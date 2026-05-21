@@ -39,10 +39,10 @@ interface LeadWebhookPayload {
   source: string; // "meta_ads", "google_ads", "landing_page", etc.
   campaign_id?: string;
   campaign_name?: string;
-  
+
   // Tags para identificar (aceita array ou string JSON)
   tags?: string[] | string;
-  
+
   // Dados do lead
   fields: {
     name?: string;
@@ -52,19 +52,131 @@ interface LeadWebhookPayload {
     // Campos personalizados
     [key: string]: string | undefined;
   };
-  
+
   // Organização (identificada por API key ou passada diretamente)
   organization_id?: string;
-  
+
   // Padrão: sempre cria um novo lead. Se true, busca por telefone/email e atualiza o lead existente (evita duplicar).
   update_existing_if_match?: boolean;
-  
+
   // Destino opcional: colocar o lead direto em um pipe e/ou campanha (ex: n8n, campanha de ads)
   place_in_pipe?: PlaceInPipe;
   place_in_campaign?: PlaceInCampaign;
 
   // Atribuição opcional (ex.: round robin do n8n) — team_member_id para SDR/Closer
   assigned_user_id?: string;
+
+  // Custom fields separados (Make.com envia fora de fields via toCollection)
+  custom_fields?: Record<string, string>;
+}
+
+// ── Field name normalization ──
+// n8n/Meta Ads sends form question text as field keys (e.g. "Email:", "Nome da Empresa").
+// This map normalizes common variations to standard lead column names so data lands
+// in the right place instead of creating orphan custom fields.
+const STANDARD_FIELD_ALIASES: Record<string, string> = {
+  // name
+  "nome": "name",
+  "nome completo": "name",
+  "full name": "name",
+  "nome_completo": "name",
+  "full_name": "name",
+  // phone
+  "telefone": "phone",
+  "celular": "phone",
+  "whatsapp": "phone",
+  "tel": "phone",
+  "fone": "phone",
+  "phone_number": "phone",
+  "numero": "phone",
+  "número": "phone",
+  // email
+  "e-mail": "email",
+  "e_mail": "email",
+  "email_address": "email",
+  "endereço de email": "email",
+  "endereco de email": "email",
+  // company
+  "empresa": "company",
+  "nome da empresa": "company",
+  "nome empresa": "company",
+  "razão social": "company",
+  "razao social": "company",
+  "company_name": "company",
+  "nome do salão/empresa": "company",
+  "nome do salao/empresa": "company",
+  "nome fantasia": "company",
+  "organização": "company",
+  "organizacao": "company",
+  // notes
+  "observações": "notes",
+  "observacoes": "notes",
+  "observação": "notes",
+  "observacao": "notes",
+  "notas": "notes",
+  "anotações": "notes",
+  "anotacoes": "notes",
+  "comentários": "notes",
+  "comentarios": "notes",
+  // segment
+  "segmento": "segment",
+  "setor": "segment",
+  // faturamento
+  "faturamento mensal": "faturamento",
+  "receita": "faturamento",
+  "receita mensal": "faturamento",
+  "revenue": "faturamento",
+  // rating
+  "nota": "rating",
+  "avaliação": "rating",
+  "avaliacao": "rating",
+  "score": "rating",
+  // urgency
+  "urgência": "urgency",
+  "urgencia": "urgency",
+  "prioridade": "urgency",
+};
+
+const STANDARD_FIELD_NAMES = new Set([
+  "name", "phone", "email", "company", "notes", "segment", "faturamento", "urgency", "rating",
+  "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+]);
+
+function normalizeFieldKeys(fields: Record<string, string | undefined>): Record<string, string | undefined> {
+  const result: Record<string, string | undefined> = {};
+  const usedStandard = new Set<string>();
+
+  // First pass: collect keys that already match standard names exactly
+  for (const key of Object.keys(fields)) {
+    if (STANDARD_FIELD_NAMES.has(key)) {
+      usedStandard.add(key);
+    }
+  }
+
+  for (const [originalKey, value] of Object.entries(fields)) {
+    // Already a known standard key — keep as-is
+    if (usedStandard.has(originalKey)) {
+      result[originalKey] = value;
+      continue;
+    }
+
+    // Normalize: lowercase, strip trailing colon/punctuation, trim
+    const normalized = originalKey.toLowerCase().replace(/[:?!.]+$/, "").trim();
+
+    // Check if normalized form IS a standard name (e.g. "Email:" → "email")
+    // or if it maps via alias table (e.g. "Nome da Empresa" → "company")
+    const mappedKey = STANDARD_FIELD_NAMES.has(normalized) ? normalized : STANDARD_FIELD_ALIASES[normalized];
+    if (mappedKey && !usedStandard.has(mappedKey)) {
+      result[mappedKey] = value;
+      usedStandard.add(mappedKey);
+      console.log(`[lead-webhook] Field "${originalKey}" → mapped to standard "${mappedKey}"`);
+    } else {
+      // Keep as custom field with original key
+      result[originalKey] = value;
+    }
+  }
+
+  return result;
 }
 
 serve(withSentry('lead-webhook', async (req) => {
@@ -97,6 +209,11 @@ serve(withSentry('lead-webhook', async (req) => {
     const payload: LeadWebhookPayload = await req.json();
     console.log("[lead-webhook] Received payload for org:", payload.organization_id, "source:", payload.source);
 
+    // Merge custom_fields into fields (Make.com sends them separately)
+    if (payload.custom_fields && typeof payload.custom_fields === "object") {
+      payload.fields = { ...payload.fields, ...payload.custom_fields };
+    }
+
     // Sanitizar campos: remover whitespace/newlines de todos os valores em fields
     if (payload.fields) {
       for (const key of Object.keys(payload.fields)) {
@@ -106,6 +223,9 @@ serve(withSentry('lead-webhook', async (req) => {
           payload.fields[key] = trimmed === "" ? undefined : trimmed;
         }
       }
+      // Normalize field keys: map common n8n/Meta Ads variations to standard names
+      // e.g. "Email:" → "email", "Nome da Empresa" → "company"
+      payload.fields = normalizeFieldKeys(payload.fields);
     }
 
     // Validação básica
@@ -147,7 +267,7 @@ serve(withSentry('lead-webhook', async (req) => {
     }
     if (payload.fields) {
       const customFieldKeys = Object.keys(payload.fields).filter(
-        (k) => !["name", "phone", "email", "company", "notes", "segment", "faturamento", "urgency", "rating", "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"].includes(k)
+        (k) => !STANDARD_FIELD_NAMES.has(k)
       );
       if (customFieldKeys.length > 100) {
         return errorResponse(400, "Validation failed: custom_fields excede o limite de 100 campos", corsHeaders, { req });
@@ -371,10 +491,13 @@ serve(withSentry('lead-webhook', async (req) => {
     }
 
     if (Object.keys(updateData).length > 0) {
-      await supabase
+      const { error: updateError } = await supabase
         .from("leads")
         .update(updateData)
         .eq("id", leadId);
+      if (updateError) {
+        console.error("[lead-webhook] Failed to update lead fields:", updateError, "data:", JSON.stringify(updateData));
+      }
     }
 
     // Salvar campos personalizados (novo e existente)

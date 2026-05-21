@@ -321,6 +321,114 @@ describe("lead-webhook — custom fields", () => {
   });
 });
 
+// ─── Field name normalization ────────────────────────────────────────────
+
+describe("lead-webhook — field name normalization", () => {
+  it("maps 'Email:' to standard email field", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("organizations", [{ id: "org-1" }]);
+    mockTable("leads", []);
+    mockTable("pipe_whatsapp", []);
+    state.mock = { sb, mockTable } as any;
+
+    const res = await invoke({
+      source: "meta_ads",
+      fields: { phone: "1", "Email:": "test@x.com" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // Should NOT appear as custom field — mapped to standard email
+    expect(body.custom_fields?.["Email:"]).toBeUndefined();
+  });
+
+  it("maps 'Nome da Empresa' to company", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("organizations", [{ id: "org-1" }]);
+    mockTable("leads", []);
+    mockTable("pipe_whatsapp", []);
+    state.mock = { sb, mockTable } as any;
+
+    const res = await invoke({
+      source: "meta_ads",
+      fields: { phone: "1", "Nome da Empresa": "Acme Corp" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.custom_fields?.["Nome da Empresa"]).toBeUndefined();
+  });
+
+  it("preserves standard field when alias also present", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("organizations", [{ id: "org-1" }]);
+    mockTable("leads", []);
+    mockTable("pipe_whatsapp", []);
+    mockTable("lead_custom_fields", []);
+    mockTable("lead_custom_field_values", []);
+    state.mock = { sb, mockTable } as any;
+
+    // If both "email" and "Email:" are sent, "email" wins, "Email:" stays as custom
+    const res = await invoke({
+      source: "meta_ads",
+      fields: { phone: "1", email: "real@x.com", "Email:": "alt@x.com" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // "Email:" should remain as custom field since "email" was already set
+    expect(body.custom_fields?.["Email:"]).toBe("saved");
+  });
+
+  it("maps 'Telefone:' to phone for validation", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("organizations", [{ id: "org-1" }]);
+    mockTable("leads", []);
+    mockTable("pipe_whatsapp", []);
+    state.mock = { sb, mockTable } as any;
+
+    // Send only "Telefone:" (no "phone") — should still pass validation
+    const res = await invoke({
+      source: "meta_ads",
+      fields: { "Telefone:": "11999999999" },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("maps 'Segmento' to segment", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("organizations", [{ id: "org-1" }]);
+    mockTable("leads", []);
+    mockTable("pipe_whatsapp", []);
+    state.mock = { sb, mockTable } as any;
+
+    const res = await invoke({
+      source: "meta_ads",
+      fields: { phone: "1", "Segmento": "Industrial" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.custom_fields?.["Segmento"]).toBeUndefined();
+  });
+
+  it("keeps unknown field names as custom fields", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("organizations", [{ id: "org-1" }]);
+    mockTable("leads", []);
+    mockTable("pipe_whatsapp", []);
+    mockTable("lead_custom_fields", [
+      { id: "cf-id", field_name: "Qual seu cargo?", organization_id: "org-1" },
+    ]);
+    mockTable("lead_custom_field_values", []);
+    state.mock = { sb, mockTable } as any;
+
+    const res = await invoke({
+      source: "meta_ads",
+      fields: { phone: "1", "Qual seu cargo?": "Gerente" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.custom_fields?.["Qual seu cargo?"]).toBe("saved");
+  });
+});
+
 // ─── Source origin mapping ────────────────────────────────────────────────
 
 describe("lead-webhook — origin mapping", () => {
