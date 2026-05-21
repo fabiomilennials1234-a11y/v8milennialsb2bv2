@@ -98,6 +98,31 @@ Coloca o lead em uma campanha em uma etapa (ex.: campanha de ads). Requer UUIDs 
 
 Pode enviar só `place_in_pipe`, só `place_in_campaign`, ou ambos. Se omitir os dois, o lead é apenas criado/atualizado (comportamento anterior).
 
+## Cal.com bypass (origin=cal)
+
+Quando `source` ∈ {`cal`, `cal.com`, `calendly`}, o lead já tem reunião agendada. O webhook força o roteamento server-side:
+
+- `place_in_pipe.pipe = "confirmacao"`, `stage = "reuniao_marcada"`.
+- `meeting_date` **obrigatório**. Aceito em `place_in_pipe.meeting_date` ou `fields.meeting_date` (ISO 8601). Sem isso → **400**.
+- Se o caller mandar `place_in_pipe` apontando pra outro pipe, override server-side + log warning.
+- Lead entra direto em **Confirmação / Reunião marcada**, pulando a qualificação WhatsApp.
+- Lembretes D-N (`confirmar_d5`, `confirmar_d3`, `confirmar_d2`, `confirmar_d1`) dependem do `meeting_date` — não envie sem ele.
+
+Exemplo mínimo:
+
+```json
+{
+  "source": "cal",
+  "organization_id": "<uuid>",
+  "fields": {
+    "name": "Nome do lead",
+    "phone": "5511999999999",
+    "email": "lead@email.com",
+    "meeting_date": "2026-06-01T10:00:00Z"
+  }
+}
+```
+
 ## Resposta (quando envia `place_in_campaign`)
 
 Além de `success`, `lead_id`, `is_new` e `message`, a resposta pode incluir:
