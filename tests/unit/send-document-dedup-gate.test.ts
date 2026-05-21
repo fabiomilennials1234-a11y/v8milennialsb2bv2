@@ -70,6 +70,7 @@ function buildSupabaseMockMultiTable(tables: Record<string, { data: any; error: 
       select: vi.fn(() => builder),
       eq: vi.fn(() => builder),
       in: vi.fn(() => builder),
+      ilike: vi.fn(() => builder),
       gte: vi.fn(() => builder),
       limit: vi.fn(() => builder),
       single: vi.fn(() => builder),
@@ -157,9 +158,10 @@ describe("checkDocumentAlreadySent", () => {
     );
   });
 
-  it("returns true via whatsapp_messages fallback when pending_ai_actions has no match", async () => {
-    // Scenario: action was in "pending" (not completed/processing) but video
-    // was already sent successfully. whatsapp_messages secondary gate catches it.
+  it("returns true via whatsapp_messages fallback when a prior media msg matches the file basename", async () => {
+    // Scenario: pending_ai_action was lost (cleanup, manual delete) but the
+    // media itself was already delivered. whatsapp_messages secondary gate
+    // catches it via media_url ILIKE on the storage path basename.
     const supabase = buildSupabaseMockMultiTable({
       pending_ai_actions: { data: [], error: null },
       whatsapp_messages: { data: [{ id: "wm-1" }], error: null },
@@ -170,6 +172,7 @@ describe("checkDocumentAlreadySent", () => {
       "conv-aaa",
       "doc-111",
       "lead-123",
+      "org-x/agent-y/123_video.mp4",
     );
     expect(result).toBe(true);
   });
@@ -185,6 +188,27 @@ describe("checkDocumentAlreadySent", () => {
       "conv-aaa",
       "doc-111",
       "lead-123",
+      "org-x/agent-y/123_video.mp4",
+    );
+    expect(result).toBe(false);
+  });
+
+  it("Barulinho regression: text reply in last 1h does NOT block a fresh video", async () => {
+    // The previous fallback fired on ANY outgoing AI message in 1h, blocking
+    // 100% of videos that followed engagement text. The fallback must only
+    // trigger on a real media_url match for the same file basename.
+    const supabase = buildSupabaseMockMultiTable({
+      pending_ai_actions: { data: [], error: null },
+      // ilike(media_url, %123_video.mp4%) → no match: query returns empty.
+      whatsapp_messages: { data: [], error: null },
+      leads: { data: { phone: "+5581986416680" }, error: null },
+    });
+    const result = await checkDocumentAlreadySent(
+      supabase as any,
+      "conv-aaa",
+      "doc-111",
+      "lead-123",
+      "org-x/agent-y/123_video.mp4",
     );
     expect(result).toBe(false);
   });
@@ -198,6 +222,20 @@ describe("checkDocumentAlreadySent", () => {
     );
     expect(result).toBe(false);
     // Only pending_ai_actions was queried (from() called once)
+    expect(supabase.from).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips whatsapp_messages gate when no filePath provided", async () => {
+    // leadId without filePath cannot perform a meaningful media_url match —
+    // gate falls through rather than over-block.
+    const supabase = buildSupabaseMock({ data: [], error: null });
+    const result = await checkDocumentAlreadySent(
+      supabase as any,
+      "conv-aaa",
+      "doc-111",
+      "lead-123",
+    );
+    expect(result).toBe(false);
     expect(supabase.from).toHaveBeenCalledTimes(1);
   });
 });
