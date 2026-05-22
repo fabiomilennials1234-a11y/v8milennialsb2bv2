@@ -138,12 +138,20 @@ export function useTVDashboardData() {
       const ondeDeveriamEstar = metaVendasMes * progressoEsperado;
       const quantoFalta = Math.max(0, metaVendasMes - vendasRealizadas);
       
-      // Meetings attended this month
-      const currentMonthConfirmacoes = confirmacoesFiltradas.filter(c => {
-        const meetingDate = c.meeting_date ? new Date(c.meeting_date) : null;
-        return meetingDate && 
-          meetingDate.getMonth() + 1 === currentMonth && 
-          meetingDate.getFullYear() === currentYear;
+      // Split confirmacoes por semântica:
+      // - confirmacoesEventoNoMes: meeting_date no mês — para "Compareceu"/"No-show" (evento real)
+      // - confirmacoesMarcadasNoMes: metrics_period_at ?? created_at no mês — para "Reuniões Marcadas" (quando entrou no pipe)
+      // Bug pré-fix: reunioesMarcadasFunnel usava meeting_date, escondendo reuniões marcadas neste mês com data futura.
+      const inCurrentMonth = (raw: string | null | undefined) => {
+        if (!raw) return false;
+        const d = new Date(raw);
+        return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
+      };
+
+      const currentMonthConfirmacoes = confirmacoesFiltradas.filter(c => inCurrentMonth(c.meeting_date));
+      const confirmacoesMarcadasNoMes = confirmacoesFiltradas.filter(c => {
+        const periodAt = (c as any).metrics_period_at ?? c.created_at;
+        return inCurrentMonth(periodAt);
       });
       
       const reunioesComparecidas = currentMonthConfirmacoes.filter(c => 
@@ -255,8 +263,9 @@ export function useTVDashboardData() {
       });
       
       // ========== FUNNEL DATA (filtered by current month) ==========
-      // Reuniões: filter by meeting_date in current month
-      const reunioesMarcadasFunnel = currentMonthConfirmacoes.length;
+      // Reuniões marcadas: pelo período da marcação (metrics_period_at ?? created_at), NÃO pela data do meeting.
+      // Comparecidas: pela data do meeting (evento real).
+      const reunioesMarcadasFunnel = confirmacoesMarcadasNoMes.length;
       const comparecidasFunnel = currentMonthConfirmacoes.filter(c => c.status === "compareceu").length;
 
       // Propostas: filter by created_at in current month for active pipeline stages
