@@ -46,13 +46,8 @@ vi.mock("@/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({ isMaster: false }),
 }));
 
-vi.mock("@/hooks/useTeamMemberMatrixPermissions", () => ({
-  useTeamMemberMatrixPermissions: () => ({ data: new Map(), isLoading: false }),
-}));
-
-vi.mock("@/lib/permissions", () => ({
-  useCanPerformAction: () => ({ allowed: true, isLoading: false }),
-  useCanPerformActionAsync: () => ({ allowed: true, reason: "admin", isLoading: false }),
+vi.mock("@/hooks/useCanDo", () => ({
+  useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 
 vi.mock("@/hooks/usePipelineEntries", () => ({

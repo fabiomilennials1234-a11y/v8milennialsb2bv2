@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useChecklistTemplates } from "@/hooks/useChecklistTemplates";
 import { useCreateChecklist } from "@/hooks/useChecklists";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 import { ChecklistCard } from "./ChecklistCard";
 import { toast } from "sonner";
 
@@ -24,7 +24,7 @@ export function ChecklistTemplatesManager() {
 
   const { data: templates = [], isLoading } = useChecklistTemplates();
   const createChecklist = useCreateChecklist();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin } = useIdentity();
 
   const handleCreate = async () => {
     const trimmed = title.trim();

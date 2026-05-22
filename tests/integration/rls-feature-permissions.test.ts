@@ -10,7 +10,7 @@
  *   - Org A has 4 leads: Alpha (sdr=TM140), Beta (closer=TM150), Gamma (unassigned), Delta (sdr=TM140,closer=TM150)
  *   - Member1 (TM 140, user_id 040) has NO feature permission overrides
  *   - Member2 (TM 150, user_id 050) has member_feature_permissions override: leads.view_all = true
- *   - organization_role_permissions for member role: can_delete_leads=false, see_all_leads=false
+ *   - feature_permissions defaults: leads.delete=false, leads.view_all=false
  *   - feature_permissions catalog: leads.view_all (default=false), leads.create (default=true),
  *     leads.delete (default=false), workflows.edit (admin_only=true, default=true)
  *

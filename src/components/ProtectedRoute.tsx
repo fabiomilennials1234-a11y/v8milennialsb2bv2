@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCurrentTeamMember } from '@/hooks/useTeamMembers';
-import { useMasterAuth } from '@/hooks/useMasterAuth';
+import { useIdentity } from '@/hooks/useIdentity';
 import { AlertTriangle, Clock } from 'lucide-react';
 import { TorqueLoader } from '@/components/branding/TorqueLoader';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children, requireOrganization = true }: ProtectedRouteProps) {
   const { user, loading: authLoading, signOut } = useAuth();
   const { data: teamMember, isLoading: teamMemberLoading, error: teamMemberError } = useCurrentTeamMember();
-  const { isMaster, isLoading: masterLoading } = useMasterAuth();
+  const { isMaster, isLoading: masterLoading } = useIdentity();
 
   if (authLoading || masterLoading) {
     return <TorqueLoader variant="full" />;

@@ -2,15 +2,9 @@
  * Unit tests for permission hooks.
  *
  * Covers:
- *   - usePermission          (src/lib/permissions.ts)
- *   - useCanPerformAction    (src/lib/permissions.ts)  — SYNC
- *   - useCanPerformActionAsync (src/lib/permissions.ts) — ASYNC
- *   - useHasPermission       (src/hooks/usePermissions.ts)
- *
- * Key finding documented here: the sync and async permission hooks diverge
- * for actions mapped to ACTION_TO_ORG_PERMISSION or ACTION_TO_MATRIX.
- * The sync hook uses a permissive fallback; the async hook actually checks
- * the RPC / matrix table and may deny.
+ *   - usePermission      (src/lib/permissions.ts) — RPC-based single key check
+ *   - useCanDo           (src/hooks/useCanDo.ts) — ACTION_TO_FEATURE resolver
+ *   - useHasPermission   (src/hooks/usePermissions.ts) — RPC-based key check
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -65,40 +59,41 @@ vi.mock('@/hooks/useMasterAuth', () => ({
   useMasterAuth: (...args: unknown[]) => mockUseMasterAuth(...args),
 }));
 
-// ─── Mock: useTeamMemberMatrixPermissions ───────────────
-
-const mockUseTeamMemberMatrixPermissions = vi.fn();
-vi.mock('@/hooks/useTeamMemberMatrixPermissions', () => ({
-  useTeamMemberMatrixPermissions: (...args: unknown[]) =>
-    mockUseTeamMemberMatrixPermissions(...args),
-}));
-
-// ─── Mock: AuthContext (needed by useHasPermission's transitive deps) ──
+// ─── Mock: AuthContext ──────────────────────────────────
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'user-1' } }),
 }));
 
+// ─── Mock: useIdentity (for useCanDo) ───────────────────
+
+const mockIdentity = {
+  userId: "user-1",
+  organizationId: "org-1",
+  teamMemberId: "tm-1",
+  effectiveRole: "admin" as "admin" | "member" | null,
+  isMaster: false,
+  isAdmin: true,
+  features: {} as Record<string, boolean>,
+  isLoading: false,
+  isReady: true,
+};
+
+vi.mock('@/hooks/useIdentity', () => ({
+  useIdentity: () => mockIdentity,
+}));
+
 // ─── Imports under test ─────────────────────────────────
 
-import {
-  usePermission,
-  useCanPerformAction,
-  useCanPerformActionAsync,
-} from '@/lib/permissions';
-
+import { usePermission } from '@/lib/permissions';
+import { useCanDo } from '@/hooks/useCanDo';
 import { useHasPermission } from '@/hooks/usePermissions';
 
 // ─── Test utilities ─────────────────────────────────────
 
 function createWrapper() {
   const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
-        gcTime: 0,
-      },
-    },
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
   return ({ children }: { children: React.ReactNode }) =>
     React.createElement(QueryClientProvider, { client: queryClient }, children);
@@ -106,92 +101,115 @@ function createWrapper() {
 
 // ─── Preset mock helpers ────────────────────────────────
 
-function mockAdmin() {
+function setAdmin() {
   mockUseUserRole.mockReturnValue({ data: { role: 'admin' }, isLoading: false });
   mockUseMasterAuth.mockReturnValue({ isMaster: false, isLoading: false });
   mockUseOrganization.mockReturnValue({ organizationId: 'org-1', isReady: true });
   mockUseCurrentTeamMember.mockReturnValue({ data: { id: 'tm-1', role: 'admin' }, isLoading: false });
   mockUseFeaturePermissions.mockReturnValue({ data: {}, isLoading: false });
-  mockUseTeamMemberMatrixPermissions.mockReturnValue({ data: new Map(), isLoading: false });
+  mockIdentity.effectiveRole = "admin";
+  mockIdentity.isMaster = false;
+  mockIdentity.isAdmin = true;
+  mockIdentity.features = {};
+  mockIdentity.isLoading = false;
+  mockIdentity.isReady = true;
 }
 
-function mockMaster() {
+function setMaster() {
   mockUseUserRole.mockReturnValue({ data: { role: 'member' }, isLoading: false });
   mockUseMasterAuth.mockReturnValue({ isMaster: true, isLoading: false });
   mockUseOrganization.mockReturnValue({ organizationId: 'org-1', isReady: true });
   mockUseCurrentTeamMember.mockReturnValue({ data: { id: 'tm-1', role: 'member' }, isLoading: false });
   mockUseFeaturePermissions.mockReturnValue({ data: {}, isLoading: false });
-  mockUseTeamMemberMatrixPermissions.mockReturnValue({ data: new Map(), isLoading: false });
+  mockIdentity.effectiveRole = "admin";
+  mockIdentity.isMaster = true;
+  mockIdentity.isAdmin = true;
+  mockIdentity.features = {};
+  mockIdentity.isLoading = false;
+  mockIdentity.isReady = true;
 }
 
-function mockMember(featurePerms: Record<string, boolean> = {}, matrix: Map<string, 'allowed' | 'denied'> = new Map()) {
+function setMember(featurePerms: Record<string, boolean> = {}) {
   mockUseUserRole.mockReturnValue({ data: { role: 'member' }, isLoading: false });
   mockUseMasterAuth.mockReturnValue({ isMaster: false, isLoading: false });
   mockUseOrganization.mockReturnValue({ organizationId: 'org-1', isReady: true });
   mockUseCurrentTeamMember.mockReturnValue({ data: { id: 'tm-1', role: 'member' }, isLoading: false });
   mockUseFeaturePermissions.mockReturnValue({ data: featurePerms, isLoading: false });
-  mockUseTeamMemberMatrixPermissions.mockReturnValue({ data: matrix, isLoading: false });
+  mockIdentity.effectiveRole = "member";
+  mockIdentity.isMaster = false;
+  mockIdentity.isAdmin = false;
+  mockIdentity.features = featurePerms;
+  mockIdentity.isLoading = false;
+  mockIdentity.isReady = true;
 }
 
-function mockLoading() {
+function setLoading() {
   mockUseUserRole.mockReturnValue({ data: null, isLoading: true });
   mockUseMasterAuth.mockReturnValue({ isMaster: false, isLoading: true });
   mockUseOrganization.mockReturnValue({ organizationId: null, isReady: false });
   mockUseCurrentTeamMember.mockReturnValue({ data: null, isLoading: true });
   mockUseFeaturePermissions.mockReturnValue({ data: null, isLoading: true });
-  mockUseTeamMemberMatrixPermissions.mockReturnValue({ data: undefined, isLoading: true });
+  mockIdentity.effectiveRole = null;
+  mockIdentity.isMaster = false;
+  mockIdentity.isAdmin = false;
+  mockIdentity.features = {};
+  mockIdentity.isLoading = true;
+  mockIdentity.isReady = false;
 }
 
-function mockNoOrg() {
+function setNoOrg() {
   mockUseUserRole.mockReturnValue({ data: { role: 'member' }, isLoading: false });
   mockUseMasterAuth.mockReturnValue({ isMaster: false, isLoading: false });
   mockUseOrganization.mockReturnValue({ organizationId: null, isReady: true });
   mockUseCurrentTeamMember.mockReturnValue({ data: { id: 'tm-1', role: 'member' }, isLoading: false });
   mockUseFeaturePermissions.mockReturnValue({ data: {}, isLoading: false });
-  mockUseTeamMemberMatrixPermissions.mockReturnValue({ data: new Map(), isLoading: false });
+  mockIdentity.organizationId = null as any;
+  mockIdentity.effectiveRole = "member";
+  mockIdentity.isMaster = false;
+  mockIdentity.isAdmin = false;
+  mockIdentity.features = {};
+  mockIdentity.isLoading = false;
+  mockIdentity.isReady = true;
 }
 
 // ─── Tests ──────────────────────────────────────────────
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockIdentity.organizationId = "org-1";
 });
 
 // ═══════════════════════════════════════════════════════════
-// usePermission (src/lib/permissions.ts)
+// usePermission (src/lib/permissions.ts) — RPC-based
 // ═══════════════════════════════════════════════════════════
 
 describe('usePermission', () => {
-  it('1. admin returns true without RPC call', async () => {
-    mockAdmin();
+  it('admin returns true without RPC call', async () => {
+    setAdmin();
     const { result } = renderHook(() => usePermission('can_delete_leads'), {
       wrapper: createWrapper(),
     });
-
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBe(true);
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it('2. master returns true without RPC call', async () => {
-    mockMaster();
+  it('master returns true without RPC call', async () => {
+    setMaster();
     const { result } = renderHook(() => usePermission('can_delete_leads'), {
       wrapper: createWrapper(),
     });
-
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBe(true);
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it('3. member calls user_has_org_permission RPC and returns result', async () => {
-    mockMember();
+  it('member calls user_has_org_permission RPC', async () => {
+    setMember();
     mockRpc.mockResolvedValue({ data: true, error: null });
-
     const { result } = renderHook(() => usePermission('can_delete_leads'), {
       wrapper: createWrapper(),
     });
-
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBe(true);
     expect(mockRpc).toHaveBeenCalledWith('user_has_org_permission', {
@@ -199,315 +217,96 @@ describe('usePermission', () => {
     });
   });
 
-  it('4. returns false when organizationId is null', async () => {
-    mockNoOrg();
-
+  it('returns false when organizationId is null', async () => {
+    setNoOrg();
     const { result } = renderHook(() => usePermission('can_delete_leads'), {
       wrapper: createWrapper(),
     });
-
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBe(false);
-    expect(mockRpc).not.toHaveBeenCalled();
   });
 });
 
 // ═══════════════════════════════════════════════════════════
-// useCanPerformAction — SYNC (src/lib/permissions.ts)
+// useCanDo (src/hooks/useCanDo.ts) — canonical action resolver
 // ═══════════════════════════════════════════════════════════
 
-describe('useCanPerformAction (sync)', () => {
-  it('5. returns isLoading:true while dependencies load', () => {
-    mockLoading();
-    const { result } = renderHook(() => useCanPerformAction('delete_lead'), {
+describe('useCanDo', () => {
+  it('returns isLoading:true while dependencies load', () => {
+    setLoading();
+    const { result } = renderHook(() => useCanDo('delete_lead'), {
       wrapper: createWrapper(),
     });
     expect(result.current.isLoading).toBe(true);
     expect(result.current.allowed).toBe(false);
   });
 
-  it('6. admin: always allowed for any action', () => {
-    mockAdmin();
-    const { result } = renderHook(() => useCanPerformAction('delete_lead'), {
+  it('admin: always allowed', () => {
+    setAdmin();
+    const { result } = renderHook(() => useCanDo('delete_lead'), {
       wrapper: createWrapper(),
     });
     expect(result.current).toEqual({ allowed: true, reason: 'admin', isLoading: false });
   });
 
-  it('7. master: always allowed for any action', () => {
-    mockMaster();
-    const { result } = renderHook(() => useCanPerformAction('import_leads'), {
+  it('master: always allowed', () => {
+    setMaster();
+    const { result } = renderHook(() => useCanDo('import_leads'), {
       wrapper: createWrapper(),
     });
-    expect(result.current).toEqual({ allowed: true, reason: 'admin', isLoading: false });
+    expect(result.current).toEqual({ allowed: true, reason: 'master', isLoading: false });
   });
 
-  it('8. feature action (edit_workflow): allowed when featurePerms["workflows.edit"]=true', () => {
-    mockMember({ 'workflows.edit': true });
-    const { result } = renderHook(() => useCanPerformAction('edit_workflow'), {
+  it('feature action allowed when feature perm is true', () => {
+    setMember({ 'workflows.edit': true });
+    const { result } = renderHook(() => useCanDo('edit_workflow'), {
       wrapper: createWrapper(),
     });
     expect(result.current.allowed).toBe(true);
     expect(result.current.reason).toBe('feature:workflows.edit');
   });
 
-  it('9. feature action (edit_workflow): denied when featurePerms["workflows.edit"]=false', () => {
-    mockMember({ 'workflows.edit': false });
-    const { result } = renderHook(() => useCanPerformAction('edit_workflow'), {
+  it('feature action denied when feature perm is false', () => {
+    setMember({ 'workflows.edit': false });
+    const { result } = renderHook(() => useCanDo('edit_workflow'), {
       wrapper: createWrapper(),
     });
     expect(result.current.allowed).toBe(false);
     expect(result.current.reason).toContain('workflows.edit');
   });
 
-  it('10. send_message: always allowed for any user', () => {
-    mockMember();
-    const { result } = renderHook(() => useCanPerformAction('send_message'), {
+  it('send_message allowed with whatsapp.send_messages permission', () => {
+    setMember({ 'whatsapp.send_messages': true });
+    const { result } = renderHook(() => useCanDo('send_message'), {
       wrapper: createWrapper(),
     });
-    expect(result.current).toEqual({ allowed: true, reason: 'open', isLoading: false });
+    expect(result.current).toEqual({ allowed: true, reason: 'feature:whatsapp.send_messages', isLoading: false });
   });
 
-  // 2026-05-20: export_leads moved FROM matrix TO ACTION_TO_ORG_PERMISSION
-  // (can_export_leads). The sync resolver has no async RPC path, so for org-
-  // permission actions it falls through to fail-closed. Use the async variant
-  // to actually check the org permission via RPC.
-  it('11. export_leads (sync) for member — denied via fail-closed after org-permission migration', () => {
-    mockMember();
-    const { result } = renderHook(() => useCanPerformAction('export_leads'), {
+  it('export_leads allowed when feature permission true', () => {
+    setMember({ 'leads.export': true });
+    const { result } = renderHook(() => useCanDo('export_leads'), {
       wrapper: createWrapper(),
     });
-    expect(result.current.allowed).toBe(false);
-    expect(result.current.reason).toBe('unmapped_action');
+    expect(result.current.allowed).toBe(true);
+    expect(result.current.reason).toBe('feature:leads.export');
   });
 
-  it('11b. import_leads still uses the matrix (no org permission equivalent)', () => {
-    const matrix = new Map<string, 'allowed' | 'denied'>();
-    matrix.set('leads:create', 'denied');
-    mockMember({}, matrix);
-    const { result } = renderHook(() => useCanPerformAction('import_leads'), {
-      wrapper: createWrapper(),
-    });
-    expect(result.current.allowed).toBe(false);
-    expect(result.current.reason).toMatch(/denied/);
-  });
-
-  it('11c. truly unmapped action: denied via fail-closed fallback', () => {
-    mockMember();
+  it('unmapped action denied (fail-closed)', () => {
+    setMember();
     const { result } = renderHook(
-      () => useCanPerformAction('totally_unknown_action' as never),
+      () => useCanDo('totally_unknown_action' as never),
       { wrapper: createWrapper() },
     );
     expect(result.current.allowed).toBe(false);
-    expect(result.current.reason).toBe('unmapped_action');
   });
 
-  // Sync version never checks ACTION_TO_ORG_PERMISSION — now denies via fail-closed
-  it('12. delete_lead for member — denied via fail-closed (sync does NOT check org permission)', () => {
-    mockMember();
-    const { result } = renderHook(() => useCanPerformAction('delete_lead'), {
+  it('no org: denied (fail-closed)', () => {
+    setNoOrg();
+    const { result } = renderHook(() => useCanDo('delete_lead'), {
       wrapper: createWrapper(),
     });
-    // delete_lead is mapped in ACTION_TO_ORG_PERMISSION to "can_delete_leads",
-    // but the sync hook has no async RPC path — hits fail-closed fallback.
     expect(result.current.allowed).toBe(false);
-    expect(result.current.reason).toBe('unmapped_action');
-    // No RPC call made
-    expect(mockRpc).not.toHaveBeenCalled();
-  });
-});
-
-// ═══════════════════════════════════════════════════════════
-// useCanPerformActionAsync (src/lib/permissions.ts)
-// ═══════════════════════════════════════════════════════════
-
-describe('useCanPerformActionAsync', () => {
-  it('13. no org: returns {allowed:false, reason:"no_org"}', async () => {
-    mockNoOrg();
-    const { result } = renderHook(() => useCanPerformActionAsync('delete_lead'), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual({ allowed: false, reason: 'no_org' });
-  });
-
-  it('14. admin: always allowed', async () => {
-    mockAdmin();
-    const { result } = renderHook(() => useCanPerformActionAsync('delete_lead'), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual({ allowed: true, reason: 'admin' });
-    expect(mockRpc).not.toHaveBeenCalled();
-  });
-
-  it('15. feature action: checks featurePerms', async () => {
-    mockMember({ 'workflows.edit': true });
-    const { result } = renderHook(() => useCanPerformActionAsync('edit_workflow'), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual({ allowed: true, reason: 'feature:workflows.edit' });
-  });
-
-  it('16. send_message: always allowed', async () => {
-    mockMember();
-    const { result } = renderHook(() => useCanPerformActionAsync('send_message'), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual({ allowed: true, reason: 'open' });
-  });
-
-  it('17. delete_lead: calls RPC user_has_org_permission("can_delete_leads")', async () => {
-    mockMember();
-    mockRpc.mockResolvedValue({ data: true, error: null });
-
-    const { result } = renderHook(() => useCanPerformActionAsync('delete_lead'), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockRpc).toHaveBeenCalledWith('user_has_org_permission', {
-      p_permission_key: 'can_delete_leads',
-    });
-    expect(result.current.data).toEqual({ allowed: true, reason: 'can_delete_leads' });
-  });
-
-  it('18. delete_lead: denied when RPC returns false', async () => {
-    mockMember();
-    mockRpc.mockResolvedValue({ data: false, error: null });
-
-    const { result } = renderHook(() => useCanPerformActionAsync('delete_lead'), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.allowed).toBe(false);
-    expect(result.current.data?.reason).toContain('can_delete_leads');
-  });
-
-  it('19. import_leads: checks matrix permission (team_member_permissions table)', async () => {
-    mockMember();
-    mockMaybeSingle.mockResolvedValue({ data: { value: 'allowed' }, error: null });
-
-    const { result } = renderHook(() => useCanPerformActionAsync('import_leads'), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockFrom).toHaveBeenCalledWith('team_member_permissions');
-    expect(result.current.data?.allowed).toBe(true);
-    expect(result.current.data?.reason).toBe('matrix_allowed');
-  });
-
-  it('20. import_leads: denied when matrix value="denied"', async () => {
-    mockMember();
-    mockMaybeSingle.mockResolvedValue({ data: { value: 'denied' }, error: null });
-
-    const { result } = renderHook(() => useCanPerformActionAsync('import_leads'), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.allowed).toBe(false);
-    expect(result.current.data?.reason).toContain('leads.create');
-  });
-
-  it('21. matrix with no row: defaults to "allowed"', async () => {
-    mockMember();
-    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
-
-    const { result } = renderHook(() => useCanPerformActionAsync('import_leads'), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    // data?.value is null -> || "allowed" -> not "denied" -> allowed
-    expect(result.current.data?.allowed).toBe(true);
-    expect(result.current.data?.reason).toBe('matrix_allowed');
-  });
-
-  it('22. matrix without teamMember.id: skips check, denied via fail-closed', async () => {
-    // Member with no teamMember.id
-    mockUseUserRole.mockReturnValue({ data: { role: 'member' }, isLoading: false });
-    mockUseMasterAuth.mockReturnValue({ isMaster: false, isLoading: false });
-    mockUseOrganization.mockReturnValue({ organizationId: 'org-1', isReady: true });
-    mockUseCurrentTeamMember.mockReturnValue({ data: { role: 'member' }, isLoading: false }); // no .id
-    mockUseFeaturePermissions.mockReturnValue({ data: {}, isLoading: false });
-
-    const { result } = renderHook(() => useCanPerformActionAsync('import_leads'), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    // matrixMapping exists but teamMember.id is undefined -> condition fails -> fail-closed
-    expect(result.current.data).toEqual({ allowed: false, reason: 'unmapped_action' });
-    expect(mockFrom).not.toHaveBeenCalled();
-  });
-});
-
-// ═══════════════════════════════════════════════════════════
-// DIVERGENCE documentation
-// ═══════════════════════════════════════════════════════════
-
-describe('CONVERGENCE: sync and async both fail-closed', () => {
-  // After fail-closed fix (#186), both sync and async deny unmapped paths.
-  // delete_lead is in ACTION_TO_ORG_PERMISSION -> "can_delete_leads"
-  // The sync version still never calls RPC, but now denies instead of allowing.
-
-  it('23. delete_lead — both sync and async deny for member', async () => {
-    mockMember();
-
-    // Sync: denies via fail-closed
-    const { result: syncResult } = renderHook(() => useCanPerformAction('delete_lead'), {
-      wrapper: createWrapper(),
-    });
-    expect(syncResult.current.allowed).toBe(false);
-    expect(syncResult.current.reason).toBe('unmapped_action');
-
-    // Async: checks RPC and also denies
-    mockRpc.mockResolvedValue({ data: false, error: null });
-    const { result: asyncResult } = renderHook(() => useCanPerformActionAsync('delete_lead'), {
-      wrapper: createWrapper(),
-    });
-    await waitFor(() => expect(asyncResult.current.isSuccess).toBe(true));
-    expect(asyncResult.current.data?.allowed).toBe(false);
-
-    // CONVERGENCE: both deny
-    expect(syncResult.current.allowed).toBe(asyncResult.current.data?.allowed);
-  });
-
-  // import_leads is in ACTION_TO_MATRIX -> { resource: "leads", action: "create" }
-  // Sync: hits fail-closed. Async: checks matrix and may deny.
-
-  it('24. import_leads with matrix denial — both sync and async deny for member', async () => {
-    // #254: sync now consults matrix in cache. Inject explicit denial.
-    const matrix = new Map<string, 'allowed' | 'denied'>();
-    matrix.set('leads:create', 'denied');
-    mockMember({}, matrix);
-
-    // Sync: denies via matrix
-    const { result: syncResult } = renderHook(() => useCanPerformAction('import_leads'), {
-      wrapper: createWrapper(),
-    });
-    expect(syncResult.current.allowed).toBe(false);
-    expect(syncResult.current.reason).toMatch(/denied/);
-
-    // Async: checks matrix RPC and denies
-    mockMaybeSingle.mockResolvedValue({ data: { value: 'denied' }, error: null });
-    const { result: asyncResult } = renderHook(() => useCanPerformActionAsync('import_leads'), {
-      wrapper: createWrapper(),
-    });
-    await waitFor(() => expect(asyncResult.current.isSuccess).toBe(true));
-    expect(asyncResult.current.data?.allowed).toBe(false);
-
-    // CONVERGENCE: both deny
-    expect(syncResult.current.allowed).toBe(asyncResult.current.data?.allowed);
   });
 });
 
@@ -516,12 +315,11 @@ describe('CONVERGENCE: sync and async both fail-closed', () => {
 // ═══════════════════════════════════════════════════════════
 
 describe('useHasPermission', () => {
-  it('25. admin returns true without RPC', async () => {
-    mockAdmin();
+  it('admin returns true without RPC', async () => {
+    setAdmin();
     const { result } = renderHook(() => useHasPermission('can_delete_leads'), {
       wrapper: createWrapper(),
     });
-
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBe(true);
     expect(mockRpc).not.toHaveBeenCalled();

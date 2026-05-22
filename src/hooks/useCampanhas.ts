@@ -5,7 +5,8 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useOrganization } from "@/hooks/useOrganization";
 import { triggerFollowUpAutomation } from "@/hooks/useAutoFollowUp";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
-import { assertIsAdmin, useCanPerformActionAsync } from "@/lib/permissions";
+import { assertPermission } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 
 // Tipos para os objetivos de campanha
 export type CampaignObjective = 'qualificacao' | 'agendamentos' | 'propostas' | 'livre';
@@ -448,7 +449,7 @@ export function useCreateCampanha() {
       templateIds?: string[]; // Para SEMI-AUTOMÁTICA
     }) => {
       // PERMISSION: Apenas admin pode criar campanhas
-      await assertIsAdmin();
+      await assertPermission("create_campaign");
 
       // Buscar organization_id do usuário
       const { data: { user } } = await supabase.auth.getUser();
@@ -562,7 +563,7 @@ export function useCreateCampanha() {
 // Hook to update a campaign
 export function useUpdateCampanha() {
   const queryClient = useQueryClient();
-  const editPermission = useCanPerformActionAsync("edit_campaign");
+  const editPermission = useCanDo("edit_campaign");
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Campanha> & { id: string }) => {
@@ -618,7 +619,7 @@ export function useUpdateCampanha() {
 // Hook to delete a campaign
 export function useDeleteCampanha() {
   const queryClient = useQueryClient();
-  const deletePermission = useCanPerformActionAsync("delete_campaign");
+  const deletePermission = useCanDo("delete_campaign");
 
   return useMutation({
     mutationFn: async (id: string) => {

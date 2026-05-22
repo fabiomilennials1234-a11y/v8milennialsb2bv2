@@ -65,6 +65,22 @@ vi.mock("@/hooks/useTeamMembers", () => ({
   useResponsibleMembers: () => ({ data: [] }),
 }));
 vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: true }) }));
+vi.mock("@/hooks/useIdentity", () => ({
+  useIdentity: () => ({
+    userId: "u1",
+    organizationId: "org-t",
+    teamMemberId: "tm1",
+    effectiveRole: "admin" as const,
+    isMaster: true,
+    isAdmin: true,
+    features: {} as Record<string, boolean>,
+    isLoading: false,
+    isReady: true,
+  }),
+}));
+vi.mock("@/hooks/useCanDo", () => ({
+  useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
+}));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/hooks/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
@@ -85,10 +101,21 @@ vi.mock("@/lib/workflowTrigger", () => ({
 }));
 vi.mock("@/lib/permissions", () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
+  assertPermission: vi.fn().mockResolvedValue(undefined),
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
 }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
+vi.mock("@/hooks/useUserRole", () => ({
+  useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
+  useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
+  useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
+  useFeaturePermission: () => ({ allowed: true, isLoading: false, hasError: false }),
+  useCanManageCopilot: () => ({ canManage: true, canCreate: true, canEdit: true, canDelete: true, canToggle: true, isLoading: false }),
+  useCanManageWhatsApp: () => ({ canManage: true, isLoading: false }),
+  useJobTitle: () => ({ jobTitle: "", isLoading: false }),
+  useMetricType: () => ({ metricType: "sales", isLoading: false }),
+  useHasRole: () => ({ hasRole: true, isLoading: false }),
+}));
 vi.mock("@/contexts/OrgFeaturesContext", () => ({
   useOrgFeatures: () => ({ hasFeature: () => true, checkLimit: () => -1 }),
 }));

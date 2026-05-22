@@ -14,7 +14,7 @@ import {
   type FunnelDestination,
 } from "@/hooks/useImportLeads";
 import { useLeadCustomFields } from "@/hooks/useLeadCustomFields";
-import { useCanPerformAction } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 import { usePipelineStages } from "@/hooks/usePipelineStages";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useProducts } from "@/hooks/useProducts";
@@ -108,7 +108,7 @@ export function ImportLeadsFunnelContent({
   const queryClient = useQueryClient();
   const { parseCSV, importLeadsToFunnel, resetImport, isImporting, progress, result, lastReport } = useImportLeads();
   const { data: customFields = [] } = useLeadCustomFields();
-  const { allowed: canImport, isLoading: permLoading } = useCanPerformAction("import_leads");
+  const { allowed: canImport, isLoading: permLoading } = useCanDo("import_leads");
   const customFieldNames = customFields.map((f) => f.field_name);
   const productOptions = (products || []).map((p) => ({ id: p.id, name: p.name || "" }));
 

@@ -8,8 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useDeleteLeadComment, useUpdateLeadComment } from "../../hooks/useLeadComments";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useAuth } from "@/contexts/AuthContext";
-import { useMasterAuth } from "@/hooks/useMasterAuth";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -35,8 +34,7 @@ function colorFromName(name: string): string {
 
 export const CommentItem = memo(function CommentItem({ comment, leadId, highlight }: CommentItemProps) {
   const { user } = useAuth();
-  const { isMaster } = useMasterAuth();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin, isMaster } = useIdentity();
   const remove = useDeleteLeadComment();
   const edit = useUpdateLeadComment();
   const logAction = useLogLeadAction();

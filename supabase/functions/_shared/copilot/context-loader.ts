@@ -79,6 +79,16 @@ export function getCacheStats(): { size: number; maxEntries: number; ttlMs: numb
  * Cache: hit retorna imediato. Miss faz queries paralelas + popula cache.
  * Bypass cache: useCache=false (útil em testes ou pós bust manual).
  */
+function agentRejectsLead(
+  agent: Record<string, unknown>,
+  leadOrigin?: string,
+): boolean {
+  if (!leadOrigin) return false;
+  const origins = agent.routing_origins as string[] | null;
+  if (!origins || origins.length === 0) return false;
+  return !origins.includes(leadOrigin);
+}
+
 export async function loadCapabilities(
   supabase: SupabaseClient,
   organizationId: string,
@@ -94,6 +104,8 @@ export async function loadCapabilities(
       return cached;
     }
   }
+
+  let leadOrigin: string | undefined;
 
   // Routing por stage/origin/segment requer leadId
   if (leadId) {
@@ -111,6 +123,8 @@ export async function loadCapabilities(
       const confirmacaoRow = confirmacaoRes ? { status: confirmacaoRes.stage_key } : null;
       const propostasRow = propostasRes ? { status: propostasRes.stage_key } : null;
       const campanhaRow = campanhaRes.data as { campanha_stages?: { name?: string } } | null;
+
+      leadOrigin = leadRow?.origin;
 
       if (leadRow || upsellRow || confirmacaoRow || propostasRow || campanhaRow) {
         const allStages: string[] = [];
@@ -156,13 +170,13 @@ export async function loadCapabilities(
     .eq("is_default", true)
     .maybeSingle();
 
-  if (defaultAgent) {
+  if (defaultAgent && !agentRejectsLead(defaultAgent as Record<string, unknown>, leadOrigin)) {
     console.log("[context-loader] using default agent", { agentId: (defaultAgent as Record<string, unknown>).id });
     if (useCache) setCachedCapabilities(organizationId, leadId, defaultAgent);
     return defaultAgent as Record<string, unknown>;
   }
 
-  // Fallback 2: qualquer ativo (mais recente)
+  // Fallback 2: qualquer ativo (mais recente) — respeitando routing_origins
   console.warn("[context-loader] no default agent, trying any active");
   const { data: anyAgent } = await supabase
     .from("copilot_agents")
@@ -173,10 +187,14 @@ export async function loadCapabilities(
     .limit(1)
     .maybeSingle();
 
-  if (anyAgent) {
+  if (anyAgent && !agentRejectsLead(anyAgent as Record<string, unknown>, leadOrigin)) {
     console.log("[context-loader] using fallback active agent", { agentId: (anyAgent as Record<string, unknown>).id });
     if (useCache) setCachedCapabilities(organizationId, leadId, anyAgent);
     return anyAgent as Record<string, unknown>;
+  }
+
+  if (anyAgent && leadOrigin) {
+    console.log("[context-loader] agent rejected lead origin", { agentId: (anyAgent as Record<string, unknown>).id, leadOrigin });
   }
 
   console.error("[context-loader] no active agents for org:", organizationId);

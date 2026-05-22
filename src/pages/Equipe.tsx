@@ -49,7 +49,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTeamMembers, useUpdateTeamMember, TeamMember } from "@/hooks/useTeamMembers";
 import { useOrganization } from "@/hooks/useOrganization";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 import { MemberPermissions } from "@/components/team/MemberPermissions";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useSeatUsage } from "@/hooks/useSeatUsage";
@@ -102,7 +102,7 @@ export default function Equipe() {
   const { data: members = [], isLoading } = useTeamMembers();
   const updateMember = useUpdateTeamMember();
   const { organizationId } = useOrganization();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin } = useIdentity();
   const queryClient = useQueryClient();
   const { data: seatUsage } = useSeatUsage(organizationId);
 

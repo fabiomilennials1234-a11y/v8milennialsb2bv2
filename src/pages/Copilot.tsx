@@ -52,7 +52,7 @@ import {
 } from "@/hooks/useCopilotAgents";
 import { useCopilotSubscription } from "@/hooks/useCopilotSubscription";
 import { useCanManageCopilot } from "@/hooks/useUserRole";
-import { useMasterAuth } from "@/hooks/useMasterAuth";
+import { useIdentity } from "@/hooks/useIdentity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { useOrgQuotas } from "@/hooks/useOrgQuotas";
 import { toast } from "sonner";
@@ -64,7 +64,7 @@ export default function Copilot() {
   const { hasAccess, isTrial, isLoading: subLoading } =
     useCopilotSubscription();
   const { canManage: canManageCopilot } = useCanManageCopilot();
-  const { isMaster } = useMasterAuth();
+  const { isMaster } = useIdentity();
   const deleteAgent = useDeleteCopilotAgent();
   const toggleAgent = useToggleCopilotAgent();
   const setDefault = useSetDefaultCopilotAgent();

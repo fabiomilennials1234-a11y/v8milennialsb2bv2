@@ -6,7 +6,7 @@
  *   - Reparar conexão WhatsApp   → RepairingWizard
  *   - Disparar campanha em massa → navega para /campanhas
  *
- * Permission check via useIsAdmin — ações destrutivas requerem admin.
+ * Permission check via useIdentity — ações destrutivas requerem admin.
  */
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -14,7 +14,7 @@ import { DatabaseBackup, Wrench, Megaphone } from "lucide-react";
 import { CommandGroup, CommandItem } from "cmdk";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 import { useWhatsAppInstancesForUser } from "@/hooks/chat/useWhatsAppInstances";
 import { HistorySyncDialog } from "@/components/chat/history-sync/HistorySyncDialog";
 import { RepairingWizard } from "@/components/whatsapp-migration/RepairingWizard";
@@ -36,7 +36,7 @@ const ITEM_CLASS = cn(
 export function CommandGroupUazapi({ onClose }: CommandGroupUazapiProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin } = useIdentity();
   const { data: teamMember } = useCurrentTeamMember();
   const { data: instances = [] } = useWhatsAppInstancesForUser();
 

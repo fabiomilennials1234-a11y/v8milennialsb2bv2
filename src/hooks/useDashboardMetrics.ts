@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useIsAdmin } from "./useUserRole";
+import { useIdentity } from "./useIdentity";
 import { useCurrentTeamMember } from "./useTeamMembers";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
@@ -61,7 +61,7 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
   const now = new Date();
   const selectedMonth = month ?? now.getMonth() + 1;
   const selectedYear = year ?? now.getFullYear();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin } = useIdentity();
   const { data: currentTeamMember } = useCurrentTeamMember();
   const organizationId = currentTeamMember?.organization_id ?? null;
   const myId = currentTeamMember?.id ?? null;

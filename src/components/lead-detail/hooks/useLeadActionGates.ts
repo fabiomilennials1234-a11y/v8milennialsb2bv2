@@ -18,8 +18,8 @@
  */
 
 import { useUserRole } from "@/hooks/useUserRole";
-import { useMasterAuth } from "@/hooks/useMasterAuth";
-import { useCanPerformAction } from "@/lib/permissions";
+import { useIdentity } from "@/hooks/useIdentity";
+import { useCanDo } from "@/hooks/useCanDo";
 
 export interface Gate {
   allowed: boolean;
@@ -49,16 +49,16 @@ const allow = (reason = "ok"): Gate => ({ allowed: true, reason, isLoading: fals
 
 export function useLeadActionGates(leadId: string | null | undefined): LeadActionGates {
   const { data: userRole, isLoading: roleLoading } = useUserRole();
-  const { isMaster, isLoading: masterLoading } = useMasterAuth();
+  const { isMaster, isLoading: masterLoading } = useIdentity();
 
   // Underlying AppAction checks — these encapsulate feature_permissions +
   // role matrix + master + admin cascade.
-  const deleteCheck = useCanPerformAction("delete_lead");
-  const movePipeCheck = useCanPerformAction("move_pipe_record");
-  const createLeadCheck = useCanPerformAction("create_lead");
-  const sendMessageCheck = useCanPerformAction("send_message");
-  const reassignCheck = useCanPerformAction("reassign_lead");
-  const removeFromPipeCheck = useCanPerformAction("remove_lead_from_pipe");
+  const deleteCheck = useCanDo("delete_lead");
+  const movePipeCheck = useCanDo("move_pipe_record");
+  const createLeadCheck = useCanDo("create_lead");
+  const sendMessageCheck = useCanDo("send_message");
+  const reassignCheck = useCanDo("reassign_lead");
+  const removeFromPipeCheck = useCanDo("remove_lead_from_pipe");
 
   const anyLoading =
     roleLoading ||

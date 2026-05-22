@@ -20,6 +20,23 @@ vi.mock('@/hooks/useMasterAuth', () => ({
   useMasterAuth: (...args: unknown[]) => mockUseMasterAuth(...args),
 }));
 
+const mockUseIdentity = vi.fn();
+vi.mock('@/hooks/useIdentity', () => ({
+  useIdentity: (...args: unknown[]) => mockUseIdentity(...args),
+}));
+
+vi.mock('@/hooks/useUserRole', () => ({
+  useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
+  useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
+  useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
+  useFeaturePermission: () => ({ allowed: true, isLoading: false, hasError: false }),
+  useCanManageCopilot: () => ({ canManage: true, canCreate: true, canEdit: true, canDelete: true, canToggle: true, isLoading: false }),
+  useCanManageWhatsApp: () => ({ canManage: true, isLoading: false }),
+  useJobTitle: () => ({ jobTitle: "", isLoading: false }),
+  useMetricType: () => ({ metricType: "sales", isLoading: false }),
+  useHasRole: () => ({ hasRole: true, isLoading: false }),
+}));
+
 vi.mock('react-router-dom', () => ({
   Navigate: ({ to, replace }: { to: string; replace?: boolean }) => (
     <div data-testid="navigate" data-to={to} data-replace={String(!!replace)} />
@@ -34,6 +51,9 @@ vi.mock('lucide-react', () => ({
   ),
   AlertTriangle: ({ className }: { className?: string }) => (
     <span data-testid="alert-triangle" className={className} />
+  ),
+  Clock: ({ className }: { className?: string }) => (
+    <span data-testid="clock" className={className} />
   ),
 }));
 
@@ -95,6 +115,17 @@ function setDefaults() {
     isMaster: false,
     isLoading: false,
   });
+  mockUseIdentity.mockReturnValue({
+    userId: 'user-1',
+    organizationId: 'org-1',
+    teamMemberId: 'tm-1',
+    effectiveRole: 'member' as const,
+    isMaster: false,
+    isAdmin: false,
+    features: {} as Record<string, boolean>,
+    isLoading: false,
+    isReady: true,
+  });
   mockUseLocation.mockReturnValue({ pathname: '/dashboard' });
 }
 
@@ -122,7 +153,11 @@ describe('ProtectedRoute', () => {
 
   // 2
   it('shows spinner when master is loading', () => {
-    mockUseMasterAuth.mockReturnValue({ isMaster: false, isLoading: true });
+    mockUseIdentity.mockReturnValue({
+      userId: 'user-1', organizationId: 'org-1', teamMemberId: 'tm-1',
+      effectiveRole: null, isMaster: false, isAdmin: false,
+      features: {}, isLoading: true, isReady: false,
+    });
 
     render(
       <ProtectedRoute>
@@ -580,7 +615,11 @@ describe('ProtectedRoute', () => {
 
   // 13
   it('master bypasses all org checks (renders children even without teamMember)', () => {
-    mockUseMasterAuth.mockReturnValue({ isMaster: true, isLoading: false });
+    mockUseIdentity.mockReturnValue({
+      userId: 'user-1', organizationId: null, teamMemberId: null,
+      effectiveRole: 'admin' as const, isMaster: true, isAdmin: true,
+      features: {}, isLoading: false, isReady: true,
+    });
     mockUseCurrentTeamMember.mockReturnValue({ data: null, isLoading: false, error: null });
 
     render(

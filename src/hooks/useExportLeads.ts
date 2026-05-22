@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
-import { useCanPerformActionAsync } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 
 const BATCH_SIZE = 500;
 
@@ -121,7 +121,7 @@ function fmtDate(v: string | null | undefined): string {
 export function useExportLeads(): UseExportLeadsResult {
   const [isExporting, setIsExporting] = useState(false);
   const { organizationId } = useOrganization();
-  const exportPermission = useCanPerformActionAsync("export_leads");
+  const exportPermission = useCanDo("export_leads");
 
   const exportLeads = async (options: ExportLeadsOptions): Promise<{ count: number }> => {
     if (!organizationId) {

@@ -25,7 +25,7 @@ import { Campanha, useUpdateCampanha, useDeleteCampanha } from "@/hooks/useCampa
 import { Calendar, Target, Users, ArrowRight, Trophy, Clock, MoreVertical, Trash2, Power, PowerOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useCampanhaLeads, useCampanhaStages, useCampanhaMembers } from "@/hooks/useCampanhas";
-import { useCanPerformAction } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 import { useState, memo } from "react";
 import { toast } from "sonner";
 
@@ -35,8 +35,8 @@ interface CampanhaCardProps {
 
 export const CampanhaCard = memo(function CampanhaCard({ campanha }: CampanhaCardProps) {
   const navigate = useNavigate();
-  const { allowed: canEditCampaign } = useCanPerformAction("edit_campaign");
-  const { allowed: canDeleteCampaign } = useCanPerformAction("delete_campaign");
+  const { allowed: canEditCampaign } = useCanDo("edit_campaign");
+  const { allowed: canDeleteCampaign } = useCanDo("delete_campaign");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   
   const { data: leads } = useCampanhaLeads(campanha.id);

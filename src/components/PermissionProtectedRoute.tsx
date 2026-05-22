@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { Lock, AlertCircle, Loader2 } from "lucide-react";
-import { useFeaturePermission, useIsAdmin } from "@/hooks/useUserRole";
-import { useMasterAuth } from "@/hooks/useMasterAuth";
+import { useFeaturePermission } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { Button } from "@/components/ui/button";
 
@@ -17,11 +17,10 @@ export function PermissionProtectedRoute({
   fallback,
 }: PermissionProtectedRouteProps) {
   const { allowed, isLoading, hasError } = useFeaturePermission(featureKey);
-  const { isAdmin, isLoading: adminLoading } = useIsAdmin();
-  const { isMaster, isLoading: masterLoading } = useMasterAuth();
+  const { isAdmin, isMaster, isLoading: identityLoading } = useIdentity();
   const { data: currentTeamMember, isLoading: teamMemberLoading } = useCurrentTeamMember();
 
-  if (adminLoading || masterLoading) {
+  if (identityLoading) {
     return <LoadingView />;
   }
 

@@ -453,52 +453,55 @@ describe("resolvePermission", () => {
     expect(await resolvePermission("u1", "org-1", "can_delete_leads")).toBe(true);
   });
 
-  it("individual override enabled=true wins", async () => {
+  it("member override enabled=true wins over default_value", async () => {
     mockState.tables.team_members = [
       { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
     ];
-    mockState.tables.team_member_org_permissions = [
-      { team_member_id: "tm1", permission_key: "can_delete_leads", enabled: true },
+    mockState.tables.feature_permissions = [
+      { key: "leads.delete", is_admin_only: false, default_value: false },
+    ];
+    mockState.tables.member_feature_permissions = [
+      { team_member_id: "tm1", feature_key: "leads.delete", enabled: true },
     ];
     expect(await resolvePermission("u1", "org-1", "can_delete_leads")).toBe(true);
   });
 
-  it("individual override enabled=false wins over role", async () => {
+  it("member override enabled=false wins over default_value=true", async () => {
     mockState.tables.team_members = [
       { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
     ];
-    mockState.tables.team_member_org_permissions = [
-      { team_member_id: "tm1", permission_key: "can_delete_leads", enabled: false },
+    mockState.tables.feature_permissions = [
+      { key: "leads.delete", is_admin_only: false, default_value: true },
     ];
-    mockState.tables.organization_role_permissions = [
-      {
-        organization_id: "org-1",
-        role: "membro",
-        permission_key: "can_delete_leads",
-        enabled: true,
-      },
+    mockState.tables.member_feature_permissions = [
+      { team_member_id: "tm1", feature_key: "leads.delete", enabled: false },
     ];
     expect(await resolvePermission("u1", "org-1", "can_delete_leads")).toBe(false);
   });
 
-  it("falls back to role permission when no individual override", async () => {
+  it("falls back to feature default_value when no member override", async () => {
     mockState.tables.team_members = [
       { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
     ];
-    mockState.tables.organization_role_permissions = [
-      {
-        organization_id: "org-1",
-        role: "membro",
-        permission_key: "can_delete_leads",
-        enabled: true,
-      },
+    mockState.tables.feature_permissions = [
+      { key: "leads.delete", is_admin_only: false, default_value: true },
     ];
     expect(await resolvePermission("u1", "org-1", "can_delete_leads")).toBe(true);
   });
 
-  it("returns false when neither override nor role permission found", async () => {
+  it("returns false when feature not found", async () => {
     mockState.tables.team_members = [
       { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
+    ];
+    expect(await resolvePermission("u1", "org-1", "can_delete_leads")).toBe(false);
+  });
+
+  it("returns false when feature is admin_only", async () => {
+    mockState.tables.team_members = [
+      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
+    ];
+    mockState.tables.feature_permissions = [
+      { key: "leads.delete", is_admin_only: true, default_value: true },
     ];
     expect(await resolvePermission("u1", "org-1", "can_delete_leads")).toBe(false);
   });

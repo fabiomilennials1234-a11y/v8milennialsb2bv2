@@ -23,7 +23,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
-import { useMasterAuth } from "./useMasterAuth";
+import { useIdentity } from "./useIdentity";
 import { normalizePhone } from "@/lib/normalizePhone";
 
 export interface CopilotToggleStatus {
@@ -53,7 +53,7 @@ export function useCopilotToggleStatus(params: {
 }) {
   const { phone, leadId } = params;
   const { organizationId } = useOrganization();
-  const { isMaster } = useMasterAuth();
+  const { isMaster } = useIdentity();
 
   const normalized = normalizePhone(phone ?? null);
   const queryKey = copilotToggleQueryKey(organizationId, phone);
@@ -126,7 +126,7 @@ export function useCopilotToggleStatus(params: {
 export function useCopilotToggleMutation() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
-  const { isMaster } = useMasterAuth();
+  const { isMaster } = useIdentity();
 
   return useMutation({
     mutationFn: async (input: {

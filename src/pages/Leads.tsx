@@ -58,7 +58,7 @@ import { ExportLeadsModal } from "@/components/leads/ExportLeadsModal";
 import { ImportHistoryPanel } from "@/components/leads/ImportHistoryPanel";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
-import { useCanPerformAction } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 import { useFeaturePermission } from "@/hooks/useUserRole";
 import {
   AlertDialog,
@@ -215,8 +215,8 @@ function LeadsInner() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isImportHistoryOpen, setIsImportHistoryOpen] = useState(false);
-  const { allowed: canExport } = useCanPerformAction("export_leads");
-  const { allowed: canCreateLead } = useCanPerformAction("create_lead");
+  const { allowed: canExport } = useCanDo("export_leads");
+  const { allowed: canCreateLead } = useCanDo("create_lead");
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState<LeadFormData>(initialFormData);
   const { organizationId } = useOrganization();

@@ -30,7 +30,7 @@ import {
 import { DraggableKanbanBoard, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/components/kanban/KanbanFilterPanel";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
-import { useCanPerformAction } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipePropostas, useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
@@ -68,8 +68,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
-import { useFeaturePermission, useIsAdmin } from "@/hooks/useUserRole";
-import { useMasterAuth } from "@/hooks/useMasterAuth";
+import { useFeaturePermission } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 import { useTags } from "@/hooks/useTags";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
@@ -201,8 +201,7 @@ function PipePropostasInner() {
   // além da RLS. Membros ainda podem trocar manualmente; a flag membroDefaultApplied
   // garante que o default só aplica uma vez por usuário.
   const { teamMemberId } = useOrganization();
-  const { isAdmin } = useIsAdmin();
-  const { isMaster } = useMasterAuth();
+  const { isAdmin, isMaster } = useIdentity();
   useEffect(() => {
     if (filterState.membroDefaultApplied) return;
     if (!teamMemberId || isAdmin || isMaster) return;
@@ -273,7 +272,7 @@ function PipePropostasInner() {
   const { data: workflowCounts = {} } = useStageWorkflowCounts("propostas");
   const { data: teamMembers } = useTeamMembers();
   const updatePipeProposta = useUpdatePipeProposta();
-  const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
+  const { allowed: canMovePipe } = useCanDo("move_pipe_record");
   const { data: tinyStatus } = useTinyErpStatus();
   const cadastroExternoEnabled = useCadastroExternoEnabled();
   const deletePipeProposta = useDeletePipeProposta();

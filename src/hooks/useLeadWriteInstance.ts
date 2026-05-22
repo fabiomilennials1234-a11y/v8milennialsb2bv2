@@ -19,8 +19,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
-import { useIsAdmin } from "@/hooks/useUserRole";
-import { useMasterAuth } from "@/hooks/useMasterAuth";
+import { useIdentity } from "@/hooks/useIdentity";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useUserWriteInstanceFlag } from "@/hooks/useUserWriteInstanceFlag";
 import type {
@@ -69,8 +68,7 @@ export function useLeadWriteInstance(
 ): UseLeadWriteInstanceResult {
   const { organizationId } = useOrganization();
   const { data: currentTeamMember } = useCurrentTeamMember();
-  const { isAdmin } = useIsAdmin();
-  const { isMaster } = useMasterAuth();
+  const { isAdmin, isMaster } = useIdentity();
   const { isStrict, isLoading: flagLoading } = useUserWriteInstanceFlag();
 
   // 1. RPC: resolve instance + error code.

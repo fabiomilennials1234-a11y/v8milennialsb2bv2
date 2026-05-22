@@ -15,7 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
-import { useMasterAuth } from "@/hooks/useMasterAuth";
+import { useIdentity } from "@/hooks/useIdentity";
 import { Skeleton } from "@/components/ui/skeleton";
 import DashboardOutbound from "./DashboardOutbound";
 
@@ -25,7 +25,7 @@ export default function Dashboard() {
   const { data: userRole } = useUserRole();
   const role = userRole?.role;
   const { isLoading: teamMemberLoading } = useCurrentTeamMember();
-  const { isMaster } = useMasterAuth();
+  const { isMaster } = useIdentity();
 
   const showAnalytics = isMaster;
 

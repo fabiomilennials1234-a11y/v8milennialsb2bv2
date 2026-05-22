@@ -62,7 +62,6 @@ import { useLeadCustomFields } from "@/hooks/useLeadCustomFields";
 import { usePipeMetrics } from "@/hooks/usePipeMetrics";
 import { useRecentActivity } from "@/hooks/useRecentActivity";
 import { useSplitAbMetrics } from "@/hooks/useSplitAbMetrics";
-import { useTeamMemberPermissions } from "@/hooks/useTeamMemberPermissions";
 import { useAutoMoveUpsellClients } from "@/hooks/useAutoMoveUpsellClients";
 import { useAutoFollowUp } from "@/hooks/useAutoFollowUp";
 

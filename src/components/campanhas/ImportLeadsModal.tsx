@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { CampanhaStage, CampanhaMember, type Campanha } from "@/hooks/useCampanhas";
 import { useImportLeads, parseFilePreview, KNOWN_LEAD_FIELDS, type FilePreviewResult } from "@/hooks/useImportLeads";
 import { useLeadCustomFields } from "@/hooks/useLeadCustomFields";
-import { useCanPerformAction } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";
 import { toast } from "sonner";
 import { Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Loader2, Sparkles, Users, RefreshCw, AlertTriangle, FileDown, ChevronDown, ChevronUp, UserX } from "lucide-react";
@@ -77,7 +77,7 @@ export function ImportLeadsModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { parseCSV, importLeads, resetImport, isImporting, progress, result, lastReport } = useImportLeads();
   const { data: customFields = [] } = useLeadCustomFields();
-  const { allowed: canImport, isLoading: permLoading } = useCanPerformAction("import_leads");
+  const { allowed: canImport, isLoading: permLoading } = useCanDo("import_leads");
   const queryClient = useQueryClient();
   const customFieldNames = customFields.map((f) => f.field_name);
   const allMembers = members;

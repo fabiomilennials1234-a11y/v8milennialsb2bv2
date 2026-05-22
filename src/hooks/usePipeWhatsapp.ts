@@ -4,7 +4,7 @@ import type { Tables } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 
 import { useOrganization } from "./useOrganization";
-import { useCanPerformActionAsync } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 import { OptimisticLockConflictError, isPostgrestNoRows } from "@/lib/optimistic-lock";
 import { usePipelineEntries, usePipelineId, findOrCreatePipelineEntry } from "./usePipelineEntries";
 
@@ -87,7 +87,7 @@ export function useCreatePipeWhatsapp() {
 
 export function useUpdatePipeWhatsapp() {
   const queryClient = useQueryClient();
-  const movePermission = useCanPerformActionAsync("move_pipe_record");
+  const movePermission = useCanDo("move_pipe_record");
 
   return useMutation({
     mutationFn: async ({

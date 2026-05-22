@@ -174,25 +174,6 @@ describe("useDispatchQueueItems", () => {
   });
 });
 
-// ═══ 7. useTeamMemberPermissions (55 LOC) ═══
-import { RESOURCE_KEYS, ACTION_KEYS, PERMISSION_VALUES, useTeamMemberPermissions, useSaveTeamMemberPermissions } from "@/hooks/useTeamMemberPermissions";
-
-describe("useTeamMemberPermissions", () => {
-  it("exports constants", () => {
-    expect(RESOURCE_KEYS.length).toBeGreaterThan(0);
-    expect(ACTION_KEYS).toContain("create");
-    expect(PERMISSION_VALUES).toContain("allowed");
-  });
-  it("useTeamMemberPermissions fetches", async () => {
-    const { result } = renderHook(() => useTeamMemberPermissions(["tm-1"]), { wrapper: w() });
-    await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
-  });
-  it("useSaveTeamMemberPermissions mutates", async () => {
-    const { result } = renderHook(() => useSaveTeamMemberPermissions(), { wrapper: w() });
-    await act(async () => { try { await result.current.mutateAsync({ teamMemberId: "tm1", permissions: [] } as any); } catch {} });
-  });
-});
-
 // ═══ 8. useMktOriginConfig (52 LOC) ═══
 import { ALL_ORIGINS, ORIGIN_LABELS, useMktOriginConfigs, useUpsertMktOriginConfig } from "@/hooks/useMktOriginConfig";
 

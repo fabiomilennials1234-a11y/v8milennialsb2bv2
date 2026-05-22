@@ -14,7 +14,7 @@ import { useAnalyticsFinanceiro } from "@/hooks/useAnalyticsFinanceiro";
 import { useAnalyticsComercial } from "@/hooks/useAnalyticsComercial";
 import { useMktByOrigin } from "@/hooks/useMktByOrigin";
 import { useMktOriginConfigs } from "@/hooks/useMktOriginConfig";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 
 interface Props {
   month: number;
@@ -23,7 +23,7 @@ interface Props {
 
 export function AquisicaoSection({ month, year }: Props) {
   const [configOpen, setConfigOpen] = useState(false);
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin } = useIdentity();
 
   const { data: overviewData, isError: overviewError } = useAnalyticsOverview();
   const { data: financeiroData, isError: financeiroError } = useAnalyticsFinanceiro();
