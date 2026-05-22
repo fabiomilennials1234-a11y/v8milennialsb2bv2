@@ -1,9 +1,0 @@
-[
-  {
-    "name": "organizationId",
-    "type": "text",
-    "label": "Organização (ID)",
-    "help": "UUID da organização no Torque CRM. Peça ao administrador.",
-    "required": true
-  }
-]
