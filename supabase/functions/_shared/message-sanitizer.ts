@@ -9,8 +9,14 @@
  * 2. Leak do delimitador ||SPLIT|| — quando o LLM emite em caixa
  *    diferente (||split||, || SPLIT ||) o split literal não matcha
  *    e o marcador vaza como texto.
+ * 3. Leak XML de tool_call — modelos preview (ex. gemini-3-flash-preview)
+ *    emitem tool invocations no formato universal-tool-calling
+ *    (`<tool_call>{...}</tool_call>`, `<vertical_tool_calls>...`,
+ *    `<no_tool_calls>`) como TEXTO no content em vez de native tool_calls.
+ *    Schemas conhecidos: `{tool_name, tool_arguments}` e `{name, arguments}`.
  *
- * Incidente-fonte: Barulhinho Bom, 2026-04-24.
+ * Incidentes-fonte: Barulhinho Bom 2026-04-24 (JSON ReAct) e 2026-05-21
+ * (XML tool_call com gemini-3-flash-preview).
  */
 
 /** Mapa tool_name (snake_case) → action token (UPPER_CASE) usado pelo executor. */
@@ -133,6 +139,80 @@ function extractActionJsonBlocks(src: string): Array<{ start: number; end: numbe
   return blocks;
 }
 
+/**
+ * Extrai e remove blocos `<tool_call>...</tool_call>` (e wrapper
+ * `<vertical_tool_calls>...</vertical_tool_calls>`) emitidos como texto
+ * por modelos no formato universal-tool-calling.
+ *
+ * Suporta:
+ *  - <tool_call>{"tool_name":"...","tool_arguments":{...}}</tool_call>
+ *  - <tool_call>{"name":"...","arguments":{...}}</tool_call>
+ *  - <tool_call name="..." arguments='...'></tool_call> (atributo form)
+ *  - <no_tool_calls> e <no_tool_calls /> (sentinelas)
+ *  - <tool_call> sem fechamento (descarta tudo a partir do bloco aberto)
+ *
+ * Retorna texto limpo + lista de candidatos a recovery (primeiro JSON
+ * parseável dentro de cada bloco, se schema reconhecido).
+ */
+function stripToolCallBlocks(
+  input: string,
+): { cleaned: string; dropped: number; candidates: string[] } {
+  if (!input || !/<\/?(?:tool_call|vertical_tool_calls|no_tool_calls)\b/i.test(input)) {
+    return { cleaned: input, dropped: 0, candidates: [] };
+  }
+
+  let text = input;
+  let dropped = 0;
+  const candidates: string[] = [];
+
+  // 1. Wrapper <vertical_tool_calls>...</vertical_tool_calls> — strip wrapper
+  //    tags só (conteúdo interno é tratado pelo próximo passo)
+  text = text.replace(/<\/?vertical_tool_calls\b[^>]*>/gi, () => {
+    dropped += 1;
+    return "";
+  });
+
+  // 2. Blocos completos <tool_call ...>...</tool_call>
+  const COMPLETE = /<tool_call\b[^>]*>([\s\S]*?)<\/tool_call\s*>/gi;
+  text = text.replace(COMPLETE, (_m, inner: string) => {
+    dropped += 1;
+    const candidate = extractFirstJsonObject(inner);
+    if (candidate) candidates.push(candidate);
+    return "";
+  });
+
+  // 3. Sentinelas <no_tool_calls>, <no_tool_calls />, </no_tool_calls>
+  text = text.replace(/<\/?no_tool_calls\s*\/?\s*>/gi, () => {
+    dropped += 1;
+    return "";
+  });
+
+  // 4. Defensive: <tool_call> aberto sem fechamento — descarta tudo após
+  const openIdx = text.search(/<tool_call\b/i);
+  if (openIdx >= 0) {
+    text = text.slice(0, openIdx);
+    dropped += 1;
+  }
+
+  // 5. Tag residual órfã </tool_call> ou <tool_call ... /> self-closing
+  text = text.replace(/<\/?tool_call\b[^>]*\/?\s*>/gi, "");
+
+  return { cleaned: text, dropped, candidates };
+}
+
+/**
+ * Extrai primeiro objeto JSON balanceado dentro de string (helper para
+ * recuperar tool args do conteúdo de `<tool_call>`).
+ */
+function extractFirstJsonObject(src: string): string | null {
+  for (let i = 0; i < src.length; i++) {
+    if (src[i] !== "{") continue;
+    const found = findBalancedJson(src, i);
+    if (found) return src.slice(i, found.end + 1);
+  }
+  return null;
+}
+
 export function sanitizeAssistantMessage(
   raw: string,
   alreadyHasAction: boolean,
@@ -160,6 +240,21 @@ export function sanitizeAssistantMessage(
     return _m; // fence sem action-json — preserva
   });
 
+  // Passo 1b: tirar blocos XML <tool_call> / <vertical_tool_calls> / <no_tool_calls>
+  // (formato universal-tool-calling emitido como texto por modelos preview).
+  const toolCallStrip = stripToolCallBlocks(text);
+  text = toolCallStrip.cleaned;
+  droppedBlocks += toolCallStrip.dropped;
+  if (!alreadyHasAction && !recoveredAction) {
+    for (const candidate of toolCallStrip.candidates) {
+      const rec = tryRecoverFromString(candidate);
+      if (rec) {
+        recoveredAction = rec;
+        break;
+      }
+    }
+  }
+
   // Passo 2: objetos JSON soltos contendo "action":"..."
   const blocks = extractActionJsonBlocks(text);
   if (blocks.length > 0) {
@@ -186,8 +281,11 @@ export function sanitizeAssistantMessage(
   // Normalização de whitespace
   text = text.replace(/\n{3,}/g, "\n\n").trim();
 
-  // Defensive final: garantir zero vazamento de tags reasoning
-  text = text.replace(/<\/?(?:thinking|response)[^>]*>/gi, "").trim();
+  // Defensive final: garantir zero vazamento de tags reasoning + tool_call residual
+  text = text
+    .replace(/<\/?(?:thinking|response)[^>]*>/gi, "")
+    .replace(/<\/?(?:tool_call|vertical_tool_calls|no_tool_calls)\b[^>]*\/?\s*>/gi, "")
+    .trim();
 
   return { text, droppedBlocks, recoveredAction, reasoning };
 }
@@ -195,12 +293,25 @@ export function sanitizeAssistantMessage(
 function tryRecoverFromString(jsonStr: string): RecoveredAction | null {
   try {
     const parsed = JSON.parse(jsonStr);
-    const toolName =
-      typeof parsed?.action === "string" ? parsed.action.toLowerCase() : "";
+    // Schemas aceitos:
+    //  - ReAct/legacy: { action, action_input }
+    //  - OpenRouter universal: { tool_name, tool_arguments }
+    //  - OpenAI-like: { name, arguments }
+    const rawToolName =
+      (typeof parsed?.action === "string" && parsed.action) ||
+      (typeof parsed?.tool_name === "string" && parsed.tool_name) ||
+      (typeof parsed?.name === "string" && parsed.name) ||
+      "";
+    const toolName = typeof rawToolName === "string" ? rawToolName.toLowerCase() : "";
     const mapped = TOOL_NAME_TO_ACTION[toolName];
     if (!mapped) return null;
 
-    const rawInput = parsed.action_input ?? parsed.input ?? parsed.arguments ?? parsed.params;
+    const rawInput =
+      parsed.action_input ??
+      parsed.tool_arguments ??
+      parsed.arguments ??
+      parsed.input ??
+      parsed.params;
     let params: Record<string, unknown> = {};
     if (typeof rawInput === "string") {
       try {
