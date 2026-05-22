@@ -50,7 +50,7 @@ import { useWhatsAppMessagesRealtime } from "@/hooks/chat/useWhatsAppRealtime";
 import { useFailedMessages, useRetryMessage } from "@/hooks/chat/useWhatsAppSend";
 import { useChatDensity } from "@/hooks/chat/useChatDensity";
 import { useTakeover } from "@/hooks/chat/useTakeover";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 import { useTags } from "@/hooks/useTags";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useAuth } from "@/contexts/AuthContext";
@@ -294,7 +294,7 @@ export function ChatShellWithContext() {
   const { user } = useAuth();
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id ?? null;
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin } = useIdentity();
   const { data: allTags = [] } = useTags();
 
   // ── Instâncias ──────────────────────────────────────────────────────────────

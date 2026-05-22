@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useCampanhas } from "@/hooks/useCampanhas";
-import { useCanPerformAction } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 import { useOrganization } from "@/hooks/useOrganization";
 import { trackModuleVisit } from "@/lib/analytics";
 import { CampanhaCard } from "@/components/campanhas/CampanhaCard";
@@ -17,7 +17,7 @@ export default function Campanhas() {
   const [createOpen, setCreateOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: campanhas, isLoading } = useCampanhas();
-  const { allowed: canCreateCampaign } = useCanPerformAction("create_campaign");
+  const { allowed: canCreateCampaign } = useCanDo("create_campaign");
 
   // Auto-open create modal when coming from CreateNewModal
   useEffect(() => {

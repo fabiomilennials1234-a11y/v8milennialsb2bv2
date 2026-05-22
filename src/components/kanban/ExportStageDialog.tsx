@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useExportLeads, type ExportStageFilter } from "@/hooks/useExportLeads";
-import { useCanPerformAction } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 import { toast } from "sonner";
 import { FileDown, Loader2, FileSpreadsheet, FileText } from "lucide-react";
 
@@ -38,7 +38,7 @@ export function ExportStageDialog({
 }: ExportStageDialogProps) {
   const [format, setFormat] = useState<ExportFormat>("csv");
   const { exportLeads, isExporting } = useExportLeads();
-  const { allowed: canExport } = useCanPerformAction("export_leads");
+  const { allowed: canExport } = useCanDo("export_leads");
 
   // Reset format ao abrir/fechar para evitar estado vazado entre etapas.
   useEffect(() => {

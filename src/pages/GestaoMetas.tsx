@@ -33,7 +33,7 @@ import {
 import { useGoals, useCreateGoal, useUpdateGoal, Goal } from "@/hooks/useGoals";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useQueryClient } from "@tanstack/react-query";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 import { useOrganization } from "@/hooks/useOrganization";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -72,7 +72,7 @@ export default function GestaoMetas() {
   const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
-  const { isAdmin, isLoading: adminLoading } = useIsAdmin();
+  const { isAdmin, isLoading: adminLoading } = useIdentity();
   const { organizationId } = useOrganization();
   const { data: goals = [], isLoading: goalsLoading } = useGoals(selectedMonth, selectedYear);
   const { data: teamMembers = [] } = useTeamMembers();

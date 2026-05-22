@@ -17,7 +17,7 @@ import {
 import { DraggableKanbanBoard, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/components/kanban/KanbanFilterPanel";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
-import { useCanPerformAction } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/hooks/usePipeWhatsapp";
@@ -162,7 +162,7 @@ function PipeWhatsappInner() {
   const { data: userRole } = useUserRole();
   const createPipeWhatsapp = useCreatePipeWhatsapp();
   const updatePipeWhatsapp = useUpdatePipeWhatsapp();
-  const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
+  const { allowed: canMovePipe } = useCanDo("move_pipe_record");
   const deletePipeWhatsapp = useDeletePipeWhatsapp();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("whatsapp");
   const createPipeProposta = useCreatePipeProposta();

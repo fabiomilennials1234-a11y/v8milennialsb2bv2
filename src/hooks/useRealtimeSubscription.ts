@@ -20,6 +20,7 @@ const TABLES_WITHOUT_ORG_ID = new Set([
   "profiles",
   "master_users",
   "tags",
+  "checklist_items",
 ]);
 
 export interface RealtimeHandlers<T = any> {

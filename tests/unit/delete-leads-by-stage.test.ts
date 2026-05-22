@@ -51,6 +51,8 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('@/lib/permissions', () => ({
   useCanPerformActionAsync: () => vi.fn(),
+  assertPermission: vi.fn().mockResolvedValue(undefined),
+  assertIsAdmin: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/hooks/useMasterAuth', () => ({
@@ -59,6 +61,33 @@ vi.mock('@/hooks/useMasterAuth', () => ({
 
 vi.mock('@/hooks/useUserRole', () => ({
   useIsAdmin: () => ({ isAdmin: false, isLoading: false }),
+  useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
+  useFeaturePermission: () => ({ allowed: true, isLoading: false, hasError: false }),
+  useCanManageCopilot: () => ({ canManage: true, canCreate: true, canEdit: true, canDelete: true, canToggle: true, isLoading: false }),
+  useCanManageWhatsApp: () => ({ canManage: true, isLoading: false }),
+  useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
+  useJobTitle: () => ({ jobTitle: "", isLoading: false }),
+  useMetricType: () => ({ metricType: "sales", isLoading: false }),
+  useHasRole: () => ({ hasRole: true, isLoading: false }),
+}));
+
+const mockIdentity = {
+  userId: "user-1",
+  organizationId: "org-123",
+  teamMemberId: "tm-1",
+  effectiveRole: "admin" as const,
+  isMaster: false,
+  isAdmin: true,
+  features: {} as Record<string, boolean>,
+  isLoading: false,
+  isReady: true,
+};
+vi.mock('@/hooks/useIdentity', () => ({
+  useIdentity: () => mockIdentity,
+}));
+
+vi.mock('@/hooks/useCanDo', () => ({
+  useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 
 // ─── Import after mocks ─────────────────────────────────
@@ -69,6 +98,8 @@ import { useDeleteAllLeadsInPipe } from '@/hooks/useLeads';
 describe('useDeleteAllLeadsInPipe — stage filtering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIdentity.isAdmin = true;
+    mockIdentity.effectiveRole = "admin" as any;
     // Permission: allow by default
     mockRpc.mockResolvedValue({ data: true, error: null });
   });
@@ -116,6 +147,8 @@ describe('useDeleteAllLeadsInPipe — stage filtering', () => {
   });
 
   it('throws if user lacks can_delete_leads permission', async () => {
+    mockIdentity.isAdmin = false;
+    mockIdentity.effectiveRole = "member" as any;
     mockRpc.mockResolvedValue({ data: false, error: null });
 
     const hook = useDeleteAllLeadsInPipe('whatsapp');

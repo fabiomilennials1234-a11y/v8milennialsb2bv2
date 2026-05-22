@@ -34,6 +34,22 @@ vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" },
 vi.mock("@/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
 vi.mock("@/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }), useResponsibleMembers: () => ({ data: [] }) }));
 vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
+vi.mock("@/hooks/useIdentity", () => ({
+  useIdentity: () => ({
+    userId: "u1",
+    organizationId: "org-t",
+    teamMemberId: "tm1",
+    effectiveRole: "admin" as const,
+    isMaster: false,
+    isAdmin: true,
+    features: {} as Record<string, boolean>,
+    isLoading: false,
+    isReady: true,
+  }),
+}));
+vi.mock("@/hooks/useCanDo", () => ({
+  useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
+}));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {}, useAllPipelineStages: () => ({ data: [] }) }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
@@ -41,9 +57,19 @@ vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }))
 vi.mock("@/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
 vi.mock("@/hooks/useWhatsAppInstances", () => ({ useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }) }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
+vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), assertPermission: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
+vi.mock("@/hooks/useUserRole", () => ({
+  useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
+  useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
+  useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
+  useFeaturePermission: () => ({ allowed: true, isLoading: false, hasError: false }),
+  useCanManageCopilot: () => ({ canManage: true, canCreate: true, canEdit: true, canDelete: true, canToggle: true, isLoading: false }),
+  useCanManageWhatsApp: () => ({ canManage: true, isLoading: false }),
+  useJobTitle: () => ({ jobTitle: "", isLoading: false }),
+  useMetricType: () => ({ metricType: "sales", isLoading: false }),
+  useHasRole: () => ({ hasRole: true, isLoading: false }),
+}));
 vi.mock("@/contexts/OrgFeaturesContext", () => ({ useOrgFeatures: () => ({ hasFeature: () => true, checkLimit: () => -1 }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 

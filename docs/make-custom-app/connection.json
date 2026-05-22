@@ -1,0 +1,25 @@
+{
+  "response": {
+    "valid": {
+      "condition": "{{statusCode}} == 200"
+    },
+    "error": {
+      "message": "{{body.error}}"
+    }
+  },
+  "url": "{{common.supabaseUrl}}/functions/v1/lead-webhook",
+  "method": "POST",
+  "headers": {
+    "Authorization": "Bearer {{common.anonKey}}",
+    "x-webhook-key": "{{common.webhookApiKey}}",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "source": "make_connection_test",
+    "organization_id": "{{parameters.organizationId}}",
+    "fields": {
+      "name": "Make Connection Test",
+      "phone": "5500000000000"
+    }
+  }
+}

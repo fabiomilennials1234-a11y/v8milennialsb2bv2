@@ -59,15 +59,18 @@ export class AgentRouter {
   }
 
   private async resolveAgent(leadId?: string): Promise<Record<string, unknown> | null> {
+    let leadOrigin: string | undefined;
+
     if (leadId) {
-      const routed = await this.routeByLead(leadId);
-      if (routed) return routed;
+      const result = await this.routeByLead(leadId);
+      if (result.agent) return result.agent;
+      leadOrigin = result.leadOrigin;
     }
 
-    return await this.fallback();
+    return await this.fallback(leadOrigin);
   }
 
-  private async routeByLead(leadId: string): Promise<Record<string, unknown> | null> {
+  private async routeByLead(leadId: string): Promise<{ agent: Record<string, unknown> | null; leadOrigin?: string }> {
     try {
       const [leadRes, upsellRes, confirmacaoRes, propostasRes, campanhaRes] = await Promise.all([
         this.supabase.from("leads").select("pipe_whatsapp, origin, segment").eq("id", leadId).maybeSingle(),
@@ -83,7 +86,9 @@ export class AgentRouter {
       const propostasRow = propostasRes ? { status: propostasRes.stage_key } : null;
       const campanhaRow = campanhaRes.data as { campanha_stages?: { name?: string } } | null;
 
-      if (!leadRow && !upsellRow && !confirmacaoRow && !propostasRow && !campanhaRow) return null;
+      if (!leadRow && !upsellRow && !confirmacaoRow && !propostasRow && !campanhaRow) {
+        return { agent: null, leadOrigin: leadRow?.origin };
+      }
 
       const allStages: string[] = [];
       if (leadRow?.pipe_whatsapp) allStages.push(leadRow.pipe_whatsapp);
@@ -106,14 +111,22 @@ export class AgentRouter {
           : Promise.resolve({ data: null }),
       ]);
 
-      return stageResult.data || originResult.data || segmentResult.data || null;
+      const agent = (stageResult.data || originResult.data || segmentResult.data) as Record<string, unknown> | null;
+      return { agent, leadOrigin: leadRow?.origin };
     } catch (e) {
       console.warn("[AgentRouter] routing lookup failed (non-fatal):", e);
-      return null;
+      return { agent: null };
     }
   }
 
-  private async fallback(): Promise<Record<string, unknown> | null> {
+  private static rejectsOrigin(agent: Record<string, unknown>, leadOrigin?: string): boolean {
+    if (!leadOrigin) return false;
+    const origins = agent.routing_origins as string[] | null;
+    if (!origins || origins.length === 0) return false;
+    return !origins.includes(leadOrigin);
+  }
+
+  private async fallback(leadOrigin?: string): Promise<Record<string, unknown> | null> {
     const { data: defaultAgent } = await this.supabase
       .from("copilot_agents")
       .select(SELECT_AGENT)
@@ -122,7 +135,9 @@ export class AgentRouter {
       .eq("is_default", true)
       .maybeSingle();
 
-    if (defaultAgent) return defaultAgent as Record<string, unknown>;
+    if (defaultAgent && !AgentRouter.rejectsOrigin(defaultAgent as Record<string, unknown>, leadOrigin)) {
+      return defaultAgent as Record<string, unknown>;
+    }
 
     const { data: anyAgent } = await this.supabase
       .from("copilot_agents")
@@ -133,7 +148,18 @@ export class AgentRouter {
       .limit(1)
       .maybeSingle();
 
-    return (anyAgent as Record<string, unknown>) ?? null;
+    if (anyAgent && !AgentRouter.rejectsOrigin(anyAgent as Record<string, unknown>, leadOrigin)) {
+      return anyAgent as Record<string, unknown>;
+    }
+
+    if (anyAgent && leadOrigin) {
+      console.log("[AgentRouter] agent rejected lead origin", {
+        agentId: (anyAgent as Record<string, unknown>).id,
+        leadOrigin,
+      });
+    }
+
+    return null;
   }
 
   static bustCache(orgId: string, leadId?: string): void {

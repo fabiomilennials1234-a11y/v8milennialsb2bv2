@@ -8,7 +8,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, ShieldAlert } from "lucide-react";
-import { useMasterAuth } from "@/hooks/useMasterAuth";
+import { useIdentity } from "@/hooks/useIdentity";
 import { toast } from "sonner";
 
 interface MasterRouteProps {
@@ -16,7 +16,7 @@ interface MasterRouteProps {
 }
 
 export function MasterRoute({ children }: MasterRouteProps) {
-  const { isMaster, isLoading } = useMasterAuth();
+  const { isMaster, isLoading } = useIdentity();
   const navigate = useNavigate();
 
   useEffect(() => {

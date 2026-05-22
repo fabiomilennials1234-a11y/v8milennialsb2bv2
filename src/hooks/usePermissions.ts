@@ -1,6 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 import { useOrganization } from "./useOrganization";
 import { useUserRole } from "./useUserRole";
 
@@ -15,17 +14,10 @@ export type PermissionKey =
   | "can_move_pipe_records"
   | "can_manage_campaigns";
 
-export interface OrgRolePermission {
-  id: string;
-  organization_id: string;
-  role: string;
-  permission_key: PermissionKey;
-  enabled: boolean;
-}
-
 /**
  * Retorna se o usuário tem uma permissão específica.
- * Admin sempre tem todas. Senão, lê organization_role_permissions.
+ * Admin sempre tem todas. Delega para user_has_org_permission() RPC
+ * que internamente mapeia org keys → feature keys.
  */
 export function useHasPermission(permissionKey: PermissionKey) {
   const { data: userRole } = useUserRole();

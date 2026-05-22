@@ -29,8 +29,6 @@ const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION ===
 // Deterministic test UUIDs -- easy to clean up
 const TEST_TAG_ID = '99990000-0000-0000-0000-000000000001';
 const TEST_TAG_MEMBER_ID = '99990000-0000-0000-0000-000000000002';
-const TEST_ORP_ID = '99990000-0000-0000-0000-000000000011';
-const TEST_ORP_MEMBER_ID = '99990000-0000-0000-0000-000000000012';
 
 describe.skipIf(shouldSkip)('RLS: Role-based access', () => {
   let admin: SupabaseClient;
@@ -52,12 +50,7 @@ describe.skipIf(shouldSkip)('RLS: Role-based access', () => {
   afterAll(async () => {
     // Deterministic cleanup via service client -- catches any leaked rows
     const cleanupIds = [TEST_TAG_ID, TEST_TAG_MEMBER_ID];
-    const cleanupOrpIds = [TEST_ORP_ID, TEST_ORP_MEMBER_ID];
-
-    await Promise.all([
-      svc.from('tags').delete().in('id', cleanupIds),
-      svc.from('organization_role_permissions').delete().in('id', cleanupOrpIds),
-    ]);
+    await svc.from('tags').delete().in('id', cleanupIds);
 
     await clearClients();
   });
@@ -134,91 +127,6 @@ describe.skipIf(shouldSkip)('RLS: Role-based access', () => {
       });
 
       await expectDeleteDenied(member, 'tags', TEST_TAG_ID);
-    });
-  });
-
-  // ================================================================
-  // ORGANIZATION_ROLE_PERMISSIONS -- Admin-only write table
-  // ================================================================
-  describe('organization_role_permissions', () => {
-    it('admin can SELECT organization_role_permissions', async () => {
-      const { error } = await admin
-        .from('organization_role_permissions')
-        .select('id')
-        .eq('organization_id', TEST_ORG_ID)
-        .limit(1);
-
-      expect(error).toBeNull();
-    });
-
-    it('member can SELECT organization_role_permissions', async () => {
-      const { error } = await member
-        .from('organization_role_permissions')
-        .select('id')
-        .eq('organization_id', TEST_ORG_ID)
-        .limit(1);
-
-      expect(error).toBeNull();
-    });
-
-    it('admin can INSERT an organization_role_permission', async () => {
-      // Clean up any existing row with this test ID
-      await svc
-        .from('organization_role_permissions')
-        .delete()
-        .eq('id', TEST_ORP_ID);
-
-      const { error } = await admin.from('organization_role_permissions').insert({
-        id: TEST_ORP_ID,
-        organization_id: TEST_ORG_ID,
-        role: 'closer',
-        permission_key: 'see_unassigned_cards',
-        enabled: false,
-      });
-
-      expect(error).toBeNull();
-    });
-
-    it('member CANNOT INSERT an organization_role_permission', async () => {
-      await expectInsertDenied(member, 'organization_role_permissions', {
-        id: TEST_ORP_MEMBER_ID,
-        organization_id: TEST_ORG_ID,
-        role: 'closer',
-        permission_key: 'see_subordinates_cards',
-        enabled: false,
-      });
-    });
-
-    it('admin can DELETE an organization_role_permission they inserted', async () => {
-      // Ensure the row exists
-      await svc.from('organization_role_permissions').upsert({
-        id: TEST_ORP_ID,
-        organization_id: TEST_ORG_ID,
-        role: 'closer',
-        permission_key: 'see_unassigned_cards',
-        enabled: false,
-      });
-
-      const { error, count } = await admin
-        .from('organization_role_permissions')
-        .delete({ count: 'exact' })
-        .eq('id', TEST_ORP_ID);
-
-      expect(error).toBeNull();
-      expect(count).toBeGreaterThanOrEqual(1);
-    });
-
-    it('member CANNOT DELETE an organization_role_permission', async () => {
-      // Re-create via service client
-      await svc.from('organization_role_permissions').upsert({
-        id: TEST_ORP_ID,
-        organization_id: TEST_ORG_ID,
-        role: 'closer',
-        permission_key: 'see_unassigned_cards',
-        enabled: false,
-      });
-
-      await expectDeleteDenied(member, 'organization_role_permissions', TEST_ORP_ID);
     });
   });
 

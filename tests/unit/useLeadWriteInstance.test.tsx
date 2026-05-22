@@ -66,6 +66,20 @@ vi.mock("@/hooks/useMasterAuth", () => ({
   }),
 }));
 
+vi.mock("@/hooks/useIdentity", () => ({
+  useIdentity: () => ({
+    userId: mockUser.id,
+    organizationId: mockTeamMember?.organization_id ?? null,
+    teamMemberId: mockTeamMember?.id ?? null,
+    effectiveRole: (mockIsMaster || mockTeamMember?.role === "admin" ? "admin" : "member") as const,
+    isMaster: mockIsMaster,
+    isAdmin: mockIsMaster || mockTeamMember?.role === "admin",
+    features: {} as Record<string, boolean>,
+    isLoading: false,
+    isReady: !!mockTeamMember,
+  }),
+}));
+
 // useUserRole consumed by hook → return based on team_member.
 vi.mock("@/hooks/useUserRole", () => ({
   useUserRole: () => ({
@@ -78,6 +92,13 @@ vi.mock("@/hooks/useUserRole", () => ({
     isAdmin: mockTeamMember?.role === "admin",
     isLoading: false,
   }),
+  useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
+  useFeaturePermission: () => ({ allowed: true, isLoading: false, hasError: false }),
+  useCanManageCopilot: () => ({ canManage: true, canCreate: true, canEdit: true, canDelete: true, canToggle: true, isLoading: false }),
+  useCanManageWhatsApp: () => ({ canManage: true, isLoading: false }),
+  useJobTitle: () => ({ jobTitle: "", isLoading: false }),
+  useMetricType: () => ({ metricType: "sales", isLoading: false }),
+  useHasRole: () => ({ hasRole: true, isLoading: false }),
 }));
 
 vi.mock("@/hooks/useOrganization", () => ({

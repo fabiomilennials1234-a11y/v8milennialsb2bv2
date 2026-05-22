@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
-import { useCanPerformAction } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
@@ -49,8 +49,8 @@ import { cn } from "@/lib/utils";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
 import { track, trackModuleVisit } from "@/lib/analytics";
-import { useFeaturePermission, useIsAdmin } from "@/hooks/useUserRole";
-import { useMasterAuth } from "@/hooks/useMasterAuth";
+import { useFeaturePermission } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 import { useTags } from "@/hooks/useTags";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
@@ -232,8 +232,7 @@ function PipeConfirmacaoInner() {
 
   // Filtro defensivo: membros começam vendo só os próprios leads. Admin/Master veem tudo.
   const { teamMemberId } = useOrganization();
-  const { isAdmin } = useIsAdmin();
-  const { isMaster } = useMasterAuth();
+  const { isAdmin, isMaster } = useIdentity();
   useEffect(() => {
     if (filterState.membroDefaultApplied) return;
     if (!teamMemberId || isAdmin || isMaster) return;
@@ -279,7 +278,7 @@ function PipeConfirmacaoInner() {
     return pipeData.filter(item => item.lead).map(item => item.lead_id);
   }, [pipeData]);
   const updatePipeConfirmacao = useUpdatePipeConfirmacao();
-  const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
+  const { allowed: canMovePipe } = useCanDo("move_pipe_record");
   const createPipeProposta = useCreatePipeProposta();
   const createPipeConfirmacao = useCreatePipeConfirmacao();
   const deletePipeConfirmacao = useDeletePipeConfirmacao();

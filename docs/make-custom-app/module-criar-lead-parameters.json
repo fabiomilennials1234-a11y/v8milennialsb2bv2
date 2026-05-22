@@ -1,0 +1,234 @@
+[
+  {
+    "name": "name",
+    "type": "text",
+    "label": "Nome",
+    "help": "Nome completo do lead",
+    "required": false
+  },
+  {
+    "name": "phone",
+    "type": "text",
+    "label": "Telefone",
+    "help": "Telefone com DDD e código do país (ex: 5511999999999). Obrigatório se email não for preenchido.",
+    "required": false
+  },
+  {
+    "name": "email",
+    "type": "text",
+    "label": "Email",
+    "help": "Email do lead. Obrigatório se telefone não for preenchido.",
+    "required": false
+  },
+  {
+    "name": "company",
+    "type": "text",
+    "label": "Empresa",
+    "help": "Nome da empresa do lead",
+    "required": false
+  },
+  {
+    "name": "source",
+    "type": "select",
+    "label": "Origem",
+    "help": "De onde o lead veio",
+    "required": false,
+    "default": "make",
+    "options": [
+      { "label": "Make.com", "value": "make" },
+      { "label": "Meta Ads (Facebook/Instagram)", "value": "meta_ads" },
+      { "label": "Google Ads", "value": "google_ads" },
+      { "label": "Site / Landing Page", "value": "site" },
+      { "label": "Indicação", "value": "indicacao" },
+      { "label": "WhatsApp", "value": "whatsapp" },
+      { "label": "Calendly", "value": "calendly" },
+      { "label": "LinkedIn", "value": "linkedin" },
+      { "label": "Evento", "value": "evento" },
+      { "label": "Outro", "value": "outro" }
+    ]
+  },
+  {
+    "name": "tags",
+    "type": "text",
+    "label": "Tags",
+    "help": "Tags separadas por vírgula (ex: Ouro, Meta Ads, Q1). Máximo 50 tags.",
+    "required": false
+  },
+  {
+    "name": "pipe",
+    "type": "select",
+    "label": "Pipeline",
+    "help": "Em qual pipeline colocar o lead (opcional)",
+    "required": false,
+    "options": [
+      { "label": "Nenhum", "value": "" },
+      { "label": "WhatsApp (Qualificação)", "value": "whatsapp" },
+      { "label": "Confirmação (Reunião)", "value": "confirmacao" },
+      { "label": "Propostas (Fechamento)", "value": "propostas" }
+    ]
+  },
+  {
+    "name": "stage",
+    "type": "select",
+    "label": "Estágio",
+    "help": "Estágio dentro do pipeline selecionado",
+    "required": false,
+    "options": [
+      { "label": "(Selecione o pipeline primeiro)", "value": "" },
+      { "label": "── WhatsApp ──", "value": "", "nested": true },
+      { "label": "Novo Lead", "value": "novo" },
+      { "label": "Abordado", "value": "abordado" },
+      { "label": "Respondeu", "value": "respondeu" },
+      { "label": "Esfriou", "value": "esfriou" },
+      { "label": "Agendado", "value": "agendado" },
+      { "label": "── Confirmação ──", "value": "", "nested": true },
+      { "label": "Reunião Marcada", "value": "reuniao_marcada" },
+      { "label": "Confirmar D-3", "value": "confirmar_d3" },
+      { "label": "Confirmar D-2", "value": "confirmar_d2" },
+      { "label": "Confirmar D-1", "value": "confirmar_d1" },
+      { "label": "Pré-confirmada", "value": "pre_confirmada" },
+      { "label": "Confirmação no Dia", "value": "confirmacao_no_dia" },
+      { "label": "Confirmada no Dia", "value": "confirmada_no_dia" },
+      { "label": "Compareceu", "value": "compareceu" },
+      { "label": "── Propostas ──", "value": "", "nested": true },
+      { "label": "Marcar Compromisso", "value": "marcar_compromisso" },
+      { "label": "Compromisso Marcado", "value": "compromisso_marcado" },
+      { "label": "Esfriou (Propostas)", "value": "esfriou" },
+      { "label": "Futuro", "value": "futuro" },
+      { "label": "Vendido", "value": "vendido" },
+      { "label": "Perdido", "value": "perdido" }
+    ]
+  },
+  {
+    "name": "meetingDate",
+    "type": "date",
+    "label": "Data da Reunião",
+    "help": "Data/hora da reunião (ISO 8601). Salva em compromisso_date no lead.",
+    "required": false
+  },
+  {
+    "name": "assignedUserId",
+    "type": "text",
+    "label": "Responsável (User ID)",
+    "help": "UUID do membro do time para atribuir o lead. Se vazio, usa round robin automático.",
+    "required": false
+  },
+  {
+    "name": "notes",
+    "type": "text",
+    "label": "Notas",
+    "help": "Observações sobre o lead",
+    "required": false,
+    "multiline": true
+  },
+  {
+    "name": "segment",
+    "type": "text",
+    "label": "Segmento",
+    "help": "Segmento de mercado do lead (ex: Indústria, Varejo, Serviços)",
+    "required": false
+  },
+  {
+    "name": "faturamento",
+    "type": "text",
+    "label": "Faturamento",
+    "help": "Faixa de faturamento da empresa (ex: 1M-5M, 5M-10M)",
+    "required": false
+  },
+  {
+    "name": "urgency",
+    "type": "select",
+    "label": "Urgência",
+    "help": "Nível de urgência do lead",
+    "required": false,
+    "options": [
+      { "label": "Nenhuma", "value": "" },
+      { "label": "Baixa", "value": "baixa" },
+      { "label": "Média", "value": "media" },
+      { "label": "Alta", "value": "alta" },
+      { "label": "Urgente", "value": "urgente" }
+    ]
+  },
+  {
+    "name": "rating",
+    "type": "number",
+    "label": "Rating",
+    "help": "Nota do lead de 0 a 10",
+    "required": false,
+    "validate": {
+      "min": 0,
+      "max": 10
+    }
+  },
+  {
+    "name": "updateExisting",
+    "type": "boolean",
+    "label": "Atualizar se já existir?",
+    "help": "Se ativado, atualiza lead existente com mesmo telefone/email ao invés de criar duplicata.",
+    "required": false,
+    "default": false
+  },
+  {
+    "name": "customFields",
+    "type": "array",
+    "label": "Campos Personalizados",
+    "help": "Adicione quantos campos extras precisar. Cada campo vira um campo personalizado no lead. Clique '+ Add item' para cada campo.",
+    "required": false,
+    "spec": [
+      {
+        "name": "key",
+        "type": "text",
+        "label": "Nome do Campo",
+        "help": "Nome do campo personalizado (ex: cidade, cargo, cnpj, num_funcionarios)",
+        "required": true
+      },
+      {
+        "name": "value",
+        "type": "text",
+        "label": "Valor",
+        "help": "Valor do campo. Pode mapear de módulos anteriores do cenário.",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "utmSource",
+    "type": "text",
+    "label": "UTM Source",
+    "help": "Parâmetro utm_source (opcional, para tracking)",
+    "required": false,
+    "advanced": true
+  },
+  {
+    "name": "utmMedium",
+    "type": "text",
+    "label": "UTM Medium",
+    "help": "Parâmetro utm_medium (opcional, para tracking)",
+    "required": false,
+    "advanced": true
+  },
+  {
+    "name": "utmCampaign",
+    "type": "text",
+    "label": "UTM Campaign",
+    "help": "Parâmetro utm_campaign (opcional, para tracking)",
+    "required": false,
+    "advanced": true
+  },
+  {
+    "name": "utmContent",
+    "type": "text",
+    "label": "UTM Content",
+    "help": "Parâmetro utm_content (opcional, para tracking)",
+    "required": false,
+    "advanced": true
+  },
+  {
+    "name": "utmTerm",
+    "type": "text",
+    "label": "UTM Term",
+    "help": "Parâmetro utm_term (opcional, para tracking)",
+    "required": false,
+    "advanced": true
+  }
+]

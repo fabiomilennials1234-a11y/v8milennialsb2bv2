@@ -2,7 +2,7 @@
  * CommandGroupActions — grupo de ações do Command Palette.
  *
  * C25: toggle dark/light, criar lead, abrir copilot, toggle density.
- * Permission check via useCanPerformAction antes de renderizar ações de mutation.
+ * Permission check via useCanDo antes de renderizar ações de mutation.
  */
 import { useNavigate } from "react-router-dom";
 import { Moon, Sun, Bot, UserPlus } from "lucide-react";

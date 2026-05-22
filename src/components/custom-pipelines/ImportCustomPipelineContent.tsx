@@ -12,7 +12,7 @@ import {
   type FilePreviewResult,
 } from "@/hooks/useImportLeads";
 import { useLeadCustomFields } from "@/hooks/useLeadCustomFields";
-import { useCanPerformAction } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 import { useTeamMembers, isVirtualTeamMember } from "@/hooks/useTeamMembers";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";
 import { toast } from "sonner";
@@ -73,7 +73,7 @@ export function ImportCustomPipelineContent({
   const { parseCSV, importLeadsToCustomPipeline, resetImport, isImporting, progress, result, lastReport } = useImportLeads();
   const { data: members = [] } = useTeamMembers();
   const { data: customFields = [] } = useLeadCustomFields();
-  const { allowed: canImport, isLoading: permLoading } = useCanPerformAction("import_leads");
+  const { allowed: canImport, isLoading: permLoading } = useCanDo("import_leads");
   const customFieldNames = customFields.map((f) => f.field_name);
 
   const activeStages = stages.filter((s) => s.is_active);

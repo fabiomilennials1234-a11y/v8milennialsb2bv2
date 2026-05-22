@@ -7,7 +7,7 @@ import { usePipePropostas } from "./usePipePropostas";
 import { usePipeConfirmacao } from "./usePipeConfirmacao";
 import { usePipeWhatsapp } from "./usePipeWhatsapp";
 import { useTeamGoals, useIndividualGoals } from "./useGoals";
-import { useIsAdmin } from "./useUserRole";
+import { useIdentity } from "./useIdentity";
 import { useDashboardMetrics } from "./useDashboardMetrics";
 
 export interface TVDashboardMetrics {
@@ -72,7 +72,7 @@ export function useTVDashboardData() {
   const dayOfMonth = now.getDate();
   const lastDayOfMonth = new Date(currentYear, currentMonth, 0).getDate();
   
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin } = useIdentity();
   const { data: currentTeamMember } = useCurrentTeamMember();
   const { data: teamMembers } = useTeamMembers();
   const { data: propostas } = usePipePropostas();

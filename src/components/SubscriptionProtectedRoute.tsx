@@ -16,7 +16,7 @@ import {
   type SubscriptionStatus,
 } from "@/lib/subscription";
 import { useUserRole, useCanManageCopilot } from "@/hooks/useUserRole";
-import { useMasterAuth } from "@/hooks/useMasterAuth";
+import { useIdentity } from "@/hooks/useIdentity";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { OverdueBanner } from "@/components/subscription/OverdueBanner";
 import { SubscriptionBlockedPage } from "@/components/subscription/SubscriptionBlockedPage";
@@ -32,7 +32,7 @@ export function SubscriptionProtectedRoute({
 }: SubscriptionProtectedRouteProps) {
   const { user, loading: authLoading } = useAuth();
   const { data: userRole, isLoading: roleLoading } = useUserRole();
-  const { isMaster, isLoading: masterLoading } = useMasterAuth();
+  const { isMaster, isLoading: masterLoading } = useIdentity();
   const { canManage: canManageCopilot, isLoading: copilotLoading } =
     useCanManageCopilot();
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(

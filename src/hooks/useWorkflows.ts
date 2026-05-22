@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useAuth } from "@/contexts/AuthContext";
-import { assertIsAdmin } from "@/lib/permissions";
+import { assertPermission } from "@/lib/permissions";
 import type {
   Workflow,
   WorkflowInsert,
@@ -62,7 +62,7 @@ export function useCreateWorkflow() {
       if (!organizationId || !user?.id) throw new Error("Sem organização ou usuário");
 
       // PERMISSION: Apenas admin pode criar workflows
-      await assertIsAdmin();
+      await assertPermission("create_workflow");
 
       const { data, error } = await supabase
         .from("workflows")
@@ -90,7 +90,7 @@ export function useUpdateWorkflow() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: WorkflowUpdate & { id: string }) => {
       // PERMISSION: Apenas admin pode editar workflows
-      await assertIsAdmin();
+      await assertPermission("edit_workflow");
 
       const { data, error } = await supabase
         .from("workflows")
@@ -117,7 +117,7 @@ export function useDeleteWorkflow() {
   return useMutation({
     mutationFn: async (id: string) => {
       // PERMISSION: Apenas admin pode excluir workflows
-      await assertIsAdmin();
+      await assertPermission("edit_workflow");
 
       const { error } = await supabase
         .from("workflows")
@@ -140,7 +140,7 @@ export function useToggleWorkflow() {
   return useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
       // PERMISSION: Apenas admin pode ativar/desativar workflows
-      await assertIsAdmin();
+      await assertPermission("edit_workflow");
 
       const { error } = await supabase
         .from("workflows")
@@ -213,7 +213,7 @@ export function useRetryWorkflowExecution() {
       if (!organizationId) throw new Error("Sem organização");
 
       // PERMISSION: Apenas admin pode repetir execuções
-      await assertIsAdmin();
+      await assertPermission("edit_workflow");
 
       // Fetch original execution (cast needed: retry_of not in auto-generated types yet)
       const { data: rawOriginal, error: fetchError } = await supabase

@@ -38,7 +38,24 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
 vi.mock("@/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
+vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), assertPermission: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
+const mockIdentity = {
+  userId: "u1",
+  organizationId: "org-t",
+  teamMemberId: "tm1",
+  effectiveRole: "admin" as const,
+  isMaster: false,
+  isAdmin: true,
+  features: {} as Record<string, boolean>,
+  isLoading: false,
+  isReady: true,
+};
+vi.mock("@/hooks/useIdentity", () => ({
+  useIdentity: () => mockIdentity,
+}));
+vi.mock("@/hooks/useCanDo", () => ({
+  useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
+}));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 
@@ -179,8 +196,15 @@ describe("useUpdateLead", () => {
 describe("useDeleteLead", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIdentity.isAdmin = false;
+    mockIdentity.effectiveRole = "member" as any;
     mockRpc.mockResolvedValue({ data: true, error: null });
     mockFrom.mockReturnValue(createChainMock([{ id: "lead-1" }]));
+  });
+
+  afterEach(() => {
+    mockIdentity.isAdmin = true;
+    mockIdentity.effectiveRole = "admin" as any;
   });
 
   it("deletes lead after permission check", async () => {

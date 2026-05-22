@@ -1,6 +1,5 @@
 import { ReactNode } from "react";
-import { useMasterAuth } from "@/hooks/useMasterAuth";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 import { useOnboardingState } from "@/hooks/useOnboardingState";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { OnboardingFlow } from "./OnboardingFlow";
@@ -11,8 +10,7 @@ interface OnboardingGateProps {
 
 export function OnboardingGate({ children }: OnboardingGateProps) {
   const { state, isLoading, needsOnboarding } = useOnboardingState();
-  const { isMaster } = useMasterAuth();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin, isMaster } = useIdentity();
 
   if (isMaster) return <>{children}</>;
 

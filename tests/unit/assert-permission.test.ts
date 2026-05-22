@@ -66,28 +66,33 @@ describe("assertPermission", () => {
     expect(result.reason!.length).toBeGreaterThan(0);
   });
 
-  it("returns { allowed: true } when matrix has no row (backwards compat default)", async () => {
+  it("returns { allowed: true } when feature permission has default_value=true", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("team_members", [
       { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "membro", is_active: true },
     ]);
-    // create_lead uses legacy matrix — no row = default allowed
-    const result = await assertPermission(sb, "u-member", "org-1", "create_lead");
+    mockTable("feature_permissions", [
+      { key: "workflows.edit", is_admin_only: false, default_value: true },
+    ]);
+    const result = await assertPermission(sb, "u-member", "org-1", "edit_workflow");
 
     expect(result.allowed).toBe(true);
-    expect(result.reason).toBe("matrix_allowed");
+    expect(result.reason).toBe("feature:workflows.edit");
   });
 
-  it("passes resourceId to permission engine", async () => {
+  it("returns { allowed: false } when member override disables permission", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("team_members", [
       { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "membro", is_active: true },
     ]);
-    mockTable("team_member_permissions", [
-      { team_member_id: "tm1", resource_key: "pipe_whatsapp", action_key: "edit", value: "denied" },
+    mockTable("feature_permissions", [
+      { key: "pipeline.move_cards", is_admin_only: false, default_value: true },
+    ]);
+    mockTable("member_feature_permissions", [
+      { team_member_id: "tm1", feature_key: "pipeline.move_cards", enabled: false },
     ]);
 
-    const result = await assertPermission(sb, "u-member", "org-1", "move_pipe_record", "pipe_whatsapp");
+    const result = await assertPermission(sb, "u-member", "org-1", "move_pipe_record");
 
     expect(result.allowed).toBe(false);
   });
