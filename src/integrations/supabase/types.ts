@@ -16018,4 +16018,4 @@ export type MetaConversationsInsert = Partial<
   external_user_id: string
 }
 
-export type MetaConversationsUpdate = Partial<MetaConversationsRow>
+export type MetaConversationsUpdate = Partial<Omit<MetaConversationsRow, "id" | "created_at">>
