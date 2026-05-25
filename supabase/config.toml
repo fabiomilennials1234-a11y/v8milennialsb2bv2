@@ -255,6 +255,9 @@ verify_jwt = false
 [functions.carteira-bulk-message]
 verify_jwt = false
 
+[functions.meta-conversation-profile]
+verify_jwt = false
+
 
 
 
