@@ -1,5 +1,5 @@
 // tests/integration/meta-conversations-trigger.test.ts
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
@@ -8,6 +8,7 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 let supabase: SupabaseClient;
 let orgId: string;
 let pageRowId: string;
+let connRowId: string;
 const pageIdString = 'fb_page_123';
 
 beforeAll(async () => {
@@ -37,6 +38,7 @@ beforeAll(async () => {
     })
     .select('id')
     .single();
+  connRowId = conn!.id;
 
   const { data: page } = await supabase
     .from('meta_pages')
@@ -57,6 +59,16 @@ beforeAll(async () => {
 afterEach(async () => {
   await supabase.from('meta_conversations').delete().eq('organization_id', orgId);
   await supabase.from('channel_messages').delete().eq('organization_id', orgId);
+});
+
+afterAll(async () => {
+  // Don't leak the seed orgs / pages / connections beyond this suite.
+  await supabase.from('meta_conversations').delete().eq('organization_id', orgId);
+  await supabase.from('channel_messages').delete().eq('organization_id', orgId);
+  await supabase.from('leads').delete().eq('organization_id', orgId);
+  await supabase.from('meta_pages').delete().eq('id', pageRowId);
+  await supabase.from('meta_connections').delete().eq('id', connRowId);
+  await supabase.from('organizations').delete().eq('id', orgId);
 });
 
 async function insertMsg(opts: Partial<{
@@ -195,5 +207,83 @@ describe('meta_conversations trigger', () => {
       .eq('organization_id', orgId);
 
     expect(data).toHaveLength(0);
+  });
+
+  it('isolates conversations across organizations', async () => {
+    // Same external_user_id namespace, different org + meta_page. The trigger
+    // keys on (organization_id, meta_page_id, channel, external_user_id), so
+    // org B must get its own conversation row and org A must remain untouched.
+    const { data: orgB } = await supabase
+      .from('organizations')
+      .insert({ name: `iso-test-orgB-${Date.now()}` })
+      .select('id')
+      .single();
+    const { data: connB } = await supabase
+      .from('meta_connections')
+      .insert({
+        organization_id: orgB!.id,
+        user_id: '00000000-0000-0000-0000-000000000000',
+        facebook_user_id: 'fb_iso_B',
+        facebook_user_name: 'B',
+        access_token: 'tB',
+        token_expires_at: new Date(Date.now() + 86400000).toISOString(),
+        status: 'connected',
+        connected_at: new Date().toISOString(),
+        connection_type: 'facebook',
+      })
+      .select('id')
+      .single();
+    const { data: pageB } = await supabase
+      .from('meta_pages')
+      .insert({
+        meta_connection_id: connB!.id,
+        organization_id: orgB!.id,
+        page_id: 'iso_page_B',
+        page_name: 'B',
+        page_access_token: 't',
+        is_active: true,
+        webhook_subscribed: true,
+      })
+      .select('id')
+      .single();
+
+    try {
+      // Inbound for org A (uses the suite-default page + sender 'user_abc').
+      await insertMsg({ direction: 'incoming', content: 'orgA msg' });
+
+      // Inbound for org B with the same sender_id but different org + page.
+      await supabase.from('channel_messages').insert({
+        organization_id: orgB!.id,
+        channel: 'instagram',
+        page_id: 'iso_page_B',
+        external_id: `extB_${Date.now()}`,
+        sender_id: 'user_abc',
+        direction: 'incoming',
+        message_type: 'text',
+        content: 'orgB msg',
+        status: 'received',
+        timestamp: new Date().toISOString(),
+      });
+
+      const { data: convsA } = await supabase
+        .from('meta_conversations')
+        .select('*')
+        .eq('organization_id', orgId);
+      const { data: convsB } = await supabase
+        .from('meta_conversations')
+        .select('*')
+        .eq('organization_id', orgB!.id);
+
+      expect(convsA).toHaveLength(1);
+      expect(convsB).toHaveLength(1);
+      expect(convsA![0].last_message_preview).toBe('orgA msg');
+      expect(convsB![0].last_message_preview).toBe('orgB msg');
+    } finally {
+      await supabase.from('channel_messages').delete().eq('organization_id', orgB!.id);
+      await supabase.from('meta_conversations').delete().eq('organization_id', orgB!.id);
+      await supabase.from('meta_pages').delete().eq('id', pageB!.id);
+      await supabase.from('meta_connections').delete().eq('id', connB!.id);
+      await supabase.from('organizations').delete().eq('id', orgB!.id);
+    }
   });
 });
