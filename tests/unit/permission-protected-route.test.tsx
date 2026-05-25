@@ -5,6 +5,13 @@ import { render, screen } from '@testing-library/react';
 vi.mock('@/hooks/useUserRole', () => ({
   useFeaturePermission: vi.fn(),
   useIsAdmin: vi.fn(),
+  useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
+  useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
+  useCanManageCopilot: () => ({ canManage: true, canCreate: true, canEdit: true, canDelete: true, canToggle: true, isLoading: false }),
+  useCanManageWhatsApp: () => ({ canManage: true, isLoading: false }),
+  useJobTitle: () => ({ jobTitle: "", isLoading: false }),
+  useMetricType: () => ({ metricType: "sales", isLoading: false }),
+  useHasRole: () => ({ hasRole: true, isLoading: false }),
 }));
 
 vi.mock('@/hooks/useMasterAuth', () => ({
@@ -13,6 +20,11 @@ vi.mock('@/hooks/useMasterAuth', () => ({
 
 vi.mock('@/hooks/useTeamMembers', () => ({
   useCurrentTeamMember: vi.fn(),
+}));
+
+const mockIdentity = vi.fn();
+vi.mock('@/hooks/useIdentity', () => ({
+  useIdentity: (...args: unknown[]) => mockIdentity(...args),
 }));
 
 import { useFeaturePermission, useIsAdmin } from '@/hooks/useUserRole';
@@ -41,6 +53,9 @@ function setMocks(overrides: {
   feature?: { allowed: boolean; isLoading: boolean; hasError?: boolean };
   teamMember?: { data: unknown; isLoading: boolean };
 }) {
+  const isAdmin = overrides.admin?.isAdmin ?? false;
+  const isMaster = overrides.master?.isMaster ?? false;
+  const isLoading = (overrides.admin?.isLoading ?? false) || (overrides.master?.isLoading ?? false);
   mockUseIsAdmin.mockReturnValue(
     overrides.admin ?? { isAdmin: false, isLoading: false },
   );
@@ -53,6 +68,17 @@ function setMocks(overrides: {
   mockUseCurrentTeamMember.mockReturnValue(
     overrides.teamMember ?? { data: fakeTeamMember, isLoading: false },
   );
+  mockIdentity.mockReturnValue({
+    userId: 'u-1',
+    organizationId: 'org-1',
+    teamMemberId: 'tm-1',
+    effectiveRole: (isAdmin || isMaster ? 'admin' : 'member') as const,
+    isMaster,
+    isAdmin: isAdmin || isMaster,
+    features: {} as Record<string, boolean>,
+    isLoading,
+    isReady: !isLoading,
+  });
 }
 
 // ─── Tests ──────────────────────────────────────────────

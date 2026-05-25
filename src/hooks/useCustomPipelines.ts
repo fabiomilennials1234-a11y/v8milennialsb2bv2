@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { triggerLeadCreatedInCustomPipeline } from "@/lib/workflowTrigger";
-import { useCanPerformActionAsync } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 
 // ────────────────────────────────────────────────────────────
 // Types
@@ -851,7 +851,7 @@ export function useAddLeadToCustomPipe() {
 /** Mover lead entre etapas (drag-and-drop) */
 export function useMoveLeadInCustomPipe() {
   const queryClient = useQueryClient();
-  const movePermission = useCanPerformActionAsync("move_pipe_record");
+  const movePermission = useCanDo("move_pipe_record");
 
   return useMutation({
     mutationFn: async ({

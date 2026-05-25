@@ -30,6 +30,21 @@ vi.mock("@/hooks/useMasterAuth", () => ({
   useMasterAuth: () => mockMaster(),
 }));
 
+const mockIdentity = {
+  userId: "user-1",
+  organizationId: "org-test",
+  teamMemberId: "tm-1",
+  effectiveRole: "admin" as const,
+  isMaster: false,
+  isAdmin: true,
+  features: {} as Record<string, boolean>,
+  isLoading: false,
+  isReady: true,
+};
+vi.mock("@/hooks/useIdentity", () => ({
+  useIdentity: () => mockIdentity,
+}));
+
 vi.mock("@/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-test", isReady: true }),
 }));
@@ -53,6 +68,7 @@ import {
 beforeEach(() => {
   vi.clearAllMocks();
   mockMaster.mockReturnValue({ isMaster: false } as any);
+  mockIdentity.isMaster = false;
   mockRpc.mockResolvedValue({ data: null, error: null });
 });
 
@@ -118,6 +134,7 @@ describe("useCopilotToggleMutation", () => {
 
   it("rota master+leadId → master_set_copilot_disabled", async () => {
     mockMaster.mockReturnValue({ isMaster: true } as any);
+    mockIdentity.isMaster = true;
     mockRpc.mockResolvedValue({ data: {}, error: null });
     const { wrapper } = createWrapper();
     const { result } = renderHook(() => useCopilotToggleMutation(), { wrapper });

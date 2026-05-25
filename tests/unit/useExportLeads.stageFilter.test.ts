@@ -79,6 +79,24 @@ vi.mock("@/hooks/useOrganization", () => ({
 
 vi.mock("@/lib/permissions", () => ({
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
+  assertPermission: vi.fn().mockResolvedValue(undefined),
+  assertIsAdmin: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/hooks/useIdentity", () => ({
+  useIdentity: () => ({
+    userId: "u1",
+    organizationId: "org-123",
+    teamMemberId: "tm-1",
+    effectiveRole: "admin" as const,
+    isMaster: false,
+    isAdmin: true,
+    features: {} as Record<string, boolean>,
+    isLoading: false,
+    isReady: true,
+  }),
+}));
+vi.mock("@/hooks/useCanDo", () => ({
+  useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 
 // exceljs may not be installed in the test environment — only used by the

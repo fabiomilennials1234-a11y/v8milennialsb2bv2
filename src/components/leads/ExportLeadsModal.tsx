@@ -6,7 +6,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useExportLeads } from "@/hooks/useExportLeads";
 import { toast } from "sonner";
 import { FileDown, Loader2, FileSpreadsheet, FileText } from "lucide-react";
-import { useCanPerformAction } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 
 const EXPORT_LIMITS = [
   { value: 100, label: "Os 100 mais recentes" },
@@ -27,7 +27,7 @@ export function ExportLeadsContent({ onDone }: ExportLeadsContentProps) {
   const [format, setFormat] = useState<ExportFormat>("xlsx");
   const [limit, setLimit] = useState<number>(5000);
   const { exportLeads, isExporting } = useExportLeads();
-  const { allowed: canExport } = useCanPerformAction("export_leads");
+  const { allowed: canExport } = useCanDo("export_leads");
 
   const handleExport = async () => {
     if (!canExport) {

@@ -17,12 +17,28 @@ vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" },
 vi.mock("@/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
 vi.mock("@/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
 vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
+vi.mock("@/hooks/useIdentity", () => ({
+  useIdentity: () => ({
+    userId: "u1",
+    organizationId: "org-t",
+    teamMemberId: "tm1",
+    effectiveRole: "admin" as const,
+    isMaster: false,
+    isAdmin: true,
+    features: {} as Record<string, boolean>,
+    isLoading: false,
+    isReady: true,
+  }),
+}));
+vi.mock("@/hooks/useCanDo", () => ({
+  useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
+}));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn(), triggerLeadCreatedInCustomPipeline: vi.fn() }));
-vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
+vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn(), assertPermission: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/lib/copilot/custom-instructions-utils", () => ({ parseCustomInstructions: () => ({ dos: "", donts: "" }), serializeCustomInstructions: () => null }));
 vi.mock("@/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r) }));

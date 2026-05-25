@@ -19,8 +19,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useLeadWriteInstance } from "@/hooks/useLeadWriteInstance";
 import type { WriteInstanceErrorCode } from "@/types/user-write-instance";
-import { useIsAdmin } from "@/hooks/useUserRole";
-import { useMasterAuth } from "@/hooks/useMasterAuth";
+import { useIdentity } from "@/hooks/useIdentity";
 
 export type ChatComposerVariant = "full" | "compact";
 
@@ -284,8 +283,7 @@ export function ChatComposerShell({
   onChangeResponsible,
 }: ChatComposerShellProps) {
   const { state } = useLeadWriteInstance(leadId);
-  const { isAdmin } = useIsAdmin();
-  const { isMaster } = useMasterAuth();
+  const { isAdmin, isMaster } = useIdentity();
   const isAdminOrMaster = isAdmin || isMaster;
 
   // Quando não há leadId, renderiza inner direto (legado / pré-resolução).

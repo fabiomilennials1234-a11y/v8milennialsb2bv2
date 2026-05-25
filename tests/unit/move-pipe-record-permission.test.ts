@@ -43,9 +43,9 @@ describe("move-pipe-record permission gate", () => {
       mockTable("team_members", [
         { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "membro", is_active: true },
       ]);
-      // Deny move_pipe_record via team_member_permissions
-      mockTable("team_member_permissions", [
-        { team_member_id: "tm1", resource_key: "pipe_whatsapp", action_key: "edit", value: "denied" },
+      // Deny move_pipe_record via feature_permissions (default_value: false, no override)
+      mockTable("feature_permissions", [
+        { key: "pipeline.move_cards", is_admin_only: false, default_value: false },
       ]);
 
       const result = await executeAdvanceStage(
@@ -84,8 +84,8 @@ describe("move-pipe-record permission gate", () => {
       mockTable("team_members", [
         { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "membro", is_active: true },
       ]);
-      mockTable("team_member_permissions", [
-        { team_member_id: "tm1", resource_key: "pipe_whatsapp", action_key: "edit", value: "denied" },
+      mockTable("feature_permissions", [
+        { key: "pipeline.move_cards", is_admin_only: false, default_value: false },
       ]);
 
       const result = await executeAdvanceStage(
@@ -107,8 +107,8 @@ describe("move-pipe-record permission gate", () => {
       mockTable("team_members", [
         { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "membro", is_active: true },
       ]);
-      mockTable("team_member_permissions", [
-        { team_member_id: "tm1", resource_key: "pipe_whatsapp", action_key: "edit", value: "denied" },
+      mockTable("feature_permissions", [
+        { key: "pipeline.move_cards", is_admin_only: false, default_value: false },
       ]);
 
       const result = await executeAdvanceStage(
@@ -118,7 +118,7 @@ describe("move-pipe-record permission gate", () => {
         { userId: "u-member" },
       );
 
-      // Denied specifically because of move_pipe_record check
+      // Denied specifically because of pipeline.move_cards feature permission
       expect(result.success).toBe(false);
       expect(result.error).toMatch(/permission|permiss/i);
     });
@@ -166,8 +166,8 @@ describe("move-pipe-record permission gate", () => {
       mockTable("team_members", [
         { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "membro", is_active: true },
       ]);
-      mockTable("team_member_permissions", [
-        { team_member_id: "tm1", resource_key: "pipe_whatsapp", action_key: "edit", value: "denied" },
+      mockTable("feature_permissions", [
+        { key: "pipeline.move_cards", is_admin_only: false, default_value: false },
       ]);
 
       const result = await executeUpdatePipelineStage(

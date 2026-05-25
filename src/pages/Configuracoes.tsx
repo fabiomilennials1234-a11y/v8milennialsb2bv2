@@ -56,7 +56,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag, Tag as TagType } from "@/hooks/useTags";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 import { useOrganization } from "@/hooks/useOrganization";
 import { toast } from "sonner";
@@ -140,7 +140,7 @@ function TagsSettings() {
   const createTag = useCreateTag();
   const updateTag = useUpdateTag();
   const deleteTag = useDeleteTag();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin } = useIdentity();
 
   const handleOpenDialog = (tag?: TagType) => {
     if (tag) {

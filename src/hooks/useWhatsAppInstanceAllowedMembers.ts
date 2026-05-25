@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "./useTeamMembers";
 import { useOrganization } from "./useOrganization";
-import { useIsAdmin } from "./useUserRole";
+import { useIdentity } from "./useIdentity";
 
 export interface WhatsAppInstanceAllowedMember {
   id: string;
@@ -49,7 +49,7 @@ export function useAllowedMembersForInstance(whatsappInstanceId: string | null) 
  */
 export function useCanReplyOnInstance(whatsappInstanceId: string | null) {
   const { data: currentTeamMember } = useCurrentTeamMember();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin } = useIdentity();
   const { data: allowedList = [], isLoading } = useAllowedMembersForInstance(whatsappInstanceId);
 
   const canReply =

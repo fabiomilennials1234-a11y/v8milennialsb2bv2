@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
-import { useIsAdmin } from "./useUserRole";
+import { useIdentity } from "./useIdentity";
 
 const DEFAULT_OVERDUE_DAYS = 5;
 const DEFAULT_REORDER_CYCLE_DAYS = 30;
@@ -16,7 +16,7 @@ export interface OrganizationSettings {
 
 export function useOrganizationSettings() {
   const { organizationId, isReady } = useOrganization();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin } = useIdentity();
   const queryClient = useQueryClient();
 
   const query = useQuery({

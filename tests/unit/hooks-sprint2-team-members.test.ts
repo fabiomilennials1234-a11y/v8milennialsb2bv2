@@ -37,6 +37,32 @@ vi.mock("@/hooks/useOrganization", () => ({ useOrganization: () => ({ organizati
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false, isLoading: false }) }));
 
+vi.mock("@/hooks/useIdentity", () => ({
+  useIdentity: () => ({
+    userId: "u1",
+    organizationId: "org-t",
+    teamMemberId: "tm1",
+    effectiveRole: "admin" as const,
+    isMaster: false,
+    isAdmin: true,
+    features: {} as Record<string, boolean>,
+    isLoading: false,
+    isReady: true,
+  }),
+}));
+
+vi.mock("@/hooks/useUserRole", () => ({
+  useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
+  useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
+  useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
+  useFeaturePermission: () => ({ allowed: true, isLoading: false, hasError: false }),
+  useCanManageCopilot: () => ({ canManage: true, canCreate: true, canEdit: true, canDelete: true, canToggle: true, isLoading: false }),
+  useCanManageWhatsApp: () => ({ canManage: true, isLoading: false }),
+  useJobTitle: () => ({ jobTitle: "", isLoading: false }),
+  useMetricType: () => ({ metricType: "sales", isLoading: false }),
+  useHasRole: () => ({ hasRole: true, isLoading: false }),
+}));
+
 function createWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return ({ children }: { children: React.ReactNode }) =>

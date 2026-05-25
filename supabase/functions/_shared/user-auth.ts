@@ -258,12 +258,19 @@ export async function requireAdmin(
 
 // ─── resolvePermission ───────────────────────────────────
 
+const ORG_KEY_TO_FEATURE: Record<string, string> = {
+  see_unassigned_cards:   "leads.view_unassigned",
+  see_subordinates_cards: "leads.view_subordinates",
+  see_general_info:       "leads.view_general_info",
+  see_all_leads:          "leads.view_all",
+  can_delete_leads:       "leads.delete",
+};
+
 /**
- * Resolve uma permissão seguindo a cascata completa:
- * master → admin → team_member_org_permissions → organization_role_permissions → false
+ * Resolve uma permissão seguindo a cascata:
+ * master → admin → feature_permissions → false
  *
- * Para uso direto nas Edge Functions quando se precisa de uma permissão
- * específica (ex: can_delete_leads) sem exigir admin full.
+ * Legacy org permission keys are mapped to feature keys internally.
  */
 export async function resolvePermission(
   userId: string,
@@ -293,29 +300,28 @@ export async function resolvePermission(
   if (!tm) return false;
   if (tm.role === "admin") return true;
 
-  // 3. Override individual (team_member_org_permissions)
+  // 3. Map org key → feature key, check feature permission
+  const featureKey = ORG_KEY_TO_FEATURE[permissionKey] ?? permissionKey;
+
+  const { data: feature } = await supabase
+    .from("feature_permissions")
+    .select("is_admin_only, default_value")
+    .eq("key", featureKey)
+    .maybeSingle();
+
+  if (!feature) return false;
+  if (feature.is_admin_only) return false;
+
   const { data: override } = await supabase
-    .from("team_member_org_permissions")
+    .from("member_feature_permissions")
     .select("enabled")
     .eq("team_member_id", tm.id)
-    .eq("permission_key", permissionKey)
+    .eq("feature_key", featureKey)
     .maybeSingle();
 
   if (override) return override.enabled;
 
-  // 4. Permissão do role na organização (organization_role_permissions)
-  const { data: rolePermission } = await supabase
-    .from("organization_role_permissions")
-    .select("enabled")
-    .eq("organization_id", organizationId)
-    .eq("role", tm.role)
-    .eq("permission_key", permissionKey)
-    .maybeSingle();
-
-  if (rolePermission) return rolePermission.enabled;
-
-  // 5. Default: false
-  return false;
+  return feature.default_value;
 }
 
 // ─── Helper: JSON error response ─────────────────────────

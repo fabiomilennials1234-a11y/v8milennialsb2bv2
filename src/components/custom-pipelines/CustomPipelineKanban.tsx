@@ -12,7 +12,7 @@ import {
   groupEntriesByStage,
 } from "@/hooks/useCustomPipelines";
 import { toast } from "sonner";
-import { useCanPerformAction } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 import { useUpdateLead } from "@/hooks/useLeads";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { formatDistanceToNow } from "date-fns";
@@ -65,7 +65,7 @@ export function CustomPipelineKanban({
   const moveLead = useMoveLeadInCustomPipe();
   const updateLead = useUpdateLead();
   const createAcaoDoDia = useCreateAcaoDoDia();
-  const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
+  const { allowed: canMovePipe } = useCanDo("move_pipe_record");
   const { data: workflowCounts = {} } = useCustomPipeWorkflowCounts(pipeline.id);
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
 

@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { HelpCircle, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 import {
   useHelpCategories,
   useHelpArticles,
@@ -15,7 +15,7 @@ import { HelpAdminPanel } from "./HelpAdminPanel";
 import { HelpArticleCard } from "./HelpArticleCard";
 
 export function HelpCenter() {
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin } = useIdentity();
   const { data: categories = [], isLoading: loadingCats } = useHelpCategories();
   const { data: articles = [], isLoading: loadingArticles } = useHelpArticles();
 

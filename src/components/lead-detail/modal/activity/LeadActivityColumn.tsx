@@ -13,7 +13,7 @@ export const LeadActivityColumn = memo(function LeadActivityColumn({
   organizationId,
 }: LeadActivityColumnProps) {
   return (
-    <div className="flex-1 flex flex-col gap-3 overflow-hidden px-5 py-5 border-l border-border/60 bg-muted/40 min-h-0">
+    <div className="flex flex-col gap-3 px-5 py-5 border-l border-border/60 bg-muted/40">
       {/* Aba de checklist — compacta, expande conforme cresce */}
       <LeadModalChecklist leadId={leadId} />
 

@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -46,7 +46,7 @@ const MODULE_LABELS: Record<string, string> = {
 };
 
 export function MemberPermissions() {
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin } = useIdentity();
   const { data: members = [], isLoading: loadingMembers } = useTeamMembers();
   const queryClient = useQueryClient();
 

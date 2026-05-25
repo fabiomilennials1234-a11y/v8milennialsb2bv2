@@ -23,10 +23,10 @@ vi.mock("@/hooks/useMasterAuth", () => ({
   }),
 }));
 
-// Mirror useCanPerformAction's behavior using only role state.
+// Mirror useCanDo's behavior using only role state.
 // Same fail-closed contract: during loading return { allowed: false, isLoading: true }.
-vi.mock("@/lib/permissions", () => ({
-  useCanPerformAction: (action: string) => {
+vi.mock("@/hooks/useCanDo", () => ({
+  useCanDo: (action: string) => {
     if (roleState.isLoading) {
       return { allowed: false, isLoading: true };
     }

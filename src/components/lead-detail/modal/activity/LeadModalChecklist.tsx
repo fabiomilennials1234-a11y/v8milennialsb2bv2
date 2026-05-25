@@ -269,22 +269,26 @@ function ChecklistRow({
             {items.map((item) => (
               <li
                 key={item.id}
-                className="group flex items-center gap-2 py-1 px-1 rounded hover:bg-muted/20"
+                className="group flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-muted/20"
               >
                 <button
                   type="button"
                   onClick={() =>
                     toggleItem.mutate({ id: item.id, checklist_id: checklist.id, is_completed: !item.is_completed })
                   }
-                  className={cn(
-                    "w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
-                    item.is_completed
-                      ? "bg-emerald-500/80 border-emerald-500 text-white"
-                      : "border-border hover:border-primary",
-                  )}
+                  className="shrink-0 flex items-center justify-center w-6 h-6 cursor-pointer"
                   aria-pressed={item.is_completed}
                 >
-                  {item.is_completed && <span className="text-[8px] leading-none">✓</span>}
+                  <span
+                    className={cn(
+                      "w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors",
+                      item.is_completed
+                        ? "bg-emerald-500 border-emerald-500 text-white"
+                        : "border-muted-foreground/30 hover:border-primary",
+                    )}
+                  >
+                    {item.is_completed && <span className="text-[8px] leading-none font-bold">✓</span>}
+                  </span>
                 </button>
                 <span
                   className={cn(

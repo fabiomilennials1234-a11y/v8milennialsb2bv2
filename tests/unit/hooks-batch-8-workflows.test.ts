@@ -56,7 +56,7 @@ vi.mock("@/hooks/useOrganization", () => ({
   useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), assertPermission: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 
 function createWrapper() {

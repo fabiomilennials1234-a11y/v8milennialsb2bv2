@@ -4,10 +4,9 @@ import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
 import { useOrganization } from "./useOrganization";
 import { track } from "@/lib/analytics";
-import { useCanPerformActionAsync } from "@/lib/permissions";
+import { useCanDo } from "@/hooks/useCanDo";
 import { normalizePhone } from "@/lib/normalizePhone";
-import { useMasterAuth } from "./useMasterAuth";
-import { useIsAdmin } from "./useUserRole";
+import { useIdentity } from "./useIdentity";
 import { OptimisticLockConflictError, isPostgrestNoRows } from "@/lib/optimistic-lock";
 
 export type Lead = Tables<"leads">;
@@ -142,7 +141,7 @@ export { LEADS_PAGE_SIZE };
 export function useCreateLead() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
-  const createPermission = useCanPerformActionAsync("create_lead");
+  const createPermission = useCanDo("create_lead");
 
   return useMutation({
     mutationFn: async (lead: LeadInsert) => {
@@ -281,8 +280,7 @@ export function useUpdateLead() {
 export function useDeleteLead() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
-  const { isMaster } = useMasterAuth();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin, isMaster } = useIdentity();
 
   return useMutation({
     mutationFn: async (id: string) => {
@@ -290,7 +288,6 @@ export function useDeleteLead() {
         throw new Error("Cannot delete lead: No organization context");
       }
 
-      // PERMISSION: Master and admin bypass org permission check (RLS still enforced)
       if (!isMaster && !isAdmin) {
         const { data: canDelete } = await supabase.rpc("user_has_org_permission", {
           p_permission_key: "can_delete_leads",
@@ -519,8 +516,7 @@ function deleteLeadsAndRelated(ids: string[]): Promise<void> {
 export function useDeleteAllLeadsInPipe(pipeType: PipeTypeForDelete) {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
-  const { isMaster } = useMasterAuth();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin, isMaster } = useIdentity();
 
   return useMutation({
     mutationFn: async ({ stageId }: { stageId: string }) => {
@@ -570,8 +566,7 @@ export function useDeleteAllLeadsInPipe(pipeType: PipeTypeForDelete) {
 export function useDeleteAllLeads() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
-  const { isMaster } = useMasterAuth();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin, isMaster } = useIdentity();
 
   return useMutation({
     mutationFn: async () => {
@@ -645,7 +640,7 @@ export function useLeadAiStatus(leadId: string | undefined) {
 export function useToggleLeadAI() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
-  const { isMaster } = useMasterAuth();
+  const { isMaster } = useIdentity();
 
   return useMutation({
     mutationFn: async ({ leadId, disabled }: { leadId: string; disabled: boolean }) => {

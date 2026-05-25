@@ -82,6 +82,126 @@ describe("sanitizeAssistantMessage", () => {
     const r = sanitizeAssistantMessage(raw, false);
     expect(r.text).not.toMatch(/"action"/);
   });
+
+  // ============================================================
+  // Regressão: leak <tool_call> XML (Barulinho Bom 2026-05-21)
+  // gemini-3-flash-preview emite tool calls como TEXTO no formato
+  // universal-tool-calling (Hermes/Qwen) em vez de native tool_calls.
+  // ============================================================
+
+  it("strips <tool_call> XML blocks with tool_name/tool_arguments schema", () => {
+    const raw = [
+      "Como sua loja é de produtos naturais, você pretende focar mais nos pacotinhos ou granel?",
+      "",
+      "<tool_call>",
+      '{"tool_name": "send_product_material", "tool_arguments": {"material_id": "e5e84c2d-ac9e-4dc2-8349-02f6893f6f1e"}}',
+      "</tool_call>",
+      "<tool_call>",
+      '{"tool_name": "send_product_material", "tool_arguments": {"material_id": "060d4750-7f23-45f8-84be-977469ec1101"}}',
+      "</tool_call>",
+    ].join("\n");
+
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe(
+      "Como sua loja é de produtos naturais, você pretende focar mais nos pacotinhos ou granel?",
+    );
+    expect(r.text).not.toMatch(/tool_call/i);
+    expect(r.text).not.toMatch(/tool_name/i);
+    expect(r.droppedBlocks).toBeGreaterThanOrEqual(2);
+  });
+
+  it("recovers action from <tool_call> with tool_name/tool_arguments when native tool missed", () => {
+    const raw = [
+      "Segue o material.",
+      "<tool_call>",
+      '{"tool_name": "send_product_material", "tool_arguments": {"material_id": "mat-xyz"}}',
+      "</tool_call>",
+    ].join("\n");
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Segue o material.");
+    expect(r.recoveredAction).toEqual({
+      action: "SEND_PRODUCT_MATERIAL",
+      params: { material_id: "mat-xyz" },
+    });
+  });
+
+  it("supports legacy <tool_call> schema name/arguments (OpenRouter universal)", () => {
+    const raw = [
+      "Buscando.",
+      "<tool_call>",
+      '{"name": "search_knowledge", "arguments": {"query": "chips embalagem"}}',
+      "</tool_call>",
+    ].join("\n");
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Buscando.");
+    expect(r.text).not.toMatch(/tool_call/i);
+    expect(r.droppedBlocks).toBeGreaterThanOrEqual(1);
+  });
+
+  it("strips <vertical_tool_calls> wrapper variant", () => {
+    const raw = [
+      "Olha só.",
+      "<vertical_tool_calls>",
+      '<tool_call name="search_knowledge" arguments=\'{"query":"x"}\'>',
+      "</tool_call>",
+      "</vertical_tool_calls>",
+    ].join("\n");
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Olha só.");
+    expect(r.text).not.toMatch(/tool_call|vertical/i);
+  });
+
+  it("strips standalone <no_tool_calls> sentinel", () => {
+    const raw = "Ok, sem ação agora.\n<no_tool_calls>";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Ok, sem ação agora.");
+    expect(r.text).not.toMatch(/no_tool_calls/i);
+  });
+
+  it("self-closing <no_tool_calls /> also stripped", () => {
+    const raw = "Tudo certo.\n<no_tool_calls />";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Tudo certo.");
+  });
+
+  it("handles unclosed <tool_call> defensively (discards trailing leak)", () => {
+    const raw = "Vou enviar.\n<tool_call>\n{\"tool_name\": \"send_product_material\", \"tool_arguments\":";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Vou enviar.");
+    expect(r.text).not.toMatch(/tool_call|tool_name/i);
+  });
+
+  it("does not recover from <tool_call> when alreadyHasAction (native fired)", () => {
+    const raw = [
+      "Ok.",
+      "<tool_call>",
+      '{"tool_name": "send_product_material", "tool_arguments": {"material_id": "m1"}}',
+      "</tool_call>",
+    ].join("\n");
+    const r = sanitizeAssistantMessage(raw, true);
+    expect(r.text).toBe("Ok.");
+    expect(r.recoveredAction).toBeNull();
+    expect(r.droppedBlocks).toBeGreaterThanOrEqual(1);
+  });
+
+  it("ignores <tool_call> with unknown tool name (no recovery, still strips)", () => {
+    const raw = [
+      "Hmm.",
+      "<tool_call>",
+      '{"tool_name": "made_up_tool", "tool_arguments": {}}',
+      "</tool_call>",
+    ].join("\n");
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Hmm.");
+    expect(r.recoveredAction).toBeNull();
+    expect(r.droppedBlocks).toBeGreaterThanOrEqual(1);
+  });
+
+  it("strips case-insensitive <TOOL_CALL> / <Tool_Call>", () => {
+    const raw = "Texto.\n<TOOL_CALL>\n{}\n</TOOL_CALL>\n<Tool_Call>\n{}\n</Tool_Call>";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Texto.");
+  });
 });
 
 describe("splitByDelimiter", () => {

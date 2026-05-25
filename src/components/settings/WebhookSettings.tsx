@@ -49,7 +49,7 @@ import {
   WebhookInsert,
 } from "@/hooks/useWebhooks";
 import { useOrganization } from "@/hooks/useOrganization";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { AlertsBanner } from "@/components/system-alerts/AlertsBanner";
@@ -73,7 +73,7 @@ function headersToObject(arr: { key: string; value: string }[]): Record<string, 
 
 export function WebhookSettings() {
   const { organizationId, isReady } = useOrganization();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin } = useIdentity();
   const { data: webhooks = [], isLoading } = useWebhooks();
   const createWebhook = useCreateWebhook();
   const updateWebhook = useUpdateWebhook();

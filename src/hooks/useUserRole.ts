@@ -48,11 +48,15 @@ export function useUserRole() {
   });
 }
 
+/**
+ * @deprecated Use useIdentity().isAdmin instead.
+ */
 export function useIsAdmin() {
-  const { data: userRole, isLoading } = useUserRole();
+  const { data: userRole, isLoading: roleLoading } = useUserRole();
+  const { isMaster, isLoading: masterLoading } = useMasterAuth();
   return {
-    isAdmin: userRole?.role === "admin",
-    isLoading,
+    isAdmin: isMaster || userRole?.role === "admin",
+    isLoading: roleLoading || masterLoading,
   };
 }
 
@@ -81,9 +85,7 @@ export function useHasRole(role: AppRole) {
 }
 
 /**
- * Permissões granulares para Copilot.
- * Admin e Master sempre podem. Members precisam da feature habilitada pelo admin.
- * useFeaturePermission já incorpora isMaster || isAdmin || features[key].
+ * @deprecated Use useCanDo("manage_copilot") or individual feature keys.
  */
 export function useCanManageCopilot() {
   const { allowed: canCreate, isLoading: l1 } = useFeaturePermission("copilot.create");
@@ -101,8 +103,7 @@ export function useCanManageCopilot() {
 }
 
 /**
- * Permissão para gerenciar instâncias WhatsApp.
- * Admin e Master sempre podem. Members precisam da feature habilitada pelo admin.
+ * @deprecated Use useCanDo("whatsapp.manage_instances") instead.
  */
 export function useCanManageWhatsApp() {
   const { allowed: canManage, isLoading } = useFeaturePermission("whatsapp.manage_instances");
@@ -200,16 +201,7 @@ export function useFeaturePermissions() {
 }
 
 /**
- * Verifica se o membro tem permissão para uma feature específica.
- * Admin retorna sempre true.
- *
- * `isLoading` considera team_member async E feature permissions query, mas
- * NUNCA depende de `!currentTeamMember` (teamMember pode resolver null
- * legitimamente — masters sem team_member real, por exemplo — e manter
- * isLoading=true nesse caso provoca loader eterno em gates globais como
- * SubscriptionProtectedRoute → useCanManageCopilot). PermissionProtectedRoute
- * trata o caso `!currentTeamMember` separadamente como erro recuperável.
- * `hasError` expõe falhas técnicas (400/500/network).
+ * @deprecated Use useCanDo(featureKey) instead.
  */
 export function useFeaturePermission(
   featureKey: string,

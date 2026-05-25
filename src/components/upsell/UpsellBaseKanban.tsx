@@ -10,7 +10,7 @@ import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/l
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { NewOrderModal } from "@/components/carteira/NewOrderModal";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useIdentity } from "@/hooks/useIdentity";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { useUpdateLead } from "@/hooks/useLeads";
 import { toast } from "sonner";
@@ -37,7 +37,7 @@ function UpsellBaseKanbanInner({ searchQuery, filterPotencial, filterActive }: U
   const updateClient = useUpdateUpsellClient();
   const createAcaoDoDia = useCreateAcaoDoDia();
   const updateLead = useUpdateLead();
-  const isAdmin = useIsAdmin();
+  const { isAdmin } = useIdentity();
   const { openLead } = useLeadSheet();
 
   const [quickSaleClientId, setQuickSaleClientId] = useState<string>();

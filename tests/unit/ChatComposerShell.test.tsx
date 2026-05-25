@@ -25,6 +25,14 @@ vi.mock("@/hooks/useLeadWriteInstance", () => ({
 
 vi.mock("@/hooks/useUserRole", () => ({
   useIsAdmin: () => ({ isAdmin: mockIsAdmin, isLoading: false }),
+  useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
+  useFeaturePermission: () => ({ allowed: true, isLoading: false, hasError: false }),
+  useCanManageCopilot: () => ({ canManage: true, canCreate: true, canEdit: true, canDelete: true, canToggle: true, isLoading: false }),
+  useCanManageWhatsApp: () => ({ canManage: true, isLoading: false }),
+  useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
+  useJobTitle: () => ({ jobTitle: "", isLoading: false }),
+  useMetricType: () => ({ metricType: "sales", isLoading: false }),
+  useHasRole: () => ({ hasRole: true, isLoading: false }),
 }));
 
 vi.mock("@/hooks/useMasterAuth", () => ({
@@ -36,6 +44,20 @@ vi.mock("@/hooks/useMasterAuth", () => ({
     isLoading: false,
     error: null,
     isOutbounder: false,
+  }),
+}));
+
+vi.mock("@/hooks/useIdentity", () => ({
+  useIdentity: () => ({
+    userId: "user-1",
+    organizationId: "org-1",
+    teamMemberId: "tm-1",
+    effectiveRole: (mockIsAdmin || mockIsMaster ? "admin" : "member") as const,
+    isMaster: mockIsMaster,
+    isAdmin: mockIsAdmin || mockIsMaster,
+    features: {} as Record<string, boolean>,
+    isLoading: false,
+    isReady: true,
   }),
 }));
 

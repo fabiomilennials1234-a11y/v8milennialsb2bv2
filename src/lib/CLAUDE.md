@@ -27,9 +27,14 @@ gate pendente (ver
 3. **Feature permissions** — toggles por feature (`copilot_enabled`, etc.)
 4. **Role matrix** — `admin` / `master` / `membro` × ação
 
-### Hooks
+### Hooks (canônicos — pós consolidação #413)
+- `useIdentity()` — identity completa: role, master, admin, features, org, loading
+- `useCanDo(action|featureKey)` — resolve permissão via ACTION_TO_FEATURE cascade
+- `assertPermission(action)` — imperative check para mutations (throws)
+
+### Hooks (legacy — mantidos por compatibilidade)
 - `useUserRole()` — retorna role do user atual
-- `useCanPerformAction(action)` — checa ação específica
+- `useFeaturePermission(key)` — checa feature permission direta
 - `useMasterAuth()` — gate master role
 
 ### Fallback fail-closed
@@ -79,5 +84,5 @@ linhas. **Nunca editar** `types.ts` manualmente.
 
 ## Áreas frágeis
 
-- `permissions.ts` — 3 camadas, fallback fail-open legado (a fix)
+- `permissions.ts` — 3 camadas, fail-closed consolidado (#413)
 - `whatsappApi.ts` — depende de `whatsapp-api-proxy` edge fn
