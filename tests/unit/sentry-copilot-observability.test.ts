@@ -147,6 +147,8 @@ describe("copilot Sentry observability (#206)", () => {
           const builder: any = {
             select: vi.fn(() => builder),
             eq: vi.fn(() => builder),
+            in: vi.fn(() => builder),
+            neq: vi.fn(() => builder),
             then: (r: any) =>
               r({ data: [{ id: "a1", payload: { document_id: "doc-111" } }], error: null }),
           };
@@ -179,6 +181,8 @@ describe("copilot Sentry observability (#206)", () => {
           const builder: any = {
             select: vi.fn(() => builder),
             eq: vi.fn(() => builder),
+            in: vi.fn(() => builder),
+            neq: vi.fn(() => builder),
             then: (r: any) => r({ data: [], error: null }),
           };
           return builder;

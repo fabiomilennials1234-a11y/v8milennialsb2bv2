@@ -121,6 +121,7 @@ export async function executeAiAction(
         organization_id,
         lead_id,
         conversation_id,
+        action.id,
       );
       break;
     case "generate_message": {
