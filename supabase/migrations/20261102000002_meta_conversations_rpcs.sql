@@ -2,12 +2,15 @@
 
 CREATE OR REPLACE FUNCTION mark_meta_conversation_read(p_conversation_id uuid)
 RETURNS void
-LANGUAGE plpgsql SECURITY DEFINER AS $$
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 DECLARE
   v_org uuid;
   v_channel text;
   v_page_id text;
   v_sender_id text;
+  v_now timestamptz := now();
 BEGIN
   SELECT mc.organization_id, mc.channel, mp.page_id, mc.external_user_id
     INTO v_org, v_channel, v_page_id, v_sender_id
@@ -24,7 +27,7 @@ BEGIN
   END IF;
 
   UPDATE meta_conversations
-     SET unread_count = 0, updated_at = now()
+     SET unread_count = 0, updated_at = v_now
    WHERE id = p_conversation_id;
 
   UPDATE channel_messages
@@ -34,6 +37,7 @@ BEGIN
      AND page_id = v_page_id
      AND sender_id = v_sender_id
      AND direction = 'incoming'
+     AND timestamp <= v_now
      AND status <> 'read';
 END;
 $$;
@@ -44,7 +48,9 @@ CREATE OR REPLACE FUNCTION link_meta_conversation_to_lead(
   p_conversation_id uuid,
   p_lead_id uuid
 ) RETURNS void
-LANGUAGE plpgsql SECURITY DEFINER AS $$
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 DECLARE
   v_org uuid;
   v_channel text;
