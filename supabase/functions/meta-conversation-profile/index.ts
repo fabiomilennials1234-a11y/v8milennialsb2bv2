@@ -21,8 +21,11 @@ async function fetchGraphProfile(
   externalUserId: string,
   pageAccessToken: string
 ): Promise<ProfileFetchResult> {
-  const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${externalUserId}?fields=name,profile_pic&access_token=${pageAccessToken}`;
-  const res = await fetch(url);
+  const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${externalUserId}?fields=name,profile_pic`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${pageAccessToken}` },
+    signal: AbortSignal.timeout(8000),
+  });
   if (!res.ok) {
     return { external_username: null, profile_pic_url: null };
   }
@@ -99,13 +102,47 @@ Deno.serve(withSentry("meta-conversation-profile", async (req) => {
     .from("meta_pages")
     .select("page_access_token")
     .eq("id", conv.meta_page_id)
+    .eq("organization_id", auth.organizationId)
     .single();
 
   if (!page?.page_access_token) {
-    return new Response(JSON.stringify({ error: "page_token_missing" }), { status: 500, headers });
+    await logRuntime({
+      organizationId: auth.organizationId,
+      module: "channel",
+      action: "meta_profile_refresh",
+      status: "error",
+      errorMessage: "page_token_missing",
+      entityType: "meta_conversation",
+      entityId: conv.id,
+    });
+    return new Response(
+      JSON.stringify({ external_username: null, profile_pic_url: null, cached: false }),
+      { status: 200, headers }
+    );
   }
 
   const profile = await fetchGraphProfile(conv.external_user_id, page.page_access_token);
+
+  if (profile.external_username === null && profile.profile_pic_url === null) {
+    await logRuntime({
+      organizationId: auth.organizationId,
+      module: "channel",
+      action: "meta_profile_refresh",
+      status: "error",
+      errorMessage: "graph_api_returned_empty",
+      entityType: "meta_conversation",
+      entityId: conv.id,
+    });
+  } else {
+    await logRuntime({
+      organizationId: auth.organizationId,
+      module: "channel",
+      action: "meta_profile_refresh",
+      status: "success",
+      entityType: "meta_conversation",
+      entityId: conv.id,
+    });
+  }
 
   const expiresAt = new Date(Date.now() + PROFILE_TTL_HOURS * 3600 * 1000).toISOString();
   await supabase
@@ -117,15 +154,6 @@ Deno.serve(withSentry("meta-conversation-profile", async (req) => {
       updated_at: new Date().toISOString(),
     })
     .eq("id", conv.id);
-
-  await logRuntime({
-    organizationId: auth.organizationId,
-    module: "channel",
-    action: "meta_profile_refresh",
-    status: "success",
-    entityType: "meta_conversation",
-    entityId: conv.id,
-  });
 
   return new Response(
     JSON.stringify({
