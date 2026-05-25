@@ -36,13 +36,23 @@ export async function checkDocumentAlreadySent(
   documentId: string,
   leadId?: string | null,
   filePath?: string | null,
+  currentActionId?: string | null,
 ): Promise<boolean> {
-  const { data } = await supabase
+  // Exclude the current action's own row from the dedup query. `claim_pending_ai_actions`
+  // sets status='processing' before the executor runs, so without this guard the gate
+  // would always match itself and silently skip every legitimate send.
+  let query = supabase
     .from("pending_ai_actions")
     .select("id, payload")
     .eq("conversation_id", conversationId)
     .eq("action_type", "send_document")
     .in("status", ["completed", "processing"]);
+
+  if (currentActionId) {
+    query = query.neq("id", currentActionId);
+  }
+
+  const { data } = await query;
 
   if (data && data.length > 0) {
     const isDuplicate = data.some(
@@ -104,6 +114,7 @@ export async function executeSendDocument(
   organizationId: string,
   leadId: string | null,
   conversationId: string | null = null,
+  actionId: string | null = null,
 ): Promise<ActionResult> {
   const documentId = payload.document_id as string;
   const caption = payload.caption as string | undefined;
@@ -141,6 +152,7 @@ export async function executeSendDocument(
       documentId,
       leadId,
       doc.file_path,
+      actionId,
     );
     if (alreadySent) {
       console.debug("[executeSendDocument] Duplicate document skipped:", { conversationId, documentId });

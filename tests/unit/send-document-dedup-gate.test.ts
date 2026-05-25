@@ -48,12 +48,13 @@ import { checkDocumentAlreadySent, executeSendDocument } from "../../supabase/fu
 /* ------------------------------------------------------------------ */
 
 function buildSupabaseMock(resolvedValue: { data: any[] | null; error: any }) {
-  // Supabase PostgREST chain: .from().select().eq().eq().in() → Promise
+  // Supabase PostgREST chain: .from().select().eq().eq().in().neq() → Promise
   // Every method returns `this`; the chain is thenable (auto-resolves).
   const builder: any = {
     select: vi.fn(() => builder),
     eq: vi.fn(() => builder),
     in: vi.fn(() => builder),
+    neq: vi.fn(() => builder),
     // Make it thenable so `await` resolves to our value
     then: (resolve: any) => resolve(resolvedValue),
   };
@@ -70,6 +71,7 @@ function buildSupabaseMockMultiTable(tables: Record<string, { data: any; error: 
       select: vi.fn(() => builder),
       eq: vi.fn(() => builder),
       in: vi.fn(() => builder),
+      neq: vi.fn(() => builder),
       ilike: vi.fn(() => builder),
       gte: vi.fn(() => builder),
       limit: vi.fn(() => builder),
@@ -223,6 +225,48 @@ describe("checkDocumentAlreadySent", () => {
     expect(result).toBe(false);
     // Only pending_ai_actions was queried (from() called once)
     expect(supabase.from).toHaveBeenCalledTimes(1);
+  });
+
+  it("Barulinho regression: excludes own action row via currentActionId (self-block fix)", async () => {
+    // Worker claims pending_ai_action → sets status='processing' → calls executor.
+    // Before the fix, the dedup query matched the row itself and silently skipped
+    // every legitimate send. With currentActionId passed in, `.neq("id", id)`
+    // filters the row out and the gate clears.
+    const supabase = buildSupabaseMock({ data: [], error: null });
+    const result = await checkDocumentAlreadySent(
+      supabase as any,
+      "conv-aaa",
+      "doc-111",
+      null,
+      null,
+      "action-self",
+    );
+    expect(result).toBe(false);
+    expect(supabase._builder.neq).toHaveBeenCalledWith("id", "action-self");
+  });
+
+  it("blocks when a DIFFERENT prior action for same doc is still processing/completed", async () => {
+    // Self-exclude must not weaken real dedup. A different action row for the
+    // same doc+conversation should still block.
+    const supabase = buildSupabaseMock({
+      data: [{ id: "action-prior", payload: { document_id: "doc-111" } }],
+      error: null,
+    });
+    const result = await checkDocumentAlreadySent(
+      supabase as any,
+      "conv-aaa",
+      "doc-111",
+      null,
+      null,
+      "action-self",
+    );
+    expect(result).toBe(true);
+  });
+
+  it("does not call .neq when currentActionId is omitted (backwards compat)", async () => {
+    const supabase = buildSupabaseMock({ data: [], error: null });
+    await checkDocumentAlreadySent(supabase as any, "conv-aaa", "doc-111");
+    expect(supabase._builder.neq).not.toHaveBeenCalled();
   });
 
   it("skips whatsapp_messages gate when no filePath provided", async () => {
