@@ -36,16 +36,14 @@ export function MetaComposer({ conversationId, lastInboundAt }: Props) {
   async function handleImage(file: File) {
     if (!canSend) return;
     const path = `meta/${conversationId}/${Date.now()}-${file.name}`;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (supabase as any).storage
+    const { data, error } = await supabase.storage
       .from(CHAT_MEDIA_BUCKET)
       .upload(path, file, { contentType: file.type, upsert: false });
     if (error || !data) {
       toast.error("Falha no upload");
       return;
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: pub } = (supabase as any).storage.from(CHAT_MEDIA_BUCKET).getPublicUrl(data.path);
+    const { data: pub } = supabase.storage.from(CHAT_MEDIA_BUCKET).getPublicUrl(data.path);
     try {
       await mutateAsync({ conversationId, mediaUrl: pub.publicUrl, mediaType: "image" });
     } catch (err) {

@@ -6,8 +6,7 @@ export function useMetaConversationProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (conversationId: string) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any).functions.invoke("meta-conversation-profile", {
+      const { data, error } = await supabase.functions.invoke("meta-conversation-profile", {
         body: { conversationId },
       });
       if (error) throw error;

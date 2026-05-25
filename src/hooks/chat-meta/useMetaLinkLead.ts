@@ -6,8 +6,7 @@ export function useMetaLinkLead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ conversationId, leadId }: { conversationId: string; leadId: string }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any).rpc("link_meta_conversation_to_lead", {
+      const { error } = await supabase.rpc("link_meta_conversation_to_lead", {
         p_conversation_id: conversationId,
         p_lead_id: leadId,
       });

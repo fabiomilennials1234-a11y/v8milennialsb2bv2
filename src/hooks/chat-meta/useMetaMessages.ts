@@ -11,24 +11,21 @@ export function useMetaMessages(conversationId: string | null) {
     queryFn: async () => {
       if (!conversationId) return [];
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: conv, error: convErr } = await (supabase as any)
+      const { data: conv, error: convErr } = await supabase
         .from("meta_conversations")
         .select("organization_id, meta_page_id, channel, external_user_id")
         .eq("id", conversationId)
         .single();
       if (convErr || !conv) throw convErr ?? new Error("conversation_not_found");
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: page, error: pageErr } = await (supabase as any)
+      const { data: page, error: pageErr } = await supabase
         .from("meta_pages")
         .select("page_id")
         .eq("id", conv.meta_page_id)
         .single();
       if (pageErr || !page) throw pageErr ?? new Error("page_not_found");
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("channel_messages")
         .select("*")
         .eq("organization_id", conv.organization_id)
