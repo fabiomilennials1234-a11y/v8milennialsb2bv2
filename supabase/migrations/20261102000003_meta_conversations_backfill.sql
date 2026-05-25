@@ -26,9 +26,8 @@ BEGIN
   END LOOP;
 END $$;
 
--- Sanity: backfilled unread_count may be inflated (we incremented per inbound
--- without considering subsequent reads). Reset unread_count for all rows where
--- the most recent message is outgoing (best-effort heuristic for backfill).
+-- Historical unread state is unrecoverable from channel_messages alone
+-- (no read receipts in the table). Reset every backfilled conversation to
+-- zero so users start with a clean badge state post-deploy.
 UPDATE meta_conversations
-   SET unread_count = 0
- WHERE last_message_direction = 'outgoing';
+   SET unread_count = 0;
