@@ -60,8 +60,12 @@ const ACTION_TO_FEATURE: Partial<Record<PermissionAction, string>> = {
   send_message:   "whatsapp.send_messages",
 };
 
-// Mapeamento de ação para permission_key em organization_role_permissions
-// (single source of truth do Pitstop > Permissões).
+// Mapeamento de ação → legacy org permission_key. Após consolidação PRD #408
+// (migration 20261032000002), checkOrgPermission() resolve via feature_permissions
+// usando LEGACY_ORG_KEY_TO_FEATURE_KEY. Apenas 5 keys foram mapeadas para feature_key
+// (mesmo subset que user_has_org_permission). Keys ainda listadas aqui mas não mapeadas
+// (can_create_leads / can_export_leads / can_move_pipe_records / can_manage_campaigns)
+// resultam em fail-closed para non-admin members.
 const ACTION_TO_ORG_PERMISSION: Partial<Record<PermissionAction, string>> = {
   create_lead:      "can_create_leads",
   export_leads:     "can_export_leads",
@@ -144,8 +148,8 @@ export async function canUserPerformAction(params: {
     return { allowed: true, reason: "can_delete_leads" };
   }
 
-  // 6. Permissões baseadas em organization_role_permissions (Pitstop tab).
-  // Single source of truth a partir de 2026-05-20.
+  // 6. Permissões legacy resolvidas via feature_permissions (consolidação PRD #408).
+  // Keys não-mapeadas em LEGACY_ORG_KEY_TO_FEATURE_KEY fail-close.
   const orgPermissionKey = ACTION_TO_ORG_PERMISSION[action];
   if (orgPermissionKey) {
     const allowed = await checkOrgPermission(
@@ -246,35 +250,50 @@ async function checkFeaturePermission(
   return feature.default_value;
 }
 
+// Mapeamento legacy permission_key → feature_key (consolidação PRD #408).
+// Idêntico ao usado em user_has_org_permission() (migration 20261032000001).
+// Tabelas legadas (team_member_org_permissions, organization_role_permissions)
+// foram dropadas em 20261032000002. Source of truth agora é o par
+// (member_feature_permissions, feature_permissions.default_value).
+const LEGACY_ORG_KEY_TO_FEATURE_KEY: Record<string, string> = {
+  see_unassigned_cards:   "leads.view_unassigned",
+  see_subordinates_cards: "leads.view_subordinates",
+  see_general_info:       "leads.view_general_info",
+  see_all_leads:          "leads.view_all",
+  can_delete_leads:       "leads.delete",
+};
+
 async function checkOrgPermission(
   supabase: SupabaseClient,
   teamMemberId: string,
-  organizationId: string,
-  role: string,
+  _organizationId: string,
+  _role: string,
   permissionKey: string,
 ): Promise<boolean> {
-  // 1. Override individual
+  // 1. Mapear legacy key → feature_key. Unmapped → fail-closed.
+  const featureKey = LEGACY_ORG_KEY_TO_FEATURE_KEY[permissionKey];
+  if (!featureKey) return false;
+
+  // 2. Override individual via member_feature_permissions
   const { data: override } = await supabase
-    .from("team_member_org_permissions")
+    .from("member_feature_permissions")
     .select("enabled")
     .eq("team_member_id", teamMemberId)
-    .eq("permission_key", permissionKey)
+    .eq("feature_key", featureKey)
     .maybeSingle();
 
   if (override) return override.enabled;
 
-  // 2. Permissão do role
-  const { data: rolePerm } = await supabase
-    .from("organization_role_permissions")
-    .select("enabled")
-    .eq("organization_id", organizationId)
-    .eq("role", role)
-    .eq("permission_key", permissionKey)
+  // 3. Default da feature
+  const { data: feature } = await supabase
+    .from("feature_permissions")
+    .select("default_value")
+    .eq("key", featureKey)
     .maybeSingle();
 
-  if (rolePerm) return rolePerm.enabled;
+  if (feature) return feature.default_value;
 
-  // 3. Default
+  // 4. Fail-closed se feature não encontrada
   return false;
 }
 
