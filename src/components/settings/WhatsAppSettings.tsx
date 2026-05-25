@@ -57,6 +57,27 @@ import { useMessageLimits } from "@/hooks/useMessageLimits";
 import { HistorySyncPanel } from "@/components/chat/history-sync/HistorySyncPanel";
 import { toast } from "sonner";
 
+/**
+ * Derives effective instance status from `status` + `session_dead_since`.
+ *
+ * `whatsapp_instances.status` is updated by provider webhooks. When a WhatsApp
+ * account is scanned on a different device, Uazapi/Evolution never fires the
+ * disconnect webhook, so `status` stays frozen on "connected" indefinitely.
+ *
+ * `session_dead_since` is the source of truth — populated by the
+ * `whatsapp-session-watchdog` cron, which actively polls the provider every
+ * 10 min. When set, the session is dead regardless of what `status` says.
+ *
+ * Until the watchdog backfills `status` itself, this UI-side derivation keeps
+ * the settings page in sync with the global red SessionDeadBanner.
+ */
+export function deriveInstanceStatus(
+  instance: Pick<WhatsAppInstance, "status" | "session_dead_since">,
+): string {
+  if (instance.session_dead_since) return "disconnected";
+  return instance.status ?? "disconnected";
+}
+
 function QRCodeModal({
   instanceId,
   instances,
@@ -78,10 +99,12 @@ function QRCodeModal({
   // Always read fresh data from the query cache via instances prop
   const instance = instances.find((i) => i.id === instanceId) ?? null;
 
+  const effectiveStatus = instance ? deriveInstanceStatus(instance) : null;
+
   // Auto-refresh QR when modal opens and instance has no valid QR
   useEffect(() => {
     if (!isOpen || !instance?.id) return;
-    if (!instance.qr_code && instance.status !== "connected" && pairMode === "qr") {
+    if (!instance.qr_code && effectiveStatus !== "connected" && pairMode === "qr") {
       refreshQR
         .mutateAsync({ instance_id: instance.id })
         .then((res) => setPairCode(res.paircode ?? null))
@@ -90,11 +113,12 @@ function QRCodeModal({
           toast.error(error.message || "Erro ao gerar QR Code");
         });
     }
-  }, [isOpen, instance?.id, instance?.qr_code, instance?.status, pairMode]);
+  }, [isOpen, instance?.id, instance?.qr_code, effectiveStatus, pairMode]);
 
-  // Poll connection status every 3s — stops when connected
+  // Poll connection status every 3s — stops when connected (real connection,
+  // not stale `status='connected'` + session_dead_since)
   useEffect(() => {
-    if (!isOpen || !instance || instance.status === "connected") return;
+    if (!isOpen || !instance || effectiveStatus === "connected") return;
 
     const interval = setInterval(async () => {
       if (instance.id) {
@@ -110,7 +134,7 @@ function QRCodeModal({
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [isOpen, instance?.id, instance?.status]);
+  }, [isOpen, instance?.id, effectiveStatus]);
 
   const handleRefreshQR = async () => {
     if (!instance?.id) return;
@@ -245,25 +269,25 @@ function QRCodeModal({
           <div className="flex items-center gap-2">
             <Badge
               variant={
-                instance.status === "connected"
+                effectiveStatus === "connected"
                   ? "default"
-                  : instance.status === "connecting"
+                  : effectiveStatus === "connecting"
                   ? "secondary"
                   : "destructive"
               }
             >
-              {instance.status === "connected" && (
+              {effectiveStatus === "connected" && (
                 <CheckCircle2 className="w-3 h-3 mr-1" />
               )}
-              {instance.status === "connecting" && (
+              {effectiveStatus === "connecting" && (
                 <Loader2 className="w-3 h-3 mr-1 animate-spin" />
               )}
-              {instance.status === "disconnected" && (
+              {effectiveStatus !== "connected" && effectiveStatus !== "connecting" && (
                 <XCircle className="w-3 h-3 mr-1" />
               )}
-              {instance.status === "connected"
+              {effectiveStatus === "connected"
                 ? "Conectado"
-                : instance.status === "connecting"
+                : effectiveStatus === "connecting"
                 ? "Conectando..."
                 : "Desconectado"}
             </Badge>
@@ -277,7 +301,7 @@ function QRCodeModal({
               Atualizar QR Code
             </Button>
           )}
-          {instance.status === "connected" && <Button onClick={onClose}>Concluído</Button>}
+          {effectiveStatus === "connected" && <Button onClick={onClose}>Concluído</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -623,7 +647,10 @@ export function WhatsAppSettings() {
         </div>
       ) : (
         <div className="space-y-3">
-          {instances.map((instance) => (
+          {instances.map((instance) => {
+            const effectiveStatus = deriveInstanceStatus(instance);
+            const isLive = effectiveStatus === "connected";
+            return (
             <motion.div
               key={instance.id}
               initial={{ opacity: 0, y: 10 }}
@@ -634,7 +661,7 @@ export function WhatsAppSettings() {
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <h4 className="font-medium">{instance.instance_name}</h4>
-                    {getStatusBadge(instance.status)}
+                    {getStatusBadge(effectiveStatus)}
                   </div>
                   {instance.phone_number && (
                     <p className="text-sm text-muted-foreground">
@@ -645,6 +672,15 @@ export function WhatsAppSettings() {
                     <p className="text-xs text-muted-foreground mt-1">
                       Última conexão:{" "}
                       {new Date(instance.last_connection_at).toLocaleString("pt-BR")}
+                    </p>
+                  )}
+                  {instance.session_dead_since && (
+                    <p className="text-xs text-destructive mt-1">
+                      Sessão deslogada
+                      {instance.session_dead_reason
+                        ? `: ${instance.session_dead_reason}`
+                        : ""}
+                      . Rescaneie o QR Code pra reconectar.
                     </p>
                   )}
                 </div>
@@ -663,7 +699,7 @@ export function WhatsAppSettings() {
                       Vendedores
                     </Button>
                   )}
-                  {instance.status !== "connected" && (
+                  {!isLive && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -681,7 +717,7 @@ export function WhatsAppSettings() {
                   >
                     <RefreshCw className="w-4 h-4" />
                   </Button>
-                  {instance.status === "connected" && (
+                  {isLive && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -708,14 +744,15 @@ export function WhatsAppSettings() {
                 </div>
               </div>
 
-              {instance.status === "connected" && (
+              {isLive && (
                 <div className="mt-4 space-y-4 pt-4 border-t border-border/40">
                   <MessageLimitsCard instanceId={instance.id} />
                   <HistorySyncPanel instanceId={instance.id} />
                 </div>
               )}
             </motion.div>
-          ))}
+            );
+          })}
         </div>
       )}
 
