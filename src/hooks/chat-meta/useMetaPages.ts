@@ -16,8 +16,7 @@ export function useMetaPages() {
   return useQuery<UseMetaPagesResult>({
     queryKey: metaPagesKey(organizationId),
     queryFn: async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("meta_pages")
         .select("*")
         .eq("organization_id", organizationId)

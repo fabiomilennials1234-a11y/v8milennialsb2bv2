@@ -1,31 +1,17 @@
 // src/hooks/chat-meta/types.ts
 //
 // Shared types + query-key helpers for the Meta Chat (Messenger/Instagram)
-// hooks. `MetaConversationsRow` is exported as a plain interface from
-// src/integrations/supabase/types.ts (manual augmentation — see the
-// "Meta Chat FASE 0" block at the bottom of that file). The standard
-// `Tables<"meta_conversations">` form will only work after the migrations
-// land on dev and types regen runs. `meta_pages` and `channel_messages`
-// are already in the generated Database type and use the generic form.
+// hooks.
 
-import type { Tables } from "@/integrations/supabase/types";
-import type {
-  MetaConversationsRow,
-  MetaConversationsInsert,
-  MetaConversationsUpdate,
-} from "@/integrations/supabase/types";
+import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
 export type MetaChannel = "messenger" | "instagram";
 
 export type MetaPage = Tables<"meta_pages">;
-export type MetaConversation = MetaConversationsRow;
+export type MetaConversation = Tables<"meta_conversations">;
+export type MetaConversationInsert = TablesInsert<"meta_conversations">;
+export type MetaConversationUpdate = TablesUpdate<"meta_conversations">;
 export type ChannelMessage = Tables<"channel_messages">;
-
-export type {
-  MetaConversationsRow,
-  MetaConversationsInsert,
-  MetaConversationsUpdate,
-};
 
 export interface MetaConversationWithLead extends MetaConversation {
   lead?: { id: string; name: string | null; phone: string | null } | null;

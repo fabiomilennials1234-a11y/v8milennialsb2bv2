@@ -73,6 +73,7 @@ Org Milennials: `6030520a-2ca7-477d-be89-55758e2cd808`.
 - [[ADR-2026-04-27-refactor-agent-engine-modular]] — Quebra de god module `AgentEngine` (2920→924 linhas)
 - [[ADR-2026-04-30-meeting-date-sync]] — Sync `meeting_date ⇄ compromisso_date` + `move_pipe_record` fail-closed
 - [[ADR-2026-05-15-consolidacao-subagentes]] — Consolidação 10→3 subagentes do harness Claude Code
+- [ADR-2026-05-25 — Meta Chat canal separado](04%20—%20Decisões/ADR-2026-05-25-meta-chat-canal-separado.md)
 
 ### 06 — Features
 
@@ -164,3 +165,9 @@ Estado vs target:
 
 - **Subagente do harness** (arquiteto/design/engenheiro) — ferramenta dev → ver [[Subagentes]]
 - **Agente IA do produto (Copilot)** — IA conversacional pra leads → ver [[Copilot]]
+
+### 02 — Arquitetura/Modulos
+- [Atendimento Meta](02%20—%20Arquitetura/Modulos/atendimento-meta.md)
+
+### 05 — How-to
+- [Debug Meta Chat](05%20—%20How-to/debug-meta-chat.md)

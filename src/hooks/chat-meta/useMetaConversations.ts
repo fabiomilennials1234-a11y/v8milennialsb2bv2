@@ -18,19 +18,16 @@ export function useMetaConversations({ pageId, channel, tab = "active" }: UseMet
     queryFn: async () => {
       if (!organizationId || !pageId || !channel) return [];
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let query: any = (supabase as any)
+      let query = supabase
         .from("meta_conversations")
         .select("*, lead:leads(id, name, phone)")
         .eq("organization_id", organizationId)
         .eq("meta_page_id", pageId)
         .eq("channel", channel);
 
-      if (tab === "active") {
-        query = query.is("archived_at", null);
-      } else {
-        query = query.not("archived_at", "is", null);
-      }
+      query = tab === "active"
+        ? query.is("archived_at", null)
+        : query.not("archived_at", "is", null);
 
       const { data, error } = await query.order("last_message_at", { ascending: false });
       if (error) throw error;
