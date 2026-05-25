@@ -18,7 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { motion } from "framer-motion";
-import { Plus, MoreHorizontal, GripVertical, Trash2, FileDown } from "lucide-react";
+import { Plus, MoreHorizontal, Trash2, FileDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -181,21 +181,14 @@ function SortableCard<T extends DraggableItem>({
     <div
       ref={setNodeRef}
       style={style}
+      {...attributes}
+      {...listeners}
       className={cn(
-        "relative group/card",
+        "relative group/card cursor-grab active:cursor-grabbing touch-none",
         isDragging && "opacity-50 z-50"
       )}
     >
-      <div
-        {...attributes}
-        {...listeners}
-        className="absolute left-0 top-0 bottom-0 w-6 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10"
-      >
-        <GripVertical className="w-4 h-4 text-muted-foreground" />
-      </div>
-      <div className="pl-2">
-        {renderCard(item, isDragging)}
-      </div>
+      {renderCard(item, isDragging)}
     </div>
   );
 }
