@@ -101,6 +101,28 @@ export default {
             border: "hsl(var(--bubble-system-border))",
           },
         },
+        // Landing page custom colors
+        orange: {
+          DEFAULT: '#ed9326',
+          light: '#f5a93f',
+          dark: '#c97912',
+        },
+        yellow: {
+          DEFAULT: '#ffd400',
+        },
+        brown: {
+          DEFAULT: '#3a2d25',
+        },
+        warm: {
+          DEFAULT: '#636156',
+        },
+        ink: {
+          DEFAULT: '#1c1c1c',
+          deep: '#0a0908',
+        },
+        cream: {
+          DEFAULT: '#f8f5e7',
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

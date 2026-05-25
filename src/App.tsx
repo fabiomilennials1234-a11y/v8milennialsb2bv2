@@ -167,15 +167,9 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Root route: Landing for visitors, redirect for authenticated users
+// Root route: always show Landing Page
 function RootRedirect() {
-  const { user, loading } = useAuth();
-
-  if (loading) return <PageLoader />;
-
-  if (!user) return <Navigate to="/auth" replace />;
-
-  return <Navigate to="/dashboard" replace />;
+  return <Landing />;
 }
 
 // Auth route that redirects to dashboard if already logged in
@@ -196,8 +190,7 @@ function AppRoutes() {
   return (
     <Suspense fallback={<PageLoader />}>
     <Routes>
-      {/* Landing + Signup temporariamente ocultos — redirecionam pra /auth */}
-      <Route path="/landing" element={<Navigate to="/auth" replace />} />
+      <Route path="/landing" element={<Landing />} />
       <Route path="/auth" element={<AuthRoute />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/signup" element={<Navigate to="/auth" replace />} />

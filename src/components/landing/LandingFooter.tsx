@@ -2,61 +2,86 @@ import { Link } from 'react-router-dom';
 
 export function LandingFooter() {
   return (
-    <footer className="footer">
-      <div className="container">
-        <div className="foot-grid">
-          <div className="foot-brand">
-            <a href="/" className="nav-logo" style={{ marginBottom: 0 }}>
-              <span className="nav-logo-icon"><i className="fas fa-bolt"></i></span>
-              Torque CRM
+    <footer className="border-t border-white/5 py-16 relative z-10">
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
+
+          {/* Brand (2 cols) */}
+          <div className="col-span-2">
+            <a href="#" className="flex items-center gap-2.5">
+              <img src="/landing/TORQUE_Logo_Icone.png" alt="TorqueCRM" className="h-8 w-8" />
+              <span className="font-display text-xl font-semibold">Torque<span className="text-orange">CRM</span></span>
             </a>
-            <p>A plataforma de vendas feita para quem vive de bater meta.</p>
-            <div className="foot-social">
-              <a href="#" aria-label="Facebook"><i className="fab fa-facebook-f"></i></a>
-              <a href="#" aria-label="LinkedIn"><i className="fab fa-linkedin-in"></i></a>
-              <a href="#" aria-label="YouTube"><i className="fab fa-youtube"></i></a>
-              <a href="#" aria-label="Instagram"><i className="fab fa-instagram"></i></a>
+            <p className="text-mute text-sm mt-4 max-w-xs leading-relaxed">
+              O CRM premium para times comerciais que querem dominar o mercado.
+              Performance, controle e automação em um sistema só.
+            </p>
+            {/* Social icons */}
+            <div className="flex items-center gap-3 mt-5">
+              {/* Twitter */}
+              <a href="#" className="w-9 h-9 rounded-lg flex items-center justify-center text-mute hover:text-orange transition" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M22.46 6c-.77.35-1.6.58-2.46.69.88-.53 1.56-1.37 1.88-2.38-.83.5-1.75.85-2.72 1.05C18.37 4.5 17.26 4 16 4c-2.35 0-4.27 1.92-4.27 4.29 0 .34.04.67.11.98C8.28 9.09 5.11 7.38 3 4.79c-.37.63-.58 1.37-.58 2.15 0 1.49.75 2.81 1.91 3.56-.71 0-1.37-.2-1.95-.5v.03c0 2.08 1.48 3.82 3.44 4.21a4.22 4.22 0 0 1-1.93.07 4.28 4.28 0 0 0 4 2.98 8.521 8.521 0 0 1-5.33 1.84c-.34 0-.68-.02-1.02-.06C3.44 20.29 5.7 21 8.12 21 16 21 20.33 14.46 20.33 8.79c0-.19 0-.37-.01-.56.84-.6 1.56-1.36 2.14-2.23z" /></svg>
+              </a>
+              {/* Instagram */}
+              <a href="#" className="w-9 h-9 rounded-lg flex items-center justify-center text-mute hover:text-orange transition" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.8 2h8.4C19.4 2 22 4.6 22 7.8v8.4a5.8 5.8 0 0 1-5.8 5.8H7.8C4.6 22 2 19.4 2 16.2V7.8A5.8 5.8 0 0 1 7.8 2m-.2 2A3.6 3.6 0 0 0 4 7.6v8.8C4 18.39 5.61 20 7.6 20h8.8a3.6 3.6 0 0 0 3.6-3.6V7.6C20 5.61 18.39 4 16.4 4H7.6m9.65 1.5a1.25 1.25 0 0 1 1.25 1.25A1.25 1.25 0 0 1 17.25 8 1.25 1.25 0 0 1 16 6.75a1.25 1.25 0 0 1 1.25-1.25M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3z" /></svg>
+              </a>
+              {/* LinkedIn */}
+              <a href="#" className="w-9 h-9 rounded-lg flex items-center justify-center text-mute hover:text-orange transition" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z" /></svg>
+              </a>
+              {/* TikTok */}
+              <a href="#" className="w-9 h-9 rounded-lg flex items-center justify-center text-mute hover:text-orange transition" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5.8 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1.84-.1z" /></svg>
+              </a>
             </div>
           </div>
-          <div className="foot-col">
-            <h4>Recursos</h4>
-            <a href="#">CRM</a>
-            <a href="#">Conversas</a>
-            <a href="#">Automações</a>
-            <a href="#">IA</a>
-            <a href="#">Indicadores</a>
+
+          {/* Produto */}
+          <div>
+            <div className="font-display text-sm font-semibold mb-4">Produto</div>
+            <ul className="space-y-2.5 text-sm text-mute">
+              <li><a href="#beneficios" className="hover:text-cream transition">Recursos</a></li>
+              <li><a href="#planos" className="hover:text-cream transition">Planos</a></li>
+              <li><a href="#showcase" className="hover:text-cream transition">Demonstração</a></li>
+              <li><a href="#" className="hover:text-cream transition">Integrações</a></li>
+              <li><a href="#" className="hover:text-cream transition">Novidades</a></li>
+            </ul>
           </div>
-          <div className="foot-col">
-            <h4>Serviços</h4>
-            <a href="#">Implantação</a>
-            <a href="#">Treinamento</a>
-            <a href="#">Consultoria</a>
-            <a href="#">API</a>
+
+          {/* Empresa */}
+          <div>
+            <div className="font-display text-sm font-semibold mb-4">Empresa</div>
+            <ul className="space-y-2.5 text-sm text-mute">
+              <li><a href="#" className="hover:text-cream transition">Sobre</a></li>
+              <li><a href="#" className="hover:text-cream transition">Clientes</a></li>
+              <li><a href="#" className="hover:text-cream transition">Carreiras</a></li>
+              <li><a href="#" className="hover:text-cream transition">Contato</a></li>
+              <li><a href="#" className="hover:text-cream transition">Imprensa</a></li>
+            </ul>
           </div>
-          <div className="foot-col">
-            <h4>Aprenda</h4>
-            <a href="#">Blog</a>
-            <a href="#">Central de ajuda</a>
-            <a href="#">Webinars</a>
-            <a href="#">Cases</a>
-          </div>
-          <div className="foot-col">
-            <h4>Sobre nós</h4>
-            <a href="#">Quem somos</a>
-            <a href="#">Carreiras</a>
-            <a href="#">Contato</a>
-            <a href="#">Parceiros</a>
+
+          {/* Recursos */}
+          <div>
+            <div className="font-display text-sm font-semibold mb-4">Recursos</div>
+            <ul className="space-y-2.5 text-sm text-mute">
+              <li><a href="#" className="hover:text-cream transition">Documentação</a></li>
+              <li><a href="#" className="hover:text-cream transition">API</a></li>
+              <li><a href="#" className="hover:text-cream transition">Blog</a></li>
+              <li><a href="#" className="hover:text-cream transition">Comunidade</a></li>
+              <li><a href="#" className="hover:text-cream transition">Status</a></li>
+            </ul>
           </div>
         </div>
-        <div className="foot-bottom">
-          <span>&copy; 2026 Torque CRM. Todos os direitos reservados.</span>
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Link to="/privacidade">Privacidade</Link>
-            <a href="#">Termos</a>
-            <a href="#">Cookies</a>
-            <span className="meta-badge">
-              <i className="fab fa-meta"></i> Meta Business Partner
-            </span>
+
+        {/* Bottom bar */}
+        <div className="mt-14 pt-8 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="text-xs text-mute">&copy; 2026 TorqueCRM · Todos os direitos reservados</div>
+          <div className="flex items-center gap-5 text-xs text-mute">
+            <Link to="/privacidade" className="hover:text-cream transition">Privacidade</Link>
+            <a href="#" className="hover:text-cream transition">Termos</a>
+            <a href="#" className="hover:text-cream transition">Segurança</a>
+            <a href="#" className="hover:text-cream transition">LGPD</a>
           </div>
         </div>
       </div>
