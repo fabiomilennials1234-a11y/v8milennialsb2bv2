@@ -60,6 +60,7 @@ const Negocios = lazy(() => lazyRetry(() => import("./pages/Negocios")));
 const Copilot = lazy(() => lazyRetry(() => import("./pages/Copilot")));
 const CopilotMetrics = lazy(() => lazyRetry(() => import("./pages/CopilotMetrics")));
 const ChatWhatsApp = lazy(() => lazyRetry(() => import("./pages/ChatWhatsApp")));
+const AtendimentoMeta = lazy(() => lazyRetry(() => import("./pages/AtendimentoMeta")));
 // ChatSkeleton é eager (não lazy) — precisa estar disponível no instante
 // em que o chunk de ChatWhatsApp começa a ser baixado.
 import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
@@ -489,6 +490,18 @@ function AppRoutes() {
                   <ChatWhatsApp />
                 </Suspense>
               </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/atendimento/meta"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <Suspense fallback={<ChatSkeleton />}>
+                <AtendimentoMeta />
+              </Suspense>
             </LayoutWrapper>
           </ProtectedRoute>
         }

@@ -15979,3 +15979,43 @@ export const Constants = {
     },
   },
 } as const
+
+// ─── Meta Chat FASE 0 — Manual augmentation pending automated regen ───
+// Migrations live on branch feat/meta-chat-fase-0/infra-db but are NOT yet
+// applied to dev project bcfadphgsibjzivtbjvc (see MEMORY.md: "Dev baseline
+// 6+ meses atrás — 28+ migrations não-aplicadas"). Once they are applied,
+// `npx supabase gen types typescript --project-id bcfadphgsibjzivtbjvc`
+// will emit `meta_conversations` natively under Database["public"]["Tables"]
+// and this block should be deleted in favor of `Tables<"meta_conversations">`.
+// TODO(types): merge into Database after CLI regen on a fresh dev baseline.
+
+export interface MetaConversationsRow {
+  id: string
+  organization_id: string
+  meta_page_id: string
+  channel: "messenger" | "instagram"
+  external_user_id: string
+  external_username: string | null
+  profile_pic_url: string | null
+  profile_pic_expires_at: string | null
+  lead_id: string | null
+  last_message_at: string
+  last_message_preview: string | null
+  last_message_direction: "incoming" | "outgoing" | null
+  last_inbound_at: string | null
+  unread_count: number
+  archived_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type MetaConversationsInsert = Partial<
+  Omit<MetaConversationsRow, "id" | "created_at" | "updated_at">
+> & {
+  organization_id: string
+  meta_page_id: string
+  channel: "messenger" | "instagram"
+  external_user_id: string
+}
+
+export type MetaConversationsUpdate = Partial<Omit<MetaConversationsRow, "id" | "created_at">>

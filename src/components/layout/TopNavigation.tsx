@@ -42,6 +42,7 @@ import {
   FileText,
   Copy,
   Trash2,
+  Instagram,
 } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueLogoDark from "@/assets/torque-logo-dark.png";
@@ -53,6 +54,7 @@ import { useUserRole, useJobTitle, useFeaturePermissions } from "@/hooks/useUser
 import { useIdentity } from "@/hooks/useIdentity";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { useMetaPages } from "@/hooks/chat-meta/useMetaPages";
 import { SIDEBAR_FEATURE_MAP } from "@/lib/feature-registry";
 import { UpgradeModal } from "@/components/shared/UpgradeModal";
 import { Button } from "@/components/ui/button";
@@ -95,6 +97,8 @@ interface NavItem {
   path: string;
   badge?: number;
   masterOnly?: boolean;
+  /** Optional runtime gate key — filtered by the component when false. */
+  gate?: "meta_pages_connected";
 }
 
 interface NavItemWithChildren extends NavItem {
@@ -126,6 +130,7 @@ const turboSubItems: NavItem[] = [
 const primaryNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/" },
   { label: "Chat", icon: Zap, path: "/chat" },
+  { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
@@ -150,6 +155,7 @@ const allNavItems: NavItemWithChildren[] = [
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Chat", icon: Zap, path: "/chat" },
+  { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
   { label: "Combustível", icon: Fuel, path: "/leads" },
   { label: "Negócios", icon: Briefcase, path: "/negocios" },
@@ -244,6 +250,8 @@ export function TopNavigation() {
   const { data: permanentPipelines = [] } = usePermanentCustomFunnels();
   const { data: temporaryFunnels = [] } = useActiveTemporaryFunnels();
   const prefetchPipes = usePrefetchPipes();
+  const { data: metaPages } = useMetaPages();
+  const showMetaNav = (metaPages?.pages.length ?? 0) > 0;
 
   // Build dynamic funnel sub-items from display config
   const dynamicFunisChildren: NavItem[] = (displayConfig ?? [])
@@ -365,6 +373,12 @@ export function TopNavigation() {
   const filterByMaster = (items: NavItemWithChildren[]) =>
     items.filter((item) => !item.masterOnly || isMaster);
 
+  const filterByGate = (items: NavItemWithChildren[]) =>
+    items.filter((item) => {
+      if (item.gate === "meta_pages_connected") return showMetaNav;
+      return true;
+    });
+
   const filterByPermission = (items: NavItemWithChildren[]) =>
     items.filter((item) => {
       if (item.children) {
@@ -374,9 +388,9 @@ export function TopNavigation() {
       return canViewRoute(item.path);
     });
 
-  const visiblePrimary = filterByPermission(filterByMaster(filterByOutbound(primaryNavItems)));
-  const visibleMore = filterByPermission(filterByMaster(filterByOutbound(moreNavItems)));
-  const visibleAll = filterByPermission(filterByMaster(filterByOutbound(allNavItems)));
+  const visiblePrimary = filterByPermission(filterByGate(filterByMaster(filterByOutbound(primaryNavItems))));
+  const visibleMore = filterByPermission(filterByGate(filterByMaster(filterByOutbound(moreNavItems))));
+  const visibleAll = filterByPermission(filterByGate(filterByMaster(filterByOutbound(allNavItems))));
   const visibleAdminItems = isOutboundMember ? [] : adminNavItems.filter((item) => canViewRoute(item.path));
   const visibleBottomItems = isOutboundMember ? [] : bottomNavItems.filter((item) => canViewRoute(item.path));
   const visibleFunisSubItems = isOutboundMember
