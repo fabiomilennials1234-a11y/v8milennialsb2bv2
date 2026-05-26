@@ -25,6 +25,10 @@ owner: claude-agent
 - [[layout-onda-2b|Chat Onda 2b — contrato de layout]]
 - [[whatsapp-stability-plan|WhatsApp Stability — estado consolidado]]
 
+## Dashboard
+
+- [[TV Dashboard|TV Dashboard]]
+
 ## IA
 
 - [[Copilot|Copilot]]
@@ -37,10 +41,12 @@ owner: claude-agent
 
 - [[Agenda Interna|Agenda Interna]]
 - [[Export Stage Kanban|Export Stage (Kanban)]]
+- [[Filtros do Kanban|Filtros do Kanban]]
 - [[Lead Card|Lead Card (Kanban) — Trello-style]]
 - [[Lead Detail Modal|Lead Detail Modal]]
 - [[Pipe Confirmacao|Pipe Confirmacao]]
 - [[Upsell|Upsell]]
+- [[pipelines-auto-assign|pipelines-auto-assign]]
 
 ## automacoes
 

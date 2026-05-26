@@ -21,3 +21,7 @@ owner: claude-agent
 - [[Modulos|Módulos — Mapa do Código]] 🟡 draft
 - [[Multi-tenancy|Multi-tenancy]]
 - [[Visao Geral|Visão Geral — Arquitetura Torque CRM]]
+
+## Modulos
+
+- [[atendimento-meta|atendimento-meta]]

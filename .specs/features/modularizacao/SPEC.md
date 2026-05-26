@@ -4,7 +4,8 @@
 **Scope:** Extra-large (codebase-wide structural refactor)
 **Owner:** CTO + arquiteto + engenheiro
 **Estimate:** 18 slices, ~80h total (~10 dias úteis 1 dev)
-**Source:** Sanity-check arquitetural do arquiteto, fundado em CONTEXT.md (glossário canônico) + inspeção real da estrutura (`src/components/` 30+ pastas, `src/hooks/` 263 arquivos com 250+ soltos no root, `supabase/functions/` 97 funções no root, `_shared/` 35+ módulos no root).
+**Source:** Sanity-check arquitetural do arquiteto, fundado em CONTEXT.md (glossário canônico) + inspeção real da estrutura (`src/components/` 30+ pastas, `src/hooks/` 263 arquivos com 250+ soltos no root, `supabase/functions/` 97 funções no root, `_shared/` 35+ módulos no root). Fundamentação conceitual: [Augusto Galego — "Acabou o hype de microsserviços. Voltamos pra 2010"](../../../Obsidian/Segundo%20Cerebro/Clippings/(1197)%20Acabou%20o%20hype%20de%20microsserviços.%20Voltamos%20pra%202010.md) (monolito modular como janela entre MVP e microsserviços).
+**ADR:** [ADR-2026-05-26-modularizacao-monolito-modular](../../../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/04%20—%20Decisões/ADR-2026-05-26-modularizacao-monolito-modular.md)
 
 ---
 
@@ -22,6 +23,10 @@ O Torque CRM cresceu organizado por **camada técnica** (hooks/components/pages/
 CONTEXT.md já documenta **14 bounded contexts** explícitos. A arquitetura física não reflete a arquitetura lógica → onboarding lento (CTO sozinho + 1 dev junior + 3 subagentes), blast radius alto a cada mudança, AI agents perdidos sem âncoras de domínio.
 
 ## Vision
+
+**Monolito modular** (não microsserviços, não monolito espaguete). 1 frontend + 1 Supabase, mas dentro: módulos por bounded context com **API pública via `index.ts`** e cross-imports proibidos fora dela.
+
+Por que monolito modular e não microsserviços: Torque tem CTO + 1 dev junior + 3 AI subagentes — fragmentar em microsserviços = overhead de devops, latência de rede, observabilidade distribuída, bancos separados. Custo > benefício até centenas de devs. Monolito modular pega o **isolamento** (anti-espaguete) sem o **overhead de rede**. Se um dia precisar virar microsserviço, as interfaces já estão expostas — troca call de função por GRPC e pronto. Detalhe completo no ADR-2026-05-26.
 
 Codebase organizado por **bounded context** (DDD). Cada módulo:
 - Unidade isolada com API pública clara (`index.ts` ou pasta `public/`)
@@ -193,30 +198,11 @@ Cada slice = 1 PR pequeno, app não quebra ao mergear, sem dependência de slice
 
 ## Decisão arquitetural (ADR)
 
-**ADR-MOD-001 — Adotar bounded contexts como unidade física de organização**
+Detalhe completo no vault: [ADR-2026-05-26-modularizacao-monolito-modular](../../../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/04%20—%20Decisões/ADR-2026-05-26-modularizacao-monolito-modular.md).
 
-**Status**: Proposto pelo arquiteto, pendente aprovação CTO.
+**Resumo**: adotar monolito modular como padrão físico. `src/modules/<bc>/` + `supabase/functions/<bc>/<fn>/`. API pública via `index.ts`. Boundary enforced por ESLint + CI. Status: proposto, pendente aprovação CTO.
 
-**Contexto**: Codebase organizado por camada técnica não escala mental model nem ferramenta. CONTEXT.md já documenta 14 BCs lógicos. AI agents (3 subagentes) operam melhor com âncoras claras de domínio.
-
-**Decisão**: Reorganizar `src/` em `src/modules/<bc>/` com API pública via `index.ts`. Reorganizar `supabase/functions/` em `supabase/functions/<bc>/<fn>/`. Cross-imports só via API pública, enforced via ESLint + CI.
-
-**Alternativas descartadas**:
-- **Manter status quo + documentação melhor**: não resolve blast radius nem dificuldade de onboarding. Doc fica desatualizada.
-- **Microfrontends**: overkill, codebase é monolito React. Custo > benefício.
-- **Reorganizar só `src/`**: deixa `supabase/functions/` no caos. Edge functions são metade do código de negócio.
-- **Domain-driven em arquivo (sem mover)**: zero ganho de blast radius, AI continua perdida.
-
-**Consequências**:
-- (+) Onboarding linear (lê 1 módulo, entende 1 domínio)
-- (+) Blast radius limitado (PR toca 1-2 módulos)
-- (+) AI subagentes operam com âncoras claras
-- (+) Caminho aberto pra extrair módulo em serviço se um dia precisar
-- (-) Custo único de ~80h refactor
-- (-) Período de transição com codebase em 2 padrões (slice por slice)
-- (-) Disciplina contínua exigida (ESLint + revisão)
-
-**Reversível**: parcialmente. Tooling e structure são reversíveis. Sub-CLAUDE.md fica de qualquer forma.
+Fundamentação conceitual: [clipping Augusto Galego — monolito modular](../../../Obsidian/Segundo%20Cerebro/Clippings/(1197)%20Acabou%20o%20hype%20de%20microsserviços.%20Voltamos%20pra%202010.md).
 
 ## O que NÃO entra neste projeto
 
