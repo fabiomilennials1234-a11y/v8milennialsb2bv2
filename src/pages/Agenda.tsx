@@ -17,7 +17,6 @@ import {
   addWeeks,
   subWeeks,
   addMonths,
-  startOfDay,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
@@ -31,15 +30,18 @@ import {
 } from "@/hooks/useGoogleCalendar";
 import { useCalendarSharing } from "@/hooks/useGoogleCalendarSharing";
 
-import type { EventSource, UnifiedEvent } from "@/components/agenda/agenda-helpers";
+import type { EventTypeKey, UnifiedEvent } from "@/components/agenda/agenda-helpers";
 import {
   getWeekDays,
   normalizeAgendaEvents,
   normalizeGoogleEvents,
+  EVENT_TYPE_KEYS,
+  normalizeEventType,
 } from "@/components/agenda/agenda-helpers";
 import { AgendaTopBar, type ViewType } from "@/components/agenda/AgendaTopBar";
 import { TimeGrid } from "@/components/agenda/TimeGrid";
 import { MonthView } from "@/components/agenda/MonthView";
+import { DayAgendaView } from "@/components/agenda/DayAgendaView";
 import {
   EventDetailPopover,
   type PopoverState,
@@ -58,36 +60,29 @@ const USER_COLORS = [
   "#06B6D4",   // cyan
 ];
 
-// ─── Available internal sources ───────────────────────────────────────────────
-
-const INTERNAL_SOURCES: EventSource[] = [
-  "meeting",
-  "follow_up",
-  "scheduled_message",
-  "pipe_confirmacao",
-];
-
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function Agenda() {
   const { session } = useAuth();
 
-  const [view, setView] = useState<ViewType>("day");
+  // View switcher removed — Agenda is day-only. Week/Month code paths remain
+  // inert (reversible) should we reintroduce the switcher later.
+  const [view] = useState<ViewType>("day");
   const [date, setDate] = useState(new Date());
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitialStart, setCreateInitialStart] = useState<Date | undefined>();
 
-  // ── Source visibility toggles ───────────────────────────────────────────────
-  const [activeSources, setActiveSources] = useState<Set<EventSource>>(
-    () => new Set<EventSource>([...INTERNAL_SOURCES, "google"]),
+  // ── Event-type visibility toggles ───────────────────────────────────────────
+  const [activeTypes, setActiveTypes] = useState<Set<EventTypeKey>>(
+    () => new Set<EventTypeKey>(EVENT_TYPE_KEYS),
   );
 
-  const toggleSource = useCallback((source: EventSource) => {
-    setActiveSources((prev) => {
+  const toggleType = useCallback((type: EventTypeKey) => {
+    setActiveTypes((prev) => {
       const next = new Set(prev);
-      if (next.has(source)) next.delete(source);
-      else next.add(source);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
       return next;
     });
   }, []);
@@ -117,8 +112,12 @@ export default function Agenda() {
   // ── Date range for queries ──────────────────────────────────────────────────
   const { startDate, endDate } = useMemo(() => {
     if (view === "day") {
-      const s = startOfDay(date);
-      return { startDate: s, endDate: addDays(s, 1) };
+      // Fetch the whole month so the mini-calendar can mark days with events;
+      // the day list itself filters down to the selected date.
+      return {
+        startDate: new Date(date.getFullYear(), date.getMonth() - 1, 1),
+        endDate: new Date(date.getFullYear(), date.getMonth() + 2, 0),
+      };
     }
     if (view === "week") {
       const s = startOfWeek(date, { locale: ptBR });
@@ -150,14 +149,13 @@ export default function Agenda() {
   // ── Merge + filter events ───────────────────────────────────────────────────
   const allEvents: UnifiedEvent[] = useMemo(() => {
     const internal = normalizeAgendaEvents(agendaRawEvents);
-    const google =
-      activeSources.has("google") && googleRawEvents
-        ? normalizeGoogleEvents(
-            googleRawEvents as unknown[],
-            googleOwnerCalendars,
-            ownUserId,
-          )
-        : [];
+    const google = googleRawEvents
+      ? normalizeGoogleEvents(
+          googleRawEvents as unknown[],
+          googleOwnerCalendars,
+          ownUserId,
+        )
+      : [];
 
     // Deduplicate: if an internal meeting has a google_event_id, hide the
     // Google overlay duplicate to avoid showing the same event twice.
@@ -169,8 +167,10 @@ export default function Agenda() {
 
     const deduped = google.filter((g) => !googleEventIds.has(g.id));
 
-    return [...internal, ...deduped].filter((e) => activeSources.has(e.source));
-  }, [agendaRawEvents, googleRawEvents, activeSources, googleOwnerCalendars, ownUserId]);
+    return [...internal, ...deduped].filter((e) =>
+      activeTypes.has(normalizeEventType(e.eventType)),
+    );
+  }, [agendaRawEvents, googleRawEvents, activeTypes, googleOwnerCalendars, ownUserId]);
 
   // ── Mutations ───────────────────────────────────────────────────────────────
   const deleteMeeting = useDeleteMeeting();
@@ -248,15 +248,11 @@ export default function Agenda() {
     return format(date, "MMMM 'de' yyyy", { locale: ptBR });
   }, [date, view]);
 
-  // ── Source toggles for the topbar ───────────────────────────────────────────
-  const sourceToggles = useMemo(() => {
-    const sources: EventSource[] = [...INTERNAL_SOURCES];
-    if (googleConnected) sources.push("google");
-    return sources.map((key) => ({
-      key,
-      active: activeSources.has(key),
-    }));
-  }, [activeSources, googleConnected]);
+  // ── Event-type toggles for the topbar ───────────────────────────────────────
+  const typeToggles = useMemo(
+    () => EVENT_TYPE_KEYS.map((key) => ({ key, active: activeTypes.has(key) })),
+    [activeTypes],
+  );
 
   // ── Event handlers ──────────────────────────────────────────────────────────
   const handleEventClick = useCallback(
@@ -300,11 +296,9 @@ export default function Agenda() {
       {/* Top Bar */}
       <AgendaTopBar
         dateLabel={dateLabel}
-        view={view}
-        onViewChange={setView}
         onNavigate={navigate}
-        sourceToggles={sourceToggles}
-        onToggleSource={toggleSource}
+        typeToggles={typeToggles}
+        onToggleType={toggleType}
         isLoading={isLoading}
         onRefresh={handleRefresh}
         onNewEvent={handleNewEvent}
@@ -327,6 +321,13 @@ export default function Agenda() {
               events={allEvents}
               onEventClick={handleEventClick}
               onSlotClick={(day) => handleSlotClick(day)}
+            />
+          ) : view === "day" ? (
+            <DayAgendaView
+              date={date}
+              events={allEvents}
+              onSelectDate={setDate}
+              onEventClick={handleEventClick}
             />
           ) : (
             <TimeGrid

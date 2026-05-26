@@ -41,6 +41,46 @@ export const SOURCE_LABELS: Record<string, string> = {
   google: "Google Calendar",
 };
 
+// ─── Event-type filter (by event_type, not source) ─────────────────────────────
+
+export type EventTypeKey = "meeting" | "call" | "follow_up" | "task" | "other";
+
+/** Filterable event types, in display order. */
+export const EVENT_TYPE_KEYS: EventTypeKey[] = [
+  "meeting",
+  "call",
+  "follow_up",
+  "task",
+  "other",
+];
+
+export const EVENT_TYPE_LABELS: Record<EventTypeKey, string> = {
+  meeting: "Reunião",
+  call: "Ligação",
+  follow_up: "Follow-up",
+  task: "Tarefa",
+  other: "Outro",
+};
+
+export const EVENT_TYPE_COLORS: Record<EventTypeKey, string> = {
+  meeting: "hsl(47, 100%, 50%)", // gold (brand)
+  call: "#3B82F6", // blue
+  follow_up: "#10B981", // emerald
+  task: "#8B5CF6", // violet
+  other: "#8a857a", // mute
+};
+
+/**
+ * Collapse any event_type (across all sources) into one of the five filterable
+ * buckets. Unknown types and Google overlay events fall under "other".
+ */
+export function normalizeEventType(t: string | null | undefined): EventTypeKey {
+  if (t === "meeting" || t === "call" || t === "follow_up" || t === "task") {
+    return t;
+  }
+  return "other";
+}
+
 /** Google Calendar event colorId → hex. */
 export const GOOGLE_EVENT_COLORS: Record<string, string> = {
   "1": "#7986CB",
