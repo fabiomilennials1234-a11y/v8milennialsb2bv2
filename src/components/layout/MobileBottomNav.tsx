@@ -32,14 +32,14 @@ interface SecondaryItem {
 }
 
 const SECONDARY_ITEMS: SecondaryItem[] = [
-  { label: "Dashboard", icon: Gauge, path: "/" },
+  { label: "Dashboard", icon: Gauge, path: "/dashboard" },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Configurações", icon: Settings, path: "/configuracoes" },
 ];
 
 // ─── Route matching ─────────────────────────────────────────
 function isTabActive(tabPath: string, pathname: string): boolean {
-  if (tabPath === "/") return pathname === "/";
+  if (tabPath === "/dashboard") return pathname === "/dashboard" || pathname === "/";
   return pathname.startsWith(tabPath);
 }
 

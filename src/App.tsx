@@ -169,6 +169,11 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
 
 // Root route: always show Landing Page
 function RootRedirect() {
+  const { user, loading } = useAuth();
+
+  if (loading) return null;
+  if (user) return <Navigate to="/dashboard" replace />;
+
   return <Landing />;
 }
 
