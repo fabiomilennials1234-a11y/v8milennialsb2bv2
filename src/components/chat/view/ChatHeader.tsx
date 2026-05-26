@@ -29,6 +29,7 @@ import { ChannelBadge } from "@/components/chat/ChannelBadge";
 import { RealtimeStatusBadge } from "@/components/chat/RealtimeStatusBadge";
 import { SyncChatButton } from "@/components/chat/history-sync/SyncChatButton";
 import { useMessageLimits } from "@/hooks/useMessageLimits";
+import { HumanPauseBadge } from "../HumanPauseBadge";
 
 export interface SzChatSession {
   sz_chat_session_id: string;
@@ -60,6 +61,14 @@ export interface ChatHeaderProps {
   onDensityChange?: (d: DensityMode) => void;
   /** Callback para abrir AITimeline — passado para TakeoverControls (C30) */
   onOpenTimeline?: () => void;
+  /** Copilot está pausado por intervenção humana */
+  humanPaused?: boolean;
+  /** Timestamp até quando o copilot está pausado */
+  humanPausedUntil?: Date | null;
+  /** Callback para reativar copilot (limpar pausa) */
+  onReactivateCopilot?: () => void;
+  /** Mutation de reativação em andamento */
+  isReactivating?: boolean;
 }
 
 // ─── Toggle de densidade ──────────────────────────────────────────────────────
@@ -131,6 +140,10 @@ export function ChatHeader({
   density,
   onDensityChange,
   onOpenTimeline,
+  humanPaused,
+  humanPausedUntil,
+  onReactivateCopilot,
+  isReactivating,
 }: ChatHeaderProps) {
   const { data: limits } = useMessageLimits(instanceId ?? null);
   const limitsWarning = limits && limits.limit > 0 && (limits.current / limits.limit) >= 0.8;
@@ -250,6 +263,15 @@ export function ChatHeader({
         </div>
       </div>
 
+      {/* Human pause badge — desktop only, takes visual priority */}
+      {humanPaused && humanPausedUntil && onReactivateCopilot && (
+        <HumanPauseBadge
+          pausedUntil={humanPausedUntil}
+          onReactivate={onReactivateCopilot}
+          isReactivating={isReactivating ?? false}
+        />
+      )}
+
       {/* Transfer / AI state badges — desktop only */}
       {hasLead && leadId && isWaitingHuman && (
         <Badge variant="outline" className="hidden md:inline-flex border-amber-400 text-amber-600 gap-1.5 text-xs">
@@ -257,7 +279,7 @@ export function ChatHeader({
           Aguardando humano
         </Badge>
       )}
-      {aiDisabled && !isWaitingHuman && (
+      {aiDisabled && !isWaitingHuman && !humanPaused && (
         <Badge variant="outline" className="hidden md:inline-flex text-muted-foreground gap-1.5 text-xs">
           IA desativada
         </Badge>

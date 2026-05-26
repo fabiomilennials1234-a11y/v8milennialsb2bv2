@@ -9,6 +9,7 @@ import { OpenRouterClient } from "./openrouter-client.ts";
 import { AgentEngine } from "./agent-engine.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
+import { isHumanPauseActive } from "../_shared/copilot/human-pause.ts";
 
 // Force bundler to include provider modules (used via dynamic import in whatsapp-client)
 import "../_shared/whatsapp-providers/evolution-provider.ts";
@@ -190,6 +191,21 @@ Deno.serve(withSentry('agent-message', async (req) => {
         reason: "AI disabled for this lead",
         lead_id: lead.id,
         source: initialCancel.source,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // 1.55. HUMAN PAUSE GATE — skip if human agent is actively handling this conversation
+    const humanPause = await isHumanPauseActive(supabase, lead.id, organizationId);
+    if (humanPause.paused) {
+      console.log('[agent-message] Human pause active for lead:', lead.id, 'until:', humanPause.pausedUntil);
+      return new Response(JSON.stringify({
+        skipped: true,
+        reason: "human_pause_active",
+        lead_id: lead.id,
+        paused_until: humanPause.pausedUntil,
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }

@@ -387,4 +387,19 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
       },
     ],
   },
+  {
+    id: "PAUSAR_ATENDIMENTO_HUMANO",
+    name: "Pausar ao atendimento humano",
+    description: "Pausa automaticamente o copilot quando um agente humano envia mensagem. Cada nova mensagem humana reseta o timer. Copilot reativa passivamente apos o tempo configurado.",
+    icon: "PauseCircle",
+    defaultInstruction: "Quando um agente humano assumir a conversa, pause automaticamente e aguarde o tempo configurado antes de retomar.",
+    parameters: [
+      {
+        key: "durationMinutes",
+        label: "Duracao da pausa (minutos)",
+        type: "number" as const,
+        placeholder: "60",
+      },
+    ],
+  },
 ];

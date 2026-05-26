@@ -31,6 +31,7 @@ import { normalizePhone } from "@/lib/normalizePhone";
 import { useResolveChatDeepLink } from "@/hooks/chat/useResolveChatDeepLink";
 import { computeNeedsDeepLinkResolve } from "@/lib/computeNeedsDeepLinkResolve";
 import { useCopilotToggle } from "@/hooks/useCopilotToggle";
+import { useCopilotPause } from "@/hooks/useCopilotPause";
 import { ChatShell } from "@/components/chat/layout/ChatShell";
 import { MobileChatLayout } from "@/components/chat/layout/MobileChatLayout";
 import { useViewport } from "@/hooks/use-viewport";
@@ -129,6 +130,12 @@ function ChatView({
     phone: phoneNumber,
     leadId: selectedContact?.lead_id ?? null,
   });
+  // Human pause state — countdown + reactivate
+  const copilotPause = useCopilotPause({
+    conversationId,
+    organizationId,
+  });
+
   const aiDisabled = copilotToggle.aiDisabled;
   const toggleAiMutation = {
     mutate: (checked: boolean) => copilotToggle.toggle(!checked),
@@ -213,6 +220,10 @@ function ChatView({
           transferPending={false}
           density={density}
           onDensityChange={onDensityChange}
+          humanPaused={copilotPause.isPaused}
+          humanPausedUntil={copilotPause.pausedUntil}
+          onReactivateCopilot={copilotPause.reactivate}
+          isReactivating={copilotPause.isReactivating}
         />
       )}
 

@@ -15,6 +15,7 @@ import {
   Database,
   FileText,
   FilePlus,
+  PauseCircle,
   ChevronDown,
   ChevronUp,
   Wrench,
@@ -44,6 +45,7 @@ const ICON_MAP: Record<string, any> = {
   Database,
   FileText,
   FilePlus,
+  PauseCircle,
 };
 
 interface PlaygroundToolsProps {
