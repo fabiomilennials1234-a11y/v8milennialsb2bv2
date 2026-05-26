@@ -17,6 +17,7 @@ owner: claude-agent
 ## Notas nesta pasta
 
 - [[Areas Frageis|Áreas Frágeis — Mapa de Risco]]
+- [[Arquitetura Atual — As-Is|Arquitetura Atual — Estado Físico (As-Is)]]
 - [[Integracoes|Integrações Externas]] 🟡 draft
 - [[Modulos|Módulos — Mapa do Código]] 🟡 draft
 - [[Multi-tenancy|Multi-tenancy]]
