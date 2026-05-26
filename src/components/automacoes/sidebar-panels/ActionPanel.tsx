@@ -215,28 +215,7 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
       {/* Send WhatsApp (Imagem) */}
       {at === "send_whatsapp_image" && (
-        <>
-          <div className="space-y-2">
-            <Label>URL da Imagem</Label>
-            <Input
-              value={data.imageUrl || ""}
-              onChange={(e) => onUpdate({ imageUrl: e.target.value })}
-              placeholder="https://..."
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Legenda (opcional)</Label>
-            <Textarea
-              value={data.imageCaption || ""}
-              onChange={(e) => onUpdate({ imageCaption: e.target.value })}
-              placeholder="Confira nosso catálogo, {{nome}}!"
-              rows={2}
-            />
-            <p className="text-xs text-muted-foreground">
-              Variáveis: {"{{"} nome {"}}"}, {"{{"} empresa {"}}"} ...
-            </p>
-          </div>
-        </>
+        <WhatsAppImagePanel data={data} onUpdate={onUpdate} />
       )}
 
       {/* Send WhatsApp (Figurinha) */}
@@ -1118,6 +1097,168 @@ function WhatsAppTextPanel({
           />
         </div>
       )}
+    </>
+  );
+}
+
+// ── WhatsApp Imagem (Upload) ─────────────────────────────────────────────────
+
+function WhatsAppImagePanel({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const { organizationId } = useOrganization();
+  const [isUploading, setIsUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      const { validateWorkflowImageFile, buildWorkflowAssetPath } = await import(
+        "@/lib/workflow-image-upload"
+      );
+
+      const validation = validateWorkflowImageFile(file);
+      if (!validation.valid) {
+        toast.error(validation.error!);
+        return;
+      }
+      if (!organizationId) {
+        toast.error("Organização não encontrada");
+        return;
+      }
+
+      setIsUploading(true);
+      try {
+        const path = buildWorkflowAssetPath(organizationId, file.name);
+        const { data: uploaded, error } = await supabase.storage
+          .from("media")
+          .upload(path, file, { contentType: file.type, upsert: false });
+
+        if (error) throw new Error(error.message);
+
+        const { data: urlData } = supabase.storage
+          .from("media")
+          .getPublicUrl(uploaded.path);
+
+        if (!urlData?.publicUrl) throw new Error("Erro ao obter URL da imagem");
+
+        onUpdate({ imageUrl: urlData.publicUrl });
+        toast.success("Imagem enviada!");
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Erro ao enviar imagem";
+        toast.error(message);
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [organizationId, onUpdate],
+  );
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+    e.target.value = "";
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
+
+  const removeImage = () => {
+    onUpdate({ imageUrl: undefined });
+  };
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Imagem</Label>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          className="hidden"
+          onChange={handleInputChange}
+        />
+
+        {data.imageUrl ? (
+          <div className="relative group rounded-lg border overflow-hidden bg-muted/30">
+            <img
+              src={data.imageUrl}
+              alt="Preview"
+              className="w-full max-h-40 object-contain"
+            />
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => inputRef.current?.click()}
+                disabled={isUploading}
+              >
+                <Upload className="h-3.5 w-3.5 mr-1" />
+                Trocar
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={removeImage}
+                disabled={isUploading}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                Remover
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 cursor-pointer transition-colors",
+              dragOver
+                ? "border-primary bg-primary/5"
+                : "border-muted-foreground/25 hover:border-muted-foreground/50",
+              isUploading && "pointer-events-none opacity-60",
+            )}
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+          >
+            <Upload className="h-8 w-8 text-muted-foreground/50" />
+            <p className="text-xs text-muted-foreground text-center">
+              {isUploading
+                ? "Enviando..."
+                : "Clique ou arraste uma imagem aqui"}
+            </p>
+            <p className="text-[10px] text-muted-foreground/60">
+              JPG, PNG, GIF ou WebP — máx. 16MB
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label>Legenda (opcional)</Label>
+        <Textarea
+          value={data.imageCaption || ""}
+          onChange={(e) => onUpdate({ imageCaption: e.target.value })}
+          placeholder="Confira nosso catálogo, {{nome}}!"
+          rows={2}
+        />
+        <p className="text-xs text-muted-foreground">
+          Variáveis: {"{{"} nome {"}}"}, {"{{"} empresa {"}}"} ...
+        </p>
+      </div>
     </>
   );
 }
