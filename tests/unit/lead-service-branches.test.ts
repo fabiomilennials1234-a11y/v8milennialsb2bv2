@@ -416,13 +416,22 @@ describe("promoveShadowLead", () => {
     expect(result).toBe(false);
   });
 
-  it("promotes to pipe_whatsapp by default", async () => {
+  // Note: pipe_whatsapp/pipe_confirmacao/pipe_propostas viraram views sobre pipeline_entries.
+  // promoveShadowLead agora chama upsertPipeEntry → INSERT em pipeline_entries.
+  // Cada teste mocka: pipelines (resolvePipelineId), pipeline_entries.maybeSingle (getPipeEntry → null),
+  // pipeline_entries insert .select().single() (retorna id).
+
+  it("promotes to whatsapp pipe by default", async () => {
     const sb = scripted({
       leads: [
         { data: { id: "l1", is_shadow: true }, error: null },
         { data: null, error: null }, // update success
       ],
-      pipe_whatsapp: [{ data: null, error: null }],
+      pipelines: [{ data: { id: "pl-wa" }, error: null }],
+      pipeline_entries: [
+        { data: null, error: null },          // getPipeEntry.maybeSingle → no existing
+        { data: { id: "pe-1" }, error: null }, // insert .select().single() → success
+      ],
     });
     const result = await promoveShadowLead(
       sb,
@@ -432,42 +441,58 @@ describe("promoveShadowLead", () => {
       "tm-sdr",
     );
     expect(result).toBe(true);
-    const pipeInsert = sb._inserted.find((i: { table: string }) => i.table === "pipe_whatsapp");
-    expect((pipeInsert?.row as any).sdr_id).toBe("tm-sdr");
+    const pipeInsert = sb._inserted.find((i: { table: string }) => i.table === "pipeline_entries");
+    expect(pipeInsert).toBeTruthy();
+    expect((pipeInsert?.row as any).pipeline_id).toBe("pl-wa");
+    expect((pipeInsert?.row as any).stage_key).toBe("novo_lead");
+    expect((pipeInsert?.row as any).assigned_to).toBe("tm-sdr");
+    expect((pipeInsert?.row as any).metadata?.sdr_id).toBe("tm-sdr");
   });
 
-  it("promotes to pipe_confirmacao when pipe='confirmacao'", async () => {
+  it("promotes to confirmacao pipe when pipe='confirmacao'", async () => {
     const sb = scripted({
       leads: [
         { data: { id: "l1", is_shadow: true }, error: null },
         { data: null, error: null },
       ],
-      pipe_confirmacao: [{ data: null, error: null }],
+      pipelines: [{ data: { id: "pl-cf" }, error: null }],
+      pipeline_entries: [
+        { data: null, error: null },
+        { data: { id: "pe-2" }, error: null },
+      ],
     });
     const result = await promoveShadowLead(sb, "l1", "org-1", {
       pipe: "confirmacao",
       stage: "reuniao_marcada",
     });
     expect(result).toBe(true);
-    const pipeInsert = sb._inserted.find((i: { table: string }) => i.table === "pipe_confirmacao");
+    const pipeInsert = sb._inserted.find((i: { table: string }) => i.table === "pipeline_entries");
     expect(pipeInsert).toBeTruthy();
+    expect((pipeInsert?.row as any).pipeline_id).toBe("pl-cf");
+    expect((pipeInsert?.row as any).stage_key).toBe("reuniao_marcada");
   });
 
-  it("promotes to pipe_propostas when pipe='propostas'", async () => {
+  it("promotes to propostas pipe when pipe='propostas'", async () => {
     const sb = scripted({
       leads: [
         { data: { id: "l1", is_shadow: true }, error: null },
         { data: null, error: null },
       ],
-      pipe_propostas: [{ data: null, error: null }],
+      pipelines: [{ data: { id: "pl-pp" }, error: null }],
+      pipeline_entries: [
+        { data: null, error: null },
+        { data: { id: "pe-3" }, error: null },
+      ],
     });
     const result = await promoveShadowLead(sb, "l1", "org-1", {
       pipe: "propostas",
       stage: "proposta_enviada",
     });
     expect(result).toBe(true);
-    const pipeInsert = sb._inserted.find((i: { table: string }) => i.table === "pipe_propostas");
+    const pipeInsert = sb._inserted.find((i: { table: string }) => i.table === "pipeline_entries");
     expect(pipeInsert).toBeTruthy();
+    expect((pipeInsert?.row as any).pipeline_id).toBe("pl-pp");
+    expect((pipeInsert?.row as any).stage_key).toBe("proposta_enviada");
   });
 
   it("catches thrown errors and returns false", async () => {
