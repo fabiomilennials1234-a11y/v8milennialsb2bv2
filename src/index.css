@@ -376,7 +376,7 @@
   }
 
   .topnav-item {
-    @apply flex items-center gap-1.5 px-3 py-1.5 text-[13.5px] text-foreground/55 rounded-md cursor-pointer select-none;
+    @apply relative flex items-center gap-1.5 px-3 py-1.5 text-[13.5px] text-foreground/55 rounded-md cursor-pointer select-none;
     @apply transition-all duration-150 ease-out;
     @apply hover:text-foreground/85;
     font-weight: 460;
@@ -386,6 +386,35 @@
   .topnav-item-active {
     @apply text-foreground;
     font-weight: 600;
+  }
+
+  /* Active-tab underline — neon yellow (same as the selected calendar day),
+     grows outward from the center each time a tab becomes active. */
+  .topnav-item-active::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 20px;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, #ffd400, transparent);
+    box-shadow: 0 0 8px rgba(255, 212, 0, 0.7);
+    transform: translateX(-50%) scaleX(1);
+    transform-origin: center;
+    animation: topnavUnderline 0.3s cubic-bezier(0.22, 0.68, 0.36, 1);
+    pointer-events: none;
+  }
+
+  @keyframes topnavUnderline {
+    from {
+      transform: translateX(-50%) scaleX(0);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(-50%) scaleX(1);
+      opacity: 1;
+    }
   }
 
   .topnav-item-locked {

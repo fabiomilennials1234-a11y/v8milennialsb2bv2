@@ -17,28 +17,35 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  Filter,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { EventSource } from "./agenda-helpers";
-import { SOURCE_COLORS, SOURCE_LABELS } from "./agenda-helpers";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+} from "@/components/ui/dropdown-menu";
+import type { EventTypeKey } from "./agenda-helpers";
+import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from "./agenda-helpers";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ViewType = "day" | "week" | "month";
 
-interface SourceToggle {
-  key: EventSource;
+interface TypeToggle {
+  key: EventTypeKey;
   active: boolean;
 }
 
 interface AgendaTopBarProps {
   dateLabel: string;
-  view: ViewType;
-  onViewChange: (view: ViewType) => void;
   onNavigate: (dir: "prev" | "next" | "today") => void;
-  sourceToggles: SourceToggle[];
-  onToggleSource: (source: EventSource) => void;
+  typeToggles: TypeToggle[];
+  onToggleType: (type: EventTypeKey) => void;
   isLoading: boolean;
   onRefresh: () => void;
   onNewEvent: () => void;
@@ -49,16 +56,16 @@ interface AgendaTopBarProps {
 
 export function AgendaTopBar({
   dateLabel,
-  view,
-  onViewChange,
   onNavigate,
-  sourceToggles,
-  onToggleSource,
+  typeToggles,
+  onToggleType,
   isLoading,
   onRefresh,
   onNewEvent,
   googleConnected,
 }: AgendaTopBarProps) {
+  const activeCount = typeToggles.filter((t) => t.active).length;
+  const allActive = activeCount === typeToggles.length;
   return (
     <motion.div
       initial={{ opacity: 0, y: -8 }}
@@ -106,25 +113,43 @@ export function AgendaTopBar({
         {dateLabel}
       </span>
 
-      {/* Source toggles */}
-      <div className="flex items-center gap-3">
-        {sourceToggles.map((toggle) => (
-          <button
-            key={toggle.key}
-            onClick={() => onToggleSource(toggle.key)}
-            className="flex items-center gap-1.5 text-xs transition-all duration-150"
-            style={{ opacity: toggle.active ? 1 : 0.35 }}
+      {/* Source filter */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1.5 rounded-lg px-2.5 text-xs"
           >
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: SOURCE_COLORS[toggle.key] }}
-            />
-            <span className="text-muted-foreground text-[11px]">
-              {SOURCE_LABELS[toggle.key]}
-            </span>
-          </button>
-        ))}
-      </div>
+            <Filter className="w-3.5 h-3.5" />
+            Filtrar
+            {!allActive && (
+              <span className="ml-0.5 rounded-full bg-primary/15 px-1.5 text-[10px] font-medium text-primary">
+                {activeCount}
+              </span>
+            )}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuLabel className="text-xs">Tipo</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {typeToggles.map((toggle) => (
+            <DropdownMenuCheckboxItem
+              key={toggle.key}
+              checked={toggle.active}
+              onCheckedChange={() => onToggleType(toggle.key)}
+              onSelect={(e) => e.preventDefault()}
+              className="gap-2 text-xs"
+            >
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: EVENT_TYPE_COLORS[toggle.key] }}
+              />
+              {EVENT_TYPE_LABELS[toggle.key]}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {/* Google Calendar status indicator */}
       {googleConnected && (
@@ -139,23 +164,6 @@ export function AgendaTopBar({
           Google
         </Badge>
       )}
-
-      {/* View switcher */}
-      <div className="flex items-center bg-muted/60 rounded-lg p-0.5 gap-px">
-        {(["day", "week", "month"] as ViewType[]).map((v) => (
-          <button
-            key={v}
-            onClick={() => onViewChange(v)}
-            className={`px-2.5 py-1 text-[11px] rounded-md transition-all font-medium ${
-              view === v
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground/80"
-            }`}
-          >
-            {v === "day" ? "Dia" : v === "week" ? "Semana" : "Mes"}
-          </button>
-        ))}
-      </div>
 
       {/* Refresh */}
       <Button
