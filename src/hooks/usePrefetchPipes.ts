@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { usePipelineId, type PipelineType } from "./usePipelineEntries";
 
 const LEAD_SELECT = `

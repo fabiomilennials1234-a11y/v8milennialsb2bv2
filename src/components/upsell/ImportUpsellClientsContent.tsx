@@ -12,8 +12,8 @@ import {
   type FilePreviewResult,
 } from "@/hooks/useImportLeads";
 import { usePipelineStages } from "@/hooks/usePipelineStages";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useTeamMembers } from "@/modules/identity";
+import { useOrganization } from "@/modules/identity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { supabase } from "@/integrations/supabase/client";
 import { downloadUpsellImportTemplate } from "@/lib/upsellImportTemplate";

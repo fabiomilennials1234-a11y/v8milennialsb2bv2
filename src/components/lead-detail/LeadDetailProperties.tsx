@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PropertyGroup } from "./PropertyGroup";
 import { InlineField } from "./InlineField";
 import { LeadChecklistSection } from "@/components/leads/LeadChecklistSection";
-import { useResponsibleMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/modules/identity";
 import { useTags } from "@/hooks/useTags";
 import { useUpdateLead } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";

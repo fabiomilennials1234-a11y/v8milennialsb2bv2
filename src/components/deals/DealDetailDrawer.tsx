@@ -15,7 +15,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useDeal, useUpdateDeal, useMarkDealWon, useMarkDealLost, useDeleteDeal } from "@/hooks/useDeals";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { DealItemsTable } from "./DealItemsTable";
 
 const fmt = (v: number) =>

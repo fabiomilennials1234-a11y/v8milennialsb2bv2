@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { useIdentity } from "@/hooks/useIdentity";
+import { useIdentity } from "@/modules/identity";
 import { useOnboardingState } from "@/hooks/useOnboardingState";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { OnboardingFlow } from "./OnboardingFlow";

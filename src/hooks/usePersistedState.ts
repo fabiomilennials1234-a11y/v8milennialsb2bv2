@@ -14,8 +14,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useOrganization } from "./useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 interface StorageEntry<T> {

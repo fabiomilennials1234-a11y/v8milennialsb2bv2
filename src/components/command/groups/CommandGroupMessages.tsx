@@ -12,7 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { MessageSquare, ArrowDownLeft, ArrowUpRight, Loader2 } from "lucide-react";
 import { CommandGroup, CommandItem } from "cmdk";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/modules/identity";
 import { useMessageSearch } from "@/hooks/chat/useMessageSearch";
 import { HighlightedText } from "@/components/chat/search/HighlightedText";
 import { pushRecent } from "../recentCommands";

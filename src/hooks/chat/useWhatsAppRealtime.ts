@@ -11,7 +11,7 @@
  */
 import { useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
 import type { WhatsAppMessage, ChatContact } from "./types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";

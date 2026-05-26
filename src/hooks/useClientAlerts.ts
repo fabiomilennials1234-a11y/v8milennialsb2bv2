@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/hooks/useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 export function useClientAlerts(clientId?: string) {
   const { organizationId } = useOrganization();
 

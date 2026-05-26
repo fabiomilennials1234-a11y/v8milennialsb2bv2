@@ -3,8 +3,8 @@ import { Send, Loader2, MessageCirclePlus } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useCreateLeadComment } from "../../hooks/useLeadComments";
-import { useAuth } from "@/contexts/AuthContext";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useAuth } from "@/modules/identity";
+import { useTeamMembers } from "@/modules/identity";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 

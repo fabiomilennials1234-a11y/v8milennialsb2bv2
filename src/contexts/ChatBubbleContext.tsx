@@ -25,7 +25,7 @@ import {
 } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { useChatBubbleState } from "@/hooks/useChatBubbleState";
 import { useWhatsAppInstancesForUser } from "@/hooks/chat/useWhatsAppInstances";
 import { useWhatsAppMessagesRealtime } from "@/hooks/chat/useWhatsAppRealtime";

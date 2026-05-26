@@ -17,10 +17,9 @@
  * `move_pipe_record` AppAction entries.
  */
 
-import { useUserRole } from "@/hooks/useUserRole";
-import { useIdentity } from "@/hooks/useIdentity";
-import { useCanDo } from "@/hooks/useCanDo";
-
+import { useUserRole } from "@/modules/identity";
+import { useIdentity } from "@/modules/identity";
+import { useCanDo } from "@/modules/identity";
 export interface Gate {
   allowed: boolean;
   reason?: string;

@@ -1,13 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { triggerFollowUpAutomation } from "@/hooks/useAutoFollowUp";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
-import { assertPermission } from "@/lib/permissions";
-import { useCanDo } from "@/hooks/useCanDo";
-
+import { assertPermission } from "@/modules/identity";
+import { useCanDo } from "@/modules/identity";
 // Tipos para os objetivos de campanha
 export type CampaignObjective = 'qualificacao' | 'agendamentos' | 'propostas' | 'livre';
 

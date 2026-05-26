@@ -2,8 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
-import { useOrganization } from "./useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 export interface FollowUp {
   id: string;
   lead_id: string;

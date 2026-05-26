@@ -13,7 +13,7 @@ vi.mock("@/lib/analytics", () => ({
 }));
 
 const mockUseOrganization = vi.fn();
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => mockUseOrganization(),
 }));
 

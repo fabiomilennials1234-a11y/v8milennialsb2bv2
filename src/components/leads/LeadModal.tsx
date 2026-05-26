@@ -23,7 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/modules/identity";
 import { useCreateLead, useUpdateLead } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import {

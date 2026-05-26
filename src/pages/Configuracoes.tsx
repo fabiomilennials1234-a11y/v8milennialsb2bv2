@@ -56,9 +56,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag, Tag as TagType } from "@/hooks/useTags";
-import { useIdentity } from "@/hooks/useIdentity";
-import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useIdentity } from "@/modules/identity";
+import { useOrganizationSettings } from "@/modules/identity";
+import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
 
 // Lazy imports — cada tab carrega só quando ativada.
@@ -112,7 +112,7 @@ const ApiKeysPanel = lazy(() =>
   }))
 );
 const PermissionsSettings = lazy(() =>
-  import("@/components/settings/PermissionsTab").then((m) => ({
+  import("@/modules/identity/components/PermissionsTab").then((m) => ({
     default: m.PermissionsTab,
   }))
 );

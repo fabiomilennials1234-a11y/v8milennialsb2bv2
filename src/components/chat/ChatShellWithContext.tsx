@@ -51,10 +51,10 @@ import { useWhatsAppMessagesRealtime } from "@/hooks/chat/useWhatsAppRealtime";
 import { useFailedMessages, useRetryMessage } from "@/hooks/chat/useWhatsAppSend";
 import { useChatDensity } from "@/hooks/chat/useChatDensity";
 import { useTakeover } from "@/hooks/chat/useTakeover";
-import { useIdentity } from "@/hooks/useIdentity";
+import { useIdentity } from "@/modules/identity";
 import { useTags } from "@/hooks/useTags";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
-import { useAuth } from "@/contexts/AuthContext";
+import { useCurrentTeamMember } from "@/modules/identity";
+import { useAuth } from "@/modules/identity";
 import {
   useArchiveConversation,
   useUnarchiveConversation,

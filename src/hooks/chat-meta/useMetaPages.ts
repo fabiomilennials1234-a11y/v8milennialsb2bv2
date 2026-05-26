@@ -1,7 +1,7 @@
 // src/hooks/chat-meta/useMetaPages.ts
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import type { MetaPage, MetaPagesByChannel } from "./types";
 import { metaPagesKey } from "./types";
 

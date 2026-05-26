@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { CampanhaStage, CampanhaMember, type Campanha } from "@/hooks/useCampanhas";
 import { useImportLeads, parseFilePreview, KNOWN_LEAD_FIELDS, type FilePreviewResult } from "@/hooks/useImportLeads";
 import { useLeadCustomFields } from "@/hooks/useLeadCustomFields";
-import { useCanDo } from "@/hooks/useCanDo";
+import { useCanDo } from "@/modules/identity";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";
 import { toast } from "sonner";
 import { Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Loader2, Sparkles, Users, RefreshCw, AlertTriangle, FileDown, ChevronDown, ChevronUp, UserX } from "lucide-react";

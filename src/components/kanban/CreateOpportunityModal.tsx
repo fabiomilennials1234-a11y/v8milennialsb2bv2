@@ -21,8 +21,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLeads } from "@/hooks/useLeads";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useTeamMembers } from "@/modules/identity";
+import { useOrganization } from "@/modules/identity";
 import { useCreatePipeWhatsapp, usePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";

@@ -44,8 +44,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useFollowUps, useCompleteFollowUp, useUpdateFollowUp, useArchiveFollowUp, useArchiveManyFollowUps, useDeleteFollowUp, type FollowUp } from "@/hooks/useFollowUps";
 import { toast } from "sonner";
-import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
-import { useUserRole, useFeaturePermission } from "@/hooks/useUserRole";
+import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
+import { useUserRole, useFeaturePermission } from "@/modules/identity";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { cn } from "@/lib/utils";
 

@@ -1,8 +1,7 @@
 import { useEffect, useRef } from "react";
 import { AlertTriangle } from "lucide-react";
 import { track } from "@/lib/analytics";
-import { useOrganization } from "@/hooks/useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 interface GhostLeadsBannerProps {
   pipeType: "whatsapp" | "confirmacao" | "propostas";
   ghostCount: number;

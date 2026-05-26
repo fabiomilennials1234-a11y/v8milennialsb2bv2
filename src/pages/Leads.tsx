@@ -58,8 +58,8 @@ import { ExportLeadsModal } from "@/components/leads/ExportLeadsModal";
 import { ImportHistoryPanel } from "@/components/leads/ImportHistoryPanel";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
-import { useCanDo } from "@/hooks/useCanDo";
-import { useFeaturePermission } from "@/hooks/useUserRole";
+import { useCanDo } from "@/modules/identity";
+import { useFeaturePermission } from "@/modules/identity";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -76,7 +76,7 @@ import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
 import { useSearchParams } from "react-router-dom";
-import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/modules/identity";
 import { useCustomPipelines, useCustomPipelineStages, useAddLeadToCustomPipe } from "@/hooks/useCustomPipelines";
 import { useAllPipelineStageOptions, getPipelineTypeName } from "@/hooks/usePipelineStages";
 import { useCreatePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
@@ -86,7 +86,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
 
 const originLabels: Record<string, string> = {

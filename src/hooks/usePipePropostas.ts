@@ -3,8 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 
-import { useOrganization } from "./useOrganization";
-import { useCanDo } from "@/hooks/useCanDo";
+import { useOrganization } from "@/modules/identity";
+import { useCanDo } from "@/modules/identity";
 import { OptimisticLockConflictError, isPostgrestNoRows } from "@/lib/optimistic-lock";
 import { usePipelineEntries, usePipelineId, findOrCreatePipelineEntry } from "./usePipelineEntries";
 

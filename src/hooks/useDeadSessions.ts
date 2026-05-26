@@ -9,8 +9,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "./useTeamMembers";
-
+import { useCurrentTeamMember } from "@/modules/identity";
 export type DeadSession = {
   id: string;
   instance_name: string;

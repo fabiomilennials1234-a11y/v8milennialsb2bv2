@@ -51,13 +51,13 @@ import {
 import { format, formatDistanceToNow, isToday, isTomorrow, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/hooks/useOrganizationSettings";
+import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/modules/identity";
 import { useUpdatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus, statusColumns } from "@/hooks/usePipeConfirmacao";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { useLeadHistory } from "@/hooks/useLeadHistory";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useDeleteLead } from "@/hooks/useLeads";
-import { useResponsibleMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/modules/identity";
 import { CompareceuModal } from "./CompareceuModal";
 import { toast } from "sonner";
 

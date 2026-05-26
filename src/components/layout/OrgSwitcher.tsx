@@ -7,9 +7,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { useOrgSwitcher } from "@/hooks/useOrgSwitcher";
-import { useOrganization } from "@/hooks/useOrganization";
-import { useMasterAuth } from "@/hooks/useMasterAuth";
+import { useOrgSwitcher } from "@/modules/identity";
+import { useOrganization } from "@/modules/identity";
+import { useMasterAuth } from "@/modules/identity";
 import { useNavigate } from "react-router-dom";
 
 export function OrgSwitcher() {

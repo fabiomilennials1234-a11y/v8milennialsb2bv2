@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
 
 export type ActivityType = "call" | "email" | "meeting" | "note" | "task" | "whatsapp_msg" | "system";

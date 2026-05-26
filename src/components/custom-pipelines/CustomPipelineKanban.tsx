@@ -12,7 +12,7 @@ import {
   groupEntriesByStage,
 } from "@/hooks/useCustomPipelines";
 import { toast } from "sonner";
-import { useCanDo } from "@/hooks/useCanDo";
+import { useCanDo } from "@/modules/identity";
 import { useUpdateLead } from "@/hooks/useLeads";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { formatDistanceToNow } from "date-fns";
@@ -92,7 +92,7 @@ export function CustomPipelineKanban({
     });
   }, [entries, searchQuery]);
 
-  // Transforma CustomPipeEntry → LeadCardData
+  // Transforma CustomPipeEntry â†’ LeadCardData
   const transformToCard = (entry: CustomPipeEntry): LeadCardData => {
     const lead = entry.lead;
     return {

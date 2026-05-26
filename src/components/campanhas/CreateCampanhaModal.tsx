@@ -16,7 +16,7 @@ import {
   OBJECTIVE_LABELS, OBJECTIVE_DEFAULT_STAGES,
   getObjectiveMetricLabel, getObjectiveSuccessStageLabel,
 } from "@/hooks/useCampanhas";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
 import { toast } from "sonner";
 import {

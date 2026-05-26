@@ -29,7 +29,7 @@ import {
   type SdrAssignmentMode,
 } from "@/hooks/useCampanhas";
 import { useCampanhaTemplates, type CampanhaTemplate } from "@/hooks/useCampaignTemplates";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import {
   Send, ChevronDown, Plus, Trash2, Loader2, ListOrdered, Play, Pencil,
   CheckCircle2, Clock, XCircle, MessageSquare, ArrowRightLeft, UserPlus, Ban, Hourglass,

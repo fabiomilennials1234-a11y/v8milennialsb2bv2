@@ -55,7 +55,7 @@ import {
 import { useUpdatePipeProposta, useDeletePipeProposta, type PipePropostasStatus, statusColumns } from "@/hooks/usePipePropostas";
 import { useActiveProducts } from "@/hooks/useProducts";
 import { usePipePropostaItems, useCreatePipePropostaItem, useUpdatePipePropostaItem, useDeletePipePropostaItem } from "@/hooks/usePipePropostaItems";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useDeleteLead } from "@/hooks/useLeads";
 import { useTinyErpStatus } from "@/hooks/useTinyErp";

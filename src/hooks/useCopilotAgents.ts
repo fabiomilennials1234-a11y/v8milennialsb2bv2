@@ -7,7 +7,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/modules/identity";
 import { toast } from "sonner";
 import { generatePrompt, saveCopilotSystemPrompt, regenerateAndSavePrompt, computePromptHash } from "./useCopilotPromptBuilder";
 import { parseCustomInstructions, serializeCustomInstructions } from "@/lib/copilot/custom-instructions-utils";
@@ -23,8 +23,7 @@ import type {
 } from "@/types/copilot";
 import { followupRuleToDB } from "./useAgentFollowupRules";
 import type { AgentDocument } from "./useAgentDocuments";
-import { useCurrentTeamMember } from "./useTeamMembers";
-
+import { useCurrentTeamMember } from "@/modules/identity";
 /**
  * Payload para atualização de configuração de pipeline
  */

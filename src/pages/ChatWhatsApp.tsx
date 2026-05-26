@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { ChatShellWithContext } from "@/components/chat/ChatShellWithContext";
 import { CoachingSidebar } from "@/components/ai/CoachingSidebar";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
 
 export default function ChatWhatsApp() {

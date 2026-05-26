@@ -2,8 +2,7 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import Papa from "papaparse";
-import { useOrganization } from "./useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 /** Campos conhecidos do sistema (leads + UTM + funil). Custom fields são passados separadamente. */
 export const KNOWN_LEAD_FIELDS = [
   "name",

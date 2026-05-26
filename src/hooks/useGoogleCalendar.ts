@@ -10,7 +10,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 

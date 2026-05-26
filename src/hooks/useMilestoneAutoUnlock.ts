@@ -9,8 +9,7 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useBadges, useUserBadges, useUnlockBadge } from "./useBadges";
 import { useOutboundMetrics } from "./useOutboundMetrics";
-import { useOrganization } from "./useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 export function useMilestoneAutoUnlock() {
   const { teamMemberId } = useOrganization();
   const { data: badges } = useBadges();

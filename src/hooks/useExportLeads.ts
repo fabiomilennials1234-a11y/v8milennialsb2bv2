@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
-import { useCanDo } from "@/hooks/useCanDo";
-
+import { useOrganization } from "@/modules/identity";
+import { useCanDo } from "@/modules/identity";
 const BATCH_SIZE = 500;
 
 /** Cabeçalhos completos: lead + pipe Qualificação + pipe Confirmação + pipe Propostas */

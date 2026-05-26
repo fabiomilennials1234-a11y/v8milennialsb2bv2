@@ -1,6 +1,6 @@
 import { memo, useEffect } from "react";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { useLeadSheet } from "../hooks/useLeadSheet";
 import { track } from "@/lib/analytics";
 import { LeadDetailDialogV1 } from "./LeadDetailDialogV1";

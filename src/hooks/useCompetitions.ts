@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 export interface Competition {
   id: string;
   organization_id: string;
@@ -162,7 +161,7 @@ export function useCreateCompetition() {
             prize_name: p.prize_name,
             prize_description: p.prize_description || null,
             prize_value: p.prize_value || null,
-            prize_icon: p.prize_icon || "🏆",
+            prize_icon: p.prize_icon || "ðŸ†",
           })));
         if (prizeError) throw prizeError;
       }

@@ -12,8 +12,8 @@ import {
   type FilePreviewResult,
 } from "@/hooks/useImportLeads";
 import { useLeadCustomFields } from "@/hooks/useLeadCustomFields";
-import { useCanDo } from "@/hooks/useCanDo";
-import { useTeamMembers, isVirtualTeamMember } from "@/hooks/useTeamMembers";
+import { useCanDo } from "@/modules/identity";
+import { useTeamMembers, isVirtualTeamMember } from "@/modules/identity";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";
 import { toast } from "sonner";
 import {

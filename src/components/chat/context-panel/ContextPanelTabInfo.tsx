@@ -46,7 +46,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useUpdateLead } from "@/hooks/useLeads";
-import { useResponsibleMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/modules/identity";
 import { useTags } from "@/hooks/useTags";
 import { LeadCustomFields } from "@/components/lead/info/LeadCustomFields";
 import { AddCustomFieldPopover } from "@/components/lead/info/AddCustomFieldPopover";

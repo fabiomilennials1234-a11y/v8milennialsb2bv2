@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { CampanhaStage, CampanhaLead, useUpdateCampanhaLead, useDeleteCampanhaLead, useExtractLeadToPipe, type CampanhaPipeAutomation } from "@/hooks/useCampanhas";
 import { useDeleteLead } from "@/hooks/useLeads";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { Phone, Mail, Building2, GripVertical, User, DollarSign, Star, Tag, Trash2, Edit2, Filter, MessageSquare, Save, X, Search, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";

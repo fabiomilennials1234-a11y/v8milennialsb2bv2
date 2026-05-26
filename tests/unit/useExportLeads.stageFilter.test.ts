@@ -73,16 +73,16 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-123" }),
 }));
 
-vi.mock("@/lib/permissions", () => ({
+vi.mock("@/modules/identity/lib/permissions", () => ({
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
   assertPermission: vi.fn().mockResolvedValue(undefined),
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/hooks/useIdentity", () => ({
   useIdentity: () => ({
     userId: "u1",
     organizationId: "org-123",
@@ -95,7 +95,7 @@ vi.mock("@/hooks/useIdentity", () => ({
     isReady: true,
   }),
 }));
-vi.mock("@/hooks/useCanDo", () => ({
+vi.mock("@/modules/identity/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 

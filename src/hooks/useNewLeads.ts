@@ -7,7 +7,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { getDailyBuckets, type TVPeriodRange } from "@/lib/tv-periods";
 
 export interface NewLeadsBucket {

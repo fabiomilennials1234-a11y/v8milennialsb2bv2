@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { HelpCircle, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useIdentity } from "@/hooks/useIdentity";
+import { useIdentity } from "@/modules/identity";
 import {
   useHelpCategories,
   useHelpArticles,

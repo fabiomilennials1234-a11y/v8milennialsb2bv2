@@ -4,8 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 export interface Badge {
   id: string;
   organization_id: string;

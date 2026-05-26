@@ -35,7 +35,7 @@ import { useMetaConnectionStatusByType } from "@/hooks/useMetaConnection";
 import { useGoogleCalendarStatus } from "@/hooks/useGoogleCalendar";
 import { useTinyErpStatus } from "@/hooks/useTinyErp";
 import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 

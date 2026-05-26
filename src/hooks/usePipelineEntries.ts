@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeSubscription, type RealtimeHandlers } from "./useRealtimeSubscription";
-import { useOrganization } from "./useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 export type PipelineType = "whatsapp" | "confirmacao" | "propostas";
 
 const LEAD_SELECT = `

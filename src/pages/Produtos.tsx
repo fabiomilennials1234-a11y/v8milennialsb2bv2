@@ -20,8 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useFeaturePermission } from "@/hooks/useUserRole";
-
+import { useFeaturePermission } from "@/modules/identity";
 export default function Produtos() {
   const { data: products, isLoading } = useProductsWithVariants();
   const deleteProduct = useDeleteProduct();

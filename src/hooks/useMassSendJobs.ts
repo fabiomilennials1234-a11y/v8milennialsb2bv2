@@ -4,7 +4,7 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity";
 import type { Tables } from "@/integrations/supabase/types";
 
 export type UazapiSenderJob = Tables<"uazapi_sender_jobs">;

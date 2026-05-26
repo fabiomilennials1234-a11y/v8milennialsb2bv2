@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import { useCreateFollowUp } from "@/hooks/useFollowUps";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { cn } from "@/lib/utils";
 
 interface ScheduleFollowUpModalProps {

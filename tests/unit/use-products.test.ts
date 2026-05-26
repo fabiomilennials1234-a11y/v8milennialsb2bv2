@@ -9,7 +9,7 @@ vi.mock("@/integrations/supabase/client", () => ({
     channel: vi.fn().mockReturnValue({ on: vi.fn().mockReturnThis(), subscribe: vi.fn() }),
   },
 }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-test", isReady: true }),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));

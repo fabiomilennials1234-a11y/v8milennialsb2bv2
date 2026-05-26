@@ -12,7 +12,7 @@ vi.mock("@/hooks/useRealtimeChannel", () => ({
 // ─── Mock useOrganization ────────────────────────────────────────────────────
 
 const mockOrgId = "org-123-abc";
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: mockOrgId }),
 }));
 

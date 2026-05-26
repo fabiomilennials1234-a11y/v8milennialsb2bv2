@@ -14,8 +14,7 @@ import { useAnalyticsFinanceiro } from "@/hooks/useAnalyticsFinanceiro";
 import { useAnalyticsComercial } from "@/hooks/useAnalyticsComercial";
 import { useMktByOrigin } from "@/hooks/useMktByOrigin";
 import { useMktOriginConfigs } from "@/hooks/useMktOriginConfig";
-import { useIdentity } from "@/hooks/useIdentity";
-
+import { useIdentity } from "@/modules/identity";
 interface Props {
   month: number;
   year: number;

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useOrganization } from "./useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
 
 /** Intervalo do mês (dia 1 00:00 até último dia 23:59:59) para vincular metas ao mês. */

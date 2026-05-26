@@ -32,7 +32,7 @@ vi.mock('@/integrations/supabase/client', () => ({
 // ─── Mock: useOrganization ──────────────────────────────
 
 const mockUseOrganization = vi.fn();
-vi.mock('@/hooks/useOrganization', () => ({
+vi.mock('@/modules/identity/hooks/useOrganization', () => ({
   useOrganization: (...args: unknown[]) => mockUseOrganization(...args),
 }));
 
@@ -40,7 +40,7 @@ vi.mock('@/hooks/useOrganization', () => ({
 
 const mockUseUserRole = vi.fn();
 const mockUseFeaturePermissions = vi.fn();
-vi.mock('@/hooks/useUserRole', () => ({
+vi.mock('@/modules/identity/hooks/useUserRole', () => ({
   useUserRole: (...args: unknown[]) => mockUseUserRole(...args),
   useFeaturePermissions: (...args: unknown[]) => mockUseFeaturePermissions(...args),
 }));
@@ -48,20 +48,20 @@ vi.mock('@/hooks/useUserRole', () => ({
 // ─── Mock: useCurrentTeamMember ─────────────────────────
 
 const mockUseCurrentTeamMember = vi.fn();
-vi.mock('@/hooks/useTeamMembers', () => ({
+vi.mock('@/modules/identity/hooks/useTeamMembers', () => ({
   useCurrentTeamMember: (...args: unknown[]) => mockUseCurrentTeamMember(...args),
 }));
 
 // ─── Mock: useMasterAuth ────────────────────────────────
 
 const mockUseMasterAuth = vi.fn();
-vi.mock('@/hooks/useMasterAuth', () => ({
+vi.mock('@/modules/identity/hooks/useMasterAuth', () => ({
   useMasterAuth: (...args: unknown[]) => mockUseMasterAuth(...args),
 }));
 
 // ─── Mock: AuthContext ──────────────────────────────────
 
-vi.mock('@/contexts/AuthContext', () => ({
+vi.mock('@/modules/identity/contexts/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'user-1' } }),
 }));
 
@@ -79,15 +79,15 @@ const mockIdentity = {
   isReady: true,
 };
 
-vi.mock('@/hooks/useIdentity', () => ({
+vi.mock('@/modules/identity/hooks/useIdentity', () => ({
   useIdentity: () => mockIdentity,
 }));
 
 // ─── Imports under test ─────────────────────────────────
 
-import { usePermission } from '@/lib/permissions';
-import { useCanDo } from '@/hooks/useCanDo';
-import { useHasPermission } from '@/hooks/usePermissions';
+import { usePermission } from '@/modules/identity/lib/permissions';
+import { useCanDo } from '@/modules/identity/hooks/useCanDo';
+import { useHasPermission } from '@/modules/identity/hooks/usePermissions';
 
 // ─── Test utilities ─────────────────────────────────────
 

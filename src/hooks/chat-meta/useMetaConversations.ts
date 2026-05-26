@@ -1,7 +1,7 @@
 // src/hooks/chat-meta/useMetaConversations.ts
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { metaConversationsKey, type MetaChannel, type MetaConversationWithLead } from "./types";
 
 interface UseMetaConversationsParams {

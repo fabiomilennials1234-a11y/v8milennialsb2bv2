@@ -43,8 +43,7 @@ import { AddLeadToPipeModal } from "@/components/custom-pipelines/AddLeadToPipeM
 import { CustomPipeSettingsDialog } from "@/components/custom-pipelines/CustomPipeSettingsDialog";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
-import { useFeaturePermission } from "@/hooks/useUserRole";
-
+import { useFeaturePermission } from "@/modules/identity";
 const ICON_MAP: Record<string, LucideIcon> = {
   kanban: Kanban,
   target: Target,

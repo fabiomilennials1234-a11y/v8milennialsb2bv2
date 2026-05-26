@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2 } from "lucide-react";
 import { ChatBubbleConversationItem } from "./ChatBubbleConversationItem";
 import { ChatBubbleEmptyState } from "./ChatBubbleEmptyState";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { chatQueryKeys } from "@/hooks/chat/shared/queryKeys";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizePhone } from "@/lib/normalizePhone";

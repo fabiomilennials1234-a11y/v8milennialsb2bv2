@@ -3,7 +3,7 @@ import { Plus, Search, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
-import { useResponsibleMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/modules/identity";
 import { useUpdateLead } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useOptimisticConflictHandler } from "@/hooks/useOptimisticConflictHandler";

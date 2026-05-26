@@ -6,9 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCreateUpsellClient } from "@/hooks/useUpsellClients";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { usePipelineStages } from "@/hooks/usePipelineStages";
-import { useResponsibleMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/modules/identity";
 import { useLeads } from "@/hooks/useLeads";
 import { toast } from "sonner";
 

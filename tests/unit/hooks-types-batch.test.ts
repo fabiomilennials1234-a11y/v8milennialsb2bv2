@@ -13,10 +13,10 @@ vi.mock("@/integrations/supabase/client", () => {
   c.then = (fn: any) => Promise.resolve(fn({ data: [], error: null, count: 0 }));
   return { supabase: { from: vi.fn().mockReturnValue(c), channel: vi.fn().mockReturnValue({ on: vi.fn().mockReturnThis(), subscribe: vi.fn() }), removeChannel: vi.fn(), rpc: vi.fn().mockResolvedValue({ data: null, error: null }), functions: { invoke: vi.fn().mockResolvedValue({ data: null, error: null }) }, auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "u1" } } }), onAuthStateChange: vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }) }, storage: { from: vi.fn().mockReturnValue({ upload: vi.fn(), getPublicUrl: vi.fn().mockReturnValue({ data: { publicUrl: "" } }) }) } } };
 });
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: {} }) }));
-vi.mock("@/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
-vi.mock("@/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
-vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: {} }) }));
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
@@ -27,7 +27,7 @@ vi.mock("@/hooks/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data
 vi.mock("@/hooks/useChannelChat", () => ({ useChannelContacts: () => ({ data: [] }), useChannelMessages: () => ({ data: [] }) }));
 vi.mock("@/hooks/useGoogleCalendar", () => ({ useGoogleCalendar: () => ({ data: null }) }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn(), triggerLeadCreatedInCustomPipeline: vi.fn() }));
-vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
+vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 

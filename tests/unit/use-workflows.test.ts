@@ -6,7 +6,7 @@ const mockFrom = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: (...args: unknown[]) => mockFrom(...args) },
 }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-test", isReady: true }),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));

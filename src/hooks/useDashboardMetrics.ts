@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useIdentity } from "./useIdentity";
-import { useCurrentTeamMember } from "./useTeamMembers";
+import { useIdentity } from "@/modules/identity";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
 

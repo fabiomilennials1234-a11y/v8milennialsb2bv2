@@ -17,8 +17,7 @@ import { ptBR } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp } from "lucide-react";
-import { useOrganization } from "@/hooks/useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 function WeeklyChartBase() {
   const { organizationId, isReady } = useOrganization();
 

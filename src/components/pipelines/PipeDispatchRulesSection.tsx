@@ -23,7 +23,7 @@ import {
   type SdrAssignmentMode,
 } from "@/hooks/usePipeDispatchRules";
 import { useCampaignTemplates, type CampaignTemplate } from "@/hooks/useCampaignTemplates";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
 import type { PipelineType, PipelineStage } from "@/hooks/usePipelineStages";
 import {
@@ -39,7 +39,7 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { cn } from "@/lib/utils";
 import { usePipeQueueItems, useRetryDispatchItems } from "@/hooks/useDispatchQueueItems";
 import { DispatchQueueSheet } from "@/components/shared/DispatchQueueSheet";

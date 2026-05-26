@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/hooks/useOrganization";
-import { useAuth } from "@/contexts/AuthContext";
+import { useOrganization } from "@/modules/identity";
+import { useAuth } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { toast } from "sonner";
 

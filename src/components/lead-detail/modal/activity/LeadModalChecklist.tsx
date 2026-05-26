@@ -17,7 +17,7 @@ import {
   useDeleteChecklistItem,
   type ChecklistWithCounts,
 } from "@/hooks/useChecklists";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { cn } from "@/lib/utils";
 
 /**

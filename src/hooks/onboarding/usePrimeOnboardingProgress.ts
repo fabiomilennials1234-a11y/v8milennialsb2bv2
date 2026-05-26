@@ -14,7 +14,7 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import type { OnboardingProgress, OnboardingStepKey } from "./useOnboardingChecklist";
 
 const SESSION_KEY = "onb_prime_done";

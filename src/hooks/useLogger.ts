@@ -7,7 +7,7 @@
  * log.audit('create', 'lead', { metadata: { leadId: '123' } });
  */
 
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from "@/modules/identity";
 import { logger, type LogContext } from '@/lib/logger';
 
 export function useLogger() {

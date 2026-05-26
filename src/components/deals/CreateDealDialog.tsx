@@ -11,8 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateDeal } from "@/hooks/useDeals";
-import { useOrganization } from "@/hooks/useOrganization";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useOrganization } from "@/modules/identity";
+import { useTeamMembers } from "@/modules/identity";
 import {
   Select,
   SelectContent,

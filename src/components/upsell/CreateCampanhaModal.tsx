@@ -8,8 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateUpsellCampanha } from "@/hooks/useUpsellCampanhas";
 import { useUpsellClients } from "@/hooks/useUpsellClients";
-import { useOrganization } from "@/hooks/useOrganization";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useOrganization } from "@/modules/identity";
+import { useTeamMembers } from "@/modules/identity";
 import { toast } from "sonner";
 
 interface CreateCampanhaModalProps {

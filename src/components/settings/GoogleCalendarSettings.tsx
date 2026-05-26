@@ -38,8 +38,7 @@ import {
   useGoogleCalendarCallback,
 } from "@/hooks/useGoogleCalendar";
 import { GoogleCalendarSharingSettings } from "@/components/settings/GoogleCalendarSharingSettings";
-import { useAuth } from "@/contexts/AuthContext";
-
+import { useAuth } from "@/modules/identity";
 // Ícone do Google (SVG inline para não precisar de dependência extra)
 function GoogleIcon({ className }: { className?: string }) {
   return (

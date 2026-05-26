@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { useUpdatePipeWhatsapp, type PipeWhatsappStatus } from "@/hooks/usePipeWhatsapp";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
-import { useResponsibleMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/modules/identity";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import { cn } from "@/lib/utils";

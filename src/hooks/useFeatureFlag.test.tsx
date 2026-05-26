@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useFeatureFlag } from "./useFeatureFlag";
 
 const orgMock = vi.fn();
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: (...a: unknown[]) => orgMock(...a),
 }));
 

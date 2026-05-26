@@ -14,9 +14,9 @@ import {
   type FunnelDestination,
 } from "@/hooks/useImportLeads";
 import { useLeadCustomFields } from "@/hooks/useLeadCustomFields";
-import { useCanDo } from "@/hooks/useCanDo";
+import { useCanDo } from "@/modules/identity";
 import { usePipelineStages } from "@/hooks/usePipelineStages";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { useProducts } from "@/hooks/useProducts";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";
 import { toast } from "sonner";

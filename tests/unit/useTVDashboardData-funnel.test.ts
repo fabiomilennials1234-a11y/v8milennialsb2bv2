@@ -28,14 +28,14 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
   useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false, isLoading: false }) }));
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false, isLoading: false }) }));
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }),
   useTeamMembers: () => ({ data: [
     { id: "tm1", name: "Closer 1", is_active: true, metric_type: "sales", role: "admin", user_id: "u1", organization_id: "org-t" },
@@ -52,7 +52,7 @@ vi.mock("@/hooks/useGoals", () => ({
   useTeamGoals: () => ({ data: [{ type: "vendas", target_value: 100000, team_member_id: null, name: "Meta" }] }),
   useIndividualGoals: () => ({ data: { salesGoals: [], meetingsGoals: [] } }),
 }));
-vi.mock("@/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useUserRole: () => "admin",
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
 }));

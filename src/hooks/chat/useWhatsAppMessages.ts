@@ -8,7 +8,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity";
 import type { WhatsAppMessage } from "./types";
 import { chatQueryKeys } from "./shared/queryKeys";
 import {

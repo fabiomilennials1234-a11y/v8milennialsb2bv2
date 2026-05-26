@@ -1,10 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { triggerLeadCreatedInCustomPipeline } from "@/lib/workflowTrigger";
-import { useCanDo } from "@/hooks/useCanDo";
-
+import { useCanDo } from "@/modules/identity";
 // ────────────────────────────────────────────────────────────
 // Types
 // ────────────────────────────────────────────────────────────

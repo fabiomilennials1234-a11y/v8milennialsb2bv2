@@ -25,7 +25,7 @@ import {
   useUpdateProductVariant,
   useDeleteProductVariant,
 } from "@/hooks/useProductVariants";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { Plus, X, Wand2, Trash2, GripVertical, Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";

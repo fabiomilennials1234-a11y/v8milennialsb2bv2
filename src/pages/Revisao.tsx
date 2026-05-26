@@ -21,8 +21,8 @@ import { ScheduleFollowUpModal } from "@/components/followups/ScheduleFollowUpMo
 import { useFollowUps, useCompleteFollowUp, useUpdateFollowUp, useArchiveFollowUp, useDeleteFollowUp } from "@/hooks/useFollowUps";
 import { useMyScheduledMessages, useCancelScheduledMessage } from "@/hooks/useScheduledMessages";
 import { useDailyPriorities } from "@/hooks/useDailyPriorities";
-import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
-import { useUserRole, useFeaturePermission } from "@/hooks/useUserRole";
+import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
+import { useUserRole, useFeaturePermission } from "@/modules/identity";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 

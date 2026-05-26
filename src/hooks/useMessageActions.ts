@@ -16,8 +16,7 @@ import {
   markMessageRead,
   downloadMedia,
 } from "@/lib/whatsappApi";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
-
+import { useCurrentTeamMember } from "@/modules/identity";
 type ActionArgs = {
   instanceId: string;
   messageId: string;

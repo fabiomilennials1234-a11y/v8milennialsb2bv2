@@ -2,13 +2,12 @@ import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOutboundMetrics } from "@/hooks/useOutboundMetrics";
 import { useBadges, useUserBadges } from "@/hooks/useBadges";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { useMilestoneAutoUnlock } from "@/hooks/useMilestoneAutoUnlock";
 import { OutboundMetricCards } from "@/components/dashboard-outbound/OutboundMetricCards";
 import { MilestoneTracker } from "@/components/dashboard-outbound/MilestoneTracker";
 import { BadgeGrid } from "@/components/dashboard-outbound/BadgeGrid";
-import { useAuth } from "@/contexts/AuthContext";
-
+import { useAuth } from "@/modules/identity";
 export default function DashboardOutbound() {
   const { user } = useAuth();
   const { teamMemberId } = useOrganization();

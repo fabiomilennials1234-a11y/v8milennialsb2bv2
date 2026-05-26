@@ -13,7 +13,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/modules/identity";
 import { CommandPaletteContext } from "./CommandPaletteContext";
 
 export function CommandPaletteProvider({ children }: { children: ReactNode }) {

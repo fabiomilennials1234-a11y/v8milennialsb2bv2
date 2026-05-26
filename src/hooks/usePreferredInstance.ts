@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity";
 import type { WhatsAppInstanceForUser } from "@/hooks/chat/types";
 
 const LS_KEY_PREFIX = "preferred_whatsapp_instance:";

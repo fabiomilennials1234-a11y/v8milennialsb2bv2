@@ -19,7 +19,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useCreateProduct, ProductType } from "@/hooks/useProducts";
 import { useBulkCreateProductVariants } from "@/hooks/useProductVariants";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
 import { Plus, X, Wand2, Trash2, GripVertical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";

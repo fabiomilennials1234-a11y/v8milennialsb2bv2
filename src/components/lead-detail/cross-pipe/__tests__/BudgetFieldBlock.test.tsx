@@ -30,27 +30,27 @@ vi.mock("@/hooks/useLogLeadAction", () => ({
   useLogLeadAction: () => vi.fn(),
 }));
 
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-1" }),
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({
   useAuth: () => ({
     user: { id: "user-1", email: "test@test.com" },
     loading: false,
   }),
 }));
 
-vi.mock("@/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useUserRole: () => ({ role: "admin", isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false }),
 }));
 
-vi.mock("@/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({ isMaster: false }),
 }));
 
-vi.mock("@/hooks/useCanDo", () => ({
+vi.mock("@/modules/identity/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 

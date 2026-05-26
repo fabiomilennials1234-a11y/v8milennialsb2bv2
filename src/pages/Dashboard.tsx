@@ -11,11 +11,11 @@ const TabAnalyticsV2 = lazy(() => import("@/components/dashboard/TabAnalyticsV2"
 import { OraculoFloatingButton } from "@/components/dashboard/OraculoFloatingButton";
 import { OraculoChat } from "@/components/dashboard/OraculoChat";
 import { useOraculoChat } from "@/hooks/useOraculoChat";
-import { useAuth } from "@/contexts/AuthContext";
-import { useOrganization } from "@/hooks/useOrganization";
-import { useUserRole } from "@/hooks/useUserRole";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
-import { useIdentity } from "@/hooks/useIdentity";
+import { useAuth } from "@/modules/identity";
+import { useOrganization } from "@/modules/identity";
+import { useUserRole } from "@/modules/identity";
+import { useCurrentTeamMember } from "@/modules/identity";
+import { useIdentity } from "@/modules/identity";
 import { Skeleton } from "@/components/ui/skeleton";
 import DashboardOutbound from "./DashboardOutbound";
 

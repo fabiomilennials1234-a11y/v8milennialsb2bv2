@@ -50,13 +50,13 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
   useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), assertPermission: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), assertPermission: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 
 function createWrapper() {

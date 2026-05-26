@@ -11,7 +11,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
 
 /**

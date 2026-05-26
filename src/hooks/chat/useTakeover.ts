@@ -21,7 +21,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/modules/identity";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import type { AiTakeoverState, AiStateResumeMode, AiStatePayload } from "@/lib/chat-types";
 

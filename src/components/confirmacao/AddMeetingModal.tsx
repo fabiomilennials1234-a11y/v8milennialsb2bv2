@@ -13,12 +13,12 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useLeads, useUpdateLead } from "@/hooks/useLeads";
-import { useResponsibleMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/modules/identity";
 import { useCreatePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useGoogleCalendarStatus } from "@/hooks/useGoogleCalendar";
 import { useCalendarSharing } from "@/hooks/useGoogleCalendarSharing";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/modules/identity";
 import { toast } from "sonner";
 
 interface AddMeetingModalProps {

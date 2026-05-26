@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: vi.fn(), channel: vi.fn().mockReturnValue({ on: vi.fn().mockReturnThis(), subscribe: vi.fn() }) },
 }));
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: { organization_id: "org-1" }, isLoading: false }),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({

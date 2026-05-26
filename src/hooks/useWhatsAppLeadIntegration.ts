@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "./useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { DEFAULT_STAGES } from "./usePipelineStages";
 import { normalizePhone } from "@/lib/normalizePhone";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";

@@ -23,7 +23,7 @@ vi.mock("@/hooks/useLeadWriteInstance", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useIsAdmin: () => ({ isAdmin: mockIsAdmin, isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
   useFeaturePermission: () => ({ allowed: true, isLoading: false, hasError: false }),
@@ -35,7 +35,7 @@ vi.mock("@/hooks/useUserRole", () => ({
   useHasRole: () => ({ hasRole: true, isLoading: false }),
 }));
 
-vi.mock("@/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({
     isMaster: mockIsMaster,
     masterUser: null,
@@ -47,7 +47,7 @@ vi.mock("@/hooks/useMasterAuth", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/hooks/useIdentity", () => ({
   useIdentity: () => ({
     userId: "user-1",
     organizationId: "org-1",

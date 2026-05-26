@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { AssignResponsibleNodeData, AssignMode, AssignTarget } from "@/types/workflow";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { cn } from "@/lib/utils";
 
 interface AssignResponsiblePanelProps {

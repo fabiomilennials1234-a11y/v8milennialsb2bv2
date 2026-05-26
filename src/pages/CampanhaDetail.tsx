@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { useCampanha, useCampanhaStages, useCampanhaLeads, useCampanhaMembers, useUpdateCampanhaMember, useDeleteCampanhaLead, useCampanhaPipeAutomations, useExtractLeadToPipe, resolveExtractionTarget, getObjectiveMetricLabel, type CampanhaLead } from "@/hooks/useCampanhas";
 import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
 import { useImportLeads } from "@/hooks/useImportLeads";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { CampanhaKanban } from "@/components/campanhas/CampanhaKanban";
 import { CampanhaAnalytics } from "@/components/campanhas/CampanhaAnalytics";
 import { CampanhaDisparosTab } from "@/components/campanhas/CampanhaDisparosTab";

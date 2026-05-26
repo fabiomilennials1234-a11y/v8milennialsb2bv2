@@ -2,12 +2,12 @@
 // Regra vale para toda superfície do projeto — RPC, hooks, componentes.
 // Ref: Obsidian/…/04 — Decisões/2026-04-24-receita-mes-canonica-projeto.md
 import { useQuery } from "@tanstack/react-query";
-import { useTeamMembers, useCurrentTeamMember } from "./useTeamMembers";
+import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
 import { usePipePropostas } from "./usePipePropostas";
 import { usePipeConfirmacao } from "./usePipeConfirmacao";
 import { usePipeWhatsapp } from "./usePipeWhatsapp";
 import { useTeamGoals, useIndividualGoals } from "./useGoals";
-import { useIdentity } from "./useIdentity";
+import { useIdentity } from "@/modules/identity";
 import { useDashboardMetrics } from "./useDashboardMetrics";
 
 export interface TVDashboardMetrics {

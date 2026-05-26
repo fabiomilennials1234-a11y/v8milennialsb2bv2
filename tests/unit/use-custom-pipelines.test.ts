@@ -45,10 +45,10 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "u1" }, session: { access_token: "token" } }),
 }));
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", profile_id: "p1" } }),
   isVirtualTeamMember: () => false,
   useTeamMembers: () => ({ data: [] }),
@@ -58,12 +58,12 @@ vi.mock("@/lib/workflowTrigger", () => ({
   triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined),
   triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/lib/permissions", () => ({
+vi.mock("@/modules/identity/lib/permissions", () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
   assertPermission: vi.fn().mockResolvedValue(undefined),
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
 }));
-vi.mock("@/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/hooks/useIdentity", () => ({
   useIdentity: () => ({
     userId: "u1",
     organizationId: "org-t",
@@ -76,7 +76,7 @@ vi.mock("@/hooks/useIdentity", () => ({
     isReady: true,
   }),
 }));
-vi.mock("@/hooks/useCanDo", () => ({
+vi.mock("@/modules/identity/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));

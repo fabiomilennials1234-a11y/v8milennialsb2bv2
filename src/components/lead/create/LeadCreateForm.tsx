@@ -30,8 +30,7 @@ import type { LeadDestination } from "@/hooks/useWhatsAppLeadIntegration";
 import { useAllPipelineStageOptions } from "@/hooks/usePipelineStages";
 import { useCustomPipelines, useCustomPipelineStages } from "@/hooks/useCustomPipelines";
 import { useCampanhas } from "@/hooks/useCampanhas";
-import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
-
+import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
 export interface CreateLeadPayload {
   phone: string;
   name: string;

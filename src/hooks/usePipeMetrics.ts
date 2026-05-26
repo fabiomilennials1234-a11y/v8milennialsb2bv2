@@ -5,7 +5,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
+import { useOrganization } from "@/modules/identity";
 import type { DateRange } from "@/lib/metrics-period";
 
 // Re-export para compatibilidade de imports existentes
