@@ -74,6 +74,7 @@ Org Milennials: `6030520a-2ca7-477d-be89-55758e2cd808`.
 - [[ADR-2026-04-30-meeting-date-sync]] — Sync `meeting_date ⇄ compromisso_date` + `move_pipe_record` fail-closed
 - [[ADR-2026-05-15-consolidacao-subagentes]] — Consolidação 10→3 subagentes do harness Claude Code
 - [ADR-2026-05-25 — Meta Chat canal separado](04%20—%20Decisões/ADR-2026-05-25-meta-chat-canal-separado.md)
+- [ADR-2026-05-26 — Modularização monolito modular](04%20—%20Decisões/ADR-2026-05-26-modularizacao-monolito-modular.md)
 
 ### 06 — Features
 
@@ -102,6 +103,10 @@ Org Milennials: `6030520a-2ca7-477d-be89-55758e2cd808`.
 
 #### Automações
 - [[rpc-consolidation]] — Consolidação de overloads RPC + health check + pg_net cleanup
+
+#### Modularização (em planejamento)
+- [Auditoria de duplicatas](06%20—%20Features/modularizacao/auditoria-duplicatas.md) — Hooks, components, edge functions e `_shared/` sobrepostos antes de mover
+- [Event-bus plano](06%20—%20Features/modularizacao/event-bus-plano.md) — `domain_events` + dispatcher cron + piloto `lead.stage_changed`
 
 ### 07 — Changelog
 - [[2026-04-27]] — Daily: refactor copilot + products RLS + PDF chunking
@@ -171,3 +176,28 @@ Estado vs target:
 
 ### 05 — How-to
 - [Debug Meta Chat](05%20—%20How-to/debug-meta-chat.md)
+
+### 10 — Remodelagem (projeto ativo)
+
+Projeto **Modularização do Torque CRM**. As-Is → Solução → To-Be. Ver [MOC](10%20—%20Remodelagem/_MOC.md).
+
+#### As-Is (problemas)
+- [Panorama atual](10%20—%20Remodelagem/01-as-is/panorama-atual.md) — números crus do codebase hoje
+- [Problemas críticos](10%20—%20Remodelagem/01-as-is/problemas-criticos.md) — blast radius, onboarding, acoplamento
+- [Duplicatas mapeadas](10%20—%20Remodelagem/01-as-is/duplicatas-mapeadas.md) — síntese executiva (detalhe em `06 — Features/modularizacao/auditoria-duplicatas.md`)
+
+#### Solução (decisões)
+- [Monolito modular](10%20—%20Remodelagem/02-solucao/monolito-modular.md) — decisão raiz
+- [Event-bus](10%20—%20Remodelagem/02-solucao/event-bus.md) — comunicação inter-módulo via `domain_events`
+- [Boundary enforcement](10%20—%20Remodelagem/02-solucao/boundary-enforcement.md) — ESLint + dep-cruiser + CI gate
+- [Bounded contexts](10%20—%20Remodelagem/02-solucao/bounded-contexts.md) — 14 BCs canônicos
+
+#### To-Be (goal)
+- [Estrutura final](10%20—%20Remodelagem/03-to-be/estrutura-final.md) — layout target
+- [Princípios do módulo](10%20—%20Remodelagem/03-to-be/principios-modulo.md) — 10 regras invariantes
+- [Critérios de sucesso](10%20—%20Remodelagem/03-to-be/criterios-sucesso.md) — checklist objetivo
+
+#### Execução
+- [Slices](10%20—%20Remodelagem/04-execucao/slices.md) — 19 slices vertical thin
+- [Decisões pendentes](10%20—%20Remodelagem/04-execucao/decisoes-pendentes.md) — bloqueios CTO
+- [Riscos e mitigações](10%20—%20Remodelagem/04-execucao/riscos-mitigacoes.md)
