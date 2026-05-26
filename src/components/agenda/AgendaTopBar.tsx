@@ -159,7 +159,7 @@ export function AgendaTopBar({
         >
           <span
             className="w-1.5 h-1.5 rounded-full"
-            style={{ backgroundColor: SOURCE_COLORS.google }}
+            style={{ backgroundColor: "#4285F4" }}
           />
           Google
         </Badge>
