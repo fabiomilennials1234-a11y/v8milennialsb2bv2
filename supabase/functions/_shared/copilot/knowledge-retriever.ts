@@ -11,7 +11,7 @@ import { generateEmbedding } from "../embeddings.ts";
 type RetrievalMode = "initial" | "tool";
 
 const THRESHOLDS = {
-  initial: { docThreshold: 0.6, docLimit: 6, faqThreshold: 0.65, faqLimit: 4 },
+  initial: { docThreshold: 0.5, docLimit: 8, faqThreshold: 0.65, faqLimit: 4 },
   tool: { docThreshold: 0.55, docLimit: 5, faqThreshold: 0.5, faqLimit: 4 },
 } as const;
 

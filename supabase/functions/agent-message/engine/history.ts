@@ -26,8 +26,8 @@ import {
   saveConversationContext as saveConversationContextExternal,
 } from "./persist-response.ts";
 
-const HISTORY_COMPRESS_THRESHOLD = 25;
-const HISTORY_KEEP_RECENT = 15;
+const HISTORY_COMPRESS_THRESHOLD = 35;
+const HISTORY_KEEP_RECENT = 20;
 
 interface ConversationContextSummary {
   lastTopic?: string;

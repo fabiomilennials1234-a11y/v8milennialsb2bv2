@@ -375,28 +375,8 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
   if (documentSummaries && documentSummaries.length > 0) {
     const docNames = documentSummaries.map((d) => d.file_name?.trim()).filter(Boolean);
     sections.push("");
-    sections.push("# BASE DE CONHECIMENTO");
-    sections.push("");
-    sections.push(
-      `Voce tem acesso a uma base de conhecimento com ${documentSummaries.length} documento(s)${docNames.length > 0 ? ": " + docNames.join(", ") : ""}.`,
-    );
-    sections.push("");
-    sections.push("REGRA CRITICA — CONSULTA OBRIGATORIA:");
-    sections.push(
-      "SEMPRE consulte a base de conhecimento via search_knowledge antes de responder perguntas sobre produtos, precos, servicos, especificacoes tecnicas ou informacoes da empresa. Nao responda de memoria quando houver documentos disponiveis.",
-    );
-    sections.push(
-      "- Antes de responder QUALQUER pergunta sobre produtos, precos, servicos, especificacoes, politicas, catalogo ou informacoes comerciais, voce DEVE chamar a ferramenta search_knowledge.",
-    );
-    sections.push("- NAO responda de memoria. NAO improvise. SEMPRE consulte a base primeiro.");
-    sections.push("- Use os dados retornados pela busca para formular sua resposta com precisao.");
-    sections.push(
-      "- Se a busca nao retornar informacoes relevantes, diga honestamente: 'Vou verificar essa informacao e te retorno em breve.'",
-    );
-    sections.push("- Se o lead pedir um documento, catalogo ou arquivo, use a ferramenta send_document.");
-    sections.push(
-      "- Fale naturalmente — nunca mencione 'base de conhecimento', 'documento' ou 'ferramenta de busca'.",
-    );
+    sections.push(`# BASE DE CONHECIMENTO (${documentSummaries.length} doc${documentSummaries.length > 1 ? "s" : ""}${docNames.length > 0 ? ": " + docNames.join(", ") : ""})`);
+    sections.push("ANTES de responder sobre produtos, preços ou serviços: use search_knowledge. Se busca não retornar resultado, diga que vai verificar.");
     sections.push("");
   }
 
@@ -483,46 +463,9 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
   }
 
   // =====================================================
-  // 2. CAPABILITIES DINÂMICAS
+  // 2. ESTADO DA CONVERSA (compact — tools já definem capabilities)
   // =====================================================
-  sections.push("# CAPABILITIES DINÂMICAS");
-  sections.push("");
-  sections.push("Estado atual da conversa: " + conversation.state);
-  sections.push("Turno: " + conversation.turn_count);
-  sections.push("");
-
-  sections.push("## CAPABILITIES ATIVAS (você PODE fazer):");
-  if (capabilities.can_qualify_lead) {
-    sections.push("- Qualificar leads fazendo perguntas sobre tamanho da empresa, urgência, orçamento");
-  }
-  if (capabilities.can_schedule_meeting) {
-    sections.push("- Agendar reuniões usando a ferramenta schedule_meeting");
-  }
-  if (capabilities.can_send_followup) {
-    sections.push("- Criar follow-ups automáticos");
-  }
-  if (capabilities.can_update_crm) {
-    sections.push("- Atualizar CRM externo do cliente");
-  }
-  if (capabilities.can_update_lead) {
-    sections.push(
-      "- Atualizar informações do lead no CRM (empresa, segmento, campos personalizados, notas) usando update_lead",
-    );
-  }
-  if (capabilities.can_create_lead) {
-    sections.push("- Criar novos leads no sistema");
-  }
-  if (capabilities.can_transfer_human) {
-    sections.push("- Transferir para atendimento humano se necessário");
-  }
-  sections.push("");
-
-  sections.push("## CAPABILITIES DESATIVADAS (você NÃO PODE fazer):");
-  if (!capabilities.can_qualify_lead) sections.push("- Qualificar leads");
-  if (!capabilities.can_schedule_meeting) sections.push("- Agendar reuniões");
-  if (!capabilities.can_update_crm) sections.push("- Atualizar CRM");
-  if (!capabilities.can_update_lead) sections.push("- Atualizar lead no CRM");
-  if (!capabilities.can_create_lead) sections.push("- Criar novos leads");
+  sections.push(`Estado: ${conversation.state} | Turno: ${conversation.turn_count}`);
   sections.push("");
 
   // =====================================================
@@ -830,52 +773,17 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
   // =====================================================
   // 5. CONTEXTO DA CONVERSA
   // =====================================================
-  sections.push("# CONTEXTO DA CONVERSA");
-  sections.push("");
   if (conversation.context && Object.keys(conversation.context).length > 0) {
-    sections.push("Informações adicionais coletadas durante a conversa:");
+    sections.push("# CONTEXTO COLETADO");
     sections.push(JSON.stringify(conversation.context, null, 2));
     sections.push("");
   }
-  sections.push(
-    "Baseado no estado atual, nas capabilities ativas, nos dados do lead e no contexto coletado, decida a próxima melhor ação.",
-  );
 
   // =====================================================
-  // 6. INSTRUÇÕES FINAIS
+  // FORMATO DE SAÍDA (compact)
   // =====================================================
-  sections.push("");
-  sections.push("# INSTRUÇÕES FINAIS");
-  sections.push("");
-  sections.push("- Sempre mantenha o tom e estilo definidos na sua personalidade");
-  sections.push("- Respeite rigorosamente os tópicos permitidos e proibidos");
-  sections.push("- Use as FAQs como base, mas adapte a resposta ao contexto específico");
-  sections.push("- Se perguntarem, seja transparente: você é um assistente virtual da empresa");
-  sections.push("- Evite linguagem de IA; responda de forma natural");
-  sections.push("- Seja sempre ético, transparente e profissional");
-  sections.push("- Em caso de dúvida ou situação complexa, transfira para um humano");
-  sections.push("- Nunca invente informações - se não souber, admita e ofereça alternativa");
-  sections.push("- Mantenha o foco no objetivo principal sem ser insistente ou agressivo");
-
-  // =====================================================
-  // FORMATO DE SAÍDA
-  // =====================================================
-  sections.push("");
-  sections.push("# FORMATO DE SAÍDA (OBRIGATÓRIO)");
-  sections.push("");
-  sections.push(
-    '- NUNCA escreva blocos JSON ou código no seu conteúdo de resposta. NUNCA escreva {"action":...} ou {"action_input":...} no texto.',
-  );
-  sections.push(
-    "- Para executar qualquer ação (agendar, enviar material, qualificar, transferir etc), use EXCLUSIVAMENTE o mecanismo nativo de tool/function call do modelo — nunca descreva a ação em texto.",
-  );
-  sections.push(
-    "- Para enviar um material, use a tool `send_product_material` (com `material_id` UUID). NÃO existe tool `send_media` — não invente nomes.",
-  );
-  sections.push(
-    "- Use o delimitador `||SPLIT||` em MAIÚSCULAS exatas para separar mensagens. Nunca use `||split||` ou variações.",
-  );
-  sections.push("- Se não for separar, apenas escreva o texto direto, sem delimitador.");
+  sections.push("Nunca escreva JSON no texto. Para ações, use tool calls nativos.");
+  sections.push("Para separar mensagens WhatsApp, use exatamente ||SPLIT|| (maiúsculas).");
 
   // =====================================================
   // AUDIO MODE
@@ -906,29 +814,10 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
   // =====================================================
   const reasoningMode = (capabilities.reasoning_mode ?? "always") as "always" | "actions_only" | "off";
   if (reasoningMode !== "off") {
-    const trigger =
-      reasoningMode === "always"
-        ? "SEMPRE"
-        : "QUANDO usar tools (schedule_meeting, qualify_lead, transfer_to_human, advance_stage, send_product_material, etc)";
+    const trigger = reasoningMode === "always" ? "Sempre" : "Antes de usar tools,";
     sections.push("");
-    sections.push("# FORMATO DE RESPOSTA OBRIGATÓRIO");
-    sections.push("");
-    sections.push(`${trigger} responda EXATAMENTE neste formato:`);
-    sections.push("");
-    sections.push("<thinking>");
-    sections.push("Pense passo-a-passo:");
-    sections.push("1. O que o lead realmente quer?");
-    sections.push("2. Qual contexto da conversa importa?");
-    sections.push("3. Qual é a melhor ação? (responder texto OU usar tool)");
-    sections.push("4. Se vou usar tool: pré-condições atendidas? (lead tem telefone? agenda livre? stage correto?)");
-    sections.push("5. Riscos da ação?");
-    sections.push("</thinking>");
-    sections.push("<response>");
-    sections.push("[mensagem que vai pro lead — texto puro, pode usar ||SPLIT||]");
-    sections.push("</response>");
-    sections.push("");
-    sections.push("CRÍTICO: conteúdo de <thinking> NUNCA aparece pro lead. Apenas <response> é entregue.");
-    sections.push("Se for usar tool, ainda assim feche o <thinking> antes de invocar a tool.");
+    sections.push(`${trigger} raciocine em <thinking>...</thinking>. Resposta final em <response>...</response>.`);
+    sections.push("Conteúdo de <thinking> nunca aparece pro lead.");
   }
 
   return sections.join("\n");

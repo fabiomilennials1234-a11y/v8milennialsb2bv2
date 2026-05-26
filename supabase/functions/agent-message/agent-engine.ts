@@ -59,6 +59,7 @@ import {
   loadConversationContext as loadConversationContextExternal,
   getConversationHistory as getConversationHistoryExternal,
 } from "./engine/history.ts";
+import { extractConversationContext } from "../_shared/copilot/context-extractor.ts";
 
 // Interface para contexto resumido da conversa
 interface ConversationContextSummary {
@@ -279,7 +280,7 @@ export class AgentEngine {
     // Obter modelo e temperatura do banco ou usar padrões
     const model = capabilities.llm_model || Deno.env.get('OPENROUTER_DEFAULT_MODEL') || 'google/gemini-2.5-flash';
     const temperatureModeMap: Record<string, number> = { criativo: 0.9, balanceado: 0.7, preciso: 0.2 };
-    const temperature = temperatureModeMap[capabilities.llm_temperature_mode ?? 'balanceado'] ?? 0.7;
+    const temperature = temperatureModeMap[capabilities.llm_temperature_mode] ?? 0.8;
     console.log('[AgentEngine] Using model:', model, '| temperature:', temperature, `(${capabilities.llm_temperature_mode ?? 'balanceado'})`);
     
     // 7. Call LLM com suporte a multi-turn para tools inline (search_knowledge)
@@ -314,7 +315,7 @@ export class AgentEngine {
         messages: orMessages,
         tools: openRouterTools,
         tool_choice: openRouterTools ? 'auto' : undefined,
-        max_tokens: 1024,
+        max_tokens: 2048,
         temperature,
       });
       const llmDurationMs = Date.now() - llmStart;
@@ -404,7 +405,7 @@ export class AgentEngine {
           model,
           messages: forcedMessages,
           tool_choice: 'none',
-          max_tokens: 1024,
+          max_tokens: 2048,
           temperature,
         });
         const forcedChoice = forcedResp.choices?.[0];
@@ -607,6 +608,19 @@ export class AgentEngine {
     // 13. Auto-update conversation_context_summary (item #2) — assíncrono, não bloqueia resposta
     updateContextSummaryAfterTurnExternal(this.supabase, this.organizationId, leadId, nextState, userMessage, cleanMessage, conversation.turn_count + 1)
       .catch(e => console.warn('[AgentEngine] Context summary update failed (non-fatal):', e));
+
+    // 13.2. LLM-based context extraction (fire-and-forget) — replaces keyword detection
+    const recentForExtraction = allMessages.slice(-10);
+    extractConversationContext(
+      recentForExtraction.map(m => ({ role: m.role, content: m.content ?? '' })),
+      this.openRouter,
+    ).then(async (extracted) => {
+      if (!extracted) return;
+      await this.supabase
+        .from('conversations')
+        .update({ context: extracted })
+        .eq('id', conversation.id);
+    }).catch(e => console.warn('[AgentEngine] Context extraction failed (non-fatal):', e));
 
     // 13.5. Item #19: Extrair e salvar memórias de longo prazo (fire-and-forget)
     extractAndSaveMemoriesExternal({

@@ -76,15 +76,30 @@ export class OpenRouterClient {
    * Chama a API do OpenRouter
    */
   async chat(request: OpenRouterRequest): Promise<OpenRouterResponse> {
+    const isAnthropic = request.model.startsWith('anthropic/');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${this.apiKey}`,
+      'HTTP-Referer': Deno.env.get('OPENROUTER_REFERER_URL') || 'https://v8millennials.com',
+      'X-Title': 'V8 Millennials CRM Agent',
+    };
+    if (isAnthropic) {
+      headers['anthropic-beta'] = 'prompt-caching-2024-07-31';
+    }
+
+    const body = { ...request };
+    if (isAnthropic && body.messages) {
+      body.messages = body.messages.map((msg) =>
+        msg.role === 'system'
+          ? { ...msg, cache_control: { type: 'ephemeral' } }
+          : msg,
+      ) as OpenRouterMessage[];
+    }
+
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
-        'HTTP-Referer': Deno.env.get('OPENROUTER_REFERER_URL') || 'https://v8millennials.com',
-        'X-Title': 'V8 Millennials CRM Agent',
-      },
-      body: JSON.stringify(request),
+      headers,
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
