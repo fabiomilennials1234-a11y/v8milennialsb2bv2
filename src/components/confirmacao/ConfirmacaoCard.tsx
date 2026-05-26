@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import { format, isToday, isTomorrow, isPast, differenceInHours, differenceInDays, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { isConfirmacaoOverdue } from "@/hooks/useOrganizationSettings";
+import { isConfirmacaoOverdue } from "@/modules/identity";
 import { QuickAddDailyAction } from "./QuickAddDailyAction";
 import { MeetingCountdown } from "./MeetingCountdown";
 import { supabase } from "@/integrations/supabase/client";

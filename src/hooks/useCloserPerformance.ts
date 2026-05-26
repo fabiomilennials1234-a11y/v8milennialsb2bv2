@@ -15,7 +15,7 @@
 import { useMemo } from "react";
 import { usePipePropostas } from "./usePipePropostas";
 import { usePipeConfirmacao } from "./usePipeConfirmacao";
-import { useTeamMembers } from "./useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { useAvatarMap } from "./useAvatarMap";
 import { inRange, type TVPeriodRange } from "@/lib/tv-periods";
 

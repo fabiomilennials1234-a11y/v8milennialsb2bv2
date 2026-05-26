@@ -2,11 +2,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
-import { useOrganization } from "./useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { track } from "@/lib/analytics";
-import { useCanDo } from "@/hooks/useCanDo";
+import { useCanDo } from "@/modules/identity";
 import { normalizePhone } from "@/lib/normalizePhone";
-import { useIdentity } from "./useIdentity";
+import { useIdentity } from "@/modules/identity";
 import { OptimisticLockConflictError, isPostgrestNoRows } from "@/lib/optimistic-lock";
 
 export type Lead = Tables<"leads">;

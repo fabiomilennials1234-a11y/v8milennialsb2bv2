@@ -31,7 +31,7 @@ vi.mock("@/hooks/usePipeConfirmacao", () => ({
   usePipeConfirmacao: () => ({ data: mockConfirmacoes }),
 }));
 
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useTeamMembers: () => ({ data: mockSDRs }),
 }));
 

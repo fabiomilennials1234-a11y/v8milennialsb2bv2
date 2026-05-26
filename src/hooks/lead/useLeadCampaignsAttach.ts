@@ -10,8 +10,7 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCampanhas, useCampanhaStages } from "@/hooks/useCampanhas";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
-
+import { useCurrentTeamMember } from "@/modules/identity";
 interface UseLeadCampaignsAttachResult {
   activeCampanhas: { id: string; name: string; is_active: boolean }[];
   selectedCampanhaId: string | null;

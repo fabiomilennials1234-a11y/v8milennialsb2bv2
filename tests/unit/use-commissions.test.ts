@@ -6,10 +6,10 @@ const mockFrom = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: (...args: unknown[]) => mockFrom(...args) },
 }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-test", isReady: true }),
 }));
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-test" } }),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));

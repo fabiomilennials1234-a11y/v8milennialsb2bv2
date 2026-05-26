@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "./useTeamMembers";
-
+import { useCurrentTeamMember } from "@/modules/identity";
 export interface SellerActivity {
   id: string;
   name: string;

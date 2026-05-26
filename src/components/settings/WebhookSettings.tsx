@@ -48,8 +48,8 @@ import {
   Webhook,
   WebhookInsert,
 } from "@/hooks/useWebhooks";
-import { useOrganization } from "@/hooks/useOrganization";
-import { useIdentity } from "@/hooks/useIdentity";
+import { useOrganization } from "@/modules/identity";
+import { useIdentity } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { AlertsBanner } from "@/components/system-alerts/AlertsBanner";

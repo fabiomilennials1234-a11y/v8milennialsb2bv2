@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Shuffle, User, AlertTriangle, Save, Loader2, CheckCircle2 } from "lucide-react";
 import { type PipelineType } from "@/hooks/usePipelineStages";
-import { useResponsibleMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/modules/identity";
 import {
   usePipeDistributionRule,
   useSavePipeDistribution,

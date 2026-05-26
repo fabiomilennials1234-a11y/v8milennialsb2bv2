@@ -17,7 +17,7 @@ import {
   uploadCampaignTemplateDocument,
   type CampaignTemplateMessageType,
 } from "@/hooks/useCampaignTemplates";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
 
 interface CreateTemplateModalProps {

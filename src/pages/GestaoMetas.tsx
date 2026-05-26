@@ -31,10 +31,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useGoals, useCreateGoal, useUpdateGoal, Goal } from "@/hooks/useGoals";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { useQueryClient } from "@tanstack/react-query";
-import { useIdentity } from "@/hooks/useIdentity";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useIdentity } from "@/modules/identity";
+import { useOrganization } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";

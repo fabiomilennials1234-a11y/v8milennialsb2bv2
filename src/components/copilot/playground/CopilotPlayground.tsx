@@ -72,7 +72,7 @@ import {
 } from "@/hooks/useCopilotAgents";
 import { useUploadAgentDocument, useAgentDocuments, useDeleteAgentDocument } from "@/hooks/useAgentDocuments";
 
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { hasFullBehaviorCoverage } from "@/components/copilot/BehaviorWindowsEditor";
 
 // =============================================================

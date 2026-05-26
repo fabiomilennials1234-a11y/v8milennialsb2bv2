@@ -13,7 +13,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { noRetryOnTimeout } from "@/integrations/supabase/noRetryOnTimeout";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { normalizePhone } from "@/lib/normalizePhone";
 import type { WhatsAppInstanceForUser } from "./types";
 

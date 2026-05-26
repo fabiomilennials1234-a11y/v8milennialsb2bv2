@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { useProducts } from "@/hooks/useProducts";
 import { useDealItems, useCreateDealItem, useUpdateDealItem, useDeleteDealItem } from "@/hooks/useDealItems";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import type { DealItemRow } from "@/hooks/useDeals";
 
 const fmt = (v: number) =>

@@ -11,9 +11,9 @@ import {
   User,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { useTVDashboardData } from "@/hooks/useTVDashboardData";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { useIndividualGoals } from "@/hooks/useGoals";
 
 // ── Types ──────────────────────────────────────────────────

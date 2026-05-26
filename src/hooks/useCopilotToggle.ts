@@ -22,8 +22,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
-import { useIdentity } from "./useIdentity";
+import { useOrganization } from "@/modules/identity";
+import { useIdentity } from "@/modules/identity";
 import { normalizePhone } from "@/lib/normalizePhone";
 
 export interface CopilotToggleStatus {

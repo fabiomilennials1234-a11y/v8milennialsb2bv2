@@ -23,8 +23,7 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable";
-import { useAuth } from "@/contexts/AuthContext";
-
+import { useAuth } from "@/modules/identity";
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 /** Modo de densidade das mensagens — controlado externamente via useChatDensity (C11). */

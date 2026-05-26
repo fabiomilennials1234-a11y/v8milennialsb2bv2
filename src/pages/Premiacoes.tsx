@@ -25,7 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useAwards, useCreateAward, useUpdateAward, useDeleteAward, Award as AwardType } from "@/hooks/useAwards";
-import { useUserRole } from "@/hooks/useUserRole";
+import { useUserRole } from "@/modules/identity";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 import { ProgressRing } from "@/components/gamification/ProgressRing";
 import { CelebrationEffect } from "@/components/gamification/CelebrationEffect";

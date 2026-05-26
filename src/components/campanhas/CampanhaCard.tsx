@@ -25,7 +25,7 @@ import { Campanha, useUpdateCampanha, useDeleteCampanha } from "@/hooks/useCampa
 import { Calendar, Target, Users, ArrowRight, Trophy, Clock, MoreVertical, Trash2, Power, PowerOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useCampanhaLeads, useCampanhaStages, useCampanhaMembers } from "@/hooks/useCampanhas";
-import { useCanDo } from "@/hooks/useCanDo";
+import { useCanDo } from "@/modules/identity";
 import { useState, memo } from "react";
 import { toast } from "sonner";
 

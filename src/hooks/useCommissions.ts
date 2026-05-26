@@ -1,8 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
-import { useOrganization } from "./useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 export type Commission = Tables<"commissions">;
 export type CommissionInsert = TablesInsert<"commissions">;
 export type CommissionUpdate = TablesUpdate<"commissions">;

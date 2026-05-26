@@ -23,7 +23,7 @@ vi.mock("@/lib/whatsappApi", () => ({
 }));
 
 // Mock useCurrentTeamMember — returns a stable team member
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({
     data: { id: "tm-1", organization_id: "org-a", user_id: "u-1" },
   }),

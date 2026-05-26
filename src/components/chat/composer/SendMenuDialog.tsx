@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { sendMenu } from "@/lib/whatsappApi";
 import { formatPhoneForWhatsApp } from "@/lib/whatsapp";
 

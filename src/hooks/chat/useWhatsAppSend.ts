@@ -7,7 +7,7 @@
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { track } from "@/lib/analytics";
 import { formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import type { WhatsAppMessage, FailedMessage } from "./types";

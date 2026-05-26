@@ -21,7 +21,7 @@ import { CrossPipePanel } from "./pipes/CrossPipePanel";
 import { LeadModalSkeleton } from "./LeadModalSkeleton";
 import { LeadVisibilityState } from "./LeadVisibilityState";
 import { LeadDetailBanners } from "./LeadDetailBanners";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/modules/identity";
 import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
 import { LogCallModal } from "@/components/calls/LogCallModal";
 import { EmailComposer } from "@/components/email/EmailComposer";

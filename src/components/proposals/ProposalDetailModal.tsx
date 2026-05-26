@@ -30,12 +30,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus, statusColumns } from "@/hooks/usePipePropostas";
 import { useLeadHistory } from "@/hooks/useLeadHistory";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useDeleteLead } from "@/hooks/useLeads";
-import { useHasPermission } from "@/hooks/usePermissions";
+import { useHasPermission } from "@/modules/identity";
 import { useActiveProducts } from "@/hooks/useProducts";
 import { 
   usePipePropostaItems, 

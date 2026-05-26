@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { useAnalyticsFilters } from "./useAnalyticsFilters";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface EngagementKPIs {
   our_avg_response_seconds: number;
@@ -75,7 +75,7 @@ export interface EngagementMetrics {
   copilot_vs_human: CopilotVsHuman;
 }
 
-// ─── Defaults ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Defaults â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const EMPTY: EngagementMetrics = {
   kpi_cards: {
@@ -92,7 +92,7 @@ const EMPTY: EngagementMetrics = {
   copilot_vs_human: { copilot: null, human: null },
 };
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Hook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function useAnalyticsEngajamento() {
   const { organizationId, isReady } = useOrganization();
@@ -121,10 +121,10 @@ export function useAnalyticsEngajamento() {
 
       if (error) {
         if (isMissingSchemaError(error)) {
-          console.warn("⚠️ [useAnalyticsEngajamento] RPC ausente (migration pendente?):", error.message);
+          console.warn("âš ï¸ [useAnalyticsEngajamento] RPC ausente (migration pendente?):", error.message);
           return EMPTY;
         }
-        console.error("❌ [useAnalyticsEngajamento] RPC error:", error.message);
+        console.error("âŒ [useAnalyticsEngajamento] RPC error:", error.message);
         throw new Error(`Analytics engajamento failed: ${error.message}`);
       }
 

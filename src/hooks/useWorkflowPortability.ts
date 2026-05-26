@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { useCreateWorkflow } from "@/hooks/useWorkflows";
 import {
   exportWorkflow,

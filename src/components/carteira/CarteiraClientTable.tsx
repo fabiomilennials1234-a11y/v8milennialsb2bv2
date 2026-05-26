@@ -33,7 +33,7 @@ import {
   type SortColumn,
 } from "@/hooks/usePortfolioClients";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import type { useBulkSelection } from "@/hooks/useBulkSelection";
 
 export type { PortfolioClientRow };

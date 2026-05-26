@@ -14,8 +14,8 @@ import {
   useRemoveCampanhaViewer,
   type CampanhaViewer,
 } from "@/hooks/useCampanhas";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
-import { useCanDo } from "@/hooks/useCanDo";
+import { useTeamMembers } from "@/modules/identity";
+import { useCanDo } from "@/modules/identity";
 import { UserPlus, X, Users } from "lucide-react";
 import { toast } from "sonner";
 

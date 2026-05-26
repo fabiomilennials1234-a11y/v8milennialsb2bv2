@@ -18,9 +18,9 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
-import { useIdentity } from "@/hooks/useIdentity";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useCurrentTeamMember } from "@/modules/identity";
+import { useIdentity } from "@/modules/identity";
+import { useOrganization } from "@/modules/identity";
 import { useUserWriteInstanceFlag } from "@/hooks/useUserWriteInstanceFlag";
 import type {
   GetLeadWriteInstanceResult,

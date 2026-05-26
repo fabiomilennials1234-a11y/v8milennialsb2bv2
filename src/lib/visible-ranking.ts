@@ -1,5 +1,4 @@
-import { isVirtualTeamMember } from "@/hooks/useTeamMembers";
-
+import { isVirtualTeamMember } from "@/modules/identity";
 export interface RankingEntry {
   id: string;
   role?: string;

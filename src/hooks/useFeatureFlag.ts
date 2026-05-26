@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/hooks/useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 /**
  * Lê a coluna `organizations.feature_flags` (jsonb) da org corrente e expõe
  * o flag de chave `key` como boolean. Convenção: keys em `snake_case`,

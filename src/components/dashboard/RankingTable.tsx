@@ -1,7 +1,7 @@
 import { memo, useState } from "react";
 import { motion } from "framer-motion";
 import { useRankingData } from "@/hooks/useDashboardMetrics";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";

@@ -6,13 +6,13 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/modules/identity/contexts/AuthContext";
 import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { PermissionProtectedRoute } from "@/components/PermissionProtectedRoute";
+import { ProtectedRoute } from "@/modules/identity/components/ProtectedRoute";
+import { PermissionProtectedRoute } from "@/modules/identity/components/PermissionProtectedRoute";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
-import { SubscriptionProtectedRoute } from "@/components/SubscriptionProtectedRoute";
+import { SubscriptionProtectedRoute } from "@/modules/identity/components/SubscriptionProtectedRoute";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 import { OnboardingGate } from "@/components/onboarding/OnboardingGate";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
@@ -35,7 +35,7 @@ function lazyRetry<T extends { default: any }>(
 }
 
 // Lazy-loaded pages — cada página vira um chunk separado (com retry automático)
-const Auth = lazy(() => lazyRetry(() => import("./pages/Auth")));
+const Auth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Auth")));
 const Dashboard = lazy(() => lazyRetry(() => import("./pages/Dashboard")));
 const PipeConfirmacao = lazy(() => lazyRetry(() => import("./pages/PipeConfirmacao")));
 const PipePropostas = lazy(() => lazyRetry(() => import("./pages/PipePropostas")));
@@ -43,7 +43,7 @@ const PipeWhatsapp = lazy(() => lazyRetry(() => import("./pages/PipeWhatsapp")))
 const PipeFollowUps = lazy(() => lazyRetry(() => import("./pages/PipeFollowUps")));
 const Revisao = lazy(() => lazyRetry(() => import("./pages/Revisao")));
 const Performance = lazy(() => lazyRetry(() => import("./pages/Performance")));
-const Equipe = lazy(() => lazyRetry(() => import("./pages/Equipe")));
+const Equipe = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Equipe")));
 const Comissoes = lazy(() => lazyRetry(() => import("./pages/Comissoes")));
 const Leads = lazy(() => lazyRetry(() => import("./pages/Leads")));
 
@@ -79,29 +79,29 @@ const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./pages/Automacoe
 
 const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
 const Landing = lazy(() => lazyRetry(() => import("./pages/Landing")));
-const Signup = lazy(() => lazyRetry(() => import("./pages/Signup")));
-const ResetPassword = lazy(() => lazyRetry(() => import("./pages/ResetPassword")));
+const Signup = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Signup")));
+const ResetPassword = lazy(() => lazyRetry(() => import("@/modules/identity/pages/ResetPassword")));
 
 // Master Admin — lazy loaded (com retry)
-const MasterDashboard = lazy(() => lazyRetry(() => import("./pages/master/MasterDashboard")));
-const MasterOrganizations = lazy(() => lazyRetry(() => import("./pages/master/MasterOrganizations")));
-const MasterUsers = lazy(() => lazyRetry(() => import("./pages/master/MasterUsers")));
-const MasterPlans = lazy(() => lazyRetry(() => import("./pages/master/MasterPlans")));
-const MasterFeatures = lazy(() => lazyRetry(() => import("./pages/master/MasterFeatures")));
-const MasterAuditLogs = lazy(() => lazyRetry(() => import("./pages/master/MasterAuditLogs")));
-const MasterOperations = lazy(() => lazyRetry(() => import("./pages/master/MasterOperations")));
-const MasterAutomationHealth = lazy(() => lazyRetry(() => import("./pages/master/MasterAutomationHealth")));
-const MasterWhatsAppHealth = lazy(() => lazyRetry(() => import("./pages/master/MasterWhatsAppHealth")));
-const CopilotReasoning = lazy(() => lazyRetry(() => import("./pages/master/CopilotReasoning")));
-const CopilotToggleAudit = lazy(() => lazyRetry(() => import("./pages/master/CopilotToggleAudit")));
-const MasterOnboarding = lazy(() => lazyRetry(() => import("./pages/master/MasterOnboarding")));
+const MasterDashboard = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterDashboard")));
+const MasterOrganizations = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterOrganizations")));
+const MasterUsers = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterUsers")));
+const MasterPlans = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterPlans")));
+const MasterFeatures = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterFeatures")));
+const MasterAuditLogs = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterAuditLogs")));
+const MasterOperations = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterOperations")));
+const MasterAutomationHealth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterAutomationHealth")));
+const MasterWhatsAppHealth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterWhatsAppHealth")));
+const CopilotReasoning = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/CopilotReasoning")));
+const CopilotToggleAudit = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/CopilotToggleAudit")));
+const MasterOnboarding = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterOnboarding")));
 const MockupChat = lazy(() => lazyRetry(() => import("./pages/MockupChat")));
 const MockupChatV2 = lazy(() => lazyRetry(() => import("./pages/MockupChatV2")));
 const MockupChatV3 = lazy(() => lazyRetry(() => import("./pages/MockupChatV3")));
 
 // Master route/layout — carregam sob demanda quando acessar /master
-import { MasterRoute } from "@/components/master/MasterRoute";
-import { MasterLayout } from "@/components/master/MasterLayout";
+import { MasterRoute } from "@/modules/identity/components/master/MasterRoute";
+import { MasterLayout } from "@/modules/identity/components/master/MasterLayout";
 
 // Command Palette — global ⌘K (C24)
 import { CommandPaletteProvider } from "@/components/command/CommandPaletteProvider";

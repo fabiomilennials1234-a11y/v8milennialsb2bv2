@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { useAnalyticsFilters } from "./useAnalyticsFilters";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
 
@@ -116,10 +116,10 @@ export function useAnalyticsOverview() {
 
       if (error) {
         if (isMissingSchemaError(error)) {
-          console.warn("⚠️ [useAnalyticsOverview] RPC ausente (migration pendente?):", error.message);
+          console.warn("âš ï¸ [useAnalyticsOverview] RPC ausente (migration pendente?):", error.message);
           return EMPTY;
         }
-        console.error("❌ [useAnalyticsOverview] RPC error:", error.message);
+        console.error("âŒ [useAnalyticsOverview] RPC error:", error.message);
         throw new Error(`Analytics overview failed: ${error.message}`);
       }
 

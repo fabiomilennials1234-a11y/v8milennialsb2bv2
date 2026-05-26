@@ -13,7 +13,7 @@ const ORG_ID = "org-1";
 const PIPELINE_ID = "pipeline-propostas-1";
 const LEAD_ID = "lead-ana";
 
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({
     organizationId: ORG_ID,
     teamMemberId: "tm-1",
@@ -34,7 +34,7 @@ vi.mock("@/hooks/usePipelineEntries", async () => {
   };
 });
 
-vi.mock("@/lib/permissions", () => ({
+vi.mock("@/modules/identity/lib/permissions", () => ({
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
 }));
 

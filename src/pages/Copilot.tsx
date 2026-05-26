@@ -51,10 +51,10 @@ import {
   useSetDefaultCopilotAgent,
 } from "@/hooks/useCopilotAgents";
 import { useCopilotSubscription } from "@/hooks/useCopilotSubscription";
-import { useCanManageCopilot } from "@/hooks/useUserRole";
-import { useIdentity } from "@/hooks/useIdentity";
+import { useCanManageCopilot } from "@/modules/identity";
+import { useIdentity } from "@/modules/identity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
-import { useOrgQuotas } from "@/hooks/useOrgQuotas";
+import { useOrgQuotas } from "@/modules/identity";
 import { toast } from "sonner";
 import type { CopilotAgentWithRelations } from "@/types/copilot";
 

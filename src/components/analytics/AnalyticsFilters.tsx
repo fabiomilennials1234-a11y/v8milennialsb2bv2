@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { type DatePreset, useAnalyticsFilters } from "@/hooks/useAnalyticsFilters";
 
 const PRESETS: { value: DatePreset; label: string }[] = [

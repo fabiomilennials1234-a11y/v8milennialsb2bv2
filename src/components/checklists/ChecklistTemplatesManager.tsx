@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useChecklistTemplates } from "@/hooks/useChecklistTemplates";
 import { useCreateChecklist } from "@/hooks/useChecklists";
-import { useIdentity } from "@/hooks/useIdentity";
+import { useIdentity } from "@/modules/identity";
 import { ChecklistCard } from "./ChecklistCard";
 import { toast } from "sonner";
 

@@ -24,8 +24,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useCreateSandbox } from "@/hooks/useSandbox";
-import { useOrganization } from "@/hooks/useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 // ── Component ─────────────────────────────────────────────────
 
 export function SandboxPanel() {

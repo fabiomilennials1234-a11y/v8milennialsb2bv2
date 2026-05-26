@@ -13,8 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { startOfDay, endOfDay, isToday, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
-import { useOrganization } from "@/hooks/useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 interface QuickStatsProps {
   className?: string;
 }

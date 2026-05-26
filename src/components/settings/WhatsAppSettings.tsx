@@ -44,15 +44,15 @@ import {
   useLogoutInstance,
   WhatsAppInstance,
 } from "@/hooks/useWhatsAppInstances";
-import { useCanManageWhatsApp } from "@/hooks/useUserRole";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useCanManageWhatsApp } from "@/modules/identity";
+import { useTeamMembers } from "@/modules/identity";
 import {
   useAllowedMembersForInstance,
   useSetAllowedMembersForInstance,
 } from "@/hooks/useWhatsAppInstanceAllowedMembers";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrgQuotas } from "@/hooks/useOrgQuotas";
+import { useOrgQuotas } from "@/modules/identity";
 import { useMessageLimits } from "@/hooks/useMessageLimits";
 import { HistorySyncPanel } from "@/components/chat/history-sync/HistorySyncPanel";
 import { toast } from "sonner";

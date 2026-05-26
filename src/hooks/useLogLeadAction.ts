@@ -1,8 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { track } from "@/lib/analytics";
-import { useOrganization } from "./useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 export type LeadActionType =
   | "lead_created"
   | "lead_deleted"

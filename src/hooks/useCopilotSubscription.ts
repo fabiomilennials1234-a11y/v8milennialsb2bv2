@@ -7,8 +7,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { checkCurrentUserSubscription } from "@/lib/subscription";
-import { useCanManageCopilot } from "@/hooks/useUserRole";
-
+import { useCanManageCopilot } from "@/modules/identity";
 /**
  * Verifica se o usuário tem acesso ao Copilot
  *

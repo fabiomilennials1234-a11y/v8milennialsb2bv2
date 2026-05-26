@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { useUpdatePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
 import { useLossReasons } from "@/hooks/useLossReasons";
 import { toast } from "sonner";

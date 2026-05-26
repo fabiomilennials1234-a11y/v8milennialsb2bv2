@@ -10,7 +10,7 @@ vi.mock('@/integrations/supabase/client', () => ({
 }));
 
 // ─── Import ─────────────────────────────────────────────
-import { assertPermission } from '@/lib/permissions';
+import { assertPermission } from '@/modules/identity/lib/permissions';
 import { ACTION_TO_FEATURE } from '@/shared/permission-actions';
 
 // ─── Tests ───────────────────────────────────────────────

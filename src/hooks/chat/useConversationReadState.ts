@@ -17,9 +17,8 @@
  */
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
-
+import { useAuth } from "@/modules/identity";
+import { useCurrentTeamMember } from "@/modules/identity";
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export interface UseConversationReadStateOptions {

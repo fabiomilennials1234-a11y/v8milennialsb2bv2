@@ -7,8 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-
+import { useAuth } from "@/modules/identity";
 type PushPermission = NotificationPermission | 'unsupported';
 
 interface UsePushSubscriptionReturn {

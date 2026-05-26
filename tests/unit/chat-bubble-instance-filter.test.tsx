@@ -19,7 +19,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 const teamMemberRef = {
   value: { id: "tm1", organization_id: "org-A", user_id: "u1" },
 };
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: teamMemberRef.value }),
 }));
 

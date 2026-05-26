@@ -34,7 +34,7 @@ import {
   Timer,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useFeaturePermission } from "@/hooks/useUserRole";
+import { useFeaturePermission } from "@/modules/identity";
 import { useExportWorkflow, useImportWorkflow } from "@/hooks/useWorkflowPortability";
 import { WorkflowImportDialog } from "@/components/automacoes/WorkflowImportDialog";
 import { WorkflowTemplates } from "@/components/automacoes/WorkflowTemplates";

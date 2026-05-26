@@ -21,7 +21,7 @@ import { useUpdatePipeConfirmacao, type PipeConfirmacaoStatus } from "@/hooks/us
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useGoogleCalendarStatus } from "@/hooks/useGoogleCalendar";
 import { useCalendarSharing } from "@/hooks/useGoogleCalendarSharing";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/modules/identity";
 import { toast } from "sonner";
 
 export type ReschedulingMode = "schedule" | "reschedule";

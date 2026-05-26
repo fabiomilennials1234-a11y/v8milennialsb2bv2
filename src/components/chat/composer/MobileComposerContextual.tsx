@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/modules/identity";
 import { useConversationDraft } from "@/hooks/useConversationDraft";
 import { useSendWhatsAppMessage, useSendWhatsAppMedia } from "@/hooks/chat/useWhatsAppSend";
 import { useKeyboardOffset } from "@/hooks/use-keyboard-offset";

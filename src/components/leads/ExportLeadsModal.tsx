@@ -6,8 +6,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useExportLeads } from "@/hooks/useExportLeads";
 import { toast } from "sonner";
 import { FileDown, Loader2, FileSpreadsheet, FileText } from "lucide-react";
-import { useCanDo } from "@/hooks/useCanDo";
-
+import { useCanDo } from "@/modules/identity";
 const EXPORT_LIMITS = [
   { value: 100, label: "Os 100 mais recentes" },
   { value: 500, label: "Os 500 mais recentes" },

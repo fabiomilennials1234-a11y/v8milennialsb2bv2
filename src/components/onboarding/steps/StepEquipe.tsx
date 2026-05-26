@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Users, Plus, CheckCircle2, ArrowRight, Loader2, ChevronRight } from "lucide-react";
-import { useCreateTeamMember } from "@/hooks/useTeamMembers";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useCreateTeamMember } from "@/modules/identity";
+import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";

@@ -1,6 +1,6 @@
 import { useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useOrganization } from "./useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { useRealtimeChannel } from "./useRealtimeChannel";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 

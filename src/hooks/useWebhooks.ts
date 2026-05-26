@@ -1,8 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
-import { useOrganization } from "./useOrganization";
-
+import { useOrganization } from "@/modules/identity";
 export type Webhook = Tables<"webhooks">;
 export type WebhookInsert = TablesInsert<"webhooks">;
 export type WebhookUpdate = TablesUpdate<"webhooks">;

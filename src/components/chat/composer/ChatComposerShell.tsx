@@ -19,8 +19,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useLeadWriteInstance } from "@/hooks/useLeadWriteInstance";
 import type { WriteInstanceErrorCode } from "@/types/user-write-instance";
-import { useIdentity } from "@/hooks/useIdentity";
-
+import { useIdentity } from "@/modules/identity";
 export type ChatComposerVariant = "full" | "compact";
 
 export interface ChatComposerShellProps {

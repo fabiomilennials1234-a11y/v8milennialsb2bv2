@@ -9,14 +9,14 @@ const roleState = vi.hoisted(() => ({
   isMaster: false,
 }));
 
-vi.mock("@/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useUserRole: () => ({
     data: roleState.role ? { role: roleState.role } : null,
     isLoading: roleState.isLoading,
   }),
 }));
 
-vi.mock("@/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({
     isMaster: roleState.isMaster,
     isLoading: roleState.isLoading,
@@ -25,7 +25,7 @@ vi.mock("@/hooks/useMasterAuth", () => ({
 
 // Mirror useCanDo's behavior using only role state.
 // Same fail-closed contract: during loading return { allowed: false, isLoading: true }.
-vi.mock("@/hooks/useCanDo", () => ({
+vi.mock("@/modules/identity/hooks/useCanDo", () => ({
   useCanDo: (action: string) => {
     if (roleState.isLoading) {
       return { allowed: false, isLoading: true };

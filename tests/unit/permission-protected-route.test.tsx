@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 // ─── Mocks ──────────────────────────────────────────────
-vi.mock('@/hooks/useUserRole', () => ({
+vi.mock('@/modules/identity/hooks/useUserRole', () => ({
   useFeaturePermission: vi.fn(),
   useIsAdmin: vi.fn(),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
@@ -14,23 +14,23 @@ vi.mock('@/hooks/useUserRole', () => ({
   useHasRole: () => ({ hasRole: true, isLoading: false }),
 }));
 
-vi.mock('@/hooks/useMasterAuth', () => ({
+vi.mock('@/modules/identity/hooks/useMasterAuth', () => ({
   useMasterAuth: vi.fn(),
 }));
 
-vi.mock('@/hooks/useTeamMembers', () => ({
+vi.mock('@/modules/identity/hooks/useTeamMembers', () => ({
   useCurrentTeamMember: vi.fn(),
 }));
 
 const mockIdentity = vi.fn();
-vi.mock('@/hooks/useIdentity', () => ({
+vi.mock('@/modules/identity/hooks/useIdentity', () => ({
   useIdentity: (...args: unknown[]) => mockIdentity(...args),
 }));
 
-import { useFeaturePermission, useIsAdmin } from '@/hooks/useUserRole';
-import { useMasterAuth } from '@/hooks/useMasterAuth';
-import { useCurrentTeamMember } from '@/hooks/useTeamMembers';
-import { PermissionProtectedRoute } from '@/components/PermissionProtectedRoute';
+import { useFeaturePermission, useIsAdmin } from '@/modules/identity/hooks/useUserRole';
+import { useMasterAuth } from '@/modules/identity/hooks/useMasterAuth';
+import { useCurrentTeamMember } from '@/modules/identity/hooks/useTeamMembers';
+import { PermissionProtectedRoute } from '@/modules/identity/components/PermissionProtectedRoute';
 
 // ─── Typed references ───────────────────────────────────
 const mockUseFeaturePermission = useFeaturePermission as ReturnType<typeof vi.fn>;

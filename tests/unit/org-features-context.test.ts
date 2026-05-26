@@ -18,7 +18,7 @@ let mockOrgReturn = {
   isLoading: false,
 };
 
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => mockOrgReturn,
 }));
 

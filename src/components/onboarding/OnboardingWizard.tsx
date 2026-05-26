@@ -1,8 +1,8 @@
 import { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/modules/identity";
 import { useOnboarding, type OnboardingAnswers } from "@/hooks/useOnboarding";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { generateSuggestions, type SuggestedPipeline, type SuggestedAutomation } from "@/lib/onboarding-suggestions";
 import { generatePipelineDisplayConfig, applyPipelineDisplayConfig } from "@/lib/pipeline-config-from-quiz";
 import { track } from "@/lib/analytics";

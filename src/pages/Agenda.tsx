@@ -22,7 +22,7 @@ import {
 import { ptBR } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/modules/identity";
 import { useAgendaEvents } from "@/hooks/useAgendaEvents";
 import { useDeleteMeeting } from "@/hooks/useMeetings";
 import {
@@ -46,7 +46,7 @@ import {
 } from "@/components/agenda/EventDetailPopover";
 import { CreateMeetingDialog } from "@/components/agenda/CreateMeetingDialog";
 
-// ─── Google Calendar user colors (for shared calendars overlay) ───────────────
+// â”€â”€â”€ Google Calendar user colors (for shared calendars overlay) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const USER_COLORS = [
   "#4285F4",   // Google blue -- own
@@ -58,7 +58,7 @@ const USER_COLORS = [
   "#06B6D4",   // cyan
 ];
 
-// ─── Available internal sources ───────────────────────────────────────────────
+// â”€â”€â”€ Available internal sources â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const INTERNAL_SOURCES: EventSource[] = [
   "meeting",
@@ -67,7 +67,7 @@ const INTERNAL_SOURCES: EventSource[] = [
   "pipe_confirmacao",
 ];
 
-// ─── Main component ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function Agenda() {
   const { session } = useAuth();
@@ -78,7 +78,7 @@ export default function Agenda() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitialStart, setCreateInitialStart] = useState<Date | undefined>();
 
-  // ── Source visibility toggles ───────────────────────────────────────────────
+  // â”€â”€ Source visibility toggles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [activeSources, setActiveSources] = useState<Set<EventSource>>(
     () => new Set<EventSource>([...INTERNAL_SOURCES, "google"]),
   );
@@ -92,7 +92,7 @@ export default function Agenda() {
     });
   }, []);
 
-  // ── Google Calendar overlay data ────────────────────────────────────────────
+  // â”€â”€ Google Calendar overlay data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const { data: gcalStatus } = useGoogleCalendarStatus();
   const { data: sharingData } = useCalendarSharing();
   const ownUserId = session?.user?.id ?? "";
@@ -114,7 +114,7 @@ export default function Agenda() {
     return list;
   }, [gcalStatus, sharingData, ownUserId]);
 
-  // ── Date range for queries ──────────────────────────────────────────────────
+  // â”€â”€ Date range for queries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const { startDate, endDate } = useMemo(() => {
     if (view === "day") {
       const s = startOfDay(date);
@@ -131,14 +131,14 @@ export default function Agenda() {
     };
   }, [date, view]);
 
-  // ── Data: internal events (primary) ─────────────────────────────────────────
+  // â”€â”€ Data: internal events (primary) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const {
     data: agendaRawEvents = [],
     isLoading: agendaLoading,
     refetch: refetchAgenda,
   } = useAgendaEvents(startDate, endDate);
 
-  // ── Data: Google Calendar events (optional overlay) ─────────────────────────
+  // â”€â”€ Data: Google Calendar events (optional overlay) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const {
     data: googleRawEvents,
     isLoading: googleLoading,
@@ -147,7 +147,7 @@ export default function Agenda() {
 
   const isLoading = agendaLoading || googleLoading;
 
-  // ── Merge + filter events ───────────────────────────────────────────────────
+  // â”€â”€ Merge + filter events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const allEvents: UnifiedEvent[] = useMemo(() => {
     const internal = normalizeAgendaEvents(agendaRawEvents);
     const google =
@@ -172,7 +172,7 @@ export default function Agenda() {
     return [...internal, ...deduped].filter((e) => activeSources.has(e.source));
   }, [agendaRawEvents, googleRawEvents, activeSources, googleOwnerCalendars, ownUserId]);
 
-  // ── Mutations ───────────────────────────────────────────────────────────────
+  // â”€â”€ Mutations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const deleteMeeting = useDeleteMeeting();
 
   const handleDeleteMeeting = useCallback(
@@ -218,7 +218,7 @@ export default function Agenda() {
     [session, refetchGoogle],
   );
 
-  // ── Navigation ──────────────────────────────────────────────────────────────
+  // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const navigate = useCallback(
     (dir: "prev" | "next" | "today") => {
       if (dir === "today") {
@@ -234,7 +234,7 @@ export default function Agenda() {
     [view],
   );
 
-  // ── Date label ──────────────────────────────────────────────────────────────
+  // â”€â”€ Date label â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const dateLabel = useMemo(() => {
     if (view === "day")
       return format(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR });
@@ -248,7 +248,7 @@ export default function Agenda() {
     return format(date, "MMMM 'de' yyyy", { locale: ptBR });
   }, [date, view]);
 
-  // ── Source toggles for the topbar ───────────────────────────────────────────
+  // â”€â”€ Source toggles for the topbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const sourceToggles = useMemo(() => {
     const sources: EventSource[] = [...INTERNAL_SOURCES];
     if (googleConnected) sources.push("google");
@@ -258,7 +258,7 @@ export default function Agenda() {
     }));
   }, [activeSources, googleConnected]);
 
-  // ── Event handlers ──────────────────────────────────────────────────────────
+  // â”€â”€ Event handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleEventClick = useCallback(
     (e: React.MouseEvent, event: UnifiedEvent) => {
       e.stopPropagation();
@@ -293,7 +293,7 @@ export default function Agenda() {
 
   const weekDays = view === "week" ? getWeekDays(date) : [date];
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">

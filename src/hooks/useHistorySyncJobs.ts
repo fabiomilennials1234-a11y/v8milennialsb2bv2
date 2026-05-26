@@ -8,7 +8,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 
 export type HistorySyncJob = Tables<"history_sync_jobs">;

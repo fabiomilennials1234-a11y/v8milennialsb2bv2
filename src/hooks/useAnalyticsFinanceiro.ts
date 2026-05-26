@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { useAnalyticsFilters } from "./useAnalyticsFilters";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
 
@@ -90,10 +90,10 @@ export function useAnalyticsFinanceiro() {
 
       if (error) {
         if (isMissingSchemaError(error)) {
-          console.warn("⚠️ [useAnalyticsFinanceiro] RPC ausente (migration pendente?):", error.message);
+          console.warn("âš ï¸ [useAnalyticsFinanceiro] RPC ausente (migration pendente?):", error.message);
           return EMPTY;
         }
-        console.error("❌ [useAnalyticsFinanceiro] RPC error:", error.message);
+        console.error("âŒ [useAnalyticsFinanceiro] RPC error:", error.message);
         throw new Error(`Analytics financeiro failed: ${error.message}`);
       }
 

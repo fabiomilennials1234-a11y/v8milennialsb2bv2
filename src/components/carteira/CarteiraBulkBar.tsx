@@ -29,11 +29,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { useTags } from "@/hooks/useTags";
 import { useBulkTag } from "@/hooks/useBulkActions";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import type { PortfolioClientRow } from "@/hooks/usePortfolioClients";
 
 interface CarteiraBulkBarProps {

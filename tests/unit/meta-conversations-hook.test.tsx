@@ -19,7 +19,7 @@ vi.mock("@/integrations/supabase/client", () => {
   return { supabase: { from: vi.fn(() => builder) } };
 });
 
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-1" }),
 }));
 

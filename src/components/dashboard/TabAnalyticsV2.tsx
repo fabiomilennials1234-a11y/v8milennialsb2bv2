@@ -27,7 +27,7 @@ import { FunnelConversion } from "@/components/analytics/FunnelConversion";
 import { SalesCycleChart } from "@/components/analytics/SalesCycleChart";
 import { RevenueAttribution } from "@/components/analytics/RevenueAttribution";
 import { CohortAnalysis } from "@/components/analytics/CohortAnalysis";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { useAnalyticsOverview } from "@/hooks/useAnalyticsOverview";
 import { useAnalyticsEngajamento } from "@/hooks/useAnalyticsEngajamento";
 import { useAnalyticsPipesFunis } from "@/hooks/useAnalyticsPipesFunis";

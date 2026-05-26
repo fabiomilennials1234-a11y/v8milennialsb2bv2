@@ -14,8 +14,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as Sentry from "@sentry/react";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/hooks/useOrganization";
-import { useAuth } from "@/contexts/AuthContext";
+import { useOrganization } from "@/modules/identity";
+import { useAuth } from "@/modules/identity";
 import { createRateLimiter } from "@/lib/rate-limit";
 import type { MessageSearchResult } from "@/lib/chat-types";
 

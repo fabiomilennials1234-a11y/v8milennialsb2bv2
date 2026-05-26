@@ -20,8 +20,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/hooks/useOrganization";
-import { useAuth } from "@/contexts/AuthContext";
+import { useOrganization } from "@/modules/identity";
+import { useAuth } from "@/modules/identity";
 import { formatDistanceToNow, isToday, isBefore, addHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";

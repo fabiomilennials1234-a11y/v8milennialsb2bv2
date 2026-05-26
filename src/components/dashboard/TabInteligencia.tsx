@@ -7,7 +7,7 @@ import { SegmentBenchmark } from "./SegmentBenchmark";
 import { WeeklyChart } from "./WeeklyChart";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 import { useTeamGoals, useIndividualGoals } from "@/hooks/useGoals";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WinLossAnalysis } from "@/components/analytics/WinLossAnalysis";

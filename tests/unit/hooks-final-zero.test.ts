@@ -32,10 +32,10 @@ vi.mock("@/integrations/supabase/client", () => ({
     storage: { from: vi.fn().mockReturnValue({ upload: vi.fn().mockResolvedValue({ error: null }), getPublicUrl: vi.fn().mockReturnValue({ data: { publicUrl: "" } }), download: vi.fn().mockResolvedValue({ data: new Blob(), error: null }) }) },
   },
 }));
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "t" } }) }));
-vi.mock("@/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
-vi.mock("@/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }), useResponsibleMembers: () => ({ data: [] }) }));
-vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: true }) }));
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "t" } }) }));
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }), useResponsibleMembers: () => ({ data: [] }) }));
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: true }) }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {}, useAllPipelineStages: () => ({ data: [] }) }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
@@ -44,9 +44,9 @@ vi.mock("@/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: an
 vi.mock("@/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
 vi.mock("@/hooks/useWhatsAppInstances", () => ({ useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }) }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined), triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
+vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
 vi.mock("@/contexts/OrgFeaturesContext", () => ({ useOrgFeatures: () => ({ hasFeature: () => true, checkLimit: () => -1, canCreateCampaign: () => true, allFeatures: new Map(), allLimits: new Map(), isLoading: false }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 
@@ -143,7 +143,7 @@ describe("useHelpCenter", () => {
 });
 
 // ═══ 5. useMasterOperations (61 LOC) ═══
-import { useOperationsOverview, useUsageByOrg, useRuntimeLogs, useJobsOverview } from "@/hooks/useMasterOperations";
+import { useOperationsOverview, useUsageByOrg, useRuntimeLogs, useJobsOverview } from "@/modules/identity/hooks/useMasterOperations";
 
 describe("useMasterOperations", () => {
   it("useOperationsOverview", async () => {

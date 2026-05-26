@@ -1,9 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "./useTeamMembers";
-import { useOrganization } from "./useOrganization";
-import { useIdentity } from "./useIdentity";
-
+import { useCurrentTeamMember } from "@/modules/identity";
+import { useOrganization } from "@/modules/identity";
+import { useIdentity } from "@/modules/identity";
 export interface WhatsAppInstanceAllowedMember {
   id: string;
   whatsapp_instance_id: string;

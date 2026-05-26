@@ -23,18 +23,18 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
 
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
   useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
 }));
 
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 
-vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false, isLoading: false }) }));
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false, isLoading: false }) }));
 
-vi.mock("@/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/hooks/useIdentity", () => ({
   useIdentity: () => ({
     userId: "u1",
     organizationId: "org-t",
@@ -48,7 +48,7 @@ vi.mock("@/hooks/useIdentity", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
@@ -65,7 +65,7 @@ const mockTeamMembers = [
   { id: "tm2", name: "SDR 1", is_active: true, metric_type: "meetings", role: "membro", user_id: "u2", organization_id: "org-t" },
 ];
 
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }),
   useTeamMembers: () => ({ data: mockTeamMembers }),
   isVirtualTeamMember: (id: any) => typeof id === "string" && id.startsWith("_virtual_"),
@@ -160,7 +160,7 @@ vi.mock("@/hooks/useGoals", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useUserRole: () => "admin",
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
 }));

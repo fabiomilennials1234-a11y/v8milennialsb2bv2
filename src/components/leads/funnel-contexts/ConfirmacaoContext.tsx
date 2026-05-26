@@ -38,12 +38,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/hooks/useOrganizationSettings";
+import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/modules/identity";
 import { useUpdatePipeConfirmacao, useDeletePipeConfirmacao, type PipeConfirmacaoStatus, statusColumns } from "@/hooks/usePipeConfirmacao";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useDeleteLead } from "@/hooks/useLeads";
-import { useResponsibleMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/modules/identity";
 import { CompareceuModal } from "@/components/confirmacao/CompareceuModal";
 import { RescheduleModal } from "@/components/confirmacao/RescheduleModal";
 import { cn } from "@/lib/utils";

@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Book, Menu, X, Key, ChevronDown, ChevronUp } from "lucide-react";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { useApiKeys } from "@/hooks/useApiKeys";
 import { apiCategories } from "@/lib/api-docs/endpoints";
 import { ApiDocsSidebar } from "./ApiDocsSidebar";

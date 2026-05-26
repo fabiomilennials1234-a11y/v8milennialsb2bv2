@@ -3,8 +3,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
-
+import { useCurrentTeamMember } from "@/modules/identity";
 export type MigrationStatus =
   | "not_started"
   | "pending"

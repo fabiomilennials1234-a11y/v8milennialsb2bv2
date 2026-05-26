@@ -27,7 +27,7 @@ import { OrderItemList } from "./OrderItemList";
 
 import { useNewOrder } from "@/hooks/useNewOrder";
 import { useLastOrder, type OrderLineItem } from "@/hooks/useQuickOrder";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers } from "@/modules/identity";
 import { useTinyErpStatus } from "@/hooks/useTinyErp";
 import { TinyErpUpsellConfirmDialog } from "@/components/upsell/TinyErpUpsellConfirmDialog";
 

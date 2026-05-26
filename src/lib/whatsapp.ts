@@ -5,8 +5,7 @@ import {
   prefetchChatRoute,
   prefetchChatData,
 } from "@/lib/prefetch/chatPrefetch";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
-
+import { useCurrentTeamMember } from "@/modules/identity";
 // Format phone number for WhatsApp: 55 + DDD (without 0) + number (add 9 if short)
 export function formatPhoneForWhatsApp(phone: string | undefined): string | null {
   if (!phone) return null;

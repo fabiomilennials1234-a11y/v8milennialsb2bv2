@@ -10,7 +10,7 @@ import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/l
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { NewOrderModal } from "@/components/carteira/NewOrderModal";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
-import { useIdentity } from "@/hooks/useIdentity";
+import { useIdentity } from "@/modules/identity";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { useUpdateLead } from "@/hooks/useLeads";
 import { toast } from "sonner";

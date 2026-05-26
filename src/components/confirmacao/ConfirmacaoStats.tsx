@@ -14,8 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { isToday, isTomorrow, isPast, isThisWeek, differenceInDays } from "date-fns";
-import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/hooks/useOrganizationSettings";
-
+import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/modules/identity";
 interface ConfirmacaoStatsProps {
   data: any[];
 }

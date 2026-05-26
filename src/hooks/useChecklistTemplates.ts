@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
-import { isVirtualTeamMember } from "./useTeamMembers";
+import { useOrganization } from "@/modules/identity";
+import { isVirtualTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
 import { toast } from "sonner";
 import type { ChecklistWithCounts } from "./useChecklists";

@@ -12,7 +12,7 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 }));
 
 const orgMock = vi.fn(() => ({ organizationId: "org-1", isLoading: false }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => orgMock(),
 }));
 

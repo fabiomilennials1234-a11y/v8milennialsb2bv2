@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePermanentCustomFunnels, useTemporaryFunnels } from "@/hooks/useCustomPipelines";
 import { usePipelineDisplayConfig } from "@/hooks/usePipelineDisplayConfig";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";

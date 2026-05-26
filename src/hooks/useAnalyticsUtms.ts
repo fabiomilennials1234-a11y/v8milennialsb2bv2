@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { useAnalyticsFilters } from "./useAnalyticsFilters";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
 

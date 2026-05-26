@@ -8,7 +8,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
 
 const MILENNIALS_ORG_ID = "6030520a-2ca7-477d-be89-55758e2cd808";
