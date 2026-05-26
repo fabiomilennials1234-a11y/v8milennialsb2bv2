@@ -5,7 +5,7 @@ import { useOrganization } from "./useOrganization";
 
 export type PipelineType = "whatsapp" | "confirmacao" | "propostas";
 
-const LEAD_SELECT = `
+export const LEAD_SELECT = `
   id, name, company, email, phone, rating, origin, segment, faturamento, urgency, notes, compromisso_date, ai_disabled,
   avatar_url, pre_qualification_tier, qualification_tier,
   sdr_id, closer_id, responsible_id, pre_sale_responsible_id, sale_responsible_id,
@@ -124,7 +124,7 @@ export function usePipelineId(slug: PipelineType) {
   });
 }
 
-function flattenMetadata(entry: any) {
+export function flattenMetadata(entry: any) {
   const meta = (entry.metadata as Record<string, any>) ?? {};
   return {
     ...entry,

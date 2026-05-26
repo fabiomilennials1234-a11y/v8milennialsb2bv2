@@ -20,7 +20,9 @@ import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanDo } from "@/hooks/useCanDo";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
-import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/hooks/usePipeWhatsapp";
+import { useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/hooks/usePipeWhatsapp";
+import { usePaginatedPipeline } from "@/hooks/usePaginatedPipeline";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePipeWhatsappMetrics } from "@/hooks/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
@@ -55,7 +57,6 @@ import { PipelineListView } from "@/components/kanban/PipelineListView";
 import { useViewport } from "@/hooks/use-viewport";
 import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
 import { useSearchParams } from "react-router-dom";
-import { matchesResponsibleFilter } from "@/lib/kanban-filters";
 
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -153,8 +154,22 @@ function PipeWhatsappInner() {
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_whatsapp", organizationId); }, []);
 
-  const { data: pipeData, isLoading, isError, refetch } = usePipeWhatsapp();
   const { data: pipelineStages = [], isLoading: loadingStages } = usePipelineStages("whatsapp");
+  const { stageData, allItems: pipeData, isLoading, organizationId: paginatedOrgId } = usePaginatedPipeline(
+    "whatsapp",
+    pipelineStages,
+    {
+      search: searchTerm,
+      responsibleId: filterResponsible,
+      tagIds: filterTags,
+    }
+  );
+  const isError = false;
+  const queryClient = useQueryClient();
+  const refetch = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["pipeline-page", "whatsapp"] });
+    queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts", "whatsapp"] });
+  }, [queryClient]);
   const { data: workflowCounts = {} } = useStageWorkflowCounts("whatsapp");
   const metricsRange = useMemo(() => getDateRange(periodState), [periodState]);
   const { data: metricsByPeriod } = usePipeWhatsappMetrics(metricsRange);
@@ -238,39 +253,19 @@ function PipeWhatsappInner() {
     };
   };
 
-  // Filter function for items
-  // Filters out "ghost leads" where RLS blocks the lead data (lead relation is null)
-  const filterItems = (item: any) => {
+  // Client-side filters that can't be server-side (origin, scheduled, date range)
+  const filterItemsLocal = (item: any) => {
     const lead = item.lead;
-
-    // Hide ghost leads (RLS blocked the lead data for this user)
     if (!lead) return false;
 
-    // Date range filter (only when a period is selected)
     if (metricsRange) {
       if (!item.created_at) return false;
       if (item.created_at < metricsRange.startStr || item.created_at > metricsRange.endStr) return false;
     }
 
-    // Search filter
-    const matchesSearch = searchTerm === "" ||
-      lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead?.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead?.phone?.includes(searchTerm);
-
-    // Responsible filter — shared helper covers entry + lead, including
-    // pre_sale_responsible_id / sale_responsible_id / sdr_id / closer_id.
-    const matchesResponsible = matchesResponsibleFilter(item, filterResponsible);
-
-    // Origin filter
     const matchesOrigin = filterOrigin === "all" || lead?.origin === filterOrigin;
-
-    // Tags filter (multi-select — lead must have at least one of the selected tags)
-    const matchesTags = filterTags.length === 0 ||
-      (lead?.lead_tags?.some((lt: any) => filterTags.includes(lt.tag?.id)) ?? false);
-
     const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
-    return matchesSearch && matchesResponsible && matchesOrigin && matchesTags && matchesScheduled;
+    return matchesOrigin && matchesScheduled;
   };
 
   // Converte etapas do banco para o formato do Kanban (com fallback)
@@ -288,34 +283,23 @@ function PipeWhatsappInner() {
     return stagesToColumns(pipelineStages);
   }, [pipelineStages]);
 
-  // Organize data by status columns — orphan leads (stage_key not matching any column) fall into the first column
+  // Build columns from server-paginated stageData
   const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
-    if (!pipeData) return statusColumns.map(col => ({ ...col, items: [] }));
-
-    const knownStageIds = new Set(statusColumns.map(c => c.id));
-
-    const result = statusColumns.map(col => {
-      const columnItems = pipeData
-        .filter(item => item.status === col.id)
-        .filter(filterItems)
-        .map(transformToCard);
-
+    return statusColumns.map(col => {
+      const sd = stageData[col.id];
+      const items = sd
+        ? sd.items.filter(filterItemsLocal).map(transformToCard)
+        : [];
       return {
         ...col,
-        items: columnItems,
+        items,
+        totalCount: sd?.totalCount ?? items.length,
+        hasMore: sd?.hasMore ?? false,
+        isFetchingMore: sd?.isFetchingMore ?? false,
+        onLoadMore: sd?.fetchMore,
       };
     });
-
-    if (result.length > 0) {
-      const orphanItems = pipeData
-        .filter(item => !knownStageIds.has(item.status))
-        .filter(filterItems)
-        .map(transformToCard);
-      result[0].items = [...result[0].items, ...orphanItems];
-    }
-
-    return result;
-  }, [pipeData, pipelineStages, statusColumns, searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled, leadsWithSchedule, metricsRange]);
+  }, [stageData, statusColumns, filterOrigin, filterScheduled, leadsWithSchedule, metricsRange, metricsMap]);
 
   // ---------------------------------------------------------------------------
   // Mobile list view — derive stages + flat lead list from existing columns
@@ -328,7 +312,7 @@ function PipeWhatsappInner() {
   const mobileLeads = useMemo(() => {
     if (!pipeData) return [];
     return pipeData
-      .filter(filterItems)
+      .filter(filterItemsLocal)
       .map((item) => {
         const lead = item.lead;
         return {
@@ -343,7 +327,7 @@ function PipeWhatsappInner() {
           updated_at: item.stage_entered_at || item.updated_at,
         };
       });
-  }, [pipeData, searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled, leadsWithSchedule, metricsRange]);
+  }, [pipeData, filterOrigin, filterScheduled, leadsWithSchedule, metricsRange]);
 
   const handleMobileLeadClick = useCallback((leadId: string) => {
     const item = pipeData?.find((p) => p.lead_id === leadId);
@@ -359,20 +343,15 @@ function PipeWhatsappInner() {
     return pipeData.filter(item => item.lead == null).length;
   }, [pipeData]);
 
-  // Calculate stats based on FILTERED data (excludes ghost leads)
+  // Stats from server-side counts (accurate totals, not limited by loaded pages)
   const stats = useMemo(() => {
-    if (!pipeData) return { total: 0, abordado: 0, respondeu: 0, scheduled: 0, pending: 0 };
-
-    const filteredData = pipeData.filter(filterItems);
-
-    const total = filteredData.length;
-    const abordado = filteredData.filter(item => item.status === "abordado").length;
-    const respondeu = filteredData.filter(item => item.status === "respondeu").length;
-    const scheduled = filteredData.filter(item => item.status === "agendado").length;
-    const pending = filteredData.filter(item => item.status === "novo").length;
-
+    const total = Object.values(stageData).reduce((sum, s) => sum + (s?.totalCount ?? 0), 0);
+    const abordado = stageData["abordado"]?.totalCount ?? 0;
+    const respondeu = stageData["respondeu"]?.totalCount ?? 0;
+    const scheduled = stageData["agendado"]?.totalCount ?? 0;
+    const pending = stageData["novo"]?.totalCount ?? 0;
     return { total, abordado, respondeu, scheduled, pending };
-  }, [pipeData, searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled, leadsWithSchedule, metricsRange]);
+  }, [stageData]);
 
   const displayStats = useMemo(() => {
     if (!metricsRange || !metricsByPeriod) return stats;

@@ -33,7 +33,8 @@ import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanDo } from "@/hooks/useCanDo";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
-import { usePipePropostas, useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
+import { useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
+import { usePaginatedPipeline } from "@/hooks/usePaginatedPipeline";
 import { usePipePropostasMetrics } from "@/hooks/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
@@ -76,7 +77,6 @@ import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
 import { useLossReasons } from "@/hooks/useLossReasons";
 import { useSearchParams } from "react-router-dom";
-import { matchesResponsibleFilter } from "@/lib/kanban-filters";
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
@@ -267,8 +267,17 @@ function PipePropostasInner() {
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_propostas", organizationId); }, []);
 
-  const { data: pipeData, isLoading, refetch } = usePipePropostas();
   const { data: pipelineStages = [] } = usePipelineStages("propostas");
+  const { stageData, allItems: pipeData, isLoading } = usePaginatedPipeline(
+    "propostas",
+    pipelineStages,
+    {
+      search: searchTerm,
+      responsibleId: filterResponsible,
+      tagIds: filterTags,
+    }
+  );
+  const refetch = useCallback(() => {}, []);
   const { data: workflowCounts = {} } = useStageWorkflowCounts("propostas");
   const { data: teamMembers } = useTeamMembers();
   const updatePipeProposta = useUpdatePipeProposta();
@@ -383,83 +392,59 @@ function PipePropostasInner() {
     return stagesToColumns(pipelineStages);
   }, [pipelineStages]);
 
-  // Organize data by status columns — orphan leads (stage_key not matching any column) fall into the first column
-  const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
-    if (!pipeData) return statusColumns.map(col => ({ ...col, items: [] }));
+  // Client-side filters that can't be server-side (date range, origin, product type, priority, calor, scheduled)
+  // Search, responsible, and tags are already handled server-side by usePaginatedPipeline.
+  const filterItemsLocal = (item: any) => {
+    if (periodRange && !isPropostaInPeriod(item, periodRange.startStr, periodRange.endStr)) return false;
 
-    const knownStageIds = new Set(statusColumns.map(c => c.id));
+    const lead = item.lead;
+    if (!lead) return false;
 
-    const filterProposta = (item: any) => {
-      if (periodRange && !isPropostaInPeriod(item, periodRange.startStr, periodRange.endStr)) return false;
-
-      const lead = item.lead;
-      if (!lead) return false;
-
-      const matchesSearch = searchTerm === "" ||
-        lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead?.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead?.phone?.includes(searchTerm);
-
-      // Shared helper covers all 9 responsibility fields (entry + lead),
-      // including pre_sale_responsible_id / sale_responsible_id.
-      const matchesResponsible = matchesResponsibleFilter(item, filterResponsible);
-
-      let matchesType = filterProductType === "all";
-      if (!matchesType) {
-        const items = item.items || [];
-        if (items.length > 0) {
-          matchesType = items.some((it: any) => it.product?.type === filterProductType);
-        } else {
-          matchesType = item.product_type === filterProductType || item.product?.type === filterProductType;
-        }
+    let matchesType = filterProductType === "all";
+    if (!matchesType) {
+      const items = item.items || [];
+      if (items.length > 0) {
+        matchesType = items.some((it: any) => it.product?.type === filterProductType);
+      } else {
+        matchesType = item.product_type === filterProductType || item.product?.type === filterProductType;
       }
-
-      const rating = lead?.rating || 0;
-      let matchesPriority = true;
-      if (filterPriority === "high") matchesPriority = rating >= 8;
-      else if (filterPriority === "medium") matchesPriority = rating >= 5 && rating < 8;
-      else if (filterPriority === "low") matchesPriority = rating < 5;
-
-      const calor = item.calor ?? 5;
-      let matchesCalor = true;
-      if (filterCalor === "hot") matchesCalor = calor >= 7;
-      else if (filterCalor === "warm") matchesCalor = calor >= 4 && calor < 7;
-      else if (filterCalor === "cold") matchesCalor = calor < 4;
-
-      const matchesOrigin = filterOrigin.length === 0 || filterOrigin.includes(lead?.origin || "");
-      const matchesTags = filterTags.length === 0 ||
-        (lead?.lead_tags?.some((lt: any) => filterTags.includes(lt.tag?.id)) ?? false);
-      const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
-
-      return matchesSearch && matchesResponsible && matchesType && matchesPriority && matchesCalor && matchesOrigin && matchesTags && matchesScheduled;
-    };
-
-    const sortByRecent = (a: any, b: any) => {
-      const timeA = new Date(a.createdAt || 0).getTime();
-      const timeB = new Date(b.createdAt || 0).getTime();
-      return timeB - timeA;
-    };
-
-    const result = statusColumns.map(col => {
-      const columnItems = pipeData
-        .filter(item => item.status === col.id)
-        .filter(filterProposta)
-        .map(transformToCard)
-        .toSorted(sortByRecent);
-      return { ...col, items: columnItems };
-    });
-
-    if (result.length > 0) {
-      const orphanItems = pipeData
-        .filter(item => !knownStageIds.has(item.status))
-        .filter(filterProposta)
-        .map(transformToCard)
-        .toSorted(sortByRecent);
-      result[0].items = [...result[0].items, ...orphanItems];
     }
 
-    return result;
-  }, [pipeData, statusColumns, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterOrigin, filterTags, filterScheduled, leadsWithSchedule, periodRange]);
+    const rating = lead?.rating || 0;
+    let matchesPriority = true;
+    if (filterPriority === "high") matchesPriority = rating >= 8;
+    else if (filterPriority === "medium") matchesPriority = rating >= 5 && rating < 8;
+    else if (filterPriority === "low") matchesPriority = rating < 5;
+
+    const calor = item.calor ?? 5;
+    let matchesCalor = true;
+    if (filterCalor === "hot") matchesCalor = calor >= 7;
+    else if (filterCalor === "warm") matchesCalor = calor >= 4 && calor < 7;
+    else if (filterCalor === "cold") matchesCalor = calor < 4;
+
+    const matchesOrigin = filterOrigin.length === 0 || filterOrigin.includes(lead?.origin || "");
+    const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
+
+    return matchesType && matchesPriority && matchesCalor && matchesOrigin && matchesScheduled;
+  };
+
+  // Build columns from server-paginated stageData
+  const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
+    return statusColumns.map(col => {
+      const sd = stageData[col.id];
+      const items = sd
+        ? sd.items.filter(filterItemsLocal).map(transformToCard)
+        : [];
+      return {
+        ...col,
+        items,
+        totalCount: sd?.totalCount ?? items.length,
+        hasMore: sd?.hasMore ?? false,
+        isFetchingMore: sd?.isFetchingMore ?? false,
+        onLoadMore: sd?.fetchMore,
+      };
+    });
+  }, [stageData, statusColumns, filterProductType, filterPriority, filterCalor, filterOrigin, filterScheduled, leadsWithSchedule, periodRange]);
 
   // Count ghost leads — rows visíveis no pipe cujo join com leads é null.
   // Indica divergência entre RLS do pipe e de leads (ver GhostLeadsBanner).
@@ -468,17 +453,17 @@ function PipePropostasInner() {
     return pipeData.filter(item => item.lead == null).length;
   }, [pipeData]);
 
-  // Calculate stats (Vendas Total / Rec. Vendida / Projetos Vendidos por item quando houver items)
+  // Calculate stats — use server-side counts for totals, loaded items for value aggregation
   const stats = useMemo(() => {
-    if (!pipeData) return { 
-      total: 0, 
-      sold: 0, 
+    if (!pipeData) return {
+      total: 0,
+      sold: 0,
       soldCount: 0,
-      mrr: 0, 
-      projeto: 0, 
+      mrr: 0,
+      projeto: 0,
       inProgress: 0,
       inProgressCount: 0,
-      conversionRate: 0 
+      conversionRate: 0
     };
 
     const activeStatuses: PipePropostasStatus[] = ["marcar_compromisso", "compromisso_marcado", "proposta_enviada", "esfriou", "futuro"];
@@ -489,7 +474,6 @@ function PipePropostasInner() {
     let mrr = 0;
     let projeto = 0;
     for (const item of soldData) {
-      // contract_duration nulo/inválido → fallback de 1 mês
       const duration = Math.max(1, Number(item.contract_duration) || 1);
       const items = item.items?.filter((i: any) => i != null) ?? [];
       if (items.length > 0) {
@@ -497,13 +481,13 @@ function PipePropostasInner() {
           const val = Number(it.sale_value) || 0;
           const t = it.product?.type;
           if (t === "mrr") {
-            mrr += val;             // Rec. Vendida = valor mensal recorrente
-            sold += val * duration; // Venda Total = mensal × duração do contrato
+            mrr += val;
+            sold += val * duration;
           } else if (t === "projeto") {
             projeto += val;
-            sold += val;            // Projeto: valor pontual
+            sold += val;
           } else {
-            sold += val;            // Unitário: valor pontual
+            sold += val;
           }
         }
       } else {
@@ -523,20 +507,23 @@ function PipePropostasInner() {
     const total = pipeData.reduce((sum, item) => sum + (item.sale_value || 0), 0);
     const inProgress = inProgressData.reduce((sum, item) => sum + (item.sale_value || 0), 0);
 
-    const totalNoPipe = pipeData.length;
-    const conversionRate = totalNoPipe > 0 ? (soldData.length / totalNoPipe) * 100 : 0;
+    // Use server-side counts for accurate totals (not limited by loaded pages)
+    const totalNoPipe = Object.values(stageData).reduce((sum, s) => sum + (s?.totalCount ?? 0), 0);
+    const soldCount = stageData["vendido"]?.totalCount ?? soldData.length;
+    const inProgressCount = activeStatuses.reduce((sum, key) => sum + (stageData[key]?.totalCount ?? 0), 0);
+    const conversionRate = totalNoPipe > 0 ? (soldCount / totalNoPipe) * 100 : 0;
 
-    return { 
-      total, 
-      sold, 
-      soldCount: soldData.length,
-      mrr, 
-      projeto, 
+    return {
+      total,
+      sold,
+      soldCount,
+      mrr,
+      projeto,
       inProgress,
-      inProgressCount: inProgressData.length,
-      conversionRate 
+      inProgressCount,
+      conversionRate
     };
-  }, [pipeData]);
+  }, [pipeData, stageData]);
 
   // Exibir métricas: "Geral" = stats do pipe; outros modos = hook (vendidos no período); pipeline ativo sempre do pipe atual
   const displayStats = useMemo(() => {

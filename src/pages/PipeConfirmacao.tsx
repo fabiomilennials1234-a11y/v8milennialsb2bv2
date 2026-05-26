@@ -19,8 +19,9 @@ import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanDo } from "@/hooks/useCanDo";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
-import { usePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
+import { useUpdatePipeConfirmacao, useCreatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks/usePipelineStages";
+import { usePaginatedPipeline } from "@/hooks/usePaginatedPipeline";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/hooks/useLeads";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
@@ -56,7 +57,6 @@ import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
 import { useSearchParams } from "react-router-dom";
-import { matchesResponsibleFilter } from "@/lib/kanban-filters";
 
 // Filter type aliases (previously from ConfirmacaoFilters)
 type OriginFilter = "all" | "whatsapp" | "meta_ads" | "instagram" | "tiktok" | "google_ads" | "site" | "landing_page" | "remarketing" | "indicacao" | "evento" | "prospeccao_ativa" | "cal" | "outro";
@@ -267,8 +267,17 @@ function PipeConfirmacaoInner() {
   useEffect(() => { trackModuleVisit("pipe_confirmacao", organizationId); }, []);
 
   const overdueDays = useConfirmacaoOverdueDays();
-  const { data: pipeData, isLoading, refetch } = usePipeConfirmacao();
   const { data: pipelineStages = [] } = usePipelineStages("confirmacao");
+  const { stageData, allItems: pipeData, isLoading } = usePaginatedPipeline(
+    "confirmacao",
+    pipelineStages,
+    {
+      search: searchQuery,
+      responsibleId: selectedResponsibleId,
+      tagIds: selectedTags,
+    }
+  );
+  const refetch = useCallback(() => {}, []);
   const { data: workflowCounts = {} } = useStageWorkflowCounts("confirmacao");
   const responsibleMembers = useResponsibleMembers();
   const { data: orgTags = [] } = useTags();
@@ -422,82 +431,56 @@ function PipeConfirmacaoInner() {
     };
   };
 
-  const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
-    if (!pipeData) return statusColumns.map(col => ({ ...col, items: [] }));
+  // Client-side filters that can't be server-side (ghost lead, date range, origin, urgency, time, status, scheduled)
+  const filterItemsLocal = (item: any) => {
+    const lead = item.lead;
+    if (!lead) return false;
 
-    const now = new Date();
-    const weekStart = startOfWeek(now, { locale: ptBR });
-    const weekEnd = endOfWeek(now, { locale: ptBR });
-
-    const knownStageIds = new Set(statusColumns.map(c => c.id));
-
-    const filterConfirmacao = (item: any) => {
-      const lead = item.lead;
-      if (!lead) return false;
-
-      if (metricsRange) {
-        if (!item.created_at) return false;
-        if (item.created_at < metricsRange.startStr || item.created_at > metricsRange.endStr) return false;
-      }
-
-      const matchesSearch = searchQuery === "" ||
-        lead?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead?.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead?.phone?.includes(searchQuery);
-
-      let matchesOrigin = originFilter === "all" || lead?.origin === originFilter;
-      let matchesUrgency = urgencyFilter === "all" || lead?.urgency === urgencyFilter;
-
-      let matchesTime = true;
-      if (timeFilter === "today" && item.meeting_date) {
-        matchesTime = isToday(new Date(item.meeting_date));
-      } else if (timeFilter === "tomorrow" && item.meeting_date) {
-        matchesTime = isTomorrow(new Date(item.meeting_date));
-      } else if (timeFilter === "week" && item.meeting_date) {
-        matchesTime = isWithinInterval(new Date(item.meeting_date), { start: weekStart, end: weekEnd });
-      } else if (timeFilter === "overdue") {
-        matchesTime = isConfirmacaoOverdue(item.status, item.updated_at, overdueDays);
-      }
-
-      const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
-      // Shared helper covers all 9 responsibility fields (entry + lead),
-      // including pre_sale_responsible_id / sale_responsible_id.
-      const matchesResponsible = matchesResponsibleFilter(item, selectedResponsibleId);
-
-      const matchesTags = selectedTags.length === 0 ||
-        (lead?.lead_tags?.some((lt: any) => selectedTags.includes(lt.tag?.id)) ?? false);
-      const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
-
-      return matchesSearch && matchesOrigin && matchesUrgency && matchesTime && matchesStatus && matchesResponsible && matchesTags && matchesScheduled;
-    };
-
-    const sortByCreated = (a: any, b: any) => {
-      const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
-      return dateB - dateA;
-    };
-
-    const result = statusColumns.map(col => {
-      const columnItems = pipeData
-        .filter(item => item.status === col.id)
-        .filter(filterConfirmacao)
-        .sort(sortByCreated)
-        .map(transformToCard);
-
-      return { ...col, items: columnItems };
-    });
-
-    if (result.length > 0) {
-      const orphanItems = pipeData
-        .filter(item => !knownStageIds.has(item.status))
-        .filter(filterConfirmacao)
-        .sort(sortByCreated)
-        .map(transformToCard);
-      result[0].items = [...result[0].items, ...orphanItems];
+    if (metricsRange) {
+      if (!item.created_at) return false;
+      if (item.created_at < metricsRange.startStr || item.created_at > metricsRange.endStr) return false;
     }
 
-    return result;
-  }, [pipeData, statusColumns, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedTags, selectedResponsibleId, overdueDays, filterScheduled, leadsWithSchedule, metricsRange]);
+    const matchesOrigin = originFilter === "all" || lead?.origin === originFilter;
+    const matchesUrgency = urgencyFilter === "all" || lead?.urgency === urgencyFilter;
+
+    let matchesTime = true;
+    const now = new Date();
+    if (timeFilter === "today" && item.meeting_date) {
+      matchesTime = isToday(new Date(item.meeting_date));
+    } else if (timeFilter === "tomorrow" && item.meeting_date) {
+      matchesTime = isTomorrow(new Date(item.meeting_date));
+    } else if (timeFilter === "week" && item.meeting_date) {
+      const weekStart = startOfWeek(now, { locale: ptBR });
+      const weekEnd = endOfWeek(now, { locale: ptBR });
+      matchesTime = isWithinInterval(new Date(item.meeting_date), { start: weekStart, end: weekEnd });
+    } else if (timeFilter === "overdue") {
+      matchesTime = isConfirmacaoOverdue(item.status, item.updated_at, overdueDays);
+    }
+
+    const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
+    const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
+
+    return matchesOrigin && matchesUrgency && matchesTime && matchesStatus && matchesScheduled;
+  };
+
+  // Build columns from server-paginated stageData
+  const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
+    return statusColumns.map(col => {
+      const sd = stageData[col.id];
+      const items = sd
+        ? sd.items.filter(filterItemsLocal).map(transformToCard)
+        : [];
+      return {
+        ...col,
+        items,
+        totalCount: sd?.totalCount ?? items.length,
+        hasMore: sd?.hasMore ?? false,
+        isFetchingMore: sd?.isFetchingMore ?? false,
+        onLoadMore: sd?.fetchMore,
+      };
+    });
+  }, [stageData, statusColumns, originFilter, urgencyFilter, timeFilter, selectedStatuses, overdueDays, filterScheduled, leadsWithSchedule, metricsRange]);
 
   // Count ghost leads — rows visíveis no pipe cujo join com leads é null.
   // Indica divergência entre RLS do pipe e de leads (ver GhostLeadsBanner).

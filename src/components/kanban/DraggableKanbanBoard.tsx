@@ -18,7 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { motion } from "framer-motion";
-import { Plus, MoreHorizontal, Trash2, FileDown } from "lucide-react";
+import { Plus, MoreHorizontal, Trash2, FileDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -38,6 +38,10 @@ export interface KanbanColumn<T extends DraggableItem> {
   title: string;
   color: string;
   items: T[];
+  totalCount?: number;
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 interface DraggableKanbanBoardProps<T extends DraggableItem> {
@@ -98,7 +102,7 @@ function DroppableColumn<T extends DraggableItem>({
           />
           <h3 className="font-semibold text-sm">{column.title}</h3>
           <span className="bg-muted text-muted-foreground text-xs font-medium px-2 py-0.5 rounded-full">
-            {column.items.length}
+            {column.totalCount ?? column.items.length}
           </span>
           {renderColumnExtra && renderColumnExtra(column)}
         </div>
@@ -149,7 +153,17 @@ function DroppableColumn<T extends DraggableItem>({
 
       {renderColumnFooter && renderColumnFooter(column)}
 
-      <div className="space-y-3 min-h-[100px] overflow-y-auto flex-1 min-h-0">{children}</div>
+      <div className="space-y-3 min-h-[100px] overflow-y-auto flex-1 min-h-0">
+        {children}
+        {column.hasMore && column.onLoadMore && (
+          <LoadMoreSentinel onLoadMore={column.onLoadMore} isFetching={column.isFetchingMore ?? false} />
+        )}
+        {!column.hasMore && column.isFetchingMore && (
+          <div className="flex justify-center py-2">
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 }
@@ -189,6 +203,29 @@ function SortableCard<T extends DraggableItem>({
       )}
     >
       {renderCard(item, isDragging)}
+    </div>
+  );
+}
+
+function LoadMoreSentinel({ onLoadMore, isFetching }: { onLoadMore: () => void; isFetching: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !isFetching) onLoadMore();
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onLoadMore, isFetching]);
+
+  return (
+    <div ref={ref} className="flex justify-center py-2">
+      {isFetching && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
     </div>
   );
 }
