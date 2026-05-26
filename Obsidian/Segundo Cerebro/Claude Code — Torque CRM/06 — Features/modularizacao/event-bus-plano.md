@@ -1,3 +1,16 @@
+---
+type: reference
+title: Modularização — Plano de Event-Bus
+status: active
+created: 2026-05-26
+updated: 2026-05-26
+tags: [modularizacao, event-bus, arquitetura]
+related:
+  - "[[ADR-2026-05-26-modularizacao-monolito-modular]]"
+  - "[[auditoria-duplicatas]]"
+owner: gabriel
+---
+
 # Modularização — Plano de Event-Bus
 
 **Created:** 2026-05-26

@@ -1,3 +1,16 @@
+---
+type: reference
+title: Modularização — Auditoria de Duplicatas
+status: active
+created: 2026-05-26
+updated: 2026-05-26
+tags: [modularizacao, auditoria, duplicatas]
+related:
+  - "[[ADR-2026-05-26-modularizacao-monolito-modular]]"
+  - "[[event-bus-plano]]"
+owner: gabriel
+---
+
 # Modularização — Auditoria de Duplicatas
 
 **Created:** 2026-05-26
