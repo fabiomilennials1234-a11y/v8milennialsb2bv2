@@ -128,9 +128,9 @@ const turboSubItems: NavItem[] = [
 
 // Primary items — always visible in the top bar
 const primaryNavItems: NavItemWithChildren[] = [
-  { label: "Comando", icon: Gauge, path: "/" },
+  { label: "Comando", icon: Gauge, path: "/dashboard" },
   { label: "Chat", icon: Zap, path: "/chat" },
-  { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
+  // { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
@@ -151,11 +151,11 @@ const moreNavItems: NavItemWithChildren[] = [
 
 // All items combined for mobile
 const allNavItems: NavItemWithChildren[] = [
-  { label: "Comando", icon: Gauge, path: "/" },
+  { label: "Comando", icon: Gauge, path: "/dashboard" },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Chat", icon: Zap, path: "/chat" },
-  { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
+  // { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
   { label: "Combustível", icon: Fuel, path: "/leads" },
   { label: "Negócios", icon: Briefcase, path: "/negocios" },
@@ -182,7 +182,7 @@ const FUNIS_PATHS = ["/pipe-whatsapp", "/pipe-confirmacao", "/pipe-propostas", "
 const TURBO_PATHS = ["/copilot", "/automacoes"] as const;
 
 const OUTBOUND_MEMBER_ALLOWED_PATHS = [
-  "/",
+  "/dashboard",
   "/chat",
   "/pipe-whatsapp",
   "/pipe-confirmacao",
@@ -306,7 +306,7 @@ export function TopNavigation() {
   };
 
   const isActive = (path: string) => {
-    if (path === "/") return location.pathname === "/";
+    if (path === "/dashboard") return location.pathname === "/dashboard" || location.pathname === "/";
     return location.pathname.startsWith(path);
   };
 
@@ -671,7 +671,7 @@ export function TopNavigation() {
     <>
       <header className="topnav-header" data-topnav>
         {/* ── Left: Logo ── */}
-        <NavLink to="/" className="flex items-center flex-shrink-0" title="Central de Comando">
+        <NavLink to="/dashboard" className="flex items-center flex-shrink-0" title="Central de Comando">
           <img src={torqueIcon} alt="Torque" className="h-7 w-7 object-contain xl:hidden" />
           <img src={isDark ? torqueLogo : torqueLogoDark} alt="Torque CRM" className="h-7 object-contain object-left hidden xl:block" style={{ width: 110 }} />
         </NavLink>
