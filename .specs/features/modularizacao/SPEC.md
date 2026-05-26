@@ -145,6 +145,24 @@ Cada slice = 1 PR pequeno, app não quebra ao mergear, sem dependência de slice
 
 **Order rationale**: tooling (slice 1) + skeleton (2) primeiro garantem que cada slice de domínio (3-14) tenha destino claro e violação detectável. Edge functions (15) depois do frontend porque alguns deploys dependem de path. Shared cleanup (16) depois que todos domínios já consumiram o que precisavam. Docs (17) por último com ESLint flip warn→error como gate.
 
+### Adendo 2026-05-26 — Dedup absorvido + Event-Bus piloto (slice 19)
+
+Auditoria pós-SPEC achou duplicatas que se não tratadas perpetuam dentro dos módulos novos. Detalhe: [`Obsidian/.../06 — Features/modularizacao/auditoria-duplicatas.md`](../../../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/06%20—%20Features/modularizacao/auditoria-duplicatas.md).
+
+**Tratamento**: cada slice de domínio (3-14) absorve sua própria dedup local (lead history×timeline×field-changes em slice 03; copilot toggle compose em slice 06; auditar `_shared/auth.ts` vs `user-auth.ts` em slice 16; etc.). +12h sobre estimativa original = ~92h total.
+
+**Slice piloto event-bus** após slice 17, **antes** de finalizar (18):
+
+| # | Branch | Escopo | Estimativa |
+|---|--------|--------|------------|
+| 19 | `feat/modularizacao/18-event-bus-pilot` | `domain_events` table + `_shared/events/{types,publish,dispatch,registry}` + edge `event-dispatcher` (cron 1/min) + migração piloto de `lead.stage_changed` (3 call sites → 1 publish + 1 handler workflow). Fecha backlog `triggerStageChangedWorkflows-duplicate.md`. | 8h |
+
+Detalhe: [`Obsidian/.../06 — Features/modularizacao/event-bus-plano.md`](../../../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/06%20—%20Features/modularizacao/event-bus-plano.md).
+
+Expansão pra outros 5+ eventos (`message.received/sent`, `lead.created`, `campaign.dispatched`, `workflow.step_executed`) = projeto separado pós-modularização. Slice 19 valida padrão + fecha 1 bug recorrente.
+
+**Renumeração**: slice de finalização passa de 18 → 20 (deletar legacy + ADR conclusão + PR develop→main).
+
 ## Critérios de decomposição (regra de classificação)
 
 **É módulo se** todos os 4 verdadeiros:
