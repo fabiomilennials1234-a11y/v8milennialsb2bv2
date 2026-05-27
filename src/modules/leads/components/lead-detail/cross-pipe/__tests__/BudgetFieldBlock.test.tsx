@@ -66,7 +66,7 @@ vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({
   triggerFollowUpAutomation: vi.fn(),
 }));
 
-vi.mock("@/hooks/useProducts", () => ({
+vi.mock("@/modules/carteira/hooks/useProducts", () => ({
   useActiveProducts: () => ({
     data: [
       { id: "p1", name: "Plano Starter", type: "mrr", ticket: 500, ticket_minimo: 300, sku: null },
@@ -82,7 +82,7 @@ vi.mock("@/modules/pipelines/hooks/usePipePropostaItems", () => ({
   useDeletePipePropostaItem: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) }),
 }));
 
-vi.mock("@/hooks/useTinyErp", () => ({
+vi.mock("@/modules/carteira/hooks/useTinyErp", () => ({
   useTinyErpStatus: () => ({ data: { connected: false } }),
 }));
 
@@ -98,15 +98,15 @@ vi.mock("@/hooks/useLossReasons", () => ({
 }));
 
 // Stub heavy sub-modals
-vi.mock("@/components/proposals/TinyErpConfirmOrderDialog", () => ({
+vi.mock("@/modules/carteira/components/proposal/TinyErpConfirmOrderDialog", () => ({
   TinyErpConfirmOrderDialog: ({ open }: { open: boolean }) =>
     open ? <div data-testid="tiny-erp-stub" /> : null,
 }));
-vi.mock("@/components/proposals/CadastroExternoConfirmDialog", () => ({
+vi.mock("@/modules/carteira/components/proposal/CadastroExternoConfirmDialog", () => ({
   CadastroExternoConfirmDialog: ({ open }: { open: boolean }) =>
     open ? <div data-testid="cadastro-externo-stub" /> : null,
 }));
-vi.mock("@/components/proposals/ProductCombobox", () => ({
+vi.mock("@/modules/carteira/components/proposal/ProductCombobox", () => ({
   ProductCombobox: ({ value, onSelect }: { value: string; onSelect: (v: string) => void }) => (
     <button data-testid="product-combobox" onClick={() => onSelect("p1")}>
       {value || "Selecionar produto"}

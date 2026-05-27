@@ -1,7 +1,7 @@
 import { memo, useState } from "react";
 import { motion } from "framer-motion";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { useProductRanking } from "@/hooks/useProductRanking";
+import { useProductRanking } from "@/modules/carteira/hooks/useProductRanking";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PackageSearch } from "lucide-react";

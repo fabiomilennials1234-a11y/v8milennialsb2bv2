@@ -65,7 +65,7 @@ import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 import { useScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
 import { useOutboundMetrics } from "@/hooks/useOutboundMetrics";
 import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
-import { useProductRanking } from "@/hooks/useProductRanking";
+import { useProductRanking } from "@/modules/carteira/hooks/useProductRanking";
 
 // ── Tests ──
 const hooks: [string, () => any][] = [

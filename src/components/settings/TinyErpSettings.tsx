@@ -43,7 +43,7 @@ import {
   useTinyErpSyncProducts,
   useTinyErpSyncLogs,
   useUpdateTinyErpSettings,
-} from "@/hooks/useTinyErp";
+} from "@/modules/carteira/hooks/useTinyErp";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 

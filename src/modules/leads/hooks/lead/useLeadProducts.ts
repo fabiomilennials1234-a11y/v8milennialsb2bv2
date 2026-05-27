@@ -6,4 +6,4 @@
  * Este hook re-exporta useProducts para composição futura.
  */
 
-export { useProducts, useProductsWithVariants } from "@/hooks/useProducts";
+export { useProducts, useProductsWithVariants } from "@/modules/carteira/hooks/useProducts";

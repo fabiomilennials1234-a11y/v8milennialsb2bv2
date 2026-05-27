@@ -144,7 +144,7 @@ import {
   useUpdateTinyErpSettings,
   useTinyErpOrderMapping,
   useTinyErpFetchNfe,
-} from "@/hooks/useTinyErp";
+} from "@/modules/carteira/hooks/useTinyErp";
 import {
   useChecklists,
   useChecklistItems,

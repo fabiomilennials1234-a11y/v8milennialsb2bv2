@@ -18,11 +18,11 @@ import {
   useUpdateDeal,
   type Deal,
   type DealsFilter,
-} from "@/hooks/useDeals";
-import { DealKPICards } from "@/components/deals/DealKPICards";
-import { DealDetailDrawer } from "@/components/deals/DealDetailDrawer";
-import { DealKanbanCard } from "@/components/deals/DealKanbanCard";
-import { CreateDealDialog } from "@/components/deals/CreateDealDialog";
+} from "@/modules/carteira/hooks/useDeals";
+import { DealKPICards } from "@/modules/carteira/components/deal/DealKPICards";
+import { DealDetailDrawer } from "@/modules/carteira/components/deal/DealDetailDrawer";
+import { DealKanbanCard } from "@/modules/carteira/components/deal/DealKanbanCard";
+import { CreateDealDialog } from "@/modules/carteira/components/deal/CreateDealDialog";
 import {
   DraggableKanbanBoard,
   type KanbanColumn,

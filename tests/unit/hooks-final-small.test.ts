@@ -162,7 +162,7 @@ describe("useMasterAuditLogs", () => {
 });
 
 // ─── useUpsellCampanhas ───
-import { useUpsellCampanhas } from "@/hooks/useUpsellCampanhas";
+import { useUpsellCampanhas } from "@/modules/carteira/hooks/useUpsellCampanhas";
 describe("useUpsellCampanhas", () => {
   it("fetches upsell campaigns", async () => {
     const { result } = renderHook(() => useUpsellCampanhas(), { wrapper: w() });

@@ -14,8 +14,8 @@ import { ImportLeadsFunnelContent } from "@/modules/leads";
 import { ExportLeadsContent } from "@/modules/leads";
 import { PipeDispatchRulesSection } from "./PipeDispatchRulesSection";
 import { PipeDistributionSection } from "./PipeDistributionSection";
-import { UpsellStageRulesTab } from "@/components/upsell/UpsellStageRulesTab";
-import { ImportUpsellClientsContent } from "@/components/upsell/ImportUpsellClientsContent";
+import { UpsellStageRulesTab } from "@/modules/carteira/components/upsell/UpsellStageRulesTab";
+import { ImportUpsellClientsContent } from "@/modules/carteira/components/upsell/ImportUpsellClientsContent";
 
 const PIPE_LABELS: Record<PipelineType, string> = {
   whatsapp: "Qualificação",

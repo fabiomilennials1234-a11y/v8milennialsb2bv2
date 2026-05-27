@@ -22,20 +22,20 @@ import {
   type PipePropostasStatus,
   type PipeProposta,
 } from "@/modules/pipelines/hooks/usePipePropostas";
-import { useActiveProducts } from "@/hooks/useProducts";
+import { useActiveProducts } from "@/modules/carteira/hooks/useProducts";
 import {
   usePipePropostaItems,
   useCreatePipePropostaItem,
   useUpdatePipePropostaItem,
   useDeletePipePropostaItem,
 } from "@/modules/pipelines/hooks/usePipePropostaItems";
-import { useTinyErpStatus } from "@/hooks/useTinyErp";
+import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
 import { useCadastroExternoEnabled } from "@/hooks/useCadastroExterno";
 import { useLossReasons } from "@/hooks/useLossReasons";
 import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
-import { ProductCombobox } from "@/components/proposals/ProductCombobox";
-import { TinyErpConfirmOrderDialog } from "@/components/proposals/TinyErpConfirmOrderDialog";
-import { CadastroExternoConfirmDialog } from "@/components/proposals/CadastroExternoConfirmDialog";
+import { ProductCombobox } from "@/modules/carteira/components/proposal/ProductCombobox";
+import { TinyErpConfirmOrderDialog } from "@/modules/carteira/components/proposal/TinyErpConfirmOrderDialog";
+import { CadastroExternoConfirmDialog } from "@/modules/carteira/components/proposal/CadastroExternoConfirmDialog";
 import { cn } from "@/lib/utils";
 
 /**

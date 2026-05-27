@@ -20,7 +20,7 @@ import {
   useRemoveLeadProduct,
   type LeadProduct,
 } from "../../../hooks/useLeadProducts";
-import { useProducts } from "@/hooks/useProducts";
+import { useProducts } from "@/modules/carteira/hooks/useProducts";
 
 const fmt = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

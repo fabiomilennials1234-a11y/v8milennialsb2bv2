@@ -19,7 +19,7 @@ import {
   type Product,
   type ProductType,
   type ProductVariant,
-} from "@/hooks/useProducts";
+} from "@/modules/carteira/hooks/useProducts";
 
 const MOCK_PRODUCTS: Partial<Product>[] = [
   { id: "p1", name: "Plano Mensal", type: "mrr" as ProductType, is_active: true, ticket: 500 },

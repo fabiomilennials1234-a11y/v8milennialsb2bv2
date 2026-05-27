@@ -36,7 +36,7 @@ vi.mock("@/modules/copilot/hooks/useCopilotPromptBuilder", () => ({ generateProm
 vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r) }));
 vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/hooks/useTags", () => ({ useTags: () => ({ data: [] }) }));
-vi.mock("@/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
+vi.mock("@/modules/carteira/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn(), triggerLeadCreatedInCustomPipeline: vi.fn() }));
 vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
@@ -62,7 +62,7 @@ import { useLeadCustomFields } from "@/modules/leads";
 import { usePipeMetrics } from "@/modules/pipelines/hooks/usePipeMetrics";
 import { useRecentActivity } from "@/hooks/useRecentActivity";
 import { useSplitAbMetrics } from "@/hooks/useSplitAbMetrics";
-import { useAutoMoveUpsellClients } from "@/hooks/useAutoMoveUpsellClients";
+import { useAutoMoveUpsellClients } from "@/modules/carteira/hooks/useAutoMoveUpsellClients";
 import { useAutoFollowUp } from "@/modules/workflows/hooks/useAutoFollowUp";
 
 // Hooks that throw on init due to complex side effects are excluded
