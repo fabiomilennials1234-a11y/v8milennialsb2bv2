@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
-import { useSDRPerformance } from "@/hooks/useSDRPerformance";
+import { useSDRPerformance } from "@/modules/engagement/hooks/useSDRPerformance";
 import type { TVPeriodRange } from "@/lib/tv-periods";
 
 const now = new Date(2026, 4, 22, 12, 0, 0);

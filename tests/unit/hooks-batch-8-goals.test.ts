@@ -72,7 +72,7 @@ import {
   useCreateGoal,
   useUpdateGoal,
   syncTeamFaturamentoGoal,
-} from "@/hooks/useGoals";
+} from "@/modules/engagement/hooks/useGoals";
 
 describe("useGoals", () => {
   beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock()); });

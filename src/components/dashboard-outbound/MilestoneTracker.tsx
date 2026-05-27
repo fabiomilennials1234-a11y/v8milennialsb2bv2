@@ -1,6 +1,6 @@
 import { CheckCircle2, Circle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Badge, UserBadge } from "@/hooks/useBadges";
+import type { Badge, UserBadge } from "@/modules/engagement/hooks/useBadges";
 import { MILESTONE_ICONS } from "./milestone-icons";
 
 interface Props {

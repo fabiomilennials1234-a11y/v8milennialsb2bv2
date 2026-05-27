@@ -18,7 +18,7 @@ import { NewLeadsBlock } from "@/components/tv/NewLeadsBlock";
 import { PeriodPill } from "@/components/tv/PeriodPill";
 import { RotatingSlot } from "@/components/tv/RotatingSlot";
 import { TVPeriodProvider, useTVPeriod } from "@/contexts/TVPeriodContext";
-import { useActiveCompetition, useCompetitionParticipants, useCompetitionPrizes } from "@/hooks/useCompetitions";
+import { useActiveCompetition, useCompetitionParticipants, useCompetitionPrizes } from "@/modules/engagement/hooks/useCompetitions";
 import { useRankingData } from "@/hooks/useDashboardMetrics";
 import { useAvatarMap } from "@/hooks/useAvatarMap";
 import { Button } from "@/components/ui/button";

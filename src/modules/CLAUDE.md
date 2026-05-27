@@ -31,7 +31,7 @@ Detalhe completo em `10 — Remodelagem/03-to-be/principios-modulo.md`.
 | 6 | [workflows](./workflows/CLAUDE.md) | workflows | Workflow DAG + Action Handler | 8 | Active |
 | 7 | [campaigns](./campaigns/CLAUDE.md) | campaigns | Campaign + Mass Send | 9 | Active |
 | 8 | [carteira](./carteira/CLAUDE.md) | carteira | Carteira Client + Order + Upsell | 10 | Active |
-| 9 | [engagement](./engagement/CLAUDE.md) | engagement | Checklist + Activity + Follow-up + Gamification | 11 | Skeleton |
+| 9 | [engagement](./engagement/CLAUDE.md) | engagement | Checklist + Activity + Follow-up + Gamification | 11 | Active |
 | 10 | [analytics](./analytics/CLAUDE.md) | analytics | Dashboard + Metric + Cohort | 12 | Skeleton |
 | 11 | [billing](./billing/CLAUDE.md) | billing | Subscription | 13 | Skeleton |
 | 12 | [marketing](./marketing/CLAUDE.md) | marketing | Lead Form + Landing + UTM | 13 | Skeleton |

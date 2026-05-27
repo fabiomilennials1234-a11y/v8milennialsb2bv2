@@ -1,4 +1,4 @@
-import { useVendedorRanking } from "@/hooks/useVendedorRanking";
+import { useVendedorRanking } from "@/modules/engagement/hooks/useVendedorRanking";
 import { formatBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Crown, Users } from "lucide-react";

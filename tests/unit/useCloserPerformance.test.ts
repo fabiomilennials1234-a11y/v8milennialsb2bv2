@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
-import { useCloserPerformance } from "@/hooks/useCloserPerformance";
+import { useCloserPerformance } from "@/modules/engagement/hooks/useCloserPerformance";
 import type { TVPeriodRange } from "@/lib/tv-periods";
 
 const inRangeDate = new Date(2026, 4, 20).toISOString();

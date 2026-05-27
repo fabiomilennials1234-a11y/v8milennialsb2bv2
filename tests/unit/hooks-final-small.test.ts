@@ -118,7 +118,7 @@ describe("useLeadScore", () => {
 });
 
 // ─── useAwards ───
-import { useAwards, useCreateAward } from "@/hooks/useAwards";
+import { useAwards, useCreateAward } from "@/modules/engagement/hooks/useAwards";
 describe("useAwards", () => {
   it("fetches awards", async () => {
     const { result } = renderHook(() => useAwards(), { wrapper: w() });
@@ -131,7 +131,7 @@ describe("useAwards", () => {
 });
 
 // ─── useBadges ───
-import { useBadges } from "@/hooks/useBadges";
+import { useBadges } from "@/modules/engagement/hooks/useBadges";
 describe("useBadges", () => {
   it("fetches badges", async () => {
     const { result } = renderHook(() => useBadges(), { wrapper: w() });

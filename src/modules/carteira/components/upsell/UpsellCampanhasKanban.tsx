@@ -5,7 +5,7 @@ import { LeadCard } from "@/modules/leads";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { NewOrderModal } from "@/modules/carteira/components/client/NewOrderModal";
-import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
+import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { useUpdateLead } from "@/modules/leads";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";

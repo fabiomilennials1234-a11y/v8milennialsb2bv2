@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useLogCall, OUTCOME_LABELS, type CallDirection, type CallOutcome } from "@/hooks/useCallLogs";
+import { useLogCall, OUTCOME_LABELS, type CallDirection, type CallOutcome } from "@/modules/engagement/hooks/useCallLogs";
 import { cn } from "@/lib/utils";
 
 interface LogCallModalProps {

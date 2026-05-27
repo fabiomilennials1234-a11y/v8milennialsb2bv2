@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Calendar, UserCheck, UserX, Users } from "lucide-react";
 import { useTVPeriod } from "@/contexts/TVPeriodContext";
-import { useSDRPerformance, type SDRPerformanceRow } from "@/hooks/useSDRPerformance";
+import { useSDRPerformance, type SDRPerformanceRow } from "@/modules/engagement/hooks/useSDRPerformance";
 
 type Metric = "marcadas" | "comparecidas" | "noShow";
 

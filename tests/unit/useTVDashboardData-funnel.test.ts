@@ -48,7 +48,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
 }));
 vi.mock("@/modules/pipelines/hooks/usePipePropostas", () => ({ usePipePropostas: () => ({ data: [] }) }));
 vi.mock("@/modules/pipelines/hooks/usePipeWhatsapp", () => ({ usePipeWhatsapp: () => ({ data: [] }) }));
-vi.mock("@/hooks/useGoals", () => ({
+vi.mock("@/modules/engagement/hooks/useGoals", () => ({
   useTeamGoals: () => ({ data: [{ type: "vendas", target_value: 100000, team_member_id: null, name: "Meta" }] }),
   useIndividualGoals: () => ({ data: { salesGoals: [], meetingsGoals: [] } }),
 }));

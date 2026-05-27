@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, Calendar, FileText, DollarSign, TrendingUp, Award } from "lucide-react";
 import { useTVPeriod } from "@/contexts/TVPeriodContext";
-import { useCloserPerformance } from "@/hooks/useCloserPerformance";
+import { useCloserPerformance } from "@/modules/engagement/hooks/useCloserPerformance";
 
 const formatCurrency = (v: number) => {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;

@@ -32,7 +32,7 @@ import { useResponsibleMembers } from "@/modules/identity";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/modules/leads";
 import { useUserRole, useFeaturePermission } from "@/modules/identity";
 import { useLogLeadAction } from "@/modules/leads";
-import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
+import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";

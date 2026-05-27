@@ -119,7 +119,7 @@ describe("useLeads — deeper", () => {
 });
 
 // ── Deeper: useGoals month/year variants ──
-import { useGoals } from "@/hooks/useGoals";
+import { useGoals } from "@/modules/engagement/hooks/useGoals";
 
 describe("useGoals — deeper", () => {
   it("specific month and year", () => {

@@ -65,7 +65,7 @@ vi.mock("@/modules/communication/lib/whatsapp", () => ({
   formatPhoneForWhatsApp: (s: string) => s,
 }));
 
-vi.mock("@/components/followups/ScheduleFollowUpButton", () => ({
+vi.mock("@/modules/engagement/components/followups/ScheduleFollowUpButton", () => ({
   ScheduleFollowUpButton: () => null,
 }));
 

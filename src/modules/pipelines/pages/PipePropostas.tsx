@@ -56,7 +56,7 @@ import { DaysUntilMeeting } from "@/modules/carteira/components/proposal/DaysUnt
 import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
 import { useCadastroExternoEnabled } from "@/hooks/useCadastroExterno";
 import { CadastroExternoConfirmDialog } from "@/modules/carteira/components/proposal/CadastroExternoConfirmDialog";
-import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
+import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { useLeadsWithScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
 import { supabase } from "@/integrations/supabase/client";
 import { CalorAnalyticsChart } from "@/modules/carteira/components/proposal/CalorAnalyticsChart";

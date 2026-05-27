@@ -23,7 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
-import { MiniProgressRing } from "@/components/gamification/ProgressRing";
+import { MiniProgressRing } from "@/modules/engagement/components/gamification/ProgressRing";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { cn } from "@/lib/utils";
 

@@ -20,7 +20,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 
-import { useFollowUps } from "@/hooks/useFollowUps";
+import { useFollowUps } from "@/modules/engagement/hooks/useFollowUps";
 
 function mockFollowUpQuery(data: unknown[]) {
   mockFrom.mockReturnValue({

@@ -39,7 +39,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useChecklistTemplates } from "@/hooks/useChecklistTemplates";
+import { useChecklistTemplates } from "@/modules/engagement/hooks/useChecklistTemplates";
 import { ClipboardList } from "lucide-react";
 import {
   DndContext,

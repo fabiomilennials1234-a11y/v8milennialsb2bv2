@@ -7,7 +7,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
+import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 
 interface QuickAddDailyActionProps {
   confirmacaoId: string;

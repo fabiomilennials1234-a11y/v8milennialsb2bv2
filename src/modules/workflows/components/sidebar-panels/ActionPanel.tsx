@@ -39,7 +39,7 @@ import { useTags } from "@/hooks/useTags";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 import { CampaignStageSelectorField } from "./CampaignStageSelectorField";
 import { CampaignTemplateSelectorField } from "./CampaignTemplateSelectorField";
-import { useChecklistTemplates } from "@/hooks/useChecklistTemplates";
+import { useChecklistTemplates } from "@/modules/engagement/hooks/useChecklistTemplates";
 
 function AssignResponsibleConfig({
   data,

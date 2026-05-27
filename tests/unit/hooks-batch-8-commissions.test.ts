@@ -76,7 +76,7 @@ import {
   useUpdateCommission,
   calculateOTEBonus,
   useCommissionSummary,
-} from "@/hooks/useCommissions";
+} from "@/modules/engagement/hooks/useCommissions";
 
 describe("useCommissions", () => {
   beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock()); });

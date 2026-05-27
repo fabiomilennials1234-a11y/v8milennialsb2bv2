@@ -41,10 +41,10 @@ const PipeConfirmacao = lazy(() => lazyRetry(() => import("@/modules/pipelines/p
 const PipePropostas = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipePropostas")));
 const PipeWhatsapp = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeWhatsapp")));
 const PipeFollowUps = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeFollowUps")));
-const Revisao = lazy(() => lazyRetry(() => import("./pages/Revisao")));
+const Revisao = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Revisao")));
 const Performance = lazy(() => lazyRetry(() => import("./pages/Performance")));
 const Equipe = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Equipe")));
-const Comissoes = lazy(() => lazyRetry(() => import("./pages/Comissoes")));
+const Comissoes = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Comissoes")));
 const Leads = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Leads")));
 
 const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash")));
@@ -67,10 +67,10 @@ import { ChatSkeleton } from "@/modules/communication/components/chat/ChatSkelet
 const Upsell = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Upsell")));
 const ClienteDetail = lazy(() => lazyRetry(() => import("@/modules/carteira/components/client/ClienteDetailPage")));
 const CustomPipeline = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/CustomPipeline")));
-const Agenda = lazy(() => lazyRetry(() => import("./pages/Agenda")));
+const Agenda = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Agenda")));
 const Privacidade = lazy(() => lazyRetry(() => import("./pages/Privacidade")));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/modules/copilot/components/playground").then(m => ({ default: m.CopilotPlayground }))));
-const ChecklistPage = lazy(() => lazyRetry(() => import("./pages/ChecklistPage")));
+const ChecklistPage = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/ChecklistPage")));
 const MessageTemplates = lazy(() => lazyRetry(() => import("./pages/MessageTemplates")));
 const Automacoes = lazy(() => lazyRetry(() => import("./modules/workflows/pages/Automacoes")));
 const AutomacoesEditor = lazy(() => lazyRetry(() => import("./modules/workflows/pages/AutomacoesEditor")));

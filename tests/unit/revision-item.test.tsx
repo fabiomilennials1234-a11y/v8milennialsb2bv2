@@ -25,11 +25,11 @@ vi.mock("@/modules/communication/components/chat/ScheduleMessageModal", () => ({
   ScheduleMessageModal: () => null,
 }));
 
-vi.mock("@/components/followups/ScheduleFollowUpModal", () => ({
+vi.mock("@/modules/engagement/components/followups/ScheduleFollowUpModal", () => ({
   ScheduleFollowUpModal: () => null,
 }));
 
-import { RevisionItem, type RevisionTask } from "@/components/revisao/RevisionItem";
+import { RevisionItem, type RevisionTask } from "@/modules/engagement/components/revisao/RevisionItem";
 
 // ── Helpers ──────────────────────────────────────────────
 

@@ -33,7 +33,7 @@ import {
   type CustomField,
 } from "../../hooks/useLeadCustomFields";
 import { useLeadHistory } from "../../hooks/useLeadTimeline";
-import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpButton";
+import { ScheduleFollowUpButton } from "@/modules/engagement/components/followups/ScheduleFollowUpButton";
 import { useCustomPipelines, useCustomPipelineStages, useAddLeadToCustomPipe } from "@/modules/pipelines/hooks/useCustomPipelines";
 import { useAllPipelineStageOptions, getPipelineTypeName } from "@/modules/pipelines/hooks/usePipelineStages";
 import { useCreatePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";

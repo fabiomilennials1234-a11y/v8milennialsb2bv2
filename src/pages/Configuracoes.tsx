@@ -102,7 +102,7 @@ const SandboxPanel = lazy(() =>
   }))
 );
 const ChecklistTemplatesManager = lazy(() =>
-  import("@/components/checklists/ChecklistTemplatesManager").then((m) => ({
+  import("@/modules/engagement/components/checklists/ChecklistTemplatesManager").then((m) => ({
     default: m.ChecklistTemplatesManager,
   }))
 );

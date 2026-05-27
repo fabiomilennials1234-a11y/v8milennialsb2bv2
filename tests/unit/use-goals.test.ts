@@ -15,7 +15,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { useGoals, type Goal } from "@/hooks/useGoals";
+import { useGoals, type Goal } from "@/modules/engagement/hooks/useGoals";
 
 function mockGoalQuery(data: unknown[]) {
   mockFrom.mockReturnValue({

@@ -1,6 +1,6 @@
 import { memo, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useSellerActivity } from "@/hooks/useSellerActivity";
+import { useSellerActivity } from "@/modules/engagement/hooks/useSellerActivity";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users, ChevronDown, ChevronUp } from "lucide-react";

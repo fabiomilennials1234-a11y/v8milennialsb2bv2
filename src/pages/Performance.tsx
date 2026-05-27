@@ -5,11 +5,11 @@ import {
   Trophy, Target, Gift, Medal, Award, TrendingUp, Star, Crown,
   Flame, Calendar, Users, Plus, Edit2, Trash2, CheckCircle, Lock, Sparkles
 } from "lucide-react";
-import { useActiveCompetition, useCompetitionParticipants, useCompetitionPrizes, type Competition } from "@/hooks/useCompetitions";
+import { useActiveCompetition, useCompetitionParticipants, useCompetitionPrizes, type Competition } from "@/modules/engagement/hooks/useCompetitions";
 import { CompetitionPodiumV2 } from "@/components/performance/CompetitionPodiumV2";
 import { CompetitionRankingListV2 } from "@/components/performance/CompetitionRankingListV2";
 import { CreateCompetitionModal } from "@/components/performance/CreateCompetitionModal";
-import { useRankingTransitions } from "@/hooks/useRankingTransitions";
+import { useRankingTransitions } from "@/modules/engagement/hooks/useRankingTransitions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useAvatarMap } from "@/hooks/useAvatarMap";
@@ -46,11 +46,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ProgressRing, MiniProgressRing } from "@/components/gamification/ProgressRing";
-import { AchievementBadge, BadgeType } from "@/components/gamification/AchievementBadge";
-import { CelebrationEffect } from "@/components/gamification/CelebrationEffect";
-import { useTeamGoals, useGoals, useCreateGoal, useUpdateGoal, Goal } from "@/hooks/useGoals";
-import { useAwards, useCreateAward, useUpdateAward, useDeleteAward, Award as AwardType } from "@/hooks/useAwards";
+import { ProgressRing, MiniProgressRing } from "@/modules/engagement/components/gamification/ProgressRing";
+import { AchievementBadge, BadgeType } from "@/modules/engagement/components/gamification/AchievementBadge";
+import { CelebrationEffect } from "@/modules/engagement/components/gamification/CelebrationEffect";
+import { useTeamGoals, useGoals, useCreateGoal, useUpdateGoal, Goal } from "@/modules/engagement/hooks/useGoals";
+import { useAwards, useCreateAward, useUpdateAward, useDeleteAward, Award as AwardType } from "@/modules/engagement/hooks/useAwards";
 import { useDashboardMetrics, useRankingData } from "@/hooks/useDashboardMetrics";
 import { useTeamMembers, isVirtualTeamMember, type TeamMember } from "@/modules/identity";
 import { filterVisibleRanking } from "@/lib/visible-ranking";

@@ -48,7 +48,7 @@ vi.mock("@/modules/campaigns/hooks/useCampanhas", () => ({ useCampanhas: () => (
 vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }) }));
 
 // ── Imports ──
-import { useAcoesDoDia } from "@/hooks/useAcoesDoDia";
+import { useAcoesDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { useAgentDocuments } from "@/modules/copilot/hooks/useAgentDocuments";
 import { useAgentFollowupRules } from "@/modules/copilot/hooks/useAgentFollowupRules";
 import { useAgentKanbanRules } from "@/modules/copilot/hooks/useAgentKanbanRules";
@@ -60,7 +60,7 @@ import { useExportLeads } from "@/modules/leads";
 import { useHelpCenter } from "@/hooks/useHelpCenter";
 import { useLeadCustomFields } from "@/modules/leads";
 import { usePipeMetrics } from "@/modules/pipelines/hooks/usePipeMetrics";
-import { useRecentActivity } from "@/hooks/useRecentActivity";
+import { useRecentActivity } from "@/modules/engagement/hooks/useRecentActivity";
 import { useSplitAbMetrics } from "@/hooks/useSplitAbMetrics";
 import { useAutoMoveUpsellClients } from "@/modules/carteira/hooks/useAutoMoveUpsellClients";
 import { useAutoFollowUp } from "@/modules/workflows/hooks/useAutoFollowUp";

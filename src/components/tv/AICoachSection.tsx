@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useTVDashboardData } from "@/hooks/useTVDashboardData";
 import { useTeamMembers } from "@/modules/identity";
-import { useIndividualGoals } from "@/hooks/useGoals";
+import { useIndividualGoals } from "@/modules/engagement/hooks/useGoals";
 
 // ── Types ──────────────────────────────────────────────────
 
