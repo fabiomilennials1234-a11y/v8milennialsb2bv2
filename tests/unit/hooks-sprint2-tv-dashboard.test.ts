@@ -167,7 +167,7 @@ vi.mock("@/modules/identity/hooks/useUserRole", () => ({
 
 // RPC canônica (ADR 2026-04-24): vendaTotal = Σ sale_value (sem × duration).
 // Mock espelha a resposta de get_dashboard_metrics para o fixture acima.
-vi.mock("@/hooks/useDashboardMetrics", () => ({
+vi.mock("@/modules/analytics/hooks/useDashboardMetrics", () => ({
   useDashboardMetrics: () => ({
     data: {
       totalLeads: 0,
@@ -213,7 +213,7 @@ function createWrapper() {
 
 // ---- Import hook ----
 
-import { useTVDashboardData } from "@/hooks/useTVDashboardData";
+import { useTVDashboardData } from "@/modules/analytics/hooks/useTVDashboardData";
 
 // ---- Tests ----
 

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useCohortAnalysis, type CohortRow } from "@/hooks/useCohortAnalysis";
+import { useCohortAnalysis, type CohortRow } from "@/modules/analytics/hooks/useCohortAnalysis";
 import { cn } from "@/lib/utils";
 import {
   Select,

@@ -1,12 +1,12 @@
 import { motion } from "framer-motion";
 import { Target, Users, TrendingUp, Calendar, Zap, Trophy, Flame, Star, Crown, Award } from "lucide-react";
-import { GoalProgress } from "@/components/dashboard/GoalProgress";
+import { GoalProgress } from "@/modules/analytics/components/dashboard/GoalProgress";
 import { ProgressRing } from "@/modules/engagement/components/gamification/ProgressRing";
 import { AchievementBadge, BadgeType } from "@/modules/engagement/components/gamification/AchievementBadge";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useAvatarMap } from "@/hooks/useAvatarMap";
 import { useTeamGoals, useIndividualGoals } from "@/modules/engagement/hooks/useGoals";
-import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
+import { useDashboardMetrics } from "@/modules/analytics/hooks/useDashboardMetrics";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";

@@ -47,7 +47,7 @@ import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportS
 import { LeadCard, type LeadCardData } from "@/modules/leads";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
-import { FunnelChart } from "@/components/dashboard/FunnelChart";
+import { FunnelChart } from "@/modules/analytics/components/dashboard/FunnelChart";
 import { CalorSlider, CalorBadge } from "@/modules/carteira/components/proposal/CalorSlider";
 import { QuickAddDailyAction } from "@/modules/carteira/components/proposal/QuickAddDailyAction";
 import { CommitmentDateModal } from "@/modules/carteira/components/proposal/CommitmentDateModal";

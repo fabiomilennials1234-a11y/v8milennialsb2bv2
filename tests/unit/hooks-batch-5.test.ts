@@ -39,13 +39,13 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: v
 vi.mock("@/modules/carteira/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
 
 // ── Imports ──
-import { useAnalyticsComercial } from "@/hooks/useAnalyticsComercial";
-import { useAnalyticsEngajamento } from "@/hooks/useAnalyticsEngajamento";
-import { useAnalyticsFilters } from "@/hooks/useAnalyticsFilters";
-import { useAnalyticsFinanceiro } from "@/hooks/useAnalyticsFinanceiro";
-import { useAnalyticsOverview } from "@/hooks/useAnalyticsOverview";
-import { useAnalyticsPipesFunis } from "@/hooks/useAnalyticsPipesFunis";
-import { useAnalyticsUtms } from "@/hooks/useAnalyticsUtms";
+import { useAnalyticsComercial } from "@/modules/analytics/hooks/useAnalyticsComercial";
+import { useAnalyticsEngajamento } from "@/modules/analytics/hooks/useAnalyticsEngajamento";
+import { useAnalyticsFilters } from "@/modules/analytics/hooks/useAnalyticsFilters";
+import { useAnalyticsFinanceiro } from "@/modules/analytics/hooks/useAnalyticsFinanceiro";
+import { useAnalyticsOverview } from "@/modules/analytics/hooks/useAnalyticsOverview";
+import { useAnalyticsPipesFunis } from "@/modules/analytics/hooks/useAnalyticsPipesFunis";
+import { useAnalyticsUtms } from "@/modules/analytics/hooks/useAnalyticsUtms";
 import { useUpsellClients } from "@/modules/carteira/hooks/useUpsellClients";
 import { useUpsellMetrics } from "@/modules/carteira/hooks/useUpsellMetrics";
 import { useUpsellOrders } from "@/modules/carteira/hooks/useUpsellOrders";

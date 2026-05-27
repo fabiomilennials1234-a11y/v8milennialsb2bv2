@@ -61,9 +61,9 @@ import { useMasterAuditLogs } from "@/modules/identity/hooks/useMasterAuditLogs"
 import { useAvatarMap } from "@/hooks/useAvatarMap";
 import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
 import { useDailyPriorities } from "@/modules/engagement/hooks/useDailyPriorities";
-import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
+import { useDashboardMetrics } from "@/modules/analytics/hooks/useDashboardMetrics";
 import { useScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
-import { useOutboundMetrics } from "@/hooks/useOutboundMetrics";
+import { useOutboundMetrics } from "@/modules/analytics/hooks/useOutboundMetrics";
 import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
 import { useProductRanking } from "@/modules/carteira/hooks/useProductRanking";
 

@@ -36,13 +36,13 @@ function lazyRetry<T extends { default: any }>(
 
 // Lazy-loaded pages — cada página vira um chunk separado (com retry automático)
 const Auth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Auth")));
-const Dashboard = lazy(() => lazyRetry(() => import("./pages/Dashboard")));
+const Dashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Dashboard")));
 const PipeConfirmacao = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeConfirmacao")));
 const PipePropostas = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipePropostas")));
 const PipeWhatsapp = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeWhatsapp")));
 const PipeFollowUps = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeFollowUps")));
 const Revisao = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Revisao")));
-const Performance = lazy(() => lazyRetry(() => import("./pages/Performance")));
+const Performance = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Performance")));
 const Equipe = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Equipe")));
 const Comissoes = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Comissoes")));
 const Leads = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Leads")));
@@ -50,7 +50,7 @@ const Leads = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Leads")))
 const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash")));
 const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
 const Configuracoes = lazy(() => lazyRetry(() => import("./pages/Configuracoes")));
-const TVDashboard = lazy(() => lazyRetry(() => import("./pages/TVDashboard")));
+const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
 const Campanhas = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/Campanhas")));
 const CampanhaDetail = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/CampanhaDetail")));
 const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));

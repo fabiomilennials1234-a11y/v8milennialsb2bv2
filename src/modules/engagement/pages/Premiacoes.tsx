@@ -26,7 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useAwards, useCreateAward, useUpdateAward, useDeleteAward, Award as AwardType } from "@/modules/engagement/hooks/useAwards";
 import { useUserRole } from "@/modules/identity";
-import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
+import { useDashboardMetrics } from "@/modules/analytics/hooks/useDashboardMetrics";
 import { ProgressRing } from "@/modules/engagement/components/gamification/ProgressRing";
 import { CelebrationEffect } from "@/modules/engagement/components/gamification/CelebrationEffect";
 import { cn } from "@/lib/utils";

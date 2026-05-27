@@ -56,7 +56,7 @@ vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useUserRole: () => "admin",
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
 }));
-vi.mock("@/hooks/useDashboardMetrics", () => ({
+vi.mock("@/modules/analytics/hooks/useDashboardMetrics", () => ({
   useDashboardMetrics: () => ({ data: { vendaTotal: 0, vendaMRR: 0, vendaProjeto: 0 } }),
   useConversionRates: () => ({ data: { meetingsRates: [], salesRates: [] } }),
   useFunnelData: () => ({ data: [] }),
@@ -124,7 +124,7 @@ function createWrapper() {
     React.createElement(QueryClientProvider, { client: qc }, children);
 }
 
-import { useTVDashboardData } from "@/hooks/useTVDashboardData";
+import { useTVDashboardData } from "@/modules/analytics/hooks/useTVDashboardData";
 
 describe("useTVDashboardData — funnel regression", () => {
   it("reunioesMarcadas conta por metrics_period_at (não meeting_date)", async () => {

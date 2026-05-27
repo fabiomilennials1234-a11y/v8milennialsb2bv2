@@ -2,8 +2,8 @@ import { memo } from "react";
 import { motion } from "framer-motion";
 import { Trophy, Crown, Medal, Award } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { OriginMetrics } from "@/hooks/useMktByOrigin";
-import { ORIGIN_LABELS, ORIGIN_COLORS, type LeadOrigin } from "@/hooks/useMktOriginConfig";
+import type { OriginMetrics } from "@/modules/analytics/hooks/useMktByOrigin";
+import { ORIGIN_LABELS, ORIGIN_COLORS, type LeadOrigin } from "@/modules/analytics/hooks/useMktOriginConfig";
 
 const POSITION_ICONS = [Crown, Medal, Award] as const;
 const POSITION_BG = ["bg-yellow-500/10", "bg-slate-400/10", "bg-amber-600/10"];

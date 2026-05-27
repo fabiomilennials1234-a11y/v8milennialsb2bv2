@@ -61,7 +61,7 @@ import { useHelpCenter } from "@/hooks/useHelpCenter";
 import { useLeadCustomFields } from "@/modules/leads";
 import { usePipeMetrics } from "@/modules/pipelines/hooks/usePipeMetrics";
 import { useRecentActivity } from "@/modules/engagement/hooks/useRecentActivity";
-import { useSplitAbMetrics } from "@/hooks/useSplitAbMetrics";
+import { useSplitAbMetrics } from "@/modules/analytics/hooks/useSplitAbMetrics";
 import { useAutoMoveUpsellClients } from "@/modules/carteira/hooks/useAutoMoveUpsellClients";
 import { useAutoFollowUp } from "@/modules/workflows/hooks/useAutoFollowUp";
 

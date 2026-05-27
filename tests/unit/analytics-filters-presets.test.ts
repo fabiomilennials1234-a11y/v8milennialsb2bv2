@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { differenceInCalendarDays, startOfDay, subDays } from "date-fns";
-import { getPresetDates, getComparisonDates } from "@/hooks/useAnalyticsFilters";
+import { getPresetDates, getComparisonDates } from "@/modules/analytics/hooks/useAnalyticsFilters";
 
 // ─── Mocks required to import the hook file ───────────────────────────────────
 vi.mock("@/integrations/supabase/client", () => ({ supabase: {} }));
