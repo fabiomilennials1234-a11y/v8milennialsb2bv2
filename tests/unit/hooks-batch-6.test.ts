@@ -64,7 +64,7 @@ import { useWorkflowPortability } from "@/modules/workflows/hooks/useWorkflowPor
 import { useCopilotSubscription } from "@/modules/copilot/hooks/useCopilotSubscription";
 import { useOraculoChat } from "@/modules/copilot/hooks/useOraculoChat";
 import { usePrefetchPipes } from "@/modules/pipelines/hooks/usePrefetchPipes";
-import { useCouponValidation } from "@/hooks/useCouponValidation";
+import { useCouponValidation } from "@/modules/billing/hooks/useCouponValidation";
 import { useMetaConnection } from "@/modules/communication/hooks/useMetaConnection";
 import { useTVDashboardData } from "@/modules/analytics/hooks/useTVDashboardData";
 import { useDispatchQueueItems } from "@/modules/campaigns/hooks/useDispatchQueueItems";

@@ -108,6 +108,7 @@ n/a — analytics é read-only (consome eventos via aggregation tables/RPCs).
 - `@/modules/identity` — `useOrganization`, `useAuth`, `useIdentity`, `useCurrentTeamMember`, `useUserRole`, `useTeamMembers`, `useFeaturePermission`, `isVirtualTeamMember`, `TeamMember`
 - `@/modules/copilot` — `useOraculoChat` (consumido por Dashboard → OraculoChat/OraculoFloatingButton)
 - `@/modules/engagement` — `useActiveCompetition`, `useCompetitionParticipants`, `useCompetitionPrizes`, `useRankingTransitions`, `useTeamGoals`, `useGoals`, `useCreateGoal`, `useUpdateGoal`, `useAwards`, `useCreateAward`, `useUpdateAward`, `useDeleteAward`, `useBadges`, `useUserBadges`, `useMilestoneAutoUnlock`, `useCloserPerformance`, `useSDRPerformance`, components `ProgressRing`, `AchievementBadge`, `CelebrationEffect`
+- `@/modules/marketing` — `MktConfigModal`, `MktOriginCard`, `MktOriginRanking` (consumido por `components/analytics/sections/AquisicaoSection.tsx` via deep-import — UI de display de Mkt por origem)
 - `@/hooks/useRealtimeSubscription`, `@/hooks/useAvatarMap`, `@/hooks/usePersistedState`, `@/hooks/useOnboarding` — cross-cutting (slices 14+)
 - `@/integrations/supabase/client`, `@/integrations/supabase/types`
 

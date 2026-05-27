@@ -33,8 +33,8 @@ Detalhe completo em `10 — Remodelagem/03-to-be/principios-modulo.md`.
 | 8 | [carteira](./carteira/CLAUDE.md) | carteira | Carteira Client + Order + Upsell | 10 | Active |
 | 9 | [engagement](./engagement/CLAUDE.md) | engagement | Checklist + Activity + Follow-up + Gamification | 11 | Active |
 | 10 | [analytics](./analytics/CLAUDE.md) | analytics | Dashboard + Metric + Cohort | 12 | Active |
-| 11 | [billing](./billing/CLAUDE.md) | billing | Subscription | 13 | Skeleton |
-| 12 | [marketing](./marketing/CLAUDE.md) | marketing | Lead Form + Landing + UTM | 13 | Skeleton |
+| 11 | [billing](./billing/CLAUDE.md) | billing | Subscription | 13 | Active |
+| 12 | [marketing](./marketing/CLAUDE.md) | marketing | Lead Form + Landing + UTM | 13 | Active |
 | 13 | [integrations](./integrations/CLAUDE.md) | integrations | Provider adapters | 13 | Skeleton |
 | 14 | [platform](./platform/CLAUDE.md) | platform | Onboarding + Settings + Observability | 14 | Skeleton |
 

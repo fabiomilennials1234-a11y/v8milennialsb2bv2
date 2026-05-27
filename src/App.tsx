@@ -78,7 +78,7 @@ const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./modules/workflo
 
 
 const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
-const Landing = lazy(() => lazyRetry(() => import("./pages/Landing")));
+const Landing = lazy(() => lazyRetry(() => import("@/modules/marketing/pages/Landing")));
 const Signup = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Signup")));
 const ResetPassword = lazy(() => lazyRetry(() => import("@/modules/identity/pages/ResetPassword")));
 

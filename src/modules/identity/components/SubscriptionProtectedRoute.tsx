@@ -14,12 +14,12 @@ import { useAuth } from "../contexts/AuthContext";
 import {
   checkCurrentUserSubscription,
   type SubscriptionStatus,
-} from "@/lib/subscription";
+} from "@/modules/billing/lib/subscription";
 import { useUserRole, useCanManageCopilot } from "../hooks/useUserRole";
 import { useIdentity } from "../hooks/useIdentity";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
-import { OverdueBanner } from "@/components/subscription/OverdueBanner";
-import { SubscriptionBlockedPage } from "@/components/subscription/SubscriptionBlockedPage";
+import { OverdueBanner } from "@/modules/billing/components/subscription/OverdueBanner";
+import { SubscriptionBlockedPage } from "@/modules/billing/components/subscription/SubscriptionBlockedPage";
 
 interface SubscriptionProtectedRouteProps {
   children: ReactNode;

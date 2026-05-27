@@ -52,7 +52,7 @@ import { useAcoesDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { useAgentDocuments } from "@/modules/copilot/hooks/useAgentDocuments";
 import { useAgentFollowupRules } from "@/modules/copilot/hooks/useAgentFollowupRules";
 import { useAgentKanbanRules } from "@/modules/copilot/hooks/useAgentKanbanRules";
-import { useCadastroExterno } from "@/hooks/useCadastroExterno";
+import { useCadastroExterno } from "@/modules/marketing/hooks/useCadastroExterno";
 import { useConversationHistory } from "@/modules/communication/hooks/useConversationHistory";
 import { useConversationNotes } from "@/modules/communication/hooks/useConversationNotes";
 import { useCopilotAgentAudios } from "@/modules/copilot/hooks/useCopilotAgentAudios";

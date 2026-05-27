@@ -1,6 +1,6 @@
 # Module — billing
 
-**Status:** 🟡 Skeleton (slice 13 popula)
+**Status:** 🟢 Active (slice 13 — frontend popular completo. Edge functions Asaas/checkout ficam em slice 14)
 **BC:** billing
 **Entidade primária:** Subscription Plan + Asaas Payment
 **Owner:** finance / ops
@@ -11,53 +11,103 @@ Faturamento e assinatura da plataforma Torque (não confundir com Order da carte
 
 Inclui:
 - Planos (Starter, Pro, Enterprise — definição em `subscription_plans`)
-- Assinatura ativa por org
+- Assinatura ativa por org (status: trial, active, overdue, suspended, cancelled, expired)
 - Integração Asaas (gateway de pagamento brasileiro)
 - Provisionamento de org após checkout
 - Trial / grace period
 - Cobrança recorrente
-- Quota / seat usage (cross-cut com `identity`)
+- Validação de cupom no checkout
+- UX de cobrança (OverdueBanner, SubscriptionBlockedPage)
 
 ## Não-escopo
 
 - Pagamento do cliente final da org → `carteira` (TinyERP integration)
 - Comissões internas do time → `engagement`
+- Gate de subscription para rotas → `@/modules/identity/components/SubscriptionProtectedRoute` (consome `billing.checkSubscription` + components `OverdueBanner` / `SubscriptionBlockedPage` via deep-import)
+- Página `Configuracoes.tsx` (parte tem UI billing — split com `platform` definido em slice 14)
 
-## API pública (`index.ts`) — TBD slice 13
+## Estrutura
 
-Provável superfície:
-- Hooks: `useSubscription` (existir?), `useCouponValidation`
-- Components: `<SubscriptionProtectedRoute>` (talvez stay em `identity`), `<UpgradeBanner>`
-- Types: `SubscriptionPlan`, `BillingStatus`
-- Eventos (post slice 19): `subscription.activated`, `subscription.expired`, `payment.failed`
+```
+src/modules/billing/
+├── components/
+│   └── subscription/         # ex-src/components/subscription/  (2 files)
+│       ├── OverdueBanner.tsx
+│       └── SubscriptionBlockedPage.tsx
+├── hooks/
+│   └── useCouponValidation.ts  # ex-src/hooks/useCouponValidation.ts
+├── lib/
+│   └── subscription.ts         # ex-src/lib/subscription.ts (RPC org_get_subscription_status)
+├── index.ts                  # API pública (hooks + lib)
+└── CLAUDE.md                 # este arquivo
+```
+
+## API pública (`index.ts`)
+
+### Hooks
+- `useCouponValidation` (+ `CouponResult` type)
+
+### Lib (re-exportada como API estável)
+- `checkSubscription(orgId)` → `SubscriptionStatus`
+- `checkCurrentUserSubscription()` → `SubscriptionStatus | null`
+- `getCurrentOrganization()`
+- `SubscriptionStatus` (type)
+
+### Components
+NÃO re-exportados. `SubscriptionProtectedRoute` (em `identity`) faz deep-import legítimo:
+- `@/modules/billing/components/subscription/OverdueBanner`
+- `@/modules/billing/components/subscription/SubscriptionBlockedPage`
+
+### Eventos (post slice 19)
+- `subscription.activated`, `subscription.expired`, `payment.failed` (TBD slice 19)
 
 ## Áreas frágeis
 
-- Asaas webhook idempotency
-- Trial expiration grace period — quanto tempo lead/data fica acessível pós-cancel?
-- Multi-tenancy + plan limits enforcement server-side
+🟠 **Asaas webhook idempotency** — só no backend (slice 14 edge functions). NÃO migrado nesta slice.
 
-## Origem (pastas atuais que migrarão pra cá)
+🟠 **Trial / grace period** — lógica em `lib/subscription.ts` cruza `daysRemaining`, `graceRemaining`, `isOverdue`, `isBlocked`. NÃO tocar comportamento sem auditar a RPC `org_get_subscription_status` (server-side).
 
-Frontend:
-- `src/components/subscription/`
-- `src/hooks/useCouponValidation.ts`
-- `src/lib/subscription.ts`
-- `src/pages/Configuracoes.tsx` (parte de billing — auditar split com `platform`)
-- `src/components/SubscriptionProtectedRoute.tsx` (avaliar — pode ficar em `identity`)
+🟠 **Multi-tenancy + plan limits enforcement server-side** — depende da RPC; client-side é display only.
 
-Backend:
-- `supabase/functions/checkout-provision-org/` (não encontrado na lista atual — verificar nome real)
-- Asaas webhooks/edge functions (auditar — qual filename real?)
+## Dependências cross-module
+
+- `@/integrations/supabase/client` — RPC + auth
+- (consumido por) `@/modules/identity/components/SubscriptionProtectedRoute` — gate de rota lê `checkSubscription` + components de UI
+
+### Consumidores cross-module (importam de `@/modules/billing`)
+
+- `@/modules/identity/components/SubscriptionProtectedRoute` — deep-import `lib/subscription` + `components/subscription/OverdueBanner` + `components/subscription/SubscriptionBlockedPage`
+- `@/modules/copilot/hooks/useCopilotSubscription` — deep-import `lib/subscription` (`checkCurrentUserSubscription`)
+
+## Decisões — slice 13
+
+- **`src/components/branding/`** (TorqueLoader, V8Logo) — mencionado no skeleton anterior, MAS é UI cross-cutting (App.tsx, OnboardingGate, ProtectedRoute, Dashboard, Copilot). NÃO migrado nesta slice. Slice 17 decide destino (`src/ui/` ou `src/shared/`).
+- **`SubscriptionProtectedRoute`** — JÁ está em `@/modules/identity` desde slice 3. NÃO movido pra billing. Ele depende de billing (lib + components UI), não o contrário.
+- **`Configuracoes.tsx`** — fica em `src/pages/Configuracoes.tsx`. Slice 14 (platform) decide split entre billing/asaas/asaas-mgmt e platform/settings.
+- **`src/lib/subscription.ts`** → movido para `src/modules/billing/lib/subscription.ts`. RPC server-side preserva comportamento.
+
+## Dívidas técnicas
+
+- 🟠 **Asaas edge functions + checkout-provision-org** — slice 14 (backend).
+- 🟠 **Configuracoes.tsx** com UI mista (billing + platform settings) — slice 14 decide o split.
+
+## Origem (slice 13 — frontend migrado em 2026-05-27)
+
+Frontend (migrado pra cá):
+
+- ~~`src/components/subscription/`~~ (2 files: OverdueBanner, SubscriptionBlockedPage) → `./components/subscription/`
+- ~~`src/hooks/useCouponValidation.ts`~~ → `./hooks/useCouponValidation.ts`
+- ~~`src/lib/subscription.ts`~~ → `./lib/subscription.ts`
+
+Backend (próximas slices):
+
+- `supabase/functions/checkout-provision-org/`, `asaas-*`, `cron-asaas-*` (slice 14)
 
 ## Slice de migração
 
-**Slice 13** — `feat/modularizacao/12-billing-marketing` (3h compartilhado com marketing)
-
-## Dedup pendente
-
-- Confirmar quais edge functions de billing realmente existem hoje (Asaas integration espalhada?)
+**Slice 13** — `feat/modularizacao/12-billing-marketing` — completado 2026-05-27 (combinado com marketing).
 
 ## Refs
 
 - ADR: `Obsidian/.../04 — Decisões/ADR-2026-05-26-modularizacao-monolito-modular.md`
+- Slice de referência: slice 12 analytics (commit `06a1e63e`)
