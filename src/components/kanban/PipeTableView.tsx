@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ORIGIN_COLORS, type LeadCardData, type LeadCardVariant } from "@/components/leads/LeadCard";
+import { ORIGIN_COLORS, type LeadCardData, type LeadCardVariant } from "@/modules/leads";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";

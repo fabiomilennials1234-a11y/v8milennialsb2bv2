@@ -18,7 +18,7 @@ import { normalizePhone } from "@/lib/normalizePhone";
 import { useLeadByPhone } from "@/hooks/useWhatsAppLeadIntegration";
 import { ChatComposerShell } from "@/components/chat/composer/ChatComposerShell";
 import { InstanceOwnerModal } from "@/components/chat/admin/InstanceOwnerModal";
-import { useLeadWriteInstance } from "@/hooks/useLeadWriteInstance";
+import { useLeadWriteInstance } from "@/modules/leads";
 
 interface ChatBubbleThreadProps {
   phoneNumber: string;

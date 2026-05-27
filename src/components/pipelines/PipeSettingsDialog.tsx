@@ -7,11 +7,11 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Settings2, Layers, Type, Upload, FileDown, Send, Shuffle, Clock } from "lucide-react";
 import { type PipelineType, type PipelineStage } from "@/hooks/usePipelineStages";
-import { type FunnelDestination } from "@/hooks/useImportLeads";
+import { type FunnelDestination } from "@/modules/leads";
 import { ManagePipelineStagesContent } from "./ManagePipelineStagesModal";
-import { CustomFieldsManager } from "@/components/leads/CustomFieldsManager";
-import { ImportLeadsFunnelContent } from "@/components/leads/ImportLeadsFunnelModal";
-import { ExportLeadsContent } from "@/components/leads/ExportLeadsModal";
+import { CustomFieldsManager } from "@/modules/leads";
+import { ImportLeadsFunnelContent } from "@/modules/leads";
+import { ExportLeadsContent } from "@/modules/leads";
 import { PipeDispatchRulesSection } from "./PipeDispatchRulesSection";
 import { PipeDistributionSection } from "./PipeDistributionSection";
 import { UpsellStageRulesTab } from "@/components/upsell/UpsellStageRulesTab";

@@ -6,7 +6,7 @@ import { UtmBreadcrumb } from "../charts/UtmBreadcrumb";
 import { UtmKpiCards } from "../charts/UtmKpiCards";
 import { UtmDataTable } from "../charts/UtmDataTable";
 import { UtmLeadsList } from "../charts/UtmLeadsList";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 
 interface DrillDownState {

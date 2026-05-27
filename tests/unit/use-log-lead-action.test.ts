@@ -53,7 +53,7 @@ vi.mock("@/lib/analytics", () => ({
   track: (...a: unknown[]) => mockTrack(...a),
 }));
 
-import { useLogLeadAction, type LeadActionType } from "@/hooks/useLogLeadAction";
+import { useLogLeadAction, type LeadActionType } from "@/modules/leads";
 
 describe("LeadActionType", () => {
   it("includes core action types", () => {

@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ProductCombobox } from "./ProductCombobox";
-import { useLeads } from "@/hooks/useLeads";
+import { useLeads } from "@/modules/leads";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { useActiveProducts } from "@/hooks/useProducts";

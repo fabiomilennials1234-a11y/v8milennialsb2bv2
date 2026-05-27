@@ -45,10 +45,10 @@ const Revisao = lazy(() => lazyRetry(() => import("./pages/Revisao")));
 const Performance = lazy(() => lazyRetry(() => import("./pages/Performance")));
 const Equipe = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Equipe")));
 const Comissoes = lazy(() => lazyRetry(() => import("./pages/Comissoes")));
-const Leads = lazy(() => lazyRetry(() => import("./pages/Leads")));
+const Leads = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Leads")));
 
-const TrashPage = lazy(() => lazyRetry(() => import("./pages/Trash")));
-const Duplicates = lazy(() => lazyRetry(() => import("./pages/Duplicates")));
+const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash")));
+const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
 const Configuracoes = lazy(() => lazyRetry(() => import("./pages/Configuracoes")));
 const TVDashboard = lazy(() => lazyRetry(() => import("./pages/TVDashboard")));
 const Campanhas = lazy(() => lazyRetry(() => import("./pages/Campanhas")));

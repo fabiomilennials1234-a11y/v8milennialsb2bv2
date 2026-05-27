@@ -9,7 +9,7 @@ import { useCreateUpsellClient } from "@/hooks/useUpsellClients";
 import { useOrganization } from "@/modules/identity";
 import { usePipelineStages } from "@/hooks/usePipelineStages";
 import { useResponsibleMembers } from "@/modules/identity";
-import { useLeads } from "@/hooks/useLeads";
+import { useLeads } from "@/modules/leads";
 import { toast } from "sonner";
 
 interface CreateClientModalProps {

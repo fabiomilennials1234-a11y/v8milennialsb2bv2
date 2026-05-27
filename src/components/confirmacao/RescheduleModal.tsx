@@ -18,7 +18,7 @@ import { format, differenceInCalendarDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useUpdatePipeConfirmacao, type PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
-import { useLogLeadAction } from "@/hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/modules/leads";
 import { useGoogleCalendarStatus } from "@/hooks/useGoogleCalendar";
 import { useCalendarSharing } from "@/hooks/useGoogleCalendarSharing";
 import { useAuth } from "@/modules/identity";

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseFileToRows } from "@/hooks/useImportLeads";
+import { parseFileToRows } from "@/modules/leads";
 
 vi.mock("papaparse", () => ({
   default: {

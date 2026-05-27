@@ -28,7 +28,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useDebounce } from "@/hooks/useDebounce";
-import { LeadModal } from "@/components/leads/LeadModal";
+import { LeadModal } from "@/modules/leads";
 
 interface AddLeadToPipeModalProps {
   open: boolean;

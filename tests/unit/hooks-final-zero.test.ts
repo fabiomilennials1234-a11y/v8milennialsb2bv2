@@ -39,7 +39,7 @@ vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => 
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {}, useAllPipelineStages: () => ({ data: [] }) }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r), useAgentFollowupRules: () => ({ data: [] }) }));
 vi.mock("@/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
 vi.mock("@/hooks/useWhatsAppInstances", () => ({ useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }) }));
@@ -308,7 +308,7 @@ describe("useCadastroExterno", () => {
 });
 
 // ═══ 16. useLogLeadAction (27 LOC) ═══
-import { useLogLeadAction as useLogAction } from "@/hooks/useLogLeadAction";
+import { useLogLeadAction as useLogAction } from "@/modules/leads";
 
 describe("useLogLeadAction", () => {
   it("returns a function", () => {

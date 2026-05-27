@@ -29,7 +29,7 @@ import {
   type CreateMeetingInput,
 } from "@/hooks/useMeetings";
 import { useTeamMembers } from "@/modules/identity";
-import { useLeads } from "@/hooks/useLeads";
+import { useLeads } from "@/modules/leads";
 
 // â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

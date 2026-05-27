@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateFollowUp } from "@/hooks/useFollowUps";
-import { useLogLeadAction } from "@/hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/modules/leads";
 import { useTeamMembers } from "@/modules/identity";
 import { cn } from "@/lib/utils";
 

@@ -5,12 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAddCampanhaLead, useCampanha, CampanhaStage, CampanhaMember } from "@/hooks/useCampanhas";
-import { useLeads } from "@/hooks/useLeads";
+import { useLeads } from "@/modules/leads";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Search, UserPlus, Shuffle, Plus } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { LeadModal } from "@/components/leads/LeadModal";
+import { LeadModal } from "@/modules/leads";
 
 const AUTO_DISTRIBUTE_VALUE = "__auto__";
 

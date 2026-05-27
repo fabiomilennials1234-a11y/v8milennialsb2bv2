@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { DraggableKanbanBoard, type KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
 import { ExportStageDialog } from "@/components/kanban/ExportStageDialog";
-import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
+import { LeadCard, type LeadCardData } from "@/modules/leads";
 import { StageWorkflowsBadge } from "@/components/kanban/StageWorkflowsBadge";
 import { useCustomPipeStageWorkflows, useCustomPipeWorkflowCounts } from "@/hooks/useStageWorkflows";
 import {
@@ -13,7 +13,7 @@ import {
 } from "@/hooks/useCustomPipelines";
 import { toast } from "sonner";
 import { useCanDo } from "@/modules/identity";
-import { useUpdateLead } from "@/hooks/useLeads";
+import { useUpdateLead } from "@/modules/leads";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";

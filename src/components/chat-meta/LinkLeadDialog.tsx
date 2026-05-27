@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
-import { useLeads, type Lead } from "@/hooks/useLeads";
+import { useLeads, type Lead } from "@/modules/leads";
 import { useMetaLinkLead } from "@/hooks/chat-meta/useMetaLinkLead";
 import { toast } from "sonner";
 

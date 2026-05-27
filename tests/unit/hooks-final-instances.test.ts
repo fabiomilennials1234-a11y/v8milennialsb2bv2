@@ -88,7 +88,7 @@ vi.mock("@/hooks/usePipelineStages", () => ({
   useAllPipelineStages: () => ({ data: [] }),
 }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
 vi.mock("@/hooks/useCustomPipelines", () => ({
   useCustomPipelines: () => ({ data: [
@@ -374,7 +374,7 @@ describe("useExportLeads", () => {
   });
 
   it("exports EXPORT_LEAD_HEADERS constant", async () => {
-    const { EXPORT_LEAD_HEADERS } = await import("@/hooks/useExportLeads");
+    const { EXPORT_LEAD_HEADERS } = await import("@/modules/leads");
     expect(EXPORT_LEAD_HEADERS).toBeDefined();
     expect(EXPORT_LEAD_HEADERS.length).toBeGreaterThan(30);
     expect(EXPORT_LEAD_HEADERS).toContain("ID Lead");
@@ -445,7 +445,7 @@ describe("useExportLeads", () => {
       return origCreateElement(tag);
     });
 
-    const { useExportLeads } = await import("@/hooks/useExportLeads");
+    const { useExportLeads } = await import("@/modules/leads");
     const { result } = renderHook(() => useExportLeads(), { wrapper: w() });
 
     expect(result.current.isExporting).toBe(false);
@@ -470,7 +470,7 @@ describe("useExportLeads", () => {
     }));
 
     // We can't easily re-import with different mock, so test the export function check
-    const { useExportLeads } = await import("@/hooks/useExportLeads");
+    const { useExportLeads } = await import("@/modules/leads");
     // The hook itself won't throw, but calling exportLeads without org should
     // This is already covered by the implementation check.
     expect(useExportLeads).toBeDefined();
@@ -898,7 +898,7 @@ describe("useLeadAllPipelines", () => {
         return chain;
       });
 
-      const { useLeadAllPipelines } = await import("@/hooks/useLeadAllPipelines");
+      const { useLeadAllPipelines } = await import("@/modules/leads");
       const { result } = renderHook(() => useLeadAllPipelines("lead-1"), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -929,7 +929,7 @@ describe("useLeadAllPipelines", () => {
     });
 
     it("is disabled when leadId is null", async () => {
-      const { useLeadAllPipelines } = await import("@/hooks/useLeadAllPipelines");
+      const { useLeadAllPipelines } = await import("@/modules/leads");
       const { result } = renderHook(() => useLeadAllPipelines(null), { wrapper: w() });
 
       expect(result.current.fetchStatus).toBe("idle");
@@ -940,7 +940,7 @@ describe("useLeadAllPipelines", () => {
     it("adds a lead to qualificacao pipe", async () => {
       mF.mockReturnValue(c());
 
-      const { useAddLeadToStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useAddLeadToStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useAddLeadToStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -959,7 +959,7 @@ describe("useLeadAllPipelines", () => {
     it("adds a lead to confirmacao pipe", async () => {
       mF.mockReturnValue(c());
 
-      const { useAddLeadToStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useAddLeadToStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useAddLeadToStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -978,7 +978,7 @@ describe("useLeadAllPipelines", () => {
     it("adds a lead to propostas pipe", async () => {
       mF.mockReturnValue(c());
 
-      const { useAddLeadToStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useAddLeadToStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useAddLeadToStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -997,7 +997,7 @@ describe("useLeadAllPipelines", () => {
     it("adds a lead to upsell pipe", async () => {
       mF.mockReturnValue(c());
 
-      const { useAddLeadToStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useAddLeadToStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useAddLeadToStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1018,7 +1018,7 @@ describe("useLeadAllPipelines", () => {
     it("moves a lead in qualificacao", async () => {
       mF.mockReturnValue(c());
 
-      const { useMoveLeadInStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useMoveLeadInStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useMoveLeadInStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1037,7 +1037,7 @@ describe("useLeadAllPipelines", () => {
     it("moves a lead in confirmacao", async () => {
       mF.mockReturnValue(c());
 
-      const { useMoveLeadInStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useMoveLeadInStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useMoveLeadInStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1056,7 +1056,7 @@ describe("useLeadAllPipelines", () => {
     it("moves a lead in propostas", async () => {
       mF.mockReturnValue(c());
 
-      const { useMoveLeadInStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useMoveLeadInStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useMoveLeadInStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1075,7 +1075,7 @@ describe("useLeadAllPipelines", () => {
     it("moves a lead in upsell", async () => {
       mF.mockReturnValue(c());
 
-      const { useMoveLeadInStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useMoveLeadInStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useMoveLeadInStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1096,7 +1096,7 @@ describe("useLeadAllPipelines", () => {
     it("removes a lead from qualificacao", async () => {
       mF.mockReturnValue(c());
 
-      const { useRemoveLeadFromStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useRemoveLeadFromStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useRemoveLeadFromStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1111,7 +1111,7 @@ describe("useLeadAllPipelines", () => {
     it("removes a lead from confirmacao", async () => {
       mF.mockReturnValue(c());
 
-      const { useRemoveLeadFromStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useRemoveLeadFromStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useRemoveLeadFromStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1126,7 +1126,7 @@ describe("useLeadAllPipelines", () => {
     it("removes a lead from propostas", async () => {
       mF.mockReturnValue(c());
 
-      const { useRemoveLeadFromStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useRemoveLeadFromStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useRemoveLeadFromStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1141,7 +1141,7 @@ describe("useLeadAllPipelines", () => {
     it("removes a lead from upsell", async () => {
       mF.mockReturnValue(c());
 
-      const { useRemoveLeadFromStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useRemoveLeadFromStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useRemoveLeadFromStandardPipe(), { wrapper: w() });
 
       await act(async () => {

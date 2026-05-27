@@ -10,7 +10,7 @@ import {
   parseExcelSheetNames,
   parseFileToRows,
   type FilePreviewResult,
-} from "@/hooks/useImportLeads";
+} from "@/modules/leads";
 import { usePipelineStages } from "@/hooks/usePipelineStages";
 import { useTeamMembers } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";

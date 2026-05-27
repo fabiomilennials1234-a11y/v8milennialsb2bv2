@@ -91,7 +91,7 @@ vi.mock('@/modules/identity/hooks/useCanDo', () => ({
 }));
 
 // ─── Import after mocks ─────────────────────────────────
-import { useDeleteAllLeadsInPipe } from '@/hooks/useLeads';
+import { useDeleteAllLeadsInPipe } from '@/modules/leads';
 
 // ─── Tests ───────────────────────────────────────────────
 

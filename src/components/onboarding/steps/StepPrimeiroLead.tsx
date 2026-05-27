@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { UserPlus, CheckCircle2, ArrowRight, Loader2, ChevronRight } from "lucide-react";
-import { useCreateLead } from "@/hooks/useLeads";
+import { useCreateLead } from "@/modules/leads";
 import { toast } from "sonner";
 
 interface Props {

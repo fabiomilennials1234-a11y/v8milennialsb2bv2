@@ -9,8 +9,8 @@
 import { History, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { TimelineItem } from "@/components/leads/TimelineItem";
-import { useLeadTimeline } from "@/hooks/useLeadTimeline";
+import { TimelineItem } from "@/modules/leads";
+import { useLeadTimeline } from "@/modules/leads";
 
 export interface ContextPanelTabHistoryProps {
   leadId: string | null;

@@ -57,7 +57,7 @@ vi.mock("@/modules/identity/hooks/useUserRole", () => ({
 
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 
-import { useUpdateLead } from "@/hooks/useLeads";
+import { useUpdateLead } from "@/modules/leads";
 import { OptimisticLockConflictError } from "@/lib/optimistic-lock";
 
 describe("useUpdateLead — optimistic locking (#307)", () => {

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useLeadByPhone } from "@/hooks/useWhatsAppLeadIntegration";
-import { useLeadAllPipelines } from "@/hooks/useLeadAllPipelines";
+import { useLeadAllPipelines } from "@/modules/leads";
 
 export interface ContextPanelPipeProps {
   phoneNumber?: string;

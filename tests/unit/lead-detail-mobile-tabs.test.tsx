@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { LeadDetailMobileTabs } from "@/components/lead-detail/modal/LeadDetailMobileTabs";
+import { LeadDetailMobileTabs } from "@/modules/leads";
 
 const mockNavigate = vi.fn();
 vi.mock("react-router-dom", () => ({

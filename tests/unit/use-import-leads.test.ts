@@ -41,7 +41,7 @@ import {
   type EdgeFunctionReport,
   type ImportLeadsToFunnelOptions,
   type ImportLeadsToCustomPipelineOptions,
-} from "@/hooks/useImportLeads";
+} from "@/modules/leads";
 
 function createWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });

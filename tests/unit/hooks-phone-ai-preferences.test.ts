@@ -83,7 +83,7 @@ import {
   usePhoneAiStatus,
   useToggleConversationAI,
   useToggleLeadAI,
-} from "@/hooks/useLeads";
+} from "@/modules/leads";
 
 beforeEach(() => {
   vi.clearAllMocks();

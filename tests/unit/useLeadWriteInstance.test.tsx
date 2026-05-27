@@ -124,7 +124,7 @@ vi.mock("@/hooks/useUserWriteInstanceFlag", () => ({
 }));
 
 // ─── Import after mocks ────────────────────────────────────
-import { useLeadWriteInstance } from "@/hooks/useLeadWriteInstance";
+import { useLeadWriteInstance } from "@/modules/leads";
 
 // ─── Helpers ───────────────────────────────────────────────
 function createWrapper() {
