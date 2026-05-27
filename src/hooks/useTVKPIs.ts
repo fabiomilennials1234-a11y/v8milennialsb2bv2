@@ -9,7 +9,7 @@ import { usePipePropostas } from "./usePipePropostas";
 import { usePipeWhatsapp } from "./usePipeWhatsapp";
 import { useSDRPerformance } from "./useSDRPerformance";
 import { useCloserPerformance } from "./useCloserPerformance";
-import { useNewLeads } from "./useNewLeads";
+import { useNewLeads } from "@/modules/leads";
 import { inRange, type TVPeriodRange } from "@/lib/tv-periods";
 
 export type TVKPIKey =

@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/select";
 import { FollowUpCard } from "@/components/followups/FollowUpCard";
 import { ScheduleFollowUpModal } from "@/components/followups/ScheduleFollowUpModal";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { AutomationSettings } from "@/components/followups/AutomationSettings";
 import { AcoesDoDia } from "@/components/followups/AcoesDoDia";
@@ -46,7 +46,7 @@ import { useFollowUps, useCompleteFollowUp, useUpdateFollowUp, useArchiveFollowU
 import { toast } from "sonner";
 import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
 import { useUserRole, useFeaturePermission } from "@/modules/identity";
-import { useLogLeadAction } from "@/hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/modules/leads";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------

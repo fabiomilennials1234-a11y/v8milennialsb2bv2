@@ -30,7 +30,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/hooks/useTags", () => ({ useTags: () => ({ data: [] }) }));
 vi.mock("@/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
@@ -72,7 +72,7 @@ import { useScheduledMessages } from "@/hooks/useScheduledMessages";
 import { useMktByOrigin } from "@/hooks/useMktByOrigin";
 import { useMktOriginConfig } from "@/hooks/useMktOriginConfig";
 import { usePersistedState } from "@/hooks/usePersistedState";
-import { useLeadAllPipelines } from "@/hooks/useLeadAllPipelines";
+import { useLeadAllPipelines } from "@/modules/leads";
 import { useProductMaterials } from "@/hooks/useProductMaterials";
 import { useChannelChat } from "@/hooks/useChannelChat";
 import { useWhatsAppLeadIntegration } from "@/hooks/useWhatsAppLeadIntegration";

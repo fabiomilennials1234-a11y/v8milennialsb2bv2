@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useLeads } from "@/hooks/useLeads";
+import { useLeads } from "@/modules/leads";
 import { useTeamMembers } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
 import { useCreatePipeWhatsapp, usePipeWhatsapp } from "@/hooks/usePipeWhatsapp";

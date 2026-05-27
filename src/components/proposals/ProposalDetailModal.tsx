@@ -32,9 +32,9 @@ import {
 } from "@/components/ui/select";
 import { useTeamMembers } from "@/modules/identity";
 import { useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus, statusColumns } from "@/hooks/usePipePropostas";
-import { useLeadHistory } from "@/hooks/useLeadHistory";
-import { useLogLeadAction } from "@/hooks/useLogLeadAction";
-import { useDeleteLead } from "@/hooks/useLeads";
+import { useLeadHistory } from "@/modules/leads";
+import { useLogLeadAction } from "@/modules/leads";
+import { useDeleteLead } from "@/modules/leads";
 import { useHasPermission } from "@/modules/identity";
 import { useActiveProducts } from "@/hooks/useProducts";
 import { 

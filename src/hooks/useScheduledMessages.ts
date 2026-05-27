@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useCurrentTeamMember } from "@/modules/identity";
-import { useLogLeadAction } from "@/hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/modules/leads";
 import { toast } from "sonner";
 
 export interface ScheduledMessage {

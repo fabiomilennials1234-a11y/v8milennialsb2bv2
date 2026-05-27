@@ -30,7 +30,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/hooks/useTags", () => ({ useTags: () => ({ data: [] }) }));
 vi.mock("@/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
@@ -74,7 +74,7 @@ describe("useTags — deeper", () => {
 });
 
 // ── Deeper: useLeads filters and pagination ──
-import { useLeads } from "@/hooks/useLeads";
+import { useLeads } from "@/modules/leads";
 
 describe("useLeads — deeper", () => {
   it("with page param", () => {

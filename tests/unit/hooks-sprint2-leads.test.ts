@@ -79,7 +79,7 @@ import {
   useToggleLeadAI,
   useToggleConversationAI,
   LEADS_PAGE_SIZE,
-} from "@/hooks/useLeads";
+} from "@/modules/leads";
 
 // ---- Tests ----
 

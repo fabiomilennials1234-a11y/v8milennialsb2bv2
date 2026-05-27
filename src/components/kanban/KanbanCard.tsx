@@ -3,10 +3,10 @@ import { Phone, Building2, Bot } from "lucide-react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { LeadScoreBadge } from "@/components/leads/LeadScoreBadge";
-import { useLeadScoresMap } from "@/hooks/useLeadScore";
-import { useToggleLeadAI } from "@/hooks/useLeads";
-import { useLogLeadAction } from "@/hooks/useLogLeadAction";
+import { LeadScoreBadge } from "@/modules/leads";
+import { useLeadScoresMap } from "@/modules/leads";
+import { useToggleLeadAI } from "@/modules/leads";
+import { useLogLeadAction } from "@/modules/leads";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 // Badge de agendamento usa prop hasScheduledMessages passada pelo pipe pai

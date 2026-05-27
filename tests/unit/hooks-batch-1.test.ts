@@ -54,7 +54,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false, isLoading: false }) }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn(), triggerLeadCreatedInCustomPipeline: vi.fn() }));
 vi.mock("@/modules/identity/lib/permissions", () => ({
   assertIsAdmin: vi.fn(),
@@ -66,13 +66,13 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: v
 vi.mock("papaparse", () => ({ default: { parse: vi.fn() } }));
 
 // ── Import hooks (each import triggers coverage) ──
-import { useLeads, type LeadsFilterParams, type Lead } from "@/hooks/useLeads";
+import { useLeads, type LeadsFilterParams, type Lead } from "@/modules/leads";
 import { usePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
 import { usePipePropostas } from "@/hooks/usePipePropostas";
 import { usePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
 import { useDebounce } from "@/hooks/useDebounce";
-import { useLeadScore } from "@/hooks/useLeadScore";
-import { useLeadHistory } from "@/hooks/useLeadHistory";
+import { useLeadScore } from "@/modules/leads";
+import { useLeadHistory } from "@/modules/leads";
 import { useOrgQuotas } from "@/modules/identity/hooks/useOrgQuotas";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { useSeatUsage } from "@/modules/identity/hooks/useSeatUsage";

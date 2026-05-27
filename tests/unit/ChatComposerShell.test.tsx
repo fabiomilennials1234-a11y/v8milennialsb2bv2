@@ -8,14 +8,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
-import type { LeadWriteInstanceState } from "@/hooks/useLeadWriteInstance";
+import type { LeadWriteInstanceState } from "@/modules/leads";
 
 // ─── Mock state ────────────────────────────────────────────
 let mockState: LeadWriteInstanceState = { status: "loading" };
 let mockIsAdmin = false;
 let mockIsMaster = false;
 
-vi.mock("@/hooks/useLeadWriteInstance", () => ({
+// Mock the underlying source path. ChatComposerShell imports
+// `useLeadWriteInstance` from the leads module barrel (`@/modules/leads`),
+// which re-exports from this file — Vitest intercepts both.
+vi.mock("@/modules/leads/hooks/useLeadWriteInstance", () => ({
   useLeadWriteInstance: () => ({
     state: mockState,
     isLoading: mockState.status === "loading",

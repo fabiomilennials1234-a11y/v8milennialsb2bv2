@@ -124,7 +124,7 @@ beforeEach(() => {
 });
 
 // Import after mocks so the hook captures the mocked supabase client
-import { useExportLeads } from "@/hooks/useExportLeads";
+import { useExportLeads } from "@/modules/leads";
 
 function findQueriesFor(table: string) {
   return queries.filter((q) => q.table === table);

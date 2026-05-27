@@ -91,7 +91,7 @@ vi.mock("@/hooks/usePipelineStages", () => ({
 vi.mock("@/hooks/useAutoFollowUp", () => ({
   triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/hooks/useLogLeadAction", () => ({
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({
   useLogLeadAction: () => vi.fn(),
 }));
 vi.mock("@/lib/workflowTrigger", () => ({
@@ -174,7 +174,7 @@ import {
   useUpdateScheduledMessage,
   useMyScheduledMessages,
 } from "@/hooks/useScheduledMessages";
-import { useExportLeads, EXPORT_LEAD_HEADERS } from "@/hooks/useExportLeads";
+import { useExportLeads, EXPORT_LEAD_HEADERS } from "@/modules/leads";
 import {
   useMasterOrganizations,
   useMasterOrganization,

@@ -6,9 +6,9 @@
 import { Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLeadByPhone } from "@/hooks/useWhatsAppLeadIntegration";
-import { useLeadTimelineCompact } from "@/hooks/useLeadTimeline";
-import { LeadTabHistory } from "@/components/lead/tabs/LeadTabHistory";
-import type { TimelineEvent } from "@/hooks/useLeadTimeline";
+import { useLeadTimelineCompact } from "@/modules/leads";
+import { LeadTabHistory } from "@/modules/leads";
+import type { TimelineEvent } from "@/modules/leads";
 
 export interface ContextPanelHistoryProps {
   phoneNumber?: string;

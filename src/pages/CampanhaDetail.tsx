@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useCampanha, useCampanhaStages, useCampanhaLeads, useCampanhaMembers, useUpdateCampanhaMember, useDeleteCampanhaLead, useCampanhaPipeAutomations, useExtractLeadToPipe, resolveExtractionTarget, getObjectiveMetricLabel, type CampanhaLead } from "@/hooks/useCampanhas";
 import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
-import { useImportLeads } from "@/hooks/useImportLeads";
+import { useImportLeads } from "@/modules/leads";
 import { useOrganization } from "@/modules/identity";
 import { CampanhaKanban } from "@/components/campanhas/CampanhaKanban";
 import { CampanhaAnalytics } from "@/components/campanhas/CampanhaAnalytics";

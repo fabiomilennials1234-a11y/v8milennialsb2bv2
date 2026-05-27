@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useExportLeads, type ExportStageFilter } from "@/hooks/useExportLeads";
+import { useExportLeads, type ExportStageFilter } from "@/modules/leads";
 import { useCanDo } from "@/modules/identity";
 import { toast } from "sonner";
 import { FileDown, Loader2, FileSpreadsheet, FileText } from "lucide-react";

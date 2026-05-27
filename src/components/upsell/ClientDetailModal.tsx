@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useUpsellClient, useUpdateUpsellClient, useDeleteUpsellClient } from "@/hooks/useUpsellClients";
 import { useUpsellOrdersByClient } from "@/hooks/useUpsellOrders";
-import { useLeadHistory } from "@/hooks/useLeadHistory";
+import { useLeadHistory } from "@/modules/leads";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";

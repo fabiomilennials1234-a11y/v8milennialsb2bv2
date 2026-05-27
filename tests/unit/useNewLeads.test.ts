@@ -32,7 +32,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-1", isReady: true }),
 }));
 
-import { useNewLeads } from "@/hooks/useNewLeads";
+import { useNewLeads } from "@/modules/leads";
 
 function createWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });

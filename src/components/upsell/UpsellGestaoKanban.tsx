@@ -5,14 +5,14 @@ import { Button } from "@/components/ui/button";
 import { usePipelineStages, stagesToColumns, type PipelineStage } from "@/hooks/usePipelineStages";
 import { useUpsellClients, useUpdateUpsellClient } from "@/hooks/useUpsellClients";
 import { useUpsellOrders } from "@/hooks/useUpsellOrders";
-import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadCard, type LeadCardData } from "@/modules/leads";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { NewOrderModal } from "@/components/carteira/NewOrderModal";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useIdentity } from "@/modules/identity";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
-import { useUpdateLead } from "@/hooks/useLeads";
+import { useUpdateLead } from "@/modules/leads";
 import { toast } from "sonner";
 
 interface UpsellGestaoKanbanProps {

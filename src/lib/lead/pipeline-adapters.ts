@@ -9,7 +9,7 @@ import type {
   PipelineStatus,
   StandardPipelineStatus,
   CustomPipelineStatus,
-} from "@/hooks/useLeadAllPipelines";
+} from "@/modules/leads";
 
 export interface NormalizedStage {
   id: string;

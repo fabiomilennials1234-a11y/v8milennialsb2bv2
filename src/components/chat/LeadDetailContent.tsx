@@ -10,4 +10,4 @@
 export {
   LeadDetailContent,
   type LeadDetailContentProps,
-} from "@/components/lead/LeadDetailContent";
+} from "@/modules/leads";

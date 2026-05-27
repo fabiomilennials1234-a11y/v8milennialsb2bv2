@@ -20,7 +20,7 @@ vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => 
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/hooks/useWhatsAppInstances", () => ({ useWhatsAppInstances: () => ({ data: [] }) }));
 vi.mock("@/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }) }));
 vi.mock("@/hooks/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }) }));
@@ -32,7 +32,7 @@ vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 
 // ── Type-level imports that trigger coverage on module load ──
-import type { LeadActionType } from "@/hooks/useLogLeadAction";
+import type { LeadActionType } from "@/modules/leads";
 import type { ChannelMessage, ChannelContact } from "@/hooks/useChannelChat";
 
 // Importing the module itself triggers line coverage for exports

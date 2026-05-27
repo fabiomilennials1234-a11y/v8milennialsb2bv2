@@ -12,10 +12,10 @@ import { CalendarIcon, Loader2, CheckCircle2, AlertCircle, Video } from "lucide-
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { useLeads, useUpdateLead } from "@/hooks/useLeads";
+import { useLeads, useUpdateLead } from "@/modules/leads";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useCreatePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
-import { useLogLeadAction } from "@/hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/modules/leads";
 import { useGoogleCalendarStatus } from "@/hooks/useGoogleCalendar";
 import { useCalendarSharing } from "@/hooks/useGoogleCalendarSharing";
 import { useAuth } from "@/modules/identity";

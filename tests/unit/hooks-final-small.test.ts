@@ -36,7 +36,7 @@ vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => 
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
@@ -95,7 +95,7 @@ describe("useWebhooks", () => {
 });
 
 // ─── useLeadCustomFields ───
-import { useLeadCustomFields, useCreateCustomField } from "@/hooks/useLeadCustomFields";
+import { useLeadCustomFields, useCreateCustomField } from "@/modules/leads";
 describe("useLeadCustomFields", () => {
   it("fetches custom fields", async () => {
     const { result } = renderHook(() => useLeadCustomFields(), { wrapper: w() });
@@ -108,7 +108,7 @@ describe("useLeadCustomFields", () => {
 });
 
 // ─── useLeadScore ───
-import { useLeadScore, useRecalculateScore } from "@/hooks/useLeadScore";
+import { useLeadScore, useRecalculateScore } from "@/modules/leads";
 describe("useLeadScore", () => {
   it("fetches lead score", async () => {
     const { result } = renderHook(() => useLeadScore("lead-1"), { wrapper: w() });

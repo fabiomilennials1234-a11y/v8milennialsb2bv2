@@ -17,7 +17,7 @@ import { useMemo } from "react";
 import { Lock, Plug2, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { useLeadWriteInstance } from "@/hooks/useLeadWriteInstance";
+import { useLeadWriteInstance } from "@/modules/leads";
 import type { WriteInstanceErrorCode } from "@/types/user-write-instance";
 import { useIdentity } from "@/modules/identity";
 export type ChatComposerVariant = "full" | "compact";

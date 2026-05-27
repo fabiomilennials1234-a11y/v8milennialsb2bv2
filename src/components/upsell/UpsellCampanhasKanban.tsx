@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useUpsellCampanhas, useUpdateUpsellCampanha } from "@/hooks/useUpsellCampanhas";
-import { LeadCard } from "@/components/leads/LeadCard";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadCard } from "@/modules/leads";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { NewOrderModal } from "@/components/carteira/NewOrderModal";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
-import { useUpdateLead } from "@/hooks/useLeads";
+import { useUpdateLead } from "@/modules/leads";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 

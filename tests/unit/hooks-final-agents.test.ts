@@ -71,7 +71,7 @@ vi.mock("@/hooks/usePipelineStages", () => ({
   useAllPipelineStages: () => ({ data: [] }),
 }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
 vi.mock("@/hooks/useWhatsAppInstances", () => ({
   useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }),

@@ -45,11 +45,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { useUpdateLead } from "@/hooks/useLeads";
+import { useUpdateLead } from "@/modules/leads";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useTags } from "@/hooks/useTags";
-import { LeadCustomFields } from "@/components/lead/info/LeadCustomFields";
-import { AddCustomFieldPopover } from "@/components/lead/info/AddCustomFieldPopover";
+import { LeadCustomFields } from "@/modules/leads";
+import { AddCustomFieldPopover } from "@/modules/leads";
 
 const SOURCE_OPTIONS: Array<{ value: string; label: string; dot: string }> = [
   { value: "whatsapp", label: "WhatsApp", dot: "hsl(142 71% 45%)" },

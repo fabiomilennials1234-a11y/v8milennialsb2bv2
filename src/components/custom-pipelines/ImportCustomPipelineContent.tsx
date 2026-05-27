@@ -10,8 +10,8 @@ import {
   parseFilePreview,
   KNOWN_LEAD_FIELDS,
   type FilePreviewResult,
-} from "@/hooks/useImportLeads";
-import { useLeadCustomFields } from "@/hooks/useLeadCustomFields";
+} from "@/modules/leads";
+import { useLeadCustomFields } from "@/modules/leads";
 import { useCanDo } from "@/modules/identity";
 import { useTeamMembers, isVirtualTeamMember } from "@/modules/identity";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";

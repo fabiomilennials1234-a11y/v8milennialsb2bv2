@@ -33,7 +33,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/hooks/useCopilotPromptBuilder", () => ({ generatePrompt: vi.fn(), saveCopilotSystemPrompt: vi.fn(), regenerateAndSavePrompt: vi.fn(), computePromptHash: vi.fn() }));
 vi.mock("@/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r) }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
@@ -49,7 +49,7 @@ import { useBadges } from "@/hooks/useBadges";
 import { useCompetitions } from "@/hooks/useCompetitions";
 import { useProfiles } from "@/modules/identity/hooks/useProfiles";
 import { useCountUp } from "@/hooks/useCountUp";
-import { useLeadTimeline } from "@/hooks/useLeadTimeline";
+import { useLeadTimeline } from "@/modules/leads";
 import { useLogger } from "@/hooks/useLogger";
 import { useMasterPlans } from "@/modules/identity/hooks/useMasterPlans";
 import { useMessageTemplates } from "@/hooks/useMessageTemplates";

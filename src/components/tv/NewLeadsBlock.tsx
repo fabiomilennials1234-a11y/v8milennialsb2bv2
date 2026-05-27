@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { UserPlus, Sparkles } from "lucide-react";
 import { useTVPeriod } from "@/contexts/TVPeriodContext";
-import { useNewLeads } from "@/hooks/useNewLeads";
+import { useNewLeads } from "@/modules/leads";
 
 const SOURCE_LABELS: Record<string, string> = {
   meta_ads: "Meta Ads",

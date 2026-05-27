@@ -15,7 +15,7 @@ import {
 import { EmptyState } from "@/components/shared/EmptyState";
 import { RevisionItem, type RevisionTask } from "@/components/revisao/RevisionItem";
 import { AutomationSettings } from "@/components/followups/AutomationSettings";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { ScheduleFollowUpModal } from "@/components/followups/ScheduleFollowUpModal";
 import { useFollowUps, useCompleteFollowUp, useUpdateFollowUp, useArchiveFollowUp, useDeleteFollowUp } from "@/hooks/useFollowUps";
