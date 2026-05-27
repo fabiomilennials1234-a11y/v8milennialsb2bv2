@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Building, Phone, Mail, User, Tag, Plus, Type, Hash, Calendar, List, ToggleLeft, Clock, History, UserPlus, UserCheck, ArrowRight, Edit2, FileText, CheckCircle, XCircle, CalendarX, DollarSign, TrendingUp, Trash2, Package, ListTodo, CheckSquare, Bot, Loader2, ChevronDown, ChevronUp, Users, Send } from "lucide-react";
 import { Link } from "react-router-dom";
-import { formatPhoneForWhatsApp } from "@/lib/whatsapp";
+import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
 import {
   Dialog,
   DialogContent,

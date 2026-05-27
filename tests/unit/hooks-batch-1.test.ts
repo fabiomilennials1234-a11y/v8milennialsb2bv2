@@ -61,7 +61,7 @@ vi.mock("@/modules/identity/lib/permissions", () => ({
   useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true),
 }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/lib/whatsapp", () => ({ formatPhoneForWhatsApp: (p: string) => p }));
+vi.mock("@/modules/communication/lib/whatsapp", () => ({ formatPhoneForWhatsApp: (p: string) => p }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 vi.mock("papaparse", () => ({ default: { parse: vi.fn() } }));
 

@@ -10,8 +10,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
-import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
+import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
+import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
 import { formatDistanceToNow, isToday, isTomorrow, isPast, differenceInDays, differenceInHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { DraggableItem } from "@/modules/pipelines/components/kanban/DraggableKanbanBoard";

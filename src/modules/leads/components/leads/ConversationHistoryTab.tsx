@@ -18,13 +18,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   useConversationSummary,
   useGenerateSummary,
-} from "@/hooks/useConversationHistory";
+} from "@/modules/communication/hooks/useConversationHistory";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import ConversationNotes from "@/components/chat/ConversationNotes";
-import { useChatBubbleOptional } from "@/hooks/useChatBubble";
+import ConversationNotes from "@/modules/communication/components/chat/ConversationNotes";
+import { useChatBubbleOptional } from "@/modules/communication/hooks/useChatBubble";
 
 interface ConversationHistoryTabProps {
   leadId: string;

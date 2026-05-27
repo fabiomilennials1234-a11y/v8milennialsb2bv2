@@ -19,7 +19,7 @@ import { LeadTabPipe } from "./tabs/LeadTabPipe";
 import { LeadTabCampanhas } from "./tabs/LeadTabCampanhas";
 import { LeadCreateForm } from "./create/LeadCreateForm";
 import { LeadChecklistSection } from "../leads/LeadChecklistSection";
-import { useLeadByPhone } from "@/hooks/useWhatsAppLeadIntegration";
+import { useLeadByPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { useLeadAllPipelines } from "../../hooks/useLeadAllPipelines";
 import { useLeadForm } from "../../hooks/lead/useLeadForm";
 import { useLeadCampaignsAttach } from "../../hooks/lead/useLeadCampaignsAttach";

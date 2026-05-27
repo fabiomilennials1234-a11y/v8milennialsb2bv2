@@ -41,7 +41,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   }),
 }));
 
-import { useSetMigrationStatus, useSetProviderOverride } from "@/hooks/useOrgWhatsAppMigration";
+import { useSetMigrationStatus, useSetProviderOverride } from "@/modules/communication/hooks/useOrgWhatsAppMigration";
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -92,7 +92,7 @@ describe("useSetProviderOverride", () => {
 describe("WhatsAppMigrationBanner", () => {
   it("hides when status=migrated", async () => {
     vi.resetModules();
-    vi.doMock("@/hooks/useOrgWhatsAppMigration", () => ({
+    vi.doMock("@/modules/communication/hooks/useOrgWhatsAppMigration", () => ({
       useSetMigrationStatus: () => ({ mutateAsync: vi.fn() }),
       useSetProviderOverride: () => ({ mutateAsync: vi.fn() }),
       useOrgMigrationStatus: () => ({
@@ -106,7 +106,7 @@ describe("WhatsAppMigrationBanner", () => {
       }),
     }));
     const { WhatsAppMigrationBanner } = await import(
-      "@/components/whatsapp-migration/WhatsAppMigrationBanner"
+      "@/modules/communication/components/whatsapp-migration/WhatsAppMigrationBanner"
     );
     const { container } = render(<WhatsAppMigrationBanner />, { wrapper });
     expect(container.firstChild).toBeNull();
@@ -114,7 +114,7 @@ describe("WhatsAppMigrationBanner", () => {
 
   it("renders banner when status=pending", async () => {
     vi.resetModules();
-    vi.doMock("@/hooks/useOrgWhatsAppMigration", () => ({
+    vi.doMock("@/modules/communication/hooks/useOrgWhatsAppMigration", () => ({
       useSetMigrationStatus: () => ({ mutateAsync: vi.fn() }),
       useSetProviderOverride: () => ({ mutateAsync: vi.fn() }),
       useOrgMigrationStatus: () => ({
@@ -128,7 +128,7 @@ describe("WhatsAppMigrationBanner", () => {
       }),
     }));
     const { WhatsAppMigrationBanner } = await import(
-      "@/components/whatsapp-migration/WhatsAppMigrationBanner"
+      "@/modules/communication/components/whatsapp-migration/WhatsAppMigrationBanner"
     );
     render(<WhatsAppMigrationBanner />, { wrapper });
     expect(screen.getByText(/Migração WhatsApp pendente/)).toBeInTheDocument();
@@ -137,7 +137,7 @@ describe("WhatsAppMigrationBanner", () => {
 
   it("renders failed variant when status=failed", async () => {
     vi.resetModules();
-    vi.doMock("@/hooks/useOrgWhatsAppMigration", () => ({
+    vi.doMock("@/modules/communication/hooks/useOrgWhatsAppMigration", () => ({
       useSetMigrationStatus: () => ({ mutateAsync: vi.fn() }),
       useSetProviderOverride: () => ({ mutateAsync: vi.fn() }),
       useOrgMigrationStatus: () => ({
@@ -151,7 +151,7 @@ describe("WhatsAppMigrationBanner", () => {
       }),
     }));
     const { WhatsAppMigrationBanner } = await import(
-      "@/components/whatsapp-migration/WhatsAppMigrationBanner"
+      "@/modules/communication/components/whatsapp-migration/WhatsAppMigrationBanner"
     );
     render(<WhatsAppMigrationBanner />, { wrapper });
     expect(screen.getByText(/Migração anterior falhou/)).toBeInTheDocument();

@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
 const linkMutate = vi.fn();
-vi.mock("@/hooks/chat-meta/useMetaLinkLead", () => ({
+vi.mock("@/modules/communication/hooks/chat-meta/useMetaLinkLead", () => ({
   useMetaLinkLead: () => ({ mutateAsync: linkMutate, isPending: false }),
 }));
 
@@ -18,7 +18,7 @@ vi.mock("@/modules/leads/hooks/useLeads", () => ({
   }),
 }));
 
-import { LinkLeadDialog } from "@/components/chat-meta/LinkLeadDialog";
+import { LinkLeadDialog } from "@/modules/communication/components/chat-meta/LinkLeadDialog";
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

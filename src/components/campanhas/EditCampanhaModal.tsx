@@ -20,7 +20,7 @@ import {
 import { useUpdateCampanha, useCampanhaMembers, useUpdateCampanhaMember, type Campanha, type LeadDistributionMode, type CampanhaMemberRole } from "@/hooks/useCampanhas";
 import { useCopilotAgents } from "@/hooks/useCopilotAgents";
 import { useTeamMembers } from "@/modules/identity";
-import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
+import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
 import { toast } from "sonner";
 import { AlertTriangle, Bot, Shuffle, User, Users } from "lucide-react";
 

@@ -15,7 +15,7 @@ import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpB
 import { ORIGIN_COLORS } from "../leads/LeadCard";
 import { StageProgressBar } from "./StageProgressBar";
 import { cn } from "@/lib/utils";
-import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
+import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
 import type { DrawerVariant } from "./legacy/drawer-variant";
 
 const VARIANT_LABELS: Record<DrawerVariant, string> = {

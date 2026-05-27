@@ -45,7 +45,7 @@ import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { useOrganization } from "@/modules/identity";
 import { track, trackModuleVisit } from "@/lib/analytics";
-import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
+import { useLeadsWithScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
 import { useBatchedLeadMetrics } from "@/modules/leads";
 import { useTags } from "@/hooks/useTags";
 import { useBulkSelection } from "@/hooks/useBulkSelection";

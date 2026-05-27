@@ -43,18 +43,18 @@ import {
   useDeleteWhatsAppInstance,
   useLogoutInstance,
   WhatsAppInstance,
-} from "@/hooks/useWhatsAppInstances";
+} from "@/modules/communication/hooks/useWhatsAppInstances";
 import { useCanManageWhatsApp } from "@/modules/identity";
 import { useTeamMembers } from "@/modules/identity";
 import {
   useAllowedMembersForInstance,
   useSetAllowedMembersForInstance,
-} from "@/hooks/useWhatsAppInstanceAllowedMembers";
+} from "@/modules/communication/hooks/useWhatsAppInstanceAllowedMembers";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgQuotas } from "@/modules/identity";
-import { useMessageLimits } from "@/hooks/useMessageLimits";
-import { HistorySyncPanel } from "@/components/chat/history-sync/HistorySyncPanel";
+import { useMessageLimits } from "@/modules/communication/hooks/useMessageLimits";
+import { HistorySyncPanel } from "@/modules/communication/components/chat/history-sync/HistorySyncPanel";
 import { toast } from "sonner";
 
 /**

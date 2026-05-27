@@ -52,7 +52,7 @@ import { useCountUp } from "@/hooks/useCountUp";
 import { useLeadTimeline } from "@/modules/leads";
 import { useLogger } from "@/hooks/useLogger";
 import { useMasterPlans } from "@/modules/identity/hooks/useMasterPlans";
-import { useMessageTemplates } from "@/hooks/useMessageTemplates";
+import { useMessageTemplates } from "@/modules/communication/hooks/useMessageTemplates";
 import { useOrgSwitcher } from "@/modules/identity/hooks/useOrgSwitcher";
 import { useOrganizationSettings } from "@/modules/identity/hooks/useOrganizationSettings";
 import { useMasterOrganizations } from "@/modules/identity/hooks/useMasterOrganizations";
@@ -62,9 +62,9 @@ import { useAvatarMap } from "@/hooks/useAvatarMap";
 import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
 import { useDailyPriorities } from "@/hooks/useDailyPriorities";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
-import { useScheduledMessages } from "@/hooks/useScheduledMessages";
+import { useScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
 import { useOutboundMetrics } from "@/hooks/useOutboundMetrics";
-import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
+import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
 import { useProductRanking } from "@/hooks/useProductRanking";
 
 // ── Tests ──

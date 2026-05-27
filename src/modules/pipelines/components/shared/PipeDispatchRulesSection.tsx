@@ -24,7 +24,7 @@ import {
 } from "@/modules/pipelines/hooks/usePipeDispatchRules";
 import { useCampaignTemplates, type CampaignTemplate } from "@/hooks/useCampaignTemplates";
 import { useTeamMembers } from "@/modules/identity";
-import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
+import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
 import type { PipelineType, PipelineStage } from "@/modules/pipelines/hooks/usePipelineStages";
 import {
   Send, Plus, Trash2, Loader2, ListOrdered, Play, Pencil,

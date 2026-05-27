@@ -12,7 +12,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
-import { useMetaConnectionStatus, MetaPage } from "@/hooks/useMetaConnection";
+import { useMetaConnectionStatus, MetaPage } from "@/modules/communication/hooks/useMetaConnection";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";

@@ -43,8 +43,8 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
 import {
   useCreateHistorySyncJob,
   type HistorySyncJob,
-} from "@/hooks/useHistorySyncJobs";
-import { SyncProgressCard } from "@/components/chat/history-sync/SyncProgressCard";
+} from "@/modules/communication/hooks/useHistorySyncJobs";
+import { SyncProgressCard } from "@/modules/communication/components/chat/history-sync/SyncProgressCard";
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

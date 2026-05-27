@@ -65,7 +65,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/lib/whatsapp", () => ({
+vi.mock("@/modules/communication/lib/whatsapp", () => ({
   formatPhoneForWhatsApp: (p: string) => {
     if (!p) return null;
     const cleaned = p.replace(/\D/g, "");
@@ -87,7 +87,7 @@ import {
   type WhatsAppMessage,
   type ChatContact,
   type WhatsAppInstanceForUser,
-} from "@/hooks/useWhatsAppChat";
+} from "@/modules/communication/hooks/useWhatsAppChat";
 
 // ---------------------------------------------------------------------------
 // Wrapper

@@ -15,7 +15,7 @@ import {
   useRefreshQRCode,
   useCheckConnectionStatus,
   useWhatsAppInstances,
-} from "@/hooks/useWhatsAppInstances";
+} from "@/modules/communication/hooks/useWhatsAppInstances";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 

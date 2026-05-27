@@ -116,7 +116,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
 // Feature flag default ON nos testes (cenário pós-cutover). Override por teste
 // quando precisar simular flag OFF.
 let mockIsStrict = true;
-vi.mock("@/hooks/useUserWriteInstanceFlag", () => ({
+vi.mock("@/modules/communication/hooks/useUserWriteInstanceFlag", () => ({
   useUserWriteInstanceFlag: () => ({
     isStrict: mockIsStrict,
     isLoading: false,

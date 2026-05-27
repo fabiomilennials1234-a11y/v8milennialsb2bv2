@@ -52,7 +52,7 @@ function w() {
 beforeEach(() => { vi.clearAllMocks(); mF.mockReturnValue(c()); });
 
 // ─── useConversationHistory ───
-import { useConversationHistory } from "@/hooks/useConversationHistory";
+import { useConversationHistory } from "@/modules/communication/hooks/useConversationHistory";
 describe("useConversationHistory", () => {
   it("fetches conversation history", async () => {
     const { result } = renderHook(() => useConversationHistory("conv-1"), { wrapper: w() });
@@ -61,7 +61,7 @@ describe("useConversationHistory", () => {
 });
 
 // ─── useMessageTemplates ───
-import { useMessageTemplates, useCreateMessageTemplate, useDeleteMessageTemplate } from "@/hooks/useMessageTemplates";
+import { useMessageTemplates, useCreateMessageTemplate, useDeleteMessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
 describe("useMessageTemplates", () => {
   it("fetches templates", async () => {
     const { result } = renderHook(() => useMessageTemplates(), { wrapper: w() });
@@ -140,7 +140,7 @@ describe("useBadges", () => {
 });
 
 // ─── useConversationNotes ───
-import { useConversationNotes, useCreateConversationNote } from "@/hooks/useConversationNotes";
+import { useConversationNotes, useCreateConversationNote } from "@/modules/communication/hooks/useConversationNotes";
 describe("useConversationNotes", () => {
   it("fetches notes", async () => {
     const { result } = renderHook(() => useConversationNotes("conv-1"), { wrapper: w() });

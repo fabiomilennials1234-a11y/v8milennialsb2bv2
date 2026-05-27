@@ -31,10 +31,10 @@ import { ElevenLabsSettings } from "./ElevenLabsSettings";
 import { WhatsAppSettings } from "./WhatsAppSettings";
 
 // Hooks de status
-import { useMetaConnectionStatusByType } from "@/hooks/useMetaConnection";
+import { useMetaConnectionStatusByType } from "@/modules/communication/hooks/useMetaConnection";
 import { useGoogleCalendarStatus } from "@/hooks/useGoogleCalendar";
 import { useTinyErpStatus } from "@/hooks/useTinyErp";
-import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
+import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
 import { useOrganization } from "@/modules/identity";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";

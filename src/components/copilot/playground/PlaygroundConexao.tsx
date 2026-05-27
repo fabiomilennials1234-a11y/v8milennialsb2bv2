@@ -32,7 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useWhatsAppInstancesWithAgent } from "@/hooks/useWhatsAppInstances";
+import { useWhatsAppInstancesWithAgent } from "@/modules/communication/hooks/useWhatsAppInstances";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 
 import type { ConexaoState } from "./conexao-comportamento-mapping";

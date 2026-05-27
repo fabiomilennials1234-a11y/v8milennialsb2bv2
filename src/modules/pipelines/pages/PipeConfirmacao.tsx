@@ -47,7 +47,7 @@ import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/modules/identity";
-import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
+import { useLeadsWithScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";

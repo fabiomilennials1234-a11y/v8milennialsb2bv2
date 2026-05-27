@@ -11,7 +11,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: { rpc: (...args: any[]) => rpcMock(...args) },
 }));
 
-import { useMetaLinkLead } from "@/hooks/chat-meta/useMetaLinkLead";
+import { useMetaLinkLead } from "@/modules/communication/hooks/chat-meta/useMetaLinkLead";
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

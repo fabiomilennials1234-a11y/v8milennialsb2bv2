@@ -13,7 +13,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useConversationDraft } from "@/hooks/useConversationDraft";
+import { useConversationDraft } from "@/modules/communication/hooks/useConversationDraft";
 
 const KEY_PREFIX = "chat-draft-";
 const USER_A = "user-aaa-111";
@@ -34,9 +34,9 @@ function makeFakeStorage() {
 }
 
 // Reset module-level state between tests so orphan cleanup is re-triggered
-vi.mock("@/hooks/useConversationDraft", async () => {
+vi.mock("@/modules/communication/hooks/useConversationDraft", async () => {
   // re-import fresh each test via module factory
-  const original = await vi.importActual<typeof import("@/hooks/useConversationDraft")>("@/hooks/useConversationDraft");
+  const original = await vi.importActual<typeof import("@/modules/communication/hooks/useConversationDraft")>("@/modules/communication/hooks/useConversationDraft");
   return original;
 });
 

@@ -48,7 +48,7 @@ vi.mock("@/integrations/supabase/client", () => {
   return { supabase: { from: fromMock } };
 });
 
-import { useMetaMessages } from "@/hooks/chat-meta/useMetaMessages";
+import { useMetaMessages } from "@/modules/communication/hooks/chat-meta/useMetaMessages";
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

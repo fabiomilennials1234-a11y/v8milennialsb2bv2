@@ -64,7 +64,7 @@ vi.mock("@/modules/identity/hooks/useIdentity", () => ({
   }),
 }));
 
-import { ChatComposerShell } from "@/components/chat/composer/ChatComposerShell";
+import { ChatComposerShell } from "@/modules/communication/components/chat/composer/ChatComposerShell";
 
 // ─── Helpers ───────────────────────────────────────────────
 function createWrapper() {

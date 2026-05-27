@@ -20,7 +20,7 @@ import { useUpdatePipeWhatsapp, type PipeWhatsappStatus } from "@/modules/pipeli
 import { usePipelineStages, stagesToColumns } from "@/modules/pipelines/hooks/usePipelineStages";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
-import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
+import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 

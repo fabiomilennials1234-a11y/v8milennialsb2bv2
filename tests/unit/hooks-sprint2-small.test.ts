@@ -133,7 +133,7 @@ import {
   useCreateLeadFromWhatsApp,
   useLinkLeadToWhatsApp,
   useUpdateLeadPipelineStatus,
-} from "@/hooks/useWhatsAppLeadIntegration";
+} from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import {
   useTinyErpStatus,
   useConnectTinyErp,
@@ -165,7 +165,7 @@ import {
   useDeleteConversation,
   useAddConversationTag,
   useRemoveConversationTag,
-} from "@/hooks/useWhatsAppConversations";
+} from "@/modules/communication/hooks/useWhatsAppConversations";
 import {
   useScheduledMessagesForLead,
   useLeadsWithScheduledMessages,
@@ -173,7 +173,7 @@ import {
   useCancelScheduledMessage,
   useUpdateScheduledMessage,
   useMyScheduledMessages,
-} from "@/hooks/useScheduledMessages";
+} from "@/modules/communication/hooks/useScheduledMessages";
 import { useExportLeads, EXPORT_LEAD_HEADERS } from "@/modules/leads";
 import {
   useMasterOrganizations,
@@ -194,7 +194,7 @@ import {
   useCheckConnectionStatus,
   useDeleteWhatsAppInstance,
   useLogoutInstance,
-} from "@/hooks/useWhatsAppInstances";
+} from "@/modules/communication/hooks/useWhatsAppInstances";
 import { usePipePropostas, useCreatePipeProposta, useUpdatePipeProposta, useDeletePipeProposta } from "@/modules/pipelines/hooks/usePipePropostas";
 import { usePipeConfirmacao, useCreatePipeConfirmacao, useUpdatePipeConfirmacao, useDeletePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
 import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";

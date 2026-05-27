@@ -11,7 +11,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: { functions: { invoke: (...args: any[]) => invokeMock(...args) } },
 }));
 
-import { useMetaConversationProfile } from "@/hooks/chat-meta/useMetaConversationProfile";
+import { useMetaConversationProfile } from "@/modules/communication/hooks/chat-meta/useMetaConversationProfile";
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

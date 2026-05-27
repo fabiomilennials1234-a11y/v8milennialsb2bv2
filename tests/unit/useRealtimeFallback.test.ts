@@ -9,7 +9,7 @@ import { describe, it, expect } from "vitest";
 import {
   shouldFallback,
   FALLBACK_THRESHOLD_MS,
-} from "@/hooks/chat/useRealtimeFallback";
+} from "@/modules/communication/hooks/chat/useRealtimeFallback";
 
 const T0 = 1_000_000;
 

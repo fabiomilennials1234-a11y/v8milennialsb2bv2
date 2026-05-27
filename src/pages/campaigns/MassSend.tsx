@@ -5,7 +5,7 @@
  * de jobs ativos com controls.
  */
 import { useState } from "react";
-import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
+import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
 import {
   useMassSendJobs,
   useCreateMassSend,

@@ -157,7 +157,7 @@ describe("useWhatsAppInstances", () => {
       };
       mF.mockReturnValue(c([inst]));
 
-      const { useWhatsAppInstances } = await import("@/hooks/useWhatsAppInstances");
+      const { useWhatsAppInstances } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { result } = renderHook(() => useWhatsAppInstances(), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -177,7 +177,7 @@ describe("useWhatsAppInstances", () => {
       };
       mF.mockReturnValue(c([inst]));
 
-      const { useWhatsAppInstancesWithAgent } = await import("@/hooks/useWhatsAppInstances");
+      const { useWhatsAppInstancesWithAgent } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { result } = renderHook(() => useWhatsAppInstancesWithAgent(), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -196,7 +196,7 @@ describe("useWhatsAppInstances", () => {
       };
       mF.mockReturnValue(c([created]));
 
-      const { useCreateWhatsAppInstance } = await import("@/hooks/useWhatsAppInstances");
+      const { useCreateWhatsAppInstance } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { createEvolutionInstance } = await import("@/lib/evolutionApi");
       const { result } = renderHook(() => useCreateWhatsAppInstance(), { wrapper: w() });
 
@@ -216,7 +216,7 @@ describe("useWhatsAppInstances", () => {
       const updated = { id: "i1", instance_name: "Updated", status: "connected" };
       mF.mockReturnValue(c([updated]));
 
-      const { useUpdateWhatsAppInstance } = await import("@/hooks/useWhatsAppInstances");
+      const { useUpdateWhatsAppInstance } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { result } = renderHook(() => useUpdateWhatsAppInstance(), { wrapper: w() });
 
       await act(async () => {
@@ -234,7 +234,7 @@ describe("useWhatsAppInstances", () => {
       const refreshed = { id: "i1", qr_code: "QR_REFRESHED", status: "connecting" };
       mF.mockReturnValue(c([refreshed]));
 
-      const { useRefreshQRCode } = await import("@/hooks/useWhatsAppInstances");
+      const { useRefreshQRCode } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { getQRCode } = await import("@/lib/evolutionApi");
       const { result } = renderHook(() => useRefreshQRCode(), { wrapper: w() });
 
@@ -253,7 +253,7 @@ describe("useWhatsAppInstances", () => {
       const connected = { id: "i1", status: "connected" };
       mF.mockReturnValue(c([connected]));
 
-      const { useCheckConnectionStatus } = await import("@/hooks/useWhatsAppInstances");
+      const { useCheckConnectionStatus } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { getConnectionState } = await import("@/lib/evolutionApi");
       const { result } = renderHook(() => useCheckConnectionStatus(), { wrapper: w() });
 
@@ -273,7 +273,7 @@ describe("useWhatsAppInstances", () => {
       const disconnected = { id: "i1", status: "disconnected" };
       mF.mockReturnValue(c([disconnected]));
 
-      const { useCheckConnectionStatus } = await import("@/hooks/useWhatsAppInstances");
+      const { useCheckConnectionStatus } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { result } = renderHook(() => useCheckConnectionStatus(), { wrapper: w() });
 
       await act(async () => {
@@ -290,7 +290,7 @@ describe("useWhatsAppInstances", () => {
     it("deletes instance from Evolution and Supabase", async () => {
       mF.mockReturnValue(c());
 
-      const { useDeleteWhatsAppInstance } = await import("@/hooks/useWhatsAppInstances");
+      const { useDeleteWhatsAppInstance } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { deleteEvolutionInstance } = await import("@/lib/evolutionApi");
       const { result } = renderHook(() => useDeleteWhatsAppInstance(), { wrapper: w() });
 
@@ -309,7 +309,7 @@ describe("useWhatsAppInstances", () => {
       (deleteEvolutionInstance as any).mockRejectedValueOnce({ status: 404 });
       mF.mockReturnValue(c());
 
-      const { useDeleteWhatsAppInstance } = await import("@/hooks/useWhatsAppInstances");
+      const { useDeleteWhatsAppInstance } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { result } = renderHook(() => useDeleteWhatsAppInstance(), { wrapper: w() });
 
       await act(async () => {
@@ -325,7 +325,7 @@ describe("useWhatsAppInstances", () => {
       (deleteEvolutionInstance as any).mockRejectedValueOnce({ status: 500 });
       mF.mockReturnValue(c());
 
-      const { useDeleteWhatsAppInstance } = await import("@/hooks/useWhatsAppInstances");
+      const { useDeleteWhatsAppInstance } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { result } = renderHook(() => useDeleteWhatsAppInstance(), { wrapper: w() });
 
       await act(async () => {
@@ -343,7 +343,7 @@ describe("useWhatsAppInstances", () => {
       const loggedOut = { id: "i1", status: "disconnected", qr_code: null };
       mF.mockReturnValue(c([loggedOut]));
 
-      const { useLogoutInstance } = await import("@/hooks/useWhatsAppInstances");
+      const { useLogoutInstance } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { logoutInstance } = await import("@/lib/evolutionApi");
       const { result } = renderHook(() => useLogoutInstance(), { wrapper: w() });
 

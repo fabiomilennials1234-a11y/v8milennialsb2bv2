@@ -54,7 +54,7 @@ import { useUserRole, useJobTitle, useFeaturePermissions } from "@/modules/ident
 import { useIdentity } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
-import { useMetaPages } from "@/hooks/chat-meta/useMetaPages";
+import { useMetaPages } from "@/modules/communication/hooks/chat-meta/useMetaPages";
 import { SIDEBAR_FEATURE_MAP } from "@/lib/feature-registry";
 import { UpgradeModal } from "@/components/shared/UpgradeModal";
 import { Button } from "@/components/ui/button";
