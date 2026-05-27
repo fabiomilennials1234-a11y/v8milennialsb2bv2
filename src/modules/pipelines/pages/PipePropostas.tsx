@@ -54,7 +54,7 @@ import { CommitmentDateModal } from "@/modules/carteira/components/proposal/Comm
 import { TinyErpConfirmOrderDialog } from "@/modules/carteira/components/proposal/TinyErpConfirmOrderDialog";
 import { DaysUntilMeeting } from "@/modules/carteira/components/proposal/DaysUntilMeeting";
 import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
-import { useCadastroExternoEnabled } from "@/hooks/useCadastroExterno";
+import { useCadastroExternoEnabled } from "@/modules/marketing/hooks/useCadastroExterno";
 import { CadastroExternoConfirmDialog } from "@/modules/carteira/components/proposal/CadastroExternoConfirmDialog";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { useLeadsWithScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";

@@ -31,7 +31,7 @@ import { toast } from "sonner";
 import {
   useCadastroExternoPush,
   type CadastroExternoPushPayload,
-} from "@/hooks/useCadastroExterno";
+} from "@/modules/marketing/hooks/useCadastroExterno";
 
 // ─── Product slug mapping ───────────────────────────────────────
 

@@ -61,7 +61,7 @@ import { cn } from "@/lib/utils";
 import { TinyErpOrderStatus } from "./TinyErpOrderStatus";
 import { TinyErpConfirmOrderDialog } from "./TinyErpConfirmOrderDialog";
 import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
-import { useCadastroExternoEnabled } from "@/hooks/useCadastroExterno";
+import { useCadastroExternoEnabled } from "@/modules/marketing/hooks/useCadastroExterno";
 import { CadastroExternoConfirmDialog } from "./CadastroExternoConfirmDialog";
 import { ProductCombobox } from "./ProductCombobox";
 

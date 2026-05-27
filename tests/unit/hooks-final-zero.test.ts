@@ -294,7 +294,7 @@ describe("useSellerActivity", () => {
 });
 
 // ═══ 15. useCadastroExterno (11 LOC) ═══
-import { useCadastroExternoEnabled, useCadastroExternoPush } from "@/hooks/useCadastroExterno";
+import { useCadastroExternoEnabled, useCadastroExternoPush } from "@/modules/marketing/hooks/useCadastroExterno";
 
 describe("useCadastroExterno", () => {
   it("useCadastroExternoEnabled returns boolean", () => {

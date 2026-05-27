@@ -14,7 +14,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-import { checkSubscription } from "../../src/lib/subscription";
+import { checkSubscription } from "@/modules/billing/lib/subscription";
 
 beforeEach(() => {
   vi.clearAllMocks();

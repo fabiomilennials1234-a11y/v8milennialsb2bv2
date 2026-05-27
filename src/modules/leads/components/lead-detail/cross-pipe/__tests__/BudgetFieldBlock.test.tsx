@@ -86,7 +86,7 @@ vi.mock("@/modules/carteira/hooks/useTinyErp", () => ({
   useTinyErpStatus: () => ({ data: { connected: false } }),
 }));
 
-vi.mock("@/hooks/useCadastroExterno", () => ({
+vi.mock("@/modules/marketing/hooks/useCadastroExterno", () => ({
   useCadastroExternoEnabled: () => false,
 }));
 

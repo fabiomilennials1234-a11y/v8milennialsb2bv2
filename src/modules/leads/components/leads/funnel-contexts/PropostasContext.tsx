@@ -61,7 +61,7 @@ import { useDeleteLead } from "../../../hooks/useLeads";
 import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
 import { TinyErpOrderStatus } from "@/modules/carteira/components/proposal/TinyErpOrderStatus";
 import { TinyErpConfirmOrderDialog } from "@/modules/carteira/components/proposal/TinyErpConfirmOrderDialog";
-import { useCadastroExternoEnabled } from "@/hooks/useCadastroExterno";
+import { useCadastroExternoEnabled } from "@/modules/marketing/hooks/useCadastroExterno";
 import { CadastroExternoConfirmDialog } from "@/modules/carteira/components/proposal/CadastroExternoConfirmDialog";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
