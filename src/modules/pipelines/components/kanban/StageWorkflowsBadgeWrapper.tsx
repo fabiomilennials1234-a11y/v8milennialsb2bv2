@@ -1,4 +1,4 @@
-import { useStageWorkflows } from "@/hooks/useStageWorkflows";
+import { useStageWorkflows } from "@/modules/workflows/hooks/useStageWorkflows";
 import { StageWorkflowsBadge } from "./StageWorkflowsBadge";
 
 interface StageWorkflowsBadgeWrapperProps {

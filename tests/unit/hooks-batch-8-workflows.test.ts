@@ -77,7 +77,7 @@ import {
   useWorkflowExecutionSteps,
   useRetryWorkflowExecution,
   useWorkflowStats,
-} from "@/hooks/useWorkflows";
+} from "@/modules/workflows/hooks/useWorkflows";
 
 describe("useWorkflows", () => {
   beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock()); });

@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useOrganization } from "@/modules/identity";
-import { triggerFollowUpAutomation } from "@/hooks/useAutoFollowUp";
+import { triggerFollowUpAutomation } from "@/modules/workflows/hooks/useAutoFollowUp";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
 import { assertPermission } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";

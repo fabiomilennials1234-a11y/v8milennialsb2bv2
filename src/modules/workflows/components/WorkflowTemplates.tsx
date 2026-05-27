@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { useCreateWorkflow } from "@/hooks/useWorkflows";
+import { useCreateWorkflow } from "@/modules/workflows/hooks/useWorkflows";
 import { toast } from "sonner";
 
 interface WorkflowTemplate {

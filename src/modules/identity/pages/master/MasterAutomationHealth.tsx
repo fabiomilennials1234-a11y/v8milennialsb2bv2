@@ -41,7 +41,7 @@ import {
   useOrgsCopilotEngine,
   useToggleCopilotEngine,
   type ReprocessType,
-} from "@/hooks/useAutomationHealth";
+} from "@/modules/workflows/hooks/useAutomationHealth";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -574,4 +574,4 @@ function severityVariant(s: SystemAlert["severity"]): "default" | "secondary" | 
   return "outline";
 }
 
-import type { SystemAlert } from "@/hooks/useAutomationHealth";
+import type { SystemAlert } from "@/modules/workflows/hooks/useAutomationHealth";

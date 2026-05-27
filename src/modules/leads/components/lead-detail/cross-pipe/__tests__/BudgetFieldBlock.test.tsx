@@ -62,7 +62,7 @@ vi.mock("@/modules/pipelines/hooks/usePipelineEntries", () => ({
     .mockResolvedValue({ entry: { id: "entry-new", lead_id: "lead-1", stage_key: "marcar_compromisso", organization_id: "org-1" }, created: true }),
 }));
 
-vi.mock("@/hooks/useAutoFollowUp", () => ({
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({
   triggerFollowUpAutomation: vi.fn(),
 }));
 

@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useWorkflows, useToggleWorkflow, useDeleteWorkflow } from "@/hooks/useWorkflows";
+import { useWorkflows, useToggleWorkflow, useDeleteWorkflow } from "@/modules/workflows/hooks/useWorkflows";
 import {
   Plus,
   Workflow,
@@ -35,9 +35,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useFeaturePermission } from "@/modules/identity";
-import { useExportWorkflow, useImportWorkflow } from "@/hooks/useWorkflowPortability";
-import { WorkflowImportDialog } from "@/components/automacoes/WorkflowImportDialog";
-import { WorkflowTemplates } from "@/components/automacoes/WorkflowTemplates";
+import { useExportWorkflow, useImportWorkflow } from "@/modules/workflows/hooks/useWorkflowPortability";
+import { WorkflowImportDialog } from "@/modules/workflows/components/WorkflowImportDialog";
+import { WorkflowTemplates } from "@/modules/workflows/components/WorkflowTemplates";
 import { TRIGGER_LABELS } from "@/types/workflow";
 import type { Workflow as WorkflowType } from "@/types/workflow";
 import { formatDistanceToNow } from "date-fns";

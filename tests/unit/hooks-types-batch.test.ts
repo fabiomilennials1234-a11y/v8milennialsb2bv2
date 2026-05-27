@@ -19,7 +19,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
-vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useWhatsAppInstances: () => ({ data: [] }) }));
 vi.mock("@/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }) }));
@@ -38,7 +38,7 @@ import type { ChannelMessage, ChannelContact } from "@/hooks/useChannelChat";
 // Importing the module itself triggers line coverage for exports
 import "@/modules/communication/hooks/useScheduledMessages";
 import "@/hooks/useSellerActivity";
-import "@/hooks/useAutoFollowUp";
+import "@/modules/workflows/hooks/useAutoFollowUp";
 
 describe("type imports — useLogLeadAction", () => {
   it("LeadActionType has lead_created", () => {

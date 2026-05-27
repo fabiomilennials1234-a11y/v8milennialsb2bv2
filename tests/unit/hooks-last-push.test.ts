@@ -37,7 +37,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 beforeEach(() => { vi.clearAllMocks(); mF.mockReturnValue(c()); });
 
 // ═══ useAutoFollowUp (18 LOC) ═══
-import { triggerFollowUpAutomation } from "@/hooks/useAutoFollowUp";
+import { triggerFollowUpAutomation } from "@/modules/workflows/hooks/useAutoFollowUp";
 
 describe("triggerFollowUpAutomation", () => {
   it("returns early when no organizationId", async () => {

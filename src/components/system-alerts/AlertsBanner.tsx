@@ -9,7 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, X } from "lucide-react";
 import { toast } from "sonner";
-import { useSystemAlerts, useResolveAlert } from "@/hooks/useAutomationHealth";
+import { useSystemAlerts, useResolveAlert } from "@/modules/workflows/hooks/useAutomationHealth";
 
 interface AlertsBannerProps {
   category?: string;

@@ -4,12 +4,12 @@ import { useNodesState, useEdgesState } from "@xyflow/react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { WorkflowCanvas } from "@/components/automacoes/WorkflowCanvas";
-import { WorkflowToolbar } from "@/components/automacoes/WorkflowToolbar";
-import { WorkflowSidebar } from "@/components/automacoes/WorkflowSidebar";
-import { WorkflowAnalytics } from "@/components/automacoes/WorkflowAnalytics";
-import { EnrollmentCriteria, EMPTY_ENROLLMENT } from "@/components/automacoes/EnrollmentCriteria";
-import { ReenrollmentConfig, DEFAULT_REENROLLMENT } from "@/components/automacoes/ReenrollmentConfig";
+import { WorkflowCanvas } from "@/modules/workflows/components/WorkflowCanvas";
+import { WorkflowToolbar } from "@/modules/workflows/components/WorkflowToolbar";
+import { WorkflowSidebar } from "@/modules/workflows/components/WorkflowSidebar";
+import { WorkflowAnalytics } from "@/modules/workflows/components/WorkflowAnalytics";
+import { EnrollmentCriteria, EMPTY_ENROLLMENT } from "@/modules/workflows/components/EnrollmentCriteria";
+import { ReenrollmentConfig, DEFAULT_REENROLLMENT } from "@/modules/workflows/components/ReenrollmentConfig";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,8 +17,8 @@ import {
   useWorkflow,
   useCreateWorkflow,
   useUpdateWorkflow,
-} from "@/hooks/useWorkflows";
-import { useExportWorkflow } from "@/hooks/useWorkflowPortability";
+} from "@/modules/workflows/hooks/useWorkflows";
+import { useExportWorkflow } from "@/modules/workflows/hooks/useWorkflowPortability";
 import type {
   WorkflowNode,
   WorkflowEdge,

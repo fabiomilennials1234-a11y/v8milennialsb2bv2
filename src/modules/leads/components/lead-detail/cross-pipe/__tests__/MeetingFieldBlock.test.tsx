@@ -56,7 +56,7 @@ vi.mock("@/modules/pipelines/hooks/usePipelineEntries", () => ({
   findOrCreatePipelineEntry: vi.fn().mockResolvedValue({ id: "entry-new" }),
 }));
 
-vi.mock("@/hooks/useAutoFollowUp", () => ({
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({
   triggerFollowUpAutomation: vi.fn(),
 }));
 

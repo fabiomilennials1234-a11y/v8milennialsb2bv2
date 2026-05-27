@@ -19,7 +19,7 @@ import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modu
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanDo } from "@/modules/identity";
 import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanban/StageWorkflowsBadgeWrapper";
-import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
+import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/modules/pipelines/hooks/usePipeWhatsapp";
 import { usePipeWhatsappMetrics } from "@/modules/pipelines/hooks/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";

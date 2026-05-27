@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, X } from "lucide-react";
 import type { ActionNodeData } from "@/types/workflow";
-import { TemplateTextarea } from "@/components/automacoes/TemplateTextarea";
+import { TemplateTextarea } from "@/modules/workflows/components/TemplateTextarea";
 import { MenuPreview } from "./MenuPreview";
 
 interface Props {

@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
-import { triggerFollowUpAutomation } from "@/hooks/useAutoFollowUp";
+import { triggerFollowUpAutomation } from "@/modules/workflows/hooks/useAutoFollowUp";
 
 import { useOrganization } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";

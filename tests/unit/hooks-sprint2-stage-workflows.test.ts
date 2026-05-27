@@ -50,7 +50,7 @@ import {
   useCustomPipeWorkflowCounts,
   useCampaignStageWorkflows,
   useCampaignWorkflowCounts,
-} from "@/hooks/useStageWorkflows";
+} from "@/modules/workflows/hooks/useStageWorkflows";
 
 // ---- Test data ----
 

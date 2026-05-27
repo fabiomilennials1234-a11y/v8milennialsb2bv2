@@ -18,7 +18,7 @@ import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/modules/pip
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanDo } from "@/modules/identity";
 import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanban/StageWorkflowsBadgeWrapper";
-import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
+import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import { usePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus } from "@/modules/pipelines/hooks/usePipeConfirmacao";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/modules/pipelines/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";

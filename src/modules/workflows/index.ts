@@ -4,9 +4,99 @@
  * Public surface do bounded context. Tudo cross-module passa por aqui.
  * Internals (subpastas) são privados — ESLint `boundaries` impede import direto.
  *
- * 🚧 Vazio — exports virão durante a slice 8 (`feat/modularizacao/07-workflows`).
+ * Status: Active (populado em slice 8 — feat/modularizacao/07-workflows).
  * Ver `./CLAUDE.md` para escopo (Workflow DAG, triggers, conditions, action
- * handlers, executor).
+ * handlers, executor), áreas frágeis (triggerStageChangedWorkflows duplicate
+ * 🟠, dedup obrigatório, actions vs action-handlers).
+ *
+ * Pages NÃO são re-exportadas — App.tsx faz deep-import via React.lazy
+ * (padrão dos slices 4-7).
  */
 
-export {};
+// ────────────────────────────────────────────────────────────────────────
+// Hooks — Workflow CRUD + executions
+// ────────────────────────────────────────────────────────────────────────
+
+export {
+  useWorkflows,
+  useWorkflow,
+  useCreateWorkflow,
+  useUpdateWorkflow,
+  useDeleteWorkflow,
+  useToggleWorkflow,
+  useWorkflowExecutions,
+  useWorkflowExecutionSteps,
+  useRetryWorkflowExecution,
+  useWorkflowStats,
+} from "./hooks/useWorkflows";
+
+// ────────────────────────────────────────────────────────────────────────
+// Hooks — Analytics
+// ────────────────────────────────────────────────────────────────────────
+
+export {
+  useWorkflowNodeStats,
+  type WorkflowNodeStats,
+} from "./hooks/useWorkflowAnalytics";
+
+// ────────────────────────────────────────────────────────────────────────
+// Hooks — Portability (export/import)
+// ────────────────────────────────────────────────────────────────────────
+
+export {
+  useExportWorkflow,
+  useImportWorkflow,
+} from "./hooks/useWorkflowPortability";
+
+// ────────────────────────────────────────────────────────────────────────
+// Hooks — Templates
+// ────────────────────────────────────────────────────────────────────────
+
+export {
+  useWorkflowTemplates,
+  useCloneWorkflowTemplate,
+  type WorkflowTemplate,
+} from "./hooks/useWorkflowTemplates";
+
+// ────────────────────────────────────────────────────────────────────────
+// Hooks — Stage <-> Workflow bindings (cross-module from pipelines/campaigns)
+// ────────────────────────────────────────────────────────────────────────
+
+export {
+  useStageWorkflows,
+  useStageWorkflowCounts,
+  useCustomPipeStageWorkflows,
+  useCustomPipeWorkflowCounts,
+  useCampaignStageWorkflows,
+  useCampaignWorkflowCounts,
+} from "./hooks/useStageWorkflows";
+
+// ────────────────────────────────────────────────────────────────────────
+// Hooks — Automation Health (dashboard master)
+// ────────────────────────────────────────────────────────────────────────
+
+export {
+  useAutomationHealth,
+  useDeadLetterJobs,
+  useFailedWorkflows,
+  useStuckActions,
+  useCircuitBrokenWebhooks,
+  useSystemAlerts,
+  useResolveAlert,
+  useReprocessJob,
+  useOrgsCopilotEngine,
+  useToggleCopilotEngine,
+  useAuditLog,
+  type HealthStats,
+  type SystemAlert,
+  type UseSystemAlertsOpts,
+  type ReprocessType,
+  type OrgEngineRow,
+  type AuditLogFilter,
+} from "./hooks/useAutomationHealth";
+
+// ────────────────────────────────────────────────────────────────────────
+// Server-side trigger (follow-up automation — chamada de pipelines/campaigns)
+// ────────────────────────────────────────────────────────────────────────
+
+export { triggerFollowUpAutomation } from "./hooks/useAutoFollowUp";

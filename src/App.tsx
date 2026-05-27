@@ -72,9 +72,9 @@ const Privacidade = lazy(() => lazyRetry(() => import("./pages/Privacidade")));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/modules/copilot/components/playground").then(m => ({ default: m.CopilotPlayground }))));
 const ChecklistPage = lazy(() => lazyRetry(() => import("./pages/ChecklistPage")));
 const MessageTemplates = lazy(() => lazyRetry(() => import("./pages/MessageTemplates")));
-const Automacoes = lazy(() => lazyRetry(() => import("./pages/Automacoes")));
-const AutomacoesEditor = lazy(() => lazyRetry(() => import("./pages/AutomacoesEditor")));
-const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./pages/AutomacoesExecucoes")));
+const Automacoes = lazy(() => lazyRetry(() => import("./modules/workflows/pages/Automacoes")));
+const AutomacoesEditor = lazy(() => lazyRetry(() => import("./modules/workflows/pages/AutomacoesEditor")));
+const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./modules/workflows/pages/AutomacoesExecucoes")));
 
 
 const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));

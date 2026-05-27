@@ -12,7 +12,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { useWorkflows } from "@/hooks/useWorkflows";
+import { useWorkflows } from "@/modules/workflows/hooks/useWorkflows";
 
 function mockWorkflowQuery(data: unknown[]) {
   mockFrom.mockReturnValue({
