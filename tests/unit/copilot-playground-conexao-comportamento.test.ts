@@ -16,7 +16,7 @@ import {
   createDefaultComportamentoState,
   type ConexaoState,
   type ComportamentoState,
-} from "../../src/components/copilot/playground/conexao-comportamento-mapping";
+} from "../../src/modules/copilot/components/playground/conexao-comportamento-mapping";
 
 // ──────────────────────────────────────────────
 // RED-GREEN 1: Conexao state -> agent payload

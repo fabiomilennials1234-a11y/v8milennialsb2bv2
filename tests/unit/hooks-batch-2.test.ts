@@ -34,8 +34,8 @@ vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => 
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
-vi.mock("@/hooks/useCopilotPromptBuilder", () => ({ generatePrompt: vi.fn(), saveCopilotSystemPrompt: vi.fn(), regenerateAndSavePrompt: vi.fn(), computePromptHash: vi.fn() }));
-vi.mock("@/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r) }));
+vi.mock("@/modules/copilot/hooks/useCopilotPromptBuilder", () => ({ generatePrompt: vi.fn(), saveCopilotSystemPrompt: vi.fn(), regenerateAndSavePrompt: vi.fn(), computePromptHash: vi.fn() }));
+vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r) }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn(), triggerLeadCreatedInCustomPipeline: vi.fn() }));
 vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));

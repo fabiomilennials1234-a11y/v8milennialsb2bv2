@@ -33,7 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useState } from "react";
-import { useAgentMetrics, type AgentMetricsTrend } from "@/hooks/useAgentMetrics";
+import { useAgentMetrics, type AgentMetricsTrend } from "@/modules/copilot/hooks/useAgentMetrics";
 
 interface AgentMetricsTabProps {
   agentId: string;

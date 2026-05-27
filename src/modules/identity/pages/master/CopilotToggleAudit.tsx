@@ -49,7 +49,7 @@ import {
   useCopilotToggleAudit,
   useCopilotToggleDrift,
   type CopilotToggleAuditFilters,
-} from "@/hooks/useCopilotToggleAudit";
+} from "@/modules/copilot/hooks/useCopilotToggleAudit";
 import { useMasterOrganizations } from "../../hooks/useMasterOrganizations";
 
 const PRESET_RANGES = [

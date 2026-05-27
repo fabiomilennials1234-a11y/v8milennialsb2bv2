@@ -41,7 +41,7 @@ vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn(),
 vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn(), assertPermission: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/lib/copilot/custom-instructions-utils", () => ({ parseCustomInstructions: () => ({ dos: "", donts: "" }), serializeCustomInstructions: () => null }));
-vi.mock("@/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r) }));
+vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 vi.mock("papaparse", () => ({ default: { parse: vi.fn() } }));
 
@@ -155,7 +155,7 @@ describe("useImportLeads — pure exports", () => {
 });
 
 // ── useCopilotPromptBuilder ──
-import { computePromptHash } from "@/hooks/useCopilotPromptBuilder";
+import { computePromptHash } from "@/modules/copilot/hooks/useCopilotPromptBuilder";
 
 describe("useCopilotPromptBuilder — pure exports", () => {
   it("computePromptHash returns a string", () => {

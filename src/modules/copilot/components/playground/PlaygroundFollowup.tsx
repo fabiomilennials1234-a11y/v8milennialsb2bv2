@@ -65,7 +65,7 @@ import {
   useUpdateFollowupRule,
   useDeleteFollowupRule,
   useToggleFollowupRule,
-} from "@/hooks/useAgentFollowupRules";
+} from "@/modules/copilot/hooks/useAgentFollowupRules";
 
 // =====================================================
 // CONSTANTS

@@ -31,7 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useAgentPendingTasks } from "@/hooks/useAgentMetrics";
+import { useAgentPendingTasks } from "@/modules/copilot/hooks/useAgentMetrics";
 
 interface AgentTasksTabProps {
   agentId: string;

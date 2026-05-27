@@ -8,7 +8,7 @@ import {
   useAcceptSuggestion,
   useDismissSuggestion,
   type PromptSuggestion,
-} from "@/hooks/usePromptAnalysis";
+} from "@/modules/copilot/hooks/usePromptAnalysis";
 import { PromptAnalysisSuggestionCard } from "./PromptAnalysisSuggestionCard";
 
 interface Props {

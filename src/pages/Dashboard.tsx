@@ -10,7 +10,7 @@ import { TabInteligencia } from "@/components/dashboard/TabInteligencia";
 const TabAnalyticsV2 = lazy(() => import("@/components/dashboard/TabAnalyticsV2").then(m => ({ default: m.TabAnalyticsV2 })));
 import { OraculoFloatingButton } from "@/components/dashboard/OraculoFloatingButton";
 import { OraculoChat } from "@/components/dashboard/OraculoChat";
-import { useOraculoChat } from "@/hooks/useOraculoChat";
+import { useOraculoChat } from "@/modules/copilot/hooks/useOraculoChat";
 import { useAuth } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
 import { useUserRole } from "@/modules/identity";

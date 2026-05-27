@@ -7,7 +7,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Check, X, ChevronDown, MessageSquare } from "lucide-react";
-import type { PromptSuggestion } from "@/hooks/usePromptAnalysis";
+import type { PromptSuggestion } from "@/modules/copilot/hooks/usePromptAnalysis";
 
 const SECTION_LABELS: Record<string, string> = {
   personality: "Personalidade",

@@ -72,7 +72,7 @@ vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
 }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
-vi.mock("@/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
+vi.mock("@/modules/copilot/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
 vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({
   useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }),
 }));
@@ -110,7 +110,7 @@ describe("useAgentFollowupRules", () => {
 
   describe("followupRuleToDB", () => {
     it("converts a frontend FollowupRule to DB format with all fields", async () => {
-      const { followupRuleToDB } = await import("@/hooks/useAgentFollowupRules");
+      const { followupRuleToDB } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const result = followupRuleToDB(
         {
           name: "Rule 1",
@@ -173,7 +173,7 @@ describe("useAgentFollowupRules", () => {
     });
 
     it("uses sensible defaults when fields are omitted", async () => {
-      const { followupRuleToDB } = await import("@/hooks/useAgentFollowupRules");
+      const { followupRuleToDB } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const result = followupRuleToDB({}, "agent-456");
 
       expect(result.agent_id).toBe("agent-456");
@@ -201,7 +201,7 @@ describe("useAgentFollowupRules", () => {
     });
 
     it("sets description to null when undefined", async () => {
-      const { followupRuleToDB } = await import("@/hooks/useAgentFollowupRules");
+      const { followupRuleToDB } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const result = followupRuleToDB({ name: "X" }, "a1");
       expect(result.description).toBeNull();
     });
@@ -240,7 +240,7 @@ describe("useAgentFollowupRules", () => {
       };
       mF.mockReturnValue(c([dbRule]));
 
-      const { useAgentFollowupRules } = await import("@/hooks/useAgentFollowupRules");
+      const { useAgentFollowupRules } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { result } = renderHook(() => useAgentFollowupRules("agent-1"), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -286,7 +286,7 @@ describe("useAgentFollowupRules", () => {
       };
       mF.mockReturnValue(c([dbRule]));
 
-      const { useAgentFollowupRules } = await import("@/hooks/useAgentFollowupRules");
+      const { useAgentFollowupRules } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { result } = renderHook(() => useAgentFollowupRules("agent-2"), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -302,7 +302,7 @@ describe("useAgentFollowupRules", () => {
     });
 
     it("is disabled when agentId is undefined", async () => {
-      const { useAgentFollowupRules } = await import("@/hooks/useAgentFollowupRules");
+      const { useAgentFollowupRules } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { result } = renderHook(() => useAgentFollowupRules(undefined), { wrapper: w() });
 
       // Should never fetch
@@ -343,7 +343,7 @@ describe("useAgentFollowupRules", () => {
       };
       mF.mockReturnValue(c([returnedRule]));
 
-      const { useCreateFollowupRule } = await import("@/hooks/useAgentFollowupRules");
+      const { useCreateFollowupRule } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useCreateFollowupRule(), { wrapper: w() });
 
@@ -377,7 +377,7 @@ describe("useAgentFollowupRules", () => {
       };
       mF.mockReturnValue(c([updated]));
 
-      const { useUpdateFollowupRule } = await import("@/hooks/useAgentFollowupRules");
+      const { useUpdateFollowupRule } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useUpdateFollowupRule(), { wrapper: w() });
 
@@ -399,7 +399,7 @@ describe("useAgentFollowupRules", () => {
     it("deletes a rule and shows success toast", async () => {
       mF.mockReturnValue(c());
 
-      const { useDeleteFollowupRule } = await import("@/hooks/useAgentFollowupRules");
+      const { useDeleteFollowupRule } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useDeleteFollowupRule(), { wrapper: w() });
 
@@ -429,7 +429,7 @@ describe("useAgentFollowupRules", () => {
       };
       mF.mockReturnValue(c([toggled]));
 
-      const { useToggleFollowupRule } = await import("@/hooks/useAgentFollowupRules");
+      const { useToggleFollowupRule } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useToggleFollowupRule(), { wrapper: w() });
 
@@ -457,7 +457,7 @@ describe("useAgentFollowupRules", () => {
       };
       mF.mockReturnValue(c([toggled]));
 
-      const { useToggleFollowupRule } = await import("@/hooks/useAgentFollowupRules");
+      const { useToggleFollowupRule } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useToggleFollowupRule(), { wrapper: w() });
 
@@ -475,7 +475,7 @@ describe("useAgentFollowupRules", () => {
     it("reorders rules by updating priorities", async () => {
       mF.mockReturnValue(c());
 
-      const { useReorderFollowupRules } = await import("@/hooks/useAgentFollowupRules");
+      const { useReorderFollowupRules } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { result } = renderHook(() => useReorderFollowupRules(), { wrapper: w() });
 
       await act(async () => {

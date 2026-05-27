@@ -32,8 +32,8 @@ vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => 
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
-vi.mock("@/hooks/useCopilotPromptBuilder", () => ({ generatePrompt: vi.fn(), saveCopilotSystemPrompt: vi.fn(), regenerateAndSavePrompt: vi.fn(), computePromptHash: vi.fn() }));
-vi.mock("@/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r) }));
+vi.mock("@/modules/copilot/hooks/useCopilotPromptBuilder", () => ({ generatePrompt: vi.fn(), saveCopilotSystemPrompt: vi.fn(), regenerateAndSavePrompt: vi.fn(), computePromptHash: vi.fn() }));
+vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r) }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/hooks/useTags", () => ({ useTags: () => ({ data: [] }) }));
 vi.mock("@/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
@@ -49,13 +49,13 @@ vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({ useCustomPipeli
 
 // ── Imports ──
 import { useAcoesDoDia } from "@/hooks/useAcoesDoDia";
-import { useAgentDocuments } from "@/hooks/useAgentDocuments";
-import { useAgentFollowupRules } from "@/hooks/useAgentFollowupRules";
-import { useAgentKanbanRules } from "@/hooks/useAgentKanbanRules";
+import { useAgentDocuments } from "@/modules/copilot/hooks/useAgentDocuments";
+import { useAgentFollowupRules } from "@/modules/copilot/hooks/useAgentFollowupRules";
+import { useAgentKanbanRules } from "@/modules/copilot/hooks/useAgentKanbanRules";
 import { useCadastroExterno } from "@/hooks/useCadastroExterno";
 import { useConversationHistory } from "@/modules/communication/hooks/useConversationHistory";
 import { useConversationNotes } from "@/modules/communication/hooks/useConversationNotes";
-import { useCopilotAgentAudios } from "@/hooks/useCopilotAgentAudios";
+import { useCopilotAgentAudios } from "@/modules/copilot/hooks/useCopilotAgentAudios";
 import { useExportLeads } from "@/modules/leads";
 import { useHelpCenter } from "@/hooks/useHelpCenter";
 import { useLeadCustomFields } from "@/modules/leads";

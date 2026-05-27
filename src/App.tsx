@@ -57,8 +57,8 @@ const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Fu
 // Marketing and Analytics are unified in the Analytics tab — see TabAnalyticsV2.tsx
 const Produtos = lazy(() => lazyRetry(() => import("./pages/Produtos")));
 const Negocios = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Negocios")));
-const Copilot = lazy(() => lazyRetry(() => import("./pages/Copilot")));
-const CopilotMetrics = lazy(() => lazyRetry(() => import("./pages/CopilotMetrics")));
+const Copilot = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/Copilot")));
+const CopilotMetrics = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/CopilotMetrics")));
 const ChatWhatsApp = lazy(() => lazyRetry(() => import("@/modules/communication/pages/ChatWhatsApp")));
 const AtendimentoMeta = lazy(() => lazyRetry(() => import("@/modules/communication/pages/AtendimentoMeta")));
 // ChatSkeleton é eager (não lazy) — precisa estar disponível no instante
@@ -69,7 +69,7 @@ const ClienteDetail = lazy(() => lazyRetry(() => import("./components/carteira/C
 const CustomPipeline = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/CustomPipeline")));
 const Agenda = lazy(() => lazyRetry(() => import("./pages/Agenda")));
 const Privacidade = lazy(() => lazyRetry(() => import("./pages/Privacidade")));
-const CopilotPlayground = lazy(() => lazyRetry(() => import("@/components/copilot/playground").then(m => ({ default: m.CopilotPlayground }))));
+const CopilotPlayground = lazy(() => lazyRetry(() => import("@/modules/copilot/components/playground").then(m => ({ default: m.CopilotPlayground }))));
 const ChecklistPage = lazy(() => lazyRetry(() => import("./pages/ChecklistPage")));
 const MessageTemplates = lazy(() => lazyRetry(() => import("./pages/MessageTemplates")));
 const Automacoes = lazy(() => lazyRetry(() => import("./pages/Automacoes")));

@@ -24,7 +24,7 @@ Detalhe completo + estimativas em `.specs/features/modularizacao/SPEC.md`.
 | 4 | `feat/modularizacao/03-leads` | Consolidar lead/lead-detail/leads + hooks + pages. **Absorve dedup**: timeline×history×fieldChanges | 6h + 2h |
 | 5 | `feat/modularizacao/04-pipelines` | kanban + pipelines + pipe-* + 16 hooks pipeline (namespace legacy explícito) | 6h + 1h |
 | 6 ✅ | `feat/modularizacao/05-communication` | chat + chat-meta + whatsapp-* + hooks. **Absorve dedup**: realtime hooks (3→1) — *concluído 2026-05-27. Dedup realtime adiado para slice 14 (hooks cross-cutting, não pertencem ao BC)* | 7h + 1h |
-| 7 | `feat/modularizacao/06-copilot` | copilot + hooks agent + `_shared/copilot/`. **Absorve dedup**: copilot toggle (3→1) | 5h + 1h |
+| 7 ✅ | `feat/modularizacao/06-copilot` | copilot + hooks agent + `_shared/copilot/`. **Absorve dedup**: copilot toggle (3→1) — *concluído 2026-05-27. Frontend migrado (42 renames). Backend `_shared/copilot/` + 4 utils órfãos adiados para slice 16. Dedup toggle mantido como 3 hooks (mutation/audit/realtime — responsabilidades distintas, consolidação forçada quebraria callers)* | 5h + 1h |
 | 8 | `feat/modularizacao/07-workflows` | automacoes + `_shared/workflow-*` + actions/action-handlers. **Absorve**: auditar nomenclatura | 6h + 2h |
 | 9 | `feat/modularizacao/08-campaigns` | campanhas + mass-send + templates | 4h |
 | 10 | `feat/modularizacao/09-carteira` | carteira + upsell + proposals + deals + tinyerp + erp-* | 5h |

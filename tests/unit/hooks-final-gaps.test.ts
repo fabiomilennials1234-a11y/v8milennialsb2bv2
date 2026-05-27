@@ -54,7 +54,7 @@ vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.
 vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {}, useAllPipelineStages: () => ({ data: [] }) }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
-vi.mock("@/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
+vi.mock("@/modules/copilot/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
 vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }) }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), assertPermission: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
@@ -100,7 +100,7 @@ describe("usePipeDispatchRules", () => {
 });
 
 // ═══ useAgentDocuments ═══
-import { useAgentDocuments, useUploadAgentDocument, useDeleteAgentDocument } from "@/hooks/useAgentDocuments";
+import { useAgentDocuments, useUploadAgentDocument, useDeleteAgentDocument } from "@/modules/copilot/hooks/useAgentDocuments";
 
 describe("useAgentDocuments", () => {
   it("fetches documents", async () => {
@@ -118,7 +118,7 @@ describe("useAgentDocuments", () => {
 });
 
 // ═══ useAgentMetrics ═══
-import { useAgentMetrics, useAgentConversationStats } from "@/hooks/useAgentMetrics";
+import { useAgentMetrics, useAgentConversationStats } from "@/modules/copilot/hooks/useAgentMetrics";
 
 describe("useAgentMetrics", () => {
   it("fetches agent metrics", async () => {
@@ -182,7 +182,7 @@ describe("usePipeWhatsapp", () => {
 });
 
 // ═══ useAgentKanbanRules ═══
-import { useAgentKanbanRules, useCreateKanbanRule, useDeleteKanbanRule } from "@/hooks/useAgentKanbanRules";
+import { useAgentKanbanRules, useCreateKanbanRule, useDeleteKanbanRule } from "@/modules/copilot/hooks/useAgentKanbanRules";
 
 describe("useAgentKanbanRules", () => {
   it("fetches kanban rules", async () => {

@@ -1,4 +1,4 @@
-import { useCopilotAgent } from "@/hooks/useCopilotAgents";
+import { useCopilotAgent } from "@/modules/copilot/hooks/useCopilotAgents";
 import { useDispatchLog, useDispatchStats } from "@/hooks/useCampaignTemplates";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
