@@ -13,7 +13,7 @@ import {
   useRefreshQRCode,
   useCheckConnectionStatus,
   useWhatsAppInstances,
-} from "@/hooks/useWhatsAppInstances";
+} from "@/modules/communication/hooks/useWhatsAppInstances";
 import { useOnboardingAdvance } from "@/hooks/useOnboardingAdvance";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";

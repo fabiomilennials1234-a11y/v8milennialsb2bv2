@@ -63,8 +63,8 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   isVirtualTeamMember: (id: string) => id?.startsWith("master-virtual-"),
 }));
 
-import { useResolveChatDeepLink } from "@/hooks/chat/useResolveChatDeepLink";
-import type { WhatsAppInstanceForUser } from "@/hooks/chat/types";
+import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
+import type { WhatsAppInstanceForUser } from "@/modules/communication/hooks/chat/types";
 
 const wrapper =
   (qc: QueryClient) =>

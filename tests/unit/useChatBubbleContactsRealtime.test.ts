@@ -32,7 +32,7 @@ vi.mock("@/lib/normalizePhone", () => ({
 
 // ─── Import after mocks ──────────────────────────────────────────────────────
 
-import { useChatBubbleContactsRealtime } from "@/hooks/chat/useChatBubbleContactsRealtime";
+import { useChatBubbleContactsRealtime } from "@/modules/communication/hooks/chat/useChatBubbleContactsRealtime";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

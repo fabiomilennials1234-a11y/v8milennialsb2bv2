@@ -22,9 +22,9 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
+import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
 import { ScheduleFollowUpModal } from "@/components/followups/ScheduleFollowUpModal";
-import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
+import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
 import { cn } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────

@@ -22,7 +22,7 @@ import { LeadModalSkeleton } from "./LeadModalSkeleton";
 import { LeadVisibilityState } from "./LeadVisibilityState";
 import { LeadDetailBanners } from "./LeadDetailBanners";
 import { useAuth } from "@/modules/identity";
-import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
+import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
 import { LogCallModal } from "@/components/calls/LogCallModal";
 import { EmailComposer } from "@/components/email/EmailComposer";
 import { SmsSendDialog } from "@/components/sms/SmsSendDialog";

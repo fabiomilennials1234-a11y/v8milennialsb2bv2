@@ -14,7 +14,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { type ReactNode } from "react";
 
 // Mock whatsappApi
-vi.mock("@/lib/whatsappApi", () => ({
+vi.mock("@/modules/communication/lib/whatsappApi", () => ({
   reactToMessage: vi.fn(async () => {}),
   editMessage: vi.fn(async () => {}),
   pinMessage: vi.fn(async () => {}),
@@ -36,16 +36,16 @@ import {
   useDeleteMessage,
   useMarkMessageRead,
   isFeatureUnavailable,
-} from "@/hooks/useMessageActions";
+} from "@/modules/communication/hooks/useMessageActions";
 import {
   reactToMessage,
   editMessage,
   pinMessage,
   deleteMessage,
   markMessageRead,
-} from "@/lib/whatsappApi";
+} from "@/modules/communication/lib/whatsappApi";
 
-import { MessageMetaBadges, DeletedPlaceholder } from "@/components/chat/actions/MessageMetaBadges";
+import { MessageMetaBadges, DeletedPlaceholder } from "@/modules/communication/components/chat/actions/MessageMetaBadges";
 
 // ─── helpers ────────────────────────────────────────────────
 

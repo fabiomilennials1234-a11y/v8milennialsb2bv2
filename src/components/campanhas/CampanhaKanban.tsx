@@ -28,7 +28,7 @@ import { Phone, Mail, Building2, GripVertical, User, DollarSign, Star, Tag, Tras
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useOpenWhatsAppChat } from "@/lib/whatsapp";
+import { useOpenWhatsAppChat } from "@/modules/communication/lib/whatsapp";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { LeadModal } from "@/modules/leads";

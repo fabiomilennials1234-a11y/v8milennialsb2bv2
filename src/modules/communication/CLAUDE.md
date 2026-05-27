@@ -1,6 +1,6 @@
 # Module — communication
 
-**Status:** 🟡 Skeleton (slice 6 popula)
+**Status:** 🟢 Active (slice 6 concluído 2026-05-27 — frontend migrado)
 **BC:** communication
 **Entidade primária:** Conversation + Message + Instance + Message Gateway
 **Owner:** vendas + ops
@@ -16,71 +16,132 @@ Inclui:
 - Chat UI por canal (composer, bubble, context panel)
 - Conversations + Messages (CRUD + realtime)
 - Instance management (1 instance por org, allowlist quem pode escrever)
-- Message gateway (humanização, chunking, dedup)
-- Mass send (slice paralelo `campaigns/mass-send`)
+- Mass send via Uazapi `/sender/*` (frontend — backend continua em `supabase/functions/`)
 - History sync (importar histórico Uazapi)
-- Mockups (dev tools — auditar pra deletar)
+- Scheduled messages
+- Chat bubble (kanban floating chat)
 
 ## Não-escopo
 
 - Copilot/agente IA que responde → `copilot`
 - Workflows que enviam mensagem como action → `workflows` (delega pra `MessageSender` deste módulo)
-- Templates de mensagem (cross-cutting) → `platform`?
+- Templates de mensagem (`useMessageTemplates`) — vivem aqui mas são reusados cross-module (workflows, campaigns); a entidade `message_templates` está no domínio communication
+- Backend (edge functions + `_shared/`) → slice 15 (`whatsapp-*`, `meta-*`, `sz-chat-*`, `history-sync-worker`) e slice 16 (`_shared/whatsapp-client.ts`, `_shared/message-*`, `_shared/whatsapp-providers/`)
 
-## API pública (`index.ts`) — TBD slice 6
+## Estrutura
 
-Provável superfície:
-- Hooks: `useWhatsAppChat`, `useWhatsAppConversations`, `useWhatsAppInstances`, `useConversationDraft`, `useMessageActions`, `useChatBubble`, `useScheduledMessages`
-- Components: `<ChatShell>`, `<MessageBubble>`, `<ChatComposer>`, `<ContextPanel>`
-- Types: `Conversation`, `Message`, `Instance`, `Channel`
-- Eventos (post slice 19): `message.received`, `message.sent`, `conversation.read`, `instance.session_died`
+```
+src/modules/communication/
+├── components/
+│   ├── chat/                      # WhatsApp UI (actions, admin, bubble, composer, context-panel, history-sync, layout, list, media, search, takeover, view + barrel index.ts)
+│   ├── chat-meta/                 # Meta Messenger/Instagram UI
+│   ├── whatsapp/                  # SessionDeadBanner (lifecycle alerts)
+│   └── whatsapp-migration/        # Evolution→Uazapi migration banner + wizard
+├── hooks/
+│   ├── chat/                      # WhatsApp-specific hooks (instances, contacts, messages, send, realtime, sz-chat) + shared/queryKeys
+│   ├── chat-meta/                 # Meta hooks (pages, conversations, messages, send, realtime, link-lead)
+│   ├── useWhatsAppChat.ts         # Barrel + Uazapi message actions + history-sync + mass-send re-exports
+│   ├── useWhatsAppConversations.ts
+│   ├── useWhatsAppFunnel.ts
+│   ├── useWhatsAppInstanceAllowedMembers.ts
+│   ├── useWhatsAppInstances.ts
+│   ├── useWhatsAppLeadIntegration.ts
+│   ├── useOrgWhatsAppMigration.ts
+│   ├── useConversationDraft.ts
+│   ├── useConversationHistory.ts
+│   ├── useConversationNotes.ts
+│   ├── useChatBubble.ts / useChatBubbleState.ts
+│   ├── useMessageActions.ts       # react/edit/pin/delete/markRead/downloadMedia (Uazapi)
+│   ├── useMessageLimits.ts
+│   ├── useMessageTemplates.ts
+│   ├── useMetaConnection.ts
+│   ├── useScheduledMessages.ts
+│   ├── useHistorySyncJobs.ts
+│   ├── useDeadSessions.ts
+│   ├── useIncomingMessageToast.ts
+│   ├── usePreferredInstance.ts
+│   └── useUserWriteInstanceFlag.ts
+├── lib/
+│   ├── whatsappApi.ts             # Low-level HTTP client (Uazapi REST)
+│   ├── whatsapp.ts                # High-level send helpers
+│   ├── chat-types.ts              # Shared chat types
+│   ├── primaryInstanceFor.ts      # Instance selection logic
+│   ├── computeNeedsDeepLinkResolve.ts
+│   ├── audioToMp3.ts              # Media transcode (browser-side)
+│   └── chatPrefetch.ts            # Route prefetch helpers
+├── pages/
+│   ├── ChatWhatsApp.tsx
+│   └── AtendimentoMeta.tsx
+├── index.ts                       # API pública
+└── CLAUDE.md                      # este arquivo
+```
+
+## API pública (`index.ts`)
+
+Superfície completa em `./index.ts`. Resumo:
+
+**Hooks WhatsApp (chat):** `useWhatsAppInstancesForUser`, `useActiveWhatsAppInstance`, `useWhatsAppContacts`, `useWhatsAppMessages`, `useSendWhatsAppMessage`, `useSendWhatsAppMedia`, `useFailedMessages`, `useRetryMessage`, `useWhatsAppMessagesRealtime`, `useTransferToSzChatDepartment`, `useActiveSzChatSession`, `useReactMessage`, `useEditMessage`, `usePinMessage`, `useDeleteMessage`, `useMarkMessageRead`, `useDownloadMedia`, `useHistorySyncJobs`, `useCreateHistorySyncJob`, `useControlHistorySyncJob`, `useMassSend*`, `useWhatsAppConversationsMeta`, `useArchive/Unarchive/DeleteConversation`, `useAdd/RemoveConversationTag`, `useWhatsAppFunnel`, `useWhatsAppLeadIntegration`.
+
+**Hooks WhatsApp (instance):** `useWhatsAppInstances`, `useWhatsAppInstancesWithAgent`, `useCreate/Update/Delete/LogoutWhatsAppInstance`, `useRefreshQRCode`, `useCheckConnectionStatus`, `useWhatsAppInstanceAllowedMembers`, `usePreferredInstance`, `useUserWriteInstanceFlag`, `useOrgWhatsAppMigration`.
+
+**Hooks composer / drafts / bubble:** `useConversationDraft`, `useConversationNotes`, `useConversationHistory`, `useChatBubble`, `useChatBubbleState`.
+
+**Hooks messaging utilities:** `useScheduled*Messages*`, `useMessageLimits`, `useMessageTemplates`, `useCreate/Update/DeleteMessageTemplate`, `useIncomingMessageToast`, `useDeadSessions`.
+
+**Hooks Meta:** `useMetaConnection`, `useMetaPages`, `useMetaConversations`, `useMetaConversationProfile`, `useMetaMessages`, `useMetaSend`, `useMetaMarkAsRead`, `useMetaLinkLead`, `useMetaRealtime`.
+
+**Components:** `ChatShellWithContext`, `ChatSkeleton`, `MessageBubble`, `MessagesAreaErrorBoundary`, `AudioPlayer`, `AudioRecorder`, `ImagePreviewModal`, `MessageImage/Video/Document`, `ChatEmptyState`, `ScrollToBottomFab`, `UnreadDivider`, `ScheduledMessagesBanner`, `ScheduleMessageModal`, `ConversationNotes`, `LeadContactModal`, `HumanPauseBadge`, `ChannelBadge`, `RealtimeStatusBadge`; Meta: `MetaChatShell`, `MetaChatHeader`, `MetaConversationList(Item)`, `MetaMessage{List,Bubble}`, `MetaComposer`, `MetaWindowWarning`, `LinkLeadDialog`, `ChatMetaSkeleton`; WhatsApp lifecycle: `SessionDeadBanner`, `WhatsAppMigrationBanner`, `RepairingWizard`.
+
+**Lib:** `whatsappApi` (namespace export), `primaryInstanceFor`, `computeNeedsDeepLinkResolve`, `prefetchChatRoute`, `prefetchChatData`.
+
+**Types:** `WhatsAppInstance`, `WhatsAppMessage`, `FailedMessage`, `ChatContact`, `MessageTemplate`, `ScheduledMessage`, `HistorySyncJob`, `MetaConversation`, `MetaPage`, `MetaChannel`, etc.
 
 ## Áreas frágeis
 
 🔴 **Área frágil declarada em CLAUDE.md raiz.**
 
-- Provider-agnostic via adapter (`_shared/whatsapp-client.ts` + `whatsapp-providers/`)
+- Provider-agnostic via adapter (`_shared/whatsapp-client.ts` + `whatsapp-providers/`) — **continua em `_shared/` até slice 16**
 - Features Uazapi-only: sendMenu, sendPixButton, react/edit/pin/deleteForAll/markRead, historySync, `/sender/*`
 - Kill-switch: `organizations.whatsapp_provider_override`
 - Janela 24h Meta: composer disable se `now - last_inbound_at > 24h`
 - RLS strict em `whatsapp_instance_secrets` (deny-all)
 - Realtime onUpdate: só campos alterados, sem joins
+- Hooks realtime específicos (`useWhatsAppMessagesRealtime`, `useChatBubbleContactsRealtime`) usam `useRealtimeChannel` cross-cutting de `@/hooks/useRealtimeChannel` — **NÃO migrado** para este módulo, fica em `src/hooks/` (será consolidado em `core/realtime/` no slice 14)
 
-## Origem (pastas atuais que migrarão pra cá)
+## Dependências cross-module
 
-Frontend:
-- `src/components/chat/` (WhatsApp)
-- `src/components/chat-meta/` (Meta)
-- `src/hooks/chat/` (subpasta existente)
-- `src/hooks/chat-meta/` (subpasta existente)
-- `src/hooks/useWhatsApp*.ts` (10 hooks)
-- `src/hooks/useChatBubble.ts`, `useChatBubbleState.ts`
-- `src/hooks/useConversation*.ts`, `useMessage*.ts`, `useIncomingMessageToast.ts`, `useScheduledMessages.ts`
-- `src/hooks/useDeadSessions.ts`, `useHistorySyncJobs.ts`
-- `src/hooks/useMetaConnection.ts`
-- `src/hooks/useLeadWriteInstance.ts`, `usePreferredInstance.ts`, `useUserWriteInstanceFlag.ts`
-- `src/lib/whatsappApi.ts`, `whatsapp.ts`
-- `src/pages/ChatWhatsApp.tsx`, `AtendimentoMeta.tsx`, `MockupChat*.tsx`
-- `src/components/whatsapp/`, `whatsapp-migration/`
+- `@/modules/identity` — `useOrganization`, `useAuth`, `useCurrentTeamMember`, contexts
+- `@/modules/leads` — `useLeadWriteInstance` (write-instance resolution para lead com phone)
+- `@/hooks/useRealtimeChannel`, `useRealtimeChannelStatus`, `useRealtimeSubscription` — transport infra (não migrado, cross-cutting)
+- `@/hooks/useMassSendJobs` — vive em `campaigns` (slice 9 prevista); re-exportado pelo barrel `useWhatsAppChat`
+- `@/hooks/useCopilotPause`, `useCopilotToggle` — pertencem a `copilot` (slice 7)
+- `@/lib/realtimeStatusStore` — store cross-cutting (não migrado)
+- `@/integrations/supabase/client`, `@/integrations/supabase/types`
+- `@/hooks/useTags` — `tags` é cross-cutting (provavelmente vai pra leads ou platform)
 
-Backend:
-- `supabase/functions/whatsapp-*` (7 functions: api-proxy, dlq-replay, health-monitor, media-retry, rebind-webhook, session-watchdog, webhook)
-- `supabase/functions/meta-webhook/`, `send-meta-message/`, `meta-conversation-profile/`, `process-meta-messages/`
-- `supabase/functions/sz-chat-send/`, `sz-chat-webhook/`
-- `supabase/functions/history-sync-worker/`
-- `supabase/functions/stream-media/`, `summarize-conversation/`
-- `supabase/functions/_shared/whatsapp-client.ts`, `whatsapp-dispatch.ts`, `whatsapp-media.ts`, `whatsapp-providers/`, `uazapi-client.ts`, `uazapi-types.ts`
-- `supabase/functions/_shared/message-gateway.ts`, `outbound-sender.ts`, `followup-sender.ts`, `audio-sender.ts`, `dispatch-router.ts`, `natural-messaging.ts`, `greeting-orchestrator.ts`, `message-humanizer.ts`, `message-sanitizer.ts`, `message-classifier.ts`, `send-dedup.ts`
+## Dedup pendente / follow-ups
 
-## Slice de migração
+- **3 hooks realtime** (`useRealtimeChannel` + `useRealtimeChannelStatus` + `useRealtimeSubscription`) → meta declarada do CLAUDE.md raiz é "manter só `useRealtimeSubscription` canonical, outros 2 viram `core/realtime/` interno". **Não consolidado no slice 6** porque esses hooks são cross-cutting (usados por 50+ hooks em todos os BCs — leads, pipelines, copilot, etc.). Movê-los para `communication` seria errado. Decisão: ficam em `src/hooks/` e serão movidos para `core/realtime/` no slice 14 (platform) ou slice 17 (boundaries enforce).
+- **Hooks realtime específicos** do chat (`useWhatsAppMessagesRealtime`, `useChatBubbleContactsRealtime`, `useMetaRealtime`, `usePatchedRealtime`, `useRealtimeFallback`) — **migrados** neste slice. Usam `useRealtimeChannel` cross-cutting.
+- `useMessageTemplates` está em `communication` (entidade `message_templates`). Workflows/campaigns reúsam — ok, cross-module via API pública.
+- `useConversationHistory` cobre `conversation_messages` (copilot) + `whatsapp_messages` (chat) — overlap suave com `copilot` (slice 7), mas a primary entity é "histórico de mensagens" que pertence a `communication`.
+- 12 módulos message-stack em `_shared/` (`message-gateway`, `outbound-sender`, etc.) → consolidação em `_shared/communication/{send,humanize,classify,dedup}/` planejada para slice 16.
+- `src/components/whatsapp/` tinha apenas `SessionDeadBanner.tsx`. `whatsapp-migration/` ficou separado por contexto (lifecycle alert vs migration flow) — mantido split.
 
-**Slice 6** — `feat/modularizacao/05-communication` (7h + 1h dedup = 8h)
+## Backend (NÃO migrado neste slice)
 
-## Dedup pendente
+Edge functions e `_shared/` ficam para **slice 15** (edge fns) e **slice 16** (`_shared/`). Lista de o que **continua fora** do módulo até lá:
 
-- 3 hooks realtime → manter só `useRealtimeSubscription` (canonical)
-- 12 módulos message-stack em `_shared/` → consolidar em `_shared/communication/{send,humanize,classify,dedup}/`
-- Pages `MockupChat*` × 4 (incluindo file corrupto `MockupChatV3 2.tsx`) → decisão CTO
+Edge functions:
+- `whatsapp-{api-proxy,dlq-replay,health-monitor,media-retry,rebind-webhook,session-watchdog,webhook}` (7)
+- `meta-webhook`, `send-meta-message`, `meta-conversation-profile`, `process-meta-messages`
+- `sz-chat-send`, `sz-chat-webhook`
+- `history-sync-worker`
+- `stream-media`, `summarize-conversation`
+
+`supabase/functions/_shared/`:
+- `whatsapp-client.ts`, `whatsapp-dispatch.ts`, `whatsapp-media.ts`, `whatsapp-providers/`, `uazapi-client.ts`, `uazapi-types.ts`
+- `message-gateway.ts`, `outbound-sender.ts`, `followup-sender.ts`, `audio-sender.ts`, `dispatch-router.ts`, `natural-messaging.ts`, `greeting-orchestrator.ts`, `message-humanizer.ts`, `message-sanitizer.ts`, `message-classifier.ts`, `send-dedup.ts`
 
 ## Refs
 
@@ -88,4 +149,5 @@ Backend:
 - WhatsApp stability: `Obsidian/.../06 — Features/Chat/whatsapp-stability-plan.md`
 - Chat bubble: `Obsidian/.../06 — Features/Chat/chat-bubble.md`
 - Meta chat: `Obsidian/.../02 — Arquitetura/Modulos/atendimento-meta.md`
-- Sub-CLAUDE.md raiz: `supabase/functions/whatsapp-webhook/CLAUDE.md`
+- Sub-CLAUDE.md raiz: `supabase/functions/whatsapp-webhook/CLAUDE.md` (para slice 15)
+- Histórico da migração: `Obsidian/.../10 — Remodelagem/04-execucao/slices.md`

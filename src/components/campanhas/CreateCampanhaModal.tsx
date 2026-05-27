@@ -17,7 +17,7 @@ import {
   getObjectiveMetricLabel, getObjectiveSuccessStageLabel,
 } from "@/hooks/useCampanhas";
 import { useTeamMembers } from "@/modules/identity";
-import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
+import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
 import { toast } from "sonner";
 import {
   Plus, X, GripVertical, Target, Users, Calendar, DollarSign,

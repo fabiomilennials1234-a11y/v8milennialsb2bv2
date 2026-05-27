@@ -11,7 +11,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { UnreadDivider } from "@/components/chat/UnreadDivider";
+import { UnreadDivider } from "@/modules/communication/components/chat/UnreadDivider";
 
 describe("UnreadDivider", () => {
   it("count=1 — shows singular 'não lida'", () => {

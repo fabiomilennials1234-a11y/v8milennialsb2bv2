@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
+import { ChatEmptyState } from "@/modules/communication/components/chat/ChatEmptyState";
 
 describe("ChatEmptyState", () => {
   it("renders contact name", () => {

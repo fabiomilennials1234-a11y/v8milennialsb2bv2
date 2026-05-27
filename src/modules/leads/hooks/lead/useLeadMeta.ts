@@ -5,4 +5,4 @@
  * NÃO duplica a queryKey — reutiliza o mesmo cache.
  */
 
-export { useLeadByPhone as useLeadMeta } from "@/hooks/useWhatsAppLeadIntegration";
+export { useLeadByPhone as useLeadMeta } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";

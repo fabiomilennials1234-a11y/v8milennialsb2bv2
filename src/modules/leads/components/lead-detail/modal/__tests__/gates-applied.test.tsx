@@ -60,7 +60,7 @@ vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
-vi.mock("@/lib/whatsapp", () => ({
+vi.mock("@/modules/communication/lib/whatsapp", () => ({
   useOpenWhatsAppChat: () => vi.fn(),
   formatPhoneForWhatsApp: (s: string) => s,
 }));

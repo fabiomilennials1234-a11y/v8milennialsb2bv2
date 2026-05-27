@@ -15,13 +15,13 @@ vi.mock("react-router-dom", () => ({
   useNavigate: () => mockNavigate,
 }));
 
-vi.mock("@/lib/whatsapp", () => ({
+vi.mock("@/modules/communication/lib/whatsapp", () => ({
   useOpenWhatsAppChat: () => vi.fn(),
   formatPhoneForWhatsApp: (phone?: string) => (phone ? `55${phone}` : null),
 }));
 
 // Mock child modals to avoid their deep dependency tree
-vi.mock("@/components/chat/ScheduleMessageModal", () => ({
+vi.mock("@/modules/communication/components/chat/ScheduleMessageModal", () => ({
   ScheduleMessageModal: () => null,
 }));
 

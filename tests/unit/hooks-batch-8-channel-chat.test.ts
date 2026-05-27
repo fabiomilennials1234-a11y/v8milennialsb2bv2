@@ -75,10 +75,10 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useTeamMembers: () => ({ data: [] }),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/lib/whatsapp", () => ({
+vi.mock("@/modules/communication/lib/whatsapp", () => ({
   formatPhoneForWhatsApp: vi.fn().mockReturnValue("5511999990000"),
 }));
-vi.mock("@/components/chat/ChannelBadge", () => ({}));
+vi.mock("@/modules/communication/components/chat/ChannelBadge", () => ({}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 
 function createWrapper() {

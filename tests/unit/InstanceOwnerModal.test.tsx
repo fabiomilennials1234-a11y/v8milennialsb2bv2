@@ -39,11 +39,11 @@ let mockInstances: Array<{
   owner_team_member_id?: string | null;
 }> = [];
 
-vi.mock("@/hooks/useWhatsAppInstances", () => ({
+vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({
   useWhatsAppInstances: () => ({ data: mockInstances, isLoading: false }),
 }));
 
-import { InstanceOwnerModal } from "@/components/chat/admin/InstanceOwnerModal";
+import { InstanceOwnerModal } from "@/modules/communication/components/chat/admin/InstanceOwnerModal";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 

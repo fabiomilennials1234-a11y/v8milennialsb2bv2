@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
-import { MessageList, type MessageListProps } from "@/components/chat/view/MessageList";
+import { MessageList, type MessageListProps } from "@/modules/communication/components/chat/view/MessageList";
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -22,17 +22,17 @@ vi.mock("@/hooks/use-viewport", () => ({
 }));
 
 // Stub heavy child components to keep tests fast
-vi.mock("@/components/chat/ChatEmptyState", () => ({
+vi.mock("@/modules/communication/components/chat/ChatEmptyState", () => ({
   ChatEmptyState: () => <div data-testid="empty-state" />,
 }));
 
-vi.mock("@/components/chat/UnreadDivider", () => ({
+vi.mock("@/modules/communication/components/chat/UnreadDivider", () => ({
   UnreadDivider: ({ count }: { count: number }) => (
     <div data-testid="unread-divider">{count}</div>
   ),
 }));
 
-vi.mock("@/components/chat/MessagePrimitives", () => ({
+vi.mock("@/modules/communication/components/chat/MessagePrimitives", () => ({
   MessagesAreaErrorBoundary: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="error-boundary">{children}</div>
   ),
@@ -43,7 +43,7 @@ vi.mock("@/components/chat/MessagePrimitives", () => ({
   ),
 }));
 
-vi.mock("@/components/chat/ScrollToBottomFab", () => ({
+vi.mock("@/modules/communication/components/chat/ScrollToBottomFab", () => ({
   ScrollToBottomFab: ({ visible, count, onClick }: any) => (
     <button data-testid="scroll-fab" data-visible={visible} data-count={count} onClick={onClick}>
       FAB

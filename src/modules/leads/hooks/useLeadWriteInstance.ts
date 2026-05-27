@@ -21,7 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
-import { useUserWriteInstanceFlag } from "@/hooks/useUserWriteInstanceFlag";
+import { useUserWriteInstanceFlag } from "@/modules/communication/hooks/useUserWriteInstanceFlag";
 import type {
   GetLeadWriteInstanceResult,
   WriteInstanceErrorCode,

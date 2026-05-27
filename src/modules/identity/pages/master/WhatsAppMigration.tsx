@@ -29,12 +29,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2, RefreshCw } from "lucide-react";
-import { RepairingWizard } from "@/components/whatsapp-migration/RepairingWizard";
+import { RepairingWizard } from "@/modules/communication/components/whatsapp-migration/RepairingWizard";
 import {
   useSetMigrationStatus,
   useSetProviderOverride,
   type MigrationStatus,
-} from "@/hooks/useOrgWhatsAppMigration";
+} from "@/modules/communication/hooks/useOrgWhatsAppMigration";
 import { toast } from "sonner";
 
 type OrgRow = {

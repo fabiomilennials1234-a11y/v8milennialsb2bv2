@@ -57,7 +57,7 @@ import { useTinyErpStatus } from "@/hooks/useTinyErp";
 import { useCadastroExternoEnabled } from "@/hooks/useCadastroExterno";
 import { CadastroExternoConfirmDialog } from "@/components/proposals/CadastroExternoConfirmDialog";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
-import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
+import { useLeadsWithScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
 import { supabase } from "@/integrations/supabase/client";
 import { CalorAnalyticsChart } from "@/components/proposals/CalorAnalyticsChart";
 import { ProductAnalyticsChart } from "@/components/proposals/ProductAnalyticsChart";

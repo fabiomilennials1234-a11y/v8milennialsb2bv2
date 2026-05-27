@@ -8,12 +8,12 @@ import { useGlobalShortcuts, type Shortcut } from "@/hooks/useKeyboardShortcuts"
 import { cn } from "@/lib/utils";
 import { useViewport } from "@/hooks/use-viewport";
 import { useCopilotToggleRealtime } from "@/hooks/useCopilotToggleRealtime";
-import { useIncomingMessageToast } from "@/hooks/useIncomingMessageToast";
+import { useIncomingMessageToast } from "@/modules/communication/hooks/useIncomingMessageToast";
 import { featureFlags } from "@/lib/feature-flags";
 import { ChatBubbleProvider } from "@/contexts/ChatBubbleContext";
 import { MobileChatProvider, useMobileChatContext } from "@/contexts/MobileChatContext";
-import { ChatBubble } from "@/components/chat/bubble";
-import { SessionDeadBanner } from "@/components/whatsapp/SessionDeadBanner";
+import { ChatBubble } from "@/modules/communication/components/chat/bubble";
+import { SessionDeadBanner } from "@/modules/communication/components/whatsapp/SessionDeadBanner";
 
 // Rotas onde o checklist NÃO deve aparecer
 const CHECKLIST_HIDDEN_PATTERNS = [

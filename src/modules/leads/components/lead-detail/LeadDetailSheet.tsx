@@ -14,7 +14,7 @@ import { LeadDetailFocus } from "./LeadDetailFocus";
 import { LeadDetailFunnelContext } from "./LeadDetailFunnelContext";
 import { LeadDetailTimeline } from "./LeadDetailTimeline";
 import { LeadDetailNotes } from "./LeadDetailNotes";
-import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
+import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
 import { LogCallModal } from "@/components/calls/LogCallModal";
 import { EmailComposer } from "@/components/email/EmailComposer";
 import { SmsSendDialog } from "@/components/sms/SmsSendDialog";

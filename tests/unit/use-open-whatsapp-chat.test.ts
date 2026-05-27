@@ -29,7 +29,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   isVirtualTeamMember: (id: string) => id?.startsWith("master-virtual-"),
 }));
 
-import { useOpenWhatsAppChat } from "@/lib/whatsapp";
+import { useOpenWhatsAppChat } from "@/modules/communication/lib/whatsapp";
 
 const wrapper =
   (qc: QueryClient) =>

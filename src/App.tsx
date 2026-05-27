@@ -59,11 +59,11 @@ const Produtos = lazy(() => lazyRetry(() => import("./pages/Produtos")));
 const Negocios = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Negocios")));
 const Copilot = lazy(() => lazyRetry(() => import("./pages/Copilot")));
 const CopilotMetrics = lazy(() => lazyRetry(() => import("./pages/CopilotMetrics")));
-const ChatWhatsApp = lazy(() => lazyRetry(() => import("./pages/ChatWhatsApp")));
-const AtendimentoMeta = lazy(() => lazyRetry(() => import("./pages/AtendimentoMeta")));
+const ChatWhatsApp = lazy(() => lazyRetry(() => import("@/modules/communication/pages/ChatWhatsApp")));
+const AtendimentoMeta = lazy(() => lazyRetry(() => import("@/modules/communication/pages/AtendimentoMeta")));
 // ChatSkeleton é eager (não lazy) — precisa estar disponível no instante
 // em que o chunk de ChatWhatsApp começa a ser baixado.
-import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
+import { ChatSkeleton } from "@/modules/communication/components/chat/ChatSkeleton";
 const Upsell = lazy(() => lazyRetry(() => import("./pages/Upsell")));
 const ClienteDetail = lazy(() => lazyRetry(() => import("./components/carteira/ClienteDetailPage")));
 const CustomPipeline = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/CustomPipeline")));
@@ -95,10 +95,6 @@ const MasterWhatsAppHealth = lazy(() => lazyRetry(() => import("@/modules/identi
 const CopilotReasoning = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/CopilotReasoning")));
 const CopilotToggleAudit = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/CopilotToggleAudit")));
 const MasterOnboarding = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterOnboarding")));
-const MockupChat = lazy(() => lazyRetry(() => import("./pages/MockupChat")));
-const MockupChatV2 = lazy(() => lazyRetry(() => import("./pages/MockupChatV2")));
-const MockupChatV3 = lazy(() => lazyRetry(() => import("./pages/MockupChatV3")));
-
 // Master route/layout — carregam sob demanda quando acessar /master
 import { MasterRoute } from "@/modules/identity/components/master/MasterRoute";
 import { MasterLayout } from "@/modules/identity/components/master/MasterLayout";
@@ -195,9 +191,6 @@ function AppRoutes() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/signup" element={<Navigate to="/auth" replace />} />
       <Route path="/privacidade" element={<Privacidade />} />
-      <Route path="/_mockup/chat" element={<MockupChat />} />
-      <Route path="/_mockup/chat-v2" element={<MockupChatV2 />} />
-      <Route path="/_mockup/chat-v3" element={<MockupChatV3 />} />
       {/* Old onboarding/checkout routes removed — OnboardingGate handles inline */}
       <Route path="/" element={<RootRedirect />} />
       <Route path="/pricing" element={<Navigate to="/#pricing" replace />} />

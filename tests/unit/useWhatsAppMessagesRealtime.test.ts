@@ -36,7 +36,7 @@ vi.mock("@/lib/normalizePhone", () => ({
 
 // ─── Import after mocks ─────────────────────────────────────────────────────
 
-import { useWhatsAppMessagesRealtime } from "@/hooks/chat/useWhatsAppRealtime";
+import { useWhatsAppMessagesRealtime } from "@/modules/communication/hooks/chat/useWhatsAppRealtime";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

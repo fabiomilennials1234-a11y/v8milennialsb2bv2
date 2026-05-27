@@ -19,7 +19,7 @@ import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/lead
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { ScheduleFollowUpModal } from "@/components/followups/ScheduleFollowUpModal";
 import { useFollowUps, useCompleteFollowUp, useUpdateFollowUp, useArchiveFollowUp, useDeleteFollowUp } from "@/hooks/useFollowUps";
-import { useMyScheduledMessages, useCancelScheduledMessage } from "@/hooks/useScheduledMessages";
+import { useMyScheduledMessages, useCancelScheduledMessage } from "@/modules/communication/hooks/useScheduledMessages";
 import { useDailyPriorities } from "@/hooks/useDailyPriorities";
 import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
 import { useUserRole, useFeaturePermission } from "@/modules/identity";

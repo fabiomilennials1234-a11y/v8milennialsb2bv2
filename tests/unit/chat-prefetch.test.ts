@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
-import { chatQueryKeys } from "@/hooks/chat/shared/queryKeys";
+import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
 
 // Mock do supabase client antes de importar o helper
 vi.mock("@/integrations/supabase/client", () => ({
@@ -24,7 +24,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-import { prefetchChatRoute, prefetchChatData } from "@/lib/prefetch/chatPrefetch";
+import { prefetchChatRoute, prefetchChatData } from "@/modules/communication/lib/chatPrefetch";
 
 describe("prefetchChatRoute", () => {
   it("é idempotente — chamadas repetidas reusam a mesma promise", async () => {

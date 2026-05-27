@@ -42,7 +42,7 @@ import {
   useMetaOAuthCallback,
   type ConnectionType,
   type MetaPage,
-} from "@/hooks/useMetaConnection";
+} from "@/modules/communication/hooks/useMetaConnection";
 import { MetaLeadgenConfig } from "./MetaLeadgenConfig";
 import { toast } from "sonner";
 

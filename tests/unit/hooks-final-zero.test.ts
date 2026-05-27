@@ -42,7 +42,7 @@ vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().m
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r), useAgentFollowupRules: () => ({ data: [] }) }));
 vi.mock("@/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
-vi.mock("@/hooks/useWhatsAppInstances", () => ({ useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }) }));
+vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }) }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined), triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
@@ -59,7 +59,7 @@ function w() {
 beforeEach(() => { vi.clearAllMocks(); mF.mockReturnValue(c()); });
 
 // ═══ 1. useMetaConnection (72 LOC) ═══
-import { useMetaConnections, useMetaConnectionStatus, useConnectMeta, useDisconnectMeta, useToggleMetaPage } from "@/hooks/useMetaConnection";
+import { useMetaConnections, useMetaConnectionStatus, useConnectMeta, useDisconnectMeta, useToggleMetaPage } from "@/modules/communication/hooks/useMetaConnection";
 
 describe("useMetaConnection", () => {
   it("useMetaConnections fetches", async () => {
@@ -191,7 +191,7 @@ describe("useMktOriginConfig", () => {
 });
 
 // ═══ 9. useWhatsAppInstanceAllowedMembers (47 LOC) ═══
-import { useAllowedMembersForInstance, useCanReplyOnInstance, useSetAllowedMembersForInstance } from "@/hooks/useWhatsAppInstanceAllowedMembers";
+import { useAllowedMembersForInstance, useCanReplyOnInstance, useSetAllowedMembersForInstance } from "@/modules/communication/hooks/useWhatsAppInstanceAllowedMembers";
 
 describe("useWhatsAppInstanceAllowedMembers", () => {
   it("useAllowedMembersForInstance", async () => {
@@ -265,7 +265,7 @@ describe("usePipeDistribution", () => {
 });
 
 // ═══ 13. useWhatsAppFunnel (20 LOC) ═══
-import { FUNNEL_STAGES, useWhatsAppFunnelLeads, groupLeadsByStage } from "@/hooks/useWhatsAppFunnel";
+import { FUNNEL_STAGES, useWhatsAppFunnelLeads, groupLeadsByStage } from "@/modules/communication/hooks/useWhatsAppFunnel";
 
 describe("useWhatsAppFunnel", () => {
   it("FUNNEL_STAGES has stages", () => { expect(FUNNEL_STAGES.length).toBeGreaterThan(0); });

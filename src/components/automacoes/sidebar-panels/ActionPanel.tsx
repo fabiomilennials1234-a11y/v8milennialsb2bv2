@@ -20,12 +20,12 @@ import { Mic, MicOff, Upload, Trash2, Play, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ACTION_CATEGORIES, ACTION_LABELS } from "@/types/workflow";
 import type { ActionNodeData, WorkflowActionType } from "@/types/workflow";
-import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
+import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
 import { useOrganization } from "@/modules/identity";
 import { useCampaignTemplatesByType } from "@/hooks/useCampaignTemplates";
 import { supabase } from "@/integrations/supabase/client";
 import { useTeamMembers } from "@/modules/identity";
-import { convertAudioBlobToMp3, preloadLamejs } from "@/lib/audioToMp3";
+import { convertAudioBlobToMp3, preloadLamejs } from "@/modules/communication/lib/audioToMp3";
 import { toast } from "sonner";
 import { VariableInserter } from "@/components/automacoes/VariableInserter";
 import {

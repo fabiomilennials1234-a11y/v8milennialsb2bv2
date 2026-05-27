@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { MobileConversationRow } from "@/components/chat/list/MobileConversationRow";
-import type { ChatContact } from "@/hooks/useWhatsAppChat";
+import { MobileConversationRow } from "@/modules/communication/components/chat/list/MobileConversationRow";
+import type { ChatContact } from "@/modules/communication/hooks/useWhatsAppChat";
 
 const baseContact: ChatContact = {
   phone_number: "5511999999999",

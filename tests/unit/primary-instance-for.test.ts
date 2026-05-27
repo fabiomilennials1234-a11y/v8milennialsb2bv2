@@ -7,8 +7,8 @@
  * Quando preenchido, evita query `useResolveChatDeepLink` no servidor.
  */
 import { describe, it, expect } from "vitest";
-import { primaryInstanceFor } from "@/lib/primaryInstanceFor";
-import type { WhatsAppInstanceForUser } from "@/hooks/chat/types";
+import { primaryInstanceFor } from "@/modules/communication/lib/primaryInstanceFor";
+import type { WhatsAppInstanceForUser } from "@/modules/communication/hooks/chat/types";
 
 const inst = (id: string): WhatsAppInstanceForUser => ({
   id,

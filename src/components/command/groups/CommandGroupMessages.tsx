@@ -13,8 +13,8 @@ import { MessageSquare, ArrowDownLeft, ArrowUpRight, Loader2 } from "lucide-reac
 import { CommandGroup, CommandItem } from "cmdk";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/modules/identity";
-import { useMessageSearch } from "@/hooks/chat/useMessageSearch";
-import { HighlightedText } from "@/components/chat/search/HighlightedText";
+import { useMessageSearch } from "@/modules/communication/hooks/chat/useMessageSearch";
+import { HighlightedText } from "@/modules/communication/components/chat/search/HighlightedText";
 import { pushRecent } from "../recentCommands";
 
 // ─── Props ────────────────────────────────────────────────────────────────────

@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { ChatQuickActions } from "@/components/chat/composer/ChatQuickActions";
+import { ChatQuickActions } from "@/modules/communication/components/chat/composer/ChatQuickActions";
 
 const createProps = () => ({
   onAudio: vi.fn(),

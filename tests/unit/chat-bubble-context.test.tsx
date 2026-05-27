@@ -27,7 +27,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
 }));
 
 const instancesRef = { value: [{ id: "i1", instance_name: "Vendas", status: "connected" }] };
-vi.mock("@/hooks/chat/useWhatsAppInstances", () => ({
+vi.mock("@/modules/communication/hooks/chat/useWhatsAppInstances", () => ({
   useWhatsAppInstancesForUser: () => ({ data: instancesRef.value }),
 }));
 
@@ -37,18 +37,18 @@ const deepLinkRef = {
   isFetching: false,
 };
 const deepLinkSpy = vi.fn();
-vi.mock("@/hooks/chat/useResolveChatDeepLink", () => ({
+vi.mock("@/modules/communication/hooks/chat/useResolveChatDeepLink", () => ({
   useResolveChatDeepLink: (args: unknown) => {
     deepLinkSpy(args);
     return deepLinkRef;
   },
 }));
 
-vi.mock("@/hooks/chat/useWhatsAppRealtime", () => ({
+vi.mock("@/modules/communication/hooks/chat/useWhatsAppRealtime", () => ({
   useWhatsAppMessagesRealtime: vi.fn(),
 }));
 
-vi.mock("@/hooks/chat/useChatBubbleContactsRealtime", () => ({
+vi.mock("@/modules/communication/hooks/chat/useChatBubbleContactsRealtime", () => ({
   useChatBubbleContactsRealtime: vi.fn(() => ({ isReconnecting: false })),
 }));
 
@@ -72,7 +72,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 // normalizePhone canônico — usa real implementation.
 
 import { ChatBubbleProvider } from "@/contexts/ChatBubbleContext";
-import { useChatBubble, useChatBubbleOptional } from "@/hooks/useChatBubble";
+import { useChatBubble, useChatBubbleOptional } from "@/modules/communication/hooks/useChatBubble";
 
 // ── Wrappers ────────────────────────────────────────────────────────────────
 function newQc() {

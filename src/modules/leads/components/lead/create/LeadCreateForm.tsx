@@ -26,7 +26,7 @@ import {
   isStandardDestination,
   DEST_TO_PIPE_TYPE,
 } from "@/lib/lead/lead-destinations";
-import type { LeadDestination } from "@/hooks/useWhatsAppLeadIntegration";
+import type { LeadDestination } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { useAllPipelineStageOptions } from "@/modules/pipelines/hooks/usePipelineStages";
 import { useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines/hooks/useCustomPipelines";
 import { useCampanhas } from "@/hooks/useCampanhas";

@@ -5,11 +5,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
 const mutateAsync = vi.fn();
-vi.mock("@/hooks/chat-meta/useMetaSend", () => ({
+vi.mock("@/modules/communication/hooks/chat-meta/useMetaSend", () => ({
   useMetaSend: () => ({ mutateAsync, isPending: false }),
 }));
 
-import { MetaComposer } from "@/components/chat-meta/MetaComposer";
+import { MetaComposer } from "@/modules/communication/components/chat-meta/MetaComposer";
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

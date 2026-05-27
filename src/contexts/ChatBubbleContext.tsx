@@ -26,15 +26,15 @@ import {
 import { useQueries } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
-import { useChatBubbleState } from "@/hooks/useChatBubbleState";
-import { useWhatsAppInstancesForUser } from "@/hooks/chat/useWhatsAppInstances";
-import { useWhatsAppMessagesRealtime } from "@/hooks/chat/useWhatsAppRealtime";
-import { useChatBubbleContactsRealtime } from "@/hooks/chat/useChatBubbleContactsRealtime";
-import { useResolveChatDeepLink } from "@/hooks/chat/useResolveChatDeepLink";
-import { usePreferredInstance } from "@/hooks/usePreferredInstance";
-import { chatQueryKeys } from "@/hooks/chat/shared/queryKeys";
+import { useChatBubbleState } from "@/modules/communication/hooks/useChatBubbleState";
+import { useWhatsAppInstancesForUser } from "@/modules/communication/hooks/chat/useWhatsAppInstances";
+import { useWhatsAppMessagesRealtime } from "@/modules/communication/hooks/chat/useWhatsAppRealtime";
+import { useChatBubbleContactsRealtime } from "@/modules/communication/hooks/chat/useChatBubbleContactsRealtime";
+import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
+import { usePreferredInstance } from "@/modules/communication/hooks/usePreferredInstance";
+import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
 import { normalizePhone } from "@/lib/normalizePhone";
-import type { ChatContact, WhatsAppInstanceForUser } from "@/hooks/chat/types";
+import type { ChatContact, WhatsAppInstanceForUser } from "@/modules/communication/hooks/chat/types";
 
 export interface ChatBubbleContextValue {
   // estado
