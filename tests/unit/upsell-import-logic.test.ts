@@ -447,7 +447,7 @@ describe("structural contract — ImportUpsellClientsContent", () => {
   it("does not import useImportLeads hook", async () => {
     const fs = await import("fs");
     const content = fs.readFileSync(
-      "src/components/upsell/ImportUpsellClientsContent.tsx",
+      "src/modules/carteira/components/upsell/ImportUpsellClientsContent.tsx",
       "utf-8"
     );
     expect(content).not.toMatch(/useImportLeads\(\)/);
@@ -457,7 +457,7 @@ describe("structural contract — ImportUpsellClientsContent", () => {
   it("uses parseFileToRows with selectedSheet parameter", async () => {
     const fs = await import("fs");
     const content = fs.readFileSync(
-      "src/components/upsell/ImportUpsellClientsContent.tsx",
+      "src/modules/carteira/components/upsell/ImportUpsellClientsContent.tsx",
       "utf-8"
     );
     const calls = content.match(/parseFileToRows\(file[^)]*selectedSheet/g) || [];
@@ -467,7 +467,7 @@ describe("structural contract — ImportUpsellClientsContent", () => {
   it("uses single-parse pattern (no dual parseCSV + parseFileToRows)", async () => {
     const fs = await import("fs");
     const content = fs.readFileSync(
-      "src/components/upsell/ImportUpsellClientsContent.tsx",
+      "src/modules/carteira/components/upsell/ImportUpsellClientsContent.tsx",
       "utf-8"
     );
     const handleImport = content.slice(
