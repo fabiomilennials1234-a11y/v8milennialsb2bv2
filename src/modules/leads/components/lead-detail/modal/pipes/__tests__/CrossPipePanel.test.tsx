@@ -34,7 +34,7 @@ vi.mock("@/modules/leads/hooks/useLeadAllPipelines", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useCustomPipelines", () => ({
+vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({
   useAddLeadToCustomPipe: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
   useRemoveLeadFromCustomPipe: () => ({
     mutateAsync: vi.fn().mockResolvedValue({}),
@@ -42,10 +42,10 @@ vi.mock("@/hooks/useCustomPipelines", () => ({
   }),
 }));
 
-vi.mock("@/hooks/usePipeConfirmacaoByLeadId", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipeConfirmacaoByLeadId", () => ({
   usePipeConfirmacaoByLeadId: () => ({ data: null, isLoading: false }),
 }));
-vi.mock("@/hooks/usePipePropostaByLeadId", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipePropostaByLeadId", () => ({
   usePipePropostaByLeadId: () => ({ data: null, isLoading: false }),
 }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));

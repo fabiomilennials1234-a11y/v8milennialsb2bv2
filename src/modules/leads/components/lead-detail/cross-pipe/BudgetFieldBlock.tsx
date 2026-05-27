@@ -21,14 +21,14 @@ import {
   statusColumns,
   type PipePropostasStatus,
   type PipeProposta,
-} from "@/hooks/usePipePropostas";
+} from "@/modules/pipelines/hooks/usePipePropostas";
 import { useActiveProducts } from "@/hooks/useProducts";
 import {
   usePipePropostaItems,
   useCreatePipePropostaItem,
   useUpdatePipePropostaItem,
   useDeletePipePropostaItem,
-} from "@/hooks/usePipePropostaItems";
+} from "@/modules/pipelines/hooks/usePipePropostaItems";
 import { useTinyErpStatus } from "@/hooks/useTinyErp";
 import { useCadastroExternoEnabled } from "@/hooks/useCadastroExterno";
 import { useLossReasons } from "@/hooks/useLossReasons";

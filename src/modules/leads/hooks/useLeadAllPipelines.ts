@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
-import { useCustomPipelines } from "@/hooks/useCustomPipelines";
+import { useCustomPipelines } from "@/modules/pipelines/hooks/useCustomPipelines";
 
 // ─── Types ───────────────────────────────────────────────────
 

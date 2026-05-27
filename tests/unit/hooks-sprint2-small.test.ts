@@ -80,7 +80,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
 }));
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/usePipelineStages", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {
     whatsapp: [{ id: "novo" }],
@@ -126,7 +126,7 @@ import {
   usePipePropostasMetrics,
   usePipeConfirmacaoMetrics,
   usePipeWhatsappMetrics,
-} from "@/hooks/usePipeMetrics";
+} from "@/modules/pipelines/hooks/usePipeMetrics";
 import {
   useLeadByPhone,
   usePipeWhatsappByLeadId,
@@ -195,9 +195,9 @@ import {
   useDeleteWhatsAppInstance,
   useLogoutInstance,
 } from "@/hooks/useWhatsAppInstances";
-import { usePipePropostas, useCreatePipeProposta, useUpdatePipeProposta, useDeletePipeProposta } from "@/hooks/usePipePropostas";
-import { usePipeConfirmacao, useCreatePipeConfirmacao, useUpdatePipeConfirmacao, useDeletePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
-import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
+import { usePipePropostas, useCreatePipeProposta, useUpdatePipeProposta, useDeletePipeProposta } from "@/modules/pipelines/hooks/usePipePropostas";
+import { usePipeConfirmacao, useCreatePipeConfirmacao, useUpdatePipeConfirmacao, useDeletePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
+import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";
 
 // ── Setup ──
 beforeEach(() => {

@@ -17,7 +17,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => mockUseOrganization(),
 }));
 
-import { GhostLeadsBanner } from "@/components/pipelines/GhostLeadsBanner";
+import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
 
 beforeEach(() => {
   mockTrack.mockClear();

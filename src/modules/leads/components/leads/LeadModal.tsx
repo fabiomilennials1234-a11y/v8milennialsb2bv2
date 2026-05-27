@@ -34,11 +34,11 @@ import {
 } from "../../hooks/useLeadCustomFields";
 import { useLeadHistory } from "../../hooks/useLeadTimeline";
 import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpButton";
-import { useCustomPipelines, useCustomPipelineStages, useAddLeadToCustomPipe } from "@/hooks/useCustomPipelines";
-import { useAllPipelineStageOptions, getPipelineTypeName } from "@/hooks/usePipelineStages";
-import { useCreatePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
-import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
-import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
+import { useCustomPipelines, useCustomPipelineStages, useAddLeadToCustomPipe } from "@/modules/pipelines/hooks/useCustomPipelines";
+import { useAllPipelineStageOptions, getPipelineTypeName } from "@/modules/pipelines/hooks/usePipelineStages";
+import { useCreatePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";
+import { useCreatePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
+import { useCreatePipeProposta } from "@/modules/pipelines/hooks/usePipePropostas";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";

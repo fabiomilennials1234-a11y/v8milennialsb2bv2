@@ -13,7 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { useSlaConfigs, useCreateSlaConfig, useUpdateSlaConfig, useDeleteSlaConfig, SlaConfig } from "@/hooks/useSlaConfigs";
-import { useAllPipelineStages, getPipelineTypeName, PipelineType } from "@/hooks/usePipelineStages";
+import { useAllPipelineStages, getPipelineTypeName, PipelineType } from "@/modules/pipelines/hooks/usePipelineStages";
 
 const ESCALATION_ACTIONS = [
   { value: "notify", label: "Notificar responsavel" },

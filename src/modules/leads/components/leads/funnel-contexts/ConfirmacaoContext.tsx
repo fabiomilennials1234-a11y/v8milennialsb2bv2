@@ -39,13 +39,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/modules/identity";
-import { useUpdatePipeConfirmacao, useDeletePipeConfirmacao, type PipeConfirmacaoStatus, statusColumns } from "@/hooks/usePipeConfirmacao";
-import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
+import { useUpdatePipeConfirmacao, useDeletePipeConfirmacao, type PipeConfirmacaoStatus, statusColumns } from "@/modules/pipelines/hooks/usePipeConfirmacao";
+import { useCreatePipeProposta } from "@/modules/pipelines/hooks/usePipePropostas";
 import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
 import { useDeleteLead } from "../../../hooks/useLeads";
 import { useResponsibleMembers } from "@/modules/identity";
-import { CompareceuModal } from "@/components/confirmacao/CompareceuModal";
-import { RescheduleModal } from "@/components/confirmacao/RescheduleModal";
+import { CompareceuModal } from "@/modules/pipelines/components/legacy/confirmacao/CompareceuModal";
+import { RescheduleModal } from "@/modules/pipelines/components/legacy/confirmacao/RescheduleModal";
 import { cn } from "@/lib/utils";
 import { format, differenceInDays, isToday, isTomorrow } from "date-fns";
 import { ptBR } from "date-fns/locale";

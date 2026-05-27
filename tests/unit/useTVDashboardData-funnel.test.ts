@@ -46,8 +46,8 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   setSelectedOrgId: vi.fn(),
   useResponsibleMembers: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/usePipePropostas", () => ({ usePipePropostas: () => ({ data: [] }) }));
-vi.mock("@/hooks/usePipeWhatsapp", () => ({ usePipeWhatsapp: () => ({ data: [] }) }));
+vi.mock("@/modules/pipelines/hooks/usePipePropostas", () => ({ usePipePropostas: () => ({ data: [] }) }));
+vi.mock("@/modules/pipelines/hooks/usePipeWhatsapp", () => ({ usePipeWhatsapp: () => ({ data: [] }) }));
 vi.mock("@/hooks/useGoals", () => ({
   useTeamGoals: () => ({ data: [{ type: "vendas", target_value: 100000, team_member_id: null, name: "Meta" }] }),
   useIndividualGoals: () => ({ data: { salesGoals: [], meetingsGoals: [] } }),
@@ -62,7 +62,7 @@ vi.mock("@/hooks/useDashboardMetrics", () => ({
   useFunnelData: () => ({ data: [] }),
   useRankingData: () => ({ data: { salesRanking: [], meetingsRanking: [] } }),
 }));
-vi.mock("@/hooks/usePipelineStages", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {},
   getPipelineTypeName: (t: string) => t,
@@ -116,7 +116,7 @@ const mockConfirmacoes = [
   },
 ];
 
-vi.mock("@/hooks/usePipeConfirmacao", () => ({ usePipeConfirmacao: () => ({ data: mockConfirmacoes }) }));
+vi.mock("@/modules/pipelines/hooks/usePipeConfirmacao", () => ({ usePipeConfirmacao: () => ({ data: mockConfirmacoes }) }));
 
 function createWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });

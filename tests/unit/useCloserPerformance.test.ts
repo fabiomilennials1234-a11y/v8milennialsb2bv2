@@ -32,8 +32,8 @@ const mockConfirmacoes = [
   { id: "c5", status: "compareceu", meeting_date: outRangeDate, sale_responsible_id: "cl1" }, // fora
 ];
 
-vi.mock("@/hooks/usePipePropostas", () => ({ usePipePropostas: () => ({ data: mockPropostas }) }));
-vi.mock("@/hooks/usePipeConfirmacao", () => ({ usePipeConfirmacao: () => ({ data: mockConfirmacoes }) }));
+vi.mock("@/modules/pipelines/hooks/usePipePropostas", () => ({ usePipePropostas: () => ({ data: mockPropostas }) }));
+vi.mock("@/modules/pipelines/hooks/usePipeConfirmacao", () => ({ usePipeConfirmacao: () => ({ data: mockConfirmacoes }) }));
 vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useTeamMembers: () => ({ data: mockClosers }) }));
 vi.mock("@/hooks/useAvatarMap", () => ({ useAvatarMap: () => new Map() }));
 

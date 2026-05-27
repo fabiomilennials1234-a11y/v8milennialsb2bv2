@@ -11,7 +11,7 @@ vi.mock("@/hooks/useRealtimeSubscription", () => ({
   useRealtimeSubscription: vi.fn(),
 }));
 
-import { DEFAULT_STAGES, type PipelineType } from "@/hooks/usePipelineStages";
+import { DEFAULT_STAGES, type PipelineType } from "@/modules/pipelines/hooks/usePipelineStages";
 
 describe("DEFAULT_STAGES", () => {
   it("has stages for all 5 pipeline types", () => {

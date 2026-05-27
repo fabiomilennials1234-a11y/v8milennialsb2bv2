@@ -67,9 +67,9 @@ vi.mock("papaparse", () => ({ default: { parse: vi.fn() } }));
 
 // ── Import hooks (each import triggers coverage) ──
 import { useLeads, type LeadsFilterParams, type Lead } from "@/modules/leads";
-import { usePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
-import { usePipePropostas } from "@/hooks/usePipePropostas";
-import { usePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
+import { usePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
+import { usePipePropostas } from "@/modules/pipelines/hooks/usePipePropostas";
+import { usePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useLeadScore } from "@/modules/leads";
 import { useLeadHistory } from "@/modules/leads";

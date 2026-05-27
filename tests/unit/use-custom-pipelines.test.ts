@@ -112,7 +112,7 @@ import {
   type LifecycleType,
   type FunnelStatus,
   type FunnelTemplateType,
-} from "@/hooks/useCustomPipelines";
+} from "@/modules/pipelines/hooks/useCustomPipelines";
 
 // ---------------------------------------------------------------------------
 // Wrapper

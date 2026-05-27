@@ -34,7 +34,7 @@ vi.mock("@/modules/identity/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
+vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn(), triggerLeadCreatedInCustomPipeline: vi.fn() }));
@@ -98,7 +98,7 @@ import {
   type CustomPipeEntry,
   type LifecycleType,
   type FunnelStatus,
-} from "@/hooks/useCustomPipelines";
+} from "@/modules/pipelines/hooks/useCustomPipelines";
 
 describe("useCustomPipelines — pure exports", () => {
   it("TEMPORARY_FUNNEL_STAGES has indicacao, prospeccao, reativacao", () => {

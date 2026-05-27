@@ -14,7 +14,7 @@ import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import { formatDistanceToNow, isToday, isTomorrow, isPast, differenceInDays, differenceInHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { DraggableItem } from "@/components/kanban/DraggableKanbanBoard";
+import type { DraggableItem } from "@/modules/pipelines/components/kanban/DraggableKanbanBoard";
 import type { QualificationTier } from "../lead-detail/modal/types";
 import { LeadCardAvatar } from "./card/LeadCardAvatar";
 import { LeadCardLabels } from "./card/LeadCardLabels";

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
-import { usePipelineStages, type PipelineStage } from "./usePipelineStages";
+import { usePipelineStages, type PipelineStage } from "@/modules/pipelines/hooks/usePipelineStages";
 import { useUpsellClients } from "./useUpsellClients";
 import { useUpsellOrders } from "./useUpsellOrders";
 import { useUpsellGestaoRules } from "./useUpsellGestaoRules";

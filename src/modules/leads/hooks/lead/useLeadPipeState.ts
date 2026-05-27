@@ -19,4 +19,4 @@ export {
   useAddLeadToCustomPipe,
   useMoveLeadInCustomPipe,
   useRemoveLeadFromCustomPipe,
-} from "@/hooks/useCustomPipelines";
+} from "@/modules/pipelines/hooks/useCustomPipelines";

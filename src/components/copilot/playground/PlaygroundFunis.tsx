@@ -39,8 +39,8 @@ import {
 } from "@/components/ui/collapsible";
 
 import { PIPE_TYPES } from "@/types/copilot";
-import { useAllPipelineStageOptions } from "@/hooks/usePipelineStages";
-import { useCustomPipelines, useCustomPipelineStages } from "@/hooks/useCustomPipelines";
+import { useAllPipelineStageOptions } from "@/modules/pipelines/hooks/usePipelineStages";
+import { useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines/hooks/useCustomPipelines";
 
 import {
   FUNIS_CONDITIONS,

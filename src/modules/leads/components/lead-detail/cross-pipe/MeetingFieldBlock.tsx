@@ -16,11 +16,11 @@ import {
   statusColumns,
   type PipeConfirmacaoStatus,
   type PipeConfirmacao,
-} from "@/hooks/usePipeConfirmacao";
+} from "@/modules/pipelines/hooks/usePipeConfirmacao";
 import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
-import { RescheduleModal } from "@/components/confirmacao/RescheduleModal";
-import { CompareceuModal } from "@/components/confirmacao/CompareceuModal";
-import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
+import { RescheduleModal } from "@/modules/pipelines/components/legacy/confirmacao/RescheduleModal";
+import { CompareceuModal } from "@/modules/pipelines/components/legacy/confirmacao/CompareceuModal";
+import { useCreatePipeProposta } from "@/modules/pipelines/hooks/usePipePropostas";
 import { cn } from "@/lib/utils";
 
 /**

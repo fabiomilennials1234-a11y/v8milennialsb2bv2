@@ -29,7 +29,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: ()
 vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
+vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn(), triggerLeadCreatedInCustomPipeline: vi.fn() }));
@@ -52,10 +52,10 @@ import { useUpsellOrders } from "@/hooks/useUpsellOrders";
 import { useUpsellGestaoRules } from "@/hooks/useUpsellGestaoRules";
 import { useUpsellCampanhas } from "@/hooks/useUpsellCampanhas";
 import { useUpsellClientProducts } from "@/hooks/useUpsellClientProducts";
-import { usePipeDispatchRules } from "@/hooks/usePipeDispatchRules";
-import { usePipeDistribution } from "@/hooks/usePipeDistribution";
-import { usePipePropostaItems } from "@/hooks/usePipePropostaItems";
-import { usePipelineDisplayConfig } from "@/hooks/usePipelineDisplayConfig";
+import { usePipeDispatchRules } from "@/modules/pipelines/hooks/usePipeDispatchRules";
+import { usePipeDistribution } from "@/modules/pipelines/hooks/usePipeDistribution";
+import { usePipePropostaItems } from "@/modules/pipelines/hooks/usePipePropostaItems";
+import { usePipelineDisplayConfig } from "@/modules/pipelines/hooks/usePipelineDisplayConfig";
 import { useProductVariants } from "@/hooks/useProductVariants";
 // useSupportMaterials doesn't exist
 

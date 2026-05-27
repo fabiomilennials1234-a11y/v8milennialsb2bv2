@@ -17,7 +17,7 @@ import {
   useAddLeadToCustomPipe,
   useMoveLeadInCustomPipe,
   useRemoveLeadFromCustomPipe,
-} from "@/hooks/useCustomPipelines";
+} from "@/modules/pipelines/hooks/useCustomPipelines";
 
 interface UsePipeHandlersResult {
   isMutating: boolean;

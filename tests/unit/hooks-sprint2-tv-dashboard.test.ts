@@ -136,15 +136,15 @@ const mockWhatsapp = [
   { id: "w3", status: "respondeu", sdr_id: "tm2", responsible_id: "tm2" },
 ];
 
-vi.mock("@/hooks/usePipePropostas", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipePropostas", () => ({
   usePipePropostas: () => ({ data: mockPropostas }),
 }));
 
-vi.mock("@/hooks/usePipeConfirmacao", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipeConfirmacao", () => ({
   usePipeConfirmacao: () => ({ data: mockConfirmacoes }),
 }));
 
-vi.mock("@/hooks/usePipeWhatsapp", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipeWhatsapp", () => ({
   usePipeWhatsapp: () => ({ data: mockWhatsapp }),
 }));
 
@@ -195,7 +195,7 @@ vi.mock("@/hooks/useDashboardMetrics", () => ({
   useRankingData: () => ({ data: { salesRanking: [], meetingsRanking: [] } }),
 }));
 
-vi.mock("@/hooks/usePipelineStages", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {},
   getPipelineTypeName: (t: string) => t,

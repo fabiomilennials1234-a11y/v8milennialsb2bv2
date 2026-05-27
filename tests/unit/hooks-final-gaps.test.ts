@@ -51,7 +51,7 @@ vi.mock("@/modules/identity/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {}, useAllPipelineStages: () => ({ data: [] }) }));
+vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {}, useAllPipelineStages: () => ({ data: [] }) }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
@@ -82,7 +82,7 @@ function w() {
 beforeEach(() => { vi.clearAllMocks(); mF.mockReturnValue(c()); });
 
 // ═══ usePipeDispatchRules ═══
-import { usePipeDispatchRules, useCreatePipeDispatchRule, useDeletePipeDispatchRule } from "@/hooks/usePipeDispatchRules";
+import { usePipeDispatchRules, useCreatePipeDispatchRule, useDeletePipeDispatchRule } from "@/modules/pipelines/hooks/usePipeDispatchRules";
 
 describe("usePipeDispatchRules", () => {
   it("fetches dispatch rules", async () => {
@@ -148,8 +148,8 @@ describe("useDashboardMetrics", () => {
 });
 
 // ═══ usePipeConfirmacao + usePipeWhatsapp ═══
-import { usePipeConfirmacao, useCreatePipeConfirmacao, useUpdatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
-import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
+import { usePipeConfirmacao, useCreatePipeConfirmacao, useUpdatePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
+import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";
 
 describe("usePipeConfirmacao", () => {
   it("fetches pipe confirmacao data", async () => {

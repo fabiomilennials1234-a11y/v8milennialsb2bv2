@@ -67,7 +67,7 @@ import {
   getPipelineTypeName,
   getSuccessStageTransition,
   DEFAULT_STAGES,
-} from "@/hooks/usePipelineStages";
+} from "@/modules/pipelines/hooks/usePipelineStages";
 
 // ---- Pure function tests ----
 

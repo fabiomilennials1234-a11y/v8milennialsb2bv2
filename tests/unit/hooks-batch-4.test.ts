@@ -30,7 +30,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: ()
 vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
+vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/hooks/useCopilotPromptBuilder", () => ({ generatePrompt: vi.fn(), saveCopilotSystemPrompt: vi.fn(), regenerateAndSavePrompt: vi.fn(), computePromptHash: vi.fn() }));
 vi.mock("@/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r) }));
@@ -45,7 +45,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: v
 vi.mock("papaparse", () => ({ default: { parse: vi.fn() } }));
 vi.mock("@/hooks/useWhatsAppInstances", () => ({ useWhatsAppInstances: () => ({ data: [] }) }));
 vi.mock("@/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }), OBJECTIVE_TARGET_MAP: {}, OBJECTIVE_LABELS: {} }));
-vi.mock("@/hooks/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }) }));
+vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }) }));
 
 // ── Imports ──
 import { useAcoesDoDia } from "@/hooks/useAcoesDoDia";
@@ -59,7 +59,7 @@ import { useCopilotAgentAudios } from "@/hooks/useCopilotAgentAudios";
 import { useExportLeads } from "@/modules/leads";
 import { useHelpCenter } from "@/hooks/useHelpCenter";
 import { useLeadCustomFields } from "@/modules/leads";
-import { usePipeMetrics } from "@/hooks/usePipeMetrics";
+import { usePipeMetrics } from "@/modules/pipelines/hooks/usePipeMetrics";
 import { useRecentActivity } from "@/hooks/useRecentActivity";
 import { useSplitAbMetrics } from "@/hooks/useSplitAbMetrics";
 import { useAutoMoveUpsellClients } from "@/hooks/useAutoMoveUpsellClients";
