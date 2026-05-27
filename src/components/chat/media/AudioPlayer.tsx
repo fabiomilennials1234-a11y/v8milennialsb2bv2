@@ -15,22 +15,11 @@ import { supabase } from "@/integrations/supabase/client";
 const STREAM_MEDIA_PATH = "/functions/v1/stream-media";
 
 /**
- * Para áudios no bucket "media" do Supabase, usa a Edge Function stream-media como proxy.
- * Evita CORS: o navegador recebe o áudio da mesma origem (Supabase Functions com CORS),
- * em vez de pedir direto ao Storage (que pode bloquear por CORS).
+ * Bucket "media" é público com CORS *. URLs /object/public/ funcionam direto
+ * no <audio> sem proxy. Retorna a URL original pra paths públicos do Storage.
  */
 export function getAudioPlaybackUrl(mediaUrl: string | null): string | null {
-  if (!mediaUrl) return null;
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-  if (!supabaseUrl?.trim()) return mediaUrl;
-  // Remover query e fragment para não enviar lixo ao stream-media
-  const urlWithoutQuery = mediaUrl.split("?")[0].split("#")[0];
-  const match = urlWithoutQuery.match(/\/object\/public\/media\/(.+)$/);
-  if (!match) return mediaUrl;
-  const path = match[1].replace(/\/$/, "");
-  if (!path.startsWith("whatsapp-media/")) return mediaUrl;
-  const base = supabaseUrl.replace(/\/$/, "");
-  return `${base}/functions/v1/stream-media?path=${encodeURIComponent(path)}`;
+  return mediaUrl;
 }
 
 interface AudioPlayerProps {
