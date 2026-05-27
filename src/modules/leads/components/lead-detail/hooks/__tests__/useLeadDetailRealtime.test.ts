@@ -12,7 +12,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { createWrapper } from "../../../../../tests/helpers/hook-test-utils";
+import { createWrapper } from "../../../../../../../tests/helpers/hook-test-utils";
 
 // Capture every useRealtimeChannel call.
 const channelCalls: Array<{ table: string; filter?: string; enabled: boolean; onEvent: (p: unknown) => void }> = [];
