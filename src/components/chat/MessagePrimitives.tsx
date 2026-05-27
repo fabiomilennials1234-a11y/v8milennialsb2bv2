@@ -21,6 +21,7 @@ import {
   MapPin,
   Contact,
   BarChart3,
+  LayoutList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday } from "date-fns";
@@ -140,15 +141,16 @@ export function MessageBubble({
   const mediaUrl = isWhatsAppMsg ? (message as WhatsAppMessage).media_url : null;
   const messageType = isWhatsAppMsg ? (message as WhatsAppMessage).message_type : null;
   const isAudio = messageType === "audio" || messageType === "ptt";
-  const isImage = messageType === "image" || messageType === "album";
-  const isVideo = messageType === "video";
+  const isImage = messageType === "image" || messageType === "album" || messageType === "motion_photo";
+  const isVideo = messageType === "video" || messageType === "ptv" || messageType === "gif" || messageType === "motion_video";
   const isDocument = messageType === "document";
-  const isSticker = messageType === "sticker";
-  const isLocation = messageType === "location" || messageType === "LocationMessage";
-  const isContact = messageType === "contact" || messageType === "ContactMessage" || messageType === "ContactsArrayMessage";
+  const isSticker = messageType === "sticker" || messageType === "1p_sticker" || messageType === "user_created_sticker" || messageType === "avatar_sticker";
+  const isLocation = messageType === "location" || messageType === "LocationMessage" || messageType === "livelocation";
+  const isContact = messageType === "contact" || messageType === "ContactMessage" || messageType === "ContactsArrayMessage" || messageType === "vcard" || messageType === "contact_array";
   const isReaction = messageType === "reaction" || messageType === "ReactionMessage";
   const isPoll = messageType === "poll";
   const isSystem = messageType === "system" || messageType === "PinInChatMessage";
+  const isInteractive = messageType === "interactive" || messageType === "collection" || messageType === "list" || messageType === "template" || messageType === "url";
   const hasMedia = isAudio || isImage || isVideo || isDocument || isSticker;
 
   const meta = message as unknown as {
@@ -374,6 +376,14 @@ export function MessageBubble({
               </p>
             )}
 
+            {/* Interactive / catalog / list / template */}
+            {isInteractive && !message.content && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <LayoutList className="w-4 h-4 shrink-0" />
+                <span className="italic">Mensagem interativa</span>
+              </div>
+            )}
+
             {/* Media without media_url — empty bubble guard */}
             {hasMedia && !mediaUrl && !message.content && (
               <p className="text-sm italic text-muted-foreground">
@@ -381,8 +391,22 @@ export function MessageBubble({
               </p>
             )}
 
+            {/* Unknown type with media_url — render based on URL extension */}
+            {!hasMedia && !isLocation && !isContact && !isPoll && !isReaction && !isSystem && !isInteractive && mediaUrl && !message.content && (
+              (() => {
+                const ext = mediaUrl.split(".").pop()?.split("?")[0]?.toLowerCase();
+                if (ext && ["jpg","jpeg","png","webp","gif"].includes(ext))
+                  return <MessageImage src={mediaUrl} onPreview={() => onImagePreview(mediaUrl)} />;
+                if (ext && ["mp4","webm","mov"].includes(ext))
+                  return <MessageVideo src={mediaUrl} />;
+                if (ext && ["mp3","ogg","opus","m4a","aac","wav","webm"].includes(ext))
+                  return <AudioPlayer src={getAudioPlaybackUrl(mediaUrl) ?? mediaUrl} isOutgoing={isOutgoing} />;
+                return <MessageDocument src={mediaUrl} isOutgoing={isOutgoing} />;
+              })()
+            )}
+
             {/* Truly unsupported — only for types we don't handle */}
-            {!message.content && !hasMedia && !isLocation && !isContact && !isPoll && !isReaction && !isSystem && (
+            {!message.content && !hasMedia && !isLocation && !isContact && !isPoll && !isReaction && !isSystem && !isInteractive && !mediaUrl && (
               <p className="text-sm italic text-muted-foreground">
                 [Mensagem não suportada]
               </p>

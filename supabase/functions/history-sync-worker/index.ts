@@ -28,6 +28,52 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 
+const HISTORY_TYPE_MAP: Record<string, string> = {
+  stickerMessage: "sticker", StickerMessage: "sticker",
+  imageMessage: "image", ImageMessage: "image",
+  videoMessage: "video", VideoMessage: "video",
+  audioMessage: "audio", AudioMessage: "audio",
+  documentMessage: "document", DocumentMessage: "document",
+  pttMessage: "ptt", PttMessage: "ptt",
+  conversation: "text", Conversation: "text",
+  extendedTextMessage: "text", ExtendedTextMessage: "text",
+  ptv: "video", PtvMessage: "video",
+  gif: "video", motion_video: "video", motion_photo: "image",
+  "1p_sticker": "sticker", user_created_sticker: "sticker", avatar_sticker: "sticker",
+  vcard: "contact", contact_array: "contact",
+  contactMessage: "contact", ContactMessage: "contact",
+  contactsArrayMessage: "contact", ContactsArrayMessage: "contact",
+  locationMessage: "location", LocationMessage: "location",
+  liveLocationMessage: "location", livelocation: "location",
+  reactionMessage: "reaction", ReactionMessage: "reaction",
+  pollCreationMessage: "poll", PollCreationMessage: "poll",
+  collection: "interactive", list: "interactive",
+  url: "text", error: "text",
+};
+
+function normalizeHistorySyncType(
+  rawType: string | null,
+  mediaType: string | null,
+  mimetype: string | null,
+  hasText: boolean,
+  hasMedia: boolean,
+): string {
+  if (rawType) {
+    const mapped = HISTORY_TYPE_MAP[rawType];
+    if (mapped) return mapped;
+    if (rawType === "media" && mediaType) {
+      return HISTORY_TYPE_MAP[mediaType] ?? mediaType;
+    }
+    if (["text", "image", "video", "audio", "document", "ptt", "sticker",
+         "location", "contact", "reaction", "poll", "system"].includes(rawType)) {
+      return rawType;
+    }
+  }
+  if (hasText) return "text";
+  if (hasMedia) return mediaType ?? mimetype?.split("/")[0] ?? "document";
+  return "unknown";
+}
+
 const CHUNK_SIZE = 100;
 const MAX_JOBS_PER_RUN = 20;
 const JOB_STALE_MINUTES = 10;
@@ -157,14 +203,13 @@ async function upsertMessages(
         remote_jid: remoteJid || "unknown",
         phone_number: phoneNumber,
         direction: fromMe ? "outgoing" : "incoming",
-        message_type:
-          msg.type ??
-          msg.wa_type ??
-          (msg.text || msg.body || msg.caption
-            ? "text"
-            : msg.mediaUrl || msg.media_url
-              ? (msg.mediaType ?? msg.mimetype?.split("/")[0] ?? "document")
-              : "unknown"),
+        message_type: normalizeHistorySyncType(
+          msg.type ?? msg.wa_type ?? null,
+          msg.mediaType ?? null,
+          msg.mimetype ?? null,
+          !!(msg.text || msg.body || msg.caption),
+          !!(msg.mediaUrl || msg.media_url),
+        ),
         content: msg.text ?? msg.body ?? msg.caption ?? null,
         media_url: msg.mediaUrl ?? msg.media_url ?? null,
         push_name: msg.pushName ?? msg.wa_pushName ?? null,

@@ -407,13 +407,19 @@ export function ChatComposer({
 
           {/* Quick action bar */}
           <ChatQuickActions
-            onAudio={() => setIsRecording(true)}
+            onAudio={() => {
+              if (sendMedia.isPending) {
+                toast.info("Aguarde o envio anterior finalizar.");
+                return;
+              }
+              setIsRecording(true);
+            }}
             onTemplate={() => {
               setMessage("/");
               setShowSlashPopover(true);
             }}
             onAttach={() => fileInputRef.current?.click()}
-            disabled={sendMessage.isPending || sendMedia.isPending}
+            disabled={sendMessage.isPending}
           />
 
           {/* Input row */}
@@ -529,8 +535,13 @@ export function ChatComposer({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setIsRecording(true)}
-                disabled={sendMedia.isPending}
+                onClick={() => {
+                  if (sendMedia.isPending) {
+                    toast.info("Aguarde o envio anterior finalizar.");
+                    return;
+                  }
+                  setIsRecording(true);
+                }}
                 aria-label="Gravar áudio"
                 className="opacity-50 hover:opacity-100 transition-opacity"
               >

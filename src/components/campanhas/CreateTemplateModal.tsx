@@ -89,8 +89,18 @@ export function CreateTemplateModal({ open, onOpenChange, onSuccess }: CreateTem
       setIsRecording(true);
       setRecordingTime(0);
       timerRef.current = setInterval(() => setRecordingTime((s) => s + 1), 1000);
-    } catch {
-      toast.error("Não foi possível acessar o microfone");
+    } catch (err) {
+      console.error("[CreateTemplateModal AudioRecorder] getUserMedia failed:", err);
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "NotAllowedError") {
+        toast.error("Permissão do microfone bloqueada. Clique no cadeado na barra de endereço e permita o acesso.", { duration: 8000 });
+      } else if (name === "NotFoundError") {
+        toast.error("Nenhum microfone encontrado.");
+      } else if (name === "NotReadableError") {
+        toast.error("Microfone em uso por outro aplicativo.");
+      } else {
+        toast.error("Não foi possível acessar o microfone. Verifique as permissões do navegador.");
+      }
     }
   };
 
