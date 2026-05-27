@@ -5,7 +5,7 @@
  * Follows same pattern as funis-mapping.ts.
  */
 
-import type { BehaviorEnforcement, BehaviorWindow } from "@/components/copilot/BehaviorWindowsEditor";
+import type { BehaviorEnforcement, BehaviorWindow } from "@/modules/copilot/components/BehaviorWindowsEditor";
 
 // ── Conexao State ──
 

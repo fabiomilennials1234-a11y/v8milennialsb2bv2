@@ -63,7 +63,7 @@ import {
   useCopilotToggle,
   useCopilotToggleStatus,
   useCopilotToggleMutation,
-} from "@/hooks/useCopilotToggle";
+} from "@/modules/copilot/hooks/useCopilotToggle";
 
 beforeEach(() => {
   vi.clearAllMocks();

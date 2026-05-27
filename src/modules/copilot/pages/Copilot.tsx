@@ -49,8 +49,8 @@ import {
   useDeleteCopilotAgent,
   useToggleCopilotAgent,
   useSetDefaultCopilotAgent,
-} from "@/hooks/useCopilotAgents";
-import { useCopilotSubscription } from "@/hooks/useCopilotSubscription";
+} from "@/modules/copilot/hooks/useCopilotAgents";
+import { useCopilotSubscription } from "@/modules/copilot/hooks/useCopilotSubscription";
 import { useCanManageCopilot } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";

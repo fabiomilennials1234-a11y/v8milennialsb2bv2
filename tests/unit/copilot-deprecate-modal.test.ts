@@ -16,7 +16,7 @@ const ROOT = resolve(__dirname, "../..");
 describe("Copilot modal deprecation (#233)", () => {
   // RED->GREEN 1: Copilot.tsx must NOT reference AgentConfigModal
   it("Copilot page does not import AgentConfigModal", () => {
-    const content = readFileSync(resolve(ROOT, "src/pages/Copilot.tsx"), "utf-8");
+    const content = readFileSync(resolve(ROOT, "src/modules/copilot/pages/Copilot.tsx"), "utf-8");
     expect(content).not.toContain("AgentConfigModal");
     // Should not have configModalOpen state
     expect(content).not.toContain("configModalOpen");
@@ -24,7 +24,7 @@ describe("Copilot modal deprecation (#233)", () => {
   });
 
   it("Copilot page navigates to playground edit route on configure", () => {
-    const content = readFileSync(resolve(ROOT, "src/pages/Copilot.tsx"), "utf-8");
+    const content = readFileSync(resolve(ROOT, "src/modules/copilot/pages/Copilot.tsx"), "utf-8");
     // Should navigate to /copilot/:id/editar
     expect(content).toContain("/editar");
   });
@@ -32,7 +32,7 @@ describe("Copilot modal deprecation (#233)", () => {
   // RED->GREEN 2: Playground has activate/deactivate + set-as-default
   it("CopilotPlayground imports toggle and setDefault hooks", () => {
     const content = readFileSync(
-      resolve(ROOT, "src/components/copilot/playground/CopilotPlayground.tsx"),
+      resolve(ROOT, "src/modules/copilot/components/playground/CopilotPlayground.tsx"),
       "utf-8",
     );
     expect(content).toContain("useToggleCopilotAgent");
@@ -41,7 +41,7 @@ describe("Copilot modal deprecation (#233)", () => {
 
   it("CopilotPlayground renders activate/deactivate controls", () => {
     const content = readFileSync(
-      resolve(ROOT, "src/components/copilot/playground/CopilotPlayground.tsx"),
+      resolve(ROOT, "src/modules/copilot/components/playground/CopilotPlayground.tsx"),
       "utf-8",
     );
     // Should have Power icon for toggle or some activation UI
@@ -51,26 +51,26 @@ describe("Copilot modal deprecation (#233)", () => {
   // Deletion checks
   it("AgentConfigModal file is deleted", () => {
     expect(
-      existsSync(resolve(ROOT, "src/components/copilot/AgentConfigModal.tsx")),
+      existsSync(resolve(ROOT, "src/modules/copilot/components/AgentConfigModal.tsx")),
     ).toBe(false);
   });
 
   it("AgentTtsSettings file is deleted (modal-only)", () => {
     expect(
-      existsSync(resolve(ROOT, "src/components/copilot/AgentTtsSettings.tsx")),
+      existsSync(resolve(ROOT, "src/modules/copilot/components/AgentTtsSettings.tsx")),
     ).toBe(false);
   });
 
   // Shared components MUST survive
   it("BehaviorWindowsEditor is kept (shared by Playground)", () => {
     expect(
-      existsSync(resolve(ROOT, "src/components/copilot/BehaviorWindowsEditor.tsx")),
+      existsSync(resolve(ROOT, "src/modules/copilot/components/BehaviorWindowsEditor.tsx")),
     ).toBe(true);
   });
 
   it("AgentFollowupRulesTab is kept (reused in #236)", () => {
     expect(
-      existsSync(resolve(ROOT, "src/components/copilot/AgentFollowupRulesTab.tsx")),
+      existsSync(resolve(ROOT, "src/modules/copilot/components/AgentFollowupRulesTab.tsx")),
     ).toBe(true);
   });
 });

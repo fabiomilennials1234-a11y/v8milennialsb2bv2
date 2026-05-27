@@ -94,7 +94,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   isVirtualTeamMember: () => false,
   useTeamMembers: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/useCopilotPromptBuilder", () => ({
+vi.mock("@/modules/copilot/hooks/useCopilotPromptBuilder", () => ({
   generatePrompt: vi.fn().mockReturnValue({ systemPrompt: "mock prompt", metadata: { version: "1.0" } }),
   saveCopilotSystemPrompt: vi.fn().mockResolvedValue(undefined),
   regenerateAndSavePrompt: vi.fn().mockResolvedValue(undefined),
@@ -109,7 +109,7 @@ const mockFollowupRuleToDB = vi.fn((r: any, agentId: string) => ({
   ...r,
   agent_id: agentId,
 }));
-vi.mock("@/hooks/useAgentFollowupRules", () => ({
+vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({
   followupRuleToDB: (...args: any[]) => mockFollowupRuleToDB(...args),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
@@ -120,7 +120,7 @@ vi.mock("@/modules/identity/lib/permissions", () => ({
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 
-import { useUpdateCopilotAgentFromWizard } from "@/hooks/useCopilotAgents";
+import { useUpdateCopilotAgentFromWizard } from "@/modules/copilot/hooks/useCopilotAgents";
 
 // ---------------------------------------------------------------------------
 // Wrapper

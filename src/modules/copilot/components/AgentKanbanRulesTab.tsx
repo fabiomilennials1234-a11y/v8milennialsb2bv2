@@ -35,7 +35,7 @@ import {
   useAgentKanbanRules,
   useUpsertKanbanRules,
   type KanbanRuleForm,
-} from "@/hooks/useAgentKanbanRules";
+} from "@/modules/copilot/hooks/useAgentKanbanRules";
 
 const createEmptyRule = (stage: { value: string; label: string }): KanbanRuleForm => ({
   pipe_type: "whatsapp",

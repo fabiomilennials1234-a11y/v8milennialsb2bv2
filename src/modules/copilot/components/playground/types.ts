@@ -3,7 +3,7 @@
  */
 
 import type { AgentTemplateType, AgentOperationMode, OutboundConfig, ActivationTriggers, AutomationActions } from "@/types/copilot";
-import type { BehaviorEnforcement, BehaviorWindow } from "@/components/copilot/BehaviorWindowsEditor";
+import type { BehaviorEnforcement, BehaviorWindow } from "@/modules/copilot/components/BehaviorWindowsEditor";
 import type { FunisState } from "./funis-mapping";
 
 // =====================================================

@@ -69,11 +69,11 @@ import {
   useCopilotAgents,
   useToggleCopilotAgent,
   useSetDefaultCopilotAgent,
-} from "@/hooks/useCopilotAgents";
-import { useUploadAgentDocument, useAgentDocuments, useDeleteAgentDocument } from "@/hooks/useAgentDocuments";
+} from "@/modules/copilot/hooks/useCopilotAgents";
+import { useUploadAgentDocument, useAgentDocuments, useDeleteAgentDocument } from "@/modules/copilot/hooks/useAgentDocuments";
 
 import { useCurrentTeamMember } from "@/modules/identity";
-import { hasFullBehaviorCoverage } from "@/components/copilot/BehaviorWindowsEditor";
+import { hasFullBehaviorCoverage } from "@/modules/copilot/components/BehaviorWindowsEditor";
 
 // =============================================================
 // HELPER: Build system prompt from playground data

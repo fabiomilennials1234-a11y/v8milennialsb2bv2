@@ -89,7 +89,7 @@ vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
 }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
-vi.mock("@/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
+vi.mock("@/modules/copilot/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
 vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({
   useCustomPipelines: () => ({ data: [
     { id: "cp1", name: "Custom Pipe 1", color: "#FF0000", icon: "star" },

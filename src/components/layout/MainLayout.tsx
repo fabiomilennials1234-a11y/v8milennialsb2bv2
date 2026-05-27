@@ -7,7 +7,7 @@ import { KeyboardShortcutsHelp } from "@/components/shared/KeyboardShortcutsHelp
 import { useGlobalShortcuts, type Shortcut } from "@/hooks/useKeyboardShortcuts";
 import { cn } from "@/lib/utils";
 import { useViewport } from "@/hooks/use-viewport";
-import { useCopilotToggleRealtime } from "@/hooks/useCopilotToggleRealtime";
+import { useCopilotToggleRealtime } from "@/modules/copilot/hooks/useCopilotToggleRealtime";
 import { useIncomingMessageToast } from "@/modules/communication/hooks/useIncomingMessageToast";
 import { featureFlags } from "@/lib/feature-flags";
 import { ChatBubbleProvider } from "@/contexts/ChatBubbleContext";

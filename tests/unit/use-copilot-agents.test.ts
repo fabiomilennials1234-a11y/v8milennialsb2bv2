@@ -54,7 +54,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   isVirtualTeamMember: () => false,
   useTeamMembers: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/useCopilotPromptBuilder", () => ({
+vi.mock("@/modules/copilot/hooks/useCopilotPromptBuilder", () => ({
   generatePrompt: vi.fn().mockReturnValue({ systemPrompt: "mock prompt", metadata: { version: "1.0" } }),
   saveCopilotSystemPrompt: vi.fn().mockResolvedValue(undefined),
   regenerateAndSavePrompt: vi.fn().mockResolvedValue(undefined),
@@ -64,7 +64,7 @@ vi.mock("@/lib/copilot/custom-instructions-utils", () => ({
   parseCustomInstructions: (v: any) => ({ dos: v || "", donts: "" }),
   serializeCustomInstructions: (d: string, dt: string) => JSON.stringify({ dos: d, donts: dt }),
 }));
-vi.mock("@/hooks/useAgentFollowupRules", () => ({
+vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({
   followupRuleToDB: vi.fn((r: any) => r),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
@@ -89,7 +89,7 @@ import {
   useCopilotAgentForEdit,
   useUpdateCopilotAgentFromWizard,
   type UpdatePipelinePayload,
-} from "@/hooks/useCopilotAgents";
+} from "@/modules/copilot/hooks/useCopilotAgents";
 
 // ---------------------------------------------------------------------------
 // Wrapper

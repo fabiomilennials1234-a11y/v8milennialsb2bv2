@@ -27,7 +27,7 @@ Detalhe completo em `10 — Remodelagem/03-to-be/principios-modulo.md`.
 | 2 | [leads](./leads/CLAUDE.md) | leads | Lead | 4 | Skeleton |
 | 3 | [pipelines](./pipelines/CLAUDE.md) | pipelines | Pipeline + Stage + Pipeline Entry | 5 | Skeleton |
 | 4 | [communication](./communication/CLAUDE.md) | communication | Conversation + Message + Instance | 6 | Skeleton |
-| 5 | [copilot](./copilot/CLAUDE.md) | copilot | Copilot Agent + Human Pause | 7 | Skeleton |
+| 5 | [copilot](./copilot/CLAUDE.md) | copilot | Copilot Agent + Human Pause | 7 | Active |
 | 6 | [workflows](./workflows/CLAUDE.md) | workflows | Workflow DAG + Action Handler | 8 | Skeleton |
 | 7 | [campaigns](./campaigns/CLAUDE.md) | campaigns | Campaign + Mass Send | 9 | Skeleton |
 | 8 | [carteira](./carteira/CLAUDE.md) | carteira | Carteira Client + Order + Upsell | 10 | Skeleton |

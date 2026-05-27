@@ -42,7 +42,7 @@ import { cn } from "@/lib/utils";
 import {
   useCopilotReasoning,
   type CopilotReasoningFilters,
-} from "@/hooks/useCopilotReasoning";
+} from "@/modules/copilot/hooks/useCopilotReasoning";
 import { useMasterOrganizations } from "../../hooks/useMasterOrganizations";
 
 const PRESET_RANGES = [

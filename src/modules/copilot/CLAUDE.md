@@ -1,6 +1,6 @@
 # Module — copilot
 
-**Status:** 🟡 Skeleton (slice 7 popula — `_shared/copilot/` já agrupado parcialmente)
+**Status:** 🟢 Active (slice 7 — frontend completo. Backend agrupado parcialmente em `_shared/copilot/`; cleanup final no slice 16)
 **BC:** copilot
 **Entidade primária:** Copilot Agent + Human Pause + Oraculo Comercial
 **Owner:** IA / produto
@@ -29,13 +29,34 @@ Inclui:
 - Envio bruto de mensagem → `communication.MessageSender`
 - UI de chat humano → `communication`
 
-## API pública (`index.ts`) — TBD slice 7
+## API pública (`index.ts`)
 
-Provável superfície:
-- Hooks: `useCopilotAgents`, `useCopilotPause`, `useCopilotToggle`, `useCopilotPromptBuilder`, `useCopilotReasoning`, `useAgentDocuments`, `useAgentFollowupRules`, `useAgentKanbanRules`, `useAgentMetrics`, `useOraculoChat`
-- Components: `<CopilotAgentEditor>`, `<CopilotMetrics>`, `<CopilotPauseBanner>`, `<OraculoChat>`
-- Types: `CopilotAgent`, `AgentType`, `HumanPause`
-- Eventos (post slice 19): `human_pause.requested`, `human_pause.released`, `agent.turn_completed`
+### Hooks
+
+- **Agent CRUD**: `useCopilotAgents`, `useCopilotAgent`, `useDefaultCopilotAgent`, `useCreateCopilotAgent`, `useUpdateCopilotAgent`, `useDeleteCopilotAgent`, `useToggleCopilotAgent`, `useSetDefaultCopilotAgent`, `useUpdateCopilotAgentPipeline`
+- **Docs/Audios**: `useAgentDocuments`, `useUploadAgentDocument`, `useDeleteAgentDocument`, `useReprocessDocument`, `fetchAgentDocumentSummaries`, `useCopilotAgentAudios`, `useUploadCopilotAgentAudio`, `useDeleteCopilotAgentAudio`, `useUpdateCopilotAgentAudio`
+- **Rules / Metrics**: `useAgentFollowupRules` + CRUD, `useAgentKanbanRules`, `useUpsertKanbanRules`, `useAgentMetrics`, `useAgentPendingTasks`
+- **Pause + Toggle suite**: `useCopilotPause`, `useCopilotToggle`, `useCopilotToggleStatus`, `useCopilotToggleMutation`, `useCopilotToggleAudit`, `useCopilotToggleDrift`, `useCopilotToggleRealtime`, `copilotToggleQueryKey`
+- **Prompt + Analysis + Reasoning**: `useCopilotPromptBuilder`, `generatePrompt`, `saveCopilotSystemPrompt`, `regenerateAndSavePrompt`, `computePromptHash`, `useCopilotReasoning`, `usePromptAnalysisHistory`, `useRunPromptAnalysis`, `useAcceptSuggestion`, `useDismissSuggestion`, `useQuickPromptAnalysis`
+- **Subscription / Oraculo / Tool logs**: `useCopilotSubscription`, `useOraculoChat`, `useToolCallLogs`
+
+### Components
+
+`<AgentFollowupRulesTab>`, `<AgentKanbanRulesTab>`, `<AgentMetricsTab>`, `<AgentTasksTab>`, `<PromptPreviewSheet>`, `<BehaviorWindowsEditor>` (+ `createDefaultBehaviorWindow`), `<CopilotPlayground>`
+
+### Pages
+
+NÃO re-exportadas — App.tsx faz deep-import via React.lazy:
+- `@/modules/copilot/pages/Copilot`
+- `@/modules/copilot/pages/CopilotMetrics`
+
+### Types
+
+Re-exportados via index.ts: `UpdatePipelinePayload`, `AgentDocument`, `KanbanRuleForm`, `AgentMetrics`, `AgentMetricsTrend`, `AgentMetricsWithTrends`, `CopilotPauseState`, `CopilotToggleStatus`, `CopilotToggleAuditEntry`, `CopilotToggleAuditFilters`, `CopilotDriftRow`, `DocumentSummary`, `CopilotReasoningRow`, `CopilotReasoningFilters`, `PromptSuggestion`, `PromptAnalysis`, `OraculoChatMessage`, `ToolCallLog`, `BehaviorEnforcement`, `BehaviorDayKey`, `BehaviorWindow`
+
+### Eventos (post slice 19)
+
+`human_pause.requested`, `human_pause.released`, `agent.turn_completed`
 
 ## Áreas frágeis
 
@@ -49,15 +70,16 @@ Edge cases conhecidos:
 
 Sub-CLAUDE.md raiz: `supabase/functions/agent-message/CLAUDE.md`.
 
-## Origem (pastas atuais que migrarão pra cá)
+## Origem (slice 7 — frontend migrado em 2026-05-27)
 
-Frontend:
-- `src/components/copilot/`
-- `src/hooks/useCopilot*.ts` (10 hooks: useCopilotAgents, useCopilotAgentAudios, useCopilotPause, useCopilotPromptBuilder, useCopilotReasoning, useCopilotSubscription, useCopilotToggle, useCopilotToggleAudit, useCopilotToggleRealtime, useOraculoChat, usePromptAnalysis, useQuickPromptAnalysis, useToolCallLogs)
-- `src/hooks/useAgent*.ts` (useAgentDocuments, useAgentFollowupRules, useAgentKanbanRules, useAgentMetrics)
-- `src/pages/Copilot.tsx`, `CopilotMetrics.tsx`
+Frontend (✅ migrado pra cá):
+- ~~`src/components/copilot/`~~ → `./components/`
+- ~~`src/hooks/useCopilot*.ts`~~ (10 hooks) → `./hooks/`
+- ~~`src/hooks/useAgent*.ts`~~ (4 hooks) → `./hooks/`
+- ~~`src/hooks/{useOraculoChat, usePromptAnalysis, useQuickPromptAnalysis, useToolCallLogs}.ts`~~ (3 hooks) → `./hooks/`
+- ~~`src/pages/Copilot.tsx`, `CopilotMetrics.tsx`~~ → `./pages/`
 
-Backend:
+Backend (próximas slices):
 - `supabase/functions/agent-message/` (Copilot turn 🔴)
 - `supabase/functions/analyze-copilot-prompt/`
 - `supabase/functions/copilot-batch-processor/`
@@ -77,13 +99,18 @@ Backend:
 
 ## Slice de migração
 
-**Slice 7** — `feat/modularizacao/06-copilot` (5h + 1h dedup = 6h)
+**Slice 7** — `feat/modularizacao/06-copilot` — completado 2026-05-27. 42 renames + 36 import rewrites + 3 tests path-fix.
 
-## Dedup pendente
+## Dedup — análise (slice 7)
 
-- `useCopilotToggle` + `useCopilotToggleAudit` + `useCopilotToggleRealtime` → 1 hook composable
-- `_shared/copilot/` parcial — mover `copilot-batch-maturity.ts`, `ai-queue.ts`, `ai-action-executor.ts`, `bot-loop-detector.ts` pra dentro
-- `test-copilot-chat` → deletar ou mover pra `tests/`
+- `useCopilotToggle` + `useCopilotToggleAudit` + `useCopilotToggleRealtime` → **mantidos como 3 hooks**.
+  - Análise: 3 responsabilidades distintas — mutation + status (toggle), audit query + drift, realtime subscription. Sinaturas, query keys e ciclos de vida divergem. Consolidação forçada quebraria callers (CopilotReasoning master page usa apenas audit; toggle hook usa apenas status+mutation; realtime monta uma vez no AppShell). API pública unificada via `index.ts` da camada copilot — chamadores cross-module veem como um único contrato.
+  - Follow-up potencial slice 17/19 (event-bus): unificar os 3 sob um `useCopilotToggleSuite()` opt-in. Não é débito real.
+
+## Dedup pendente (próximas slices)
+
+- `_shared/copilot/` parcial (slice 16) — mover `copilot-batch-maturity.ts`, `ai-queue.ts`, `ai-action-executor.ts`, `bot-loop-detector.ts` pra dentro
+- `test-copilot-chat` (slice 15) → deletar ou mover pra `tests/`
 
 ## Refs
 

@@ -14,7 +14,7 @@ import { resolve } from "path";
 // -------------------------------------------------------
 describe("PlaygroundSettings dead code removal", () => {
   const settingsSource = readFileSync(
-    resolve(__dirname, "../../src/components/copilot/playground/PlaygroundSettings.tsx"),
+    resolve(__dirname, "../../src/modules/copilot/components/playground/PlaygroundSettings.tsx"),
     "utf-8"
   );
 
@@ -57,7 +57,7 @@ describe("PlaygroundSettings dead code removal", () => {
 // -------------------------------------------------------
 describe("playgroundToAgentPayload defaults", () => {
   const playgroundSource = readFileSync(
-    resolve(__dirname, "../../src/components/copilot/playground/CopilotPlayground.tsx"),
+    resolve(__dirname, "../../src/modules/copilot/components/playground/CopilotPlayground.tsx"),
     "utf-8"
   );
 

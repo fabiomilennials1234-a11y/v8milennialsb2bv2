@@ -32,7 +32,7 @@ import {
 import {
   BehaviorWindowsEditor,
   hasFullBehaviorCoverage,
-} from "@/components/copilot/BehaviorWindowsEditor";
+} from "@/modules/copilot/components/BehaviorWindowsEditor";
 
 import type { ComportamentoState } from "./conexao-comportamento-mapping";
 

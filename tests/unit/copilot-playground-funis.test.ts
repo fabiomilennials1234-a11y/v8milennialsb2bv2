@@ -11,7 +11,7 @@ import {
   funisStateToPayload,
   payloadToFunisState,
   type FunisState,
-} from "@/components/copilot/playground/funis-mapping";
+} from "@/modules/copilot/components/playground/funis-mapping";
 
 describe("funisStateToPayload", () => {
   it("maps activePipes, activeStages, moveRules to agent payload shape", () => {
