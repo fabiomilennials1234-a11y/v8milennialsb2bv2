@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useTrackView } from "@/hooks/useTrackView";
+import { useTrackView } from "@/modules/platform/hooks/useTrackView";
 
 /**
  * Visibility outcomes from the `can_view_lead(uuid)` RPC (migration

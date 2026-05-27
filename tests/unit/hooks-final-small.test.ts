@@ -78,7 +78,7 @@ describe("useMessageTemplates", () => {
 });
 
 // ─── useWebhooks ───
-import { useWebhooks, useCreateWebhook, useDeleteWebhook } from "@/hooks/useWebhooks";
+import { useWebhooks, useCreateWebhook, useDeleteWebhook } from "@/modules/platform/hooks/useWebhooks";
 describe("useWebhooks", () => {
   it("fetches webhooks", async () => {
     const { result } = renderHook(() => useWebhooks(), { wrapper: w() });

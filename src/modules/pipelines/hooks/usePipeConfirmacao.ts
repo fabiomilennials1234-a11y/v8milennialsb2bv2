@@ -5,7 +5,7 @@ import { triggerFollowUpAutomation } from "@/modules/workflows/hooks/useAutoFoll
 
 import { useOrganization } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";
-import { OptimisticLockConflictError, isPostgrestNoRows } from "@/lib/optimistic-lock";
+import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platform/lib/optimistic-lock";
 import { usePipelineEntries, usePipelineId, findOrCreatePipelineEntry } from "./usePipelineEntries";
 
 export type PipeConfirmacao = Tables<"pipe_confirmacao">;

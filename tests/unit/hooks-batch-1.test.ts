@@ -74,7 +74,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { useLeadScore } from "@/modules/leads";
 import { useLeadHistory } from "@/modules/leads";
 import { useOrgQuotas } from "@/modules/identity/hooks/useOrgQuotas";
-import { useOnboarding } from "@/hooks/useOnboarding";
+import { useOnboarding } from "@/modules/platform/hooks/useOnboarding";
 import { useSeatUsage } from "@/modules/identity/hooks/useSeatUsage";
 
 // ── Tests ──

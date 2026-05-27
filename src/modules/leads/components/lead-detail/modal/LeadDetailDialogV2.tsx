@@ -6,7 +6,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useViewport } from "@/hooks/use-viewport";
-import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { useOnlineStatus } from "@/modules/platform/hooks/useOnlineStatus";
 import { useLeadSheet } from "../hooks/useLeadSheet";
 import { useLeadDetail } from "../hooks/useLeadDetail";
 import { useLeadDetailRealtime } from "../hooks/useLeadDetailRealtime";

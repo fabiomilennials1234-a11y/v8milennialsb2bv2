@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useClientAlerts } from "@/modules/carteira/hooks/useClientAlerts";
-import { useHealthHistory } from "@/hooks/useHealthHistory";
+import { useHealthHistory } from "@/modules/platform/hooks/useHealthHistory";
 import { HealthSparkline } from "./HealthSparkline";
 import { NewOrderModal } from "./NewOrderModal";
 

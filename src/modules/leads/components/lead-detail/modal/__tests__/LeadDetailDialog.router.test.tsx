@@ -7,7 +7,7 @@ import { useEffect } from "react";
 // ─── Mocks ────────────────────────────────────────────────────────────
 
 const flagMock = vi.fn();
-vi.mock("@/hooks/useFeatureFlag", () => ({
+vi.mock("@/modules/platform/hooks/useFeatureFlag", () => ({
   useFeatureFlag: (key: string) => flagMock(key),
 }));
 

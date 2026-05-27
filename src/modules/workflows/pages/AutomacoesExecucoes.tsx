@@ -33,7 +33,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { WorkflowExecution, WorkflowExecutionStep, WorkflowExecutionStatus, WorkflowStepStatus } from "@/types/workflow";
 import SplitAbAnalytics from "@/modules/workflows/components/SplitAbAnalytics";
-import { AlertsBanner } from "@/components/system-alerts/AlertsBanner";
+import { AlertsBanner } from "@/modules/platform/components/system-alerts/AlertsBanner";
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof CheckCircle2 }> = {
   running: { label: "Executando", variant: "default", icon: Loader2 },

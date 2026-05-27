@@ -8,7 +8,7 @@ import {
   Zap, GitBranch, Wrench, Fuel, DollarSign, Trophy, BarChart2, Package,
   Tv, Bot, MousePointer, Sparkles, Send, Code, Palette,
 } from "lucide-react";
-import type { FeatureMeta } from "@/lib/feature-registry";
+import type { FeatureMeta } from "@/modules/platform/lib/feature-registry";
 
 const ICON_MAP: Record<string, React.ElementType> = {
   Zap, GitBranch, Wrench, Fuel, DollarSign, Trophy, BarChart2, Package,

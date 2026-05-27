@@ -9,7 +9,7 @@ import {
   usePipelineTemplates,
   useCreatePipelineTemplate,
   useUpdatePipelineTemplate,
-} from "@/hooks/useOnboardingTemplates";
+} from "@/modules/platform/hooks/useOnboardingTemplates";
 import { MatchCriteriaBuilder } from "./MatchCriteriaBuilder";
 import { toast } from "sonner";
 

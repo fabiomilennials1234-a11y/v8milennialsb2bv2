@@ -11,7 +11,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { useWebhooks } from "@/hooks/useWebhooks";
+import { useWebhooks } from "@/modules/platform/hooks/useWebhooks";
 
 function mockWebhookQuery(data: unknown[]) {
   mockFrom.mockReturnValue({

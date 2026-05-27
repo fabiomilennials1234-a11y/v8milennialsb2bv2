@@ -24,8 +24,8 @@ import { useAvatarMap } from "@/hooks/useAvatarMap";
 import { Button } from "@/components/ui/button";
 import torqueLogo from "@/assets/torque-logo.png";
 import { TVRankingSimple } from "@/modules/analytics/components/tv/TVRankingSimple";
-import { generateTVConfig } from "@/lib/tv-config-from-quiz";
-import { useOnboarding } from "@/hooks/useOnboarding";
+import { generateTVConfig } from "@/modules/platform/lib/tv-config-from-quiz";
+import { useOnboarding } from "@/modules/platform/hooks/useOnboarding";
 
 const formatCurrency = (value: number) => {
   if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;

@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { OptimisticLockConflictError } from "@/lib/optimistic-lock";
+import { OptimisticLockConflictError } from "@/modules/platform/lib/optimistic-lock";
 
 /**
  * Standard handler for `OptimisticLockConflictError` (#307).
