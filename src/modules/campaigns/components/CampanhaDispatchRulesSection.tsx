@@ -27,8 +27,8 @@ import {
   type CampanhaDispatchRuleStepActionType,
   type CampanhaDispatchRuleTimeoutAction,
   type SdrAssignmentMode,
-} from "@/hooks/useCampanhas";
-import { useCampanhaTemplates, type CampanhaTemplate } from "@/hooks/useCampaignTemplates";
+} from "@/modules/campaigns/hooks/useCampanhas";
+import { useCampanhaTemplates, type CampanhaTemplate } from "@/modules/campaigns/hooks/useCampaignTemplates";
 import { useTeamMembers } from "@/modules/identity";
 import {
   Send, ChevronDown, Plus, Trash2, Loader2, ListOrdered, Play, Pencil,
@@ -44,7 +44,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { useCampaignQueueItems, useRetryDispatchItems } from "@/hooks/useDispatchQueueItems";
+import { useCampaignQueueItems, useRetryDispatchItems } from "@/modules/campaigns/hooks/useDispatchQueueItems";
 import { DispatchQueueSheet } from "@/components/shared/DispatchQueueSheet";
 
 const TRIGGER_LABELS: Record<CampanhaDispatchRuleTriggerType, string> = {

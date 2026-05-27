@@ -22,7 +22,7 @@ vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStage
 vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useWhatsAppInstances: () => ({ data: [] }) }));
-vi.mock("@/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }) }));
+vi.mock("@/modules/campaigns/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }) }));
 vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }) }));
 vi.mock("@/hooks/useChannelChat", () => ({ useChannelContacts: () => ({ data: [] }), useChannelMessages: () => ({ data: [] }) }));
 vi.mock("@/hooks/useGoogleCalendar", () => ({ useGoogleCalendar: () => ({ data: null }) }));

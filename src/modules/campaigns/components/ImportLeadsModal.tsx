@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
-import { CampanhaStage, CampanhaMember, type Campanha } from "@/hooks/useCampanhas";
+import { CampanhaStage, CampanhaMember, type Campanha } from "@/modules/campaigns/hooks/useCampanhas";
 import { useImportLeads, parseFilePreview, KNOWN_LEAD_FIELDS, type FilePreviewResult } from "@/modules/leads";
 import { useLeadCustomFields } from "@/modules/leads";
 import { useCanDo } from "@/modules/identity";

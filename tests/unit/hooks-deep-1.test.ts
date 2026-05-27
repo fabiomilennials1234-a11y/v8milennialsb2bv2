@@ -53,7 +53,7 @@ import {
   type CampaignTemplateMessageType,
   type DispatchBatch,
   type LeadFilter,
-} from "@/hooks/useCampaignTemplates";
+} from "@/modules/campaigns/hooks/useCampaignTemplates";
 
 describe("useCampaignTemplates — pure exports", () => {
   it("TEMPLATE_VARIABLES has expected variables", () => {

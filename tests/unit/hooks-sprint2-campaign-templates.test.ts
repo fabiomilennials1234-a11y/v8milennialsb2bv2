@@ -73,7 +73,7 @@ import {
   useDispatchLog,
   useDispatchStats,
   TEMPLATE_VARIABLES,
-} from "@/hooks/useCampaignTemplates";
+} from "@/modules/campaigns/hooks/useCampaignTemplates";
 
 // ---- Pure function tests ----
 

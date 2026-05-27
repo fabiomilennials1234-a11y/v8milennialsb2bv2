@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useCampaignTemplates } from "@/hooks/useCampaignTemplates";
+import { useCampaignTemplates } from "@/modules/campaigns/hooks/useCampaignTemplates";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { FileText, Plus, Eye, AlertCircle, Check, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreateTemplateModal } from "./CreateTemplateModal";
-import { replaceVariablesWithExamples } from "@/hooks/useCampaignTemplates";
+import { replaceVariablesWithExamples } from "@/modules/campaigns/hooks/useCampaignTemplates";
 
 interface TemplateSelectorStepProps {
   selectedTemplateIds: string[];

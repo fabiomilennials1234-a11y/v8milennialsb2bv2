@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Campanha, CampanhaStage, CampanhaLead, CampanhaMember, getObjectiveMetricLabel } from "@/hooks/useCampanhas";
+import { Campanha, CampanhaStage, CampanhaLead, CampanhaMember, getObjectiveMetricLabel } from "@/modules/campaigns/hooks/useCampanhas";
 import { format, differenceInDays, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Target, Users, Trophy, Calendar, TrendingUp, DollarSign, Award, Flame, Zap, Crown, Star, Sparkles } from "lucide-react";

@@ -147,7 +147,7 @@ import {
   OBJECTIVE_DEFAULT_STAGES,
   getObjectiveMetricLabel,
   getObjectiveSuccessStageLabel,
-} from "@/hooks/useCampanhas";
+} from "@/modules/campaigns/hooks/useCampanhas";
 
 function createWrapper() {
   const qc = new QueryClient({

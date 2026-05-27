@@ -21,10 +21,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Campanha, useUpdateCampanha, useDeleteCampanha } from "@/hooks/useCampanhas";
+import { Campanha, useUpdateCampanha, useDeleteCampanha } from "@/modules/campaigns/hooks/useCampanhas";
 import { Calendar, Target, Users, ArrowRight, Trophy, Clock, MoreVertical, Trash2, Power, PowerOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useCampanhaLeads, useCampanhaStages, useCampanhaMembers } from "@/hooks/useCampanhas";
+import { useCampanhaLeads, useCampanhaStages, useCampanhaMembers } from "@/modules/campaigns/hooks/useCampanhas";
 import { useCanDo } from "@/modules/identity";
 import { useState, memo } from "react";
 import { toast } from "sonner";

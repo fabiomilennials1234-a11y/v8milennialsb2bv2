@@ -35,7 +35,7 @@ vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAut
 vi.mock("@/hooks/useTags", () => ({ useTags: () => ({ data: [] }) }));
 vi.mock("@/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
 vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useWhatsAppInstances: () => ({ data: [] }) }));
-vi.mock("@/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }) }));
+vi.mock("@/modules/campaigns/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }) }));
 vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }) }));
 vi.mock("@/modules/pipelines/hooks/usePipelineDisplayConfig", () => ({ usePipelineDisplayConfig: () => ({ data: [] }) }));
 vi.mock("@/hooks/useGoogleCalendar", () => ({ useGoogleCalendar: () => ({ data: null }) }));
@@ -48,7 +48,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: v
 
 // ── Target: remaining 0% hooks ──
 import { useTVDashboardData } from "@/hooks/useTVDashboardData";
-import { useDispatchQueueItems } from "@/hooks/useDispatchQueueItems";
+import { useDispatchQueueItems } from "@/modules/campaigns/hooks/useDispatchQueueItems";
 import { useMktByOrigin } from "@/hooks/useMktByOrigin";
 import { useMktOriginConfig } from "@/hooks/useMktOriginConfig";
 

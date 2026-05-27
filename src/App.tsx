@@ -51,8 +51,8 @@ const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash
 const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
 const Configuracoes = lazy(() => lazyRetry(() => import("./pages/Configuracoes")));
 const TVDashboard = lazy(() => lazyRetry(() => import("./pages/TVDashboard")));
-const Campanhas = lazy(() => lazyRetry(() => import("./pages/Campanhas")));
-const CampanhaDetail = lazy(() => lazyRetry(() => import("./pages/CampanhaDetail")));
+const Campanhas = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/Campanhas")));
+const CampanhaDetail = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/CampanhaDetail")));
 const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));
 // Marketing and Analytics are unified in the Analytics tab — see TabAnalyticsV2.tsx
 const Produtos = lazy(() => lazyRetry(() => import("./pages/Produtos")));

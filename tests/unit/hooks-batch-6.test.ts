@@ -35,7 +35,7 @@ vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAut
 vi.mock("@/hooks/useTags", () => ({ useTags: () => ({ data: [] }) }));
 vi.mock("@/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
 vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useWhatsAppInstances: () => ({ data: [] }) }));
-vi.mock("@/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }) }));
+vi.mock("@/modules/campaigns/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }) }));
 vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }) }));
 vi.mock("@/modules/pipelines/hooks/usePipelineDisplayConfig", () => ({ usePipelineDisplayConfig: () => ({ data: [] }) }));
 vi.mock("@/hooks/useGoogleCalendar", () => ({ useGoogleCalendar: () => ({ data: null }) }));
@@ -67,7 +67,7 @@ import { usePrefetchPipes } from "@/modules/pipelines/hooks/usePrefetchPipes";
 import { useCouponValidation } from "@/hooks/useCouponValidation";
 import { useMetaConnection } from "@/modules/communication/hooks/useMetaConnection";
 import { useTVDashboardData } from "@/hooks/useTVDashboardData";
-import { useDispatchQueueItems } from "@/hooks/useDispatchQueueItems";
+import { useDispatchQueueItems } from "@/modules/campaigns/hooks/useDispatchQueueItems";
 import { useScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
 import { useMktByOrigin } from "@/hooks/useMktByOrigin";
 import { useMktOriginConfig } from "@/hooks/useMktOriginConfig";
@@ -76,7 +76,7 @@ import { useLeadAllPipelines } from "@/modules/leads";
 import { useProductMaterials } from "@/hooks/useProductMaterials";
 import { useChannelChat } from "@/hooks/useChannelChat";
 import { useWhatsAppLeadIntegration } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
-import { useCampaignTemplates } from "@/hooks/useCampaignTemplates";
+import { useCampaignTemplates } from "@/modules/campaigns/hooks/useCampaignTemplates";
 
 // Hooks that throw removed: useTinyErp, useMasterOperations, useGoogleCalendarSharing,
 // useCustomPipelineMembers, useSellerActivity, useWhatsAppFunnel, useWhatsAppInstanceAllowedMembers,

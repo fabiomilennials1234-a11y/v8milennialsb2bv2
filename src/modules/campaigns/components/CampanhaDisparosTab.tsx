@@ -14,13 +14,13 @@ import { CampanhaPipeAutomationsSection } from "./CampanhaPipeAutomationsSection
 import { CampanhaSemiAutomaticaPanel } from "./CampanhaSemiAutomaticaPanel";
 import { CampanhaAutomaticaPanel } from "./CampanhaAutomaticaPanel";
 import { CreateTemplateModal } from "./CreateTemplateModal";
-import type { Campanha, CampanhaStage } from "@/hooks/useCampanhas";
+import type { Campanha, CampanhaStage } from "@/modules/campaigns/hooks/useCampanhas";
 import {
   useCampanhaTemplates,
   useCampaignTemplates,
   useAddTemplateToCampanha,
   useRemoveTemplateFromCampanha,
-} from "@/hooks/useCampaignTemplates";
+} from "@/modules/campaigns/hooks/useCampaignTemplates";
 import { FileText, Send, Zap, Plus, Link2, Trash2, Eye } from "lucide-react";
 import { toast } from "sonner";
 

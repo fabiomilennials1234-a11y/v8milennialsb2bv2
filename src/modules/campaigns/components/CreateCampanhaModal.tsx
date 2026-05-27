@@ -15,7 +15,7 @@ import {
   type AutoConfig, type LeadDistributionMode, type CampanhaMemberRole,
   OBJECTIVE_LABELS, OBJECTIVE_DEFAULT_STAGES,
   getObjectiveMetricLabel, getObjectiveSuccessStageLabel,
-} from "@/hooks/useCampanhas";
+} from "@/modules/campaigns/hooks/useCampanhas";
 import { useTeamMembers } from "@/modules/identity";
 import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
 import { toast } from "sonner";

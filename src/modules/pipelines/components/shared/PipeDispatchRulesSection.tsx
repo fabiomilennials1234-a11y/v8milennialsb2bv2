@@ -22,7 +22,7 @@ import {
   type PipeDispatchRuleTimeoutAction,
   type SdrAssignmentMode,
 } from "@/modules/pipelines/hooks/usePipeDispatchRules";
-import { useCampaignTemplates, type CampaignTemplate } from "@/hooks/useCampaignTemplates";
+import { useCampaignTemplates, type CampaignTemplate } from "@/modules/campaigns/hooks/useCampaignTemplates";
 import { useTeamMembers } from "@/modules/identity";
 import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
 import type { PipelineType, PipelineStage } from "@/modules/pipelines/hooks/usePipelineStages";
@@ -41,7 +41,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOrganization } from "@/modules/identity";
 import { cn } from "@/lib/utils";
-import { usePipeQueueItems, useRetryDispatchItems } from "@/hooks/useDispatchQueueItems";
+import { usePipeQueueItems, useRetryDispatchItems } from "@/modules/campaigns/hooks/useDispatchQueueItems";
 import { DispatchQueueSheet } from "@/components/shared/DispatchQueueSheet";
 
 const TRIGGER_LABELS: Record<PipeDispatchRuleTriggerType, string> = {

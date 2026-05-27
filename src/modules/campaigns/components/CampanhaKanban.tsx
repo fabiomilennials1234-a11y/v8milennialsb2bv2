@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { CampanhaStage, CampanhaLead, useUpdateCampanhaLead, useDeleteCampanhaLead, useExtractLeadToPipe, type CampanhaPipeAutomation } from "@/hooks/useCampanhas";
+import { CampanhaStage, CampanhaLead, useUpdateCampanhaLead, useDeleteCampanhaLead, useExtractLeadToPipe, type CampanhaPipeAutomation } from "@/modules/campaigns/hooks/useCampanhas";
 import { useDeleteLead } from "@/modules/leads";
 import { useTeamMembers } from "@/modules/identity";
 import { Phone, Mail, Building2, GripVertical, User, DollarSign, Star, Tag, Trash2, Edit2, Filter, MessageSquare, Save, X, Search, Clock } from "lucide-react";

@@ -14,7 +14,7 @@ import { TRIGGER_CATEGORIES } from "@/types/workflow";
 import type { TriggerNodeData, WorkflowTriggerType } from "@/types/workflow";
 import { usePipelineStages, getPipelineTypeName, type PipelineType } from "@/modules/pipelines/hooks/usePipelineStages";
 import { useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines/hooks/useCustomPipelines";
-import { useCampanhas, useCampanhaStages } from "@/hooks/useCampanhas";
+import { useCampanhas, useCampanhaStages } from "@/modules/campaigns/hooks/useCampanhas";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 
 interface TriggerPanelProps {

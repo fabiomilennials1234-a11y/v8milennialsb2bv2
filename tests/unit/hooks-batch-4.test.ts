@@ -44,7 +44,7 @@ vi.mock("@/lib/copilot/custom-instructions-utils", () => ({ parseCustomInstructi
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 vi.mock("papaparse", () => ({ default: { parse: vi.fn() } }));
 vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useWhatsAppInstances: () => ({ data: [] }) }));
-vi.mock("@/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }), OBJECTIVE_TARGET_MAP: {}, OBJECTIVE_LABELS: {} }));
+vi.mock("@/modules/campaigns/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }), OBJECTIVE_TARGET_MAP: {}, OBJECTIVE_LABELS: {} }));
 vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }) }));
 
 // ── Imports ──

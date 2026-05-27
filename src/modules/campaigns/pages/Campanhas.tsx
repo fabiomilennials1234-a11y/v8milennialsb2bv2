@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useCampanhas } from "@/hooks/useCampanhas";
+import { useCampanhas } from "@/modules/campaigns/hooks/useCampanhas";
 import { useCanDo } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
-import { CampanhaCard } from "@/components/campanhas/CampanhaCard";
-import { CreateCampanhaModal } from "@/components/campanhas/CreateCampanhaModal";
+import { CampanhaCard } from "@/modules/campaigns/components/CampanhaCard";
+import { CreateCampanhaModal } from "@/modules/campaigns/components/CreateCampanhaModal";
 import { Plus, Target, Loader2 } from "lucide-react";
 
 export default function Campanhas() {

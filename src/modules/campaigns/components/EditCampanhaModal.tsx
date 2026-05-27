@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useUpdateCampanha, useCampanhaMembers, useUpdateCampanhaMember, type Campanha, type LeadDistributionMode, type CampanhaMemberRole } from "@/hooks/useCampanhas";
+import { useUpdateCampanha, useCampanhaMembers, useUpdateCampanhaMember, type Campanha, type LeadDistributionMode, type CampanhaMemberRole } from "@/modules/campaigns/hooks/useCampanhas";
 import { useCopilotAgents } from "@/modules/copilot/hooks/useCopilotAgents";
 import { useTeamMembers } from "@/modules/identity";
 import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";

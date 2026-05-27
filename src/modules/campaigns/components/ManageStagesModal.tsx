@@ -18,7 +18,7 @@ import {
   useReorderCampanhaStages,
   type CampaignObjective,
   getObjectiveSuccessStageLabel,
-} from "@/hooks/useCampanhas";
+} from "@/modules/campaigns/hooks/useCampanhas";
 import { 
   Plus, 
   Trash2, 

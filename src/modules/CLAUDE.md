@@ -29,7 +29,7 @@ Detalhe completo em `10 — Remodelagem/03-to-be/principios-modulo.md`.
 | 4 | [communication](./communication/CLAUDE.md) | communication | Conversation + Message + Instance | 6 | Skeleton |
 | 5 | [copilot](./copilot/CLAUDE.md) | copilot | Copilot Agent + Human Pause | 7 | Active |
 | 6 | [workflows](./workflows/CLAUDE.md) | workflows | Workflow DAG + Action Handler | 8 | Active |
-| 7 | [campaigns](./campaigns/CLAUDE.md) | campaigns | Campaign + Mass Send | 9 | Skeleton |
+| 7 | [campaigns](./campaigns/CLAUDE.md) | campaigns | Campaign + Mass Send | 9 | Active |
 | 8 | [carteira](./carteira/CLAUDE.md) | carteira | Carteira Client + Order + Upsell | 10 | Skeleton |
 | 9 | [engagement](./engagement/CLAUDE.md) | engagement | Checklist + Activity + Follow-up + Gamification | 11 | Skeleton |
 | 10 | [analytics](./analytics/CLAUDE.md) | analytics | Dashboard + Metric + Cohort | 12 | Skeleton |

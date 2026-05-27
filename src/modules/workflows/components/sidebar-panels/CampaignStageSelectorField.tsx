@@ -6,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCampanhaStages } from "@/hooks/useCampanhas";
+import { useCampanhaStages } from "@/modules/campaigns/hooks/useCampanhas";
 
 interface CampaignStageSelectorFieldProps {
   campanhaId: string;
