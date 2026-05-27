@@ -136,23 +136,25 @@
   html.dark,
   .dark {
     color-scheme: dark;
-    --background: 36 20% 12%;
+    /* Page background matches the mockup's warm dark (#191714). */
+    --background: 36 11% 9%;
     --foreground: 45 20% 95%;
 
-    --card: 36 20% 16%;
+    /* Warm muted dark surfaces, in the #191714 family (low-saturation hue 36). */
+    --card: 35 10% 13%;
     --card-foreground: 45 20% 95%;
 
-    --popover: 36 20% 16%;
+    --popover: 35 10% 13%;
     --popover-foreground: 45 20% 95%;
 
     --primary: 47 100% 50%;
     --primary-foreground: 30 18% 15%;
 
-    --secondary: 36 15% 22%;
+    --secondary: 35 8% 17%;
     --secondary-foreground: 45 20% 95%;
 
-    --muted: 36 15% 22%;
-    --muted-foreground: 45 15% 70%;
+    --muted: 35 8% 17%;
+    --muted-foreground: 40 7% 56%;
 
     --accent: 47 100% 50%;
     --accent-foreground: 30 18% 15%;
@@ -169,8 +171,8 @@
     --silver: 220 9% 70%;
     --silver-foreground: 30 18% 10%;
 
-    --border: 36 15% 25%;
-    --input: 36 15% 25%;
+    --border: 35 8% 19%;
+    --input: 35 8% 19%;
     --ring: 47 100% 50%;
 
     /* ─── Bubble tokens (dark) ────────────────────────────────── */
@@ -200,7 +202,7 @@
     --command-palette-bg:     220 15% 10%;
     --command-palette-border: 220 10% 20%;
 
-    --sidebar-background: 36 20% 10%;
+    --sidebar-background: 36 12% 7%;
     --sidebar-foreground: 45 20% 90%;
   }
 }
@@ -415,6 +417,53 @@
       transform: translateX(-50%) scaleX(1);
       opacity: 1;
     }
+  }
+
+  /* ─── DashboardTV — painel de parede / tempo real ─────────────── */
+  .tv-live-badge {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.28);
+    color: #f87171;
+    letter-spacing: 0.06em;
+  }
+  .tv-live-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #f87171;
+    box-shadow: 0 0 8px rgba(248, 113, 113, 0.9);
+    animation: tvLive 1.8s ease-in-out infinite;
+    display: inline-block;
+  }
+  @keyframes tvLive {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.35; transform: scale(0.75); }
+  }
+
+  /* KPI cards — micro hover lift */
+  .tv-kpi {
+    transition: transform .45s cubic-bezier(.2,.8,.2,1), box-shadow .45s ease, border-color .45s ease;
+    will-change: transform;
+  }
+  .tv-kpi:hover {
+    transform: translateY(-3px);
+    border-color: rgba(255,255,255,0.12) !important;
+    box-shadow: 0 12px 28px -12px rgba(0,0,0,0.6);
+  }
+
+  /* Soft sheen sweeping across the hero KPI */
+  .tv-sheen {
+    position: absolute; inset: 0;
+    background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.07) 50%, transparent 65%);
+    transform: translateX(-120%);
+    animation: tvSheen 6.5s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes tvSheen {
+    0%, 70%  { transform: translateX(-120%); }
+    100%     { transform: translateX(120%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tv-live-dot, .tv-sheen { animation: none; }
   }
 
   .topnav-item-locked {
