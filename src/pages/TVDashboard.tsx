@@ -144,35 +144,47 @@ function TVDashboardInner() {
       <div className="absolute inset-0 checkered-pattern opacity-[0.015] pointer-events-none" />
 
       {/* Header */}
-      <header className="relative z-10 flex items-center justify-between px-6 py-3 border-b border-white/5">
-        <div className="flex items-center gap-4">
-          <img src={torqueLogo} alt="Torque CRM" className="h-8" />
+      <header className="relative z-10 flex flex-wrap items-center justify-between gap-3 px-6 py-3 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <img src={torqueLogo} alt="Torque CRM" className="h-7" />
           <div className="h-6 w-px bg-white/10" />
           <div>
-            <h1 className="text-lg font-bold text-white tracking-tight">Dashboard Comercial</h1>
-            <p className="text-xs text-white/40 capitalize">{monthName}</p>
+            <h1 className="font-display text-base font-semibold text-[#f8f5e7] tracking-tight leading-tight">Dashboard Comercial</h1>
+            <p className="text-[10.5px] text-[#8a857a] capitalize">{monthName}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <PeriodPill />
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5">
-            <Clock className="w-4 h-4 text-primary" />
-            <span className="text-lg font-mono font-semibold text-white">
-              {format(currentTime, "HH:mm")}
-            </span>
+          <div
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-[#f8f5e7] tabular-nums"
+            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+          >
+            <Clock className="w-[11px] h-[11px] text-[#ed9326]" />
+            <span>{format(currentTime, "HH:mm")}</span>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => refetch()} className="text-white/60 hover:text-white hover:bg-white/5">
-            <RefreshCw className="w-4 h-4" />
+          <Button
+            variant="ghost" size="icon"
+            onClick={() => refetch()}
+            className="w-7 h-7 rounded-lg text-[#8a857a] hover:text-[#f8f5e7] hover:bg-white/5"
+            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+          >
+            <RefreshCw className="w-3 h-3" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={toggleFullscreen} className="text-white/60 hover:text-white hover:bg-white/5">
-            <Maximize className="w-4 h-4" />
+          <Button
+            variant="ghost" size="icon"
+            onClick={toggleFullscreen}
+            className="w-7 h-7 rounded-lg text-[#8a857a] hover:text-[#f8f5e7] hover:bg-white/5"
+            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+          >
+            <Maximize className="w-3 h-3" />
           </Button>
         </div>
       </header>
 
-      {/* Main Grid */}
-      <div className="relative z-10 flex-1 p-3 grid grid-cols-12 gap-3 overflow-hidden">
+      {/* Main Grid — scrolls when the viewport is shorter than the content
+          (e.g. windowed mode); fills the screen in fullscreen. */}
+      <div className="relative z-10 flex-1 p-3 grid grid-cols-12 gap-3 overflow-y-auto">
 
         {/* Coluna esquerda — Termômetro (mês civil, fixo) */}
         <div className="col-span-3 flex flex-col gap-3">
@@ -230,7 +242,7 @@ function TVDashboardInner() {
           </div>
 
           {/* Linha 2: SDR + Closer + Coach/Ranking rotativo */}
-          <div className="grid grid-cols-12 gap-3 min-h-0" style={{ minHeight: "280px" }}>
+          <div className="grid grid-cols-12 gap-3" style={{ minHeight: "280px" }}>
             <TVCard className="col-span-5 flex flex-col">
               <SDRPerformanceBlock />
             </TVCard>
@@ -295,7 +307,7 @@ function TVDashboardInner() {
           </div>
 
           {/* Linha 3: NovosLeads + Funil (mês fixo) */}
-          <div className="grid grid-cols-12 gap-3 min-h-0 flex-1">
+          <div className="grid grid-cols-12 gap-3" style={{ minHeight: "240px" }}>
             <TVCard className="col-span-5 flex flex-col" accent="emerald">
               <NewLeadsBlock />
             </TVCard>
@@ -335,149 +347,109 @@ interface ThermometerProps {
 }
 
 function Thermometer({ meta, atual, ondeDeveria, percentage, isAhead, quantoFalta, diferenca, currentTime }: ThermometerProps) {
+  const pct = Math.min(percentage, 100);
+  const monthUpper = format(currentTime, "MMMM", { locale: ptBR }).toUpperCase();
+
   return (
     <div className="h-full flex flex-col">
-      <div className="text-center mb-2">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
-          <Target className="w-4 h-4 text-primary" />
-          <span className="text-sm font-bold text-primary uppercase tracking-wider">
-            Meta de {format(currentTime, "MMMM", { locale: ptBR })}
-          </span>
-        </div>
+      {/* Top pill */}
+      <div className="flex items-center justify-center mb-3">
+        <span
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-[#f8f5e7]"
+          style={{ background: "rgba(237,147,38,0.12)", border: "1px solid rgba(237,147,38,0.3)" }}
+        >
+          <Target className="w-3 h-3 text-[#ed9326]" />
+          META DE {monthUpper}
+        </span>
       </div>
 
-      <div className="flex-1 flex items-stretch gap-3 min-h-0">
-        <div className="flex flex-col justify-between py-2 text-right w-10">
+      {/* Body */}
+      <div className="flex-1 flex gap-2 min-h-[260px]">
+        {/* ticks */}
+        <div className="flex flex-col justify-between items-end text-[8px] text-[#8a857a] py-1 w-9 shrink-0 tabular-nums">
           {[100, 75, 50, 25, 0].map((p) => (
-            <span key={p} className="text-[10px] font-mono text-white/50">
-              {formatCurrency((meta * p) / 100)}
-            </span>
+            <span key={p}>{p === 0 ? "0" : formatCurrency((meta * p) / 100)}</span>
           ))}
         </div>
 
-        <div className="relative flex flex-col items-center flex-1 py-2">
-          <motion.div
-            animate={{
-              scale: percentage >= 100 ? [1, 1.2, 1] : 1,
-              boxShadow: percentage >= 100
-                ? ["0 0 0px rgba(234,179,8,0.5)", "0 0 40px rgba(234,179,8,0.8)", "0 0 0px rgba(234,179,8,0.5)"]
-                : "none"
-            }}
-            transition={{ repeat: percentage >= 100 ? Infinity : 0, duration: 1 }}
-            className={`relative -mb-3 z-20 px-4 py-2 rounded-xl border-2 ${
-              percentage >= 100
-                ? "bg-gradient-to-br from-yellow-400 via-amber-500 to-orange-500 border-yellow-300 shadow-2xl shadow-yellow-500/30"
-                : "bg-gradient-to-br from-primary/80 to-primary border-primary/50"
-            }`}
+        {/* track */}
+        <div className="relative flex-1 flex justify-center">
+          {/* top meta label */}
+          <div
+            className="absolute -top-1 left-1/2 -translate-x-1/2 z-20 text-center px-3 py-2 rounded-xl shadow-lg"
+            style={{ background: "linear-gradient(135deg,#ed9326,#ffd400)" }}
           >
-            <p className="text-2xl font-black text-white drop-shadow-lg text-center font-racing">
+            <div className="font-display text-sm font-bold text-[#1c1c1c] leading-none">
               R$ {formatCurrency(meta)}
-            </p>
-            <p className="text-[10px] font-medium text-white/80 text-center uppercase tracking-wider">
-              {percentage >= 100 ? "Meta Batida!" : "Meta do Mês"}
-            </p>
-          </motion.div>
-
-          <div className="relative w-16 flex-1 rounded-t-full bg-white/[0.08] border-2 border-white/20 overflow-hidden">
-            {[25, 50, 75].map((p) => (
-              <div key={p} className="absolute left-0 right-0 h-px bg-white/15" style={{ bottom: `${p}%` }} />
-            ))}
-
-            <motion.div
-              initial={{ bottom: 0 }}
-              animate={{ bottom: `${Math.min((ondeDeveria / meta) * 100, 100)}%` }}
-              transition={{ duration: 1, delay: 0.3 }}
-              className="absolute left-0 right-0 h-1 bg-white/40 z-10"
-            >
-              <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-0 h-0 border-t-[5px] border-b-[5px] border-l-[7px] border-transparent border-l-white/40" />
-            </motion.div>
-
-            <motion.div
-              initial={{ height: 0 }}
-              animate={{ height: `${Math.min(percentage, 100)}%` }}
-              transition={{ duration: 1.5, ease: "easeOut" }}
-              className={`absolute bottom-0 left-1 right-1 rounded-t-full ${
-                isAhead
-                  ? "bg-gradient-to-t from-emerald-600 via-emerald-500 to-emerald-400"
-                  : "bg-gradient-to-t from-amber-600 via-amber-500 to-yellow-400"
-              }`}
-            >
-              <div className="absolute inset-y-0 left-1.5 w-1.5 bg-white/25 rounded-full" />
-            </motion.div>
+            </div>
+            <div className="text-[7.5px] font-semibold uppercase tracking-wider mt-0.5" style={{ color: "rgba(28,28,28,0.7)" }}>
+              {percentage >= 100 ? "Meta batida!" : "Meta do mês"}
+            </div>
           </div>
 
+          {/* tube */}
+          <div
+            className="relative w-7 mt-14 mb-1 rounded-full overflow-hidden"
+            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
+          >
+            {/* "onde deveria estar" marker */}
+            <div
+              className="absolute inset-x-0 h-px bg-white/40 z-10"
+              style={{ bottom: `${Math.min((ondeDeveria / meta) * 100, 100)}%` }}
+            />
+            <motion.div
+              initial={{ height: 0 }}
+              animate={{ height: `${pct}%` }}
+              transition={{ duration: 1.5, ease: "easeOut" }}
+              className="absolute bottom-0 inset-x-0 rounded-full"
+              style={{ background: "linear-gradient(180deg,#ffd400,#ed9326)", boxShadow: "0 0 16px rgba(237,147,38,0.5)" }}
+            />
+          </div>
+
+          {/* base bubble */}
           <motion.div
             animate={{
-              boxShadow: isAhead
-                ? ["0 0 10px rgba(16,185,129,0.4)", "0 0 25px rgba(16,185,129,0.7)", "0 0 10px rgba(16,185,129,0.4)"]
-                : ["0 0 10px rgba(245,158,11,0.4)", "0 0 25px rgba(245,158,11,0.7)", "0 0 10px rgba(245,158,11,0.4)"]
+              boxShadow: [
+                "0 0 12px rgba(237,147,38,0.35)",
+                "0 0 22px rgba(237,147,38,0.6)",
+                "0 0 12px rgba(237,147,38,0.35)",
+              ],
             }}
             transition={{ repeat: Infinity, duration: 2 }}
-            className={`-mt-2 rounded-full flex flex-col items-center justify-center z-10 border-3 shrink-0 ${
-              isAhead
-                ? "bg-gradient-to-br from-emerald-400 to-emerald-600 border-emerald-400/50"
-                : "bg-gradient-to-br from-amber-400 to-amber-600 border-amber-400/50"
-            }`}
-            style={{ width: 72, height: 72 }}
+            className="absolute bottom-1 left-1/2 -translate-x-1/2 z-20 w-12 h-12 rounded-full flex flex-col items-center justify-center text-center"
+            style={{ background: "radial-gradient(circle at 50% 35%,#ffb347,#ed9326)" }}
           >
-            <span className={`text-xl font-black text-white drop-shadow-md font-racing ${percentage >= 100 ? "animate-turbo" : ""}`}>
-              {percentage.toFixed(0)}%
-            </span>
-            <span className="text-[9px] text-white/80 font-medium">atingido</span>
+            <div className="font-display text-[13px] font-bold text-[#1c1c1c] leading-none">{percentage.toFixed(0)}%</div>
+            <div className="text-[6.5px] font-semibold uppercase" style={{ color: "rgba(28,28,28,0.7)" }}>atingido</div>
           </motion.div>
-        </div>
 
-        <div className="relative w-24 py-2">
-          <motion.div
-            initial={{ bottom: "0%" }}
-            animate={{ bottom: `${Math.max(5, Math.min(percentage - 8, 85))}%` }}
-            transition={{ duration: 1.5, ease: "easeOut" }}
-            className="absolute left-0 right-0"
+          {/* vendido tag */}
+          <div
+            className="absolute bottom-3 right-0 z-20 flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-semibold text-[#1c1c1c]"
+            style={{ background: "linear-gradient(135deg,#ed9326,#ffd400)" }}
           >
-            <div className="flex items-center gap-1">
-              <div className={`w-0 h-0 border-t-[6px] border-b-[6px] border-r-[8px] border-transparent ${
-                isAhead ? "border-r-emerald-500" : "border-r-amber-500"
-              }`} />
-              <motion.div
-                animate={{ scale: [1, 1.02, 1] }}
-                transition={{ repeat: Infinity, duration: 2 }}
-                className={`px-2 py-1.5 rounded-lg font-bold text-sm shadow-lg ${
-                  isAhead ? "bg-emerald-500 text-white" : "bg-amber-500 text-amber-950"
-                }`}
-              >
-                R$ {formatCurrency(atual)}
-              </motion.div>
-            </div>
-            <p className="text-[9px] text-white/40 mt-0.5 ml-3">vendido</p>
-          </motion.div>
+            <ArrowUpRight className="w-2 h-2" />
+            R$ {formatCurrency(atual)}
+          </div>
         </div>
       </div>
 
-      <div className={`mt-2 py-2 px-3 rounded-lg flex items-center justify-center gap-2 ${
-        isAhead
-          ? "bg-emerald-500/15 border border-emerald-500/30"
-          : "bg-amber-500/15 border border-amber-500/30"
-      }`}>
-        {isAhead ? (
-          <>
-            <ArrowUpRight className="w-4 h-4 text-emerald-400" />
-            <span className="text-sm font-bold text-emerald-400">
-              +R$ {formatCurrency(diferenca)} acima
-            </span>
-          </>
-        ) : (
-          <>
-            <ArrowDownRight className="w-4 h-4 text-amber-400" />
-            <span className="text-sm font-bold text-amber-400">
-              -R$ {formatCurrency(diferenca)} atrás
-            </span>
-          </>
-        )}
+      {/* footer */}
+      <div
+        className="mt-3 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[10px] font-medium"
+        style={
+          isAhead
+            ? { background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", color: "#4ade80" }
+            : { background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171" }
+        }
+      >
+        {isAhead ? <ArrowUpRight className="w-2.5 h-2.5" /> : <ArrowDownRight className="w-2.5 h-2.5" />}
+        R$ {formatCurrency(diferenca)} {isAhead ? "acima" : "atrás"}
       </div>
 
       {quantoFalta > 0 && (
-        <p className="mt-1.5 text-xs text-white/50 text-center">
-          Falta <span className="font-bold text-white">R$ {formatCurrency(quantoFalta)}</span> para a meta
+        <p className="mt-1.5 text-[10px] text-[#8a857a] text-center">
+          Falta <span className="font-bold text-[#f8f5e7]">R$ {formatCurrency(quantoFalta)}</span> para a meta
         </p>
       )}
     </div>
@@ -511,7 +483,7 @@ function TVCard({
       transition={{ duration: 0.2 }}
       className={`
         p-3 rounded-xl
-        bg-white/[0.03] border border-white/5
+        bg-white/[0.022] border border-white/5
         backdrop-blur-sm
         ${accent ? accentClasses[accent] : ""}
         ${className}
@@ -553,12 +525,13 @@ function KPICard({
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      whileHover={{ y: -2, backgroundColor: "rgba(255,255,255,0.04)" }}
-      className="p-3 rounded-xl bg-white/[0.03] border border-white/5 transition-all cursor-default"
+      whileHover={{ y: -2 }}
+      className="p-2.5 rounded-xl transition-all cursor-default"
+      style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.05)" }}
     >
-      <div className="flex items-center gap-1.5 mb-1">
-        <Icon className={`w-3.5 h-3.5 ${colors.icon}`} />
-        <span className="text-[10px] text-white/40 uppercase tracking-wider">{label}</span>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[8px] text-[#8a857a] uppercase tracking-wider leading-tight">{label}</span>
+        <Icon className={`w-2.5 h-2.5 ${colors.icon}`} />
       </div>
       <AnimatePresence mode="wait">
         <motion.p
@@ -567,7 +540,7 @@ function KPICard({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
           transition={{ duration: 0.18 }}
-          className={`text-xl font-bold ${colors.text}`}
+          className={`font-display text-lg font-semibold tabular-nums ${colors.text}`}
         >
           {prefix}{value}{suffix}
         </motion.p>

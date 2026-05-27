@@ -77,16 +77,10 @@ const PEDESTAL_HEIGHTS = ["h-[68px]", "h-[52px]", "h-[40px]"];
 function LiveBadge({ daysLeft }: { daysLeft: number }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30">
-        <motion.div
-          className="w-2 h-2 rounded-full bg-emerald-500"
-          animate={{ scale: [1, 1.4, 1], opacity: [1, 0.6, 1] }}
-          transition={{ repeat: Infinity, duration: 1.4, ease: "easeInOut" }}
-        />
-        <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">
-          Live
-        </span>
-      </div>
+      <span className="tv-live-badge flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold uppercase">
+        <span className="tv-live-dot" />
+        Live
+      </span>
       <span className="text-xs text-muted-foreground font-medium">
         {daysLeft}d restantes
       </span>
