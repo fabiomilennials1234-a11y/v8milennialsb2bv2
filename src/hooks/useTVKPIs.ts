@@ -7,8 +7,8 @@
 import { useMemo } from "react";
 import { usePipePropostas } from "@/modules/pipelines/hooks/usePipePropostas";
 import { usePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";
-import { useSDRPerformance } from "./useSDRPerformance";
-import { useCloserPerformance } from "./useCloserPerformance";
+import { useSDRPerformance } from "@/modules/engagement/hooks/useSDRPerformance";
+import { useCloserPerformance } from "@/modules/engagement/hooks/useCloserPerformance";
 import { useNewLeads } from "@/modules/leads";
 import { inRange, type TVPeriodRange } from "@/lib/tv-periods";
 

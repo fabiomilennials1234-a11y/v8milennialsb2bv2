@@ -11,7 +11,7 @@ import {
   DropdownMenu, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpButton";
+import { ScheduleFollowUpButton } from "@/modules/engagement/components/followups/ScheduleFollowUpButton";
 import { ORIGIN_COLORS } from "../leads/LeadCard";
 import { StageProgressBar } from "./StageProgressBar";
 import { cn } from "@/lib/utils";

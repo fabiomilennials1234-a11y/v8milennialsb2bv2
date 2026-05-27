@@ -14,7 +14,7 @@ import {
 import { toast } from "sonner";
 import { useCanDo } from "@/modules/identity";
 import { useUpdateLead } from "@/modules/leads";
-import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
+import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 

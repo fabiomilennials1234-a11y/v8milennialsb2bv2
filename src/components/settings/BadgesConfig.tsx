@@ -54,7 +54,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useBadges, useCreateBadge, useDeleteBadge } from "@/hooks/useBadges";
+import { useBadges, useCreateBadge, useDeleteBadge } from "@/modules/engagement/hooks/useBadges";
 import { toast } from "sonner";
 
 const ICON_OPTIONS: { value: string; label: string; icon: React.ReactNode }[] = [

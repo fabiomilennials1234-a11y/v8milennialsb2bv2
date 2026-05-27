@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { motion } from "framer-motion";
 import { User, Calendar, DollarSign, FileText, X, Clock } from "lucide-react";
-import { useRecentActivity, Activity } from "@/hooks/useRecentActivity";
+import { useRecentActivity, Activity } from "@/modules/engagement/hooks/useRecentActivity";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";

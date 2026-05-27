@@ -43,7 +43,7 @@ import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/modules/ident
 import { format, isToday, startOfWeek, endOfWeek, isWithinInterval, isTomorrow, isPast, startOfDay, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useLogLeadAction } from "@/modules/leads";
-import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
+import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/modules/identity";

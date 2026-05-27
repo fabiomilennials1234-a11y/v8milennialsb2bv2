@@ -44,9 +44,9 @@ vi.mock("@/lib/copilot/custom-instructions-utils", () => ({ parseCustomInstructi
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 
 // ── Hook imports ──
-import { useAwards } from "@/hooks/useAwards";
-import { useBadges } from "@/hooks/useBadges";
-import { useCompetitions } from "@/hooks/useCompetitions";
+import { useAwards } from "@/modules/engagement/hooks/useAwards";
+import { useBadges } from "@/modules/engagement/hooks/useBadges";
+import { useCompetitions } from "@/modules/engagement/hooks/useCompetitions";
 import { useProfiles } from "@/modules/identity/hooks/useProfiles";
 import { useCountUp } from "@/hooks/useCountUp";
 import { useLeadTimeline } from "@/modules/leads";
@@ -60,7 +60,7 @@ import { useMasterUsers } from "@/modules/identity/hooks/useMasterUsers";
 import { useMasterAuditLogs } from "@/modules/identity/hooks/useMasterAuditLogs";
 import { useAvatarMap } from "@/hooks/useAvatarMap";
 import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
-import { useDailyPriorities } from "@/hooks/useDailyPriorities";
+import { useDailyPriorities } from "@/modules/engagement/hooks/useDailyPriorities";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 import { useScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
 import { useOutboundMetrics } from "@/hooks/useOutboundMetrics";

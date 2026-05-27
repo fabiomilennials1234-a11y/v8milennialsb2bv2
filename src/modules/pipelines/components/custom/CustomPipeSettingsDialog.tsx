@@ -77,7 +77,7 @@ import {
 } from "@/components/ui/select";
 import { PIPELINE_COLORS, PIPELINE_ICONS } from "./CreatePipelineModal";
 import { ImportCustomPipelineContent } from "./ImportCustomPipelineContent";
-import { useChecklistTemplates } from "@/hooks/useChecklistTemplates";
+import { useChecklistTemplates } from "@/modules/engagement/hooks/useChecklistTemplates";
 
 const STANDARD_PIPES: { value: string; label: string }[] = [
   { value: "whatsapp", label: "Qualificação" },

@@ -156,7 +156,7 @@ import {
   useUpdateChecklistItem,
   useDeleteChecklistItem,
   useReorderChecklistItems,
-} from "@/hooks/useChecklists";
+} from "@/modules/engagement/hooks/useChecklists";
 import {
   useWhatsAppConversationsMeta,
   useWhatsAppConversationTags,

@@ -148,7 +148,7 @@ vi.mock("@/modules/pipelines/hooks/usePipeWhatsapp", () => ({
   usePipeWhatsapp: () => ({ data: mockWhatsapp }),
 }));
 
-vi.mock("@/hooks/useGoals", () => ({
+vi.mock("@/modules/engagement/hooks/useGoals", () => ({
   useTeamGoals: () => ({
     data: [{ type: "vendas", target_value: 100000, team_member_id: null, name: "Meta de Vendas" }],
   }),

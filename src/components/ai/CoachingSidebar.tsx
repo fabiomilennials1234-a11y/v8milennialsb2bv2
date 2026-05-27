@@ -26,7 +26,7 @@ import {
   useMarkSuggestionUsed,
   useDismissSuggestion,
   type SuggestionType,
-} from "@/hooks/useCoachingSuggestions";
+} from "@/modules/engagement/hooks/useCoachingSuggestions";
 import { cn } from "@/lib/utils";
 
 // ── Suggestion type config ────────────────────────────────────

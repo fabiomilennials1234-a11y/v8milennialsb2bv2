@@ -10,7 +10,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpButton";
+import { ScheduleFollowUpButton } from "@/modules/engagement/components/followups/ScheduleFollowUpButton";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
 import { useLeadActionGates } from "../hooks/useLeadActionGates";
 import { cn } from "@/lib/utils";

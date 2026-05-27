@@ -11,7 +11,7 @@ import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { NewOrderModal } from "@/modules/carteira/components/client/NewOrderModal";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
 import { useIdentity } from "@/modules/identity";
-import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
+import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { useUpdateLead } from "@/modules/leads";
 import { toast } from "sonner";
 

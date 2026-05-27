@@ -284,7 +284,7 @@ describe("useWhatsAppFunnel", () => {
 });
 
 // ═══ 14. useSellerActivity (17 LOC) ═══
-import { useSellerActivity } from "@/hooks/useSellerActivity";
+import { useSellerActivity } from "@/modules/engagement/hooks/useSellerActivity";
 
 describe("useSellerActivity", () => {
   it("fetches seller activity", async () => {

@@ -14,7 +14,7 @@ import { FunnelChart } from "./FunnelChart";
 import { TopPerformers } from "./TopPerformers";
 import { FirstOrderVsBase } from "./FirstOrderVsBase";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
-import { useTeamGoals } from "@/hooks/useGoals";
+import { useTeamGoals } from "@/modules/engagement/hooks/useGoals";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface TabVisaoGeralProps {

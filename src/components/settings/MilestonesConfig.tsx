@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { useBadges, useCreateBadge, useDeleteBadge } from "@/hooks/useBadges";
+import { useBadges, useCreateBadge, useDeleteBadge } from "@/modules/engagement/hooks/useBadges";
 import { MILESTONE_ICONS, MILESTONE_ICON_OPTIONS } from "@/components/dashboard-outbound/milestone-icons";
 
 const CRITERIA_TYPES = [

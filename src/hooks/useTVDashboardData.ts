@@ -6,7 +6,7 @@ import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
 import { usePipePropostas } from "@/modules/pipelines/hooks/usePipePropostas";
 import { usePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
 import { usePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";
-import { useTeamGoals, useIndividualGoals } from "./useGoals";
+import { useTeamGoals, useIndividualGoals } from "@/modules/engagement/hooks/useGoals";
 import { useIdentity } from "@/modules/identity";
 import { useDashboardMetrics } from "./useDashboardMetrics";
 

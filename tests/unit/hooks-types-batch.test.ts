@@ -37,7 +37,7 @@ import type { ChannelMessage, ChannelContact } from "@/hooks/useChannelChat";
 
 // Importing the module itself triggers line coverage for exports
 import "@/modules/communication/hooks/useScheduledMessages";
-import "@/hooks/useSellerActivity";
+import "@/modules/engagement/hooks/useSellerActivity";
 import "@/modules/workflows/hooks/useAutoFollowUp";
 
 describe("type imports — useLogLeadAction", () => {

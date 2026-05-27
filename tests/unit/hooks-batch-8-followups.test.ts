@@ -79,7 +79,7 @@ import {
   useUpdateFollowUpAutomation,
   useDeleteFollowUpAutomation,
   useCreateAutomatedFollowUps,
-} from "@/hooks/useFollowUps";
+} from "@/modules/engagement/hooks/useFollowUps";
 
 describe("useFollowUps", () => {
   beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock()); });

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { useCreateCompetition } from "@/hooks/useCompetitions";
+import { useCreateCompetition } from "@/modules/engagement/hooks/useCompetitions";
 import { useTeamMembers } from "@/modules/identity";
 import { useAvatarMap } from "@/hooks/useAvatarMap";
 import { toast } from "sonner";

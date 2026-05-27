@@ -16,7 +16,7 @@ import {
   useToggleChecklistItem,
   useDeleteChecklistItem,
   type ChecklistWithCounts,
-} from "@/hooks/useChecklists";
+} from "@/modules/engagement/hooks/useChecklists";
 import { useOrganization } from "@/modules/identity";
 import { cn } from "@/lib/utils";
 

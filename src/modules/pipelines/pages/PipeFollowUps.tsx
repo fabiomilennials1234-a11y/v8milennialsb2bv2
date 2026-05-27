@@ -26,12 +26,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FollowUpCard } from "@/components/followups/FollowUpCard";
-import { ScheduleFollowUpModal } from "@/components/followups/ScheduleFollowUpModal";
+import { FollowUpCard } from "@/modules/engagement/components/followups/FollowUpCard";
+import { ScheduleFollowUpModal } from "@/modules/engagement/components/followups/ScheduleFollowUpModal";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
-import { AutomationSettings } from "@/components/followups/AutomationSettings";
-import { AcoesDoDia } from "@/components/followups/AcoesDoDia";
+import { AutomationSettings } from "@/modules/engagement/components/followups/AutomationSettings";
+import { AcoesDoDia } from "@/modules/engagement/components/followups/AcoesDoDia";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,7 +42,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useFollowUps, useCompleteFollowUp, useUpdateFollowUp, useArchiveFollowUp, useArchiveManyFollowUps, useDeleteFollowUp, type FollowUp } from "@/hooks/useFollowUps";
+import { useFollowUps, useCompleteFollowUp, useUpdateFollowUp, useArchiveFollowUp, useArchiveManyFollowUps, useDeleteFollowUp, type FollowUp } from "@/modules/engagement/hooks/useFollowUps";
 import { toast } from "sonner";
 import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
 import { useUserRole, useFeaturePermission } from "@/modules/identity";

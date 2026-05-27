@@ -14,7 +14,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { useCommissions } from "@/hooks/useCommissions";
+import { useCommissions } from "@/modules/engagement/hooks/useCommissions";
 
 function mockCommissionQuery(data: unknown[]) {
   mockFrom.mockReturnValue({

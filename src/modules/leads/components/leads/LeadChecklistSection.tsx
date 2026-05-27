@@ -16,16 +16,16 @@ import {
 import {
   useChecklistItems,
   useToggleChecklistItem,
-} from "@/hooks/useChecklists";
+} from "@/modules/engagement/hooks/useChecklists";
 import {
   useChecklistTemplates,
   useApplyChecklistTemplate,
-} from "@/hooks/useChecklistTemplates";
+} from "@/modules/engagement/hooks/useChecklistTemplates";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { cn } from "@/lib/utils";
-import type { ChecklistWithCounts } from "@/hooks/useChecklists";
+import type { ChecklistWithCounts } from "@/modules/engagement/hooks/useChecklists";
 
 function useLeadChecklists(leadId: string | null) {
   const { organizationId } = useOrganization();

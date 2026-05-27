@@ -1,9 +1,9 @@
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOutboundMetrics } from "@/hooks/useOutboundMetrics";
-import { useBadges, useUserBadges } from "@/hooks/useBadges";
+import { useBadges, useUserBadges } from "@/modules/engagement/hooks/useBadges";
 import { useOrganization } from "@/modules/identity";
-import { useMilestoneAutoUnlock } from "@/hooks/useMilestoneAutoUnlock";
+import { useMilestoneAutoUnlock } from "@/modules/engagement/hooks/useMilestoneAutoUnlock";
 import { OutboundMetricCards } from "@/components/dashboard-outbound/OutboundMetricCards";
 import { MilestoneTracker } from "@/components/dashboard-outbound/MilestoneTracker";
 import { BadgeGrid } from "@/components/dashboard-outbound/BadgeGrid";
