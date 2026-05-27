@@ -32,7 +32,7 @@ import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modu
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanDo } from "@/modules/identity";
 import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanban/StageWorkflowsBadgeWrapper";
-import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
+import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import { usePipePropostas, useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } from "@/modules/pipelines/hooks/usePipePropostas";
 import { usePipePropostasMetrics } from "@/modules/pipelines/hooks/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";

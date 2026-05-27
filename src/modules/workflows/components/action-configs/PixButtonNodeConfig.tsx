@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ActionNodeData } from "@/types/workflow";
-import { TemplateTextarea } from "@/components/automacoes/TemplateTextarea";
+import { TemplateTextarea } from "@/modules/workflows/components/TemplateTextarea";
 
 interface Props {
   data: ActionNodeData;

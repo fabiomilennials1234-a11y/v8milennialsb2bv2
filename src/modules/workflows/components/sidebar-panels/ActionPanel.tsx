@@ -27,11 +27,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTeamMembers } from "@/modules/identity";
 import { convertAudioBlobToMp3, preloadLamejs } from "@/modules/communication/lib/audioToMp3";
 import { toast } from "sonner";
-import { VariableInserter } from "@/components/automacoes/VariableInserter";
+import { VariableInserter } from "@/modules/workflows/components/VariableInserter";
 import {
   TemplateTextarea,
   type TemplateTextareaHandle,
-} from "@/components/automacoes/TemplateTextarea";
+} from "@/modules/workflows/components/TemplateTextarea";
 import type { CampaignTemplate } from "@/hooks/useCampaignTemplates";
 import { usePipelineStages, type PipelineType } from "@/modules/pipelines/hooks/usePipelineStages";
 import { useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines/hooks/useCustomPipelines";

@@ -70,7 +70,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
 vi.mock("@/hooks/useRealtimeSubscription", () => ({
   useRealtimeSubscription: vi.fn(),
 }));
-vi.mock("@/hooks/useAutoFollowUp", () => ({
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({
   triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/workflowTrigger", () => ({

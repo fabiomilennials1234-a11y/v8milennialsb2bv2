@@ -3,7 +3,7 @@ import { DraggableKanbanBoard, type KanbanColumn } from "@/modules/pipelines/com
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
 import { StageWorkflowsBadge } from "@/modules/pipelines/components/kanban/StageWorkflowsBadge";
-import { useCustomPipeStageWorkflows, useCustomPipeWorkflowCounts } from "@/hooks/useStageWorkflows";
+import { useCustomPipeStageWorkflows, useCustomPipeWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import {
   type CustomPipeline,
   type CustomPipelineStage,

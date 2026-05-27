@@ -38,7 +38,7 @@ vi.mock("@/modules/identity/lib/permissions", () => ({
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
 }));
 
-vi.mock("@/hooks/useAutoFollowUp", () => ({
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({
   triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined),
 }));
 

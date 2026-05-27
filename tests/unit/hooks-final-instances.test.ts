@@ -87,7 +87,7 @@ vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
   DEFAULT_STAGES: {},
   useAllPipelineStages: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/modules/copilot/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
 vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({
@@ -756,7 +756,7 @@ describe("usePipePropostas", () => {
       mF.mockReturnValue(c([created]));
 
       const { useCreatePipeProposta } = await import("@/modules/pipelines/hooks/usePipePropostas");
-      const { triggerFollowUpAutomation } = await import("@/hooks/useAutoFollowUp");
+      const { triggerFollowUpAutomation } = await import("@/modules/workflows/hooks/useAutoFollowUp");
       const { triggerStageChangedWorkflows } = await import("@/lib/workflowTrigger");
       const { result } = renderHook(() => useCreatePipeProposta(), { wrapper: w() });
 

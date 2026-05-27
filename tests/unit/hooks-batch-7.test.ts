@@ -31,7 +31,7 @@ vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => 
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
-vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/hooks/useTags", () => ({ useTags: () => ({ data: [] }) }));
 vi.mock("@/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
 vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useWhatsAppInstances: () => ({ data: [] }) }));
@@ -39,7 +39,7 @@ vi.mock("@/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }) }));
 vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }) }));
 vi.mock("@/modules/pipelines/hooks/usePipelineDisplayConfig", () => ({ usePipelineDisplayConfig: () => ({ data: [] }) }));
 vi.mock("@/hooks/useGoogleCalendar", () => ({ useGoogleCalendar: () => ({ data: null }) }));
-vi.mock("@/hooks/useWorkflows", () => ({ useWorkflows: () => ({ data: [] }) }));
+vi.mock("@/modules/workflows/hooks/useWorkflows", () => ({ useWorkflows: () => ({ data: [] }) }));
 vi.mock("@/hooks/useChannelChat", () => ({ useChannelChat: () => ({ data: null }) }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn(), triggerLeadCreatedInCustomPipeline: vi.fn() }));
 vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));

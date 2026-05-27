@@ -5,7 +5,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-import { MenuPreview } from "@/components/automacoes/action-configs/MenuPreview";
+import { MenuPreview } from "@/modules/workflows/components/action-configs/MenuPreview";
 import { InteractiveResponseBubble } from "@/modules/communication/components/chat/bubbles/InteractiveResponseBubble";
 import { PixButtonBubble } from "@/modules/communication/components/chat/bubbles/PixButtonBubble";
 

@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { useWorkflow, useWorkflowExecutions, useWorkflowExecutionSteps, useRetryWorkflowExecution } from "@/hooks/useWorkflows";
+import { useWorkflow, useWorkflowExecutions, useWorkflowExecutionSteps, useRetryWorkflowExecution } from "@/modules/workflows/hooks/useWorkflows";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,7 @@ import { ArrowLeft, CheckCircle2, XCircle, Clock, Pause, AlertTriangle, Loader2,
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { WorkflowExecution, WorkflowExecutionStep, WorkflowExecutionStatus, WorkflowStepStatus } from "@/types/workflow";
-import SplitAbAnalytics from "@/components/automacoes/SplitAbAnalytics";
+import SplitAbAnalytics from "@/modules/workflows/components/SplitAbAnalytics";
 import { AlertsBanner } from "@/components/system-alerts/AlertsBanner";
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof CheckCircle2 }> = {

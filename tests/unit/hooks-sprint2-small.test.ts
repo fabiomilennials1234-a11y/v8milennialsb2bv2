@@ -88,7 +88,7 @@ vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
     propostas: [{ id: "marcar_compromisso" }],
   },
 }));
-vi.mock("@/hooks/useAutoFollowUp", () => ({
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({
   triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({
