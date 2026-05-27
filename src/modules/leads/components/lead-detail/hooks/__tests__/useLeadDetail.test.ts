@@ -14,7 +14,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
-import { createWrapper } from "../../../../../tests/helpers/hook-test-utils";
+import { createWrapper } from "../../../../../../../tests/helpers/hook-test-utils";
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 const mockRpc = vi.fn();

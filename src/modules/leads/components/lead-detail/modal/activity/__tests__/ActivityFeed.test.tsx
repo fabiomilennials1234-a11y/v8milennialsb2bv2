@@ -1,11 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ActivityFeed } from "../ActivityFeed";
-import type { TimelineEvent } from "../../../../../hooks/useLeadTimeline";
+import type { TimelineEvent } from "@/modules/leads/hooks/useLeadTimeline";
 
 const timelineMock = vi.fn();
-// Mock resolve relative ao ActivityFeed.tsx (post-slice 4 module-relative imports).
-vi.mock("../../../../../hooks/useLeadTimeline", () => ({
+// Mock alvo: caminho usado por ActivityFeed.tsx, normalizado via alias absoluto.
+vi.mock("@/modules/leads/hooks/useLeadTimeline", () => ({
   useLeadTimeline: (...args: unknown[]) => timelineMock(...args),
 }));
 
