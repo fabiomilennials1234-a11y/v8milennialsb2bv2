@@ -32,7 +32,7 @@ const PEDESTAL_BG = [
   "linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))",
   "linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015))",
 ];
-const PEDESTAL_H = ["h-11", "h-7", "h-5"];
+const PEDESTAL_H = ["h-9", "h-6", "h-4"];
 const POS_LABEL = ["1º", "2º", "3º"];
 
 /** Live wall ranking shown as a podium (matches the mockup's "Corrida"). */
@@ -46,7 +46,7 @@ export function TVRankingSimple({ users, metricType = "sales" }: TVRankingSimple
   const posIdx = top.length >= 3 ? [1, 0, 2] : top.length === 2 ? [1, 0] : [0];
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-1.5 font-display text-[11px] font-bold text-[#f8f5e7] uppercase leading-tight">
@@ -61,12 +61,12 @@ export function TVRankingSimple({ users, metricType = "sales" }: TVRankingSimple
       <div className="text-[8.5px] text-[#8a857a] mt-1">{users.length} participantes</div>
 
       {/* Podium */}
-      <div className="flex-1 flex items-end justify-center gap-3 mt-3">
+      <div className="flex-1 flex items-end justify-center gap-2 mt-3">
         {order.map((user, vi) => {
           if (!user) return null;
           const pi = posIdx[vi]; // 0 = 1st, 1 = 2nd, 2 = 3rd
           const isFirst = pi === 0;
-          const avatarPx = isFirst ? 44 : 36;
+          const avatarPx = isFirst ? 40 : 32;
 
           return (
             <motion.div
@@ -116,7 +116,7 @@ export function TVRankingSimple({ users, metricType = "sales" }: TVRankingSimple
               </div>
 
               {/* Pedestal */}
-              <div className={`w-12 ${PEDESTAL_H[pi]} rounded-t-md mt-1`} style={{ background: PEDESTAL_BG[pi] }} />
+              <div className={`w-10 ${PEDESTAL_H[pi]} rounded-t-md mt-1`} style={{ background: PEDESTAL_BG[pi] }} />
             </motion.div>
           );
         })}
