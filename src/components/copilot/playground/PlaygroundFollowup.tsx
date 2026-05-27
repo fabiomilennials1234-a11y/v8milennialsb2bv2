@@ -58,7 +58,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { FollowupRule, FollowupTriggerType, FollowupStyle, SequenceStep } from "@/types/copilot";
 import { PIPE_TYPES } from "@/types/copilot";
-import { useAllPipelineStageOptions } from "@/hooks/usePipelineStages";
+import { useAllPipelineStageOptions } from "@/modules/pipelines/hooks/usePipelineStages";
 import {
   useAgentFollowupRules,
   useCreateFollowupRule,

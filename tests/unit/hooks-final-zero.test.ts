@@ -37,7 +37,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: ()
 vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }), useResponsibleMembers: () => ({ data: [] }) }));
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: true }) }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {}, useAllPipelineStages: () => ({ data: [] }) }));
+vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {}, useAllPipelineStages: () => ({ data: [] }) }));
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r), useAgentFollowupRules: () => ({ data: [] }) }));
@@ -233,7 +233,7 @@ describe("useGoogleCalendarSharing", () => {
 });
 
 // ═══ 11. useCustomPipelineMembers (36 LOC) ═══
-import { usePipelineMembers, useAddPipelineMember, useRemovePipelineMember } from "@/hooks/useCustomPipelineMembers";
+import { usePipelineMembers, useAddPipelineMember, useRemovePipelineMember } from "@/modules/pipelines/hooks/useCustomPipelineMembers";
 
 describe("useCustomPipelineMembers", () => {
   it("usePipelineMembers fetches", async () => {
@@ -251,7 +251,7 @@ describe("useCustomPipelineMembers", () => {
 });
 
 // ═══ 12. usePipeDistribution (25 LOC) ═══
-import { usePipeDistributionRule, useSavePipeDistribution } from "@/hooks/usePipeDistribution";
+import { usePipeDistributionRule, useSavePipeDistribution } from "@/modules/pipelines/hooks/usePipeDistribution";
 
 describe("usePipeDistribution", () => {
   it("usePipeDistributionRule fetches", async () => {

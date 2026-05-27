@@ -50,7 +50,7 @@ vi.mock("@/modules/identity/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 
-vi.mock("@/hooks/usePipelineEntries", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipelineEntries", () => ({
   usePipelineEntries: () => ({ data: [], isLoading: false }),
   usePipelineId: () => ({ data: "pipeline-confirmacao-id" }),
   findOrCreatePipelineEntry: vi.fn().mockResolvedValue({ id: "entry-new" }),
@@ -61,17 +61,17 @@ vi.mock("@/hooks/useAutoFollowUp", () => ({
 }));
 
 // RescheduleModal pulls in GoogleCalendar hooks — stub the whole component.
-vi.mock("@/components/confirmacao/RescheduleModal", () => ({
+vi.mock("@/modules/pipelines/components/legacy/confirmacao/RescheduleModal", () => ({
   RescheduleModal: ({ open }: { open: boolean }) =>
     open ? <div data-testid="reschedule-modal-stub" /> : null,
 }));
 
-vi.mock("@/components/confirmacao/CompareceuModal", () => ({
+vi.mock("@/modules/pipelines/components/legacy/confirmacao/CompareceuModal", () => ({
   CompareceuModal: ({ open }: { open: boolean }) =>
     open ? <div data-testid="compareceu-modal-stub" /> : null,
 }));
 
-vi.mock("@/hooks/usePipePropostas", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipePropostas", () => ({
   useCreatePipeProposta: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) }),
 }));
 

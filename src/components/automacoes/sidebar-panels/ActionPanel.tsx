@@ -33,8 +33,8 @@ import {
   type TemplateTextareaHandle,
 } from "@/components/automacoes/TemplateTextarea";
 import type { CampaignTemplate } from "@/hooks/useCampaignTemplates";
-import { usePipelineStages, type PipelineType } from "@/hooks/usePipelineStages";
-import { useCustomPipelines, useCustomPipelineStages } from "@/hooks/useCustomPipelines";
+import { usePipelineStages, type PipelineType } from "@/modules/pipelines/hooks/usePipelineStages";
+import { useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines/hooks/useCustomPipelines";
 import { useTags } from "@/hooks/useTags";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 import { CampaignStageSelectorField } from "./CampaignStageSelectorField";

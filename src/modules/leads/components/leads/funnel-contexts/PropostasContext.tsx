@@ -52,9 +52,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useUpdatePipeProposta, useDeletePipeProposta, type PipePropostasStatus, statusColumns } from "@/hooks/usePipePropostas";
+import { useUpdatePipeProposta, useDeletePipeProposta, type PipePropostasStatus, statusColumns } from "@/modules/pipelines/hooks/usePipePropostas";
 import { useActiveProducts } from "@/hooks/useProducts";
-import { usePipePropostaItems, useCreatePipePropostaItem, useUpdatePipePropostaItem, useDeletePipePropostaItem } from "@/hooks/usePipePropostaItems";
+import { usePipePropostaItems, useCreatePipePropostaItem, useUpdatePipePropostaItem, useDeletePipePropostaItem } from "@/modules/pipelines/hooks/usePipePropostaItems";
 import { useTeamMembers } from "@/modules/identity";
 import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
 import { useDeleteLead } from "../../../hooks/useLeads";

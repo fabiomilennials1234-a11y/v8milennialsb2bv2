@@ -5,8 +5,8 @@
  * KPI keys batem com src/lib/tv-config-from-quiz.ts.
  */
 import { useMemo } from "react";
-import { usePipePropostas } from "./usePipePropostas";
-import { usePipeWhatsapp } from "./usePipeWhatsapp";
+import { usePipePropostas } from "@/modules/pipelines/hooks/usePipePropostas";
+import { usePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";
 import { useSDRPerformance } from "./useSDRPerformance";
 import { useCloserPerformance } from "./useCloserPerformance";
 import { useNewLeads } from "@/modules/leads";

@@ -27,7 +27,7 @@ const mockConfirmacoes = [
   { id: "c7", status: "compareceu", metrics_period_at: outRangeDate, meeting_date: inRangeDate, sdr_id: "s2" },
 ];
 
-vi.mock("@/hooks/usePipeConfirmacao", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipeConfirmacao", () => ({
   usePipeConfirmacao: () => ({ data: mockConfirmacoes }),
 }));
 

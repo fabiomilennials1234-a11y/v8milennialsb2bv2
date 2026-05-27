@@ -15,7 +15,7 @@ import {
 } from "../../hooks/useImportLeads";
 import { useLeadCustomFields } from "../../hooks/useLeadCustomFields";
 import { useCanDo } from "@/modules/identity";
-import { usePipelineStages } from "@/hooks/usePipelineStages";
+import { usePipelineStages } from "@/modules/pipelines/hooks/usePipelineStages";
 import { useTeamMembers } from "@/modules/identity";
 import { useProducts } from "@/hooks/useProducts";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";

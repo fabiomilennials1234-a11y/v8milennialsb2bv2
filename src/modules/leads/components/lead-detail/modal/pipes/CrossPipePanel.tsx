@@ -13,9 +13,9 @@ import {
 import {
   useAddLeadToCustomPipe,
   useRemoveLeadFromCustomPipe,
-} from "@/hooks/useCustomPipelines";
-import { usePipeConfirmacaoByLeadId } from "@/hooks/usePipeConfirmacaoByLeadId";
-import { usePipePropostaByLeadId } from "@/hooks/usePipePropostaByLeadId";
+} from "@/modules/pipelines/hooks/useCustomPipelines";
+import { usePipeConfirmacaoByLeadId } from "@/modules/pipelines/hooks/usePipeConfirmacaoByLeadId";
+import { usePipePropostaByLeadId } from "@/modules/pipelines/hooks/usePipePropostaByLeadId";
 import { useLogLeadAction } from "../../../../hooks/useLogLeadAction";
 import { useLeadActionGates } from "../../hooks/useLeadActionGates";
 import { MeetingFieldBlock } from "../../cross-pipe/MeetingFieldBlock";

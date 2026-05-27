@@ -55,7 +55,7 @@ import {
   useDeleteAcaoDoDia,
   type AcaoDoDia,
 } from "@/hooks/useAcoesDoDia";
-import { usePipePropostas } from "@/hooks/usePipePropostas";
+import { usePipePropostas } from "@/modules/pipelines/hooks/usePipePropostas";
 import { useFollowUps } from "@/hooks/useFollowUps";
 import {
   useDailyPriorities,

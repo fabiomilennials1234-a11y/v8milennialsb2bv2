@@ -82,7 +82,7 @@ vi.mock("@/modules/identity/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/usePipelineStages", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {},
   useAllPipelineStages: () => ({ data: [] }),
@@ -90,7 +90,7 @@ vi.mock("@/hooks/usePipelineStages", () => ({
 vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
-vi.mock("@/hooks/useCustomPipelines", () => ({
+vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({
   useCustomPipelines: () => ({ data: [
     { id: "cp1", name: "Custom Pipe 1", color: "#FF0000", icon: "star" },
   ] }),
@@ -714,7 +714,7 @@ describe("usePipePropostas", () => {
 
   describe("statusColumns export", () => {
     it("exports the correct status column definitions", async () => {
-      const { statusColumns } = await import("@/hooks/usePipePropostas");
+      const { statusColumns } = await import("@/modules/pipelines/hooks/usePipePropostas");
       expect(statusColumns).toBeDefined();
       expect(statusColumns.length).toBeGreaterThan(0);
       const ids = statusColumns.map((s) => s.id);
@@ -735,7 +735,7 @@ describe("usePipePropostas", () => {
       };
       mF.mockReturnValue(c([proposta]));
 
-      const { usePipePropostas } = await import("@/hooks/usePipePropostas");
+      const { usePipePropostas } = await import("@/modules/pipelines/hooks/usePipePropostas");
       const { result } = renderHook(() => usePipePropostas(), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -755,7 +755,7 @@ describe("usePipePropostas", () => {
       };
       mF.mockReturnValue(c([created]));
 
-      const { useCreatePipeProposta } = await import("@/hooks/usePipePropostas");
+      const { useCreatePipeProposta } = await import("@/modules/pipelines/hooks/usePipePropostas");
       const { triggerFollowUpAutomation } = await import("@/hooks/useAutoFollowUp");
       const { triggerStageChangedWorkflows } = await import("@/lib/workflowTrigger");
       const { result } = renderHook(() => useCreatePipeProposta(), { wrapper: w() });
@@ -787,7 +787,7 @@ describe("usePipePropostas", () => {
       };
       mF.mockReturnValue(c([updated]));
 
-      const { useUpdatePipeProposta } = await import("@/hooks/usePipePropostas");
+      const { useUpdatePipeProposta } = await import("@/modules/pipelines/hooks/usePipePropostas");
       const { result } = renderHook(() => useUpdatePipeProposta(), { wrapper: w() });
 
       await act(async () => {
@@ -815,7 +815,7 @@ describe("usePipePropostas", () => {
       };
       mF.mockReturnValue(c([updated]));
 
-      const { useUpdatePipeProposta } = await import("@/hooks/usePipePropostas");
+      const { useUpdatePipeProposta } = await import("@/modules/pipelines/hooks/usePipePropostas");
       const { result } = renderHook(() => useUpdatePipeProposta(), { wrapper: w() });
 
       await act(async () => {
@@ -839,7 +839,7 @@ describe("usePipePropostas", () => {
       const chain = c([{ id: "pp1" }]);
       mF.mockReturnValue(chain);
 
-      const { useDeletePipeProposta } = await import("@/hooks/usePipePropostas");
+      const { useDeletePipeProposta } = await import("@/modules/pipelines/hooks/usePipePropostas");
       const { result } = renderHook(() => useDeletePipeProposta(), { wrapper: w() });
 
       await act(async () => {

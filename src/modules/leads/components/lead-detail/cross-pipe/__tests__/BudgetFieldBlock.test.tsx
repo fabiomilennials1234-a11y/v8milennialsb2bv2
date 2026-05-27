@@ -54,7 +54,7 @@ vi.mock("@/modules/identity/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 
-vi.mock("@/hooks/usePipelineEntries", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipelineEntries", () => ({
   usePipelineEntries: () => ({ data: [], isLoading: false }),
   usePipelineId: () => ({ data: "pipeline-propostas-id" }),
   findOrCreatePipelineEntry: vi
@@ -75,7 +75,7 @@ vi.mock("@/hooks/useProducts", () => ({
   }),
 }));
 
-vi.mock("@/hooks/usePipePropostaItems", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipePropostaItems", () => ({
   usePipePropostaItems: () => ({ data: [], isLoading: false }),
   useCreatePipePropostaItem: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) }),
   useUpdatePipePropostaItem: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) }),

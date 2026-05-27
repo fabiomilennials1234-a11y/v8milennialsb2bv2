@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useTeamMembers } from "@/modules/identity";
-import { useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus, statusColumns } from "@/hooks/usePipePropostas";
+import { useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus, statusColumns } from "@/modules/pipelines/hooks/usePipePropostas";
 import { useLeadHistory } from "@/modules/leads";
 import { useLogLeadAction } from "@/modules/leads";
 import { useDeleteLead } from "@/modules/leads";
@@ -42,7 +42,7 @@ import {
   useCreatePipePropostaItem, 
   useUpdatePipePropostaItem, 
   useDeletePipePropostaItem 
-} from "@/hooks/usePipePropostaItems";
+} from "@/modules/pipelines/hooks/usePipePropostaItems";
 import { toast } from "sonner";
 import {
   AlertDialog,

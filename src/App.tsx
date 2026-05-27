@@ -37,10 +37,10 @@ function lazyRetry<T extends { default: any }>(
 // Lazy-loaded pages — cada página vira um chunk separado (com retry automático)
 const Auth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Auth")));
 const Dashboard = lazy(() => lazyRetry(() => import("./pages/Dashboard")));
-const PipeConfirmacao = lazy(() => lazyRetry(() => import("./pages/PipeConfirmacao")));
-const PipePropostas = lazy(() => lazyRetry(() => import("./pages/PipePropostas")));
-const PipeWhatsapp = lazy(() => lazyRetry(() => import("./pages/PipeWhatsapp")));
-const PipeFollowUps = lazy(() => lazyRetry(() => import("./pages/PipeFollowUps")));
+const PipeConfirmacao = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeConfirmacao")));
+const PipePropostas = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipePropostas")));
+const PipeWhatsapp = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeWhatsapp")));
+const PipeFollowUps = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeFollowUps")));
 const Revisao = lazy(() => lazyRetry(() => import("./pages/Revisao")));
 const Performance = lazy(() => lazyRetry(() => import("./pages/Performance")));
 const Equipe = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Equipe")));
@@ -53,10 +53,10 @@ const Configuracoes = lazy(() => lazyRetry(() => import("./pages/Configuracoes")
 const TVDashboard = lazy(() => lazyRetry(() => import("./pages/TVDashboard")));
 const Campanhas = lazy(() => lazyRetry(() => import("./pages/Campanhas")));
 const CampanhaDetail = lazy(() => lazyRetry(() => import("./pages/CampanhaDetail")));
-const FunisHub = lazy(() => lazyRetry(() => import("./pages/FunisHub")));
+const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));
 // Marketing and Analytics are unified in the Analytics tab — see TabAnalyticsV2.tsx
 const Produtos = lazy(() => lazyRetry(() => import("./pages/Produtos")));
-const Negocios = lazy(() => lazyRetry(() => import("./pages/Negocios")));
+const Negocios = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Negocios")));
 const Copilot = lazy(() => lazyRetry(() => import("./pages/Copilot")));
 const CopilotMetrics = lazy(() => lazyRetry(() => import("./pages/CopilotMetrics")));
 const ChatWhatsApp = lazy(() => lazyRetry(() => import("./pages/ChatWhatsApp")));
@@ -66,7 +66,7 @@ const AtendimentoMeta = lazy(() => lazyRetry(() => import("./pages/AtendimentoMe
 import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
 const Upsell = lazy(() => lazyRetry(() => import("./pages/Upsell")));
 const ClienteDetail = lazy(() => lazyRetry(() => import("./components/carteira/ClienteDetailPage")));
-const CustomPipeline = lazy(() => lazyRetry(() => import("./pages/CustomPipeline")));
+const CustomPipeline = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/CustomPipeline")));
 const Agenda = lazy(() => lazyRetry(() => import("./pages/Agenda")));
 const Privacidade = lazy(() => lazyRetry(() => import("./pages/Privacidade")));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/components/copilot/playground").then(m => ({ default: m.CopilotPlayground }))));

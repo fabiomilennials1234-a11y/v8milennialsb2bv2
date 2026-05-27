@@ -4,8 +4,8 @@ import { GitBranch, Target, Plus, ArrowLeft } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { CreatePipelineModal } from "@/components/custom-pipelines/CreatePipelineModal";
-import { useHiddenDefaultPipes, useTogglePipeVisibility } from "@/hooks/usePipelineDisplayConfig";
+import { CreatePipelineModal } from "@/modules/pipelines/components/custom/CreatePipelineModal";
+import { useHiddenDefaultPipes, useTogglePipeVisibility } from "@/modules/pipelines/hooks/usePipelineDisplayConfig";
 import { toast } from "sonner";
 
 interface CreateNewModalProps {
