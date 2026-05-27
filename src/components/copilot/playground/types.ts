@@ -137,6 +137,10 @@ export interface PlaygroundData {
   // Funis & Etapas (pipes, stages, move rules)
   funis: FunisState;
 
+  // Handoff WhatsApp Notification
+  handoffNotifyPhones: Array<{ phone: string; label: string }>;
+  handoffNotifyInstructions: string;
+
   // Existing agent ID (edit mode)
   agentId?: string;
 }
@@ -231,6 +235,8 @@ export function createDefaultPlaygroundData(): PlaygroundData {
     documents: [],
     links: [],
     funis: { activePipes: [], activeStages: {}, moveRules: [] },
+    handoffNotifyPhones: [],
+    handoffNotifyInstructions: "",
   };
 }
 

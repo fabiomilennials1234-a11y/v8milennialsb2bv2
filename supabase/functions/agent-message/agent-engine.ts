@@ -539,6 +539,30 @@ export class AgentEngine {
             payload: { ...currentAction.params, lead_id: this.currentLeadId },
             idempotencyKey: `transfer_human_notify_${this.currentLeadId}_${minuteTs}`,
           });
+
+          // Enqueue WhatsApp notification if agent has handoff_notify_phones
+          const notifyPhones = capabilities.handoff_notify_phones as string[] | null;
+          if (Array.isArray(notifyPhones) && notifyPhones.length > 0) {
+            const actionParams = currentAction.params || {};
+            await enqueueAiAction(this.supabase, {
+              organizationId: this.organizationId,
+              leadId: this.currentLeadId || undefined,
+              conversationId: conversation.id.startsWith('temp_') ? undefined : conversation.id,
+              actionType: 'transfer_to_human_whatsapp_notify',
+              payload: {
+                lead_id: this.currentLeadId,
+                summary: actionParams.summary || '',
+                priority: actionParams.priority || 'NORMAL',
+                priority_reason: actionParams.priority_reason || '',
+                reason: actionParams.reason || '',
+                extra_notes: actionParams.extra_notes || null,
+                notify_phones: actionParams.notify_phones || notifyPhones,
+              },
+              idempotencyKey: `transfer_human_wa_notify_${this.currentLeadId}_${minuteTs}`,
+            });
+            console.log('[AgentEngine] WhatsApp handoff notification enqueued for', (actionParams.notify_phones || notifyPhones).length, 'phone(s)');
+          }
+
           executionResult = { success: true, queued: true, immediate: true };
         } else if (currentAction.action === 'TRANSFER_SZ_CHAT') {
           // TRANSFER_SZ_CHAT: disable AI immediately, enqueue SZ.chat transfer

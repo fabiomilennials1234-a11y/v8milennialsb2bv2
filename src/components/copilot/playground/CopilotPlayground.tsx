@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { FileText, Wrench, BookOpen, Sparkles, GitBranch, Plug, SlidersHorizontal, RefreshCw } from "lucide-react";
+import { FileText, Wrench, BookOpen, Sparkles, GitBranch, Plug, SlidersHorizontal, RefreshCw, BellRing } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -40,6 +40,7 @@ import { PlaygroundFunis } from "./PlaygroundFunis";
 import { PlaygroundConexao } from "./PlaygroundConexao";
 import { PlaygroundComportamento } from "./PlaygroundComportamento";
 import { PlaygroundFollowup } from "./PlaygroundFollowup";
+import { PlaygroundHandoffNotify } from "./PlaygroundHandoffNotify";
 import { LivePreviewChat } from "./LivePreviewChat";
 import { PromptAnalysisTab } from "./PromptAnalysisTab";
 import { funisStateToPayload, payloadToFunisState } from "./funis-mapping";
@@ -250,8 +251,15 @@ function playgroundToAgentPayload(data: PlaygroundData, conexaoState?: ConexaoSt
             .filter(([_, s]) => s.enabled && s.instruction)
             .map(([id, s]) => [id, s.instruction])
         ),
+        handoffNotifyPhones: data.handoffNotifyPhones,
+        handoffNotifyInstructions: data.handoffNotifyInstructions,
       },
       custom_instructions: sectionsToFlatText(data),
+      // Handoff WhatsApp Notification
+      handoff_notify_phones: data.handoffNotifyPhones.length > 0
+        ? data.handoffNotifyPhones.map((p) => p.phone)
+        : null,
+      handoff_notify_instructions: data.handoffNotifyInstructions || null,
       // Conexao fields
       ...(conexaoState ? conexaoStateToPayload(conexaoState) : {}),
     },
@@ -357,6 +365,12 @@ export function CopilotPlayground() {
       audioSendOrder: wd.outboundConfig?.audioSendOrder || "text_first",
       attendUnknownContacts: wd.attendUnknownContacts ?? true,
       agentId: editId,
+      handoffNotifyPhones: wd.handoffNotifyPhones || (
+        Array.isArray((editData as any)?.agent?.handoff_notify_phones)
+          ? ((editData as any).agent.handoff_notify_phones as string[]).map((phone: string) => ({ phone, label: "" }))
+          : []
+      ),
+      handoffNotifyInstructions: wd.handoffNotifyInstructions || (editData as any)?.agent?.handoff_notify_instructions || "",
       funis: payloadToFunisState({
         active_pipes: wd.activePipes || [],
         active_stages: wd.activeStages || {},
@@ -698,6 +712,10 @@ export function CopilotPlayground() {
                 <SlidersHorizontal className="w-3.5 h-3.5" />
                 Comportamento
               </TabsTrigger>
+              <TabsTrigger value="handoff-notify" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
+                <BellRing className="w-3.5 h-3.5" />
+                Notificação
+              </TabsTrigger>
               <TabsTrigger value="analysis" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
                 <Sparkles className="w-3.5 h-3.5" />
                 Analise
@@ -772,6 +790,10 @@ export function CopilotPlayground() {
                 state={comportamento}
                 onChange={updateComportamento}
               />
+            </TabsContent>
+
+            <TabsContent value="handoff-notify" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
+              <PlaygroundHandoffNotify data={data} onChange={updateData} />
             </TabsContent>
 
             <TabsContent value="analysis" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
