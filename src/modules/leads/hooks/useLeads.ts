@@ -7,7 +7,7 @@ import { track } from "@/lib/analytics";
 import { useCanDo } from "@/modules/identity";
 import { normalizePhone } from "@/lib/normalizePhone";
 import { useIdentity } from "@/modules/identity";
-import { OptimisticLockConflictError, isPostgrestNoRows } from "@/lib/optimistic-lock";
+import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platform/lib/optimistic-lock";
 
 export type Lead = Tables<"leads">;
 export type LeadInsert = TablesInsert<"leads">;

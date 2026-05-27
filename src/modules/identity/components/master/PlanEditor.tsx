@@ -16,7 +16,7 @@ import { useUpdatePlan, type Plan } from "../../hooks/useMasterPlans";
 import {
   LIMITS,
   getFeaturesByCategory,
-} from "@/lib/feature-registry";
+} from "@/modules/platform/lib/feature-registry";
 
 interface PlanEditorProps {
   plan: Plan;

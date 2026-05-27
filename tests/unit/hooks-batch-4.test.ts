@@ -57,7 +57,7 @@ import { useConversationHistory } from "@/modules/communication/hooks/useConvers
 import { useConversationNotes } from "@/modules/communication/hooks/useConversationNotes";
 import { useCopilotAgentAudios } from "@/modules/copilot/hooks/useCopilotAgentAudios";
 import { useExportLeads } from "@/modules/leads";
-import { useHelpCenter } from "@/hooks/useHelpCenter";
+import { useHelpCenter } from "@/modules/platform/hooks/useHelpCenter";
 import { useLeadCustomFields } from "@/modules/leads";
 import { usePipeMetrics } from "@/modules/pipelines/hooks/usePipeMetrics";
 import { useRecentActivity } from "@/modules/engagement/hooks/useRecentActivity";

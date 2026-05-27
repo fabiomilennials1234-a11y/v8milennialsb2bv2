@@ -1,5 +1,5 @@
 import { memo, useEffect } from "react";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useFeatureFlag } from "@/modules/platform/hooks/useFeatureFlag";
 import { useOrganization } from "@/modules/identity";
 import { useLeadSheet } from "../hooks/useLeadSheet";
 import { track } from "@/lib/analytics";

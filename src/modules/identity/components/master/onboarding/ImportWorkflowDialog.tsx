@@ -13,7 +13,7 @@ import {
   useAllOrganizations,
   useOrgWorkflows,
   useCreateAutomationTemplate,
-} from "@/hooks/useOnboardingTemplates";
+} from "@/modules/platform/hooks/useOnboardingTemplates";
 import { toast } from "sonner";
 
 interface Props {

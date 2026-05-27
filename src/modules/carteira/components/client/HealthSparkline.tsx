@@ -1,4 +1,4 @@
-import type { HealthSnapshot } from "@/hooks/useHealthHistory";
+import type { HealthSnapshot } from "@/modules/platform/hooks/useHealthHistory";
 
 interface HealthSparklineProps {
   data: HealthSnapshot[];

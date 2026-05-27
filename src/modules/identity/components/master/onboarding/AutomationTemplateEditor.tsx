@@ -16,7 +16,7 @@ import {
   useAutomationTemplates,
   useCreateAutomationTemplate,
   useUpdateAutomationTemplate,
-} from "@/hooks/useOnboardingTemplates";
+} from "@/modules/platform/hooks/useOnboardingTemplates";
 import { MatchCriteriaBuilder } from "./MatchCriteriaBuilder";
 import { toast } from "sonner";
 

@@ -13,7 +13,7 @@ import {
 import {
   usePipelineTemplates,
   useAutomationTemplates,
-} from "@/hooks/useOnboardingTemplates";
+} from "@/modules/platform/hooks/useOnboardingTemplates";
 
 interface QuizOption {
   key: string;

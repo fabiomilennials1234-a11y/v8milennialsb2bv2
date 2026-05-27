@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { useClientAlerts } from "@/modules/carteira/hooks/useClientAlerts";
-import { useHealthHistory } from "@/hooks/useHealthHistory";
+import { useHealthHistory } from "@/modules/platform/hooks/useHealthHistory";
 import { HealthSparkline } from "./HealthSparkline";
 import type { PortfolioClientRow } from "@/modules/carteira/hooks/usePortfolioClients";
 

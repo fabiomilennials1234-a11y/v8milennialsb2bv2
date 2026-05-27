@@ -45,7 +45,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/hooks/useTrackView", () => ({
+vi.mock("@/modules/platform/hooks/useTrackView", () => ({
   useTrackView: vi.fn(),
 }));
 

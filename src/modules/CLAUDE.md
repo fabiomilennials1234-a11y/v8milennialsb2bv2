@@ -36,7 +36,7 @@ Detalhe completo em `10 — Remodelagem/03-to-be/principios-modulo.md`.
 | 11 | [billing](./billing/CLAUDE.md) | billing | Subscription | 13 | Active |
 | 12 | [marketing](./marketing/CLAUDE.md) | marketing | Lead Form + Landing + UTM | 13 | Active |
 | 13 | [integrations](./integrations/CLAUDE.md) | integrations | Provider adapters | 13 | Skeleton |
-| 14 | [platform](./platform/CLAUDE.md) | platform | Onboarding + Settings + Observability | 14 | Skeleton |
+| 14 | [platform](./platform/CLAUDE.md) | platform | Onboarding + Settings + Observability | 14 | Active |
 
 ## Cross-cutting (NÃO são módulos)
 

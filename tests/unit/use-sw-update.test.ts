@@ -14,7 +14,7 @@ vi.mock('virtual:pwa-register', () => ({
   registerSW: mockRegisterSW,
 }));
 
-import { useServiceWorkerUpdate } from '@/hooks/use-sw-update';
+import { useServiceWorkerUpdate } from '@/modules/platform/hooks/use-sw-update';
 
 describe('useServiceWorkerUpdate', () => {
   let capturedOnNeedRefresh: (() => void) | undefined;

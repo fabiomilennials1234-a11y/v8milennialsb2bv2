@@ -12,7 +12,7 @@
 import { lazy, Suspense, useCallback, useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useLocation } from "react-router-dom";
-import { featureFlags } from "@/lib/feature-flags";
+import { featureFlags } from "@/modules/platform/lib/feature-flags";
 import { useChatBubble } from "@/modules/communication/hooks/useChatBubble";
 import { useToast } from "@/hooks/use-toast";
 import { useViewport } from "@/hooks/use-viewport";

@@ -13,11 +13,11 @@ import { PermissionProtectedRoute } from "@/modules/identity/components/Permissi
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
 import { SubscriptionProtectedRoute } from "@/modules/identity/components/SubscriptionProtectedRoute";
-import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
-import { OnboardingGate } from "@/components/onboarding/OnboardingGate";
+import { GlobalErrorBoundary } from "@/modules/platform/components/GlobalErrorBoundary";
+import { OnboardingGate } from "@/modules/platform/components/onboarding/OnboardingGate";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
-import { ServiceWorkerUpdater } from "@/components/ServiceWorkerUpdater";
-import { PushPermissionPrompt } from "@/components/PushPermissionPrompt";
+import { ServiceWorkerUpdater } from "@/modules/platform/components/ServiceWorkerUpdater";
+import { PushPermissionPrompt } from "@/modules/platform/components/PushPermissionPrompt";
 
 // Retry helper para chunks que falham ao carregar (comum após deploy)
 function lazyRetry<T extends { default: any }>(
@@ -49,7 +49,7 @@ const Leads = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Leads")))
 
 const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash")));
 const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
-const Configuracoes = lazy(() => lazyRetry(() => import("./pages/Configuracoes")));
+const Configuracoes = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Configuracoes")));
 const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
 const Campanhas = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/Campanhas")));
 const CampanhaDetail = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/CampanhaDetail")));
@@ -68,7 +68,7 @@ const Upsell = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Upsel
 const ClienteDetail = lazy(() => lazyRetry(() => import("@/modules/carteira/components/client/ClienteDetailPage")));
 const CustomPipeline = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/CustomPipeline")));
 const Agenda = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Agenda")));
-const Privacidade = lazy(() => lazyRetry(() => import("./pages/Privacidade")));
+const Privacidade = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Privacidade")));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/modules/copilot/components/playground").then(m => ({ default: m.CopilotPlayground }))));
 const ChecklistPage = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/ChecklistPage")));
 const MessageTemplates = lazy(() => lazyRetry(() => import("./pages/MessageTemplates")));
@@ -77,7 +77,7 @@ const AutomacoesEditor = lazy(() => lazyRetry(() => import("./modules/workflows/
 const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./modules/workflows/pages/AutomacoesExecucoes")));
 
 
-const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
+const NotFound = lazy(() => lazyRetry(() => import("@/modules/platform/pages/NotFound")));
 const Landing = lazy(() => lazyRetry(() => import("@/modules/marketing/pages/Landing")));
 const Signup = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Signup")));
 const ResetPassword = lazy(() => lazyRetry(() => import("@/modules/identity/pages/ResetPassword")));

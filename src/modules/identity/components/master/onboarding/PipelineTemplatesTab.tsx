@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Plus, Pencil, Trash2, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { usePipelineTemplates, useDeletePipelineTemplate } from "@/hooks/useOnboardingTemplates";
+import { usePipelineTemplates, useDeletePipelineTemplate } from "@/modules/platform/hooks/useOnboardingTemplates";
 import { PipelineTemplateEditor } from "./PipelineTemplateEditor";
 import { toast } from "sonner";
 

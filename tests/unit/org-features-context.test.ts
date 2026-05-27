@@ -23,7 +23,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
 }));
 
 // ─── Mock feature-registry types (only needed for TS) ───
-vi.mock("@/lib/feature-registry", () => ({}));
+vi.mock("@/modules/platform/lib/feature-registry", () => ({}));
 
 // ─── Import module under test ───────────────────────────
 import { OrgFeaturesProvider, useOrgFeatures } from "@/contexts/OrgFeaturesContext";

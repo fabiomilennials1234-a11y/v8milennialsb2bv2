@@ -117,7 +117,7 @@ describe("useGoogleCalendar", () => {
 });
 
 // ═══ 4. useHelpCenter (65 LOC) ═══
-import { useHelpCategories, useHelpArticles, useHelpArticle, useCreateHelpCategory, useCreateHelpArticle, useUpdateHelpArticle } from "@/hooks/useHelpCenter";
+import { useHelpCategories, useHelpArticles, useHelpArticle, useCreateHelpCategory, useCreateHelpArticle, useUpdateHelpArticle } from "@/modules/platform/hooks/useHelpCenter";
 
 describe("useHelpCenter", () => {
   it("useHelpCategories", async () => {

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   useAutomationTemplates,
   useDeleteAutomationTemplate,
-} from "@/hooks/useOnboardingTemplates";
+} from "@/modules/platform/hooks/useOnboardingTemplates";
 import { AutomationTemplateEditor } from "./AutomationTemplateEditor";
 import { ImportWorkflowDialog } from "./ImportWorkflowDialog";
 import { toast } from "sonner";

@@ -16,7 +16,7 @@ import * as Sentry from "@sentry/react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useAuth } from "@/modules/identity";
-import { createRateLimiter } from "@/lib/rate-limit";
+import { createRateLimiter } from "@/modules/platform/lib/rate-limit";
 import type { MessageSearchResult } from "@/modules/communication/lib/chat-types";
 
 // ─── Constantes ────────────────────────────────────────────────────────────────

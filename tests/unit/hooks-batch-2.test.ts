@@ -50,7 +50,7 @@ import { useCompetitions } from "@/modules/engagement/hooks/useCompetitions";
 import { useProfiles } from "@/modules/identity/hooks/useProfiles";
 import { useCountUp } from "@/hooks/useCountUp";
 import { useLeadTimeline } from "@/modules/leads";
-import { useLogger } from "@/hooks/useLogger";
+import { useLogger } from "@/modules/platform/hooks/useLogger";
 import { useMasterPlans } from "@/modules/identity/hooks/useMasterPlans";
 import { useMessageTemplates } from "@/modules/communication/hooks/useMessageTemplates";
 import { useOrgSwitcher } from "@/modules/identity/hooks/useOrgSwitcher";

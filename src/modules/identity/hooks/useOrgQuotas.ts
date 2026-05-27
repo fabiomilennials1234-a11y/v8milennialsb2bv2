@@ -12,7 +12,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
-import type { LimitKey } from "@/lib/feature-registry";
+import type { LimitKey } from "@/modules/platform/lib/feature-registry";
 
 export interface QuotaInfo {
   plan_base: number;
