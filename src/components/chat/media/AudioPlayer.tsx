@@ -9,6 +9,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { convertAudioBlobToMp3 } from "@/lib/audioToMp3";
+import { supabase } from "@/integrations/supabase/client";
 
 // Edge Function exige Authorization; <audio src="..."> não envia header → 401. Resolvemos via fetch com token e blob.
 const STREAM_MEDIA_PATH = "/functions/v1/stream-media";
@@ -53,7 +54,15 @@ export function AudioPlayer({ src, isOutgoing: _isOutgoing, instanceId, whatsapp
   const rawBlobRef = useRef<Blob | null>(null);
 
   const isStreamMediaUrl = src.includes(STREAM_MEDIA_PATH);
-  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setAccessToken(data.session?.access_token ?? null));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAccessToken(session?.access_token ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   const isValidSrc = src && (src.startsWith("http://") || src.startsWith("https://") || src.startsWith("blob:"));
 
@@ -85,7 +94,7 @@ export function AudioPlayer({ src, isOutgoing: _isOutgoing, instanceId, whatsapp
   // Etapa 1: Baixar o blob do stream-media com Authorization e servir com tipo correto
   // NÃO tenta converter — deixa o navegador reproduzir o formato original primeiro.
   useEffect(() => {
-    if (!isStreamMediaUrl || !anonKey?.trim() || !src) return;
+    if (!isStreamMediaUrl || !accessToken || !src) return;
     let cancelled = false;
     conversionAttemptedRef.current = false;
     retryWithNewBlobUrlRef.current = false;
@@ -98,7 +107,7 @@ export function AudioPlayer({ src, isOutgoing: _isOutgoing, instanceId, whatsapp
       try {
         const res = await fetch(src, {
           method: "GET",
-          headers: { Authorization: `Bearer ${anonKey}` },
+          headers: { Authorization: `Bearer ${accessToken}` },
           credentials: "omit",
         });
         if (!res.ok) {
@@ -139,7 +148,7 @@ export function AudioPlayer({ src, isOutgoing: _isOutgoing, instanceId, whatsapp
       cancelled = true;
       setBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
     };
-  }, [src, isStreamMediaUrl, anonKey, ensureBlobType]);
+  }, [src, isStreamMediaUrl, accessToken, ensureBlobType]);
 
   // Resetar ao trocar de src (não-stream-media)
   useEffect(() => {
@@ -220,7 +229,7 @@ export function AudioPlayer({ src, isOutgoing: _isOutgoing, instanceId, whatsapp
       setLoading(true);
       try {
         const headers: HeadersInit = {};
-        if (isStreamMediaUrl && anonKey?.trim()) headers["Authorization"] = `Bearer ${anonKey}`;
+        if (isStreamMediaUrl && accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
         const res = await fetch(src, { mode: "cors", credentials: "omit", headers });
         if (!res.ok) {
           setLoading(false);
@@ -255,7 +264,7 @@ export function AudioPlayer({ src, isOutgoing: _isOutgoing, instanceId, whatsapp
 
     setLoading(false);
     setError(true);
-  }, [src, isValidSrc, isStreamMediaUrl, anonKey, ensureBlobType]);
+  }, [src, isValidSrc, isStreamMediaUrl, accessToken, ensureBlobType]);
 
   // Cleanup de blobUrl no unmount
   useEffect(() => {
