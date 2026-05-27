@@ -26,8 +26,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useUpsellClient, useUpdateUpsellClient, useDeleteUpsellClient } from "@/hooks/useUpsellClients";
-import { useUpsellOrdersByClient } from "@/hooks/useUpsellOrders";
+import { useUpsellClient, useUpdateUpsellClient, useDeleteUpsellClient } from "@/modules/carteira/hooks/useUpsellClients";
+import { useUpsellOrdersByClient } from "@/modules/carteira/hooks/useUpsellOrders";
 import { toast } from "sonner";
 
 interface UpsellContextProps {

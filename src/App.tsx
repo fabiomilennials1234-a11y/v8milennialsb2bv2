@@ -55,7 +55,7 @@ const Campanhas = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/C
 const CampanhaDetail = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/CampanhaDetail")));
 const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));
 // Marketing and Analytics are unified in the Analytics tab — see TabAnalyticsV2.tsx
-const Produtos = lazy(() => lazyRetry(() => import("./pages/Produtos")));
+const Produtos = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Produtos")));
 const Negocios = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Negocios")));
 const Copilot = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/Copilot")));
 const CopilotMetrics = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/CopilotMetrics")));
@@ -64,8 +64,8 @@ const AtendimentoMeta = lazy(() => lazyRetry(() => import("@/modules/communicati
 // ChatSkeleton é eager (não lazy) — precisa estar disponível no instante
 // em que o chunk de ChatWhatsApp começa a ser baixado.
 import { ChatSkeleton } from "@/modules/communication/components/chat/ChatSkeleton";
-const Upsell = lazy(() => lazyRetry(() => import("./pages/Upsell")));
-const ClienteDetail = lazy(() => lazyRetry(() => import("./components/carteira/ClienteDetailPage")));
+const Upsell = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Upsell")));
+const ClienteDetail = lazy(() => lazyRetry(() => import("@/modules/carteira/components/client/ClienteDetailPage")));
 const CustomPipeline = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/CustomPipeline")));
 const Agenda = lazy(() => lazyRetry(() => import("./pages/Agenda")));
 const Privacidade = lazy(() => lazyRetry(() => import("./pages/Privacidade")));

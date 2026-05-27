@@ -36,7 +36,7 @@ vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn(),
 vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
-vi.mock("@/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
+vi.mock("@/modules/carteira/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
 
 // ── Imports ──
 import { useAnalyticsComercial } from "@/hooks/useAnalyticsComercial";
@@ -46,17 +46,17 @@ import { useAnalyticsFinanceiro } from "@/hooks/useAnalyticsFinanceiro";
 import { useAnalyticsOverview } from "@/hooks/useAnalyticsOverview";
 import { useAnalyticsPipesFunis } from "@/hooks/useAnalyticsPipesFunis";
 import { useAnalyticsUtms } from "@/hooks/useAnalyticsUtms";
-import { useUpsellClients } from "@/hooks/useUpsellClients";
-import { useUpsellMetrics } from "@/hooks/useUpsellMetrics";
-import { useUpsellOrders } from "@/hooks/useUpsellOrders";
-import { useUpsellGestaoRules } from "@/hooks/useUpsellGestaoRules";
-import { useUpsellCampanhas } from "@/hooks/useUpsellCampanhas";
-import { useUpsellClientProducts } from "@/hooks/useUpsellClientProducts";
+import { useUpsellClients } from "@/modules/carteira/hooks/useUpsellClients";
+import { useUpsellMetrics } from "@/modules/carteira/hooks/useUpsellMetrics";
+import { useUpsellOrders } from "@/modules/carteira/hooks/useUpsellOrders";
+import { useUpsellGestaoRules } from "@/modules/carteira/hooks/useUpsellGestaoRules";
+import { useUpsellCampanhas } from "@/modules/carteira/hooks/useUpsellCampanhas";
+import { useUpsellClientProducts } from "@/modules/carteira/hooks/useUpsellClientProducts";
 import { usePipeDispatchRules } from "@/modules/pipelines/hooks/usePipeDispatchRules";
 import { usePipeDistribution } from "@/modules/pipelines/hooks/usePipeDistribution";
 import { usePipePropostaItems } from "@/modules/pipelines/hooks/usePipePropostaItems";
 import { usePipelineDisplayConfig } from "@/modules/pipelines/hooks/usePipelineDisplayConfig";
-import { useProductVariants } from "@/hooks/useProductVariants";
+import { useProductVariants } from "@/modules/carteira/hooks/useProductVariants";
 // useSupportMaterials doesn't exist
 
 // Analytics hooks use RPC — safe with mock

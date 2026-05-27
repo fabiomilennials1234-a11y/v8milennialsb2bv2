@@ -40,7 +40,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ProductCombobox } from "@/components/proposals/ProductCombobox";
+import { ProductCombobox } from "@/modules/carteira/components/proposal/ProductCombobox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,16 +53,16 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useUpdatePipeProposta, useDeletePipeProposta, type PipePropostasStatus, statusColumns } from "@/modules/pipelines/hooks/usePipePropostas";
-import { useActiveProducts } from "@/hooks/useProducts";
+import { useActiveProducts } from "@/modules/carteira/hooks/useProducts";
 import { usePipePropostaItems, useCreatePipePropostaItem, useUpdatePipePropostaItem, useDeletePipePropostaItem } from "@/modules/pipelines/hooks/usePipePropostaItems";
 import { useTeamMembers } from "@/modules/identity";
 import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
 import { useDeleteLead } from "../../../hooks/useLeads";
-import { useTinyErpStatus } from "@/hooks/useTinyErp";
-import { TinyErpOrderStatus } from "@/components/proposals/TinyErpOrderStatus";
-import { TinyErpConfirmOrderDialog } from "@/components/proposals/TinyErpConfirmOrderDialog";
+import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
+import { TinyErpOrderStatus } from "@/modules/carteira/components/proposal/TinyErpOrderStatus";
+import { TinyErpConfirmOrderDialog } from "@/modules/carteira/components/proposal/TinyErpConfirmOrderDialog";
 import { useCadastroExternoEnabled } from "@/hooks/useCadastroExterno";
-import { CadastroExternoConfirmDialog } from "@/components/proposals/CadastroExternoConfirmDialog";
+import { CadastroExternoConfirmDialog } from "@/modules/carteira/components/proposal/CadastroExternoConfirmDialog";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";

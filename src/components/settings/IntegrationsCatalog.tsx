@@ -33,7 +33,7 @@ import { WhatsAppSettings } from "./WhatsAppSettings";
 // Hooks de status
 import { useMetaConnectionStatusByType } from "@/modules/communication/hooks/useMetaConnection";
 import { useGoogleCalendarStatus } from "@/hooks/useGoogleCalendar";
-import { useTinyErpStatus } from "@/hooks/useTinyErp";
+import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
 import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
 import { useOrganization } from "@/modules/identity";
 import { useQuery } from "@tanstack/react-query";

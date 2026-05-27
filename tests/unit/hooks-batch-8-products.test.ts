@@ -65,7 +65,7 @@ import {
   useCreateProduct,
   useUpdateProduct,
   useDeleteProduct,
-} from "@/hooks/useProducts";
+} from "@/modules/carteira/hooks/useProducts";
 
 describe("useProducts", () => {
   beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock()); });
