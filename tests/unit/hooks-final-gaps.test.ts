@@ -129,7 +129,7 @@ describe("useAgentMetrics", () => {
 });
 
 // ═══ useDashboardMetrics (expand) ═══
-import { useDashboardMetrics, useConversionRates, useFunnelData, useRankingData } from "@/hooks/useDashboardMetrics";
+import { useDashboardMetrics, useConversionRates, useFunnelData, useRankingData } from "@/modules/analytics/hooks/useDashboardMetrics";
 
 describe("useDashboardMetrics", () => {
   // useDashboardMetrics needs complex multi-table mock — skipped

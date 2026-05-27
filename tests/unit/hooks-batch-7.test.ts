@@ -47,10 +47,10 @@ vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 
 // ── Target: remaining 0% hooks ──
-import { useTVDashboardData } from "@/hooks/useTVDashboardData";
+import { useTVDashboardData } from "@/modules/analytics/hooks/useTVDashboardData";
 import { useDispatchQueueItems } from "@/modules/campaigns/hooks/useDispatchQueueItems";
-import { useMktByOrigin } from "@/hooks/useMktByOrigin";
-import { useMktOriginConfig } from "@/hooks/useMktOriginConfig";
+import { useMktByOrigin } from "@/modules/analytics/hooks/useMktByOrigin";
+import { useMktOriginConfig } from "@/modules/analytics/hooks/useMktOriginConfig";
 
 describe("useTVDashboardData", () => {
   it("initializes", () => {

@@ -19,7 +19,7 @@ import {
   type MktOriginConfig,
   type LeadOrigin,
   useBatchUpsertMktOriginConfig,
-} from "@/hooks/useMktOriginConfig";
+} from "@/modules/analytics/hooks/useMktOriginConfig";
 import { toast } from "sonner";
 
 interface OriginFormState {

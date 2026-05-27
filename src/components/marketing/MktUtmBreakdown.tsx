@@ -2,7 +2,7 @@ import { memo, useState, useMemo } from "react";
 import { Link2, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { useAnalyticsUtms } from "@/hooks/useAnalyticsUtms";
+import { useAnalyticsUtms } from "@/modules/analytics/hooks/useAnalyticsUtms";
 
 interface CampaignRow {
   campaign: string;

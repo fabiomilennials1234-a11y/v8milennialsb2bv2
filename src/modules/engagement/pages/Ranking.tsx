@@ -7,7 +7,7 @@ import { MiniProgressRing } from "@/modules/engagement/components/gamification/P
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useAvatarMap } from "@/hooks/useAvatarMap";
 import badgeIcon from "@/assets/badge-icon.png";
-import { useRankingData } from "@/hooks/useDashboardMetrics";
+import { useRankingData } from "@/modules/analytics/hooks/useDashboardMetrics";
 
 interface RankingUser {
   id: string;

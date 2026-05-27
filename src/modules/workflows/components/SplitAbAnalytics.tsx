@@ -24,7 +24,7 @@ import {
   XCircle,
   Clock,
 } from "lucide-react";
-import { useSplitAbMetrics, useSplitAbNodes } from "@/hooks/useSplitAbMetrics";
+import { useSplitAbMetrics, useSplitAbNodes } from "@/modules/analytics/hooks/useSplitAbMetrics";
 import type { SplitAbVariantMetrics } from "@/types/workflow";
 
 interface SplitAbAnalyticsProps {

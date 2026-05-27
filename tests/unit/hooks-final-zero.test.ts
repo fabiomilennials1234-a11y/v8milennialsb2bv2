@@ -85,7 +85,7 @@ describe("useMetaConnection", () => {
 });
 
 // ═══ 2. useMktByOrigin (70 LOC) ═══
-import { useMktByOrigin } from "@/hooks/useMktByOrigin";
+import { useMktByOrigin } from "@/modules/analytics/hooks/useMktByOrigin";
 
 describe("useMktByOrigin", () => {
   it("renders hook", () => {
@@ -175,7 +175,7 @@ describe("useDispatchQueueItems", () => {
 });
 
 // ═══ 8. useMktOriginConfig (52 LOC) ═══
-import { ALL_ORIGINS, ORIGIN_LABELS, useMktOriginConfigs, useUpsertMktOriginConfig } from "@/hooks/useMktOriginConfig";
+import { ALL_ORIGINS, ORIGIN_LABELS, useMktOriginConfigs, useUpsertMktOriginConfig } from "@/modules/analytics/hooks/useMktOriginConfig";
 
 describe("useMktOriginConfig", () => {
   it("exports ALL_ORIGINS", () => { expect(ALL_ORIGINS.length).toBeGreaterThan(0); });
