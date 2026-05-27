@@ -3,19 +3,19 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { useCampanha, useCampanhaStages, useCampanhaLeads, useCampanhaMembers, useUpdateCampanhaMember, useDeleteCampanhaLead, useCampanhaPipeAutomations, useExtractLeadToPipe, resolveExtractionTarget, getObjectiveMetricLabel, type CampanhaLead } from "@/hooks/useCampanhas";
+import { useCampanha, useCampanhaStages, useCampanhaLeads, useCampanhaMembers, useUpdateCampanhaMember, useDeleteCampanhaLead, useCampanhaPipeAutomations, useExtractLeadToPipe, resolveExtractionTarget, getObjectiveMetricLabel, type CampanhaLead } from "@/modules/campaigns/hooks/useCampanhas";
 import { useCreatePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
 import { useImportLeads } from "@/modules/leads";
 import { useOrganization } from "@/modules/identity";
-import { CampanhaKanban } from "@/components/campanhas/CampanhaKanban";
-import { CampanhaAnalytics } from "@/components/campanhas/CampanhaAnalytics";
-import { CampanhaDisparosTab } from "@/components/campanhas/CampanhaDisparosTab";
-import { AddLeadToCampanhaModal } from "@/components/campanhas/AddLeadToCampanhaModal";
-import { ImportLeadsModal } from "@/components/campanhas/ImportLeadsModal";
-import { ManageStagesModal } from "@/components/campanhas/ManageStagesModal";
-import { EditCampanhaModal } from "@/components/campanhas/EditCampanhaModal";
-import { CampanhaViewersSection } from "@/components/campanhas/CampanhaViewersSection";
-import { ExtractToPipeModal } from "@/components/campanhas/ExtractToPipeModal";
+import { CampanhaKanban } from "@/modules/campaigns/components/CampanhaKanban";
+import { CampanhaAnalytics } from "@/modules/campaigns/components/CampanhaAnalytics";
+import { CampanhaDisparosTab } from "@/modules/campaigns/components/CampanhaDisparosTab";
+import { AddLeadToCampanhaModal } from "@/modules/campaigns/components/AddLeadToCampanhaModal";
+import { ImportLeadsModal } from "@/modules/campaigns/components/ImportLeadsModal";
+import { ManageStagesModal } from "@/modules/campaigns/components/ManageStagesModal";
+import { EditCampanhaModal } from "@/modules/campaigns/components/EditCampanhaModal";
+import { CampanhaViewersSection } from "@/modules/campaigns/components/CampanhaViewersSection";
+import { ExtractToPipeModal } from "@/modules/campaigns/components/ExtractToPipeModal";
 import {
   Collapsible,
   CollapsibleContent,

@@ -165,7 +165,7 @@ describe("useMasterOperations", () => {
 });
 
 // ═══ 6. useDispatchQueueItems (58 LOC) ═══
-import { useCampaignQueueItems } from "@/hooks/useDispatchQueueItems";
+import { useCampaignQueueItems } from "@/modules/campaigns/hooks/useDispatchQueueItems";
 
 describe("useDispatchQueueItems", () => {
   it("useCampaignQueueItems", async () => {

@@ -6,8 +6,8 @@ import {
   useCreateDispatchBatch,
   useCancelDispatchBatch,
   replaceVariablesWithExamples,
-} from "@/hooks/useCampaignTemplates";
-import { useCampanhaLeads, useCampanhaStages } from "@/hooks/useCampanhas";
+} from "@/modules/campaigns/hooks/useCampaignTemplates";
+import { useCampanhaLeads, useCampanhaStages } from "@/modules/campaigns/hooks/useCampanhas";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { Campanha } from "@/hooks/useCampanhas";
+import type { Campanha } from "@/modules/campaigns/hooks/useCampanhas";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 

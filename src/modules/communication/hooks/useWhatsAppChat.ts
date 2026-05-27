@@ -79,10 +79,12 @@ export type {
 } from "./useHistorySyncJobs";
 
 // ─── Uazapi — Mass Send ───────────────────────────────────────────────────────
+// NOTE: mass-send é cross-module — entidade `uazapi_sender_jobs` pertence ao
+// BC `campaigns` (slice 9). Re-export via API pública do módulo, não deep import.
 export {
   useMassSendJobs,
   useCreateMassSend,
   useControlMassSend,
   useRefreshMassSendStatus,
-} from "@/hooks/useMassSendJobs";
-export type { UazapiSenderJob } from "@/hooks/useMassSendJobs";
+} from "@/modules/campaigns";
+export type { UazapiSenderJob } from "@/modules/campaigns";

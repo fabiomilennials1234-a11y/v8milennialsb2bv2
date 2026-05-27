@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCampanhaTemplates } from "@/hooks/useCampaignTemplates";
+import { useCampanhaTemplates } from "@/modules/campaigns/hooks/useCampaignTemplates";
 
 const TYPE_LABELS: Record<string, string> = {
   text: "Texto",

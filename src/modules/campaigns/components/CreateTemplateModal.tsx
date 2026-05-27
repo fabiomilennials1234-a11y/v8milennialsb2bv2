@@ -16,7 +16,7 @@ import {
   uploadCampaignTemplateImage,
   uploadCampaignTemplateDocument,
   type CampaignTemplateMessageType,
-} from "@/hooks/useCampaignTemplates";
+} from "@/modules/campaigns/hooks/useCampaignTemplates";
 import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
 

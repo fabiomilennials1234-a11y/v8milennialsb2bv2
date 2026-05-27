@@ -13,7 +13,7 @@ import {
   useAddCampanhaViewer,
   useRemoveCampanhaViewer,
   type CampanhaViewer,
-} from "@/hooks/useCampanhas";
+} from "@/modules/campaigns/hooks/useCampanhas";
 import { useTeamMembers } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";
 import { UserPlus, X, Users } from "lucide-react";

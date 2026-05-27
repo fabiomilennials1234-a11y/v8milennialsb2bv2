@@ -35,7 +35,7 @@ import {
   useCreateMassSend,
   useControlMassSend,
   useRefreshMassSendStatus,
-} from "@/hooks/useMassSendJobs";
+} from "@/modules/campaigns/hooks/useMassSendJobs";
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

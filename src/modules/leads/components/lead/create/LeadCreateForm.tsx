@@ -29,7 +29,7 @@ import {
 import type { LeadDestination } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { useAllPipelineStageOptions } from "@/modules/pipelines/hooks/usePipelineStages";
 import { useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines/hooks/useCustomPipelines";
-import { useCampanhas } from "@/hooks/useCampanhas";
+import { useCampanhas } from "@/modules/campaigns/hooks/useCampanhas";
 import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
 export interface CreateLeadPayload {
   phone: string;

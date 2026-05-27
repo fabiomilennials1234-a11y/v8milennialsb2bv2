@@ -22,7 +22,7 @@ import { ACTION_CATEGORIES, ACTION_LABELS } from "@/types/workflow";
 import type { ActionNodeData, WorkflowActionType } from "@/types/workflow";
 import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
 import { useOrganization } from "@/modules/identity";
-import { useCampaignTemplatesByType } from "@/hooks/useCampaignTemplates";
+import { useCampaignTemplatesByType } from "@/modules/campaigns/hooks/useCampaignTemplates";
 import { supabase } from "@/integrations/supabase/client";
 import { useTeamMembers } from "@/modules/identity";
 import { convertAudioBlobToMp3, preloadLamejs } from "@/modules/communication/lib/audioToMp3";
@@ -32,7 +32,7 @@ import {
   TemplateTextarea,
   type TemplateTextareaHandle,
 } from "@/modules/workflows/components/TemplateTextarea";
-import type { CampaignTemplate } from "@/hooks/useCampaignTemplates";
+import type { CampaignTemplate } from "@/modules/campaigns/hooks/useCampaignTemplates";
 import { usePipelineStages, type PipelineType } from "@/modules/pipelines/hooks/usePipelineStages";
 import { useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines/hooks/useCustomPipelines";
 import { useTags } from "@/hooks/useTags";

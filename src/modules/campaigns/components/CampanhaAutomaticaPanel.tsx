@@ -1,5 +1,5 @@
 import { useCopilotAgent } from "@/modules/copilot/hooks/useCopilotAgents";
-import { useDispatchLog, useDispatchStats } from "@/hooks/useCampaignTemplates";
+import { useDispatchLog, useDispatchStats } from "@/modules/campaigns/hooks/useCampaignTemplates";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { Campanha } from "@/hooks/useCampanhas";
+import type { Campanha } from "@/modules/campaigns/hooks/useCampanhas";
 import { cn } from "@/lib/utils";
 
 interface CampanhaAutomaticaPanelProps {
