@@ -1,6 +1,5 @@
 import { motion } from "framer-motion";
-import { Trophy, Crown, Medal, Award } from "lucide-react";
-import { UserAvatar } from "@/components/ui/user-avatar";
+import { Trophy } from "lucide-react";
 
 interface RankingUser {
   id: string;
@@ -22,89 +21,102 @@ function formatValue(value: number, metricType: string) {
   return `R$ ${value}`;
 }
 
-const POSITION_ICONS = [Crown, Medal, Award];
-const POSITION_COLORS = ["text-yellow-400", "text-slate-400", "text-amber-600"];
-const POSITION_BG = ["bg-yellow-400/10", "bg-slate-400/10", "bg-amber-600/10"];
+// Avatar background gradient by podium position (1º gold, 2º blue, 3º violet).
+const AVATAR_GRAD = [
+  "linear-gradient(135deg,#ed9326,#ffd400)",
+  "linear-gradient(135deg,#3b82f6,#1d4ed8)",
+  "linear-gradient(135deg,#a855f7,#7c3aed)",
+];
+const PEDESTAL_BG = [
+  "linear-gradient(180deg,rgba(237,147,38,0.25),rgba(237,147,38,0.05))",
+  "linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))",
+  "linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015))",
+];
+const PEDESTAL_H = ["h-11", "h-7", "h-5"];
+const POS_LABEL = ["1º", "2º", "3º"];
 
+/** Live wall ranking shown as a podium (matches the mockup's "Corrida"). */
 export function TVRankingSimple({ users, metricType = "sales" }: TVRankingSimpleProps) {
-  const top5 = users.slice(0, 5);
-  if (top5.length === 0) return null;
+  const top = users.slice(0, 3);
+  if (top.length === 0) return null;
+
+  // Classic podium order: 2nd | 1st | 3rd (centred on the leader).
+  const order =
+    top.length >= 3 ? [top[1], top[0], top[2]] : top.length === 2 ? [top[1], top[0]] : [top[0]];
+  const posIdx = top.length >= 3 ? [1, 0, 2] : top.length === 2 ? [1, 0] : [0];
 
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Trophy className="w-5 h-5 text-yellow-400" />
-          <span className="text-sm font-bold text-white uppercase tracking-wider">
-            Ranking de Vendas
-          </span>
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-1.5 font-display text-[11px] font-bold text-[#f8f5e7] uppercase leading-tight">
+          <Trophy className="w-3.5 h-3.5 text-[#ffd400]" />
+          Ranking<br />de vendas
         </div>
+        <span className="tv-live-badge flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-semibold uppercase">
+          <span className="tv-live-dot" />
+          LIVE
+        </span>
       </div>
+      <div className="text-[8.5px] text-[#8a857a] mt-1">{users.length} participantes</div>
 
-      {/* Ranking list */}
-      <div className="flex-1 space-y-2">
-        {top5.map((user, i) => {
-          const isTop3 = user.position <= 3;
-          const Icon = isTop3 ? POSITION_ICONS[user.position - 1] : null;
-          const posColor = isTop3 ? POSITION_COLORS[user.position - 1] : "text-white/40";
-          const posBg = isTop3 ? POSITION_BG[user.position - 1] : "";
+      {/* Podium */}
+      <div className="flex-1 flex items-end justify-center gap-3 mt-3">
+        {order.map((user, vi) => {
+          if (!user) return null;
+          const pi = posIdx[vi]; // 0 = 1st, 1 = 2nd, 2 = 3rd
+          const isFirst = pi === 0;
+          const avatarPx = isFirst ? 44 : 36;
 
           return (
             <motion.div
               key={user.id}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.08 }}
-              className={`flex items-center gap-3 p-2.5 rounded-lg ${
-                isTop3 ? "bg-white/[0.04] border border-white/[0.06]" : "bg-white/[0.02]"
-              }`}
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: vi * 0.12, type: "spring", stiffness: 160, damping: 18 }}
+              className="flex flex-col items-center"
             >
-              {/* Position */}
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${posBg}`}>
-                {Icon ? (
-                  <Icon className={`w-4 h-4 ${posColor}`} />
+              {isFirst ? (
+                <Trophy className="w-3.5 h-3.5 text-[#ffd400] mb-0.5" />
+              ) : (
+                <span className="text-[8px] font-bold text-[#f8f5e7]/60 mb-0.5">{POS_LABEL[pi]}</span>
+              )}
+
+              {/* Avatar */}
+              <div
+                className="rounded-full flex items-center justify-center font-semibold text-[#1c1c1c] overflow-hidden shrink-0"
+                style={{
+                  width: avatarPx,
+                  height: avatarPx,
+                  background: AVATAR_GRAD[pi],
+                  border: "2px solid #131110",
+                  fontSize: isFirst ? 13 : 11,
+                  boxShadow: isFirst ? "0 0 16px rgba(237,147,38,0.4)" : undefined,
+                }}
+              >
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
                 ) : (
-                  <span className="text-sm font-extrabold text-white/40">{user.position}</span>
+                  user.name.charAt(0)
                 )}
               </div>
 
-              {/* Avatar */}
-              <UserAvatar
-                name={user.name}
-                avatarUrl={user.avatarUrl}
-                size="sm"
-                fallbackClassName="bg-white/10 text-white/60"
-              />
-
               {/* Name */}
-              <span className="flex-1 text-sm font-semibold text-white truncate">
+              <div
+                className={`text-[9.5px] ${isFirst ? "font-semibold" : "font-medium"} text-[#f8f5e7] mt-1 truncate max-w-[80px] text-center`}
+              >
                 {user.name.split(" ")[0]}
-              </span>
+              </div>
 
               {/* Value */}
-              <span className={`text-sm font-extrabold ${isTop3 ? "text-primary" : "text-white/60"}`}>
+              <div
+                className={`font-display ${isFirst ? "text-base" : "text-sm"} font-bold tabular-nums ${isFirst ? "text-[#ffd400]" : "text-[#f8f5e7]"}`}
+              >
                 {formatValue(user.value, metricType)}
-              </span>
-
-              {/* Goal bar (mini) */}
-              <div className="w-14">
-                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                  <motion.div
-                    className={`h-full rounded-full ${
-                      user.goalProgress >= 100 ? "bg-emerald-400" :
-                      user.goalProgress >= 80 ? "bg-orange-400" :
-                      "bg-blue-400"
-                    }`}
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(user.goalProgress, 100)}%` }}
-                    transition={{ duration: 0.8, delay: i * 0.1 }}
-                  />
-                </div>
-                <p className="text-[9px] text-white/40 text-right mt-0.5">
-                  {user.goalProgress}%
-                </p>
               </div>
+
+              {/* Pedestal */}
+              <div className={`w-12 ${PEDESTAL_H[pi]} rounded-t-md mt-1`} style={{ background: PEDESTAL_BG[pi] }} />
             </motion.div>
           );
         })}
