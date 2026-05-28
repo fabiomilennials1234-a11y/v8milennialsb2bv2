@@ -15,7 +15,6 @@ import {
   Bot,
   Zap,
 } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -40,6 +39,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { ChatContact } from "@/hooks/useWhatsAppChat";
 import { ChannelBadge } from "../ChannelBadge";
+import { getAvatarGradient } from "./avatarGradient";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -249,6 +249,9 @@ export function ConversationListItem({
   onRemoveTag,
 }: ConversationListItemProps) {
   const displayName = contactDisplayName(contact);
+  const avatarGradient = getAvatarGradient(
+    contact.phone_number || displayName,
+  );
 
   return (
     <motion.div
@@ -266,9 +269,9 @@ export function ConversationListItem({
       className={cn(
         "w-full px-3 py-3 text-left transition-colors rounded-none border-l-2 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:z-10 focus-visible:relative",
         isSelected
-          ? "bg-primary/15 border-l-primary"
+          ? "bg-primary/[0.08] border-l-primary"
           : contact.unread_count > 0
-            ? "bg-amber-50 dark:bg-amber-950/30 border-l-amber-500 hover:bg-amber-100 dark:hover:bg-amber-950/50"
+            ? "bg-primary/[0.04] border-l-primary/40 hover:bg-primary/[0.07]"
             : "hover:bg-muted/50 border-l-transparent",
       )}
       whileTap={{ scale: 0.99 }}
@@ -276,11 +279,16 @@ export function ConversationListItem({
     >
       <div className="flex items-start gap-3">
         <div className="relative shrink-0">
-          <Avatar className="w-11 h-11 rounded-full border-2 border-background shadow-sm">
-            <AvatarFallback className="bg-primary/10 text-primary font-medium text-sm">
-              {(displayName.charAt(0) || "?").toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          <div
+            className={cn(
+              "w-11 h-11 rounded-full border-2 border-background shadow-sm flex items-center justify-center font-semibold text-sm select-none",
+              avatarGradient.ink ? "text-[#1c1c1c]" : "text-white",
+            )}
+            style={{ background: avatarGradient.background }}
+            aria-hidden
+          >
+            {(displayName.charAt(0) || "?").toUpperCase()}
+          </div>
           <ChannelBadge channel="whatsapp" size={18} overlay />
         </div>
         <div className="flex-1 min-w-0">
@@ -346,7 +354,7 @@ export function ConversationListItem({
             </p>
             {contact.unread_count > 0 && !isSelected && (
               <Badge
-                className="h-5 min-w-5 px-1.5 shrink-0 text-xs bg-amber-500 text-white border-0 hover:bg-amber-600"
+                className="h-5 min-w-5 px-1.5 shrink-0 text-xs bg-primary text-primary-foreground border-0 hover:bg-primary/90 rounded-full"
                 title="Mensagens não lidas"
               >
                 {contact.unread_count > 99 ? "99+" : contact.unread_count}
