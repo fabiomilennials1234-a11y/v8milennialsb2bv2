@@ -89,10 +89,20 @@ GROUP BY event_type, last_error;
 
 Nenhum durante setup. Reuso de `cron_secret` existente (em vez de gerar novo, como sugeriu o roadmap original) reduz divergência com demais jobs DEV — decisão pragmática registrada aqui.
 
-## Conclusão preliminar
+## Conclusão final
 
 ✅ Setup completo em DEV. Smoke loop pub→consume→mark green.
-⏳ Aguardando 24h de monitoria passiva pra concluir Fase 3 e habilitar Fase 4.
+
+**Monitoria 24h pulada por decisão CTO em 2026-05-28 ~19:30 UTC.** Evidência aceita como suficiente:
+
+- 120 cron runs `succeeded` consecutivos nas últimas 2h (100% green)
+- 0 events `failed` desde setup
+- 1 event smoke E2E `dispatched` em ~11s
+- 0 anomalias em `cron.job_run_details`
+
+Sinal estatístico não é equivalente a 24h verdes (1440 runs vs 120), mas demonstra cron + dispatcher + handler estáveis no eixo conhecido. Risco residual aceito pelo CTO.
+
+**Fase 5 (deploy prod) habilitada.**
 
 ## Runbook — checkpoint 2026-05-29 ~16:30 UTC
 
@@ -170,16 +180,34 @@ curl -s -X POST "https://api.supabase.com/v1/projects/${DEV_REF}/database/query"
 - ✅ Project ref alvo = `bcfadphgsibjzivtbjvc` (DEV) — confirmar antes de cada curl
 - ✅ Sem `--no-verify`
 
-## Monitoria 24h — counts finais
+## Monitoria — snapshot final (2026-05-28 ~19:30 UTC)
 
-_A preencher em 2026-05-29 ~16:30 UTC._
+Monitoria 24h **pulada por decisão CTO**. Snapshot do estado em ~3h pós-setup capturado abaixo:
 
 ```
+domain_events
+-------------
 status     | count
 -----------+-------
-(pending)  |
-dispatched |
-failed     |
+dispatched | 1
+failed     | 0
+pending    | 0
+
+cron.job_run_details (jobid=31, últimas 2h)
+-------------------------------------------
+status    | count
+----------+-------
+succeeded | 120
+failed    | 0
 ```
 
-Cron runs: _N succeeded / M failed nas últimas 24h._
+**Aceito como suficiente pra habilitar Fase 5 deploy prod.**
+
+## Risco residual + mitigação Fase 5
+
+Como monitoria foi pulada, **Fase 5 deploy prod precisa intensificar monitoria pós-deploy** pra cobrir o gap:
+
+- Monitoria 60min ativa pós-cutover Fase 5 (vs 5min planejado)
+- Query SQL de status executada a cada 15min nas primeiras 2h
+- Sentry capture explícito no `publishEvent.catch` antes do deploy (1 linha, ~5min)
+- Rollback plan documentado (drop table + unschedule cron + delete edge fn) com tempo alvo ≤ 5min execução
