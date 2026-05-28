@@ -8,14 +8,14 @@ const MOCK_ROWS: DrilldownRow[] = [
     id: "p1", lead_id: "l1", sale_value: 3000, status: "vendido",
     product_type: "mrr", closed_at: "2026-05-10T00:00:00Z",
     created_at: "2026-05-01T00:00:00Z", updated_at: "2026-05-10T00:00:00Z",
-    lead: { name: "Acme Corp Lead", company_name: "Acme Corp" },
+    lead: { name: "Acme Corp Lead", company: "Acme Corp" },
     responsible: { name: "João" },
   },
   {
     id: "p2", lead_id: "l2", sale_value: 5000, status: "proposta_enviada",
     product_type: null, closed_at: null,
     created_at: "2026-05-03T00:00:00Z", updated_at: "2026-05-03T00:00:00Z",
-    lead: { name: "Beta Industries", company_name: "Beta Inc" },
+    lead: { name: "Beta Industries", company: "Beta Inc" },
     responsible: { name: "Maria" },
   },
 ];

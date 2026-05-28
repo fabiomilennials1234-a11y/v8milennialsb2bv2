@@ -20,7 +20,7 @@ export interface DrilldownRow {
   closed_at: string | null;
   created_at: string | null;
   updated_at: string | null;
-  lead: { name: string | null; company_name: string | null } | null;
+  lead: { name: string | null; company: string | null } | null;
   responsible: { name: string | null } | null;
 }
 
@@ -35,7 +35,7 @@ const ACTIVE_STATUSES = [
 
 const SELECT = `
   id, lead_id, stage_key, metadata, closed_at, created_at, updated_at,
-  lead:leads!pipeline_entries_lead_id_fkey(name, company_name),
+  lead:leads!pipeline_entries_lead_id_fkey(name, company),
   responsible:team_members!pipeline_entries_assigned_to_fkey(name)
 `;
 

@@ -53,7 +53,7 @@ const SOLD_ENTRY = {
   closed_at: "2026-05-10T00:00:00Z",
   created_at: "2026-05-01T00:00:00Z",
   updated_at: "2026-05-10T00:00:00Z",
-  lead: { name: "Acme Corp Lead", company_name: "Acme Corp" },
+  lead: { name: "Acme Corp Lead", company: "Acme Corp" },
   responsible: { name: "João" },
 };
 
@@ -65,7 +65,7 @@ const ACTIVE_ENTRY = {
   closed_at: null,
   created_at: "2026-05-03T00:00:00Z",
   updated_at: "2026-05-03T00:00:00Z",
-  lead: { name: "Beta Lead", company_name: "Beta Inc" },
+  lead: { name: "Beta Lead", company: "Beta Inc" },
   responsible: { name: "Maria" },
 };
 

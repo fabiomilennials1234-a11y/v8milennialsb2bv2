@@ -89,7 +89,7 @@ export function MetricDrilldownSheet({
     return data.filter(
       (r) =>
         r.lead?.name?.toLowerCase().includes(term) ||
-        r.lead?.company_name?.toLowerCase().includes(term)
+        r.lead?.company?.toLowerCase().includes(term)
     );
   }, [data, search]);
 
@@ -139,7 +139,7 @@ export function MetricDrilldownSheet({
                         {row.lead?.name ?? "Sem nome"}
                       </p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {row.lead?.company_name ?? "—"}
+                        {row.lead?.company ?? "—"}
                       </p>
                     </div>
                     <p className="text-sm font-semibold whitespace-nowrap">
