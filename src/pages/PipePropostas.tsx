@@ -77,6 +77,8 @@ import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
 import { useLossReasons } from "@/hooks/useLossReasons";
 import { useSearchParams } from "react-router-dom";
+import { useMetricDrilldown, type MetricType } from "@/hooks/useMetricDrilldown";
+import { MetricDrilldownSheet } from "@/components/proposals/MetricDrilldownSheet";
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
@@ -261,6 +263,7 @@ function PipePropostasInner() {
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
   const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
+  const [drilldownMetric, setDrilldownMetric] = useState<MetricType | null>(null);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
 
@@ -528,6 +531,38 @@ function PipePropostasInner() {
       inProgressCount: stats.inProgressCount,
     };
   }, [metricsByPeriod, stats]);
+
+  const { data: drilldownData = [], isLoading: drilldownLoading } = useMetricDrilldown(
+    drilldownMetric ?? "vendas_total",
+    periodRange
+  );
+
+  const drilldownPeriodLabel = useMemo(() => {
+    if (!periodRange) return "Geral";
+    return formatPeriodLabel(periodRange);
+  }, [periodRange]);
+
+  const drilldownDisplayValue = useMemo(() => {
+    if (!drilldownMetric) return "";
+    const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+    switch (drilldownMetric) {
+      case "pipeline_ativo": return fmt(displayStats.inProgress);
+      case "vendas_total": return fmt(displayStats.sold);
+      case "rec_vendida": return fmt(displayStats.mrr);
+      case "projetos_vendidos": return fmt(displayStats.projeto);
+      case "taxa_conversao": return `${displayStats.conversionRate.toFixed(1)}%`;
+    }
+  }, [drilldownMetric, displayStats]);
+
+  const drilldownDisplayCount = useMemo(() => {
+    if (!drilldownMetric) return 0;
+    switch (drilldownMetric) {
+      case "pipeline_ativo": return displayStats.inProgressCount;
+      case "vendas_total": return displayStats.soldCount;
+      case "taxa_conversao": return displayStats.soldCount + displayStats.inProgressCount;
+      default: return drilldownData.length;
+    }
+  }, [drilldownMetric, displayStats, drilldownData]);
 
   // Total de propostas que passam pelo filtro temporal (para exibir no banner)
   const periodFilteredCount = useMemo(() => {
@@ -981,7 +1016,8 @@ function PipePropostasInner() {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="stat-card"
+          className="stat-card cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
+          onClick={() => setDrilldownMetric("pipeline_ativo")}
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">Pipeline Ativo</p>
@@ -990,12 +1026,13 @@ function PipePropostasInner() {
           <p className="text-xl font-bold">{formatCurrency(displayStats.inProgress)}</p>
           <p className="text-xs text-muted-foreground">{displayStats.inProgressCount} propostas</p>
         </motion.div>
-        
+
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="stat-card"
+          className="stat-card cursor-pointer hover:ring-1 hover:ring-success/30 transition-all"
+          onClick={() => setDrilldownMetric("vendas_total")}
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">Vendas Total</p>
@@ -1004,12 +1041,13 @@ function PipePropostasInner() {
           <p className="text-xl font-bold text-success">{formatCurrency(displayStats.sold)}</p>
           <p className="text-xs text-muted-foreground">{displayStats.soldCount} vendas</p>
         </motion.div>
-        
+
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="stat-card"
+          className="stat-card cursor-pointer hover:ring-1 hover:ring-chart-5/30 transition-all"
+          onClick={() => setDrilldownMetric("rec_vendida")}
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">Rec. Vendida</p>
@@ -1018,12 +1056,13 @@ function PipePropostasInner() {
           <p className="text-xl font-bold text-chart-5">{formatCurrency(displayStats.mrr)}</p>
           <p className="text-xs text-muted-foreground">valor vendido /mês</p>
         </motion.div>
-        
+
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="stat-card"
+          className="stat-card cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
+          onClick={() => setDrilldownMetric("projetos_vendidos")}
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">Projetos Vendidos</p>
@@ -1032,12 +1071,13 @@ function PipePropostasInner() {
           <p className="text-xl font-bold text-primary">{formatCurrency(displayStats.projeto)}</p>
           <p className="text-xs text-muted-foreground">valor vendido</p>
         </motion.div>
-        
+
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="stat-card"
+          className="stat-card cursor-pointer hover:ring-1 hover:ring-chart-3/30 transition-all"
+          onClick={() => setDrilldownMetric("taxa_conversao")}
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">Taxa de Conversão</p>
@@ -1470,6 +1510,21 @@ function PipePropostasInner() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <MetricDrilldownSheet
+        isOpen={drilldownMetric !== null}
+        onClose={() => setDrilldownMetric(null)}
+        onSelectItem={(leadId) => {
+          setDrilldownMetric(null);
+          openLead(leadId);
+        }}
+        metricType={drilldownMetric ?? "vendas_total"}
+        displayValue={drilldownDisplayValue}
+        displayCount={drilldownDisplayCount}
+        periodLabel={drilldownPeriodLabel}
+        data={drilldownMetric ? drilldownData : []}
+        isLoading={drilldownLoading && drilldownMetric !== null}
+      />
     </div>
   );
 }
