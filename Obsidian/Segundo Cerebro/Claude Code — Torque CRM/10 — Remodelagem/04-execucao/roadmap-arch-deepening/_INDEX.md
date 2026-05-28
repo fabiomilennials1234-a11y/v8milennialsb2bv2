@@ -63,15 +63,39 @@ Análise via skill identificou 3 candidatos com ROI mais alto pra deepening pós
 7. Test suites não regridem vs baseline (27 files / 42 tests red toleráveis se pré-existentes).
 8. Comportamento preservado — zero mudança de schema DB, zero pixel modificado, zero rota deletada/movida sem redirect.
 
-## Roda em paralelo com fases 5-6 do roadmap pós-mod?
+## Ordem revisada — 2026-05-28 ~20:00 UTC (decisão CTO)
 
-**Não.** Recomendado sequencial:
-1. Concluir Fase 5 (deploy prod) — modularização entra em produção
-2. Concluir Fase 6 (PR develop → main)
-3. Estabilizar prod por ~1 semana
-4. **Então** iniciar este roadmap arquitetural em `develop` novo
+**Plano original (revertido):** Fase 5 → Fase 6 → estabilizar 7d → Fases 7/8/9.
 
-Razão: refactor arquitetural em paralelo com deploy prod aumenta surface area de risco. Esperar prod estabilizar dá baseline de comportamento pra comparar pós-refactor.
+**Plano atual:** Fases 7/8/9 em `develop` **antes** de Fase 5 (deploy prod) e Fase 6 (develop → main).
+
+```
+Hoje → Fase 7 → Fase 8 → Fase 9 → Fase 5 → Fase 6 → estabilização
+```
+
+### Razão da inversão
+
+- Main vai receber tudo num único deploy: modularização + 4 fases pós-mod + event-bus + arch refactor
+- Cliente vê produto mais limpo direto; menos débito visível pós-cutover
+- Baseline ratchet menor antes do deploy = bug surface menor em prod
+- Não precisa estabilizar prod sobre estrutura conhecidamente shallow (ratio 0.85, 1.50)
+
+### Trade-offs aceitos
+
+| Trade-off | Aceito porque |
+|---|---|
+| Deploy maior surface área | Fase 5 com monitoria 60min ativa (decisão pós skip da monitoria 24h dev) |
+| Main fica mais defasada por ~2-4 semanas | Hotfix continua possível via branch de main (`feedback_hotfix_during_feature`) |
+| Pattern arch não validado em prod antes | Pattern de modularização (slices 0-19) já foi validado em prod por orgs reais. Arch refactor preserva mesmo pattern |
+| ~40h trabalho antes do deploy | CTO prioriza quality sobre time-to-prod |
+
+### Hotfix durante esse período
+
+Pattern de [[feedback_hotfix_during_feature]] se mantém:
+- Hotfix sai de `main` (não develop)
+- PR direto pra main
+- Sync main → develop após merge
+- Rebase de slices em andamento
 
 ## Refs
 
