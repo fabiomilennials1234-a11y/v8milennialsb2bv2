@@ -71,7 +71,7 @@ const Agenda = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Age
 const Privacidade = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Privacidade")));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/modules/copilot/components/playground").then(m => ({ default: m.CopilotPlayground }))));
 const ChecklistPage = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/ChecklistPage")));
-const MessageTemplates = lazy(() => lazyRetry(() => import("./pages/MessageTemplates")));
+const MessageTemplates = lazy(() => lazyRetry(() => import("@/modules/communication/pages/MessageTemplates")));
 const Automacoes = lazy(() => lazyRetry(() => import("./modules/workflows/pages/Automacoes")));
 const AutomacoesEditor = lazy(() => lazyRetry(() => import("./modules/workflows/pages/AutomacoesEditor")));
 const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./modules/workflows/pages/AutomacoesExecucoes")));
