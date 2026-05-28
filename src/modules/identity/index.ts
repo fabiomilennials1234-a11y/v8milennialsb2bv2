@@ -45,7 +45,7 @@ export { useCanDo } from "./hooks/useCanDo";
 export { useMasterAuth, useCanAccessMaster } from "./hooks/useMasterAuth";
 export type { MasterUser, MasterPermissions } from "./hooks/useMasterAuth";
 export {
-  useMasterOperations,
+  useOperationsOverview,
   useAutomationJobs,
   useJobsOverview,
   useRetryDeadLetter,
