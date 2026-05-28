@@ -8,6 +8,8 @@ import { TabPerformance } from "@/components/dashboard/TabPerformance";
 import { TabInteligencia } from "@/components/dashboard/TabInteligencia";
 
 const TabAnalyticsV2 = lazy(() => import("@/components/dashboard/TabAnalyticsV2").then(m => ({ default: m.TabAnalyticsV2 })));
+const PerformancePage = lazy(() => import("@/pages/Performance"));
+const CopilotMetricsPage = lazy(() => import("@/pages/CopilotMetrics"));
 import { OraculoFloatingButton } from "@/components/dashboard/OraculoFloatingButton";
 import { OraculoChat } from "@/components/dashboard/OraculoChat";
 import { useOraculoChat } from "@/hooks/useOraculoChat";
@@ -22,7 +24,12 @@ import type { DashboardTabContext } from "@/lib/dashboard-tabs";
 import { CoberturaPipeline } from "@/components/dashboard/CoberturaPipeline";
 import { LeadsParados } from "@/components/dashboard/LeadsParados";
 import { SequenciaVitorias } from "@/components/dashboard/SequenciaVitorias";
-import DashboardOutbound from "./DashboardOutbound";
+import { OutboundMetricCards } from "@/components/dashboard-outbound/OutboundMetricCards";
+import { MilestoneTracker } from "@/components/dashboard-outbound/MilestoneTracker";
+import { BadgeGrid } from "@/components/dashboard-outbound/BadgeGrid";
+import { useOutboundMetrics } from "@/hooks/useOutboundMetrics";
+import { useBadges, useUserBadges } from "@/hooks/useBadges";
+import { useMilestoneAutoUnlock } from "@/hooks/useMilestoneAutoUnlock";
 
 const tabAnimation = {
   initial: { opacity: 0, y: 10 },
@@ -39,6 +46,12 @@ export default function Dashboard() {
   const { isMaster } = useIdentity();
   const teamMemberId = (currentTeamMember as any)?.id ?? null;
 
+  const isOutbound = orgType === "outbound";
+  const { data: outboundMetrics } = useOutboundMetrics();
+  const { data: badges = [] } = useBadges();
+  const { data: userBadges = [] } = useUserBadges(teamMemberId);
+  useMilestoneAutoUnlock();
+
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
 
@@ -52,10 +65,6 @@ export default function Dashboard() {
   const tabs = useMemo(() => getDashboardTabs(tabContext), [tabContext]);
   const defaultTab = useMemo(() => getDefaultTab(tabContext), [tabContext]);
   const visibleTabs = useMemo(() => tabs.filter((t) => t.visible), [tabs]);
-
-  if (orgType === "outbound" && role === "member") {
-    return <DashboardOutbound />;
-  }
 
   if (orgLoading || teamMemberLoading) {
     return (
@@ -117,6 +126,16 @@ export default function Dashboard() {
           <TabsContent value="time" className="mt-6">
             <motion.div key="time" {...tabAnimation}>
               <TabPerformance month={selectedMonth} year={selectedYear} />
+              <Suspense fallback={<TorqueLoader variant="inline" />}>
+                <div className="mt-8">
+                  <PerformancePage />
+                </div>
+              </Suspense>
+              <Suspense fallback={<TorqueLoader variant="inline" />}>
+                <div className="mt-8">
+                  <CopilotMetricsPage />
+                </div>
+              </Suspense>
             </motion.div>
           </TabsContent>
         )}
@@ -124,11 +143,22 @@ export default function Dashboard() {
         {/* Tab Meus Números — Camada Operacional */}
         <TabsContent value="meus-numeros" className="mt-6">
           <motion.div key="meus-numeros" {...tabAnimation}>
+            {isOutbound && outboundMetrics && (
+              <div className="mb-6">
+                <OutboundMetricCards metrics={outboundMetrics} />
+              </div>
+            )}
             <TabVisaoGeral month={selectedMonth} year={selectedYear} isAdmin={false} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
               <LeadsParados memberId={teamMemberId} />
               <SequenciaVitorias memberId={teamMemberId} />
             </div>
+            {isOutbound && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                <MilestoneTracker badges={badges} userBadges={userBadges} />
+                <BadgeGrid badges={badges} userBadges={userBadges} />
+              </div>
+            )}
           </motion.div>
         </TabsContent>
       </Tabs>
