@@ -295,3 +295,16 @@ Fundamentação conceitual: [clipping Augusto Galego — monolito modular](../..
 - Deploy do frontend em prod.
 
 Sequência de deploy documentada no smoke checklist acima — **migration antes do front** (senão call sites publicam pra tabela inexistente).
+
+## Adendo 2026-05-28 — Roadmap pós-modularização
+
+Após slices 0-19 fecharem em develop, análise [`analise-pos-modularizacao.md`](../../../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/10%20—%20Remodelagem/04-execucao/analise-pos-modularizacao.md) identificou que enforcement era teatro (ESLint boundaries permissivo + dep-cruise em warn) e CI não validava (security audit blocker + slice 19 nunca rodou em ambiente algum). Roadmap pós-modularização estruturado em 6 fases:
+
+- **Fase 1** — CI unblock — `chore/ci-unblock-security-audit` (PR #525, mergeada)
+- **Fase 2** — Enforcement real via dep-cruise ratchet — `chore/boundaries-enforcement-real` (PR #526, mergeada; baseline 86 violations)
+- **Fase 3** — Event-bus validado em dev — `chore/event-bus-dev-validation` (PR #527 draft, monitoria 24h em curso)
+- **Fase 4** (esta) — Limpeza pós-validação: `triggerStageChangedWorkflows` deletado (1 caller migrado para event-bus em slice 19), CLAUDE.md de integrations/billing atualizados com decisão "mantido separado" + reavaliar em 6 meses
+- **Fase 5** — Deploy prod (CTO + janela noturna; migration + edge fn + cron + frontend em ordem)
+- **Fase 6** — PR develop → main (release modularização completa)
+
+Vault index: [`roadmap-pos-modularizacao/_INDEX.md`](../../../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/10%20—%20Remodelagem/04-execucao/roadmap-pos-modularizacao/_INDEX.md).

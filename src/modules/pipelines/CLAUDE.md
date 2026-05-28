@@ -27,7 +27,7 @@ Inclui:
 
 ## Não-escopo
 
-- Workflows disparados em stage change → `workflows` (`triggerStageChangedWorkflows` chamado em 3 lugares — fix em slice 19 event-bus)
+- Workflows disparados em stage change → `workflows` (consumido via event-bus `lead.stage_changed` desde slice 19)
 - Campanhas por stage → `campaigns`
 - Comunicação WhatsApp → `communication`
 - Edge functions (`process-pipe-distribution`, `pipe-rule-dispatch`, `_shared/pipeline-adapter.ts`) → slice 15 (consolidação backend)
@@ -119,7 +119,6 @@ Eventos (post slice 19): `lead.stage_changed`, `pipeline.entry.moved`. Slice 19 
 - **Dual model**: hooks `usePipe*` operam views legacy `pipe_*` (status=stage_key slug); hooks `usePipeline*` operam `pipeline_entries` (stage_id uuid). **Não unificar** — cleanup futuro fora do escopo slice 5.
 - **Realtime**: subscriptions em `pipeline_entries` via `useRealtimeSubscription`, **nunca** nas views `pipe_*` (regra CLAUDE.md raiz). `usePipelineEntries.ts` + `usePipelines.ts` usam o hook. Não mexer na assinatura sem testar multi-tab.
 - **Status field divergente**: pipe_* views = `status` (slug string). Custom pipes = `stage_id` (uuid). Code paths separados.
-- **`triggerStageChangedWorkflows` chamado em 3 lugares** (bug documentado em `08 — Backlog/backlog/triggerStageChangedWorkflows-duplicate.md`). NÃO consertar aqui — fix em slice 19 (event-bus). Paths permanecem corretos após esta slice.
 - **Lead em múltiplos pipes simultaneamente** — invariante crítico. `useLeadAllPipelines` (módulo `leads`) consolida via RPC.
 - **Multi-tenancy**: toda query filtra `organization_id` via hook `useOrganization()`. RLS no Postgres é o gate final.
 - **`statusColumns` duplicado**: existe em 3 hooks (`usePipeWhatsapp`, `usePipeConfirmacao`, `usePipePropostas`) com valores diferentes — não-exportado via index pra evitar colisão. Consumir via deep-import quando necessário.
@@ -154,7 +153,6 @@ Out-of-scope (movem em outras slices):
 - **Dual model unificação**: hooks `usePipe*` (views) vs `usePipeline*` (entries). Cleanup futuro depois de migrar consumidores 100% para `pipeline_entries`.
 - **`statusColumns`** existe em 3 hooks com valores divergentes — manter por compat até refactor.
 - **`Negocios.tsx` vs `PipePropostas.tsx`** — auditar atividade (continua pendente).
-- **`triggerStageChangedWorkflows` triplo** — slice 19 event-bus.
 
 ## Slice de migração
 

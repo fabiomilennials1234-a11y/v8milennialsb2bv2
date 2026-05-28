@@ -6,8 +6,8 @@
  *
  * Status: Active (populado em slice 8 — feat/modularizacao/07-workflows).
  * Ver `./CLAUDE.md` para escopo (Workflow DAG, triggers, conditions, action
- * handlers, executor), áreas frágeis (triggerStageChangedWorkflows duplicate
- * 🟠, dedup obrigatório, actions vs action-handlers).
+ * handlers, executor), áreas frágeis (dedup obrigatório, actions vs
+ * action-handlers, wait_response / wait_business_window).
  *
  * Pages NÃO são re-exportadas — App.tsx faz deep-import via React.lazy
  * (padrão dos slices 4-7).

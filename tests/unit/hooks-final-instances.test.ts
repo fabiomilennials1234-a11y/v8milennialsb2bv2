@@ -96,7 +96,6 @@ vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({
   ] }),
 }));
 vi.mock("@/lib/workflowTrigger", () => ({
-  triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined),
   triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/modules/identity/lib/permissions", () => ({
@@ -757,7 +756,6 @@ describe("usePipePropostas", () => {
 
       const { useCreatePipeProposta } = await import("@/modules/pipelines/hooks/usePipePropostas");
       const { triggerFollowUpAutomation } = await import("@/modules/workflows/hooks/useAutoFollowUp");
-      const { triggerStageChangedWorkflows } = await import("@/lib/workflowTrigger");
       const { result } = renderHook(() => useCreatePipeProposta(), { wrapper: w() });
 
       await act(async () => {
@@ -771,7 +769,6 @@ describe("usePipePropostas", () => {
 
       expect(mF).toHaveBeenCalledWith("pipe_propostas");
       expect(triggerFollowUpAutomation).toHaveBeenCalled();
-      expect(triggerStageChangedWorkflows).toHaveBeenCalled();
     });
   });
 

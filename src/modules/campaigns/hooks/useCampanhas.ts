@@ -4,9 +4,6 @@ import { useAuth } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { useOrganization } from "@/modules/identity";
 import { triggerFollowUpAutomation } from "@/modules/workflows/hooks/useAutoFollowUp";
-// Slice 19 event-bus: migrado para publishEvent. Import legacy mantido
-// comentado até remoção pós-2-semanas-verde em prod (ver TODO em useUpdateCampanhaLead).
-// import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
 import { publishEvent } from "@/integrations/supabase/events";
 import { assertPermission } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";
@@ -813,12 +810,8 @@ export function useUpdateCampanhaLead() {
       queryClient.invalidateQueries({ queryKey: ["campanha_leads", variables.campanha_id] });
       queryClient.invalidateQueries({ queryKey: ["campanha_members", variables.campanha_id] });
 
-      // Slice 19 event-bus piloto: publica lead.stage_changed em vez de
-      // chamar triggerStageChangedWorkflows direto. Edge function
-      // event-dispatcher consome e dispara workflows via handler central.
-      //
-      // TODO(2 semanas verde em prod): remover bloco comentado abaixo
-      // junto com import de triggerStageChangedWorkflows.
+      // Migrado em slice 19 (2026-05-27): publishEvent('lead.stage_changed') substitui
+      // triggerStageChangedWorkflows direto. Função legacy deletada em fase 4.
       if (!error && data && variables.stage_id && data.lead_id && organizationId) {
         publishEvent({
           event_type: "lead.stage_changed",
@@ -834,15 +827,7 @@ export function useUpdateCampanhaLead() {
             new_stage_key: variables.stage_id,
             pipeline_slug: null,
           },
-        }).catch(() => {}); // Non-blocking — mantém UX consistente com legacy.
-
-        // Legacy fan-out manual — comentado por slice 19, remoção pendente.
-        // triggerStageChangedWorkflows({
-        //   organizationId,
-        //   leadId: data.lead_id,
-        //   campaignId: variables.campanha_id,
-        //   toStage: variables.stage_id,
-        // }).catch(() => {});
+        }).catch(() => {});
       }
     },
   });
