@@ -368,14 +368,31 @@ Deno.serve(withSentry('agent-message', async (req) => {
       console.warn('[agent-message] Absorb loop failed (non-fatal):', absorbErr);
     }
 
-    // 6. RETURN RESPONSE (strip internal _eval_meta before sending)
+    // 6. RELEASE LOCK — reduce blocking window from 60s to actual processing time
+    supabase.from("copilot_processing_locks")
+      .delete()
+      .eq("phone", from)
+      .eq("organization_id", organizationId)
+      .then(({ error: relErr }) => {
+        if (relErr) console.warn("[agent-message] Lock release failed (non-fatal):", relErr.message);
+      });
+
+    // 7. RETURN RESPONSE (strip internal _eval_meta before sending)
     const { _eval_meta: _unused, ...publicResponse } = response as any;
     return new Response(JSON.stringify(publicResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
 
   } catch (error) {
-    // DB lock expires naturally after 60s — no manual release needed
+    // Best-effort lock release on error — variables may not be defined if error is early
+    try {
+      if (typeof from === "string" && typeof organization_id === "string") {
+        await supabase.from("copilot_processing_locks")
+          .delete()
+          .eq("phone", from)
+          .eq("organization_id", organization_id);
+      }
+    } catch { /* swallow */ }
     console.error('[agent-message] Error:', error);
     await logRuntime({
       module: 'copilot',

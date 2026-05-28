@@ -84,16 +84,28 @@ export function useOutboundMetrics() {
           .gte("created_at", prev.start).lte("created_at", prev.end),
       ]);
 
-      // 4. Vendas fechadas (pipe_propostas with status vendido)
-      const [vendasNow, vendasPrev] = await Promise.all([
+      // 4. Vendas fechadas — COALESCE(metrics_period_at, closed_at)
+      const [vNowM, vNowC, vPrevM, vPrevC] = await Promise.all([
         supabase.from("pipe_propostas").select("id", { count: "exact", head: true })
           .eq("organization_id", organizationId)
           .eq("status", "vendido")
-          .gte("created_at", curr.start).lte("created_at", curr.end),
+          .not("metrics_period_at", "is", null)
+          .gte("metrics_period_at", curr.start).lte("metrics_period_at", curr.end),
         supabase.from("pipe_propostas").select("id", { count: "exact", head: true })
           .eq("organization_id", organizationId)
           .eq("status", "vendido")
-          .gte("created_at", prev.start).lte("created_at", prev.end),
+          .is("metrics_period_at", null)
+          .gte("closed_at", curr.start).lte("closed_at", curr.end),
+        supabase.from("pipe_propostas").select("id", { count: "exact", head: true })
+          .eq("organization_id", organizationId)
+          .eq("status", "vendido")
+          .not("metrics_period_at", "is", null)
+          .gte("metrics_period_at", prev.start).lte("metrics_period_at", prev.end),
+        supabase.from("pipe_propostas").select("id", { count: "exact", head: true })
+          .eq("organization_id", organizationId)
+          .eq("status", "vendido")
+          .is("metrics_period_at", null)
+          .gte("closed_at", prev.start).lte("closed_at", prev.end),
       ]);
 
       return {
@@ -103,8 +115,8 @@ export function useOutboundMetrics() {
         taxaRespostaPrev,
         reunioesAgendadas: reunioesNow.count ?? 0,
         reunioesAgendadasPrev: reunioesPrev.count ?? 0,
-        vendasFechadas: vendasNow.count ?? 0,
-        vendasFechadasPrev: vendasPrev.count ?? 0,
+        vendasFechadas: (vNowM.count ?? 0) + (vNowC.count ?? 0),
+        vendasFechadasPrev: (vPrevM.count ?? 0) + (vPrevC.count ?? 0),
       };
     },
     enabled: isReady,
