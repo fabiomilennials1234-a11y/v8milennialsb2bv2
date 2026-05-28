@@ -277,3 +277,21 @@ Fundamentação conceitual: [clipping Augusto Galego — monolito modular](../..
 - Este SPEC com adendos slice 15/16/17
 
 **Próximo:** Slice 18 (finalize — deletar legacy + ADR conclusão). Slice 19 (event-bus piloto) em paralelo.
+
+## Adendo 2026-05-28 — Slice 18 (finalize) — encerramento
+
+**Estado:** slices 0-19 mergeadas em `develop`. Slice 18 fecha a modularização **em develop**.
+
+**Entregas da slice 18:**
+- Verificação de pastas legacy vazias remanescentes — `src/components/` = `ui/`, `src/hooks/` = `use-toast.ts`, `src/pages/` eliminada. Nada a deletar.
+- ADR de conclusão: [ADR-2026-05-28-modularizacao-conclusao](../../../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/04%20—%20Decisões/ADR-2026-05-28-modularizacao-conclusao.md).
+- `slices.md` do vault marcado tudo ✅, slice 15 descartada e slice 16 documentadas como adições ao roadmap.
+- Smoke checklist pra coordenação manual do PR `develop → main`: [`smoke-pre-develop-to-main.md`](../../../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/10%20—%20Remodelagem/04-execucao/smoke-pre-develop-to-main.md).
+
+**Out of scope desta slice (fica pra coordenação humana CTO):**
+- Abrir PR `develop → main`.
+- Aplicar migration `domain_events` em prod.
+- Deploy `event-dispatcher` em prod + ativação do cron em prod.
+- Deploy do frontend em prod.
+
+Sequência de deploy documentada no smoke checklist acima — **migration antes do front** (senão call sites publicam pra tabela inexistente).
