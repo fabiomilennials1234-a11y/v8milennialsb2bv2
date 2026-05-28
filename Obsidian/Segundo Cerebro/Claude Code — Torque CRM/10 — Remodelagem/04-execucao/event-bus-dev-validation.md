@@ -94,8 +94,92 @@ Nenhum durante setup. Reuso de `cron_secret` existente (em vez de gerar novo, co
 ✅ Setup completo em DEV. Smoke loop pub→consume→mark green.
 ⏳ Aguardando 24h de monitoria passiva pra concluir Fase 3 e habilitar Fase 4.
 
-## Próximo passo
+## Runbook — checkpoint 2026-05-29 ~16:30 UTC
 
-- 2026-05-29: executar queries de monitoria, atualizar este doc com counts finais, commit final na branch `chore/event-bus-dev-validation`.
-- Se monitoria verde: Fase 4 (limpeza) habilitada.
-- Se `failed > 0`: investigar `last_error`, bloquear Fase 5 até resolver.
+**Atualização pós-Fase-4 merge (PR #528, 2026-05-28 17:06 UTC):** Fase 4 cortada com smoke programático aceito pelo CTO (pub→consume→mark ~11s + 13 cron runs verdes). Fase 5 (deploy prod) **continua bloqueada** pela monitoria 24h aqui descrita.
+
+**Execução manual** (D do menu de opções — rotina remota descartada por falta de GitHub App + secret management Anthropic Cloud):
+
+### Passo 1 — sincronizar repo
+
+```bash
+cd C:\Users\torch\Desktop\milennials\v8milennialsb2bv2
+git fetch origin
+git checkout chore/event-bus-dev-validation
+git pull --ff-only
+```
+
+### Passo 2 — queries de monitoria
+
+```bash
+DEV_REF="bcfadphgsibjzivtbjvc"  # NUNCA usar jsjsmuncfkbsbzqzqhfq aqui
+TOKEN=$(grep -E "^SUPABASE_ACCESS_TOKEN=sbp_" .env.development | tail -1 | cut -d= -f2)
+
+# Distribuição por status nas últimas 24h
+curl -s -X POST "https://api.supabase.com/v1/projects/${DEV_REF}/database/query" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: claude-cli/1.0" \
+  -d '{"query":"select status, count(*) from public.domain_events where published_at > now() - interval $$24 hours$$ group by status"}'
+
+# Erros se houver
+curl -s -X POST "https://api.supabase.com/v1/projects/${DEV_REF}/database/query" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: claude-cli/1.0" \
+  -d '{"query":"select event_type, last_error, count(*) from public.domain_events where status = $$failed$$ and published_at > now() - interval $$24 hours$$ group by event_type, last_error"}'
+
+# Sanidade do cron
+curl -s -X POST "https://api.supabase.com/v1/projects/${DEV_REF}/database/query" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: claude-cli/1.0" \
+  -d '{"query":"select status, count(*) from cron.job_run_details where jobid = 31 and start_time > now() - interval $$24 hours$$ group by status"}'
+```
+
+### Passo 3A — caso verde (`failed=0`)
+
+1. Atualizar este doc seção **Monitoria 24h** com counts finais (`pending=0, dispatched=N, failed=0`).
+2. Atualizar conclusão pra: `✅ Pronto para Fase 5 (deploy prod)`.
+3. Commit + push:
+   ```bash
+   git add "Obsidian/Segundo Cerebro/Claude Code — Torque CRM/10 — Remodelagem/04-execucao/event-bus-dev-validation.md"
+   git commit -m "docs(event-bus): monitoria 24h verde, pronto para Fase 5"
+   git push
+   ```
+4. Marcar PR pronto: `gh pr ready 527`
+5. Mergear em develop → habilita Fase 5.
+
+### Passo 3B — caso vermelho (`failed > 0`)
+
+1. **NÃO** marcar PR ready.
+2. Atualizar doc com snapshot dos `last_error` por `event_type`.
+3. Commit + push:
+   ```bash
+   git commit -m "docs(event-bus): monitoria 24h — N erros, bloqueio Fase 5"
+   git push
+   ```
+4. Comentar no PR #527 com o snapshot.
+5. **Bloquear Fase 5** até root cause identificado.
+6. Triage: cron succeeded + dispatcher error? → bug no handler. Cron failed? → infra (rate limit, edge function down, secret expirado).
+
+### Constraints invariantes — não negociável
+
+- ✅ Zero push em `main`
+- ✅ Zero mutação em prod DB (`jsjsmuncfkbsbzqzqhfq`)
+- ✅ Project ref alvo = `bcfadphgsibjzivtbjvc` (DEV) — confirmar antes de cada curl
+- ✅ Sem `--no-verify`
+
+## Monitoria 24h — counts finais
+
+_A preencher em 2026-05-29 ~16:30 UTC._
+
+```
+status     | count
+-----------+-------
+(pending)  |
+dispatched |
+failed     |
+```
+
+Cron runs: _N succeeded / M failed nas últimas 24h._
