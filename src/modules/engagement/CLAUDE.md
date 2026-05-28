@@ -1,6 +1,6 @@
 # Module — engagement
 
-**Status:** 🟢 Active (slice 11 — frontend completo. Backend `_shared/` + edge functions ficam em slices 14/16)
+**Status:** 🟢 Active (slice 11 + cleanup longtail slice 16 — 2026-05-28). Backend: doc-only mapping (slice 15).
 **BC:** engagement
 **Entidade primária:** Checklist + Activity + Follow-up + Agenda Event + Gamification
 **Owner:** ops / vendas
@@ -40,8 +40,10 @@ src/modules/engagement/
 ├── components/
 │   ├── agenda/         # ex-src/components/agenda/         (8 files — AgendaTopBar, MonthView, TimeGrid, EventDetailPopover, ... + agenda-helpers.ts)
 │   ├── activities/     # ex-src/components/activities/     (1 file — ActivityTimeline)
+│   ├── ai/             # slice 16 — CoachingSidebar, NextBestActionsPanel
 │   ├── approvals/      # ex-src/components/approvals/      (3 files — ApprovalRequestCard, ApprovalRulesConfig, PendingApprovals)
 │   ├── badges/         # ex-src/components/badges/         (2 files — BadgeCard, BadgeGrid)
+│   ├── calls/          # slice 16 — LogCallModal
 │   ├── checklists/     # ex-src/components/checklists/     (4 files — ChecklistCard, ChecklistItemRow, ChecklistTemplatesManager, CreateChecklistDialog)
 │   ├── comissoes/      # ex-src/components/comissoes/      (1 file — CommissionChart)
 │   ├── followups/      # ex-src/components/followups/      (5 files — AcoesDoDia, AutomationSettings, FollowUpCard, ScheduleFollowUpButton, ScheduleFollowUpModal)
@@ -82,6 +84,12 @@ src/modules/engagement/
 - **Coaching**: `useCoachingSuggestions`, `useMarkSuggestionUsed`, `useDismissSuggestion`
 - **Performance**: `useCloserPerformance`, `useSDRPerformance`
 - **Commissions**: `useCommissions`, `useCommissionsByMember`, `useCreateCommission`, `useUpdateCommission`, `useCommissionSummary`, `calculateOTEBonus`
+
+### Components (slice 16 longtail)
+
+- `<LogCallModal>` — log de ligação manual (`components/calls/`)
+- `<CoachingSidebar>` — sugestões de coaching IA (`components/ai/`)
+- `<NextBestActionsPanel>` — próximas melhores ações IA (`components/ai/`)
 
 ### Components
 
@@ -129,7 +137,7 @@ Tipos públicos re-exportados via barrel: `Activity`, `ActivityWithNames`, `Acti
 - `@/modules/leads` — types `Lead` (Tables<"leads">), `useLeadById`
 - `@/modules/communication` — `useOpenWhatsAppChat`, `ScheduleMessageModal`, `formatPhoneForWhatsApp`
 - `@/modules/copilot` — (nenhuma direta no momento, mas `useNextBestActions` consume IA)
-- `@/hooks/useRealtimeSubscription`, `@/hooks/useDashboardMetrics` — cross-cutting (slice 12 absorve `useDashboardMetrics` em analytics)
+- `@/shared/realtime/useRealtimeSubscription` (movido em slice 16), `@/modules/analytics/useDashboardMetrics`
 - `@/integrations/supabase/client`, `@/integrations/supabase/types`
 
 ### Consumidores cross-module (importam de `@/modules/engagement`)

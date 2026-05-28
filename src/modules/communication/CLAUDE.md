@@ -1,6 +1,6 @@
 # Module — communication
 
-**Status:** 🟢 Active (slice 6 concluído 2026-05-27 — frontend migrado)
+**Status:** 🟢 Active (slice 6 + cleanup longtail slice 16 — 2026-05-28)
 **BC:** communication
 **Entidade primária:** Conversation + Message + Instance + Message Gateway
 **Owner:** vendas + ops
@@ -33,8 +33,11 @@ Inclui:
 ```
 src/modules/communication/
 ├── components/
+│   ├── ai/                        # AiEmailWriter (slice 16 absorvido)
 │   ├── chat/                      # WhatsApp UI (actions, admin, bubble, composer, context-panel, history-sync, layout, list, media, search, takeover, view + barrel index.ts)
 │   ├── chat-meta/                 # Meta Messenger/Instagram UI
+│   ├── email/                     # Email channel UI (slice 16)
+│   ├── sms/                       # SMS channel UI (slice 16)
 │   ├── whatsapp/                  # SessionDeadBanner (lifecycle alerts)
 │   └── whatsapp-migration/        # Evolution→Uazapi migration banner + wizard
 ├── hooks/
@@ -60,7 +63,11 @@ src/modules/communication/
 │   ├── useDeadSessions.ts
 │   ├── useIncomingMessageToast.ts
 │   ├── usePreferredInstance.ts
-│   └── useUserWriteInstanceFlag.ts
+│   ├── useUserWriteInstanceFlag.ts
+│   ├── useEmailAccounts.ts        # (slice 16)
+│   ├── useEmails.ts               # (slice 16)
+│   ├── useSms.ts                  # (slice 16)
+│   └── useAiEmailDrafts.ts        # (slice 16)
 ├── lib/
 │   ├── whatsappApi.ts             # Low-level HTTP client (Uazapi REST)
 │   ├── whatsapp.ts                # High-level send helpers
@@ -71,7 +78,8 @@ src/modules/communication/
 │   └── chatPrefetch.ts            # Route prefetch helpers
 ├── pages/
 │   ├── ChatWhatsApp.tsx
-│   └── AtendimentoMeta.tsx
+│   ├── AtendimentoMeta.tsx
+│   └── MessageTemplates.tsx       # (slice 16)
 ├── index.ts                       # API pública
 └── CLAUDE.md                      # este arquivo
 ```
@@ -90,7 +98,9 @@ Superfície completa em `./index.ts`. Resumo:
 
 **Hooks Meta:** `useMetaConnection`, `useMetaPages`, `useMetaConversations`, `useMetaConversationProfile`, `useMetaMessages`, `useMetaSend`, `useMetaMarkAsRead`, `useMetaLinkLead`, `useMetaRealtime`.
 
-**Components:** `ChatShellWithContext`, `ChatSkeleton`, `MessageBubble`, `MessagesAreaErrorBoundary`, `AudioPlayer`, `AudioRecorder`, `ImagePreviewModal`, `MessageImage/Video/Document`, `ChatEmptyState`, `ScrollToBottomFab`, `UnreadDivider`, `ScheduledMessagesBanner`, `ScheduleMessageModal`, `ConversationNotes`, `LeadContactModal`, `HumanPauseBadge`, `ChannelBadge`, `RealtimeStatusBadge`; Meta: `MetaChatShell`, `MetaChatHeader`, `MetaConversationList(Item)`, `MetaMessage{List,Bubble}`, `MetaComposer`, `MetaWindowWarning`, `LinkLeadDialog`, `ChatMetaSkeleton`; WhatsApp lifecycle: `SessionDeadBanner`, `WhatsAppMigrationBanner`, `RepairingWizard`.
+**Hooks email/sms/ai (slice 16 longtail):** `useEmailAccounts`, `useEmails`, `useSms`, `useAiEmailDrafts`.
+
+**Components:** `ChatShellWithContext`, `ChatSkeleton`, `MessageBubble`, `MessagesAreaErrorBoundary`, `AudioPlayer`, `AudioRecorder`, `ImagePreviewModal`, `MessageImage/Video/Document`, `ChatEmptyState`, `ScrollToBottomFab`, `UnreadDivider`, `ScheduledMessagesBanner`, `ScheduleMessageModal`, `ConversationNotes`, `LeadContactModal`, `HumanPauseBadge`, `ChannelBadge`, `RealtimeStatusBadge`; Meta: `MetaChatShell`, `MetaChatHeader`, `MetaConversationList(Item)`, `MetaMessage{List,Bubble}`, `MetaComposer`, `MetaWindowWarning`, `LinkLeadDialog`, `ChatMetaSkeleton`; WhatsApp lifecycle: `SessionDeadBanner`, `WhatsAppMigrationBanner`, `RepairingWizard`; Email/SMS/AI (slice 16): `AiEmailWriter`, email/sms internals.
 
 **Lib:** `whatsappApi` (namespace export), `primaryInstanceFor`, `computeNeedsDeepLinkResolve`, `prefetchChatRoute`, `prefetchChatData`.
 
@@ -106,18 +116,18 @@ Superfície completa em `./index.ts`. Resumo:
 - Janela 24h Meta: composer disable se `now - last_inbound_at > 24h`
 - RLS strict em `whatsapp_instance_secrets` (deny-all)
 - Realtime onUpdate: só campos alterados, sem joins
-- Hooks realtime específicos (`useWhatsAppMessagesRealtime`, `useChatBubbleContactsRealtime`) usam `useRealtimeChannel` cross-cutting de `@/hooks/useRealtimeChannel` — **NÃO migrado** para este módulo, fica em `src/hooks/` (será consolidado em `core/realtime/` no slice 14)
+- Hooks realtime específicos (`useWhatsAppMessagesRealtime`, `useChatBubbleContactsRealtime`) usam `useRealtimeChannel` cross-cutting de `@/shared/realtime/useRealtimeChannel` (movido em slice 16 — antes `@/hooks/`)
 
 ## Dependências cross-module
 
 - `@/modules/identity` — `useOrganization`, `useAuth`, `useCurrentTeamMember`, contexts
 - `@/modules/leads` — `useLeadWriteInstance` (write-instance resolution para lead com phone)
-- `@/hooks/useRealtimeChannel`, `useRealtimeChannelStatus`, `useRealtimeSubscription` — transport infra (não migrado, cross-cutting)
-- `@/hooks/useMassSendJobs` — vive em `campaigns` (slice 9 prevista); re-exportado pelo barrel `useWhatsAppChat`
-- `@/hooks/useCopilotPause`, `useCopilotToggle` — pertencem a `copilot` (slice 7)
+- `@/shared/realtime/useRealtimeChannel`, `useRealtimeChannelStatus`, `useRealtimeSubscription` — transport infra (movido em slice 16 para `@/shared/realtime/`)
+- `@/modules/campaigns` — `useMassSendJobs` re-exportado pelo barrel `useWhatsAppChat`
+- `@/modules/copilot` — `useCopilotPause`, `useCopilotToggle`
 - `@/lib/realtimeStatusStore` — store cross-cutting (não migrado)
 - `@/integrations/supabase/client`, `@/integrations/supabase/types`
-- `@/hooks/useTags` — `tags` é cross-cutting (provavelmente vai pra leads ou platform)
+- `@/modules/leads` — `useTags`, `useLeadWriteInstance` (slice 16)
 
 ## Dedup pendente / follow-ups
 

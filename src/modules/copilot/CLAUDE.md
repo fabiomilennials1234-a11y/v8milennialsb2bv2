@@ -1,6 +1,6 @@
 # Module — copilot
 
-**Status:** 🟢 Active (slice 7 — frontend completo. Backend agrupado parcialmente em `_shared/copilot/`; cleanup final no slice 16)
+**Status:** 🟢 Active (slice 7 + cleanup longtail slice 16 — 2026-05-28). Backend: doc-only mapping (slice 15).
 **BC:** copilot
 **Entidade primária:** Copilot Agent + Human Pause + Oraculo Comercial
 **Owner:** IA / produto
@@ -42,7 +42,7 @@ Inclui:
 
 ### Components
 
-`<AgentFollowupRulesTab>`, `<AgentKanbanRulesTab>`, `<AgentMetricsTab>`, `<AgentTasksTab>`, `<PromptPreviewSheet>`, `<BehaviorWindowsEditor>` (+ `createDefaultBehaviorWindow`), `<CopilotPlayground>`
+`<AgentFollowupRulesTab>`, `<AgentKanbanRulesTab>`, `<AgentMetricsTab>`, `<AgentTasksTab>`, `<PromptPreviewSheet>`, `<BehaviorWindowsEditor>` (+ `createDefaultBehaviorWindow`), `<CopilotPlayground>`, `<OraculoComercial>` (`components/oraculo/` — slice 16 longtail)
 
 ### Pages
 

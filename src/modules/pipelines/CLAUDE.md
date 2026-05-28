@@ -1,6 +1,6 @@
 # Module — pipelines
 
-**Status:** 🟢 Populado (slice 5 — 2026-05-27)
+**Status:** 🟢 Active (slice 5 + cleanup longtail slice 16 — 2026-05-28)
 **BC:** pipelines
 **Entidade primária:** Pipeline + Stage + Pipeline Entry
 **Owner:** vendas
@@ -60,6 +60,9 @@ Ver `./index.ts` para a superfície completa. Estável.
 
 ### Hooks — performance
 - `usePrefetchPipes`
+
+### Hooks — slice 16 longtail
+- `useLossReasons` — CRUD loss reasons per org (configurável em settings, usado em `pipe_propostas` Lost stage)
 
 ### Components — kanban
 - `KanbanBoard`, `KanbanCard`, `KanbanFilterPanel`, `DraggableKanbanBoard`

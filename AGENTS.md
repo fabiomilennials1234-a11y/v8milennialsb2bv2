@@ -59,13 +59,43 @@ CI roda em PR: unit → integration → e2e → docker-image.
 
 ## Architecture
 
+- **Monolito modular** (pós-modularização slices 1-16, 2026-05-28). 14
+  bounded contexts em `src/modules/<bc>/`. Cada BC tem API pública via
+  `index.ts`. Cross-module SEMPRE via barrel `@/modules/<bc>`.
+- **Boundaries enforced** via ESLint `boundaries/element-types` em `error`
+  mode (slice 17). Deep-import só pra `pages/*` (preserva `React.lazy()`).
 - **Multi-tenant by default.** Toda query filtra `organization_id`. RLS
   garante isolamento. Frontend nunca envia `org_id` — vem do auth context.
 - **Permissions 3 camadas**: Master → Org Admin → Feature Permissions → Role
   Matrix. Roles: `admin`, `master`, `membro`.
 - **Edge Function pattern**: `Deno.serve(withSentry('nome', handler))` +
-  `withSecurityHeaders(getCorsHeaders(req))` + OPTIONS early return.
+  `withSecurityHeaders(getCorsHeaders(req))` + OPTIONS early return. Edge
+  functions vivem em `supabase/functions/` (flat — Supabase CLI exige).
+  Mapping BC→fn doc-only em `supabase/functions/CLAUDE.md` (slice 15).
 - **Cron via pg_cron + pg_net** → edge functions. Auth: `x-cron-secret` header.
+
+### Modules (14 BCs)
+
+```
+src/modules/
+├── identity/      ← Auth, org, team, permissions, master ops
+├── leads/         ← Lead CRUD, timeline, tags, import, bulk, enrichment
+├── pipelines/     ← pipe_* views, custom pipelines, kanban, dispatch
+├── communication/ ← WhatsApp, Meta, Email, SMS, AI writer, history sync
+├── copilot/       ← Copilot agents, Oraculo, prompt builder, reasoning
+├── workflows/     ← Workflow DAG, executor, triggers
+├── campaigns/     ← Campaigns, mass send
+├── carteira/      ← Carteira clients, orders, upsell
+├── engagement/    ← Activities, agenda, gamification, commissions, goals
+├── analytics/     ← Dashboards, metrics, cohorts, TV dashboard
+├── billing/       ← Subscription, plans
+├── marketing/     ← Lead forms, landing, UTM
+├── integrations/  ← Google Calendar adapter (+ resto via edge fns)
+└── platform/      ← Onboarding, settings, observability, feature flags
+```
+
+Cross-cutting (NÃO são módulos): `src/components/ui/` (shadcn), `src/shared/`,
+`src/core/`, `src/integrations/`.
 
 C4 diagrams: [`docs/architecture/`](./docs/architecture/) (após F5).
 Deep dive: [`Obsidian/.../02 — Arquitetura/`](./Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/02%20—%20Arquitetura/).
@@ -74,11 +104,11 @@ Deep dive: [`Obsidian/.../02 — Arquitetura/`](./Obsidian/Segundo%20Cerebro/Cla
 
 ### Paths sensíveis (review obrigatório)
 
-- `src/lib/permissions.ts`
+- `src/modules/identity/lib/permissions.ts`
+- `src/modules/identity/contexts/AuthContext.tsx`
 - `supabase/functions/_shared/permission_engine.ts`
 - `supabase/functions/_shared/whatsapp-client.ts`
 - `supabase/migrations/` (RLS, POLICY, GRANT, ROLE)
-- `src/contexts/Auth*.tsx`
 - `src/integrations/supabase/client.ts`
 
 ### Não fazer
@@ -173,7 +203,7 @@ To delete vault files: include `[vault-delete-ok]` flag in commit message.
 - **WhatsApp** (Uazapi) — webhook + adapter + DLQ
 
 🟠 High — review obrigatório:
-- **Permissões** — `src/lib/permissions.ts`, `_shared/permission_engine.ts`
+- **Permissões** — `src/modules/identity/lib/permissions.ts`, `_shared/permission_engine.ts`
 - **Pipelines + workflows** — sync entre tabelas, dedup triggers
 
 Deep dive: [`Obsidian/.../02 — Arquitetura/Areas Frageis.md`](./Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/02%20—%20Arquitetura/Areas%20Frageis.md).
@@ -182,13 +212,29 @@ Deep dive: [`Obsidian/.../02 — Arquitetura/Areas Frageis.md`](./Obsidian/Segun
 
 Critical modules têm `CLAUDE.md` local com contexto JIT:
 
-- `supabase/functions/agent-message/CLAUDE.md` — Copilot turn
-- `supabase/functions/whatsapp-webhook/CLAUDE.md` — Uazapi inbound
+Frontend (`src/modules/<bc>/CLAUDE.md` — 14 BCs):
+- `src/modules/identity/CLAUDE.md`
+- `src/modules/leads/CLAUDE.md`
+- `src/modules/pipelines/CLAUDE.md`
+- `src/modules/communication/CLAUDE.md` 🔴
+- `src/modules/copilot/CLAUDE.md` 🔴
+- `src/modules/workflows/CLAUDE.md`
+- `src/modules/campaigns/CLAUDE.md`
+- `src/modules/carteira/CLAUDE.md`
+- `src/modules/engagement/CLAUDE.md`
+- `src/modules/analytics/CLAUDE.md`
+- `src/modules/billing/CLAUDE.md`
+- `src/modules/marketing/CLAUDE.md`
+- `src/modules/integrations/CLAUDE.md`
+- `src/modules/platform/CLAUDE.md`
+- `src/modules/CLAUDE.md` — overview + regras invariantes
+
+Backend:
+- `supabase/functions/CLAUDE.md` — BC mapping doc-only (slice 15)
+- `supabase/functions/agent-message/CLAUDE.md` — Copilot turn 🔴
+- `supabase/functions/whatsapp-webhook/CLAUDE.md` — Uazapi inbound 🔴
 - `supabase/functions/_shared/CLAUDE.md` — Shared modules
 - `supabase/migrations/CLAUDE.md` — Migration rules
-- `src/lib/permissions/CLAUDE.md` (or equivalent) — Permissions engine
-
-(Files added in F4 — verify presence before assuming.)
 
 ## Get help
 

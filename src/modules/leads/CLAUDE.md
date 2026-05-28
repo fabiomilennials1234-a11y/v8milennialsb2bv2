@@ -1,6 +1,6 @@
 # Module — leads
 
-**Status:** 🟢 Populado (slice 4 — 2026-05-26)
+**Status:** 🟢 Active (slice 4 + cleanup longtail slice 16 — 2026-05-28)
 **BC:** leads
 **Entidade primária:** Lead
 **Owner:** vendas
@@ -43,12 +43,14 @@ Ver `./index.ts` para a superfície completa. Estável.
 - Action log: `useLogLeadAction`, `logLeadActionDirect`
 - Import/export/duplicates/trash/novo: `useImportLeads`, `useExportLeads`, `useDuplicateLeads`, `useMergeLeads`, `useTrashLeads`, `useRestoreLead`, `useRestoreLeadsBulk`, `usePurgeLead`, `useNewLeads`
 - Lead-form helpers (subpasta `hooks/lead/`): `useLeadCampaignsAttach`, `useLeadCreateHandler`, `useLeadForm`, `useLeadPipeHandlers`, `useLeadTagsAttached`, `useAddLeadTag`, `useRemoveLeadTag`
+- **Slice 16 longtail**: `useTags` (CRUD tags org-scoped), `useImportBatches` (rastreio import jobs), `useEnrichment` (Apollo/dadosify enrichment), `useBulkActions` + `useBulkSelection` (bulk ops em leads table/kanban)
 
 ### Components
 - Lead detail modal: `LeadDetailDialog` (+ V1/V2 explícitos), `LeadDetailSheet` (alias), `LeadPanelProvider`, `useLeadSheet`, `LeadDetailMobileTabs`
 - Card/modal/score: `LeadCard`, `LeadModal`, `LeadScoreBadge`, `TimelineItem`
 - Form internals consumidos cross-module: `LeadDetailContent`, `LeadCustomFields`, `AddCustomFieldPopover`, `LeadTabHistory`
 - Modais standalone: `CustomFieldsManager`, `ExportLeadsContent`, `ImportLeadsFunnelContent`
+- Bulk (slice 16): `BulkActionBar` (`components/bulk-actions/`)
 
 ### Pages (deep-import only)
 - `@/modules/leads/pages/Leads`
@@ -103,6 +105,11 @@ Backend (NÃO movidas nesta slice — vai pra slice 15):
 - `supabase/functions/import-leads/`
 - `supabase/functions/calculate-lead-score/`
 - `supabase/functions/get-lead-timeline/`
+
+## Dedup feita (slice 16 longtail)
+
+- `useTags`, `useImportBatches`, `useEnrichment`, `useBulkActions`, `useBulkSelection`, `useBatchedLeadMetrics` movidos de `src/hooks/` para `src/modules/leads/hooks/`.
+- `BulkActionBar` movido de `src/components/bulk-actions/` para `src/modules/leads/components/bulk-actions/`.
 
 ## Dedup feita (slice 4)
 

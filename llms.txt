@@ -24,9 +24,29 @@ Important notes:
 ## Arquitetura
 
 - [Visão Geral](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/02 — Arquitetura/Visao Geral.md): stack, princípios, mapa mental
+- [Módulos](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/02 — Arquitetura/Modulos.md): 14 bounded contexts pós-modularização (slices 1-16)
 - [Multi-tenancy](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/02 — Arquitetura/Multi-tenancy.md): shared schema + RLS isolation
 - [Áreas Frágeis](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/02 — Arquitetura/Areas Frageis.md): onde sangra (Copilot, WhatsApp, Permissões)
 - [Subagentes](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/01 — Identidade/Subagentes.md): pipeline arquiteto → design/engenheiro → arquiteto
+
+## Bounded contexts (sub-CLAUDE.md por módulo)
+
+- [src/modules/](src/modules/CLAUDE.md): overview + regras invariantes
+- [identity](src/modules/identity/CLAUDE.md): auth, org, team, permissions, master
+- [leads](src/modules/leads/CLAUDE.md): lead CRUD, timeline, tags, import, bulk
+- [pipelines](src/modules/pipelines/CLAUDE.md): pipe_* views, custom, kanban, dispatch
+- [communication](src/modules/communication/CLAUDE.md): WhatsApp, Meta, Email, SMS 🔴
+- [copilot](src/modules/copilot/CLAUDE.md): copilot agents, Oraculo, reasoning 🔴
+- [workflows](src/modules/workflows/CLAUDE.md): DAG executor + triggers
+- [campaigns](src/modules/campaigns/CLAUDE.md): campaigns + mass send
+- [carteira](src/modules/carteira/CLAUDE.md): clients + orders + upsell
+- [engagement](src/modules/engagement/CLAUDE.md): activities + agenda + gamification + commissions + goals
+- [analytics](src/modules/analytics/CLAUDE.md): dashboards + metrics + cohorts + TV
+- [billing](src/modules/billing/CLAUDE.md): subscription + plans
+- [marketing](src/modules/marketing/CLAUDE.md): lead forms + landing + UTM
+- [integrations](src/modules/integrations/CLAUDE.md): provider adapters
+- [platform](src/modules/platform/CLAUDE.md): onboarding + settings + feature flags + command palette + saved views
+- [supabase/functions](supabase/functions/CLAUDE.md): edge fn BC mapping (doc-only, slice 15)
 
 ## Reference
 
