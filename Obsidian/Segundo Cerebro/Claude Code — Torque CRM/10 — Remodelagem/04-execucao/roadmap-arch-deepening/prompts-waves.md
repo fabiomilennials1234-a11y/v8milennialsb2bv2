@@ -17,6 +17,26 @@ relacionados:
 
 Cada prompt **autocontido**. Cole no terminal Claude correspondente (track A ou track B). Setup recomendado: 2 worktrees + 2 terminais.
 
+> [!danger] LEI INVARIANTE — TARGET DO PR
+> **TODO PR DESTE ROADMAP TEM `--base develop`. NUNCA `--base main`.**
+>
+> Incidente real: PR #536 abriu contra `main` por engano. Correção via `gh pr edit <num> --base develop`.
+>
+> Comando obrigatório em **cada slice** ao abrir PR:
+> ```bash
+> gh pr create --base develop --head <branch> --title "..." --body "..."
+> ```
+>
+> **Auto-check antes de qualquer `gh pr create`:**
+> ```bash
+> echo "TARGET CHECK: base=develop confirmado"
+> # se base != develop, ABORTAR
+> ```
+>
+> Razão: `main` é prod-deploy gate. Merge direto pula Fase 5 (deploy prod controlado) e Fase 6 (PR develop→main final). Pode disparar deploy não-autorizado via EasyPanel `:latest`.
+>
+> Constraint reforçada em cada prompt abaixo na seção CONSTRAINTS.
+
 > [!info] Setup worktree
 > ```bash
 > # Track A
@@ -80,7 +100,7 @@ VERIFICACAO TDD:
 7. npx vitest run tests/unit/ (nao regride vs develop)
 8. Smoke Blocos 2+3+4 de smoke-roteiro-sem-whatsapp.md
 
-CONSTRAINTS: zero push main, zero mutacao DB, zero deploy, sem --no-verify, .claude/scheduled_tasks.lock NAO commit, feature-overview.md NAO commit.
+CONSTRAINTS: zero push main, zero mutacao DB, zero deploy, sem --no-verify, .claude/scheduled_tasks.lock NAO commit, feature-overview.md NAO commit. PR TARGET = develop OBRIGATORIO (jamais main) — `gh pr create --base develop ...`.
 
 Commit "feat(arch-deepening): slice 7.2 — quebrar ciclo leads<->pipelines" + push + PR contra develop com tabela diff (exports antes/depois, baseline antes/depois, deep cross antes/depois).
 ```
@@ -105,7 +125,7 @@ Tarefas:
 
 VERIFICACAO: doc renderiza, 100% exports cobertos, decisao clara com pros/cons mensurados.
 
-CONSTRAINTS: zero codigo modificado. Doc-only. PR target develop. Sem --no-verify.
+CONSTRAINTS: zero codigo modificado. Doc-only. PR target develop. Sem --no-verify. PR TARGET = develop OBRIGATORIO (jamais main) — `gh pr create --base develop ...`.
 
 Commit "docs(arch-deepening): slice 9.1 — inventario identity + decisao alt A/B" + push + PR.
 ```
@@ -140,7 +160,7 @@ Tarefas:
 
 VERIFICACAO: doc renderiza, 100% exports cobertos, ratio alvo definido (>= 3.0), slices 8.2-8.4 alinhados com decisao.
 
-CONSTRAINTS: zero codigo modificado. Doc-only. PR target develop. Sem --no-verify. Lock file + feature-overview.md NAO commit.
+CONSTRAINTS: zero codigo modificado. Doc-only. PR target develop. Sem --no-verify. PR TARGET = develop OBRIGATORIO (jamais main) — `gh pr create --base develop ...`. Lock file + feature-overview.md NAO commit.
 
 Commit "docs(arch-deepening): slice 8.1 — inventario pipelines + decisao sub-conceitos" + push + PR.
 ```
@@ -173,7 +193,7 @@ VERIFICACAO TDD:
 5. grep -c "^export" src/modules/identity/index.ts IGUAL pre-slice (barrel publico inalterado)
 6. Tentar login admin + login membro + login master — todos OK
 
-CONSTRAINTS: zero mudanca barrel publico. Reorg interno. Zero push main. Zero mutacao DB. Sem --no-verify. Lock file + feature-overview.md NAO commit. AuthContext shim cross-cutting preservado.
+CONSTRAINTS: zero mudanca barrel publico. Reorg interno. Zero push main. Zero mutacao DB. Sem --no-verify. PR TARGET = develop OBRIGATORIO (jamais main) — `gh pr create --base develop ...`. Lock file + feature-overview.md NAO commit. AuthContext shim cross-cutting preservado.
 
 Commit "refactor(arch-deepening): slice 9.2 — identity auth reorganizado em sub-pasta interna" + push + PR contra develop com tabela: arquivos movidos, barrel publico antes/depois (igual), smoke marcado verde.
 ```
@@ -207,7 +227,7 @@ VERIFICACAO TDD:
 4. grep -c "^export" src/modules/pipelines/index.ts IGUAL pre-slice
 5. Verificar pages/PipeWhatsapp.tsx etc continuam carregando
 
-CONSTRAINTS: zero mudanca barrel publico. Reorg interno. NAO unificar dual model. Sem --no-verify. Lock + feature-overview NAO commit.
+CONSTRAINTS: zero mudanca barrel publico. Reorg interno. NAO unificar dual model. Sem --no-verify. PR TARGET = develop OBRIGATORIO (jamais main) — `gh pr create --base develop ...`. Lock + feature-overview NAO commit.
 
 Commit "refactor(arch-deepening): slice 8.2 — pipelines views reorganizado em sub-pasta interna" + push + PR contra develop com tabela arquivos movidos + smoke checklist.
 ```
@@ -252,7 +272,7 @@ VERIFICACAO TDD (CRITICA):
 5. Hotfix #530 nao regride: /master/operations carrega
 6. grep -c "^export" src/modules/identity/index.ts IGUAL pre-slice
 
-CONSTRAINTS: zero mudanca barrel publico. Zero mudanca comportamental. Permissions fail-closed preservadas. Sem --no-verify. Lock + feature-overview NAO commit.
+CONSTRAINTS: zero mudanca barrel publico. Zero mudanca comportamental. Permissions fail-closed preservadas. Sem --no-verify. PR TARGET = develop OBRIGATORIO (jamais main) — `gh pr create --base develop ...`. Lock + feature-overview NAO commit.
 
 Risco critico: se qualquer falha de permissao por role aparecer no smoke, ABORTAR slice + git reset --hard + reportar.
 
@@ -292,7 +312,7 @@ VERIFICACAO TDD:
 4. grep -c "^export" src/modules/pipelines/index.ts IGUAL pre-slice
 5. pages/Funis.tsx + custom pipe detail funcionam
 
-CONSTRAINTS: zero mudanca barrel publico. NAO unificar com views legacy. Sem --no-verify. Lock + feature-overview NAO commit.
+CONSTRAINTS: zero mudanca barrel publico. NAO unificar com views legacy. Sem --no-verify. PR TARGET = develop OBRIGATORIO (jamais main) — `gh pr create --base develop ...`. Lock + feature-overview NAO commit.
 
 Commit "refactor(arch-deepening): slice 8.3 — pipelines canonical+custom reorganizados" + push + PR.
 ```
@@ -331,7 +351,7 @@ VERIFICACAO TDD:
 5. grep -c "^export" src/modules/identity/index.ts IGUAL pre-slice
 6. Logout/login com 3 roles diferentes — todos funcionam
 
-CONSTRAINTS: zero mudanca barrel publico. Permissoes preservadas. Sem --no-verify. Lock + feature-overview NAO commit.
+CONSTRAINTS: zero mudanca barrel publico. Permissoes preservadas. Sem --no-verify. PR TARGET = develop OBRIGATORIO (jamais main) — `gh pr create --base develop ...`. Lock + feature-overview NAO commit.
 
 Commit "refactor(arch-deepening): slice 9.4 — identity org-team+master reorganizados" + push + PR contra develop com smoke checklist por role.
 ```
@@ -373,7 +393,7 @@ VERIFICACAO TDD:
 6. Smoke completo Blocos 2 + 3 + 4 de smoke-roteiro-sem-whatsapp.md
 7. Bundle delta: comparar dist size pre vs pos (alvo ±5%)
 
-CONSTRAINTS: zero mudanca de comportamento. Dual model views vs canonical preservado. Sem --no-verify. Lock + feature-overview NAO commit.
+CONSTRAINTS: zero mudanca de comportamento. Dual model views vs canonical preservado. Sem --no-verify. PR TARGET = develop OBRIGATORIO (jamais main) — `gh pr create --base develop ...`. Lock + feature-overview NAO commit.
 
 Risco alto: se Opcao 1 estourar muito (consumer migration demorada), quebrar em 8.4a (low-hanging fruit — exports privados sem consumer) + 8.4b (consumer migration). Reportar ao CTO antes de prosseguir com 8.4b.
 
@@ -420,7 +440,7 @@ VERIFICACAO TDD (CRITICA):
 8. Baseline ratchet diminui em >= 3 violations
 9. AuthContext shim em src/contexts/AuthContext.tsx ainda funciona (re-export OK)
 
-CONSTRAINTS: zero comportamento mudado. Permissoes fail-closed preservadas. Sem --no-verify. Lock + feature-overview NAO commit.
+CONSTRAINTS: zero comportamento mudado. Permissoes fail-closed preservadas. Sem --no-verify. PR TARGET = develop OBRIGATORIO (jamais main) — `gh pr create --base develop ...`. Lock + feature-overview NAO commit.
 
 Risco maximo: qualquer falha em smoke por role = abortar + reset hard.
 
