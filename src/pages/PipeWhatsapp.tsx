@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion } from "framer-motion";
-import { Search, Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List, ChevronUp, ChevronDown } from "lucide-react";
+import { Search, Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List, ChevronUp, ChevronDown, BarChart3 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +27,8 @@ import { usePipeWhatsappMetrics } from "@/hooks/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
 import { GhostLeadsBanner } from "@/components/pipelines/GhostLeadsBanner";
+import { PipeWhatsappAnalytics } from "@/components/pipelines/PipeWhatsappAnalytics";
+import { PipeViewToggle } from "@/components/pipelines/PipeViewToggle";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
@@ -79,7 +81,7 @@ type WhatsappFilterState = {
   filterOrigin: string;
   filterTags: string[];
   filterScheduled: boolean;
-  viewMode: "kanban" | "list";
+  viewMode: "kanban" | "list" | "analytics";
 };
 
 const DEFAULT_WHATSAPP_FILTERS: WhatsappFilterState = {
@@ -121,7 +123,7 @@ function PipeWhatsappInner() {
     [setFilterState]
   );
   const setViewMode = useCallback(
-    (v: "kanban" | "list") => setFilterState((f) => ({ ...f, viewMode: v })),
+    (v: "kanban" | "list" | "analytics") => setFilterState((f) => ({ ...f, viewMode: v })),
     [setFilterState]
   );
 
@@ -358,6 +360,15 @@ function PipeWhatsappInner() {
     return metricsByPeriod;
   }, [metricsRange, metricsByPeriod, stats]);
 
+  // Itens para o Analytics — respeita o período selecionado (subset carregado)
+  const analyticsItems = useMemo(() => {
+    if (!pipeData) return [];
+    if (!metricsRange) return pipeData;
+    return pipeData.filter(
+      (it) => it.created_at && it.created_at >= metricsRange.startStr && it.created_at <= metricsRange.endStr
+    );
+  }, [pipeData, metricsRange]);
+
   // Handle status change from drag-and-drop
   const handleStatusChange = async (itemId: string, newStatus: string) => {
     const item = pipeData?.find(p => p.id === itemId);
@@ -484,22 +495,16 @@ function PipeWhatsappInner() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center border rounded-lg p-1">
-            <Button
-              variant={viewMode === "kanban" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("kanban")}
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </Button>
-            <Button
-              variant={viewMode === "list" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("list")}
-            >
-              <List className="w-4 h-4" />
-            </Button>
-          </div>
+          <PipeViewToggle
+            value={viewMode}
+            onChange={setViewMode}
+            layoutId="pipe-whatsapp-view-indicator"
+            options={[
+              { value: "kanban", icon: LayoutGrid, label: "Kanban" },
+              { value: "list", icon: List, label: "Lista" },
+              { value: "analytics", icon: BarChart3, label: "Analytics" },
+            ]}
+          />
           <Button size="sm" variant="outline" onClick={() => setIsSettingsOpen(true)}>
             <Settings2 className="w-4 h-4 mr-2" />
             Configurações
@@ -518,30 +523,32 @@ function PipeWhatsappInner() {
       {/* Ghost leads (RLS divergente entre pipe e leads) */}
       <GhostLeadsBanner pipeType="whatsapp" ghostCount={ghostLeadsCount} />
 
-      {/* Período + toggle recolher métricas */}
+      {/* Período + toggle recolher métricas (toggle só no Analytics) */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs gap-1.5 text-muted-foreground"
-          onClick={() => setMetricsCollapsed(!metricsCollapsed)}
-          aria-expanded={!metricsCollapsed}
-        >
-          {metricsCollapsed ? (
-            <>
-              <ChevronDown className="w-3.5 h-3.5" /> Mostrar métricas
-            </>
-          ) : (
-            <>
-              <ChevronUp className="w-3.5 h-3.5" /> Recolher métricas
-            </>
-          )}
-        </Button>
+        {viewMode === "analytics" && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs gap-1.5 text-muted-foreground"
+            onClick={() => setMetricsCollapsed(!metricsCollapsed)}
+            aria-expanded={!metricsCollapsed}
+          >
+            {metricsCollapsed ? (
+              <>
+                <ChevronDown className="w-3.5 h-3.5" /> Mostrar métricas
+              </>
+            ) : (
+              <>
+                <ChevronUp className="w-3.5 h-3.5" /> Recolher métricas
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
-      {/* Stats Bar - colapsível */}
-      {!metricsCollapsed && (
+      {/* Stats Bar - colapsível, só no Analytics */}
+      {viewMode === "analytics" && !metricsCollapsed && (
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
@@ -567,39 +574,41 @@ function PipeWhatsappInner() {
         </motion.div>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar lead, empresa, telefone..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
+      {/* Filters — ocultos no modo Analytics (são específicos do board) */}
+      {viewMode !== "analytics" && (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar lead, empresa, telefone..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <SavedViewsDropdown
+              entityType="pipe_whatsapp"
+              currentFilters={filterState}
+              defaultFilters={DEFAULT_WHATSAPP_FILTERS}
+              onApplyFilters={(f) => setFilterState(() => f)}
+              activeViewId={activeViewId}
+              onActiveViewChange={handleActiveViewChange}
+            />
+            <KanbanFilterPanel
+              sections={filterSections}
+              onClearAll={handleClearAllFilters}
             />
           </div>
-          <SavedViewsDropdown
-            entityType="pipe_whatsapp"
-            currentFilters={filterState}
-            defaultFilters={DEFAULT_WHATSAPP_FILTERS}
-            onApplyFilters={(f) => setFilterState(() => f)}
-            activeViewId={activeViewId}
-            onActiveViewChange={handleActiveViewChange}
-          />
-          <KanbanFilterPanel
+          <FilterChips
             sections={filterSections}
             onClearAll={handleClearAllFilters}
           />
         </div>
-        <FilterChips
-          sections={filterSections}
-          onClearAll={handleClearAllFilters}
-        />
-      </div>
+      )}
 
       {/* Period filter indicator — aparece quando um período está selecionado */}
-      {metricsRange && (
+      {viewMode !== "analytics" && metricsRange && (
         <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-card border border-border text-sm text-muted-foreground">
           <Calendar className="w-4 h-4 shrink-0" />
           <span className="flex-1">
@@ -617,8 +626,14 @@ function PipeWhatsappInner() {
         </div>
       )}
 
-      {/* Kanban Board / List View / Mobile List View */}
-      {isMobile ? (
+      {/* Analytics / Kanban Board / List View / Mobile List View */}
+      {viewMode === "analytics" ? (
+        <PipeWhatsappAnalytics
+          items={analyticsItems}
+          stats={displayStats}
+          responsibleMembers={responsibleMembers}
+        />
+      ) : isMobile ? (
         <PipelineListView
           stages={mobileStages}
           leads={mobileLeads}
