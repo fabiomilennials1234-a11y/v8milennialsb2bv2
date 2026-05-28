@@ -27,7 +27,7 @@ import { Loader2, Search, Building2, Phone, UserCheck, Plus } from "lucide-react
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { useDebounce } from "@/hooks/useDebounce";
+import { useDebounce } from "@/shared/hooks/useDebounce";
 import { LeadModal } from "@/modules/leads";
 
 interface AddLeadToPipeModalProps {

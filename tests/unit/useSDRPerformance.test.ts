@@ -35,7 +35,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useTeamMembers: () => ({ data: mockSDRs }),
 }));
 
-vi.mock("@/hooks/useAvatarMap", () => ({
+vi.mock("@/modules/identity/hooks/useAvatarMap", () => ({
   useAvatarMap: () => new Map([["s1", "url-s1"]]),
 }));
 

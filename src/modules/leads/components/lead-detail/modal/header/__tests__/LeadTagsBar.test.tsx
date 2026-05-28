@@ -17,7 +17,7 @@ vi.mock("@/modules/leads/hooks/lead/useLeadTagsAttached", () => ({
   useRemoveLeadTag: () => ({ mutateAsync: removeSpy, isPending: false }),
 }));
 
-vi.mock("@/hooks/useTags", () => ({
+vi.mock("@/modules/leads/hooks/useTags", () => ({
   useTags: () => ({
     data: [
       { id: "tag-1", name: "Ouro",       color: "#f0a", organization_id: "org-1" },

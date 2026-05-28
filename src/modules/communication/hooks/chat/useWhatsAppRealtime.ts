@@ -12,7 +12,7 @@
 import { useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentTeamMember } from "@/modules/identity";
-import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
+import { useRealtimeChannel } from "@/shared/realtime/useRealtimeChannel";
 import type { WhatsAppMessage, ChatContact } from "./types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { normalizePhone as canonicalNormalizePhone } from "@/lib/normalizePhone";

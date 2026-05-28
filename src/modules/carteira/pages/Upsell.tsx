@@ -18,7 +18,7 @@ import { usePipelineStages, type PipelineType } from "@/modules/pipelines/hooks/
 import { useAutoMoveUpsellClients } from "@/modules/carteira/hooks/useAutoMoveUpsellClients";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { usePortfolioKPIs } from "@/modules/carteira/hooks/usePortfolioKPIs";
-import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { CarteiraKPIs } from "@/modules/carteira/components/client/CarteiraKPIs";
 import { CarteiraAlertBanner } from "@/modules/carteira/components/client/CarteiraAlertBanner";
 import { CarteiraClientTable, type PortfolioClientRow } from "@/modules/carteira/components/client/CarteiraClientTable";
@@ -30,7 +30,7 @@ import { CarteiraCohortHeatmap } from "@/modules/carteira/components/client/Cart
 import { CarteiraVendedorRanking } from "@/modules/carteira/components/client/CarteiraVendedorRanking";
 import { CarteiraApprovals } from "@/modules/carteira/components/client/CarteiraApprovals";
 import { usePendingOrders } from "@/modules/carteira/hooks/useOrderApproval";
-import { useBulkSelection } from "@/hooks/useBulkSelection";
+import { useBulkSelection } from "@/modules/leads/hooks/useBulkSelection";
 
 type ViewMode = "kanban" | "list";
 

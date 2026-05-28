@@ -32,7 +32,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 // ─── Import after mock ────────────────────────────────────────────────────────
 
-import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
+import { useRealtimeChannel } from "@/shared/realtime/useRealtimeChannel";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

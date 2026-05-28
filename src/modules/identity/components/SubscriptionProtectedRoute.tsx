@@ -17,7 +17,7 @@ import {
 } from "@/modules/billing/lib/subscription";
 import { useUserRole, useCanManageCopilot } from "../hooks/useUserRole";
 import { useIdentity } from "../hooks/useIdentity";
-import { TorqueLoader } from "@/components/branding/TorqueLoader";
+import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { OverdueBanner } from "@/modules/billing/components/subscription/OverdueBanner";
 import { SubscriptionBlockedPage } from "@/modules/billing/components/subscription/SubscriptionBlockedPage";
 

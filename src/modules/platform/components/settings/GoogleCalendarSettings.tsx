@@ -36,7 +36,7 @@ import {
   useConnectGoogleCalendar,
   useDisconnectGoogleCalendar,
   useGoogleCalendarCallback,
-} from "@/hooks/useGoogleCalendar";
+} from "@/modules/integrations/hooks/useGoogleCalendar";
 import { GoogleCalendarSharingSettings } from "@/modules/platform/components/settings/GoogleCalendarSharingSettings";
 import { useAuth } from "@/modules/identity";
 // Ícone do Google (SVG inline para não precisar de dependência extra)

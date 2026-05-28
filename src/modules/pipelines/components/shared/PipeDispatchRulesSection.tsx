@@ -42,7 +42,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOrganization } from "@/modules/identity";
 import { cn } from "@/lib/utils";
 import { usePipeQueueItems, useRetryDispatchItems } from "@/modules/campaigns/hooks/useDispatchQueueItems";
-import { DispatchQueueSheet } from "@/components/shared/DispatchQueueSheet";
+import { DispatchQueueSheet } from "@/shared/components/DispatchQueueSheet";
 
 const TRIGGER_LABELS: Record<PipeDispatchRuleTriggerType, string> = {
   lead_added: "Ao adicionar lead no funil",

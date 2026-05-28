@@ -45,7 +45,7 @@ import {
   useRevokeCalendarShare,
   type OutgoingShare,
   type IncomingShare,
-} from "@/hooks/useGoogleCalendarSharing";
+} from "@/modules/integrations/hooks/useGoogleCalendarSharing";
 
 const ROLE_LABELS: Record<string, string> = {
   admin:   "Admin",

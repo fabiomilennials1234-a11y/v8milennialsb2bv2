@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { usePersistedState } from "@/hooks/usePersistedState";
+import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import {
   startOfDay,
   endOfDay,

@@ -67,7 +67,7 @@ vi.mock("@/lib/copilot/custom-instructions-utils", () => ({
 vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({
   followupRuleToDB: vi.fn((r: any) => r),
 }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/identity/lib/permissions", () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),

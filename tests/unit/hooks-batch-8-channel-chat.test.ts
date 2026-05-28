@@ -74,7 +74,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   isVirtualTeamMember: () => false,
   useTeamMembers: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/communication/lib/whatsapp", () => ({
   formatPhoneForWhatsApp: vi.fn().mockReturnValue("5511999990000"),
 }));

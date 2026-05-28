@@ -28,17 +28,17 @@ vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ us
 vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
 vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
-vi.mock("@/hooks/useTags", () => ({ useTags: () => ({ data: [] }) }));
+vi.mock("@/modules/leads/hooks/useTags", () => ({ useTags: () => ({ data: [] }) }));
 vi.mock("@/modules/carteira/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
 vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useWhatsAppInstances: () => ({ data: [] }) }));
 vi.mock("@/modules/campaigns/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }) }));
 vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }) }));
 vi.mock("@/modules/pipelines/hooks/usePipelineDisplayConfig", () => ({ usePipelineDisplayConfig: () => ({ data: [] }) }));
-vi.mock("@/hooks/useGoogleCalendar", () => ({ useGoogleCalendar: () => ({ data: null }) }));
+vi.mock("@/modules/integrations/hooks/useGoogleCalendar", () => ({ useGoogleCalendar: () => ({ data: null }) }));
 vi.mock("@/modules/workflows/hooks/useWorkflows", () => ({ useWorkflows: () => ({ data: [] }) }));
 vi.mock("@/hooks/useChannelChat", () => ({ useChannelChat: () => ({ data: null }) }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn(), triggerLeadCreatedInCustomPipeline: vi.fn() }));
@@ -61,7 +61,7 @@ describe("useTVDashboardData", () => {
 // useDispatchQueueItems, useMktByOrigin, useMktOriginConfig have complex side effects
 
 // ── Deeper tests for useTags (already at 100% — verify CRUD mutations) ──
-import { useTags, useCreateTag } from "@/hooks/useTags";
+import { useTags, useCreateTag } from "@/modules/leads/hooks/useTags";
 
 describe("useTags — deeper", () => {
   it("returns data array from query", async () => {

@@ -12,7 +12,7 @@ import { CreateCompetitionModal } from "@/modules/analytics/components/performan
 import { useRankingTransitions } from "@/modules/engagement/hooks/useRankingTransitions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { useAvatarMap } from "@/hooks/useAvatarMap";
+import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

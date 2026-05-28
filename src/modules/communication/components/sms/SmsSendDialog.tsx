@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSendSms, useSmsTemplates } from "@/hooks/useSms";
+import { useSendSms, useSmsTemplates } from "@/modules/communication/hooks/useSms";
 import { cn } from "@/lib/utils";
 
 interface SmsSendDialogProps {

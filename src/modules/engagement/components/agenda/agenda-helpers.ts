@@ -15,7 +15,7 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { AgendaEvent as RpcAgendaEvent } from "@/modules/engagement/hooks/useAgendaEvents";
-import type { CalendarEvent } from "@/hooks/useGoogleCalendar";
+import type { CalendarEvent } from "@/modules/integrations/hooks/useGoogleCalendar";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

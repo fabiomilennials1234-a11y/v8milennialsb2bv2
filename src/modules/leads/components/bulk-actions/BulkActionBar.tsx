@@ -24,14 +24,14 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useTeamMembers } from "@/modules/identity";
-import { useTags } from "@/hooks/useTags";
+import { useTags } from "@/modules/leads/hooks/useTags";
 import { usePipelineStages } from "@/modules/pipelines/hooks/usePipelineStages";
 import {
   useBulkMoveStage,
   useBulkAssign,
   useBulkTag,
   useBulkDelete,
-} from "@/hooks/useBulkActions";
+} from "@/modules/leads/hooks/useBulkActions";
 
 interface BulkActionBarProps {
   selectedIds: Set<string>;

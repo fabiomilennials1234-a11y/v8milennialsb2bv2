@@ -36,7 +36,7 @@ vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ us
 vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
 vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }), useResponsibleMembers: () => ({ data: [] }) }));
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: true }) }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {}, useAllPipelineStages: () => ({ data: [] }) }));
 vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
@@ -95,7 +95,7 @@ describe("useMktByOrigin", () => {
 });
 
 // ═══ 3. useGoogleCalendar (65 LOC) ═══
-import { useGoogleCalendarStatus, useConnectGoogleCalendar, useDisconnectGoogleCalendar, useCalendarEvents } from "@/hooks/useGoogleCalendar";
+import { useGoogleCalendarStatus, useConnectGoogleCalendar, useDisconnectGoogleCalendar, useCalendarEvents } from "@/modules/integrations/hooks/useGoogleCalendar";
 
 describe("useGoogleCalendar", () => {
   it("useGoogleCalendarStatus renders", () => {
@@ -206,7 +206,7 @@ describe("useWhatsAppInstanceAllowedMembers", () => {
 });
 
 // ═══ 10. useGoogleCalendarSharing (39 LOC) ═══
-import { useCalendarSharing, useShareCalendar, useRevokeCalendarShare } from "@/hooks/useGoogleCalendarSharing";
+import { useCalendarSharing, useShareCalendar, useRevokeCalendarShare } from "@/modules/integrations/hooks/useGoogleCalendarSharing";
 
 describe("useGoogleCalendarSharing", () => {
   beforeEach(() => {

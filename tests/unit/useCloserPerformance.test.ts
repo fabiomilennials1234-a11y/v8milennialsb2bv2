@@ -35,7 +35,7 @@ const mockConfirmacoes = [
 vi.mock("@/modules/pipelines/hooks/usePipePropostas", () => ({ usePipePropostas: () => ({ data: mockPropostas }) }));
 vi.mock("@/modules/pipelines/hooks/usePipeConfirmacao", () => ({ usePipeConfirmacao: () => ({ data: mockConfirmacoes }) }));
 vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useTeamMembers: () => ({ data: mockClosers }) }));
-vi.mock("@/hooks/useAvatarMap", () => ({ useAvatarMap: () => new Map() }));
+vi.mock("@/modules/identity/hooks/useAvatarMap", () => ({ useAvatarMap: () => new Map() }));
 
 describe("useCloserPerformance", () => {
   const range: TVPeriodRange = {

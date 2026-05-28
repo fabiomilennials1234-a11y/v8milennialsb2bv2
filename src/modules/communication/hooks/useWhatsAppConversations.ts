@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { normalizePhone } from "@/lib/normalizePhone";
-import type { Tag } from "@/hooks/useTags";
+import type { Tag } from "@/modules/leads/hooks/useTags";
 
 // ============================================
 // Types

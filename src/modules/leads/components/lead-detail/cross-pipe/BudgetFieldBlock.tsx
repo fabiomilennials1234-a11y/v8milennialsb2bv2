@@ -31,7 +31,7 @@ import {
 } from "@/modules/pipelines/hooks/usePipePropostaItems";
 import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
 import { useCadastroExternoEnabled } from "@/modules/marketing/hooks/useCadastroExterno";
-import { useLossReasons } from "@/hooks/useLossReasons";
+import { useLossReasons } from "@/modules/pipelines/hooks/useLossReasons";
 import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
 import { ProductCombobox } from "@/modules/carteira/components/proposal/ProductCombobox";
 import { TinyErpConfirmOrderDialog } from "@/modules/carteira/components/proposal/TinyErpConfirmOrderDialog";

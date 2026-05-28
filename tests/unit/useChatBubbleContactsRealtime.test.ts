@@ -22,7 +22,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
 let capturedOptions: any = null;
 const mockUseRealtimeChannel = vi.fn();
 
-vi.mock("@/hooks/useRealtimeChannel", () => ({
+vi.mock("@/shared/realtime/useRealtimeChannel", () => ({
   useRealtimeChannel: (opts: any) => mockUseRealtimeChannel(opts),
 }));
 

@@ -14,7 +14,7 @@ import {
 import { Bookmark, ChevronDown, MoreHorizontal, Pencil, Trash2, Share2, Plus, Eye } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { useSavedViews, useDeleteSavedView } from "@/hooks/useSavedViews";
+import { useSavedViews, useDeleteSavedView } from "@/modules/platform/hooks/useSavedViews";
 import { useOrganization } from "@/modules/identity";
 import { resolveFilters } from "@/types/saved-views";
 import { SaveViewDialog } from "./SaveViewDialog";

@@ -11,8 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useEmailAccounts } from "@/hooks/useEmailAccounts";
-import { useSendEmail } from "@/hooks/useEmails";
+import { useEmailAccounts } from "@/modules/communication/hooks/useEmailAccounts";
+import { useSendEmail } from "@/modules/communication/hooks/useEmails";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 

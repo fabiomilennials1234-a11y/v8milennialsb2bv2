@@ -10,7 +10,7 @@
  *   - State "joined" → no poll
  */
 import { useEffect, useState } from "react";
-import { useWhatsAppRealtimeStatus } from "@/hooks/useRealtimeChannelStatus";
+import { useWhatsAppRealtimeStatus } from "@/shared/realtime/useRealtimeChannelStatus";
 import type { RealtimeChannelState } from "@/lib/realtimeStatusStore";
 
 export const FALLBACK_THRESHOLD_MS = 10_000;

@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { usePersistedState } from "@/hooks/usePersistedState";
+import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -29,7 +29,7 @@ import {
 import { FollowUpCard } from "@/modules/engagement/components/followups/FollowUpCard";
 import { ScheduleFollowUpModal } from "@/modules/engagement/components/followups/ScheduleFollowUpModal";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
-import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
+import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { AutomationSettings } from "@/modules/engagement/components/followups/AutomationSettings";
 import { AcoesDoDia } from "@/modules/engagement/components/followups/AcoesDoDia";
 import {

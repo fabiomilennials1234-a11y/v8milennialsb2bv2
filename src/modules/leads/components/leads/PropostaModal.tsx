@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { useTeamMembers } from "@/modules/identity";
 import { useUpdatePipeProposta, PipePropostasStatus } from "@/modules/pipelines/hooks/usePipePropostas";
-import { useLossReasons } from "@/hooks/useLossReasons";
+import { useLossReasons } from "@/modules/pipelines/hooks/useLossReasons";
 import { toast } from "sonner";
 import { format } from "date-fns";
 

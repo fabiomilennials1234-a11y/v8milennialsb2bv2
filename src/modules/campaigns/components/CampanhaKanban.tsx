@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { usePersistedState } from "@/hooks/usePersistedState";
+import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import {
   DndContext,
   DragOverlay,
@@ -30,7 +30,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useOpenWhatsAppChat } from "@/modules/communication/lib/whatsapp";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
-import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
+import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { LeadModal } from "@/modules/leads";
 import {
   AlertDialog,

@@ -38,7 +38,7 @@ import {
 } from "@/modules/pipelines/hooks/useCustomPipelines";
 import { CustomPipelineKanban } from "@/modules/pipelines/components/custom/CustomPipelineKanban";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
-import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
+import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { AddLeadToPipeModal } from "@/modules/pipelines/components/custom/AddLeadToPipeModal";
 import { CustomPipeSettingsDialog } from "@/modules/pipelines/components/custom/CustomPipeSettingsDialog";
 import { toast } from "sonner";

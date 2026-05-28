@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WinLossAnalysis } from "@/modules/analytics/components/analytics/WinLossAnalysis";
 import { AnalyticsErrorBoundary } from "@/modules/analytics/components/analytics/AnalyticsErrorBoundary";
-import { NextBestActionsPanel } from "@/components/ai/NextBestActionsPanel";
+import { NextBestActionsPanel } from "@/modules/engagement/components/ai/NextBestActionsPanel";
 
 
 interface TabInteligenciaProps {

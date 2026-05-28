@@ -20,7 +20,7 @@
 import { useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
-import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
+import { useRealtimeChannel } from "@/shared/realtime/useRealtimeChannel";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { normalizePhone as canonicalNormalizePhone } from "@/lib/normalizePhone";
 import { chatQueryKeys } from "./shared/queryKeys";

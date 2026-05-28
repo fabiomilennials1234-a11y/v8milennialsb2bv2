@@ -35,7 +35,7 @@ import {
 import type { CampaignTemplate } from "@/modules/campaigns/hooks/useCampaignTemplates";
 import { usePipelineStages, type PipelineType } from "@/modules/pipelines/hooks/usePipelineStages";
 import { useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines/hooks/useCustomPipelines";
-import { useTags } from "@/hooks/useTags";
+import { useTags } from "@/modules/leads/hooks/useTags";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 import { CampaignStageSelectorField } from "./CampaignStageSelectorField";
 import { CampaignTemplateSelectorField } from "./CampaignTemplateSelectorField";

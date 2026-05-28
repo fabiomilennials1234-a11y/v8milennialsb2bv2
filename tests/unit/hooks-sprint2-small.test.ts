@@ -79,7 +79,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useTeamMembers: () => ({ data: [] }),
 }));
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {
@@ -119,7 +119,7 @@ vi.mock("@/lib/evolutionApi", () => ({
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn(), info: vi.fn() },
 }));
-vi.mock("@/hooks/useTags", () => ({}));
+vi.mock("@/modules/leads/hooks/useTags", () => ({}));
 
 // ── Imports ──
 import {

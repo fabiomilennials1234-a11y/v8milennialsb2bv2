@@ -7,7 +7,7 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: {} }));
 vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-1", teamMemberId: "tm-1" }),
 }));
-vi.mock("@/hooks/usePersistedState", () => ({
+vi.mock("@/shared/hooks/usePersistedState", () => ({
   usePersistedState: () => [undefined, () => undefined, () => undefined],
 }));
 

@@ -47,7 +47,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useUpdateLead } from "@/modules/leads";
 import { useResponsibleMembers } from "@/modules/identity";
-import { useTags } from "@/hooks/useTags";
+import { useTags } from "@/modules/leads/hooks/useTags";
 import { LeadCustomFields } from "@/modules/leads";
 import { AddCustomFieldPopover } from "@/modules/leads";
 

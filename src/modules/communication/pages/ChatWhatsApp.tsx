@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { ChatShellWithContext } from "@/modules/communication/components/chat/ChatShellWithContext";
-import { CoachingSidebar } from "@/components/ai/CoachingSidebar";
+import { CoachingSidebar } from "@/modules/engagement/components/ai/CoachingSidebar";
 import { useOrganization } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
 

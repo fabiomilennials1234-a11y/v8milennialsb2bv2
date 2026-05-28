@@ -17,7 +17,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { useWhatsAppRealtimeStatus } from "@/hooks/useRealtimeChannelStatus";
+import { useWhatsAppRealtimeStatus } from "@/shared/realtime/useRealtimeChannelStatus";
 import type { ChannelStatus } from "@/lib/realtimeStatusStore";
 
 type Variant = "ok" | "pending" | "polling" | "offline";

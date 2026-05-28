@@ -15,7 +15,7 @@ import { useLocation } from "react-router-dom";
 import { featureFlags } from "@/modules/platform/lib/feature-flags";
 import { useChatBubble } from "@/modules/communication/hooks/useChatBubble";
 import { useToast } from "@/hooks/use-toast";
-import { useViewport } from "@/hooks/use-viewport";
+import { useViewport } from "@/shared/hooks/use-viewport";
 import { ChatBubbleFab } from "./ChatBubbleFab";
 
 const LazyChatBubblePanel = lazy(() => import("./ChatBubblePanel"));

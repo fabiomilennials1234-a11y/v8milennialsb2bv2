@@ -1,7 +1,7 @@
 // src/hooks/chat-meta/useMetaRealtime.ts
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 
 export function useMetaRealtime() {
   const qc = useQueryClient();

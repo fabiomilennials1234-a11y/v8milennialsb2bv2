@@ -41,7 +41,7 @@ vi.mock("@/modules/communication/hooks/useConversationDraft", () => ({
   }),
 }));
 
-vi.mock("@/hooks/use-keyboard-offset", () => ({
+vi.mock("@/shared/hooks/use-keyboard-offset", () => ({
   useKeyboardOffset: () => ({ offset: 0, isKeyboardOpen: false }),
 }));
 

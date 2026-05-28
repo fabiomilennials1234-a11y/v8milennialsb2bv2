@@ -45,7 +45,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useCampaignQueueItems, useRetryDispatchItems } from "@/modules/campaigns/hooks/useDispatchQueueItems";
-import { DispatchQueueSheet } from "@/components/shared/DispatchQueueSheet";
+import { DispatchQueueSheet } from "@/shared/components/DispatchQueueSheet";
 
 const TRIGGER_LABELS: Record<CampanhaDispatchRuleTriggerType, string> = {
   lead_created: "Ao adicionar lead na campanha",

@@ -34,7 +34,7 @@ import { useCopilotToggle } from "@/modules/copilot/hooks/useCopilotToggle";
 import { useCopilotPause } from "@/modules/copilot/hooks/useCopilotPause";
 import { ChatShell } from "@/modules/communication/components/chat/layout/ChatShell";
 import { MobileChatLayout } from "@/modules/communication/components/chat/layout/MobileChatLayout";
-import { useViewport } from "@/hooks/use-viewport";
+import { useViewport } from "@/shared/hooks/use-viewport";
 import { ConversationList } from "@/modules/communication/components/chat/list/ConversationList";
 import { ChatHeader } from "@/modules/communication/components/chat/view/ChatHeader";
 import { MobileChatThreadHeader } from "@/modules/communication/components/chat/view/MobileChatThreadHeader";
@@ -52,7 +52,7 @@ import { useFailedMessages, useRetryMessage } from "@/modules/communication/hook
 import { useChatDensity } from "@/modules/communication/hooks/chat/useChatDensity";
 import { useTakeover } from "@/modules/communication/hooks/chat/useTakeover";
 import { useIdentity } from "@/modules/identity";
-import { useTags } from "@/hooks/useTags";
+import { useTags } from "@/modules/leads/hooks/useTags";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useAuth } from "@/modules/identity";
 import {

@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/modules/identity";
 import { useConversationDraft } from "@/modules/communication/hooks/useConversationDraft";
 import { useSendWhatsAppMessage, useSendWhatsAppMedia } from "@/modules/communication/hooks/chat/useWhatsAppSend";
-import { useKeyboardOffset } from "@/hooks/use-keyboard-offset";
+import { useKeyboardOffset } from "@/shared/hooks/use-keyboard-offset";
 import { AudioRecorder } from "@/modules/communication/components/chat/media/AudioRecorder";
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
 import { convertAudioBlobToMp3 } from "@/modules/communication/lib/audioToMp3";

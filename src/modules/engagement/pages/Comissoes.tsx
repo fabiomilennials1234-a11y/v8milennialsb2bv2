@@ -29,7 +29,7 @@ import { useCommissions, useCommissionSummary } from "@/modules/engagement/hooks
 import { useFeaturePermission } from "@/modules/identity";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { useAvatarMap } from "@/hooks/useAvatarMap";
+import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 
 const months = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",

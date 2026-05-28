@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
+import { useRealtimeChannel } from "@/shared/realtime/useRealtimeChannel";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 /**

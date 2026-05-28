@@ -19,8 +19,8 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useUpdatePipeConfirmacao, type PipeConfirmacaoStatus } from "@/modules/pipelines/hooks/usePipeConfirmacao";
 import { useLogLeadAction } from "@/modules/leads";
-import { useGoogleCalendarStatus } from "@/hooks/useGoogleCalendar";
-import { useCalendarSharing } from "@/hooks/useGoogleCalendarSharing";
+import { useGoogleCalendarStatus } from "@/modules/integrations/hooks/useGoogleCalendar";
+import { useCalendarSharing } from "@/modules/integrations/hooks/useGoogleCalendarSharing";
 import { useAuth } from "@/modules/identity";
 import { toast } from "sonner";
 

@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { motion } from "framer-motion";
 import { type LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
-import { useCountUp } from "@/hooks/useCountUp";
+import { useCountUp } from "@/shared/hooks/useCountUp";
 import { AT, ACCENT, type AccentColor } from "./analytics-tokens";
 
 interface HeroKPICardProps {

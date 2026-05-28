@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { usePersistedState } from "@/hooks/usePersistedState";
+import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { motion } from "framer-motion";
 import { Search, Plus, Calendar, LayoutGrid, List, Settings2, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/modules/pipelines/components/kanban/DraggableKanbanBoard";
-import { TorqueLoader } from "@/components/branding/TorqueLoader";
+import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { useCanDo } from "@/modules/identity";
 import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
@@ -34,7 +34,7 @@ import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/Met
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
-import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
+import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
 import { MeetingTimeline } from "@/modules/pipelines/components/legacy/confirmacao/MeetingTimeline";
 import { CompareceuModal } from "@/modules/pipelines/components/legacy/confirmacao/CompareceuModal";
@@ -51,10 +51,10 @@ import { useLeadsWithScheduledMessages } from "@/modules/communication/hooks/use
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
-import { useTags } from "@/hooks/useTags";
-import { useBulkSelection } from "@/hooks/useBulkSelection";
-import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
-import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
+import { useTags } from "@/modules/leads/hooks/useTags";
+import { useBulkSelection } from "@/modules/leads/hooks/useBulkSelection";
+import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
+import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { useSearchParams } from "react-router-dom";
 import { matchesResponsibleFilter } from "@/lib/kanban-filters";
 

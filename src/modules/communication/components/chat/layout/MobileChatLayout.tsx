@@ -11,7 +11,7 @@
 import { useCallback, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useMobileChatContext } from "@/contexts/MobileChatContext";
-import { useKeyboardOffset } from "@/hooks/use-keyboard-offset";
+import { useKeyboardOffset } from "@/shared/hooks/use-keyboard-offset";
 import type { ChatShellProps } from "./ChatShell";
 
 // ─── Swipe-back threshold ─────────────────────────────────────────────────────

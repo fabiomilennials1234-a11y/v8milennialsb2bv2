@@ -12,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useImportBatches, useRollbackImport, type ImportBatch } from "@/hooks/useImportBatches";
+import { useImportBatches, useRollbackImport, type ImportBatch } from "@/modules/leads/hooks/useImportBatches";
 import { cn } from "@/lib/utils";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";

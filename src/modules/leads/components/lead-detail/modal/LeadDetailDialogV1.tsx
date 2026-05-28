@@ -2,7 +2,7 @@ import { memo } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Dialog, DialogPortal, DialogOverlay } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { useViewport } from "@/hooks/use-viewport";
+import { useViewport } from "@/shared/hooks/use-viewport";
 import { useLeadSheet } from "../hooks/useLeadSheet";
 import { LeadDetailSheet as LegacyLeadDetailSheet } from "../LeadDetailSheet";
 import { cn } from "@/lib/utils";

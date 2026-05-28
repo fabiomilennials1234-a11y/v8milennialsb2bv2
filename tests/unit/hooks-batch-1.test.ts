@@ -52,7 +52,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   isVirtualTeamMember: (id: string) => id?.startsWith("master-virtual-"),
 }));
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false, isLoading: false }) }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn(), triggerLeadCreatedInCustomPipeline: vi.fn() }));
@@ -70,7 +70,7 @@ import { useLeads, type LeadsFilterParams, type Lead } from "@/modules/leads";
 import { usePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
 import { usePipePropostas } from "@/modules/pipelines/hooks/usePipePropostas";
 import { usePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";
-import { useDebounce } from "@/hooks/useDebounce";
+import { useDebounce } from "@/shared/hooks/useDebounce";
 import { useLeadScore } from "@/modules/leads";
 import { useLeadHistory } from "@/modules/leads";
 import { useOrgQuotas } from "@/modules/identity/hooks/useOrgQuotas";

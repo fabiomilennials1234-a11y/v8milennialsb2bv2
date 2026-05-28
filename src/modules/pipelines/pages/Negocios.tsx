@@ -28,7 +28,7 @@ import {
   type KanbanColumn,
   type DraggableItem,
 } from "@/modules/pipelines/components/kanban/DraggableKanbanBoard";
-import { usePersistedState } from "@/hooks/usePersistedState";
+import { usePersistedState } from "@/shared/hooks/usePersistedState";
 
 const fmt = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

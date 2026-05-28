@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
+import { useGlobalShortcuts } from "@/modules/platform/hooks/useGlobalShortcuts";
 import { KeyboardShortcutsOverlay } from "./KeyboardShortcutsOverlay";
 
 export function GlobalShortcutsProvider({ children }: { children: ReactNode }) {

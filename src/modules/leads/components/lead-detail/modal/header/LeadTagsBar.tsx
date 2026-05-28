@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { useTags } from "@/hooks/useTags";
+import { useTags } from "@/modules/leads/hooks/useTags";
 import {
   useLeadTagsAttached,
   useAddLeadTag,

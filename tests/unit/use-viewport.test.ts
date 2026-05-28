@@ -1,5 +1,5 @@
 import { renderHook, act } from "@testing-library/react";
-import { useViewport } from "@/hooks/use-viewport";
+import { useViewport } from "@/shared/hooks/use-viewport";
 
 describe("useViewport", () => {
   let resizeCallback: (() => void) | null = null;

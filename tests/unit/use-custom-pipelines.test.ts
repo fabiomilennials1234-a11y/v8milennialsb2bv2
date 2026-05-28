@@ -53,7 +53,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   isVirtualTeamMember: () => false,
   useTeamMembers: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/lib/workflowTrigger", () => ({
   triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined),
   triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined),

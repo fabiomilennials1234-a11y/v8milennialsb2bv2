@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useRealtimeSubscription, type RealtimeHandlers } from "@/hooks/useRealtimeSubscription";
+import { useRealtimeSubscription, type RealtimeHandlers } from "@/shared/realtime/useRealtimeSubscription";
 import { useOrganization } from "@/modules/identity";
 export type PipelineType = "whatsapp" | "confirmacao" | "propostas";
 

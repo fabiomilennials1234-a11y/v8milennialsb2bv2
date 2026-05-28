@@ -90,7 +90,7 @@ vi.mock("@/modules/marketing/hooks/useCadastroExterno", () => ({
   useCadastroExternoEnabled: () => false,
 }));
 
-vi.mock("@/hooks/useLossReasons", () => ({
+vi.mock("@/modules/pipelines/hooks/useLossReasons", () => ({
   useLossReasons: () => ({ data: [
     { id: "lr-1", label: "Sem budget" },
     { id: "lr-2", label: "Concorrência" },

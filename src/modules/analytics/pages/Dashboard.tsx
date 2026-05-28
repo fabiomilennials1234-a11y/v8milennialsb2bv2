@@ -1,6 +1,6 @@
 import { useState, lazy, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { TorqueLoader } from "@/components/branding/TorqueLoader";
+import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DashboardHeader } from "@/modules/analytics/components/dashboard/DashboardHeader";
 import { TabVisaoGeral } from "@/modules/analytics/components/dashboard/TabVisaoGeral";

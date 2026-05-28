@@ -43,7 +43,7 @@ import {
   useRequestDataExport,
   useExportLeadData,
   type ExportStatus,
-} from "@/hooks/useDataExport";
+} from "@/shared/hooks/useDataExport";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";

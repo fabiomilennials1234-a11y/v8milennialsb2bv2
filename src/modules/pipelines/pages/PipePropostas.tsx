@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import { usePersistedState } from "@/hooks/usePersistedState";
+import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Plus, Calendar as CalendarIcon, User, Building2,
@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, KanbanColumn } from "@/modules/pipelines/components/kanban/DraggableKanbanBoard";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
-import { TorqueLoader } from "@/components/branding/TorqueLoader";
+import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { useCanDo } from "@/modules/identity";
 import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
@@ -46,7 +46,7 @@ import { CreateProposalModal } from "@/modules/carteira/components/proposal/Crea
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
-import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
+import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { FunnelChart } from "@/modules/analytics/components/dashboard/FunnelChart";
 import { CalorSlider, CalorBadge } from "@/modules/carteira/components/proposal/CalorSlider";
 import { QuickAddDailyAction } from "@/modules/carteira/components/proposal/QuickAddDailyAction";
@@ -70,11 +70,11 @@ import { useOrganization } from "@/modules/identity";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
-import { useTags } from "@/hooks/useTags";
-import { useBulkSelection } from "@/hooks/useBulkSelection";
-import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
-import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
-import { useLossReasons } from "@/hooks/useLossReasons";
+import { useTags } from "@/modules/leads/hooks/useTags";
+import { useBulkSelection } from "@/modules/leads/hooks/useBulkSelection";
+import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
+import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
+import { useLossReasons } from "@/modules/pipelines/hooks/useLossReasons";
 import { useSearchParams } from "react-router-dom";
 import { matchesResponsibleFilter } from "@/lib/kanban-filters";
 
