@@ -132,3 +132,18 @@ Foco: buckets 2 + 3. Mais frágil — hooks têm side-effects.
 ## Próximo passo
 
 Após Slice 7.3 verde em develop ≥ 24h: Fase 8 (pipelines re-deepen).
+
+---
+
+## Atualização 2026-05-28 — replan
+
+Slice 7.2 original tentada, **abortada** (baseline subiu 86→120). Detalhes técnicos completos em `inventario-leads-pipelines.md` (seção "Slice 7.2 — tentativa invalidada").
+
+**Roadmap reescrito:**
+
+- **Slice 7.2-bis** — inversão via event-bus (mata `leads → pipelines/hooks/*` substituindo hooks por publicação de evento)
+- **Slice 7.3-bis** — re-deepen pipelines barrel em sub-pastas (`views`, `canonical`, `custom`, `kanban`, `legacy`)
+- **Slice 7.4-bis** — type-only imports cross-module remanescentes
+- **Fase 8 CANCELADA** — 7.3-bis cobre re-deepen
+
+Razão da reescrita: barrel-promotion não trata coupling de domínio. Ciclo `leads ↔ pipelines` é real (leads muta pipes, pipelines lê leads). Solução = inverter direção via event-bus, não renomear via barrel.

@@ -20,26 +20,26 @@ Análise via skill identificou 3 candidatos com ROI mais alto pra deepening pós
 
 | # | Candidato | Problema medido | Fase |
 |---|-----------|-----------------|-----:|
-| 1 | `pipelines` re-deepen | 0.85 files-per-export (INVERTIDO — interface > implementação) | [[fase-8-pipelines-re-deepen]] |
+| 1 | `pipelines` re-deepen | 0.85 files-per-export (INVERTIDO — interface > implementação) | ~~[[fase-8-pipelines-re-deepen]]~~ → colapsado em Slice 7.3-bis |
 | 2 | `identity` split em sub-BCs | 1.50 ratio + hotfix #530 (barrel dessincronizado de internals) | [[fase-9-identity-split]] |
-| 3 | Quebrar ciclo `leads ↔ pipelines` | 47 imports bidirecionais (38+9) | [[fase-7-quebrar-ciclo-leads-pipelines]] |
+| 3 | Quebrar ciclo `leads ↔ pipelines` | 47 imports bidirecionais (38+9) | [[fase-7-quebrar-ciclo-leads-pipelines]] (replan 2026-05-28) |
 
 ## Por que esta ordem
 
-**Fase 7 antes da 8** — quebrar ciclo `leads ↔ pipelines` reduz superfície compartilhada. Sem fazer isso, qualquer split de `pipelines` propaga deep imports pra `leads` (e vice-versa).
+**Fase 7 antes da 9** — quebrar ciclo `leads ↔ pipelines` reduz superfície compartilhada. Slice 7.3-bis (parte do replan) já cobre o re-deepen de `pipelines` que originalmente era Fase 8. Sem fazer 7 primeiro, qualquer split de `pipelines` propaga deep imports pra `leads` (e vice-versa).
 
-**Fase 8 antes da 9** — `pipelines` é o caso mais agudo (ratio invertido 0.85). Fase 7 + 8 combinadas atacam o pior offender medido. `identity` (1.50) é problema sério mas menos agudo, e impacta auth crítica — entra depois do dev exercitar pattern em fases menos sensíveis.
+**Fase 8 CANCELADA (2026-05-28)** — colapsada em Slice 7.3-bis do replan de Fase 7. Sub-pastas (`views`, `canonical`, `custom`, `kanban`, `legacy`) viraram pré-requisito para fechar ciclo, então faz parte da mesma onda. Detalhes em `inventario-leads-pipelines.md`.
 
-**Fase 9 por último** — `identity` é área frágil 🟠 (CLAUDE.md raiz) com permissões + auth. Split exige cuidado extra. Pattern já validado nas fases 7+8 reduz risco aqui.
+**Fase 9 por último** — `identity` é área frágil 🟠 (CLAUDE.md raiz) com permissões + auth. Split exige cuidado extra. Pattern já validado em Fase 7 (com replan) reduz risco aqui.
 
 ## Estimativas
 
 | Fase | Estimate (sessões) | PRs | Habilita |
 |---|---:|---:|---|
-| 7 — quebrar ciclo leads-pipelines | 6-10h | 2-3 | Fase 8 |
-| 8 — pipelines re-deepen | 8-14h | 3-4 | Fase 9 + redução baseline |
+| 7 — quebrar ciclo leads-pipelines (replan: 7.2-bis + 7.3-bis + 7.4-bis) | 16-24h | 3-5 | Fase 9 + redução baseline |
+| ~~8 — pipelines re-deepen~~ | ~~CANCELADA~~ | ~~—~~ | colapsada em Slice 7.3-bis |
 | 9 — identity split | 10-16h | 3-5 | onboarding agentes mais limpo |
-| **Total** | **24-40h** | **8-12** | baseline ratchet ↓ |
+| **Total** | **26-40h** | **6-10** | baseline ratchet ↓ |
 
 ## Critérios de sucesso globais
 
@@ -67,10 +67,10 @@ Análise via skill identificou 3 candidatos com ROI mais alto pra deepening pós
 
 **Plano original (revertido):** Fase 5 → Fase 6 → estabilizar 7d → Fases 7/8/9.
 
-**Plano atual:** Fases 7/8/9 em `develop` **antes** de Fase 5 (deploy prod) e Fase 6 (develop → main).
+**Plano atual:** Fase 7 (com replan 7.2-bis + 7.3-bis + 7.4-bis) + Fase 9 em `develop` **antes** de Fase 5 (deploy prod) e Fase 6 (develop → main). Fase 8 cancelada (colapsada em 7.3-bis).
 
 ```
-Hoje → Fase 7 → Fase 8 → Fase 9 → Fase 5 → Fase 6 → estabilização
+Hoje → Fase 7 (replan) → Fase 9 → Fase 5 → Fase 6 → estabilização
 ```
 
 ### Razão da inversão

@@ -165,4 +165,125 @@ Verificar após Slice 7.2 mergeado.
 
 ## Próximo passo
 
-Slice 7.2 — promoção + ajuste de imports em 1 PR (~3-5h). Branch `feat/arch-deepening/07-2-promote-and-rewire`.
+~~Slice 7.2 — promoção + ajuste de imports em 1 PR (~3-5h). Branch `feat/arch-deepening/07-2-promote-and-rewire`.~~
+
+**Slice 7.2 original INVALIDADA em 2026-05-28.** Ver seção abaixo.
+
+---
+
+## Slice 7.2 — tentativa invalidada (2026-05-28)
+
+### O que foi feito
+
+Branch `feat/arch-deepening/07-2-promote-and-rewire` (local, nunca pushada, **deletada**) executou exatamente o que o inventário pediu:
+
+- `pipelines/index.ts`: +6 hooks + 3 `statusColumns` aliased (resolve colisão entre 3 hooks legacy)
+- `leads/index.ts`: +3 (`useTags`, `useBulkSelection`, `BulkActionBar`)
+- 18 consumers reescritos (15 em `leads/`, 3 em `pipelines/`)
+- Verificação `grep` cross-module: **0 deep imports** leads ↔ pipelines
+
+### O que quebrou
+
+```
+baseline ratchet: 86 → 120 violations
+  no-circular: 63 → 97 (+34 NEW)
+  no-orphans: 23 → 23
+```
+
+Constraint invariante do CTO: **"baseline SEMPRE verde. Se subir, abortar."** Abortado.
+
+### Por que a premissa estava errada
+
+Inventário previu **queda** para ≤80. Realidade: **subiu 39%**.
+
+Causa: barrel-to-barrel cria um ciclo mais largo, não menor.
+
+- **Antes** (deep imports): `leads/X.tsx → pipelines/hooks/Y.ts` — grafo file-to-file fino. Ciclos curtos, localizados.
+- **Depois** (barrel): `leads/X.tsx → pipelines/index.ts` (re-exporta 97 símbolos, incluindo `KanbanCard` que importa `leads/index.ts` (51 símbolos)) `→ ... → leads/X.tsx`. Cada import via barrel materializa o ciclo cross-module na sua plenitude.
+
+**O ciclo é REAL no domínio.** Não é artefato de organização de arquivos:
+- `leads` precisa mutar pipes (`LeadModal`, `LeadCreateForm`, `ConfirmacaoContext`, `PropostasContext`, `MeetingFieldBlock`, `BudgetFieldBlock` criam/atualizam pipe_*)
+- `pipelines` precisa ler leads (`KanbanCard`, `PipeTableView`, pages consomem tags/bulk-select)
+
+Promoção ao barrel só **renomeia** o problema — não trata coupling estrutural.
+
+### Lição
+
+Slice "mecânica" (mover símbolos para barrels) sem análise de coupling de domínio = trabalho perdido. Inventário 7.1 mediu deep imports mas não mediu **direção semântica** (mutation vs read) nem **handler topology** (quem é entry point, quem é folha).
+
+---
+
+## Replan — Slice 7 reescrita (2026-05-28)
+
+### Slice 7.2-bis — inversão via event-bus existente (~2-3 dias)
+
+**Alvo:** matar `leads → pipelines/hooks/*` (38 imports) substituindo por publicação de evento.
+
+Event-bus já operacional (slice 19 piloto: `lead.stage_changed`). Expandir vocabulário:
+
+| Evento novo | Publisher (em `leads/`) | Subscriber (em `pipelines/`) |
+|---|---|---|
+| `pipe.add` | LeadModal, LeadCreateForm, MeetingFieldBlock, BudgetFieldBlock | handler executa `useCreatePipe*` |
+| `pipe.stage.change` | ConfirmacaoContext, PropostasContext, WhatsAppContext | handler executa `useUpdatePipe*` |
+| `pipe.remove` | CrossPipePanel, useLeadPipeHandlers | handler executa `useDeletePipe*` |
+| `pipe.proposta.item.upsert` | BudgetFieldBlock | handler executa items mutations |
+
+**Critério de sucesso:** zero hook `usePipe*` chamado de dentro de `leads/`. Só tipos remanescentes (via `import type`).
+
+Estimativa restante de `leads → pipelines` após 7.2-bis: ~5 imports type-only.
+
+### Slice 7.3-bis — re-deepen pipelines barrel (~1 dia)
+
+**Problema atual:** `pipelines/index.ts` re-exporta 97 símbolos. Qualquer barrel-to-barrel arrasta tudo.
+
+**Solução:** quebrar em sub-barrels semânticos:
+
+```
+pipelines/
+├── views/index.ts       # pipe_whatsapp/confirmacao/propostas hooks + types
+├── canonical/index.ts   # pipeline_entries + pipeline_stages (modelo novo)
+├── custom/index.ts      # custom_pipelines + members
+├── kanban/index.ts      # KanbanCard, KanbanBoard, etc — consome lead TYPES (não índice)
+├── legacy/index.ts      # CompareceuModal, RescheduleModal, etc
+└── index.ts             # re-exporta só os sub-barrels (fica pequeno)
+```
+
+Consumers escolhem o sub-barrel: `import { KanbanCard } from "@/modules/pipelines/kanban"` — não puxa `pipe_whatsapp` hooks.
+
+Quebra ciclo dep-cruiser porque `pipelines/kanban → leads/index.ts` não passa mais por `pipelines/index.ts → leads/index.ts → pipelines/index.ts`.
+
+### Slice 7.4-bis — type-only imports onde sobrar (~2 horas)
+
+`import type { Lead }` não gera runtime cycle (TS-only, apagado em build). Marcar qualquer remanescente cross-module como type-only.
+
+### Net result projetado (validar após 7.2-bis + 7.3-bis)
+
+- Deep cross-module: 0
+- Baseline ratchet: estimativa **~70** (queda real, não chutada) — confirmar via medição pós-7.2-bis
+- Domain shape: pipelines = side-effect handler. leads = command publisher.
+
+### Riscos
+
+- Event-bus async exige `wait_response` no UI onde antes era await direto (mutation chain quebra)
+- Realtime + event sequencing — testar concorrência
+- Permission gates (`useLeadActionGates`) precisam funcionar antes do publish
+
+### Ordem proposta
+
+1. **7.2-bis** primeiro (inverte 38 imports leads→pipelines) — quebra 80% do ciclo
+2. **7.3-bis** depois (sub-barrels) — quebra os 9 imports pipelines→leads + reduz baseline
+3. **7.4-bis** finaliza — type-only para resto
+
+Fase 8 (re-deepen pipelines geral) cancelada — 7.3-bis cobre.
+
+### Pré-requisitos pra 7.2-bis
+
+Antes de codar, mapear:
+
+- [ ] Listar 38 deep imports `leads → pipelines` por categoria: **mutation** (publica evento) vs **read** (consome tipo)
+- [ ] Para reads de tipo: marcar como `import type` candidato em 7.4-bis
+- [ ] Para mutations: definir contrato exato do evento (payload, response shape)
+- [ ] Confirmar event-bus suporta request-response sync (mutation chains com toast/error feedback) — se não, criar wrapper
+- [ ] Decidir: 1 PR grande (todos os 4 contextos migrados) vs 4 PRs incrementais (1 por evento)
+
+Branch base: `feat/arch-deepening/07-2-bis-eventbus-inversion` (a criar quando 7.2-bis começar).

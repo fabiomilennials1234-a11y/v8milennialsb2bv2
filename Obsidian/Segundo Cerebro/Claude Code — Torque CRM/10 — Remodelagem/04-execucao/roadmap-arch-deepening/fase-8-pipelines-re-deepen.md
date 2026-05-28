@@ -1,9 +1,11 @@
 ---
-status: planejado
+status: cancelada
 owner: arquiteto
 tipo: fase-execucao
 fase: 8
 criado: 2026-05-28
+cancelada: 2026-05-28
+motivo_cancelamento: "Coberta por Slice 7.3-bis no replan de Fase 7 — ver inventario-leads-pipelines.md"
 estimate: 8-14h
 pre_requisitos:
   - "[[fase-7-quebrar-ciclo-leads-pipelines]] mergeada"
@@ -13,6 +15,9 @@ habilita:
 relacionados:
   - "[[_INDEX]]"
 ---
+
+> **CANCELADA 2026-05-28.** Re-deepen de `pipelines` foi colapsado em Slice 7.3-bis (parte do replan de Fase 7). Quebra do barrel monolítico em sub-pastas (`views`, `canonical`, `custom`, `kanban`, `legacy`) virou pré-requisito para fechar ciclo `leads ↔ pipelines`, então faz parte da mesma onda. Detalhes em `inventario-leads-pipelines.md` (seção "Replan").
+
 
 # Fase 8 — `pipelines` re-deepen
 
