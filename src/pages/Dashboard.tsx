@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from "react";
+import { useState, lazy, Suspense, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,22 +17,41 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useIdentity } from "@/hooks/useIdentity";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getDashboardTabs, getDefaultTab } from "@/lib/dashboard-tabs";
+import type { DashboardTabContext } from "@/lib/dashboard-tabs";
+import { CoberturaPipeline } from "@/components/dashboard/CoberturaPipeline";
+import { LeadsParados } from "@/components/dashboard/LeadsParados";
+import { SequenciaVitorias } from "@/components/dashboard/SequenciaVitorias";
 import DashboardOutbound from "./DashboardOutbound";
+
+const tabAnimation = {
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.3 },
+};
 
 export default function Dashboard() {
   useAuth();
   const { orgType, isLoading: orgLoading } = useOrganization();
   const { data: userRole } = useUserRole();
   const role = userRole?.role;
-  const { isLoading: teamMemberLoading } = useCurrentTeamMember();
+  const { data: currentTeamMember, isLoading: teamMemberLoading } = useCurrentTeamMember();
   const { isMaster } = useIdentity();
-
-  const showAnalytics = isMaster;
+  const teamMemberId = (currentTeamMember as any)?.id ?? null;
 
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
 
   const oraculo = useOraculoChat({ month: selectedMonth, year: selectedYear });
+
+  const tabContext: DashboardTabContext = useMemo(() => ({
+    role: isMaster ? "admin" : role === "admin" ? "admin" : role ? "member" : null,
+    isMaster,
+  }), [role, isMaster]);
+
+  const tabs = useMemo(() => getDashboardTabs(tabContext), [tabContext]);
+  const defaultTab = useMemo(() => getDefaultTab(tabContext), [tabContext]);
+  const visibleTabs = useMemo(() => tabs.filter((t) => t.visible), [tabs]);
 
   if (orgType === "outbound" && role === "member") {
     return <DashboardOutbound />;
@@ -50,7 +69,8 @@ export default function Dashboard() {
     );
   }
 
-  const isUserAdmin = role === "admin";
+  const isUserAdmin = isMaster || role === "admin";
+  const showAnalytics = isMaster;
 
   return (
     <div className="space-y-6 relative">
@@ -60,63 +80,57 @@ export default function Dashboard() {
         onMonthChange={(m, y) => { setSelectedMonth(m); setSelectedYear(y); }}
       />
 
-      <Tabs defaultValue="visao-geral" className="w-full">
+      <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList>
-          <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
-          <TabsTrigger value="performance">Performance</TabsTrigger>
-          <TabsTrigger value="inteligencia">Inteligência</TabsTrigger>
-          {showAnalytics && (
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          )}
+          {visibleTabs.map((tab) => (
+            <TabsTrigger key={tab.id} value={tab.id}>
+              {tab.label}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
-        <TabsContent value="visao-geral" className="mt-6">
-          <motion.div
-            key="visao-geral"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <TabVisaoGeral month={selectedMonth} year={selectedYear} isAdmin={isUserAdmin} />
-          </motion.div>
-        </TabsContent>
-
-        <TabsContent value="performance" className="mt-6">
-          <motion.div
-            key="performance"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <TabPerformance month={selectedMonth} year={selectedYear} />
-          </motion.div>
-        </TabsContent>
-
-        <TabsContent value="inteligencia" className="mt-6">
-          <motion.div
-            key="inteligencia"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <TabInteligencia month={selectedMonth} year={selectedYear} isAdmin={isUserAdmin} />
-          </motion.div>
-        </TabsContent>
-
-        {showAnalytics && (
-          <TabsContent value="analytics" className="mt-6">
-            <Suspense fallback={<TorqueLoader variant="inline" />}>
-              <motion.div
-                key="analytics"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <TabAnalyticsV2 />
-              </motion.div>
-            </Suspense>
+        {/* Tab Resultado — Camada Estratégica */}
+        {isUserAdmin && (
+          <TabsContent value="resultado" className="mt-6">
+            <motion.div key="resultado" {...tabAnimation}>
+              <TabVisaoGeral month={selectedMonth} year={selectedYear} isAdmin={isUserAdmin} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                <CoberturaPipeline month={selectedMonth} year={selectedYear} />
+                <LeadsParados />
+              </div>
+              <div className="mt-6">
+                <TabInteligencia month={selectedMonth} year={selectedYear} isAdmin={isUserAdmin} />
+              </div>
+              {showAnalytics && (
+                <Suspense fallback={<TorqueLoader variant="inline" />}>
+                  <div className="mt-6">
+                    <TabAnalyticsV2 />
+                  </div>
+                </Suspense>
+              )}
+            </motion.div>
           </TabsContent>
         )}
+
+        {/* Tab Time — Camada Tática */}
+        {isUserAdmin && (
+          <TabsContent value="time" className="mt-6">
+            <motion.div key="time" {...tabAnimation}>
+              <TabPerformance month={selectedMonth} year={selectedYear} />
+            </motion.div>
+          </TabsContent>
+        )}
+
+        {/* Tab Meus Números — Camada Operacional */}
+        <TabsContent value="meus-numeros" className="mt-6">
+          <motion.div key="meus-numeros" {...tabAnimation}>
+            <TabVisaoGeral month={selectedMonth} year={selectedYear} isAdmin={false} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+              <LeadsParados memberId={teamMemberId} />
+              <SequenciaVitorias memberId={teamMemberId} />
+            </div>
+          </motion.div>
+        </TabsContent>
       </Tabs>
 
       <OraculoFloatingButton
