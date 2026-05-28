@@ -4,7 +4,10 @@ import { useAuth } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { useOrganization } from "@/modules/identity";
 import { triggerFollowUpAutomation } from "@/modules/workflows/hooks/useAutoFollowUp";
-import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
+// Slice 19 event-bus: migrado para publishEvent. Import legacy mantido
+// comentado até remoção pós-2-semanas-verde em prod (ver TODO em useUpdateCampanhaLead).
+// import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
+import { publishEvent } from "@/integrations/supabase/events";
 import { assertPermission } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";
 // Tipos para os objetivos de campanha
@@ -810,14 +813,36 @@ export function useUpdateCampanhaLead() {
       queryClient.invalidateQueries({ queryKey: ["campanha_leads", variables.campanha_id] });
       queryClient.invalidateQueries({ queryKey: ["campanha_members", variables.campanha_id] });
 
-      // Fire workflow stage_changed trigger when campaign lead changes stage
+      // Slice 19 event-bus piloto: publica lead.stage_changed em vez de
+      // chamar triggerStageChangedWorkflows direto. Edge function
+      // event-dispatcher consome e dispara workflows via handler central.
+      //
+      // TODO(2 semanas verde em prod): remover bloco comentado abaixo
+      // junto com import de triggerStageChangedWorkflows.
       if (!error && data && variables.stage_id && data.lead_id && organizationId) {
-        triggerStageChangedWorkflows({
-          organizationId,
-          leadId: data.lead_id,
-          campaignId: variables.campanha_id,
-          toStage: variables.stage_id,
-        }).catch(() => {}); // Non-blocking
+        publishEvent({
+          event_type: "lead.stage_changed",
+          aggregate_type: "campanha_lead",
+          aggregate_id: data.id,
+          organization_id: organizationId,
+          payload: {
+            lead_id: data.lead_id,
+            pipeline_id: null,
+            campaign_id: variables.campanha_id,
+            pipe_type: null,
+            old_stage_key: null,
+            new_stage_key: variables.stage_id,
+            pipeline_slug: null,
+          },
+        }).catch(() => {}); // Non-blocking — mantém UX consistente com legacy.
+
+        // Legacy fan-out manual — comentado por slice 19, remoção pendente.
+        // triggerStageChangedWorkflows({
+        //   organizationId,
+        //   leadId: data.lead_id,
+        //   campaignId: variables.campanha_id,
+        //   toStage: variables.stage_id,
+        // }).catch(() => {});
       }
     },
   });

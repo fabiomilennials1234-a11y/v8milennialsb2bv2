@@ -73,8 +73,8 @@ vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({
 vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({
   triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/lib/workflowTrigger", () => ({
-  triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined),
+vi.mock("@/integrations/supabase/events", () => ({
+  publishEvent: vi.fn().mockResolvedValue("evt-test"),
 }));
 vi.mock("@/modules/identity/lib/permissions", () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
@@ -782,8 +782,8 @@ describe("useUpdateCampanhaLead", () => {
     vi.clearAllMocks();
   });
 
-  it("updates a campaign lead (move stage) and triggers workflow", async () => {
-    // Return data with lead_id so onSettled fires triggerStageChangedWorkflows
+  it("updates a campaign lead (move stage) and publishes lead.stage_changed event", async () => {
+    // Return data with lead_id so onSettled publishes the event (slice 19 event-bus).
     const chain = createChainMock({
       singleData: { id: "cl-1", lead_id: "lead-1", stage_id: "s2", campanha_id: "camp-1" },
     });
@@ -797,15 +797,20 @@ describe("useUpdateCampanhaLead", () => {
       });
     });
     expect(mockFrom).toHaveBeenCalledWith("campanha_leads");
-    // triggerStageChangedWorkflows should be called via onSettled
-    const { triggerStageChangedWorkflows } = await import("@/lib/workflowTrigger");
-    expect(triggerStageChangedWorkflows).toHaveBeenCalledWith(
+
+    const { publishEvent } = await import("@/integrations/supabase/events");
+    expect(publishEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        organizationId: "org-t",
-        leadId: "lead-1",
-        campaignId: "camp-1",
-        toStage: "s2",
-      })
+        event_type: "lead.stage_changed",
+        aggregate_type: "campanha_lead",
+        aggregate_id: "cl-1",
+        organization_id: "org-t",
+        payload: expect.objectContaining({
+          lead_id: "lead-1",
+          campaign_id: "camp-1",
+          new_stage_key: "s2",
+        }),
+      }),
     );
   });
 
