@@ -36,8 +36,21 @@ const ACTIVE_STATUSES = [
 const SELECT = `
   id, lead_id, stage_key, metadata, closed_at, created_at, updated_at,
   lead:leads!pipeline_entries_lead_id_fkey(name, company),
-  responsible:team_members!pipeline_entries_assigned_to_fkey(name)
+  responsible:team_members!pipeline_entries_assigned_to_fkey(name),
+  items:pipe_proposta_items!pipe_proposta_items_pipeline_entry_id_fkey(sale_value, product:products(type))
 `;
+
+function resolveProductType(entry: any): string | null {
+  const items = entry.items?.filter((i: any) => i != null) ?? [];
+  if (items.length > 0) {
+    const types = new Set(items.map((i: any) => i.product?.type).filter(Boolean));
+    if (types.has("mrr")) return "mrr";
+    if (types.has("projeto")) return "projeto";
+    return "unitario";
+  }
+  const meta = (entry.metadata as Record<string, any>) ?? {};
+  return meta.product_type ?? null;
+}
 
 function mapEntry(entry: any): DrilldownRow {
   const meta = (entry.metadata as Record<string, any>) ?? {};
@@ -46,7 +59,7 @@ function mapEntry(entry: any): DrilldownRow {
     lead_id: entry.lead_id,
     sale_value: meta.sale_value != null ? Number(meta.sale_value) : null,
     status: entry.stage_key,
-    product_type: meta.product_type ?? null,
+    product_type: resolveProductType(entry),
     closed_at: entry.closed_at,
     created_at: entry.created_at,
     updated_at: entry.updated_at,
