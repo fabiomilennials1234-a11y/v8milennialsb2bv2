@@ -230,18 +230,18 @@ graph LR
 
 ### 5.3. Distribuição doc-only por BC
 
-| BC | Edge fns mapeadas |
-|---|---:|
-| identity | 9 (master, admin, invite, etc.) |
-| communication | ~20 (whatsapp, meta, mass-send, etc.) |
-| copilot | 13 (agent-message, oraculo, ai-action) |
-| workflows | 3 (process-workflow-executions, etc.) |
-| campaigns | 3 (campaign-rule-dispatch, etc.) |
-| carteira | 3 (tinyerp sync) |
-| integrations | ~13 (google-calendar, asaas, elevenlabs, etc.) |
-| platform | ~10 (cron, observability) |
-| event-dispatcher | 1 (slice 19) |
-| Total | 96 mapeadas + 2 outras = 98 |
+| BC               |                              Edge fns mapeadas |
+| ---------------- | ---------------------------------------------: |
+| identity         |                9 (master, admin, invite, etc.) |
+| communication    |          ~20 (whatsapp, meta, mass-send, etc.) |
+| copilot          |         13 (agent-message, oraculo, ai-action) |
+| workflows        |          3 (process-workflow-executions, etc.) |
+| campaigns        |               3 (campaign-rule-dispatch, etc.) |
+| carteira         |                               3 (tinyerp sync) |
+| integrations     | ~13 (google-calendar, asaas, elevenlabs, etc.) |
+| platform         |                      ~10 (cron, observability) |
+| event-dispatcher |                                   1 (slice 19) |
+| Total            |                    96 mapeadas + 2 outras = 98 |
 
 ---
 
