@@ -48,45 +48,30 @@ type SoldRow = {
   items?: Array<{ sale_value: number | null; product?: { type: string } | null }> | null;
 };
 
-/**
- * Agrega vendidos por item.
- * Regra de Venda Total:
- *   - Rec.:    mrr += sale_value (mensal);  sold += sale_value * contract_duration
- *   - Projeto: projeto += sale_value;        sold += sale_value
- *   - Unitário:                              sold += sale_value
- * contract_duration nulo/inválido → fallback de 1 mês (evita zerar o contrato).
- */
 function aggregateSoldByItem(rows: SoldRow[]): { sold: number; mrr: number; projeto: number } {
   let sold = 0;
   let mrr = 0;
   let projeto = 0;
   for (const r of rows) {
-    const duration = Math.max(1, Number(r.contract_duration) || 1);
     const items = r.items?.filter((i) => i != null) ?? [];
     if (items.length > 0) {
       for (const item of items) {
         const val = Number(item.sale_value) || 0;
         const t = item.product?.type;
+        sold += val;
         if (t === "mrr") {
           mrr += val;
-          sold += val * duration;
         } else if (t === "projeto") {
           projeto += val;
-          sold += val;
-        } else {
-          sold += val;
         }
       }
     } else {
       const val = Number(r.sale_value) || 0;
+      sold += val;
       if (r.product_type === "mrr") {
         mrr += val;
-        sold += val * duration;
       } else if (r.product_type === "projeto") {
         projeto += val;
-        sold += val;
-      } else {
-        sold += val;
       }
     }
   }
@@ -145,9 +130,9 @@ export function usePipePropostasMetrics(range: DateRange | null) {
         };
       }
 
-      // Filtra por range: vendidos no período (COALESCE metrics_period_at, closed_at), com items
+      // Filtra por range: vendidos no período (COALESCE metrics_period_at, closed_at, updated_at)
       const { startStr, endStr } = range;
-      const [propQ1, propQ2, activeQ] = await Promise.all([
+      const [propQ1, propQ2, propQ3, activeQ] = await Promise.all([
         supabase
           .from("pipe_propostas")
           .select(soldSelect)
@@ -162,8 +147,18 @@ export function usePipePropostasMetrics(range: DateRange | null) {
           .eq("organization_id", organizationId)
           .eq("status", "vendido")
           .is("metrics_period_at", null)
+          .not("closed_at", "is", null)
           .gte("closed_at", startStr)
           .lte("closed_at", endStr),
+        supabase
+          .from("pipe_propostas")
+          .select(soldSelect)
+          .eq("organization_id", organizationId)
+          .eq("status", "vendido")
+          .is("metrics_period_at", null)
+          .is("closed_at", null)
+          .gte("updated_at", startStr)
+          .lte("updated_at", endStr),
         supabase
           .from("pipe_propostas")
           .select("sale_value, status")
@@ -171,12 +166,12 @@ export function usePipePropostasMetrics(range: DateRange | null) {
           .in("status", activeStatuses),
       ]);
 
-      const soldData = [...(propQ1.data || []), ...(propQ2.data || [])] as SoldRow[];
+      const soldData = [...(propQ1.data || []), ...(propQ2.data || []), ...(propQ3.data || [])] as SoldRow[];
       const { sold, mrr, projeto } = aggregateSoldByItem(soldData);
 
       // Total com atividade no período: entraram no período OU fecharam (vendido/perdido) no período.
       // Denominador correto para evitar taxa inflada quando não marcam "perdido".
-      const [enteredQ1, enteredQ2, lostQ1, lostQ2] = await Promise.all([
+      const [enteredQ1, enteredQ2, lostQ1, lostQ2, lostQ3] = await Promise.all([
         supabase
           .from("pipe_propostas")
           .select("id")
@@ -205,11 +200,21 @@ export function usePipePropostasMetrics(range: DateRange | null) {
           .eq("organization_id", organizationId)
           .eq("status", "perdido")
           .is("metrics_period_at", null)
+          .not("closed_at", "is", null)
           .gte("closed_at", startStr)
           .lte("closed_at", endStr),
+        supabase
+          .from("pipe_propostas")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .eq("status", "perdido")
+          .is("metrics_period_at", null)
+          .is("closed_at", null)
+          .gte("updated_at", startStr)
+          .lte("updated_at", endStr),
       ]);
       const uniqueIds = new Set<string>();
-      [enteredQ1.data, enteredQ2.data, lostQ1.data, lostQ2.data, propQ1.data, propQ2.data]
+      [enteredQ1.data, enteredQ2.data, lostQ1.data, lostQ2.data, lostQ3.data, propQ1.data, propQ2.data, propQ3.data]
         .forEach(list => list?.forEach((r: { id: string }) => uniqueIds.add(r.id)));
       const totalInPeriod = uniqueIds.size;
       const conversionRate = totalInPeriod > 0 ? (soldData.length / totalInPeriod) * 100 : 0;

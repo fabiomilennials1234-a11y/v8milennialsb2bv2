@@ -106,7 +106,7 @@ function isPropostaInPeriod(
   endStr: string,
 ): boolean {
   if (CLOSED_STATUSES_PROPOSTAS.includes(item.status)) {
-    const ref = item.metrics_period_at ?? item.closed_at;
+    const ref = item.metrics_period_at ?? item.closed_at ?? item.updated_at;
     if (!ref) return false;
     return ref >= startStr && ref <= endStr;
   }
@@ -474,32 +474,25 @@ function PipePropostasInner() {
     let mrr = 0;
     let projeto = 0;
     for (const item of soldData) {
-      const duration = Math.max(1, Number(item.contract_duration) || 1);
       const items = item.items?.filter((i: any) => i != null) ?? [];
       if (items.length > 0) {
         for (const it of items) {
           const val = Number(it.sale_value) || 0;
           const t = it.product?.type;
+          sold += val;
           if (t === "mrr") {
             mrr += val;
-            sold += val * duration;
           } else if (t === "projeto") {
             projeto += val;
-            sold += val;
-          } else {
-            sold += val;
           }
         }
       } else {
         const val = Number(item.sale_value) || 0;
+        sold += val;
         if (item.product_type === "mrr") {
           mrr += val;
-          sold += val * duration;
         } else if (item.product_type === "projeto") {
           projeto += val;
-          sold += val;
-        } else {
-          sold += val;
         }
       }
     }
