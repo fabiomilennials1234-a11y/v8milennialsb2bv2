@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TopThreePodium } from "@/modules/engagement/components/gamification/LeaderboardCard";
 import { MiniProgressRing } from "@/modules/engagement/components/gamification/ProgressRing";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { useAvatarMap } from "@/hooks/useAvatarMap";
+import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import badgeIcon from "@/assets/badge-icon.png";
 import { useRankingData } from "@/modules/analytics/hooks/useDashboardMetrics";
 

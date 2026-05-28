@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { useIdentity } from "@/modules/identity";
 import { useOnboardingState } from "@/modules/platform/hooks/useOnboardingState";
-import { TorqueLoader } from "@/components/branding/TorqueLoader";
+import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { OnboardingFlow } from "./OnboardingFlow";
 
 interface OnboardingGateProps {

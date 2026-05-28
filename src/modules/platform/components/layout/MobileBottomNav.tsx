@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { MessageSquare, LayoutList, Users, MoreHorizontal, Gauge, CalendarDays, Settings } from "lucide-react";
-import { useViewport } from "@/hooks/use-viewport";
+import { useViewport } from "@/shared/hooks/use-viewport";
 import { useMobileChatContext } from "@/contexts/MobileChatContext";
 import { cn } from "@/lib/utils";
 import {

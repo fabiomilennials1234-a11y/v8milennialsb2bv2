@@ -18,7 +18,7 @@ import { ChatBubbleThread } from "./ChatBubbleThread";
 import { ChatBubbleEmptyState } from "./ChatBubbleEmptyState";
 import { ChatBubbleRealtimePill } from "./ChatBubbleRealtimePill";
 import { ChatBubbleInstanceSwitcher } from "./ChatBubbleInstanceSwitcher";
-import { useViewport } from "@/hooks/use-viewport";
+import { useViewport } from "@/shared/hooks/use-viewport";
 
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);

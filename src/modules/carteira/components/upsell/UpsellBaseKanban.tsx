@@ -7,7 +7,7 @@ import { useUpsellClients, useUpdateUpsellClient } from "@/modules/carteira/hook
 import { useUpsellOrders } from "@/modules/carteira/hooks/useUpsellOrders";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
-import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
+import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { NewOrderModal } from "@/modules/carteira/components/client/NewOrderModal";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
 import { useIdentity } from "@/modules/identity";

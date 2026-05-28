@@ -5,7 +5,7 @@ import { renderHook, act } from "@testing-library/react";
 
 const mockUseRealtimeChannel = vi.hoisted(() => vi.fn());
 
-vi.mock("@/hooks/useRealtimeChannel", () => ({
+vi.mock("@/shared/realtime/useRealtimeChannel", () => ({
   useRealtimeChannel: mockUseRealtimeChannel,
 }));
 
@@ -31,8 +31,8 @@ vi.mock("@tanstack/react-query", () => ({
 
 // ─── Import after mocks ─────────────────────────────────────────────────────
 
-import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import type { RealtimeHandlers } from "@/hooks/useRealtimeSubscription";
+import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
+import type { RealtimeHandlers } from "@/shared/realtime/useRealtimeSubscription";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

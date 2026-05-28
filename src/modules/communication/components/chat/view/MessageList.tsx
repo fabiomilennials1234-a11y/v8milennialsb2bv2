@@ -26,7 +26,7 @@ import { ptBR } from "date-fns/locale";
 import { Loader2, UserPlus } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { useViewport } from "@/hooks/use-viewport";
+import { useViewport } from "@/shared/hooks/use-viewport";
 import { ChatEmptyState } from "@/modules/communication/components/chat/ChatEmptyState";
 import { UnreadDivider } from "@/modules/communication/components/chat/UnreadDivider";
 import { ScrollToBottomFab } from "@/modules/communication/components/chat/ScrollToBottomFab";

@@ -7,7 +7,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: { organization_id: "org-1" }, isLoading: false }),
 }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({
   useRealtimeSubscription: vi.fn(),
 }));
 

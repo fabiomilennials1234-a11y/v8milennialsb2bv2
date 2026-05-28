@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: vi.fn(), channel: vi.fn().mockReturnValue({ on: vi.fn().mockReturnThis(), subscribe: vi.fn() }) },
 }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({
   useRealtimeSubscription: vi.fn(),
 }));
 vi.mock("@/modules/identity/hooks/useOrganization", () => ({

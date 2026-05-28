@@ -23,7 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useCreateSandbox } from "@/hooks/useSandbox";
+import { useCreateSandbox } from "@/modules/platform/hooks/useSandbox";
 import { useOrganization } from "@/modules/identity";
 // ── Component ─────────────────────────────────────────────────
 

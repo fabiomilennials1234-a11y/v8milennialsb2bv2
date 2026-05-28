@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { motion } from "framer-motion";
 import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
-import { useCountUp } from "@/hooks/useCountUp";
+import { useCountUp } from "@/shared/hooks/useCountUp";
 
 interface KPICardProps {
   title: string;

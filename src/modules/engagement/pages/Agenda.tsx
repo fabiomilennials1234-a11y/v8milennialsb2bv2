@@ -28,8 +28,8 @@ import { useDeleteMeeting } from "@/modules/engagement/hooks/useMeetings";
 import {
   useCalendarEvents,
   useGoogleCalendarStatus,
-} from "@/hooks/useGoogleCalendar";
-import { useCalendarSharing } from "@/hooks/useGoogleCalendarSharing";
+} from "@/modules/integrations/hooks/useGoogleCalendar";
+import { useCalendarSharing } from "@/modules/integrations/hooks/useGoogleCalendarSharing";
 
 import type { EventSource, UnifiedEvent } from "@/modules/engagement/components/agenda/agenda-helpers";
 import {

@@ -67,7 +67,7 @@ vi.mock("@/modules/identity/contexts/AuthContext", () => ({
 vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
 }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({
   useRealtimeSubscription: vi.fn(),
 }));
 vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({

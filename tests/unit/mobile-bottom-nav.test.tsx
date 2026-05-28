@@ -26,11 +26,11 @@ const mockViewport = vi.fn(() => ({
   width: 375,
 }));
 
-vi.mock("@/hooks/use-viewport", () => ({
+vi.mock("@/shared/hooks/use-viewport", () => ({
   useViewport: () => mockViewport(),
 }));
 
-import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
+import { MobileBottomNav } from "@/modules/platform/components/layout/MobileBottomNav";
 
 function renderNav(initialPath = "/") {
   return render(

@@ -17,7 +17,7 @@ import { MessageList, type MessageListProps } from "@/modules/communication/comp
 
 // Mock useViewport to control mobile/desktop
 const mockViewport = { isMobile: false, isDesktop: true, width: 1024 };
-vi.mock("@/hooks/use-viewport", () => ({
+vi.mock("@/shared/hooks/use-viewport", () => ({
   useViewport: () => mockViewport,
 }));
 

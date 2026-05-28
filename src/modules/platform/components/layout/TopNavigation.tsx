@@ -56,7 +56,7 @@ import { useOrganization } from "@/modules/identity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { useMetaPages } from "@/modules/communication/hooks/chat-meta/useMetaPages";
 import { SIDEBAR_FEATURE_MAP } from "@/modules/platform/lib/feature-registry";
-import { UpgradeModal } from "@/components/shared/UpgradeModal";
+import { UpgradeModal } from "@/shared/components/UpgradeModal";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { UserAvatar } from "@/components/ui/user-avatar";

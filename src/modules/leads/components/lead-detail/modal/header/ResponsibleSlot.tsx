@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useUpdateLead } from "../../../../hooks/useLeads";
 import { useLogLeadAction } from "../../../../hooks/useLogLeadAction";
-import { useOptimisticConflictHandler } from "@/hooks/useOptimisticConflictHandler";
+import { useOptimisticConflictHandler } from "@/shared/hooks/useOptimisticConflictHandler";
 import { useLeadActionGates } from "../../hooks/useLeadActionGates";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";

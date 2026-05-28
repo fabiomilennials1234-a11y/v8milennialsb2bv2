@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { useUpsellCampanhas, useUpdateUpsellCampanha } from "@/modules/carteira/hooks/useUpsellCampanhas";
 import { LeadCard } from "@/modules/leads";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
-import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
+import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { NewOrderModal } from "@/modules/carteira/components/client/NewOrderModal";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { useUpdateLead } from "@/modules/leads";

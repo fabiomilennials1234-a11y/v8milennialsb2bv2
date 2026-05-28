@@ -17,7 +17,7 @@ import { createWrapper } from "../../../../../../../tests/helpers/hook-test-util
 // Capture every useRealtimeChannel call.
 const channelCalls: Array<{ table: string; filter?: string; enabled: boolean; onEvent: (p: unknown) => void }> = [];
 
-vi.mock("@/hooks/useRealtimeChannel", () => ({
+vi.mock("@/shared/realtime/useRealtimeChannel", () => ({
   useRealtimeChannel: (opts: {
     table: string;
     filter?: string;

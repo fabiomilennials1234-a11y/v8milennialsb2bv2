@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { useCommandPalette } from "@/components/command/useCommandPalette";
+import { useCommandPalette } from "@/modules/platform/components/command/useCommandPalette";
 
 interface ShortcutDef {
   key: string;

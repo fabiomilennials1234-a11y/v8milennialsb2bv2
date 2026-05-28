@@ -10,12 +10,12 @@ import { AuthProvider, useAuth } from "@/modules/identity/contexts/AuthContext";
 import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
 import { ProtectedRoute } from "@/modules/identity/components/ProtectedRoute";
 import { PermissionProtectedRoute } from "@/modules/identity/components/PermissionProtectedRoute";
-import { MainLayout } from "@/components/layout/MainLayout";
-import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
+import { MainLayout } from "@/modules/platform/components/layout/MainLayout";
+import { useAutoAdminAssignment } from "@/modules/identity/hooks/useAutoAdminAssignment";
 import { SubscriptionProtectedRoute } from "@/modules/identity/components/SubscriptionProtectedRoute";
 import { GlobalErrorBoundary } from "@/modules/platform/components/GlobalErrorBoundary";
 import { OnboardingGate } from "@/modules/platform/components/onboarding/OnboardingGate";
-import { TorqueLoader } from "@/components/branding/TorqueLoader";
+import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { ServiceWorkerUpdater } from "@/modules/platform/components/ServiceWorkerUpdater";
 import { PushPermissionPrompt } from "@/modules/platform/components/PushPermissionPrompt";
 
@@ -100,9 +100,9 @@ import { MasterRoute } from "@/modules/identity/components/master/MasterRoute";
 import { MasterLayout } from "@/modules/identity/components/master/MasterLayout";
 
 // Command Palette — global ⌘K (C24)
-import { CommandPaletteProvider } from "@/components/command/CommandPaletteProvider";
-import { CommandPalette as CommandPaletteComponent } from "@/components/command/CommandPalette";
-import { GlobalShortcutsProvider } from "@/components/command/GlobalShortcutsProvider";
+import { CommandPaletteProvider } from "@/modules/platform/components/command/CommandPaletteProvider";
+import { CommandPalette as CommandPaletteComponent } from "@/modules/platform/components/command/CommandPalette";
+import { GlobalShortcutsProvider } from "@/modules/platform/components/command/GlobalShortcutsProvider";
 
 const queryClient = new QueryClient({
   defaultOptions: {

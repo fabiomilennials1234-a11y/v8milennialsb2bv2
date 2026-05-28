@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { usePersistedState } from "@/hooks/usePersistedState";
+import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { motion } from "framer-motion";
 import {
   Fuel,
@@ -57,7 +57,7 @@ import { useLeads, useLeadsCount, useCreateLead, useUpdateLead, useDeleteLead, L
 import { ExportLeadsModal } from "../components/leads/ExportLeadsModal";
 import { ImportHistoryPanel } from "../components/leads/ImportHistoryPanel";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "../components/lead-detail";
-import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
+import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { useCanDo } from "@/modules/identity";
 import { useFeaturePermission } from "@/modules/identity";
 import {
@@ -72,9 +72,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useBulkSelection } from "@/hooks/useBulkSelection";
-import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
-import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
+import { useBulkSelection } from "@/modules/leads/hooks/useBulkSelection";
+import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
+import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { useSearchParams } from "react-router-dom";
 import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/modules/identity";
 import { useCustomPipelines, useCustomPipelineStages, useAddLeadToCustomPipe } from "@/modules/pipelines/hooks/useCustomPipelines";

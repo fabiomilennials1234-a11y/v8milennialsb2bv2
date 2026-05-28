@@ -31,7 +31,7 @@ vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ us
 vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-test", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-test", teamMemberId: "tm1" }) }));
 vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-test", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/modules/copilot/hooks/useCopilotPromptBuilder", () => ({ generatePrompt: vi.fn(), saveCopilotSystemPrompt: vi.fn(), regenerateAndSavePrompt: vi.fn(), computePromptHash: vi.fn() }));
@@ -48,7 +48,7 @@ import { useAwards } from "@/modules/engagement/hooks/useAwards";
 import { useBadges } from "@/modules/engagement/hooks/useBadges";
 import { useCompetitions } from "@/modules/engagement/hooks/useCompetitions";
 import { useProfiles } from "@/modules/identity/hooks/useProfiles";
-import { useCountUp } from "@/hooks/useCountUp";
+import { useCountUp } from "@/shared/hooks/useCountUp";
 import { useLeadTimeline } from "@/modules/leads";
 import { useLogger } from "@/modules/platform/hooks/useLogger";
 import { useMasterPlans } from "@/modules/identity/hooks/useMasterPlans";
@@ -58,8 +58,8 @@ import { useOrganizationSettings } from "@/modules/identity/hooks/useOrganizatio
 import { useMasterOrganizations } from "@/modules/identity/hooks/useMasterOrganizations";
 import { useMasterUsers } from "@/modules/identity/hooks/useMasterUsers";
 import { useMasterAuditLogs } from "@/modules/identity/hooks/useMasterAuditLogs";
-import { useAvatarMap } from "@/hooks/useAvatarMap";
-import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
+import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
+import { useAutoAdminAssignment } from "@/modules/identity/hooks/useAutoAdminAssignment";
 import { useDailyPriorities } from "@/modules/engagement/hooks/useDailyPriorities";
 import { useDashboardMetrics } from "@/modules/analytics/hooks/useDashboardMetrics";
 import { useScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";

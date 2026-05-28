@@ -6,7 +6,7 @@
  * Fallback: offset 0 quando visualViewport nao disponivel.
  */
 import { useState, useEffect, useCallback } from "react";
-import { useViewport } from "@/hooks/use-viewport";
+import { useViewport } from "@/shared/hooks/use-viewport";
 
 export interface KeyboardOffset {
   /** Altura em px do teclado virtual (0 se fechado/desktop/sem API) */

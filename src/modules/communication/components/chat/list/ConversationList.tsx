@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useViewport } from "@/hooks/use-viewport";
+import { useViewport } from "@/shared/hooks/use-viewport";
 import type { ChatContact, WhatsAppInstanceForUser } from "@/modules/communication/hooks/useWhatsAppChat";
 import { ConversationListItem, contactDisplayName } from "./ConversationListItem";
 import { MobileConversationRow } from "./MobileConversationRow";

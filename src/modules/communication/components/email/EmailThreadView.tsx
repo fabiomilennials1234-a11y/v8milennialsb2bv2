@@ -3,7 +3,7 @@ import DOMPurify from "dompurify";
 import { ChevronDown, ChevronUp, Paperclip, Reply, Forward, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useEmailThread, type Email } from "@/hooks/useEmails";
+import { useEmailThread, type Email } from "@/modules/communication/hooks/useEmails";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";

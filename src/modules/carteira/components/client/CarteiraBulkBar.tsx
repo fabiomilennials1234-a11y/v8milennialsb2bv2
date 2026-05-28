@@ -30,8 +30,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useTeamMembers } from "@/modules/identity";
-import { useTags } from "@/hooks/useTags";
-import { useBulkTag } from "@/hooks/useBulkActions";
+import { useTags } from "@/modules/leads/hooks/useTags";
+import { useBulkTag } from "@/modules/leads/hooks/useBulkActions";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import type { PortfolioClientRow } from "@/modules/carteira/hooks/usePortfolioClients";

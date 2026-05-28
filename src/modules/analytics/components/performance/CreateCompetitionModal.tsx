@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useCreateCompetition } from "@/modules/engagement/hooks/useCompetitions";
 import { useTeamMembers } from "@/modules/identity";
-import { useAvatarMap } from "@/hooks/useAvatarMap";
+import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { toast } from "sonner";
 
 interface Props {

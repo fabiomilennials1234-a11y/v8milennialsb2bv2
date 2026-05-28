@@ -20,7 +20,7 @@ import { RotatingSlot } from "@/modules/analytics/components/tv/RotatingSlot";
 import { TVPeriodProvider, useTVPeriod } from "@/contexts/TVPeriodContext";
 import { useActiveCompetition, useCompetitionParticipants, useCompetitionPrizes } from "@/modules/engagement/hooks/useCompetitions";
 import { useRankingData } from "@/modules/analytics/hooks/useDashboardMetrics";
-import { useAvatarMap } from "@/hooks/useAvatarMap";
+import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { Button } from "@/components/ui/button";
 import torqueLogo from "@/assets/torque-logo.png";
 import { TVRankingSimple } from "@/modules/analytics/components/tv/TVRankingSimple";

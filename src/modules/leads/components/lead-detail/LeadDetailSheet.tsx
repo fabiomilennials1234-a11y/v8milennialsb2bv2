@@ -15,10 +15,10 @@ import { LeadDetailFunnelContext } from "./LeadDetailFunnelContext";
 import { LeadDetailTimeline } from "./LeadDetailTimeline";
 import { LeadDetailNotes } from "./LeadDetailNotes";
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
-import { LogCallModal } from "@/components/calls/LogCallModal";
-import { EmailComposer } from "@/components/email/EmailComposer";
-import { SmsSendDialog } from "@/components/sms/SmsSendDialog";
-import { AiEmailWriter } from "@/components/ai/AiEmailWriter";
+import { LogCallModal } from "@/modules/engagement/components/calls/LogCallModal";
+import { EmailComposer } from "@/modules/communication/components/email/EmailComposer";
+import { SmsSendDialog } from "@/modules/communication/components/sms/SmsSendDialog";
+import { AiEmailWriter } from "@/modules/communication/components/ai/AiEmailWriter";
 import { toast } from "sonner";
 import { useToast } from "@/hooks/use-toast";
 

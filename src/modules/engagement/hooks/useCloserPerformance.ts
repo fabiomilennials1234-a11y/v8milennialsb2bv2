@@ -16,7 +16,7 @@ import { useMemo } from "react";
 import { usePipePropostas } from "@/modules/pipelines/hooks/usePipePropostas";
 import { usePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
 import { useTeamMembers } from "@/modules/identity";
-import { useAvatarMap } from "@/hooks/useAvatarMap";
+import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { inRange, type TVPeriodRange } from "@/lib/tv-periods";
 
 export interface CloserPerformanceRow {

@@ -2,7 +2,7 @@ import { memo } from "react";
 import { cn } from "@/lib/utils";
 import { Crown, Medal, Award, DollarSign, Trophy, TrendingUp } from "lucide-react";
 import { motion } from "framer-motion";
-import { useCountUp } from "@/hooks/useCountUp";
+import { useCountUp } from "@/shared/hooks/useCountUp";
 import type { OriginMetrics } from "@/modules/analytics/hooks/useMktByOrigin";
 import type { MktOriginConfig } from "@/modules/analytics/hooks/useMktOriginConfig";
 import { ORIGIN_LABELS, ORIGIN_COLORS, type LeadOrigin } from "@/modules/analytics/hooks/useMktOriginConfig";

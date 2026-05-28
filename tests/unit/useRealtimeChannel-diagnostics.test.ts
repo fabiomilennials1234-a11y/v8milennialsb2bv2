@@ -48,8 +48,8 @@ vi.mock("@/lib/realtimeStatusStore", () => ({
 
 // ─── Import after mocks ──────────────────────────────────────────────────────
 
-import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
-import type { DiagnosticEvent } from "@/hooks/useRealtimeChannel";
+import { useRealtimeChannel } from "@/shared/realtime/useRealtimeChannel";
+import type { DiagnosticEvent } from "@/shared/realtime/useRealtimeChannel";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

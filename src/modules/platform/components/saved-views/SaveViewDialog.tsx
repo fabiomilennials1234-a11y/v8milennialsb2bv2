@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { useCreateSavedView, useUpdateSavedView } from "@/hooks/useSavedViews";
+import { useCreateSavedView, useUpdateSavedView } from "@/modules/platform/hooks/useSavedViews";
 import type { SavedView } from "@/types/saved-views";
 import { toast } from "sonner";
 

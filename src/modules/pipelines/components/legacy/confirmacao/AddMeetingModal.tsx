@@ -16,8 +16,8 @@ import { useLeads, useUpdateLead } from "@/modules/leads";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useCreatePipeConfirmacao, PipeConfirmacaoStatus } from "@/modules/pipelines/hooks/usePipeConfirmacao";
 import { useLogLeadAction } from "@/modules/leads";
-import { useGoogleCalendarStatus } from "@/hooks/useGoogleCalendar";
-import { useCalendarSharing } from "@/hooks/useGoogleCalendarSharing";
+import { useGoogleCalendarStatus } from "@/modules/integrations/hooks/useGoogleCalendar";
+import { useCalendarSharing } from "@/modules/integrations/hooks/useGoogleCalendarSharing";
 import { useAuth } from "@/modules/identity";
 import { toast } from "sonner";
 

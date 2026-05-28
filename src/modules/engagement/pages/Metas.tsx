@@ -4,7 +4,7 @@ import { GoalProgress } from "@/modules/analytics/components/dashboard/GoalProgr
 import { ProgressRing } from "@/modules/engagement/components/gamification/ProgressRing";
 import { AchievementBadge, BadgeType } from "@/modules/engagement/components/gamification/AchievementBadge";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { useAvatarMap } from "@/hooks/useAvatarMap";
+import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { useTeamGoals, useIndividualGoals } from "@/modules/engagement/hooks/useGoals";
 import { useDashboardMetrics } from "@/modules/analytics/hooks/useDashboardMetrics";
 import { Skeleton } from "@/components/ui/skeleton";

@@ -64,7 +64,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useResponsibleMembers: () => ({ data: [] }),
 }));
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: true }) }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {},

@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCurrentTeamMember } from '../hooks/useTeamMembers';
 import { useIdentity } from '../hooks/useIdentity';
 import { AlertTriangle, Clock } from 'lucide-react';
-import { TorqueLoader } from '@/components/branding/TorqueLoader';
+import { TorqueLoader } from '@/components/ui/branding/TorqueLoader';
 import { Button } from '@/components/ui/button';
 
 interface ProtectedRouteProps {

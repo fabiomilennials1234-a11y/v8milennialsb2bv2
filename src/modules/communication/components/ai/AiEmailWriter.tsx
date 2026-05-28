@@ -36,7 +36,7 @@ import {
   useAcceptEmailDraft,
   type EmailStyle,
   type AiEmailDraft,
-} from "@/hooks/useAiEmailDrafts";
+} from "@/modules/communication/hooks/useAiEmailDrafts";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 

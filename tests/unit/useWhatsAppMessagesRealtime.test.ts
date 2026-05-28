@@ -20,7 +20,7 @@ const { mockUseRealtimeChannel, capturedOptions } = vi.hoisted(() => {
   return { mockUseRealtimeChannel, capturedOptions };
 });
 
-vi.mock("@/hooks/useRealtimeChannel", () => ({
+vi.mock("@/shared/realtime/useRealtimeChannel", () => ({
   useRealtimeChannel: mockUseRealtimeChannel,
 }));
 
