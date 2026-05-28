@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/modules/identity";
+import { useCurrentTeamMember, isVirtualTeamMember } from "@/modules/identity";
 import { useCustomPipelines } from "@/modules/pipelines/hooks/useCustomPipelines";
 
 // ─── Types ───────────────────────────────────────────────────
@@ -195,12 +195,16 @@ export function useAddLeadToStandardPipe() {
     }) => {
       if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
 
+      // Virtual master team_members carry a non-UUID id ("master-virtual-<uuid>")
+      // and must never be written into uuid FK columns (responsible_id/sdr_id/closer_id).
+      const memberId = isVirtualTeamMember(teamMember.id) ? null : teamMember.id;
+
       if (pipeType === "qualificacao") {
         const { error } = await supabase.from("pipe_whatsapp").insert({
           lead_id: leadId,
           status: stageId,
-          responsible_id: teamMember.id,
-          sdr_id: teamMember.id,
+          responsible_id: memberId,
+          sdr_id: memberId,
           organization_id: teamMember.organization_id,
         });
         if (error) throw error;
@@ -208,8 +212,8 @@ export function useAddLeadToStandardPipe() {
         const { error } = await supabase.from("pipe_confirmacao").insert({
           lead_id: leadId,
           status: stageId,
-          responsible_id: teamMember.id,
-          sdr_id: teamMember.id,
+          responsible_id: memberId,
+          sdr_id: memberId,
           organization_id: teamMember.organization_id,
         });
         if (error) throw error;
@@ -217,8 +221,8 @@ export function useAddLeadToStandardPipe() {
         const { error } = await supabase.from("pipe_propostas").insert({
           lead_id: leadId,
           status: stageId,
-          responsible_id: teamMember.id,
-          closer_id: teamMember.id,
+          responsible_id: memberId,
+          closer_id: memberId,
           organization_id: teamMember.organization_id,
         });
         if (error) throw error;
