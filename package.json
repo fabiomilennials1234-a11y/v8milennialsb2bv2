@@ -9,6 +9,8 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "lint:deps": "depcruise src --config .dependency-cruiser.cjs",
+    "lint:deps:baseline": "depcruise src --config .dependency-cruiser.cjs --output-type json > .dependency-cruiser-baseline.json",
+    "lint:deps:check": "node scripts/dep-cruise-ratchet.cjs",
     "lint:deps:graph": "depcruise src --config .dependency-cruiser.cjs --output-type dot | dot -T svg -o dependency-graph.svg",
     "preview": "vite preview",
     "test": "vitest",
