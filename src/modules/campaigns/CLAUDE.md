@@ -114,14 +114,14 @@ Re-exportados via index.ts: `CampaignObjective`, `TargetPipe`, `CampaignType`, `
 - **Mass send + rate limit** — `uazapi_sender_jobs` tem progresso/status assíncrono. Realtime atualiza UI. `useRefreshMassSendStatus` força sync.
 - **Templates com variáveis** — `{{lead.name}}`, `{{lead.empresa}}`, `{{lead.phone}}`, `{{saudacao}}`, `{{data}}`, `{{hora}}` — resolução em `replaceVariablesWithLeadData`.
 - **Dispatch queue** (`outbound_dispatches`) — compartilhado com `pipelines` (PipeDispatchRulesSection usa `usePipeQueueItems`). Cross-module via API pública.
-- **`triggerStageChangedWorkflows`** chamado dentro de `useCampanhas.useExtractLeadToPipe` — bug doc reconhecido (3 call sites). Fix em slice 19 event-bus.
+- **Stage change fan-out** — `useUpdateCampanhaLead` publica `lead.stage_changed` via `publishEvent` (event-bus). Workflows consumem via handler central `_shared/events/handlers/lead-stage-changed.ts`. Migrado em slice 19 + fase 4 deletou função legacy.
 
 ## Dependências cross-module
 
 - `@/modules/identity` — `useOrganization`, `useAuth`, `useCanDo`, `assertPermission`
 - `@/modules/workflows` — `triggerFollowUpAutomation` (server-side)
 - `@/hooks/useRealtimeSubscription` — transport infra (cross-cutting)
-- `@/lib/workflowTrigger` — `triggerStageChangedWorkflows` (a consolidar em slice 19 event-bus)
+- `@/integrations/supabase/events` — `publishEvent` (event-bus, substitui legacy `triggerStageChangedWorkflows` deletado em fase 4)
 - `@/integrations/supabase/client`, `@/integrations/supabase/types`
 
 ### Consumidores cross-module (importam de `@/modules/campaigns`)
@@ -171,4 +171,4 @@ Backend (próximas slices):
 
 - ADR: `Obsidian/.../04 — Decisões/ADR-2026-05-26-modularizacao-monolito-modular.md`
 - Slice de referência: slice 8 workflows (commit e9401f06, changelog `2026-05-27-slice-08-workflows.md`)
-- Bug doc workflow-trigger: `Obsidian/.../08 — Backlog/backlog/triggerStageChangedWorkflows-duplicate.md` (resolução slice 19)
+- Event-bus piloto: `Obsidian/.../10 — Remodelagem/02-solucao/event-bus.md` (resolução slice 19 + dead code removido em fase 4)

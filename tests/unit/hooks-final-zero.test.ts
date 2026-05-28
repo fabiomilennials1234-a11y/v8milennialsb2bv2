@@ -43,7 +43,7 @@ vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () 
 vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r), useAgentFollowupRules: () => ({ data: [] }) }));
 vi.mock("@/modules/copilot/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
 vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }) }));
-vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined), triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/lib/workflowTrigger", () => ({ triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/modules/identity/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));

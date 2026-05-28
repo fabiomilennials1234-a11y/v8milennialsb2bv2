@@ -77,7 +77,6 @@ vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({
   useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }),
 }));
 vi.mock("@/lib/workflowTrigger", () => ({
-  triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined),
   triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/modules/identity/lib/permissions", () => ({

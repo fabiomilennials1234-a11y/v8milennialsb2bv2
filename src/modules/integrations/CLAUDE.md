@@ -1,9 +1,10 @@
 # Module — integrations
 
-**Status:** 🟢 Active (frontend skeleton + cleanup longtail slice 16 — 2026-05-28; backend doc-only via slice 15)
+**Status:** 🟢 Active — superfície atual mínima (3 arquivos: `useGoogleCalendar`, `useGoogleCalendarSharing`, index). Mantido como BC distinto por ser **alvo de expansão futura** — TinyERP, Asaas, Meta, SZ.Chat, Cal.com, ElevenLabs, Uazapi hoje vivem em edge functions com UI fragmentada nos consumidores. Consolidação progressiva pra cá.
 **BC:** integrations (cross-cutting)
 **Entidade primária:** Provider adapter (por provider)
 **Owner:** ops / plataforma
+**Decisão pós-modularização (fase 4 — 2026-05-28):** mantido separado (não absorvido em `platform`). Razão: convergência prevista de providers conforme novas integrações entram. Reavaliar se em 6 meses superfície continuar abaixo de 5 hooks.
 
 ## Escopo
 

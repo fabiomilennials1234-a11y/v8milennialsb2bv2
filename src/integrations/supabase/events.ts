@@ -38,7 +38,8 @@ export type PublishEventInput =
  * Publica evento de domínio. Resolve com event id, rejeita em INSERT failure.
  *
  * Call sites em fluxos não-críticos para UX devem usar `.catch(() => {})` para
- * não bloquear (consistente com o legacy `triggerStageChangedWorkflows`).
+ * não bloquear (UX-first: falha de publish não trava UI; dispatcher reprocessa
+ * pending no próximo cron tick).
  */
 export async function publishEvent(input: PublishEventInput): Promise<string> {
   const { event_type, organization_id, aggregate_id, aggregate_type, payload, metadata } = input;

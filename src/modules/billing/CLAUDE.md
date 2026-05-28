@@ -1,9 +1,10 @@
 # Module — billing
 
-**Status:** 🟢 Active (slice 13 — frontend popular completo. Edge functions Asaas/checkout ficam em slice 14)
+**Status:** 🟢 Active — subscription stable, superfície pequena (5 arquivos). Mantido como BC distinto por ser domínio com **alvo de expansão** se Asaas/Stripe ganhar nova superfície (multi-provider, plano custom, métricas de churn, etc.).
 **BC:** billing
 **Entidade primária:** Subscription Plan + Asaas Payment
 **Owner:** finance / ops
+**Decisão pós-modularização (fase 4 — 2026-05-28):** mantido separado (não absorvido em `platform`). Razão: edge functions Asaas/checkout (slice 14) crescem aqui; subscription é domínio financeiro distinto de settings de plataforma. Reavaliar se em 6 meses não houver edge function nova ou hook novo.
 
 ## Escopo
 

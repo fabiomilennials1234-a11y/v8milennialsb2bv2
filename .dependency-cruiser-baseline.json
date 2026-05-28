@@ -13087,7 +13087,6 @@
       ],
       "dependents": [
         "src/modules/workflows/hooks/useAutoFollowUp.ts",
-        "src/lib/workflowTrigger.ts",
         "src/modules/leads/components/lead-detail/modal/LeadDetailDialog.tsx",
         "src/modules/leads/hooks/useLeads.ts",
         "src/modules/leads/hooks/useLogLeadAction.ts",
@@ -13963,26 +13962,6 @@
             "import"
           ],
           "resolved": "src/integrations/supabase/client.ts",
-          "coreModule": false,
-          "followable": true,
-          "couldNotResolve": false,
-          "matchesDoNotFollow": false,
-          "circular": false,
-          "valid": true
-        },
-        {
-          "dynamic": false,
-          "module": "@/lib/analytics",
-          "moduleSystem": "es6",
-          "exoticallyRequired": false,
-          "dependencyTypes": [
-            "aliased",
-            "aliased-tsconfig",
-            "aliased-tsconfig-paths",
-            "local",
-            "import"
-          ],
-          "resolved": "src/lib/analytics.ts",
           "coreModule": false,
           "followable": true,
           "couldNotResolve": false,
@@ -129299,7 +129278,7 @@
     "info": 0,
     "ignore": 0,
     "totalCruised": 1158,
-    "totalDependenciesCruised": 5199,
+    "totalDependenciesCruised": 5198,
     "optionsUsed": {
       "baseDir": "C:\\Users\\torch\\Desktop\\milennials\\v8milennialsb2bv2",
       "combinedDependencies": false,
