@@ -518,9 +518,8 @@ function PipePropostasInner() {
     };
   }, [pipeData, stageData]);
 
-  // Exibir métricas: "Geral" = stats do pipe; outros modos = hook (vendidos no período); pipeline ativo sempre do pipe atual
   const displayStats = useMemo(() => {
-    if (!periodRange || !metricsByPeriod) {
+    if (!metricsByPeriod) {
       return stats;
     }
     return {
@@ -528,7 +527,7 @@ function PipePropostasInner() {
       inProgress: stats.inProgress,
       inProgressCount: stats.inProgressCount,
     };
-  }, [periodRange, metricsByPeriod, stats]);
+  }, [metricsByPeriod, stats]);
 
   // Total de propostas que passam pelo filtro temporal (para exibir no banner)
   const periodFilteredCount = useMemo(() => {
