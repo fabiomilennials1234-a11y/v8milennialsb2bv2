@@ -20,6 +20,8 @@ jobs:
       - name: Security audit
         run: npm audit --audit-level=high
       - run: npm run lint
+      - name: Lint dependency graph (cycles + module boundaries)
+        run: npm run lint:deps
       - name: Build (prod)
         run: npm run build
         env:
