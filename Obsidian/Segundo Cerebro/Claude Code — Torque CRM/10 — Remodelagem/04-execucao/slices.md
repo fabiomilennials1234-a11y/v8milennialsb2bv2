@@ -11,7 +11,7 @@ related: ["[[estrutura-final]]", "[[criterios-sucesso]]"]
 
 19 slices vertical thin, mergeáveis em `develop` independente. Cada slice = 1 PR pequeno, app não quebra ao mergear, sem dependência de slice futura.
 
-**Estado (2026-05-28):** slices 0-16 ✅ merged. Slice 15 (edge functions reorg) descartada como reorg física — substituída por doc-only mapping. Slice 17 (docs + ESLint flip) em PR. Slice 18 (finalize) + slice 19 (event-bus piloto) pendentes.
+**Estado (2026-05-28):** slices 0-19 ✅ merged. Slice 15 (edge functions reorg) **descartada** como reorg física — substituída por doc-only mapping em `supabase/functions/CLAUDE.md`. Slice 16 (cleanup longtail) adicionada após inspeção pós-slice 14 (não estava no plano original). Slice 18 (finalize) encerra a modularização em `develop` — ADR de conclusão `ADR-2026-05-28-modularizacao-conclusao.md`. PR `develop → main` pendente de coordenação humana.
 
 Detalhe completo + estimativas em `.specs/features/modularizacao/SPEC.md`.
 
@@ -36,9 +36,9 @@ Detalhe completo + estimativas em `.specs/features/modularizacao/SPEC.md`.
 | 14 ✅ | `feat/modularizacao/13-platform` | onboarding + settings + observability + feature flags | 4h | merged |
 | 15 ❌ | ~~`feat/modularizacao/14-edge-functions`~~ → docs-only | **Descartada como reorg física.** Supabase CLI exige flat layout em `supabase/functions/`. Substituído por **mapping doc-only** em `supabase/functions/CLAUDE.md` (96 funções por BC, commit `c9b227ed`). | 0h (doc-only) | ✅ doc |
 | 16 ✅ | `feat/modularizacao/15-shared-cleanup` (renamed: cleanup longtail) | Limpar `src/components/`, `src/hooks/`, `src/pages/` root → módulos + `src/shared/`. 45 hooks/components + 1 page absorvidos pelos BCs corretos. | 4h | merged (PR #512) |
-| 17 | `feat/modularizacao/17-docs-eslint-flip` ← **atual** | CLAUDE.md raiz + AGENTS.md + llms.txt + vault + sub-CLAUDE.md 8 módulos + ESLint flip warn→error + SPEC adendo slice 15 descartada | 4h | em PR |
-| 18 | `feat/modularizacao/18-finalize` | Deletar pastas legacy vazias + ADR conclusão + PR `develop → main` | 2h | pending |
-| 19 | `feat/modularizacao/19-event-bus-pilot` | **Slice piloto event-bus**: `domain_events` + `_shared/events/` + dispatcher + migração `lead.stage_changed` | 8h | paralela slice 17 |
+| 17 ✅ | `feat/modularizacao/17-docs-eslint-flip` | CLAUDE.md raiz + AGENTS.md + llms.txt + vault + sub-CLAUDE.md 8 módulos + ESLint flip warn→error + SPEC adendo slice 15 descartada | 4h | merged (PR #514) |
+| 18 ✅ | `feat/modularizacao/18-finalize` ← **atual** | ADR de conclusão + atualização slices.md + nota SPEC + smoke checklist pra PR `develop → main`. **Não abre PR develop→main** (coordenação humana). | 2h | merged (em PR contra develop) |
+| 19 ✅ | `feat/modularizacao/19-event-bus-piloto` | **Slice piloto event-bus**: `domain_events` + `_shared/events/` + dispatcher + migração `lead.stage_changed` | 8h | merged (PR #515) |
 
 **Total estimado**: ~92h (~12 dias úteis 1 dev). Originais 80h + ~12h dedup absorvido.
 
@@ -50,7 +50,7 @@ Detalhe completo + estimativas em `.specs/features/modularizacao/SPEC.md`.
 - **Shared cleanup (16) depois de todos domínios**: já consumiram o que precisavam.
 - **Docs (17) por último** com ESLint flip warn→error como gate de conclusão.
 - **Event-bus piloto (19) depois de docs**: padrão consolidado + 1 bug recorrente fechado.
-- **Finalize (20)**: deletar legacy + ADR conclusão.
+- **Finalize (18)**: ADR conclusão + smoke checklist; PR `develop → main` fica pra coordenação humana.
 
 ## Convenção branches (já firmada)
 
