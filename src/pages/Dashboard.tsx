@@ -1,4 +1,5 @@
 import { useState, lazy, Suspense, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,6 +39,8 @@ const tabAnimation = {
 };
 
 export default function Dashboard() {
+  const [searchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get("tab") as "resultado" | "time" | "meus-numeros" | null;
   useAuth();
   const { orgType, isLoading: orgLoading } = useOrganization();
   const { data: userRole } = useUserRole();
@@ -63,8 +66,11 @@ export default function Dashboard() {
   }), [role, isMaster]);
 
   const tabs = useMemo(() => getDashboardTabs(tabContext), [tabContext]);
-  const defaultTab = useMemo(() => getDefaultTab(tabContext), [tabContext]);
+  const roleDefaultTab = useMemo(() => getDefaultTab(tabContext), [tabContext]);
   const visibleTabs = useMemo(() => tabs.filter((t) => t.visible), [tabs]);
+  const defaultTab = tabFromUrl && visibleTabs.some((t) => t.id === tabFromUrl)
+    ? tabFromUrl
+    : roleDefaultTab;
 
   if (orgLoading || teamMemberLoading) {
     return (

@@ -272,31 +272,23 @@ function AppRoutes() {
       />
       <Route
         path="/performance"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="performance.view">
-                <Performance />
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
+        element={<Navigate to="/dashboard?tab=time" replace />}
       />
       <Route
         path="/ranking"
-        element={<Navigate to="/performance" replace />}
+        element={<Navigate to="/dashboard?tab=time" replace />}
       />
       <Route
         path="/metas"
-        element={<Navigate to="/performance" replace />}
+        element={<Navigate to="/dashboard?tab=time" replace />}
       />
       <Route
         path="/premiacoes"
-        element={<Navigate to="/performance" replace />}
+        element={<Navigate to="/dashboard?tab=time" replace />}
       />
       <Route
         path="/gestao-metas"
-        element={<Navigate to="/performance" replace />}
+        element={<Navigate to="/dashboard?tab=time" replace />}
       />
       <Route
         path="/pipe-whatsapp"
@@ -372,7 +364,7 @@ function AppRoutes() {
       />
       <Route
         path="/premiacoes"
-        element={<Navigate to="/performance" replace />}
+        element={<Navigate to="/dashboard?tab=time" replace />}
       />
       <Route
         path="/comissoes"
@@ -454,15 +446,7 @@ function AppRoutes() {
       />
       <Route
         path="/copilot/metricas"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="copilot.view">
-                <CopilotMetrics />
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
+        element={<Navigate to="/dashboard?tab=time" replace />}
       />
       <Route
         path="/chat"

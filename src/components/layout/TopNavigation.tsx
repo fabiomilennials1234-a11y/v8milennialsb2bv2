@@ -134,7 +134,7 @@ const primaryNavItems: NavItemWithChildren[] = [
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
-  { label: "Ranking", icon: Trophy, path: "/performance" },
+  { label: "Ranking", icon: Trophy, path: "/dashboard?tab=time" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
 ];
 
@@ -159,7 +159,7 @@ const allNavItems: NavItemWithChildren[] = [
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
   { label: "Combustível", icon: Fuel, path: "/leads" },
   { label: "Negócios", icon: Briefcase, path: "/negocios" },
-  { label: "Ranking", icon: Trophy, path: "/performance" },
+  { label: "Ranking", icon: Trophy, path: "/dashboard?tab=time" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
   { label: "Checklists", icon: ListChecks, path: "/checklists" },
@@ -218,7 +218,7 @@ const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/templates": "message_templates.view",
   "/duplicatas": "leads.view",
   "/lixeira": "leads.view",
-  "/performance": "performance.view",
+  "/dashboard?tab=time": "performance.view",
   "/comissoes": "commissions.view",
   "/copilot": "copilot.view",
   "/automacoes": "workflows.view",
