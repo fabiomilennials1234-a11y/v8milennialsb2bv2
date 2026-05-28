@@ -68,7 +68,7 @@ Tipos de domínio (`Workflow`, `WorkflowExecution`, `WorkflowExecutionStep`, `Wo
 
 🟠 **Área frágil declarada em CLAUDE.md raiz.** Um dos 4 maiores (Copilot, WhatsApp, Permissões, Workflows).
 
-- **`triggerStageChangedWorkflows` chamado em 3 lugares** — bug `08 — Backlog/backlog/triggerStageChangedWorkflows-duplicate.md`. Fix em slice 19 event-bus (piloto migra `lead.stage_changed`). **NÃO consolidar agora.**
+- **Stage_changed fan-out** — consumido via event-bus `lead.stage_changed` (slice 19 + fase 3 event-bus dev). Handler `_shared/events/handlers/lead-stage-changed.ts` chama `fireTrigger` no executor.
 - **Dedup obrigatório** — mesma trigger não dispara workflow 2x (memória `workflow-trigger-dedup.ts`).
 - **`actions/` vs `action-handlers/`** — split ambíguo em `_shared/`. Slice 16 audita + consolida.
 - **wait_response** + **wait_business_window** — workflow pausado por tempo indefinido. Cron retoma.
