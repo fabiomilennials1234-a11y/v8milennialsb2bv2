@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
+import { usePipelineId } from "./usePipelineEntries";
 import type { DateRange } from "@/lib/metrics-period";
 
 export type MetricType =
@@ -33,31 +34,46 @@ const ACTIVE_STATUSES = [
 ];
 
 const SELECT = `
-  id, lead_id, sale_value, status, product_type,
-  closed_at, created_at, updated_at,
+  id, lead_id, stage_key, metadata, closed_at, created_at, updated_at,
   lead:leads!pipeline_entries_lead_id_fkey(name, company_name),
   responsible:team_members!pipeline_entries_assigned_to_fkey(name)
 `;
 
+function mapEntry(entry: any): DrilldownRow {
+  const meta = (entry.metadata as Record<string, any>) ?? {};
+  return {
+    id: entry.id,
+    lead_id: entry.lead_id,
+    sale_value: meta.sale_value != null ? Number(meta.sale_value) : null,
+    status: entry.stage_key,
+    product_type: meta.product_type ?? null,
+    closed_at: entry.closed_at,
+    created_at: entry.created_at,
+    updated_at: entry.updated_at,
+    lead: entry.lead,
+    responsible: entry.responsible,
+  };
+}
+
 export function useMetricDrilldown(metricType: MetricType, range: DateRange | null) {
   const { organizationId, isReady } = useOrganization();
+  const { data: pipelineId } = usePipelineId("propostas");
 
   return useQuery({
-    queryKey: ["metric-drilldown", metricType, range?.startStr ?? "all", range?.endStr ?? "all", organizationId],
+    queryKey: ["metric-drilldown", metricType, range?.startStr ?? "all", range?.endStr ?? "all", organizationId, pipelineId],
     queryFn: async (): Promise<DrilldownRow[]> => {
-      if (!organizationId) return [];
+      if (!organizationId || !pipelineId) return [];
 
       let query = supabase
-        .from("pipe_propostas")
+        .from("pipeline_entries")
         .select(SELECT)
-        .eq("organization_id", organizationId);
+        .eq("pipeline_id", pipelineId);
 
       if (metricType === "pipeline_ativo") {
-        query = query.in("status", ACTIVE_STATUSES);
+        query = query.in("stage_key", ACTIVE_STATUSES);
       } else if (metricType === "vendas_total" || metricType === "rec_vendida" || metricType === "projetos_vendidos") {
-        query = query.eq("status", "vendido");
+        query = query.eq("stage_key", "vendido");
       }
-      // taxa_conversao: no status filter
 
       if (range && metricType !== "pipeline_ativo") {
         if (metricType === "vendas_total" || metricType === "rec_vendida" || metricType === "projetos_vendidos") {
@@ -75,7 +91,7 @@ export function useMetricDrilldown(metricType: MetricType, range: DateRange | nu
       const { data, error } = await query.order("closed_at", { ascending: false, nullsFirst: false });
       if (error) throw error;
 
-      let rows = (data ?? []) as DrilldownRow[];
+      let rows = (data ?? []).map(mapEntry);
 
       if (metricType === "rec_vendida") {
         rows = rows.filter((r) => r.product_type === "mrr");
@@ -85,7 +101,7 @@ export function useMetricDrilldown(metricType: MetricType, range: DateRange | nu
 
       return rows;
     },
-    enabled: isReady && !!organizationId,
+    enabled: isReady && !!organizationId && !!pipelineId,
     staleTime: 60000,
   });
 }
