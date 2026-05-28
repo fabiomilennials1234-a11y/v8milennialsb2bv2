@@ -22,7 +22,7 @@ vi.mock("@/integrations/supabase/client", () => ({
     functions: { invoke: vi.fn().mockResolvedValue({ data: null, error: null }) },
   },
 }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-test" }),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
@@ -41,7 +41,7 @@ import {
   type EdgeFunctionReport,
   type ImportLeadsToFunnelOptions,
   type ImportLeadsToCustomPipelineOptions,
-} from "@/hooks/useImportLeads";
+} from "@/modules/leads";
 
 function createWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });

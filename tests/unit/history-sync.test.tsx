@@ -34,7 +34,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({
     data: { organization_id: "org-a", id: "tm-1", user_id: "u-1" },
   }),
@@ -43,8 +43,8 @@ vi.mock("@/hooks/useTeamMembers", () => ({
 import {
   useCreateHistorySyncJob,
   type HistorySyncJob,
-} from "@/hooks/useHistorySyncJobs";
-import { SyncProgressCard } from "@/components/chat/history-sync/SyncProgressCard";
+} from "@/modules/communication/hooks/useHistorySyncJobs";
+import { SyncProgressCard } from "@/modules/communication/components/chat/history-sync/SyncProgressCard";
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

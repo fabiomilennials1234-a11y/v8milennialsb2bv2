@@ -86,15 +86,15 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "u1" }, session: { access_token: "token" } }),
 }));
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", profile_id: "p1" } }),
   isVirtualTeamMember: () => false,
   useTeamMembers: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/useCopilotPromptBuilder", () => ({
+vi.mock("@/modules/copilot/hooks/useCopilotPromptBuilder", () => ({
   generatePrompt: vi.fn().mockReturnValue({ systemPrompt: "mock prompt", metadata: { version: "1.0" } }),
   saveCopilotSystemPrompt: vi.fn().mockResolvedValue(undefined),
   regenerateAndSavePrompt: vi.fn().mockResolvedValue(undefined),
@@ -109,18 +109,18 @@ const mockFollowupRuleToDB = vi.fn((r: any, agentId: string) => ({
   ...r,
   agent_id: agentId,
 }));
-vi.mock("@/hooks/useAgentFollowupRules", () => ({
+vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({
   followupRuleToDB: (...args: any[]) => mockFollowupRuleToDB(...args),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/lib/permissions", () => ({
+vi.mock("@/modules/identity/lib/permissions", () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
 }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 
-import { useUpdateCopilotAgentFromWizard } from "@/hooks/useCopilotAgents";
+import { useUpdateCopilotAgentFromWizard } from "@/modules/copilot/hooks/useCopilotAgents";
 
 // ---------------------------------------------------------------------------
 // Wrapper

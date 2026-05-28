@@ -3,8 +3,8 @@
  * Nenhuma chamada a Supabase ou rede aqui.
  */
 
-import type { ChatContact } from "@/hooks/chat/types";
-import type { AiTakeoverState } from "@/lib/chat-types";
+import type { ChatContact } from "@/modules/communication/hooks/chat/types";
+import type { AiTakeoverState } from "@/modules/communication/lib/chat-types";
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────
 

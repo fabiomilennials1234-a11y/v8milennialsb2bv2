@@ -9,13 +9,13 @@ import { useNavigate } from "react-router-dom";
 import { MessageSquare } from "lucide-react";
 import { CommandGroup, CommandItem } from "cmdk";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/modules/identity";
 import { pushRecent } from "../recentCommands";
 
 // Importar hook de contatos — usa cache existente do TanStack Query
 // sem nova query, apenas leitura do cache via hook
-import { useWhatsAppContacts } from "@/hooks/chat/useWhatsAppContacts";
-import { useWhatsAppInstancesForUser } from "@/hooks/chat/useWhatsAppInstances";
+import { useWhatsAppContacts } from "@/modules/communication/hooks/chat/useWhatsAppContacts";
+import { useWhatsAppInstancesForUser } from "@/modules/communication/hooks/chat/useWhatsAppInstances";
 
 interface CommandGroupConversationsProps {
   onClose: () => void;

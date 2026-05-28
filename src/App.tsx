@@ -6,18 +6,18 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/modules/identity/contexts/AuthContext";
 import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { PermissionProtectedRoute } from "@/components/PermissionProtectedRoute";
+import { ProtectedRoute } from "@/modules/identity/components/ProtectedRoute";
+import { PermissionProtectedRoute } from "@/modules/identity/components/PermissionProtectedRoute";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
-import { SubscriptionProtectedRoute } from "@/components/SubscriptionProtectedRoute";
-import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
-import { OnboardingGate } from "@/components/onboarding/OnboardingGate";
+import { SubscriptionProtectedRoute } from "@/modules/identity/components/SubscriptionProtectedRoute";
+import { GlobalErrorBoundary } from "@/modules/platform/components/GlobalErrorBoundary";
+import { OnboardingGate } from "@/modules/platform/components/onboarding/OnboardingGate";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
-import { ServiceWorkerUpdater } from "@/components/ServiceWorkerUpdater";
-import { PushPermissionPrompt } from "@/components/PushPermissionPrompt";
+import { ServiceWorkerUpdater } from "@/modules/platform/components/ServiceWorkerUpdater";
+import { PushPermissionPrompt } from "@/modules/platform/components/PushPermissionPrompt";
 
 // Retry helper para chunks que falham ao carregar (comum após deploy)
 function lazyRetry<T extends { default: any }>(
@@ -35,73 +35,69 @@ function lazyRetry<T extends { default: any }>(
 }
 
 // Lazy-loaded pages — cada página vira um chunk separado (com retry automático)
-const Auth = lazy(() => lazyRetry(() => import("./pages/Auth")));
-const Dashboard = lazy(() => lazyRetry(() => import("./pages/Dashboard")));
-const PipeConfirmacao = lazy(() => lazyRetry(() => import("./pages/PipeConfirmacao")));
-const PipePropostas = lazy(() => lazyRetry(() => import("./pages/PipePropostas")));
-const PipeWhatsapp = lazy(() => lazyRetry(() => import("./pages/PipeWhatsapp")));
-const PipeFollowUps = lazy(() => lazyRetry(() => import("./pages/PipeFollowUps")));
-const Revisao = lazy(() => lazyRetry(() => import("./pages/Revisao")));
-const Performance = lazy(() => lazyRetry(() => import("./pages/Performance")));
-const Equipe = lazy(() => lazyRetry(() => import("./pages/Equipe")));
-const Comissoes = lazy(() => lazyRetry(() => import("./pages/Comissoes")));
-const Leads = lazy(() => lazyRetry(() => import("./pages/Leads")));
+const Auth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Auth")));
+const Dashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Dashboard")));
+const PipeConfirmacao = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeConfirmacao")));
+const PipePropostas = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipePropostas")));
+const PipeWhatsapp = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeWhatsapp")));
+const PipeFollowUps = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeFollowUps")));
+const Revisao = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Revisao")));
+const Performance = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Performance")));
+const Equipe = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Equipe")));
+const Comissoes = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Comissoes")));
+const Leads = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Leads")));
 
-const TrashPage = lazy(() => lazyRetry(() => import("./pages/Trash")));
-const Duplicates = lazy(() => lazyRetry(() => import("./pages/Duplicates")));
-const Configuracoes = lazy(() => lazyRetry(() => import("./pages/Configuracoes")));
-const TVDashboard = lazy(() => lazyRetry(() => import("./pages/TVDashboard")));
-const Campanhas = lazy(() => lazyRetry(() => import("./pages/Campanhas")));
-const CampanhaDetail = lazy(() => lazyRetry(() => import("./pages/CampanhaDetail")));
-const FunisHub = lazy(() => lazyRetry(() => import("./pages/FunisHub")));
+const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash")));
+const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
+const Configuracoes = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Configuracoes")));
+const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
+const Campanhas = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/Campanhas")));
+const CampanhaDetail = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/CampanhaDetail")));
+const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));
 // Marketing and Analytics are unified in the Analytics tab — see TabAnalyticsV2.tsx
-const Produtos = lazy(() => lazyRetry(() => import("./pages/Produtos")));
-const Negocios = lazy(() => lazyRetry(() => import("./pages/Negocios")));
-const Copilot = lazy(() => lazyRetry(() => import("./pages/Copilot")));
-const CopilotMetrics = lazy(() => lazyRetry(() => import("./pages/CopilotMetrics")));
-const ChatWhatsApp = lazy(() => lazyRetry(() => import("./pages/ChatWhatsApp")));
-const AtendimentoMeta = lazy(() => lazyRetry(() => import("./pages/AtendimentoMeta")));
+const Produtos = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Produtos")));
+const Negocios = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Negocios")));
+const Copilot = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/Copilot")));
+const CopilotMetrics = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/CopilotMetrics")));
+const ChatWhatsApp = lazy(() => lazyRetry(() => import("@/modules/communication/pages/ChatWhatsApp")));
+const AtendimentoMeta = lazy(() => lazyRetry(() => import("@/modules/communication/pages/AtendimentoMeta")));
 // ChatSkeleton é eager (não lazy) — precisa estar disponível no instante
 // em que o chunk de ChatWhatsApp começa a ser baixado.
-import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
-const Upsell = lazy(() => lazyRetry(() => import("./pages/Upsell")));
-const ClienteDetail = lazy(() => lazyRetry(() => import("./components/carteira/ClienteDetailPage")));
-const CustomPipeline = lazy(() => lazyRetry(() => import("./pages/CustomPipeline")));
-const Agenda = lazy(() => lazyRetry(() => import("./pages/Agenda")));
-const Privacidade = lazy(() => lazyRetry(() => import("./pages/Privacidade")));
-const CopilotPlayground = lazy(() => lazyRetry(() => import("@/components/copilot/playground").then(m => ({ default: m.CopilotPlayground }))));
-const ChecklistPage = lazy(() => lazyRetry(() => import("./pages/ChecklistPage")));
+import { ChatSkeleton } from "@/modules/communication/components/chat/ChatSkeleton";
+const Upsell = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Upsell")));
+const ClienteDetail = lazy(() => lazyRetry(() => import("@/modules/carteira/components/client/ClienteDetailPage")));
+const CustomPipeline = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/CustomPipeline")));
+const Agenda = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Agenda")));
+const Privacidade = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Privacidade")));
+const CopilotPlayground = lazy(() => lazyRetry(() => import("@/modules/copilot/components/playground").then(m => ({ default: m.CopilotPlayground }))));
+const ChecklistPage = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/ChecklistPage")));
 const MessageTemplates = lazy(() => lazyRetry(() => import("./pages/MessageTemplates")));
-const Automacoes = lazy(() => lazyRetry(() => import("./pages/Automacoes")));
-const AutomacoesEditor = lazy(() => lazyRetry(() => import("./pages/AutomacoesEditor")));
-const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./pages/AutomacoesExecucoes")));
+const Automacoes = lazy(() => lazyRetry(() => import("./modules/workflows/pages/Automacoes")));
+const AutomacoesEditor = lazy(() => lazyRetry(() => import("./modules/workflows/pages/AutomacoesEditor")));
+const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./modules/workflows/pages/AutomacoesExecucoes")));
 
 
-const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
-const Landing = lazy(() => lazyRetry(() => import("./pages/Landing")));
-const Signup = lazy(() => lazyRetry(() => import("./pages/Signup")));
-const ResetPassword = lazy(() => lazyRetry(() => import("./pages/ResetPassword")));
+const NotFound = lazy(() => lazyRetry(() => import("@/modules/platform/pages/NotFound")));
+const Landing = lazy(() => lazyRetry(() => import("@/modules/marketing/pages/Landing")));
+const Signup = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Signup")));
+const ResetPassword = lazy(() => lazyRetry(() => import("@/modules/identity/pages/ResetPassword")));
 
 // Master Admin — lazy loaded (com retry)
-const MasterDashboard = lazy(() => lazyRetry(() => import("./pages/master/MasterDashboard")));
-const MasterOrganizations = lazy(() => lazyRetry(() => import("./pages/master/MasterOrganizations")));
-const MasterUsers = lazy(() => lazyRetry(() => import("./pages/master/MasterUsers")));
-const MasterPlans = lazy(() => lazyRetry(() => import("./pages/master/MasterPlans")));
-const MasterFeatures = lazy(() => lazyRetry(() => import("./pages/master/MasterFeatures")));
-const MasterAuditLogs = lazy(() => lazyRetry(() => import("./pages/master/MasterAuditLogs")));
-const MasterOperations = lazy(() => lazyRetry(() => import("./pages/master/MasterOperations")));
-const MasterAutomationHealth = lazy(() => lazyRetry(() => import("./pages/master/MasterAutomationHealth")));
-const MasterWhatsAppHealth = lazy(() => lazyRetry(() => import("./pages/master/MasterWhatsAppHealth")));
-const CopilotReasoning = lazy(() => lazyRetry(() => import("./pages/master/CopilotReasoning")));
-const CopilotToggleAudit = lazy(() => lazyRetry(() => import("./pages/master/CopilotToggleAudit")));
-const MasterOnboarding = lazy(() => lazyRetry(() => import("./pages/master/MasterOnboarding")));
-const MockupChat = lazy(() => lazyRetry(() => import("./pages/MockupChat")));
-const MockupChatV2 = lazy(() => lazyRetry(() => import("./pages/MockupChatV2")));
-const MockupChatV3 = lazy(() => lazyRetry(() => import("./pages/MockupChatV3")));
-
+const MasterDashboard = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterDashboard")));
+const MasterOrganizations = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterOrganizations")));
+const MasterUsers = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterUsers")));
+const MasterPlans = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterPlans")));
+const MasterFeatures = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterFeatures")));
+const MasterAuditLogs = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterAuditLogs")));
+const MasterOperations = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterOperations")));
+const MasterAutomationHealth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterAutomationHealth")));
+const MasterWhatsAppHealth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterWhatsAppHealth")));
+const CopilotReasoning = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/CopilotReasoning")));
+const CopilotToggleAudit = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/CopilotToggleAudit")));
+const MasterOnboarding = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterOnboarding")));
 // Master route/layout — carregam sob demanda quando acessar /master
-import { MasterRoute } from "@/components/master/MasterRoute";
-import { MasterLayout } from "@/components/master/MasterLayout";
+import { MasterRoute } from "@/modules/identity/components/master/MasterRoute";
+import { MasterLayout } from "@/modules/identity/components/master/MasterLayout";
 
 // Command Palette — global ⌘K (C24)
 import { CommandPaletteProvider } from "@/components/command/CommandPaletteProvider";
@@ -195,9 +191,6 @@ function AppRoutes() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/signup" element={<Navigate to="/auth" replace />} />
       <Route path="/privacidade" element={<Privacidade />} />
-      <Route path="/_mockup/chat" element={<MockupChat />} />
-      <Route path="/_mockup/chat-v2" element={<MockupChatV2 />} />
-      <Route path="/_mockup/chat-v3" element={<MockupChatV3 />} />
       {/* Old onboarding/checkout routes removed — OnboardingGate handles inline */}
       <Route path="/" element={<RootRedirect />} />
       <Route path="/pricing" element={<Navigate to="/#pricing" replace />} />

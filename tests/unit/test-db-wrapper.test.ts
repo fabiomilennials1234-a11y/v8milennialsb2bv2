@@ -19,24 +19,24 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => mockOrgState,
 }));
 
-vi.mock("@/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useUserRole: () => mockUserRoleState,
   useIsAdmin: () => ({ isAdmin: (mockUserRoleState.data as any)?.role === "admin", isLoading: false }),
 }));
 
-vi.mock("@/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
   useMasterAuth: () => mockMasterAuthState,
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "user-1" }, session: null, loading: false }),
 }));
 
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({
     data: { id: "tm-1", organization_id: mockOrgState.organizationId, role: mockUserRoleState.data ? (mockUserRoleState.data as any).role : "admin" },
     isLoading: false,

@@ -30,8 +30,8 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" } }) }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" } }) }));
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
 }));
 
@@ -50,7 +50,7 @@ import {
   useCustomPipeWorkflowCounts,
   useCampaignStageWorkflows,
   useCampaignWorkflowCounts,
-} from "@/hooks/useStageWorkflows";
+} from "@/modules/workflows/hooks/useStageWorkflows";
 
 // ---- Test data ----
 

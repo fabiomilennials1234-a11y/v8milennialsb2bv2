@@ -13,7 +13,7 @@ const ORG_ID = "org-1";
 const PIPELINE_ID = "pipeline-propostas-1";
 const LEAD_ID = "lead-ana";
 
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({
     organizationId: ORG_ID,
     teamMemberId: "tm-1",
@@ -25,8 +25,8 @@ vi.mock("@/hooks/useOrganization", () => ({
   }),
 }));
 
-vi.mock("@/hooks/usePipelineEntries", async () => {
-  const actual = await vi.importActual<any>("@/hooks/usePipelineEntries");
+vi.mock("@/modules/pipelines/hooks/usePipelineEntries", async () => {
+  const actual = await vi.importActual<any>("@/modules/pipelines/hooks/usePipelineEntries");
   return {
     ...actual,
     usePipelineId: () => ({ data: PIPELINE_ID }),
@@ -34,11 +34,11 @@ vi.mock("@/hooks/usePipelineEntries", async () => {
   };
 });
 
-vi.mock("@/lib/permissions", () => ({
+vi.mock("@/modules/identity/lib/permissions", () => ({
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
 }));
 
-vi.mock("@/hooks/useAutoFollowUp", () => ({
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({
   triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -72,7 +72,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
+import { useCreatePipeProposta } from "@/modules/pipelines/hooks/usePipePropostas";
 
 beforeEach(() => {
   mockMaybeSingle.mockReset();

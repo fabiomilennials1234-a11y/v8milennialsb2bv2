@@ -7,7 +7,7 @@
  * defesa multi-tenant.
  */
 import { describe, it, expect } from "vitest";
-import { computeNeedsDeepLinkResolve } from "@/lib/computeNeedsDeepLinkResolve";
+import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
 
 describe("computeNeedsDeepLinkResolve", () => {
   it("não resolve quando phone ausente", () => {

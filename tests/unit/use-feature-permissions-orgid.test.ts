@@ -26,16 +26,16 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 const mockUseAuth = vi.fn(() => ({ user: { id: "user-1" } }));
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
 const mockUseCurrentTeamMember = vi.fn();
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => mockUseCurrentTeamMember(),
 }));
 
-vi.mock("@/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({ isMaster: false, isLoading: false }),
 }));
 
@@ -43,7 +43,7 @@ vi.mock("@/hooks/useMasterAuth", () => ({
 vi.stubEnv("VITE_SUPABASE_URL", "https://proj.supabase.co");
 vi.stubEnv("VITE_SUPABASE_PUBLISHABLE_KEY", "anon-key");
 
-import { useFeaturePermissions } from "@/hooks/useUserRole";
+import { useFeaturePermissions } from "@/modules/identity/hooks/useUserRole";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 

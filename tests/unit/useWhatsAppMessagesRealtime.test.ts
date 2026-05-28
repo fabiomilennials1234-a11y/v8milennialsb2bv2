@@ -24,7 +24,7 @@ vi.mock("@/hooks/useRealtimeChannel", () => ({
   useRealtimeChannel: mockUseRealtimeChannel,
 }));
 
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({
     data: { id: "tm1", organization_id: "org-test" },
   }),
@@ -36,7 +36,7 @@ vi.mock("@/lib/normalizePhone", () => ({
 
 // ─── Import after mocks ─────────────────────────────────────────────────────
 
-import { useWhatsAppMessagesRealtime } from "@/hooks/chat/useWhatsAppRealtime";
+import { useWhatsAppMessagesRealtime } from "@/modules/communication/hooks/chat/useWhatsAppRealtime";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -205,7 +205,7 @@ describe("useWhatsAppMessagesRealtime", () => {
 
   it("when org is missing, passes enabled=false to useRealtimeChannel", () => {
     // Override mock to simulate no team member
-    vi.doMock("@/hooks/useTeamMembers", () => ({
+    vi.doMock("@/modules/identity/hooks/useTeamMembers", () => ({
       useCurrentTeamMember: () => ({ data: null }),
     }));
 

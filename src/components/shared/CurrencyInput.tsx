@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { SUPPORTED_CURRENCIES, useConvertCurrency } from "@/hooks/useExchangeRates";
+import { SUPPORTED_CURRENCIES, useConvertCurrency } from "@/modules/analytics/hooks/useExchangeRates";
 
 interface CurrencyInputProps {
   value: number | null;

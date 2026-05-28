@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { CommandGroup, CommandItem } from "cmdk";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/modules/identity";
 import { pushRecent } from "../recentCommands";
 
 interface CommandGroupNavigationProps {

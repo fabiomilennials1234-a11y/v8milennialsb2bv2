@@ -44,17 +44,17 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 // ─── Mock contexts/hooks dependentes ───────────────────────
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({
   useAuth: () => ({ user: mockUser, session: null, loading: false }),
 }));
 
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: mockTeamMember, isLoading: false }),
   isVirtualTeamMember: (id: string | null | undefined) =>
     !!id?.startsWith("master-virtual-"),
 }));
 
-vi.mock("@/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({
     isMaster: mockIsMaster,
     masterUser: null,
@@ -66,7 +66,7 @@ vi.mock("@/hooks/useMasterAuth", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/hooks/useIdentity", () => ({
   useIdentity: () => ({
     userId: mockUser.id,
     organizationId: mockTeamMember?.organization_id ?? null,
@@ -81,7 +81,7 @@ vi.mock("@/hooks/useIdentity", () => ({
 }));
 
 // useUserRole consumed by hook → return based on team_member.
-vi.mock("@/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useUserRole: () => ({
     data: mockTeamMember
       ? { user_id: mockUser.id, role: mockTeamMember.role }
@@ -101,7 +101,7 @@ vi.mock("@/hooks/useUserRole", () => ({
   useHasRole: () => ({ hasRole: true, isLoading: false }),
 }));
 
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({
     organizationId: mockTeamMember?.organization_id ?? null,
     teamMemberId: mockTeamMember?.id ?? null,
@@ -116,7 +116,7 @@ vi.mock("@/hooks/useOrganization", () => ({
 // Feature flag default ON nos testes (cenário pós-cutover). Override por teste
 // quando precisar simular flag OFF.
 let mockIsStrict = true;
-vi.mock("@/hooks/useUserWriteInstanceFlag", () => ({
+vi.mock("@/modules/communication/hooks/useUserWriteInstanceFlag", () => ({
   useUserWriteInstanceFlag: () => ({
     isStrict: mockIsStrict,
     isLoading: false,
@@ -124,7 +124,7 @@ vi.mock("@/hooks/useUserWriteInstanceFlag", () => ({
 }));
 
 // ─── Import after mocks ────────────────────────────────────
-import { useLeadWriteInstance } from "@/hooks/useLeadWriteInstance";
+import { useLeadWriteInstance } from "@/modules/leads";
 
 // ─── Helpers ───────────────────────────────────────────────
 function createWrapper() {

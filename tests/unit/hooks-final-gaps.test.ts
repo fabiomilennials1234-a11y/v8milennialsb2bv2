@@ -30,11 +30,11 @@ vi.mock("@/integrations/supabase/client", () => ({
     storage: { from: vi.fn().mockReturnValue({ upload: vi.fn().mockResolvedValue({ error: null }), getPublicUrl: vi.fn().mockReturnValue({ data: { publicUrl: "" } }), download: vi.fn().mockResolvedValue({ data: new Blob(), error: null }), list: vi.fn().mockResolvedValue({ data: [], error: null }) }) },
   },
 }));
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "t" } }) }));
-vi.mock("@/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
-vi.mock("@/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }), useResponsibleMembers: () => ({ data: [] }) }));
-vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
-vi.mock("@/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "t" } }) }));
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }), useResponsibleMembers: () => ({ data: [] }) }));
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
+vi.mock("@/modules/identity/hooks/useIdentity", () => ({
   useIdentity: () => ({
     userId: "u1",
     organizationId: "org-t",
@@ -47,19 +47,19 @@ vi.mock("@/hooks/useIdentity", () => ({
     isReady: true,
   }),
 }));
-vi.mock("@/hooks/useCanDo", () => ({
+vi.mock("@/modules/identity/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {}, useAllPipelineStages: () => ({ data: [] }) }));
-vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
-vi.mock("@/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
-vi.mock("@/hooks/useWhatsAppInstances", () => ({ useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }) }));
+vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {}, useAllPipelineStages: () => ({ data: [] }) }));
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/copilot/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
+vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }) }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), assertPermission: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
+vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), assertPermission: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
@@ -82,7 +82,7 @@ function w() {
 beforeEach(() => { vi.clearAllMocks(); mF.mockReturnValue(c()); });
 
 // ═══ usePipeDispatchRules ═══
-import { usePipeDispatchRules, useCreatePipeDispatchRule, useDeletePipeDispatchRule } from "@/hooks/usePipeDispatchRules";
+import { usePipeDispatchRules, useCreatePipeDispatchRule, useDeletePipeDispatchRule } from "@/modules/pipelines/hooks/usePipeDispatchRules";
 
 describe("usePipeDispatchRules", () => {
   it("fetches dispatch rules", async () => {
@@ -100,7 +100,7 @@ describe("usePipeDispatchRules", () => {
 });
 
 // ═══ useAgentDocuments ═══
-import { useAgentDocuments, useUploadAgentDocument, useDeleteAgentDocument } from "@/hooks/useAgentDocuments";
+import { useAgentDocuments, useUploadAgentDocument, useDeleteAgentDocument } from "@/modules/copilot/hooks/useAgentDocuments";
 
 describe("useAgentDocuments", () => {
   it("fetches documents", async () => {
@@ -118,7 +118,7 @@ describe("useAgentDocuments", () => {
 });
 
 // ═══ useAgentMetrics ═══
-import { useAgentMetrics, useAgentConversationStats } from "@/hooks/useAgentMetrics";
+import { useAgentMetrics, useAgentConversationStats } from "@/modules/copilot/hooks/useAgentMetrics";
 
 describe("useAgentMetrics", () => {
   it("fetches agent metrics", async () => {
@@ -129,7 +129,7 @@ describe("useAgentMetrics", () => {
 });
 
 // ═══ useDashboardMetrics (expand) ═══
-import { useDashboardMetrics, useConversionRates, useFunnelData, useRankingData } from "@/hooks/useDashboardMetrics";
+import { useDashboardMetrics, useConversionRates, useFunnelData, useRankingData } from "@/modules/analytics/hooks/useDashboardMetrics";
 
 describe("useDashboardMetrics", () => {
   // useDashboardMetrics needs complex multi-table mock — skipped
@@ -148,8 +148,8 @@ describe("useDashboardMetrics", () => {
 });
 
 // ═══ usePipeConfirmacao + usePipeWhatsapp ═══
-import { usePipeConfirmacao, useCreatePipeConfirmacao, useUpdatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
-import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
+import { usePipeConfirmacao, useCreatePipeConfirmacao, useUpdatePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
+import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";
 
 describe("usePipeConfirmacao", () => {
   it("fetches pipe confirmacao data", async () => {
@@ -182,7 +182,7 @@ describe("usePipeWhatsapp", () => {
 });
 
 // ═══ useAgentKanbanRules ═══
-import { useAgentKanbanRules, useCreateKanbanRule, useDeleteKanbanRule } from "@/hooks/useAgentKanbanRules";
+import { useAgentKanbanRules, useCreateKanbanRule, useDeleteKanbanRule } from "@/modules/copilot/hooks/useAgentKanbanRules";
 
 describe("useAgentKanbanRules", () => {
   it("fetches kanban rules", async () => {

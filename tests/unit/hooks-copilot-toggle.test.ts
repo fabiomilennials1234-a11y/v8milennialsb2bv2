@@ -26,7 +26,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 const mockMaster = vi.fn(() => ({ isMaster: false, masterUser: null, permissions: {}, isOutbounder: false, isLoading: false }));
-vi.mock("@/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
   useMasterAuth: () => mockMaster(),
 }));
 
@@ -41,11 +41,11 @@ const mockIdentity = {
   isLoading: false,
   isReady: true,
 };
-vi.mock("@/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/hooks/useIdentity", () => ({
   useIdentity: () => mockIdentity,
 }));
 
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-test", isReady: true }),
 }));
 
@@ -63,7 +63,7 @@ import {
   useCopilotToggle,
   useCopilotToggleStatus,
   useCopilotToggleMutation,
-} from "@/hooks/useCopilotToggle";
+} from "@/modules/copilot/hooks/useCopilotToggle";
 
 beforeEach(() => {
   vi.clearAllMocks();

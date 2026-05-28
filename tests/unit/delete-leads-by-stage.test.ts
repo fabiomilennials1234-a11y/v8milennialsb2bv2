@@ -37,7 +37,7 @@ vi.mock('@/integrations/supabase/client', () => ({
   },
 }));
 
-vi.mock('@/hooks/useOrganization', () => ({
+vi.mock('@/modules/identity/hooks/useOrganization', () => ({
   useOrganization: () => ({ organizationId: 'org-123' }),
 }));
 
@@ -49,17 +49,17 @@ vi.mock('@tanstack/react-query', () => ({
   }),
 }));
 
-vi.mock('@/lib/permissions', () => ({
+vi.mock('@/modules/identity/lib/permissions', () => ({
   useCanPerformActionAsync: () => vi.fn(),
   assertPermission: vi.fn().mockResolvedValue(undefined),
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@/hooks/useMasterAuth', () => ({
+vi.mock('@/modules/identity/hooks/useMasterAuth', () => ({
   useMasterAuth: () => ({ isMaster: false, isLoading: false }),
 }));
 
-vi.mock('@/hooks/useUserRole', () => ({
+vi.mock('@/modules/identity/hooks/useUserRole', () => ({
   useIsAdmin: () => ({ isAdmin: false, isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
   useFeaturePermission: () => ({ allowed: true, isLoading: false, hasError: false }),
@@ -82,16 +82,16 @@ const mockIdentity = {
   isLoading: false,
   isReady: true,
 };
-vi.mock('@/hooks/useIdentity', () => ({
+vi.mock('@/modules/identity/hooks/useIdentity', () => ({
   useIdentity: () => mockIdentity,
 }));
 
-vi.mock('@/hooks/useCanDo', () => ({
+vi.mock('@/modules/identity/hooks/useCanDo', () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 
 // ─── Import after mocks ─────────────────────────────────
-import { useDeleteAllLeadsInPipe } from '@/hooks/useLeads';
+import { useDeleteAllLeadsInPipe } from '@/modules/leads';
 
 // ─── Tests ───────────────────────────────────────────────
 

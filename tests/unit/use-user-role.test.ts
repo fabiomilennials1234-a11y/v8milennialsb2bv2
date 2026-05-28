@@ -43,7 +43,7 @@ vi.mock('@/integrations/supabase/client', () => ({
 }));
 
 // ─── Mock AuthContext ───────────────────────────────────
-vi.mock('@/contexts/AuthContext', () => ({
+vi.mock('@/modules/identity/contexts/AuthContext', () => ({
   useAuth: () => ({
     user: mockUser,
     session: mockSession,
@@ -52,7 +52,7 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 // ─── Mock useTeamMembers ────────────────────────────────
-vi.mock('@/hooks/useTeamMembers', () => ({
+vi.mock('@/modules/identity/hooks/useTeamMembers', () => ({
   useCurrentTeamMember: () => ({
     data: mockTeamMember,
     isLoading: false,
@@ -60,7 +60,7 @@ vi.mock('@/hooks/useTeamMembers', () => ({
 }));
 
 // ─── Mock useMasterAuth ─────────────────────────────────
-vi.mock('@/hooks/useMasterAuth', () => ({
+vi.mock('@/modules/identity/hooks/useMasterAuth', () => ({
   useMasterAuth: () => ({
     isMaster: mockIsMaster,
     masterUser: null,
@@ -84,7 +84,7 @@ import {
   useFeaturePermission,
   useCanManageCopilot,
   useHasRole,
-} from '@/hooks/useUserRole';
+} from '@/modules/identity/hooks/useUserRole';
 
 // ─── Helper: QueryClient wrapper ────────────────────────
 function createWrapper() {

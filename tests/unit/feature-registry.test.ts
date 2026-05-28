@@ -9,7 +9,7 @@ import {
   getFeatureMeta,
   getLimitMeta,
   isUnlimited,
-} from "../../src/lib/feature-registry";
+} from "../../src/modules/platform/lib/feature-registry";
 
 describe("FEATURES catalog", () => {
   it("has at least 20 features", () => {

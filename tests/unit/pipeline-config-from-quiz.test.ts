@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   generatePipelineDisplayConfig,
   type QuizAnswers,
-} from "../../src/lib/pipeline-config-from-quiz";
+} from "../../src/modules/platform/lib/pipeline-config-from-quiz";
 
 function makeAnswers(overrides: Partial<QuizAnswers> = {}): QuizAnswers {
   return {

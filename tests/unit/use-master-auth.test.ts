@@ -17,12 +17,12 @@ vi.mock('@/integrations/supabase/client', () => ({
 // ─── Mock AuthContext ────────────────────────────────────
 const mockUseAuth = vi.fn();
 
-vi.mock('@/contexts/AuthContext', () => ({
+vi.mock('@/modules/identity/contexts/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
 // ─── Import after mocks ─────────────────────────────────
-import { useMasterAuth, useCanAccessMaster } from '@/hooks/useMasterAuth';
+import { useMasterAuth, useCanAccessMaster } from '@/modules/identity/hooks/useMasterAuth';
 
 // ─── Helpers ─────────────────────────────────────────────
 function createWrapper() {

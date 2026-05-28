@@ -13,11 +13,11 @@ vi.mock("@/lib/analytics", () => ({
 }));
 
 const mockUseOrganization = vi.fn();
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => mockUseOrganization(),
 }));
 
-import { GhostLeadsBanner } from "@/components/pipelines/GhostLeadsBanner";
+import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
 
 beforeEach(() => {
   mockTrack.mockClear();

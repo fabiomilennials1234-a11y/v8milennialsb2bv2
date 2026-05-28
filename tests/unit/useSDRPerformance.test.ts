@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
-import { useSDRPerformance } from "@/hooks/useSDRPerformance";
+import { useSDRPerformance } from "@/modules/engagement/hooks/useSDRPerformance";
 import type { TVPeriodRange } from "@/lib/tv-periods";
 
 const now = new Date(2026, 4, 22, 12, 0, 0);
@@ -27,11 +27,11 @@ const mockConfirmacoes = [
   { id: "c7", status: "compareceu", metrics_period_at: outRangeDate, meeting_date: inRangeDate, sdr_id: "s2" },
 ];
 
-vi.mock("@/hooks/usePipeConfirmacao", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipeConfirmacao", () => ({
   usePipeConfirmacao: () => ({ data: mockConfirmacoes }),
 }));
 
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useTeamMembers: () => ({ data: mockSDRs }),
 }));
 

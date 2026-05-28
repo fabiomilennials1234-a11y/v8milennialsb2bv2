@@ -19,9 +19,9 @@ import {
 import { CommandGroup, CommandItem } from "cmdk";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/modules/identity";
 import { getRecent, pushRecent } from "../recentCommands";
-import { useRecentItems } from "@/hooks/useRecentItems";
+import { useRecentItems } from "@/modules/engagement/hooks/useRecentItems";
 
 interface CommandGroupRecentsProps {
   onClose: () => void;

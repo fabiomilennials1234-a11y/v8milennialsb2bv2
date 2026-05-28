@@ -9,7 +9,7 @@
  * so it matches the global SessionDeadBanner.
  */
 import { describe, it, expect } from "vitest";
-import { deriveInstanceStatus } from "../../src/components/settings/WhatsAppSettings";
+import { deriveInstanceStatus } from "../../src/modules/platform/components/settings/WhatsAppSettings";
 
 describe("deriveInstanceStatus", () => {
   it("returns status when session_dead_since is null", () => {

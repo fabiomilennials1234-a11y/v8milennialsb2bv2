@@ -7,11 +7,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { SessionDeadBanner } from "@/components/whatsapp/SessionDeadBanner";
+import { SessionDeadBanner } from "@/modules/communication/components/whatsapp/SessionDeadBanner";
 
 const mockUseDeadSessions = vi.fn();
 
-vi.mock("@/hooks/useDeadSessions", () => ({
+vi.mock("@/modules/communication/hooks/useDeadSessions", () => ({
   useDeadSessions: () => mockUseDeadSessions(),
 }));
 

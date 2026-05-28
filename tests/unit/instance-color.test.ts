@@ -3,7 +3,7 @@
  * Cobre: determinismo, distinção, formato, não-crash em string vazia.
  */
 import { describe, it, expect } from "vitest";
-import { instanceColor } from "@/components/chat/bubble/utils/instanceColor";
+import { instanceColor } from "@/modules/communication/components/chat/bubble/utils/instanceColor";
 
 describe("instanceColor", () => {
   it("é determinístico — mesmo id → mesma cor", () => {

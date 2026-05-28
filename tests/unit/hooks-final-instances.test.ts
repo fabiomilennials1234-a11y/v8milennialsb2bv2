@@ -49,14 +49,14 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "u1" }, session: { access_token: "t" } }),
 }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
   useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
 }));
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({
     data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" },
   }),
@@ -64,8 +64,8 @@ vi.mock("@/hooks/useTeamMembers", () => ({
   useTeamMembers: () => ({ data: [] }),
   useResponsibleMembers: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: true }) }));
-vi.mock("@/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: true }) }));
+vi.mock("@/modules/identity/hooks/useIdentity", () => ({
   useIdentity: () => ({
     userId: "u1",
     organizationId: "org-t",
@@ -78,19 +78,19 @@ vi.mock("@/hooks/useIdentity", () => ({
     isReady: true,
   }),
 }));
-vi.mock("@/hooks/useCanDo", () => ({
+vi.mock("@/modules/identity/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/usePipelineStages", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {},
   useAllPipelineStages: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
-vi.mock("@/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
-vi.mock("@/hooks/useCustomPipelines", () => ({
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/copilot/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
+vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({
   useCustomPipelines: () => ({ data: [
     { id: "cp1", name: "Custom Pipe 1", color: "#FF0000", icon: "star" },
   ] }),
@@ -99,13 +99,13 @@ vi.mock("@/lib/workflowTrigger", () => ({
   triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined),
   triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/lib/permissions", () => ({
+vi.mock("@/modules/identity/lib/permissions", () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
   assertPermission: vi.fn().mockResolvedValue(undefined),
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
 }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
@@ -157,7 +157,7 @@ describe("useWhatsAppInstances", () => {
       };
       mF.mockReturnValue(c([inst]));
 
-      const { useWhatsAppInstances } = await import("@/hooks/useWhatsAppInstances");
+      const { useWhatsAppInstances } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { result } = renderHook(() => useWhatsAppInstances(), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -177,7 +177,7 @@ describe("useWhatsAppInstances", () => {
       };
       mF.mockReturnValue(c([inst]));
 
-      const { useWhatsAppInstancesWithAgent } = await import("@/hooks/useWhatsAppInstances");
+      const { useWhatsAppInstancesWithAgent } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { result } = renderHook(() => useWhatsAppInstancesWithAgent(), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -196,7 +196,7 @@ describe("useWhatsAppInstances", () => {
       };
       mF.mockReturnValue(c([created]));
 
-      const { useCreateWhatsAppInstance } = await import("@/hooks/useWhatsAppInstances");
+      const { useCreateWhatsAppInstance } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { createEvolutionInstance } = await import("@/lib/evolutionApi");
       const { result } = renderHook(() => useCreateWhatsAppInstance(), { wrapper: w() });
 
@@ -216,7 +216,7 @@ describe("useWhatsAppInstances", () => {
       const updated = { id: "i1", instance_name: "Updated", status: "connected" };
       mF.mockReturnValue(c([updated]));
 
-      const { useUpdateWhatsAppInstance } = await import("@/hooks/useWhatsAppInstances");
+      const { useUpdateWhatsAppInstance } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { result } = renderHook(() => useUpdateWhatsAppInstance(), { wrapper: w() });
 
       await act(async () => {
@@ -234,7 +234,7 @@ describe("useWhatsAppInstances", () => {
       const refreshed = { id: "i1", qr_code: "QR_REFRESHED", status: "connecting" };
       mF.mockReturnValue(c([refreshed]));
 
-      const { useRefreshQRCode } = await import("@/hooks/useWhatsAppInstances");
+      const { useRefreshQRCode } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { getQRCode } = await import("@/lib/evolutionApi");
       const { result } = renderHook(() => useRefreshQRCode(), { wrapper: w() });
 
@@ -253,7 +253,7 @@ describe("useWhatsAppInstances", () => {
       const connected = { id: "i1", status: "connected" };
       mF.mockReturnValue(c([connected]));
 
-      const { useCheckConnectionStatus } = await import("@/hooks/useWhatsAppInstances");
+      const { useCheckConnectionStatus } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { getConnectionState } = await import("@/lib/evolutionApi");
       const { result } = renderHook(() => useCheckConnectionStatus(), { wrapper: w() });
 
@@ -273,7 +273,7 @@ describe("useWhatsAppInstances", () => {
       const disconnected = { id: "i1", status: "disconnected" };
       mF.mockReturnValue(c([disconnected]));
 
-      const { useCheckConnectionStatus } = await import("@/hooks/useWhatsAppInstances");
+      const { useCheckConnectionStatus } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { result } = renderHook(() => useCheckConnectionStatus(), { wrapper: w() });
 
       await act(async () => {
@@ -290,7 +290,7 @@ describe("useWhatsAppInstances", () => {
     it("deletes instance from Evolution and Supabase", async () => {
       mF.mockReturnValue(c());
 
-      const { useDeleteWhatsAppInstance } = await import("@/hooks/useWhatsAppInstances");
+      const { useDeleteWhatsAppInstance } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { deleteEvolutionInstance } = await import("@/lib/evolutionApi");
       const { result } = renderHook(() => useDeleteWhatsAppInstance(), { wrapper: w() });
 
@@ -309,7 +309,7 @@ describe("useWhatsAppInstances", () => {
       (deleteEvolutionInstance as any).mockRejectedValueOnce({ status: 404 });
       mF.mockReturnValue(c());
 
-      const { useDeleteWhatsAppInstance } = await import("@/hooks/useWhatsAppInstances");
+      const { useDeleteWhatsAppInstance } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { result } = renderHook(() => useDeleteWhatsAppInstance(), { wrapper: w() });
 
       await act(async () => {
@@ -325,7 +325,7 @@ describe("useWhatsAppInstances", () => {
       (deleteEvolutionInstance as any).mockRejectedValueOnce({ status: 500 });
       mF.mockReturnValue(c());
 
-      const { useDeleteWhatsAppInstance } = await import("@/hooks/useWhatsAppInstances");
+      const { useDeleteWhatsAppInstance } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { result } = renderHook(() => useDeleteWhatsAppInstance(), { wrapper: w() });
 
       await act(async () => {
@@ -343,7 +343,7 @@ describe("useWhatsAppInstances", () => {
       const loggedOut = { id: "i1", status: "disconnected", qr_code: null };
       mF.mockReturnValue(c([loggedOut]));
 
-      const { useLogoutInstance } = await import("@/hooks/useWhatsAppInstances");
+      const { useLogoutInstance } = await import("@/modules/communication/hooks/useWhatsAppInstances");
       const { logoutInstance } = await import("@/lib/evolutionApi");
       const { result } = renderHook(() => useLogoutInstance(), { wrapper: w() });
 
@@ -374,7 +374,7 @@ describe("useExportLeads", () => {
   });
 
   it("exports EXPORT_LEAD_HEADERS constant", async () => {
-    const { EXPORT_LEAD_HEADERS } = await import("@/hooks/useExportLeads");
+    const { EXPORT_LEAD_HEADERS } = await import("@/modules/leads");
     expect(EXPORT_LEAD_HEADERS).toBeDefined();
     expect(EXPORT_LEAD_HEADERS.length).toBeGreaterThan(30);
     expect(EXPORT_LEAD_HEADERS).toContain("ID Lead");
@@ -445,7 +445,7 @@ describe("useExportLeads", () => {
       return origCreateElement(tag);
     });
 
-    const { useExportLeads } = await import("@/hooks/useExportLeads");
+    const { useExportLeads } = await import("@/modules/leads");
     const { result } = renderHook(() => useExportLeads(), { wrapper: w() });
 
     expect(result.current.isExporting).toBe(false);
@@ -464,19 +464,19 @@ describe("useExportLeads", () => {
 
   it("throws when organizationId is missing", async () => {
     // Temporarily override the mock
-    vi.doMock("@/hooks/useOrganization", () => ({
+    vi.doMock("@/modules/identity/hooks/useOrganization", () => ({
       useOrganization: () => ({ organizationId: null, isReady: false }),
       useRequiredOrganization: () => ({ organizationId: null, teamMemberId: null }),
     }));
 
     // We can't easily re-import with different mock, so test the export function check
-    const { useExportLeads } = await import("@/hooks/useExportLeads");
+    const { useExportLeads } = await import("@/modules/leads");
     // The hook itself won't throw, but calling exportLeads without org should
     // This is already covered by the implementation check.
     expect(useExportLeads).toBeDefined();
 
     // Restore
-    vi.doMock("@/hooks/useOrganization", () => ({
+    vi.doMock("@/modules/identity/hooks/useOrganization", () => ({
       useOrganization: () => ({ organizationId: "org-t", isReady: true }),
       useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
     }));
@@ -499,7 +499,7 @@ describe("useMasterOrganizations", () => {
       ];
       mF.mockReturnValue(c(orgs));
 
-      const { useMasterOrganizations } = await import("@/hooks/useMasterOrganizations");
+      const { useMasterOrganizations } = await import("@/modules/identity/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterOrganizations(), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -513,7 +513,7 @@ describe("useMasterOrganizations", () => {
       const org = { id: "o1", name: "Org 1", slug: "org-1" };
       mF.mockReturnValue(c([org]));
 
-      const { useMasterOrganization } = await import("@/hooks/useMasterOrganizations");
+      const { useMasterOrganization } = await import("@/modules/identity/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterOrganization("o1"), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -521,7 +521,7 @@ describe("useMasterOrganizations", () => {
     });
 
     it("is disabled when orgId is undefined", async () => {
-      const { useMasterOrganization } = await import("@/hooks/useMasterOrganizations");
+      const { useMasterOrganization } = await import("@/modules/identity/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterOrganization(undefined), { wrapper: w() });
 
       expect(result.current.fetchStatus).toBe("idle");
@@ -540,7 +540,7 @@ describe("useMasterOrganizations", () => {
       ];
       mF.mockReturnValue(c(orgs));
 
-      const { useMasterOrganizationStats } = await import("@/hooks/useMasterOrganizations");
+      const { useMasterOrganizationStats } = await import("@/modules/identity/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterOrganizationStats(), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -558,7 +558,7 @@ describe("useMasterOrganizations", () => {
       const created = { id: "o-new", name: "New Org", slug: "new-org", org_type: "crm" };
       mF.mockReturnValue(c([created]));
 
-      const { useMasterCreateOrganization } = await import("@/hooks/useMasterOrganizations");
+      const { useMasterCreateOrganization } = await import("@/modules/identity/hooks/useMasterOrganizations");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useMasterCreateOrganization(), { wrapper: w() });
 
@@ -576,7 +576,7 @@ describe("useMasterOrganizations", () => {
       const created = { id: "o-out", name: "Outbound Co", slug: "outbound", org_type: "outbound" };
       mF.mockReturnValue(c([created]));
 
-      const { useMasterCreateOrganization } = await import("@/hooks/useMasterOrganizations");
+      const { useMasterCreateOrganization } = await import("@/modules/identity/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterCreateOrganization(), { wrapper: w() });
 
       await act(async () => {
@@ -599,7 +599,7 @@ describe("useMasterOrganizations", () => {
       const updated = { id: "o1", name: "Updated Org" };
       mF.mockReturnValue(c([updated]));
 
-      const { useMasterUpdateOrganization } = await import("@/hooks/useMasterOrganizations");
+      const { useMasterUpdateOrganization } = await import("@/modules/identity/hooks/useMasterOrganizations");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useMasterUpdateOrganization(), { wrapper: w() });
 
@@ -617,7 +617,7 @@ describe("useMasterOrganizations", () => {
     it("deletes an organization", async () => {
       mF.mockReturnValue(c());
 
-      const { useMasterDeleteOrganization } = await import("@/hooks/useMasterOrganizations");
+      const { useMasterDeleteOrganization } = await import("@/modules/identity/hooks/useMasterOrganizations");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useMasterDeleteOrganization(), { wrapper: w() });
 
@@ -633,7 +633,7 @@ describe("useMasterOrganizations", () => {
 
   describe("useMasterBillingOverride", () => {
     it("overrides billing via RPC", async () => {
-      const { useMasterBillingOverride } = await import("@/hooks/useMasterOrganizations");
+      const { useMasterBillingOverride } = await import("@/modules/identity/hooks/useMasterOrganizations");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useMasterBillingOverride(), { wrapper: w() });
 
@@ -658,7 +658,7 @@ describe("useMasterOrganizations", () => {
     });
 
     it("handles billing override without expiresAt", async () => {
-      const { useMasterBillingOverride } = await import("@/hooks/useMasterOrganizations");
+      const { useMasterBillingOverride } = await import("@/modules/identity/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterBillingOverride(), { wrapper: w() });
 
       await act(async () => {
@@ -688,7 +688,7 @@ describe("useMasterOrganizations", () => {
       ];
       mF.mockReturnValue(c(members));
 
-      const { useMasterOrganizationMembers } = await import("@/hooks/useMasterOrganizations");
+      const { useMasterOrganizationMembers } = await import("@/modules/identity/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterOrganizationMembers("o1"), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -696,7 +696,7 @@ describe("useMasterOrganizations", () => {
     });
 
     it("is disabled when orgId is undefined", async () => {
-      const { useMasterOrganizationMembers } = await import("@/hooks/useMasterOrganizations");
+      const { useMasterOrganizationMembers } = await import("@/modules/identity/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterOrganizationMembers(undefined), { wrapper: w() });
 
       expect(result.current.fetchStatus).toBe("idle");
@@ -714,7 +714,7 @@ describe("usePipePropostas", () => {
 
   describe("statusColumns export", () => {
     it("exports the correct status column definitions", async () => {
-      const { statusColumns } = await import("@/hooks/usePipePropostas");
+      const { statusColumns } = await import("@/modules/pipelines/hooks/usePipePropostas");
       expect(statusColumns).toBeDefined();
       expect(statusColumns.length).toBeGreaterThan(0);
       const ids = statusColumns.map((s) => s.id);
@@ -735,7 +735,7 @@ describe("usePipePropostas", () => {
       };
       mF.mockReturnValue(c([proposta]));
 
-      const { usePipePropostas } = await import("@/hooks/usePipePropostas");
+      const { usePipePropostas } = await import("@/modules/pipelines/hooks/usePipePropostas");
       const { result } = renderHook(() => usePipePropostas(), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -755,8 +755,8 @@ describe("usePipePropostas", () => {
       };
       mF.mockReturnValue(c([created]));
 
-      const { useCreatePipeProposta } = await import("@/hooks/usePipePropostas");
-      const { triggerFollowUpAutomation } = await import("@/hooks/useAutoFollowUp");
+      const { useCreatePipeProposta } = await import("@/modules/pipelines/hooks/usePipePropostas");
+      const { triggerFollowUpAutomation } = await import("@/modules/workflows/hooks/useAutoFollowUp");
       const { triggerStageChangedWorkflows } = await import("@/lib/workflowTrigger");
       const { result } = renderHook(() => useCreatePipeProposta(), { wrapper: w() });
 
@@ -787,7 +787,7 @@ describe("usePipePropostas", () => {
       };
       mF.mockReturnValue(c([updated]));
 
-      const { useUpdatePipeProposta } = await import("@/hooks/usePipePropostas");
+      const { useUpdatePipeProposta } = await import("@/modules/pipelines/hooks/usePipePropostas");
       const { result } = renderHook(() => useUpdatePipeProposta(), { wrapper: w() });
 
       await act(async () => {
@@ -815,7 +815,7 @@ describe("usePipePropostas", () => {
       };
       mF.mockReturnValue(c([updated]));
 
-      const { useUpdatePipeProposta } = await import("@/hooks/usePipePropostas");
+      const { useUpdatePipeProposta } = await import("@/modules/pipelines/hooks/usePipePropostas");
       const { result } = renderHook(() => useUpdatePipeProposta(), { wrapper: w() });
 
       await act(async () => {
@@ -839,7 +839,7 @@ describe("usePipePropostas", () => {
       const chain = c([{ id: "pp1" }]);
       mF.mockReturnValue(chain);
 
-      const { useDeletePipeProposta } = await import("@/hooks/usePipePropostas");
+      const { useDeletePipeProposta } = await import("@/modules/pipelines/hooks/usePipePropostas");
       const { result } = renderHook(() => useDeletePipeProposta(), { wrapper: w() });
 
       await act(async () => {
@@ -898,7 +898,7 @@ describe("useLeadAllPipelines", () => {
         return chain;
       });
 
-      const { useLeadAllPipelines } = await import("@/hooks/useLeadAllPipelines");
+      const { useLeadAllPipelines } = await import("@/modules/leads");
       const { result } = renderHook(() => useLeadAllPipelines("lead-1"), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -929,7 +929,7 @@ describe("useLeadAllPipelines", () => {
     });
 
     it("is disabled when leadId is null", async () => {
-      const { useLeadAllPipelines } = await import("@/hooks/useLeadAllPipelines");
+      const { useLeadAllPipelines } = await import("@/modules/leads");
       const { result } = renderHook(() => useLeadAllPipelines(null), { wrapper: w() });
 
       expect(result.current.fetchStatus).toBe("idle");
@@ -940,7 +940,7 @@ describe("useLeadAllPipelines", () => {
     it("adds a lead to qualificacao pipe", async () => {
       mF.mockReturnValue(c());
 
-      const { useAddLeadToStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useAddLeadToStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useAddLeadToStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -959,7 +959,7 @@ describe("useLeadAllPipelines", () => {
     it("adds a lead to confirmacao pipe", async () => {
       mF.mockReturnValue(c());
 
-      const { useAddLeadToStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useAddLeadToStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useAddLeadToStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -978,7 +978,7 @@ describe("useLeadAllPipelines", () => {
     it("adds a lead to propostas pipe", async () => {
       mF.mockReturnValue(c());
 
-      const { useAddLeadToStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useAddLeadToStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useAddLeadToStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -997,7 +997,7 @@ describe("useLeadAllPipelines", () => {
     it("adds a lead to upsell pipe", async () => {
       mF.mockReturnValue(c());
 
-      const { useAddLeadToStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useAddLeadToStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useAddLeadToStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1018,7 +1018,7 @@ describe("useLeadAllPipelines", () => {
     it("moves a lead in qualificacao", async () => {
       mF.mockReturnValue(c());
 
-      const { useMoveLeadInStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useMoveLeadInStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useMoveLeadInStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1037,7 +1037,7 @@ describe("useLeadAllPipelines", () => {
     it("moves a lead in confirmacao", async () => {
       mF.mockReturnValue(c());
 
-      const { useMoveLeadInStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useMoveLeadInStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useMoveLeadInStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1056,7 +1056,7 @@ describe("useLeadAllPipelines", () => {
     it("moves a lead in propostas", async () => {
       mF.mockReturnValue(c());
 
-      const { useMoveLeadInStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useMoveLeadInStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useMoveLeadInStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1075,7 +1075,7 @@ describe("useLeadAllPipelines", () => {
     it("moves a lead in upsell", async () => {
       mF.mockReturnValue(c());
 
-      const { useMoveLeadInStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useMoveLeadInStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useMoveLeadInStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1096,7 +1096,7 @@ describe("useLeadAllPipelines", () => {
     it("removes a lead from qualificacao", async () => {
       mF.mockReturnValue(c());
 
-      const { useRemoveLeadFromStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useRemoveLeadFromStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useRemoveLeadFromStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1111,7 +1111,7 @@ describe("useLeadAllPipelines", () => {
     it("removes a lead from confirmacao", async () => {
       mF.mockReturnValue(c());
 
-      const { useRemoveLeadFromStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useRemoveLeadFromStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useRemoveLeadFromStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1126,7 +1126,7 @@ describe("useLeadAllPipelines", () => {
     it("removes a lead from propostas", async () => {
       mF.mockReturnValue(c());
 
-      const { useRemoveLeadFromStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useRemoveLeadFromStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useRemoveLeadFromStandardPipe(), { wrapper: w() });
 
       await act(async () => {
@@ -1141,7 +1141,7 @@ describe("useLeadAllPipelines", () => {
     it("removes a lead from upsell", async () => {
       mF.mockReturnValue(c());
 
-      const { useRemoveLeadFromStandardPipe } = await import("@/hooks/useLeadAllPipelines");
+      const { useRemoveLeadFromStandardPipe } = await import("@/modules/leads");
       const { result } = renderHook(() => useRemoveLeadFromStandardPipe(), { wrapper: w() });
 
       await act(async () => {

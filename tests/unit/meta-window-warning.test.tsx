@@ -1,7 +1,7 @@
 // tests/unit/meta-window-warning.test.tsx
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { MetaWindowWarning } from "@/components/chat-meta/MetaWindowWarning";
+import { MetaWindowWarning } from "@/modules/communication/components/chat-meta/MetaWindowWarning";
 
 describe("MetaWindowWarning", () => {
   it("renders when lastInboundAt is older than 24h", () => {

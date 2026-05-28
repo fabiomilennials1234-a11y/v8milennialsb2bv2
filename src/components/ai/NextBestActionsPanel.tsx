@@ -26,7 +26,7 @@ import {
   useCompleteAction,
   useDismissAction,
   type ActionType,
-} from "@/hooks/useNextBestActions";
+} from "@/modules/engagement/hooks/useNextBestActions";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";

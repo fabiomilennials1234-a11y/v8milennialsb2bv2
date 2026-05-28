@@ -129,8 +129,8 @@ Cada slice = 1 PR pequeno, app não quebra ao mergear, sem dependência de slice
 | 3 | `feat/modularizacao/02-identity` | Mover auth + team + master + permissions | 5h |
 | 4 | `feat/modularizacao/03-leads` | Consolidar lead/lead-detail/leads + hooks + pages | 6h |
 | 5 | `feat/modularizacao/04-pipelines` | kanban + pipelines + pipe-* + hooks pipeline | 6h |
-| 6 | `feat/modularizacao/05-communication` | chat + chat-meta + whatsapp-* + hooks chat + pages | 7h |
-| 7 | `feat/modularizacao/06-copilot` | copilot + hooks agent (`_shared/copilot/` já agrupado) | 5h |
+| 6 ✅ | `feat/modularizacao/05-communication` | chat + chat-meta + whatsapp-* + hooks chat + pages — *concluído 2026-05-27* | 7h |
+| 7 ✅ | `feat/modularizacao/06-copilot` | copilot + hooks agent (`_shared/copilot/` já agrupado) — *concluído 2026-05-27* | 5h |
 | 8 | `feat/modularizacao/07-workflows` | automacoes (frontend) + executor (`_shared/workflow-*`, `actions/`, `action-handlers/`) | 6h |
 | 9 | `feat/modularizacao/08-campaigns` | campanhas + mass-send + templates | 4h |
 | 10 | `feat/modularizacao/09-carteira` | carteira + upsell + tinyerp + erp-* | 5h |

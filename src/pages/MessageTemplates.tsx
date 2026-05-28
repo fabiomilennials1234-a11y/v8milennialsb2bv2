@@ -40,7 +40,7 @@ import {
   useDeleteMessageTemplate,
   type MessageTemplate,
   type MediaType,
-} from "@/hooks/useMessageTemplates";
+} from "@/modules/communication/hooks/useMessageTemplates";
 import {
   TEMPLATE_VARIABLES,
   resolveVariables,

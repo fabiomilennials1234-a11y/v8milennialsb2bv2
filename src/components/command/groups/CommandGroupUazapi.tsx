@@ -13,12 +13,12 @@ import { useNavigate } from "react-router-dom";
 import { DatabaseBackup, Wrench, Megaphone } from "lucide-react";
 import { CommandGroup, CommandItem } from "cmdk";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
-import { useIdentity } from "@/hooks/useIdentity";
-import { useWhatsAppInstancesForUser } from "@/hooks/chat/useWhatsAppInstances";
-import { HistorySyncDialog } from "@/components/chat/history-sync/HistorySyncDialog";
-import { RepairingWizard } from "@/components/whatsapp-migration/RepairingWizard";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useAuth } from "@/modules/identity";
+import { useIdentity } from "@/modules/identity";
+import { useWhatsAppInstancesForUser } from "@/modules/communication/hooks/chat/useWhatsAppInstances";
+import { HistorySyncDialog } from "@/modules/communication/components/chat/history-sync/HistorySyncDialog";
+import { RepairingWizard } from "@/modules/communication/components/whatsapp-migration/RepairingWizard";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { pushRecent } from "../recentCommands";
 
 interface CommandGroupUazapiProps {

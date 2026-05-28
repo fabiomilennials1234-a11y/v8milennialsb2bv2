@@ -30,7 +30,7 @@ import {
   Phone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { QueueItem } from "@/hooks/useDispatchQueueItems";
+import type { QueueItem } from "@/modules/campaigns/hooks/useDispatchQueueItems";
 
 const ACTION_ICONS: Record<string, typeof MessageSquare> = {
   send_template: MessageSquare,

@@ -46,15 +46,15 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "u1" }, session: { access_token: "token" } }),
 }));
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", profile_id: "p1" } }),
   isVirtualTeamMember: () => false,
   useTeamMembers: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/useCopilotPromptBuilder", () => ({
+vi.mock("@/modules/copilot/hooks/useCopilotPromptBuilder", () => ({
   generatePrompt: vi.fn().mockReturnValue({ systemPrompt: "mock prompt", metadata: { version: "1.0" } }),
   saveCopilotSystemPrompt: vi.fn().mockResolvedValue(undefined),
   regenerateAndSavePrompt: vi.fn().mockResolvedValue(undefined),
@@ -64,11 +64,11 @@ vi.mock("@/lib/copilot/custom-instructions-utils", () => ({
   parseCustomInstructions: (v: any) => ({ dos: v || "", donts: "" }),
   serializeCustomInstructions: (d: string, dt: string) => JSON.stringify({ dos: d, donts: dt }),
 }));
-vi.mock("@/hooks/useAgentFollowupRules", () => ({
+vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({
   followupRuleToDB: vi.fn((r: any) => r),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/lib/permissions", () => ({
+vi.mock("@/modules/identity/lib/permissions", () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
 }));
@@ -89,7 +89,7 @@ import {
   useCopilotAgentForEdit,
   useUpdateCopilotAgentFromWizard,
   type UpdatePipelinePayload,
-} from "@/hooks/useCopilotAgents";
+} from "@/modules/copilot/hooks/useCopilotAgents";
 
 // ---------------------------------------------------------------------------
 // Wrapper

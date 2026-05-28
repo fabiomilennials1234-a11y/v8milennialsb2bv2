@@ -41,24 +41,24 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-1" }),
   useRequiredOrganization: () => ({ organizationId: "org-1", teamMemberId: "tm1", isReady: true }),
 }));
 
-vi.mock("@/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({ isMaster: false, isLoading: false }),
 }));
 
-vi.mock("@/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useIsAdmin: () => ({ isAdmin: true }),
   useUserRole: () => ({ data: "admin" }),
 }));
 
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 
-import { useUpdateLead } from "@/hooks/useLeads";
-import { OptimisticLockConflictError } from "@/lib/optimistic-lock";
+import { useUpdateLead } from "@/modules/leads";
+import { OptimisticLockConflictError } from "@/modules/platform/lib/optimistic-lock";
 
 describe("useUpdateLead — optimistic locking (#307)", () => {
   beforeEach(() => {

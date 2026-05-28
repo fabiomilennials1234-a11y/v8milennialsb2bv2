@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { ScrollToBottomFab } from "@/components/chat/ScrollToBottomFab";
+import { ScrollToBottomFab } from "@/modules/communication/components/chat/ScrollToBottomFab";
 
 // framer-motion AnimatePresence renders children conditionally in tests
 // without needing any mock — jsdom renders the motion.button synchronously.

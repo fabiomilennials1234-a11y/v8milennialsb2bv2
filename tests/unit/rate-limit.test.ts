@@ -1,5 +1,5 @@
 /**
- * Testes unitários para src/lib/rate-limit.ts
+ * Testes unitários para src/modules/platform/lib/rate-limit.ts
  *
  * Onda 3.1, C23. Cobre: allow até capacity, block ao esgotar,
  * refill linear, reset manual, clock skew, storage fallback,
@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { createRateLimiter, tokenBucket } from "@/lib/rate-limit";
+import { createRateLimiter, tokenBucket } from "@/modules/platform/lib/rate-limit";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

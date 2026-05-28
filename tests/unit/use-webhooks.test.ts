@@ -6,12 +6,12 @@ const mockFrom = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: (...args: unknown[]) => mockFrom(...args) },
 }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-test", isReady: true }),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { useWebhooks } from "@/hooks/useWebhooks";
+import { useWebhooks } from "@/modules/platform/hooks/useWebhooks";
 
 function mockWebhookQuery(data: unknown[]) {
   mockFrom.mockReturnValue({

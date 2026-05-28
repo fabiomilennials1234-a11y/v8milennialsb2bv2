@@ -51,21 +51,21 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "u1" }, session: { access_token: "token" } }),
 }));
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", role: "admin", user_id: "u1" } }),
   isVirtualTeamMember: (id: string) => id?.startsWith("master-virtual-"),
   useTeamMembers: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
   useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
 }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/lib/whatsapp", () => ({
+vi.mock("@/modules/communication/lib/whatsapp", () => ({
   formatPhoneForWhatsApp: (p: string) => {
     if (!p) return null;
     const cleaned = p.replace(/\D/g, "");
@@ -87,7 +87,7 @@ import {
   type WhatsAppMessage,
   type ChatContact,
   type WhatsAppInstanceForUser,
-} from "@/hooks/useWhatsAppChat";
+} from "@/modules/communication/hooks/useWhatsAppChat";
 
 // ---------------------------------------------------------------------------
 // Wrapper

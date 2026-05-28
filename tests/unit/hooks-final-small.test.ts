@@ -29,18 +29,18 @@ vi.mock("@/integrations/supabase/client", () => ({
     storage: { from: vi.fn().mockReturnValue({ upload: vi.fn().mockResolvedValue({ error: null }), getPublicUrl: vi.fn().mockReturnValue({ data: { publicUrl: "" } }) }) },
   },
 }));
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "t" } }) }));
-vi.mock("@/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
-vi.mock("@/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
-vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "t" } }) }));
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
-vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
+vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 
 function w() {
@@ -52,7 +52,7 @@ function w() {
 beforeEach(() => { vi.clearAllMocks(); mF.mockReturnValue(c()); });
 
 // ─── useConversationHistory ───
-import { useConversationHistory } from "@/hooks/useConversationHistory";
+import { useConversationHistory } from "@/modules/communication/hooks/useConversationHistory";
 describe("useConversationHistory", () => {
   it("fetches conversation history", async () => {
     const { result } = renderHook(() => useConversationHistory("conv-1"), { wrapper: w() });
@@ -61,7 +61,7 @@ describe("useConversationHistory", () => {
 });
 
 // ─── useMessageTemplates ───
-import { useMessageTemplates, useCreateMessageTemplate, useDeleteMessageTemplate } from "@/hooks/useMessageTemplates";
+import { useMessageTemplates, useCreateMessageTemplate, useDeleteMessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
 describe("useMessageTemplates", () => {
   it("fetches templates", async () => {
     const { result } = renderHook(() => useMessageTemplates(), { wrapper: w() });
@@ -78,7 +78,7 @@ describe("useMessageTemplates", () => {
 });
 
 // ─── useWebhooks ───
-import { useWebhooks, useCreateWebhook, useDeleteWebhook } from "@/hooks/useWebhooks";
+import { useWebhooks, useCreateWebhook, useDeleteWebhook } from "@/modules/platform/hooks/useWebhooks";
 describe("useWebhooks", () => {
   it("fetches webhooks", async () => {
     const { result } = renderHook(() => useWebhooks(), { wrapper: w() });
@@ -95,7 +95,7 @@ describe("useWebhooks", () => {
 });
 
 // ─── useLeadCustomFields ───
-import { useLeadCustomFields, useCreateCustomField } from "@/hooks/useLeadCustomFields";
+import { useLeadCustomFields, useCreateCustomField } from "@/modules/leads";
 describe("useLeadCustomFields", () => {
   it("fetches custom fields", async () => {
     const { result } = renderHook(() => useLeadCustomFields(), { wrapper: w() });
@@ -108,7 +108,7 @@ describe("useLeadCustomFields", () => {
 });
 
 // ─── useLeadScore ───
-import { useLeadScore, useRecalculateScore } from "@/hooks/useLeadScore";
+import { useLeadScore, useRecalculateScore } from "@/modules/leads";
 describe("useLeadScore", () => {
   it("fetches lead score", async () => {
     const { result } = renderHook(() => useLeadScore("lead-1"), { wrapper: w() });
@@ -118,7 +118,7 @@ describe("useLeadScore", () => {
 });
 
 // ─── useAwards ───
-import { useAwards, useCreateAward } from "@/hooks/useAwards";
+import { useAwards, useCreateAward } from "@/modules/engagement/hooks/useAwards";
 describe("useAwards", () => {
   it("fetches awards", async () => {
     const { result } = renderHook(() => useAwards(), { wrapper: w() });
@@ -131,7 +131,7 @@ describe("useAwards", () => {
 });
 
 // ─── useBadges ───
-import { useBadges } from "@/hooks/useBadges";
+import { useBadges } from "@/modules/engagement/hooks/useBadges";
 describe("useBadges", () => {
   it("fetches badges", async () => {
     const { result } = renderHook(() => useBadges(), { wrapper: w() });
@@ -140,7 +140,7 @@ describe("useBadges", () => {
 });
 
 // ─── useConversationNotes ───
-import { useConversationNotes, useCreateConversationNote } from "@/hooks/useConversationNotes";
+import { useConversationNotes, useCreateConversationNote } from "@/modules/communication/hooks/useConversationNotes";
 describe("useConversationNotes", () => {
   it("fetches notes", async () => {
     const { result } = renderHook(() => useConversationNotes("conv-1"), { wrapper: w() });
@@ -153,7 +153,7 @@ describe("useConversationNotes", () => {
 });
 
 // ─── useMasterAuditLogs ───
-import { useMasterAuditLogs } from "@/hooks/useMasterAuditLogs";
+import { useMasterAuditLogs } from "@/modules/identity/hooks/useMasterAuditLogs";
 describe("useMasterAuditLogs", () => {
   it("fetches audit logs", async () => {
     const { result } = renderHook(() => useMasterAuditLogs(), { wrapper: w() });
@@ -162,7 +162,7 @@ describe("useMasterAuditLogs", () => {
 });
 
 // ─── useUpsellCampanhas ───
-import { useUpsellCampanhas } from "@/hooks/useUpsellCampanhas";
+import { useUpsellCampanhas } from "@/modules/carteira/hooks/useUpsellCampanhas";
 describe("useUpsellCampanhas", () => {
   it("fetches upsell campaigns", async () => {
     const { result } = renderHook(() => useUpsellCampanhas(), { wrapper: w() });

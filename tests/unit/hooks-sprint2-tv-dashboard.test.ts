@@ -23,18 +23,18 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
 
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
   useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
 }));
 
 vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 
-vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false, isLoading: false }) }));
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false, isLoading: false }) }));
 
-vi.mock("@/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/hooks/useIdentity", () => ({
   useIdentity: () => ({
     userId: "u1",
     organizationId: "org-t",
@@ -48,7 +48,7 @@ vi.mock("@/hooks/useIdentity", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
@@ -65,7 +65,7 @@ const mockTeamMembers = [
   { id: "tm2", name: "SDR 1", is_active: true, metric_type: "meetings", role: "membro", user_id: "u2", organization_id: "org-t" },
 ];
 
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }),
   useTeamMembers: () => ({ data: mockTeamMembers }),
   isVirtualTeamMember: (id: any) => typeof id === "string" && id.startsWith("_virtual_"),
@@ -136,19 +136,19 @@ const mockWhatsapp = [
   { id: "w3", status: "respondeu", sdr_id: "tm2", responsible_id: "tm2" },
 ];
 
-vi.mock("@/hooks/usePipePropostas", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipePropostas", () => ({
   usePipePropostas: () => ({ data: mockPropostas }),
 }));
 
-vi.mock("@/hooks/usePipeConfirmacao", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipeConfirmacao", () => ({
   usePipeConfirmacao: () => ({ data: mockConfirmacoes }),
 }));
 
-vi.mock("@/hooks/usePipeWhatsapp", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipeWhatsapp", () => ({
   usePipeWhatsapp: () => ({ data: mockWhatsapp }),
 }));
 
-vi.mock("@/hooks/useGoals", () => ({
+vi.mock("@/modules/engagement/hooks/useGoals", () => ({
   useTeamGoals: () => ({
     data: [{ type: "vendas", target_value: 100000, team_member_id: null, name: "Meta de Vendas" }],
   }),
@@ -160,14 +160,14 @@ vi.mock("@/hooks/useGoals", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useUserRole: () => "admin",
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
 }));
 
 // RPC canônica (ADR 2026-04-24): vendaTotal = Σ sale_value (sem × duration).
 // Mock espelha a resposta de get_dashboard_metrics para o fixture acima.
-vi.mock("@/hooks/useDashboardMetrics", () => ({
+vi.mock("@/modules/analytics/hooks/useDashboardMetrics", () => ({
   useDashboardMetrics: () => ({
     data: {
       totalLeads: 0,
@@ -195,7 +195,7 @@ vi.mock("@/hooks/useDashboardMetrics", () => ({
   useRankingData: () => ({ data: { salesRanking: [], meetingsRanking: [] } }),
 }));
 
-vi.mock("@/hooks/usePipelineStages", () => ({
+vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {},
   getPipelineTypeName: (t: string) => t,
@@ -213,7 +213,7 @@ function createWrapper() {
 
 // ---- Import hook ----
 
-import { useTVDashboardData } from "@/hooks/useTVDashboardData";
+import { useTVDashboardData } from "@/modules/analytics/hooks/useTVDashboardData";
 
 // ---- Tests ----
 

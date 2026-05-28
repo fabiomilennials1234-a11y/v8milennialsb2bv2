@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateSuggestions } from "../../src/lib/onboarding-suggestions";
+import { generateSuggestions } from "../../src/modules/platform/lib/onboarding-suggestions";
 
 describe("generateSuggestions", () => {
   it("returns pipelines, automations, profileLabel and checklistPriorities", () => {

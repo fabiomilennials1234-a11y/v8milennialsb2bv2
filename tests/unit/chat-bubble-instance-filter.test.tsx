@@ -19,7 +19,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 const teamMemberRef = {
   value: { id: "tm1", organization_id: "org-A", user_id: "u1" },
 };
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: teamMemberRef.value }),
 }));
 
@@ -29,19 +29,19 @@ const instancesRef = {
     { id: "i2", instance_name: "Suporte", status: "connected" },
   ],
 };
-vi.mock("@/hooks/chat/useWhatsAppInstances", () => ({
+vi.mock("@/modules/communication/hooks/chat/useWhatsAppInstances", () => ({
   useWhatsAppInstancesForUser: () => ({ data: instancesRef.value }),
 }));
 
-vi.mock("@/hooks/chat/useResolveChatDeepLink", () => ({
+vi.mock("@/modules/communication/hooks/chat/useResolveChatDeepLink", () => ({
   useResolveChatDeepLink: () => ({ data: null, isLoading: false, isFetching: false }),
 }));
 
-vi.mock("@/hooks/chat/useWhatsAppRealtime", () => ({
+vi.mock("@/modules/communication/hooks/chat/useWhatsAppRealtime", () => ({
   useWhatsAppMessagesRealtime: vi.fn(),
 }));
 
-vi.mock("@/hooks/chat/useChatBubbleContactsRealtime", () => ({
+vi.mock("@/modules/communication/hooks/chat/useChatBubbleContactsRealtime", () => ({
   useChatBubbleContactsRealtime: vi.fn(() => ({ isReconnecting: false })),
 }));
 
@@ -60,9 +60,9 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 import { ChatBubbleProvider } from "@/contexts/ChatBubbleContext";
-import { useChatBubble } from "@/hooks/useChatBubble";
-import { ChatBubbleInstanceSwitcher } from "@/components/chat/bubble/ChatBubbleInstanceSwitcher";
-import { ChatBubbleEmptyState } from "@/components/chat/bubble/ChatBubbleEmptyState";
+import { useChatBubble } from "@/modules/communication/hooks/useChatBubble";
+import { ChatBubbleInstanceSwitcher } from "@/modules/communication/components/chat/bubble/ChatBubbleInstanceSwitcher";
+import { ChatBubbleEmptyState } from "@/modules/communication/components/chat/bubble/ChatBubbleEmptyState";
 
 function newQc() {
   return new QueryClient({

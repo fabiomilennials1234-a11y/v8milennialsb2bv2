@@ -14,7 +14,7 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 const mockUseCurrentTeamMember = vi.fn();
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => mockUseCurrentTeamMember(),
 }));
 
@@ -32,7 +32,7 @@ vi.mock("@/lib/normalizePhone", () => ({
 
 // ─── Import after mocks ──────────────────────────────────────────────────────
 
-import { useChatBubbleContactsRealtime } from "@/hooks/chat/useChatBubbleContactsRealtime";
+import { useChatBubbleContactsRealtime } from "@/modules/communication/hooks/chat/useChatBubbleContactsRealtime";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

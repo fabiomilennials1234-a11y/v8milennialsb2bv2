@@ -9,7 +9,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-import { LogLevel, logger } from "../../src/lib/logger";
+import { LogLevel, logger } from "../../src/modules/platform/lib/logger";
 
 describe("LogLevel enum", () => {
   it("has DEBUG", () => expect(LogLevel.DEBUG).toBe("debug"));
