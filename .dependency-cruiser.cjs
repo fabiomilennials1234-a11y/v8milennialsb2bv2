@@ -6,19 +6,19 @@
  *  2. Sem imports cross-module através de internals (`module-internals-private`)
  *     uma vez que módulos existam em `src/modules/<bc>/` (slice 2+).
  *
- * Modo atual: warn em violações inter-módulo (ainda não há módulos populados).
- * Flip para error em slice 17 quando estrutura estiver consolidada.
+ * Modo atual: error em violações inter-módulo e ciclos (flip Fase 2 enforcement real).
+ * Gate efetivo via ratchet (`scripts/dep-cruise-ratchet.js`) que compara contra
+ * `.dependency-cruiser-baseline.json` — falha apenas em violations NOVAS.
  *
  * Ver: .specs/features/modularizacao/SPEC.md
  *      Obsidian/.../10 — Remodelagem/02-solucao/boundary-enforcement.md
+ *      Obsidian/.../10 — Remodelagem/04-execucao/roadmap-pos-modularizacao/fase-2-enforcement-real.md
  */
 module.exports = {
   forbidden: [
     {
       name: "no-circular",
-      // Warn-only inicial — 13 ciclos pré-existentes (ver `npm run lint:deps`).
-      // Flip para `error` em slice 17 após cleanup dos ciclos existentes (issue separada).
-      severity: "warn",
+      severity: "error",
       comment:
         "Ciclos entre módulos / arquivos quebram tree-shaking e tornam refactor "
         + "frágil. Resolver via extração de tipo compartilhado ou inversão de dependência.",
@@ -29,7 +29,7 @@ module.exports = {
     },
     {
       name: "module-internals-private",
-      severity: "warn",
+      severity: "error",
       comment:
         "Imports entre módulos devem passar pela API pública (`src/modules/<bc>/index.ts`). "
         + "Importar internals (subpastas) cria acoplamento que o monolito modular existe pra evitar.",
