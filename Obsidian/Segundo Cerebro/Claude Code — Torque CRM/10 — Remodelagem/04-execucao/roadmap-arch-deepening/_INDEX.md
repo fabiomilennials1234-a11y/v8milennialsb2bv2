@@ -103,3 +103,8 @@ Pattern de [[feedback_hotfix_during_feature]] se mantém:
 - [[reducao-deep-imports]] — processo redução ratchet
 - [[roadmap-pos-modularizacao/_INDEX]] — roadmap deploy prod (fases 5-6 dependência)
 - Relatório análise comparativa main vs develop (chat session, não persistido)
+
+## Inventários por slice
+
+- [[inventario-leads-pipelines]] — Slice 7.1 (Fase 7)
+- [[inventario-identity]] — Slice 9.1 (Fase 9, decisão Alt B)
