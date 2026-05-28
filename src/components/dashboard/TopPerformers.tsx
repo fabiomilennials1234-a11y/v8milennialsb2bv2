@@ -48,7 +48,7 @@ function TopPerformersBase() {
   return (
     <div
       className="bg-card rounded-lg border border-border p-5 cursor-pointer hover:border-primary/30 transition-colors"
-      onClick={() => navigate("/dashboard?tab=time")}
+      onClick={() => navigate("/ranking")}
     >
       <div className="flex items-center justify-between mb-4">
         <p className="stat-card-label flex items-center gap-1.5">

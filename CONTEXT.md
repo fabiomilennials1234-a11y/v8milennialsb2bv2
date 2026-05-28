@@ -64,24 +64,6 @@ Canonical terms used across the system. No implementation details here — this 
 
 - **Gamification**: Badges, awards, competitions, streaks, and milestones for sales team motivation.
 
-## Metrics & Dashboards
-
-- **North Star Metrics**: The two top-level indicators of business health: Vendas Fechadas (new revenue engine) and Receita Recorrente (retention/reorder sustentation). All other metrics support or diagnose these two.
-
-- **Dashboard Camada Estratégica ("Resultado")**: Executive-level view showing North Stars, funnel health, efficiency, and alerts. Visible to admin/master only.
-
-- **Dashboard Camada Tática ("Time")**: Management-level view showing team performance, detailed funnel, diagnostics, and Copilot effectiveness. Visible to admin/master only.
-
-- **Dashboard Camada Operacional ("Meus Números")**: Individual contributor view showing personal metrics, pending actions, and evolution. Visible to all roles. Default tab for membro.
-
-- **Cobertura de Pipeline**: Ratio of total open deal value to the monthly sales target (meta). Indicates whether there's enough pipeline to hit the goal.
-
-- **Leads Parados**: Leads with no activity (no messages, no stage changes, no notes) for 7+ days. An alert metric for stale pipeline.
-
-- **Sequência de Vitórias**: Consecutive days a team member has recorded at least one sale (Closer) or attended meeting (SDR). Gamification metric.
-
-- **Meta (Goal)**: A monthly target assigned to a Team Member (individual) or the whole team. Types: vendas, reunioes, faturamento, clientes, conversao.
-
 ## Billing
 
 - **Subscription Plan**: A pricing tier for an Organization. Managed via Asaas payment gateway. Controls feature access via quotas and feature flags.
