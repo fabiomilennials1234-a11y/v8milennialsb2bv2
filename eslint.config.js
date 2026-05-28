@@ -30,9 +30,9 @@ export default tseslint.config(
       "custom": { rules: { "no-brittle-supabase-mocks": noBrittleSupabaseMocks } },
     },
     settings: {
-      // Boundary enforcement preparado para src/modules/<bc>/ (slice 2+).
-      // Modo warn enquanto a maior parte do código ainda vive fora de elementos;
-      // flip para error em slice 17 (docs) quando estrutura modular estiver consolidada.
+      // Boundary enforcement em error mode (slice 17 — 2026-05-28).
+      // Estrutura modular consolidada (slices 1-16). Cross-module só via barrel
+      // `@/modules/<bc>` (deep-import apenas para pages/* — preserva React.lazy).
       // Ver: .specs/features/modularizacao/SPEC.md
       "boundaries/elements": [
         { type: "module", pattern: "src/modules/*", mode: "folder" },
@@ -67,8 +67,8 @@ export default tseslint.config(
       "react-hooks/rules-of-hooks": "warn",
       "@typescript-eslint/no-unsafe-function-type": "warn",
       "custom/no-brittle-supabase-mocks": "warn",
-      // Boundary rules (warn-only inicial — flip para error em slice 17)
-      "boundaries/element-types": ["warn", {
+      // Boundary rules (slice 17 — 2026-05-28: flip warn → error).
+      "boundaries/element-types": ["error", {
         default: "allow",
         rules: [
           { from: "module", allow: ["ui", "shared", "core", "module"] },
@@ -77,7 +77,7 @@ export default tseslint.config(
           { from: "core", allow: ["core"] },
         ],
       }],
-      "boundaries/no-private": ["warn", { allowUncles: false }],
+      "boundaries/no-private": ["error", { allowUncles: false }],
       "boundaries/no-unknown": "off",
       "boundaries/no-unknown-files": "off",
     },

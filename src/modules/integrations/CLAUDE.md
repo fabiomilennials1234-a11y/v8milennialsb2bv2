@@ -1,6 +1,6 @@
 # Module — integrations
 
-**Status:** 🟡 Skeleton (slice 13 popula)
+**Status:** 🟢 Active (frontend skeleton + cleanup longtail slice 16 — 2026-05-28; backend doc-only via slice 15)
 **BC:** integrations (cross-cutting)
 **Entidade primária:** Provider adapter (por provider)
 **Owner:** ops / plataforma
@@ -10,7 +10,7 @@
 Adapters para provedores externos. Cada integração isolada em subpasta. Outros módulos consomem via API pública (port-and-adapter).
 
 Providers ativos:
-- **Google Calendar** — sync de reunião + availability
+- **Google Calendar** — sync de reunião + availability + sharing
 - **Google Drive** — anexos (futuro)
 - **Google Sheets** — append row (mass export)
 - **Meta** (Graph API) — Messenger/Instagram inbox + ads insights + OAuth
@@ -24,17 +24,15 @@ Providers ativos:
 ## Não-escopo
 
 - Lógica de negócio que CONSOME o provider → módulos respectivos (`carteira` consome `tinyerp`, `communication` consome `meta`)
-- Webhook routing genérico → `platform`?
+- Webhook routing genérico → `platform`
 
-## API pública (`index.ts`) — TBD slice 13
+## API pública (`index.ts`)
 
-Provável estrutura:
-- `integrations/google-calendar/` — `useGoogleCalendar`, `useGoogleCalendarSharing`
-- `integrations/meta/` — Meta adapter + `useMetaConnection`
-- `integrations/tinyerp/` — TinyERP adapter + `useTinyErp`
-- ...etc
+**Hooks (slice 16 longtail):**
+- `useGoogleCalendar` — sync de reunião + availability
+- `useGoogleCalendarSharing` — convidar participantes + ACL
 
-Cada subpasta tem seu próprio sub-CLAUDE.md (popula slice 13).
+Demais providers seguem em edge functions (`supabase/functions/`) com mapping doc-only em slice 15 — sem move físico (Supabase CLI exige flat layout).
 
 ## Áreas frágeis
 
@@ -43,28 +41,17 @@ Cada subpasta tem seu próprio sub-CLAUDE.md (popula slice 13).
 - **Webhook signature verification** — Asaas, TinyERP, Meta — cada um com seu esquema
 - **OAuth callback URLs** — change provider config → break
 
-## Origem (pastas atuais que migrarão pra cá)
+## Backend (NÃO migrado — fica em `supabase/functions/`)
 
-Frontend:
-- `src/hooks/useGoogleCalendar.ts`, `useGoogleCalendarSharing.ts`
-- `src/hooks/useMetaConnection.ts`
-- `src/hooks/useTinyErp.ts`
-
-Backend:
-- `supabase/functions/google-calendar-*` (6 functions)
-- `supabase/functions/meta-oauth-callback/`, `meta-ads-insights/`, `meta-conversation-profile/`, `refresh-meta-tokens/`
-- `supabase/functions/tinyerp-*` (8 functions) + `erp-order-webhook/`
-- `supabase/functions/elevenlabs-proxy/`
-- `supabase/functions/sz-chat-send/`, `sz-chat-webhook/` (cross-cut)
-- `supabase/functions/webhook-calcom/`
-- `supabase/functions/partner-webhook/` (auditar)
-- `supabase/functions/_shared/google-calendar-utils.ts`, `meta-api.ts`, `tinyerp-utils.ts`, `asaas.ts`, `tts-elevenlabs.ts`
-
-## Slice de migração
-
-**Slice 13** (cross-cut) ou **Slice 15** — `feat/modularizacao/14-edge-functions` (6h + 3h auditoria webhook ambíguos)
-
-Maior parte do volume está em edge functions — provavelmente migra junto com slice 15.
+Ver `supabase/functions/CLAUDE.md` slice 15 doc-only mapping. Edge functions integrations:
+- `google-calendar-*` (6 functions)
+- `meta-oauth-callback`, `meta-ads-insights`, `meta-conversation-profile`, `refresh-meta-tokens`
+- `tinyerp-*` (8 functions) + `erp-order-webhook`
+- `elevenlabs-proxy`
+- `sz-chat-send`, `sz-chat-webhook` (cross-cut com `communication`)
+- `webhook-calcom`
+- `partner-webhook` (auditar)
+- `_shared/google-calendar-utils.ts`, `meta-api.ts`, `tinyerp-utils.ts`, `asaas.ts`, `tts-elevenlabs.ts`
 
 ## Dedup pendente
 

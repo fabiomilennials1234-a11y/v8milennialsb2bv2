@@ -1,6 +1,6 @@
 # Module — identity
 
-**Status:** 🟡 Skeleton (slice 3 popula)
+**Status:** 🟢 Active (slice 3 + cleanup longtail slice 16 — 2026-05-28)
 **BC:** identity
 **Entidade primária:** Organization + Team Member + Role + Permission
 **Owner:** plataforma / ops
@@ -15,6 +15,8 @@ Inclui:
 - Team members (admin, master, membro) — SDR/Closer são roles UI, não código
 - Sistema de permissões (3 camadas: master → admin → feature → role)
 - Master ops (super-admin transversal a orgs)
+- Avatar resolution (`useAvatarMap`)
+- Auto-admin assignment em first signup (`useAutoAdminAssignment`)
 
 ## Não-escopo
 
@@ -23,58 +25,73 @@ Inclui:
 - Billing/subscription → `billing`
 - Settings de feature flags → `platform`
 
-## API pública (`index.ts`) — TBD slice 3
+## Estrutura
 
-Provável superfície:
-- Hooks: `useIdentity`, `useUserRole`, `useMasterAuth`, `useCanPerformAction`, `usePermissions`
-- Components: `<ProtectedRoute>`, `<PermissionProtectedRoute>`, `<SubscriptionProtectedRoute>`
-- Types: `Role`, `Permission`, `TeamMember`
-- Eventos (post slice 19): `user.signed_in`, `org.switched`, `permission.granted`
+```
+src/modules/identity/
+├── components/
+│   ├── master/                       # Master ops UI (ApiStatusTab, BillingOverrideModal, MasterLayout, MasterRoute, MasterSidebar, PlanEditor, PlanFeatureCard, QuotaManagementPanel, onboarding/)
+│   ├── team/                         # Team management UI (MemberPermissions, SeatUsageBar, TeamMemberCard, TeamStats) — absorvidos em slice 16
+│   ├── PermissionProtectedRoute.tsx
+│   ├── PermissionsTab.tsx
+│   ├── ProfileSettings.tsx
+│   ├── ProtectedRoute.tsx
+│   └── SubscriptionProtectedRoute.tsx
+├── contexts/
+│   └── AuthContext.tsx
+├── hooks/                            # 22 hooks (auth, role, master, permissions, org, profiles, avatar)
+├── lib/
+│   └── permissions.ts                # resolveAction, usePermission, assertPermissionClient, assertPermission
+├── pages/                            # Auth, Signup, ResetPassword, Equipe, master/
+├── index.ts                          # API pública
+└── CLAUDE.md                         # este arquivo
+```
+
+## API pública (`index.ts`)
+
+Ver `./index.ts` para superfície completa. Resumo:
+
+**Auth context:** `AuthProvider`, `useAuth`.
+
+**Lib (permissions resolver):** `resolveAction`, `usePermission`, `assertPermissionClient`, `assertPermission`. Types: `AppAction`, `ResolveActionContext`, `ResolveActionResult`.
+
+**Hooks — identity + role:** `useIdentity` (+ type `Identity`), `useUserRole`, `useHasRole`, `useIsAdmin`, `useFeaturePermission`, `useFeaturePermissions`, `useCanManageCopilot`, `useCanManageWhatsApp`, `useJobTitle`, `useMetricType` (+ types `AppRole`, `UserRole`), `useCanDo`.
+
+**Hooks — master ops:** `useMasterAuth`, `useCanAccessMaster` (+ types `MasterUser`, `MasterPermissions`), `useMasterOperations`, `useAutomationJobs`, `useJobsOverview`, `useMasterOrganizations`, `useMasterUsers`, `useMasterPlans`, `useMasterAuditLogs`.
+
+**Hooks — permissions:** `usePermissions`, `useOrgRolePermissions`, `useUpdateRolePermission`, `useResetOrgRolePermissions`.
+
+**Hooks — org + team:** `useOrganization`, `useOrganizationSettings`, `useOrgQuotas`, `useOrgSwitcher`, `useSeatUsage`, `useTeamMembers`, `useProfiles`.
+
+**Hooks (slice 16 longtail):** `useAvatarMap` (resolve avatares por user_id), `useAutoAdminAssignment` (promove primeiro user a admin se ainda não houver admin na org).
+
+**Components:** `<ProtectedRoute>`, `<PermissionProtectedRoute>`, `<SubscriptionProtectedRoute>`, `<PermissionsTab>`, `<ProfileSettings>`, `<MemberPermissions>`, `<SeatUsageBar>`, `<TeamMemberCard>`, `<TeamStats>`, + master/* components.
+
+**Pages (deep-import, não no barrel):** `pages/Auth`, `pages/Signup`, `pages/ResetPassword`, `pages/Equipe`, `pages/master/*`.
+
+**Eventos (post slice 19):** `user.signed_in`, `org.switched`, `permission.granted`.
 
 ## Áreas frágeis
 
-🟠 Permissões em 3 camadas, issues recorrentes (`08 — Backlog/backlog/permissions-fallback-fail-closed.md`).
+🟠 **Permissões em 3 camadas — issues recorrentes** (`08 — Backlog/backlog/permissions-fallback-fail-closed.md`).
 
 - Server-side enforcement parcial (ver `docs/PERMISSION-ENFORCEMENT.md`)
 - Roles no código: SEMPRE `admin`, `master`, `membro` — nunca `SDR`/`Closer` (UI only)
 - Multi-tenancy: toda query filtra `organization_id` via RLS — frontend nunca envia
 - RLS + Realtime: usar `get_my_organization_ids()` (SECURITY DEFINER), NUNCA subquery inline em policies
+- Virtual master team_member id: rotinas FK não devem persistir o id virtual (ver fix `8f63435e`)
 
-## Origem (pastas atuais que migrarão pra cá)
+## Dependências cross-module
 
-Frontend:
-- `src/components/master/`
-- `src/components/settings/equipe/`
-- `src/hooks/auth/` (subpasta existente)
-- `src/hooks/useIdentity.ts`, `useUserRole.ts`, `useMasterAuth.ts`, `useMasterOperations.ts`, `useMasterOrganizations.ts`, `useMasterPlans.ts`, `useMasterUsers.ts`, `useMasterAuditLogs.ts`
-- `src/hooks/usePermissions.ts`, `useCanDo.ts`, `useOrgRolePermissions.ts`, `useUpdateRolePermission.ts`, `useResetOrgRolePermissions.ts`
-- `src/hooks/useOrganization.ts`, `useOrganizationSettings.ts`, `useOrgQuotas.ts`, `useOrgSwitcher.ts`, `useSeatUsage.ts`, `useTeamMembers.ts`, `useProfiles.ts`
-- `src/lib/permissions.ts`
-- `src/contexts/AuthContext.tsx`
-- `src/pages/Auth.tsx`, `Signup.tsx`, `ResetPassword.tsx`, `Equipe.tsx`, `master/`
-- `src/components/PermissionProtectedRoute.tsx`, `ProtectedRoute.tsx`, `SubscriptionProtectedRoute.tsx`
+- `@/shared/realtime/*` — transport infra (useRealtimeChannel/Subscription/Status, mvd em slice 16)
+- `@/integrations/supabase/client`, `@/integrations/supabase/types`
 
-Backend:
-- `supabase/functions/admin-reset-user-password/`
-- `supabase/functions/assign-user-to-org/`
-- `supabase/functions/attach-to-org-by-pending-invite/`
-- `supabase/functions/create-org-user/`
-- `supabase/functions/list-organizations/`
-- `supabase/functions/list-unassigned-users/`
-- `supabase/functions/remove-org-member/`
-- `supabase/functions/save-member-permissions/`
-- `supabase/functions/get-member-permissions/`
-- `supabase/functions/_shared/auth.ts` + `user-auth.ts` (consolidar)
-- `supabase/functions/_shared/permission_engine.ts`, `permission-actions.ts`, `assert-permission.ts`
+## Backend (NÃO migrado — fica em `supabase/functions/`)
 
-## Slice de migração
-
-**Slice 3** — `feat/modularizacao/02-identity` (5h)
-
-## Dedup pendente
-
-- `_shared/auth.ts` vs `_shared/user-auth.ts` — auditar diff + consolidar
-- `usePermissions` vs `useCanDo` — overlap (definir convenção)
+Ver `supabase/functions/CLAUDE.md` slice 15 doc-only mapping. Edge functions identity:
+- `admin-reset-user-password`, `assign-user-to-org`, `attach-to-org-by-pending-invite`, `create-org-user`, `list-organizations`, `list-unassigned-users`, `remove-org-member`, `save-member-permissions`, `get-member-permissions`
+- `_shared/auth.ts` + `user-auth.ts` (consolidar)
+- `_shared/permission_engine.ts`, `permission-actions.ts`, `assert-permission.ts`
 
 ## Refs
 

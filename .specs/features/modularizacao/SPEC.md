@@ -236,3 +236,44 @@ Fundamentação conceitual: [clipping Augusto Galego — monolito modular](../..
 1. CTO aprova ADR-MOD-001
 2. Abrir issue de cada slice 1-18 (skill `to-issues`)
 3. Slice 1 (`feat/modularizacao/00-tooling`) cortada de `develop`
+
+---
+
+## Adendo 2026-05-28 — Slice 15 (edge functions reorg) descartada
+
+**Decisão:** Slice 15 reorg física de `supabase/functions/<bc>/<fn>/` foi **descartada**. Substituída por **mapping doc-only** em `supabase/functions/CLAUDE.md` (96 funções catalogadas por BC, commit `c9b227ed`).
+
+**Motivo:** Supabase CLI hardcoda o contrato `supabase/functions/<fn>/index.ts` (flat layout). Toda a tooling (deploy, serve, logs, config.toml) acopla a esse path. Quebrar isso significaria forkar a CLI ou manter wrapper duplo — custo > benefício pra equipe pequena.
+
+**Trade-off aceito:** Edge functions ficam fora do enforcement físico de boundaries. Mitigação: BC mapping doc-only + sub-CLAUDE.md por edge function crítica (já existe pra `agent-message`, `whatsapp-webhook`, `_shared`).
+
+**Impacto:** Critério de aceite "0 edge functions soltas no root de `supabase/functions/`" **revogado**. Substituído por: "edge functions catalogadas por BC em `supabase/functions/CLAUDE.md` com link bidirecional para `src/modules/<bc>/CLAUDE.md`".
+
+## Adendo 2026-05-28 — Slice 16 adicionada (cleanup longtail)
+
+**Decisão:** Slice 16 não estava no plano original. Adicionada após inspeção pós-slice 14: ainda restavam 45 hooks/components + 1 page em `src/components/{ai,branding,calls,command,email,layout,oraculo,saved-views,shared,sms,team}/` e `src/hooks/` root.
+
+**Escopo executado (PR #512):**
+- `useTags`, `useImportBatches`, `useEnrichment`, `useBulkActions`, `useBulkSelection`, `useBatchedLeadMetrics` → `leads`
+- `useEmailAccounts`, `useEmails`, `useSms`, `useAiEmailDrafts`, `components/{email,sms,ai/AiEmailWriter}`, `pages/MessageTemplates` → `communication`
+- `useGoogleCalendar`, `useGoogleCalendarSharing` → `integrations`
+- `useLossReasons` → `pipelines`
+- `useSavedViews`, `useApplyViewFromUrl`, `useGlobalShortcuts`, `useKeyboardShortcuts`, `useSandbox`, `components/{command,saved-views,layout}` → `platform`
+- `useAvatarMap`, `useAutoAdminAssignment`, `components/team/*` → `identity`
+- `components/oraculo/OraculoComercial` → `copilot`
+- `components/calls/LogCallModal`, `components/ai/{CoachingSidebar,NextBestActionsPanel}` → `engagement`
+- `useRealtimeChannel`, `useRealtimeChannelStatus`, `useRealtimeSubscription` → `src/shared/realtime/`
+- `usePersistedState`, `useDebounce`, `useOptimisticConflictHandler`, `useCountUp`, `use-viewport`, `useAutoSaveField`, `useExplicitSaveForm` → `src/shared/hooks/`
+
+**Estado pós-slice 16:** `src/components/` contém apenas `ui/` (shadcn). `src/hooks/` contém apenas `use-toast.ts`. `src/pages/` vazia.
+
+## Adendo 2026-05-28 — Slice 17 (docs + flip warn→error)
+
+**PR atual.** Atualiza:
+- 8 sub-CLAUDE.md afetados por slice 16 (identity, leads, pipelines, communication, copilot, engagement, integrations, platform)
+- CLAUDE.md raiz + AGENTS.md + llms.txt
+- Vault `02 — Arquitetura/Modulos.md` + `10 — Remodelagem/04-execucao/slices.md`
+- ESLint `boundaries/element-types` + `boundaries/no-private` flip `warn` → `error` (0 violations detectadas pre-flip — fix risk-free)
+- Este SPEC com adendos slice 15/16/17
+
+**Próximo:** Slice 18 (finalize — deletar legacy + ADR conclusão). Slice 19 (event-bus piloto) em paralelo.
