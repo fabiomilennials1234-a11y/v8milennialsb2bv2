@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import {
   Table,
   TableBody,
@@ -50,6 +50,8 @@ interface CarteiraClientTableProps {
   filter: string;
   bulk?: ReturnType<typeof useBulkSelection>;
   onRowsChange?: (rows: PortfolioClientRow[]) => void;
+  /** Slot à esquerda da linha do Exportar (ex.: tabs de filtro da carteira). */
+  filterTabs?: ReactNode;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -194,6 +196,7 @@ export function CarteiraClientTable({
   filter,
   bulk,
   onRowsChange,
+  filterTabs,
 }: CarteiraClientTableProps) {
   const { organizationId } = useOrganization();
   const [sortBy, setSortBy] = useState<SortColumn | null>(null);
@@ -344,14 +347,15 @@ export function CarteiraClientTable({
 
   return (
     <div className="space-y-0">
-      {/* Export button */}
-      <div className="flex justify-end mb-2">
+      {/* Filtros (slot, à esquerda) + Exportar (à direita) */}
+      <div className="flex items-center gap-4 mb-2">
+        {filterTabs && <div className="min-w-0 flex-1">{filterTabs}</div>}
         <Button
           variant="outline"
           size="sm"
           onClick={handleExport}
           disabled={exporting || total === 0}
-          className="gap-2 text-[13px]"
+          className="gap-2 text-[13px] shrink-0 ml-auto"
         >
           {exporting ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />

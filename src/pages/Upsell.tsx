@@ -139,47 +139,6 @@ export default function Upsell() {
         {/* Alert banner */}
         <CarteiraAlertBanner onViewDetails={() => setCarteiraFilter("overdue")} />
 
-        {/* Tabs — filtram a lista de clientes; não fazem sentido em analytics */}
-        {carteiraView !== "analytics" && (
-        <div className="flex gap-0 border-b border-border overflow-x-auto">
-          {PORTFOLIO_TABS.map((tab) => {
-            const count = tabCounts[tab.value] ?? 0;
-            const active = carteiraFilter === tab.value;
-            const isRisk = "isRisk" in tab && tab.isRisk;
-            return (
-              <button
-                key={tab.value}
-                onClick={() => {
-                  setCarteiraFilter(tab.value);
-                  setSelectedClient(null);
-                }}
-                className={cn(
-                  "px-5 py-2.5 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap",
-                  active
-                    ? "text-foreground border-b-primary"
-                    : "text-muted-foreground border-b-transparent hover:text-muted-foreground",
-                )}
-              >
-                {tab.label}
-                {count > 0 && (
-                  <span
-                    className={cn(
-                      "ml-1.5 text-[11px] px-1.5 py-px rounded-full inline-block",
-                      active && !isRisk && "bg-primary/10 text-primary",
-                      active && isRisk && "bg-destructive/10 text-destructive",
-                      !active && !isRisk && "bg-muted text-muted-foreground",
-                      !active && isRisk && "bg-destructive/10 text-destructive",
-                    )}
-                  >
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-        )}
-
         {/* Search + View toggle */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1 max-w-[320px]">
@@ -263,6 +222,45 @@ export default function Upsell() {
                   filter={carteiraFilter}
                   bulk={bulk}
                   onRowsChange={setCurrentRows}
+                  filterTabs={
+                    <div className="flex gap-0 overflow-x-auto">
+                      {PORTFOLIO_TABS.map((tab) => {
+                        const count = tabCounts[tab.value] ?? 0;
+                        const active = carteiraFilter === tab.value;
+                        const isRisk = "isRisk" in tab && tab.isRisk;
+                        return (
+                          <button
+                            key={tab.value}
+                            onClick={() => {
+                              setCarteiraFilter(tab.value);
+                              setSelectedClient(null);
+                            }}
+                            className={cn(
+                              "px-5 py-2.5 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap",
+                              active
+                                ? "text-foreground border-b-primary"
+                                : "text-muted-foreground border-b-transparent hover:text-muted-foreground",
+                            )}
+                          >
+                            {tab.label}
+                            {count > 0 && (
+                              <span
+                                className={cn(
+                                  "ml-1.5 text-[11px] px-1.5 py-px rounded-full inline-block",
+                                  active && !isRisk && "bg-primary/10 text-primary",
+                                  active && isRisk && "bg-destructive/10 text-destructive",
+                                  !active && !isRisk && "bg-muted text-muted-foreground",
+                                  !active && isRisk && "bg-destructive/10 text-destructive",
+                                )}
+                              >
+                                {count}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  }
                 />
               </div>
 
