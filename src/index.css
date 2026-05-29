@@ -181,19 +181,22 @@
     --bubble-outgoing-foreground: 210 20% 94%;
     --bubble-outgoing-border:     217 20% 38%;
 
-    /* Incoming (cliente): superfície sutil sobre o fundo warm-dark (#191714),
-       lendo como translúcida ~rgba(255,255,255,0.04) + linha ~0.06. */
-    --bubble-incoming:            36 9% 14%;
-    --bubble-incoming-foreground: 45 12% 90%;
-    --bubble-incoming-border:     36 8% 22%;
+    /* Incoming (cliente): superfície elevada +9% L sobre o fundo warm-dark
+       (#191714), lendo como cinza warm-neutral nitidamente destacado — padrão
+       WhatsApp dark (recebida clara à esquerda). Saturação baixa não compete com o gold. */
+    --bubble-incoming:            36 8% 18%;
+    --bubble-incoming-foreground: 45 14% 92%;
+    --bubble-incoming-border:     36 8% 28%;
 
     --bubble-ai:                  38 22% 24%;
     --bubble-ai-foreground:       47 40% 90%;
     --bubble-ai-border:           47 100% 50%;
 
-    --bubble-workflow:            263 30% 12%;
-    --bubble-workflow-foreground: 263 70% 80%;
-    --bubble-workflow-border:     263 60% 55%;
+    /* Workflow (automação): roxo legível +13% L sobre o fundo (era invisível a
+       L=12%); hue 263 + S=32 lê inconfundivelmente roxo, distinto de copilot (gold). */
+    --bubble-workflow:            263 32% 22%;
+    --bubble-workflow-foreground: 263 45% 90%;
+    --bubble-workflow-border:     263 55% 60%;
 
     --bubble-system:              36 15% 15%;
     --bubble-system-foreground:   40 12% 56%;
