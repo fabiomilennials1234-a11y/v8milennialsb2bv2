@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bot, Loader2, Send, Sparkles, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useBuilderSession } from "@/hooks/useBuilderSession";
 
@@ -40,7 +41,15 @@ export function BuilderPanel({ agentId, toolDefs, onApplyActions, onClose }: Bui
     setDraft("");
     sendMessage.mutate(
       { message: text, toolDefs },
-      { onSuccess: (res) => onApplyActions(res.actions) },
+      {
+        onSuccess: (res) => onApplyActions(res.actions),
+        onError: (err) => {
+          toast.error("Não consegui responder agora", {
+            description: err instanceof Error ? err.message : "Tente novamente.",
+          });
+          setDraft(text); // restore so the user doesn't lose what they typed
+        },
+      },
     );
   };
 

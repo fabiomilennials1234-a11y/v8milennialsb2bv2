@@ -8,6 +8,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "@/hooks/useOrganization";
 
 export interface BuilderMessage {
   role: "user" | "assistant";
@@ -22,6 +23,7 @@ interface BuilderSessionRow {
 
 export function useBuilderSession(agentId?: string) {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
   const queryKey = ["builder_session", agentId];
 
   const sessionQuery = useQuery({
@@ -51,7 +53,12 @@ export function useBuilderSession(agentId?: string) {
     }): Promise<{ reply: string; actions: unknown[] }> => {
       if (!agentId) throw new Error("agentId obrigatório");
       const { data, error } = await supabase.functions.invoke("copilot-builder", {
-        body: { agentId, message: args.message, toolDefs: args.toolDefs },
+        body: {
+          agentId,
+          organization_id: organizationId,
+          message: args.message,
+          toolDefs: args.toolDefs,
+        },
       });
       if (error) throw error;
       const res = data as { reply: string; actions?: unknown[] };

@@ -22,10 +22,10 @@ import {
   resolveOrgCapabilities,
   describeOrgCapabilities,
 } from "../_shared/resolve-org-capabilities.ts";
+import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const BUILDER_MODEL =
   Deno.env.get("COPILOT_BUILDER_MODEL") || "anthropic/claude-sonnet-4.6";
 
@@ -55,44 +55,12 @@ Deno.serve(
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return json({ error: "unauthorized" }, 401, corsHeaders);
-
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false },
     });
-    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: false },
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const {
-      data: { user },
-      error: authError,
-    } = await userClient.auth.getUser();
-    if (authError || !user) return json({ error: "unauthenticated" }, 401, corsHeaders);
-
-    // Caller's org.
-    const { data: member } = await admin
-      .from("team_members")
-      .select("organization_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    const orgId = member?.organization_id;
-    if (!orgId) return json({ error: "no_organization" }, 403, corsHeaders);
-
-    // Phase-1 feature gate — server-side, never trust the client.
-    const { data: org } = await admin
-      .from("organizations")
-      .select("feature_flags")
-      .eq("id", orgId)
-      .maybeSingle();
-    const flags = (org?.feature_flags ?? {}) as Record<string, unknown>;
-    if (flags.copilot_builder !== true) {
-      return json({ error: "feature_disabled" }, 403, corsHeaders);
-    }
 
     let body: {
+      organization_id?: string;
       agentId?: string;
       message?: string;
       toolDefs?: Array<{ name: string; description: string; input_schema: unknown }>;
@@ -107,14 +75,42 @@ Deno.serve(
       return json({ error: "agentId and message are required" }, 400, corsHeaders);
     }
 
-    // The draft agent must exist and belong to the caller's org.
+    // The agent is the org anchor — derive org from it, so this works whether
+    // or not the client sends organization_id (older frontends don't).
     const { data: agent } = await admin
       .from("copilot_agents")
       .select("id, organization_id")
       .eq("id", agentId)
       .maybeSingle();
-    if (!agent || agent.organization_id !== orgId) {
+    if (!agent?.organization_id) {
       return json({ error: "agent_not_found" }, 404, corsHeaders);
+    }
+    const orgId = agent.organization_id as string;
+
+    // Auth via the canonical helper — handles team members AND masters (shadow
+    // mode). We pass the agent's org explicitly so a master operating in shadow
+    // (who is NOT a team_member of that org) is authorized via the master path.
+    // Pass only the agent's org (not body) so the caller can't smuggle a
+    // different org_id to authorize against the wrong tenant. Token comes from
+    // the Authorization header.
+    let userId: string;
+    try {
+      const ctx = await requireAuth(req, { organizationId: orgId });
+      userId = ctx.userId;
+    } catch (e) {
+      if (e instanceof AuthError) return authErrorResponse(e, corsHeaders);
+      throw e;
+    }
+
+    // Phase-1 feature gate — server-side, never trust the client.
+    const { data: org } = await admin
+      .from("organizations")
+      .select("feature_flags")
+      .eq("id", orgId)
+      .maybeSingle();
+    const flags = (org?.feature_flags ?? {}) as Record<string, unknown>;
+    if (flags.copilot_builder !== true) {
+      return json({ error: "feature_disabled" }, 403, corsHeaders);
     }
 
     // Load or create the agent's Builder Session.
@@ -217,7 +213,7 @@ Deno.serve(
       status: "success",
       entityType: "copilot_agent",
       entityId: agentId,
-      triggeredBy: user.id,
+      triggeredBy: userId,
       tokens: {
         prompt: completion.usage?.prompt_tokens,
         completion: completion.usage?.completion_tokens,
