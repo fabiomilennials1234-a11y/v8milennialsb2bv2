@@ -28,6 +28,31 @@ async function callOpenRouterWithMedia(
     return null;
   }
 
+  // PDFs precisam de content part `file` (OpenRouter file-parser), não `image_url`.
+  // Imagem/áudio/vídeo seguem via `image_url` (Gemini aceita data URI nesse slot).
+  const isPdf = mimeType === "application/pdf" || mimeType.startsWith("application/pdf");
+  const dataUri = `data:${mimeType};base64,${base64Data}`;
+  const mediaPart = isPdf
+    ? { type: "file", file: { filename: "document.pdf", file_data: dataUri } }
+    : { type: "image_url", image_url: { url: dataUri } };
+
+  const requestBody: Record<string, unknown> = {
+    model: MEDIA_MODEL,
+    messages: [
+      {
+        role: "user",
+        content: [mediaPart, { type: "text", text: prompt }],
+      },
+    ],
+    temperature: 0,
+    max_tokens: 2048,
+  };
+  // pdf-text engine: grátis, extrai texto selecionável (CNPJ, cadastros). Funciona
+  // em qualquer modelo — OpenRouter parseia e injeta o texto no prompt.
+  if (isPdf) {
+    requestBody.plugins = [{ id: "file-parser", pdf: { engine: "pdf-text" } }];
+  }
+
   try {
     const response = await fetch(OPENROUTER_URL, {
       method: "POST",
@@ -37,23 +62,7 @@ async function callOpenRouterWithMedia(
         "HTTP-Referer": Deno.env.get("OPENROUTER_REFERER_URL") || "https://torquecrm.com.br",
         "X-Title": "Torque CRM Media Understanding",
       },
-      body: JSON.stringify({
-        model: MEDIA_MODEL,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "image_url",
-                image_url: { url: `data:${mimeType};base64,${base64Data}` },
-              },
-              { type: "text", text: prompt },
-            ],
-          },
-        ],
-        temperature: 0,
-        max_tokens: 2048,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -115,6 +124,7 @@ const MEDIA_PROMPTS: Record<string, string> = {
   ptt: "Transcreva este áudio em português. Retorne APENAS o texto falado, sem formatação, sem aspas, sem explicações.",
   image: "Descreva esta imagem em português de forma concisa. O que aparece nela? Se houver texto visível, inclua-o.",
   video: "Descreva este vídeo em português de forma concisa. O que acontece nele?",
+  document: "Extraia em português o conteúdo relevante deste documento: dados cadastrais (CNPJ, razão social, endereço), valores, datas, itens e qualquer informação útil. Seja completo e fiel ao documento. Retorne apenas o conteúdo, sem comentários.",
 };
 
 const MEDIA_LABELS: Record<string, string> = {

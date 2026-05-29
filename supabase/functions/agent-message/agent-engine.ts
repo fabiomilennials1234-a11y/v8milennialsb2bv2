@@ -77,6 +77,67 @@ interface ConversationContextSummary {
   followupCount: number;
 }
 
+/**
+ * Bug 2 — entrega do fallback.
+ *
+ * Quando o LLM não produz texto nem após o forced-text turn (com retry no
+ * client), NÃO mandamos a antiga frase robótica "Desculpe, houve um problema
+ * ao processar sua mensagem." ao lead. Em vez disso entregamos uma mensagem
+ * natural de espera E acionamos TRANSFER_HUMAN — desativa a IA e notifica a
+ * equipe (reuso do pipeline existente de handoff).
+ */
+export function buildFallbackOutcome(orgId: string): {
+  message: string;
+  action: { action: 'TRANSFER_HUMAN'; params: Record<string, unknown>; tenant_id: string };
+} {
+  return {
+    message: 'Deixa eu confirmar isso certinho aqui com a equipe e já te retorno, tá bom?',
+    action: {
+      action: 'TRANSFER_HUMAN',
+      params: {
+        reason: 'copilot_fallback_no_text',
+        summary: 'IA não conseguiu gerar resposta textual após retry — transferência automática.',
+        priority: 'NORMAL',
+        priority_reason: 'fallback_no_text',
+      },
+      tenant_id: orgId,
+    },
+  };
+}
+
+/**
+ * Bug 2 — observabilidade. Converte a telemetria do turn num payload de
+ * runtime_logs queryável (payload_snapshot), com status=error quando o
+ * fallback foi acionado. Permite cravar a causa em prod sem depender de
+ * console.log volátil.
+ */
+export function buildTelemetryLog(opts: {
+  organizationId: string;
+  leadId?: string;
+  agentId?: string;
+  telemetry: Record<string, unknown> & { fallback_used?: boolean };
+}): {
+  organizationId: string;
+  module: 'copilot';
+  action: 'turn_telemetry';
+  status: 'success' | 'error';
+  entityType: 'lead';
+  entityId?: string;
+  triggeredBy?: string;
+  payloadSnapshot: Record<string, unknown>;
+} {
+  return {
+    organizationId: opts.organizationId,
+    module: 'copilot',
+    action: 'turn_telemetry',
+    status: opts.telemetry.fallback_used ? 'error' : 'success',
+    entityType: 'lead',
+    entityId: opts.leadId,
+    triggeredBy: opts.agentId,
+    payloadSnapshot: { ...opts.telemetry },
+  };
+}
+
 export class AgentEngine {
   private supabase: SupabaseClient;
   private openRouter: OpenRouterClient;
@@ -426,16 +487,32 @@ export class AgentEngine {
     const nextState = finalNextState;
     let actionToExecute = finalAction;
 
-    // Último recurso: fallback genérico — sinalizado via telemetry.fallback_used
-    // e logado com severity=error. Callers podem suprimir envio observando fallback_used.
+    // Último recurso: sem texto após retry + forced-text turn. Em vez da frase
+    // robótica de erro, entregamos mensagem natural de espera E acionamos
+    // TRANSFER_HUMAN (desativa IA + notifica equipe). Ver buildFallbackOutcome.
     let rawAssistantMessage: string;
     if (finalAssistantMessage && finalAssistantMessage.trim().length > 0) {
       rawAssistantMessage = finalAssistantMessage;
     } else {
-      rawAssistantMessage = 'Desculpe, houve um problema ao processar sua mensagem.';
+      const fallback = buildFallbackOutcome(this.organizationId);
+      rawAssistantMessage = fallback.message;
+      // Só sobrescreve a ação se o LLM não tiver decidido nenhuma — preserva
+      // qualquer tool legítima que tenha sido extraída antes do texto sumir.
+      if (!actionToExecute) {
+        actionToExecute = fallback.action;
+      }
       telemetry.fallback_used = true;
-      console.error('[AgentEngine] FALLBACK USED — no text after forced-text turn', telemetry);
+      console.error('[AgentEngine] FALLBACK USED — handing off to human', telemetry);
     }
+
+    // Bug 2 observability — persiste telemetry do turn em runtime_logs (queryável).
+    // Fire-and-forget; status=error quando fallback foi acionado.
+    logRuntime(buildTelemetryLog({
+      organizationId: this.organizationId,
+      leadId,
+      agentId: capabilities.id as string,
+      telemetry,
+    })).catch((e) => console.warn('[AgentEngine] telemetry log failed (non-fatal):', e));
 
     // 8a.0 Sanitizar JSON de ReAct leak + recuperar ação textual se tool nativo não foi usado.
     // Evita vazamento de blocos {"action":"...","action_input":"..."} para o lead (incidente 2026-04-24).

@@ -144,7 +144,55 @@ describe("resolveMediaContent", () => {
     expect(result).toBe("[Imagem recebida]: Uma foto de um produto industrial");
   });
 
-  it("handles document messages with fallback", async () => {
+  it("extracts PDF document content via OpenRouter file part", async () => {
+    // First fetch: download the PDF
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      headers: new Headers({ "content-type": "application/pdf" }),
+      arrayBuffer: async () => new Uint8Array([0x25, 0x50, 0x44, 0x46]).buffer, // %PDF
+    });
+    // Second fetch: OpenRouter extraction
+    mockFetch.mockResolvedValueOnce(
+      openRouterResponse("CNPJ 44.388.011/0001-48 — TATI&NE HAMBURGUERIA LTDA"),
+    );
+
+    const result = await resolveMediaContent({
+      content: null,
+      messageType: "document",
+      mediaUrl: "https://cdn.whatsapp.net/doc.pdf",
+    });
+
+    expect(result).toBe(
+      "[documento]: CNPJ 44.388.011/0001-48 — TATI&NE HAMBURGUERIA LTDA",
+    );
+
+    // PDF must be sent as a `file` content part (NOT image_url) so the parser runs
+    const body = JSON.parse(mockFetch.mock.calls[1][1].body);
+    const parts = body.messages[0].content;
+    const filePart = parts.find((p: any) => p.type === "file");
+    expect(filePart).toBeTruthy();
+    expect(filePart.file.file_data).toContain("data:application/pdf;base64,");
+    expect(parts.some((p: any) => p.type === "image_url")).toBe(false);
+    // file-parser plugin enables PDF parsing on any model
+    expect(body.plugins).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "file-parser" }),
+      ]),
+    );
+  });
+
+  it("returns document fallback when extraction fails", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      headers: new Headers({ "content-type": "application/pdf" }),
+      arrayBuffer: async () => new Uint8Array([0x25, 0x50, 0x44, 0x46]).buffer,
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: async () => "error",
+    });
+
     const result = await resolveMediaContent({
       content: null,
       messageType: "document",
