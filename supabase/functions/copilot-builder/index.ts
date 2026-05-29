@@ -17,7 +17,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { withSentry } from "../_shared/sentry.ts";
 import { logRuntime } from "../_shared/logger.ts";
-import { OpenRouterClient } from "../agent-message/openrouter-client.ts";
+import { OpenRouterClient, type OpenRouterTool } from "../agent-message/openrouter-client.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -88,13 +88,17 @@ Deno.serve(
       return json({ error: "feature_disabled" }, 403, corsHeaders);
     }
 
-    let body: { agentId?: string; message?: string };
+    let body: {
+      agentId?: string;
+      message?: string;
+      toolDefs?: Array<{ name: string; description: string; input_schema: unknown }>;
+    };
     try {
       body = await req.json();
     } catch {
       return json({ error: "invalid_body" }, 400, corsHeaders);
     }
-    const { agentId, message } = body;
+    const { agentId, message, toolDefs } = body;
     if (!agentId || !message?.trim()) {
       return json({ error: "agentId and message are required" }, 400, corsHeaders);
     }
@@ -123,6 +127,20 @@ Deno.serve(
     const openRouterKey = Deno.env.get("OPENROUTER_API_KEY");
     if (!openRouterKey) return json({ error: "OPENROUTER_API_KEY not set" }, 500, corsHeaders);
 
+    // Tool defs come from the client (derived from the capability manifest —
+    // the single source — so the model can only target real tools/sections).
+    const tools: OpenRouterTool[] | undefined =
+      Array.isArray(toolDefs) && toolDefs.length > 0
+        ? toolDefs.map((t) => ({
+            type: "function" as const,
+            function: {
+              name: t.name,
+              description: t.description,
+              parameters: t.input_schema as OpenRouterTool["function"]["parameters"],
+            },
+          }))
+        : undefined;
+
     const openRouter = new OpenRouterClient(openRouterKey);
     const completion = await openRouter.chat({
       model: BUILDER_MODEL,
@@ -131,16 +149,40 @@ Deno.serve(
         ...history.map((m) => ({ role: m.role, content: m.content })),
         { role: "user", content: message },
       ],
+      tools,
       temperature: 0.7,
       max_tokens: 1024,
     });
 
-    const reply = completion.choices?.[0]?.message?.content?.trim() || "";
+    const choice = completion.choices?.[0]?.message;
+    const reply = choice?.content?.trim() || "";
+
+    // Map model tool_calls → Builder actions the client applies to the form.
+    const actions = (choice?.tool_calls ?? []).map((tc) => {
+      let args: Record<string, unknown> = {};
+      try {
+        args = JSON.parse(tc.function.arguments || "{}");
+      } catch {
+        args = {};
+      }
+      if (tc.function.name === "enable_tool") {
+        return { kind: "enable_tool", toolId: args.tool_id, instruction: args.instruction };
+      }
+      if (tc.function.name === "set_prompt_section") {
+        return { kind: "set_prompt_section", section: args.section, text: args.text };
+      }
+      return { kind: tc.function.name, ...args };
+    });
+
+    // If the model only emitted tool_calls (no prose), keep a short marker so
+    // the transcript stays coherent across turns.
+    const assistantText =
+      reply || (actions.length > 0 ? "(atualizei os campos do agente)" : "");
 
     const nextMessages: SessionMessage[] = [
       ...history,
       { role: "user", content: message },
-      { role: "assistant", content: reply },
+      { role: "assistant", content: assistantText },
     ];
 
     let sessionId = existing?.id;
@@ -173,6 +215,6 @@ Deno.serve(
       },
     });
 
-    return json({ reply, sessionId }, 200, corsHeaders);
+    return json({ reply: assistantText, actions, sessionId }, 200, corsHeaders);
   }),
 );

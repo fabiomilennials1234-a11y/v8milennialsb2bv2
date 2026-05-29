@@ -8,6 +8,7 @@ import {
   X,
   Loader2,
   CheckCircle2,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -32,6 +33,7 @@ import {
   useBulkTag,
   useBulkDelete,
 } from "@/hooks/useBulkActions";
+import { QuickBlastDialog } from "@/components/bulk-actions/QuickBlastDialog";
 
 interface BulkActionBarProps {
   selectedIds: Set<string>;
@@ -45,6 +47,7 @@ export function BulkActionBar({ selectedIds, onClear, leadIds }: BulkActionBarPr
   const [assignOpen, setAssignOpen] = useState(false);
   const [tagOpen, setTagOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [blastOpen, setBlastOpen] = useState(false);
 
   if (count === 0) return null;
 
@@ -75,6 +78,10 @@ export function BulkActionBar({ selectedIds, onClear, leadIds }: BulkActionBarPr
             <Tag className="mr-1.5 h-3.5 w-3.5" />
             Tags
           </Button>
+          <Button size="sm" variant="outline" onClick={() => setBlastOpen(true)}>
+            <Send className="mr-1.5 h-3.5 w-3.5" />
+            Disparar
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -95,6 +102,7 @@ export function BulkActionBar({ selectedIds, onClear, leadIds }: BulkActionBarPr
       <BulkAssignDialog open={assignOpen} onOpenChange={setAssignOpen} leadIds={ids} onSuccess={onClear} />
       <BulkTagDialog open={tagOpen} onOpenChange={setTagOpen} leadIds={ids} onSuccess={onClear} />
       <BulkDeleteDialog open={deleteOpen} onOpenChange={setDeleteOpen} leadIds={ids} count={count} onSuccess={onClear} />
+      <QuickBlastDialog open={blastOpen} onOpenChange={setBlastOpen} leadIds={ids} onDone={onClear} />
     </>
   );
 }

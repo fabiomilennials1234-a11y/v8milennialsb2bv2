@@ -45,13 +45,17 @@ export function useBuilderSession(agentId?: string) {
   });
 
   const sendMessage = useMutation({
-    mutationFn: async (message: string): Promise<{ reply: string }> => {
+    mutationFn: async (args: {
+      message: string;
+      toolDefs?: unknown[];
+    }): Promise<{ reply: string; actions: unknown[] }> => {
       if (!agentId) throw new Error("agentId obrigatório");
       const { data, error } = await supabase.functions.invoke("copilot-builder", {
-        body: { agentId, message },
+        body: { agentId, message: args.message, toolDefs: args.toolDefs },
       });
       if (error) throw error;
-      return data as { reply: string };
+      const res = data as { reply: string; actions?: unknown[] };
+      return { reply: res.reply, actions: res.actions ?? [] };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });

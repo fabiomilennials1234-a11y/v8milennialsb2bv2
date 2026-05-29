@@ -53,7 +53,6 @@ import {
   useCreateCopilotAgent,
 } from "@/hooks/useCopilotAgents";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { BuilderPanel } from "@/components/copilot/builder/BuilderPanel";
 import { useCopilotSubscription } from "@/hooks/useCopilotSubscription";
 import { useCanManageCopilot } from "@/hooks/useUserRole";
 import { useIdentity } from "@/hooks/useIdentity";
@@ -77,8 +76,6 @@ export default function Copilot() {
 
   const [agentToDelete, setAgentToDelete] = useState<string | null>(null);
   const [pendingActivation, setPendingActivation] = useState<{ id: string; name: string } | null>(null);
-  const [builderOpen, setBuilderOpen] = useState(false);
-  const [builderAgentId, setBuilderAgentId] = useState<string | undefined>(undefined);
   const { checkLimit } = useOrgFeatures();
   const { getQuota } = useOrgQuotas();
   const copilotQuota = getQuota("max_copilot_agents");
@@ -109,8 +106,7 @@ export default function Copilot() {
       });
       const newId = (result as { id?: string })?.id;
       if (!newId) throw new Error("Falha ao criar rascunho");
-      setBuilderAgentId(newId);
-      setBuilderOpen(true);
+      navigate(`/copilot/${newId}/editar?builder=1`);
     } catch (e) {
       toast.error("Não foi possível iniciar o assistente. Tente novamente.");
     }
@@ -487,14 +483,6 @@ export default function Copilot() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {builderEnabled && (
-        <BuilderPanel
-          agentId={builderAgentId}
-          open={builderOpen}
-          onOpenChange={setBuilderOpen}
-        />
-      )}
 
     </div>
   );

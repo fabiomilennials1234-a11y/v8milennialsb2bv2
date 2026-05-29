@@ -7,8 +7,12 @@
  */
 
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
+import { BuilderPanel } from "@/components/copilot/builder/BuilderPanel";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { buildCapabilityManifest, buildBuilderToolDefs } from "@/lib/copilot/capability-manifest";
+import { applyBuilderAction, type BuilderAction, type BuilderFormState } from "@/lib/copilot/builder-form-reducer";
 import { Save, Loader2, ChevronLeft, Bot, Power, Star, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -277,6 +281,15 @@ export function CopilotPlayground() {
   const { id: editId } = useParams<{ id: string }>();
   const isEditMode = !!editId;
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { enabled: builderFlag } = useFeatureFlag("copilot_builder");
+  const builderActive = builderFlag && searchParams.get("builder") === "1";
+  const [builderLocked, setBuilderLocked] = useState<string[]>([]);
+  const builderToolDefs = useMemo(
+    () => buildBuilderToolDefs(buildCapabilityManifest()) as unknown[],
+    [],
+  );
+
   const [data, setData] = useState<PlaygroundData>(createDefaultPlaygroundData());
   const [conexao, setConexao] = useState<ConexaoState>(createDefaultConexaoState());
   const [comportamento, setComportamento] = useState<ComportamentoState>(createDefaultComportamentoState());
@@ -440,6 +453,40 @@ export function CopilotPlayground() {
     [bumpConfigVersion]
   );
 
+  // Apply the Builder's tool-calls to the live form (reuses the pure reducer).
+  const applyBuilderActions = useCallback(
+    (actions: unknown[]) => {
+      if (!actions?.length) return;
+      setData((prev) => {
+        let state: BuilderFormState = { data: prev, locked: builderLocked };
+        for (const a of actions as BuilderAction[]) {
+          state = applyBuilderAction(state, a);
+        }
+        return state.data;
+      });
+      bumpConfigVersion();
+    },
+    [builderLocked, bumpConfigVersion]
+  );
+
+  // Lock a prompt section once the user edits it by hand, so the Builder asks
+  // before overwriting (handled in the reducer via the `override` flag).
+  const handleSectionsChange = useCallback(
+    (promptSections: PlaygroundData["promptSections"]) => {
+      setData((prev) => {
+        const touched = (Object.keys(promptSections) as Array<keyof PlaygroundData["promptSections"]>)
+          .filter((k) => promptSections[k] !== prev.promptSections[k])
+          .map((k) => `promptSections.${k}`);
+        if (touched.length) {
+          setBuilderLocked((locked) => Array.from(new Set([...locked, ...touched])));
+        }
+        return { ...prev, promptSections };
+      });
+      bumpConfigVersion();
+    },
+    [bumpConfigVersion]
+  );
+
   // Conexao updater
   const updateConexao = useCallback(
     (updates: Partial<ConexaoState>) => {
@@ -576,10 +623,11 @@ export function CopilotPlayground() {
   }
 
   return (
+    <div className="flex h-[calc(100vh-4rem)]">
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="flex flex-col h-[calc(100vh-4rem)]"
+      className="flex flex-col flex-1 min-w-0 h-full"
     >
       {/* ===== Header ===== */}
       <div className="flex items-center justify-between px-4 py-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
@@ -726,7 +774,7 @@ export function CopilotPlayground() {
               <div className={`border-b ${isEditorExpanded ? "flex-1" : ""}`}>
                 <PromptEditor
                   sections={data.promptSections}
-                  onSectionsChange={(promptSections) => updateData({ promptSections })}
+                  onSectionsChange={handleSectionsChange}
                   tools={data.tools}
                   toolDefs={PLAYGROUND_TOOLS}
                   documents={data.documents}
@@ -854,6 +902,20 @@ export function CopilotPlayground() {
         </AlertDialogContent>
       </AlertDialog>
     </motion.div>
+    {builderActive && (
+      <div className="w-[380px] shrink-0 h-full">
+        <BuilderPanel
+          agentId={editId}
+          toolDefs={builderToolDefs}
+          onApplyActions={applyBuilderActions}
+          onClose={() => {
+            searchParams.delete("builder");
+            setSearchParams(searchParams, { replace: true });
+          }}
+        />
+      </div>
+    )}
+    </div>
   );
 }
 
