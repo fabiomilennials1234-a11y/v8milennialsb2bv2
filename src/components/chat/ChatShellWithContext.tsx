@@ -683,7 +683,7 @@ export function ChatShellWithContext() {
           />
         }
         context={
-          selectedPhone && contextVisible ? (
+          selectedPhone ? (
             <ContextPanel
               leadId={selectedContact?.lead_id ?? undefined}
               phoneNumber={selectedPhone}
@@ -694,6 +694,7 @@ export function ChatShellWithContext() {
         selectedPhone={selectedPhone}
         onBack={handleBack}
         density={density}
+        contextVisible={contextVisible}
         densityCssVars={cssVars}
       />
 

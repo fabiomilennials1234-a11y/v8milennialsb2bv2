@@ -17,7 +17,8 @@
  * WhatsAppChat.tsx continua usando seu layout próprio.
  * ChatShell é consumido pelo mockup v2 (C16) e ativado em Onda 2b.
  */
-import React, { useCallback, useEffect, useRef, type ReactNode } from "react";
+import React, { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import type { ImperativePanelHandle } from "react-resizable-panels";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -46,6 +47,8 @@ export interface ChatShellProps {
   onBack: () => void;
   /** Modo de densidade — usado apenas para leitura/display externo (opcional). */
   density?: DensityMode;
+  /** Coluna de contexto visível. Quando false, o painel colapsa (slide) sem desmontar. Default true. */
+  contextVisible?: boolean;
   /**
    * CSS vars do preset de densidade para injeção no root do shell.
    * Gerado por useChatDensity(userId).cssVars — spread em style inline.
@@ -104,10 +107,32 @@ export function ChatShell({
   context,
   selectedPhone,
   density: _density,
+  contextVisible = true,
   densityCssVars,
 }: ChatShellProps) {
   const { user } = useAuth();
   const userId = user?.id;
+
+  // ── Slide do painel de contexto: colapsa/expande via API imperativa ─────────
+  const contextPanelRef = useRef<ImperativePanelHandle>(null);
+  const [isResizing, setIsResizing] = useState(false);
+  const prefersReduced =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  useEffect(() => {
+    const panel = contextPanelRef.current;
+    if (!panel) return;
+    if (contextVisible) {
+      panel.expand();
+    } else {
+      panel.collapse();
+    }
+  }, [contextVisible]);
+
+  // Transição de flex só fora do drag e sem reduced-motion (drag fica 1:1).
+  const slideClass =
+    !isResizing && !prefersReduced ? "transition-[flex-grow] duration-[250ms] ease-out" : undefined;
 
   const initialSizes = loadSizes(userId);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -168,6 +193,7 @@ export function ChatShell({
         minSize={40}
         className={cn(
           "flex flex-col min-h-0 min-w-0 overflow-hidden",
+          slideClass,
           // Mobile: esconde o centro quando nenhuma conversa selecionada
           !selectedPhone ? "hidden md:flex" : "flex",
         )}
@@ -177,18 +203,25 @@ export function ChatShell({
         </div>
       </ResizablePanel>
 
-      {/* ── Painel direito: contexto (opcional, colapsável) ───────────────── */}
+      {/* ── Painel direito: contexto (opcional, colapsável via slide) ─────── */}
       {hasContext && (
         <>
           <ResizableHandle
-            className="transition-opacity duration-[80ms] ease-out data-[resize-handle-state=drag]:opacity-100 opacity-60 hover:opacity-100"
+            onDragging={setIsResizing}
+            className={cn(
+              "transition-opacity duration-[80ms] ease-out data-[resize-handle-state=drag]:opacity-100 opacity-60 hover:opacity-100",
+              // Esconde o handle quando o painel está colapsado (sem desmontar — preserva o slide)
+              !contextVisible && "opacity-0 pointer-events-none",
+            )}
           />
           <ResizablePanel
+            ref={contextPanelRef}
             defaultSize={initialSizes[2]}
             minSize={23}
             maxSize={42}
             collapsible
-            className="flex flex-col min-h-0 min-w-0 overflow-hidden"
+            collapsedSize={0}
+            className={cn("flex flex-col min-h-0 min-w-0 overflow-hidden", slideClass)}
           >
             <div className="flex flex-col h-full min-h-0 min-w-0 overflow-hidden">
               {context}

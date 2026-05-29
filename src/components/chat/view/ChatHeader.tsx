@@ -94,7 +94,7 @@ function DensityToggle({
   onDensityChange: (d: DensityMode) => void;
 }) {
   return (
-    <div className="flex items-center gap-0.5 shrink-0" role="group" aria-label="Modo de densidade das mensagens">
+    <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Modo de densidade das mensagens">
       {DENSITY_OPTIONS.map(({ mode, icon: Icon, label }) => (
         <Tooltip key={mode}>
           <TooltipTrigger asChild>
@@ -331,7 +331,7 @@ export function ChatHeader({
 
       {/* Density toggle + context panel toggle — desktop only */}
       {(onDensityChange || onToggleContext) && (
-        <div className="hidden md:flex items-center gap-0.5 shrink-0">
+        <div className="hidden md:flex items-center gap-2 shrink-0">
           {onDensityChange && (
             <DensityToggle density={density ?? "comfortable"} onDensityChange={onDensityChange} />
           )}
