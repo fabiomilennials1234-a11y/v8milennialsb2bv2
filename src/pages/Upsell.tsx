@@ -139,7 +139,8 @@ export default function Upsell() {
         {/* Alert banner */}
         <CarteiraAlertBanner onViewDetails={() => setCarteiraFilter("overdue")} />
 
-        {/* Tabs */}
+        {/* Tabs — filtram a lista de clientes; não fazem sentido em analytics */}
+        {carteiraView !== "analytics" && (
         <div className="flex gap-0 border-b border-border overflow-x-auto">
           {PORTFOLIO_TABS.map((tab) => {
             const count = tabCounts[tab.value] ?? 0;
@@ -177,6 +178,7 @@ export default function Upsell() {
             );
           })}
         </div>
+        )}
 
         {/* Search + View toggle */}
         <div className="flex items-center gap-2">
