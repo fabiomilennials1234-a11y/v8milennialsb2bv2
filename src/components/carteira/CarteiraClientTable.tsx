@@ -293,21 +293,46 @@ export function CarteiraClientTable({
     );
   }
 
+  // Toolbar (filtros + Exportar) — sempre visível, inclusive em loading/empty,
+  // pra a barra de filtros não sumir quando a busca não retorna clientes.
+  const toolbar = (
+    <div className="flex items-center gap-4 mb-2">
+      {filterTabs && <div className="min-w-0 flex-1">{filterTabs}</div>}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleExport}
+        disabled={exporting || total === 0}
+        className="gap-2 text-[13px] shrink-0 ml-auto"
+      >
+        {exporting ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : (
+          <Download className="w-3.5 h-3.5" />
+        )}
+        Exportar
+      </Button>
+    </div>
+  );
+
   // ── Loading skeleton ────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="divide-y divide-border">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="flex gap-4 px-4 py-3.5 animate-pulse">
-              <div className="h-4 bg-muted rounded w-40" />
-              <div className="h-4 bg-muted rounded w-14" />
-              <div className="h-4 bg-muted rounded w-24" />
-              <div className="h-4 bg-muted rounded w-20" />
-              <div className="h-4 bg-muted rounded w-16" />
-              <div className="h-4 bg-muted rounded w-16" />
-            </div>
-          ))}
+      <div className="space-y-0">
+        {toolbar}
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="divide-y divide-border">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="flex gap-4 px-4 py-3.5 animate-pulse">
+                <div className="h-4 bg-muted rounded w-40" />
+                <div className="h-4 bg-muted rounded w-14" />
+                <div className="h-4 bg-muted rounded w-24" />
+                <div className="h-4 bg-muted rounded w-20" />
+                <div className="h-4 bg-muted rounded w-16" />
+                <div className="h-4 bg-muted rounded w-16" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -317,25 +342,28 @@ export function CarteiraClientTable({
   if (rows.length === 0 && !isFetching) {
     const hasActiveFilters = filter !== "all" || searchQuery.length > 0;
     return (
-      <div className="rounded-xl border border-border bg-card py-20 flex flex-col items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
-          {hasActiveFilters ? (
-            <SearchX className="w-6 h-6 text-muted-foreground/60" />
-          ) : (
-            <Users className="w-6 h-6 text-muted-foreground/60" />
-          )}
-        </div>
-        <div className="text-center space-y-1">
-          <p className="text-sm font-medium text-muted-foreground">
-            {hasActiveFilters
-              ? "Nenhum cliente encontrado"
-              : "Sua carteira está vazia"}
-          </p>
-          <p className="text-[13px] text-muted-foreground/60 max-w-[320px]">
-            {hasActiveFilters
-              ? "Tente ajustar o filtro ou termo de busca."
-              : "Use os botões acima para cadastrar, importar uma planilha ou marcar propostas como vendidas."}
-          </p>
+      <div className="space-y-0">
+        {toolbar}
+        <div className="rounded-xl border border-border bg-card py-20 flex flex-col items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
+            {hasActiveFilters ? (
+              <SearchX className="w-6 h-6 text-muted-foreground/60" />
+            ) : (
+              <Users className="w-6 h-6 text-muted-foreground/60" />
+            )}
+          </div>
+          <div className="text-center space-y-1">
+            <p className="text-sm font-medium text-muted-foreground">
+              {hasActiveFilters
+                ? "Nenhum cliente encontrado"
+                : "Sua carteira está vazia"}
+            </p>
+            <p className="text-[13px] text-muted-foreground/60 max-w-[320px]">
+              {hasActiveFilters
+                ? "Tente ajustar o filtro ou termo de busca."
+                : "Use os botões acima para cadastrar, importar uma planilha ou marcar propostas como vendidas."}
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -347,24 +375,7 @@ export function CarteiraClientTable({
 
   return (
     <div className="space-y-0">
-      {/* Filtros (slot, à esquerda) + Exportar (à direita) */}
-      <div className="flex items-center gap-4 mb-2">
-        {filterTabs && <div className="min-w-0 flex-1">{filterTabs}</div>}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleExport}
-          disabled={exporting || total === 0}
-          className="gap-2 text-[13px] shrink-0 ml-auto"
-        >
-          {exporting ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <Download className="w-3.5 h-3.5" />
-          )}
-          Exportar
-        </Button>
-      </div>
+      {toolbar}
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <Table>
