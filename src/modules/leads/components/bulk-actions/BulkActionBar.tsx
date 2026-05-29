@@ -25,7 +25,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useTeamMembers } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
-import { usePipelineStages } from "@/modules/pipelines";
+import { usePipeOps } from "../../pipe-ops";
+import type { PipelineType } from "@/contracts/pipe";
 import {
   useBulkMoveStage,
   useBulkAssign,
@@ -110,7 +111,8 @@ function BulkMoveDialog({
   leadIds: string[];
   onSuccess: () => void;
 }) {
-  const [pipe, setPipe] = useState("whatsapp");
+  const { usePipelineStages } = usePipeOps();
+  const [pipe, setPipe] = useState<PipelineType>("whatsapp");
   const [stage, setStage] = useState("");
   const { data: stages = [] } = usePipelineStages(pipe);
   const mutation = useBulkMoveStage();
@@ -140,7 +142,7 @@ function BulkMoveDialog({
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Pipeline</label>
-            <Select value={pipe} onValueChange={(v) => { setPipe(v); setStage(""); }}>
+            <Select value={pipe} onValueChange={(v) => { setPipe(v as PipelineType); setStage(""); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="whatsapp">Qualificacao</SelectItem>

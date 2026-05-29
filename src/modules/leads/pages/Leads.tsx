@@ -77,15 +77,7 @@ import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActio
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { useSearchParams } from "react-router-dom";
 import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/modules/identity";
-import {
-  useCustomPipelines,
-  useCustomPipelineStages,
-  useAddLeadToCustomPipe,
-  useAllPipelineStageOptions,
-  useCreatePipeWhatsapp,
-  useCreatePipeConfirmacao,
-  useCreatePipeProposta,
-} from "@/modules/pipelines";
+import { usePipeOps } from "../pipe-ops";
 import { getPipelineTypeName } from "@/contracts/pipe";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -255,6 +247,15 @@ function LeadsInner() {
   const allLeadIds = useMemo(() => leads.map((l: Lead) => l.id), [leads]);
 
   // ── Pipe/funnel selection for new leads ──
+  const {
+    useCustomPipelines,
+    useCustomPipelineStages,
+    useAddLeadToCustomPipe,
+    useAllPipelineStageOptions,
+    useCreatePipeWhatsapp,
+    useCreatePipeConfirmacao,
+    useCreatePipeProposta,
+  } = usePipeOps();
   const [selectedPipe, setSelectedPipe] = useState("");
   const [selectedStage, setSelectedStage] = useState("");
   const { data: customPipelines = [] } = useCustomPipelines();
