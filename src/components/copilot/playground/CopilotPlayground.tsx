@@ -234,7 +234,7 @@ function playgroundToAgentPayload(data: PlaygroundData, conexaoState?: ConexaoSt
       can_move_cards: data.tools.MOVER_CARD?.enabled ?? false,
       can_send_document: data.tools.ENVIAR_DOCUMENTO?.enabled ?? false,
       can_transfer_sz_chat: data.tools.TRANSFERIR_SZ_CHAT?.enabled ?? false,
-      human_pause_enabled: data.tools.PAUSAR_ATENDIMENTO_HUMANO?.enabled ?? false,
+      human_pause_enabled: data.tools.PAUSAR_ATENDIMENTO_HUMANO?.enabled ?? true,
       human_pause_duration_minutes: data.tools.PAUSAR_ATENDIMENTO_HUMANO?.config?.durationMinutes
         ? Number(data.tools.PAUSAR_ATENDIMENTO_HUMANO.config.durationMinutes)
         : 60,
@@ -387,7 +387,7 @@ export function CopilotPlayground() {
         TRANSFERIR_SZ_CHAT: toolState(false, "TRANSFERIR_SZ_CHAT"),
         ENVIAR_DOCUMENTO: toolState(false, "ENVIAR_DOCUMENTO"),
         PAUSAR_ATENDIMENTO_HUMANO: {
-          enabled: wd.humanPauseEnabled ?? false,
+          enabled: wd.humanPauseEnabled ?? true,
           config: { durationMinutes: wd.humanPauseDurationMinutes ?? 60 },
           instruction: wd.toolInstructions?.PAUSAR_ATENDIMENTO_HUMANO ?? "",
         },
@@ -938,7 +938,7 @@ function createWizardDataFromPlayground(data: PlaygroundData, conexaoState?: Con
     canMoveCards: data.tools.MOVER_CARD?.enabled ?? false,
     canSendDocument: data.tools.ENVIAR_DOCUMENTO?.enabled ?? false,
     canTransferSzChat: data.tools.TRANSFERIR_SZ_CHAT?.enabled ?? false,
-    humanPauseEnabled: data.tools.PAUSAR_ATENDIMENTO_HUMANO?.enabled ?? false,
+    humanPauseEnabled: data.tools.PAUSAR_ATENDIMENTO_HUMANO?.enabled ?? true,
     humanPauseDurationMinutes: data.tools.PAUSAR_ATENDIMENTO_HUMANO?.config?.durationMinutes
       ? Number(data.tools.PAUSAR_ATENDIMENTO_HUMANO.config.durationMinutes)
       : 60,

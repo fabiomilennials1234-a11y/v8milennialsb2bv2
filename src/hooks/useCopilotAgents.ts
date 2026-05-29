@@ -810,7 +810,7 @@ export function useCopilotAgentForEdit(agentId?: string) {
         canCreateLead: (agent as any).can_create_lead ?? true,
         canTransferHuman: (agent as any).can_transfer_human ?? true,
         canMoveCards: agent.can_move_cards ?? false,
-        humanPauseEnabled: (agent as any).human_pause_enabled ?? false,
+        humanPauseEnabled: (agent as any).human_pause_enabled ?? true,
         humanPauseDurationMinutes: (agent as any).human_pause_duration_minutes ?? 60,
         maxConversationTurns: (agent as any).max_conversation_turns ?? 20,
         responseDelayMs: (agent as any).response_delay_ms ?? 1000,
@@ -919,7 +919,7 @@ export function useUpdateCopilotAgentFromWizard() {
       agentUpdate.can_create_lead = data.canCreateLead ?? true;
       agentUpdate.can_transfer_human = data.canTransferHuman ?? true;
       agentUpdate.can_move_cards = data.canMoveCards ?? false;
-      agentUpdate.human_pause_enabled = data.humanPauseEnabled ?? false;
+      agentUpdate.human_pause_enabled = data.humanPauseEnabled ?? true;
       agentUpdate.human_pause_duration_minutes = data.humanPauseDurationMinutes ?? 60;
       agentUpdate.max_conversation_turns = data.maxConversationTurns ?? 20;
       agentUpdate.response_delay_ms = data.responseDelayMs ?? 1000;
