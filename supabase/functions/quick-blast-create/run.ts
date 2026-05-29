@@ -16,7 +16,7 @@ export interface QuickBlastDeps {
   dispatch: (
     instance: any,
     input: {
-      recipients: Array<{ number: string; text?: string }>;
+      recipients: Array<{ number: string; text?: string; type?: string; file?: string; caption?: string }>;
       delayMin?: number;
       delayMax?: number;
       scheduledFor?: string;
@@ -37,6 +37,9 @@ export interface QuickBlastParams {
   delayMaxMs?: number;
   maxLeads?: number;
   scheduledFor?: string;
+  /** Optional single image (Supabase Storage URL). Resolved text becomes the
+   *  caption. V1 supports image only (video deferred). */
+  imageUrl?: string;
 }
 
 export interface QuickBlastResult {
@@ -90,6 +93,7 @@ export async function runQuickBlast(
   const { recipients, skipped } = buildRecipients(merged, {
     template: params.message,
     cap: effectiveCap,
+    imageUrl: params.imageUrl,
   });
 
   if (recipients.length === 0) {
@@ -97,7 +101,13 @@ export async function runQuickBlast(
   }
 
   const { sender_job_id, uazapi_sender_id } = await dispatch(params.instance, {
-    recipients: recipients.map((r) => ({ number: r.number, text: r.text })),
+    recipients: recipients.map((r) => ({
+      number: r.number,
+      text: r.text,
+      type: r.type,
+      file: r.file,
+      caption: r.caption,
+    })),
     delayMin: params.delayMinMs,
     delayMax: params.delayMaxMs,
     scheduledFor: params.scheduledFor,

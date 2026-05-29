@@ -10,6 +10,7 @@ export interface QuickBlastInput {
   delay_max_ms?: number;
   max_leads?: number;
   scheduled_for?: string;
+  image_url?: string;
 }
 
 export interface QuickBlastResult {

@@ -17,8 +17,12 @@ export interface BlastLead {
 
 export interface BlastRecipient {
   number: string;
-  text: string;
+  text?: string;
   leadId: string;
+  // Set only for image blasts — Uazapi /sender/advanced media shape.
+  type?: "image";
+  file?: string;
+  caption?: string;
 }
 
 export interface BuildRecipientsResult {
@@ -28,7 +32,7 @@ export interface BuildRecipientsResult {
 
 export function buildRecipients(
   leads: BlastLead[],
-  opts: { template: string; cap: number; rng?: () => number },
+  opts: { template: string; cap: number; rng?: () => number; imageUrl?: string },
 ): BuildRecipientsResult {
   const skipped = { noPhone: 0, duplicates: 0, overCap: 0 };
   const recipients: BlastRecipient[] = [];
@@ -50,7 +54,12 @@ export function buildRecipients(
       continue;
     }
     const text = resolveBlastMessage(opts.template, leadVars(lead), opts.rng);
-    recipients.push({ number, text, leadId: lead.id });
+    if (opts.imageUrl) {
+      // Image blast: resolved text becomes the caption (Uazapi media shape).
+      recipients.push({ number, leadId: lead.id, type: "image", file: opts.imageUrl, caption: text });
+    } else {
+      recipients.push({ number, text, leadId: lead.id });
+    }
   }
 
   return { recipients, skipped };

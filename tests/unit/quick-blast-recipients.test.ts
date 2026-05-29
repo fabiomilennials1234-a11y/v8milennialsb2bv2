@@ -75,6 +75,30 @@ describe("buildRecipients — cap enforcement", () => {
   });
 });
 
+describe("buildRecipients — image attachment", () => {
+  it("emits image recipients with resolved text as caption when imageUrl is set", () => {
+    const out = buildRecipients(
+      [{ id: "a", name: "Ana", company: "Co", phone: "11999990001" }],
+      { template: "Oi {primeiro_nome}", cap: 10, imageUrl: "https://cdn/x.jpg" },
+    );
+    const r = out.recipients[0];
+    expect(r.type).toBe("image");
+    expect(r.file).toBe("https://cdn/x.jpg");
+    expect(r.caption).toBe("Oi Ana");
+  });
+
+  it("emits plain text recipients (no type/file) when imageUrl is absent", () => {
+    const out = buildRecipients(
+      [{ id: "a", name: "Ana", company: "Co", phone: "11999990001" }],
+      { template: "Oi {primeiro_nome}", cap: 10 },
+    );
+    const r = out.recipients[0];
+    expect(r.text).toBe("Oi Ana");
+    expect(r.type).toBeUndefined();
+    expect(r.file).toBeUndefined();
+  });
+});
+
 describe("buildRecipients — per-recipient variable resolution", () => {
   it("resolves lead + carteira variables into each recipient's text", () => {
     const out = buildRecipients(

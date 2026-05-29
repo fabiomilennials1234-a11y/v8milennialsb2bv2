@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from "react";
-import { Loader2, Send } from "lucide-react";
+import { Loader2, Send, ImagePlus, X } from "lucide-react";
 import { toast } from "sonner";
+
+import { supabase } from "@/integrations/supabase/client";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -59,6 +61,8 @@ export function QuickBlastDialog({ open, onOpenChange, leadIds, onDone }: QuickB
   const [delayMin, setDelayMin] = useState(5);
   const [delayMax, setDelayMax] = useState(30);
   const [maxLeads, setMaxLeads] = useState<string>("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const connectedInstances = useMemo(
     () => instances.filter((i: any) => CONNECTED.has(i.status)),
@@ -72,6 +76,7 @@ export function QuickBlastDialog({ open, onOpenChange, leadIds, onDone }: QuickB
     delayMin >= 0 &&
     delayMax >= delayMin &&
     leadIds.length > 0 &&
+    !uploading &&
     !blast.isPending;
 
   function insertVariable(token: string) {
@@ -94,6 +99,28 @@ export function QuickBlastDialog({ open, onOpenChange, leadIds, onDone }: QuickB
 
   const preview = previewMessage(message);
 
+  async function handleImageUpload(file: File) {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Selecione um arquivo de imagem");
+      return;
+    }
+    setUploading(true);
+    try {
+      const path = `quick-blast/${crypto.randomUUID()}-${file.name.replace(/[^\w.-]/g, "_")}`;
+      const { error } = await supabase.storage.from("media").upload(path, file, {
+        contentType: file.type,
+        upsert: true,
+      });
+      if (error) throw error;
+      const { data } = supabase.storage.from("media").getPublicUrl(path);
+      setImageUrl(data.publicUrl);
+    } catch (e) {
+      toast.error(`Falha no upload: ${(e as Error).message}`);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function handleFire() {
     try {
       const res = await blast.mutateAsync({
@@ -103,6 +130,7 @@ export function QuickBlastDialog({ open, onOpenChange, leadIds, onDone }: QuickB
         delay_min_ms: Math.round(delayMin * 1000),
         delay_max_ms: Math.round(delayMax * 1000),
         max_leads: maxLeads ? Number(maxLeads) : undefined,
+        image_url: imageUrl ?? undefined,
       });
       const { noPhone, duplicates, overCap } = res.skipped;
       const skippedParts = [
@@ -115,6 +143,7 @@ export function QuickBlastDialog({ open, onOpenChange, leadIds, onDone }: QuickB
           (skippedParts.length ? ` — ${skippedParts.join(", ")} ignorados` : ""),
       );
       setMessage("");
+      setImageUrl(null);
       onOpenChange(false);
       onDone?.();
     } catch (e) {
@@ -236,6 +265,41 @@ export function QuickBlastDialog({ open, onOpenChange, leadIds, onDone }: QuickB
                 onChange={(e) => setMaxLeads(e.target.value)}
               />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Imagem (opcional)</Label>
+            {imageUrl ? (
+              <div className="flex items-center gap-3 rounded-md border border-border p-2">
+                <img src={imageUrl} alt="anexo" className="h-12 w-12 rounded object-cover" />
+                <span className="flex-1 truncate text-xs text-muted-foreground">
+                  Imagem anexada — a mensagem vira legenda
+                </span>
+                <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => setImageUrl(null)}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <label className="flex h-10 cursor-pointer items-center gap-2 rounded-md border border-dashed border-border px-3 text-sm text-muted-foreground hover:border-primary">
+                {uploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ImagePlus className="h-4 w-4" />
+                )}
+                {uploading ? "Enviando…" : "Anexar imagem"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void handleImageUpload(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            )}
           </div>
         </div>
 

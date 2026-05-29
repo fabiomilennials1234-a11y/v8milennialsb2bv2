@@ -128,6 +128,24 @@ describe("runQuickBlast", () => {
     expect(sentText).toBe("Seg ouro, 30 dias");
   });
 
+  it("forwards an image blast to dispatch with file + caption per recipient", async () => {
+    let recipient: any;
+    const dispatch = vi.fn(async (_inst: any, input: any) => {
+      recipient = input.recipients[0];
+      return { sender_job_id: "j", uazapi_sender_id: "u" };
+    });
+    const supabase = supabaseStub({ cap: 200, leads: [lead("a", "11999990001")] });
+
+    await runQuickBlast(
+      { supabaseAdmin: supabase, dispatch },
+      { orgId: "org-1", userId: "u", instance: INSTANCE, leadIds: ["a"], message: "Promo", imageUrl: "https://cdn/x.jpg" },
+    );
+
+    expect(recipient.type).toBe("image");
+    expect(recipient.file).toBe("https://cdn/x.jpg");
+    expect(recipient.caption).toBe("Promo");
+  });
+
   it("rejects when the instance belongs to another organization", async () => {
     const dispatch = vi.fn(async () => ({ sender_job_id: "j", uazapi_sender_id: "u" }));
     const supabase = supabaseStub({ cap: 200, leads: [lead("a", "11999990001")] });

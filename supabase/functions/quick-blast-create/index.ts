@@ -79,6 +79,7 @@ Deno.serve(
       delay_max_ms,
       max_leads,
       scheduled_for,
+      image_url,
     } = body as {
       instance_id?: string;
       lead_ids?: string[];
@@ -87,6 +88,7 @@ Deno.serve(
       delay_max_ms?: number;
       max_leads?: number;
       scheduled_for?: string;
+      image_url?: string;
     };
 
     if (!instance_id || !Array.isArray(lead_ids) || lead_ids.length === 0 || !message) {
@@ -123,6 +125,7 @@ Deno.serve(
           delayMaxMs: delay_max_ms,
           maxLeads: max_leads,
           scheduledFor: scheduled_for,
+          imageUrl: image_url,
         },
       );
 
