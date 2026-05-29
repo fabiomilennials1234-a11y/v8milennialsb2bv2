@@ -18,6 +18,10 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { withSentry } from "../_shared/sentry.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { OpenRouterClient, type OpenRouterTool } from "../agent-message/openrouter-client.ts";
+import {
+  resolveOrgCapabilities,
+  describeOrgCapabilities,
+} from "../_shared/resolve-org-capabilities.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -127,6 +131,12 @@ Deno.serve(
     const openRouterKey = Deno.env.get("OPENROUTER_API_KEY");
     if (!openRouterKey) return json({ error: "OPENROUTER_API_KEY not set" }, 500, corsHeaders);
 
+    // Ground the Builder in the org's real state (real funnel stages, whether
+    // SZ.Chat / knowledge docs exist) so it never invents and wires only what
+    // exists.
+    const orgCaps = await resolveOrgCapabilities(admin, orgId, agentId);
+    const systemPrompt = `${SYSTEM_PROMPT}\n\n${describeOrgCapabilities(orgCaps)}`;
+
     // Tool defs come from the client (derived from the capability manifest —
     // the single source — so the model can only target real tools/sections).
     const tools: OpenRouterTool[] | undefined =
@@ -145,7 +155,7 @@ Deno.serve(
     const completion = await openRouter.chat({
       model: BUILDER_MODEL,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         ...history.map((m) => ({ role: m.role, content: m.content })),
         { role: "user", content: message },
       ],
