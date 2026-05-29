@@ -20,7 +20,6 @@ import {
 import { useTeamMembers } from "@/modules/identity";
 import { usePipeOps } from "../../pipe-ops";
 import type { PipePropostasStatus } from "@/contracts/pipe";
-import { useLossReasons } from "@/modules/pipelines";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -67,6 +66,7 @@ export function PropostaModal({
     loss_reason: proposta?.loss_reason || "",
   });
 
+  const { useLossReasons, useUpdatePipeProposta } = usePipeOps();
   const { data: teamMembers = [] } = useTeamMembers();
   const { data: lossReasons = [] } = useLossReasons();
   const updateProposta = useUpdatePipeProposta();

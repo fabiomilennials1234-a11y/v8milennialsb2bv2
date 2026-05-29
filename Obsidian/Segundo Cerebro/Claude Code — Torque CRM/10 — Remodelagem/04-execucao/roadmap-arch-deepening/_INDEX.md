@@ -16,6 +16,8 @@ relacionados:
 
 > [!info] Replan Fase 7 — 2026-05-29
 > Fase 7 (ciclo leads↔pipelines) **replanejada**: abordagem barrel ABORTADA (baseline 86→120), event-bus não resolve forward-edges síncronos. Único caminho = inversão `PipeOpsPort`. Ver banner em [[fase-7-quebrar-ciclo-leads-pipelines]]. **Fase 8** provavelmente absorvida (re-deepen pipelines em sub-pastas faz parte da inversão) — confirmar com CTO antes de iniciar.
+>
+> **Update 2026-05-29 — Fase 7 CONCLUÍDA.** Inversão entregue em 7.3-bis (deep edges → 0) e os 3 barrel-edges residuais zerados em 7.4-bis. Ciclo `leads ↔ pipelines` = **0** em todas as formas (deep + barrel). Fase 8 absorvida. Próximo: Fase 9 (identity split).
 
 ## Contexto
 
@@ -52,7 +54,7 @@ Análise via skill identificou 3 candidatos com ROI mais alto pra deepening pós
 |---|---:|---:|---:|---|
 | `pipelines` files-per-export | 0.85 | ≥ 3.0 | **3.58** ✅ | `find / wc + grep ^export` |
 | `identity` files-per-export | 1.50 | ≥ 3.0 | 1.50 (Fase 9 pendente) | idem |
-| Ciclo `leads ↔ pipelines` (deep imports) | 47 | 0 | **0** ✅ (3 barrel-edges → 7.4-bis) | grep cross-module |
+| Ciclo `leads ↔ pipelines` (deep + barrel) | 47 | 0 | **0** ✅ (deep zerado em 7.3-bis; 3 barrel-edges zerados em 7.4-bis) | grep cross-module |
 | `dependency-cruiser` baseline | 86 | ≤ 70 | **83** (em direção a ≤70) | `lint:deps:baseline` |
 | Ciclos `no-circular` | 63 | ≤ 50 | **60** (em direção a ≤50) | idem |
 | Test coverage em `pipelines` e `identity` | preservar | preservar | preservado (zero regressão) | npm run test:coverage |

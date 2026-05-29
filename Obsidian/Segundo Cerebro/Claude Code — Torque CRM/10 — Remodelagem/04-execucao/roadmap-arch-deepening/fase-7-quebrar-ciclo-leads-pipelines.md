@@ -197,3 +197,32 @@ Baseline composto: **60 `no-circular` + 23 `no-orphans` = 83**. Ratchet regenera
 **Restam 3 barrel-edges `leads → pipelines`** (`from "@/modules/pipelines"`) — não são deep imports e não recriam o ciclo de módulo (back-edge `pipelines → leads` agora é só via barrel + 6 deep residuais). Alvo de limpeza no **slice 7.4-bis**.
 
 Tests pós-fix: **40 failed / 3902 passed / 150 skipped** — os 27 files vermelhos são baseline pré-existente (ver constraint #7 do `_INDEX.md`), **zero regressão** introduzida pelo slice.
+
+### Slice 7.4-bis — executado (2026-05-29)
+
+Branch `feat/arch-deepening/07-4-bis-leads-pipelines-pure`. Refactor puro TS (zero schema/deploy/prod). Zerados os **3 barrel-edges `leads → @/modules/pipelines`** que restavam, reapontando-os para a porta via `usePipeOps()`:
+
+| Arquivo | Símbolos migrados (`@/modules/pipelines` → `usePipeOps()`) | Idioma |
+|---|---|---|
+| `src/modules/leads/components/bulk-actions/BulkActionBar.tsx` | `usePipelineStages` | Destructure dentro do componente aninhado `BulkMoveDialog` (regras dos hooks). + correção de type pré-existente: `pipe` state tipado `useState<PipelineType>` + cast no `onValueChange` (import `PipelineType` de `@/contracts/pipe`, camada neutra). |
+| `src/modules/leads/components/leads/PropostaModal.tsx` | `useLossReasons`, `useUpdatePipeProposta` | `usePipeOps()` já estava importado mas sem uso; agora consumido. |
+| `src/modules/leads/pages/Leads.tsx` | `useCustomPipelines`, `useCustomPipelineStages`, `useAddLeadToCustomPipe`, `useAllPipelineStageOptions`, `useCreatePipeWhatsapp`, `useCreatePipeConfirmacao`, `useCreatePipeProposta` (bloco de 7) | Destructure no topo de `LeadsInner`; `getPipelineTypeName` mantido em `@/contracts/pipe` (já neutro). |
+
+**`PipeOpsPort` / `PipeOpsProvider` / `@/contracts/pipe` NÃO alterados** — todos os símbolos já existiam na porta e já estavam wired (completos em 7.3-bis). Rewire PURO de 3 consumidores.
+
+QA medido (outputs literais):
+
+| Critério | Resultado |
+|---|---|
+| `leads → @/modules/pipelines` (`grep -rnE 'from "@/modules/pipelines"' src/modules/leads/`) | **0** (deep + barrel = 0) |
+| Typecheck real (`tsc -p tsconfig.app.json`) | baseline **1767** → após **1764** errors. Diff normalizado (line/col-agnóstico): **3 erros removidos, 0 introduzidos**. Removidos: `BulkActionBar` TS2345 (string→PipelineType), `PropostaModal` TS2304 (`useUpdatePipeProposta` indefinido) + TS6133 (`usePipeOps` unused). Restante idêntico ao baseline (ruído pré-existente em arquivos não-tocados; `tsconfig.app.json` checa `*.test.*` sem types de vitest). |
+| Root `tsc --noEmit` | 0 (hollow — solution-style `files:[]`, compila 0 arquivos). |
+| `npm run lint` | **0 errors / 2450 warnings** (warnings = `no-explicit-any` pré-existente). `boundaries/element-types` NÃO acusa nenhum dos 3 arquivos (as 2 menções são deprecation-notices do plugin, não violations). |
+| `dep-cruise-ratchet` | **83** violations — OK, neutro vs baseline 7.3-bis (os 3 barrel-edges não eram violations contadas; baseline não regenerado). |
+| `test:unit` | **Test Files 26 failed / 280 passed / 3 skipped (309)** · **Tests 39 failed / 3947 passed / 150 skipped (4136)**. Vs baseline pristino (24 / 282 / 3 · 37 / 3949 / 150): os 24 files vermelhos do baseline presentes e inalterados; os **2 a mais** (`refactor-smoke.test.ts`, `hooks-final-agents.test.ts`) são **flakes de timing sob carga da máquina** (assert de perf 2321ms>2000ms; timeout 15s) — **re-rodados isolados passam (2 files / 83 tests, exit 0)**. **Zero regressão** atribuível ao rewire (nenhum dos files toca os 3 alvos). |
+
+**Notas:**
+- `PropostaModal.tsx` estava **órfão** (sem importador em `src`) e carregava uma referência pendente `useUpdatePipeProposta` (migração incompleta — nunca quebrou em runtime por ser dead-code). Corrigida de brinde sourçando da porta. Candidato a deleção em slice de cleanup futura (fora de escopo deste slice).
+- A máquina de execução estava sob carga pesada (múltiplos dev-servers Next/Vite concorrentes); `tsc -p tsconfig.app.json` levou ~10min e dois tests de timing flakaram. Sem impacto na correção do rewire.
+
+**Ciclo de módulo `leads ↔ pipelines` = 0 em todas as formas (deep + barrel).** Fase 7 (quebra do ciclo) concluída.
