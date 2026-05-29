@@ -227,6 +227,11 @@ verify_jwt = false
 [functions.mass-send-create]
 verify_jwt = false
 
+# quick-blast-create: Disparo Rápido do kanban. JWT validado no handler (getUser);
+# SEM role gate (ADR-0002) — qualquer membro da org dispara, teto org é a trava.
+[functions.quick-blast-create]
+verify_jwt = false
+
 # mass-send-status: polls status (JWT user OR x-cron-secret)
 [functions.mass-send-status]
 verify_jwt = false
@@ -241,6 +246,11 @@ verify_jwt = false
 
 # analyze-copilot-prompt: JWT validated inside function; OPTIONS preflight needs passthrough
 [functions.analyze-copilot-prompt]
+verify_jwt = false
+
+# copilot-builder: interviews the creator + builds the agent. Auth (getUser) +
+# org feature-flag gate validated inside the function.
+[functions.copilot-builder]
 verify_jwt = false
 
 # calculate-portfolio-health: cron job, auth via x-cron-secret; no JWT needed

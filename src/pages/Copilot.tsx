@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Plus,
+  Sparkles,
   Bot,
   Power,
   Trash2,
@@ -49,7 +50,10 @@ import {
   useDeleteCopilotAgent,
   useToggleCopilotAgent,
   useSetDefaultCopilotAgent,
+  useCreateCopilotAgent,
 } from "@/hooks/useCopilotAgents";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { BuilderPanel } from "@/components/copilot/builder/BuilderPanel";
 import { useCopilotSubscription } from "@/hooks/useCopilotSubscription";
 import { useCanManageCopilot } from "@/hooks/useUserRole";
 import { useIdentity } from "@/hooks/useIdentity";
@@ -68,15 +72,48 @@ export default function Copilot() {
   const deleteAgent = useDeleteCopilotAgent();
   const toggleAgent = useToggleCopilotAgent();
   const setDefault = useSetDefaultCopilotAgent();
+  const createAgent = useCreateCopilotAgent();
+  const { enabled: builderEnabled } = useFeatureFlag("copilot_builder");
 
   const [agentToDelete, setAgentToDelete] = useState<string | null>(null);
   const [pendingActivation, setPendingActivation] = useState<{ id: string; name: string } | null>(null);
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [builderAgentId, setBuilderAgentId] = useState<string | undefined>(undefined);
   const { checkLimit } = useOrgFeatures();
   const { getQuota } = useOrgQuotas();
   const copilotQuota = getQuota("max_copilot_agents");
 
   const handleOpenConfig = (agent: CopilotAgentWithRelations) => {
     navigate(`/copilot/${agent.id}/editar`);
+  };
+
+  const handleCreateWithAI = async () => {
+    if (!copilotQuota.can_add) {
+      toast.error(
+        `Limite de agentes atingido (${copilotQuota.current_usage}/${copilotQuota.effective_limit}). Faça upgrade do plano para criar mais.`,
+      );
+      return;
+    }
+    try {
+      const result = await createAgent.mutateAsync({
+        agent: {
+          name: "Copilot (rascunho)",
+          main_objective: "Em construção com o assistente de IA",
+          is_active: false,
+          // organization_id + created_by are injected by the mutation hook.
+          organization_id: "",
+          created_by: "",
+        },
+        faqs: [],
+        kanbanRules: [],
+      });
+      const newId = (result as { id?: string })?.id;
+      if (!newId) throw new Error("Falha ao criar rascunho");
+      setBuilderAgentId(newId);
+      setBuilderOpen(true);
+    } catch (e) {
+      toast.error("Não foi possível iniciar o assistente. Tente novamente.");
+    }
   };
 
   const handleCreateAgent = () => {
@@ -158,6 +195,17 @@ export default function Copilot() {
             <BarChart3 className="w-4 h-4 mr-2" />
             Métricas LLM
           </Button>
+          {canManageCopilot && builderEnabled && (
+            <Button
+              onClick={handleCreateWithAI}
+              variant="outline"
+              className="border-primary/40 text-primary hover:bg-primary/10"
+              disabled={!copilotQuota.can_add || createAgent.isPending}
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              Criar com IA
+            </Button>
+          )}
           {canManageCopilot && (
             <Button
               onClick={handleCreateAgent}
@@ -439,6 +487,14 @@ export default function Copilot() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {builderEnabled && (
+        <BuilderPanel
+          agentId={builderAgentId}
+          open={builderOpen}
+          onOpenChange={setBuilderOpen}
+        />
+      )}
 
     </div>
   );

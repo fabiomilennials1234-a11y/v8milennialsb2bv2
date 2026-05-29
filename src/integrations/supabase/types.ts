@@ -907,6 +907,51 @@ export type Database = {
           },
         ]
       }
+      builder_sessions: {
+        Row: {
+          agent_id: string
+          covered_topics: string[]
+          created_at: string
+          id: string
+          messages: Json
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          covered_topics?: string[]
+          created_at?: string
+          id?: string
+          messages?: Json
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          covered_topics?: string[]
+          created_at?: string
+          id?: string
+          messages?: Json
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "builder_sessions_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: true
+            referencedRelation: "copilot_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "builder_sessions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       call_logs: {
         Row: {
           contact_id: string | null
@@ -3407,6 +3452,7 @@ export type Database = {
           created_at: string
           created_by: string
           custom_instructions: string | null
+          finalized_at: string | null
           few_shot_examples: Json | null
           forbidden_topics: string[] | null
           human_transfer_triggers: string[] | null
@@ -3475,6 +3521,7 @@ export type Database = {
           created_at?: string
           created_by: string
           custom_instructions?: string | null
+          finalized_at?: string | null
           few_shot_examples?: Json | null
           forbidden_topics?: string[] | null
           human_transfer_triggers?: string[] | null
@@ -3543,6 +3590,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           custom_instructions?: string | null
+          finalized_at?: string | null
           few_shot_examples?: Json | null
           forbidden_topics?: string[] | null
           human_transfer_triggers?: string[] | null
