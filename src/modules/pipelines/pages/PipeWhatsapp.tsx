@@ -48,7 +48,7 @@ import { track, trackModuleVisit } from "@/lib/analytics";
 import { useLeadsWithScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
 import { useBatchedLeadMetrics } from "@/modules/leads";
 import { useTags } from "@/modules/leads/hooks/useTags";
-import { useBulkSelection } from "@/modules/leads/hooks/useBulkSelection";
+import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { PipeTableView } from "@/modules/pipelines/components/kanban/PipeTableView";
 import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";

@@ -71,7 +71,7 @@ import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
-import { useBulkSelection } from "@/modules/leads/hooks/useBulkSelection";
+import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { useLossReasons } from "@/modules/pipelines/hooks/useLossReasons";
