@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useRealtimeSubscription } from "./useRealtimeSubscription";
+import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 
 export type PipeWhatsAppStatus = 'novo' | 'abordado' | 'respondeu' | 'esfriou' | 'agendado';
 
