@@ -37,7 +37,7 @@ import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/lead
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
 import { MeetingTimeline } from "@/modules/pipelines/components/legacy/confirmacao/MeetingTimeline";
-import { CompareceuModal } from "@/modules/pipelines/components/legacy/confirmacao/CompareceuModal";
+import { CompareceuModal } from "@/modules/leads";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
 import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/modules/identity";
 import { format, isToday, startOfWeek, endOfWeek, isWithinInterval, isTomorrow, isPast, startOfDay, differenceInCalendarDays } from "date-fns";

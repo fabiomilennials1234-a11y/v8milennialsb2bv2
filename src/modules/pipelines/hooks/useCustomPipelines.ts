@@ -5,85 +5,26 @@ import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscripti
 import { triggerLeadCreatedInCustomPipeline } from "@/lib/workflowTrigger";
 import { useCanDo } from "@/modules/identity";
 // ────────────────────────────────────────────────────────────
-// Types
+// Types — definição canônica em contracts (puros, sem React/Supabase).
+// Re-exportados aqui para manter a API pública do módulo inalterada.
 // ────────────────────────────────────────────────────────────
 
-export type LifecycleType = "permanent" | "temporary";
-export type FunnelStatus = "draft" | "active" | "paused" | "ended";
-export type FunnelTemplateType = "indicacao" | "prospeccao" | "reativacao";
-
-export interface CustomPipeline {
-  id: string;
-  organization_id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  icon: string;
-  color: string;
-  position: number;
-  is_active: boolean;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-  // Temporal fields
-  lifecycle_type: LifecycleType;
-  starts_at: string | null;
-  ends_at: string | null;
-  status: FunnelStatus;
-  team_goal: number | null;
-  individual_goal: number | null;
-  bonus_value: number | null;
-  bonus_description: string | null;
-  objective_pipe_type: string | null;
-  objective_stage_key: string | null;
-  template_type: FunnelTemplateType | null;
-  lead_source_config: Record<string, unknown> | null;
-}
-
-export interface CustomPipelineStage {
-  id: string;
-  organization_id: string;
-  pipeline_id: string;
-  stage_key: string;
-  name: string;
-  color: string | null;
-  position: number;
-  is_active: boolean;
-  is_final_positive: boolean;
-  is_final_negative: boolean;
-  target_pipeline_id: string | null;
-  target_stage_id: string | null;
-  target_pipe_type: string | null;
-  target_stage_key: string | null;
-  checklist_template_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CustomPipeEntry {
-  id: string;
-  organization_id: string;
-  pipeline_id: string;
-  lead_id: string;
-  stage_id: string;
-  assigned_to: string | null;
-  notes: string | null;
-  entered_at: string;
-  stage_changed_at: string;
-  created_at: string;
-  updated_at: string;
-  // Joins
-  lead?: {
-    id: string;
-    name: string;
-    company: string | null;
-    phone: string | null;
-    email: string | null;
-  };
-  stage?: CustomPipelineStage;
-  assigned_profile?: { id: string; full_name: string | null; avatar_url: string | null };
-  assigned_member?: { id: string; name: string | null; profile: { id: string; full_name: string | null; avatar_url: string | null } | null };
-}
+import type {
+  LifecycleType,
+  FunnelStatus,
+  FunnelTemplateType,
+  CustomPipeline,
+  CustomPipelineStage,
+  CustomPipeEntry,
+} from "@/contracts/pipe";
+export type {
+  LifecycleType,
+  FunnelStatus,
+  FunnelTemplateType,
+  CustomPipeline,
+  CustomPipelineStage,
+  CustomPipeEntry,
+};
 
 // ────────────────────────────────────────────────────────────
 // Helpers

@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/modules/identity/contexts/AuthContext";
 import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
+import { PipeOpsProvider } from "@/modules/pipelines";
 import { ProtectedRoute } from "@/modules/identity/components/ProtectedRoute";
 import { PermissionProtectedRoute } from "@/modules/identity/components/PermissionProtectedRoute";
 import { MainLayout } from "@/modules/platform/components/layout/MainLayout";
@@ -666,15 +667,17 @@ const App = () => {
             <ServiceWorkerUpdater />
             <BrowserRouter>
               <AuthProvider>
-                <GlobalErrorBoundary>
-                  <PushPermissionPrompt />
-                  <CommandPaletteProvider>
-                    <GlobalShortcutsProvider>
-                      <AppRoutes />
-                      <CommandPaletteComponent />
-                    </GlobalShortcutsProvider>
-                  </CommandPaletteProvider>
-                </GlobalErrorBoundary>
+                <PipeOpsProvider>
+                  <GlobalErrorBoundary>
+                    <PushPermissionPrompt />
+                    <CommandPaletteProvider>
+                      <GlobalShortcutsProvider>
+                        <AppRoutes />
+                        <CommandPaletteComponent />
+                      </GlobalShortcutsProvider>
+                    </CommandPaletteProvider>
+                  </GlobalErrorBoundary>
+                </PipeOpsProvider>
               </AuthProvider>
             </BrowserRouter>
           </TooltipProvider>

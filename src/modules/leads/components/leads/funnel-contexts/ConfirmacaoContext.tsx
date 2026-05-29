@@ -39,13 +39,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/modules/identity";
-import { useUpdatePipeConfirmacao, useDeletePipeConfirmacao, type PipeConfirmacaoStatus, statusColumns } from "@/modules/pipelines/hooks/usePipeConfirmacao";
-import { useCreatePipeProposta } from "@/modules/pipelines/hooks/usePipePropostas";
+import { type PipeConfirmacaoStatus, confirmacaoStatusColumns as statusColumns } from "@/contracts/pipe";
+import { usePipeOps } from "../../../pipe-ops";
 import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
 import { useDeleteLead } from "../../../hooks/useLeads";
 import { useResponsibleMembers } from "@/modules/identity";
-import { CompareceuModal } from "@/modules/pipelines/components/legacy/confirmacao/CompareceuModal";
-import { RescheduleModal } from "@/modules/pipelines/components/legacy/confirmacao/RescheduleModal";
+import { CompareceuModal } from "./modals/CompareceuModal";
 import { cn } from "@/lib/utils";
 import { format, differenceInDays, isToday, isTomorrow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -98,6 +97,7 @@ export function ConfirmacaoContext({ lead, pipeData: item, onSuccess }: Confirma
   const [isCompareceuModalOpen, setIsCompareceuModalOpen] = useState(false);
   const [isProcessingCompareceu, setIsProcessingCompareceu] = useState(false);
 
+  const { useUpdatePipeConfirmacao, useDeletePipeConfirmacao, useCreatePipeProposta, RescheduleModal } = usePipeOps();
   const updatePipeConfirmacao = useUpdatePipeConfirmacao();
   const deletePipeConfirmacao = useDeletePipeConfirmacao();
   const deleteLead = useDeleteLead();

@@ -52,9 +52,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useUpdatePipeProposta, useDeletePipeProposta, type PipePropostasStatus, statusColumns } from "@/modules/pipelines/hooks/usePipePropostas";
+import { type PipePropostasStatus, propostasStatusColumns as statusColumns } from "@/contracts/pipe";
+import { usePipeOps } from "../../../pipe-ops";
 import { useActiveProducts } from "@/modules/carteira/hooks/useProducts";
-import { usePipePropostaItems, useCreatePipePropostaItem, useUpdatePipePropostaItem, useDeletePipePropostaItem } from "@/modules/pipelines/hooks/usePipePropostaItems";
 import { useTeamMembers } from "@/modules/identity";
 import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
 import { useDeleteLead } from "../../../hooks/useLeads";
@@ -79,6 +79,14 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
   const cadastroExternoEnabled = useCadastroExternoEnabled();
   const { data: teamMembers = [] } = useTeamMembers();
   const { data: products = [] } = useActiveProducts();
+  const {
+    usePipePropostaItems,
+    useUpdatePipeProposta,
+    useDeletePipeProposta,
+    useCreatePipePropostaItem,
+    useUpdatePipePropostaItem,
+    useDeletePipePropostaItem,
+  } = usePipeOps();
   const { data: itemsData = [], isLoading: itemsLoading } = usePipePropostaItems(proposta?.id);
   const updateProposta = useUpdatePipeProposta();
   const deleteProposta = useDeletePipeProposta();

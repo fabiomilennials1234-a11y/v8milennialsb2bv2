@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MeetingFieldBlock } from "../MeetingFieldBlock";
+import { MockPipeOpsProvider } from "@/modules/leads/pipe-ops/testing";
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -60,24 +61,30 @@ vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({
   triggerFollowUpAutomation: vi.fn(),
 }));
 
-// RescheduleModal pulls in GoogleCalendar hooks — stub the whole component.
-vi.mock("@/modules/pipelines/components/legacy/confirmacao/RescheduleModal", () => ({
-  RescheduleModal: ({ open }: { open: boolean }) =>
-    open ? <div data-testid="reschedule-modal-stub" /> : null,
-}));
-
-vi.mock("@/modules/pipelines/components/legacy/confirmacao/CompareceuModal", () => ({
+// CompareceuModal foi movido para leads (inversão F7) — stub local.
+vi.mock("../../../leads/funnel-contexts/modals/CompareceuModal", () => ({
   CompareceuModal: ({ open }: { open: boolean }) =>
     open ? <div data-testid="compareceu-modal-stub" /> : null,
 }));
 
-vi.mock("@/modules/pipelines/hooks/usePipePropostas", () => ({
-  useCreatePipeProposta: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) }),
-}));
+// Pós-inversão F7: useCreatePipeConfirmacao/useUpdatePipeConfirmacao/
+// useCreatePipeProposta + RescheduleModal vêm do PipeOpsPort (context).
+// RescheduleModal arrasta hooks de GoogleCalendar — stub via slot do port.
+const pipeOpsPort = {
+  useCreatePipeConfirmacao: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }) as never,
+  useUpdatePipeConfirmacao: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }) as never,
+  useCreatePipeProposta: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }) as never,
+  RescheduleModal: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="reschedule-modal-stub" /> : null,
+};
 
 function renderWithQuery(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={qc}>
+      <MockPipeOpsProvider port={pipeOpsPort}>{ui}</MockPipeOpsProvider>
+    </QueryClientProvider>,
+  );
 }
 
 const baseProps = {

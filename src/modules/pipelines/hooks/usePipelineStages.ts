@@ -2,42 +2,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
-import type { PipelineType } from "@/contracts/pipe";
+import type { PipelineType, PipelineStage, PipelineStageInsert } from "@/contracts/pipe";
 
-// `PipelineType` + `getPipelineTypeName` + `stagesToColumns` têm definição
-// canônica em contracts (puros, sem side-effect) — quebra import direto
-// leads→pipelines. Re-exportados aqui mantendo a API pública inalterada.
-export type { PipelineType };
-
-export interface PipelineStage {
-  id: string;
-  organization_id: string;
-  pipeline_type: PipelineType;
-  stage_key: string;
-  name: string;
-  color: string | null;
-  position: number;
-  is_active: boolean;
-  is_final_positive: boolean;
-  is_final_negative: boolean;
-  auto_move_min_days: number | null;
-  auto_move_max_days: number | null;
-  target_pipe_type: string | null;
-  target_stage_key: string | null;
-  checklist_template_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface PipelineStageInsert {
-  pipeline_type: PipelineType;
-  stage_key: string;
-  name: string;
-  color?: string;
-  position: number;
-  is_final_positive?: boolean;
-  is_final_negative?: boolean;
-}
+// `PipelineType` + `PipelineStage(Insert)` + `getPipelineTypeName` +
+// `stagesToColumns` têm definição canônica em contracts (puros, sem
+// side-effect) — quebra import direto leads→pipelines. Re-exportados aqui
+// mantendo a API pública inalterada.
+export type { PipelineType, PipelineStage, PipelineStageInsert };
 
 // Controle para garantir que etapas padrão existam no banco (uma vez por sessão)
 const defaultsEnsuredForSession = new Set<string>();

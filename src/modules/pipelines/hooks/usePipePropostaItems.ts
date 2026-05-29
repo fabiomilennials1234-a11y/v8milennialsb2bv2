@@ -1,31 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-export interface PipePropostaItem {
-  id: string;
-  pipe_proposta_id: string;
-  product_id: string | null;
-  quantity: number;
-  unit_price: number | null;
-  sale_value: number | null;
-  created_at: string;
-  product?: {
-    id: string;
-    name: string;
-    type: "mrr" | "projeto";
-    ticket: number | null;
-    ticket_minimo: number | null;
-    sku: string | null;
-  };
-}
-
-export interface PipePropostaItemInsert {
-  pipe_proposta_id: string;
-  product_id: string | null;
-  quantity?: number;
-  unit_price?: number | null;
-  sale_value: number | null;
-}
+// Definição canônica em contracts. Re-exportados aqui (API pública inalterada).
+import type { PipePropostaItem, PipePropostaItemInsert } from "@/contracts/pipe";
+export type { PipePropostaItem, PipePropostaItemInsert };
 
 export function usePipePropostaItems(propostaId: string | null | undefined) {
   return useQuery({

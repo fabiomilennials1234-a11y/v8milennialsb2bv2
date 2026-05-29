@@ -7,4 +7,5 @@
  */
 export * from "./pipe-status";
 export * from "./pipe-columns";
+export * from "./pipe-entities";
 export * from "./kanban";

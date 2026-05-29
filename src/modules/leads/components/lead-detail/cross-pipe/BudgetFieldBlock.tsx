@@ -16,23 +16,17 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
-  useCreatePipeProposta,
-  useUpdatePipeProposta,
-  statusColumns,
   type PipePropostasStatus,
-  type PipeProposta,
-} from "@/modules/pipelines/hooks/usePipePropostas";
+  propostasStatusColumns as statusColumns,
+} from "@/contracts/pipe";
+import type { Tables } from "@/integrations/supabase/types";
+import { usePipeOps } from "../../../pipe-ops";
 import { useActiveProducts } from "@/modules/carteira/hooks/useProducts";
-import {
-  usePipePropostaItems,
-  useCreatePipePropostaItem,
-  useUpdatePipePropostaItem,
-  useDeletePipePropostaItem,
-} from "@/modules/pipelines/hooks/usePipePropostaItems";
 import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
 import { useCadastroExternoEnabled } from "@/modules/marketing/hooks/useCadastroExterno";
-import { useLossReasons } from "@/modules/pipelines/hooks/useLossReasons";
 import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
+
+type PipeProposta = Tables<"pipe_propostas">;
 import { ProductCombobox } from "@/modules/carteira/components/proposal/ProductCombobox";
 import { TinyErpConfirmOrderDialog } from "@/modules/carteira/components/proposal/TinyErpConfirmOrderDialog";
 import { CadastroExternoConfirmDialog } from "@/modules/carteira/components/proposal/CadastroExternoConfirmDialog";
@@ -83,6 +77,15 @@ export const BudgetFieldBlock = memo(function BudgetFieldBlock({
   onSuccess,
   bare = false,
 }: BudgetFieldBlockProps) {
+  const {
+    useCreatePipeProposta,
+    useUpdatePipeProposta,
+    useCreatePipePropostaItem,
+    useUpdatePipePropostaItem,
+    useDeletePipePropostaItem,
+    usePipePropostaItems,
+    useLossReasons,
+  } = usePipeOps();
   const createPipe = useCreatePipeProposta();
   const updateProposta = useUpdatePipeProposta();
   const createItem = useCreatePipePropostaItem();

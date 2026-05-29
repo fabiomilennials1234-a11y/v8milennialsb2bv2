@@ -15,8 +15,6 @@ export {
   type CustomPipelineStatus,
 } from "../useLeadAllPipelines";
 
-export {
-  useAddLeadToCustomPipe,
-  useMoveLeadInCustomPipe,
-  useRemoveLeadFromCustomPipe,
-} from "@/modules/pipelines/hooks/useCustomPipelines";
+// Mutations de custom-pipe (add/move/remove) movidas para trás do PipeOpsPort
+// (inversão F7). Consumir via `usePipeOps()` na render tree — não re-exportar
+// hooks aqui (quebraria a injeção e recriaria o edge leads→pipelines).

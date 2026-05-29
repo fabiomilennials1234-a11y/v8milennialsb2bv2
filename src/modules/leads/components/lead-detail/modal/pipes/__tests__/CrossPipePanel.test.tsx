@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CrossPipePanel } from "../CrossPipePanel";
+import { MockPipeOpsProvider } from "@/modules/leads/pipe-ops/testing";
 
 // ─── Mocks ────────────────────────────────────────────────────────────
 
@@ -34,20 +35,14 @@ vi.mock("@/modules/leads/hooks/useLeadAllPipelines", () => ({
   }),
 }));
 
-vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({
-  useAddLeadToCustomPipe: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
-  useRemoveLeadFromCustomPipe: () => ({
-    mutateAsync: vi.fn().mockResolvedValue({}),
-    isPending: false,
-  }),
-}));
+// Pós-inversão F7: custom-pipe mutations + byLeadId reads vêm do PipeOpsPort.
+const pipeOpsPort = {
+  useAddLeadToCustomPipe: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }) as never,
+  useRemoveLeadFromCustomPipe: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }) as never,
+  usePipeConfirmacaoByLeadId: () => ({ data: null, isLoading: false }) as never,
+  usePipePropostaByLeadId: () => ({ data: null, isLoading: false }) as never,
+};
 
-vi.mock("@/modules/pipelines/hooks/usePipeConfirmacaoByLeadId", () => ({
-  usePipeConfirmacaoByLeadId: () => ({ data: null, isLoading: false }),
-}));
-vi.mock("@/modules/pipelines/hooks/usePipePropostaByLeadId", () => ({
-  usePipePropostaByLeadId: () => ({ data: null, isLoading: false }),
-}));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 
 const gatesMock = vi.fn(() => ({
@@ -85,12 +80,14 @@ function renderPanel(extraProps: Partial<React.ComponentProps<typeof CrossPipePa
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <CrossPipePanel
-        leadId="lead-1"
-        organizationId="org-1"
-        userId="user-1"
-        {...extraProps}
-      />
+      <MockPipeOpsProvider port={pipeOpsPort}>
+        <CrossPipePanel
+          leadId="lead-1"
+          organizationId="org-1"
+          userId="user-1"
+          {...extraProps}
+        />
+      </MockPipeOpsProvider>
     </QueryClientProvider>,
   );
 }

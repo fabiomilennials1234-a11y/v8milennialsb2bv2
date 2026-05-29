@@ -207,3 +207,12 @@ export { LeadDetailContent } from "./components/lead/LeadDetailContent";
 export { LeadCustomFields } from "./components/lead/info/LeadCustomFields";
 export { AddCustomFieldPopover } from "./components/lead/info/AddCustomFieldPopover";
 export { LeadTabHistory } from "./components/lead/tabs/LeadTabHistory";
+
+// ── PipeOpsPort: inversão de dependência leads↔pipelines (arch-deepening F7) ─
+// leads define a abstração (DIP); pipelines implementa+injeta via context.
+export type { PipeOpsPort, RescheduleModalSlotProps } from "./pipe-ops";
+export { PipeOpsContextProvider, usePipeOps } from "./pipe-ops";
+
+// CompareceuModal: apresentacional (só identity + onConfirm), movido de
+// pipelines para leads na inversão F7. pipelines consome via este barrel.
+export { CompareceuModal } from "./components/leads/funnel-contexts/modals/CompareceuModal";
