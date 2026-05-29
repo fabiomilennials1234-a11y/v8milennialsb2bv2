@@ -9,7 +9,6 @@ import { OpenRouterClient } from "./openrouter-client.ts";
 import { AgentEngine } from "./agent-engine.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
-import { isHumanPauseActive } from "../_shared/copilot/human-pause.ts";
 
 // Force bundler to include provider modules (used via dynamic import in whatsapp-client)
 import "../_shared/whatsapp-providers/evolution-provider.ts";
@@ -212,20 +211,12 @@ Deno.serve(withSentry('agent-message', async (req) => {
       });
     }
 
-    // 1.55. HUMAN PAUSE GATE — skip if human agent is actively handling this conversation
-    const humanPause = await isHumanPauseActive(supabase, lead.id, organizationId);
-    if (humanPause.paused) {
-      console.log('[agent-message] Human pause active for lead:', lead.id, 'until:', humanPause.pausedUntil);
-      return new Response(JSON.stringify({
-        skipped: true,
-        reason: "human_pause_active",
-        lead_id: lead.id,
-        paused_until: humanPause.pausedUntil,
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
-    }
+    // 1.55. HUMAN PAUSE GATE — coberto pelo initialCancel acima (1.5).
+    // isCopilotCanceled é phone-keyed e lê phone_ai_preferences.human_paused_until,
+    // então funciona mesmo em cold-start (lead/conversa ainda não existem) e é
+    // re-checado per-chunk no envio escalonado. Quando source='human_pause' o
+    // early-return em 1.5 já barra o turno. Gate dedicado removido (era
+    // conversa-dependente → não armava em cold-start). Ver cancellation.ts.
 
     // 1.6. AGENT ACTIVE GATE — fresh DB check (bypasses 5min LRU cache)
     const { data: activeAgent } = await supabase
