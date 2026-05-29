@@ -1,7 +1,14 @@
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, MessageCircle, ExternalLink, ShoppingCart, CheckCircle2 } from "lucide-react";
+import { MessageCircle, ExternalLink, ShoppingCart, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { useClientAlerts } from "@/hooks/useClientAlerts";
@@ -12,8 +19,10 @@ import type { PortfolioClientRow } from "@/hooks/usePortfolioClients";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CarteiraClientPreviewProps {
-  client: PortfolioClientRow;
-  onClose: () => void;
+  /** Cliente selecionado; null quando o drawer está fechado. */
+  client: PortfolioClientRow | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onViewDetail: (clientId: string) => void;
   onNewOrder: (clientId: string) => void;
 }
@@ -52,14 +61,19 @@ function MiniMetric({ label, value }: MiniMetricProps) {
   );
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// ─── Corpo do drawer ───────────────────────────────────────────────────────────
+// Montado só quando há cliente, então os hooks de dados (alerts/health) só
+// disparam com um clientId válido — nunca no load inicial da página.
 
-export function CarteiraClientPreview({
+function ClientPreviewBody({
   client,
-  onClose,
   onViewDetail,
   onNewOrder,
-}: CarteiraClientPreviewProps) {
+}: {
+  client: PortfolioClientRow;
+  onViewDetail: (clientId: string) => void;
+  onNewOrder: (clientId: string) => void;
+}) {
   const navigate = useNavigate();
   const { data: alerts = [], resolveAlert } = useClientAlerts(client.id);
   const { data: healthHistory = [] } = useHealthHistory(client.id);
@@ -71,41 +85,27 @@ export function CarteiraClientPreview({
   const circumference = 220;
   const dashArray = `${Math.round((score / 100) * circumference)} ${circumference}`;
 
-  // Recompra info
-  const cycleDays = client?.reorder_cycle_days ?? null;
-  const daysSince = client?.days_since_last_order ?? null;
+  const cycleDays = client.reorder_cycle_days ?? null;
+  const daysSince = client.days_since_last_order ?? null;
 
   return (
-    <aside className="w-80 shrink-0 flex flex-col rounded-lg border border-border bg-card overflow-hidden">
+    <>
       {/* Header */}
-      <div className="flex items-start justify-between gap-2 px-4 py-3 border-b border-border">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground truncate">
-            {client?.name ?? "Carregando…"}
-          </p>
-          {client?.company && (
-            <p className="text-xs text-muted-foreground truncate">{client.company}</p>
-          )}
-        </div>
-        <button
-          onClick={onClose}
-          className="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors mt-0.5"
-          aria-label="Fechar painel"
-        >
-          <X size={14} />
-        </button>
-      </div>
+      <SheetHeader className="space-y-1 px-5 py-4 border-b border-border text-left pr-12">
+        <SheetTitle className="text-base font-semibold text-foreground truncate">
+          {client.name ?? "Cliente"}
+        </SheetTitle>
+        <SheetDescription className="truncate">
+          {client.company ?? "Detalhes do cliente"}
+        </SheetDescription>
+      </SheetHeader>
 
       {/* Body — scrollable */}
       <div className="flex-1 overflow-y-auto">
         {/* Health Ring */}
-        <div className="flex flex-col items-center py-5 border-b border-border">
-          <div className="relative w-20 h-20">
-            <svg
-              className="w-20 h-20 -rotate-90"
-              viewBox="0 0 80 80"
-              aria-hidden="true"
-            >
+        <div className="flex flex-col items-center py-6 border-b border-border">
+          <div className="relative w-24 h-24">
+            <svg className="w-24 h-24 -rotate-90" viewBox="0 0 80 80" aria-hidden="true">
               <circle
                 cx="40"
                 cy="40"
@@ -129,7 +129,7 @@ export function CarteiraClientPreview({
             </svg>
             <span
               className={cn(
-                "absolute inset-0 flex items-center justify-center text-lg font-bold",
+                "absolute inset-0 flex items-center justify-center text-xl font-bold",
                 ringColor,
               )}
             >
@@ -140,7 +140,7 @@ export function CarteiraClientPreview({
           {healthHistory.length >= 2 && (
             <HealthSparkline
               data={healthHistory}
-              width={140}
+              width={160}
               height={28}
               className="mt-3 flex items-center gap-1.5"
             />
@@ -148,22 +148,13 @@ export function CarteiraClientPreview({
         </div>
 
         {/* Mini Metrics */}
-        <div className="grid grid-cols-3 gap-x-4 gap-y-3 px-4 py-4 border-b border-border">
-          <MiniMetric
-            label="Ciclo"
-            value={cycleDays ? `${cycleDays} dias` : "—"}
-          />
+        <div className="grid grid-cols-3 gap-x-4 gap-y-4 px-5 py-5 border-b border-border">
+          <MiniMetric label="Ciclo" value={cycleDays ? `${cycleDays} dias` : "—"} />
           <MiniMetric
             label="Dias s/ pedido"
             value={
               daysSince != null ? (
-                <span
-                  className={
-                    cycleDays && daysSince > cycleDays
-                      ? "text-red-400"
-                      : "text-foreground"
-                  }
-                >
+                <span className={cycleDays && daysSince > cycleDays ? "text-red-400" : "text-foreground"}>
                   {daysSince}
                 </span>
               ) : (
@@ -173,22 +164,16 @@ export function CarteiraClientPreview({
           />
           <MiniMetric
             label="LTV"
-            value={
-              client?.lifetime_value != null
-                ? formatBRL(client.lifetime_value)
-                : "—"
-            }
+            value={client.lifetime_value != null ? formatBRL(client.lifetime_value) : "—"}
           />
           <MiniMetric
             label="Ticket"
-            value={
-              client?.avg_ticket != null ? formatBRL(client.avg_ticket) : "—"
-            }
+            value={client.avg_ticket != null ? formatBRL(client.avg_ticket) : "—"}
           />
           <MiniMetric
             label="Churn"
             value={
-              client?.churn_probability != null ? (
+              client.churn_probability != null ? (
                 <span
                   className={
                     client.churn_probability >= 70
@@ -209,7 +194,7 @@ export function CarteiraClientPreview({
 
         {/* Alerts */}
         {alerts.length > 0 && (
-          <div className="px-4 py-3 border-b border-border">
+          <div className="px-5 py-4 border-b border-border">
             <p className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground mb-2">
               Alertas ativos
             </p>
@@ -238,7 +223,7 @@ export function CarteiraClientPreview({
       </div>
 
       {/* Actions */}
-      <div className="flex flex-col gap-2 px-4 py-3 border-t border-border bg-card/80">
+      <div className="flex flex-col gap-2 px-5 py-4 border-t border-border bg-card/80">
         <Button
           size="sm"
           className="w-full gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
@@ -257,7 +242,7 @@ export function CarteiraClientPreview({
             <ShoppingCart size={13} />
             Novo Pedido
           </Button>
-          {client?.lead_id && (
+          {client.lead_id && (
             <Button
               size="sm"
               variant="outline"
@@ -266,10 +251,7 @@ export function CarteiraClientPreview({
                 if (client.lead_id) {
                   navigate(`/chat?lead=${client.lead_id}`);
                 } else if (client.phone) {
-                  window.open(
-                    `https://wa.me/${client.phone.replace(/\D/g, "")}`,
-                    "_blank",
-                  );
+                  window.open(`https://wa.me/${client.phone.replace(/\D/g, "")}`, "_blank");
                 }
               }}
             >
@@ -279,6 +261,41 @@ export function CarteiraClientPreview({
           )}
         </div>
       </div>
-    </aside>
+    </>
+  );
+}
+
+// ─── Drawer ──────────────────────────────────────────────────────────────────
+
+export function CarteiraClientPreview({
+  client,
+  open,
+  onOpenChange,
+  onViewDetail,
+  onNewOrder,
+}: CarteiraClientPreviewProps) {
+  // Mantém o último cliente durante a animação de saída do Sheet (~300ms),
+  // evitando flash de painel vazio quando `client` vira null ao fechar.
+  const [shown, setShown] = useState<PortfolioClientRow | null>(client);
+  useEffect(() => {
+    if (client) setShown(client);
+  }, [client]);
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        overlayClassName="bg-background/60 backdrop-blur-sm"
+        className="w-full sm:max-w-[440px] p-0 flex flex-col gap-0"
+      >
+        {shown && (
+          <ClientPreviewBody
+            client={shown}
+            onViewDetail={onViewDetail}
+            onNewOrder={onNewOrder}
+          />
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }

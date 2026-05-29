@@ -197,7 +197,7 @@ export default function Upsell() {
 
         {carteiraView === "clientes" ? (
           <>
-            {/* Main content: table + optional sidebar */}
+            {/* Main content: tabela full-width; detalhe do cliente abre em drawer */}
             <div className="flex gap-4 items-start">
               <div className="flex-1 min-w-0">
                 <CarteiraClientTable
@@ -264,17 +264,16 @@ export default function Upsell() {
                 />
               </div>
 
-              {selectedClient && (
-                <CarteiraClientPreview
-                  client={selectedClient}
-                  onClose={() => setSelectedClient(null)}
-                  onViewDetail={(id) => navigate(`/carteira/${id}`)}
-                  onNewOrder={(id) => {
-                    setQuickOrderClientId(id);
-                    setNovaVendaOpen(true);
-                  }}
-                />
-              )}
+              <CarteiraClientPreview
+                client={selectedClient}
+                open={!!selectedClient}
+                onOpenChange={(o) => { if (!o) setSelectedClient(null); }}
+                onViewDetail={(id) => navigate(`/carteira/${id}`)}
+                onNewOrder={(id) => {
+                  setQuickOrderClientId(id);
+                  setNovaVendaOpen(true);
+                }}
+              />
             </div>
 
             {/* Bulk action bar */}
