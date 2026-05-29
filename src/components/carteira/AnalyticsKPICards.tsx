@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   ShoppingCart,
   Receipt,
+  Package,
 } from "lucide-react";
 
 interface SparklineProps {
@@ -89,7 +90,7 @@ export function AnalyticsKPICards() {
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: 7 }).map((_, i) => (
           <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
             <div className="h-3 bg-muted rounded w-2/3 mb-2" />
             <div className="h-6 bg-muted rounded w-1/2" />
@@ -143,6 +144,12 @@ export function AnalyticsKPICards() {
         sparkline={revenueValues}
         sparkColor="hsl(var(--primary))"
         sub="vs mês anterior"
+      />
+      <KPICard
+        label="Pedidos Esperados"
+        value={kpis.expected_this_week}
+        icon={<Package size={14} />}
+        sub="próximos 7 dias"
       />
       <KPICard
         label="Health Médio"

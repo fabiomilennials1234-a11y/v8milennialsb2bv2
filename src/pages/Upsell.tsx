@@ -19,7 +19,6 @@ import { useAutoMoveUpsellClients } from "@/hooks/useAutoMoveUpsellClients";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { usePortfolioKPIs } from "@/hooks/usePortfolioKPIs";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { CarteiraKPIs } from "@/components/carteira/CarteiraKPIs";
 import { CarteiraAlertBanner } from "@/components/carteira/CarteiraAlertBanner";
 import { CarteiraClientTable, type PortfolioClientRow } from "@/components/carteira/CarteiraClientTable";
 import { CarteiraClientPreview } from "@/components/carteira/CarteiraClientPreview";
@@ -136,9 +135,6 @@ export default function Upsell() {
             </Button>
           </div>
         </div>
-
-        {/* KPIs */}
-        <CarteiraKPIs />
 
         {/* Alert banner */}
         <CarteiraAlertBanner onViewDetails={() => setCarteiraFilter("overdue")} />
