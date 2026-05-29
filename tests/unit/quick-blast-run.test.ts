@@ -42,6 +42,9 @@ function supabaseStub(opts: { cap?: number | null; leads: any[]; upsell?: any[] 
       }
       if (table === "leads") return queryReturning(opts.leads);
       if (table === "upsell_clients") return queryReturning(opts.upsell ?? []);
+      if (table === "channel_messages") {
+        return { insert: async (rows: any[]) => { calls.logRows = rows; return { error: null }; } };
+      }
       throw new Error(`unexpected table ${table}`);
     },
   } as any;
@@ -144,6 +147,25 @@ describe("runQuickBlast", () => {
     expect(recipient.type).toBe("image");
     expect(recipient.file).toBe("https://cdn/x.jpg");
     expect(recipient.caption).toBe("Promo");
+  });
+
+  it("logs one outbound channel_messages row per dispatched recipient", async () => {
+    const dispatch = vi.fn(async () => ({ sender_job_id: "job-9", uazapi_sender_id: "uz" }));
+    const supabase = supabaseStub({ cap: 200, leads: [lead("a", "11999990001"), lead("b", "11999990002")] });
+
+    await runQuickBlast(
+      { supabaseAdmin: supabase, dispatch },
+      { orgId: "org-1", userId: "user-1", instance: INSTANCE, leadIds: ["a", "b"], message: "Oi" },
+    );
+
+    expect(supabase.calls.logRows).toHaveLength(2);
+    expect(supabase.calls.logRows[0]).toMatchObject({
+      organization_id: "org-1",
+      lead_id: "a",
+      direction: "outbound",
+      channel: "whatsapp",
+    });
+    expect(supabase.calls.logRows[0].metadata).toMatchObject({ source: "quick_blast", sender_job_id: "job-9" });
   });
 
   it("rejects when the instance belongs to another organization", async () => {

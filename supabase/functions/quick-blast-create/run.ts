@@ -10,6 +10,7 @@
  */
 import { getOrgBlastCap } from "../_shared/quick-blast/org-cap.ts";
 import { buildRecipients, type BlastLead } from "../_shared/quick-blast/recipients.ts";
+import { buildBlastLogRows } from "../_shared/quick-blast/message-log.ts";
 
 export interface QuickBlastDeps {
   supabaseAdmin: { from: (t: string) => any };
@@ -115,6 +116,22 @@ export async function runQuickBlast(
     triggeredVia: "ui",
     trackSource: "quick-blast",
   });
+
+  // Per-lead conversation logging — optimistic at enqueue, non-fatal. Lets the
+  // rep see what was sent and gives the Copilot context if the lead replies.
+  try {
+    const logRows = buildBlastLogRows({
+      orgId: params.orgId,
+      userId: params.userId,
+      senderJobId: sender_job_id,
+      recipients,
+    });
+    if (logRows.length > 0) {
+      await supabaseAdmin.from("channel_messages").insert(logRows);
+    }
+  } catch {
+    // logging is best-effort; the blast already dispatched
+  }
 
   return { ok: true, sender_job_id, uazapi_sender_id, count: recipients.length, skipped };
 }
