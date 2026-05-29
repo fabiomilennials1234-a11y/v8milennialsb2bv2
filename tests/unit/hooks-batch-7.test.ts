@@ -29,15 +29,15 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: ()
 vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
+vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {}, useAllPipelineStageOptions: vi.fn(() => ({ data: [] })) }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/modules/leads/hooks/useTags", () => ({ useTags: () => ({ data: [] }) }));
 vi.mock("@/modules/carteira/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
 vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useWhatsAppInstances: () => ({ data: [] }) }));
 vi.mock("@/modules/campaigns/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }) }));
-vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }) }));
-vi.mock("@/modules/pipelines/hooks/usePipelineDisplayConfig", () => ({ usePipelineDisplayConfig: () => ({ data: [] }) }));
+vi.mock("@/modules/pipelines/hooks/custom/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }), useCustomPipelineStages: vi.fn(() => ({ data: [] })), useAddLeadToCustomPipe: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useMoveLeadInCustomPipe: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useRemoveLeadFromCustomPipe: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
+vi.mock("@/modules/pipelines/hooks/config/usePipelineDisplayConfig", () => ({ usePipelineDisplayConfig: () => ({ data: [] }) }));
 vi.mock("@/modules/integrations/hooks/useGoogleCalendar", () => ({ useGoogleCalendar: () => ({ data: null }) }));
 vi.mock("@/modules/workflows/hooks/useWorkflows", () => ({ useWorkflows: () => ({ data: [] }) }));
 vi.mock("@/hooks/useChannelChat", () => ({ useChannelChat: () => ({ data: null }) }));

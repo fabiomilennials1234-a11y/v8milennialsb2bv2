@@ -2,73 +2,21 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
-import type { PipelineType, PipelineStage, PipelineStageInsert } from "@/contracts/pipe";
+import type { PipelineType, PipelineStage, PipelineStageInsert, DefaultStage } from "@/contracts/pipe";
+import { DEFAULT_STAGES } from "@/contracts/pipe";
 
 // `PipelineType` + `PipelineStage(Insert)` + `getPipelineTypeName` +
 // `stagesToColumns` têm definição canônica em contracts (puros, sem
 // side-effect) — quebra import direto leads→pipelines. Re-exportados aqui
 // mantendo a API pública inalterada.
-export type { PipelineType, PipelineStage, PipelineStageInsert };
+export type { PipelineType, PipelineStage, PipelineStageInsert, DefaultStage };
+// DEFAULT_STAGES: constante PURA movida para `@/contracts/pipe` (quebra ciclo
+// communication/leads -> pipelines via barrel). Re-exportada aqui p/ API estável.
+export { DEFAULT_STAGES };
 
 // Controle para garantir que etapas padrão existam no banco (uma vez por sessão)
 const defaultsEnsuredForSession = new Set<string>();
 
-// Etapas padrão com flags de etapa final (fallback + seed no banco)
-interface DefaultStage {
-  id: string;
-  title: string;
-  color: string;
-  is_final_positive?: boolean;
-  is_final_negative?: boolean;
-  target_pipe_type?: string;
-  target_stage_key?: string;
-}
-
-export const DEFAULT_STAGES: Record<PipelineType, DefaultStage[]> = {
-  whatsapp: [
-    { id: "novo", title: "Novo", color: "#6366f1" },
-    { id: "abordado", title: "Abordado", color: "#f59e0b" },
-    { id: "respondeu", title: "Respondeu", color: "#3b82f6" },
-    { id: "esfriou", title: "Esfriou", color: "#ef4444" },
-    { id: "agendado", title: "Agendado ✓", color: "#22c55e", is_final_positive: true, target_pipe_type: "confirmacao", target_stage_key: "reuniao_marcada" },
-  ],
-  confirmacao: [
-    { id: "reuniao_marcada", title: "Reunião Marcada", color: "#6366f1" },
-    { id: "confirmar_d5", title: "Confirmar D-5", color: "#8b5cf6" },
-    { id: "confirmar_d3", title: "Confirmar D-3", color: "#a855f7" },
-    { id: "confirmar_d2", title: "Confirmar D-2", color: "#f59e0b" },
-    { id: "confirmar_d1", title: "Confirmar D-1", color: "#f97316" },
-    { id: "confirmacao_no_dia", title: "Confirmação no Dia", color: "#ef4444" },
-    { id: "remarcar", title: "Remarcar 📅", color: "#f97316" },
-    { id: "compareceu", title: "Compareceu ✓", color: "#22c55e", is_final_positive: true, target_pipe_type: "propostas", target_stage_key: "marcar_compromisso" },
-    { id: "perdido", title: "Perdido ✗", color: "#ef4444", is_final_negative: true },
-  ],
-  propostas: [
-    { id: "marcar_compromisso", title: "Marcar Compromisso", color: "#F5C518" },
-    { id: "reativar", title: "Reativar", color: "#F97316" },
-    { id: "compromisso_marcado", title: "Compromisso Marcado", color: "#3B82F6" },
-    { id: "proposta_enviada", title: "Proposta Enviada", color: "#0EA5E9" },
-    { id: "esfriou", title: "Esfriou", color: "#64748B" },
-    { id: "futuro", title: "Futuro", color: "#8B5CF6" },
-    { id: "vendido", title: "Vendido ✓", color: "#22C55E", is_final_positive: true },
-    { id: "perdido", title: "Perdido", color: "#EF4444", is_final_negative: true },
-  ],
-  upsell_base: [
-    { id: "0-3m", title: "0-3 meses", color: "#3B82F6" },
-    { id: "3-6m", title: "3-6 meses", color: "#22C55E" },
-    { id: "6-9m", title: "6-9 meses", color: "#F59E0B" },
-    { id: "9-12m", title: "9-12 meses", color: "#EF4444" },
-    { id: "12-18m", title: "12-18 meses", color: "#8B5CF6" },
-    { id: "18m+", title: "18+ meses", color: "#EC4899" },
-  ],
-  upsell_gestao: [
-    { id: "campeoes", title: "Campeões", color: "#22C55E" },
-    { id: "fieis", title: "Fiéis", color: "#3B82F6" },
-    { id: "primeira_compra", title: "Primeira Compra", color: "#8B5CF6" },
-    { id: "em_risco", title: "Em Risco", color: "#F59E0B" },
-    { id: "inativos", title: "Inativos", color: "#EF4444" },
-  ],
-};
 
 /**
  * Garante que as etapas padrão de TODOS os pipelines existam no banco para uma organização.

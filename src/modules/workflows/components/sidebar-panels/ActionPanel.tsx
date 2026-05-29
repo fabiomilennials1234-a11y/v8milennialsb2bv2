@@ -33,8 +33,7 @@ import {
   type TemplateTextareaHandle,
 } from "@/modules/workflows/components/TemplateTextarea";
 import type { CampaignTemplate } from "@/modules/campaigns/hooks/useCampaignTemplates";
-import { usePipelineStages, type PipelineType } from "@/modules/pipelines/hooks/usePipelineStages";
-import { useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines/hooks/useCustomPipelines";
+import { usePipelineStages, type PipelineType, useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 import { CampaignStageSelectorField } from "./CampaignStageSelectorField";

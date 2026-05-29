@@ -82,18 +82,23 @@ vi.mock("@/modules/identity/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
+vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {},
   useAllPipelineStages: () => ({ data: [] }),
+  useAllPipelineStageOptions: vi.fn(() => ({ data: [] })),
 }));
 vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/modules/copilot/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
-vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({
+vi.mock("@/modules/pipelines/hooks/custom/useCustomPipelines", () => ({
   useCustomPipelines: () => ({ data: [
     { id: "cp1", name: "Custom Pipe 1", color: "#FF0000", icon: "star" },
   ] }),
+  useCustomPipelineStages: vi.fn(() => ({ data: [] })),
+  useAddLeadToCustomPipe: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })),
+  useMoveLeadInCustomPipe: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })),
+  useRemoveLeadFromCustomPipe: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })),
 }));
 vi.mock("@/lib/workflowTrigger", () => ({
   triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined),
@@ -713,7 +718,7 @@ describe("usePipePropostas", () => {
 
   describe("statusColumns export", () => {
     it("exports the correct status column definitions", async () => {
-      const { statusColumns } = await import("@/modules/pipelines/hooks/usePipePropostas");
+      const { statusColumns } = await import("@/modules/pipelines/hooks/legacy/usePipePropostas");
       expect(statusColumns).toBeDefined();
       expect(statusColumns.length).toBeGreaterThan(0);
       const ids = statusColumns.map((s) => s.id);
@@ -734,7 +739,7 @@ describe("usePipePropostas", () => {
       };
       mF.mockReturnValue(c([proposta]));
 
-      const { usePipePropostas } = await import("@/modules/pipelines/hooks/usePipePropostas");
+      const { usePipePropostas } = await import("@/modules/pipelines/hooks/legacy/usePipePropostas");
       const { result } = renderHook(() => usePipePropostas(), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -754,7 +759,7 @@ describe("usePipePropostas", () => {
       };
       mF.mockReturnValue(c([created]));
 
-      const { useCreatePipeProposta } = await import("@/modules/pipelines/hooks/usePipePropostas");
+      const { useCreatePipeProposta } = await import("@/modules/pipelines/hooks/legacy/usePipePropostas");
       const { triggerFollowUpAutomation } = await import("@/modules/workflows/hooks/useAutoFollowUp");
       const { result } = renderHook(() => useCreatePipeProposta(), { wrapper: w() });
 
@@ -784,7 +789,7 @@ describe("usePipePropostas", () => {
       };
       mF.mockReturnValue(c([updated]));
 
-      const { useUpdatePipeProposta } = await import("@/modules/pipelines/hooks/usePipePropostas");
+      const { useUpdatePipeProposta } = await import("@/modules/pipelines/hooks/legacy/usePipePropostas");
       const { result } = renderHook(() => useUpdatePipeProposta(), { wrapper: w() });
 
       await act(async () => {
@@ -812,7 +817,7 @@ describe("usePipePropostas", () => {
       };
       mF.mockReturnValue(c([updated]));
 
-      const { useUpdatePipeProposta } = await import("@/modules/pipelines/hooks/usePipePropostas");
+      const { useUpdatePipeProposta } = await import("@/modules/pipelines/hooks/legacy/usePipePropostas");
       const { result } = renderHook(() => useUpdatePipeProposta(), { wrapper: w() });
 
       await act(async () => {
@@ -836,7 +841,7 @@ describe("usePipePropostas", () => {
       const chain = c([{ id: "pp1" }]);
       mF.mockReturnValue(chain);
 
-      const { useDeletePipeProposta } = await import("@/modules/pipelines/hooks/usePipePropostas");
+      const { useDeletePipeProposta } = await import("@/modules/pipelines/hooks/legacy/usePipePropostas");
       const { result } = renderHook(() => useDeletePipeProposta(), { wrapper: w() });
 
       await act(async () => {

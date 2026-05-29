@@ -14,7 +14,7 @@ import { UpsellGestaoKanban } from "@/modules/carteira/components/upsell/UpsellG
 import { CreateClientModal } from "@/modules/carteira/components/upsell/CreateClientModal";
 import { NewOrderModal } from "@/modules/carteira/components/client/NewOrderModal";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
-import { usePipelineStages, type PipelineType } from "@/modules/pipelines/hooks/usePipelineStages";
+import { usePipelineStages, type PipelineType } from "@/modules/pipelines";
 import { useAutoMoveUpsellClients } from "@/modules/carteira/hooks/useAutoMoveUpsellClients";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { usePortfolioKPIs } from "@/modules/carteira/hooks/usePortfolioKPIs";

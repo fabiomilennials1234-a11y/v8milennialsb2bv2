@@ -6,7 +6,9 @@ import { triggerFollowUpAutomation } from "@/modules/workflows/hooks/useAutoFoll
 import { useOrganization } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";
 import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platform/lib/optimistic-lock";
-import { usePipelineEntries, usePipelineId, findOrCreatePipelineEntry } from "./usePipelineEntries";
+// Importa via o shim de path estável (`../usePipelineEntries`), não `../model/...`,
+// para preservar o module-id que mocks de teste interceptam (slice 7.3-bis).
+import { usePipelineEntries, usePipelineId, findOrCreatePipelineEntry } from "../model/usePipelineEntries";
 
 export type PipeConfirmacao = Tables<"pipe_confirmacao">;
 export type PipeConfirmacaoInsert = Partial<PipeConfirmacao> & { lead_id: string };

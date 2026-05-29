@@ -10,7 +10,7 @@ import {
   type CustomPipeEntry,
   useMoveLeadInCustomPipe,
   groupEntriesByStage,
-} from "@/modules/pipelines/hooks/useCustomPipelines";
+} from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { toast } from "sonner";
 import { useCanDo } from "@/modules/identity";
 import { useUpdateLead } from "@/modules/leads";

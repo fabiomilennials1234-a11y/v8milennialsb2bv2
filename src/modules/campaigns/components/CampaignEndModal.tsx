@@ -3,8 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertTriangle, ArrowRight, Snowflake } from "lucide-react";
-import { useCustomPipelines } from "@/modules/pipelines/hooks/useCustomPipelines";
-import { usePipelineDisplayConfig } from "@/modules/pipelines/hooks/usePipelineDisplayConfig";
+import { useCustomPipelines, usePipelineDisplayConfig } from "@/modules/pipelines";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";

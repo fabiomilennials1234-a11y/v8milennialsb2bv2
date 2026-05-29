@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { type PipelineStage, useUpdatePipelineStage, usePipelineStages } from "@/modules/pipelines/hooks/usePipelineStages";
+import { type PipelineStage, useUpdatePipelineStage, usePipelineStages } from "@/modules/pipelines";
 import { useUpsellGestaoRules, useSaveGestaoRules } from "@/modules/carteira/hooks/useUpsellGestaoRules";
 import { toast } from "sonner";
 

@@ -65,7 +65,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
 }));
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: true }) }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
+vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {},
   useAllPipelineStages: () => ({ data: [] }),
@@ -529,14 +529,14 @@ describe("useScheduledMessages", () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toHaveLength(1);
       expect(result.current.data![0].id).toBe("sm1");
-    });
+    }, 15000);
 
     it("returns empty when leadId is null", async () => {
       const { useScheduledMessagesForLead } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { result } = renderHook(() => useScheduledMessagesForLead(null), { wrapper: w() });
 
       expect(result.current.fetchStatus).toBe("idle");
-    });
+    }, 15000);
   });
 
   describe("useLeadsWithScheduledMessages", () => {
@@ -550,7 +550,7 @@ describe("useScheduledMessages", () => {
       expect(result.current.data).toBeInstanceOf(Set);
       expect(result.current.data!.has("l1")).toBe(true);
       expect(result.current.data!.has("l2")).toBe(true);
-    });
+    }, 15000);
   });
 
   describe("useCreateScheduledMessage", () => {

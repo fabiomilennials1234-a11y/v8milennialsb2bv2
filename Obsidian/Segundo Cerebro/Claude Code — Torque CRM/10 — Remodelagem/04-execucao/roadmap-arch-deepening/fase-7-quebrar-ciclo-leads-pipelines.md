@@ -177,3 +177,23 @@ Fragilidade: toca `LeadModal` V1/V2 (feature flag) + 8 consumidores de `CrossPip
 ### Incremento já entregue (CHORE, fora da slice)
 
 `useBulkSelection` (hook puro, zero domain dep) movido `leads/hooks/` → `src/shared/hooks/` via git mv + 6 imports reescritos. Back-edge pipelines→leads 9→6, limpa carteira→leads de brinde. tsc 0 / lint 0. **Baseline-neutro (86→86)** — ciclo intacto. Branch `feat/arch-deepening/07-2-bis-acyclic`, sem commit (commit = arquiteto).
+
+### Slice 7.3-bis — executado (2026-05-29)
+
+Inversão `PipeOpsPort` (camadas D+B+C) entregue no commit `25b56628`, **mais** o re-deepen físico de `pipelines` (absorveu a [[fase-8-pipelines-re-deepen]]) na branch `feat/arch-deepening/07-3-bis-pipelines-deepen`. Números medidos:
+
+| Métrica | Antes | Depois |
+|---|---:|---:|
+| `pipelines` files-per-export | 0.85 | **3.58** (68 arquivos / 19 export-statements) |
+| `pipelines` barrel (export statements) | 68 | **19** |
+| dep-cruiser baseline (total violations) | 86 | **83** |
+| Ciclos `no-circular` | 63 | **60** |
+| Ciclo `leads ↔ pipelines` (no-circular cross-module) | 1 | **0** (zerado na inversão; mantido) |
+| `leads → pipelines` deep imports | 38 | **0** |
+| `pipelines → leads` deep imports | 9 | **6** |
+
+Baseline composto: **60 `no-circular` + 23 `no-orphans` = 83**. Ratchet regenerado e travado em 83 (regressão acima de 83 bloqueia CI).
+
+**Restam 3 barrel-edges `leads → pipelines`** (`from "@/modules/pipelines"`) — não são deep imports e não recriam o ciclo de módulo (back-edge `pipelines → leads` agora é só via barrel + 6 deep residuais). Alvo de limpeza no **slice 7.4-bis**.
+
+Tests pós-fix: **40 failed / 3902 passed / 150 skipped** — os 27 files vermelhos são baseline pré-existente (ver constraint #7 do `_INDEX.md`), **zero regressão** introduzida pelo slice.

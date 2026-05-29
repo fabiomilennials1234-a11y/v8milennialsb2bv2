@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Settings2, Layers, Type, Upload, FileDown, Send, Shuffle, Clock } from "lucide-react";
-import { type PipelineType, type PipelineStage } from "@/modules/pipelines/hooks/usePipelineStages";
+import { type PipelineType, type PipelineStage } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { type FunnelDestination } from "@/modules/leads";
 import { ManagePipelineStagesContent } from "./ManagePipelineStagesModal";
 import { CustomFieldsManager } from "@/modules/leads";
@@ -14,8 +14,7 @@ import { ImportLeadsFunnelContent } from "@/modules/leads";
 import { ExportLeadsContent } from "@/modules/leads";
 import { PipeDispatchRulesSection } from "./PipeDispatchRulesSection";
 import { PipeDistributionSection } from "./PipeDistributionSection";
-import { UpsellStageRulesTab } from "@/modules/carteira/components/upsell/UpsellStageRulesTab";
-import { ImportUpsellClientsContent } from "@/modules/carteira/components/upsell/ImportUpsellClientsContent";
+import type { ReactNode } from "react";
 
 const PIPE_LABELS: Record<PipelineType, string> = {
   whatsapp: "Qualificação",
@@ -37,6 +36,14 @@ interface PipeSettingsDialogProps {
   pipeType: PipelineType;
   stages: PipelineStage[];
   defaultTab?: string;
+  /**
+   * Slots de upsell (carteira) — injetados pelos call sites de carteira.
+   * Inversão de dependência: `pipelines` NÃO importa `carteira`. Quando
+   * `pipeType` é upsell_base/upsell_gestao, o consumidor de carteira passa
+   * estes render slots. Mesma estratégia do `CompareceuModal` (F7).
+   */
+  upsellRulesSlot?: ReactNode;
+  upsellImportSlot?: ReactNode;
 }
 
 export function PipeSettingsDialog({
@@ -45,6 +52,8 @@ export function PipeSettingsDialog({
   pipeType,
   stages,
   defaultTab = "etapas",
+  upsellRulesSlot,
+  upsellImportSlot,
 }: PipeSettingsDialogProps) {
   const isUpsellBase = pipeType === "upsell_base";
   const isUpsellGestao = pipeType === "upsell_gestao";
@@ -118,13 +127,13 @@ export function PipeSettingsDialog({
 
             {isUpsellBase && (
               <TabsContent value="regras" className="mt-0">
-                <UpsellStageRulesTab stages={stages} />
+                {upsellRulesSlot}
               </TabsContent>
             )}
 
             {isUpsell && (
               <TabsContent value="importar" className="mt-0">
-                <ImportUpsellClientsContent pipeType={pipeType as "upsell_base" | "upsell_gestao"} />
+                {upsellImportSlot}
               </TabsContent>
             )}
 

@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useTeamMembers } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
-import { usePipelineStages } from "@/modules/pipelines/hooks/usePipelineStages";
+import { usePipelineStages } from "@/modules/pipelines";
 import {
   useBulkMoveStage,
   useBulkAssign,

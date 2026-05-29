@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { computeConfirmacaoStats } from "../../src/modules/pipelines/hooks/usePipeMetrics";
+import { computeConfirmacaoStats } from "../../src/modules/pipelines/hooks/config/usePipeMetrics";
 
 const noopOverdue = () => false;
 const tomorrow = () => new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();

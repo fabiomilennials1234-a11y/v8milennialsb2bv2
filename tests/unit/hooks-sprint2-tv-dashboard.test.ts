@@ -136,16 +136,24 @@ const mockWhatsapp = [
   { id: "w3", status: "respondeu", sdr_id: "tm2", responsible_id: "tm2" },
 ];
 
-vi.mock("@/modules/pipelines/hooks/usePipePropostas", () => ({
+vi.mock("@/modules/pipelines/hooks/legacy/usePipePropostas", () => ({
   usePipePropostas: () => ({ data: mockPropostas }),
+  useCreatePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })),
+  useUpdatePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })),
+  useDeletePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })),
 }));
 
-vi.mock("@/modules/pipelines/hooks/usePipeConfirmacao", () => ({
+vi.mock("@/modules/pipelines/hooks/legacy/usePipeConfirmacao", () => ({
   usePipeConfirmacao: () => ({ data: mockConfirmacoes }),
+  useCreatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })),
+  useUpdatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })),
+  useDeletePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })),
 }));
 
-vi.mock("@/modules/pipelines/hooks/usePipeWhatsapp", () => ({
+vi.mock("@/modules/pipelines/hooks/legacy/usePipeWhatsapp", () => ({
   usePipeWhatsapp: () => ({ data: mockWhatsapp }),
+  useCreatePipeWhatsapp: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })),
+  useUpdatePipeWhatsapp: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })),
 }));
 
 vi.mock("@/modules/engagement/hooks/useGoals", () => ({
@@ -195,7 +203,7 @@ vi.mock("@/modules/analytics/hooks/useDashboardMetrics", () => ({
   useRankingData: () => ({ data: { salesRanking: [], meetingsRanking: [] } }),
 }));
 
-vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
+vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {},
   getPipelineTypeName: (t: string) => t,
@@ -203,6 +211,7 @@ vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
   stagesToSelectOptions: () => [],
   getSuccessStageTransition: () => null,
   useAllPipelineStages: () => ({ data: [] }),
+  useAllPipelineStageOptions: vi.fn(() => ({ data: [] })),
 }));
 
 function createWrapper() {

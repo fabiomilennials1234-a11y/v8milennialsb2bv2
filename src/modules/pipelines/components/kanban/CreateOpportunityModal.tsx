@@ -23,7 +23,7 @@ import {
 import { useLeads } from "@/modules/leads";
 import { useTeamMembers } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
-import { useCreatePipeWhatsapp, usePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";
+import { useCreatePipeWhatsapp, usePipeWhatsapp } from "@/modules/pipelines/hooks/legacy/usePipeWhatsapp";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 

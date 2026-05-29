@@ -26,7 +26,7 @@ import {
   useReorderPipelineStages,
   useAllPipelineStages,
   getPipelineTypeName,
-} from "@/modules/pipelines/hooks/usePipelineStages";
+} from "@/modules/pipelines/hooks/model/usePipelineStages";
 import {
   Plus,
   Trash2,

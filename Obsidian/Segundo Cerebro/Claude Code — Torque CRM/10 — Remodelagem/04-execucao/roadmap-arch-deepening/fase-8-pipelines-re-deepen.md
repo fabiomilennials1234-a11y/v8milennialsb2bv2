@@ -1,9 +1,10 @@
 ---
-status: planejado
+status: concluido-via-7.3-bis
 owner: arquiteto
 tipo: fase-execucao
 fase: 8
 criado: 2026-05-28
+concluido: 2026-05-29
 estimate: 8-14h
 pre_requisitos:
   - "[[fase-7-quebrar-ciclo-leads-pipelines]] mergeada"
@@ -13,6 +14,16 @@ habilita:
 relacionados:
   - "[[_INDEX]]"
 ---
+
+> [!success] ABSORVIDA pelo slice 7.3-bis — 2026-05-29
+> A Fase 8 (re-deepen de `pipelines`) foi **executada dentro da Fase 7**, no slice `07-3-bis-pipelines-deepen`. O re-deepen físico (reorg de `hooks/` em sub-pastas + sub-barris privados + redução do barrel público) andou junto com a inversão `PipeOpsPort` porque a divisão de sub-conceitos compartilha a mesma superfície tocada.
+>
+> **Alvos atingidos (medidos 2026-05-29):**
+> - `pipelines` files-per-export: **0.85 → 3.58** (68 arquivos `.ts/.tsx` / **19** export-statements no barrel) — supera o alvo `≥ 3.0`.
+> - Barrel público: **68 → 19** export statements.
+> - Estrutura interna real entregue (difere das hipóteses originais abaixo): `hooks/{legacy,model,config,custom,perf}/` + `components/{kanban,shared,custom,funis,legacy/confirmacao}/`, cada um com sub-barril privado (`index.ts`).
+>
+> O plano de slices 8.1–8.4 abaixo fica como **histórico**. A nomenclatura de sub-conceitos divergiu (`views/canonical/custom` planejado → `legacy/model/config/custom/perf` entregue), mas a tese de deepening (interface < implementação, barrel só expõe cross-module) foi cumprida.
 
 # Fase 8 — `pipelines` re-deepen
 

@@ -15,37 +15,37 @@ import { PipeOpsContextProvider, type PipeOpsPort } from "@/modules/leads";
 import {
   usePipelineStages,
   useAllPipelineStageOptions,
-} from "./hooks/usePipelineStages";
+} from "./hooks/model/usePipelineStages";
 import {
   useCustomPipelines,
   useCustomPipelineStages,
   useAddLeadToCustomPipe,
   useMoveLeadInCustomPipe,
   useRemoveLeadFromCustomPipe,
-} from "./hooks/useCustomPipelines";
+} from "./hooks/custom/useCustomPipelines";
 import {
   useCreatePipeWhatsapp,
   useUpdatePipeWhatsapp,
-} from "./hooks/usePipeWhatsapp";
+} from "./hooks/legacy/usePipeWhatsapp";
 import {
   useCreatePipeConfirmacao,
   useUpdatePipeConfirmacao,
   useDeletePipeConfirmacao,
-} from "./hooks/usePipeConfirmacao";
-import { usePipeConfirmacaoByLeadId } from "./hooks/usePipeConfirmacaoByLeadId";
+} from "./hooks/legacy/usePipeConfirmacao";
+import { usePipeConfirmacaoByLeadId } from "./hooks/legacy/usePipeConfirmacaoByLeadId";
 import {
   useCreatePipeProposta,
   useUpdatePipeProposta,
   useDeletePipeProposta,
-} from "./hooks/usePipePropostas";
-import { usePipePropostaByLeadId } from "./hooks/usePipePropostaByLeadId";
+} from "./hooks/legacy/usePipePropostas";
+import { usePipePropostaByLeadId } from "./hooks/legacy/usePipePropostaByLeadId";
 import {
   usePipePropostaItems,
   useCreatePipePropostaItem,
   useUpdatePipePropostaItem,
   useDeletePipePropostaItem,
-} from "./hooks/usePipePropostaItems";
-import { useLossReasons } from "./hooks/useLossReasons";
+} from "./hooks/legacy/usePipePropostaItems";
+import { useLossReasons } from "./hooks/config/useLossReasons";
 import { RescheduleModal } from "./components/legacy/confirmacao/RescheduleModal";
 
 /**

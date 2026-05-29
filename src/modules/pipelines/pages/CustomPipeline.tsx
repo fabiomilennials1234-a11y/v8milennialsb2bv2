@@ -35,7 +35,7 @@ import {
   useCustomPipeEntries,
   useRemoveLeadFromCustomPipe,
   useDeleteCustomPipeline,
-} from "@/modules/pipelines/hooks/useCustomPipelines";
+} from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { CustomPipelineKanban } from "@/modules/pipelines/components/custom/CustomPipelineKanban";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";

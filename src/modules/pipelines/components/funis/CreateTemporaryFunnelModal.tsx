@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 import {
   useCreateCustomPipeline,
   type FunnelTemplateType,
-} from "@/modules/pipelines/hooks/useCustomPipelines";
+} from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 

@@ -2,14 +2,16 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Settings, Plus, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { usePipelineStages, stagesToColumns, type PipelineStage } from "@/modules/pipelines/hooks/usePipelineStages";
+import { usePipelineStages, stagesToColumns, type PipelineStage } from "@/modules/pipelines";
 import { useUpsellClients, useUpdateUpsellClient } from "@/modules/carteira/hooks/useUpsellClients";
 import { useUpsellOrders } from "@/modules/carteira/hooks/useUpsellOrders";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { NewOrderModal } from "@/modules/carteira/components/client/NewOrderModal";
-import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
+import { PipeSettingsDialog } from "@/modules/pipelines";
+import { UpsellStageRulesTab } from "./UpsellStageRulesTab";
+import { ImportUpsellClientsContent } from "./ImportUpsellClientsContent";
 import { useIdentity } from "@/modules/identity";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { useUpdateLead } from "@/modules/leads";
@@ -255,6 +257,8 @@ function UpsellBaseKanbanInner({ searchQuery, filterPotencial, filterActive }: U
           onOpenChange={setSettingsOpen}
           pipeType="upsell_base"
           stages={stages as PipelineStage[]}
+          upsellRulesSlot={<UpsellStageRulesTab stages={stages as PipelineStage[]} />}
+          upsellImportSlot={<ImportUpsellClientsContent pipeType="upsell_base" />}
         />
       )}
     </>

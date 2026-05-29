@@ -30,7 +30,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { usePipelineStageOptions } from "@/modules/pipelines/hooks/usePipelineStages";
+import { usePipelineStageOptions } from "@/modules/pipelines";
 import {
   useAgentKanbanRules,
   useUpsertKanbanRules,

@@ -23,9 +23,8 @@ import {
 import { ProductCombobox } from "./ProductCombobox";
 import { useLeads } from "@/modules/leads";
 import { useResponsibleMembers } from "@/modules/identity";
-import { useCreatePipeProposta } from "@/modules/pipelines/hooks/usePipePropostas";
+import { useCreatePipeProposta, useCreateManyPipePropostaItems } from "@/modules/pipelines";
 import { useActiveProducts } from "@/modules/carteira/hooks/useProducts";
-import { useCreateManyPipePropostaItems } from "@/modules/pipelines/hooks/usePipePropostaItems";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 

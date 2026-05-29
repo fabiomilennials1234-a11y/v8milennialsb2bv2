@@ -55,7 +55,7 @@ vi.mock("@/modules/identity/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 
-vi.mock("@/modules/pipelines/hooks/usePipelineEntries", () => ({
+vi.mock("@/modules/pipelines/hooks/model/usePipelineEntries", () => ({
   usePipelineEntries: () => ({ data: [], isLoading: false }),
   usePipelineId: () => ({ data: "pipeline-propostas-id" }),
   findOrCreatePipelineEntry: vi

@@ -13,8 +13,7 @@
  * Atribuição SDR (pra reunião): closer real = sale_responsible_id ?? closer_id da confirmacao.
  */
 import { useMemo } from "react";
-import { usePipePropostas } from "@/modules/pipelines/hooks/usePipePropostas";
-import { usePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
+import { usePipePropostas, usePipeConfirmacao } from "@/modules/pipelines";
 import { useTeamMembers } from "@/modules/identity";
 import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { inRange, type TVPeriodRange } from "@/lib/tv-periods";

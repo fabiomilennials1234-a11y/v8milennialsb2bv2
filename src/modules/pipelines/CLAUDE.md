@@ -25,6 +25,30 @@ Inclui:
 - Confirmação de reunião (modais standalone legacy)
 - Settings dialog unificado
 
+## Estrutura interna (re-deepen slice 7.3-bis — 2026-05-29)
+
+Re-deepen executado dentro da Fase 7 (absorveu a Fase 8 do roadmap-arch-deepening). `hooks/` e `components/` reorganizados em sub-pastas por sub-conceito, cada uma com **sub-barril privado** (`index.ts`, não cross-module):
+
+```
+src/modules/pipelines/
+├── hooks/
+│   ├── legacy/     # usePipe* (views pipe_* — status=stage_key slug) + index.ts
+│   ├── model/      # usePipeline* (pipeline_entries + pipeline_stages — stage_id uuid) + index.ts
+│   ├── config/     # display config + metrics + dispatch + distribution + index.ts
+│   ├── custom/     # useCustomPipelines + funnels + members + index.ts
+│   └── perf/       # usePrefetchPipes + index.ts
+├── components/
+│   ├── kanban/     # KanbanBoard, list/table views, filtros + index.ts
+│   ├── shared/     # settings dialog, dispatch/distribution sections + index.ts
+│   ├── custom/     # custom pipeline kanban + modais + index.ts
+│   ├── funis/      # creators (CreateFunilOuCampanha, CreateTemporaryFunnel) + index.ts
+│   └── legacy/confirmacao/   # confirmação standalone (cards, meeting modais) + index.ts
+├── pages/          # deep-import only (React.lazy) — NÃO no barrel público
+└── index.ts        # BARREL PÚBLICO — 19 export statements (cross-module only)
+```
+
+**Métricas (medidas 2026-05-29):** 68 arquivos `.ts/.tsx` / 19 export-statements = **files-per-export 3.58** (era 0.85 — interface antes maior que implementação). Sub-barris são privados ao módulo: cross-module continua entrando **só** pelo barrel raiz. Imports internos usam caminho relativo curto (`./hooks/legacy`, `./components/kanban`, etc.).
+
 ## Não-escopo
 
 - Workflows disparados em stage change → `workflows` (consumido via event-bus `lead.stage_changed` desde slice 19)

@@ -3,9 +3,7 @@
 // Ref: Obsidian/…/04 — Decisões/2026-04-24-receita-mes-canonica-projeto.md
 import { useQuery } from "@tanstack/react-query";
 import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
-import { usePipePropostas } from "@/modules/pipelines/hooks/usePipePropostas";
-import { usePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
-import { usePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";
+import { usePipePropostas, usePipeConfirmacao, usePipeWhatsapp } from "@/modules/pipelines";
 import { useTeamGoals, useIndividualGoals } from "@/modules/engagement/hooks/useGoals";
 import { useIdentity } from "@/modules/identity";
 import { useDashboardMetrics } from "./useDashboardMetrics";

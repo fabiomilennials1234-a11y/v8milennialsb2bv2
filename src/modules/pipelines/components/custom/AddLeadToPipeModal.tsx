@@ -22,7 +22,7 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import {
   useAddLeadToCustomPipe,
   type CustomPipelineStage,
-} from "@/modules/pipelines/hooks/useCustomPipelines";
+} from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { Loader2, Search, Building2, Phone, UserCheck, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";

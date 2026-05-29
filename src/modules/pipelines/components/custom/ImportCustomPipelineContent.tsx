@@ -33,7 +33,7 @@ import {
   UserX,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { CustomPipelineStage } from "@/modules/pipelines/hooks/useCustomPipelines";
+import type { CustomPipelineStage } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 
 interface PreviewLead {
   name: string;

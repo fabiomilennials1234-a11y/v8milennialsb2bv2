@@ -12,8 +12,7 @@ import {
 } from "@/components/ui/select";
 import { TRIGGER_CATEGORIES } from "@/types/workflow";
 import type { TriggerNodeData, WorkflowTriggerType } from "@/types/workflow";
-import { usePipelineStages, getPipelineTypeName, type PipelineType } from "@/modules/pipelines/hooks/usePipelineStages";
-import { useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines/hooks/useCustomPipelines";
+import { usePipelineStages, getPipelineTypeName, type PipelineType, useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines";
 import { useCampanhas, useCampanhaStages } from "@/modules/campaigns/hooks/useCampanhas";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 

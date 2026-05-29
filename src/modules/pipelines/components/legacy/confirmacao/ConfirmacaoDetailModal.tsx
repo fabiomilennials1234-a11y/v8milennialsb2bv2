@@ -52,8 +52,8 @@ import { format, formatDistanceToNow, isToday, isTomorrow, differenceInDays } fr
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/modules/identity";
-import { useUpdatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus, statusColumns } from "@/modules/pipelines/hooks/usePipeConfirmacao";
-import { useCreatePipeProposta } from "@/modules/pipelines/hooks/usePipePropostas";
+import { useUpdatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus, statusColumns } from "@/modules/pipelines/hooks/legacy/usePipeConfirmacao";
+import { useCreatePipeProposta } from "@/modules/pipelines/hooks/legacy/usePipePropostas";
 import { useLeadHistory } from "@/modules/leads";
 import { useLogLeadAction } from "@/modules/leads";
 import { useDeleteLead } from "@/modules/leads";

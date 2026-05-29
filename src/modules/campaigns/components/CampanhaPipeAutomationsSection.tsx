@@ -21,7 +21,7 @@ import {
   type CampanhaPipeAutomation,
   type CampanhaPipeAutomationTarget,
 } from "@/modules/campaigns/hooks/useCampanhas";
-import { usePipelineStages, type PipelineType } from "@/modules/pipelines/hooks/usePipelineStages";
+import { usePipelineStages, type PipelineType } from "@/modules/pipelines";
 import { MessageSquare, CalendarCheck, FileText, ChevronDown, Plus, Trash2, Loader2, Zap } from "lucide-react";
 import { toast } from "sonner";
 

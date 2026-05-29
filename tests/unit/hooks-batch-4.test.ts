@@ -30,7 +30,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: ()
 vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
+vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {}, useAllPipelineStageOptions: vi.fn(() => ({ data: [] })) }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/modules/copilot/hooks/useCopilotPromptBuilder", () => ({ generatePrompt: vi.fn(), saveCopilotSystemPrompt: vi.fn(), regenerateAndSavePrompt: vi.fn(), computePromptHash: vi.fn() }));
 vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r) }));
@@ -45,7 +45,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: v
 vi.mock("papaparse", () => ({ default: { parse: vi.fn() } }));
 vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useWhatsAppInstances: () => ({ data: [] }) }));
 vi.mock("@/modules/campaigns/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }), OBJECTIVE_TARGET_MAP: {}, OBJECTIVE_LABELS: {} }));
-vi.mock("@/modules/pipelines/hooks/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }) }));
+vi.mock("@/modules/pipelines/hooks/custom/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }), useCustomPipelineStages: vi.fn(() => ({ data: [] })), useAddLeadToCustomPipe: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useMoveLeadInCustomPipe: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useRemoveLeadFromCustomPipe: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
 
 // ── Imports ──
 import { useAcoesDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
@@ -59,7 +59,7 @@ import { useCopilotAgentAudios } from "@/modules/copilot/hooks/useCopilotAgentAu
 import { useExportLeads } from "@/modules/leads";
 import { useHelpCenter } from "@/modules/platform/hooks/useHelpCenter";
 import { useLeadCustomFields } from "@/modules/leads";
-import { usePipeMetrics } from "@/modules/pipelines/hooks/usePipeMetrics";
+import { usePipeMetrics } from "@/modules/pipelines/hooks/config/usePipeMetrics";
 import { useRecentActivity } from "@/modules/engagement/hooks/useRecentActivity";
 import { useSplitAbMetrics } from "@/modules/analytics/hooks/useSplitAbMetrics";
 import { useAutoMoveUpsellClients } from "@/modules/carteira/hooks/useAutoMoveUpsellClients";
