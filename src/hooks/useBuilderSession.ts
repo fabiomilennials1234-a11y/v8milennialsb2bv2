@@ -38,9 +38,15 @@ export function useBuilderSession(agentId?: string) {
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
+      const raw = Array.isArray(data.messages) ? (data.messages as Array<{ role: string; content: string | null }>) : [];
       return {
         id: data.id,
-        messages: Array.isArray(data.messages) ? (data.messages as BuilderMessage[]) : [],
+        // Only show user/assistant prose — hide tool-result messages and
+        // empty tool-call turns from the chat view.
+        messages: raw.filter(
+          (m): m is BuilderMessage =>
+            (m.role === "user" || m.role === "assistant") && !!m.content && m.content.trim().length > 0,
+        ),
         covered_topics: data.covered_topics ?? [],
       };
     },
@@ -50,6 +56,8 @@ export function useBuilderSession(agentId?: string) {
     mutationFn: async (args: {
       message: string;
       toolDefs?: unknown[];
+      capabilities?: unknown[];
+      filled?: { sections: string[]; tools: string[] };
     }): Promise<{ reply: string; actions: unknown[] }> => {
       if (!agentId) throw new Error("agentId obrigatório");
       const { data, error } = await supabase.functions.invoke("copilot-builder", {
@@ -58,6 +66,8 @@ export function useBuilderSession(agentId?: string) {
           organization_id: organizationId,
           message: args.message,
           toolDefs: args.toolDefs,
+          capabilities: args.capabilities,
+          filled: args.filled,
         },
       });
       if (error) throw error;

@@ -19,12 +19,23 @@ interface BuilderPanelProps {
   agentId?: string;
   /** Function-calling defs derived from the capability manifest. */
   toolDefs: unknown[];
+  /** Capability catalog (id + when-to-use) so the Builder knows what to enable. */
+  capabilities: unknown[];
+  /** Already-filled state, so the Builder doesn't re-emit what's done. */
+  filled: { sections: string[]; tools: string[] };
   /** Apply the Builder's tool-calls to the live form. */
   onApplyActions: (actions: unknown[]) => void;
   onClose?: () => void;
 }
 
-export function BuilderPanel({ agentId, toolDefs, onApplyActions, onClose }: BuilderPanelProps) {
+export function BuilderPanel({
+  agentId,
+  toolDefs,
+  capabilities,
+  filled,
+  onApplyActions,
+  onClose,
+}: BuilderPanelProps) {
   const { messages, isLoading, sendMessage } = useBuilderSession(agentId);
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -40,7 +51,7 @@ export function BuilderPanel({ agentId, toolDefs, onApplyActions, onClose }: Bui
     if (!text || sending) return;
     setDraft("");
     sendMessage.mutate(
-      { message: text, toolDefs },
+      { message: text, toolDefs, capabilities, filled },
       {
         onSuccess: (res) => onApplyActions(res.actions),
         onError: (err) => {

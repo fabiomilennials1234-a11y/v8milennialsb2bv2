@@ -286,9 +286,20 @@ export function CopilotPlayground() {
   const { enabled: builderFlag } = useFeatureFlag("copilot_builder");
   const builderActive = builderFlag && searchParams.get("builder") === "1";
   const [builderLocked, setBuilderLocked] = useState<string[]>([]);
+  const builderManifest = useMemo(() => buildCapabilityManifest(), []);
   const builderToolDefs = useMemo(
-    () => buildBuilderToolDefs(buildCapabilityManifest()) as unknown[],
-    [],
+    () => buildBuilderToolDefs(builderManifest) as unknown[],
+    [builderManifest],
+  );
+  const builderCapabilities = useMemo(
+    () =>
+      builderManifest.tools.map((t) => ({
+        id: t.id,
+        name: t.name,
+        whenToUse: t.guide.whenToUse,
+        dependency: t.dependency,
+      })) as unknown[],
+    [builderManifest],
   );
 
   const [data, setData] = useState<PlaygroundData>(createDefaultPlaygroundData());
@@ -916,6 +927,15 @@ export function CopilotPlayground() {
         <BuilderPanel
           agentId={editId}
           toolDefs={builderToolDefs}
+          capabilities={builderCapabilities}
+          filled={{
+            sections: Object.entries(data.promptSections)
+              .filter(([, v]) => (v ?? "").trim().length > 0)
+              .map(([k]) => k),
+            tools: Object.entries(data.tools)
+              .filter(([, v]) => v?.enabled)
+              .map(([k]) => k),
+          }}
           onApplyActions={applyBuilderActions}
           onClose={() => {
             searchParams.delete("builder");

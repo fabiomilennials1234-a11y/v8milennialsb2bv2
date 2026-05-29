@@ -30,8 +30,12 @@ const BUILDER_MODEL =
   Deno.env.get("COPILOT_BUILDER_MODEL") || "anthropic/claude-sonnet-4.6";
 
 interface SessionMessage {
-  role: "user" | "assistant";
-  content: string;
+  role: "user" | "assistant" | "tool";
+  content: string | null;
+  // Present on assistant turns that called tools — replayed so the model sees
+  // what it already did and doesn't re-emit the same fields next turn.
+  tool_calls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>;
+  tool_call_id?: string;
 }
 
 const SYSTEM_PROMPT = `Você é o Copilot Builder do Torque CRM. Você NÃO é um chatbot de entrevista — você CONSTRÓI um agente de IA (Copilot) para WhatsApp, preenchendo os campos dele em tempo real através das suas ferramentas.
@@ -74,13 +78,15 @@ Deno.serve(
       agentId?: string;
       message?: string;
       toolDefs?: Array<{ name: string; description: string; input_schema: unknown }>;
+      capabilities?: Array<{ id: string; name: string; whenToUse: string; dependency: string | null }>;
+      filled?: { sections?: string[]; tools?: string[] };
     };
     try {
       body = await req.json();
     } catch {
       return json({ error: "invalid_body" }, 400, corsHeaders);
     }
-    const { agentId, message, toolDefs } = body;
+    const { agentId, message, toolDefs, capabilities, filled } = body;
     if (!agentId || !message?.trim()) {
       return json({ error: "agentId and message are required" }, 400, corsHeaders);
     }
@@ -141,7 +147,28 @@ Deno.serve(
     // SZ.Chat / knowledge docs exist) so it never invents and wires only what
     // exists.
     const orgCaps = await resolveOrgCapabilities(admin, orgId, agentId);
-    const systemPrompt = `${SYSTEM_PROMPT}\n\n${describeOrgCapabilities(orgCaps)}`;
+
+    // Capability catalog (id + when-to-use) so the model knows what each tool
+    // does and can map the user's needs to the right enable_tool calls.
+    const catalogBlock = Array.isArray(capabilities) && capabilities.length > 0
+      ? "CAPACIDADES QUE VOCÊ PODE LIGAR (enable_tool) — ligue TODAS que o usuário pedir:\n" +
+        capabilities.map((c) => `- ${c.id}: ${c.whenToUse}`).join("\n")
+      : "";
+
+    // What's already filled this build — don't re-emit it; only fill the rest
+    // or what the user asked to change.
+    const filledSections = filled?.sections ?? [];
+    const filledTools = filled?.tools ?? [];
+    const filledBlock = filledSections.length || filledTools.length
+      ? `JÁ PREENCHIDO NESTE BUILD (NÃO re-emita, a menos que o usuário peça mudança):\n- Seções: ${filledSections.join(", ") || "nenhuma"}\n- Tools ligadas: ${filledTools.join(", ") || "nenhuma"}`
+      : "Nada preenchido ainda — comece a montar.";
+
+    const systemPrompt = [
+      SYSTEM_PROMPT,
+      describeOrgCapabilities(orgCaps),
+      catalogBlock,
+      filledBlock,
+    ].filter(Boolean).join("\n\n");
 
     // Tool defs come from the client (derived from the capability manifest —
     // the single source — so the model can only target real tools/sections).
@@ -162,22 +189,29 @@ Deno.serve(
       model: BUILDER_MODEL,
       messages: [
         { role: "system", content: systemPrompt },
-        ...history.map((m) => ({ role: m.role, content: m.content })),
+        // Replay full history including the assistant's prior tool_calls + tool
+        // results, so the model knows what it already built.
+        ...history.map((m) => ({
+          role: m.role,
+          content: m.content,
+          ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+          ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
+        })),
         { role: "user", content: message },
-      ],
+      ] as never,
       tools,
       temperature: 0.7,
       // Builder emits multiple large tool_calls (prompt sections + tools) in a
-      // single turn; 1024 truncated them mid-JSON, producing invalid/empty
-      // actions. Give it room to finish.
+      // single turn; 1024 truncated them mid-JSON. Give it room to finish.
       max_tokens: 8192,
     });
 
     const choice = completion.choices?.[0]?.message;
     const reply = choice?.content?.trim() || "";
+    const rawToolCalls = choice?.tool_calls ?? [];
 
     // Map model tool_calls → Builder actions the client applies to the form.
-    const actions = (choice?.tool_calls ?? []).map((tc) => {
+    const actions = rawToolCalls.map((tc) => {
       let args: Record<string, unknown> = {};
       try {
         args = JSON.parse(tc.function.arguments || "{}");
@@ -193,15 +227,24 @@ Deno.serve(
       return { kind: tc.function.name, ...args };
     });
 
-    // If the model only emitted tool_calls (no prose), keep a short marker so
-    // the transcript stays coherent across turns.
     const assistantText =
       reply || (actions.length > 0 ? "(atualizei os campos do agente)" : "");
 
+    // Persist a proper tool-use turn: the user message, the assistant message
+    // WITH its tool_calls, and a tool-result message per call.
     const nextMessages: SessionMessage[] = [
       ...history,
       { role: "user", content: message },
-      { role: "assistant", content: assistantText },
+      {
+        role: "assistant",
+        content: assistantText,
+        ...(rawToolCalls.length ? { tool_calls: rawToolCalls } : {}),
+      },
+      ...rawToolCalls.map((tc) => ({
+        role: "tool" as const,
+        tool_call_id: tc.id,
+        content: "Aplicado no formulário.",
+      })),
     ];
 
     let sessionId = existing?.id;
