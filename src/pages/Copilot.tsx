@@ -386,6 +386,21 @@ export default function Copilot() {
                         Configurar
                       </Button>
 
+                      {builderEnabled && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-primary/40 text-primary hover:bg-primary/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/copilot/${agent.id}/editar?builder=1`);
+                          }}
+                        >
+                          <Sparkles className="w-4 h-4 mr-2" />
+                          Revisar com IA
+                        </Button>
+                      )}
+
                       <Button
                         variant="outline"
                         size="sm"
