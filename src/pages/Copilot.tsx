@@ -51,6 +51,7 @@ import {
   useToggleCopilotAgent,
   useSetDefaultCopilotAgent,
   useCreateCopilotAgent,
+  useDraftCopilotAgents,
 } from "@/hooks/useCopilotAgents";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useCopilotSubscription } from "@/hooks/useCopilotSubscription";
@@ -73,6 +74,7 @@ export default function Copilot() {
   const setDefault = useSetDefaultCopilotAgent();
   const createAgent = useCreateCopilotAgent();
   const { enabled: builderEnabled } = useFeatureFlag("copilot_builder");
+  const { data: drafts = [] } = useDraftCopilotAgents();
 
   const [agentToDelete, setAgentToDelete] = useState<string | null>(null);
   const [pendingActivation, setPendingActivation] = useState<{ id: string; name: string } | null>(null);
@@ -214,6 +216,42 @@ export default function Copilot() {
           )}
         </div>
       </motion.div>
+
+      {builderEnabled && drafts.length > 0 && (
+        <div className="mb-6 flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/5 p-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Sparkles className="h-4 w-4 text-primary" />
+            {drafts.length === 1
+              ? "Você tem um Copilot em construção"
+              : `Você tem ${drafts.length} Copilots em construção`}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {drafts.map((d) => (
+              <div key={d.id} className="flex items-center justify-between gap-3">
+                <span className="text-sm text-muted-foreground">{d.name}</span>
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-primary hover:bg-primary/10"
+                    onClick={() => navigate(`/copilot/${d.id}/editar?builder=1`)}
+                  >
+                    Retomar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-muted-foreground hover:text-destructive"
+                    onClick={() => setAgentToDelete(d.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Subscription Warning - Apenas para quem não tem acesso */}
       {!canManageCopilot && (isTrial || !hasAccess) && (

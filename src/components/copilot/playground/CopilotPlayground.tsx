@@ -9,6 +9,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
+import { supabase } from "@/integrations/supabase/client";
 import { BuilderPanel } from "@/components/copilot/builder/BuilderPanel";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { buildCapabilityManifest, buildBuilderToolDefs } from "@/lib/copilot/capability-manifest";
@@ -571,6 +572,14 @@ export function CopilotPlayground() {
             }
           }
         }
+
+        // Graduate a Builder draft to a real agent. No-op for agents that are
+        // already finalized (guarded by finalized_at IS NULL).
+        await supabase
+          .from("copilot_agents")
+          .update({ finalized_at: new Date().toISOString() })
+          .eq("id", editId)
+          .is("finalized_at", null);
 
         navigate("/copilot");
       } else {
