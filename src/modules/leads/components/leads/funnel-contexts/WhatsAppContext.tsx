@@ -16,8 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useUpdatePipeWhatsapp, type PipeWhatsappStatus } from "@/modules/pipelines/hooks/usePipeWhatsapp";
-import { usePipelineStages, stagesToColumns } from "@/modules/pipelines/hooks/usePipelineStages";
+import { type PipeWhatsappStatus, stagesToColumns } from "@/contracts/pipe";
+import { usePipeOps } from "../../../pipe-ops";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
@@ -31,6 +31,7 @@ interface WhatsAppContextProps {
 }
 
 export function WhatsAppContext({ lead, pipeData, onSuccess }: WhatsAppContextProps) {
+  const { useUpdatePipeWhatsapp, usePipelineStages } = usePipeOps();
   const updatePipe = useUpdatePipeWhatsapp();
   const logAction = useLogLeadAction();
   const responsibleMembers = useResponsibleMembers();

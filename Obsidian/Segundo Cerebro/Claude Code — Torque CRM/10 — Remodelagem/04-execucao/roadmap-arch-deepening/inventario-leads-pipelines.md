@@ -1,14 +1,23 @@
 ---
-status: ativo
+status: historico
 owner: arquiteto
 tipo: inventario-execucao
 fase: 7
 slice: 7.1
 criado: 2026-05-28
+revisado: 2026-05-29
 relacionados:
   - "[[fase-7-quebrar-ciclo-leads-pipelines]]"
   - "[[_INDEX]]"
 ---
+
+> [!warning] ESTRATÉGIA OBSOLETA 2026-05-29
+> As **contagens medidas** (38 + 9 = 47) seguem válidas. A **estratégia** (buckets + promoção barrel, seções "classificação por bucket" em diante) está **abortada**. Ver banner em [[fase-7-quebrar-ciclo-leads-pipelines]].
+>
+> - **Bucket 1 (tipos) é ilusório:** dep-cruiser conta type-only (`tsPreCompilationDeps: true`). Mover tipo via barrel não sai do ciclo.
+> - **Promoção barrel ABORTADA:** baseline 86→120 (+34). Barrel-to-barrel cycle mais largo.
+> - **Bucket 4 reavaliado:** só `useBulkSelection` é puro → movido pra `src/shared/hooks/` (back-edge 9→6, baseline-neutro). `useTags` + `BulkActionBar` são domain (BulkActionBar importa usePipelineStages + useTeamMembers + useTags) → **não movíveis**.
+> - **Caminho real:** inversão `PipeOpsPort` (ver fase-7 "## Replan 2026-05-29"), não relocação.
 
 # Inventário Fase 7 Slice 7.1 — leads ↔ pipelines deep imports
 

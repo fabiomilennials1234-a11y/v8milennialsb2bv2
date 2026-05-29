@@ -21,6 +21,11 @@
  * Realtime: subscriptions em `pipeline_entries`, NUNCA em `pipe_*` views.
  */
 
+// ── PipeOpsProvider: inversão de dependência leads↔pipelines (arch F7) ─────
+// Monta-se no App acima das rotas; injeta a impl de PipeOpsPort (definido em
+// leads) via context. Único ponto onde pipelines→leads é intencional.
+export { PipeOpsProvider } from "./PipeOpsProvider";
+
 // ── Hooks: pipe legacy (views pipe_whatsapp/confirmacao/propostas) ────────
 export {
   usePipeWhatsapp,
@@ -249,7 +254,9 @@ export { CreateTemporaryFunnelModal } from "./components/funis/CreateTemporaryFu
 
 // ── Components: legacy (confirmacao standalone — pre-modelo-novo) ─────────
 export { AddMeetingModal } from "./components/legacy/confirmacao/AddMeetingModal";
-export { CompareceuModal } from "./components/legacy/confirmacao/CompareceuModal";
+// CompareceuModal movido para `leads` (inversão F7) — re-exportado dali para
+// manter a API pública de pipelines estável p/ call sites legados.
+export { CompareceuModal } from "@/modules/leads";
 export { ConfirmacaoCard } from "./components/legacy/confirmacao/ConfirmacaoCard";
 export { ConfirmacaoDetailModal } from "./components/legacy/confirmacao/ConfirmacaoDetailModal";
 export { ConfirmacaoStats } from "./components/legacy/confirmacao/ConfirmacaoStats";

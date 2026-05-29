@@ -10,12 +10,7 @@ import {
   type PipelineStatus,
   type StandardPipelineStatus,
 } from "../../../../hooks/useLeadAllPipelines";
-import {
-  useAddLeadToCustomPipe,
-  useRemoveLeadFromCustomPipe,
-} from "@/modules/pipelines/hooks/useCustomPipelines";
-import { usePipeConfirmacaoByLeadId } from "@/modules/pipelines/hooks/usePipeConfirmacaoByLeadId";
-import { usePipePropostaByLeadId } from "@/modules/pipelines/hooks/usePipePropostaByLeadId";
+import { usePipeOps } from "../../../../pipe-ops";
 import { useLogLeadAction } from "../../../../hooks/useLogLeadAction";
 import { useLeadActionGates } from "../../hooks/useLeadActionGates";
 import { MeetingFieldBlock } from "../../cross-pipe/MeetingFieldBlock";
@@ -108,6 +103,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
   defaultExpandedPipeEntryId,
   userId,
 }: CrossPipePanelProps) {
+  const { usePipeConfirmacaoByLeadId, usePipePropostaByLeadId, useAddLeadToCustomPipe, useRemoveLeadFromCustomPipe } = usePipeOps();
   const { data: pipelines = [], isLoading } = useLeadAllPipelines(leadId);
   const { data: confirmacaoData } = usePipeConfirmacaoByLeadId(leadId);
   const { data: propostaData } = usePipePropostaByLeadId(leadId);

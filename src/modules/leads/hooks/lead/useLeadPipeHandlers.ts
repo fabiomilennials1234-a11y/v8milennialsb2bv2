@@ -13,11 +13,7 @@ import {
   useRemoveLeadFromStandardPipe,
   type PipelineStatus,
 } from "../useLeadAllPipelines";
-import {
-  useAddLeadToCustomPipe,
-  useMoveLeadInCustomPipe,
-  useRemoveLeadFromCustomPipe,
-} from "@/modules/pipelines/hooks/useCustomPipelines";
+import { usePipeOps } from "../../pipe-ops";
 
 interface UsePipeHandlersResult {
   isMutating: boolean;
@@ -27,6 +23,7 @@ interface UsePipeHandlersResult {
 }
 
 export function useLeadPipeHandlers(leadId: string | null | undefined): UsePipeHandlersResult {
+  const { useAddLeadToCustomPipe, useMoveLeadInCustomPipe, useRemoveLeadFromCustomPipe } = usePipeOps();
   const addToStandard = useAddLeadToStandardPipe();
   const moveInStandard = useMoveLeadInStandardPipe();
   const removeFromStandard = useRemoveLeadFromStandardPipe();

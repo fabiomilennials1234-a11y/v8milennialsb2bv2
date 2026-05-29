@@ -72,7 +72,9 @@ import { useScheduledMessages } from "@/modules/communication/hooks/useScheduled
 import { useMktByOrigin } from "@/modules/analytics/hooks/useMktByOrigin";
 import { useMktOriginConfig } from "@/modules/analytics/hooks/useMktOriginConfig";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
-import { useLeadAllPipelines } from "@/modules/leads";
+import { useLeadAllPipelines, PipeOpsContextProvider } from "@/modules/leads";
+import { makeMockPipeOps } from "@/modules/leads/pipe-ops/testing";
+import React from "react";
 import { useProductMaterials } from "@/modules/carteira/hooks/useProductMaterials";
 import { useChannelChat } from "@/hooks/useChannelChat";
 import { useWhatsAppLeadIntegration } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
@@ -91,13 +93,24 @@ const hooks: [string, () => any][] = [
   ["useOraculoChat", () => useOraculoChat()],
   ["usePrefetchPipes", () => usePrefetchPipes()],
   ["useCouponValidation", () => useCouponValidation()],
-  ["useLeadAllPipelines", () => useLeadAllPipelines("lead-1")],
   ["useProductMaterials", () => useProductMaterials("prod-1")],
 ];
 
 describe.each(hooks)("%s", (_name, hookFn) => {
   it("initializes without error", () => {
     expect(() => renderHook(() => hookFn(), { wrapper: createWrapper() })).not.toThrow();
+  });
+});
+
+// useLeadAllPipelines consome pipe-ops via usePipeOps() (inversão F7) — precisa
+// do PipeOpsContextProvider na árvore. Wrapper compõe createWrapper + port mock.
+describe("useLeadAllPipelines", () => {
+  it("initializes without error", () => {
+    const Base = createWrapper();
+    const port = makeMockPipeOps();
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(Base, null, React.createElement(PipeOpsContextProvider, { value: port }, children));
+    expect(() => renderHook(() => useLeadAllPipelines("lead-1"), { wrapper })).not.toThrow();
   });
 });
 

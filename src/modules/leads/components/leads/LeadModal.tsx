@@ -34,11 +34,8 @@ import {
 } from "../../hooks/useLeadCustomFields";
 import { useLeadHistory } from "../../hooks/useLeadTimeline";
 import { ScheduleFollowUpButton } from "@/modules/engagement/components/followups/ScheduleFollowUpButton";
-import { useCustomPipelines, useCustomPipelineStages, useAddLeadToCustomPipe } from "@/modules/pipelines/hooks/useCustomPipelines";
-import { useAllPipelineStageOptions, getPipelineTypeName } from "@/modules/pipelines/hooks/usePipelineStages";
-import { useCreatePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";
-import { useCreatePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
-import { useCreatePipeProposta } from "@/modules/pipelines/hooks/usePipePropostas";
+import { usePipeOps } from "../../pipe-ops";
+import { getPipelineTypeName } from "@/contracts/pipe";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";

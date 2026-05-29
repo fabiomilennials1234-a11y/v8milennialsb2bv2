@@ -1,9 +1,10 @@
 ---
-status: planejado
+status: replanejado
 owner: arquiteto
 tipo: fase-execucao
 fase: 7
 criado: 2026-05-28
+revisado: 2026-05-29
 estimate: 6-10h
 pre_requisitos:
   - "Fase 6 mergeada (develop → main)"
@@ -14,6 +15,17 @@ relacionados:
   - "[[_INDEX]]"
   - "[[../reducao-deep-imports]]"
 ---
+
+> [!warning] REPLANEJADO 2026-05-29 — abordagem barrel ABORTADA
+> Todo o plano de slices abaixo (7.2 mover tipos, 7.3 promover barrel) está **obsoleto**. Mantido como histórico. Achados decisivos da sessão 2026-05-29:
+>
+> 1. **Barrel promotion ABORTADA.** Tentativa real subiu baseline dep-cruiser 86→120 (+34 ciclos) — barrel-to-barrel cycle mais largo. Barrel renomeia o ciclo, não o trata.
+> 2. **dep-cruiser conta type-only** (`tsPreCompilationDeps: true`). Mover tipos via barrel NÃO sai do ciclo. Bucket 1 do inventário é ilusório.
+> 3. **Baseline só cai quebrando `no-circular`.** Reduzir deep imports parcialmente (deep→barrel) é **baseline-NEUTRO**. O ciclo de módulo persiste enquanto QUALQUER par de edges bidirecional existir.
+> 4. **Event-bus NÃO resolve os 38 forward-edges.** `events.ts` é async (~60s cron); os 38 leads→pipelines são reads síncronos + mutations inline (LeadModal cria pipe entry na hora). Event-bus quebra UX. Reservado só pro `lead.stage_changed`→workflow.
+> 5. **MOVE-candidates são TRONCO, não folha.** `CrossPipePanel` (8 consumidores leads), `useLeadAllPipelines`/`useLeadPipeHandlers` (API pública barrel, 6+ consumidores). Relocar pra pipelines MULTIPLICA leads→pipelines = recria o ciclo barrel↔barrel = abort original. **Não há subconjunto MOVE seguro.**
+>
+> **Único caminho real = inversão de dependência** (não relocação). Ver seção "## Replan 2026-05-29" no fim do doc. Incremento seguro já entregue: `useBulkSelection` (puro) movido `leads/hooks/` → `src/shared/hooks/` — back-edge 9→6, baseline-neutro, é CHORE (não slice).
 
 # Fase 7 — Quebrar ciclo `leads ↔ pipelines`
 
@@ -131,4 +143,37 @@ Foco: buckets 2 + 3. Mais frágil — hooks têm side-effects.
 
 ## Próximo passo
 
-Após Slice 7.3 verde em develop ≥ 24h: Fase 8 (pipelines re-deepen).
+~~Após Slice 7.3 verde em develop ≥ 24h: Fase 8 (pipelines re-deepen).~~ Obsoleto — ver replan abaixo.
+
+---
+
+## Replan 2026-05-29 — inversão de dependência (`PipeOpsPort`)
+
+Abordagem barrel abortada (ver banner topo). Único caminho que zera o ciclo sem recriar o abort = **inversão**, não relocação.
+
+### Princípio
+
+Hoje: lead-detail UI **importa** hooks de pipelines (`useLeadAllPipelines`, `useLeadPipeHandlers`, `CrossPipePanel`, mutations inline) → 38 forward-edges leads→pipelines.
+
+Alvo: lead-detail UI **não importa** pipelines. Recebe pipe-ops via **porta injetada** (`PipeOpsPort`) — interface que pipelines expõe e leads consome via props/context. DAG passa a ser pipelines→leads (direção natural única).
+
+### Por que tudo de uma vez (não fatiável)
+
+O ciclo de módulo persiste enquanto QUALQUER edge bidirecional existir (achado 3). Mover/inverter parcialmente é baseline-neutro. Logo a slice precisa eliminar **os 38 de uma vez** — não há "inverte metade agora".
+
+Fragilidade: toca `LeadModal` V1/V2 (feature flag) + 8 consumidores de `CrossPipePanel`. Smoke **V1+V2 obrigatório**.
+
+### Escopo da slice de inversão
+
+| Tarefa | Detalhe |
+|---|---|
+| Definir `PipeOpsPort` | Interface TS: cria/atualiza/deleta pipe entries, lê stages, cross-pipe move. Owner = pipelines (exporta no barrel). |
+| Provider em pipelines | `PipeOpsProvider` que implementa a porta usando os hooks atuais de pipelines. |
+| Injeção em lead-detail | LeadModal V1+V2 + 8 consumidores recebem `PipeOpsPort` via context/props. Param de `pipelines/*` imports. |
+| Migrar `lead.stage_changed` | Side-effect que dispara workflow → `publishEvent` (event-bus, async OK aqui). |
+| Validar baseline | `no-circular` cross-module leads↔pipelines = **0**. Baseline alvo ~70. |
+| Smoke V1+V2 | LeadModal flag ON/OFF — criar pipe entry inline, cross-pipe move, stage change. Blocos 2+3 do roteiro. |
+
+### Incremento já entregue (CHORE, fora da slice)
+
+`useBulkSelection` (hook puro, zero domain dep) movido `leads/hooks/` → `src/shared/hooks/` via git mv + 6 imports reescritos. Back-edge pipelines→leads 9→6, limpa carteira→leads de brinde. tsc 0 / lint 0. **Baseline-neutro (86→86)** — ciclo intacto. Branch `feat/arch-deepening/07-2-bis-acyclic`, sem commit (commit = arquiteto).

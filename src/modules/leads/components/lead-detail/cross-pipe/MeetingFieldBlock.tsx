@@ -11,17 +11,16 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import {
-  useCreatePipeConfirmacao,
-  useUpdatePipeConfirmacao,
-  statusColumns,
   type PipeConfirmacaoStatus,
-  type PipeConfirmacao,
-} from "@/modules/pipelines/hooks/usePipeConfirmacao";
+  confirmacaoStatusColumns as statusColumns,
+} from "@/contracts/pipe";
+import type { Tables } from "@/integrations/supabase/types";
+import { usePipeOps } from "../../../pipe-ops";
 import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
-import { RescheduleModal } from "@/modules/pipelines/components/legacy/confirmacao/RescheduleModal";
-import { CompareceuModal } from "@/modules/pipelines/components/legacy/confirmacao/CompareceuModal";
-import { useCreatePipeProposta } from "@/modules/pipelines/hooks/usePipePropostas";
+import { CompareceuModal } from "../../leads/funnel-contexts/modals/CompareceuModal";
 import { cn } from "@/lib/utils";
+
+type PipeConfirmacao = Tables<"pipe_confirmacao">;
 
 /**
  * Cross-pipe field block for "Reunião" (meeting / confirmação pipeline).
@@ -52,6 +51,7 @@ export const MeetingFieldBlock = memo(function MeetingFieldBlock({
   onSuccess,
   bare = false,
 }: MeetingFieldBlockProps) {
+  const { useCreatePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeProposta, RescheduleModal } = usePipeOps();
   const createPipe = useCreatePipeConfirmacao();
   const updatePipe = useUpdatePipeConfirmacao();
   const createPipeProposta = useCreatePipeProposta();

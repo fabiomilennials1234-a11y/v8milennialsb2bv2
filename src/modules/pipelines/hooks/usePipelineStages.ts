@@ -2,38 +2,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
+import type { PipelineType, PipelineStage, PipelineStageInsert } from "@/contracts/pipe";
 
-export type PipelineType = "whatsapp" | "confirmacao" | "propostas" | "upsell_base" | "upsell_gestao";
-
-export interface PipelineStage {
-  id: string;
-  organization_id: string;
-  pipeline_type: PipelineType;
-  stage_key: string;
-  name: string;
-  color: string | null;
-  position: number;
-  is_active: boolean;
-  is_final_positive: boolean;
-  is_final_negative: boolean;
-  auto_move_min_days: number | null;
-  auto_move_max_days: number | null;
-  target_pipe_type: string | null;
-  target_stage_key: string | null;
-  checklist_template_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface PipelineStageInsert {
-  pipeline_type: PipelineType;
-  stage_key: string;
-  name: string;
-  color?: string;
-  position: number;
-  is_final_positive?: boolean;
-  is_final_negative?: boolean;
-}
+// `PipelineType` + `PipelineStage(Insert)` + `getPipelineTypeName` +
+// `stagesToColumns` têm definição canônica em contracts (puros, sem
+// side-effect) — quebra import direto leads→pipelines. Re-exportados aqui
+// mantendo a API pública inalterada.
+export type { PipelineType, PipelineStage, PipelineStageInsert };
 
 // Controle para garantir que etapas padrão existam no banco (uma vez por sessão)
 const defaultsEnsuredForSession = new Set<string>();
@@ -241,16 +216,9 @@ export function useAllPipelineStages() {
   });
 }
 
-/**
- * Converte etapas do banco para o formato usado nos componentes de Kanban
- */
-export function stagesToColumns(stages: PipelineStage[] | { id: string; stage_key: string; name: string; color: string | null }[]) {
-  return stages.map((stage) => ({
-    id: "stage_key" in stage ? stage.stage_key : stage.id,
-    title: stage.name,
-    color: stage.color || "#64748b",
-  }));
-}
+// `stagesToColumns` movido para contracts (puro). Re-exportado para manter a
+// API pública do módulo. `PipelineStage[]` é estruturalmente compatível.
+export { stagesToColumns } from "@/contracts/pipe";
 
 /**
  * Hook para criar uma nova etapa
@@ -392,19 +360,9 @@ export function useReorderPipelineStages() {
   });
 }
 
-/**
- * Retorna o nome amigável do tipo de pipeline
- */
-export function getPipelineTypeName(type: PipelineType): string {
-  const names: Record<PipelineType, string> = {
-    whatsapp: "Qualificação",
-    confirmacao: "Confirmação",
-    propostas: "Propostas",
-    upsell_base: "Carteira Base",
-    upsell_gestao: "Carteira Gestão",
-  };
-  return names[type];
-}
+// `getPipelineTypeName` movido para contracts (puro). Re-exportado para manter
+// a API pública do módulo.
+export { getPipelineTypeName } from "@/contracts/pipe";
 
 /**
  * Converte etapas do banco para o formato {value, label} usado nos selects/checkboxes.

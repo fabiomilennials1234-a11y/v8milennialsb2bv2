@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember, isVirtualTeamMember } from "@/modules/identity";
-import { useCustomPipelines } from "@/modules/pipelines/hooks/useCustomPipelines";
+import { usePipeOps } from "../pipe-ops";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -46,6 +46,7 @@ const SYSTEM_SLUG_TO_PIPE: Record<string, "qualificacao" | "confirmacao" | "prop
 // ─── Main hook: unified pipeline_entries query ────────
 
 export function useLeadAllPipelines(leadId: string | null) {
+  const { useCustomPipelines } = usePipeOps();
   const { data: teamMember } = useCurrentTeamMember();
   const { data: customPipelines = [] } = useCustomPipelines();
   const orgId = teamMember?.organization_id ?? null;

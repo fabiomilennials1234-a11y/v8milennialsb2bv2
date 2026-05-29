@@ -12,18 +12,10 @@ export type PipeProposta = Tables<"pipe_propostas">;
 export type PipePropostaInsert = Partial<PipeProposta> & { lead_id: string };
 export type PipePropostaUpdate = Partial<PipeProposta>;
 
-export type PipePropostasStatus = string;
-
-export const statusColumns: { id: string; title: string; color: string }[] = [
-  { id: "marcar_compromisso", title: "Marcar Compromisso", color: "#F5C518" },
-  { id: "reativar", title: "Reativar", color: "#F97316" },
-  { id: "compromisso_marcado", title: "Compromisso Marcado", color: "#3B82F6" },
-  { id: "proposta_enviada", title: "Proposta Enviada", color: "#0EA5E9" },
-  { id: "esfriou", title: "Esfriou", color: "#64748B" },
-  { id: "futuro", title: "Futuro", color: "#8B5CF6" },
-  { id: "vendido", title: "Vendido ✓", color: "#22C55E" },
-  { id: "perdido", title: "Perdido", color: "#EF4444" },
-];
+// Definição canônica em contracts (quebra import direto leads→pipelines).
+// Re-exportados aqui mantendo a API pública do hook inalterada.
+export type { PipePropostasStatus } from "@/contracts/pipe";
+export { propostasStatusColumns as statusColumns } from "@/contracts/pipe";
 
 export function usePipePropostas() {
   return usePipelineEntries("propostas");

@@ -58,7 +58,7 @@ import { useLeadHistory } from "@/modules/leads";
 import { useLogLeadAction } from "@/modules/leads";
 import { useDeleteLead } from "@/modules/leads";
 import { useResponsibleMembers } from "@/modules/identity";
-import { CompareceuModal } from "./CompareceuModal";
+import { CompareceuModal } from "@/modules/leads";
 import { toast } from "sonner";
 
 interface ConfirmacaoDetailModalProps {

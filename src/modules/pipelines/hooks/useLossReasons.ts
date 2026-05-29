@@ -1,16 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/modules/identity";
-export interface LossReason {
-  id: string;
-  organization_id: string;
-  name: string;
-  slug: string;
-  category: string | null;
-  is_system: boolean;
-  display_order: number;
-  created_at: string;
-}
+
+// Definição canônica em contracts. Re-exportada aqui (API pública inalterada).
+import type { LossReason } from "@/contracts/pipe";
+export type { LossReason };
 
 export function useLossReasons() {
   const { organizationId } = useAuth();

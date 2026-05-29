@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BudgetFieldBlock } from "../BudgetFieldBlock";
+import { MockPipeOpsProvider } from "@/modules/leads/pipe-ops/testing";
 
 // ─── Mocks ───────────────────────────────────────────────────────────
 
@@ -75,12 +76,20 @@ vi.mock("@/modules/carteira/hooks/useProducts", () => ({
   }),
 }));
 
-vi.mock("@/modules/pipelines/hooks/usePipePropostaItems", () => ({
-  usePipePropostaItems: () => ({ data: [], isLoading: false }),
-  useCreatePipePropostaItem: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) }),
-  useUpdatePipePropostaItem: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) }),
-  useDeletePipePropostaItem: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) }),
-}));
+// Pós-inversão F7: hooks de pipeline (proposta + items + lossReasons) vêm do
+// PipeOpsPort (context), não mais por import direto de @/modules/pipelines.
+const pipeOpsPort = {
+  useCreatePipeProposta: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }) as never,
+  useUpdatePipeProposta: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }) as never,
+  usePipePropostaItems: () => ({ data: [], isLoading: false }) as never,
+  useCreatePipePropostaItem: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }) as never,
+  useUpdatePipePropostaItem: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }) as never,
+  useDeletePipePropostaItem: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }) as never,
+  useLossReasons: () => ({ data: [
+    { id: "lr-1", label: "Sem budget" },
+    { id: "lr-2", label: "Concorrência" },
+  ] }) as never,
+};
 
 vi.mock("@/modules/carteira/hooks/useTinyErp", () => ({
   useTinyErpStatus: () => ({ data: { connected: false } }),
@@ -88,13 +97,6 @@ vi.mock("@/modules/carteira/hooks/useTinyErp", () => ({
 
 vi.mock("@/modules/marketing/hooks/useCadastroExterno", () => ({
   useCadastroExternoEnabled: () => false,
-}));
-
-vi.mock("@/modules/pipelines/hooks/useLossReasons", () => ({
-  useLossReasons: () => ({ data: [
-    { id: "lr-1", label: "Sem budget" },
-    { id: "lr-2", label: "Concorrência" },
-  ] }),
 }));
 
 // Stub heavy sub-modals
@@ -116,7 +118,11 @@ vi.mock("@/modules/carteira/components/proposal/ProductCombobox", () => ({
 
 function renderWithQuery(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={qc}>
+      <MockPipeOpsProvider port={pipeOpsPort}>{ui}</MockPipeOpsProvider>
+    </QueryClientProvider>,
+  );
 }
 
 const baseProps = {
