@@ -168,6 +168,19 @@ describe("runQuickBlast", () => {
     expect(supabase.calls.logRows[0].metadata).toMatchObject({ source: "quick_blast", sender_job_id: "job-9" });
   });
 
+  it("forwards an optional scheduledFor to dispatch", async () => {
+    let input: any;
+    const dispatch = vi.fn(async (_inst: any, i: any) => { input = i; return { sender_job_id: "j", uazapi_sender_id: "u" }; });
+    const supabase = supabaseStub({ cap: 200, leads: [lead("a", "11999990001")] });
+
+    await runQuickBlast(
+      { supabaseAdmin: supabase, dispatch },
+      { orgId: "org-1", userId: "u", instance: INSTANCE, leadIds: ["a"], message: "Oi", scheduledFor: "2026-06-01T09:00:00.000Z" },
+    );
+
+    expect(input.scheduledFor).toBe("2026-06-01T09:00:00.000Z");
+  });
+
   it("rejects when the instance belongs to another organization", async () => {
     const dispatch = vi.fn(async () => ({ sender_job_id: "j", uazapi_sender_id: "u" }));
     const supabase = supabaseStub({ cap: 200, leads: [lead("a", "11999990001")] });

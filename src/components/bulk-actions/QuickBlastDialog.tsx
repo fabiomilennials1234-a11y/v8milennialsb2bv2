@@ -63,6 +63,7 @@ export function QuickBlastDialog({ open, onOpenChange, leadIds, onDone }: QuickB
   const [maxLeads, setMaxLeads] = useState<string>("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [scheduledFor, setScheduledFor] = useState<string>(""); // datetime-local
 
   const connectedInstances = useMemo(
     () => instances.filter((i: any) => CONNECTED.has(i.status)),
@@ -76,6 +77,7 @@ export function QuickBlastDialog({ open, onOpenChange, leadIds, onDone }: QuickB
     delayMin >= 0 &&
     delayMax >= delayMin &&
     leadIds.length > 0 &&
+    (scheduledFor === "" || new Date(scheduledFor).getTime() > Date.now()) &&
     !uploading &&
     !blast.isPending;
 
@@ -131,6 +133,7 @@ export function QuickBlastDialog({ open, onOpenChange, leadIds, onDone }: QuickB
         delay_max_ms: Math.round(delayMax * 1000),
         max_leads: maxLeads ? Number(maxLeads) : undefined,
         image_url: imageUrl ?? undefined,
+        scheduled_for: scheduledFor ? new Date(scheduledFor).toISOString() : undefined,
       });
       const { noPhone, duplicates, overCap } = res.skipped;
       const skippedParts = [
@@ -138,12 +141,14 @@ export function QuickBlastDialog({ open, onOpenChange, leadIds, onDone }: QuickB
         duplicates ? `${duplicates} duplicados` : null,
         overCap ? `${overCap} acima do teto` : null,
       ].filter(Boolean);
+      const verb = scheduledFor ? "agendado" : "iniciado";
       toast.success(
-        `Disparo iniciado para ${res.count} lead(s)` +
+        `Disparo ${verb} para ${res.count} lead(s)` +
           (skippedParts.length ? ` — ${skippedParts.join(", ")} ignorados` : ""),
       );
       setMessage("");
       setImageUrl(null);
+      setScheduledFor("");
       onOpenChange(false);
       onDone?.();
     } catch (e) {
@@ -301,6 +306,21 @@ export function QuickBlastDialog({ open, onOpenChange, leadIds, onDone }: QuickB
               </label>
             )}
           </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="qb-schedule">Agendar (opcional)</Label>
+            <Input
+              id="qb-schedule"
+              type="datetime-local"
+              value={scheduledFor}
+              onChange={(e) => setScheduledFor(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {scheduledFor
+                ? "Será disparado na data/hora escolhida."
+                : "Vazio = dispara agora, de supetão."}
+            </p>
+          </div>
         </div>
 
         <DialogFooter>
@@ -313,7 +333,7 @@ export function QuickBlastDialog({ open, onOpenChange, leadIds, onDone }: QuickB
             ) : (
               <Send className="mr-1.5 h-3.5 w-3.5" />
             )}
-            Disparar
+            {scheduledFor ? "Agendar" : "Disparar"}
           </Button>
         </DialogFooter>
       </DialogContent>
