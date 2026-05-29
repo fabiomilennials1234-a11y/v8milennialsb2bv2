@@ -64,10 +64,36 @@ export function useCopilotAgents() {
         `
         )
         .eq("organization_id", teamMember.organization_id)
+        // Hide Builder drafts (finalized_at IS NULL) from the main list.
+        .not("finalized_at", "is", null)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return (data || []) as CopilotAgentWithRelations[];
+    },
+    enabled: !!teamMember?.organization_id,
+  });
+}
+
+/**
+ * Rascunhos do Copilot Builder (finalized_at IS NULL) da org — usados no banner
+ * "retomar construção". Não aparecem na lista principal.
+ */
+export function useDraftCopilotAgents() {
+  const { data: teamMember } = useCurrentTeamMember();
+
+  return useQuery({
+    queryKey: ["copilot_agents", "drafts", teamMember?.organization_id],
+    queryFn: async () => {
+      if (!teamMember?.organization_id) return [];
+      const { data, error } = await supabase
+        .from("copilot_agents")
+        .select("id, name, updated_at")
+        .eq("organization_id", teamMember.organization_id)
+        .is("finalized_at", null)
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as Array<{ id: string; name: string; updated_at: string }>;
     },
     enabled: !!teamMember?.organization_id,
   });

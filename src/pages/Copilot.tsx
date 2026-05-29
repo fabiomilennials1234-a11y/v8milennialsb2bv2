@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Plus,
+  Sparkles,
   Bot,
   Power,
   Trash2,
@@ -49,7 +50,10 @@ import {
   useDeleteCopilotAgent,
   useToggleCopilotAgent,
   useSetDefaultCopilotAgent,
+  useCreateCopilotAgent,
+  useDraftCopilotAgents,
 } from "@/hooks/useCopilotAgents";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useCopilotSubscription } from "@/hooks/useCopilotSubscription";
 import { useCanManageCopilot } from "@/hooks/useUserRole";
 import { useIdentity } from "@/hooks/useIdentity";
@@ -68,6 +72,9 @@ export default function Copilot() {
   const deleteAgent = useDeleteCopilotAgent();
   const toggleAgent = useToggleCopilotAgent();
   const setDefault = useSetDefaultCopilotAgent();
+  const createAgent = useCreateCopilotAgent();
+  const { enabled: builderEnabled } = useFeatureFlag("copilot_builder");
+  const { data: drafts = [] } = useDraftCopilotAgents();
 
   const [agentToDelete, setAgentToDelete] = useState<string | null>(null);
   const [pendingActivation, setPendingActivation] = useState<{ id: string; name: string } | null>(null);
@@ -77,6 +84,34 @@ export default function Copilot() {
 
   const handleOpenConfig = (agent: CopilotAgentWithRelations) => {
     navigate(`/copilot/${agent.id}/editar`);
+  };
+
+  const handleCreateWithAI = async () => {
+    if (!copilotQuota.can_add) {
+      toast.error(
+        `Limite de agentes atingido (${copilotQuota.current_usage}/${copilotQuota.effective_limit}). Faça upgrade do plano para criar mais.`,
+      );
+      return;
+    }
+    try {
+      const result = await createAgent.mutateAsync({
+        agent: {
+          name: "Copilot (rascunho)",
+          main_objective: "Em construção com o assistente de IA",
+          is_active: false,
+          // organization_id + created_by are injected by the mutation hook.
+          organization_id: "",
+          created_by: "",
+        },
+        faqs: [],
+        kanbanRules: [],
+      });
+      const newId = (result as { id?: string })?.id;
+      if (!newId) throw new Error("Falha ao criar rascunho");
+      navigate(`/copilot/${newId}/editar?builder=1`);
+    } catch (e) {
+      toast.error("Não foi possível iniciar o assistente. Tente novamente.");
+    }
   };
 
   const handleCreateAgent = () => {
@@ -158,6 +193,17 @@ export default function Copilot() {
             <BarChart3 className="w-4 h-4 mr-2" />
             Métricas LLM
           </Button>
+          {canManageCopilot && builderEnabled && (
+            <Button
+              onClick={handleCreateWithAI}
+              variant="outline"
+              className="border-primary/40 text-primary hover:bg-primary/10"
+              disabled={!copilotQuota.can_add || createAgent.isPending}
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              Criar com IA
+            </Button>
+          )}
           {canManageCopilot && (
             <Button
               onClick={handleCreateAgent}
@@ -170,6 +216,42 @@ export default function Copilot() {
           )}
         </div>
       </motion.div>
+
+      {builderEnabled && drafts.length > 0 && (
+        <div className="mb-6 flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/5 p-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Sparkles className="h-4 w-4 text-primary" />
+            {drafts.length === 1
+              ? "Você tem um Copilot em construção"
+              : `Você tem ${drafts.length} Copilots em construção`}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {drafts.map((d) => (
+              <div key={d.id} className="flex items-center justify-between gap-3">
+                <span className="text-sm text-muted-foreground">{d.name}</span>
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-primary hover:bg-primary/10"
+                    onClick={() => navigate(`/copilot/${d.id}/editar?builder=1`)}
+                  >
+                    Retomar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-muted-foreground hover:text-destructive"
+                    onClick={() => setAgentToDelete(d.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Subscription Warning - Apenas para quem não tem acesso */}
       {!canManageCopilot && (isTrial || !hasAccess) && (
@@ -303,6 +385,21 @@ export default function Copilot() {
                         <Settings className="w-4 h-4 mr-2" />
                         Configurar
                       </Button>
+
+                      {builderEnabled && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-primary/40 text-primary hover:bg-primary/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/copilot/${agent.id}/editar?builder=1`);
+                          }}
+                        >
+                          <Sparkles className="w-4 h-4 mr-2" />
+                          Revisar com IA
+                        </Button>
+                      )}
 
                       <Button
                         variant="outline"
