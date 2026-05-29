@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion } from "framer-motion";
-import { Search, Plus, Calendar, LayoutGrid, List, Settings2, X } from "lucide-react";
+import { Search, Plus, Calendar, LayoutGrid, List, BarChart3, Settings2, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,7 +29,8 @@ import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { LeadModal } from "@/components/leads/LeadModal";
 import { AddMeetingModal } from "@/components/confirmacao/AddMeetingModal";
 import { RescheduleModal } from "@/components/confirmacao/RescheduleModal";
-import { ConfirmacaoStats } from "@/components/confirmacao/ConfirmacaoStats";
+import { PipeViewToggle } from "@/components/pipelines/PipeViewToggle";
+import { PipeConfirmacaoAnalytics } from "@/components/pipelines/PipeConfirmacaoAnalytics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
 import { GhostLeadsBanner } from "@/components/pipelines/GhostLeadsBanner";
@@ -156,7 +157,7 @@ type ConfirmacaoFilterState = {
   selectedStatuses: string[];
   selectedTags: string[];
   selectedResponsibleId: string;
-  viewMode: "kanban" | "timeline";
+  viewMode: "kanban" | "timeline" | "analytics";
   membroDefaultApplied?: boolean;
 };
 
@@ -218,7 +219,7 @@ function PipeConfirmacaoInner() {
     [setFilterState]
   );
   const setViewMode = useCallback(
-    (v: "kanban" | "timeline") => setFilterState((f) => ({ ...f, viewMode: v })),
+    (v: "kanban" | "timeline" | "analytics") => setFilterState((f) => ({ ...f, viewMode: v })),
     [setFilterState]
   );
   const [searchParams, setSearchParams] = useSearchParams();
@@ -641,22 +642,16 @@ function PipeConfirmacaoInner() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center border rounded-lg p-1">
-            <Button 
-              variant={viewMode === "kanban" ? "secondary" : "ghost"} 
-              size="sm"
-              onClick={() => setViewMode("kanban")}
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </Button>
-            <Button 
-              variant={viewMode === "timeline" ? "secondary" : "ghost"} 
-              size="sm"
-              onClick={() => setViewMode("timeline")}
-            >
-              <List className="w-4 h-4" />
-            </Button>
-          </div>
+          <PipeViewToggle
+            value={viewMode}
+            onChange={setViewMode}
+            layoutId="pipe-confirmacao-view-indicator"
+            options={[
+              { value: "kanban", icon: LayoutGrid, label: "Kanban" },
+              { value: "timeline", icon: List, label: "Timeline" },
+              { value: "analytics", icon: BarChart3, label: "Analytics" },
+            ]}
+          />
           <Button size="sm" variant="outline" onClick={() => setIsSettingsOpen(true)}>
             <Settings2 className="w-4 h-4 mr-2" />
             Configurações
@@ -681,10 +676,8 @@ function PipeConfirmacaoInner() {
       {/* Período das métricas */}
       <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
 
-      {/* Stats */}
-      <ConfirmacaoStats data={statsData} />
-
-      {/* Filters */}
+      {/* Filters — ocultos no Analytics (são específicos do board) */}
+      {viewMode !== "analytics" && (
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row gap-3">
           {/* Search */}
@@ -746,6 +739,7 @@ function PipeConfirmacaoInner() {
           onClearAll={handleClearAllFilters}
         />
       </div>
+      )}
 
       {/* Period filter indicator — aparece quando um período está selecionado (apenas no kanban) */}
       {viewMode === "kanban" && metricsRange && (
@@ -767,7 +761,9 @@ function PipeConfirmacaoInner() {
       )}
 
       {/* Content */}
-      {viewMode === "kanban" ? (
+      {viewMode === "analytics" ? (
+        <PipeConfirmacaoAnalytics items={statsData} responsibleMembers={responsibleMembers} />
+      ) : viewMode === "kanban" ? (
         <DraggableKanbanBoard
           columns={columns}
           onStatusChange={handleStatusChange}

@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Racing+Sans+One&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -180,9 +181,11 @@
     --bubble-outgoing-foreground: 210 20% 94%;
     --bubble-outgoing-border:     217 20% 38%;
 
-    --bubble-incoming:            36 18% 20%;
-    --bubble-incoming-foreground: 45 15% 88%;
-    --bubble-incoming-border:     38 14% 30%;
+    /* Incoming (cliente): superfície sutil sobre o fundo warm-dark (#191714),
+       lendo como translúcida ~rgba(255,255,255,0.04) + linha ~0.06. */
+    --bubble-incoming:            36 9% 14%;
+    --bubble-incoming-foreground: 45 12% 90%;
+    --bubble-incoming-border:     36 8% 22%;
 
     --bubble-ai:                  38 22% 24%;
     --bubble-ai-foreground:       47 40% 90%;
@@ -595,6 +598,12 @@
   /* V8 Racing Font */
   .font-racing {
     font-family: 'Racing Sans One', 'Inter', sans-serif;
+  }
+
+  /* Display font — headings premium (mesma família do mockup/landing) */
+  .font-display {
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
+    letter-spacing: -0.02em;
   }
 
   .animate-pulse-success {

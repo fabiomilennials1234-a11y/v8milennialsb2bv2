@@ -5,7 +5,7 @@ import {
   Search, Plus, Calendar as CalendarIcon, User, Building2,
   DollarSign, Loader2, TrendingUp, Package,
   ArrowUpRight, Percent, BarChart3, Target, Flame, MessageCircle, Settings2,
-  MoreVertical, Trash2
+  MoreVertical, Trash2, LayoutGrid
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,7 @@ import { usePipePropostasMetrics } from "@/hooks/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
 import { GhostLeadsBanner } from "@/components/pipelines/GhostLeadsBanner";
+import { PipeViewToggle } from "@/components/pipelines/PipeViewToggle";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/hooks/useLeads";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
@@ -975,18 +976,15 @@ function PipePropostasInner() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)}>
-            <TabsList>
-              <TabsTrigger value="kanban" className="gap-1.5">
-                <BarChart3 className="w-4 h-4" />
-                Kanban
-              </TabsTrigger>
-              <TabsTrigger value="analytics" className="gap-1.5">
-                <TrendingUp className="w-4 h-4" />
-                Analytics
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <PipeViewToggle
+            value={viewMode}
+            onChange={setViewMode}
+            layoutId="pipe-propostas-view-indicator"
+            options={[
+              { value: "kanban", icon: LayoutGrid, label: "Kanban" },
+              { value: "analytics", icon: BarChart3, label: "Analytics" },
+            ]}
+          />
           <Button variant="outline" className="gap-2" onClick={() => setIsSettingsOpen(true)}>
             <Settings2 className="w-4 h-4" />
             Configurações
@@ -1011,82 +1009,84 @@ function PipePropostasInner() {
       {/* Período das métricas */}
       <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="stat-card cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
-          onClick={() => setDrilldownMetric("pipeline_ativo")}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Pipeline Ativo</p>
-            <Target className="w-4 h-4 text-primary" />
-          </div>
-          <p className="text-xl font-bold">{formatCurrency(displayStats.inProgress)}</p>
-          <p className="text-xs text-muted-foreground">{displayStats.inProgressCount} propostas</p>
-        </motion.div>
+      {/* Summary Cards — só no modo Analytics */}
+      {viewMode === "analytics" && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="stat-card cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
+            onClick={() => setDrilldownMetric("pipeline_ativo")}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-muted-foreground">Pipeline Ativo</p>
+              <Target className="w-4 h-4 text-primary" />
+            </div>
+            <p className="text-xl font-bold">{formatCurrency(displayStats.inProgress)}</p>
+            <p className="text-xs text-muted-foreground">{displayStats.inProgressCount} propostas</p>
+          </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="stat-card cursor-pointer hover:ring-1 hover:ring-success/30 transition-all"
-          onClick={() => setDrilldownMetric("vendas_total")}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Vendas Total</p>
-            <TrendingUp className="w-4 h-4 text-success" />
-          </div>
-          <p className="text-xl font-bold text-success">{formatCurrency(displayStats.sold)}</p>
-          <p className="text-xs text-muted-foreground">{displayStats.soldCount} vendas</p>
-        </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="stat-card cursor-pointer hover:ring-1 hover:ring-success/30 transition-all"
+            onClick={() => setDrilldownMetric("vendas_total")}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-muted-foreground">Vendas Total</p>
+              <TrendingUp className="w-4 h-4 text-success" />
+            </div>
+            <p className="text-xl font-bold text-success">{formatCurrency(displayStats.sold)}</p>
+            <p className="text-xs text-muted-foreground">{displayStats.soldCount} vendas</p>
+          </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="stat-card cursor-pointer hover:ring-1 hover:ring-chart-5/30 transition-all"
-          onClick={() => setDrilldownMetric("rec_vendida")}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Rec. Vendida</p>
-            <ArrowUpRight className="w-4 h-4 text-chart-5" />
-          </div>
-          <p className="text-xl font-bold text-chart-5">{formatCurrency(displayStats.mrr)}</p>
-          <p className="text-xs text-muted-foreground">valor vendido /mês</p>
-        </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="stat-card cursor-pointer hover:ring-1 hover:ring-chart-5/30 transition-all"
+            onClick={() => setDrilldownMetric("rec_vendida")}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-muted-foreground">Rec. Vendida</p>
+              <ArrowUpRight className="w-4 h-4 text-chart-5" />
+            </div>
+            <p className="text-xl font-bold text-chart-5">{formatCurrency(displayStats.mrr)}</p>
+            <p className="text-xs text-muted-foreground">valor vendido /mês</p>
+          </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="stat-card cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
-          onClick={() => setDrilldownMetric("projetos_vendidos")}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Projetos Vendidos</p>
-            <Package className="w-4 h-4 text-primary" />
-          </div>
-          <p className="text-xl font-bold text-primary">{formatCurrency(displayStats.projeto)}</p>
-          <p className="text-xs text-muted-foreground">valor vendido</p>
-        </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="stat-card cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
+            onClick={() => setDrilldownMetric("projetos_vendidos")}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-muted-foreground">Projetos Vendidos</p>
+              <Package className="w-4 h-4 text-primary" />
+            </div>
+            <p className="text-xl font-bold text-primary">{formatCurrency(displayStats.projeto)}</p>
+            <p className="text-xs text-muted-foreground">valor vendido</p>
+          </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="stat-card cursor-pointer hover:ring-1 hover:ring-chart-3/30 transition-all"
-          onClick={() => setDrilldownMetric("taxa_conversao")}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Taxa de Conversão</p>
-            <Percent className="w-4 h-4 text-chart-3" />
-          </div>
-          <p className="text-xl font-bold">{displayStats.conversionRate.toFixed(1)}%</p>
-          <p className="text-xs text-muted-foreground">vendas / total no pipe</p>
-        </motion.div>
-      </div>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="stat-card cursor-pointer hover:ring-1 hover:ring-chart-3/30 transition-all"
+            onClick={() => setDrilldownMetric("taxa_conversao")}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-muted-foreground">Taxa de Conversão</p>
+              <Percent className="w-4 h-4 text-chart-3" />
+            </div>
+            <p className="text-xl font-bold">{displayStats.conversionRate.toFixed(1)}%</p>
+            <p className="text-xs text-muted-foreground">vendas / total no pipe</p>
+          </motion.div>
+        </div>
+      )}
 
       <AnimatePresence mode="wait">
         {viewMode === "kanban" ? (

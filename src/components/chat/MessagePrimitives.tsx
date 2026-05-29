@@ -90,16 +90,20 @@ export function formatMessageTime(timestamp: string): string {
 // MessageStatusIcon
 // ---------------------------------------------------------------------------
 
-export function MessageStatusIcon({ status }: { status: string }) {
+export function MessageStatusIcon({ status, onInk = false }: { status: string; onInk?: boolean }) {
+  // onInk → ícone está sobre o gradiente laranja (bubble manual outgoing): usa
+  // tinta escura para legibilidade. Caso contrário, mantém os tons originais.
+  const muted = onInk ? "text-[#1c1c1c]/45" : "text-muted-foreground/40";
+  const readTone = onInk ? "text-[#1c1c1c]/70" : "text-blue-500/70";
   switch (status) {
     case "pending":
-      return <Clock className="w-2.5 h-2.5 text-muted-foreground/40" />;
+      return <Clock className={cn("w-2.5 h-2.5", muted)} />;
     case "sent":
-      return <Check className="w-2.5 h-2.5 text-muted-foreground/40" />;
+      return <Check className={cn("w-2.5 h-2.5", muted)} />;
     case "delivered":
-      return <CheckCheck className="w-2.5 h-2.5 text-muted-foreground/40" />;
+      return <CheckCheck className={cn("w-2.5 h-2.5", muted)} />;
     case "read":
-      return <CheckCheck className="w-2.5 h-2.5 text-blue-500/70" />;
+      return <CheckCheck className={cn("w-2.5 h-2.5", readTone)} />;
     case "failed":
       return <AlertCircle className="w-3 h-3 text-destructive" title="Falha no envio" />;
     default:
@@ -194,14 +198,17 @@ export function MessageBubble({
     }
   };
 
-  // Bubble color tokens — C9
+  // Bubble color tokens — C9.
+  // Manual/humano outgoing recebe o tratamento laranja da marca (gradient gold +
+  // texto ink + sombra). Copilot/workflow preservam as cores semânticas (IA/automação).
+  const isManualOutgoing = isOutgoing && sentSource === "manual";
   const bubbleColorClass =
     sentSource === "copilot"
       ? "bg-bubble-ai text-bubble-ai-foreground border border-bubble-ai-border/30 border-l-[3px] border-l-bubble-ai-border"
       : sentSource === "workflow"
         ? "bg-bubble-workflow text-bubble-workflow-foreground border border-bubble-workflow-border/30 border-l-[3px] border-l-bubble-workflow-border"
-        : isOutgoing
-          ? "bg-bubble-outgoing text-bubble-outgoing-foreground border border-bubble-outgoing-border"
+        : isManualOutgoing
+          ? "gradient-gold text-primary-foreground border-0 shadow-[0_4px_12px_hsl(var(--primary)/0.25)]"
           : "bg-bubble-incoming text-bubble-incoming-foreground border border-bubble-incoming-border";
 
   const radiusClass = isOutgoing
@@ -436,8 +443,16 @@ export function MessageBubble({
         {/* Linha: data/hora e status — only on last in group */}
         {isLastInGroup && (
           <div className="flex items-center justify-end gap-1.5 mt-1.5">
-            <time dateTime={message.timestamp} className="text-[10px] text-muted-foreground/50 tabular-nums">{formatMessageTime(message.timestamp)}</time>
-            {isOutgoing && <MessageStatusIcon status={message.status} />}
+            <time
+              dateTime={message.timestamp}
+              className={cn(
+                "text-[10px] tabular-nums",
+                isManualOutgoing ? "text-primary-foreground/60" : "text-muted-foreground/50",
+              )}
+            >
+              {formatMessageTime(message.timestamp)}
+            </time>
+            {isOutgoing && <MessageStatusIcon status={message.status} onInk={isManualOutgoing} />}
           </div>
         )}
       </div>
