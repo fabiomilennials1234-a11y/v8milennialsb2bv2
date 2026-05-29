@@ -14,6 +14,9 @@ relacionados:
 
 3 fases sequenciais que endereçam os candidatos #1, #2 e #3 do relatório `improve-codebase-architecture` (main vs develop). Roda em `develop`, independente das fases 5-6 do roadmap pós-modularização (deploy prod).
 
+> [!info] Replan Fase 7 — 2026-05-29
+> Fase 7 (ciclo leads↔pipelines) **replanejada**: abordagem barrel ABORTADA (baseline 86→120), event-bus não resolve forward-edges síncronos. Único caminho = inversão `PipeOpsPort`. Ver banner em [[fase-7-quebrar-ciclo-leads-pipelines]]. **Fase 8** provavelmente absorvida (re-deepen pipelines em sub-pastas faz parte da inversão) — confirmar com CTO antes de iniciar.
+
 ## Contexto
 
 Análise via skill identificou 3 candidatos com ROI mais alto pra deepening pós-modularização:
