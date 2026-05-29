@@ -1,8 +1,8 @@
 /**
  * Edge Function: reembed-all
  *
- * Re-gera todos os embeddings do sistema usando Gemini Embedding 2.
- * Usado na migração de OpenAI → Gemini.
+ * Re-gera todos os embeddings do sistema via OpenRouter → Gemini Embedding 2.
+ * Usado na migração de provider direto → OpenRouter.
  *
  * Processa em batch:
  *   1. copilot_agent_document_chunks (conteúdo de documentos)
@@ -29,10 +29,10 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-  if (!GEMINI_API_KEY) {
+  const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+  if (!OPENROUTER_API_KEY) {
     return new Response(
-      JSON.stringify({ error: "GEMINI_API_KEY not configured" }),
+      JSON.stringify({ error: "OPENROUTER_API_KEY not configured" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
         const texts = batch.map(c => c.content);
 
         try {
-          const embeddings = await generateEmbeddingsBatch(texts, GEMINI_API_KEY);
+          const embeddings = await generateEmbeddingsBatch(texts, OPENROUTER_API_KEY);
 
           for (let j = 0; j < batch.length; j++) {
             const embeddingStr = `[${embeddings[j].join(",")}]`;
@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
         const batchFaqs = faqs.slice(i, i + batchSize);
 
         try {
-          const embeddings = await generateEmbeddingsBatch(batchTexts, GEMINI_API_KEY);
+          const embeddings = await generateEmbeddingsBatch(batchTexts, OPENROUTER_API_KEY);
 
           for (let j = 0; j < batchFaqs.length; j++) {
             const embeddingStr = `[${embeddings[j].join(",")}]`;
@@ -173,7 +173,7 @@ Deno.serve(async (req) => {
         const texts = batch.map(m => m.content);
 
         try {
-          const embeddings = await generateEmbeddingsBatch(texts, GEMINI_API_KEY);
+          const embeddings = await generateEmbeddingsBatch(texts, OPENROUTER_API_KEY);
 
           for (let j = 0; j < batch.length; j++) {
             const embeddingStr = `[${embeddings[j].join(",")}]`;

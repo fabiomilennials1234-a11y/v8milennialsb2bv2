@@ -7,7 +7,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { resolveActiveWindow } from "../../_shared/copilot/time-context.ts";
+import { resolveActiveWindow, formatNowText, getDayKeyInTimezone } from "../../_shared/copilot/time-context.ts";
 import { parseCustomInstructions } from "./utils.ts";
 
 interface ConversationContextSummary {

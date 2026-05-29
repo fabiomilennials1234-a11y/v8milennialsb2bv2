@@ -91,30 +91,35 @@ async function checkOpenRouter(): Promise<ApiHealthResult> {
   }
 }
 
-async function checkGemini(): Promise<ApiHealthResult> {
-  const key = Deno.env.get("GEMINI_API_KEY");
-  if (!key) return { service: "Gemini", status: "not_configured", latency_ms: 0, checked_at: new Date().toISOString() };
+async function checkEmbeddings(): Promise<ApiHealthResult> {
+  const key = Deno.env.get("OPENROUTER_API_KEY");
+  if (!key) return { service: "Embeddings (OpenRouter)", status: "not_configured", latency_ms: 0, checked_at: new Date().toISOString() };
 
   const start = Date.now();
   try {
     const res = await withTimeout(fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent",
+      "https://openrouter.ai/api/v1/embeddings",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${key}`,
+          "HTTP-Referer": "https://torquecrm.com.br",
+          "X-Title": "Torque CRM Health Check",
+        },
         body: JSON.stringify({
-          model: "models/gemini-embedding-2",
-          content: { parts: [{ text: "health check" }] },
-          outputDimensionality: 128,
+          model: "google/gemini-embedding-2",
+          input: "health check",
+          dimensions: 128,
         }),
       }
     ), TIMEOUT_MS);
     const latency = Date.now() - start;
-    if (res.ok) return { service: "Gemini", status: "connected", latency_ms: latency, checked_at: new Date().toISOString() };
+    if (res.ok) return { service: "Embeddings (OpenRouter)", status: "connected", latency_ms: latency, checked_at: new Date().toISOString() };
     const errText = await res.text().catch(() => "");
-    return { service: "Gemini", status: "error", latency_ms: latency, error: `HTTP ${res.status}: ${errText.substring(0, 100)}`, checked_at: new Date().toISOString() };
+    return { service: "Embeddings (OpenRouter)", status: "error", latency_ms: latency, error: `HTTP ${res.status}: ${errText.substring(0, 100)}`, checked_at: new Date().toISOString() };
   } catch (e) {
-    return { service: "Gemini", status: "error", latency_ms: Date.now() - start, error: e instanceof Error ? e.message : String(e), checked_at: new Date().toISOString() };
+    return { service: "Embeddings (OpenRouter)", status: "error", latency_ms: Date.now() - start, error: e instanceof Error ? e.message : String(e), checked_at: new Date().toISOString() };
   }
 }
 
@@ -198,7 +203,7 @@ serve(async (req) => {
       checkEvolution(),
       checkUazapi(),
       checkOpenRouter(),
-      checkGemini(),
+      checkEmbeddings(),
       checkOpenAI(),
       checkAsaas(),
       Promise.resolve(checkSentry()),
