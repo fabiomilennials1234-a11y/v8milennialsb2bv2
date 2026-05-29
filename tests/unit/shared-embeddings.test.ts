@@ -35,7 +35,7 @@ describe("generateEmbedding", () => {
     const result = await generateEmbedding("olá mundo", "gem-key");
     expect(result).toHaveLength(1536);
     const [url, init] = mockFetch.mock.calls[0];
-    expect(url).toContain("gemini-embedding-2-preview:embedContent");
+    expect(url).toContain("gemini-embedding-2:embedContent");
     expect((init.headers as Record<string, string>)["x-goog-api-key"]).toBe("gem-key");
     const body = JSON.parse(init.body as string);
     expect(body.outputDimensionality).toBe(1536);

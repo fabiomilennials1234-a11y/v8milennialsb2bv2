@@ -14,8 +14,8 @@ import { captureMessage } from "../_shared/sentry.ts";
  * Messages are joined with newlines, preserving order (caller must
  * sort by created_at ASC before calling).
  */
-export function buildBatchContent(messages: { content: string }[]): string {
-  return messages.map((m) => m.content).join("\n");
+export function buildBatchContent(messages: { content: string | null }[]): string {
+  return messages.map((m) => m.content).filter(Boolean).join("\n");
 }
 
 /**

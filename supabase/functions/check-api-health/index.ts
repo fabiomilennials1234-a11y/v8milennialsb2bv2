@@ -98,12 +98,12 @@ async function checkGemini(): Promise<ApiHealthResult> {
   const start = Date.now();
   try {
     const res = await withTimeout(fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2-preview:embedContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent",
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": key },
         body: JSON.stringify({
-          model: "models/gemini-embedding-2-preview",
+          model: "models/gemini-embedding-2",
           content: { parts: [{ text: "health check" }] },
           outputDimensionality: 128,
         }),

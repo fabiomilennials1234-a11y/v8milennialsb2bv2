@@ -105,6 +105,25 @@ export interface PersistedMessage {
   direction: string;
   message_type: string;
   push_name: string | null;
+  media_url: string | null;
+}
+
+const COPILOT_MEDIA_TYPES = new Set(["audio", "ptt", "image", "video", "document"]);
+
+export function computeShouldTriggerCopilot(normalized: {
+  direction: string;
+  content: string | null;
+  phone_number: string | null;
+  message_type: string;
+  media_url: string | null;
+}): boolean {
+  if (normalized.direction !== "incoming") return false;
+  if (!normalized.phone_number) return false;
+
+  const hasTextContent = !!normalized.content && normalized.content.trim().length > 0;
+  if (hasTextContent) return true;
+
+  return COPILOT_MEDIA_TYPES.has(normalized.message_type) && !!normalized.media_url;
 }
 
 export interface ReactionContext {
@@ -522,6 +541,7 @@ export async function triggerReactions(
     organization_id: persisted.organization_id,
     push_name: persisted.push_name,
     incoming_message_type: persisted.message_type,
+    media_url: (persisted as any).media_url ?? null,
   };
 
   fetch(`${SUPABASE_URL}/functions/v1/agent-message`, {
@@ -797,6 +817,7 @@ export async function persistMessage(
     direction: normalized.direction,
     message_type: normalized.message_type,
     push_name: normalized.push_name,
+    media_url: normalized.media_url,
   };
 }
 
@@ -833,7 +854,7 @@ async function handleMessagesEvent(
   if (normalized.is_group) return; // groups: persist only
 
   await triggerReactions(supabase, persisted, {
-    shouldTriggerCopilot: normalized.direction === "incoming" && !!normalized.content && normalized.content.trim().length > 0 && !!normalized.phone_number,
+    shouldTriggerCopilot: computeShouldTriggerCopilot(normalized),
     shouldResolveWaitResponse: normalized.direction === "incoming" && !!normalized.phone_number,
     isGroup: normalized.is_group,
     replaySource: receivedVia === "dlq_replay" ? "dlq_replay" : null,

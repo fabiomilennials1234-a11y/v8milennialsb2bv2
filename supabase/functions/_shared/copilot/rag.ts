@@ -13,7 +13,7 @@
 
 export { generateEmbedding, generateEmbeddingsBatch } from "../embeddings.ts";
 
-export const EMBEDDING_DIMENSIONS = 1536; // gemini-embedding-2-preview
+export const EMBEDDING_DIMENSIONS = 1536; // gemini-embedding-2
 
 // ─── retrieveSemanticContext (extracted from agent-engine.ts:736) ────────────
 

@@ -6,7 +6,7 @@
  * Suporta: texto, imagens, áudio, vídeo e PDF.
  */
 
-const EMBEDDING_MODEL = "gemini-embedding-2-preview";
+const EMBEDDING_MODEL = "gemini-embedding-2";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta";
 const EMBEDDING_DIM = 1536;
 const CHUNK_OVERLAP = 50;

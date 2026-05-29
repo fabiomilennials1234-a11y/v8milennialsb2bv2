@@ -17,6 +17,7 @@ import "../_shared/whatsapp-providers/uazapi-provider.ts";
 
 import { buildBatchContent, absorbPendingMessages } from "./batch-helpers.ts";
 import { checkAudienceGate } from "./audience-gate.ts";
+import { resolveMediaContent } from "../_shared/audio-transcription.ts";
 
 /**
  * Webhook receptor de mensagens de leads
@@ -64,7 +65,7 @@ Deno.serve(withSentry('agent-message', async (req) => {
     if (isBatchMode) {
       const { data: batchMsgs, error: batchErr } = await supabase
         .from("channel_messages")
-        .select("content")
+        .select("content, message_type, media_url")
         .in("id", body.message_ids)
         .order("created_at", { ascending: true });
 
@@ -75,10 +76,24 @@ Deno.serve(withSentry('agent-message', async (req) => {
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      message = buildBatchContent(batchMsgs);
-      console.log('[agent-message] Batch mode: combined', batchMsgs.length, 'messages into', message.length, 'chars');
+
+      const resolvedParts: string[] = [];
+      for (const msg of batchMsgs) {
+        const resolved = await resolveMediaContent({
+          content: msg.content,
+          messageType: msg.message_type || "text",
+          mediaUrl: msg.media_url || null,
+        });
+        if (resolved) resolvedParts.push(resolved);
+      }
+      message = resolvedParts.join("\n");
+      console.log('[agent-message] Batch mode: resolved', batchMsgs.length, 'messages into', message.length, 'chars');
     } else {
-      message = body.message;
+      message = await resolveMediaContent({
+        content: body.message,
+        messageType: incoming_message_type || "text",
+        mediaUrl: body.media_url || null,
+      });
     }
 
     // 1. IDENTIFY TENANT — organization_id is REQUIRED (security boundary).
