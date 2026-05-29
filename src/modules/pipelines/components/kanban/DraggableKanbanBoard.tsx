@@ -17,6 +17,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import type { DraggableItem } from "@/contracts/pipe";
 import { motion } from "framer-motion";
 import { Plus, MoreHorizontal, Trash2, FileDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,10 +29,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 
-export interface DraggableItem {
-  id: string;
-  [key: string]: any;
-}
+// `DraggableItem` tem definição canônica em contracts (quebra import direto
+// leads→pipelines). Re-exportado para manter a API pública inalterada.
+export type { DraggableItem };
 
 export interface KanbanColumn<T extends DraggableItem> {
   id: string;

@@ -2,8 +2,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
+import type { PipelineType } from "@/contracts/pipe";
 
-export type PipelineType = "whatsapp" | "confirmacao" | "propostas" | "upsell_base" | "upsell_gestao";
+// `PipelineType` + `getPipelineTypeName` + `stagesToColumns` têm definição
+// canônica em contracts (puros, sem side-effect) — quebra import direto
+// leads→pipelines. Re-exportados aqui mantendo a API pública inalterada.
+export type { PipelineType };
 
 export interface PipelineStage {
   id: string;
@@ -241,16 +245,9 @@ export function useAllPipelineStages() {
   });
 }
 
-/**
- * Converte etapas do banco para o formato usado nos componentes de Kanban
- */
-export function stagesToColumns(stages: PipelineStage[] | { id: string; stage_key: string; name: string; color: string | null }[]) {
-  return stages.map((stage) => ({
-    id: "stage_key" in stage ? stage.stage_key : stage.id,
-    title: stage.name,
-    color: stage.color || "#64748b",
-  }));
-}
+// `stagesToColumns` movido para contracts (puro). Re-exportado para manter a
+// API pública do módulo. `PipelineStage[]` é estruturalmente compatível.
+export { stagesToColumns } from "@/contracts/pipe";
 
 /**
  * Hook para criar uma nova etapa
@@ -392,19 +389,9 @@ export function useReorderPipelineStages() {
   });
 }
 
-/**
- * Retorna o nome amigável do tipo de pipeline
- */
-export function getPipelineTypeName(type: PipelineType): string {
-  const names: Record<PipelineType, string> = {
-    whatsapp: "Qualificação",
-    confirmacao: "Confirmação",
-    propostas: "Propostas",
-    upsell_base: "Carteira Base",
-    upsell_gestao: "Carteira Gestão",
-  };
-  return names[type];
-}
+// `getPipelineTypeName` movido para contracts (puro). Re-exportado para manter
+// a API pública do módulo.
+export { getPipelineTypeName } from "@/contracts/pipe";
 
 /**
  * Converte etapas do banco para o formato {value, label} usado nos selects/checkboxes.

@@ -12,21 +12,10 @@ export type PipeConfirmacao = Tables<"pipe_confirmacao">;
 export type PipeConfirmacaoInsert = Partial<PipeConfirmacao> & { lead_id: string };
 export type PipeConfirmacaoUpdate = Partial<PipeConfirmacao>;
 
-export type PipeConfirmacaoStatus = string;
-
-// Visual Kanban columns - pre_confirmada and confirmada_no_dia are NOT shown as columns
-// They are visual states (colors) on the cards instead
-export const statusColumns: { id: string; title: string; color: string }[] = [
-  { id: "reuniao_marcada", title: "Reunião Marcada", color: "#6366f1" },
-  { id: "confirmar_d5", title: "Confirmar D-5", color: "#8b5cf6" },
-  { id: "confirmar_d3", title: "Confirmar D-3", color: "#a855f7" },
-  { id: "confirmar_d2", title: "Confirmar D-2", color: "#f59e0b" },
-  { id: "confirmar_d1", title: "Confirmar D-1", color: "#f97316" },
-  { id: "confirmacao_no_dia", title: "Confirmação no Dia", color: "#ef4444" },
-  { id: "remarcar", title: "Remarcar 📅", color: "#f97316" },
-  { id: "compareceu", title: "Compareceu ✓", color: "#22c55e" },
-  { id: "perdido", title: "Perdido ✗", color: "#ef4444" },
-];
+// Definição canônica em contracts (quebra import direto leads→pipelines).
+// Re-exportados aqui mantendo a API pública do hook inalterada.
+export type { PipeConfirmacaoStatus } from "@/contracts/pipe";
+export { confirmacaoStatusColumns as statusColumns } from "@/contracts/pipe";
 
 export function usePipeConfirmacao() {
   return usePipelineEntries("confirmacao");

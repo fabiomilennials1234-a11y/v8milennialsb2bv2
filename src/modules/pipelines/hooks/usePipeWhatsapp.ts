@@ -12,15 +12,10 @@ export type PipeWhatsapp = Tables<"pipe_whatsapp">;
 export type PipeWhatsappInsert = Partial<PipeWhatsapp> & { lead_id: string };
 export type PipeWhatsappUpdate = Partial<PipeWhatsapp>;
 
-export type PipeWhatsappStatus = string;
-
-export const statusColumns: { id: string; title: string; color: string }[] = [
-  { id: "novo", title: "Novo", color: "#6366f1" },
-  { id: "abordado", title: "Abordado", color: "#f59e0b" },
-  { id: "respondeu", title: "Respondeu", color: "#3b82f6" },
-  { id: "esfriou", title: "Esfriou", color: "#ef4444" },
-  { id: "agendado", title: "Agendado ✓", color: "#22c55e" },
-];
+// Definição canônica em contracts (quebra import direto leads→pipelines).
+// Re-exportados aqui mantendo a API pública do hook inalterada.
+export type { PipeWhatsappStatus } from "@/contracts/pipe";
+export { whatsappStatusColumns as statusColumns } from "@/contracts/pipe";
 
 export function usePipeWhatsapp() {
   return usePipelineEntries("whatsapp");

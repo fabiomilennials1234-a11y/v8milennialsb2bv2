@@ -35,7 +35,8 @@ import {
 import { useLeadHistory } from "../../hooks/useLeadTimeline";
 import { ScheduleFollowUpButton } from "@/modules/engagement/components/followups/ScheduleFollowUpButton";
 import { useCustomPipelines, useCustomPipelineStages, useAddLeadToCustomPipe } from "@/modules/pipelines/hooks/useCustomPipelines";
-import { useAllPipelineStageOptions, getPipelineTypeName } from "@/modules/pipelines/hooks/usePipelineStages";
+import { useAllPipelineStageOptions } from "@/modules/pipelines/hooks/usePipelineStages";
+import { getPipelineTypeName } from "@/contracts/pipe";
 import { useCreatePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";
 import { useCreatePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
 import { useCreatePipeProposta } from "@/modules/pipelines/hooks/usePipePropostas";
