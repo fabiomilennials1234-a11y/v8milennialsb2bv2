@@ -89,11 +89,12 @@ describe("PLAYGROUND_TOOLS registry", () => {
       "TRANSFERIR_SZ_CHAT",
       "ENVIAR_DOCUMENTO",
       "CRIAR_CAMPO",
+      "PAUSAR_ATENDIMENTO_HUMANO",
     ];
     for (const toolId of expected) {
       expect(ids).toContain(toolId);
     }
-    // Total count = 9
-    expect(PLAYGROUND_TOOLS).toHaveLength(9);
+    // Total count = 10
+    expect(PLAYGROUND_TOOLS).toHaveLength(10);
   });
 });
