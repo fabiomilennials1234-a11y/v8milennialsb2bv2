@@ -64,8 +64,8 @@ import {
   useUpdateCustomPipeline,
   useCustomPipelines,
   useCustomPipelineStages as useCustomPipeStagesQuery,
-} from "@/modules/pipelines/hooks/useCustomPipelines";
-import { usePipelineStages, type PipelineType } from "@/modules/pipelines/hooks/usePipelineStages";
+} from "@/modules/pipelines/hooks/custom/useCustomPipelines";
+import { usePipelineStages, type PipelineType } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import {
   Select,
   SelectContent,

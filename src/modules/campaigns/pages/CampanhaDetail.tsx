@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useCampanha, useCampanhaStages, useCampanhaLeads, useCampanhaMembers, useUpdateCampanhaMember, useDeleteCampanhaLead, useCampanhaPipeAutomations, useExtractLeadToPipe, resolveExtractionTarget, getObjectiveMetricLabel, type CampanhaLead } from "@/modules/campaigns/hooks/useCampanhas";
-import { useCreatePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
+import { useCreatePipeConfirmacao } from "@/modules/pipelines";
 import { useImportLeads } from "@/modules/leads";
 import { useOrganization } from "@/modules/identity";
 import { CampanhaKanban } from "@/modules/campaigns/components/CampanhaKanban";

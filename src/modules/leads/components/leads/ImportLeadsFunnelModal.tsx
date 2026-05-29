@@ -15,7 +15,7 @@ import {
 } from "../../hooks/useImportLeads";
 import { useLeadCustomFields } from "../../hooks/useLeadCustomFields";
 import { useCanDo } from "@/modules/identity";
-import { usePipelineStages } from "@/modules/pipelines/hooks/usePipelineStages";
+import { usePipeOps } from "../../pipe-ops";
 import { useTeamMembers } from "@/modules/identity";
 import { useProducts } from "@/modules/carteira/hooks/useProducts";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";
@@ -101,7 +101,7 @@ export function ImportLeadsFunnelContent({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const pipelineType = PIPELINE_TYPE[destination];
-  const { data: stages = [] } = usePipelineStages(pipelineType);
+  const { data: stages = [] } = usePipeOps().usePipelineStages(pipelineType);
   const { data: members = [] } = useTeamMembers();
   const { data: products = [] } = useProducts();
   const [showErrors, setShowErrors] = useState(false);

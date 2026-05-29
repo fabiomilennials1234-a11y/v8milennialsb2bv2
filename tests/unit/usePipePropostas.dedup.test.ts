@@ -25,8 +25,8 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   }),
 }));
 
-vi.mock("@/modules/pipelines/hooks/usePipelineEntries", async () => {
-  const actual = await vi.importActual<any>("@/modules/pipelines/hooks/usePipelineEntries");
+vi.mock("@/modules/pipelines/hooks/model/usePipelineEntries", async () => {
+  const actual = await vi.importActual<any>("@/modules/pipelines/hooks/model/usePipelineEntries");
   return {
     ...actual,
     usePipelineId: () => ({ data: PIPELINE_ID }),
@@ -72,7 +72,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-import { useCreatePipeProposta } from "@/modules/pipelines/hooks/usePipePropostas";
+import { useCreatePipeProposta } from "@/modules/pipelines/hooks/legacy/usePipePropostas";
 
 beforeEach(() => {
   mockMaybeSingle.mockReset();

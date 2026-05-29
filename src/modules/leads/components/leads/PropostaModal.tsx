@@ -20,7 +20,7 @@ import {
 import { useTeamMembers } from "@/modules/identity";
 import { usePipeOps } from "../../pipe-ops";
 import type { PipePropostasStatus } from "@/contracts/pipe";
-import { useLossReasons } from "@/modules/pipelines/hooks/useLossReasons";
+import { useLossReasons } from "@/modules/pipelines";
 import { toast } from "sonner";
 import { format } from "date-fns";
 

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { CustomPipeEntry } from "@/modules/pipelines/hooks/useCustomPipelines";
+import type { CustomPipeEntry } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 
 interface CustomPipeLeadCardProps {
   entry: CustomPipeEntry;

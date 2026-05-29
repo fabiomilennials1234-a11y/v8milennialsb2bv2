@@ -46,8 +46,8 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   setSelectedOrgId: vi.fn(),
   useResponsibleMembers: () => ({ data: [] }),
 }));
-vi.mock("@/modules/pipelines/hooks/usePipePropostas", () => ({ usePipePropostas: () => ({ data: [] }) }));
-vi.mock("@/modules/pipelines/hooks/usePipeWhatsapp", () => ({ usePipeWhatsapp: () => ({ data: [] }) }));
+vi.mock("@/modules/pipelines/hooks/legacy/usePipePropostas", () => ({ usePipePropostas: () => ({ data: [] }), useCreatePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useUpdatePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useDeletePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
+vi.mock("@/modules/pipelines/hooks/legacy/usePipeWhatsapp", () => ({ usePipeWhatsapp: () => ({ data: [] }), useCreatePipeWhatsapp: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useUpdatePipeWhatsapp: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
 vi.mock("@/modules/engagement/hooks/useGoals", () => ({
   useTeamGoals: () => ({ data: [{ type: "vendas", target_value: 100000, team_member_id: null, name: "Meta" }] }),
   useIndividualGoals: () => ({ data: { salesGoals: [], meetingsGoals: [] } }),
@@ -55,6 +55,7 @@ vi.mock("@/modules/engagement/hooks/useGoals", () => ({
 vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useUserRole: () => "admin",
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
+  useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
 }));
 vi.mock("@/modules/analytics/hooks/useDashboardMetrics", () => ({
   useDashboardMetrics: () => ({ data: { vendaTotal: 0, vendaMRR: 0, vendaProjeto: 0 } }),
@@ -62,7 +63,7 @@ vi.mock("@/modules/analytics/hooks/useDashboardMetrics", () => ({
   useFunnelData: () => ({ data: [] }),
   useRankingData: () => ({ data: { salesRanking: [], meetingsRanking: [] } }),
 }));
-vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
+vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {},
   getPipelineTypeName: (t: string) => t,
@@ -70,6 +71,7 @@ vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({
   stagesToSelectOptions: () => [],
   getSuccessStageTransition: () => null,
   useAllPipelineStages: () => ({ data: [] }),
+  useAllPipelineStageOptions: vi.fn(() => ({ data: [] })),
 }));
 
 const now = new Date();
@@ -116,7 +118,7 @@ const mockConfirmacoes = [
   },
 ];
 
-vi.mock("@/modules/pipelines/hooks/usePipeConfirmacao", () => ({ usePipeConfirmacao: () => ({ data: mockConfirmacoes }) }));
+vi.mock("@/modules/pipelines/hooks/legacy/usePipeConfirmacao", () => ({ usePipeConfirmacao: () => ({ data: mockConfirmacoes }), useCreatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useUpdatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useDeletePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
 
 function createWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });

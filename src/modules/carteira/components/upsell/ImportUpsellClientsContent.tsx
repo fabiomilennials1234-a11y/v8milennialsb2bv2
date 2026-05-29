@@ -11,7 +11,7 @@ import {
   parseFileToRows,
   type FilePreviewResult,
 } from "@/modules/leads";
-import { usePipelineStages } from "@/modules/pipelines/hooks/usePipelineStages";
+import { usePipelineStages } from "@/modules/pipelines";
 import { useTeamMembers } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";

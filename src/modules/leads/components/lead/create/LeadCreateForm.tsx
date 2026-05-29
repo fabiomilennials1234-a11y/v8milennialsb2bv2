@@ -27,8 +27,7 @@ import {
   DEST_TO_PIPE_TYPE,
 } from "@/lib/lead/lead-destinations";
 import type { LeadDestination } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
-import { useAllPipelineStageOptions } from "@/modules/pipelines/hooks/usePipelineStages";
-import { useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines/hooks/useCustomPipelines";
+import { usePipeOps } from "../../../pipe-ops";
 import { useCampanhas } from "@/modules/campaigns/hooks/useCampanhas";
 import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
 export interface CreateLeadPayload {
@@ -78,11 +77,12 @@ export function LeadCreateForm({
   const { data: teamMember } = useCurrentTeamMember();
   const { data: teamMembers = [] } = useTeamMembers();
   const { data: campanhas = [] } = useCampanhas();
-  const { data: customPipelines = [] } = useCustomPipelines();
-  const { data: customPipeStages = [] } = useCustomPipelineStages(
+  const pipeOps = usePipeOps();
+  const { data: customPipelines = [] } = pipeOps.useCustomPipelines();
+  const { data: customPipeStages = [] } = pipeOps.useCustomPipelineStages(
     destination === "custom" ? customPipelineId : undefined
   );
-  const { stagesByPipe: dynamicStagesByPipe } = useAllPipelineStageOptions();
+  const { stagesByPipe: dynamicStagesByPipe } = pipeOps.useAllPipelineStageOptions();
 
   // Auto-select current member as SDR on mount
   useEffect(() => {

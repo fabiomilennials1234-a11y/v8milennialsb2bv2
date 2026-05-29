@@ -15,13 +15,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Shuffle, User, AlertTriangle, Save, Loader2, CheckCircle2 } from "lucide-react";
-import { type PipelineType } from "@/modules/pipelines/hooks/usePipelineStages";
+import { type PipelineType } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { useResponsibleMembers } from "@/modules/identity";
 import {
   usePipeDistributionRule,
   useSavePipeDistribution,
   type DistributionMode,
-} from "@/modules/pipelines/hooks/usePipeDistribution";
+} from "@/modules/pipelines/hooks/config/usePipeDistribution";
 
 interface PipeDistributionSectionProps {
   pipeType: PipelineType;

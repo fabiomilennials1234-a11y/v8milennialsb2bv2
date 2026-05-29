@@ -9,7 +9,7 @@
  * Atribuição: pre_sale_responsible_id ?? sdr_id (snapshot dual ADR 2026-05-18).
  */
 import { useMemo } from "react";
-import { usePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
+import { usePipeConfirmacao } from "@/modules/pipelines";
 import { useTeamMembers } from "@/modules/identity";
 import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { inRange, type TVPeriodRange } from "@/lib/tv-periods";

@@ -6,6 +6,7 @@
  * `leads → pipelines/hooks/*` na inversão de dependência (arch-deepening Fase 7).
  */
 export * from "./pipe-status";
+export * from "./pipe-defaults";
 export * from "./pipe-columns";
 export * from "./pipe-entities";
 export * from "./kanban";

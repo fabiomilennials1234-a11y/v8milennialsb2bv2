@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
-import { usePipelineId, type PipelineType } from "./usePipelineEntries";
+import { usePipelineId, type PipelineType } from "../model/usePipelineEntries";
 
 const LEAD_SELECT = `
   id, name, company, email, phone, rating, origin, segment, faturamento, urgency, notes, compromisso_date, ai_disabled,

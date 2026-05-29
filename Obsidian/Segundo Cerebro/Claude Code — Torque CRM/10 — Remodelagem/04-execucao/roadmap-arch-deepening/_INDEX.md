@@ -46,14 +46,16 @@ Análise via skill identificou 3 candidatos com ROI mais alto pra deepening pós
 
 ## Critérios de sucesso globais
 
-| Métrica | Hoje (develop) | Após roadmap | Como medir |
-|---|---:|---:|---|
-| `pipelines` files-per-export | 0.85 | ≥ 3.0 | `find / wc + grep ^export` |
-| `identity` files-per-export | 1.50 | ≥ 3.0 | idem |
-| Ciclo `leads ↔ pipelines` (deep imports) | 47 | 0 | grep cross-module |
-| `dependency-cruiser` baseline | 86 | ≤ 70 | `lint:deps:baseline` |
-| Ciclos `no-circular` | 63 | ≤ 50 | idem |
-| Test coverage em `pipelines` e `identity` | preservar | preservar | npm run test:coverage |
+> Coluna **Real (7.3-bis)** = medido em 2026-05-29 após inversão `PipeOpsPort` + re-deepen de `pipelines` (Fase 8 absorvida). Ver [[fase-7-quebrar-ciclo-leads-pipelines]] § "Slice 7.3-bis — executado".
+
+| Métrica | Hoje (develop) | Após roadmap | Real (7.3-bis) | Como medir |
+|---|---:|---:|---:|---|
+| `pipelines` files-per-export | 0.85 | ≥ 3.0 | **3.58** ✅ | `find / wc + grep ^export` |
+| `identity` files-per-export | 1.50 | ≥ 3.0 | 1.50 (Fase 9 pendente) | idem |
+| Ciclo `leads ↔ pipelines` (deep imports) | 47 | 0 | **0** ✅ (3 barrel-edges → 7.4-bis) | grep cross-module |
+| `dependency-cruiser` baseline | 86 | ≤ 70 | **83** (em direção a ≤70) | `lint:deps:baseline` |
+| Ciclos `no-circular` | 63 | ≤ 50 | **60** (em direção a ≤50) | idem |
+| Test coverage em `pipelines` e `identity` | preservar | preservar | preservado (zero regressão) | npm run test:coverage |
 
 ## Constraints invariantes (todas as fases)
 

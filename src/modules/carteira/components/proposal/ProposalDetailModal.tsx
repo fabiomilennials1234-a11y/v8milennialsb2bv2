@@ -31,18 +31,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useTeamMembers } from "@/modules/identity";
-import { useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus, statusColumns } from "@/modules/pipelines/hooks/usePipePropostas";
+import { useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus, propostasStatusColumns as statusColumns } from "@/modules/pipelines";
 import { useLeadHistory } from "@/modules/leads";
 import { useLogLeadAction } from "@/modules/leads";
 import { useDeleteLead } from "@/modules/leads";
 import { useHasPermission } from "@/modules/identity";
 import { useActiveProducts } from "@/modules/carteira/hooks/useProducts";
-import { 
-  usePipePropostaItems, 
-  useCreatePipePropostaItem, 
-  useUpdatePipePropostaItem, 
-  useDeletePipePropostaItem 
-} from "@/modules/pipelines/hooks/usePipePropostaItems";
+import {
+  usePipePropostaItems,
+  useCreatePipePropostaItem,
+  useUpdatePipePropostaItem,
+  useDeletePipePropostaItem
+} from "@/modules/pipelines";
 import { toast } from "sonner";
 import {
   AlertDialog,

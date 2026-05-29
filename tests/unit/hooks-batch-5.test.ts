@@ -29,7 +29,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: ()
 vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
 vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/modules/pipelines/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
+vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerLeadCreatedInCustomPipeline: vi.fn() }));
@@ -52,10 +52,10 @@ import { useUpsellOrders } from "@/modules/carteira/hooks/useUpsellOrders";
 import { useUpsellGestaoRules } from "@/modules/carteira/hooks/useUpsellGestaoRules";
 import { useUpsellCampanhas } from "@/modules/carteira/hooks/useUpsellCampanhas";
 import { useUpsellClientProducts } from "@/modules/carteira/hooks/useUpsellClientProducts";
-import { usePipeDispatchRules } from "@/modules/pipelines/hooks/usePipeDispatchRules";
-import { usePipeDistribution } from "@/modules/pipelines/hooks/usePipeDistribution";
-import { usePipePropostaItems } from "@/modules/pipelines/hooks/usePipePropostaItems";
-import { usePipelineDisplayConfig } from "@/modules/pipelines/hooks/usePipelineDisplayConfig";
+import { usePipeDispatchRules } from "@/modules/pipelines/hooks/config/usePipeDispatchRules";
+import { usePipeDistribution } from "@/modules/pipelines/hooks/config/usePipeDistribution";
+import { usePipePropostaItems } from "@/modules/pipelines/hooks/legacy/usePipePropostaItems";
+import { usePipelineDisplayConfig } from "@/modules/pipelines/hooks/config/usePipelineDisplayConfig";
 import { useProductVariants } from "@/modules/carteira/hooks/useProductVariants";
 // useSupportMaterials doesn't exist
 

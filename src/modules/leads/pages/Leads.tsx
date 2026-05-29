@@ -77,12 +77,16 @@ import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActio
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { useSearchParams } from "react-router-dom";
 import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/modules/identity";
-import { useCustomPipelines, useCustomPipelineStages, useAddLeadToCustomPipe } from "@/modules/pipelines/hooks/useCustomPipelines";
-import { useAllPipelineStageOptions } from "@/modules/pipelines/hooks/usePipelineStages";
+import {
+  useCustomPipelines,
+  useCustomPipelineStages,
+  useAddLeadToCustomPipe,
+  useAllPipelineStageOptions,
+  useCreatePipeWhatsapp,
+  useCreatePipeConfirmacao,
+  useCreatePipeProposta,
+} from "@/modules/pipelines";
 import { getPipelineTypeName } from "@/contracts/pipe";
-import { useCreatePipeWhatsapp } from "@/modules/pipelines/hooks/usePipeWhatsapp";
-import { useCreatePipeConfirmacao } from "@/modules/pipelines/hooks/usePipeConfirmacao";
-import { useCreatePipeProposta } from "@/modules/pipelines/hooks/usePipePropostas";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";

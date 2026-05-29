@@ -21,11 +21,11 @@ import {
   type PipeDispatchRuleStepActionType,
   type PipeDispatchRuleTimeoutAction,
   type SdrAssignmentMode,
-} from "@/modules/pipelines/hooks/usePipeDispatchRules";
+} from "@/modules/pipelines/hooks/config/usePipeDispatchRules";
 import { useCampaignTemplates, type CampaignTemplate } from "@/modules/campaigns/hooks/useCampaignTemplates";
 import { useTeamMembers } from "@/modules/identity";
 import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
-import type { PipelineType, PipelineStage } from "@/modules/pipelines/hooks/usePipelineStages";
+import type { PipelineType, PipelineStage } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import {
   Send, Plus, Trash2, Loader2, ListOrdered, Play, Pencil,
   CheckCircle2, Clock, XCircle, MessageSquare, ArrowRightLeft, UserPlus, Ban, Hourglass,

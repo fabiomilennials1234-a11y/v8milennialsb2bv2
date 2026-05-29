@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useExtractLeadToPipe, type CampanhaLead, type ExtractLeadToPipeTarget } from "@/modules/campaigns/hooks/useCampanhas";
-import { usePipelineStages, type PipelineType } from "@/modules/pipelines/hooks/usePipelineStages";
+import { usePipelineStages, type PipelineType } from "@/modules/pipelines";
 import { MessageSquare, CalendarCheck, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
