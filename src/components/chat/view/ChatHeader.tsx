@@ -6,7 +6,7 @@
  * Props: callbacks puros — sem hooks de mutation aqui, recebe handlers do pai.
  */
 import React from "react";
-import { ArrowLeft, Phone, UserCircle, Plus, Bot, UserPlus, ArrowRightLeft, Loader2, AlignJustify, List, LayoutList, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Phone, UserCircle, Plus, Bot, UserPlus, ArrowRightLeft, Loader2, AlignJustify, List, PanelRight, AlertTriangle } from "lucide-react";
 import { TakeoverControls } from "@/components/chat/takeover/TakeoverControls";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +59,10 @@ export interface ChatHeaderProps {
   density?: DensityMode;
   /** Callback para alterar a densidade (C11) */
   onDensityChange?: (d: DensityMode) => void;
+  /** Painel de contexto (coluna direita) visível — highlight do botão de toggle */
+  contextVisible?: boolean;
+  /** Callback para ocultar/mostrar a coluna de contexto */
+  onToggleContext?: () => void;
   /** Callback para abrir AITimeline — passado para TakeoverControls (C30) */
   onOpenTimeline?: () => void;
   /** Copilot está pausado por intervenção humana */
@@ -80,7 +84,6 @@ const DENSITY_OPTIONS: Array<{
 }> = [
   { mode: "compact",     icon: AlignJustify, label: "Compacto" },
   { mode: "comfortable", icon: List,         label: "Padrão" },
-  { mode: "spacious",    icon: LayoutList,   label: "Espaçoso" },
 ];
 
 function DensityToggle({
@@ -120,6 +123,42 @@ function DensityToggle({
   );
 }
 
+// ─── Toggle do painel de contexto (coluna direita) ────────────────────────────
+
+function ContextToggleButton({
+  contextVisible,
+  onToggleContext,
+}: {
+  contextVisible: boolean;
+  onToggleContext: () => void;
+}) {
+  const label = contextVisible ? "Ocultar painel do lead" : "Mostrar painel do lead";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            "h-7 w-7 p-0",
+            contextVisible
+              ? "ring-2 ring-ring ring-offset-1 ring-offset-background bg-muted/60"
+              : "opacity-50 hover:opacity-100",
+          )}
+          onClick={onToggleContext}
+          aria-pressed={contextVisible}
+          aria-label={label}
+        >
+          <PanelRight className="w-3.5 h-3.5" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="text-xs">
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function ChatHeader({
   phoneNumber,
   contactName,
@@ -139,6 +178,8 @@ export function ChatHeader({
   transferPending,
   density,
   onDensityChange,
+  contextVisible,
+  onToggleContext,
   onOpenTimeline,
   humanPaused,
   humanPausedUntil,
@@ -288,10 +329,18 @@ export function ChatHeader({
         </Badge>
       )}
 
-      {/* Density toggle — desktop only */}
-      {onDensityChange && (
-        <div className="hidden md:block">
-          <DensityToggle density={density ?? "comfortable"} onDensityChange={onDensityChange} />
+      {/* Density toggle + context panel toggle — desktop only */}
+      {(onDensityChange || onToggleContext) && (
+        <div className="hidden md:flex items-center gap-0.5 shrink-0">
+          {onDensityChange && (
+            <DensityToggle density={density ?? "comfortable"} onDensityChange={onDensityChange} />
+          )}
+          {onToggleContext && (
+            <ContextToggleButton
+              contextVisible={contextVisible ?? true}
+              onToggleContext={onToggleContext}
+            />
+          )}
         </div>
       )}
 

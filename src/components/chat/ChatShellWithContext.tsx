@@ -84,6 +84,8 @@ interface ChatViewProps {
   onOpenLeadModal: () => void;
   density: DensityMode;
   onDensityChange: (d: DensityMode) => void;
+  contextVisible: boolean;
+  onToggleContext: () => void;
   isMobile: boolean;
 }
 
@@ -98,6 +100,8 @@ function ChatView({
   onOpenLeadModal,
   density,
   onDensityChange,
+  contextVisible,
+  onToggleContext,
   isMobile,
 }: ChatViewProps) {
   const phoneNumber = selectedContact?.phone_number ?? selectedPhone;
@@ -220,6 +224,8 @@ function ChatView({
           transferPending={false}
           density={density}
           onDensityChange={onDensityChange}
+          contextVisible={contextVisible}
+          onToggleContext={onToggleContext}
           humanPaused={copilotPause.isPaused}
           humanPausedUntil={copilotPause.pausedUntil}
           onReactivateCopilot={copilotPause.reactivate}
@@ -574,6 +580,32 @@ export function ChatShellWithContext() {
   // ── Density ─────────────────────────────────────────────────────────────────
   const { density, setDensity, cssVars } = useChatDensity(user?.id);
 
+  // ── Visibilidade do painel de contexto (coluna direita) ──────────────────────
+  // Persistido por usuário; default visível. Toggle no ChatHeader (3º botão).
+  // Mesmo padrão de storageKey do useChatDensity (null quando não há userId).
+  const contextVisibleKey = user?.id ? `chat-context-visible-${user.id}` : null;
+  const [contextVisible, setContextVisible] = useState<boolean>(() => {
+    if (!contextVisibleKey) return true;
+    try {
+      return localStorage.getItem(contextVisibleKey) !== "false";
+    } catch {
+      return true;
+    }
+  });
+  const toggleContext = useCallback(() => {
+    setContextVisible((prev) => {
+      const next = !prev;
+      if (contextVisibleKey) {
+        try {
+          localStorage.setItem(contextVisibleKey, String(next));
+        } catch {
+          // localStorage indisponível (modo privado) — estado segue em memória
+        }
+      }
+      return next;
+    });
+  }, [contextVisibleKey]);
+
   // ── mountTime estável (capturado uma vez no mount) ───────────────────────────
   const mountTimeRef = useRef(Date.now());
 
@@ -645,11 +677,13 @@ export function ChatShellWithContext() {
             onOpenLeadModal={handleOpenLeadModal}
             density={density}
             onDensityChange={setDensity}
+            contextVisible={contextVisible}
+            onToggleContext={toggleContext}
             isMobile={isMobile}
           />
         }
         context={
-          selectedPhone ? (
+          selectedPhone && contextVisible ? (
             <ContextPanel
               leadId={selectedContact?.lead_id ?? undefined}
               phoneNumber={selectedPhone}
