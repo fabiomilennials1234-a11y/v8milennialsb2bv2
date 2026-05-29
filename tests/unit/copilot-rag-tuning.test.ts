@@ -41,6 +41,8 @@ vi.mock("../../supabase/functions/_shared/logger.ts", () => ({
 
 vi.mock("../../supabase/functions/_shared/copilot/time-context.ts", () => ({
   resolveActiveWindow: vi.fn(() => null),
+  formatNowText: vi.fn(() => "quarta-feira, 28/05/2026 14:00 (America/Sao_Paulo)"),
+  getDayKeyInTimezone: vi.fn(() => "wed"),
 }));
 
 vi.mock("../../supabase/functions/agent-message/engine/utils.ts", () => ({
