@@ -72,7 +72,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useBulkSelection } from "@/modules/leads/hooks/useBulkSelection";
+import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { useSearchParams } from "react-router-dom";

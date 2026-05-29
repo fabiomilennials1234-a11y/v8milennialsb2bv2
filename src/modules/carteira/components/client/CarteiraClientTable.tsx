@@ -34,7 +34,7 @@ import {
 } from "@/modules/carteira/hooks/usePortfolioClients";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
-import type { useBulkSelection } from "@/modules/leads/hooks/useBulkSelection";
+import type { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 
 export type { PortfolioClientRow };
 

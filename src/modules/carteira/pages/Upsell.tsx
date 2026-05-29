@@ -30,7 +30,7 @@ import { CarteiraCohortHeatmap } from "@/modules/carteira/components/client/Cart
 import { CarteiraVendedorRanking } from "@/modules/carteira/components/client/CarteiraVendedorRanking";
 import { CarteiraApprovals } from "@/modules/carteira/components/client/CarteiraApprovals";
 import { usePendingOrders } from "@/modules/carteira/hooks/useOrderApproval";
-import { useBulkSelection } from "@/modules/leads/hooks/useBulkSelection";
+import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 
 type ViewMode = "kanban" | "list";
 
