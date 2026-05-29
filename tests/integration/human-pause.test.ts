@@ -102,10 +102,21 @@ describe('Human Pause Copilot', () => {
     });
   }, 30_000);
 
+  // Telefone canônico (11 díg, sem 55) usado pelo gate phone-keyed.
+  const NORMALIZED_TEST_PHONE = '11999880001';      // == TEST_PHONE normalizado
+  const COLD_PHONE = '+5511999881234';              // fresh: sem lead/conversa
+  const NORMALIZED_COLD_PHONE = '11999881234';
+  const COPILOT_PHONE = '+5511999882222';           // fresh: testa copilot não-arma
+  const NORMALIZED_COPILOT_PHONE = '11999882222';
+
   afterAll(async () => {
     for (const id of msgIdsToClean) {
       await admin.from('whatsapp_messages').delete().eq('id', id);
     }
+    // Limpa fonte de verdade phone-keyed criada pelo trigger.
+    await admin.from('phone_ai_preferences').delete()
+      .eq('organization_id', testOrgId)
+      .in('normalized_phone', [NORMALIZED_TEST_PHONE, NORMALIZED_COLD_PHONE, NORMALIZED_COPILOT_PHONE]);
     if (testConversationId) await admin.from('conversations').delete().eq('id', testConversationId);
     if (testAgentId) await admin.from('copilot_agents').delete().eq('id', testAgentId);
     if (testLeadId) await admin.from('leads').delete().eq('id', testLeadId);
@@ -150,6 +161,22 @@ describe('Human Pause Copilot', () => {
     await admin.from('conversations')
       .update({ human_paused_until: null })
       .eq('id', testConversationId);
+  }
+
+  async function getPhonePause(normalizedPhone: string) {
+    const { data } = await admin.from('phone_ai_preferences')
+      .select('human_paused_until')
+      .eq('organization_id', testOrgId)
+      .eq('normalized_phone', normalizedPhone)
+      .maybeSingle();
+    return (data as { human_paused_until?: string } | null)?.human_paused_until ?? null;
+  }
+
+  async function clearPhonePauseDirectly(normalizedPhone: string) {
+    await admin.from('phone_ai_preferences')
+      .update({ human_paused_until: null })
+      .eq('organization_id', testOrgId)
+      .eq('normalized_phone', normalizedPhone);
   }
 
   it('should set human_paused_until when manual outgoing message is sent', async () => {
@@ -309,5 +336,85 @@ describe('Human Pause Copilot', () => {
 
     const pausedUntil = await getConversationPause();
     expect(pausedUntil).toBeNull();
+  });
+
+  // ── Phone-keyed (Furo B): pausa arma por telefone, fonte = phone_ai_preferences ──
+
+  it('arms phone_ai_preferences pause on manual outgoing (phone-keyed)', async () => {
+    await clearPhonePauseDirectly(NORMALIZED_TEST_PHONE);
+
+    await insertMessage();
+    const paused = await getPhonePause(NORMALIZED_TEST_PHONE);
+
+    expect(paused).toBeTruthy();
+    const t = new Date(paused!).getTime();
+    expect(t).toBeGreaterThan(Date.now() + 59 * 60_000);
+    expect(t).toBeLessThan(Date.now() + 61 * 60_000);
+  });
+
+  it('Furo B: arms pause even when lead_id is NULL and no conversation exists (cold start)', async () => {
+    await clearPhonePauseDirectly(NORMALIZED_COLD_PHONE);
+
+    // Humano prospecta ANTES do lead existir: mensagem manual, lead_id NULL,
+    // telefone sem nenhuma conversa. Trigger v1 não armava; v2 (phone-keyed) arma.
+    const msgId = `test-hp-cold-${Date.now()}`;
+    const { error } = await admin.from('whatsapp_messages').insert({
+      organization_id: testOrgId,
+      instance_id: testInstanceId,
+      message_id: msgId,
+      phone_number: COLD_PHONE,
+      remote_jid: '5511999881234@s.whatsapp.net',
+      direction: 'outgoing',
+      message_type: 'video',
+      content: '',
+      status: 'sent',
+      sent_by_ai: false,
+      sent_source: 'manual',
+      lead_id: null,
+    }).select('id').single();
+    expect(error).toBeNull();
+
+    // Cold-start: agente resolvido por-org (duração varia conforme org). Basta armar.
+    const paused = await getPhonePause(NORMALIZED_COLD_PHONE);
+    expect(paused).toBeTruthy();
+    expect(new Date(paused!).getTime()).toBeGreaterThan(Date.now());
+
+    await admin.from('whatsapp_messages').delete().eq('message_id', msgId);
+  });
+
+  it('does NOT arm phone_ai_preferences pause for copilot messages', async () => {
+    // Telefone fresco (sem arming prévio) pra isolar de contaminação cross-test.
+    const msgId = `test-hp-cop-${Date.now()}`;
+    await admin.from('whatsapp_messages').insert({
+      organization_id: testOrgId,
+      instance_id: testInstanceId,
+      message_id: msgId,
+      phone_number: COPILOT_PHONE,
+      remote_jid: '5511999882222@s.whatsapp.net',
+      direction: 'outgoing',
+      message_type: 'text',
+      content: 'ai message',
+      status: 'sent',
+      sent_by_ai: true,
+      sent_source: 'copilot',
+      lead_id: null,
+    });
+
+    const paused = await getPhonePause(NORMALIZED_COPILOT_PHONE);
+    expect(paused).toBeNull();
+
+    await admin.from('whatsapp_messages').delete().eq('message_id', msgId);
+  });
+
+  it('clear_human_pause RPC clears phone_ai_preferences pause too', async () => {
+    await insertMessage();
+    expect(await getPhonePause(NORMALIZED_TEST_PHONE)).toBeTruthy();
+
+    const { error } = await userClient.rpc('clear_human_pause', {
+      p_conversation_id: testConversationId,
+    });
+    expect(error).toBeNull();
+
+    expect(await getPhonePause(NORMALIZED_TEST_PHONE)).toBeNull();
   });
 });
