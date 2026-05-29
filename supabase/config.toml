@@ -227,6 +227,11 @@ verify_jwt = false
 [functions.mass-send-create]
 verify_jwt = false
 
+# quick-blast-create: Disparo Rápido do kanban. JWT validado no handler (getUser);
+# SEM role gate (ADR-0002) — qualquer membro da org dispara, teto org é a trava.
+[functions.quick-blast-create]
+verify_jwt = false
+
 # mass-send-status: polls status (JWT user OR x-cron-secret)
 [functions.mass-send-status]
 verify_jwt = false
