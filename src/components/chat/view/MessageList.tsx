@@ -403,7 +403,9 @@ export function MessageList({
               </div>
             ) : (
               // ── Modo plain (≤100 msgs) ────────────────────────────────
-              <div className="space-y-1 pb-4">
+              // space-y-0: o gap entre mensagens vem do mt-[var(--chat-msg-gap-*)]
+              // da própria bolha (densidade). space-y-1 aqui somaria e quebraria Compacto.
+              <div className="space-y-0 pb-4">
                 {timeline.map((item, index) => renderTimelineItem(item, index))}
                 <div ref={messagesEndRef} />
               </div>

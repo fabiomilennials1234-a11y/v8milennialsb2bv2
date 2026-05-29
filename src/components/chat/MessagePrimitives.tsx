@@ -240,7 +240,7 @@ export function MessageBubble({
       className={cn(
         "flex gap-2 group min-w-0 w-full",
         isOutgoing ? "justify-end" : "justify-start",
-        isFirstInGroup ? "mt-3" : "mt-0.5"
+        isFirstInGroup ? "mt-[var(--chat-msg-gap-different,12px)]" : "mt-[var(--chat-msg-gap-same-author,4px)]"
       )}
     >
       {/* Action bar — hover reveal, outgoing only appears on left; incoming on right */}
@@ -262,7 +262,7 @@ export function MessageBubble({
 
       <div
         className={cn(
-          "max-w-[75%] min-w-0 px-4 py-2.5 overflow-hidden",
+          "max-w-[75%] min-w-0 overflow-hidden px-[var(--chat-bubble-padding-x,14px)] py-[var(--chat-bubble-padding-y,10px)]",
           radiusClass,
           bubbleColorClass,
           isFailed && "border-destructive/40",
