@@ -12,8 +12,9 @@ vi.mock("@/integrations/supabase/client", () => {
     },
   };
 });
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({
-  useOrganization: () => ({ organizationId: "org-t" }),
+// org-id agora vem do contexto shared/realtime (slice 9.1b), não de identity
+vi.mock("@/shared/realtime/realtime-org-context", () => ({
+  useRealtimeOrgId: () => "org-t",
 }));
 
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";

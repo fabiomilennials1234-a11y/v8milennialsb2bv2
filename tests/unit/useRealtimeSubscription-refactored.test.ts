@@ -9,11 +9,13 @@ vi.mock("@/shared/realtime/useRealtimeChannel", () => ({
   useRealtimeChannel: mockUseRealtimeChannel,
 }));
 
-// ─── Mock useOrganization ────────────────────────────────────────────────────
+// ─── Mock realtime org context ───────────────────────────────────────────────
+// O hook lê o org-id de @/shared/realtime/realtime-org-context (slice 9.1b),
+// não mais de @/modules/identity. Mockamos a fonte para fornecer o org-id.
 
 const mockOrgId = "org-123-abc";
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({
-  useOrganization: () => ({ organizationId: mockOrgId }),
+vi.mock("@/shared/realtime/realtime-org-context", () => ({
+  useRealtimeOrgId: () => mockOrgId,
 }));
 
 // ─── Mock TanStack Query ─────────────────────────────────────────────────────
