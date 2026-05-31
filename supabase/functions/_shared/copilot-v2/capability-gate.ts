@@ -49,6 +49,11 @@ const READ_TOOLS = new Set<string>([
 
 export const TOOL_CALL_BUDGET = 5;
 
+/** Read/introspect tools are never capability-gated nor introspect-guarded. */
+export function isReadTool(tool: string): boolean {
+  return READ_TOOLS.has(tool);
+}
+
 export interface CapabilityGateInput {
   tool: string;
   capabilities: Record<string, boolean | undefined>;
