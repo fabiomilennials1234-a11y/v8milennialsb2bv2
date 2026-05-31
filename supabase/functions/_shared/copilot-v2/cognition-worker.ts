@@ -16,6 +16,7 @@ import { modelForArchetype, type Archetype, type ModelId } from "./model-selecto
 import { buildSystemPrompt, type AgentConfig } from "./prompt-builder.ts";
 import { BASE_PROMPTS } from "./base-prompts.ts";
 import { runTurn, type LlmClient, type ToolSchema, type ToolStep } from "./cognition-loop.ts";
+import { TOOL_SCHEMAS, writeTargetOf as registryWriteTargetOf } from "./tool-registry.ts";
 import type { Introspection } from "./introspect-guard.ts";
 
 export interface ResolvedContext {
@@ -31,7 +32,8 @@ export interface HandleQueuedMessageInput {
   context: ResolvedContext;
   /** Builds an LLM client bound to the chosen model. */
   makeLlm: (model: ModelId) => LlmClient;
-  toolSchemas: ToolSchema[];
+  /** Defaults to the canonical TOOL_SCHEMAS from the registry. */
+  toolSchemas?: ToolSchema[];
   executeTool: (name: string, args: Record<string, unknown>) => Promise<unknown>;
   writeTargetOf?: (name: string, args: Record<string, unknown>) => string | null;
   maxToolCalls?: number;
@@ -66,11 +68,11 @@ export async function handleQueuedMessage(
     llm,
     system,
     messages: [{ role: "user", content: input.message.content }],
-    toolSchemas: input.toolSchemas,
+    toolSchemas: input.toolSchemas ?? TOOL_SCHEMAS,
     capabilities: input.context.capabilitiesByArchetype[archetype] ?? {},
     introspection: input.context.introspection,
     executeTool: input.executeTool,
-    writeTargetOf: input.writeTargetOf,
+    writeTargetOf: input.writeTargetOf ?? registryWriteTargetOf,
     maxToolCalls: input.maxToolCalls,
   });
 
