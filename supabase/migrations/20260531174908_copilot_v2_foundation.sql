@@ -12,7 +12,9 @@
 -- incident at the schema level), turn counter (atomic — kills the
 -- increment_conversation_turn race), and end-to-end trace tables.
 --
--- NOT YET APPLIED TO PROD. Apply via the migration runbook after CTO review.
+-- Applied to PROD (jsjsmuncfkbsbzqzqhfq) 2026-05-31 via MCP, recorded as
+-- schema_migrations version 20260531174908. Verified: 9 tables + 5 RPCs;
+-- dedup race / turn race / phone-keyed pause regressions all pass on prod.
 -- ============================================================================
 
 -- ── Enums (closed, validated) ───────────────────────────────────────────────
