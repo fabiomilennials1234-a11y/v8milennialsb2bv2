@@ -17,6 +17,7 @@ function mockSupabase(results: Record<string, unknown> = {}) {
     const b: any = {
       select: () => b,
       update: (vals: unknown) => { (q as any).update = vals; return b; },
+      upsert: (vals: unknown, opts: unknown) => { (q as any).upsert = vals; (q as any).onConflict = opts; return b; },
       eq: (c: string, v: unknown) => { q.filters.push([c, v]); return b; },
       is: (c: string, v: unknown) => { q.filters.push([c, v]); return b; },
       order: (c: string, o: unknown) => { q.order = [c, o]; return b; },
@@ -176,6 +177,31 @@ describe('list_custom_fields', () => {
     expect(out).toEqual([{ field: 'cnpj', type: 'text', required: true }]);
     const q = sb.queries.find((x) => x.table === 'lead_custom_fields')!;
     expect(q.filters).toContainEqual(['organization_id', 'org-1']);
+  });
+});
+
+describe('fill_lead_field (custom value upsert)', () => {
+  it('resolves the field def and upserts the value (unique lead_id+field_id)', async () => {
+    const sb = mockSupabase({ lead_custom_fields: { id: 'field-1' } });
+    const out = await createToolExecutor(sb, ctx)('fill_lead_field', { field: 'cnpj', value: '12.345.678/0001-00' });
+    expect(out).toMatchObject({ filled: true, field: 'cnpj' });
+    const defQ = sb.queries.find((x) => x.table === 'lead_custom_fields')!;
+    expect(defQ.filters).toContainEqual(['organization_id', 'org-1']);
+    const valQ = sb.queries.find((x) => x.table === 'lead_custom_field_values')!;
+    expect((valQ as any).upsert).toMatchObject({ lead_id: 'lead-1', field_id: 'field-1', value: '12.345.678/0001-00' });
+    expect((valQ as any).onConflict).toMatchObject({ onConflict: 'lead_id,field_id' });
+  });
+
+  it('does not write when the field is not defined for the org (honest no-op)', async () => {
+    const sb = mockSupabase({}); // no lead_custom_fields row
+    const out = await createToolExecutor(sb, ctx)('fill_lead_field', { field: 'inexistente', value: 'x' });
+    expect(out).toMatchObject({ filled: false, reason: 'unknown_field' });
+    expect(sb.queries.some((x) => x.table === 'lead_custom_field_values')).toBe(false);
+  });
+
+  it('requires a lead in context', async () => {
+    const exec = createToolExecutor(mockSupabase(), { organizationId: 'org-1' });
+    await expect(exec('fill_lead_field', { field: 'cnpj', value: 'x' })).rejects.toMatchObject({ code: 'missing_context' });
   });
 });
 

@@ -191,6 +191,29 @@ const transferToHuman: Handler = async (supabase, ctx, args) => {
   };
 };
 
+const fillLeadField: Handler = async (supabase, ctx, args) => {
+  if (!ctx.leadId) throw new ToolError("missing_context", "fill_lead_field:lead");
+  const field = String(args.field ?? "");
+  if (!field) throw new ToolError("missing_context", "fill_lead_field:field");
+
+  // Resolve the custom-field definition (introspect target the write-guard checks).
+  const { data: def, error: defErr } = await supabase
+    .from("lead_custom_fields").select("id")
+    .eq("organization_id", ctx.organizationId).eq("field_name", field).maybeSingle();
+  if (defErr) throw new Error(`fill_lead_field: ${defErr.message}`);
+  if (!def) return { filled: false, reason: "unknown_field", field };
+
+  // Safe upsert — lead_custom_field_values has a unique (lead_id, field_id).
+  const { error } = await supabase
+    .from("lead_custom_field_values")
+    .upsert(
+      { lead_id: ctx.leadId, field_id: def.id, value: String(args.value ?? ""), updated_at: new Date().toISOString() },
+      { onConflict: "lead_id,field_id" },
+    );
+  if (error) throw new Error(`fill_lead_field: ${error.message}`);
+  return { filled: true, field };
+};
+
 const HANDLERS: Record<string, Handler> = {
   get_lead_360: getLead360,
   list_pipeline_stages: listPipelineStages,
@@ -199,11 +222,8 @@ const HANDLERS: Record<string, Handler> = {
   list_custom_fields: listCustomFields,
   move_lead_stage: moveLeadStage,
   set_qualification_tier: setQualificationTier,
+  fill_lead_field: fillLeadField,
   transfer_to_human: transferToHuman,
-  // fill_lead_field: deferred — lead_custom_field_values has no (lead_id, field_id)
-  //   unique constraint, so a safe upsert needs a select-then-write done in the
-  //   integration session (and verified against the live table). Stays
-  //   not_implemented until then (honest — never a silent partial write).
 };
 
 /**
