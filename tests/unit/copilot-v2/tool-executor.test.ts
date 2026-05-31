@@ -26,7 +26,12 @@ function mockSupabase(results: Record<string, unknown> = {}) {
     };
     return b;
   };
-  return { from, queries };
+  const rpcCalls: Array<{ name: string; args: any }> = [];
+  const rpc = async (name: string, args: any) => {
+    rpcCalls.push({ name, args });
+    return { data: (results as any)[`rpc:${name}`] ?? null, error: (results as any)[`rpcError:${name}`] ?? null };
+  };
+  return { from, rpc, queries, rpcCalls };
 }
 
 const ctx: ToolContext = { organizationId: 'org-1', leadId: 'lead-1', conversationId: 'conv-1' };
@@ -136,6 +141,59 @@ describe('set_qualification_tier (rubric-driven write)', () => {
   it('requires the agent in context (needs the rubric)', async () => {
     const exec = createToolExecutor(mockSupabase(), { organizationId: 'org-1', leadId: 'lead-1' });
     await expect(exec('set_qualification_tier', { signals: {} })).rejects.toMatchObject({ code: 'missing_context' });
+  });
+});
+
+describe('get_contact_status', () => {
+  it('returns NOVO when no lead exists', async () => {
+    const out = await createToolExecutor(mockSupabase({}), { organizationId: 'org-1', canonicalPhone: '11987654321' })('get_contact_status', {});
+    expect(out).toMatchObject({ status: 'NOVO' });
+  });
+
+  it('returns CLIENTE_CARTEIRA when the lead is in upsell_clients', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1', qualification_tier: null }, upsell_clients: { id: 'uc-1' } });
+    const out = await createToolExecutor(sb, ctx)('get_contact_status', {});
+    expect(out).toMatchObject({ status: 'CLIENTE_CARTEIRA', leadId: 'lead-1' });
+  });
+
+  it('returns QUALIFIED when the lead has a qualifying tier and is not in the portfolio', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1', qualification_tier: 'ouro' } });
+    const out = await createToolExecutor(sb, ctx)('get_contact_status', {});
+    expect(out).toMatchObject({ status: 'QUALIFIED' });
+  });
+
+  it('returns LEAD_NO_PIPELINE for a known lead with no tier and no portfolio', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1', qualification_tier: null } });
+    const out = await createToolExecutor(sb, ctx)('get_contact_status', {});
+    expect(out).toMatchObject({ status: 'LEAD_NO_PIPELINE' });
+  });
+});
+
+describe('list_custom_fields', () => {
+  it('returns the org custom field definitions (real lead_custom_fields table)', async () => {
+    const sb = mockSupabase({ lead_custom_fields: [{ field_name: 'cnpj', field_type: 'text', is_required: true }] });
+    const out = await createToolExecutor(sb, ctx)('list_custom_fields', {});
+    expect(out).toEqual([{ field: 'cnpj', type: 'text', required: true }]);
+    const q = sb.queries.find((x) => x.table === 'lead_custom_fields')!;
+    expect(q.filters).toContainEqual(['organization_id', 'org-1']);
+  });
+});
+
+describe('transfer_to_human', () => {
+  it('pauses the agent phone-keyed and returns a structured handoff payload', async () => {
+    const sb = mockSupabase({});
+    const out: any = await createToolExecutor(sb, { organizationId: 'org-1', leadId: 'lead-1', canonicalPhone: '11987654321' })(
+      'transfer_to_human', { reason: 'pediu humano', summary: 'lead quer falar com vendedor' },
+    );
+    expect(out).toMatchObject({ transferred: true, reason: 'pediu humano' });
+    expect(out.handoff).toMatchObject({ leadId: 'lead-1', reason: 'pediu humano' });
+    const pause = sb.rpcCalls.find((c) => c.name === 'copilot_v2_set_human_pause')!;
+    expect(pause.args).toMatchObject({ p_org_id: 'org-1', p_canonical_phone: '11987654321' });
+  });
+
+  it('requires the canonical phone (the pause key)', async () => {
+    const exec = createToolExecutor(mockSupabase({}), { organizationId: 'org-1', leadId: 'lead-1' });
+    await expect(exec('transfer_to_human', { reason: 'x' })).rejects.toMatchObject({ code: 'missing_context' });
   });
 });
 

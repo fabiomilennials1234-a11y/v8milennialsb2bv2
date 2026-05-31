@@ -137,12 +137,73 @@ const setQualificationTier: Handler = async (supabase, ctx, args) => {
   return { applied: true, tier, signals: args.signals ?? {} };
 };
 
+const QUALIFIED_TIERS = ["diamante", "ouro", "prata", "bronze"];
+
+const getContactStatus: Handler = async (supabase, ctx) => {
+  let leadQ = supabase.from("leads").select("id, qualification_tier")
+    .eq("organization_id", ctx.organizationId).is("deleted_at", null);
+  leadQ = ctx.leadId ? leadQ.eq("id", ctx.leadId) : leadQ.eq("normalized_phone", ctx.canonicalPhone ?? "__none__");
+  const { data: lead, error } = await leadQ.maybeSingle();
+  if (error) throw new Error(`get_contact_status: ${error.message}`);
+  if (!lead) return { status: "NOVO", leadId: null };
+
+  // Carteira = existing customer in the portfolio (upsell_clients).
+  const { data: client } = await supabase
+    .from("upsell_clients").select("id")
+    .eq("organization_id", ctx.organizationId).eq("lead_id", lead.id).maybeSingle();
+  if (client) return { status: "CLIENTE_CARTEIRA", leadId: lead.id };
+
+  if (lead.qualification_tier && QUALIFIED_TIERS.includes(lead.qualification_tier)) {
+    return { status: "QUALIFIED", leadId: lead.id };
+  }
+  return { status: "LEAD_NO_PIPELINE", leadId: lead.id };
+};
+
+const listCustomFields: Handler = async (supabase, ctx) => {
+  const { data, error } = await supabase
+    .from("lead_custom_fields")
+    .select("field_name, field_type, is_required")
+    .eq("organization_id", ctx.organizationId)
+    .order("display_order", { ascending: true });
+  if (error) throw new Error(`list_custom_fields: ${error.message}`);
+  // field_name is the introspect target the write-guard checks against.
+  return (data ?? []).map((f: any) => ({ field: f.field_name, type: f.field_type, required: f.is_required }));
+};
+
+const transferToHuman: Handler = async (supabase, ctx, args) => {
+  if (!ctx.canonicalPhone) throw new ToolError("missing_context", "transfer_to_human:phone");
+  const reason = String(args.reason ?? "transfer");
+  // Critical (sensitive path): pause the agent phone-keyed so it goes silent for
+  // the human takeover. This is the security-essential part and is verified.
+  const until = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
+  const { error } = await supabase.rpc("copilot_v2_set_human_pause", {
+    p_org_id: ctx.organizationId, p_canonical_phone: ctx.canonicalPhone, p_until: until, p_reason: `transfer:${reason}`,
+  });
+  if (error) throw new Error(`transfer_to_human: ${error.message}`);
+  // The structured notification dispatch (WhatsApp + in-app, to the configured
+  // handoff target) is the outbound layer (needs target-user from config) — not
+  // done here. We return the structured payload for that layer to consume.
+  return {
+    transferred: true,
+    reason,
+    paused_until: until,
+    handoff: { leadId: ctx.leadId ?? null, reason, summary: args.summary ?? null },
+  };
+};
+
 const HANDLERS: Record<string, Handler> = {
   get_lead_360: getLead360,
   list_pipeline_stages: listPipelineStages,
   get_conversation_history: getConversationHistory,
+  get_contact_status: getContactStatus,
+  list_custom_fields: listCustomFields,
   move_lead_stage: moveLeadStage,
   set_qualification_tier: setQualificationTier,
+  transfer_to_human: transferToHuman,
+  // fill_lead_field: deferred — lead_custom_field_values has no (lead_id, field_id)
+  //   unique constraint, so a safe upsert needs a select-then-write done in the
+  //   integration session (and verified against the live table). Stays
+  //   not_implemented until then (honest — never a silent partial write).
 };
 
 /**

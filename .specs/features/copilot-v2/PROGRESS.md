@@ -28,12 +28,15 @@
 
 ## Tool executor — estado por tool
 
-✅ **Implementadas** (schema real): `get_lead_360`, `list_pipeline_stages`, `get_conversation_history`, `move_lead_stage` (pipes sistema), `set_qualification_tier` (rubric-engine + `copilot_v2_rubric` → escreve `leads.qualification_tier`).
-🔴 **`not_implemented`** (gating honesto, sem NOOP) — bloqueadas por tabela/origem:
+✅ **Implementadas** (8, schema real): `get_lead_360`, `list_pipeline_stages`, `get_conversation_history`, `get_contact_status` (leads+`upsell_clients`+tier → NOVO/LEAD_NO_PIPELINE/QUALIFIED/CLIENTE_CARTEIRA), `list_custom_fields` (`lead_custom_fields`), `move_lead_stage` (pipes sistema), `set_qualification_tier` (rubric-engine → `leads.qualification_tier`), `transfer_to_human` (pausa phone-keyed via RPC + payload de handoff).
+🔴 **`not_implemented`** (gating honesto, sem NOOP):
 | Tool | Bloqueio |
 |------|----------|
+| `fill_lead_field` | `lead_custom_field_values` SEM unique (lead_id,field_id) → upsert seguro precisa select-then-write verificado ao vivo |
+| `handoff_to_vendedor` | reassign + notificação (`notifications.user_id` NOT NULL → precisa target-user da config) |
 | `search_knowledge` | ingestão+embeddings (Slice 7) — tabela `copilot_v2_knowledge` JÁ em prod |
 | `send_media` | WhatsApp adapter — tabela `copilot_v2_send_media` JÁ em prod |
+| `schedule_meeting` | Google Calendar |
 | `schedule_meeting` | Google Calendar + `check_agenda_availability` |
 | `transfer_to_human` / `handoff_to_vendedor` | notificação estruturada + reassign |
 | `get_contact_status` | lógica leads+pipes+carteira |
