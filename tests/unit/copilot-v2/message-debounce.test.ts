@@ -55,6 +55,11 @@ describe('coalesceFragments', () => {
     expect(result[0].content).toBe('oi beleza');
   });
 
+  it('drops a burst made entirely of blank fragments (never emits an empty turn)', () => {
+    const result = coalesceFragments([frag('   ', 0), frag('', 30), frag('\n', 60)], 2000);
+    expect(result).toEqual([]);
+  });
+
   it('preserves chronological order even if input is unsorted', () => {
     const result = coalesceFragments([frag('b', 60), frag('a', 0), frag('c', 120)], 2000);
     expect(result[0].content).toBe('a b c');

@@ -44,13 +44,16 @@ export function coalesceFragments(
   }
   groups.push(current);
 
-  return groups.map((group) => ({
-    content: group
-      .map((f) => f.content.trim())
-      .filter((c) => c.length > 0)
-      .join(" "),
-    fragmentCount: group.length,
-    firstTimestamp: group[0].timestamp,
-    lastTimestamp: group[group.length - 1].timestamp,
-  }));
+  return groups
+    .map((group) => ({
+      content: group
+        .map((f) => f.content.trim())
+        .filter((c) => c.length > 0)
+        .join(" "),
+      fragmentCount: group.length,
+      firstTimestamp: group[0].timestamp,
+      lastTimestamp: group[group.length - 1].timestamp,
+    }))
+    // A burst of only-blank fragments yields no message — never emit an empty turn.
+    .filter((m) => m.content !== "");
 }

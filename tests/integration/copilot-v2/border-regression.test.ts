@@ -7,7 +7,7 @@
  * can only be proven against real Postgres (atomic dedup, phone-keyed pause
  * persistence, atomic turn counter).
  *
- * SKIPPED until `20261107000000_copilot_v2_foundation.sql` is applied (these run
+ * SKIPPED until `20260531174908_copilot_v2_foundation.sql` is applied (these run
  * against PROD like the rest of tests/integration/, per the repo convention).
  * Remove `.skip` once the migration lands. Each `it` maps to one incident.
  */
@@ -18,11 +18,12 @@ import { createClient } from '@supabase/supabase-js';
 const PROD_URL = 'https://jsjsmuncfkbsbzqzqhfq.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 const ORG = '6030520a-2ca7-477d-be89-55758e2cd808'; // Milennials
+// NOTE: foundation migration 20260531174908_copilot_v2_foundation IS applied to prod.
 // Lazy — constructing a client with an empty key throws at import time.
 const getAdmin = () => createClient(PROD_URL, SERVICE_KEY);
 
 describe('Copilot v2 border regression — gate', () => {
-  it('is gated on 20261107000000_copilot_v2_foundation.sql (un-skip the suite below once applied)', () => {
+  it('is gated on 20260531174908_copilot_v2_foundation.sql (un-skip the suite below once applied)', () => {
     // Sentinel: keeps this file green pre-migration. The real DB regressions are
     // in the skipped suite below — they require the foundation tables in prod.
     expect(SERVICE_KEY === '' || SERVICE_KEY.length > 0).toBe(true);

@@ -54,7 +54,7 @@ export function configToSlots(config: AgentConfig): Record<string, string | unde
  * verbatim as data (no re-templating / injection).
  */
 export function fillTemplate(template: string, slots: Record<string, string | undefined>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => {
+  return template.replace(/\{\{([\w-]+)\}\}/g, (_match, key: string) => {
     const value = slots[key];
     return value && value.trim() !== "" ? value : MISSING;
   });
