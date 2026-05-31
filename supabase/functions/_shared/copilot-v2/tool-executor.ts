@@ -13,12 +13,15 @@
  */
 
 import { TOOL_REGISTRY } from "./tool-registry.ts";
+import { mapSignalsToTier, type Rubric, type Signals } from "./rubric-engine.ts";
 
 export interface ToolContext {
   organizationId: string;
   leadId?: string | null;
   conversationId?: string | null;
   canonicalPhone?: string | null;
+  /** The active agent for this turn (needed to load its rubric). */
+  agentId?: string | null;
 }
 
 export type ToolErrorCode = "unknown_tool" | "not_implemented" | "missing_context";
@@ -109,11 +112,37 @@ const moveLeadStage: Handler = async (supabase, ctx, args) => {
   return { moved: true, pipe, stage };
 };
 
+const setQualificationTier: Handler = async (supabase, ctx, args) => {
+  if (!ctx.agentId) throw new ToolError("missing_context", "set_qualification_tier:agent");
+  if (!ctx.leadId) throw new ToolError("missing_context", "set_qualification_tier:lead");
+
+  // The LLM provides SIGNALS; the deterministic rubric decides the tier (ADR #3).
+  const { data: rubricRow, error: rubricErr } = await supabase
+    .from("copilot_v2_rubric")
+    .select("rules")
+    .eq("agent_id", ctx.agentId)
+    .maybeSingle();
+  if (rubricErr) throw new Error(`set_qualification_tier: ${rubricErr.message}`);
+  if (!rubricRow) return { applied: false, reason: "no_rubric", tier: null };
+
+  const rubric: Rubric = { rules: Array.isArray(rubricRow.rules) ? rubricRow.rules : [] };
+  const tier = mapSignalsToTier((args.signals ?? {}) as Signals, rubric);
+
+  const { error } = await supabase
+    .from("leads")
+    .update({ qualification_tier: tier, updated_at: new Date().toISOString() })
+    .eq("organization_id", ctx.organizationId)
+    .eq("id", ctx.leadId);
+  if (error) throw new Error(`set_qualification_tier: ${error.message}`);
+  return { applied: true, tier, signals: args.signals ?? {} };
+};
+
 const HANDLERS: Record<string, Handler> = {
   get_lead_360: getLead360,
   list_pipeline_stages: listPipelineStages,
   get_conversation_history: getConversationHistory,
   move_lead_stage: moveLeadStage,
+  set_qualification_tier: setQualificationTier,
 };
 
 /**

@@ -110,6 +110,35 @@ describe('move_lead_stage (write)', () => {
   });
 });
 
+describe('set_qualification_tier (rubric-driven write)', () => {
+  const tierCtx: ToolContext = { organizationId: 'org-1', leadId: 'lead-1', agentId: 'agent-1' };
+  const rubricRow = { rules: [{ tier: 'ouro', minFaturamento: 300_000, requiresIcp: true }] };
+
+  it('runs the deterministic rubric on the signals and writes leads.qualification_tier', async () => {
+    const sb = mockSupabase({ copilot_v2_rubric: rubricRow });
+    const out = await createToolExecutor(sb, tierCtx)('set_qualification_tier', {
+      signals: { faturamentoMensal: 500_000, icpFit: true },
+    });
+    expect(out).toMatchObject({ applied: true, tier: 'ouro' });
+    const leadsUpdate = sb.queries.find((x) => x.table === 'leads')!;
+    expect((leadsUpdate as any).update).toMatchObject({ qualification_tier: 'ouro' });
+    expect(leadsUpdate.filters).toContainEqual(['organization_id', 'org-1']);
+    expect(leadsUpdate.filters).toContainEqual(['id', 'lead-1']);
+  });
+
+  it('does NOT write when no rubric is configured (honest no-op)', async () => {
+    const sb = mockSupabase({}); // no copilot_v2_rubric row
+    const out = await createToolExecutor(sb, tierCtx)('set_qualification_tier', { signals: {} });
+    expect(out).toMatchObject({ applied: false, reason: 'no_rubric' });
+    expect(sb.queries.some((x) => x.table === 'leads')).toBe(false);
+  });
+
+  it('requires the agent in context (needs the rubric)', async () => {
+    const exec = createToolExecutor(mockSupabase(), { organizationId: 'org-1', leadId: 'lead-1' });
+    await expect(exec('set_qualification_tier', { signals: {} })).rejects.toMatchObject({ code: 'missing_context' });
+  });
+});
+
 describe('get_conversation_history', () => {
   it('queries conversation_messages for the context conversation', async () => {
     const sb = mockSupabase({ conversation_messages: [{ role: 'user', content: 'oi' }] });
