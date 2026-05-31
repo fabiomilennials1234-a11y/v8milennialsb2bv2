@@ -13,12 +13,15 @@
  */
 
 import { TOOL_REGISTRY } from "./tool-registry.ts";
+import { mapSignalsToTier, type Rubric, type Signals } from "./rubric-engine.ts";
 
 export interface ToolContext {
   organizationId: string;
   leadId?: string | null;
   conversationId?: string | null;
   canonicalPhone?: string | null;
+  /** The active agent for this turn (needed to load its rubric). */
+  agentId?: string | null;
 }
 
 export type ToolErrorCode = "unknown_tool" | "not_implemented" | "missing_context";
@@ -109,11 +112,118 @@ const moveLeadStage: Handler = async (supabase, ctx, args) => {
   return { moved: true, pipe, stage };
 };
 
+const setQualificationTier: Handler = async (supabase, ctx, args) => {
+  if (!ctx.agentId) throw new ToolError("missing_context", "set_qualification_tier:agent");
+  if (!ctx.leadId) throw new ToolError("missing_context", "set_qualification_tier:lead");
+
+  // The LLM provides SIGNALS; the deterministic rubric decides the tier (ADR #3).
+  const { data: rubricRow, error: rubricErr } = await supabase
+    .from("copilot_v2_rubric")
+    .select("rules")
+    .eq("agent_id", ctx.agentId)
+    .maybeSingle();
+  if (rubricErr) throw new Error(`set_qualification_tier: ${rubricErr.message}`);
+  if (!rubricRow) return { applied: false, reason: "no_rubric", tier: null };
+
+  const rubric: Rubric = { rules: Array.isArray(rubricRow.rules) ? rubricRow.rules : [] };
+  const tier = mapSignalsToTier((args.signals ?? {}) as Signals, rubric);
+
+  const { error } = await supabase
+    .from("leads")
+    .update({ qualification_tier: tier, updated_at: new Date().toISOString() })
+    .eq("organization_id", ctx.organizationId)
+    .eq("id", ctx.leadId);
+  if (error) throw new Error(`set_qualification_tier: ${error.message}`);
+  return { applied: true, tier, signals: args.signals ?? {} };
+};
+
+const QUALIFIED_TIERS = ["diamante", "ouro", "prata", "bronze"];
+
+const getContactStatus: Handler = async (supabase, ctx) => {
+  let leadQ = supabase.from("leads").select("id, qualification_tier")
+    .eq("organization_id", ctx.organizationId).is("deleted_at", null);
+  leadQ = ctx.leadId ? leadQ.eq("id", ctx.leadId) : leadQ.eq("normalized_phone", ctx.canonicalPhone ?? "__none__");
+  const { data: lead, error } = await leadQ.maybeSingle();
+  if (error) throw new Error(`get_contact_status: ${error.message}`);
+  if (!lead) return { status: "NOVO", leadId: null };
+
+  // Carteira = existing customer in the portfolio (upsell_clients).
+  const { data: client } = await supabase
+    .from("upsell_clients").select("id")
+    .eq("organization_id", ctx.organizationId).eq("lead_id", lead.id).maybeSingle();
+  if (client) return { status: "CLIENTE_CARTEIRA", leadId: lead.id };
+
+  if (lead.qualification_tier && QUALIFIED_TIERS.includes(lead.qualification_tier)) {
+    return { status: "QUALIFIED", leadId: lead.id };
+  }
+  return { status: "LEAD_NO_PIPELINE", leadId: lead.id };
+};
+
+const listCustomFields: Handler = async (supabase, ctx) => {
+  const { data, error } = await supabase
+    .from("lead_custom_fields")
+    .select("field_name, field_type, is_required")
+    .eq("organization_id", ctx.organizationId)
+    .order("display_order", { ascending: true });
+  if (error) throw new Error(`list_custom_fields: ${error.message}`);
+  // field_name is the introspect target the write-guard checks against.
+  return (data ?? []).map((f: any) => ({ field: f.field_name, type: f.field_type, required: f.is_required }));
+};
+
+const transferToHuman: Handler = async (supabase, ctx, args) => {
+  if (!ctx.canonicalPhone) throw new ToolError("missing_context", "transfer_to_human:phone");
+  const reason = String(args.reason ?? "transfer");
+  // Critical (sensitive path): pause the agent phone-keyed so it goes silent for
+  // the human takeover. This is the security-essential part and is verified.
+  const until = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
+  const { error } = await supabase.rpc("copilot_v2_set_human_pause", {
+    p_org_id: ctx.organizationId, p_canonical_phone: ctx.canonicalPhone, p_until: until, p_reason: `transfer:${reason}`,
+  });
+  if (error) throw new Error(`transfer_to_human: ${error.message}`);
+  // The structured notification dispatch (WhatsApp + in-app, to the configured
+  // handoff target) is the outbound layer (needs target-user from config) — not
+  // done here. We return the structured payload for that layer to consume.
+  return {
+    transferred: true,
+    reason,
+    paused_until: until,
+    handoff: { leadId: ctx.leadId ?? null, reason, summary: args.summary ?? null },
+  };
+};
+
+const fillLeadField: Handler = async (supabase, ctx, args) => {
+  if (!ctx.leadId) throw new ToolError("missing_context", "fill_lead_field:lead");
+  const field = String(args.field ?? "");
+  if (!field) throw new ToolError("missing_context", "fill_lead_field:field");
+
+  // Resolve the custom-field definition (introspect target the write-guard checks).
+  const { data: def, error: defErr } = await supabase
+    .from("lead_custom_fields").select("id")
+    .eq("organization_id", ctx.organizationId).eq("field_name", field).maybeSingle();
+  if (defErr) throw new Error(`fill_lead_field: ${defErr.message}`);
+  if (!def) return { filled: false, reason: "unknown_field", field };
+
+  // Safe upsert — lead_custom_field_values has a unique (lead_id, field_id).
+  const { error } = await supabase
+    .from("lead_custom_field_values")
+    .upsert(
+      { lead_id: ctx.leadId, field_id: def.id, value: String(args.value ?? ""), updated_at: new Date().toISOString() },
+      { onConflict: "lead_id,field_id" },
+    );
+  if (error) throw new Error(`fill_lead_field: ${error.message}`);
+  return { filled: true, field };
+};
+
 const HANDLERS: Record<string, Handler> = {
   get_lead_360: getLead360,
   list_pipeline_stages: listPipelineStages,
   get_conversation_history: getConversationHistory,
+  get_contact_status: getContactStatus,
+  list_custom_fields: listCustomFields,
   move_lead_stage: moveLeadStage,
+  set_qualification_tier: setQualificationTier,
+  fill_lead_field: fillLeadField,
+  transfer_to_human: transferToHuman,
 };
 
 /**
