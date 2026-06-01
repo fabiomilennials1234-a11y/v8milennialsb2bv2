@@ -406,13 +406,28 @@ describe("canUserPerformAction — import_leads (legacy matrix)", () => {
     ]);
   };
 
-  it("allows import_leads when matrix has no denial (default allowed)", async () => {
+  // Fail-closed (#647): missing matrix row no longer defaults to allowed.
+  it("denies import_leads when matrix has no row (fail-closed, #647)", async () => {
     const { sb, mockTable } = createMockSupabase();
     asMember(mockTable);
     const result = await canUserPerformAction({
       supabase: sb, userId: "u1", organizationId: "org-1", action: "import_leads",
     });
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("leads.create");
+  });
+
+  it("allows import_leads only with explicit matrix value=allowed", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    asMember(mockTable);
+    mockTable("team_member_permissions", [
+      { team_member_id: "tm1", resource_key: "leads", action_key: "create", value: "allowed" },
+    ]);
+    const result = await canUserPerformAction({
+      supabase: sb, userId: "u1", organizationId: "org-1", action: "import_leads",
+    });
     expect(result.allowed).toBe(true);
+    expect(result.reason).toBe("matrix_allowed");
   });
 
   it("denies import_leads when matrix value=denied for leads.create", async () => {
