@@ -584,6 +584,7 @@ export const LeadCard = memo(function LeadCard({
           {/* ── Footer: Inline metrics (Trello-style) ── */}
           <div className="flex items-center justify-between pt-2 mt-auto border-t border-border/40">
             <LeadCardMetrics
+              leadId={lead.leadId}
               commentsCount={lead.metrics?.commentsCount ?? 0}
               checklistsCompleted={lead.metrics?.checklistsCompleted ?? 0}
               checklistsTotal={lead.metrics?.checklistsTotal ?? 0}

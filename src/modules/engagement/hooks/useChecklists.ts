@@ -54,6 +54,51 @@ export function useChecklists() {
   });
 }
 
+/**
+ * Lead-scoped checklists com contadores agregados.
+ *
+ * Single source consumido pelo modal do lead (`LeadChecklistSection`) e pelo
+ * popover do card (`LeadCardChecklistPopover`). Mesma queryKey
+ * `["checklists","lead",leadId]` — `useToggleChecklistItem` invalida
+ * `["checklists"]` (prefixo), mantendo ambos em sync.
+ *
+ * Multi-tenancy: filtra por `organization_id` via `useOrganization`. RLS é o gate.
+ * Não assina realtime: `useChecklistItems` (itens) e `useBatchedLeadMetrics`
+ * (badge do card) já cobrem `checklists`/`checklist_items` — evita subscription
+ * redundante.
+ */
+export function useLeadChecklists(leadId: string | null) {
+  const { organizationId } = useOrganization();
+
+  return useQuery({
+    queryKey: ["checklists", "lead", leadId],
+    queryFn: async (): Promise<ChecklistWithCounts[]> => {
+      if (!leadId || !organizationId) return [];
+
+      const { data, error } = await supabase
+        .from("checklists")
+        .select(`*, checklist_items(id, is_completed)`)
+        .eq("organization_id", organizationId)
+        .eq("lead_id", leadId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      return (data ?? []).map((c: any) => {
+        const items = c.checklist_items ?? [];
+        return {
+          ...c,
+          checklist_items: undefined,
+          total_items: items.length,
+          completed_items: items.filter((i: any) => i.is_completed).length,
+        };
+      });
+    },
+    enabled: !!leadId && !!organizationId,
+    staleTime: 30_000,
+  });
+}
+
 export function useChecklistItems(checklistId: string | null) {
   useRealtimeSubscription("checklist_items", ["checklist_items"]);
 

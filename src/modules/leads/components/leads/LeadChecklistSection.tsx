@@ -16,49 +16,12 @@ import {
 import {
   useChecklistItems,
   useToggleChecklistItem,
-} from "@/modules/engagement/hooks/useChecklists";
-import {
+  useLeadChecklists,
   useChecklistTemplates,
   useApplyChecklistTemplate,
-} from "@/modules/engagement/hooks/useChecklistTemplates";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/modules/identity";
+} from "@/modules/engagement";
 import { cn } from "@/lib/utils";
-import type { ChecklistWithCounts } from "@/modules/engagement/hooks/useChecklists";
-
-function useLeadChecklists(leadId: string | null) {
-  const { organizationId } = useOrganization();
-
-  return useQuery({
-    queryKey: ["checklists", "lead", leadId],
-    queryFn: async (): Promise<ChecklistWithCounts[]> => {
-      if (!leadId || !organizationId) return [];
-
-      const { data, error } = await supabase
-        .from("checklists")
-        .select(`*, checklist_items(id, is_completed)`)
-        .eq("organization_id", organizationId)
-        .eq("lead_id", leadId)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      return (data ?? []).map((c: any) => {
-        const items = c.checklist_items ?? [];
-        return {
-          ...c,
-          checklist_items: undefined,
-          total_items: items.length,
-          completed_items: items.filter((i: any) => i.is_completed).length,
-          lead: null,
-        };
-      });
-    },
-    enabled: !!leadId && !!organizationId,
-    staleTime: 30_000,
-  });
-}
+import type { ChecklistWithCounts } from "@/modules/engagement";
 
 interface LeadChecklistItemsProps {
   checklistId: string;
