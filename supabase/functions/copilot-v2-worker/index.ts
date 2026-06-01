@@ -52,9 +52,24 @@ serve(
     const rows = (claimed ?? []) as QueueRow[];
     if (rows.length === 0) return json({ processed: 0 });
 
+    // Ensure the parent trace row exists before any step insert (FK:
+    // trace_steps.trace_id → traces.trace_id). Created once per message.
+    const tracesOpened = new Set<string>();
+    async function ensureTrace(row: QueueRow): Promise<void> {
+      if (tracesOpened.has(row.trace_id)) return;
+      tracesOpened.add(row.trace_id);
+      await supabase.from("copilot_v2_traces").upsert({
+        trace_id: row.trace_id,
+        organization_id: row.organization_id,
+        lead_id: row.lead_id,
+        conversation_id: row.conversation_id,
+        status: "open",
+      }, { onConflict: "trace_id" }).then(() => {}, () => {});
+    }
+
     // 2. Drain via the pure processor with real deps.
     const result = await processBatch(rows, {
-      resolveContext: (row) => resolveContext(supabase, row),
+      resolveContext: async (row) => { await ensureTrace(row); return resolveContext(supabase, row); },
       makeLlm: (model: ModelId) => createOpenRouterClient({ model, maxTokens: 2048 }),
       makeExecutor: (row, context) => createToolExecutor(supabase, {
         organizationId: row.organization_id,
