@@ -1,5 +1,12 @@
 project_id = "jsjsmuncfkbsbzqzqhfq"
 
+# Auth: signup público DESABILITADO (invite-only). Usuários são provisionados via
+# edge function create-org-user (admin.createUser, que ignora este gate).
+# Auditoria de segurança 2026-06-01: fecha a escalada anon→authenticated
+# (disable_signup=true também aplicado em prod via Management API).
+[auth]
+enable_signup = false
+
 # Auth: exigir confirmação de email para login.
 # Em projetos hospedados, habilite em: Dashboard → Authentication → Providers → Email → "Confirm email".
 [auth.email]
