@@ -76,6 +76,28 @@ jobs:
           SUPABASE_URL: http://localhost:54321
           SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
 
+  rls-invariants:
+    name: RLS Invariants (pgTAP)
+    runs-on: ubuntu-latest
+    needs: [quality]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      # Boots local Postgres and applies supabase/migrations/* — the clean
+      # schema the invariant suite asserts against.
+      - run: supabase start
+      - name: Install pgTAP TAP harness (pg_prove)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libtap-parser-sourcehandler-pgtap-perl postgresql-client
+      - name: Run RLS invariant suite (red fixture + clean gate)
+        run: bash supabase/tests/run.sh
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
