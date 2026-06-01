@@ -43,7 +43,7 @@ import {
   useCopilotReasoning,
   type CopilotReasoningFilters,
 } from "@/modules/copilot/hooks/useCopilotReasoning";
-import { useMasterOrganizations } from "../../hooks/useMasterOrganizations";
+import { useMasterOrganizations } from "../hooks/useMasterOrganizations";
 
 const PRESET_RANGES = [
   { value: "1h", label: "Última 1h", hours: 1 },

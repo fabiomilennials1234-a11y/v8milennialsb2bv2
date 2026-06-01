@@ -45,14 +45,18 @@ src/modules/identity/
 │   ├── components/PermissionProtectedRoute.tsx
 │   ├── components/PermissionsTab.tsx  # Pitstop > Permissões (deep-import direto via Configuracoes p/ lazy chunk — NÃO no sub-barrel)
 │   └── index.ts                      # sub-barrel privado
+├── master/                           # sub-conceito master (slice 9.4 arch-deepening) — API interna privada; barrel raiz re-exporta SÓ useMasterAuth/useCanAccessMaster, resto fica aqui
+│   ├── hooks/                        # 6 master hooks: useMasterAuth, useMasterOperations, useMasterOrganizations, useMasterPlans, useMasterUsers, useMasterAuditLogs (mvd de hooks/ em 9.4)
+│   ├── components/                   # Master ops UI (ApiStatusTab, BillingOverrideModal, MasterLayout, MasterRoute, MasterSidebar, PlanEditor, PlanFeatureCard, QuotaManagementPanel, onboarding/)
+│   ├── pages/                        # Master route components (MasterDashboard, MasterOrganizations, MasterUsers, MasterPlans, MasterFeatures, MasterAuditLogs, MasterOperations, MasterAutomationHealth, MasterWhatsAppHealth, CopilotReasoning, CopilotToggleAudit, MasterOnboarding, WhatsAppMigration) — deep-import via App.tsx p/ lazy chunk
+│   └── index.ts                      # sub-barrel privado (master ops completo)
 ├── components/
-│   ├── master/                       # Master ops UI (ApiStatusTab, BillingOverrideModal, MasterLayout, MasterRoute, MasterSidebar, PlanEditor, PlanFeatureCard, QuotaManagementPanel, onboarding/)
 │   ├── team/                         # Team management UI (MemberPermissions, SeatUsageBar, TeamMemberCard, TeamStats) — absorvidos em slice 16
 │   ├── ProfileSettings.tsx
 │   └── SubscriptionProtectedRoute.tsx
-├── hooks/                            # 16 hooks (master, org, team, profiles, avatar) — role/permissions movidos p/ permissions/ em 9.3, useIdentity p/ auth/ em 9.2
+├── hooks/                            # 10 hooks (org, team, profiles, avatar) — master mvd p/ master/ em 9.4, role/permissions p/ permissions/ em 9.3, useIdentity p/ auth/ em 9.2
 │                                     # useCurrentTeamMember.ts extraído de useTeamMembers.ts (9.4a) p/ quebrar ciclo useOrganization↔useTeamMembers; useTeamMembers re-exporta
-├── pages/                            # Auth, Signup, ResetPassword, Equipe, master/
+├── pages/                            # Auth, Signup, ResetPassword, Equipe
 ├── index.ts                          # API pública
 └── CLAUDE.md                         # este arquivo
 ```
@@ -67,7 +71,7 @@ Ver `./index.ts` para superfície completa. Resumo:
 
 **Hooks — identity + role:** `useIdentity` (+ type `Identity`), `useUserRole`, `useHasRole`, `useIsAdmin`, `useFeaturePermission`, `useFeaturePermissions`, `useCanManageCopilot`, `useCanManageWhatsApp`, `useJobTitle`, `useMetricType` (+ types `AppRole`, `UserRole`), `useCanDo`.
 
-**Hooks — master ops:** `useMasterAuth`, `useCanAccessMaster` (+ types `MasterUser`, `MasterPermissions`), `useMasterOperations`, `useAutomationJobs`, `useJobsOverview`, `useMasterOrganizations`, `useMasterUsers`, `useMasterPlans`, `useMasterAuditLogs`.
+**Hooks — master ops (sub-conceito `master/`):** o barrel raiz re-exporta SÓ `useMasterAuth`, `useCanAccessMaster` (+ types `MasterUser`, `MasterPermissions`) via `./master` (slice 9.4 demoção). O restante (`useMasterOperations`/`useAutomationJobs`/`useJobsOverview`/`useMasterOrganizations`/`useMasterUsers`/`useMasterPlans`/`useMasterAuditLogs` + suas variantes/types) saiu do barrel raiz e vive em `master/index.ts` — consumido só pelas pages/components master internas (deep-import via App.tsx).
 
 **Hooks — permissions:** `usePermissions`, `useOrgRolePermissions`, `useUpdateRolePermission`, `useResetOrgRolePermissions`.
 
@@ -75,9 +79,9 @@ Ver `./index.ts` para superfície completa. Resumo:
 
 **Hooks (slice 16 longtail):** `useAvatarMap` (resolve avatares por user_id), `useAutoAdminAssignment` (promove primeiro user a admin se ainda não houver admin na org).
 
-**Components:** `<ProtectedRoute>`, `<PermissionProtectedRoute>`, `<SubscriptionProtectedRoute>`, `<PermissionsTab>`, `<ProfileSettings>`, `<MemberPermissions>`, `<SeatUsageBar>`, `<TeamMemberCard>`, `<TeamStats>`, + master/* components.
+**Components:** `<ProtectedRoute>`, `<PermissionProtectedRoute>`, `<SubscriptionProtectedRoute>`, `<PermissionsTab>`, `<ProfileSettings>`, `<MemberPermissions>`, `<SeatUsageBar>`, `<TeamMemberCard>`, `<TeamStats>`. (master components em `master/components/`, deep-import via App.tsx — NÃO no barrel raiz.)
 
-**Pages (deep-import, não no barrel):** `pages/Auth`, `pages/Signup`, `pages/ResetPassword`, `pages/Equipe`, `pages/master/*`.
+**Pages (deep-import, não no barrel):** `pages/Auth`, `pages/Signup`, `pages/ResetPassword`, `pages/Equipe`, `master/pages/*` (master, slice 9.4).
 
 **Eventos (post slice 19):** `user.signed_in`, `org.switched`, `permission.granted`.
 

@@ -7,7 +7,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "user-1" }, session: {} }),
 }));
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({ isMaster: false, isLoading: false }),
 }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({

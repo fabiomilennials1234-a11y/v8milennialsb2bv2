@@ -55,7 +55,7 @@ vi.mock('@/modules/identity/hooks/useTeamMembers', () => ({
 // ─── Mock: useMasterAuth ────────────────────────────────
 
 const mockUseMasterAuth = vi.fn();
-vi.mock('@/modules/identity/hooks/useMasterAuth', () => ({
+vi.mock('@/modules/identity/master/hooks/useMasterAuth', () => ({
   useMasterAuth: (...args: unknown[]) => mockUseMasterAuth(...args),
 }));
 

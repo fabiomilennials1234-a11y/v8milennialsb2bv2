@@ -47,7 +47,7 @@ vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useFeaturePermissions: () => ({ data: {}, isLoading: false }),
 }));
 
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({ isMaster: false }),
 }));
 

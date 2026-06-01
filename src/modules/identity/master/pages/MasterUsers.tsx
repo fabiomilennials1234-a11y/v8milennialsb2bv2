@@ -62,9 +62,9 @@ import {
   useMasterAssignUserToOrg,
   useMasterResetUserPassword,
   type UnassignedUser,
-} from "../../hooks/useMasterUsers";
-import { useMasterOrganizations } from "../../hooks/useMasterOrganizations";
-import { useMasterAuth } from "../../hooks/useMasterAuth";
+} from "../hooks/useMasterUsers";
+import { useMasterOrganizations } from "../hooks/useMasterOrganizations";
+import { useMasterAuth } from "../hooks/useMasterAuth";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";

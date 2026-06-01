@@ -54,7 +54,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
     !!id?.startsWith("master-virtual-"),
 }));
 
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({
     isMaster: mockIsMaster,
     masterUser: null,

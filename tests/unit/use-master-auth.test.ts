@@ -22,7 +22,7 @@ vi.mock('@/modules/identity/auth/contexts/AuthContext', () => ({
 }));
 
 // ─── Import after mocks ─────────────────────────────────
-import { useMasterAuth, useCanAccessMaster } from '@/modules/identity/hooks/useMasterAuth';
+import { useMasterAuth, useCanAccessMaster } from '@/modules/identity/master/hooks/useMasterAuth';
 
 // ─── Helpers ─────────────────────────────────────────────
 function createWrapper() {

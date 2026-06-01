@@ -8,8 +8,8 @@ import { CreditCard, Check, X, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useMasterPlans, type Plan } from "../../hooks/useMasterPlans";
-import { PlanEditor } from "../../components/master/PlanEditor";
+import { useMasterPlans, type Plan } from "../hooks/useMasterPlans";
+import { PlanEditor } from "../components/PlanEditor";
 
 export default function MasterPlans() {
   const { data: plans, isLoading } = useMasterPlans();

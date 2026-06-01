@@ -35,7 +35,7 @@ import {
   useMasterAuditLogs,
   useMasterAuditActions,
   useMasterAuditStats,
-} from "../../hooks/useMasterAuditLogs";
+} from "../hooks/useMasterAuditLogs";
 
 export default function MasterAuditLogs() {
   const [actionFilter, setActionFilter] = useState<string>("");

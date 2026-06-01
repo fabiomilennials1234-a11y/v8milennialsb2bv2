@@ -55,7 +55,7 @@ vi.mock('@/modules/identity/permissions/lib/permissions', () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@/modules/identity/hooks/useMasterAuth', () => ({
+vi.mock('@/modules/identity/master/hooks/useMasterAuth', () => ({
   useMasterAuth: () => ({ isMaster: false, isLoading: false }),
 }));
 

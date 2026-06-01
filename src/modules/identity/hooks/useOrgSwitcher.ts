@@ -10,7 +10,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "../auth/contexts/AuthContext";
-import { useMasterAuth } from "./useMasterAuth";
+import { useMasterAuth } from "../master/hooks/useMasterAuth";
 import { setSelectedOrgId } from "./useCurrentTeamMember";
 
 export interface SwitcherOrg {

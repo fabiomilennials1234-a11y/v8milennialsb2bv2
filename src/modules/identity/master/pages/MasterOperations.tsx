@@ -52,8 +52,8 @@ import {
   useRetryDeadLetter,
   type RuntimeLog,
   type AutomationJob,
-} from "../../hooks/useMasterOperations";
-import { ApiStatusTab } from "../../components/master/ApiStatusTab";
+} from "../hooks/useMasterOperations";
+import { ApiStatusTab } from "../components/ApiStatusTab";
 
 // ─── Aba 1: Visão Geral ─────────────────────────────────
 

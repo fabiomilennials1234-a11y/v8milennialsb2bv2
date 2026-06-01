@@ -26,7 +26,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 const mockMaster = vi.fn(() => ({ isMaster: false, masterUser: null, permissions: {}, isOutbounder: false, isLoading: false }));
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
   useMasterAuth: () => mockMaster(),
 }));
 

@@ -1,5 +1,5 @@
 import { useAuth } from "../contexts/AuthContext";
-import { useMasterAuth } from "../../hooks/useMasterAuth";
+import { useMasterAuth } from "../../master/hooks/useMasterAuth";
 import { useCurrentTeamMember } from "../../hooks/useTeamMembers";
 import { useFeaturePermissions } from "../../permissions/hooks/useUserRole";
 

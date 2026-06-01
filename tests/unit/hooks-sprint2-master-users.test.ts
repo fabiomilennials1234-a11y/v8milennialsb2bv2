@@ -61,7 +61,7 @@ import {
   useMasterUnassignedUsers,
   useMasterAssignUserToOrg,
   useMasterResetUserPassword,
-} from "@/modules/identity/hooks/useMasterUsers";
+} from "@/modules/identity/master/hooks/useMasterUsers";
 
 // ---- Tests ----
 
