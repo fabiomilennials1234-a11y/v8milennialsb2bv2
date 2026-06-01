@@ -319,8 +319,13 @@ export function MobileComposerContextual({
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setIsRecording(true)}
-            disabled={isSending}
+            onClick={() => {
+              if (isSending) {
+                toast.info("Aguarde o envio anterior finalizar.");
+                return;
+              }
+              setIsRecording(true);
+            }}
             aria-label="Gravar audio"
             className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
           >

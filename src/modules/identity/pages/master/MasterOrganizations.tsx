@@ -17,6 +17,8 @@ import {
   Eye,
   Power,
   PowerOff,
+  Copy,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +56,7 @@ import {
 } from "../../hooks/useMasterOrganizations";
 import { BillingOverrideModal } from "../../components/master/BillingOverrideModal";
 import { useMasterAuth } from "../../hooks/useMasterAuth";
+import { toast } from "sonner";
 
 export default function MasterOrganizations() {
   const { isOutbounder } = useMasterAuth();
@@ -61,6 +64,7 @@ export default function MasterOrganizations() {
   const [createOpen, setCreateOpen] = useState(false);
   const [billingOverrideOpen, setBillingOverrideOpen] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState<any>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Form states
   const [newOrgName, setNewOrgName] = useState("");
@@ -80,7 +84,8 @@ export default function MasterOrganizations() {
   const filteredOrgs = baseOrgs?.filter(
     (org) =>
       org.name.toLowerCase().includes(search.toLowerCase()) ||
-      org.slug.toLowerCase().includes(search.toLowerCase())
+      org.slug.toLowerCase().includes(search.toLowerCase()) ||
+      org.id.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleCreate = async () => {
@@ -154,6 +159,7 @@ export default function MasterOrganizations() {
             <TableHeader>
               <TableRow>
                 <TableHead>Organização</TableHead>
+                <TableHead>ID</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Plano</TableHead>
@@ -164,13 +170,13 @@ export default function MasterOrganizations() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     Carregando...
                   </TableCell>
                 </TableRow>
               ) : filteredOrgs?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     Nenhuma organização encontrada
                   </TableCell>
                 </TableRow>
@@ -182,6 +188,28 @@ export default function MasterOrganizations() {
                         <p className="font-medium">{org.name}</p>
                         <p className="text-sm text-muted-foreground">{org.slug}</p>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 group/copy"
+                        onClick={() => {
+                          navigator.clipboard.writeText(org.id);
+                          setCopiedId(org.id);
+                          toast.success("ID copiado");
+                          setTimeout(() => setCopiedId(null), 2000);
+                        }}
+                        title={org.id}
+                      >
+                        <code className="text-xs text-muted-foreground font-mono">
+                          {org.id.slice(0, 8)}...
+                        </code>
+                        {copiedId === org.id ? (
+                          <Check className="w-3 h-3 text-emerald-500" />
+                        ) : (
+                          <Copy className="w-3 h-3 text-muted-foreground opacity-0 group-hover/copy:opacity-100 transition-opacity" />
+                        )}
+                      </button>
                     </TableCell>
                     <TableCell>
                       <Badge variant={org.org_type === "outbound" ? "default" : "secondary"}>

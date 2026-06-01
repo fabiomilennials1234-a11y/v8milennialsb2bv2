@@ -28,6 +28,11 @@ export function AudioRecorder({ onRecorded, onCancel }: AudioRecorderProps) {
 
   const startRecording = async () => {
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast.error("Navegador não suporta gravação de áudio. Use HTTPS e um navegador moderno.");
+        onCancel();
+        return;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
       // Tentar usar formato compatível com WhatsApp
@@ -81,8 +86,22 @@ export function AudioRecorder({ onRecorded, onCancel }: AudioRecorderProps) {
       timerRef.current = setInterval(() => {
         setRecordingTime((prev) => prev + 1);
       }, 1000);
-    } catch {
-      toast.error("Não foi possível acessar o microfone");
+    } catch (err) {
+      console.error("[AudioRecorder] getUserMedia failed:", err);
+
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "NotAllowedError") {
+        toast.error(
+          "Permissão do microfone bloqueada. Clique no ícone de cadeado na barra de endereço e permita o acesso ao microfone.",
+          { duration: 8000 },
+        );
+      } else if (name === "NotFoundError") {
+        toast.error("Nenhum microfone encontrado. Verifique se um dispositivo de áudio está conectado.");
+      } else if (name === "NotReadableError") {
+        toast.error("Microfone em uso por outro aplicativo. Feche outros apps que usam o microfone e tente novamente.");
+      } else {
+        toast.error("Não foi possível acessar o microfone. Verifique as permissões do navegador.");
+      }
       onCancel();
     }
   };

@@ -2,6 +2,7 @@ import type { Preview } from "@storybook/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import React from "react";
+import { AuthContext } from "../src/contexts/AuthContext";
 import "../src/index.css";
 
 const queryClient = new QueryClient({
@@ -12,6 +13,16 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Auth fake p/ stories — sem rede/Supabase. Só pra componentes que chamam useAuth().
+const mockAuth = {
+  user: { id: "sb-preview-user", email: "preview@torque.dev" } as any,
+  session: null,
+  loading: false,
+  signIn: async () => ({ error: null }),
+  signUp: async () => ({ error: null }),
+  signOut: async () => {},
+};
 
 const preview: Preview = {
   parameters: {
@@ -43,11 +54,13 @@ const preview: Preview = {
   decorators: [
     (Story) => (
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <div className="dark">
-            <Story />
-          </div>
-        </MemoryRouter>
+        <AuthContext.Provider value={mockAuth}>
+          <MemoryRouter>
+            <div className="dark">
+              <Story />
+            </div>
+          </MemoryRouter>
+        </AuthContext.Provider>
       </QueryClientProvider>
     ),
   ],

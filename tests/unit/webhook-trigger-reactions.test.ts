@@ -180,6 +180,7 @@ describe("triggerReactions", () => {
     direction: "incoming" as const,
     message_type: "text",
     push_name: "Lead Test",
+    media_url: null as string | null,
   };
 
   // ─── Scenario 1: Copilot fallback (queue fails → direct fetch) ───────────
@@ -215,6 +216,7 @@ describe("triggerReactions", () => {
       organization_id: "org-1",
       push_name: "Lead Test",
       incoming_message_type: "text",
+      media_url: null,
     });
   });
 
@@ -490,5 +492,139 @@ describe("triggerReactions", () => {
         expect.objectContaining({ method: "POST" }),
       );
     });
+  });
+});
+
+// ─── shouldTriggerCopilot logic ─────────────────────────────────────────────
+
+const { computeShouldTriggerCopilot } = mod as unknown as {
+  computeShouldTriggerCopilot: (normalized: {
+    direction: string;
+    content: string | null;
+    phone_number: string | null;
+    message_type: string;
+    media_url: string | null;
+  }) => boolean;
+};
+
+describe("computeShouldTriggerCopilot", () => {
+  it("returns true for incoming text with content", () => {
+    expect(
+      computeShouldTriggerCopilot({
+        direction: "incoming",
+        content: "Olá",
+        phone_number: "5511999999999",
+        message_type: "text",
+        media_url: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false for outgoing messages", () => {
+    expect(
+      computeShouldTriggerCopilot({
+        direction: "outgoing",
+        content: "Olá",
+        phone_number: "5511999999999",
+        message_type: "text",
+        media_url: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false for empty text content", () => {
+    expect(
+      computeShouldTriggerCopilot({
+        direction: "incoming",
+        content: "   ",
+        phone_number: "5511999999999",
+        message_type: "text",
+        media_url: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("returns true for audio messages even without text content", () => {
+    expect(
+      computeShouldTriggerCopilot({
+        direction: "incoming",
+        content: null,
+        phone_number: "5511999999999",
+        message_type: "audio",
+        media_url: "https://cdn.whatsapp.net/audio.ogg",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true for ptt (voice note) messages without text content", () => {
+    expect(
+      computeShouldTriggerCopilot({
+        direction: "incoming",
+        content: null,
+        phone_number: "5511999999999",
+        message_type: "ptt",
+        media_url: "https://cdn.whatsapp.net/voice.ogg",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true for image messages", () => {
+    expect(
+      computeShouldTriggerCopilot({
+        direction: "incoming",
+        content: null,
+        phone_number: "5511999999999",
+        message_type: "image",
+        media_url: "https://cdn.whatsapp.net/image.jpg",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true for video messages", () => {
+    expect(
+      computeShouldTriggerCopilot({
+        direction: "incoming",
+        content: null,
+        phone_number: "5511999999999",
+        message_type: "video",
+        media_url: "https://cdn.whatsapp.net/video.mp4",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true for document messages", () => {
+    expect(
+      computeShouldTriggerCopilot({
+        direction: "incoming",
+        content: null,
+        phone_number: "5511999999999",
+        message_type: "document",
+        media_url: "https://cdn.whatsapp.net/doc.pdf",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false without phone_number", () => {
+    expect(
+      computeShouldTriggerCopilot({
+        direction: "incoming",
+        content: "Olá",
+        phone_number: null,
+        message_type: "text",
+        media_url: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false for sticker (no useful content to process)", () => {
+    expect(
+      computeShouldTriggerCopilot({
+        direction: "incoming",
+        content: null,
+        phone_number: "5511999999999",
+        message_type: "sticker",
+        media_url: "https://cdn.whatsapp.net/sticker.webp",
+      }),
+    ).toBe(false);
   });
 });

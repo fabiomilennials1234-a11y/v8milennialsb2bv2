@@ -62,6 +62,22 @@ describe("buildBatchContent", () => {
     const result = buildBatchContent([]);
     expect(result).toBe("");
   });
+
+  it("skips messages with null content gracefully", () => {
+    const msgs = [
+      { content: "Texto normal" },
+      { content: null },
+      { content: "Outro texto" },
+    ] as any;
+    const result = buildBatchContent(msgs);
+    expect(result).toBe("Texto normal\nOutro texto");
+  });
+
+  it("returns empty string when all messages have null content", () => {
+    const msgs = [{ content: null }, { content: null }] as any;
+    const result = buildBatchContent(msgs);
+    expect(result).toBe("");
+  });
 });
 
 // ─── Absorb loop ─────────────────────────────────────────────────────────

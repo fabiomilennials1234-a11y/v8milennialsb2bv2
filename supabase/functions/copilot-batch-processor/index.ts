@@ -198,6 +198,58 @@ Deno.serve(withSentry('copilot-batch-processor', async (req: Request): Promise<R
       );
     }
 
+    const responseBody = await response.json().catch(() => ({}));
+
+    if (responseBody.skipped && responseBody.reason === "dedup_concurrent") {
+      console.warn("[copilot-batch-processor] Dedup lock hit — retrying after delay:", batchKey);
+
+      const MAX_DEDUP_RETRIES = 2;
+      const DEDUP_RETRY_DELAY_MS = 10_000;
+      let retrySuccess = false;
+
+      for (let retry = 0; retry < MAX_DEDUP_RETRIES; retry++) {
+        await new Promise((r) => setTimeout(r, DEDUP_RETRY_DELAY_MS));
+
+        const retryResp = await fetch(agentMessageUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({
+            message_ids: messageIds,
+            organization_id: firstRow.organization_id,
+            phone: firstRow.phone,
+            conversation_id: firstRow.conversation_id,
+            from: firstRow.phone,
+            batch_mode: true,
+          }),
+        });
+
+        const retryBody = await retryResp.json().catch(() => ({}));
+        if (!retryBody.skipped || retryBody.reason !== "dedup_concurrent") {
+          retrySuccess = true;
+          console.log("[copilot-batch-processor] Dedup retry succeeded on attempt", retry + 1);
+          break;
+        }
+        console.log("[copilot-batch-processor] Dedup retry", retry + 1, "still locked");
+      }
+
+      if (!retrySuccess) {
+        console.error("[copilot-batch-processor] Dedup retries exhausted — marking failed:", batchKey);
+        await supabase
+          .from("copilot_message_queue")
+          .update({ status: "failed", processed_at: new Date().toISOString() })
+          .eq("batch_key", batchKey)
+          .eq("status", "processing");
+
+        return new Response(
+          JSON.stringify({ ok: false, reason: "dedup_retries_exhausted", batch_key: batchKey }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
     // Mark rows as done
     await supabase
       .from("copilot_message_queue")

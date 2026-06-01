@@ -103,7 +103,7 @@ export function windowMatches(window: BehaviorWindow, dayKey: DayKey, minutes: n
   return false;
 }
 
-function formatNowText(now: Date, tz: string, dayKey: DayKey): string {
+export function formatNowText(now: Date, tz: string, dayKey: DayKey): string {
   const dateStr = new Intl.DateTimeFormat("pt-BR", {
     timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric",
   }).format(now);

@@ -8,20 +8,20 @@ const inRangeDate2 = new Date(2026, 4, 22, 8, 0, 0).toISOString();
 const inRangeDate3 = new Date(2026, 4, 22, 14, 0, 0).toISOString();
 
 const mockLeads = [
-  { id: "l1", created_at: inRangeDate, source: "meta_ads" },
-  { id: "l2", created_at: inRangeDate2, source: "meta_ads" },
-  { id: "l3", created_at: inRangeDate3, source: "google_ads" },
-  { id: "l4", created_at: inRangeDate, source: null },
+  { id: "l1", created_at: inRangeDate, origin: "meta_ads" },
+  { id: "l2", created_at: inRangeDate2, origin: "meta_ads" },
+  { id: "l3", created_at: inRangeDate3, origin: "google_ads" },
+  { id: "l4", created_at: inRangeDate, origin: null },
 ];
 
+// Hook now fetches the whole month (.eq().gte(), no .lte()) and filters the
+// range client-side; column is `origin` (not `source`).
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: () => ({
       select: () => ({
         eq: () => ({
-          gte: () => ({
-            lte: () => Promise.resolve({ data: mockLeads, error: null }),
-          }),
+          gte: () => Promise.resolve({ data: mockLeads, error: null }),
         }),
       }),
     }),

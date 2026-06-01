@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { motion } from "framer-motion";
-import { Search, Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List, ChevronUp, ChevronDown } from "lucide-react";
+import { Search, Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List, ChevronUp, ChevronDown, BarChart3 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,11 +20,15 @@ import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { useCanDo } from "@/modules/identity";
 import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
-import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/modules/pipelines/hooks/legacy/usePipeWhatsapp";
+import { useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/modules/pipelines/hooks/legacy/usePipeWhatsapp";
+import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePipeWhatsappMetrics } from "@/modules/pipelines/hooks/config/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/MetricsPeriodSelector";
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
+import { PipeWhatsappAnalytics } from "@/modules/pipelines/components/shared/PipeWhatsappAnalytics";
+import { PipeViewToggle } from "@/modules/pipelines/components/shared/PipeViewToggle";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
 import { useCreatePipeProposta } from "@/modules/pipelines/hooks/legacy/usePipePropostas";
@@ -55,7 +59,6 @@ import { PipelineListView } from "@/modules/pipelines/components/kanban/Pipeline
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { useSearchParams } from "react-router-dom";
-import { matchesResponsibleFilter } from "@/lib/kanban-filters";
 
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -78,7 +81,7 @@ type WhatsappFilterState = {
   filterOrigin: string;
   filterTags: string[];
   filterScheduled: boolean;
-  viewMode: "kanban" | "list";
+  viewMode: "kanban" | "list" | "analytics";
 };
 
 const DEFAULT_WHATSAPP_FILTERS: WhatsappFilterState = {
@@ -120,7 +123,7 @@ function PipeWhatsappInner() {
     [setFilterState]
   );
   const setViewMode = useCallback(
-    (v: "kanban" | "list") => setFilterState((f) => ({ ...f, viewMode: v })),
+    (v: "kanban" | "list" | "analytics") => setFilterState((f) => ({ ...f, viewMode: v })),
     [setFilterState]
   );
 
@@ -153,8 +156,22 @@ function PipeWhatsappInner() {
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_whatsapp", organizationId); }, []);
 
-  const { data: pipeData, isLoading, isError, refetch } = usePipeWhatsapp();
   const { data: pipelineStages = [], isLoading: loadingStages } = usePipelineStages("whatsapp");
+  const { stageData, allItems: pipeData, isLoading, organizationId: paginatedOrgId } = usePaginatedPipeline(
+    "whatsapp",
+    pipelineStages,
+    {
+      search: searchTerm,
+      responsibleId: filterResponsible,
+      tagIds: filterTags,
+    }
+  );
+  const isError = false;
+  const queryClient = useQueryClient();
+  const refetch = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["pipeline-page", "whatsapp"] });
+    queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts", "whatsapp"] });
+  }, [queryClient]);
   const { data: workflowCounts = {} } = useStageWorkflowCounts("whatsapp");
   const metricsRange = useMemo(() => getDateRange(periodState), [periodState]);
   const { data: metricsByPeriod } = usePipeWhatsappMetrics(metricsRange);
@@ -238,39 +255,19 @@ function PipeWhatsappInner() {
     };
   };
 
-  // Filter function for items
-  // Filters out "ghost leads" where RLS blocks the lead data (lead relation is null)
-  const filterItems = (item: any) => {
+  // Client-side filters that can't be server-side (origin, scheduled, date range)
+  const filterItemsLocal = (item: any) => {
     const lead = item.lead;
-
-    // Hide ghost leads (RLS blocked the lead data for this user)
     if (!lead) return false;
 
-    // Date range filter (only when a period is selected)
     if (metricsRange) {
       if (!item.created_at) return false;
       if (item.created_at < metricsRange.startStr || item.created_at > metricsRange.endStr) return false;
     }
 
-    // Search filter
-    const matchesSearch = searchTerm === "" ||
-      lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead?.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead?.phone?.includes(searchTerm);
-
-    // Responsible filter — shared helper covers entry + lead, including
-    // pre_sale_responsible_id / sale_responsible_id / sdr_id / closer_id.
-    const matchesResponsible = matchesResponsibleFilter(item, filterResponsible);
-
-    // Origin filter
     const matchesOrigin = filterOrigin === "all" || lead?.origin === filterOrigin;
-
-    // Tags filter (multi-select — lead must have at least one of the selected tags)
-    const matchesTags = filterTags.length === 0 ||
-      (lead?.lead_tags?.some((lt: any) => filterTags.includes(lt.tag?.id)) ?? false);
-
     const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
-    return matchesSearch && matchesResponsible && matchesOrigin && matchesTags && matchesScheduled;
+    return matchesOrigin && matchesScheduled;
   };
 
   // Converte etapas do banco para o formato do Kanban (com fallback)
@@ -288,34 +285,23 @@ function PipeWhatsappInner() {
     return stagesToColumns(pipelineStages);
   }, [pipelineStages]);
 
-  // Organize data by status columns — orphan leads (stage_key not matching any column) fall into the first column
+  // Build columns from server-paginated stageData
   const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
-    if (!pipeData) return statusColumns.map(col => ({ ...col, items: [] }));
-
-    const knownStageIds = new Set(statusColumns.map(c => c.id));
-
-    const result = statusColumns.map(col => {
-      const columnItems = pipeData
-        .filter(item => item.status === col.id)
-        .filter(filterItems)
-        .map(transformToCard);
-
+    return statusColumns.map(col => {
+      const sd = stageData[col.id];
+      const items = sd
+        ? sd.items.filter(filterItemsLocal).map(transformToCard)
+        : [];
       return {
         ...col,
-        items: columnItems,
+        items,
+        totalCount: sd?.totalCount ?? items.length,
+        hasMore: sd?.hasMore ?? false,
+        isFetchingMore: sd?.isFetchingMore ?? false,
+        onLoadMore: sd?.fetchMore,
       };
     });
-
-    if (result.length > 0) {
-      const orphanItems = pipeData
-        .filter(item => !knownStageIds.has(item.status))
-        .filter(filterItems)
-        .map(transformToCard);
-      result[0].items = [...result[0].items, ...orphanItems];
-    }
-
-    return result;
-  }, [pipeData, pipelineStages, statusColumns, searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled, leadsWithSchedule, metricsRange]);
+  }, [stageData, statusColumns, filterOrigin, filterScheduled, leadsWithSchedule, metricsRange, metricsMap]);
 
   // ---------------------------------------------------------------------------
   // Mobile list view — derive stages + flat lead list from existing columns
@@ -328,7 +314,7 @@ function PipeWhatsappInner() {
   const mobileLeads = useMemo(() => {
     if (!pipeData) return [];
     return pipeData
-      .filter(filterItems)
+      .filter(filterItemsLocal)
       .map((item) => {
         const lead = item.lead;
         return {
@@ -343,7 +329,7 @@ function PipeWhatsappInner() {
           updated_at: item.stage_entered_at || item.updated_at,
         };
       });
-  }, [pipeData, searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled, leadsWithSchedule, metricsRange]);
+  }, [pipeData, filterOrigin, filterScheduled, leadsWithSchedule, metricsRange]);
 
   const handleMobileLeadClick = useCallback((leadId: string) => {
     const item = pipeData?.find((p) => p.lead_id === leadId);
@@ -359,25 +345,29 @@ function PipeWhatsappInner() {
     return pipeData.filter(item => item.lead == null).length;
   }, [pipeData]);
 
-  // Calculate stats based on FILTERED data (excludes ghost leads)
+  // Stats from server-side counts (accurate totals, not limited by loaded pages)
   const stats = useMemo(() => {
-    if (!pipeData) return { total: 0, abordado: 0, respondeu: 0, scheduled: 0, pending: 0 };
-
-    const filteredData = pipeData.filter(filterItems);
-
-    const total = filteredData.length;
-    const abordado = filteredData.filter(item => item.status === "abordado").length;
-    const respondeu = filteredData.filter(item => item.status === "respondeu").length;
-    const scheduled = filteredData.filter(item => item.status === "agendado").length;
-    const pending = filteredData.filter(item => item.status === "novo").length;
-
+    const total = Object.values(stageData).reduce((sum, s) => sum + (s?.totalCount ?? 0), 0);
+    const abordado = stageData["abordado"]?.totalCount ?? 0;
+    const respondeu = stageData["respondeu"]?.totalCount ?? 0;
+    const scheduled = stageData["agendado"]?.totalCount ?? 0;
+    const pending = stageData["novo"]?.totalCount ?? 0;
     return { total, abordado, respondeu, scheduled, pending };
-  }, [pipeData, searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled, leadsWithSchedule, metricsRange]);
+  }, [stageData]);
 
   const displayStats = useMemo(() => {
     if (!metricsRange || !metricsByPeriod) return stats;
     return metricsByPeriod;
   }, [metricsRange, metricsByPeriod, stats]);
+
+  // Itens para o Analytics — respeita o período selecionado (subset carregado)
+  const analyticsItems = useMemo(() => {
+    if (!pipeData) return [];
+    if (!metricsRange) return pipeData;
+    return pipeData.filter(
+      (it) => it.created_at && it.created_at >= metricsRange.startStr && it.created_at <= metricsRange.endStr
+    );
+  }, [pipeData, metricsRange]);
 
   // Handle status change from drag-and-drop
   const handleStatusChange = async (itemId: string, newStatus: string) => {
@@ -505,22 +495,16 @@ function PipeWhatsappInner() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center border rounded-lg p-1">
-            <Button
-              variant={viewMode === "kanban" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("kanban")}
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </Button>
-            <Button
-              variant={viewMode === "list" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("list")}
-            >
-              <List className="w-4 h-4" />
-            </Button>
-          </div>
+          <PipeViewToggle
+            value={viewMode}
+            onChange={setViewMode}
+            layoutId="pipe-whatsapp-view-indicator"
+            options={[
+              { value: "kanban", icon: LayoutGrid, label: "Kanban" },
+              { value: "list", icon: List, label: "Lista" },
+              { value: "analytics", icon: BarChart3, label: "Analytics" },
+            ]}
+          />
           <Button size="sm" variant="outline" onClick={() => setIsSettingsOpen(true)}>
             <Settings2 className="w-4 h-4 mr-2" />
             Configurações
@@ -539,30 +523,32 @@ function PipeWhatsappInner() {
       {/* Ghost leads (RLS divergente entre pipe e leads) */}
       <GhostLeadsBanner pipeType="whatsapp" ghostCount={ghostLeadsCount} />
 
-      {/* Período + toggle recolher métricas */}
+      {/* Período + toggle recolher métricas (toggle só no Analytics) */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs gap-1.5 text-muted-foreground"
-          onClick={() => setMetricsCollapsed(!metricsCollapsed)}
-          aria-expanded={!metricsCollapsed}
-        >
-          {metricsCollapsed ? (
-            <>
-              <ChevronDown className="w-3.5 h-3.5" /> Mostrar métricas
-            </>
-          ) : (
-            <>
-              <ChevronUp className="w-3.5 h-3.5" /> Recolher métricas
-            </>
-          )}
-        </Button>
+        {viewMode === "analytics" && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs gap-1.5 text-muted-foreground"
+            onClick={() => setMetricsCollapsed(!metricsCollapsed)}
+            aria-expanded={!metricsCollapsed}
+          >
+            {metricsCollapsed ? (
+              <>
+                <ChevronDown className="w-3.5 h-3.5" /> Mostrar métricas
+              </>
+            ) : (
+              <>
+                <ChevronUp className="w-3.5 h-3.5" /> Recolher métricas
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
-      {/* Stats Bar - colapsível */}
-      {!metricsCollapsed && (
+      {/* Stats Bar - colapsível, só no Analytics */}
+      {viewMode === "analytics" && !metricsCollapsed && (
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
@@ -588,39 +574,41 @@ function PipeWhatsappInner() {
         </motion.div>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar lead, empresa, telefone..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
+      {/* Filters — ocultos no modo Analytics (são específicos do board) */}
+      {viewMode !== "analytics" && (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar lead, empresa, telefone..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <SavedViewsDropdown
+              entityType="pipe_whatsapp"
+              currentFilters={filterState}
+              defaultFilters={DEFAULT_WHATSAPP_FILTERS}
+              onApplyFilters={(f) => setFilterState(() => f)}
+              activeViewId={activeViewId}
+              onActiveViewChange={handleActiveViewChange}
+            />
+            <KanbanFilterPanel
+              sections={filterSections}
+              onClearAll={handleClearAllFilters}
             />
           </div>
-          <SavedViewsDropdown
-            entityType="pipe_whatsapp"
-            currentFilters={filterState}
-            defaultFilters={DEFAULT_WHATSAPP_FILTERS}
-            onApplyFilters={(f) => setFilterState(() => f)}
-            activeViewId={activeViewId}
-            onActiveViewChange={handleActiveViewChange}
-          />
-          <KanbanFilterPanel
+          <FilterChips
             sections={filterSections}
             onClearAll={handleClearAllFilters}
           />
         </div>
-        <FilterChips
-          sections={filterSections}
-          onClearAll={handleClearAllFilters}
-        />
-      </div>
+      )}
 
       {/* Period filter indicator — aparece quando um período está selecionado */}
-      {metricsRange && (
+      {viewMode !== "analytics" && metricsRange && (
         <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-card border border-border text-sm text-muted-foreground">
           <Calendar className="w-4 h-4 shrink-0" />
           <span className="flex-1">
@@ -638,8 +626,14 @@ function PipeWhatsappInner() {
         </div>
       )}
 
-      {/* Kanban Board / List View / Mobile List View */}
-      {isMobile ? (
+      {/* Analytics / Kanban Board / List View / Mobile List View */}
+      {viewMode === "analytics" ? (
+        <PipeWhatsappAnalytics
+          items={analyticsItems}
+          stats={displayStats}
+          responsibleMembers={responsibleMembers}
+        />
+      ) : isMobile ? (
         <PipelineListView
           stages={mobileStages}
           leads={mobileLeads}

@@ -19,7 +19,7 @@ import { normalizePhoneForSearch } from "../lead-service.ts";
 
 export interface CancellationCheck {
   canceled: boolean;
-  source: "phone_ai_preferences" | "leads" | "default" | "error";
+  source: "phone_ai_preferences" | "human_pause" | "leads" | "default" | "error";
   ai_disabled: boolean;
   reason?: string;
 }
@@ -55,10 +55,12 @@ export async function isCopilotCanceled(
       return { canceled: false, source: "default", ai_disabled: false };
     }
 
-    // 1. Source of truth: phone_ai_preferences (PK organization_id, normalized_phone)
+    // 1. Source of truth: phone_ai_preferences (PK organization_id, normalized_phone).
+    // Cobre DOIS gates phone-keyed: ai_disabled (toggle permanente) e
+    // human_paused_until (pausa temporária quando humano assume — RC human-pause).
     const { data: pref, error: prefErr } = await supabase
       .from("phone_ai_preferences")
-      .select("ai_disabled")
+      .select("ai_disabled, human_paused_until")
       .eq("organization_id", organizationId)
       .eq("normalized_phone", normalized)
       .maybeSingle();
@@ -66,11 +68,20 @@ export async function isCopilotCanceled(
     if (prefErr) {
       console.warn("[isCopilotCanceled] phone_ai_preferences read failed:", prefErr.message);
     } else if (pref) {
-      return {
-        canceled: Boolean(pref.ai_disabled),
-        ai_disabled: Boolean(pref.ai_disabled),
-        source: "phone_ai_preferences",
-      };
+      // ai_disabled (toggle permanente) tem prioridade sobre a pausa temporária.
+      if (pref.ai_disabled) {
+        return { canceled: true, ai_disabled: true, source: "phone_ai_preferences" };
+      }
+      // Pausa humana ativa: human_paused_until no futuro.
+      if (pref.human_paused_until && new Date(pref.human_paused_until as string) > new Date()) {
+        return {
+          canceled: true,
+          ai_disabled: false,
+          source: "human_pause",
+          reason: "human_pause_active",
+        };
+      }
+      return { canceled: false, ai_disabled: false, source: "phone_ai_preferences" };
     }
 
     // 2. Fallback: leads.ai_disabled (lead mais recente pra esse telefone).

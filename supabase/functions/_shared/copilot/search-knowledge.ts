@@ -26,13 +26,13 @@ import { generateEmbedding } from "../embeddings.ts";
  * Retorna string formatada pra injeção no prompt LLM (multi-turn search).
  *
  * Comportamento:
- *   1. Gera embedding da query via Gemini
+ *   1. Gera embedding da query via OpenRouter
  *   2. Busca chunks via match_document_chunks RPC (limit 8, threshold 0.45)
  *   3. Busca FAQs via match_faqs RPC (limit 4, threshold 0.5)
  *   4. Lista docs disponíveis (status=ready) pra send_document
  *   5. Concatena tudo em string formatada
  *
- * Retorna mensagem de erro se Gemini key ausente, embedding falha, ou exceção.
+ * Retorna mensagem de erro se OpenRouter key ausente, embedding falha, ou exceção.
  */
 export async function executeSearchKnowledge(
   supabase: SupabaseClient,
@@ -40,7 +40,7 @@ export async function executeSearchKnowledge(
   agentId: string,
 ): Promise<string> {
   try {
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    const apiKey = Deno.env.get("OPENROUTER_API_KEY");
     if (!apiKey) return "Erro: API key nao configurada.";
 
     const queryEmbedding = await generateEmbedding(query, apiKey);

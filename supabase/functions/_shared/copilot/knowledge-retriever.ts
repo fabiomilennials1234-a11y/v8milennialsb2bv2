@@ -117,7 +117,7 @@ export class KnowledgeRetriever {
   }
 
   private async getEmbedding(text: string): Promise<number[] | null> {
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    const apiKey = Deno.env.get("OPENROUTER_API_KEY");
     if (!apiKey) return null;
 
     const embedding = await generateEmbedding(text, apiKey);

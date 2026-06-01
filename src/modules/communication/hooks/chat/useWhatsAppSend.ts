@@ -204,7 +204,8 @@ export function useSendWhatsAppMessage() {
       if (error) throw error;
       if ((data as Record<string, unknown>)?.error) throw new Error((data as Record<string, string>).error);
 
-      const messageId = (data as Record<string, { id?: string }>)?.key?.id || `local_${Date.now()}`;
+      const d = data as Record<string, any>;
+      const messageId = d?.result?.message_id ?? d?.key?.id ?? `local_${Date.now()}`;
       const timestamp = new Date().toISOString();
 
       // Fire-and-forget — webhook send.message is the authoritative save
@@ -409,7 +410,8 @@ export function useSendWhatsAppMedia() {
         }
       }
 
-      const messageId = (data as Record<string, { id?: string }>)?.key?.id || `local_${Date.now()}`;
+      const d = data as Record<string, any>;
+      const messageId = d?.result?.message_id ?? d?.key?.id ?? `local_${Date.now()}`;
 
       // Fire-and-forget — webhook send.message is the authoritative save
       supabase.from("whatsapp_messages").upsert({

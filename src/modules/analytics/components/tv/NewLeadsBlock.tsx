@@ -25,8 +25,8 @@ export function NewLeadsBlock() {
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center gap-2 mb-3">
-        <UserPlus className="w-5 h-5 text-emerald-400" />
-        <span className="text-sm font-bold text-white uppercase tracking-wider">Novos Leads</span>
+        <UserPlus className="w-5 h-5 text-[#4ade80]" />
+        <span className="text-[12px] font-semibold text-[#f8f5e7]">Novos Leads</span>
         <AnimatePresence mode="wait">
           <motion.span
             key={period}
@@ -34,7 +34,7 @@ export function NewLeadsBlock() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -4 }}
             transition={{ duration: 0.2 }}
-            className="ml-auto text-[10px] font-medium text-white/40 uppercase tracking-wider"
+            className="ml-auto text-[10px] font-medium text-[#8a857a] uppercase tracking-wider"
           >
             {label}
           </motion.span>
@@ -51,10 +51,10 @@ export function NewLeadsBlock() {
           transition={{ duration: 0.25 }}
           className="flex items-baseline gap-2 mb-3"
         >
-          <span className="text-5xl font-black text-emerald-400 font-racing leading-none">
+          <span className="font-display text-4xl font-bold text-[#f8f5e7] leading-none tabular-nums">
             {total}
           </span>
-          <span className="text-xs text-white/40 uppercase tracking-wider">
+          <span className="text-xs text-[#8a857a] uppercase tracking-wider">
             {total === 1 ? "lead" : "leads"}
           </span>
         </motion.div>
@@ -79,7 +79,7 @@ export function NewLeadsBlock() {
             );
           })}
         </div>
-        <div className="flex items-center justify-between text-[9px] text-white/30 mb-3 px-0.5">
+        <div className="flex items-center justify-between text-[9px] text-[#8a857a] mb-3 px-0.5">
           <span>{buckets[0]?.key.slice(5).replace("-", "/")}</span>
           <span>{buckets[buckets.length - 1]?.key.slice(5).replace("-", "/")}</span>
         </div>
@@ -89,14 +89,14 @@ export function NewLeadsBlock() {
           <div className="mt-auto pt-2 border-t border-white/5">
             <div className="flex items-center gap-1.5 mb-1.5">
               <Sparkles className="w-3 h-3 text-emerald-400/60" />
-              <span className="text-[9px] uppercase tracking-wider text-white/40">Top Origens</span>
+              <span className="text-[9px] uppercase tracking-wider text-[#8a857a]">Top Origens</span>
             </div>
             <div className="space-y-1">
               {topSources.map((s) => {
                 const pct = (s.count / total) * 100;
                 return (
                   <div key={s.source} className="flex items-center justify-between text-[11px]">
-                    <span className="text-white/70 truncate max-w-[60%]">{labelOf(s.source)}</span>
+                    <span className="text-[#f8f5e7]/80 truncate max-w-[60%]">{labelOf(s.source)}</span>
                     <div className="flex items-center gap-2">
                       <div className="w-12 h-1 bg-white/5 rounded-full overflow-hidden">
                         <div

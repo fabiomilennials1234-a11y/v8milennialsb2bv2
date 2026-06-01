@@ -63,11 +63,10 @@ export function useTVKPIs(range: TVPeriodRange): TVKPIValues {
         ? projetoSales.reduce((s, p) => s + (p.sale_value || 0), 0) / projetoSales.length
         : 0;
 
-    // Leads pra trabalhar = estado atual (não filtra por período)
-    const leadsRemarcar = 0; // sem confirmacoes aqui — derivado de status atual; manter 0 ou recalc
-    const leadsNovo = (whatsapp as any[]).filter((w) => w.status === "novo").length;
+    // "Leads p/ Trabalhar" = coluna "Novo Lead" do funil Oportunidades
+    // (pipe_whatsapp, stage_key "novo"). Estado atual, não filtra período.
     const leadsAbordado = (whatsapp as any[]).filter((w) => w.status === "abordado").length;
-    const leads = leadsRemarcar + leadsNovo + leadsAbordado;
+    const leads = (whatsapp as any[]).filter((w) => w.status === "novo").length;
 
     return {
       reunioes: sdrPerf.totals.comparecidas,

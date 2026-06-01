@@ -4442,6 +4442,42 @@ export type Database = {
           },
         ]
       }
+      copilot_v2_agent_media: {
+        Row: {
+          agent_id: string
+          media_id: string
+          organization_id: string
+          trigger: string | null
+        }
+        Insert: {
+          agent_id: string
+          media_id: string
+          organization_id: string
+          trigger?: string | null
+        }
+        Update: {
+          agent_id?: string
+          media_id?: string
+          organization_id?: string
+          trigger?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_v2_agent_media_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_v2_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_v2_agent_media_media_id_fkey"
+            columns: ["media_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_v2_send_media"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       copilot_v2_agents: {
         Row: {
           archetype: Database["public"]["Enums"]["copilot_v2_archetype"]
@@ -4576,6 +4612,79 @@ export type Database = {
         }
         Relationships: []
       }
+      copilot_v2_knowledge: {
+        Row: {
+          created_at: string
+          extracted_text: string | null
+          id: string
+          organization_id: string
+          source_kind: Database["public"]["Enums"]["copilot_v2_knowledge_kind"]
+          status: Database["public"]["Enums"]["copilot_v2_knowledge_status"]
+          storage_path: string
+        }
+        Insert: {
+          created_at?: string
+          extracted_text?: string | null
+          id?: string
+          organization_id: string
+          source_kind: Database["public"]["Enums"]["copilot_v2_knowledge_kind"]
+          status?: Database["public"]["Enums"]["copilot_v2_knowledge_status"]
+          storage_path: string
+        }
+        Update: {
+          created_at?: string
+          extracted_text?: string | null
+          id?: string
+          organization_id?: string
+          source_kind?: Database["public"]["Enums"]["copilot_v2_knowledge_kind"]
+          status?: Database["public"]["Enums"]["copilot_v2_knowledge_status"]
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_v2_knowledge_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      copilot_v2_knowledge_chunks: {
+        Row: {
+          content: string
+          created_at: string
+          embedding: string | null
+          id: number
+          knowledge_id: string
+          organization_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          embedding?: string | null
+          id?: never
+          knowledge_id: string
+          organization_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          embedding?: string | null
+          id?: never
+          knowledge_id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_v2_knowledge_chunks_knowledge_id_fkey"
+            columns: ["knowledge_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_v2_knowledge"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       copilot_v2_message_queue: {
         Row: {
           attempts: number
@@ -4664,6 +4773,86 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      copilot_v2_rubric: {
+        Row: {
+          agent_id: string
+          organization_id: string
+          rules: Json
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          organization_id: string
+          rules?: Json
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          organization_id?: string
+          rules?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_v2_rubric_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: true
+            referencedRelation: "copilot_v2_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_v2_rubric_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      copilot_v2_send_media: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          kind: Database["public"]["Enums"]["copilot_v2_media_kind"]
+          nuance: string | null
+          organization_id: string
+          storage_path: string
+          trigger: string
+          what_it_is: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          kind: Database["public"]["Enums"]["copilot_v2_media_kind"]
+          nuance?: string | null
+          organization_id: string
+          storage_path: string
+          trigger: string
+          what_it_is: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          kind?: Database["public"]["Enums"]["copilot_v2_media_kind"]
+          nuance?: string | null
+          organization_id?: string
+          storage_path?: string
+          trigger?: string
+          what_it_is?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_v2_send_media_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       copilot_v2_trace_steps: {
         Row: {
@@ -16042,6 +16231,9 @@ export type Database = {
         | "member"
       channel_type: "whatsapp" | "instagram" | "messenger" | "email" | "sms"
       copilot_v2_archetype: "qualificador" | "vendedor" | "carteira"
+      copilot_v2_knowledge_kind: "image" | "video" | "doc" | "pdf"
+      copilot_v2_knowledge_status: "pending" | "ingesting" | "ready" | "failed"
+      copilot_v2_media_kind: "image" | "video"
       copilot_v2_model_id:
         | "google/gemini-2.5-flash"
         | "anthropic/claude-haiku-4-5"
@@ -16266,6 +16458,9 @@ export const Constants = {
       ],
       channel_type: ["whatsapp", "instagram", "messenger", "email", "sms"],
       copilot_v2_archetype: ["qualificador", "vendedor", "carteira"],
+      copilot_v2_knowledge_kind: ["image", "video", "doc", "pdf"],
+      copilot_v2_knowledge_status: ["pending", "ingesting", "ready", "failed"],
+      copilot_v2_media_kind: ["image", "video"],
       copilot_v2_model_id: [
         "google/gemini-2.5-flash",
         "anthropic/claude-haiku-4-5",

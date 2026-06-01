@@ -308,9 +308,25 @@ export async function executeSendDocument(
       data: { file_name: doc.file_name, message_id: sendResult.message_id },
     };
   } catch (error) {
+    // UazapiError é objeto plano (não instância de Error) → String(error) daria
+    // "[object Object]" e perderia o motivo real. Extrai message/status/code/raw.
+    let detail: string;
+    if (error instanceof Error) {
+      detail = error.message;
+    } else if (error && typeof error === "object") {
+      const e = error as Record<string, unknown>;
+      const parts: string[] = [];
+      if (e.message) parts.push(String(e.message));
+      if (e.status) parts.push(`status=${e.status}`);
+      if (e.provider_code) parts.push(`code=${e.provider_code}`);
+      if (e.raw) parts.push(`raw=${JSON.stringify(e.raw)}`);
+      detail = parts.length > 0 ? parts.join(" | ") : JSON.stringify(error);
+    } else {
+      detail = String(error);
+    }
     return {
       success: false,
-      error: `Failed to send document: ${error instanceof Error ? error.message : String(error)}`,
+      error: `Failed to send document: ${detail}`,
     };
   }
 }

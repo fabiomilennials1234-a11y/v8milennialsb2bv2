@@ -9,7 +9,6 @@ import { OpenRouterClient } from "./openrouter-client.ts";
 import { AgentEngine } from "./agent-engine.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
-import { isHumanPauseActive } from "../_shared/copilot/human-pause.ts";
 
 // Force bundler to include provider modules (used via dynamic import in whatsapp-client)
 import "../_shared/whatsapp-providers/evolution-provider.ts";
@@ -17,6 +16,7 @@ import "../_shared/whatsapp-providers/uazapi-provider.ts";
 
 import { buildBatchContent, absorbPendingMessages } from "./batch-helpers.ts";
 import { checkAudienceGate } from "./audience-gate.ts";
+import { resolveMediaContent } from "../_shared/audio-transcription.ts";
 
 /**
  * Webhook receptor de mensagens de leads
@@ -64,7 +64,7 @@ Deno.serve(withSentry('agent-message', async (req) => {
     if (isBatchMode) {
       const { data: batchMsgs, error: batchErr } = await supabase
         .from("channel_messages")
-        .select("content")
+        .select("content, message_type, media_url")
         .in("id", body.message_ids)
         .order("created_at", { ascending: true });
 
@@ -75,10 +75,24 @@ Deno.serve(withSentry('agent-message', async (req) => {
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      message = buildBatchContent(batchMsgs);
-      console.log('[agent-message] Batch mode: combined', batchMsgs.length, 'messages into', message.length, 'chars');
+
+      const resolvedParts: string[] = [];
+      for (const msg of batchMsgs) {
+        const resolved = await resolveMediaContent({
+          content: msg.content,
+          messageType: msg.message_type || "text",
+          mediaUrl: msg.media_url || null,
+        });
+        if (resolved) resolvedParts.push(resolved);
+      }
+      message = resolvedParts.join("\n");
+      console.log('[agent-message] Batch mode: resolved', batchMsgs.length, 'messages into', message.length, 'chars');
     } else {
-      message = body.message;
+      message = await resolveMediaContent({
+        content: body.message,
+        messageType: incoming_message_type || "text",
+        mediaUrl: body.media_url || null,
+      });
     }
 
     // 1. IDENTIFY TENANT — organization_id is REQUIRED (security boundary).
@@ -197,20 +211,12 @@ Deno.serve(withSentry('agent-message', async (req) => {
       });
     }
 
-    // 1.55. HUMAN PAUSE GATE — skip if human agent is actively handling this conversation
-    const humanPause = await isHumanPauseActive(supabase, lead.id, organizationId);
-    if (humanPause.paused) {
-      console.log('[agent-message] Human pause active for lead:', lead.id, 'until:', humanPause.pausedUntil);
-      return new Response(JSON.stringify({
-        skipped: true,
-        reason: "human_pause_active",
-        lead_id: lead.id,
-        paused_until: humanPause.pausedUntil,
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
-    }
+    // 1.55. HUMAN PAUSE GATE — coberto pelo initialCancel acima (1.5).
+    // isCopilotCanceled é phone-keyed e lê phone_ai_preferences.human_paused_until,
+    // então funciona mesmo em cold-start (lead/conversa ainda não existem) e é
+    // re-checado per-chunk no envio escalonado. Quando source='human_pause' o
+    // early-return em 1.5 já barra o turno. Gate dedicado removido (era
+    // conversa-dependente → não armava em cold-start). Ver cancellation.ts.
 
     // 1.6. AGENT ACTIVE GATE — fresh DB check (bypasses 5min LRU cache)
     const { data: activeAgent } = await supabase
@@ -368,14 +374,31 @@ Deno.serve(withSentry('agent-message', async (req) => {
       console.warn('[agent-message] Absorb loop failed (non-fatal):', absorbErr);
     }
 
-    // 6. RETURN RESPONSE (strip internal _eval_meta before sending)
+    // 6. RELEASE LOCK — reduce blocking window from 60s to actual processing time
+    supabase.from("copilot_processing_locks")
+      .delete()
+      .eq("phone", from)
+      .eq("organization_id", organizationId)
+      .then(({ error: relErr }) => {
+        if (relErr) console.warn("[agent-message] Lock release failed (non-fatal):", relErr.message);
+      });
+
+    // 7. RETURN RESPONSE (strip internal _eval_meta before sending)
     const { _eval_meta: _unused, ...publicResponse } = response as any;
     return new Response(JSON.stringify(publicResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
 
   } catch (error) {
-    // DB lock expires naturally after 60s — no manual release needed
+    // Best-effort lock release on error — variables may not be defined if error is early
+    try {
+      if (typeof from === "string" && typeof organization_id === "string") {
+        await supabase.from("copilot_processing_locks")
+          .delete()
+          .eq("phone", from)
+          .eq("organization_id", organization_id);
+      }
+    } catch { /* swallow */ }
     console.error('[agent-message] Error:', error);
     await logRuntime({
       module: 'copilot',

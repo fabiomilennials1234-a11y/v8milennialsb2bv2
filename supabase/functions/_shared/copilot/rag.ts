@@ -13,7 +13,7 @@
 
 export { generateEmbedding, generateEmbeddingsBatch } from "../embeddings.ts";
 
-export const EMBEDDING_DIMENSIONS = 1536; // gemini-embedding-2-preview
+export const EMBEDDING_DIMENSIONS = 1536; // gemini-embedding-2
 
 // ─── retrieveSemanticContext (extracted from agent-engine.ts:736) ────────────
 
@@ -29,7 +29,7 @@ export async function retrieveSemanticContext(
   agentId: string,
 ): Promise<string> {
   try {
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    const apiKey = Deno.env.get("OPENROUTER_API_KEY");
     if (!apiKey) return "";
 
     const queryEmbedding = await generateEmbedding(userMessage, apiKey);
@@ -83,7 +83,7 @@ export async function retrieveLongTermMemories(
   leadId: string,
 ): Promise<string> {
   try {
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    const apiKey = Deno.env.get("OPENROUTER_API_KEY");
     if (!apiKey) return "";
 
     const queryEmbedding = await generateEmbedding(userMessage, apiKey);

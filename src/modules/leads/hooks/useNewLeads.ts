@@ -31,19 +31,20 @@ export interface NewLeadsData {
 export function useNewLeads(range: TVPeriodRange): NewLeadsData {
   const { organizationId } = useOrganization();
 
-  const startISO = range.start.toISOString();
-  const endISO = range.end.toISOString();
+  // Fetch all leads for the current month, filter client-side by range.
+  // Avoids PostgREST 400 from duplicate column filters and query key thrashing
+  // from the 200ms period tick recalculating end date.
+  const monthStart = new Date(range.start.getFullYear(), range.start.getMonth(), 1).toISOString();
 
-  const { data: leads = [], isLoading } = useQuery({
-    queryKey: ["tv-new-leads", organizationId, startISO, endISO],
+  const { data: allLeads = [], isLoading } = useQuery({
+    queryKey: ["tv-new-leads", organizationId, monthStart],
     queryFn: async () => {
       if (!organizationId) return [];
       const { data, error } = await supabase
         .from("leads")
-        .select("id, created_at, source")
+        .select("id, created_at, origin")
         .eq("organization_id", organizationId)
-        .gte("created_at", startISO)
-        .lte("created_at", endISO);
+        .gte("created_at", monthStart);
       if (error) throw error;
       return data ?? [];
     },
@@ -51,6 +52,14 @@ export function useNewLeads(range: TVPeriodRange): NewLeadsData {
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
+
+  const leads = useMemo(() => {
+    return allLeads.filter((lead) => {
+      const created = lead.created_at ? new Date(lead.created_at) : null;
+      if (!created) return false;
+      return created >= range.start && created <= range.end;
+    });
+  }, [allLeads, range.start.getTime(), range.end.getTime()]);
 
   return useMemo(() => {
     const buckets = getDailyBuckets(range).map((b) => ({ ...b, count: 0 }));
@@ -65,7 +74,7 @@ export function useNewLeads(range: TVPeriodRange): NewLeadsData {
       const b = bucketByKey.get(key);
       if (b) b.count++;
 
-      const src = (lead.source ?? "—").toString();
+      const src = ((lead as any).origin ?? "—").toString();
       sourceCount.set(src, (sourceCount.get(src) ?? 0) + 1);
     }
 

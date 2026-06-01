@@ -9,7 +9,6 @@ import React from "react";
 import { ArrowLeft, Phone, UserCircle, Plus, Bot, UserPlus, ArrowRightLeft, Loader2, AlignJustify, List, LayoutList, AlertTriangle } from "lucide-react";
 import { TakeoverControls } from "@/modules/communication/components/chat/takeover/TakeoverControls";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -30,6 +29,7 @@ import { RealtimeStatusBadge } from "@/modules/communication/components/chat/Rea
 import { SyncChatButton } from "@/modules/communication/components/chat/history-sync/SyncChatButton";
 import { useMessageLimits } from "@/modules/communication/hooks/useMessageLimits";
 import { HumanPauseBadge } from "../HumanPauseBadge";
+import { getAvatarGradient } from "@/components/chat/list/avatarGradient";
 
 export interface SzChatSession {
   sz_chat_session_id: string;
@@ -148,6 +148,7 @@ export function ChatHeader({
   const { data: limits } = useMessageLimits(instanceId ?? null);
   const limitsWarning = limits && limits.limit > 0 && (limits.current / limits.limit) >= 0.8;
   const chatJid = phoneNumber ? `${phoneNumber.replace(/\D/g, "")}@s.whatsapp.net` : null;
+  const avatarGradient = getAvatarGradient(phoneNumber || contactName);
   return (
     <div className="flex items-center gap-3 p-3 border-b border-border/60 bg-background shrink-0 min-w-0 overflow-hidden">
       <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden shrink-0">
@@ -164,19 +165,21 @@ export function ChatHeader({
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenLeadModal(); } }}
       >
         <div className="relative shrink-0">
-          <Avatar className="w-10 h-10 border-2 border-background shadow-sm">
-            <AvatarFallback className={cn(
-              "font-medium text-primary",
-              hasLead ? "bg-primary/15 text-primary" : "bg-primary/10"
-            )}>
-              {(contactName.charAt(0) || "?").toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          <div
+            className={cn(
+              "w-10 h-10 rounded-full border-2 border-background shadow-sm flex items-center justify-center font-semibold text-sm select-none",
+              avatarGradient.ink ? "text-[#1c1c1c]" : "text-white",
+            )}
+            style={{ background: avatarGradient.background }}
+            aria-hidden
+          >
+            {(contactName.charAt(0) || "?").toUpperCase()}
+          </div>
           <ChannelBadge channel="whatsapp" size={16} overlay />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-semibold truncate text-foreground">{contactName}</h3>
+            <h3 className="font-display font-semibold truncate text-foreground">{contactName}</h3>
             <RealtimeStatusBadge organizationId={organizationId} />
             {!hasLead && (
               <Badge

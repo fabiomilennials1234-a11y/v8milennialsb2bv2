@@ -63,10 +63,36 @@ export function useCopilotAgents() {
         `
         )
         .eq("organization_id", teamMember.organization_id)
+        // Hide Builder drafts (finalized_at IS NULL) from the main list.
+        .not("finalized_at", "is", null)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return (data || []) as CopilotAgentWithRelations[];
+    },
+    enabled: !!teamMember?.organization_id,
+  });
+}
+
+/**
+ * Rascunhos do Copilot Builder (finalized_at IS NULL) da org — usados no banner
+ * "retomar construção". Não aparecem na lista principal.
+ */
+export function useDraftCopilotAgents() {
+  const { data: teamMember } = useCurrentTeamMember();
+
+  return useQuery({
+    queryKey: ["copilot_agents", "drafts", teamMember?.organization_id],
+    queryFn: async () => {
+      if (!teamMember?.organization_id) return [];
+      const { data, error } = await supabase
+        .from("copilot_agents")
+        .select("id, name, updated_at")
+        .eq("organization_id", teamMember.organization_id)
+        .is("finalized_at", null)
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as Array<{ id: string; name: string; updated_at: string }>;
     },
     enabled: !!teamMember?.organization_id,
   });
@@ -809,7 +835,7 @@ export function useCopilotAgentForEdit(agentId?: string) {
         canCreateLead: (agent as any).can_create_lead ?? true,
         canTransferHuman: (agent as any).can_transfer_human ?? true,
         canMoveCards: agent.can_move_cards ?? false,
-        humanPauseEnabled: (agent as any).human_pause_enabled ?? false,
+        humanPauseEnabled: (agent as any).human_pause_enabled ?? true,
         humanPauseDurationMinutes: (agent as any).human_pause_duration_minutes ?? 60,
         maxConversationTurns: (agent as any).max_conversation_turns ?? 20,
         responseDelayMs: (agent as any).response_delay_ms ?? 1000,
@@ -918,7 +944,7 @@ export function useUpdateCopilotAgentFromWizard() {
       agentUpdate.can_create_lead = data.canCreateLead ?? true;
       agentUpdate.can_transfer_human = data.canTransferHuman ?? true;
       agentUpdate.can_move_cards = data.canMoveCards ?? false;
-      agentUpdate.human_pause_enabled = data.humanPauseEnabled ?? false;
+      agentUpdate.human_pause_enabled = data.humanPauseEnabled ?? true;
       agentUpdate.human_pause_duration_minutes = data.humanPauseDurationMinutes ?? 60;
       agentUpdate.max_conversation_turns = data.maxConversationTurns ?? 20;
       agentUpdate.response_delay_ms = data.responseDelayMs ?? 1000;

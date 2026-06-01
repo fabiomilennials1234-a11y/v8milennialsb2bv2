@@ -5,7 +5,7 @@ import {
   Search, Plus, Calendar as CalendarIcon, User, Building2,
   DollarSign, Loader2, TrendingUp, Package,
   ArrowUpRight, Percent, BarChart3, Target, Flame, MessageCircle, Settings2,
-  MoreVertical, Trash2
+  MoreVertical, Trash2, LayoutGrid
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -33,11 +33,13 @@ import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { useCanDo } from "@/modules/identity";
 import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
-import { usePipePropostas, useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } from "@/modules/pipelines/hooks/legacy/usePipePropostas";
+import { useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } from "@/modules/pipelines/hooks/legacy/usePipePropostas";
+import { usePaginatedPipeline } from "@/modules/pipelines/hooks/perf/usePaginatedPipeline";
 import { usePipePropostasMetrics } from "@/modules/pipelines/hooks/config/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/MetricsPeriodSelector";
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
+import { PipeViewToggle } from "@/modules/pipelines/components/shared/PipeViewToggle";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/modules/leads";
 import { usePipelineStages, stagesToColumns } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
@@ -76,7 +78,8 @@ import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActio
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { useLossReasons } from "@/modules/pipelines/hooks/config/useLossReasons";
 import { useSearchParams } from "react-router-dom";
-import { matchesResponsibleFilter } from "@/lib/kanban-filters";
+import { useMetricDrilldown, type MetricType } from "@/modules/pipelines/hooks/config/useMetricDrilldown";
+import { MetricDrilldownSheet } from "@/modules/carteira/components/proposal/MetricDrilldownSheet";
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
@@ -101,12 +104,12 @@ const CLOSED_STATUSES_PROPOSTAS = ["vendido", "perdido"];
  *    representando fielmente a "foto do mês" para cards em andamento.
  */
 function isPropostaInPeriod(
-  item: { status: string; metrics_period_at?: string | null; closed_at?: string | null; created_at?: string | null },
+  item: { status: string; metrics_period_at?: string | null; closed_at?: string | null; created_at?: string | null; updated_at?: string | null },
   startStr: string,
   endStr: string,
 ): boolean {
   if (CLOSED_STATUSES_PROPOSTAS.includes(item.status)) {
-    const ref = item.metrics_period_at ?? item.closed_at;
+    const ref = item.metrics_period_at ?? item.closed_at ?? item.updated_at;
     if (!ref) return false;
     return ref >= startStr && ref <= endStr;
   }
@@ -216,7 +219,7 @@ function PipePropostasInner() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [analyticsTab, setAnalyticsTab] = useState<"propostas" | "produtos">("propostas");
-  
+
   // State for commitment date modal
   const [isDateModalOpen, setIsDateModalOpen] = useState(false);
   const [pendingStatusChange, setPendingStatusChange] = useState<{
@@ -261,14 +264,24 @@ function PipePropostasInner() {
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
   const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
+  const [drilldownMetric, setDrilldownMetric] = useState<MetricType | null>(null);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
 
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_propostas", organizationId); }, []);
 
-  const { data: pipeData, isLoading, refetch } = usePipePropostas();
   const { data: pipelineStages = [] } = usePipelineStages("propostas");
+  const { stageData, allItems: pipeData, isLoading } = usePaginatedPipeline(
+    "propostas",
+    pipelineStages,
+    {
+      search: searchTerm,
+      responsibleId: filterResponsible,
+      tagIds: filterTags,
+    }
+  );
+  const refetch = useCallback(() => {}, []);
   const { data: workflowCounts = {} } = useStageWorkflowCounts("propostas");
   const { data: teamMembers } = useTeamMembers();
   const updatePipeProposta = useUpdatePipeProposta();
@@ -383,83 +396,59 @@ function PipePropostasInner() {
     return stagesToColumns(pipelineStages);
   }, [pipelineStages]);
 
-  // Organize data by status columns — orphan leads (stage_key not matching any column) fall into the first column
-  const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
-    if (!pipeData) return statusColumns.map(col => ({ ...col, items: [] }));
+  // Client-side filters that can't be server-side (date range, origin, product type, priority, calor, scheduled)
+  // Search, responsible, and tags are already handled server-side by usePaginatedPipeline.
+  const filterItemsLocal = (item: any) => {
+    if (periodRange && !isPropostaInPeriod(item, periodRange.startStr, periodRange.endStr)) return false;
 
-    const knownStageIds = new Set(statusColumns.map(c => c.id));
+    const lead = item.lead;
+    if (!lead) return false;
 
-    const filterProposta = (item: any) => {
-      if (periodRange && !isPropostaInPeriod(item, periodRange.startStr, periodRange.endStr)) return false;
-
-      const lead = item.lead;
-      if (!lead) return false;
-
-      const matchesSearch = searchTerm === "" ||
-        lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead?.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead?.phone?.includes(searchTerm);
-
-      // Shared helper covers all 9 responsibility fields (entry + lead),
-      // including pre_sale_responsible_id / sale_responsible_id.
-      const matchesResponsible = matchesResponsibleFilter(item, filterResponsible);
-
-      let matchesType = filterProductType === "all";
-      if (!matchesType) {
-        const items = item.items || [];
-        if (items.length > 0) {
-          matchesType = items.some((it: any) => it.product?.type === filterProductType);
-        } else {
-          matchesType = item.product_type === filterProductType || item.product?.type === filterProductType;
-        }
+    let matchesType = filterProductType === "all";
+    if (!matchesType) {
+      const items = item.items || [];
+      if (items.length > 0) {
+        matchesType = items.some((it: any) => it.product?.type === filterProductType);
+      } else {
+        matchesType = item.product_type === filterProductType || item.product?.type === filterProductType;
       }
-
-      const rating = lead?.rating || 0;
-      let matchesPriority = true;
-      if (filterPriority === "high") matchesPriority = rating >= 8;
-      else if (filterPriority === "medium") matchesPriority = rating >= 5 && rating < 8;
-      else if (filterPriority === "low") matchesPriority = rating < 5;
-
-      const calor = item.calor ?? 5;
-      let matchesCalor = true;
-      if (filterCalor === "hot") matchesCalor = calor >= 7;
-      else if (filterCalor === "warm") matchesCalor = calor >= 4 && calor < 7;
-      else if (filterCalor === "cold") matchesCalor = calor < 4;
-
-      const matchesOrigin = filterOrigin.length === 0 || filterOrigin.includes(lead?.origin || "");
-      const matchesTags = filterTags.length === 0 ||
-        (lead?.lead_tags?.some((lt: any) => filterTags.includes(lt.tag?.id)) ?? false);
-      const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
-
-      return matchesSearch && matchesResponsible && matchesType && matchesPriority && matchesCalor && matchesOrigin && matchesTags && matchesScheduled;
-    };
-
-    const sortByRecent = (a: any, b: any) => {
-      const timeA = new Date(a.createdAt || 0).getTime();
-      const timeB = new Date(b.createdAt || 0).getTime();
-      return timeB - timeA;
-    };
-
-    const result = statusColumns.map(col => {
-      const columnItems = pipeData
-        .filter(item => item.status === col.id)
-        .filter(filterProposta)
-        .map(transformToCard)
-        .toSorted(sortByRecent);
-      return { ...col, items: columnItems };
-    });
-
-    if (result.length > 0) {
-      const orphanItems = pipeData
-        .filter(item => !knownStageIds.has(item.status))
-        .filter(filterProposta)
-        .map(transformToCard)
-        .toSorted(sortByRecent);
-      result[0].items = [...result[0].items, ...orphanItems];
     }
 
-    return result;
-  }, [pipeData, statusColumns, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterOrigin, filterTags, filterScheduled, leadsWithSchedule, periodRange]);
+    const rating = lead?.rating || 0;
+    let matchesPriority = true;
+    if (filterPriority === "high") matchesPriority = rating >= 8;
+    else if (filterPriority === "medium") matchesPriority = rating >= 5 && rating < 8;
+    else if (filterPriority === "low") matchesPriority = rating < 5;
+
+    const calor = item.calor ?? 5;
+    let matchesCalor = true;
+    if (filterCalor === "hot") matchesCalor = calor >= 7;
+    else if (filterCalor === "warm") matchesCalor = calor >= 4 && calor < 7;
+    else if (filterCalor === "cold") matchesCalor = calor < 4;
+
+    const matchesOrigin = filterOrigin.length === 0 || filterOrigin.includes(lead?.origin || "");
+    const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
+
+    return matchesType && matchesPriority && matchesCalor && matchesOrigin && matchesScheduled;
+  };
+
+  // Build columns from server-paginated stageData
+  const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
+    return statusColumns.map(col => {
+      const sd = stageData[col.id];
+      const items = sd
+        ? sd.items.filter(filterItemsLocal).map(transformToCard)
+        : [];
+      return {
+        ...col,
+        items,
+        totalCount: sd?.totalCount ?? items.length,
+        hasMore: sd?.hasMore ?? false,
+        isFetchingMore: sd?.isFetchingMore ?? false,
+        onLoadMore: sd?.fetchMore,
+      };
+    });
+  }, [stageData, statusColumns, filterProductType, filterPriority, filterCalor, filterOrigin, filterScheduled, leadsWithSchedule, periodRange]);
 
   // Count ghost leads — rows visíveis no pipe cujo join com leads é null.
   // Indica divergência entre RLS do pipe e de leads (ver GhostLeadsBanner).
@@ -468,17 +457,17 @@ function PipePropostasInner() {
     return pipeData.filter(item => item.lead == null).length;
   }, [pipeData]);
 
-  // Calculate stats (Vendas Total / Rec. Vendida / Projetos Vendidos por item quando houver items)
+  // Calculate stats — use server-side counts for totals, loaded items for value aggregation
   const stats = useMemo(() => {
-    if (!pipeData) return { 
-      total: 0, 
-      sold: 0, 
+    if (!pipeData) return {
+      total: 0,
+      sold: 0,
       soldCount: 0,
-      mrr: 0, 
-      projeto: 0, 
+      mrr: 0,
+      projeto: 0,
       inProgress: 0,
       inProgressCount: 0,
-      conversionRate: 0 
+      conversionRate: 0
     };
 
     const activeStatuses: PipePropostasStatus[] = ["marcar_compromisso", "compromisso_marcado", "proposta_enviada", "esfriou", "futuro"];
@@ -489,33 +478,25 @@ function PipePropostasInner() {
     let mrr = 0;
     let projeto = 0;
     for (const item of soldData) {
-      // contract_duration nulo/inválido → fallback de 1 mês
-      const duration = Math.max(1, Number(item.contract_duration) || 1);
       const items = item.items?.filter((i: any) => i != null) ?? [];
       if (items.length > 0) {
         for (const it of items) {
           const val = Number(it.sale_value) || 0;
           const t = it.product?.type;
+          sold += val;
           if (t === "mrr") {
-            mrr += val;             // Rec. Vendida = valor mensal recorrente
-            sold += val * duration; // Venda Total = mensal × duração do contrato
+            mrr += val;
           } else if (t === "projeto") {
             projeto += val;
-            sold += val;            // Projeto: valor pontual
-          } else {
-            sold += val;            // Unitário: valor pontual
           }
         }
       } else {
         const val = Number(item.sale_value) || 0;
+        sold += val;
         if (item.product_type === "mrr") {
           mrr += val;
-          sold += val * duration;
         } else if (item.product_type === "projeto") {
           projeto += val;
-          sold += val;
-        } else {
-          sold += val;
         }
       }
     }
@@ -523,24 +504,26 @@ function PipePropostasInner() {
     const total = pipeData.reduce((sum, item) => sum + (item.sale_value || 0), 0);
     const inProgress = inProgressData.reduce((sum, item) => sum + (item.sale_value || 0), 0);
 
-    const totalNoPipe = pipeData.length;
-    const conversionRate = totalNoPipe > 0 ? (soldData.length / totalNoPipe) * 100 : 0;
+    // Use server-side counts for accurate totals (not limited by loaded pages)
+    const totalNoPipe = Object.values(stageData).reduce((sum, s) => sum + (s?.totalCount ?? 0), 0);
+    const soldCount = stageData["vendido"]?.totalCount ?? soldData.length;
+    const inProgressCount = activeStatuses.reduce((sum, key) => sum + (stageData[key]?.totalCount ?? 0), 0);
+    const conversionRate = totalNoPipe > 0 ? (soldCount / totalNoPipe) * 100 : 0;
 
-    return { 
-      total, 
-      sold, 
-      soldCount: soldData.length,
-      mrr, 
-      projeto, 
+    return {
+      total,
+      sold,
+      soldCount,
+      mrr,
+      projeto,
       inProgress,
-      inProgressCount: inProgressData.length,
-      conversionRate 
+      inProgressCount,
+      conversionRate
     };
-  }, [pipeData]);
+  }, [pipeData, stageData]);
 
-  // Exibir métricas: "Geral" = stats do pipe; outros modos = hook (vendidos no período); pipeline ativo sempre do pipe atual
   const displayStats = useMemo(() => {
-    if (!periodRange || !metricsByPeriod) {
+    if (!metricsByPeriod) {
       return stats;
     }
     return {
@@ -548,7 +531,39 @@ function PipePropostasInner() {
       inProgress: stats.inProgress,
       inProgressCount: stats.inProgressCount,
     };
-  }, [periodRange, metricsByPeriod, stats]);
+  }, [metricsByPeriod, stats]);
+
+  const { data: drilldownData = [], isLoading: drilldownLoading } = useMetricDrilldown(
+    drilldownMetric ?? "vendas_total",
+    periodRange
+  );
+
+  const drilldownPeriodLabel = useMemo(() => {
+    if (!periodRange) return "Geral";
+    return formatPeriodLabel(periodRange);
+  }, [periodRange]);
+
+  const drilldownDisplayValue = useMemo(() => {
+    if (!drilldownMetric) return "";
+    const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+    switch (drilldownMetric) {
+      case "pipeline_ativo": return fmt(displayStats.inProgress);
+      case "vendas_total": return fmt(displayStats.sold);
+      case "rec_vendida": return fmt(displayStats.mrr);
+      case "projetos_vendidos": return fmt(displayStats.projeto);
+      case "taxa_conversao": return `${displayStats.conversionRate.toFixed(1)}%`;
+    }
+  }, [drilldownMetric, displayStats]);
+
+  const drilldownDisplayCount = useMemo(() => {
+    if (!drilldownMetric) return 0;
+    switch (drilldownMetric) {
+      case "pipeline_ativo": return displayStats.inProgressCount;
+      case "vendas_total": return displayStats.soldCount;
+      case "taxa_conversao": return displayStats.soldCount + displayStats.inProgressCount;
+      default: return drilldownData.length;
+    }
+  }, [drilldownMetric, displayStats, drilldownData]);
 
   // Total de propostas que passam pelo filtro temporal (para exibir no banner)
   const periodFilteredCount = useMemo(() => {
@@ -583,7 +598,7 @@ function PipePropostasInner() {
 
     // Group by calor level
     const grouped: { [key: number]: { calor: number; value: number; count: number } } = {};
-    
+
     activeProposals.forEach(item => {
       const calor = item.calor ?? 5;
       if (!grouped[calor]) {
@@ -616,10 +631,10 @@ function PipePropostasInner() {
 
       items.forEach((item: any) => {
         if (!item.product) return;
-        
+
         const productId = item.product.id;
         const existing = productMap.get(productId);
-        
+
         if (existing) {
           existing.proposalCount += 1;
           existing.proposalValue += item.sale_value || 0;
@@ -961,18 +976,15 @@ function PipePropostasInner() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)}>
-            <TabsList>
-              <TabsTrigger value="kanban" className="gap-1.5">
-                <BarChart3 className="w-4 h-4" />
-                Kanban
-              </TabsTrigger>
-              <TabsTrigger value="analytics" className="gap-1.5">
-                <TrendingUp className="w-4 h-4" />
-                Analytics
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <PipeViewToggle
+            value={viewMode}
+            onChange={setViewMode}
+            layoutId="pipe-propostas-view-indicator"
+            options={[
+              { value: "kanban", icon: LayoutGrid, label: "Kanban" },
+              { value: "analytics", icon: BarChart3, label: "Analytics" },
+            ]}
+          />
           <Button variant="outline" className="gap-2" onClick={() => setIsSettingsOpen(true)}>
             <Settings2 className="w-4 h-4" />
             Configurações
@@ -997,77 +1009,84 @@ function PipePropostasInner() {
       {/* Período das métricas */}
       <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="stat-card"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Pipeline Ativo</p>
-            <Target className="w-4 h-4 text-primary" />
-          </div>
-          <p className="text-xl font-bold">{formatCurrency(displayStats.inProgress)}</p>
-          <p className="text-xs text-muted-foreground">{displayStats.inProgressCount} propostas</p>
-        </motion.div>
-        
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="stat-card"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Vendas Total</p>
-            <TrendingUp className="w-4 h-4 text-success" />
-          </div>
-          <p className="text-xl font-bold text-success">{formatCurrency(displayStats.sold)}</p>
-          <p className="text-xs text-muted-foreground">{displayStats.soldCount} vendas</p>
-        </motion.div>
-        
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="stat-card"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Rec. Vendida</p>
-            <ArrowUpRight className="w-4 h-4 text-chart-5" />
-          </div>
-          <p className="text-xl font-bold text-chart-5">{formatCurrency(displayStats.mrr)}</p>
-          <p className="text-xs text-muted-foreground">valor vendido /mês</p>
-        </motion.div>
-        
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="stat-card"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Projetos Vendidos</p>
-            <Package className="w-4 h-4 text-primary" />
-          </div>
-          <p className="text-xl font-bold text-primary">{formatCurrency(displayStats.projeto)}</p>
-          <p className="text-xs text-muted-foreground">valor vendido</p>
-        </motion.div>
-        
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="stat-card"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Taxa de Conversão</p>
-            <Percent className="w-4 h-4 text-chart-3" />
-          </div>
-          <p className="text-xl font-bold">{displayStats.conversionRate.toFixed(1)}%</p>
-          <p className="text-xs text-muted-foreground">vendas / total no pipe</p>
-        </motion.div>
-      </div>
+      {/* Summary Cards — só no modo Analytics */}
+      {viewMode === "analytics" && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="stat-card cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
+            onClick={() => setDrilldownMetric("pipeline_ativo")}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-muted-foreground">Pipeline Ativo</p>
+              <Target className="w-4 h-4 text-primary" />
+            </div>
+            <p className="text-xl font-bold">{formatCurrency(displayStats.inProgress)}</p>
+            <p className="text-xs text-muted-foreground">{displayStats.inProgressCount} propostas</p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="stat-card cursor-pointer hover:ring-1 hover:ring-success/30 transition-all"
+            onClick={() => setDrilldownMetric("vendas_total")}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-muted-foreground">Vendas Total</p>
+              <TrendingUp className="w-4 h-4 text-success" />
+            </div>
+            <p className="text-xl font-bold text-success">{formatCurrency(displayStats.sold)}</p>
+            <p className="text-xs text-muted-foreground">{displayStats.soldCount} vendas</p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="stat-card cursor-pointer hover:ring-1 hover:ring-chart-5/30 transition-all"
+            onClick={() => setDrilldownMetric("rec_vendida")}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-muted-foreground">Rec. Vendida</p>
+              <ArrowUpRight className="w-4 h-4 text-chart-5" />
+            </div>
+            <p className="text-xl font-bold text-chart-5">{formatCurrency(displayStats.mrr)}</p>
+            <p className="text-xs text-muted-foreground">valor vendido /mês</p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="stat-card cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
+            onClick={() => setDrilldownMetric("projetos_vendidos")}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-muted-foreground">Projetos Vendidos</p>
+              <Package className="w-4 h-4 text-primary" />
+            </div>
+            <p className="text-xl font-bold text-primary">{formatCurrency(displayStats.projeto)}</p>
+            <p className="text-xs text-muted-foreground">valor vendido</p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="stat-card cursor-pointer hover:ring-1 hover:ring-chart-3/30 transition-all"
+            onClick={() => setDrilldownMetric("taxa_conversao")}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-muted-foreground">Taxa de Conversão</p>
+              <Percent className="w-4 h-4 text-chart-3" />
+            </div>
+            <p className="text-xl font-bold">{displayStats.conversionRate.toFixed(1)}%</p>
+            <p className="text-xs text-muted-foreground">vendas / total no pipe</p>
+          </motion.div>
+        </div>
+      )}
 
       <AnimatePresence mode="wait">
         {viewMode === "kanban" ? (
@@ -1214,7 +1233,7 @@ function PipePropostasInner() {
                       <TrendingUp className="w-5 h-5 text-primary" />
                       Funil de Vendas
                     </h3>
-                    <FunnelChart 
+                    <FunnelChart
                       title="Pipeline"
                       steps={funnelData.map(stage => ({
                         label: stage.name,
@@ -1435,6 +1454,18 @@ function PipePropostasInner() {
         stageTitle={stageToExport?.title ?? ""}
         pipe="propostas"
         leadCount={stageToExport?.count ?? 0}
+      />
+
+      {/* Metric Drilldown Sheet (click stat-card no modo Analytics) */}
+      <MetricDrilldownSheet
+        open={!!drilldownMetric}
+        onOpenChange={(open) => { if (!open) setDrilldownMetric(null); }}
+        metric={drilldownMetric}
+        periodLabel={drilldownPeriodLabel}
+        displayValue={drilldownDisplayValue}
+        displayCount={drilldownDisplayCount}
+        data={drilldownData}
+        isLoading={drilldownLoading}
       />
 
       {/* Bulk Action Bar */}

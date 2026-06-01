@@ -56,7 +56,7 @@ vi.mock("https://esm.sh/@supabase/supabase-js@2", () => ({
   createClient: vi.fn(),
 }));
 
-const { AgentEngine } = await import(
+const { AgentEngine, buildFallbackOutcome, buildTelemetryLog } = await import(
   "../../supabase/functions/agent-message/agent-engine.ts"
 );
 const { OpenRouterClient } = await import(
@@ -234,6 +234,48 @@ describe("AgentEngine.processLLMResponse", () => {
     await expect(
       engine.processLLMResponse({ choices: [] }, conversation, capabilities),
     ).rejects.toThrow("No response from LLM");
+  });
+});
+
+describe("buildFallbackOutcome — no robotic apology, hands off to human (Bug 2 delivery)", () => {
+  const orgId = "org-fallback";
+
+  it("returns a natural holding message, NOT the old error string", () => {
+    const out = buildFallbackOutcome(orgId);
+    expect(out.message.length).toBeGreaterThan(0);
+    expect(out.message).not.toMatch(/houve um problema ao processar/i);
+    expect(out.message).not.toMatch(/desculpe/i);
+    // No emoji (design rule)
+    expect(out.message).not.toMatch(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
+  });
+
+  it("sets a TRANSFER_HUMAN action scoped to the org with a diagnostic reason", () => {
+    const out = buildFallbackOutcome(orgId);
+    expect(out.action.action).toBe("TRANSFER_HUMAN");
+    expect(out.action.tenant_id).toBe(orgId);
+    expect(out.action.params.reason).toContain("fallback");
+  });
+});
+
+describe("buildTelemetryLog — persists turn telemetry queryably (Bug 2 observability)", () => {
+  const base = {
+    organizationId: "org-x",
+    leadId: "lead-1",
+    agentId: "agent-1",
+  };
+
+  it("flags status=error when fallback was used", () => {
+    const log = buildTelemetryLog({ ...base, telemetry: { fallback_used: true, turns_used: 3, finish_reasons: ["tool_calls"] } });
+    expect(log.status).toBe("error");
+    expect(log.module).toBe("copilot");
+    expect(log.action).toBe("turn_telemetry");
+    expect(log.payloadSnapshot.fallback_used).toBe(true);
+  });
+
+  it("flags status=success when no fallback", () => {
+    const log = buildTelemetryLog({ ...base, telemetry: { fallback_used: false, turns_used: 1, finish_reasons: ["stop"] } });
+    expect(log.status).toBe("success");
+    expect(log.payloadSnapshot.finish_reasons).toEqual(["stop"]);
   });
 });
 
