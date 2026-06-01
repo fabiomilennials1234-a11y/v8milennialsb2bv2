@@ -209,7 +209,7 @@ Pattern Fase 8. Escopo definido por [[inventario-identity]] — statements 1, 4,
 4. Validar SEPARADAMENTE: admin / membro / master (Bloco 1.6, 1.7).
 5. Test integration `permission-engine.test.ts` rodar 3× consecutivas pra detectar flakiness.
 
-**Critério aceite 9.3 (verificado 2026-06-01 — PR #605):**
+**Critério aceite 9.3 (verificado 2026-06-01 — PR #606):**
 - [x] `permissions/` populada — 9 arquivos `git mv` (lib/permissions + 6 hooks role/perm + PermissionProtectedRoute + PermissionsTab) + `permissions/index.ts` sub-barrel privado
 - [x] Barrel raiz statements: **44** (`grep -c '^export'` = 44; 13 statements re-apontados `from "./permissions"`)
 - [x] `npx tsc --noEmit` (root) = **0** · leak grep = **0** · lint **0 errors** · ratchet **OK 56 0-new** (9 arquivos em zero ciclos → move neutro)
