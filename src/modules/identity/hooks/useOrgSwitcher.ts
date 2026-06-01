@@ -11,7 +11,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "../auth/contexts/AuthContext";
 import { useMasterAuth } from "./useMasterAuth";
-import { setSelectedOrgId } from "./useTeamMembers";
+import { setSelectedOrgId } from "./useCurrentTeamMember";
 
 export interface SwitcherOrg {
   id: string;

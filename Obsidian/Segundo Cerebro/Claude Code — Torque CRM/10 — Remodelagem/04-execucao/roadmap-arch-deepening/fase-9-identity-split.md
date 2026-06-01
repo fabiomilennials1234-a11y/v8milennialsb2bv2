@@ -220,6 +220,15 @@ Pattern Fase 8. Escopo definido por [[inventario-identity]] — statements 1, 4,
 - [ ] `/master/operations` carrega (hotfix #530 não regride) — **gate CTO**
 - ⚠️ `permission-engine.test.ts` (integration) = **env-blocked** (Supabase local sem seed de auth); backend não tocado pela slice — não-regressão. Rodar 3× quando ambiente disponível.
 
+### Slice 9.4a — Precursora: quebrar ciclo `useOrganization↔useTeamMembers` (PR #610) ✅
+
+Bloqueava o move 9.4 (mover ambos os arquivos cíclicos re-chaveava o ratchet edge-keyed). Decisão CTO (AskUserQuestion): precursora dedicada antes do move — espelha 9.1b. Ver changelog [[2026-06-01-arch-deepening-9-4a-break-org-team-cycle]].
+
+- **Causa**: `useTeamMembers.ts` agregava `useCurrentTeamMember` (org-independente) com hooks org-scoped; `useOrganization` importava `useCurrentTeamMember` de lá ⇒ ciclo.
+- **Fix mecânico**: extraído `hooks/useCurrentTeamMember.ts` (bodies verbatim via slice por linha). `useTeamMembers.ts` re-exporta (superfície pública inalterada). `useOrganization`/`useOrgSwitcher` repontados pra fonte nova. Único teste tocado: `use-organization.test.ts` (mock repontado).
+- **Resultado**: baseline **56 → 55** (`no-circular` 33 → 32; removido só `useOrganization → useTeamMembers`, 0 add — provado por diff de chaves; baseline regenerado por ser redução). root tsc 0 · lint 0 err · test:unit zero regressão. **9.4 (move) agora ratchet-neutro.**
+- [x] Aceite 9.4a: ciclo morto, baseline 55, superfície pública 44 intacta, smoke org-context = gate CTO.
+
 ### Slice 9.4 — Reorganizar `org-team/` + `master/` internos (3-4h)
 
 Escopo definido por [[inventario-identity]] — `org-team`: statements 28-41 (14 / 30 símbolos). `master`: statements 9-20 (12 / 45 símbolos).

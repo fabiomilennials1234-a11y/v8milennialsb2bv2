@@ -6,7 +6,7 @@ import React from 'react';
 // ─── Mock: useCurrentTeamMember ─────────────────────────
 const mockUseCurrentTeamMember = vi.fn();
 
-vi.mock('@/modules/identity/hooks/useTeamMembers', () => ({
+vi.mock('@/modules/identity/hooks/useCurrentTeamMember', () => ({
   useCurrentTeamMember: () => mockUseCurrentTeamMember(),
 }));
 
