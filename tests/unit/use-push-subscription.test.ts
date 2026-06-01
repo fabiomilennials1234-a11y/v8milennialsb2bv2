@@ -21,7 +21,7 @@ const mockUseAuth = vi.fn(() => ({
   organizationId: 'org-1',
 }));
 
-vi.mock('@/modules/identity/contexts/AuthContext', () => ({
+vi.mock('@/modules/identity/auth/contexts/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
 }));
 

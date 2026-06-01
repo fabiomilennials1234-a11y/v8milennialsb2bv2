@@ -10,13 +10,13 @@
 
 import { ReactNode, useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../auth/contexts/AuthContext";
 import {
   checkCurrentUserSubscription,
   type SubscriptionStatus,
 } from "@/modules/billing/lib/subscription";
 import { useUserRole, useCanManageCopilot } from "../hooks/useUserRole";
-import { useIdentity } from "../hooks/useIdentity";
+import { useIdentity } from "../auth/hooks/useIdentity";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { OverdueBanner } from "@/modules/billing/components/subscription/OverdueBanner";
 import { SubscriptionBlockedPage } from "@/modules/billing/components/subscription/SubscriptionBlockedPage";

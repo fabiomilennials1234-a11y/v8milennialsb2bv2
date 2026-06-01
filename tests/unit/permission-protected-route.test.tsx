@@ -23,7 +23,7 @@ vi.mock('@/modules/identity/hooks/useTeamMembers', () => ({
 }));
 
 const mockIdentity = vi.fn();
-vi.mock('@/modules/identity/hooks/useIdentity', () => ({
+vi.mock('@/modules/identity/auth/hooks/useIdentity', () => ({
   useIdentity: (...args: unknown[]) => mockIdentity(...args),
 }));
 

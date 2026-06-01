@@ -4,7 +4,7 @@ owner: arquiteto
 tipo: fase-execucao
 fase: 9
 criado: 2026-05-28
-atualizado: 2026-05-28
+atualizado: 2026-05-29
 estimate: 10-16h
 decisao_alt: B
 decidido_em: 2026-05-28
@@ -166,6 +166,7 @@ Doc-only.
 **Changelog:** [[07 — Changelog/2026-05-29-arch-deepening-9-1b-realtime-decouple]].
 
 ### Slice 9.2 — Reorganizar `auth/` interno (2-3h)
+### Slice 9.2 — Reorganizar `auth/` interno (2-3h) — ✅ CONCLUÍDO (2026-05-29)
 
 Pattern Fase 8. Escopo definido por [[inventario-identity]] — statements 1, 4, 5, 42.
 
@@ -176,12 +177,19 @@ Pattern Fase 8. Escopo definido por [[inventario-identity]] — statements 1, 4,
 4. Barrel raiz `identity/index.ts` re-exporta os 4 statements de `auth` (consumers externos inalterados — `useAuth`=57, `useIdentity`=26 mantêm path `@/modules/identity`).
 5. Validar.
 
-**Critério aceite 9.2:**
-- [ ] `auth/` populada (4 statements / 5 símbolos)
-- [ ] Barrel raiz statements: 44 (inalterado nesse slice)
-- [ ] Smoke Bloco 1.1, 1.2 (login flow) verde
-- [ ] Build + lint + test integration permission-engine verde
-- [ ] Consumers externos inalterados (396 sites compilam sem mudança)
+**Critério aceite 9.2 (verificado com counts literais):**
+- [x] `auth/` populada — 3 arquivos movidos (`AuthContext.tsx`, `useIdentity.ts`, `ProtectedRoute.tsx` via `git mv`, history preservada) + `auth/index.ts` privado re-exportando os 4 statements / 5 símbolos (`AuthProvider`, `useAuth`, `useIdentity`, `Identity`, `ProtectedRoute`)
+- [x] Barrel raiz statements: **44** (`grep -c '^export'` = 44, inalterado)
+- [x] identity files: **66 → 67** (criação de `auth/index.ts`)
+- [x] `npx tsc --noEmit` (root solution-style) = **0 erros** (literal)
+- [x] `npx tsc --noEmit -p tsconfig.app.json` = 1764 erros (= baseline, delta 0; arquivos `auth/*` movidos = 0 erros antes/depois; App.tsx = 4 erros TS6133 pré-existentes, inalterado)
+- [x] `npm run lint` nos arquivos tocados = 0 errors, 6 warnings (todos pré-existentes; `boundaries/element-types` e `boundaries/no-private` NÃO acusam os movidos/App.tsx)
+- [x] `npm run test:unit` = sem regressão vs baseline (26 red files / 39 red tests pré-existentes; auth-context + use-identity + permission-protected-route **verdes**; os 7 reds em `protected-route.test.tsx` são `TestingLibraryElementError` de lógica `/checkout` ausente — pré-existentes, NÃO de import quebrado)
+- [x] Consumers externos inalterados (App.tsx repontado p/ `@/modules/identity/auth` sub-barrel; demais 25 símbolos com reach externo seguem via `@/modules/identity`)
+- [x] Leak grep = **ZERO** referências remanescentes aos paths antigos
+- [x] ✅ `dep-cruise-ratchet`: **OK — baseline 56, 0 new** (resume 2026-06-01). O net +1 da sessão anterior dissolveu: o precursor **9.1b (#592)** quebrou o edge raiz `useRealtimeSubscription → @/modules/identity`, removendo a cadeia inteira. `AuthContext`/`useIdentity`/`ProtectedRoute` confirmados em **zero** ciclos empiricamente. Sem regenerar baseline. (Ver "Achado dep-cruise" abaixo como registro histórico do bloqueio original.)
+
+**Achado dep-cruise (Slice 9.2):** mover `useIdentity.ts`/`ProtectedRoute.tsx` (nós participantes de 7 ciclos `no-circular` baseline) re-chaveia esses ciclos pelo path novo. Após normalizar `auth/*`→path antigo, o delta lógico é **+1** ciclo: `index.ts → auth/components/ProtectedRoute` — é a MESMA cadeia `ProtectedRoute → useIdentity → useUserRole → useTeamMembers → useRealtimeSubscription → identity/index.ts` que o baseline já contava (entry-edge `components/ProtectedRoute → useIdentity`), apenas re-reportada por outro edge porque o dep-cruiser escolhe entry diferente quando `useIdentity` muda de pasta. **Causa-raiz**: edge pré-existente `shared/realtime/useRealtimeSubscription.ts → @/modules/identity` (importa `useOrganization`) — fora de escopo deste slice mecânico. Recomendação: quebrar esse edge num slice dedicado (eliminaria os ~7 ciclos de uma vez, ratchet ficaria negativo).
 
 ### Slice 9.3 — Reorganizar `permissions/` interno (3-4h)
 

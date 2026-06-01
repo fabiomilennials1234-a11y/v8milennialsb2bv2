@@ -16,7 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "../hooks/useOrganization";
 import { useUserRole } from "../hooks/useUserRole";
-import { useIdentity } from "../hooks/useIdentity";
+import { useIdentity } from "../auth/hooks/useIdentity";
 import type { PermissionKey } from "../hooks/usePermissions";
 import {
   ACTION_TO_FEATURE as CANONICAL_ACTION_TO_FEATURE,

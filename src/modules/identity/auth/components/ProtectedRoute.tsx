@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useCurrentTeamMember } from '../hooks/useTeamMembers';
+import { useCurrentTeamMember } from '../../hooks/useTeamMembers';
 import { useIdentity } from '../hooks/useIdentity';
 import { AlertTriangle, Clock } from 'lucide-react';
 import { TorqueLoader } from '@/components/ui/branding/TorqueLoader';

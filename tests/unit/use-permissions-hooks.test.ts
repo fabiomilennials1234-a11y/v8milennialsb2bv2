@@ -61,7 +61,7 @@ vi.mock('@/modules/identity/hooks/useMasterAuth', () => ({
 
 // ─── Mock: AuthContext ──────────────────────────────────
 
-vi.mock('@/modules/identity/contexts/AuthContext', () => ({
+vi.mock('@/modules/identity/auth/contexts/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'user-1' } }),
 }));
 
@@ -79,7 +79,7 @@ const mockIdentity = {
   isReady: true,
 };
 
-vi.mock('@/modules/identity/hooks/useIdentity', () => ({
+vi.mock('@/modules/identity/auth/hooks/useIdentity', () => ({
   useIdentity: () => mockIdentity,
 }));
 

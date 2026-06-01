@@ -9,7 +9,7 @@
  */
 
 // ── Auth context ───────────────────────────────────────────────────────────
-export { AuthProvider, useAuth } from "./contexts/AuthContext";
+export { AuthProvider, useAuth } from "./auth";
 
 // ── Lib (permissions resolver) ─────────────────────────────────────────────
 export {
@@ -25,8 +25,8 @@ export type {
 } from "./lib/permissions";
 
 // ── Hooks: identity + role ─────────────────────────────────────────────────
-export { useIdentity } from "./hooks/useIdentity";
-export type { Identity } from "./hooks/useIdentity";
+export { useIdentity } from "./auth";
+export type { Identity } from "./auth";
 export {
   useUserRole,
   useHasRole,
@@ -155,6 +155,6 @@ export { useProfile, useProfiles } from "./hooks/useProfiles";
 export type { Profile } from "./hooks/useProfiles";
 
 // ── Components ─────────────────────────────────────────────────────────────
-export { ProtectedRoute } from "./components/ProtectedRoute";
+export { ProtectedRoute } from "./auth";
 export { PermissionProtectedRoute } from "./components/PermissionProtectedRoute";
 export { SubscriptionProtectedRoute } from "./components/SubscriptionProtectedRoute";

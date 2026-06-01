@@ -50,7 +50,7 @@ vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
   }),
 }));
 
-vi.mock("@/modules/identity/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/auth/hooks/useIdentity", () => ({
   useIdentity: () => ({
     userId: "user-1",
     organizationId: "org-1",

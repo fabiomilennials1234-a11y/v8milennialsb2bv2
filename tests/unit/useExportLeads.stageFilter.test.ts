@@ -82,7 +82,7 @@ vi.mock("@/modules/identity/lib/permissions", () => ({
   assertPermission: vi.fn().mockResolvedValue(undefined),
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/modules/identity/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/auth/hooks/useIdentity", () => ({
   useIdentity: () => ({
     userId: "u1",
     organizationId: "org-123",

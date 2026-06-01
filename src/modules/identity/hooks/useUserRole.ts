@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../auth/contexts/AuthContext";
 import { useCurrentTeamMember } from "./useTeamMembers";
 import { useMasterAuth } from "./useMasterAuth";
 import type { Tables } from "@/integrations/supabase/types";
