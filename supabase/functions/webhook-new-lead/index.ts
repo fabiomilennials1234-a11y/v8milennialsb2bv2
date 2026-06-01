@@ -49,14 +49,13 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // --- API Key Authentication (90-day grace period) ---
+    // --- API Key Authentication (obrigatória — fail-closed) ---
+    // SEGURANÇA (incidente 2026-06-01): a antiga "janela de graça" deixava passar
+    // requisições SEM API key e resolvia a org a partir do body do chamador, permitindo
+    // injeção anônima de leads cross-tenant + disparo de automações. Agora: sem chave válida = 401.
     const authResult = await validateApiKey(supabase, req);
     if (!authResult.valid) {
-      const graceEnd = new Date("2026-07-09T00:00:00Z");
-      if (new Date() > graceEnd) {
-        return errorResponse(401, authResult.error || "API key required", corsHeaders, { req });
-      }
-      console.warn(`[DEPRECATION] Unauthenticated request to webhook-new-lead. Auth required after 2026-07-09.`);
+      return errorResponse(401, authResult.error || "API key required", corsHeaders, { req });
     }
 
     const body = await req.json();
@@ -87,19 +86,15 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
       organization_id: rawOrganizationId,
     } = body;
 
-    // Resolve organization_id: authenticated key org > payload > first active org
-    let organization_id: string | undefined =
-      (authResult.valid && authResult.organizationId) || rawOrganizationId;
+    // organization_id vem EXCLUSIVAMENTE da API key autenticada (anti cross-tenant).
+    // NUNCA confiar em organization_id do body, nem cair na "primeira org ativa".
+    const organization_id: string | undefined = authResult.organizationId;
     if (!organization_id) {
-      const { data: defaultOrg } = await supabase
-        .from("organizations")
-        .select("id")
-        .limit(1)
-        .single();
-      organization_id = defaultOrg?.id;
+      return errorResponse(401, "organização não resolvida a partir da API key", corsHeaders, { req });
     }
-    if (!organization_id) {
-      return errorResponse(400, "organization_id não encontrado", corsHeaders, { req });
+    // Se o body mandar organization_id divergente da chave, rejeita (evita confusão/abuso).
+    if (rawOrganizationId && rawOrganizationId !== organization_id) {
+      return errorResponse(403, "organization_id do body diverge da API key", corsHeaders, { req });
     }
 
     // ── Input validation ──
