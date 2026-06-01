@@ -186,10 +186,15 @@ serve(withSentry('process-agent-document', async (req) => {
       );
     }
 
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
+    // Embeddings sao via OpenRouter (getOpenRouterHeaders usa Bearer <key>).
+    // Bug fix (incidente VitrineVET 2026-06-01): aqui passava GEMINI_API_KEY
+    // por engano -> OpenRouter respondia 401 "Missing Authentication header" e
+    // o media path nao gerava embedding -> doc travava. Todos os outros
+    // callers (generate-faq-embeddings, reembed-all) passam OPENROUTER_API_KEY.
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+    if (!OPENROUTER_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "Gemini API key not configured" }),
+        JSON.stringify({ error: "OpenRouter API key not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -284,7 +289,7 @@ serve(withSentry('process-agent-document', async (req) => {
       // explicitamente pra o operador ver e reprocessar.
       let embedding: Awaited<ReturnType<typeof generateMultimodalEmbedding>>;
       try {
-        embedding = await generateMultimodalEmbedding(fileBytes, mime, GEMINI_API_KEY);
+        embedding = await generateMultimodalEmbedding(fileBytes, mime, OPENROUTER_API_KEY);
       } catch (embErr) {
         const errMsg = `Falha ao gerar embedding multimodal: ${embErr instanceof Error ? embErr.message : String(embErr)}`;
         await supabase.from("copilot_agent_documents")
@@ -323,7 +328,7 @@ serve(withSentry('process-agent-document', async (req) => {
       // Chunk 1: text embedding from description+send_when (text-based RAG search)
       if (summary.length > 10) {
         try {
-          const textEmbedding = await generateEmbedding(summary, GEMINI_API_KEY);
+          const textEmbedding = await generateEmbedding(summary, OPENROUTER_API_KEY);
           await supabase.from("copilot_agent_document_chunks").insert({
             document_id: documentId,
             agent_id: doc.agent_id,
@@ -375,7 +380,7 @@ serve(withSentry('process-agent-document', async (req) => {
           supabaseUrl,
           supabaseServiceKey,
           openaiApiKey: OPENAI_API_KEY,
-          geminiApiKey: GEMINI_API_KEY,
+          openrouterApiKey: OPENROUTER_API_KEY,
           documentId,
           doc,
           fileBytes,
@@ -524,7 +529,7 @@ serve(withSentry('process-agent-document', async (req) => {
 
     // 8. RAG: chunks + embeddings (fire-and-forget)
     generateAndStoreChunkEmbeddings(
-      supabase, GEMINI_API_KEY, documentId, doc.agent_id, doc.organization_id,
+      supabase, OPENROUTER_API_KEY, documentId, doc.agent_id, doc.organization_id,
       contentToSave.substring(0, 100000)
     ).catch(e => console.warn("[process-agent-document] Chunks failed:", e));
 
@@ -569,7 +574,7 @@ async function processPdfInBackground(params: {
   supabaseUrl: string;
   supabaseServiceKey: string;
   openaiApiKey: string;
-  geminiApiKey: string;
+  openrouterApiKey: string;
   documentId: string;
   doc: any;
   fileBytes: Uint8Array;
@@ -579,7 +584,7 @@ async function processPdfInBackground(params: {
     supabaseUrl,
     supabaseServiceKey,
     openaiApiKey,
-    geminiApiKey,
+    openrouterApiKey,
     documentId,
     doc,
     fileBytes,
@@ -744,7 +749,7 @@ async function processPdfInBackground(params: {
   // 8. RAG chunks + embeddings
   await generateAndStoreChunkEmbeddings(
     supabase,
-    geminiApiKey,
+    openrouterApiKey,
     documentId,
     doc.agent_id,
     doc.organization_id,
