@@ -12,6 +12,8 @@ relacionados:
 
 # Roadmap Arch Deepening — pipelines + identity + ciclo leads-pipelines
 
+> 📊 **Para leitura de negócio / não-técnica:** [[RELATORIO-EXECUTIVO-melhorias-arquitetura]] — melhorias e métricas explicadas sem termos técnicos.
+
 3 fases sequenciais que endereçam os candidatos #1, #2 e #3 do relatório `improve-codebase-architecture` (main vs develop). Roda em `develop`, independente das fases 5-6 do roadmap pós-modularização (deploy prod).
 
 > [!info] Replan Fase 7 — 2026-05-29
