@@ -64,7 +64,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/modules/identity/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }),
 }));
 vi.mock("@/modules/identity/hooks/useOrganization", () => ({

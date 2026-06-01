@@ -29,17 +29,19 @@ Inclui:
 
 ```
 src/modules/identity/
+├── auth/                             # sub-conceito auth (slice 9.2 arch-deepening) — API interna privada, re-exportada pelo barrel raiz
+│   ├── contexts/AuthContext.tsx      # AuthProvider + useAuth (singleton de sessão Supabase)
+│   ├── hooks/useIdentity.ts          # useIdentity + type Identity
+│   ├── components/ProtectedRoute.tsx # <ProtectedRoute>
+│   └── index.ts                      # sub-barrel privado (4 statements / 5 símbolos)
 ├── components/
 │   ├── master/                       # Master ops UI (ApiStatusTab, BillingOverrideModal, MasterLayout, MasterRoute, MasterSidebar, PlanEditor, PlanFeatureCard, QuotaManagementPanel, onboarding/)
 │   ├── team/                         # Team management UI (MemberPermissions, SeatUsageBar, TeamMemberCard, TeamStats) — absorvidos em slice 16
 │   ├── PermissionProtectedRoute.tsx
 │   ├── PermissionsTab.tsx
 │   ├── ProfileSettings.tsx
-│   ├── ProtectedRoute.tsx
 │   └── SubscriptionProtectedRoute.tsx
-├── contexts/
-│   └── AuthContext.tsx
-├── hooks/                            # 22 hooks (auth, role, master, permissions, org, profiles, avatar)
+├── hooks/                            # 21 hooks (role, master, permissions, org, profiles, avatar) — useIdentity movido p/ auth/ em 9.2
 ├── lib/
 │   └── permissions.ts                # resolveAction, usePermission, assertPermissionClient, assertPermission
 ├── pages/                            # Auth, Signup, ResetPassword, Equipe, master/

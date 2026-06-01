@@ -44,7 +44,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 // ─── Mock contexts/hooks dependentes ───────────────────────
-vi.mock("@/modules/identity/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => ({ user: mockUser, session: null, loading: false }),
 }));
 
@@ -66,7 +66,7 @@ vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
   }),
 }));
 
-vi.mock("@/modules/identity/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/auth/hooks/useIdentity", () => ({
   useIdentity: () => ({
     userId: mockUser.id,
     organizationId: mockTeamMember?.organization_id ?? null,

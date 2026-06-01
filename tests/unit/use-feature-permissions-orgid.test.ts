@@ -26,7 +26,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 const mockUseAuth = vi.fn(() => ({ user: { id: "user-1" } }));
-vi.mock("@/modules/identity/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => mockUseAuth(),
 }));
 

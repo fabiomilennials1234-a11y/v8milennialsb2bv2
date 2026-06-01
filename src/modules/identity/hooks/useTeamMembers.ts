@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../auth/contexts/AuthContext";
 import { useMasterAuth } from "./useMasterAuth";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { useOrganization } from "./useOrganization";

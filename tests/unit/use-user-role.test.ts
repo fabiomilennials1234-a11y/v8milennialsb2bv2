@@ -43,7 +43,7 @@ vi.mock('@/integrations/supabase/client', () => ({
 }));
 
 // ─── Mock AuthContext ───────────────────────────────────
-vi.mock('@/modules/identity/contexts/AuthContext', () => ({
+vi.mock('@/modules/identity/auth/contexts/AuthContext', () => ({
   useAuth: () => ({
     user: mockUser,
     session: mockSession,

@@ -27,7 +27,7 @@ const mockIdentity = {
   isReady: true,
 };
 
-vi.mock("@/modules/identity/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/auth/hooks/useIdentity", () => ({
   useIdentity: () => mockIdentity,
 }));
 

@@ -32,7 +32,7 @@ vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
   useMasterAuth: () => mockMasterAuthState,
 }));
 
-vi.mock("@/modules/identity/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "user-1" }, session: null, loading: false }),
 }));
 
