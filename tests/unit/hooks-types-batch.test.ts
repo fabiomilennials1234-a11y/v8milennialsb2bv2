@@ -27,7 +27,7 @@ vi.mock("@/modules/pipelines/hooks/custom/useCustomPipelines", () => ({ useCusto
 vi.mock("@/hooks/useChannelChat", () => ({ useChannelContacts: () => ({ data: [] }), useChannelMessages: () => ({ data: [] }) }));
 vi.mock("@/modules/integrations/hooks/useGoogleCalendar", () => ({ useGoogleCalendar: () => ({ data: null }) }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerLeadCreatedInCustomPipeline: vi.fn() }));
-vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 

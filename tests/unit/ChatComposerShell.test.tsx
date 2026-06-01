@@ -26,7 +26,7 @@ vi.mock("@/modules/leads/hooks/useLeadWriteInstance", () => ({
   }),
 }));
 
-vi.mock("@/modules/identity/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useIsAdmin: () => ({ isAdmin: mockIsAdmin, isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
   useFeaturePermission: () => ({ allowed: true, isLoading: false, hasError: false }),

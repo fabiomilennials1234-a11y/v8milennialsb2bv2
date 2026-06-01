@@ -29,7 +29,7 @@ vi.mock('@/modules/identity/auth/hooks/useIdentity', () => ({
 
 // ─── Import under test ──────────────────────────────────
 
-import { useCanDo } from '@/modules/identity/hooks/useCanDo';
+import { useCanDo } from '@/modules/identity/permissions/hooks/useCanDo';
 
 // ─── Test utilities ─────────────────────────────────────
 

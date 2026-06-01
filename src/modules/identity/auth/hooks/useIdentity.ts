@@ -1,7 +1,7 @@
 import { useAuth } from "../contexts/AuthContext";
 import { useMasterAuth } from "../../hooks/useMasterAuth";
 import { useCurrentTeamMember } from "../../hooks/useTeamMembers";
-import { useFeaturePermissions } from "../../hooks/useUserRole";
+import { useFeaturePermissions } from "../../permissions/hooks/useUserRole";
 
 export interface Identity {
   userId: string | null;

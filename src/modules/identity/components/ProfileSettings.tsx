@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "../auth/contexts/AuthContext";
-import { useUserRole } from "../hooks/useUserRole";
+import { useUserRole } from "../permissions/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";

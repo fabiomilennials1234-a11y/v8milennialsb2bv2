@@ -48,7 +48,7 @@ vi.mock("@/modules/identity/auth/hooks/useIdentity", () => ({
   }),
 }));
 
-vi.mock("@/modules/identity/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
@@ -168,7 +168,7 @@ vi.mock("@/modules/engagement/hooks/useGoals", () => ({
   }),
 }));
 
-vi.mock("@/modules/identity/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useUserRole: () => "admin",
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
 }));

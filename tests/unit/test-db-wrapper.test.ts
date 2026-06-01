@@ -23,7 +23,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => mockOrgState,
 }));
 
-vi.mock("@/modules/identity/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useUserRole: () => mockUserRoleState,
   useIsAdmin: () => ({ isAdmin: (mockUserRoleState.data as any)?.role === "admin", isLoading: false }),
 }));

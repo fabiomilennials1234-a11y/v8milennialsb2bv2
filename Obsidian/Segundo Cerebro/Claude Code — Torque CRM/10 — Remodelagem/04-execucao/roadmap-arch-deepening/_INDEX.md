@@ -55,7 +55,7 @@ Análise via skill identificou 3 candidatos com ROI mais alto pra deepening pós
 | Métrica | Hoje (develop) | Após roadmap | Real (7.3-bis) | Como medir |
 |---|---:|---:|---:|---|
 | `pipelines` files-per-export | 0.85 | ≥ 3.0 | **3.58** ✅ | `find / wc + grep ^export` |
-| `identity` files-per-export | 1.50 | ≥ 3.0 | 1.52 (Fase 9 em curso — 9.2 ✅; 67 files / 44 exports; sub-pasta `auth/` criada) | idem |
+| `identity` files-per-export | 1.50 | ≥ 3.0 | 1.55 (Fase 9 em curso — 9.2 ✅ 9.3 ✅; 68 files / 44 exports; sub-pastas `auth/` + `permissions/` criadas; demoção barrel = 9.5) | idem |
 | Ciclo `leads ↔ pipelines` (deep + barrel) | 47 | 0 | **0** ✅ (deep zerado em 7.3-bis; 3 barrel-edges zerados em 7.4-bis) | grep cross-module |
 | `dependency-cruiser` baseline | 86 | ≤ 70 | **56** ✅ (9.1b: 83 → 56; 9.2 neutro 0-new) | `lint:deps:baseline` |
 | Ciclos `no-circular` | 63 | ≤ 50 | **33** ✅ (9.1b: 60 → 33; 9.2 neutro) | idem |

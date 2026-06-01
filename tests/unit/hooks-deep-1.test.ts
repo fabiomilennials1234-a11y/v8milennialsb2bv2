@@ -30,7 +30,7 @@ vi.mock("@/modules/identity/auth/hooks/useIdentity", () => ({
     isReady: true,
   }),
 }));
-vi.mock("@/modules/identity/hooks/useCanDo", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
@@ -38,7 +38,7 @@ vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({ usePipelin
 vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerLeadCreatedInCustomPipeline: vi.fn() }));
-vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn(), assertPermission: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({ assertIsAdmin: vi.fn(), assertPermission: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/lib/copilot/custom-instructions-utils", () => ({ parseCustomInstructions: () => ({ dos: "", donts: "" }), serializeCustomInstructions: () => null }));
 vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r) }));

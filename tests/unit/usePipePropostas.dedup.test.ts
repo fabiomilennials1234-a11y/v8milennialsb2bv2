@@ -34,7 +34,7 @@ vi.mock("@/modules/pipelines/hooks/model/usePipelineEntries", async () => {
   };
 });
 
-vi.mock("@/modules/identity/lib/permissions", () => ({
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
 }));
 

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 // ─── Mocks ──────────────────────────────────────────────
-vi.mock('@/modules/identity/hooks/useUserRole', () => ({
+vi.mock('@/modules/identity/permissions/hooks/useUserRole', () => ({
   useFeaturePermission: vi.fn(),
   useIsAdmin: vi.fn(),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
@@ -27,10 +27,10 @@ vi.mock('@/modules/identity/auth/hooks/useIdentity', () => ({
   useIdentity: (...args: unknown[]) => mockIdentity(...args),
 }));
 
-import { useFeaturePermission, useIsAdmin } from '@/modules/identity/hooks/useUserRole';
+import { useFeaturePermission, useIsAdmin } from '@/modules/identity/permissions/hooks/useUserRole';
 import { useMasterAuth } from '@/modules/identity/hooks/useMasterAuth';
 import { useCurrentTeamMember } from '@/modules/identity/hooks/useTeamMembers';
-import { PermissionProtectedRoute } from '@/modules/identity/components/PermissionProtectedRoute';
+import { PermissionProtectedRoute } from '@/modules/identity/permissions/components/PermissionProtectedRoute';
 
 // ─── Typed references ───────────────────────────────────
 const mockUseFeaturePermission = useFeaturePermission as ReturnType<typeof vi.fn>;

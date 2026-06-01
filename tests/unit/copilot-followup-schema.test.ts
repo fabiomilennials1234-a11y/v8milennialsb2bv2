@@ -113,7 +113,7 @@ vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({
   followupRuleToDB: (...args: any[]) => mockFollowupRuleToDB(...args),
 }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/modules/identity/lib/permissions", () => ({
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
 }));

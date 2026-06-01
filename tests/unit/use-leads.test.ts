@@ -13,7 +13,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
 vi.mock("@/lib/analytics", () => ({
   track: vi.fn(),
 }));
-vi.mock("@/modules/identity/lib/permissions", () => ({
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({
   useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true),
 }));
 

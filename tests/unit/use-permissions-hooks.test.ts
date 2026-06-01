@@ -40,7 +40,7 @@ vi.mock('@/modules/identity/hooks/useOrganization', () => ({
 
 const mockUseUserRole = vi.fn();
 const mockUseFeaturePermissions = vi.fn();
-vi.mock('@/modules/identity/hooks/useUserRole', () => ({
+vi.mock('@/modules/identity/permissions/hooks/useUserRole', () => ({
   useUserRole: (...args: unknown[]) => mockUseUserRole(...args),
   useFeaturePermissions: (...args: unknown[]) => mockUseFeaturePermissions(...args),
 }));
@@ -85,9 +85,9 @@ vi.mock('@/modules/identity/auth/hooks/useIdentity', () => ({
 
 // ─── Imports under test ─────────────────────────────────
 
-import { usePermission } from '@/modules/identity/lib/permissions';
-import { useCanDo } from '@/modules/identity/hooks/useCanDo';
-import { useHasPermission } from '@/modules/identity/hooks/usePermissions';
+import { usePermission } from '@/modules/identity/permissions/lib/permissions';
+import { useCanDo } from '@/modules/identity/permissions/hooks/useCanDo';
+import { useHasPermission } from '@/modules/identity/permissions/hooks/usePermissions';
 
 // ─── Test utilities ─────────────────────────────────────
 
