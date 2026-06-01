@@ -276,5 +276,9 @@ verify_jwt = false
 [functions.agent-runtime-v2]
 verify_jwt = false
 
+# copilot-v2-worker: drena copilot_v2_message_queue (cron 1/min via pg_net); auth x-cron-secret
+[functions.copilot-v2-worker]
+verify_jwt = false
+
 
 
