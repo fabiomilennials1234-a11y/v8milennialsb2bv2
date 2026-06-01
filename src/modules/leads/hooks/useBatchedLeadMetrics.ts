@@ -4,29 +4,34 @@
  * Busca contadores agregados pra N leads em 2 queries (comments + checklists).
  * Usado pelo LeadCard pra evitar N+1.
  *
- * Retorno: Map<leadId, { commentsCount, checklistsTotal, checklistsCompleted, attachmentsCount }>.
+ * Retorno: Map<leadId, { commentsCount, checklistsTotal, checklistsCompleted }>.
  *
- * Attachments retorna 0 enquanto tabela `lead_attachments` não existe.
+ * Freshness: realtime em `checklists`/`checklist_items` (estão na publication).
+ * `lead_comments` NÃO está na publication — a contagem de comentários é
+ * invalidada pelas mutations do modal (useLeadComments) via ["lead-card-metrics"].
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 
 export interface LeadMetrics {
   commentsCount: number;
   checklistsTotal: number;
   checklistsCompleted: number;
-  attachmentsCount: number;
 }
 
 const EMPTY: LeadMetrics = {
   commentsCount: 0,
   checklistsTotal: 0,
   checklistsCompleted: 0,
-  attachmentsCount: 0,
 };
 
 export function useBatchedLeadMetrics(leadIds: string[]) {
   const sortedIds = [...new Set(leadIds)].sort();
+  // Card reflete checklists em tempo real (edição no modal, trigger de stage,
+  // workflow apply_checklist). Comentários cobertos por invalidação cross-cache.
+  useRealtimeSubscription("checklists", ["lead-card-metrics"]);
+  useRealtimeSubscription("checklist_items", ["lead-card-metrics"]);
   return useQuery({
     queryKey: ["lead-card-metrics", sortedIds],
     queryFn: async (): Promise<Record<string, LeadMetrics>> => {

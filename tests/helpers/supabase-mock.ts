@@ -22,9 +22,15 @@ export function createMockSupabase() {
   const insertedRows: Record<string, MockData> = {};
   const upsertOpts: Record<string, unknown[]> = {};
   const rpcResults: Record<string, unknown> = {};
+  const insertErrors: Record<string, { code: string; message: string }> = {};
 
   function mockTable(name: string, data: MockData) {
     tables[name] = data;
+  }
+
+  /** Force the next (and subsequent) inserts on `table` to fail with `error`. */
+  function mockInsertError(name: string, error: { code: string; message: string }) {
+    insertErrors[name] = error;
   }
 
   function mockRpc(name: string, result: unknown) {
@@ -51,6 +57,7 @@ export function createMockSupabase() {
     let selectOpts: { count?: string; head?: boolean } | null = null;
     let isInsert = false;
     let insertData: unknown = null;
+    let insertError: { code: string; message: string } | null = null;
     let isDelete = false;
     let isUpdate = false;
     let updateData: Record<string, unknown> = {};
@@ -160,6 +167,10 @@ export function createMockSupabase() {
       insert: (rows: unknown) => {
         isInsert = true;
         insertData = rows;
+        if (insertErrors[tableName]) {
+          insertError = insertErrors[tableName];
+          return chain;
+        }
         const arr = Array.isArray(rows) ? rows : [rows];
         if (!insertedRows[tableName]) insertedRows[tableName] = [];
         const withIds = arr.map((r: any) => ({ id: crypto.randomUUID(), ...r }));
@@ -194,6 +205,7 @@ export function createMockSupabase() {
       },
       delete: () => { isDelete = true; return chain; },
       single: () => {
+        if (insertError) return Promise.resolve({ data: null, error: insertError });
         const result = applyFilters();
         return Promise.resolve({
           data: result[0] || null,
@@ -201,6 +213,7 @@ export function createMockSupabase() {
         });
       },
       maybeSingle: () => {
+        if (insertError) return Promise.resolve({ data: null, error: insertError });
         const result = applyFilters();
         return Promise.resolve({
           data: result[0] || null,
@@ -216,6 +229,9 @@ export function createMockSupabase() {
     // Make chain thenable (for await without .single/.maybeSingle)
     chain[Symbol.toStringTag] = 'Promise';
     const defaultPromise = () => {
+      if (insertError) {
+        return Promise.resolve({ data: null, error: insertError, count: null });
+      }
       const filtered = applyFilters();
       if (selectOpts?.head) {
         return Promise.resolve({
@@ -315,5 +331,5 @@ export function createMockSupabase() {
     channel: (name: string) => createChannel(name),
   };
 
-  return { sb: sb as any, mockTable, mockRpc, getInserted, getUpsertOpts, emitEvent };
+  return { sb: sb as any, mockTable, mockRpc, mockInsertError, getInserted, getUpsertOpts, emitEvent };
 }

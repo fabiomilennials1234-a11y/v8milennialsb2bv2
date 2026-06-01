@@ -114,7 +114,6 @@ export interface LeadCardData extends DraggableItem {
     commentsCount: number;
     checklistsTotal: number;
     checklistsCompleted: number;
-    attachmentsCount: number;
   };
   /** Responsáveis dual (pre-venda / venda) com avatar. */
   preSaleResponsible?: { name: string | null; avatar_url?: string | null } | null;
@@ -588,7 +587,6 @@ export const LeadCard = memo(function LeadCard({
               commentsCount={lead.metrics?.commentsCount ?? 0}
               checklistsCompleted={lead.metrics?.checklistsCompleted ?? 0}
               checklistsTotal={lead.metrics?.checklistsTotal ?? 0}
-              attachmentsCount={lead.metrics?.attachmentsCount ?? 0}
               preSaleResponsible={lead.preSaleResponsible}
               saleResponsible={lead.saleResponsible}
               className="flex-1"
