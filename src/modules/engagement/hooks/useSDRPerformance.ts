@@ -9,10 +9,12 @@
  * Atribuição: pre_sale_responsible_id ?? sdr_id (snapshot dual ADR 2026-05-18).
  */
 import { useMemo } from "react";
-import { usePipeConfirmacao } from "@/modules/pipelines";
 import { useTeamMembers } from "@/modules/identity";
 import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { inRange, type TVPeriodRange } from "@/lib/tv-periods";
+// Lê a view pipe_confirmacao direto via supabase (data layer), reusando o
+// query hook do perf de closer. Quebra o import do módulo pipelines.
+import { usePerfPipeConfirmacao } from "./useCloserPerformance";
 
 export interface SDRPerformanceRow {
   id: string;
@@ -34,7 +36,7 @@ export interface SDRPerformanceData {
 }
 
 export function useSDRPerformance(range: TVPeriodRange): SDRPerformanceData {
-  const { data: confirmacoes = [] } = usePipeConfirmacao();
+  const { data: confirmacoes = [] } = usePerfPipeConfirmacao();
   const { data: teamMembers = [] } = useTeamMembers();
   const avatarMap = useAvatarMap();
 

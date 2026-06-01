@@ -13,10 +13,63 @@
  * Atribuição SDR (pra reunião): closer real = sale_responsible_id ?? closer_id da confirmacao.
  */
 import { useMemo } from "react";
-import { usePipePropostas, usePipeConfirmacao } from "@/modules/pipelines";
-import { useTeamMembers } from "@/modules/identity";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
+import { useOrganization, useTeamMembers } from "@/modules/identity";
 import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { inRange, type TVPeriodRange } from "@/lib/tv-periods";
+
+// Leitura direta das views `pipe_propostas` / `pipe_confirmacao` (data layer),
+// scoped por organization_id, em vez de importar os hooks de valor do módulo
+// pipelines. Quebra a aresta engagement→pipelines que fechava o
+// ciclo leads→engagement→pipelines→leads. Tipos vêm de core (Tables<...>).
+// Sem realtime (regra: nunca subscription em views pipe_*; dashboard → staleTime basta).
+
+type PipePropostaRow = Tables<"pipe_propostas">;
+type PipeConfirmacaoRow = Tables<"pipe_confirmacao">;
+
+const PERF_STALE_TIME = 60 * 1000;
+
+export function usePerfPipePropostas() {
+  const { organizationId, isReady } = useOrganization();
+  return useQuery({
+    queryKey: ["pipe_propostas", "perf", organizationId],
+    queryFn: async () => {
+      if (!organizationId) return [] as PipePropostaRow[];
+      const { data, error } = await supabase
+        .from("pipe_propostas")
+        .select(
+          "status, metrics_period_at, created_at, closed_at, sale_value, sale_responsible_id, closer_id"
+        )
+        .eq("organization_id", organizationId);
+      if (error) throw error;
+      return (data ?? []) as PipePropostaRow[];
+    },
+    enabled: isReady && !!organizationId,
+    staleTime: PERF_STALE_TIME,
+  });
+}
+
+export function usePerfPipeConfirmacao() {
+  const { organizationId, isReady } = useOrganization();
+  return useQuery({
+    queryKey: ["pipe_confirmacao", "perf", organizationId],
+    queryFn: async () => {
+      if (!organizationId) return [] as PipeConfirmacaoRow[];
+      const { data, error } = await supabase
+        .from("pipe_confirmacao")
+        .select(
+          "status, meeting_date, metrics_period_at, created_at, sale_responsible_id, closer_id, pre_sale_responsible_id, sdr_id"
+        )
+        .eq("organization_id", organizationId);
+      if (error) throw error;
+      return (data ?? []) as PipeConfirmacaoRow[];
+    },
+    enabled: isReady && !!organizationId,
+    staleTime: PERF_STALE_TIME,
+  });
+}
 
 export interface CloserPerformanceRow {
   id: string;
@@ -47,8 +100,8 @@ const closerOf = (row: any): string | null =>
   row.sale_responsible_id ?? row.closer_id ?? null;
 
 export function useCloserPerformance(range: TVPeriodRange): CloserPerformanceData {
-  const { data: propostas = [] } = usePipePropostas();
-  const { data: confirmacoes = [] } = usePipeConfirmacao();
+  const { data: propostas = [] } = usePerfPipePropostas();
+  const { data: confirmacoes = [] } = usePerfPipeConfirmacao();
   const { data: teamMembers = [] } = useTeamMembers();
   const avatarMap = useAvatarMap();
 
