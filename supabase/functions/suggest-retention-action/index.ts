@@ -10,6 +10,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withSentry } from "../_shared/sentry.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -43,7 +44,8 @@ Deno.serve(
     }
 
     try {
-      const { client_id } = await req.json();
+      const body = await req.json();
+      const { client_id } = body;
       if (!client_id) {
         return new Response(
           JSON.stringify({ error: "client_id required" }),
@@ -51,28 +53,11 @@ Deno.serve(
         );
       }
 
-      const authHeader = req.headers.get("authorization") ?? "";
-      const supabaseUser = createClient(SUPABASE_URL, authHeader.replace("Bearer ", "").trim() || SUPABASE_SERVICE_ROLE_KEY);
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
         auth: { persistSession: false },
       });
 
-      // Check cache (24h TTL)
-      const { data: cached } = await supabaseUser
-        .from("retention_suggestions")
-        .select("*")
-        .eq("client_id", client_id)
-        .gt("expires_at", new Date().toISOString())
-        .maybeSingle();
-
-      if (cached) {
-        return new Response(JSON.stringify({ suggestion: cached, cached: true }), {
-          status: 200,
-          headers: jsonHeaders,
-        });
-      }
-
-      // Fetch client context
+      // Fetch client context (organization_id needed to authorize the caller)
       const { data: client } = await supabaseAdmin
         .from("upsell_clients")
         .select("id, organization_id, name, company, health_score, health_status, segment, avg_ticket, lifetime_value, order_count, reorder_cycle_days, days_since_last_order, next_order_expected, churn_probability, trend")
@@ -84,6 +69,30 @@ Deno.serve(
           JSON.stringify({ error: "Client not found" }),
           { status: 404, headers: jsonHeaders },
         );
+      }
+
+      // AuthZ: caller must be an authenticated member of the client's organization.
+      // Without this, the service-role fetches below leak any org's portfolio pre-auth.
+      try {
+        await requireAuth(req, { organizationId: client.organization_id, body });
+      } catch (e) {
+        if (e instanceof AuthError) return authErrorResponse(e, headers);
+        throw e;
+      }
+
+      // Check cache (24h TTL) — membership verified above
+      const { data: cached } = await supabaseAdmin
+        .from("retention_suggestions")
+        .select("*")
+        .eq("client_id", client_id)
+        .gt("expires_at", new Date().toISOString())
+        .maybeSingle();
+
+      if (cached) {
+        return new Response(JSON.stringify({ suggestion: cached, cached: true }), {
+          status: 200,
+          headers: jsonHeaders,
+        });
       }
 
       // Fetch recent orders
