@@ -50,7 +50,8 @@ src/modules/identity/
 │   ├── team/                         # Team management UI (MemberPermissions, SeatUsageBar, TeamMemberCard, TeamStats) — absorvidos em slice 16
 │   ├── ProfileSettings.tsx
 │   └── SubscriptionProtectedRoute.tsx
-├── hooks/                            # 15 hooks (master, org, team, profiles, avatar) — role/permissions movidos p/ permissions/ em 9.3, useIdentity p/ auth/ em 9.2
+├── hooks/                            # 16 hooks (master, org, team, profiles, avatar) — role/permissions movidos p/ permissions/ em 9.3, useIdentity p/ auth/ em 9.2
+│                                     # useCurrentTeamMember.ts extraído de useTeamMembers.ts (9.4a) p/ quebrar ciclo useOrganization↔useTeamMembers; useTeamMembers re-exporta
 ├── pages/                            # Auth, Signup, ResetPassword, Equipe, master/
 ├── index.ts                          # API pública
 └── CLAUDE.md                         # este arquivo
