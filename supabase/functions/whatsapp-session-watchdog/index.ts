@@ -29,6 +29,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { extractOwnerNumber } from "../_shared/whatsapp-owner.ts";
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
@@ -47,6 +48,7 @@ type DbInstance = {
   instance_name: string;
   provider: string;
   status: string | null;
+  phone_number: string | null;
   session_dead_since: string | null;
   session_dead_reason: string | null;
 };
@@ -134,7 +136,7 @@ Deno.serve(
 
     const { data: dbInstances, error: dbErr } = await supabase
       .from("whatsapp_instances")
-      .select("id, organization_id, instance_name, provider, status, session_dead_since, session_dead_reason")
+      .select("id, organization_id, instance_name, provider, status, phone_number, session_dead_since, session_dead_reason")
       .eq("provider", "uazapi")
       .returns<DbInstance[]>();
 
@@ -146,6 +148,7 @@ Deno.serve(
     let transitionedHealthy = 0;
     let unchanged = 0;
     let untrackedOnUazapi = 0;
+    let ownerBackfilled = 0;
     const dead: Array<{ id: string; org: string; reason: string }> = [];
 
     for (const row of dbInstances ?? []) {
@@ -156,6 +159,21 @@ Deno.serve(
       }
       const nowDead = isDead(u.status);
       const wasDead = row.session_dead_since !== null;
+
+      // Backfill the connected account's own number when we don't have it yet.
+      // /instance/all already carries it, so this is free — no extra request and
+      // off any webhook ack path. Only when live; never overwrite an existing
+      // number (account may have been swapped — A-path poll handles that).
+      if (!nowDead && !row.phone_number) {
+        const owner = extractOwnerNumber(u);
+        if (owner) {
+          await supabase
+            .from("whatsapp_instances")
+            .update({ phone_number: owner })
+            .eq("id", row.id);
+          ownerBackfilled += 1;
+        }
+      }
 
       if (nowDead && !wasDead) {
         const reason = u.lastDisconnectReason && u.lastDisconnectReason.length > 0
@@ -209,6 +227,7 @@ Deno.serve(
         transitioned_healthy: transitionedHealthy,
         unchanged,
         untracked_on_uazapi: untrackedOnUazapi,
+        owner_backfilled: ownerBackfilled,
         dead,
       }),
       { status: 200, headers },

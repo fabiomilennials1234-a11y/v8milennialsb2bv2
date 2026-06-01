@@ -1,0 +1,73 @@
+// deno-lint-ignore-file no-explicit-any
+
+/**
+ * Owner-number extraction for WhatsApp instances.
+ *
+ * Uazapi exposes the *connected account's own number* under inconsistent keys
+ * depending on endpoint and server version: `owner`, `wid`, `jid`, a nested
+ * `instance.owner`, or `status.jid` (the `{ connected, loggedIn, jid }` object
+ * returned by /instance/init). The provider schema is known-unstable (incident
+ * 2026-05-14), so we scan a prioritized candidate set rather than trusting a
+ * single field name — same defensive posture as the webhook resolver.
+ *
+ * Returns the number as bare digits (no `@s.whatsapp.net` suffix, no `:NN`
+ * multi-device suffix), or `undefined` when nothing usable is present.
+ */
+
+/** Strip a WhatsApp JID / raw value down to a bare phone-number string. */
+export function jidToPhone(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  // Group JIDs (@g.us) are never an account owner.
+  if (value.includes("@g.us")) return undefined;
+  // LinkedID (@lid) handles are NOT phone numbers — Uazapi V2 sometimes emits
+  // them in identity fields. Treat as non-phone, matching the convention in
+  // whatsapp-webhook/index.ts (resolvedJid @lid handling).
+  if (value.includes("@lid")) return undefined;
+  // Drop everything from the first "@" (s.whatsapp.net / c.us) and any
+  // ":NN" multi-device suffix that precedes it.
+  const local = value.split("@")[0].split(":")[0];
+  const digits = local.replace(/\D/g, "");
+  // E.164-ish sanity: WhatsApp numbers are 10–15 digits (country + DDD + line).
+  if (digits.length < 10 || digits.length > 15) return undefined;
+  return digits;
+}
+
+// Keys, in priority order, observed (or plausible) to carry the connected
+// account's own number across Uazapi endpoints/versions.
+const OWNER_KEYS = [
+  "owner",
+  "wid",
+  "wuid",
+  "jid",
+  "me",
+  "myJid",
+  "phoneConnected",
+  "phone",
+  "number",
+] as const;
+
+function scan(obj: any): string | undefined {
+  if (!obj || typeof obj !== "object") return undefined;
+  for (const key of OWNER_KEYS) {
+    const phone = jidToPhone(obj[key]);
+    if (phone) return phone;
+  }
+  return undefined;
+}
+
+/**
+ * Best-effort extraction of the connected account's number from any Uazapi
+ * status / connection / init payload. Scans the object itself, its nested
+ * `instance`, and the `status` object (which on /instance/init is
+ * `{ connected, loggedIn, jid }`).
+ */
+export function extractOwnerNumber(raw: unknown): string | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as any;
+  return (
+    scan(r) ??
+    scan(r.instance) ??
+    (typeof r.status === "object" ? scan(r.status) : undefined) ??
+    (typeof r.instance?.status === "object" ? scan(r.instance.status) : undefined)
+  );
+}
