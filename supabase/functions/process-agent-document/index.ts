@@ -275,8 +275,24 @@ serve(withSentry('process-agent-document', async (req) => {
         return new Response(JSON.stringify({ error: errMsg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Generate multimodal embedding directly from raw bytes
-      const embedding = await generateMultimodalEmbedding(fileBytes, mime, GEMINI_API_KEY);
+      // Generate multimodal embedding directly from raw bytes.
+      // Bug fix (incidente VitrineVET 2026-06-01): se essa chamada falha
+      // (timeout/quota Gemini), o erro propagava pro outer catch que NAO
+      // resetava o status -> doc ficava preso em 'processing' pra sempre, sem
+      // error_message. Resultado: tool send_document nunca oferecia o doc e o
+      // modelo improvisava {"file":...} em texto. Agora marcamos 'error'
+      // explicitamente pra o operador ver e reprocessar.
+      let embedding: Awaited<ReturnType<typeof generateMultimodalEmbedding>>;
+      try {
+        embedding = await generateMultimodalEmbedding(fileBytes, mime, GEMINI_API_KEY);
+      } catch (embErr) {
+        const errMsg = `Falha ao gerar embedding multimodal: ${embErr instanceof Error ? embErr.message : String(embErr)}`;
+        await supabase.from("copilot_agent_documents")
+          .update({ status: "error", error_message: errMsg, updated_at: new Date().toISOString() })
+          .eq("id", documentId);
+        console.error(`[process-agent-document] Media embedding failed for ${documentId}:`, errMsg);
+        return new Response(JSON.stringify({ error: errMsg }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
 
       // Use description as content (user-provided context about the media)
       const description = (doc as any).description || doc.file_name;
