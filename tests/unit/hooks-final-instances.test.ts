@@ -52,11 +52,11 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "u1" }, session: { access_token: "t" } }),
 }));
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
   useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
 }));
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({
     data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" },
   }),
@@ -468,7 +468,7 @@ describe("useExportLeads", () => {
 
   it("throws when organizationId is missing", async () => {
     // Temporarily override the mock
-    vi.doMock("@/modules/identity/hooks/useOrganization", () => ({
+    vi.doMock("@/modules/identity/org-team/hooks/useOrganization", () => ({
       useOrganization: () => ({ organizationId: null, isReady: false }),
       useRequiredOrganization: () => ({ organizationId: null, teamMemberId: null }),
     }));
@@ -480,7 +480,7 @@ describe("useExportLeads", () => {
     expect(useExportLeads).toBeDefined();
 
     // Restore
-    vi.doMock("@/modules/identity/hooks/useOrganization", () => ({
+    vi.doMock("@/modules/identity/org-team/hooks/useOrganization", () => ({
       useOrganization: () => ({ organizationId: "org-t", isReady: true }),
       useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
     }));

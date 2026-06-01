@@ -43,11 +43,11 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: {} }) }));
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-test", isReady: true }),
   useRequiredOrganization: () => ({ organizationId: "org-test", teamMemberId: "tm1", isReady: true }),
 }));
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-test", user_id: "u1", role: "admin" } }),
   isVirtualTeamMember: (id: string) => id?.startsWith("master-virtual-"),
 }));
@@ -73,9 +73,9 @@ import { usePipeWhatsapp } from "@/modules/pipelines/hooks/legacy/usePipeWhatsap
 import { useDebounce } from "@/shared/hooks/useDebounce";
 import { useLeadScore } from "@/modules/leads";
 import { useLeadHistory } from "@/modules/leads";
-import { useOrgQuotas } from "@/modules/identity/hooks/useOrgQuotas";
+import { useOrgQuotas } from "@/modules/identity/org-team/hooks/useOrgQuotas";
 import { useOnboarding } from "@/modules/platform/hooks/useOnboarding";
-import { useSeatUsage } from "@/modules/identity/hooks/useSeatUsage";
+import { useSeatUsage } from "@/modules/identity/org-team/hooks/useSeatUsage";
 
 // ── Tests ──
 

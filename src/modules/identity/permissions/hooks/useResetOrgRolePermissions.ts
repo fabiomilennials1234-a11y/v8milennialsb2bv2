@@ -8,7 +8,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "../../hooks/useOrganization";
+import { useOrganization } from "../../org-team/hooks/useOrganization";
 import { ALL_PERMISSIONS } from "@/lib/permission-catalog";
 import { QUERY_KEY_ORP, QUERY_KEY_FP } from "./useOrgRolePermissions";
 

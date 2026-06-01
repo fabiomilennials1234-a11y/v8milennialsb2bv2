@@ -33,7 +33,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }) }));
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }) }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false, isLoading: false }) }));
 
@@ -82,7 +82,7 @@ import {
   isVirtualTeamMember,
   getSelectedOrgId,
   setSelectedOrgId,
-} from "@/modules/identity/hooks/useTeamMembers";
+} from "@/modules/identity/org-team/hooks/useTeamMembers";
 
 // ---- Pure function tests ----
 

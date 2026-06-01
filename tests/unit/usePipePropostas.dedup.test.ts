@@ -13,7 +13,7 @@ const ORG_ID = "org-1";
 const PIPELINE_ID = "pipeline-propostas-1";
 const LEAD_ID = "lead-ana";
 
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({
     organizationId: ORG_ID,
     teamMemberId: "tm-1",

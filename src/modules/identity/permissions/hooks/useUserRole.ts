@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "../../auth/contexts/AuthContext";
-import { useCurrentTeamMember } from "../../hooks/useTeamMembers";
+import { useCurrentTeamMember } from "../../org-team/hooks/useTeamMembers";
 import { useMasterAuth } from "../../master/hooks/useMasterAuth";
 import type { Tables } from "@/integrations/supabase/types";
 

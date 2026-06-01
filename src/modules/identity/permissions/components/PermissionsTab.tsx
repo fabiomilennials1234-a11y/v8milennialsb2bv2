@@ -40,7 +40,7 @@ import { useUpdateRolePermission } from "../hooks/useUpdateRolePermission";
 import { useResetOrgRolePermissions } from "../hooks/useResetOrgRolePermissions";
 import { useIsAdmin } from "../hooks/useUserRole";
 import { useMasterAuth } from "../../master/hooks/useMasterAuth";
-import { useTeamMembers } from "../../hooks/useTeamMembers";
+import { useTeamMembers } from "../../org-team/hooks/useTeamMembers";
 
 interface PendingConfirm {
   perm: PermissionDef;

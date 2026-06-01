@@ -12,7 +12,7 @@ vi.mock('@/modules/identity/auth/contexts/AuthContext', () => ({
   useAuth: (...args: unknown[]) => mockUseAuth(...args),
 }));
 
-vi.mock('@/modules/identity/hooks/useTeamMembers', () => ({
+vi.mock('@/modules/identity/org-team/hooks/useTeamMembers', () => ({
   useCurrentTeamMember: (...args: unknown[]) => mockUseCurrentTeamMember(...args),
 }));
 

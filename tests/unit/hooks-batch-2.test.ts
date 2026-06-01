@@ -28,8 +28,8 @@ vi.mock("@/integrations/supabase/client", () => {
 });
 
 vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: {} }) }));
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-test", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-test", teamMemberId: "tm1" }) }));
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-test", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-test", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-test", teamMemberId: "tm1" }) }));
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-test", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
 vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
@@ -47,14 +47,14 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: v
 import { useAwards } from "@/modules/engagement/hooks/useAwards";
 import { useBadges } from "@/modules/engagement/hooks/useBadges";
 import { useCompetitions } from "@/modules/engagement/hooks/useCompetitions";
-import { useProfiles } from "@/modules/identity/hooks/useProfiles";
+import { useProfiles } from "@/modules/identity/org-team/hooks/useProfiles";
 import { useCountUp } from "@/shared/hooks/useCountUp";
 import { useLeadTimeline } from "@/modules/leads";
 import { useLogger } from "@/modules/platform/hooks/useLogger";
 import { useMasterPlans } from "@/modules/identity/master/hooks/useMasterPlans";
 import { useMessageTemplates } from "@/modules/communication/hooks/useMessageTemplates";
-import { useOrgSwitcher } from "@/modules/identity/hooks/useOrgSwitcher";
-import { useOrganizationSettings } from "@/modules/identity/hooks/useOrganizationSettings";
+import { useOrgSwitcher } from "@/modules/identity/org-team/hooks/useOrgSwitcher";
+import { useOrganizationSettings } from "@/modules/identity/org-team/hooks/useOrganizationSettings";
 import { useMasterOrganizations } from "@/modules/identity/master/hooks/useMasterOrganizations";
 import { useMasterUsers } from "@/modules/identity/master/hooks/useMasterUsers";
 import { useMasterAuditLogs } from "@/modules/identity/master/hooks/useMasterAuditLogs";
