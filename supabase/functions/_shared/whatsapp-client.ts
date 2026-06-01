@@ -59,6 +59,11 @@ export type InstanceStatus = {
   state: "connecting" | "connected" | "disconnected" | "unknown";
   qrcode?: string;
   paircode?: string;
+  /**
+   * The connected account's own number as bare digits (no `@s.whatsapp.net`
+   * suffix). Best-effort — undefined when the provider payload doesn't expose it.
+   */
+  owner?: string;
 };
 
 export type CreateInstanceInput = {

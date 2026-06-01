@@ -205,12 +205,19 @@ export function useCheckConnectionStatus() {
       }
       const status = await proxyGetStatus(args.instance_id, teamMember.organization_id);
 
+      const updates: WhatsAppInstanceUpdate = {
+        status: status.connected ? "connected" : "disconnected",
+        last_connection_at: status.connected ? new Date().toISOString() : null,
+      };
+      // Persist the connected account's own number when the provider reports it,
+      // so Settings can show which WhatsApp is live. Never clobber with null.
+      if (status.connected && status.owner) {
+        updates.phone_number = status.owner;
+      }
+
       const { data, error } = await supabase
         .from("whatsapp_instances")
-        .update({
-          status: status.connected ? "connected" : "disconnected",
-          last_connection_at: status.connected ? new Date().toISOString() : null,
-        })
+        .update(updates)
         .eq("id", args.instance_id)
         .eq("organization_id", teamMember.organization_id)
         .select()

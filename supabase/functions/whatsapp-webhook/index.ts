@@ -33,6 +33,7 @@ import {
   stampMediaJob,
 } from "../_shared/whatsapp-media.ts";
 import { timingSafeCompare, checkRateLimitPersistent } from "../_shared/auth.ts";
+import { extractOwnerNumber } from "../_shared/whatsapp-owner.ts";
 
 // ============================================================================
 // Config
@@ -1018,20 +1019,41 @@ async function handleConnectionEvent(
 
   const { data: prevInstance } = await supabase
     .from("whatsapp_instances")
-    .select("status")
+    .select("status, phone_number")
     .eq("id", instance.id)
     .maybeSingle();
   const previousStatus = prevInstance?.status;
 
+  const update: Record<string, unknown> = {
+    status: mapped,
+    updated_at: new Date().toISOString(),
+  };
+
+  // Capture the connected account's own number so the settings UI can show
+  // which number is live. The connection event sometimes carries it
+  // (owner/jid/wid). Never overwrite a known number with nothing.
+  if (mapped === "connected" && !prevInstance?.phone_number) {
+    const ownerFromEvent = extractOwnerNumber(data);
+    if (ownerFromEvent) update.phone_number = ownerFromEvent;
+  }
+
   await supabase
     .from("whatsapp_instances")
-    .update({ status: mapped, updated_at: new Date().toISOString() })
+    .update(update)
     .eq("id", instance.id);
 
-  // Auto-sync: trigger default history sync on first connect
   if (mapped === "connected" && previousStatus !== "connected") {
+    // Auto-sync: trigger default history sync on first connect
     await maybeAutoSync(supabase, instance);
   }
+
+  // NOTE: no provider probe here. This handler runs on the webhook 200-ack path
+  // (inside the PROCESSING_TIMEOUT_MS budget); a slow getStatus would force a
+  // 500 → Uazapi retry storm — forbidden for this 🔴 area. When the connection
+  // event doesn't embed the owner number, the backfill is owned by the
+  // `whatsapp-session-watchdog` cron, which already fetches /instance/all and
+  // persists phone_number off the ack path. The settings poll path
+  // (useCheckConnectionStatus) also fills it on the next status check.
 }
 
 async function maybeAutoSync(
@@ -1385,6 +1407,7 @@ export {
   checkRateLimit,
   timingSafeCompare,
   normalizeMessage,
+  handleConnectionEvent,
   rateLimitState,
   RATE_LIMIT_MAX,
   REPLAY_WINDOW_MS,

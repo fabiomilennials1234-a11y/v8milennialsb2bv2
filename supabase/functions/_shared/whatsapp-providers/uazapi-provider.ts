@@ -10,6 +10,7 @@
  */
 
 import { UazapiClient } from "../uazapi-client.ts";
+import { extractOwnerNumber } from "../whatsapp-owner.ts";
 import type {
   CreateInstanceInput,
   CreateInstanceResult,
@@ -32,6 +33,7 @@ function normaliseStatus(raw: {
   connected?: boolean;
   qrcode?: string;
   paircode?: string;
+  owner?: string;
 }): InstanceStatus {
   const rawStatus = raw.status;
   // Uazapi /instance/init returns status as object {connected, loggedIn, jid},
@@ -53,6 +55,7 @@ function normaliseStatus(raw: {
     state,
     qrcode: raw.qrcode,
     paircode: raw.paircode,
+    owner: raw.owner,
   };
 }
 
@@ -164,6 +167,7 @@ export class UazapiProvider implements WhatsAppProvider {
         status: resp.status ?? resp.instance?.status,
         qrcode: resp.instance?.qrcode ?? (resp as any).qrcode,
         paircode: resp.instance?.paircode ?? (resp as any).paircode,
+        owner: extractOwnerNumber(resp),
       }),
     };
   }
@@ -176,6 +180,7 @@ export class UazapiProvider implements WhatsAppProvider {
       connected: inst.connected ?? raw.connected,
       qrcode: inst.qrcode,
       paircode: inst.paircode,
+      owner: extractOwnerNumber(raw),
     });
   }
 
