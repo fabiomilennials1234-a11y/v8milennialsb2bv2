@@ -4,7 +4,7 @@ owner: arquiteto
 tipo: fase-execucao
 fase: 9
 criado: 2026-05-28
-atualizado: 2026-05-28
+atualizado: 2026-05-29
 estimate: 10-16h
 decisao_alt: B
 decidido_em: 2026-05-28
@@ -143,7 +143,30 @@ Doc-only.
 - `master` = 39% dos símbolos / 0,3% do reach — purga maciça em 9.4 (só `useMasterAuth` mantém-se PUB)
 - `permissions` (área 🟠) — 33 símbolos, só 9 com consumer externo (4 com reach ≥ 5)
 
+### Slice 9.1b — Inverter dependência `realtime → identity` (precursora / enabler) — ✅ CONCLUÍDO 2026-05-29
+
+**Inserida fora da sequência original.** Não estava no plano 9.1→9.5; surgiu como **bloqueador** das movimentações de arquivo (9.2–9.5).
+
+**Por quê.** `src/shared/realtime/useRealtimeSubscription.ts` importava `useOrganization` de `@/modules/identity` (barrel raiz) — um edge `shared → module` que fechava um ciclo: o barrel re-exporta hooks (`useTeamMembers`, `useOrgRolePermissions`) que chegam a `useRealtimeSubscription`, que reimportava o barrel. Esse único edge gerava **27 violações `no-circular`** no dep-cruise (todos os ciclos que atravessavam `useRealtimeSubscription`, ancorados em `identity/index.ts`). Mover arquivos de `identity` em 9.2–9.5 re-chavearia esses edges cíclicos cross-boundary a cada slice, mascarando regressões no ratchet.
+
+**O que foi feito.** Inversão via contexto React (mesmo espírito do `PipeOpsPort` da Fase 7):
+- Novo `src/shared/realtime/realtime-org-context.tsx` — `RealtimeOrgProvider` + `useRealtimeOrgId()`. **Owned** por `shared/realtime`, só importa `react`.
+- `useRealtimeSubscription.ts` passa a LER o org-id via `useRealtimeOrgId()` — não importa mais `@/modules/identity`.
+- `App.tsx`: `RealtimeOrgBridge` (deep-import `useOrganization`, preserva code-splitting) ALIMENTA o contexto, montado entre `<AuthProvider>` e `<PipeOpsProvider>`. Reatividade a org switch preservada.
+
+**Resultado (dep-cruise).** Baseline **83 → 56** (`no-circular` 60 → 33; `no-orphans` 23 inalterado). 27 `no-circular` removidos, 0 adicionados. `useIdentity`/`ProtectedRoute`/`useUserRole`/`useOrgRolePermissions`/`useRealtimeSubscription` agora em **zero** ciclos. Nenhum ciclo atravessa mais `shared/realtime`.
+
+**Impacto no plano.**
+- **Destrava 9.2–9.5**: mover arquivos `identity` não toca mais edges cíclicos cross-boundary.
+- **Recalibra alvos de baseline downstream**: critérios da Fase 9 (e do `_INDEX`) eram premissados em baseline 83. Nova base = **56**. Os alvos globais (`baseline ≤ 70`, `no-circular ≤ 50`) já foram **atingidos** por esta slice precursora; 9.2–9.5 continuam reduzindo a partir de 56.
+- **Residual conhecido (escopo 9.2+)**: sobrou 1 ciclo *intra-identity* `useTeamMembers ↔ useOrganization` (ambos importam um ao outro, sem cross-boundary). Não envolve `shared/realtime` e não bloqueia nada — será endereçado ao reorganizar `org-team/` interno (9.4).
+
+**Auto-QA (literal).** tsc app + root = 0 erros; `npm run lint` = 0 errors / 2451 warnings (pré-existentes); `npm run test:unit` = 26 files / 40 tests failed (vs baseline `d902ddc4` = 27 files / 43 failed → **zero regressão nova**; `auth-context.test.ts` flaky-async passou neste run); `useRealtimeSubscription-refactored.test.ts` + `hooks-realtime-sub.test.ts` = 23/23 verde; ratchet OK em 56.
+
+**Changelog:** [[07 — Changelog/2026-05-29-arch-deepening-9-1b-realtime-decouple]].
+
 ### Slice 9.2 — Reorganizar `auth/` interno (2-3h)
+### Slice 9.2 — Reorganizar `auth/` interno (2-3h) — ✅ CONCLUÍDO (2026-05-29)
 
 Pattern Fase 8. Escopo definido por [[inventario-identity]] — statements 1, 4, 5, 42.
 
@@ -154,12 +177,19 @@ Pattern Fase 8. Escopo definido por [[inventario-identity]] — statements 1, 4,
 4. Barrel raiz `identity/index.ts` re-exporta os 4 statements de `auth` (consumers externos inalterados — `useAuth`=57, `useIdentity`=26 mantêm path `@/modules/identity`).
 5. Validar.
 
-**Critério aceite 9.2:**
-- [ ] `auth/` populada (4 statements / 5 símbolos)
-- [ ] Barrel raiz statements: 44 (inalterado nesse slice)
-- [ ] Smoke Bloco 1.1, 1.2 (login flow) verde
-- [ ] Build + lint + test integration permission-engine verde
-- [ ] Consumers externos inalterados (396 sites compilam sem mudança)
+**Critério aceite 9.2 (verificado com counts literais):**
+- [x] `auth/` populada — 3 arquivos movidos (`AuthContext.tsx`, `useIdentity.ts`, `ProtectedRoute.tsx` via `git mv`, history preservada) + `auth/index.ts` privado re-exportando os 4 statements / 5 símbolos (`AuthProvider`, `useAuth`, `useIdentity`, `Identity`, `ProtectedRoute`)
+- [x] Barrel raiz statements: **44** (`grep -c '^export'` = 44, inalterado)
+- [x] identity files: **66 → 67** (criação de `auth/index.ts`)
+- [x] `npx tsc --noEmit` (root solution-style) = **0 erros** (literal)
+- [x] `npx tsc --noEmit -p tsconfig.app.json` = 1764 erros (= baseline, delta 0; arquivos `auth/*` movidos = 0 erros antes/depois; App.tsx = 4 erros TS6133 pré-existentes, inalterado)
+- [x] `npm run lint` nos arquivos tocados = 0 errors, 6 warnings (todos pré-existentes; `boundaries/element-types` e `boundaries/no-private` NÃO acusam os movidos/App.tsx)
+- [x] `npm run test:unit` = sem regressão vs baseline (26 red files / 39 red tests pré-existentes; auth-context + use-identity + permission-protected-route **verdes**; os 7 reds em `protected-route.test.tsx` são `TestingLibraryElementError` de lógica `/checkout` ausente — pré-existentes, NÃO de import quebrado)
+- [x] Consumers externos inalterados (App.tsx repontado p/ `@/modules/identity/auth` sub-barrel; demais 25 símbolos com reach externo seguem via `@/modules/identity`)
+- [x] Leak grep = **ZERO** referências remanescentes aos paths antigos
+- [x] ✅ `dep-cruise-ratchet`: **OK — baseline 56, 0 new** (resume 2026-06-01). O net +1 da sessão anterior dissolveu: o precursor **9.1b (#592)** quebrou o edge raiz `useRealtimeSubscription → @/modules/identity`, removendo a cadeia inteira. `AuthContext`/`useIdentity`/`ProtectedRoute` confirmados em **zero** ciclos empiricamente. Sem regenerar baseline. (Ver "Achado dep-cruise" abaixo como registro histórico do bloqueio original.)
+
+**Achado dep-cruise (Slice 9.2):** mover `useIdentity.ts`/`ProtectedRoute.tsx` (nós participantes de 7 ciclos `no-circular` baseline) re-chaveia esses ciclos pelo path novo. Após normalizar `auth/*`→path antigo, o delta lógico é **+1** ciclo: `index.ts → auth/components/ProtectedRoute` — é a MESMA cadeia `ProtectedRoute → useIdentity → useUserRole → useTeamMembers → useRealtimeSubscription → identity/index.ts` que o baseline já contava (entry-edge `components/ProtectedRoute → useIdentity`), apenas re-reportada por outro edge porque o dep-cruiser escolhe entry diferente quando `useIdentity` muda de pasta. **Causa-raiz**: edge pré-existente `shared/realtime/useRealtimeSubscription.ts → @/modules/identity` (importa `useOrganization`) — fora de escopo deste slice mecânico. Recomendação: quebrar esse edge num slice dedicado (eliminaria os ~7 ciclos de uma vez, ratchet ficaria negativo).
 
 ### Slice 9.3 — Reorganizar `permissions/` interno (3-4h)
 
@@ -179,14 +209,16 @@ Pattern Fase 8. Escopo definido por [[inventario-identity]] — statements 1, 4,
 4. Validar SEPARADAMENTE: admin / membro / master (Bloco 1.6, 1.7).
 5. Test integration `permission-engine.test.ts` rodar 3× consecutivas pra detectar flakiness.
 
-**Critério aceite 9.3:**
-- [ ] `permissions/` populada (13 statements / 33 símbolos movidos pra subpasta)
-- [ ] Barrel raiz statements: 44 (re-export ainda; demoção ocorre no 9.5)
-- [ ] Smoke admin OK
-- [ ] Smoke membro OK (sem fail-open)
-- [ ] Smoke master OK
-- [ ] `permission-engine.test.ts` 100% pass (3× consecutivas)
-- [ ] Hotfix #530 não regride (testar `/master/operations` carrega)
+**Critério aceite 9.3 (verificado 2026-06-01 — PR #606):**
+- [x] `permissions/` populada — 9 arquivos `git mv` (lib/permissions + 6 hooks role/perm + PermissionProtectedRoute + PermissionsTab) + `permissions/index.ts` sub-barrel privado
+- [x] Barrel raiz statements: **44** (`grep -c '^export'` = 44; 13 statements re-apontados `from "./permissions"`)
+- [x] `npx tsc --noEmit` (root) = **0** · leak grep = **0** · lint **0 errors** · ratchet **OK 56 0-new** (9 arquivos em zero ciclos → move neutro)
+- [x] test:unit zero regressão; subset permissão/identity = **8 files / 89 tests 100% pass** (use-user-role, use-can-do, use-permissions-hooks, permission-protected-route, permissions-fail-closed, permissions, use-feature-permissions-orgid, use-identity)
+- [ ] Smoke admin OK — **gate CTO**
+- [ ] Smoke membro OK (sem fail-open) — **gate CTO**
+- [ ] Smoke master OK — **gate CTO**
+- [ ] `/master/operations` carrega (hotfix #530 não regride) — **gate CTO**
+- ⚠️ `permission-engine.test.ts` (integration) = **env-blocked** (Supabase local sem seed de auth); backend não tocado pela slice — não-regressão. Rodar 3× quando ambiente disponível.
 
 ### Slice 9.4 — Reorganizar `org-team/` + `master/` internos (3-4h)
 
