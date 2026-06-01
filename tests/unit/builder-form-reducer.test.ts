@@ -7,11 +7,11 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { createDefaultPlaygroundData } from "@/components/copilot/playground/types";
+import { createDefaultPlaygroundData } from "@/modules/copilot/components/playground/types";
 import {
   applyBuilderAction,
   type BuilderFormState,
-} from "@/lib/copilot/builder-form-reducer";
+} from "@/modules/copilot/lib/builder-form-reducer";
 
 function initialState(): BuilderFormState {
   return { data: createDefaultPlaygroundData(), locked: [] };

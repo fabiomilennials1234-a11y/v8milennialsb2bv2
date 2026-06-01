@@ -15,7 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useWhatsAppInstances } from "@/modules/communication";
-import { useQuickBlast } from "@/hooks/useQuickBlast";
+import { useQuickBlast } from "@/modules/leads/hooks/useQuickBlast";
 
 interface QuickBlastDialogProps {
   open: boolean;

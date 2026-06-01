@@ -1,9 +1,9 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
+import { useOrganization } from "@/modules/identity";
 import { usePipelineId, flattenMetadata, type PipelineType } from "./usePipelineEntries";
-import { useRealtimeSubscription } from "./useRealtimeSubscription";
+import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import type { PipelineStage } from "./usePipelineStages";
 
 const PAGE_SIZE = 20;

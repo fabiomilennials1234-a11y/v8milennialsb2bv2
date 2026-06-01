@@ -24,10 +24,10 @@ beforeEach(() => {
 import { generateEmbedding, generateEmbeddingsBatch } from "../../supabase/functions/_shared/embeddings";
 
 describe("generateEmbedding", () => {
-  it("calls Gemini API with correct parameters", async () => {
+  it("calls the OpenRouter embeddings API with correct parameters", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ embedding: { values: [0.1, 0.2, 0.3] } }),
+      json: () => Promise.resolve({ data: [{ embedding: [0.1, 0.2, 0.3] }] }),
     });
     const result = await generateEmbedding("test text", "api-key");
     expect(result).toEqual([0.1, 0.2, 0.3]);
@@ -37,12 +37,12 @@ describe("generateEmbedding", () => {
   it("truncates text to 8000 chars", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ embedding: { values: [0.1] } }),
+      json: () => Promise.resolve({ data: [{ embedding: [0.1] }] }),
     });
     const longText = "a".repeat(10000);
     await generateEmbedding(longText, "key");
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.content.parts[0].text.length).toBeLessThanOrEqual(8000);
+    expect(body.input.length).toBeLessThanOrEqual(8000);
   });
 
   it("throws on API error", async () => {
@@ -50,7 +50,7 @@ describe("generateEmbedding", () => {
       ok: false, status: 400,
       text: () => Promise.resolve("bad request"),
     });
-    await expect(generateEmbedding("test", "key")).rejects.toThrow("Gemini Embedding API error");
+    await expect(generateEmbedding("test", "key")).rejects.toThrow("OpenRouter Embedding API error");
   });
 });
 
@@ -59,9 +59,9 @@ describe("generateEmbeddingsBatch", () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({
-        embeddings: [
-          { values: [0.1, 0.2] },
-          { values: [0.3, 0.4] },
+        data: [
+          { embedding: [0.1, 0.2], index: 0 },
+          { embedding: [0.3, 0.4], index: 1 },
         ],
       }),
     });

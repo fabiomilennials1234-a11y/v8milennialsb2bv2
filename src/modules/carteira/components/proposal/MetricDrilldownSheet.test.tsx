@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MetricDrilldownSheet } from "./MetricDrilldownSheet";
-import type { DrilldownRow } from "@/hooks/useMetricDrilldown";
+import type { DrilldownRow } from "@/modules/carteira/hooks/useMetricDrilldown";
 import React from "react";
 
 const MOCK_ROWS: DrilldownRow[] = [

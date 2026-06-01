@@ -8,8 +8,8 @@
  * See PRD #544 / Slice #548.
  */
 
-import type { PlaygroundData } from "@/components/copilot/playground/types";
-import { hasFullBehaviorCoverage } from "@/components/copilot/BehaviorWindowsEditor";
+import type { PlaygroundData } from "@/modules/copilot/components/playground/types";
+import { hasFullBehaviorCoverage } from "@/modules/copilot/components/BehaviorWindowsEditor";
 
 /** The Builder's fixed interview backbone — every Copilot setup should cover these. */
 export const BACKBONE_TOPICS = [

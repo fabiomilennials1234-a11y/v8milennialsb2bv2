@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { MetricType, DrilldownRow } from "@/hooks/useMetricDrilldown";
+import type { MetricType, DrilldownRow } from "@/modules/carteira/hooks/useMetricDrilldown";
 
 const METRIC_TITLES: Record<MetricType, string> = {
   pipeline_ativo: "Pipeline Ativo",

@@ -1,14 +1,14 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useMetricDrilldown } from "./useMetricDrilldown";
+import { useMetricDrilldown } from "@/modules/carteira/hooks/useMetricDrilldown";
 import React from "react";
 
 const orgMock = vi.fn();
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity", () => ({
   useOrganization: (...a: unknown[]) => orgMock(...a),
 }));
 
-vi.mock("@/hooks/usePipelineEntries", () => ({
+vi.mock("@/modules/pipelines/hooks/model/usePipelineEntries", () => ({
   usePipelineId: () => ({ data: "pipe-123" }),
 }));
 

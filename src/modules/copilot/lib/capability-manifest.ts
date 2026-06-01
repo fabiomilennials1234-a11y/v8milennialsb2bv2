@@ -14,7 +14,7 @@ import {
   LEGACY_TOOL_IDS,
   DEFAULT_PROMPT_SECTIONS,
   type ToolParameter,
-} from "@/components/copilot/playground/types";
+} from "@/modules/copilot/components/playground/types";
 
 /**
  * A real piece of org state a capability needs before it can actually do

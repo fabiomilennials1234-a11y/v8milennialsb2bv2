@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
-import { usePipelineId } from "./usePipelineEntries";
+import { useOrganization } from "@/modules/identity";
+import { usePipelineId } from "@/modules/pipelines/hooks/model/usePipelineEntries";
 import type { DateRange } from "@/lib/metrics-period";
 
 export type MetricType =

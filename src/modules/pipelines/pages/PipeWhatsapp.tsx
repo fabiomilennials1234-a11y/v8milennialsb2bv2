@@ -21,7 +21,7 @@ import { useCanDo } from "@/modules/identity";
 import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import { useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/modules/pipelines/hooks/legacy/usePipeWhatsapp";
-import { usePaginatedPipeline } from "@/hooks/usePaginatedPipeline";
+import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePipeWhatsappMetrics } from "@/modules/pipelines/hooks/config/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";

@@ -12,8 +12,8 @@ import type {
   PlaygroundData,
   PromptSections,
   PlaygroundToolState,
-} from "@/components/copilot/playground/types";
-import { buildCapabilityManifest } from "@/lib/copilot/capability-manifest";
+} from "@/modules/copilot/components/playground/types";
+import { buildCapabilityManifest } from "@/modules/copilot/lib/capability-manifest";
 
 const VALID_TOOL_IDS = new Set(buildCapabilityManifest().tools.map((t) => t.id));
 

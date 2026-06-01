@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useBuilderSession } from "@/hooks/useBuilderSession";
+import { useBuilderSession } from "@/modules/copilot/hooks/useBuilderSession";
 
 interface BuilderPanelProps {
   agentId?: string;
