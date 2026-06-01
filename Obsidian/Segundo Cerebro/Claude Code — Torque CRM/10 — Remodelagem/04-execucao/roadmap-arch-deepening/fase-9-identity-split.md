@@ -231,7 +231,7 @@ Bloqueava o move 9.4 (mover ambos os arquivos cíclicos re-chaveava o ratchet ed
 
 ### Slice 9.4 — Reorganizar `org-team/` + `master/` internos (3-4h)
 
-> **FATIADA (CTO, AskUserQuestion 2026-06-01):** bundle grande demais p/ 1 PR em área frágil. **9.4 = master + demote** (PR #611, ✅ — alto valor, isolado, ~0 test-churn); **9.4b = org-team** (próxima — ~70 test-files de useOrganization/useTeamMembers, relocação pura). Ver changelog [[2026-06-01-arch-deepening-9-4-master-internal-demote]].
+> **FATIADA (CTO, AskUserQuestion 2026-06-01):** bundle grande demais p/ 1 PR em área frágil. **9.4 = master + demote** (PR #620, ✅ — alto valor, isolado, ~0 test-churn); **9.4b = org-team** (próxima — ~70 test-files de useOrganization/useTeamMembers, relocação pura). Ver changelog [[2026-06-01-arch-deepening-9-4-master-internal-demote]].
 
 Escopo definido por [[inventario-identity]] — `org-team`: statements 28-41 (14 / 30 símbolos). `master`: statements 9-20 (12 / 45 símbolos).
 
@@ -243,7 +243,7 @@ Escopo definido por [[inventario-identity]] — `org-team`: statements 28-41 (14
 3. **Demoção de barrel ALT** — `master`: dos 12 statements, **apenas `useMasterAuth, useCanAccessMaster` (statement 9) permanece re-exportado no barrel raiz**. Os outros 11 statements (44 símbolos master) ficam só em `identity/master/index.ts` (deep-import permitido p/ `pages/master/*` internas).
 4. Validar.
 
-**Critério aceite 9.4 (master, PR #611):**
+**Critério aceite 9.4 (master, PR #620):**
 - [x] `master/` populada — 34 `git mv` (6 hooks + 15 components incl `onboarding/` + 13 pages) + `master/index.ts` sub-barrel
 - [x] Barrel raiz: 44 → **33** (`grep -c '^export'` = 33; só `useMasterAuth, useCanAccessMaster` via `./master`; 11 statements demovidos)
 - [x] root tsc 0 · leak grep 0 · mojibake 0 · lint 0 err · ratchet **OK 55 0-new** · `npm run build` exit 0 (rotas master lazy resolvem)
