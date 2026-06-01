@@ -49,6 +49,10 @@ describe('neutralize_hml.sql', () => {
   beforeAll(async () => {
     pg = new Client({ connectionString: PG_CONN });
     await pg.connect();
+    // Bypass row-level triggers (e.g. enforce_whatsapp_instance_limit, which
+    // rejects seeding instances for orgs with a 0 quota) while loading fixtures.
+    // Requires superuser — the local Supabase postgres role qualifies.
+    await pg.query(`SET session_replication_role = 'replica'`);
   });
 
   afterAll(async () => {
