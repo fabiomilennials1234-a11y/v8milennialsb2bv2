@@ -10,9 +10,16 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const PROD_SUPABASE_URL = 'https://jsjsmuncfkbsbzqzqhfq.supabase.co';
-const PROD_SERVICE_ROLE_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpzanNtdW5jZmtic2J6cXpxaGZxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTIxODc4MSwiZXhwIjoyMDg0Nzk0NzgxfQ.dcAGjeVLcMIh2x2JRdCYFmD_6Gtp8cdVxg4hL1dNz2w';
+const PROD_SUPABASE_URL =
+  process.env.PROD_SUPABASE_URL || 'https://jsjsmuncfkbsbzqzqhfq.supabase.co';
+const PROD_SERVICE_ROLE_KEY = process.env.PROD_SUPABASE_SERVICE_ROLE_KEY;
+
+if (!PROD_SERVICE_ROLE_KEY) {
+  throw new Error(
+    'PROD_SUPABASE_SERVICE_ROLE_KEY is required to run production integration tests. ' +
+      'Set it in your local .env (never commit it).',
+  );
+}
 
 export const supabaseProd = createClient(PROD_SUPABASE_URL, PROD_SERVICE_ROLE_KEY);
 
