@@ -82,7 +82,14 @@ Deno.serve(
         body.secret ??
         "";
 
-      if (ERP_WEBHOOK_SECRET && (!providedSecret || !timingSafeCompare(providedSecret, ERP_WEBHOOK_SECRET))) {
+      // Fail-closed: se o secret não está configurado, rejeita (antes: pulava o check = fail-open).
+      if (!ERP_WEBHOOK_SECRET) {
+        return new Response(
+          JSON.stringify({ error: "Webhook secret not configured" }),
+          { status: 503, headers: jsonHeaders },
+        );
+      }
+      if (!providedSecret || !timingSafeCompare(providedSecret, ERP_WEBHOOK_SECRET)) {
         return new Response(
           JSON.stringify({ error: "Forbidden" }),
           { status: 403, headers: jsonHeaders },
