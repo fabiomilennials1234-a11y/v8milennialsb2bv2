@@ -1,106 +1,51 @@
 /**
- * Module identity — API pública.
+ * Module identity — API pública (barrel enxuto, slice 9.5 arch-deepening).
  *
- * Tudo que outros módulos consomem deve estar exportado aqui.
- * Internals (subpastas) são privados — não importar de fora via path interno.
+ * Só símbolos com reach cross-module + route guards/provider públicos.
+ * Internals (auth/ · permissions/ · master/ · org-team/) são sub-barris PRIVADOS —
+ * não importar de fora via path interno (exceto App.tsx/pages, por code-splitting).
+ * Símbolos sem consumer externo foram demovidos pros sub-barris em 9.5.
  *
  * Boundary enforcement: warn agora (slice 1), error em slice 17.
- * Ver `CLAUDE.md` deste módulo para escopo, áreas frágeis e owner.
+ * Ver CLAUDE.md deste módulo para escopo, áreas frágeis e owner.
  */
 
-// ── Auth context ───────────────────────────────────────────────────────────
-export { AuthProvider, useAuth } from "./auth";
+// ── Auth + identity ─────────────────────────────────────────────────────────
+export { AuthProvider, useAuth, useIdentity } from "./auth";
+export { ProtectedRoute } from "./auth";
 
-// ── Lib (permissions resolver) ─────────────────────────────────────────────
-export {
-  resolveAction,
-  usePermission,
-  assertPermissionClient,
-  assertPermission,
-} from "./permissions";
-export type {
-  AppAction,
-  ResolveActionContext,
-  ResolveActionResult,
-} from "./permissions";
-
-// ── Hooks: identity + role ─────────────────────────────────────────────────
-export { useIdentity } from "./auth";
-export type { Identity } from "./auth";
+// ── Permissions (resolver + role/feature + granular) ────────────────────────
+export { assertPermission } from "./permissions";
 export {
   useUserRole,
-  useHasRole,
-  useIsAdmin,
   useFeaturePermission,
   useFeaturePermissions,
   useCanManageCopilot,
   useCanManageWhatsApp,
   useJobTitle,
-  useMetricType,
-} from "./permissions";
-export type { AppRole, UserRole } from "./permissions";
-export { useCanDo } from "./permissions";
-
-// ── Hooks: master ops (sub-conceito master/ — só o entry público fica no barrel; resto em master/index.ts, slice 9.4) ──
-export { useMasterAuth, useCanAccessMaster } from "./master";
-
-// ── Hooks: permissions (granular) ──────────────────────────────────────────
-export {
+  useCanDo,
   useHasPermission,
-  useMyPermissions,
-  useOrganizationRolePermissions,
-  useTeamMemberOrgPermissions,
-  useSaveTeamMemberOrgPermissions,
-  PERMISSION_LABELS,
 } from "./permissions";
-export type {
-  PermissionKey,
-  TeamMemberOrgPermission,
-} from "./permissions";
-export { useOrgRolePermissions } from "./permissions";
-export type { OrgRolePermissionsMap } from "./permissions";
-export { useUpdateRolePermission } from "./permissions";
-export type { UpdateRolePermissionInput } from "./permissions";
-export { useResetOrgRolePermissions } from "./permissions";
+export { PermissionProtectedRoute } from "./permissions";
 
-// ── Hooks: organization + settings (sub-conceito org-team/ — slice 9.4b) ────
-export { useOrganization, useRequiredOrganization } from "./org-team";
-export type { OrgType, OrganizationContext } from "./org-team";
+// ── Master ops ──────────────────────────────────────────────────────────────
+export { useMasterAuth } from "./master";
+
+// ── Organization + team ─────────────────────────────────────────────────────
 export {
+  useOrganization,
   useOrganizationSettings,
   useConfirmacaoOverdueDays,
   isConfirmacaoOverdue,
-} from "./org-team";
-export type { OrganizationSettings } from "./org-team";
-export { useOrgQuotas } from "./org-team";
-export type { QuotaInfo } from "./org-team";
-export { useOrgSwitcher } from "./org-team";
-export type { SwitcherOrg } from "./org-team";
-export { useSeatUsage } from "./org-team";
-export type { SeatUsage } from "./org-team";
-
-// ── Hooks: team + profile (sub-conceito org-team/ — slice 9.4b) ─────────────
-export {
+  useOrgQuotas,
+  useOrgSwitcher,
   useTeamMembers,
-  useTeamMember,
   useCurrentTeamMember,
   useResponsibleMembers,
   useCreateTeamMember,
-  useUpdateTeamMember,
-  useDeleteTeamMember,
-  getSelectedOrgId,
-  setSelectedOrgId,
   isVirtualTeamMember,
 } from "./org-team";
-export type {
-  TeamMember,
-  TeamMemberInsert,
-  TeamMemberUpdate,
-} from "./org-team";
-export { useProfile, useProfiles } from "./org-team";
-export type { Profile } from "./org-team";
+export type { TeamMember } from "./org-team";
 
-// ── Components ─────────────────────────────────────────────────────────────
-export { ProtectedRoute } from "./auth";
-export { PermissionProtectedRoute } from "./permissions";
+// ── Subscription guard ──────────────────────────────────────────────────────
 export { SubscriptionProtectedRoute } from "./components/SubscriptionProtectedRoute";
