@@ -18,7 +18,7 @@ vi.mock('@/modules/identity/master/hooks/useMasterAuth', () => ({
   useMasterAuth: vi.fn(),
 }));
 
-vi.mock('@/modules/identity/hooks/useTeamMembers', () => ({
+vi.mock('@/modules/identity/org-team/hooks/useTeamMembers', () => ({
   useCurrentTeamMember: vi.fn(),
 }));
 
@@ -29,7 +29,7 @@ vi.mock('@/modules/identity/auth/hooks/useIdentity', () => ({
 
 import { useFeaturePermission, useIsAdmin } from '@/modules/identity/permissions/hooks/useUserRole';
 import { useMasterAuth } from '@/modules/identity/master/hooks/useMasterAuth';
-import { useCurrentTeamMember } from '@/modules/identity/hooks/useTeamMembers';
+import { useCurrentTeamMember } from '@/modules/identity/org-team/hooks/useTeamMembers';
 import { PermissionProtectedRoute } from '@/modules/identity/permissions/components/PermissionProtectedRoute';
 
 // ─── Typed references ───────────────────────────────────

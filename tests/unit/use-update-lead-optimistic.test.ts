@@ -41,7 +41,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-1" }),
   useRequiredOrganization: () => ({ organizationId: "org-1", teamMemberId: "tm1", isReady: true }),
 }));

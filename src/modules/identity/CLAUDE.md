@@ -50,13 +50,16 @@ src/modules/identity/
 │   ├── components/                   # Master ops UI (ApiStatusTab, BillingOverrideModal, MasterLayout, MasterRoute, MasterSidebar, PlanEditor, PlanFeatureCard, QuotaManagementPanel, onboarding/)
 │   ├── pages/                        # Master route components (MasterDashboard, MasterOrganizations, MasterUsers, MasterPlans, MasterFeatures, MasterAuditLogs, MasterOperations, MasterAutomationHealth, MasterWhatsAppHealth, CopilotReasoning, CopilotToggleAudit, MasterOnboarding, WhatsAppMigration) — deep-import via App.tsx p/ lazy chunk
 │   └── index.ts                      # sub-barrel privado (master ops completo)
+├── org-team/                         # sub-conceito org-team (slice 9.4b arch-deepening) — API interna privada, re-exportada pelo barrel raiz (superfície PÚBLICA)
+│   ├── hooks/                        # 8 hooks: useOrganization (org_id raiz de TODA query — multi-tenancy), useOrganizationSettings, useOrgQuotas, useOrgSwitcher, useSeatUsage, useTeamMembers, useCurrentTeamMember, useProfiles
+│   ├── components/team/              # Team management UI (MemberPermissions, SeatUsageBar, TeamMemberCard, TeamStats) — absorvidos em slice 16, mvd p/ org-team em 9.4b
+│   ├── components/ProfileSettings.tsx
+│   ├── pages/Equipe.tsx              # deep-import via App.tsx p/ lazy chunk
+│   └── index.ts                      # sub-barrel privado (org+team+profile)
 ├── components/
-│   ├── team/                         # Team management UI (MemberPermissions, SeatUsageBar, TeamMemberCard, TeamStats) — absorvidos em slice 16
-│   ├── ProfileSettings.tsx
 │   └── SubscriptionProtectedRoute.tsx
-├── hooks/                            # 10 hooks (org, team, profiles, avatar) — master mvd p/ master/ em 9.4, role/permissions p/ permissions/ em 9.3, useIdentity p/ auth/ em 9.2
-│                                     # useCurrentTeamMember.ts extraído de useTeamMembers.ts (9.4a) p/ quebrar ciclo useOrganization↔useTeamMembers; useTeamMembers re-exporta
-├── pages/                            # Auth, Signup, ResetPassword, Equipe
+├── hooks/                            # 2 hooks: useAutoAdminAssignment, useAvatarMap — org/team/profiles mvd p/ org-team/ em 9.4b, master p/ master/ em 9.4, role/permissions p/ permissions/ em 9.3, useIdentity p/ auth/ em 9.2
+├── pages/                            # Auth, Signup, ResetPassword
 ├── index.ts                          # API pública
 └── CLAUDE.md                         # este arquivo
 ```

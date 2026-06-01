@@ -252,6 +252,14 @@ Escopo definido por [[inventario-identity]] — `org-team`: statements 28-41 (14
 - [x] ESLint boundaries não acusa (deep-import em pages/App é permitido)
 - ⏭️ `org-team/` (Bloco 1.3-1.5 org switcher + equipe) = **slice 9.4b**
 
+**Critério aceite 9.4b (org-team, PR #621):**
+- [x] `org-team/` populada — 14 `git mv` (8 hooks + 4 team components + ProfileSettings + Equipe) + `org-team/index.ts` sub-barrel; useAutoAdminAssignment/useAvatarMap ficam em `hooks/`
+- [x] Barrel raiz **33** (re-aponta 14 statements org-team `from "./org-team"`, SEM demote — org-team é PUB)
+- [x] root tsc 0 · leak grep 0 (alias+relativo) · mojibake 0 · lint 0 err · ratchet **OK 55 0-new** · build exit 0 · 14 renames
+- [x] test:unit zero regressão (red set pré-existente; subset org/team/identity = **7 files / 78 tests pass**)
+- [ ] Smoke Bloco 1.3-1.5 (org switcher + equipe + carga de org context) — **gate CTO**
+- Débito pré-existente flagado: deep-imports cross-module (useBuilderSession/useQuickBlast) pro org-team barrel; orphans ProfileSettings/TeamMemberCard/TeamStats.
+
 ### Slice 9.5 — Reduzir barrel `identity/index.ts` (3-4h)
 
 **Tarefas:**

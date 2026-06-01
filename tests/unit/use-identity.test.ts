@@ -40,7 +40,7 @@ vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
   useMasterAuth: () => mockMaster,
 }));
 
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => mockTeamMember,
 }));
 

@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { Lock, AlertCircle, Loader2 } from "lucide-react";
 import { useFeaturePermission } from "../hooks/useUserRole";
 import { useIdentity } from "../../auth/hooks/useIdentity";
-import { useCurrentTeamMember } from "../../hooks/useTeamMembers";
+import { useCurrentTeamMember } from "../../org-team/hooks/useTeamMembers";
 import { Button } from "@/components/ui/button";
 
 interface PermissionProtectedRouteProps {

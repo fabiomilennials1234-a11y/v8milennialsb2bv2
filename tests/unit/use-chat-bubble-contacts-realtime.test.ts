@@ -75,7 +75,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: mocks.supabaseMock,
 }));
 
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: mocks.teamMemberRef.value }),
 }));
 

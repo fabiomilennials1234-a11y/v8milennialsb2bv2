@@ -49,11 +49,11 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTeamMembers, useUpdateTeamMember, TeamMember } from "../hooks/useTeamMembers";
 import { useOrganization } from "../hooks/useOrganization";
-import { useIdentity } from "../auth/hooks/useIdentity";
-import { MemberPermissions } from "@/modules/identity/components/team/MemberPermissions";
+import { useIdentity } from "../../auth/hooks/useIdentity";
+import { MemberPermissions } from "../components/team/MemberPermissions";
 import { useProfiles } from "../hooks/useProfiles";
 import { useSeatUsage } from "../hooks/useSeatUsage";
-import { SeatUsageBar } from "@/modules/identity/components/team/SeatUsageBar";
+import { SeatUsageBar } from "../components/team/SeatUsageBar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 type TeamRole = "admin" | "member";

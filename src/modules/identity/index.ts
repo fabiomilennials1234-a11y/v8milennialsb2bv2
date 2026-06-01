@@ -63,23 +63,23 @@ export { useUpdateRolePermission } from "./permissions";
 export type { UpdateRolePermissionInput } from "./permissions";
 export { useResetOrgRolePermissions } from "./permissions";
 
-// ── Hooks: organization + settings ─────────────────────────────────────────
-export { useOrganization, useRequiredOrganization } from "./hooks/useOrganization";
-export type { OrgType, OrganizationContext } from "./hooks/useOrganization";
+// ── Hooks: organization + settings (sub-conceito org-team/ — slice 9.4b) ────
+export { useOrganization, useRequiredOrganization } from "./org-team";
+export type { OrgType, OrganizationContext } from "./org-team";
 export {
   useOrganizationSettings,
   useConfirmacaoOverdueDays,
   isConfirmacaoOverdue,
-} from "./hooks/useOrganizationSettings";
-export type { OrganizationSettings } from "./hooks/useOrganizationSettings";
-export { useOrgQuotas } from "./hooks/useOrgQuotas";
-export type { QuotaInfo } from "./hooks/useOrgQuotas";
-export { useOrgSwitcher } from "./hooks/useOrgSwitcher";
-export type { SwitcherOrg } from "./hooks/useOrgSwitcher";
-export { useSeatUsage } from "./hooks/useSeatUsage";
-export type { SeatUsage } from "./hooks/useSeatUsage";
+} from "./org-team";
+export type { OrganizationSettings } from "./org-team";
+export { useOrgQuotas } from "./org-team";
+export type { QuotaInfo } from "./org-team";
+export { useOrgSwitcher } from "./org-team";
+export type { SwitcherOrg } from "./org-team";
+export { useSeatUsage } from "./org-team";
+export type { SeatUsage } from "./org-team";
 
-// ── Hooks: team + profile ──────────────────────────────────────────────────
+// ── Hooks: team + profile (sub-conceito org-team/ — slice 9.4b) ─────────────
 export {
   useTeamMembers,
   useTeamMember,
@@ -91,14 +91,14 @@ export {
   getSelectedOrgId,
   setSelectedOrgId,
   isVirtualTeamMember,
-} from "./hooks/useTeamMembers";
+} from "./org-team";
 export type {
   TeamMember,
   TeamMemberInsert,
   TeamMemberUpdate,
-} from "./hooks/useTeamMembers";
-export { useProfile, useProfiles } from "./hooks/useProfiles";
-export type { Profile } from "./hooks/useProfiles";
+} from "./org-team";
+export { useProfile, useProfiles } from "./org-team";
+export type { Profile } from "./org-team";
 
 // ── Components ─────────────────────────────────────────────────────────────
 export { ProtectedRoute } from "./auth";

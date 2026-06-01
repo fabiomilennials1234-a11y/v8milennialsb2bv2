@@ -45,7 +45,7 @@ vi.mock("@/modules/identity/auth/hooks/useIdentity", () => ({
   useIdentity: () => mockIdentity,
 }));
 
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-test", isReady: true }),
 }));
 

@@ -34,7 +34,7 @@ const mockConfirmacoes = [
 
 vi.mock("@/modules/pipelines/hooks/legacy/usePipePropostas", () => ({ usePipePropostas: () => ({ data: mockPropostas }), useCreatePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useUpdatePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useDeletePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
 vi.mock("@/modules/pipelines/hooks/legacy/usePipeConfirmacao", () => ({ usePipeConfirmacao: () => ({ data: mockConfirmacoes }), useCreatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useUpdatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useDeletePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useTeamMembers: () => ({ data: mockClosers }) }));
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({ useTeamMembers: () => ({ data: mockClosers }) }));
 vi.mock("@/modules/identity/hooks/useAvatarMap", () => ({ useAvatarMap: () => new Map() }));
 
 describe("useCloserPerformance", () => {

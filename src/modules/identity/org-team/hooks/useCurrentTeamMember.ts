@@ -6,8 +6,8 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "../auth/contexts/AuthContext";
-import { useMasterAuth } from "../master/hooks/useMasterAuth";
+import { useAuth } from "../../auth/contexts/AuthContext";
+import { useMasterAuth } from "../../master/hooks/useMasterAuth";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
 export type TeamMember = Tables<"team_members">;

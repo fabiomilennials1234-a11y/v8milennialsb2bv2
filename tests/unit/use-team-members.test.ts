@@ -13,7 +13,7 @@ vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({
   useRealtimeSubscription: vi.fn(),
 }));
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-1", isReady: true }),
 }));
 
@@ -21,7 +21,7 @@ import {
   isVirtualTeamMember,
   getSelectedOrgId,
   setSelectedOrgId,
-} from "@/modules/identity/hooks/useTeamMembers";
+} from "@/modules/identity/org-team/hooks/useTeamMembers";
 
 describe("isVirtualTeamMember", () => {
   it("returns true for master-virtual- prefix", () => {

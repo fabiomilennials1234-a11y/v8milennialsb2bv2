@@ -34,7 +34,7 @@ vi.mock("@/modules/pipelines/hooks/legacy/usePipeConfirmacao", () => ({
   useDeletePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })),
 }));
 
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useTeamMembers: () => ({ data: mockSDRs }),
 }));
 
