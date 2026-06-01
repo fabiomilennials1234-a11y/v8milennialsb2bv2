@@ -360,6 +360,41 @@ describe("UazapiProvider.getStatus — status normalisation", () => {
     expect(status.state).toBe("unknown");
     expect(status.connected).toBe(false);
   });
+
+  it("extracts owner number from a top-level owner JID", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonRes(200, { status: "connected", connected: true, owner: "554899998888@s.whatsapp.net" })
+    );
+
+    const provider = makeProvider();
+    const status = await provider.getStatus();
+
+    expect(status.connected).toBe(true);
+    expect(status.owner).toBe("554899998888");
+  });
+
+  it("extracts owner number from a nested instance object", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonRes(200, { instance: { status: "connected", connected: true, owner: "5548999998888" } })
+    );
+
+    const provider = makeProvider();
+    const status = await provider.getStatus();
+
+    expect(status.connected).toBe(true);
+    expect(status.owner).toBe("5548999998888");
+  });
+
+  it("leaves owner undefined when the payload has no number", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonRes(200, { status: "connected", connected: true })
+    );
+
+    const provider = makeProvider();
+    const status = await provider.getStatus();
+
+    expect(status.owner).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -42,6 +42,7 @@ const {
   timingSafeCompare,
   checkRateLimit,
   normalizeMessage,
+  handleConnectionEvent,
   rateLimitState,
   RATE_LIMIT_MAX,
   REPLAY_WINDOW_MS,
@@ -49,9 +50,40 @@ const {
   timingSafeCompare: (a: string, b: string) => boolean;
   checkRateLimit: (ip: string) => { allowed: boolean; remaining: number };
   normalizeMessage: (data: unknown, instance: unknown) => Record<string, unknown>;
+  handleConnectionEvent: (
+    supabase: unknown,
+    instance: { id: string; organization_id: string; instance_name: string },
+    data: unknown,
+  ) => Promise<void>;
   rateLimitState: Map<string, unknown>;
   RATE_LIMIT_MAX: number;
   REPLAY_WINDOW_MS: number;
+};
+
+/**
+ * Minimal chainable Supabase double for handleConnectionEvent. Records the
+ * payload passed to `.update()`. The select() path resolves to `prev`.
+ */
+function makeConnSupabase(
+  prev: { status: string | null; phone_number: string | null },
+  sink: { payload?: Record<string, unknown> },
+) {
+  const builder = {
+    select: () => ({
+      eq: () => ({ maybeSingle: async () => ({ data: prev }) }),
+    }),
+    update: (payload: Record<string, unknown>) => {
+      sink.payload = payload;
+      return { eq: async () => ({ error: null }) };
+    },
+  };
+  return { from: () => builder };
+}
+
+const connInstance = {
+  id: "inst-1",
+  organization_id: "org-1",
+  instance_name: "test-instance",
 };
 
 describe("timingSafeCompare (re-exported from _shared/auth)", () => {
@@ -205,5 +237,47 @@ describe("constants", () => {
   });
   it("REPLAY_WINDOW_MS is 5min", () => {
     expect(REPLAY_WINDOW_MS).toBe(5 * 60 * 1000);
+  });
+});
+
+describe("handleConnectionEvent — connected-number capture", () => {
+  it("persists phone_number from the connection event owner JID on connect", async () => {
+    const sink: { payload?: Record<string, unknown> } = {};
+    // prev status already 'connected' → no transition → no autosync/probe path,
+    // but the owner-capture branch still runs (phone_number was null).
+    const sb = makeConnSupabase({ status: "connected", phone_number: null }, sink);
+
+    await handleConnectionEvent(sb, connInstance, {
+      status: "connected",
+      owner: "554899998888@s.whatsapp.net",
+    });
+
+    expect(sink.payload?.status).toBe("connected");
+    expect(sink.payload?.phone_number).toBe("554899998888");
+  });
+
+  it("does not overwrite an existing phone_number", async () => {
+    const sink: { payload?: Record<string, unknown> } = {};
+    const sb = makeConnSupabase(
+      { status: "connected", phone_number: "5511111111111" },
+      sink,
+    );
+
+    await handleConnectionEvent(sb, connInstance, {
+      status: "connected",
+      owner: "554899998888@s.whatsapp.net",
+    });
+
+    expect(sink.payload?.phone_number).toBeUndefined();
+  });
+
+  it("maps a disconnect event to status=disconnected without touching phone_number", async () => {
+    const sink: { payload?: Record<string, unknown> } = {};
+    const sb = makeConnSupabase({ status: "connected", phone_number: null }, sink);
+
+    await handleConnectionEvent(sb, connInstance, { status: "disconnected" });
+
+    expect(sink.payload?.status).toBe("disconnected");
+    expect(sink.payload?.phone_number).toBeUndefined();
   });
 });

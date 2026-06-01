@@ -78,6 +78,8 @@ export type InstanceStatus = {
   state: "connecting" | "connected" | "disconnected" | "unknown";
   qrcode?: string;
   paircode?: string;
+  /** Connected account's own number as bare digits. Best-effort from provider. */
+  owner?: string;
 };
 
 export async function createWhatsAppInstance(

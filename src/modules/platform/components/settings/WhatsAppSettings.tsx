@@ -12,6 +12,7 @@ import {
   LogOut,
   Users,
   Activity,
+  Phone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +56,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrgQuotas } from "@/modules/identity";
 import { useMessageLimits } from "@/modules/communication/hooks/useMessageLimits";
 import { HistorySyncPanel } from "@/modules/communication/components/chat/history-sync/HistorySyncPanel";
+import { formatPhoneBR } from "@/shared/format/phone";
 import { toast } from "sonner";
 
 /**
@@ -292,6 +294,15 @@ function QRCodeModal({
                 : "Desconectado"}
             </Badge>
           </div>
+
+          {effectiveStatus === "connected" && instance.phone_number && (
+            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Phone className="w-3.5 h-3.5 shrink-0" />
+              <span className="font-medium text-foreground tabular-nums">
+                {formatPhoneBR(instance.phone_number)}
+              </span>
+            </p>
+          )}
         </div>
 
         <DialogFooter className="flex gap-2">
@@ -664,8 +675,14 @@ export function WhatsAppSettings() {
                     {getStatusBadge(effectiveStatus)}
                   </div>
                   {instance.phone_number && (
-                    <p className="text-sm text-muted-foreground">
-                      {instance.phone_number}
+                    <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <Phone className="w-3.5 h-3.5 shrink-0" />
+                      <span>
+                        {isLive ? "Número conectado: " : "Último número: "}
+                        <span className="font-medium text-foreground tabular-nums">
+                          {formatPhoneBR(instance.phone_number)}
+                        </span>
+                      </span>
                     </p>
                   )}
                   {instance.last_connection_at && (
