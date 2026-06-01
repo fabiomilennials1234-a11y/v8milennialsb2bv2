@@ -22,5 +22,6 @@ owner: claude-agent
 - [[debug-whatsapp|Debug Fluxo WhatsApp]]
 - [[deploy-edge-function|Deploy Edge Function]]
 - [[rebind-uazapi-webhook|Rebind Uazapi Webhook]]
+- [[refresh-hml|Refresh do HML (homologação)]]
 - [[regenerar-types-supabase|Regenerar Types Supabase]]
 - [[reset-leads-teste|Reset Leads de Teste]] 🟡 draft

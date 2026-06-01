@@ -176,6 +176,7 @@ Estado vs target:
 
 ### 05 — How-to
 - [Debug Meta Chat](05%20—%20How-to/debug-meta-chat.md)
+- [Refresh do HML (homologação)](05%20—%20How-to/refresh-hml.md)
 
 ### 10 — Remodelagem (projeto ativo)
 
