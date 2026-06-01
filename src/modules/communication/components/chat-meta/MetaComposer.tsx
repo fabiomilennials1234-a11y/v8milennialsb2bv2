@@ -35,7 +35,8 @@ export function MetaComposer({ conversationId, lastInboundAt }: Props) {
 
   async function handleImage(file: File) {
     if (!canSend) return;
-    const path = `meta/${conversationId}/${Date.now()}-${file.name}`;
+    // Segmento aleatório: bucket público (provider busca a URL); path não-enumerável.
+    const path = `meta/${conversationId}/${crypto.randomUUID()}-${file.name}`;
     const { data, error } = await supabase.storage
       .from(CHAT_MEDIA_BUCKET)
       .upload(path, file, { contentType: file.type, upsert: false });

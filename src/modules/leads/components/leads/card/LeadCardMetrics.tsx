@@ -2,6 +2,7 @@ import { memo } from "react";
 import { MessageSquare, CheckSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { LeadCardChecklistPopover } from "./LeadCardChecklistPopover";
 
 /**
  * Métricas inline do LeadCard — comments, checklists,
@@ -19,6 +20,8 @@ interface ResponsibleMini {
 }
 
 interface LeadCardMetricsProps {
+  /** UUID do lead (lead.leadId). Habilita o popover clicável de checklists. */
+  leadId?: string;
   commentsCount?: number;
   checklistsCompleted?: number;
   checklistsTotal?: number;
@@ -68,6 +71,7 @@ function MiniResponsible({ member, label }: { member: ResponsibleMini | null | u
 }
 
 export const LeadCardMetrics = memo(function LeadCardMetrics({
+  leadId,
   commentsCount = 0,
   checklistsCompleted = 0,
   checklistsTotal = 0,
@@ -78,6 +82,8 @@ export const LeadCardMetrics = memo(function LeadCardMetrics({
   const checklistDone = checklistsTotal > 0 && checklistsCompleted === checklistsTotal;
   const hasComments = commentsCount > 0;
   const hasChecklists = checklistsTotal > 0;
+  // Badge vira popover clicável só quando há lead + checklists. Senão, chip passivo.
+  const checklistInteractive = !!leadId && hasChecklists;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -95,31 +101,39 @@ export const LeadCardMetrics = memo(function LeadCardMetrics({
           </TooltipContent>
         </Tooltip>
 
-        {/* Checklists */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div
-              className={cn(
-                "flex items-center gap-1 px-1 py-px rounded",
-                checklistDone
-                  ? "bg-emerald-500/15 text-emerald-400"
-                  : hasChecklists
-                  ? "text-foreground/70"
-                  : "text-muted-foreground/40",
-              )}
-            >
-              <CheckSquare className="w-3 h-3" />
-              <span>{checklistsCompleted}/{checklistsTotal}</span>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-[10px]">
-            {checklistsTotal === 0
-              ? "Sem checklists"
-              : checklistDone
-              ? "Checklist completo"
-              : `${checklistsCompleted} de ${checklistsTotal} itens`}
-          </TooltipContent>
-        </Tooltip>
+        {/* Checklists — popover clicável quando há lead + checklists; senão chip passivo */}
+        {checklistInteractive ? (
+          <LeadCardChecklistPopover
+            leadId={leadId}
+            completed={checklistsCompleted}
+            total={checklistsTotal}
+          />
+        ) : (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                className={cn(
+                  "flex items-center gap-1 px-1 py-px rounded",
+                  checklistDone
+                    ? "bg-emerald-500/15 text-emerald-400"
+                    : hasChecklists
+                    ? "text-foreground/70"
+                    : "text-muted-foreground/40",
+                )}
+              >
+                <CheckSquare className="w-3 h-3" />
+                <span>{checklistsCompleted}/{checklistsTotal}</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-[10px]">
+              {checklistsTotal === 0
+                ? "Sem checklists"
+                : checklistDone
+                ? "Checklist completo"
+                : `${checklistsCompleted} de ${checklistsTotal} itens`}
+            </TooltipContent>
+          </Tooltip>
+        )}
 
         {/* Responsibles — empilhados levemente */}
         <div className="flex items-center -space-x-1.5 ml-auto">

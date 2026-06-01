@@ -113,7 +113,9 @@ async function uploadMediaToStorage(
   const timestamp = Date.now();
   const baseName = fileName ? sanitizeFileName(fileName) : `${mediaType}_${timestamp}`;
   const uniqueFileName = `${baseName}_${timestamp}.${extension}`;
-  const filePath = `whatsapp-media/${organizationId}/${uniqueFileName}`;
+  // Segmento aleatório no path: o bucket `media` é público (o provider busca a
+  // URL pra enviar), então um path não-enumerável impede acesso por adivinhação.
+  const filePath = `whatsapp-media/${organizationId}/${crypto.randomUUID()}/${uniqueFileName}`;
 
   const { error } = await supabase.storage
     .from("media")
