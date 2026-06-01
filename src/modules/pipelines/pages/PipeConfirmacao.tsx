@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { motion } from "framer-motion";
-import { Search, Plus, Calendar, LayoutGrid, List, Settings2, X } from "lucide-react";
+import { Search, Plus, Calendar, LayoutGrid, List, BarChart3, Settings2, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,7 @@ import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanba
 import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import { usePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus } from "@/modules/pipelines/hooks/legacy/usePipeConfirmacao";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/modules/pipelines/hooks/model/usePipelineStages";
+import { usePaginatedPipeline } from "@/modules/pipelines/hooks/perf/usePaginatedPipeline";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/modules/leads";
 import { useCreatePipeProposta } from "@/modules/pipelines/hooks/legacy/usePipePropostas";
@@ -28,7 +29,8 @@ import { useResponsibleMembers } from "@/modules/identity";
 import { LeadModal } from "@/modules/leads";
 import { AddMeetingModal } from "@/modules/pipelines/components/legacy/confirmacao/AddMeetingModal";
 import { RescheduleModal } from "@/modules/pipelines/components/legacy/confirmacao/RescheduleModal";
-import { ConfirmacaoStats } from "@/modules/pipelines/components/legacy/confirmacao/ConfirmacaoStats";
+import { PipeViewToggle } from "@/modules/pipelines/components/shared/PipeViewToggle";
+import { PipeConfirmacaoAnalytics } from "@/modules/pipelines/components/shared/PipeConfirmacaoAnalytics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/MetricsPeriodSelector";
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
@@ -86,7 +88,7 @@ function formatPeriodLabel(range: { startStr: string; endStr: string }): string 
 // They are visual states controlled by is_confirmed field
 function calculateStatusByDate(meetingDate: Date | null, currentStatus: PipeConfirmacaoStatus): PipeConfirmacaoStatus | null {
   if (!meetingDate) return null;
-  
+
   // Don't auto-update terminal statuses
   if (["compareceu", "perdido", "remarcar"].includes(currentStatus)) {
     // Check if remarcar should be updated (meeting date was changed to future)
@@ -100,48 +102,48 @@ function calculateStatusByDate(meetingDate: Date | null, currentStatus: PipeConf
       return null;
     }
   }
-  
+
   const today = startOfDay(new Date());
   const meetingDay = startOfDay(meetingDate);
-  
+
   // Use differenceInCalendarDays to count actual calendar days, not 24h periods
   const calendarDays = differenceInCalendarDays(meetingDay, today);
-  
+
   // If meeting day is in the past (negative days), it's overdue - should remarcar
   if (calendarDays < 0) {
     return "remarcar";
   }
-  
+
   // If meeting is today (0 days)
   if (calendarDays === 0) {
     return "confirmacao_no_dia";
   }
-  
+
   // If meeting is tomorrow (1 day) - D-1
   if (calendarDays === 1) {
     return "confirmar_d1";
   }
-  
+
   // If meeting is in 2 days - D-2
   if (calendarDays === 2) {
     return "confirmar_d2";
   }
-  
+
   // If meeting is in 3 days - D-3
   if (calendarDays === 3) {
     return "confirmar_d3";
   }
-  
+
   // If meeting is in 4-5 days - D-5
   if (calendarDays === 4 || calendarDays === 5) {
     return "confirmar_d5";
   }
-  
+
   // If meeting is more than 5 days away
   if (calendarDays > 5) {
     return "reuniao_marcada";
   }
-  
+
   return null;
 }
 
@@ -156,7 +158,7 @@ type ConfirmacaoFilterState = {
   selectedStatuses: string[];
   selectedTags: string[];
   selectedResponsibleId: string;
-  viewMode: "kanban" | "timeline";
+  viewMode: "kanban" | "timeline" | "analytics";
   membroDefaultApplied?: boolean;
 };
 
@@ -218,7 +220,7 @@ function PipeConfirmacaoInner() {
     [setFilterState]
   );
   const setViewMode = useCallback(
-    (v: "kanban" | "timeline") => setFilterState((f) => ({ ...f, viewMode: v })),
+    (v: "kanban" | "timeline" | "analytics") => setFilterState((f) => ({ ...f, viewMode: v })),
     [setFilterState]
   );
   const [searchParams, setSearchParams] = useSearchParams();
@@ -267,8 +269,17 @@ function PipeConfirmacaoInner() {
   useEffect(() => { trackModuleVisit("pipe_confirmacao", organizationId); }, []);
 
   const overdueDays = useConfirmacaoOverdueDays();
-  const { data: pipeData, isLoading, refetch } = usePipeConfirmacao();
   const { data: pipelineStages = [] } = usePipelineStages("confirmacao");
+  const { stageData, allItems: pipeData, isLoading } = usePaginatedPipeline(
+    "confirmacao",
+    pipelineStages,
+    {
+      search: searchQuery,
+      responsibleId: selectedResponsibleId,
+      tagIds: selectedTags,
+    }
+  );
+  const refetch = useCallback(() => {}, []);
   const { data: workflowCounts = {} } = useStageWorkflowCounts("confirmacao");
   const responsibleMembers = useResponsibleMembers();
   const { data: orgTags = [] } = useTags();
@@ -336,13 +347,13 @@ function PipeConfirmacaoInner() {
   // Auto-update statuses based on meeting dates
   const autoUpdateStatuses = useCallback(async () => {
     if (!pipeData) return;
-    
+
     const terminalStatuses: PipeConfirmacaoStatus[] = ["compareceu", "perdido"];
-    
+
     for (const item of pipeData) {
       // Skip terminal statuses
       if (terminalStatuses.includes(item.status as PipeConfirmacaoStatus)) continue;
-      
+
       // Skip remarcar status unless it's no longer overdue (meeting date changed)
       if (item.status === "remarcar") {
         const meetingDate = item.meeting_date ? new Date(item.meeting_date) : null;
@@ -350,10 +361,10 @@ function PipeConfirmacaoInner() {
           continue; // Still overdue, keep in remarcar
         }
       }
-      
+
       const meetingDate = item.meeting_date ? new Date(item.meeting_date) : null;
       const calculatedStatus = calculateStatusByDate(meetingDate, item.status as PipeConfirmacaoStatus);
-      
+
       if (calculatedStatus && calculatedStatus !== item.status) {
         try {
           await updatePipeConfirmacao.mutateAsync({
@@ -422,82 +433,59 @@ function PipeConfirmacaoInner() {
     };
   };
 
-  const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
-    if (!pipeData) return statusColumns.map(col => ({ ...col, items: [] }));
+  // Client-side filters that can't be server-side (ghost lead, date range, origin, urgency, time, status, scheduled)
+  const filterItemsLocal = (item: any) => {
+    const lead = item.lead;
+    if (!lead) return false;
 
-    const now = new Date();
-    const weekStart = startOfWeek(now, { locale: ptBR });
-    const weekEnd = endOfWeek(now, { locale: ptBR });
-
-    const knownStageIds = new Set(statusColumns.map(c => c.id));
-
-    const filterConfirmacao = (item: any) => {
-      const lead = item.lead;
-      if (!lead) return false;
-
-      if (metricsRange) {
-        if (!item.created_at) return false;
-        if (item.created_at < metricsRange.startStr || item.created_at > metricsRange.endStr) return false;
-      }
-
-      const matchesSearch = searchQuery === "" ||
-        lead?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead?.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead?.phone?.includes(searchQuery);
-
-      let matchesOrigin = originFilter === "all" || lead?.origin === originFilter;
-      let matchesUrgency = urgencyFilter === "all" || lead?.urgency === urgencyFilter;
-
-      let matchesTime = true;
-      if (timeFilter === "today" && item.meeting_date) {
-        matchesTime = isToday(new Date(item.meeting_date));
-      } else if (timeFilter === "tomorrow" && item.meeting_date) {
-        matchesTime = isTomorrow(new Date(item.meeting_date));
-      } else if (timeFilter === "week" && item.meeting_date) {
-        matchesTime = isWithinInterval(new Date(item.meeting_date), { start: weekStart, end: weekEnd });
-      } else if (timeFilter === "overdue") {
-        matchesTime = isConfirmacaoOverdue(item.status, item.updated_at, overdueDays);
-      }
-
-      const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
-      // Shared helper covers all 9 responsibility fields (entry + lead),
-      // including pre_sale_responsible_id / sale_responsible_id.
-      const matchesResponsible = matchesResponsibleFilter(item, selectedResponsibleId);
-
-      const matchesTags = selectedTags.length === 0 ||
-        (lead?.lead_tags?.some((lt: any) => selectedTags.includes(lt.tag?.id)) ?? false);
-      const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
-
-      return matchesSearch && matchesOrigin && matchesUrgency && matchesTime && matchesStatus && matchesResponsible && matchesTags && matchesScheduled;
-    };
-
-    const sortByCreated = (a: any, b: any) => {
-      const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
-      return dateB - dateA;
-    };
-
-    const result = statusColumns.map(col => {
-      const columnItems = pipeData
-        .filter(item => item.status === col.id)
-        .filter(filterConfirmacao)
-        .sort(sortByCreated)
-        .map(transformToCard);
-
-      return { ...col, items: columnItems };
-    });
-
-    if (result.length > 0) {
-      const orphanItems = pipeData
-        .filter(item => !knownStageIds.has(item.status))
-        .filter(filterConfirmacao)
-        .sort(sortByCreated)
-        .map(transformToCard);
-      result[0].items = [...result[0].items, ...orphanItems];
+    if (metricsRange) {
+      if (!item.created_at) return false;
+      if (item.created_at < metricsRange.startStr || item.created_at > metricsRange.endStr) return false;
     }
 
-    return result;
-  }, [pipeData, statusColumns, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedTags, selectedResponsibleId, overdueDays, filterScheduled, leadsWithSchedule, metricsRange]);
+    const matchesOrigin = originFilter === "all" || lead?.origin === originFilter;
+    const matchesUrgency = urgencyFilter === "all" || lead?.urgency === urgencyFilter;
+
+    let matchesTime = true;
+    const now = new Date();
+    if (timeFilter === "today" && item.meeting_date) {
+      matchesTime = isToday(new Date(item.meeting_date));
+    } else if (timeFilter === "tomorrow" && item.meeting_date) {
+      matchesTime = isTomorrow(new Date(item.meeting_date));
+    } else if (timeFilter === "week" && item.meeting_date) {
+      const weekStart = startOfWeek(now, { locale: ptBR });
+      const weekEnd = endOfWeek(now, { locale: ptBR });
+      matchesTime = isWithinInterval(new Date(item.meeting_date), { start: weekStart, end: weekEnd });
+    } else if (timeFilter === "overdue") {
+      matchesTime = isConfirmacaoOverdue(item.status, item.updated_at, overdueDays);
+    }
+
+    const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
+    // Shared helper covers all 9 responsibility fields (entry + lead),
+    // including pre_sale_responsible_id / sale_responsible_id.
+    const matchesResponsible = matchesResponsibleFilter(item, selectedResponsibleId);
+    const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
+
+    return matchesOrigin && matchesUrgency && matchesTime && matchesStatus && matchesResponsible && matchesScheduled;
+  };
+
+  // Build columns from server-paginated stageData
+  const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
+    return statusColumns.map(col => {
+      const sd = stageData[col.id];
+      const items = sd
+        ? sd.items.filter(filterItemsLocal).map(transformToCard)
+        : [];
+      return {
+        ...col,
+        items,
+        totalCount: sd?.totalCount ?? items.length,
+        hasMore: sd?.hasMore ?? false,
+        isFetchingMore: sd?.isFetchingMore ?? false,
+        onLoadMore: sd?.fetchMore,
+      };
+    });
+  }, [stageData, statusColumns, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedResponsibleId, overdueDays, filterScheduled, leadsWithSchedule, metricsRange]);
 
   // Count ghost leads — rows visíveis no pipe cujo join com leads é null.
   // Indica divergência entre RLS do pipe e de leads (ver GhostLeadsBanner).
@@ -658,22 +646,16 @@ function PipeConfirmacaoInner() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center border rounded-lg p-1">
-            <Button 
-              variant={viewMode === "kanban" ? "secondary" : "ghost"} 
-              size="sm"
-              onClick={() => setViewMode("kanban")}
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </Button>
-            <Button 
-              variant={viewMode === "timeline" ? "secondary" : "ghost"} 
-              size="sm"
-              onClick={() => setViewMode("timeline")}
-            >
-              <List className="w-4 h-4" />
-            </Button>
-          </div>
+          <PipeViewToggle
+            value={viewMode}
+            onChange={setViewMode}
+            layoutId="pipe-confirmacao-view-indicator"
+            options={[
+              { value: "kanban", icon: LayoutGrid, label: "Kanban" },
+              { value: "timeline", icon: List, label: "Timeline" },
+              { value: "analytics", icon: BarChart3, label: "Analytics" },
+            ]}
+          />
           <Button size="sm" variant="outline" onClick={() => setIsSettingsOpen(true)}>
             <Settings2 className="w-4 h-4 mr-2" />
             Configurações
@@ -698,10 +680,8 @@ function PipeConfirmacaoInner() {
       {/* Período das métricas */}
       <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
 
-      {/* Stats */}
-      <ConfirmacaoStats data={statsData} />
-
-      {/* Filters */}
+      {/* Filters — ocultos no Analytics (são específicos do board) */}
+      {viewMode !== "analytics" && (
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row gap-3">
           {/* Search */}
@@ -763,6 +743,7 @@ function PipeConfirmacaoInner() {
           onClearAll={handleClearAllFilters}
         />
       </div>
+      )}
 
       {/* Period filter indicator — aparece quando um período está selecionado (apenas no kanban) */}
       {viewMode === "kanban" && metricsRange && (
@@ -784,7 +765,9 @@ function PipeConfirmacaoInner() {
       )}
 
       {/* Content */}
-      {viewMode === "kanban" ? (
+      {viewMode === "analytics" ? (
+        <PipeConfirmacaoAnalytics items={statsData} responsibleMembers={responsibleMembers} />
+      ) : viewMode === "kanban" ? (
         <DraggableKanbanBoard
           columns={columns}
           onStatusChange={handleStatusChange}

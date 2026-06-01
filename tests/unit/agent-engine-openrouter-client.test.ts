@@ -10,15 +10,79 @@
  * These tests lock the on-the-wire shape.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Deno env stub for module-load side effects (none here but safe)
-// vi.stubGlobal not needed — the client module does not read Deno.env at import time
-// beyond the request path (which runs only on .chat()).
+vi.stubGlobal("Deno", {
+  env: { get: (_k: string) => undefined },
+});
 
 import { OpenRouterClient } from "../../supabase/functions/agent-message/openrouter-client.ts";
 
 const client = new OpenRouterClient("test-key");
+
+function okResp(content = "ok") {
+  return {
+    ok: true,
+    json: async () => ({ id: "r1", choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }] }),
+  };
+}
+function errResp(status: number) {
+  return { ok: false, status, text: async () => `http ${status}` };
+}
+
+describe("OpenRouterClient.chat — transient retry (Bug 2 cause)", () => {
+  const mockFetch = vi.fn();
+  // retryBaseMs:0 → no real backoff delay in tests
+  const retryClient = new OpenRouterClient("test-key", { retryBaseMs: 0, maxRetries: 2 });
+  const req = { model: "google/gemini-2.5-flash", messages: [{ role: "user" as const, content: "oi" }] };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", mockFetch);
+  });
+
+  it("succeeds on first try without retrying", async () => {
+    mockFetch.mockResolvedValueOnce(okResp("hello"));
+    const out = await retryClient.chat(req);
+    expect(out.choices[0].message.content).toBe("hello");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries on 503 then succeeds", async () => {
+    mockFetch.mockResolvedValueOnce(errResp(503));
+    mockFetch.mockResolvedValueOnce(okResp("recovered"));
+    const out = await retryClient.chat(req);
+    expect(out.choices[0].message.content).toBe("recovered");
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries on 429 rate limit then succeeds", async () => {
+    mockFetch.mockResolvedValueOnce(errResp(429));
+    mockFetch.mockResolvedValueOnce(okResp());
+    await retryClient.chat(req);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries on network throw then succeeds", async () => {
+    mockFetch.mockRejectedValueOnce(new Error("network down"));
+    mockFetch.mockResolvedValueOnce(okResp());
+    await retryClient.chat(req);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws after exhausting retries on persistent 503", async () => {
+    mockFetch.mockResolvedValue(errResp(503));
+    await expect(retryClient.chat(req)).rejects.toThrow(/503/);
+    expect(mockFetch).toHaveBeenCalledTimes(3); // 1 + 2 retries
+  });
+
+  it("does NOT retry transient 500 as if 400 — but DOES retry 500", async () => {
+    mockFetch.mockResolvedValueOnce(errResp(500));
+    mockFetch.mockResolvedValueOnce(okResp());
+    await retryClient.chat(req);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe("OpenRouterClient.convertMessages — content/tool_calls contract", () => {
   it("preserves content:null when assistant has tool_calls", () => {

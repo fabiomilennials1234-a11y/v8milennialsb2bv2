@@ -53,7 +53,7 @@ RUN printf '%s\n' \
   'add_header X-XSS-Protection "1; mode=block" always;' \
   'add_header Referrer-Policy "strict-origin-when-cross-origin" always;' \
   'add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;' \
-  'add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;' \
+  'add_header Permissions-Policy "geolocation=(), payment=()" always;' \
   "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://generativelanguage.googleapis.com https://*.sentry.io https://openrouter.ai; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; media-src 'self' blob: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';\" always;" \
   > /etc/nginx/security-headers.conf && \
 printf '%s\n' \

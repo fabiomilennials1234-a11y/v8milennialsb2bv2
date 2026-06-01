@@ -18,6 +18,7 @@ export const ACTION_MAP: Record<string, string> = {
   UPDATE_LEAD: "update_lead",
   TRANSFER_HUMAN: "transfer_to_human",
   TRANSFER_HUMAN_NOTIFY: "transfer_to_human_notify",
+  TRANSFER_HUMAN_WHATSAPP_NOTIFY: "transfer_to_human_whatsapp_notify",
   UPDATE_QUALIFICATION_SCORE: "update_qualification_score",
   ADVANCE_STAGE: "advance_stage",
   CONFIRM_MEETING: "confirm_meeting",
@@ -138,10 +139,11 @@ export async function logDecision(
 
 /**
  * Persiste message em conversation_messages com idempotency_key.
- * Onda 1 / T1.1.6: dedup via UNIQUE(conversation_id, idempotency_key).
+ * Onda 1 / T1.1.6: dedup via UNIQUE partial index (conversation_id, idempotency_key).
  * Key formato: `${role}:${sha256(content).slice(0,16)}:${bucket5min}`.
  *
- * upsert ignoreDuplicates: true → silencia 23505, mensagem persiste 1x.
+ * Usa INSERT (não upsert) porque partial unique indexes não são inferidos
+ * pelo ON CONFLICT do PostgREST. Erro 23505 (unique_violation) = dedup ok.
  */
 export async function addMessageToMemory(
   supabase: SupabaseClient,
@@ -166,12 +168,9 @@ export async function addMessageToMemory(
 
     const { error } = await supabase
       .from("conversation_messages")
-      .upsert(
-        { conversation_id: conversationId, role, content, idempotency_key },
-        { onConflict: "conversation_id,idempotency_key", ignoreDuplicates: true },
-      );
+      .insert({ conversation_id: conversationId, role, content, idempotency_key });
 
-    if (error) {
+    if (error && error.code !== "23505") {
       console.warn("[dispatcher] addMessageToMemory error:", error.message);
     }
   } catch (e) {

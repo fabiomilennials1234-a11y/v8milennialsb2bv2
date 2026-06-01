@@ -7,7 +7,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { resolveActiveWindow } from "../../_shared/copilot/time-context.ts";
+import { resolveActiveWindow, formatNowText, getDayKeyInTimezone } from "../../_shared/copilot/time-context.ts";
 import { parseCustomInstructions } from "./utils.ts";
 
 interface ConversationContextSummary {
@@ -245,25 +245,34 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
     }
 
     // Time-Aware Behavior — janela ativa + comportamento contextual.
+    const tz = (availability as { timezone?: string })?.timezone || "America/Sao_Paulo";
+    const now = new Date();
+    const dayKey = getDayKeyInTimezone(now, tz);
+    const nowText = formatNowText(now, tz, dayKey);
+
     const timeContext = resolveActiveWindow({
       behavior_windows: capabilities.behavior_windows,
       availability: availability as { timezone?: string },
-    });
+    }, now);
+
+    sections.push("# CONTEXTO TEMPORAL");
+    sections.push("");
+    sections.push(`- Agora: ${nowText}`);
+
     if (timeContext) {
-      sections.push("# CONTEXTO TEMPORAL");
-      sections.push("");
       sections.push(
         "IMPORTANTE: Adapte sua resposta ao momento atual e ao comportamento configurado para esta janela.",
       );
       sections.push("");
-      sections.push(timeContext.formatted);
-      if (responseDelaySeconds && responseDelaySeconds > 0) {
-        sections.push(`- Tempo médio de resposta: ~${responseDelaySeconds}s`);
+      sections.push(`- Janela ativa: "${timeContext.window.name}"`);
+      const trimmedBehavior = (timeContext.window.behavior || "").trim();
+      if (trimmedBehavior) {
+        sections.push("- Comportamento esperado nesta janela:");
+        sections.push(trimmedBehavior);
       }
-      sections.push("");
-    } else if (availability.mode) {
-      sections.push("# DISPONIBILIDADE");
-      sections.push("");
+    }
+
+    if (availability.mode) {
       if (availability.mode === "always") {
         sections.push("- Atendimento: 24 horas");
       } else {
@@ -275,13 +284,13 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
             ? `${availability.start}–${availability.end}`
             : "",
         );
-        appendIf("Fuso", availability.timezone);
       }
-      if (responseDelaySeconds && responseDelaySeconds > 0) {
-        sections.push(`- Tempo médio de resposta: ~${responseDelaySeconds}s`);
-      }
-      sections.push("");
     }
+
+    if (responseDelaySeconds && responseDelaySeconds > 0) {
+      sections.push(`- Tempo médio de resposta: ~${responseDelaySeconds}s`);
+    }
+    sections.push("");
 
     // Habilidades
     if (capabilities.skills && capabilities.skills.length > 0) {

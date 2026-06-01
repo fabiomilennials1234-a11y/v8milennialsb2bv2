@@ -23,7 +23,7 @@ export function RotatingSlot({ panels }: RotatingSlotProps) {
   const current = panels[idx];
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full overflow-hidden">
       <AnimatePresence mode="wait">
         <motion.div
           key={current.id}

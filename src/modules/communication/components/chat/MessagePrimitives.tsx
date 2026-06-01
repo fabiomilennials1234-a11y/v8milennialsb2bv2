@@ -21,6 +21,7 @@ import {
   MapPin,
   Contact,
   BarChart3,
+  LayoutList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday } from "date-fns";
@@ -89,16 +90,20 @@ export function formatMessageTime(timestamp: string): string {
 // MessageStatusIcon
 // ---------------------------------------------------------------------------
 
-export function MessageStatusIcon({ status }: { status: string }) {
+export function MessageStatusIcon({ status, onInk = false }: { status: string; onInk?: boolean }) {
+  // onInk → ícone está sobre o gradiente laranja (bubble manual outgoing): usa
+  // tinta escura para legibilidade. Caso contrário, mantém os tons originais.
+  const muted = onInk ? "text-[#1c1c1c]/45" : "text-muted-foreground/40";
+  const readTone = onInk ? "text-[#1c1c1c]/70" : "text-blue-500/70";
   switch (status) {
     case "pending":
-      return <Clock className="w-2.5 h-2.5 text-muted-foreground/40" />;
+      return <Clock className={cn("w-2.5 h-2.5", muted)} />;
     case "sent":
-      return <Check className="w-2.5 h-2.5 text-muted-foreground/40" />;
+      return <Check className={cn("w-2.5 h-2.5", muted)} />;
     case "delivered":
-      return <CheckCheck className="w-2.5 h-2.5 text-muted-foreground/40" />;
+      return <CheckCheck className={cn("w-2.5 h-2.5", muted)} />;
     case "read":
-      return <CheckCheck className="w-2.5 h-2.5 text-blue-500/70" />;
+      return <CheckCheck className={cn("w-2.5 h-2.5", readTone)} />;
     case "failed":
       return <AlertCircle className="w-3 h-3 text-destructive" title="Falha no envio" />;
     default:
@@ -140,15 +145,16 @@ export function MessageBubble({
   const mediaUrl = isWhatsAppMsg ? (message as WhatsAppMessage).media_url : null;
   const messageType = isWhatsAppMsg ? (message as WhatsAppMessage).message_type : null;
   const isAudio = messageType === "audio" || messageType === "ptt";
-  const isImage = messageType === "image" || messageType === "album";
-  const isVideo = messageType === "video";
+  const isImage = messageType === "image" || messageType === "album" || messageType === "motion_photo";
+  const isVideo = messageType === "video" || messageType === "ptv" || messageType === "gif" || messageType === "motion_video";
   const isDocument = messageType === "document";
-  const isSticker = messageType === "sticker";
-  const isLocation = messageType === "location" || messageType === "LocationMessage";
-  const isContact = messageType === "contact" || messageType === "ContactMessage" || messageType === "ContactsArrayMessage";
+  const isSticker = messageType === "sticker" || messageType === "1p_sticker" || messageType === "user_created_sticker" || messageType === "avatar_sticker";
+  const isLocation = messageType === "location" || messageType === "LocationMessage" || messageType === "livelocation";
+  const isContact = messageType === "contact" || messageType === "ContactMessage" || messageType === "ContactsArrayMessage" || messageType === "vcard" || messageType === "contact_array";
   const isReaction = messageType === "reaction" || messageType === "ReactionMessage";
   const isPoll = messageType === "poll";
   const isSystem = messageType === "system" || messageType === "PinInChatMessage";
+  const isInteractive = messageType === "interactive" || messageType === "collection" || messageType === "list" || messageType === "template" || messageType === "url";
   const hasMedia = isAudio || isImage || isVideo || isDocument || isSticker;
 
   const meta = message as unknown as {
@@ -192,14 +198,17 @@ export function MessageBubble({
     }
   };
 
-  // Bubble color tokens — C9
+  // Bubble color tokens — C9.
+  // Manual/humano outgoing recebe o tratamento laranja da marca (gradient gold +
+  // texto ink + sombra). Copilot/workflow preservam as cores semânticas (IA/automação).
+  const isManualOutgoing = isOutgoing && sentSource === "manual";
   const bubbleColorClass =
     sentSource === "copilot"
       ? "bg-bubble-ai text-bubble-ai-foreground border border-bubble-ai-border/30 border-l-[3px] border-l-bubble-ai-border"
       : sentSource === "workflow"
         ? "bg-bubble-workflow text-bubble-workflow-foreground border border-bubble-workflow-border/30 border-l-[3px] border-l-bubble-workflow-border"
-        : isOutgoing
-          ? "bg-bubble-outgoing text-bubble-outgoing-foreground border border-bubble-outgoing-border"
+        : isManualOutgoing
+          ? "gradient-gold text-primary-foreground border-0 shadow-[0_4px_12px_hsl(var(--primary)/0.25)]"
           : "bg-bubble-incoming text-bubble-incoming-foreground border border-bubble-incoming-border";
 
   const radiusClass = isOutgoing
@@ -374,6 +383,14 @@ export function MessageBubble({
               </p>
             )}
 
+            {/* Interactive / catalog / list / template */}
+            {isInteractive && !message.content && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <LayoutList className="w-4 h-4 shrink-0" />
+                <span className="italic">Mensagem interativa</span>
+              </div>
+            )}
+
             {/* Media without media_url — empty bubble guard */}
             {hasMedia && !mediaUrl && !message.content && (
               <p className="text-sm italic text-muted-foreground">
@@ -381,8 +398,22 @@ export function MessageBubble({
               </p>
             )}
 
+            {/* Unknown type with media_url — render based on URL extension */}
+            {!hasMedia && !isLocation && !isContact && !isPoll && !isReaction && !isSystem && !isInteractive && mediaUrl && !message.content && (
+              (() => {
+                const ext = mediaUrl.split(".").pop()?.split("?")[0]?.toLowerCase();
+                if (ext && ["jpg","jpeg","png","webp","gif"].includes(ext))
+                  return <MessageImage src={mediaUrl} onPreview={() => onImagePreview(mediaUrl)} />;
+                if (ext && ["mp4","webm","mov"].includes(ext))
+                  return <MessageVideo src={mediaUrl} />;
+                if (ext && ["mp3","ogg","opus","m4a","aac","wav","webm"].includes(ext))
+                  return <AudioPlayer src={getAudioPlaybackUrl(mediaUrl) ?? mediaUrl} isOutgoing={isOutgoing} />;
+                return <MessageDocument src={mediaUrl} isOutgoing={isOutgoing} />;
+              })()
+            )}
+
             {/* Truly unsupported — only for types we don't handle */}
-            {!message.content && !hasMedia && !isLocation && !isContact && !isPoll && !isReaction && !isSystem && (
+            {!message.content && !hasMedia && !isLocation && !isContact && !isPoll && !isReaction && !isSystem && !isInteractive && !mediaUrl && (
               <p className="text-sm italic text-muted-foreground">
                 [Mensagem não suportada]
               </p>
@@ -412,8 +443,16 @@ export function MessageBubble({
         {/* Linha: data/hora e status — only on last in group */}
         {isLastInGroup && (
           <div className="flex items-center justify-end gap-1.5 mt-1.5">
-            <time dateTime={message.timestamp} className="text-[10px] text-muted-foreground/50 tabular-nums">{formatMessageTime(message.timestamp)}</time>
-            {isOutgoing && <MessageStatusIcon status={message.status} />}
+            <time
+              dateTime={message.timestamp}
+              className={cn(
+                "text-[10px] tabular-nums",
+                isManualOutgoing ? "text-primary-foreground/60" : "text-muted-foreground/50",
+              )}
+            >
+              {formatMessageTime(message.timestamp)}
+            </time>
+            {isOutgoing && <MessageStatusIcon status={message.status} onInk={isManualOutgoing} />}
           </div>
         )}
       </div>

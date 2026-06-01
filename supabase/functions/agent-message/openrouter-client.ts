@@ -63,17 +63,47 @@ export interface OpenRouterResponse {
   };
 }
 
+export interface OpenRouterClientOptions {
+  /** Backoff base in ms (delay = retryBaseMs * 2^attempt). Tests pass 0. */
+  retryBaseMs?: number;
+  /** Max retries on transient failures (total attempts = maxRetries + 1). */
+  maxRetries?: number;
+  /** Per-attempt request timeout in ms. Guards against silent hangs that
+   *  cascade into the empty-text fallback (Bug 2). */
+  timeoutMs?: number;
+}
+
+// Status codes worth retrying — transient infra/rate-limit, not client errors.
+// 400 is intentionally absent (handled separately via model fallback).
+const TRANSIENT_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
+
 export class OpenRouterClient {
   private apiKey: string;
   private baseUrl: string;
+  private retryBaseMs: number;
+  private maxRetries: number;
+  private timeoutMs: number;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, opts: OpenRouterClientOptions = {}) {
     this.apiKey = apiKey;
     this.baseUrl = 'https://openrouter.ai/api/v1';
+    this.retryBaseMs = opts.retryBaseMs ?? 500;
+    this.maxRetries = opts.maxRetries ?? 2;
+    this.timeoutMs = opts.timeoutMs ?? 45_000;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    if (ms <= 0) return Promise.resolve();
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
-   * Chama a API do OpenRouter
+   * Chama a API do OpenRouter.
+   *
+   * Resiliência (Bug 2 — fallback "houve um problema"):
+   *   - Erros transientes (429/5xx/timeout/rede) → retry com backoff exponencial.
+   *   - Erro 400 (modelo inválido/deprecado) → swap único para gemini fallback.
+   *   - Timeout por tentativa evita hang silencioso que virava texto vazio.
    */
   async chat(request: OpenRouterRequest): Promise<OpenRouterResponse> {
     const isAnthropic = request.model.startsWith('anthropic/');
@@ -96,26 +126,52 @@ export class OpenRouterClient {
       ) as OpenRouterMessage[];
     }
 
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
+    const fallback = 'google/gemini-2.5-flash';
+    let lastError: Error | null = null;
 
-    if (!response.ok) {
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      if (attempt > 0) {
+        await this.sleep(this.retryBaseMs * 2 ** (attempt - 1));
+      }
+
+      let response: Response;
+      try {
+        response = await fetch(`${this.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(this.timeoutMs),
+        });
+      } catch (err) {
+        // Network failure / timeout — transient, retry.
+        lastError = err instanceof Error ? err : new Error(String(err));
+        console.warn(`[OpenRouterClient] fetch failed (attempt ${attempt + 1}/${this.maxRetries + 1}):`, lastError.message);
+        continue;
+      }
+
+      if (response.ok) {
+        return await response.json();
+      }
+
       const error = await response.text();
-      const fallback = 'google/gemini-2.5-flash';
 
-      // If model is invalid/deprecated, retry with fallback
+      // Modelo inválido/deprecado → swap único para fallback (não conta como retry).
       if (response.status === 400 && request.model !== fallback) {
         console.warn(`[OpenRouterClient] Model "${request.model}" failed with 400, retrying with ${fallback}`);
         return this.chat({ ...request, model: fallback });
       }
 
-      throw new Error(`OpenRouter API error: ${response.status} ${error}`);
+      lastError = new Error(`OpenRouter API error: ${response.status} ${error}`);
+
+      if (TRANSIENT_STATUS.has(response.status) && attempt < this.maxRetries) {
+        console.warn(`[OpenRouterClient] transient ${response.status} (attempt ${attempt + 1}/${this.maxRetries + 1}), retrying`);
+        continue;
+      }
+
+      throw lastError;
     }
 
-    return await response.json();
+    throw lastError ?? new Error('OpenRouter API error: exhausted retries');
   }
 
   /**

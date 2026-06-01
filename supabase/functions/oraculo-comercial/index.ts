@@ -924,22 +924,27 @@ serve(withSentry('oraculo-comercial', async (req) => {
   }
   const userId = userData.user.id;
 
-  // Resolve caller's organization via team_members
   const supabaseAdmin = createSupabaseClient(supabaseUrl, supabaseServiceKey);
-  const { data: member } = await supabaseAdmin
-    .from("team_members")
-    .select("organization_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (!member?.organization_id) {
-    return unauthorizedResponse("User has no organization", corsHeaders);
-  }
-  const verifiedOrgId = member.organization_id;
 
   try {
     const body = await req.json();
 
-    // Override organization_id with the verified one from JWT — never trust body
+    // Resolve caller's organization via team_members.
+    // If body includes organization_id, verify the user belongs to that org
+    // (handles master users with multiple team_member rows).
+    let memberQuery = supabaseAdmin
+      .from("team_members")
+      .select("organization_id")
+      .eq("user_id", userId);
+    if (body.organization_id) {
+      memberQuery = memberQuery.eq("organization_id", body.organization_id);
+    }
+    const { data: member } = await memberQuery.limit(1).single();
+    if (!member?.organization_id) {
+      return unauthorizedResponse("User has no organization", corsHeaders);
+    }
+    const verifiedOrgId = member.organization_id;
+
     body.organization_id = verifiedOrgId;
     body.user_id = userId;
 

@@ -65,9 +65,9 @@ const PODIUM_COLORS = {
   ],
 } as const;
 
-const AVATAR_SIZES: Array<"xl" | "lg" | "lg"> = ["xl", "lg", "lg"];
-const AVATAR_PX = [64, 52, 48];
-const PEDESTAL_HEIGHTS = ["h-[68px]", "h-[52px]", "h-[40px]"];
+const AVATAR_SIZES: Array<"lg" | "md" | "md"> = ["lg", "md", "md"];
+const AVATAR_PX = [48, 40, 36];
+const PEDESTAL_HEIGHTS = ["h-[52px]", "h-[40px]", "h-[32px]"];
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -77,16 +77,10 @@ const PEDESTAL_HEIGHTS = ["h-[68px]", "h-[52px]", "h-[40px]"];
 function LiveBadge({ daysLeft }: { daysLeft: number }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30">
-        <motion.div
-          className="w-2 h-2 rounded-full bg-emerald-500"
-          animate={{ scale: [1, 1.4, 1], opacity: [1, 0.6, 1] }}
-          transition={{ repeat: Infinity, duration: 1.4, ease: "easeInOut" }}
-        />
-        <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">
-          Live
-        </span>
-      </div>
+      <span className="tv-live-badge flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold uppercase">
+        <span className="tv-live-dot" />
+        Live
+      </span>
       <span className="text-xs text-muted-foreground font-medium">
         {daysLeft}d restantes
       </span>
@@ -145,7 +139,7 @@ function PodiumCard({
       </div>
 
       {/* Name */}
-      <p className="font-bold text-sm mt-1.5 truncate max-w-[90px] relative z-10">
+      <p className="font-bold text-xs mt-1 truncate max-w-[72px] relative z-10">
         {firstName(user.name)}
       </p>
 
@@ -154,14 +148,14 @@ function PodiumCard({
         key={user.value}
         initial={{ opacity: 0.6, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`text-sm font-bold ${isFirst ? "text-yellow-400" : "text-primary"} relative z-10`}
+        className={`text-xs font-bold ${isFirst ? "text-yellow-400" : "text-primary"} relative z-10`}
       >
         {formatValue(user.value, metricType)}
       </motion.p>
 
       {/* Pedestal with prize */}
       <div
-        className={`mt-1.5 w-full min-w-[80px] ${PEDESTAL_HEIGHTS[posIdx]} rounded-t-lg ${PODIUM_COLORS.pedestalBg[posIdx]} border-t ${PODIUM_COLORS.border[posIdx]} border-opacity-40 flex flex-col items-center justify-center px-2 relative z-10`}
+        className={`mt-1 w-full min-w-[60px] ${PEDESTAL_HEIGHTS[posIdx]} rounded-t-lg ${PODIUM_COLORS.pedestalBg[posIdx]} border-t ${PODIUM_COLORS.border[posIdx]} border-opacity-40 flex flex-col items-center justify-center px-1.5 relative z-10`}
       >
         {prize ? (
           <>
@@ -288,13 +282,13 @@ function TVCompetitionBlockV2Base({
         : [0];
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2 overflow-hidden">
       {/* ---- Header ---- */}
-      <div className="flex items-center justify-between pb-2 border-b border-border/20">
-        <div className="flex items-center gap-2">
-          <span className="text-base">🏆</span>
+      <div className="flex flex-wrap items-center justify-between gap-1 pb-2 border-b border-border/20">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-sm shrink-0">🏆</span>
           <h2
-            className="text-[16px] font-bold uppercase tracking-wide"
+            className="text-[12px] font-bold uppercase tracking-wide truncate"
             style={{
               background: "linear-gradient(135deg, #fbbf24, #f59e0b, #d97706)",
               WebkitBackgroundClip: "text",
@@ -305,10 +299,10 @@ function TVCompetitionBlockV2Base({
           </h2>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 shrink-0">
           {participantCount != null && (
-            <span className="text-[10px] text-muted-foreground">
-              {participantCount} participantes
+            <span className="text-[9px] text-muted-foreground">
+              {participantCount} part.
             </span>
           )}
           <LiveBadge daysLeft={daysLeft} />
@@ -316,7 +310,7 @@ function TVCompetitionBlockV2Base({
       </div>
 
       {/* ---- Podium ---- */}
-      <div className="flex items-end justify-center gap-5 pt-2 pb-1">
+      <div className="flex items-end justify-center gap-2 pt-1 pb-1">
         <AnimatePresence mode="wait">
           {podiumOrder.map((user, visualIdx) => {
             if (!user) return null;

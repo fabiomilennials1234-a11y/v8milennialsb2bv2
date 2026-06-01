@@ -249,15 +249,47 @@ export async function buildDynamicTools(params: BuildToolsParams): Promise<any[]
   }
 
   if (capabilities.can_transfer_human) {
+    const hasNotifyPhones = Array.isArray(capabilities.handoff_notify_phones) && capabilities.handoff_notify_phones.length > 0;
+
+    const transferProperties: Record<string, unknown> = {
+      reason: { type: "string", description: "Motivo da transferência para humano" },
+    };
+    const transferRequired = ["reason"];
+
+    if (hasNotifyPhones) {
+      const phoneList = (capabilities.handoff_notify_phones as string[]).join(", ");
+      const instructions = capabilities.handoff_notify_instructions || "";
+
+      transferProperties.summary = {
+        type: "string",
+        description: "Resumo da conversa em 2-3 frases para o humano que vai atender",
+      };
+      transferProperties.priority = {
+        type: "string",
+        enum: ["ALTA", "MÉDIA", "NORMAL"],
+        description: "Prioridade do lead baseado no contexto da conversa",
+      };
+      transferProperties.priority_reason = {
+        type: "string",
+        description: "Razão da prioridade (ex: pedido alto valor, urgência, produto específico)",
+      };
+      transferProperties.notify_phones = {
+        type: "array",
+        items: { type: "string" },
+        description: `Números para notificar via WhatsApp. Disponíveis: ${phoneList}. ${instructions ? "Regras de roteamento: " + instructions : "Notificar todos."}`,
+      };
+      transferRequired.push("summary", "priority", "priority_reason", "notify_phones");
+    }
+
     tools.push({
       name: "transfer_to_human",
-      description: "Transfere conversa para atendimento humano",
+      description: hasNotifyPhones
+        ? "Transfere conversa para atendimento humano e notifica equipe via WhatsApp"
+        : "Transfere conversa para atendimento humano",
       input_schema: {
         type: "object",
-        properties: {
-          reason: { type: "string" },
-        },
-        required: ["reason"],
+        properties: transferProperties,
+        required: transferRequired,
       },
     });
   }

@@ -58,7 +58,6 @@ export async function loadConversationContext(
       .select("direction, content, created_at")
       .eq("organization_id", organizationId)
       .eq("lead_id", leadId)
-      .eq("message_type", "text")
       .not("content", "is", null)
       .order("created_at", { ascending: false })
       .limit(20);
@@ -167,7 +166,6 @@ export async function getWhatsAppMessageHistory(
       .select("direction, content, created_at")
       .eq("organization_id", organizationId)
       .ilike("phone_number", `%${lead.phone.slice(-8)}%`)
-      .eq("message_type", "text")
       .not("content", "is", null)
       .order("created_at", { ascending: true })
       .limit(50);

@@ -14,6 +14,7 @@ import { ChatBubbleProvider } from "@/contexts/ChatBubbleContext";
 import { MobileChatProvider, useMobileChatContext } from "@/contexts/MobileChatContext";
 import { ChatBubble } from "@/modules/communication/components/chat/bubble";
 import { SessionDeadBanner } from "@/modules/communication/components/whatsapp/SessionDeadBanner";
+import { QuickBlastProgressPanel } from "@/modules/leads/components/bulk-actions/QuickBlastProgressPanel";
 
 // Rotas onde o checklist NÃO deve aparecer
 const CHECKLIST_HIDDEN_PATTERNS = [
@@ -129,6 +130,8 @@ function MainLayoutInner({ children }: MainLayoutProps) {
       />
 
       {featureFlags.chatBubble && <ChatBubble />}
+
+      <QuickBlastProgressPanel />
 
       <MobileBottomNav />
     </div>

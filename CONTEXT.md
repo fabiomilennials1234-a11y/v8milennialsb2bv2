@@ -58,6 +58,10 @@ Canonical terms used across the system. No implementation details here — this 
 
 - **Instance (WhatsApp)**: A WhatsApp phone number connection managed via Uazapi provider. An Organization can have multiple instances.
 
+- **Mass Send (Disparo)**: A one-time bulk outbound broadcast to many phone numbers through a single Instance. Sourced from CSV paste or a lead selection. Tracked as a job with progress counters and pause/resume/stop controls. Distinct from Campaign (no stages, no enrollment, no rules) and Workflow (not event-triggered).
+
+- **Quick Blast (Disparo Rápido)**: An ad-hoc Mass Send triggered directly from a kanban/list lead selection — "de supetão", without planning. Reuses the Mass Send dispatch core. Defining traits: no role gate (any logged-in member may fire it, scoped to their Organization by RLS), with an Organization-level cap on leads-per-blast as the safety guardrail instead of a permission; per-recipient personalization (variables + spintax) to reduce ban risk; optional single image; randomized inter-message delay. A Quick Blast is a Mass Send — same domain concept, different entry point and access policy.
+
 ## Automation
 
 - **Action Handler**: A function that executes a specific domain operation (move_stage, send_whatsapp, update_lead, etc.). Registered in a handler map and dispatched by the Workflow engine or Copilot.
@@ -67,6 +71,10 @@ Canonical terms used across the system. No implementation details here — this 
 ## Intelligence
 
 - **Oraculo Comercial**: A specialized Copilot variant that provides sales coaching and metric analysis. Not a separate domain — it's a Copilot agent type.
+
+- **Copilot Builder**: An internal AI assistant that interviews the person creating a Copilot Agent and progressively fills the agent's configuration (prompt sections, tools, instructions, funnel wiring, knowledge). It builds an Agent; it is not itself a deployed Agent and never talks to Leads. Distinct from the Copilot Agent it produces.
+
+- **Builder Session**: The persistent, re-openable conversation between a user and the Copilot Builder for a given Agent. Survives across visits — the user can return to review the interview history and continue revising the Agent with the Builder. Distinct from a (runtime) Conversation, which is between a deployed Agent and a Lead.
 
 ## Engagement
 

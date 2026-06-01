@@ -407,17 +407,23 @@ export function ChatComposer({
 
           {/* Quick action bar */}
           <ChatQuickActions
-            onAudio={() => setIsRecording(true)}
+            onAudio={() => {
+              if (sendMedia.isPending) {
+                toast.info("Aguarde o envio anterior finalizar.");
+                return;
+              }
+              setIsRecording(true);
+            }}
             onTemplate={() => {
               setMessage("/");
               setShowSlashPopover(true);
             }}
             onAttach={() => fileInputRef.current?.click()}
-            disabled={sendMessage.isPending || sendMedia.isPending}
+            disabled={sendMessage.isPending}
           />
 
-          {/* Input row */}
-          <div className="relative flex items-center gap-2">
+          {/* Input row — container "pill" arredondado (estilo mockup) */}
+          <div className="relative flex items-center gap-1 rounded-xl border border-border/70 dark:border-white/[0.07] bg-muted/30 dark:bg-white/[0.03] px-1.5 py-1 transition-colors focus-within:border-primary/40">
             {/* File input oculto */}
             <input
               ref={fileInputRef}
@@ -489,7 +495,7 @@ export function ChatComposer({
               onKeyDown={handleKeyDown}
               disabled={sendMessage.isPending || sendMedia.isPending}
               aria-label={`Digite uma mensagem para ${contactName}`}
-              className="flex-1 rounded-full border border-border/60 bg-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+              className="flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-2"
             />
 
             {/* Botão agendar */}
@@ -517,7 +523,7 @@ export function ChatComposer({
                 disabled={sendMessage.isPending}
                 size="icon"
                 aria-label="Enviar mensagem"
-                className="gradient-primary text-white border-0"
+                className="gradient-gold text-primary-foreground border-0 rounded-lg shadow-[0_4px_12px_hsl(var(--primary)/0.3)] hover:shadow-[0_6px_16px_hsl(var(--primary)/0.4)] hover:brightness-105 transition-all shrink-0"
               >
                 {sendMessage.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -529,8 +535,13 @@ export function ChatComposer({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setIsRecording(true)}
-                disabled={sendMedia.isPending}
+                onClick={() => {
+                  if (sendMedia.isPending) {
+                    toast.info("Aguarde o envio anterior finalizar.");
+                    return;
+                  }
+                  setIsRecording(true);
+                }}
                 aria-label="Gravar áudio"
                 className="opacity-50 hover:opacity-100 transition-opacity"
               >

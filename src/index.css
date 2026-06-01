@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Racing+Sans+One&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -136,23 +137,25 @@
   html.dark,
   .dark {
     color-scheme: dark;
-    --background: 36 20% 12%;
+    /* Page background matches the mockup's warm dark (#191714). */
+    --background: 36 11% 9%;
     --foreground: 45 20% 95%;
 
-    --card: 36 20% 16%;
+    /* Warm muted dark surfaces, in the #191714 family (low-saturation hue 36). */
+    --card: 35 10% 13%;
     --card-foreground: 45 20% 95%;
 
-    --popover: 36 20% 16%;
+    --popover: 35 10% 13%;
     --popover-foreground: 45 20% 95%;
 
     --primary: 47 100% 50%;
     --primary-foreground: 30 18% 15%;
 
-    --secondary: 36 15% 22%;
+    --secondary: 35 8% 17%;
     --secondary-foreground: 45 20% 95%;
 
-    --muted: 36 15% 22%;
-    --muted-foreground: 45 15% 70%;
+    --muted: 35 8% 17%;
+    --muted-foreground: 40 7% 56%;
 
     --accent: 47 100% 50%;
     --accent-foreground: 30 18% 15%;
@@ -169,8 +172,8 @@
     --silver: 220 9% 70%;
     --silver-foreground: 30 18% 10%;
 
-    --border: 36 15% 25%;
-    --input: 36 15% 25%;
+    --border: 35 8% 19%;
+    --input: 35 8% 19%;
     --ring: 47 100% 50%;
 
     /* ─── Bubble tokens (dark) ────────────────────────────────── */
@@ -178,9 +181,11 @@
     --bubble-outgoing-foreground: 210 20% 94%;
     --bubble-outgoing-border:     217 20% 38%;
 
-    --bubble-incoming:            36 18% 20%;
-    --bubble-incoming-foreground: 45 15% 88%;
-    --bubble-incoming-border:     38 14% 30%;
+    /* Incoming (cliente): superfície sutil sobre o fundo warm-dark (#191714),
+       lendo como translúcida ~rgba(255,255,255,0.04) + linha ~0.06. */
+    --bubble-incoming:            36 9% 14%;
+    --bubble-incoming-foreground: 45 12% 90%;
+    --bubble-incoming-border:     36 8% 22%;
 
     --bubble-ai:                  38 22% 24%;
     --bubble-ai-foreground:       47 40% 90%;
@@ -200,7 +205,7 @@
     --command-palette-bg:     220 15% 10%;
     --command-palette-border: 220 10% 20%;
 
-    --sidebar-background: 36 20% 10%;
+    --sidebar-background: 36 12% 7%;
     --sidebar-foreground: 45 20% 90%;
   }
 }
@@ -376,7 +381,7 @@
   }
 
   .topnav-item {
-    @apply flex items-center gap-1.5 px-3 py-1.5 text-[13.5px] text-foreground/55 rounded-md cursor-pointer select-none;
+    @apply relative flex items-center gap-1.5 px-3 py-1.5 text-[13.5px] text-foreground/55 rounded-md cursor-pointer select-none;
     @apply transition-all duration-150 ease-out;
     @apply hover:text-foreground/85;
     font-weight: 460;
@@ -386,6 +391,82 @@
   .topnav-item-active {
     @apply text-foreground;
     font-weight: 600;
+  }
+
+  /* Active-tab underline — neon yellow (same as the selected calendar day),
+     grows outward from the center each time a tab becomes active. */
+  .topnav-item-active::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 20px;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, #ffd400, transparent);
+    box-shadow: 0 0 8px rgba(255, 212, 0, 0.7);
+    transform: translateX(-50%) scaleX(1);
+    transform-origin: center;
+    animation: topnavUnderline 0.3s cubic-bezier(0.22, 0.68, 0.36, 1);
+    pointer-events: none;
+  }
+
+  @keyframes topnavUnderline {
+    from {
+      transform: translateX(-50%) scaleX(0);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(-50%) scaleX(1);
+      opacity: 1;
+    }
+  }
+
+  /* ─── DashboardTV — painel de parede / tempo real ─────────────── */
+  .tv-live-badge {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.28);
+    color: #f87171;
+    letter-spacing: 0.06em;
+  }
+  .tv-live-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #f87171;
+    box-shadow: 0 0 8px rgba(248, 113, 113, 0.9);
+    animation: tvLive 1.8s ease-in-out infinite;
+    display: inline-block;
+  }
+  @keyframes tvLive {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.35; transform: scale(0.75); }
+  }
+
+  /* KPI cards — micro hover lift */
+  .tv-kpi {
+    transition: transform .45s cubic-bezier(.2,.8,.2,1), box-shadow .45s ease, border-color .45s ease;
+    will-change: transform;
+  }
+  .tv-kpi:hover {
+    transform: translateY(-3px);
+    border-color: rgba(255,255,255,0.12) !important;
+    box-shadow: 0 12px 28px -12px rgba(0,0,0,0.6);
+  }
+
+  /* Soft sheen sweeping across the hero KPI */
+  .tv-sheen {
+    position: absolute; inset: 0;
+    background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.07) 50%, transparent 65%);
+    transform: translateX(-120%);
+    animation: tvSheen 6.5s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes tvSheen {
+    0%, 70%  { transform: translateX(-120%); }
+    100%     { transform: translateX(120%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tv-live-dot, .tv-sheen { animation: none; }
   }
 
   .topnav-item-locked {
@@ -517,6 +598,12 @@
   /* V8 Racing Font */
   .font-racing {
     font-family: 'Racing Sans One', 'Inter', sans-serif;
+  }
+
+  /* Display font — headings premium (mesma família do mockup/landing) */
+  .font-display {
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
+    letter-spacing: -0.02em;
   }
 
   .animate-pulse-success {

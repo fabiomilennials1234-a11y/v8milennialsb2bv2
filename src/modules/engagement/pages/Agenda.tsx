@@ -17,7 +17,6 @@ import {
   addWeeks,
   subWeeks,
   addMonths,
-  startOfDay,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
@@ -31,22 +30,25 @@ import {
 } from "@/modules/integrations/hooks/useGoogleCalendar";
 import { useCalendarSharing } from "@/modules/integrations/hooks/useGoogleCalendarSharing";
 
-import type { EventSource, UnifiedEvent } from "@/modules/engagement/components/agenda/agenda-helpers";
+import type { EventTypeKey, UnifiedEvent } from "@/modules/engagement/components/agenda/agenda-helpers";
 import {
   getWeekDays,
   normalizeAgendaEvents,
   normalizeGoogleEvents,
+  EVENT_TYPE_KEYS,
+  normalizeEventType,
 } from "@/modules/engagement/components/agenda/agenda-helpers";
 import { AgendaTopBar, type ViewType } from "@/modules/engagement/components/agenda/AgendaTopBar";
 import { TimeGrid } from "@/modules/engagement/components/agenda/TimeGrid";
 import { MonthView } from "@/modules/engagement/components/agenda/MonthView";
+import { DayAgendaView } from "@/modules/engagement/components/agenda/DayAgendaView";
 import {
   EventDetailPopover,
   type PopoverState,
 } from "@/modules/engagement/components/agenda/EventDetailPopover";
 import { CreateMeetingDialog } from "@/modules/engagement/components/agenda/CreateMeetingDialog";
 
-// â”€â”€â”€ Google Calendar user colors (for shared calendars overlay) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Google Calendar user colors (for shared calendars overlay) ───────────────
 
 const USER_COLORS = [
   "#4285F4",   // Google blue -- own
@@ -58,41 +60,34 @@ const USER_COLORS = [
   "#06B6D4",   // cyan
 ];
 
-// â”€â”€â”€ Available internal sources â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-const INTERNAL_SOURCES: EventSource[] = [
-  "meeting",
-  "follow_up",
-  "scheduled_message",
-  "pipe_confirmacao",
-];
-
-// â”€â”€â”€ Main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Main component ──────────────────────────────────────────────────────────
 
 export default function Agenda() {
   const { session } = useAuth();
 
-  const [view, setView] = useState<ViewType>("day");
+  // View switcher removed — Agenda is day-only. Week/Month code paths remain
+  // inert (reversible) should we reintroduce the switcher later.
+  const [view] = useState<ViewType>("day");
   const [date, setDate] = useState(new Date());
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitialStart, setCreateInitialStart] = useState<Date | undefined>();
 
-  // â”€â”€ Source visibility toggles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const [activeSources, setActiveSources] = useState<Set<EventSource>>(
-    () => new Set<EventSource>([...INTERNAL_SOURCES, "google"]),
+  // ── Event-type visibility toggles ───────────────────────────────────────────
+  const [activeTypes, setActiveTypes] = useState<Set<EventTypeKey>>(
+    () => new Set<EventTypeKey>(EVENT_TYPE_KEYS),
   );
 
-  const toggleSource = useCallback((source: EventSource) => {
-    setActiveSources((prev) => {
+  const toggleType = useCallback((type: EventTypeKey) => {
+    setActiveTypes((prev) => {
       const next = new Set(prev);
-      if (next.has(source)) next.delete(source);
-      else next.add(source);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
       return next;
     });
   }, []);
 
-  // â”€â”€ Google Calendar overlay data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Google Calendar overlay data ────────────────────────────────────────────
   const { data: gcalStatus } = useGoogleCalendarStatus();
   const { data: sharingData } = useCalendarSharing();
   const ownUserId = session?.user?.id ?? "";
@@ -114,11 +109,15 @@ export default function Agenda() {
     return list;
   }, [gcalStatus, sharingData, ownUserId]);
 
-  // â”€â”€ Date range for queries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Date range for queries ──────────────────────────────────────────────────
   const { startDate, endDate } = useMemo(() => {
     if (view === "day") {
-      const s = startOfDay(date);
-      return { startDate: s, endDate: addDays(s, 1) };
+      // Fetch the whole month so the mini-calendar can mark days with events;
+      // the day list itself filters down to the selected date.
+      return {
+        startDate: new Date(date.getFullYear(), date.getMonth() - 1, 1),
+        endDate: new Date(date.getFullYear(), date.getMonth() + 2, 0),
+      };
     }
     if (view === "week") {
       const s = startOfWeek(date, { locale: ptBR });
@@ -131,14 +130,14 @@ export default function Agenda() {
     };
   }, [date, view]);
 
-  // â”€â”€ Data: internal events (primary) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Data: internal events (primary) ─────────────────────────────────────────
   const {
     data: agendaRawEvents = [],
     isLoading: agendaLoading,
     refetch: refetchAgenda,
   } = useAgendaEvents(startDate, endDate);
 
-  // â”€â”€ Data: Google Calendar events (optional overlay) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Data: Google Calendar events (optional overlay) ─────────────────────────
   const {
     data: googleRawEvents,
     isLoading: googleLoading,
@@ -147,17 +146,16 @@ export default function Agenda() {
 
   const isLoading = agendaLoading || googleLoading;
 
-  // â”€â”€ Merge + filter events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Merge + filter events ───────────────────────────────────────────────────
   const allEvents: UnifiedEvent[] = useMemo(() => {
     const internal = normalizeAgendaEvents(agendaRawEvents);
-    const google =
-      activeSources.has("google") && googleRawEvents
-        ? normalizeGoogleEvents(
-            googleRawEvents as unknown[],
-            googleOwnerCalendars,
-            ownUserId,
-          )
-        : [];
+    const google = googleRawEvents
+      ? normalizeGoogleEvents(
+          googleRawEvents as unknown[],
+          googleOwnerCalendars,
+          ownUserId,
+        )
+      : [];
 
     // Deduplicate: if an internal meeting has a google_event_id, hide the
     // Google overlay duplicate to avoid showing the same event twice.
@@ -169,10 +167,12 @@ export default function Agenda() {
 
     const deduped = google.filter((g) => !googleEventIds.has(g.id));
 
-    return [...internal, ...deduped].filter((e) => activeSources.has(e.source));
-  }, [agendaRawEvents, googleRawEvents, activeSources, googleOwnerCalendars, ownUserId]);
+    return [...internal, ...deduped].filter((e) =>
+      activeTypes.has(normalizeEventType(e.eventType)),
+    );
+  }, [agendaRawEvents, googleRawEvents, activeTypes, googleOwnerCalendars, ownUserId]);
 
-  // â”€â”€ Mutations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Mutations ───────────────────────────────────────────────────────────────
   const deleteMeeting = useDeleteMeeting();
 
   const handleDeleteMeeting = useCallback(
@@ -218,7 +218,7 @@ export default function Agenda() {
     [session, refetchGoogle],
   );
 
-  // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Navigation ──────────────────────────────────────────────────────────────
   const navigate = useCallback(
     (dir: "prev" | "next" | "today") => {
       if (dir === "today") {
@@ -234,7 +234,7 @@ export default function Agenda() {
     [view],
   );
 
-  // â”€â”€ Date label â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Date label ──────────────────────────────────────────────────────────────
   const dateLabel = useMemo(() => {
     if (view === "day")
       return format(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR });
@@ -248,17 +248,13 @@ export default function Agenda() {
     return format(date, "MMMM 'de' yyyy", { locale: ptBR });
   }, [date, view]);
 
-  // â”€â”€ Source toggles for the topbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const sourceToggles = useMemo(() => {
-    const sources: EventSource[] = [...INTERNAL_SOURCES];
-    if (googleConnected) sources.push("google");
-    return sources.map((key) => ({
-      key,
-      active: activeSources.has(key),
-    }));
-  }, [activeSources, googleConnected]);
+  // ── Event-type toggles for the topbar ───────────────────────────────────────
+  const typeToggles = useMemo(
+    () => EVENT_TYPE_KEYS.map((key) => ({ key, active: activeTypes.has(key) })),
+    [activeTypes],
+  );
 
-  // â”€â”€ Event handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Event handlers ──────────────────────────────────────────────────────────
   const handleEventClick = useCallback(
     (e: React.MouseEvent, event: UnifiedEvent) => {
       e.stopPropagation();
@@ -293,18 +289,16 @@ export default function Agenda() {
 
   const weekDays = view === "week" ? getWeekDays(date) : [date];
 
-  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
       {/* Top Bar */}
       <AgendaTopBar
         dateLabel={dateLabel}
-        view={view}
-        onViewChange={setView}
         onNavigate={navigate}
-        sourceToggles={sourceToggles}
-        onToggleSource={toggleSource}
+        typeToggles={typeToggles}
+        onToggleType={toggleType}
         isLoading={isLoading}
         onRefresh={handleRefresh}
         onNewEvent={handleNewEvent}
@@ -327,6 +321,13 @@ export default function Agenda() {
               events={allEvents}
               onEventClick={handleEventClick}
               onSlotClick={(day) => handleSlotClick(day)}
+            />
+          ) : view === "day" ? (
+            <DayAgendaView
+              date={date}
+              events={allEvents}
+              onSelectDate={setDate}
+              onEventClick={handleEventClick}
             />
           ) : (
             <TimeGrid
