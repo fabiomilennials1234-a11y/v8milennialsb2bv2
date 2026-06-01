@@ -24,8 +24,15 @@ Deno.serve(withSentry('tinyerp-webhook', async (req) => {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  // Validate webhook secret (header or query param)
-  if (TINYERP_WEBHOOK_SECRET) {
+  // Validate webhook secret (header or query param) — fail-closed.
+  // Antes: `if (SECRET) { check }` pulava a validação quando o env não estava setado (fail-open).
+  {
+    if (!TINYERP_WEBHOOK_SECRET) {
+      return new Response(
+        JSON.stringify({ error: "Webhook secret not configured" }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     const url = new URL(req.url);
     const secretFromQuery = url.searchParams.get("secret") ?? "";
     const secretFromHeader = req.headers.get("x-webhook-secret") ?? "";
