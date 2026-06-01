@@ -143,6 +143,28 @@ Doc-only.
 - `master` = 39% dos símbolos / 0,3% do reach — purga maciça em 9.4 (só `useMasterAuth` mantém-se PUB)
 - `permissions` (área 🟠) — 33 símbolos, só 9 com consumer externo (4 com reach ≥ 5)
 
+### Slice 9.1b — Inverter dependência `realtime → identity` (precursora / enabler) — ✅ CONCLUÍDO 2026-05-29
+
+**Inserida fora da sequência original.** Não estava no plano 9.1→9.5; surgiu como **bloqueador** das movimentações de arquivo (9.2–9.5).
+
+**Por quê.** `src/shared/realtime/useRealtimeSubscription.ts` importava `useOrganization` de `@/modules/identity` (barrel raiz) — um edge `shared → module` que fechava um ciclo: o barrel re-exporta hooks (`useTeamMembers`, `useOrgRolePermissions`) que chegam a `useRealtimeSubscription`, que reimportava o barrel. Esse único edge gerava **27 violações `no-circular`** no dep-cruise (todos os ciclos que atravessavam `useRealtimeSubscription`, ancorados em `identity/index.ts`). Mover arquivos de `identity` em 9.2–9.5 re-chavearia esses edges cíclicos cross-boundary a cada slice, mascarando regressões no ratchet.
+
+**O que foi feito.** Inversão via contexto React (mesmo espírito do `PipeOpsPort` da Fase 7):
+- Novo `src/shared/realtime/realtime-org-context.tsx` — `RealtimeOrgProvider` + `useRealtimeOrgId()`. **Owned** por `shared/realtime`, só importa `react`.
+- `useRealtimeSubscription.ts` passa a LER o org-id via `useRealtimeOrgId()` — não importa mais `@/modules/identity`.
+- `App.tsx`: `RealtimeOrgBridge` (deep-import `useOrganization`, preserva code-splitting) ALIMENTA o contexto, montado entre `<AuthProvider>` e `<PipeOpsProvider>`. Reatividade a org switch preservada.
+
+**Resultado (dep-cruise).** Baseline **83 → 56** (`no-circular` 60 → 33; `no-orphans` 23 inalterado). 27 `no-circular` removidos, 0 adicionados. `useIdentity`/`ProtectedRoute`/`useUserRole`/`useOrgRolePermissions`/`useRealtimeSubscription` agora em **zero** ciclos. Nenhum ciclo atravessa mais `shared/realtime`.
+
+**Impacto no plano.**
+- **Destrava 9.2–9.5**: mover arquivos `identity` não toca mais edges cíclicos cross-boundary.
+- **Recalibra alvos de baseline downstream**: critérios da Fase 9 (e do `_INDEX`) eram premissados em baseline 83. Nova base = **56**. Os alvos globais (`baseline ≤ 70`, `no-circular ≤ 50`) já foram **atingidos** por esta slice precursora; 9.2–9.5 continuam reduzindo a partir de 56.
+- **Residual conhecido (escopo 9.2+)**: sobrou 1 ciclo *intra-identity* `useTeamMembers ↔ useOrganization` (ambos importam um ao outro, sem cross-boundary). Não envolve `shared/realtime` e não bloqueia nada — será endereçado ao reorganizar `org-team/` interno (9.4).
+
+**Auto-QA (literal).** tsc app + root = 0 erros; `npm run lint` = 0 errors / 2451 warnings (pré-existentes); `npm run test:unit` = 26 files / 40 tests failed (vs baseline `d902ddc4` = 27 files / 43 failed → **zero regressão nova**; `auth-context.test.ts` flaky-async passou neste run); `useRealtimeSubscription-refactored.test.ts` + `hooks-realtime-sub.test.ts` = 23/23 verde; ratchet OK em 56.
+
+**Changelog:** [[07 — Changelog/2026-05-29-arch-deepening-9-1b-realtime-decouple]].
+
 ### Slice 9.2 — Reorganizar `auth/` interno (2-3h)
 
 Pattern Fase 8. Escopo definido por [[inventario-identity]] — statements 1, 4, 5, 42.

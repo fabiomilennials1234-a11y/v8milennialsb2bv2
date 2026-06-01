@@ -1,6 +1,6 @@
 import { useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useOrganization } from "@/modules/identity";
+import { useRealtimeOrgId } from "./realtime-org-context";
 import { useRealtimeChannel } from "./useRealtimeChannel";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
@@ -43,7 +43,7 @@ export function useRealtimeSubscription<T = any>(
   handlers?: RealtimeHandlers<T>
 ) {
   const queryClient = useQueryClient();
-  const { organizationId } = useOrganization();
+  const organizationId = useRealtimeOrgId();
 
   const queryKeysRef = useRef(queryKeys);
   queryKeysRef.current = queryKeys;
