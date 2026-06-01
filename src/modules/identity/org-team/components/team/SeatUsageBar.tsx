@@ -3,7 +3,7 @@
  */
 
 import { Users } from "lucide-react";
-import type { SeatUsage } from "@/modules/identity";
+import type { SeatUsage } from "../../hooks/useSeatUsage";
 interface SeatUsageBarProps {
   usage: SeatUsage;
 }

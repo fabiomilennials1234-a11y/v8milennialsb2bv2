@@ -66,25 +66,22 @@ src/modules/identity/
 
 ## API pública (`index.ts`)
 
-Ver `./index.ts` para superfície completa. Resumo:
+**Barrel enxuto pós-slice 9.5: 9 statements / 28 símbolos** — só os com reach cross-module + route guards/provider. Símbolos sem consumer externo foram demovidos pros sub-barris privados (`auth/`, `permissions/`, `master/`, `org-team/`), acessíveis só internamente/relativo. Ver `./index.ts`.
 
-**Auth context:** `AuthProvider`, `useAuth`.
+**No barrel raiz (público):**
+- **Auth:** `AuthProvider`, `useAuth`, `useIdentity`, `<ProtectedRoute>`.
+- **Permissions:** `assertPermission`, `useUserRole`, `useFeaturePermission`, `useFeaturePermissions`, `useCanManageCopilot`, `useCanManageWhatsApp`, `useJobTitle`, `useCanDo`, `useHasPermission`, `<PermissionProtectedRoute>`.
+- **Master:** `useMasterAuth` (único leak master — resto em `master/index.ts`, slice 9.4).
+- **Org + team:** `useOrganization`, `useOrganizationSettings`, `useConfirmacaoOverdueDays`, `isConfirmacaoOverdue`, `useOrgQuotas`, `useOrgSwitcher`, `useTeamMembers`, `useCurrentTeamMember`, `useResponsibleMembers`, `useCreateTeamMember`, `isVirtualTeamMember`, type `TeamMember`.
+- **Guard:** `<SubscriptionProtectedRoute>`.
 
-**Lib (permissions resolver):** `resolveAction`, `usePermission`, `assertPermissionClient`, `assertPermission`. Types: `AppAction`, `ResolveActionContext`, `ResolveActionResult`.
+**Demovidos pros sub-barris (PRIV — não no barrel raiz, 9.5):** resolver internals (`resolveAction`/`usePermission`/`assertPermissionClient`), role internos (`useHasRole`/`useIsAdmin`/`useMetricType`), `useCanAccessMaster`, granular perms (`usePermissions`/`useOrgRolePermissions`/`useUpdateRolePermission`/`useResetOrgRolePermissions`/`useMyPermissions`/`PERMISSION_LABELS`/etc), org/team internos (`useRequiredOrganization`/`useSeatUsage`/`useTeamMember`/`useUpdateTeamMember`/`useDeleteTeamMember`/`get/setSelectedOrgId`/`useProfile`/`useProfiles`) + ~20 types órfãos. Consumo interno via relativo ou sub-barril.
 
-**Hooks — identity + role:** `useIdentity` (+ type `Identity`), `useUserRole`, `useHasRole`, `useIsAdmin`, `useFeaturePermission`, `useFeaturePermissions`, `useCanManageCopilot`, `useCanManageWhatsApp`, `useJobTitle`, `useMetricType` (+ types `AppRole`, `UserRole`), `useCanDo`.
+**Components internos (deep-import via pages, NÃO no barrel):** `<PermissionsTab>`, `<ProfileSettings>` (org-team/), `<MemberPermissions>`/`<SeatUsageBar>`/`<TeamMemberCard>`/`<TeamStats>` (org-team/components/team/), master/components/*.
 
-**Hooks — master ops (sub-conceito `master/`):** o barrel raiz re-exporta SÓ `useMasterAuth`, `useCanAccessMaster` (+ types `MasterUser`, `MasterPermissions`) via `./master` (slice 9.4 demoção). O restante (`useMasterOperations`/`useAutomationJobs`/`useJobsOverview`/`useMasterOrganizations`/`useMasterUsers`/`useMasterPlans`/`useMasterAuditLogs` + suas variantes/types) saiu do barrel raiz e vive em `master/index.ts` — consumido só pelas pages/components master internas (deep-import via App.tsx).
+**Hooks que ficam em `hooks/` (não org-team):** `useAvatarMap`, `useAutoAdminAssignment`.
 
-**Hooks — permissions:** `usePermissions`, `useOrgRolePermissions`, `useUpdateRolePermission`, `useResetOrgRolePermissions`.
-
-**Hooks — org + team:** `useOrganization`, `useOrganizationSettings`, `useOrgQuotas`, `useOrgSwitcher`, `useSeatUsage`, `useTeamMembers`, `useProfiles`.
-
-**Hooks (slice 16 longtail):** `useAvatarMap` (resolve avatares por user_id), `useAutoAdminAssignment` (promove primeiro user a admin se ainda não houver admin na org).
-
-**Components:** `<ProtectedRoute>`, `<PermissionProtectedRoute>`, `<SubscriptionProtectedRoute>`, `<PermissionsTab>`, `<ProfileSettings>`, `<MemberPermissions>`, `<SeatUsageBar>`, `<TeamMemberCard>`, `<TeamStats>`. (master components em `master/components/`, deep-import via App.tsx — NÃO no barrel raiz.)
-
-**Pages (deep-import, não no barrel):** `pages/Auth`, `pages/Signup`, `pages/ResetPassword`, `pages/Equipe`, `master/pages/*` (master, slice 9.4).
+**Pages (deep-import, não no barrel):** `auth/pages` (Auth/Signup/ResetPassword via `pages/`), `org-team/pages/Equipe`, `master/pages/*`.
 
 **Eventos (post slice 19):** `user.signed_in`, `org.switched`, `permission.granted`.
 

@@ -270,14 +270,15 @@ Escopo definido por [[inventario-identity]] — `org-team`: statements 28-41 (14
 3. Alvo: **≈ 18 export statements** (66/18 ≈ 3.7 — supera alvo ≥ 3.0).
 4. Atualizar `identity/CLAUDE.md` refletindo nova estrutura interna (`auth/`, `permissions/`, `org-team/`, `master/`).
 
-**Critério aceite 9.5:**
-- [ ] `identity/index.ts` ≤ 20 export statements (alvo concreto: ~18)
-- [ ] files-per-export ≥ 3.0 (alvo concreto: 3.7)
-- [ ] Build + lint + lint:deps:check verde
-- [ ] Suite tests pass (não regride vs baseline)
-- [ ] Baseline ratchet reduzido em ≥ 3 violations
-- [ ] Sub-CLAUDE.md `identity` atualizado com 4 sub-pastas
-- [ ] 25 símbolos com reach externo (inventário 9.1) continuam acessíveis via `@/modules/identity` (zero regressão consumer)
+**Critério aceite 9.5 (PR #627 — Fase 9 CONCLUÍDA):**
+- [x] `identity/index.ts` = **9 export statements** (era 33; ≤20 ✓, superou alvo ~18 — reach-driven minimal)
+- [x] files-per-export = **7.9** (71/9; ≥3.0 ✓)
+- [x] Build exit 0 + lint 0 err + ratchet OK 55 0-new (todos verdes)
+- [x] test:unit não regride (23 fail files/38 tests = baseline; zero "has no exported member")
+- [~] Baseline ratchet: NEUTRO nesta slice (purga de re-exports não-cíclicos); a redução 83→55 (−28) veio cumulativa de 9.1b+9.4a
+- [x] Sub-CLAUDE.md `identity` atualizado (4 sub-pastas: auth/permissions/master/org-team)
+- [x] 24 símbolos com reach externo (medido empírico ripgrep quote-agnostic) + 4 route guards/provider continuam no barrel — zero regressão consumer (tsc 0 prova)
+- 1 repoint interno: SeatUsageBar (type SeatUsage via barrel → relativo). Único self-import de símbolo demovido.
 
 ## Riscos + mitigação
 
