@@ -29,19 +29,28 @@ Inclui:
 
 ```
 src/modules/identity/
+├── auth/                             # sub-conceito auth (slice 9.2 arch-deepening) — API interna privada, re-exportada pelo barrel raiz
+│   ├── contexts/AuthContext.tsx      # AuthProvider + useAuth (singleton de sessão Supabase)
+│   ├── hooks/useIdentity.ts          # useIdentity + type Identity
+│   ├── components/ProtectedRoute.tsx # <ProtectedRoute>
+│   └── index.ts                      # sub-barrel privado (4 statements / 5 símbolos)
+├── permissions/                      # sub-conceito permissions (slice 9.3 arch-deepening) — API interna privada, re-exportada pelo barrel raiz
+│   ├── lib/permissions.ts            # resolveAction, usePermission, assertPermissionClient, assertPermission
+│   ├── hooks/useUserRole.ts          # useUserRole + role/feature hooks (useIsAdmin, useFeaturePermission(s), useCanManage*, ...)
+│   ├── hooks/useCanDo.ts             # useCanDo
+│   ├── hooks/usePermissions.ts       # useHasPermission, useMyPermissions, useOrganizationRolePermissions, ..., PERMISSION_LABELS
+│   ├── hooks/useOrgRolePermissions.ts        # mapa agregado das 12 toggles (Pitstop > Permissões)
+│   ├── hooks/useUpdateRolePermission.ts      # mutation de toggle (storage split)
+│   ├── hooks/useResetOrgRolePermissions.ts   # reset bulk pro padrão
+│   ├── components/PermissionProtectedRoute.tsx
+│   ├── components/PermissionsTab.tsx  # Pitstop > Permissões (deep-import direto via Configuracoes p/ lazy chunk — NÃO no sub-barrel)
+│   └── index.ts                      # sub-barrel privado
 ├── components/
 │   ├── master/                       # Master ops UI (ApiStatusTab, BillingOverrideModal, MasterLayout, MasterRoute, MasterSidebar, PlanEditor, PlanFeatureCard, QuotaManagementPanel, onboarding/)
 │   ├── team/                         # Team management UI (MemberPermissions, SeatUsageBar, TeamMemberCard, TeamStats) — absorvidos em slice 16
-│   ├── PermissionProtectedRoute.tsx
-│   ├── PermissionsTab.tsx
 │   ├── ProfileSettings.tsx
-│   ├── ProtectedRoute.tsx
 │   └── SubscriptionProtectedRoute.tsx
-├── contexts/
-│   └── AuthContext.tsx
-├── hooks/                            # 22 hooks (auth, role, master, permissions, org, profiles, avatar)
-├── lib/
-│   └── permissions.ts                # resolveAction, usePermission, assertPermissionClient, assertPermission
+├── hooks/                            # 15 hooks (master, org, team, profiles, avatar) — role/permissions movidos p/ permissions/ em 9.3, useIdentity p/ auth/ em 9.2
 ├── pages/                            # Auth, Signup, ResetPassword, Equipe, master/
 ├── index.ts                          # API pública
 └── CLAUDE.md                         # este arquivo

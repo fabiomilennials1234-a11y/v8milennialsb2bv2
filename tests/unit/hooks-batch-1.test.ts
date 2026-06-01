@@ -42,7 +42,7 @@ vi.mock("@/integrations/supabase/client", () => ({
     auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "u1", email: "test@t.com" } } }) },
   },
 }));
-vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: {} }) }));
+vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: {} }) }));
 vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-test", isReady: true }),
   useRequiredOrganization: () => ({ organizationId: "org-test", teamMemberId: "tm1", isReady: true }),
@@ -56,7 +56,7 @@ vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscri
 vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerLeadCreatedInCustomPipeline: vi.fn() }));
-vi.mock("@/modules/identity/lib/permissions", () => ({
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({
   assertIsAdmin: vi.fn(),
   useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true),
 }));

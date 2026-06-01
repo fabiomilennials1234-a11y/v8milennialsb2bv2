@@ -37,7 +37,7 @@ const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
 // ─── Import module under test ────────────────────────────
-import { AuthProvider, useAuth } from '@/modules/identity/contexts/AuthContext';
+import { AuthProvider, useAuth } from '@/modules/identity/auth/contexts/AuthContext';
 
 // ─── Helpers ─────────────────────────────────────────────
 
@@ -325,7 +325,7 @@ describe('AuthContext', () => {
     }));
 
     const { AuthProvider: FreshAuthProvider, useAuth: freshUseAuth } = await import(
-      '@/modules/identity/contexts/AuthContext'
+      '@/modules/identity/auth/contexts/AuthContext'
     );
 
     const freshWrapper = ({ children }: { children: ReactNode }) =>

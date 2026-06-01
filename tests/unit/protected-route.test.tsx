@@ -8,7 +8,7 @@ const mockUseCurrentTeamMember = vi.fn();
 const mockUseMasterAuth = vi.fn();
 const mockUseLocation = vi.fn();
 
-vi.mock('@/modules/identity/contexts/AuthContext', () => ({
+vi.mock('@/modules/identity/auth/contexts/AuthContext', () => ({
   useAuth: (...args: unknown[]) => mockUseAuth(...args),
 }));
 
@@ -21,11 +21,11 @@ vi.mock('@/modules/identity/hooks/useMasterAuth', () => ({
 }));
 
 const mockUseIdentity = vi.fn();
-vi.mock('@/modules/identity/hooks/useIdentity', () => ({
+vi.mock('@/modules/identity/auth/hooks/useIdentity', () => ({
   useIdentity: (...args: unknown[]) => mockUseIdentity(...args),
 }));
 
-vi.mock('@/modules/identity/hooks/useUserRole', () => ({
+vi.mock('@/modules/identity/permissions/hooks/useUserRole', () => ({
   useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
@@ -74,7 +74,7 @@ vi.mock('@/components/ui/button', () => ({
   ),
 }));
 
-import { ProtectedRoute } from '@/modules/identity/components/ProtectedRoute';
+import { ProtectedRoute } from '@/modules/identity/auth/components/ProtectedRoute';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

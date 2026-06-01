@@ -46,7 +46,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/modules/identity/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "u1" }, session: { access_token: "token" } }),
 }));
 vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
@@ -68,7 +68,7 @@ vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({
   followupRuleToDB: vi.fn((r: any) => r),
 }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/modules/identity/lib/permissions", () => ({
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
 }));

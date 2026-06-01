@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
-import { useIdentity } from "./useIdentity";
+import { useIdentity } from "../auth/hooks/useIdentity";
 
 const DEFAULT_OVERDUE_DAYS = 5;
 const DEFAULT_REORDER_CYCLE_DAYS = 30;

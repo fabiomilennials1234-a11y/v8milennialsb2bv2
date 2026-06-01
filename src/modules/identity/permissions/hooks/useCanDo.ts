@@ -1,4 +1,4 @@
-import { useIdentity } from "./useIdentity";
+import { useIdentity } from "../../auth/hooks/useIdentity";
 import {
   ACTION_TO_FEATURE,
   resolvePermission,

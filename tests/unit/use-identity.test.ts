@@ -32,7 +32,7 @@ const mockFeaturePerms = {
   isError: false,
 };
 
-vi.mock("@/modules/identity/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => mockAuth,
 }));
 
@@ -44,12 +44,12 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => mockTeamMember,
 }));
 
-vi.mock("@/modules/identity/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useFeaturePermissions: () => mockFeaturePerms,
 }));
 
 // Import after mocks
-import { useIdentity } from "@/modules/identity/hooks/useIdentity";
+import { useIdentity } from "@/modules/identity/auth/hooks/useIdentity";
 
 describe("useIdentity", () => {
   beforeEach(() => {

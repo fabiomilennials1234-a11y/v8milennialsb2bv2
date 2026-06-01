@@ -45,7 +45,7 @@ vi.mock("@/shared/hooks/use-keyboard-offset", () => ({
   useKeyboardOffset: () => ({ offset: 0, isKeyboardOpen: false }),
 }));
 
-vi.mock("@/modules/identity/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "test-user-id" } }),
 }));
 

@@ -9,7 +9,7 @@
  */
 
 // ── Auth context ───────────────────────────────────────────────────────────
-export { AuthProvider, useAuth } from "./contexts/AuthContext";
+export { AuthProvider, useAuth } from "./auth";
 
 // ── Lib (permissions resolver) ─────────────────────────────────────────────
 export {
@@ -17,16 +17,16 @@ export {
   usePermission,
   assertPermissionClient,
   assertPermission,
-} from "./lib/permissions";
+} from "./permissions";
 export type {
   AppAction,
   ResolveActionContext,
   ResolveActionResult,
-} from "./lib/permissions";
+} from "./permissions";
 
 // ── Hooks: identity + role ─────────────────────────────────────────────────
-export { useIdentity } from "./hooks/useIdentity";
-export type { Identity } from "./hooks/useIdentity";
+export { useIdentity } from "./auth";
+export type { Identity } from "./auth";
 export {
   useUserRole,
   useHasRole,
@@ -37,9 +37,9 @@ export {
   useCanManageWhatsApp,
   useJobTitle,
   useMetricType,
-} from "./hooks/useUserRole";
-export type { AppRole, UserRole } from "./hooks/useUserRole";
-export { useCanDo } from "./hooks/useCanDo";
+} from "./permissions";
+export type { AppRole, UserRole } from "./permissions";
+export { useCanDo } from "./permissions";
 
 // ── Hooks: master ops ──────────────────────────────────────────────────────
 export { useMasterAuth, useCanAccessMaster } from "./hooks/useMasterAuth";
@@ -106,16 +106,16 @@ export {
   useTeamMemberOrgPermissions,
   useSaveTeamMemberOrgPermissions,
   PERMISSION_LABELS,
-} from "./hooks/usePermissions";
+} from "./permissions";
 export type {
   PermissionKey,
   TeamMemberOrgPermission,
-} from "./hooks/usePermissions";
-export { useOrgRolePermissions } from "./hooks/useOrgRolePermissions";
-export type { OrgRolePermissionsMap } from "./hooks/useOrgRolePermissions";
-export { useUpdateRolePermission } from "./hooks/useUpdateRolePermission";
-export type { UpdateRolePermissionInput } from "./hooks/useUpdateRolePermission";
-export { useResetOrgRolePermissions } from "./hooks/useResetOrgRolePermissions";
+} from "./permissions";
+export { useOrgRolePermissions } from "./permissions";
+export type { OrgRolePermissionsMap } from "./permissions";
+export { useUpdateRolePermission } from "./permissions";
+export type { UpdateRolePermissionInput } from "./permissions";
+export { useResetOrgRolePermissions } from "./permissions";
 
 // ── Hooks: organization + settings ─────────────────────────────────────────
 export { useOrganization, useRequiredOrganization } from "./hooks/useOrganization";
@@ -155,6 +155,6 @@ export { useProfile, useProfiles } from "./hooks/useProfiles";
 export type { Profile } from "./hooks/useProfiles";
 
 // ── Components ─────────────────────────────────────────────────────────────
-export { ProtectedRoute } from "./components/ProtectedRoute";
-export { PermissionProtectedRoute } from "./components/PermissionProtectedRoute";
+export { ProtectedRoute } from "./auth";
+export { PermissionProtectedRoute } from "./permissions";
 export { SubscriptionProtectedRoute } from "./components/SubscriptionProtectedRoute";

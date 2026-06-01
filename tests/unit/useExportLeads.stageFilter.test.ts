@@ -77,12 +77,12 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-123" }),
 }));
 
-vi.mock("@/modules/identity/lib/permissions", () => ({
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
   assertPermission: vi.fn().mockResolvedValue(undefined),
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/modules/identity/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/auth/hooks/useIdentity", () => ({
   useIdentity: () => ({
     userId: "u1",
     organizationId: "org-123",
@@ -95,7 +95,7 @@ vi.mock("@/modules/identity/hooks/useIdentity", () => ({
     isReady: true,
   }),
 }));
-vi.mock("@/modules/identity/hooks/useCanDo", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 

@@ -48,7 +48,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/modules/identity/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "u1" }, session: { access_token: "t" } }),
 }));
 vi.mock("@/modules/identity/hooks/useOrganization", () => ({
@@ -79,12 +79,12 @@ vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({
 vi.mock("@/lib/workflowTrigger", () => ({
   triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/modules/identity/lib/permissions", () => ({
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
 }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/modules/identity/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
 vi.mock("@/contexts/OrgFeaturesContext", () => ({
   useOrgFeatures: () => ({ hasFeature: () => true, checkLimit: () => -1 }),
 }));

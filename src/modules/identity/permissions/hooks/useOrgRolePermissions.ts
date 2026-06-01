@@ -14,7 +14,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
+import { useOrganization } from "../../hooks/useOrganization";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { ALL_PERMISSIONS, PERMISSION_GROUPS } from "@/lib/permission-catalog";
 

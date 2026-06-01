@@ -13,11 +13,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
 
-const PROD_URL = 'https://jsjsmuncfkbsbzqzqhfq.supabase.co';
-const PROD_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpzanNtdW5jZmtic2J6cXpxaGZxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTIxODc4MSwiZXhwIjoyMDg0Nzk0NzgxfQ.dcAGjeVLcMIh2x2JRdCYFmD_6Gtp8cdVxg4hL1dNz2w';
-const PROD_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpzanNtdW5jZmtic2J6cXpxaGZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMTg3ODEsImV4cCI6MjA4NDc5NDc4MX0.rwmZh_bLyRIluqo0KN2TsK1PR2S0TriduUOzQ_RnaKQ';
+const PROD_URL =
+  process.env.PROD_SUPABASE_URL || 'https://jsjsmuncfkbsbzqzqhfq.supabase.co';
+const PROD_SERVICE_KEY = process.env.PROD_SUPABASE_SERVICE_ROLE_KEY ?? '';
+const PROD_ANON_KEY = process.env.PROD_SUPABASE_ANON_KEY ?? '';
 
-const admin = createClient(PROD_URL, PROD_SERVICE_KEY);
+const admin = createClient(PROD_URL, PROD_SERVICE_KEY || 'skipped-no-key');
 
 const TEST_EMAIL = `test-human-pause-${Date.now()}@test.local`;
 const TEST_PASSWORD = 'TestHumanPause123!';
@@ -34,7 +35,7 @@ let testInstanceId: string;
 let userClient: ReturnType<typeof createClient>;
 let msgIdsToClean: string[] = [];
 
-describe('Human Pause Copilot', () => {
+describe.skipIf(!PROD_SERVICE_KEY)('Human Pause Copilot', () => {
   beforeAll(async () => {
     // Use Milennials org (has active copilot plan)
     testOrgId = '6030520a-2ca7-477d-be89-55758e2cd808';

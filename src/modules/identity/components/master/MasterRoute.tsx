@@ -8,7 +8,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, ShieldAlert } from "lucide-react";
-import { useIdentity } from "../../hooks/useIdentity";
+import { useIdentity } from "../../auth/hooks/useIdentity";
 import { toast } from "sonner";
 
 interface MasterRouteProps {

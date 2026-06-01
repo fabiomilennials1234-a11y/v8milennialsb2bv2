@@ -31,14 +31,14 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-1" }),
 }));
 
-vi.mock("@/modules/identity/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => ({
     user: { id: "user-1", email: "test@test.com" },
     loading: false,
   }),
 }));
 
-vi.mock("@/modules/identity/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useUserRole: () => ({ role: "admin", isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false }),
 }));
@@ -47,7 +47,7 @@ vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({ isMaster: false }),
 }));
 
-vi.mock("@/modules/identity/hooks/useCanDo", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 

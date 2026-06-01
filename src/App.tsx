@@ -6,11 +6,13 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { AuthProvider, useAuth } from "@/modules/identity/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/modules/identity/auth";
+import { useOrganization } from "@/modules/identity/hooks/useOrganization";
+import { RealtimeOrgProvider } from "@/shared/realtime/realtime-org-context";
 import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
 import { PipeOpsProvider } from "@/modules/pipelines";
-import { ProtectedRoute } from "@/modules/identity/components/ProtectedRoute";
-import { PermissionProtectedRoute } from "@/modules/identity/components/PermissionProtectedRoute";
+import { ProtectedRoute } from "@/modules/identity/auth";
+import { PermissionProtectedRoute } from "@/modules/identity/permissions";
 import { MainLayout } from "@/modules/platform/components/layout/MainLayout";
 import { useAutoAdminAssignment } from "@/modules/identity/hooks/useAutoAdminAssignment";
 import { SubscriptionProtectedRoute } from "@/modules/identity/components/SubscriptionProtectedRoute";
@@ -148,6 +150,13 @@ function EnvMissingScreen() {
       </p>
     </div>
   );
+}
+
+// Alimenta o contexto de org-id do realtime (shared) a partir do identity.
+// Inverte o edge realtime→identity (slice 9.1b). Reativo a org switch.
+function RealtimeOrgBridge({ children }: { children: React.ReactNode }) {
+  const { organizationId } = useOrganization();
+  return <RealtimeOrgProvider organizationId={organizationId}>{children}</RealtimeOrgProvider>;
 }
 
 // Wrapper for pages that need the main layout
@@ -672,17 +681,19 @@ const App = () => {
             <ServiceWorkerUpdater />
             <BrowserRouter>
               <AuthProvider>
-                <PipeOpsProvider>
-                  <GlobalErrorBoundary>
-                    <PushPermissionPrompt />
-                    <CommandPaletteProvider>
-                      <GlobalShortcutsProvider>
-                        <AppRoutes />
-                        <CommandPaletteComponent />
-                      </GlobalShortcutsProvider>
-                    </CommandPaletteProvider>
-                  </GlobalErrorBoundary>
-                </PipeOpsProvider>
+                <RealtimeOrgBridge>
+                  <PipeOpsProvider>
+                    <GlobalErrorBoundary>
+                      <PushPermissionPrompt />
+                      <CommandPaletteProvider>
+                        <GlobalShortcutsProvider>
+                          <AppRoutes />
+                          <CommandPaletteComponent />
+                        </GlobalShortcutsProvider>
+                      </CommandPaletteProvider>
+                    </GlobalErrorBoundary>
+                  </PipeOpsProvider>
+                </RealtimeOrgBridge>
               </AuthProvider>
             </BrowserRouter>
           </TooltipProvider>

@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "../contexts/AuthContext";
-import { useCurrentTeamMember } from "./useTeamMembers";
-import { useMasterAuth } from "./useMasterAuth";
+import { useAuth } from "../../auth/contexts/AuthContext";
+import { useCurrentTeamMember } from "../../hooks/useTeamMembers";
+import { useMasterAuth } from "../../hooks/useMasterAuth";
 import type { Tables } from "@/integrations/supabase/types";
 
 export type UserRole = Tables<"user_roles">;

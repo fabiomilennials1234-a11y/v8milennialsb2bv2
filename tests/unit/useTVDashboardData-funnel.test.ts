@@ -28,7 +28,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
+vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
 vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
   useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
@@ -52,7 +52,7 @@ vi.mock("@/modules/engagement/hooks/useGoals", () => ({
   useTeamGoals: () => ({ data: [{ type: "vendas", target_value: 100000, team_member_id: null, name: "Meta" }] }),
   useIndividualGoals: () => ({ data: { salesGoals: [], meetingsGoals: [] } }),
 }));
-vi.mock("@/modules/identity/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useUserRole: () => "admin",
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),

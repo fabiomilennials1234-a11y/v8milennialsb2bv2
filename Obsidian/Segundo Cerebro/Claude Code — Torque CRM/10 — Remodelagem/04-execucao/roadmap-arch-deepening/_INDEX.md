@@ -18,6 +18,8 @@ relacionados:
 > Fase 7 (ciclo leads↔pipelines) **replanejada**: abordagem barrel ABORTADA (baseline 86→120), event-bus não resolve forward-edges síncronos. Único caminho = inversão `PipeOpsPort`. Ver banner em [[fase-7-quebrar-ciclo-leads-pipelines]]. **Fase 8** provavelmente absorvida (re-deepen pipelines em sub-pastas faz parte da inversão) — confirmar com CTO antes de iniciar.
 >
 > **Update 2026-05-29 — Fase 7 CONCLUÍDA.** Inversão entregue em 7.3-bis (deep edges → 0) e os 3 barrel-edges residuais zerados em 7.4-bis. Ciclo `leads ↔ pipelines` = **0** em todas as formas (deep + barrel). Fase 8 absorvida. Próximo: Fase 9 (identity split).
+>
+> **Update 2026-05-29 — Slice 9.1b (precursora da Fase 9) CONCLUÍDA.** Quebrado o ciclo `shared → module` `realtime → identity` via contexto React owned por `shared/realtime` e alimentado por `identity` no root do app (`RealtimeOrgBridge` em `App.tsx`), mesmo espírito do `PipeOpsPort`. **Baseline dep-cruise 83 → 56** (`no-circular` 60 → 33; `no-orphans` 23 inalterado). 27 `no-circular` removidos — todos os ciclos que atravessavam `useRealtimeSubscription` (anchor `identity/index.ts` ↔ `useTeamMembers`/`useOrgRolePermissions` → `useRealtimeSubscription` → barrel). `useIdentity`/`ProtectedRoute`/`useUserRole` agora em **zero** ciclos. Destrava 9.2–9.5 (mover arquivos identity não re-chaveia mais edges cíclicos cross-boundary). Os alvos de baseline downstream da Fase 9 (premissados em 83) recalibram para a nova base 56. Ver [[fase-9-identity-split]] § Slice 9.1b.
 
 ## Contexto
 
@@ -53,10 +55,10 @@ Análise via skill identificou 3 candidatos com ROI mais alto pra deepening pós
 | Métrica | Hoje (develop) | Após roadmap | Real (7.3-bis) | Como medir |
 |---|---:|---:|---:|---|
 | `pipelines` files-per-export | 0.85 | ≥ 3.0 | **3.58** ✅ | `find / wc + grep ^export` |
-| `identity` files-per-export | 1.50 | ≥ 3.0 | 1.50 (Fase 9 pendente) | idem |
+| `identity` files-per-export | 1.50 | ≥ 3.0 | 1.55 (Fase 9 em curso — 9.2 ✅ 9.3 ✅; 68 files / 44 exports; sub-pastas `auth/` + `permissions/` criadas; demoção barrel = 9.5) | idem |
 | Ciclo `leads ↔ pipelines` (deep + barrel) | 47 | 0 | **0** ✅ (deep zerado em 7.3-bis; 3 barrel-edges zerados em 7.4-bis) | grep cross-module |
-| `dependency-cruiser` baseline | 86 | ≤ 70 | **83** (em direção a ≤70) | `lint:deps:baseline` |
-| Ciclos `no-circular` | 63 | ≤ 50 | **60** (em direção a ≤50) | idem |
+| `dependency-cruiser` baseline | 86 | ≤ 70 | **56** ✅ (9.1b: 83 → 56; 9.2 neutro 0-new) | `lint:deps:baseline` |
+| Ciclos `no-circular` | 63 | ≤ 50 | **33** ✅ (9.1b: 60 → 33; 9.2 neutro) | idem |
 | Test coverage em `pipelines` e `identity` | preservar | preservar | preservado (zero regressão) | npm run test:coverage |
 
 ## Constraints invariantes (todas as fases)

@@ -23,7 +23,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => mockOrgState,
 }));
 
-vi.mock("@/modules/identity/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useUserRole: () => mockUserRoleState,
   useIsAdmin: () => ({ isAdmin: (mockUserRoleState.data as any)?.role === "admin", isLoading: false }),
 }));
@@ -32,7 +32,7 @@ vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
   useMasterAuth: () => mockMasterAuthState,
 }));
 
-vi.mock("@/modules/identity/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "user-1" }, session: null, loading: false }),
 }));
 
