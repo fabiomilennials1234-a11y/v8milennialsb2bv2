@@ -21,7 +21,7 @@ import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanba
 import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import { usePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus } from "@/modules/pipelines/hooks/legacy/usePipeConfirmacao";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/modules/pipelines/hooks/model/usePipelineStages";
-import { usePaginatedPipeline } from "@/modules/pipelines/hooks/perf/usePaginatedPipeline";
+import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/modules/leads";
 import { useCreatePipeProposta } from "@/modules/pipelines/hooks/legacy/usePipePropostas";

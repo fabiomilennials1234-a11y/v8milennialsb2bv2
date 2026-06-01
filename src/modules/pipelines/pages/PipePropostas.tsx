@@ -34,7 +34,7 @@ import { useCanDo } from "@/modules/identity";
 import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import { useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } from "@/modules/pipelines/hooks/legacy/usePipePropostas";
-import { usePaginatedPipeline } from "@/modules/pipelines/hooks/perf/usePaginatedPipeline";
+import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
 import { usePipePropostasMetrics } from "@/modules/pipelines/hooks/config/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/MetricsPeriodSelector";
@@ -78,7 +78,7 @@ import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActio
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { useLossReasons } from "@/modules/pipelines/hooks/config/useLossReasons";
 import { useSearchParams } from "react-router-dom";
-import { useMetricDrilldown, type MetricType } from "@/modules/pipelines/hooks/config/useMetricDrilldown";
+import { useMetricDrilldown, type MetricType } from "@/modules/carteira/hooks/useMetricDrilldown";
 import { MetricDrilldownSheet } from "@/modules/carteira/components/proposal/MetricDrilldownSheet";
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
