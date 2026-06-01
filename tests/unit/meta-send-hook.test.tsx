@@ -18,7 +18,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-import { useMetaSend } from "@/hooks/chat-meta/useMetaSend";
+import { useMetaSend } from "@/modules/communication/hooks/chat-meta/useMetaSend";
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

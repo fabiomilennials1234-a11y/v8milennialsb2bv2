@@ -56,15 +56,15 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({
     data: { id: "tm1", organization_id: "org-t", role: "admin", user_id: "u1" },
   }),
   isVirtualTeamMember: (id: string) => id?.startsWith("master-virtual-"),
 }));
 
-import { useResolveChatDeepLink } from "@/hooks/chat/useResolveChatDeepLink";
-import type { WhatsAppInstanceForUser } from "@/hooks/chat/types";
+import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
+import type { WhatsAppInstanceForUser } from "@/modules/communication/hooks/chat/types";
 
 const wrapper =
   (qc: QueryClient) =>

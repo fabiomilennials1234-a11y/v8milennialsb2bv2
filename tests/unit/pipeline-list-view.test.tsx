@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
-import { PipelineListView } from "@/components/kanban/PipelineListView";
+import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";
 
 const mockStages = [
   { id: "s1", name: "Novo", stage_key: "novo", color: "#6366f1" },

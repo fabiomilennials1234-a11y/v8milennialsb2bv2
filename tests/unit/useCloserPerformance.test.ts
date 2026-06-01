@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
-import { useCloserPerformance } from "@/hooks/useCloserPerformance";
+import { useCloserPerformance } from "@/modules/engagement/hooks/useCloserPerformance";
 import type { TVPeriodRange } from "@/lib/tv-periods";
 
 const inRangeDate = new Date(2026, 4, 20).toISOString();
@@ -32,10 +32,10 @@ const mockConfirmacoes = [
   { id: "c5", status: "compareceu", meeting_date: outRangeDate, sale_responsible_id: "cl1" }, // fora
 ];
 
-vi.mock("@/hooks/usePipePropostas", () => ({ usePipePropostas: () => ({ data: mockPropostas }) }));
-vi.mock("@/hooks/usePipeConfirmacao", () => ({ usePipeConfirmacao: () => ({ data: mockConfirmacoes }) }));
-vi.mock("@/hooks/useTeamMembers", () => ({ useTeamMembers: () => ({ data: mockClosers }) }));
-vi.mock("@/hooks/useAvatarMap", () => ({ useAvatarMap: () => new Map() }));
+vi.mock("@/modules/pipelines/hooks/legacy/usePipePropostas", () => ({ usePipePropostas: () => ({ data: mockPropostas }), useCreatePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useUpdatePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useDeletePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
+vi.mock("@/modules/pipelines/hooks/legacy/usePipeConfirmacao", () => ({ usePipeConfirmacao: () => ({ data: mockConfirmacoes }), useCreatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useUpdatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useDeletePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useTeamMembers: () => ({ data: mockClosers }) }));
+vi.mock("@/modules/identity/hooks/useAvatarMap", () => ({ useAvatarMap: () => new Map() }));
 
 describe("useCloserPerformance", () => {
   const range: TVPeriodRange = {

@@ -768,8 +768,10 @@ describe("executeWorkflow — error paths", () => {
     expect(result.error).toContain("boom");
   });
 
-  it("action handler returning success:false fails workflow", async () => {
-    mockAction.mockResolvedValueOnce({ success: false, error: "upstream error" });
+  it("action handler returning success:false (non-retryable) fails workflow", async () => {
+    // Note: retryable:false bypasses the retry-with-backoff path (3 retries × 30s exp backoff).
+    // Without this flag, a single success:false pauses for retry instead of failing.
+    mockAction.mockResolvedValueOnce({ success: false, error: "upstream error", retryable: false });
     const { sb } = baseMock();
     const definition = {
       nodes: [

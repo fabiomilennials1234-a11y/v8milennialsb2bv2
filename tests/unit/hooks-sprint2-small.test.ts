@@ -64,23 +64,23 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }),
 }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true, teamMemberId: "tm1" }),
   useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
 }));
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({
     data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" },
   }),
   isVirtualTeamMember: () => false,
   useTeamMembers: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/usePipelineStages", () => ({
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {
     whatsapp: [{ id: "novo" }],
@@ -88,17 +88,16 @@ vi.mock("@/hooks/usePipelineStages", () => ({
     propostas: [{ id: "marcar_compromisso" }],
   },
 }));
-vi.mock("@/hooks/useAutoFollowUp", () => ({
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({
   triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/hooks/useLogLeadAction", () => ({
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({
   useLogLeadAction: () => vi.fn(),
 }));
 vi.mock("@/lib/workflowTrigger", () => ({
-  triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined),
   triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/lib/permissions", () => ({
+vi.mock("@/modules/identity/lib/permissions", () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
 }));
@@ -119,21 +118,21 @@ vi.mock("@/lib/evolutionApi", () => ({
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn(), info: vi.fn() },
 }));
-vi.mock("@/hooks/useTags", () => ({}));
+vi.mock("@/modules/leads/hooks/useTags", () => ({}));
 
 // ── Imports ──
 import {
   usePipePropostasMetrics,
   usePipeConfirmacaoMetrics,
   usePipeWhatsappMetrics,
-} from "@/hooks/usePipeMetrics";
+} from "@/modules/pipelines/hooks/config/usePipeMetrics";
 import {
   useLeadByPhone,
   usePipeWhatsappByLeadId,
   useCreateLeadFromWhatsApp,
   useLinkLeadToWhatsApp,
   useUpdateLeadPipelineStatus,
-} from "@/hooks/useWhatsAppLeadIntegration";
+} from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import {
   useTinyErpStatus,
   useConnectTinyErp,
@@ -144,7 +143,7 @@ import {
   useUpdateTinyErpSettings,
   useTinyErpOrderMapping,
   useTinyErpFetchNfe,
-} from "@/hooks/useTinyErp";
+} from "@/modules/carteira/hooks/useTinyErp";
 import {
   useChecklists,
   useChecklistItems,
@@ -156,7 +155,7 @@ import {
   useUpdateChecklistItem,
   useDeleteChecklistItem,
   useReorderChecklistItems,
-} from "@/hooks/useChecklists";
+} from "@/modules/engagement/hooks/useChecklists";
 import {
   useWhatsAppConversationsMeta,
   useWhatsAppConversationTags,
@@ -165,7 +164,7 @@ import {
   useDeleteConversation,
   useAddConversationTag,
   useRemoveConversationTag,
-} from "@/hooks/useWhatsAppConversations";
+} from "@/modules/communication/hooks/useWhatsAppConversations";
 import {
   useScheduledMessagesForLead,
   useLeadsWithScheduledMessages,
@@ -173,8 +172,8 @@ import {
   useCancelScheduledMessage,
   useUpdateScheduledMessage,
   useMyScheduledMessages,
-} from "@/hooks/useScheduledMessages";
-import { useExportLeads, EXPORT_LEAD_HEADERS } from "@/hooks/useExportLeads";
+} from "@/modules/communication/hooks/useScheduledMessages";
+import { useExportLeads, EXPORT_LEAD_HEADERS } from "@/modules/leads";
 import {
   useMasterOrganizations,
   useMasterOrganization,
@@ -184,7 +183,7 @@ import {
   useMasterDeleteOrganization,
   useMasterBillingOverride,
   useMasterOrganizationMembers,
-} from "@/hooks/useMasterOrganizations";
+} from "@/modules/identity/hooks/useMasterOrganizations";
 import {
   useWhatsAppInstances,
   useWhatsAppInstancesWithAgent,
@@ -194,10 +193,10 @@ import {
   useCheckConnectionStatus,
   useDeleteWhatsAppInstance,
   useLogoutInstance,
-} from "@/hooks/useWhatsAppInstances";
-import { usePipePropostas, useCreatePipeProposta, useUpdatePipeProposta, useDeletePipeProposta } from "@/hooks/usePipePropostas";
-import { usePipeConfirmacao, useCreatePipeConfirmacao, useUpdatePipeConfirmacao, useDeletePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
-import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
+} from "@/modules/communication/hooks/useWhatsAppInstances";
+import { usePipePropostas, useCreatePipeProposta, useUpdatePipeProposta, useDeletePipeProposta } from "@/modules/pipelines/hooks/legacy/usePipePropostas";
+import { usePipeConfirmacao, useCreatePipeConfirmacao, useUpdatePipeConfirmacao, useDeletePipeConfirmacao } from "@/modules/pipelines/hooks/legacy/usePipeConfirmacao";
+import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp } from "@/modules/pipelines/hooks/legacy/usePipeWhatsapp";
 
 // ── Setup ──
 beforeEach(() => {

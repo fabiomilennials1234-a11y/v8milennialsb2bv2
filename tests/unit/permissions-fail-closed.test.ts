@@ -23,13 +23,13 @@ const mockIdentity = {
   isReady: true,
 };
 
-vi.mock('@/hooks/useIdentity', () => ({
+vi.mock('@/modules/identity/hooks/useIdentity', () => ({
   useIdentity: () => mockIdentity,
 }));
 
 // ─── Import under test ──────────────────────────────────
 
-import { useCanDo } from '@/hooks/useCanDo';
+import { useCanDo } from '@/modules/identity/hooks/useCanDo';
 
 // ─── Test utilities ─────────────────────────────────────
 

@@ -43,12 +43,12 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
   useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
 }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 
 function createWrapper() {
@@ -58,7 +58,7 @@ function createWrapper() {
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
-import { useTags, useCreateTag, useUpdateTag, useDeleteTag } from "@/hooks/useTags";
+import { useTags, useCreateTag, useUpdateTag, useDeleteTag } from "@/modules/leads/hooks/useTags";
 
 describe("useTags", () => {
   beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock()); });
@@ -71,7 +71,7 @@ describe("useTags", () => {
   });
 
   it("returns empty array when no organizationId", async () => {
-    const mod = await import("@/hooks/useOrganization");
+    const mod = await import("@/modules/identity/hooks/useOrganization");
     vi.spyOn(mod, "useOrganization").mockReturnValueOnce({ organizationId: null as any, isReady: true } as any);
     // With isReady true but no orgId the query is disabled, so data remains undefined
     const { result } = renderHook(() => useTags(), { wrapper: createWrapper() });

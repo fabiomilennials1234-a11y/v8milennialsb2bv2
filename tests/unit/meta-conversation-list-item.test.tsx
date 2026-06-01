@@ -1,7 +1,7 @@
 // tests/unit/meta-conversation-list-item.test.tsx
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { MetaConversationListItem } from "@/components/chat-meta/MetaConversationListItem";
+import { MetaConversationListItem } from "@/modules/communication/components/chat-meta/MetaConversationListItem";
 
 const baseConv: any = {
   id: "c1",

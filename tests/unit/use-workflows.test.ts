@@ -6,13 +6,13 @@ const mockFrom = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: (...args: unknown[]) => mockFrom(...args) },
 }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-test", isReady: true }),
 }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { useWorkflows } from "@/hooks/useWorkflows";
+import { useWorkflows } from "@/modules/workflows/hooks/useWorkflows";
 
 function mockWorkflowQuery(data: unknown[]) {
   mockFrom.mockReturnValue({

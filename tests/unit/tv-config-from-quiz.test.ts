@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateTVConfig } from "../../src/lib/tv-config-from-quiz";
+import { generateTVConfig } from "../../src/modules/platform/lib/tv-config-from-quiz";
 
 describe("generateTVConfig", () => {
   it("returns default config when no answers", () => {

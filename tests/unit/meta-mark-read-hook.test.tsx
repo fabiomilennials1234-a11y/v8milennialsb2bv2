@@ -11,7 +11,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: { rpc: (...args: any[]) => rpcMock(...args) },
 }));
 
-import { useMetaMarkAsRead } from "@/hooks/chat-meta/useMetaMarkAsRead";
+import { useMetaMarkAsRead } from "@/modules/communication/hooks/chat-meta/useMetaMarkAsRead";
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

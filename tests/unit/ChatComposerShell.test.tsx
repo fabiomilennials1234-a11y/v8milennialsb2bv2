@@ -8,14 +8,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
-import type { LeadWriteInstanceState } from "@/hooks/useLeadWriteInstance";
+import type { LeadWriteInstanceState } from "@/modules/leads";
 
 // ─── Mock state ────────────────────────────────────────────
 let mockState: LeadWriteInstanceState = { status: "loading" };
 let mockIsAdmin = false;
 let mockIsMaster = false;
 
-vi.mock("@/hooks/useLeadWriteInstance", () => ({
+// Mock the underlying source path. ChatComposerShell imports
+// `useLeadWriteInstance` from the leads module barrel (`@/modules/leads`),
+// which re-exports from this file — Vitest intercepts both.
+vi.mock("@/modules/leads/hooks/useLeadWriteInstance", () => ({
   useLeadWriteInstance: () => ({
     state: mockState,
     isLoading: mockState.status === "loading",
@@ -23,7 +26,7 @@ vi.mock("@/hooks/useLeadWriteInstance", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useIsAdmin: () => ({ isAdmin: mockIsAdmin, isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
   useFeaturePermission: () => ({ allowed: true, isLoading: false, hasError: false }),
@@ -35,7 +38,7 @@ vi.mock("@/hooks/useUserRole", () => ({
   useHasRole: () => ({ hasRole: true, isLoading: false }),
 }));
 
-vi.mock("@/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({
     isMaster: mockIsMaster,
     masterUser: null,
@@ -47,7 +50,7 @@ vi.mock("@/hooks/useMasterAuth", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/hooks/useIdentity", () => ({
   useIdentity: () => ({
     userId: "user-1",
     organizationId: "org-1",
@@ -61,7 +64,7 @@ vi.mock("@/hooks/useIdentity", () => ({
   }),
 }));
 
-import { ChatComposerShell } from "@/components/chat/composer/ChatComposerShell";
+import { ChatComposerShell } from "@/modules/communication/components/chat/composer/ChatComposerShell";
 
 // ─── Helpers ───────────────────────────────────────────────
 function createWrapper() {

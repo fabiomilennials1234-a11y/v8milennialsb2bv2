@@ -7,8 +7,8 @@
  * - buildPreviewTools: PlaygroundToolState → OpenRouter function-calling tool definitions
  */
 
-import type { PlaygroundToolState } from "@/components/copilot/playground/types";
-import { PLAYGROUND_TOOLS } from "@/components/copilot/playground/types";
+import type { PlaygroundToolState } from "@/modules/copilot/components/playground/types";
+import { PLAYGROUND_TOOLS } from "@/modules/copilot/components/playground/types";
 
 // ─── Types ──────────────────────────────────────────────
 

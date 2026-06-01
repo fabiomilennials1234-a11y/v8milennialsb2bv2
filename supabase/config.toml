@@ -268,8 +268,13 @@ verify_jwt = false
 [functions.meta-conversation-profile]
 verify_jwt = false
 
+# event-dispatcher: cron 1/min; consome domain_events pending; auth via x-cron-secret
+[functions.event-dispatcher]
+verify_jwt = false
 
-
+# agent-runtime-v2: Copilot v2 border/queue entry; org resolvido por instance/secret, NÃO pelo payload
+[functions.agent-runtime-v2]
+verify_jwt = false
 
 
 

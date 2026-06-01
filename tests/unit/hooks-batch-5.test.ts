@@ -24,39 +24,39 @@ vi.mock("@/integrations/supabase/client", () => {
   };
 });
 
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: {} }) }));
-vi.mock("@/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
-vi.mock("@/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
-vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
-vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
-vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn(), triggerLeadCreatedInCustomPipeline: vi.fn() }));
-vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: {} }) }));
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
+vi.mock("@/lib/workflowTrigger", () => ({ triggerLeadCreatedInCustomPipeline: vi.fn() }));
+vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
-vi.mock("@/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
+vi.mock("@/modules/carteira/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
 
 // ── Imports ──
-import { useAnalyticsComercial } from "@/hooks/useAnalyticsComercial";
-import { useAnalyticsEngajamento } from "@/hooks/useAnalyticsEngajamento";
-import { useAnalyticsFilters } from "@/hooks/useAnalyticsFilters";
-import { useAnalyticsFinanceiro } from "@/hooks/useAnalyticsFinanceiro";
-import { useAnalyticsOverview } from "@/hooks/useAnalyticsOverview";
-import { useAnalyticsPipesFunis } from "@/hooks/useAnalyticsPipesFunis";
-import { useAnalyticsUtms } from "@/hooks/useAnalyticsUtms";
-import { useUpsellClients } from "@/hooks/useUpsellClients";
-import { useUpsellMetrics } from "@/hooks/useUpsellMetrics";
-import { useUpsellOrders } from "@/hooks/useUpsellOrders";
-import { useUpsellGestaoRules } from "@/hooks/useUpsellGestaoRules";
-import { useUpsellCampanhas } from "@/hooks/useUpsellCampanhas";
-import { useUpsellClientProducts } from "@/hooks/useUpsellClientProducts";
-import { usePipeDispatchRules } from "@/hooks/usePipeDispatchRules";
-import { usePipeDistribution } from "@/hooks/usePipeDistribution";
-import { usePipePropostaItems } from "@/hooks/usePipePropostaItems";
-import { usePipelineDisplayConfig } from "@/hooks/usePipelineDisplayConfig";
-import { useProductVariants } from "@/hooks/useProductVariants";
+import { useAnalyticsComercial } from "@/modules/analytics/hooks/useAnalyticsComercial";
+import { useAnalyticsEngajamento } from "@/modules/analytics/hooks/useAnalyticsEngajamento";
+import { useAnalyticsFilters } from "@/modules/analytics/hooks/useAnalyticsFilters";
+import { useAnalyticsFinanceiro } from "@/modules/analytics/hooks/useAnalyticsFinanceiro";
+import { useAnalyticsOverview } from "@/modules/analytics/hooks/useAnalyticsOverview";
+import { useAnalyticsPipesFunis } from "@/modules/analytics/hooks/useAnalyticsPipesFunis";
+import { useAnalyticsUtms } from "@/modules/analytics/hooks/useAnalyticsUtms";
+import { useUpsellClients } from "@/modules/carteira/hooks/useUpsellClients";
+import { useUpsellMetrics } from "@/modules/carteira/hooks/useUpsellMetrics";
+import { useUpsellOrders } from "@/modules/carteira/hooks/useUpsellOrders";
+import { useUpsellGestaoRules } from "@/modules/carteira/hooks/useUpsellGestaoRules";
+import { useUpsellCampanhas } from "@/modules/carteira/hooks/useUpsellCampanhas";
+import { useUpsellClientProducts } from "@/modules/carteira/hooks/useUpsellClientProducts";
+import { usePipeDispatchRules } from "@/modules/pipelines/hooks/config/usePipeDispatchRules";
+import { usePipeDistribution } from "@/modules/pipelines/hooks/config/usePipeDistribution";
+import { usePipePropostaItems } from "@/modules/pipelines/hooks/legacy/usePipePropostaItems";
+import { usePipelineDisplayConfig } from "@/modules/pipelines/hooks/config/usePipelineDisplayConfig";
+import { useProductVariants } from "@/modules/carteira/hooks/useProductVariants";
 // useSupportMaterials doesn't exist
 
 // Analytics hooks use RPC — safe with mock

@@ -22,14 +22,14 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({
     data: { id: "tm1", organization_id: "org-1", role: "admin", user_id: "u1" },
   }),
   isVirtualTeamMember: (id: string) => id?.startsWith("master-virtual-"),
 }));
 
-import { useOpenWhatsAppChat } from "@/lib/whatsapp";
+import { useOpenWhatsAppChat } from "@/modules/communication/lib/whatsapp";
 
 const wrapper =
   (qc: QueryClient) =>

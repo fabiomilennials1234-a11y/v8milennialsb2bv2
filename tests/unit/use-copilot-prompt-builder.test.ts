@@ -59,8 +59,8 @@ import {
   useCopilotPromptBuilder,
   saveCopilotSystemPrompt,
   regenerateAndSavePrompt,
-} from "@/hooks/useCopilotPromptBuilder";
-import type { DocumentSummary } from "@/hooks/useCopilotPromptBuilder";
+} from "@/modules/copilot/hooks/useCopilotPromptBuilder";
+import type { DocumentSummary } from "@/modules/copilot/hooks/useCopilotPromptBuilder";
 
 // ---- Helpers ----
 

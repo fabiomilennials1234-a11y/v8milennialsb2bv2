@@ -20,11 +20,11 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-1" }),
 }));
 
-import { useMetaPages } from "@/hooks/chat-meta/useMetaPages";
+import { useMetaPages } from "@/modules/communication/hooks/chat-meta/useMetaPages";
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

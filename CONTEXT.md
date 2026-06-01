@@ -4,7 +4,15 @@ Canonical terms used across the system. No implementation details here — this 
 
 ## Core Entities
 
-- **Lead**: A person or company entering the sales funnel. Has name, company, phone, email, origin, rating (1-5 manual), qualification_score (0-100 auto), tags, and assigned team members (SDR/Closer/Responsible).
+- **Lead**: A person or company entering the sales funnel. Has name, company, phone, email, origin, rating (1-5 manual), qualification_score (0-100 auto), qualification_tier, tags, and assigned team members (SDR/Closer/Responsible).
+
+- **Buying-Intent Signal**: A real-time, decaying, evidence-backed hotness score (0-100) assembled from explicit buying signals surfaced during a conversation (pricing/MOQ question, "preciso pra semana que vem", sending a CNPJ/PO, asking lead-time). Distinct from **Qualification Tier**: the tier is a slow lead-quality verdict; the intent signal is "hot RIGHT NOW" and fires real-time actions (handoff, owner notification, cadence change). Both derive from the same extracted signals.
+
+- **Lead Fact Memory**: A durable, agent-curated ledger of stable facts about a Lead (CNPJ, segment, monthly volume, payment terms negotiated, preferred carrier, decision-maker name, known objections) with confidence + provenance + decay. Distinct from **conversation history** (ephemeral, summarized away) and from **Lead 360** (a point-in-time read of CRM columns) — the fact memory persists across conversations and is authored by the agent itself.
+
+- **Cotação (Quote)**: A priced order proposal a Copilot (Vendedor archetype) assembles: line items by SKU + quantity, with MOQ (minimum order quantity) enforcement, a quantity→unit-price tier table, and computed subtotal/IPI/total. Pricing is deterministic (client-configured tiers), never LLM-guessed. Distinct from **Deal** (the broader monetary negotiation record) — a Cotação is one concrete priced offer within it.
+
+- **Qualification Tier**: A first-class enum ranking a Lead's commercial quality: `diamante > ouro > prata > bronze > desqualificado`. Distinct from **Tag** (free-form N:N label, even when a tag happens to be named "Ouro"), from **qualification_score** (0-100 numeric), and from **rating** (1-5 manual human judgment) and **lead_temperature** (hot/warm/cold engagement). Owned by the Qualifier archetype of the Copilot Agent (or set manually). The tier is decided by a deterministic rubric (client-defined thresholds over B2B signals: revenue, purchase volume/recurrence, ICP fit, urgency, region); the LLM only extracts the signals, it does not "judge" the tier.
 
 - **Pipeline**: A sequence of stages a Lead moves through. Four system pipes: `pipe_whatsapp` (qualification), `pipe_confirmacao` (meeting confirmation), `pipe_propostas` (closing), `custom_pipelines` (user-defined). A Lead can exist in multiple pipelines simultaneously.
 
@@ -16,7 +24,11 @@ Canonical terms used across the system. No implementation details here — this 
 
 - **Message**: A single inbound or outbound communication unit within a Conversation. Types: text, audio, image, video, document, sticker, menu, pix_button.
 
-- **Copilot Agent**: An AI agent that processes inbound WhatsApp messages and generates responses. Types: qualificador, sdr, followup, agendador, prospectador, custom. Has personality, capabilities, kanban rules, and business context.
+- **Copilot Agent**: An AI agent that processes inbound WhatsApp messages and generates responses. Canonical model has three **Archetypes**, each with its own Torque-owned, immutable base prompt; the client never edits the base prompt, only fills structured config slots:
+  - **Qualificador (Qualifier)**: works inbound NEW/cold ad/WhatsApp leads — qualifies, sets the Qualification Tier, schedules discovery, then hands off the qualified Lead to the Vendedor (via stage move).
+  - **Vendedor (Salesperson)**: works qualified Leads — sends proposals/material, negotiates, closes, schedules meetings, sends approved media.
+  - **Carteira (Post-sale)**: works existing customers already in the Carteira — drives reorder, upsell, and win-back (resgate) for dormant clients. Reads the Carteira segment (ouro/prata/novo/resgate/dormindo), NOT the Qualification Tier (different scales — must not be conflated).
+  An Organization enables any subset, at most one of each archetype. Routing is deterministic by **contact status** (`get_contact_status(phone)` → NOVO / LEAD_NO_PIPELINE → Qualificador; qualified → Vendedor; CLIENTE_CARTEIRA → Carteira) plus the Lead's stage — never complex per-agent rules. (Legacy v1 types — sdr, followup, agendador, prospectador, custom — are deprecated by this three-archetype model.)
 
 - **Human Pause**: A time-bound suspension of a Copilot Agent's responses for a specific Conversation, triggered automatically when a human team member sends a message. The pause resets on each subsequent human message and expires after a configurable duration (default 60 minutes). Distinct from AI Disabled (permanent toggle) and Transfer to Human (agent-initiated state change).
 

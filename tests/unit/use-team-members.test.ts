@@ -4,16 +4,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: vi.fn(), channel: vi.fn().mockReturnValue({ on: vi.fn().mockReturnThis(), subscribe: vi.fn() }) },
 }));
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "user-1" }, session: {} }),
 }));
-vi.mock("@/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({ isMaster: false, isLoading: false }),
 }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({
   useRealtimeSubscription: vi.fn(),
 }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-1", isReady: true }),
 }));
 
@@ -21,7 +21,7 @@ import {
   isVirtualTeamMember,
   getSelectedOrgId,
   setSelectedOrgId,
-} from "@/hooks/useTeamMembers";
+} from "@/modules/identity/hooks/useTeamMembers";
 
 describe("isVirtualTeamMember", () => {
   it("returns true for master-virtual- prefix", () => {

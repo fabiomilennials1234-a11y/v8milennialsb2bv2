@@ -9,8 +9,8 @@ import {
   PLAYGROUND_TOOLS,
   createDefaultPlaygroundData,
   LEGACY_TOOL_IDS,
-} from "@/components/copilot/playground/types";
-import { filterLegacyTools, isMoverCardAutoEnabled } from "@/components/copilot/playground/types";
+} from "@/modules/copilot/components/playground/types";
+import { filterLegacyTools, isMoverCardAutoEnabled } from "@/modules/copilot/components/playground/types";
 
 describe("PLAYGROUND_TOOLS registry", () => {
   // Cycle 1: removed tools

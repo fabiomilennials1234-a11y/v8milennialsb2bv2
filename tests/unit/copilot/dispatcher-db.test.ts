@@ -30,16 +30,17 @@ describe("addMessageToMemory", () => {
     expect(row.idempotency_key).toMatch(/^assistant:[a-f0-9]{16}:\d+$/);
   });
 
-  it("upsert opts inclui ignoreDuplicates true", async () => {
-    const { sb, mockTable, getUpsertOpts } = createMockSupabase();
+  it("usa INSERT (não upsert) — partial unique index não é inferido pelo upsert", async () => {
+    // Mudança intencional (main ac66aea8): trocou upsert→insert porque o
+    // partial unique index de conversation_messages não é inferido pelo upsert.
+    // A dedup passou a ser garantida pelo lock + idempotency_key, não pelo ON CONFLICT.
+    const { sb, mockTable, getInserted, getUpsertOpts } = createMockSupabase();
     mockTable("conversation_messages", []);
 
     await addMessageToMemory(sb, CONV, "user", "test");
 
-    const opts = getUpsertOpts("conversation_messages") as Array<{ onConflict?: string; ignoreDuplicates?: boolean }>;
-    expect(opts.length).toBe(1);
-    expect(opts[0]?.onConflict).toBe("conversation_id,idempotency_key");
-    expect(opts[0]?.ignoreDuplicates).toBe(true);
+    expect(getInserted("conversation_messages").length).toBe(1);
+    expect(getUpsertOpts("conversation_messages").length).toBe(0); // nenhum upsert
   });
 
   it("conversation temporária (temp_*) skipa insert", async () => {

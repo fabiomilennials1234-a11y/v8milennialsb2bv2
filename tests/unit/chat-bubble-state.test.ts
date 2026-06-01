@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useChatBubbleState } from "@/hooks/useChatBubbleState";
+import { useChatBubbleState } from "@/modules/communication/hooks/useChatBubbleState";
 
 const KEY = (uid: string) => `chat-bubble:${uid}`;
 

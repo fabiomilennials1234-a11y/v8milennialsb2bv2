@@ -4,21 +4,21 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: vi.fn(), channel: vi.fn().mockReturnValue({ on: vi.fn().mockReturnThis(), subscribe: vi.fn() }) },
 }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({
   useRealtimeSubscription: vi.fn(),
 }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-1", isReady: true }),
 }));
 vi.mock("@/lib/analytics", () => ({
   track: vi.fn(),
 }));
-vi.mock("@/lib/permissions", () => ({
+vi.mock("@/modules/identity/lib/permissions", () => ({
   useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true),
 }));
 
 // Import types — these are pure and always testable
-import type { LeadsFilterParams } from "@/hooks/useLeads";
+import type { LeadsFilterParams } from "@/modules/leads";
 
 describe("useLeads types and constants", () => {
   it("LeadsFilterParams interface exists", () => {

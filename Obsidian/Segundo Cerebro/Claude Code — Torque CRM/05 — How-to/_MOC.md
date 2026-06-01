@@ -18,6 +18,7 @@ owner: claude-agent
 
 - [[aplicar-migration-prod|Aplicar Migration em Produção]]
 - [[criar-nova-org|Criar Nova Organização]] 🟡 draft
+- [[debug-meta-chat|debug-meta-chat]]
 - [[debug-whatsapp|Debug Fluxo WhatsApp]]
 - [[deploy-edge-function|Deploy Edge Function]]
 - [[rebind-uazapi-webhook|Rebind Uazapi Webhook]]

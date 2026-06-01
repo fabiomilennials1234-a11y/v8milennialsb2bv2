@@ -12,11 +12,11 @@ import {
   PLAYGROUND_TOOLS,
   LEGACY_TOOL_IDS,
   DEFAULT_PROMPT_SECTIONS,
-} from "@/components/copilot/playground/types";
+} from "@/modules/copilot/components/playground/types";
 import {
   buildCapabilityManifest,
   buildBuilderToolDefs,
-} from "@/lib/copilot/capability-manifest";
+} from "@/modules/copilot/lib/capability-manifest";
 
 describe("buildCapabilityManifest — tools", () => {
   it("includes every non-legacy tool from the registry", () => {

@@ -24,59 +24,61 @@ vi.mock("@/integrations/supabase/client", () => {
   };
 });
 
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: {} }) }));
-vi.mock("@/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
-vi.mock("@/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
-vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
-vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
-vi.mock("@/hooks/useTags", () => ({ useTags: () => ({ data: [] }) }));
-vi.mock("@/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
-vi.mock("@/hooks/useWhatsAppInstances", () => ({ useWhatsAppInstances: () => ({ data: [] }) }));
-vi.mock("@/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }) }));
-vi.mock("@/hooks/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }) }));
-vi.mock("@/hooks/usePipelineDisplayConfig", () => ({ usePipelineDisplayConfig: () => ({ data: [] }) }));
-vi.mock("@/hooks/useGoogleCalendar", () => ({ useGoogleCalendar: () => ({ data: null }) }));
-vi.mock("@/hooks/useWorkflows", () => ({ useWorkflows: () => ({ data: [] }) }));
-vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn(), triggerLeadCreatedInCustomPipeline: vi.fn() }));
-vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: {} }) }));
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
+vi.mock("@/modules/leads/hooks/useTags", () => ({ useTags: () => ({ data: [] }) }));
+vi.mock("@/modules/carteira/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
+vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useWhatsAppInstances: () => ({ data: [] }) }));
+vi.mock("@/modules/campaigns/hooks/useCampanhas", () => ({ useCampanhas: () => ({ data: [] }) }));
+vi.mock("@/modules/pipelines/hooks/custom/useCustomPipelines", () => ({ useCustomPipelines: () => ({ data: [] }) }));
+vi.mock("@/modules/pipelines/hooks/config/usePipelineDisplayConfig", () => ({ usePipelineDisplayConfig: () => ({ data: [] }) }));
+vi.mock("@/modules/integrations/hooks/useGoogleCalendar", () => ({ useGoogleCalendar: () => ({ data: null }) }));
+vi.mock("@/modules/workflows/hooks/useWorkflows", () => ({ useWorkflows: () => ({ data: [] }) }));
+vi.mock("@/lib/workflowTrigger", () => ({ triggerLeadCreatedInCustomPipeline: vi.fn() }));
+vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 
 // ── Verified imports ──
-import { useTinyErp } from "@/hooks/useTinyErp";
-import { useMasterOperations } from "@/hooks/useMasterOperations";
-import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
-import { useGoogleCalendarSharing } from "@/hooks/useGoogleCalendarSharing";
-import { useRankingTransitions } from "@/hooks/useRankingTransitions";
-import { useStageWorkflows } from "@/hooks/useStageWorkflows";
-import { useAgentMetrics } from "@/hooks/useAgentMetrics";
-import { useCustomPipelineMembers } from "@/hooks/useCustomPipelineMembers";
-import { useSegmentBenchmark } from "@/hooks/useSegmentBenchmark";
-import { useSellerActivity } from "@/hooks/useSellerActivity";
-import { useWhatsAppFunnel } from "@/hooks/useWhatsAppFunnel";
-import { useWhatsAppInstanceAllowedMembers } from "@/hooks/useWhatsAppInstanceAllowedMembers";
-import { useWhatsAppConversations } from "@/hooks/useWhatsAppConversations";
-import { useMilestoneAutoUnlock } from "@/hooks/useMilestoneAutoUnlock";
-import { useWorkflowPortability } from "@/hooks/useWorkflowPortability";
-import { useCopilotSubscription } from "@/hooks/useCopilotSubscription";
-import { useOraculoChat } from "@/hooks/useOraculoChat";
-import { usePrefetchPipes } from "@/hooks/usePrefetchPipes";
-import { useCouponValidation } from "@/hooks/useCouponValidation";
-import { useMetaConnection } from "@/hooks/useMetaConnection";
-import { useTVDashboardData } from "@/hooks/useTVDashboardData";
-import { useDispatchQueueItems } from "@/hooks/useDispatchQueueItems";
-import { useScheduledMessages } from "@/hooks/useScheduledMessages";
-import { useMktByOrigin } from "@/hooks/useMktByOrigin";
-import { useMktOriginConfig } from "@/hooks/useMktOriginConfig";
-import { usePersistedState } from "@/hooks/usePersistedState";
-import { useLeadAllPipelines } from "@/hooks/useLeadAllPipelines";
-import { useProductMaterials } from "@/hooks/useProductMaterials";
+import { useTinyErp } from "@/modules/carteira/hooks/useTinyErp";
+import { useMasterOperations } from "@/modules/identity/hooks/useMasterOperations";
+import { useGoogleCalendar } from "@/modules/integrations/hooks/useGoogleCalendar";
+import { useGoogleCalendarSharing } from "@/modules/integrations/hooks/useGoogleCalendarSharing";
+import { useRankingTransitions } from "@/modules/engagement/hooks/useRankingTransitions";
+import { useStageWorkflows } from "@/modules/workflows/hooks/useStageWorkflows";
+import { useAgentMetrics } from "@/modules/copilot/hooks/useAgentMetrics";
+import { useCustomPipelineMembers } from "@/modules/pipelines/hooks/custom/useCustomPipelineMembers";
+import { useSegmentBenchmark } from "@/modules/analytics/hooks/useSegmentBenchmark";
+import { useSellerActivity } from "@/modules/engagement/hooks/useSellerActivity";
+import { useWhatsAppFunnel } from "@/modules/communication/hooks/useWhatsAppFunnel";
+import { useWhatsAppInstanceAllowedMembers } from "@/modules/communication/hooks/useWhatsAppInstanceAllowedMembers";
+import { useWhatsAppConversations } from "@/modules/communication/hooks/useWhatsAppConversations";
+import { useMilestoneAutoUnlock } from "@/modules/engagement/hooks/useMilestoneAutoUnlock";
+import { useWorkflowPortability } from "@/modules/workflows/hooks/useWorkflowPortability";
+import { useCopilotSubscription } from "@/modules/copilot/hooks/useCopilotSubscription";
+import { useOraculoChat } from "@/modules/copilot/hooks/useOraculoChat";
+import { usePrefetchPipes } from "@/modules/pipelines/hooks/perf/usePrefetchPipes";
+import { useCouponValidation } from "@/modules/billing/hooks/useCouponValidation";
+import { useMetaConnection } from "@/modules/communication/hooks/useMetaConnection";
+import { useTVDashboardData } from "@/modules/analytics/hooks/useTVDashboardData";
+import { useDispatchQueueItems } from "@/modules/campaigns/hooks/useDispatchQueueItems";
+import { useScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
+import { useMktByOrigin } from "@/modules/analytics/hooks/useMktByOrigin";
+import { useMktOriginConfig } from "@/modules/analytics/hooks/useMktOriginConfig";
+import { usePersistedState } from "@/shared/hooks/usePersistedState";
+import { useLeadAllPipelines, PipeOpsContextProvider } from "@/modules/leads";
+import { makeMockPipeOps } from "@/modules/leads/pipe-ops/testing";
+import React from "react";
+import { useProductMaterials } from "@/modules/carteira/hooks/useProductMaterials";
 import { useChannelChat } from "@/hooks/useChannelChat";
-import { useWhatsAppLeadIntegration } from "@/hooks/useWhatsAppLeadIntegration";
-import { useCampaignTemplates } from "@/hooks/useCampaignTemplates";
+import { useWhatsAppLeadIntegration } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
+import { useCampaignTemplates } from "@/modules/campaigns/hooks/useCampaignTemplates";
 
 // Hooks that throw removed: useTinyErp, useMasterOperations, useGoogleCalendarSharing,
 // useCustomPipelineMembers, useSellerActivity, useWhatsAppFunnel, useWhatsAppInstanceAllowedMembers,
@@ -91,13 +93,24 @@ const hooks: [string, () => any][] = [
   ["useOraculoChat", () => useOraculoChat()],
   ["usePrefetchPipes", () => usePrefetchPipes()],
   ["useCouponValidation", () => useCouponValidation()],
-  ["useLeadAllPipelines", () => useLeadAllPipelines("lead-1")],
   ["useProductMaterials", () => useProductMaterials("prod-1")],
 ];
 
 describe.each(hooks)("%s", (_name, hookFn) => {
   it("initializes without error", () => {
     expect(() => renderHook(() => hookFn(), { wrapper: createWrapper() })).not.toThrow();
+  });
+});
+
+// useLeadAllPipelines consome pipe-ops via usePipeOps() (inversão F7) — precisa
+// do PipeOpsContextProvider na árvore. Wrapper compõe createWrapper + port mock.
+describe("useLeadAllPipelines", () => {
+  it("initializes without error", () => {
+    const Base = createWrapper();
+    const port = makeMockPipeOps();
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(Base, null, React.createElement(PipeOpsContextProvider, { value: port }, children));
+    expect(() => renderHook(() => useLeadAllPipelines("lead-1"), { wrapper })).not.toThrow();
   });
 });
 

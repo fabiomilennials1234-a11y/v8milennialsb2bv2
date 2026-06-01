@@ -27,11 +27,11 @@ const mockIdentity = {
   isReady: true,
 };
 
-vi.mock("@/hooks/useIdentity", () => ({
+vi.mock("@/modules/identity/hooks/useIdentity", () => ({
   useIdentity: () => mockIdentity,
 }));
 
-import { useCanDo } from "@/hooks/useCanDo";
+import { useCanDo } from "@/modules/identity/hooks/useCanDo";
 
 describe("useCanDo", () => {
   beforeEach(() => {

@@ -1,0 +1,94 @@
+---
+title: "(1197) Acabou o hype de microsserviços. Voltamos pra 2010"
+source: "https://www.youtube.com/watch?v=tTdD4YRGDEc"
+author:
+  - "[[Augusto Galego]]"
+published:
+created: 2026-05-26
+description: "Aproveite vídeos e músicas que você ama, envie e compartilhe conteúdo original com amigos, parentes e o mundo no YouTube."
+tags:
+  - "clippings"
+---
+![](https://www.youtube.com/watch?v=tTdD4YRGDEc)
+
+## Transcript
+
+**0:00** · Pô, eh, isso aqui é loucura, tá? Eh, obrigadão, pessoal. Cara, te fala que eu fiquei muito tempo sem entender esse conceito aqui de o que que é um monolito modular e vamos falar um pouquinho sobre isso, né? Quando você tá fazendo o seu software aqui, o seu serviço, imagina que isso daqui é um um servição, tá?
+
+**0:14** · Você tem aqui embaixo seu banco de dados tradicional, pô. Aí você começa a criar aqui uma classe que vai ser a nossa classe de produtos. Em algum momento você vai ter ali uma parte do código que vai ser responsável por users, né, usuários. Pô, usário junto ou separado de autenticação, não sei. Fica junto. A gente vai ter, sei lá, pagamentos. Eu sempre uso os mesmos exemplos, né? Vamos dar um exemplo diferente. Você vai ter aqui hotéis, modelos de sei lá. E conforme o seu monolito vai crescendo, você vai ter que uma coisa chama outra coisa, chama funções de outra coisa, outra coisa chama funções de outra coisa. Tem como escolher uma corzinha mais adequada aqui?
+
+**0:44** · Aí uma coisa vai chamando outra, vai chamando outro que vai chamando outra. Uma função chama outra sem muita organização, sem muita coisa. De repente você tem que aqui no meio, o que que isso aqui se parece? se parece com um espaguetti. Você tem código espaguete. Qual a saída aqui, né?
+
+**0:57** · Qual a saída pra gente sair dessa situação que a gente se colocou?
+
+**1:00** · Conforme o nosso serviço foi crescendo de maneira desorganizada e virou um projeto legado. Será que a solução é a gente melhorar esse monolito? Será que a solução é a gente transformar esse monolito num monolito modular? Será que a solução é a gente ir para um monolito distribuído ou para microsserviços?
+
+**1:15** · Vamos debater aqui quais as opções que a gente tem. Como que a gente soluciona o problema de escalar um serviço que o monolito tá ficando muito bagunçado? A gente já vai discutir isso. Antes eu preciso de falar da UVP que tá patrocinando esse vídeo. Se você ganha seus R$ 4.500 ou mais, a UVP pode te ajudar. Tá na hora de você aprender a investir de verdade para você não depender mais de diquinhas ou de conselhos ou de videozinho no YouTube.
+
+**1:38** · Que que você vai aprender, né? Em oito semanas, você vai aprender a ser um investidor e investir com confiança.
+
+**1:43** · Você vai aprender a investir em ativos de valor. Você vai aprender a investir baseado no seu perfil e investir baseado nos seus objetivos, né? Como assim? Pô, nenhuma pessoa igual a outra. Eu, por exemplo, eu moro fora do país, meus custos são todos em euro. Eu tenho 28 anos de idade, eu não tenho casa, não tenho carro. tem uma tolerância a risco absolutamente gigantesca e tem uma fonte de renda que por momentos pode ser inconstante. Você trabalho num startup e a gente sabe, né, que startup é altíssimo risco.
+
+**2:05** · Não faz o menor sentido eu copiar a carteira de alguém que tem uma vida completamente diferente da minha, que tem objetivos completamente diferentes do meu, que tem gastos completamente diferentes dos meus, que tem uma idade diferente, um perfil de risco diferente, certo? Meu salário é diferente, o quanto eu recebo mês a mês é diferente, a moeda que eu recebo é outra. Então aqui, né, o que que você vai aprender? AVP não vai te ensinar uma receita de bolo, não vai te dar uma carteira pronta. Você vai aprender a cozinhar, né? Você vai aprender a montar uma carteira que faz sentido para você.
+
+**2:31** · Quer você more, você mora fora, você queira morar no Brasil, queira morar fora, você vai aprender investir no Brasil, nos Estados Unidos, na China, em ouro, em Bitcoin, no que você quiser investir no mundo inteiro e guiar isso para te auxiliar a alcançar os seus objetivos na vida. Além disso, você vai ter acesso à plataforma de investimentos exclusiva da UVP e também sujeito a análise de crédito, esse cartãozinho black que te dá cashback na fatura e sala VIP em aeroporto. É o cartão que eu uso no Brasil, o único cartão. Se você fizer o VP e não ficar satisfeito, tem aqui, ó, 100% de de garantia, tá? Você pode pedir o seu reembolso lá, tranquilo.
+
+**3:01** · Eles vão te reembolsar se você não gostou, se não valeu a pena.
+
+**3:04** · Clica no link aqui na descrição, clica em faça análise de perfil e vem para o VP, a maior e melhor escola de investimentos do Brasil. E aos clientes que forem na baguncinha lá em Goiânia, eu vejo vocês em novembro. Então, né, estamos escalando aqui o nosso monolito.
+
+**3:16** · Que que muita gente faz? Pô, começa a ficar essa gambiarra, esse espaguete, o pessoal começa a pensar, cara, era tão mais fácil, mas tão mais fácil quando esse monolito era pequeno? Então vou fazer o seguinte, né? Se era mais fácil quando era pequeno, esquece essa história aqui de monolito. E vamos transformar isso daqui em vários serviços pequenos. Aí, né, a gente vai ter a simplicidade em cada um desses serviços. E pronto, cada um desses pequenos serviços aqui vai ser um monolito. E o conjunto de de vários pequenos monolitos a gente vai chamar de microsserviços.
+
+**3:41** · Antes a gente tinha aquele código completamente espaguete, que uma coisa chamava as funções da outra coisa de maneira completamente desorganizada. Agora a gente não pode mais fazer isso, porque nota o, por exemplo, microsservço de produtos, ele não tem acesso às funções do usuário, ele não consegue se comunicar mais através da chamada de função. O microsserviços impossibilita que um serviço chame funções de outro serviço.
+
+**4:03** · Eles vão ter então que se comunicar através de protocolos de rede com APIs que estão expostas e documentadas. E ao eu enforçar isso, eu não consigo mais que o meu código seja um espaguete gigantesco, porque lógico, se tornou impossível que o código seja espaguete, porque não dá não não dá para um se comunicar com outro. a gente tem uma impossibilidade aqui. A gente precisa que isso daqui passe através de uma API, através de um graphq, rest, eh, só que vai passar por um protocolo HTTP ou JRPC, um negócio nesse sentido.
+
+**4:30** · Então, a troca que a gente fez foi, a gente trocou uma chamada de função para uma chamada via rede e isso, né, é algemou a gente. Isso travou nossas mãos, isso preveniu que a gente transformasse o nosso código numa sopa, mas nem tudo são flores, né? Vamos fazer uma comparação sincera e honesta aqui rapidinho, que eu já falei isso em vários outros vídeos, né, sobre microsserviços versus monolitos. Quais vantagens e desvantagens que a gente tem aqui, tá?
+
+**4:53** · Eh, é muito importante que a gente compreenda isso, porque não é tão simples quanto, ah, eu fui escalando e do nada eu eu virei microsserviços ou então microsservistiços são melhores e monolitos são piores, não é bem por aí.
+
+**5:05** · Um monolito ele tradicionalmente ele tem algumas vantagens que é primeiro que é um deploy, o código vai tudo junto, certo? Então você não precisa se preocupar com versões diferentes. Por exemplo, se o meu user está na V2 e o meu hotel está na V3, talvez isso dê algum problema, né? Eh, é uma dor de cabeça adicional para minha equipe, pro meu DevOps. Você tem um deploy, uma equipe, eh, uma versão, um repositório tradicionalmente, tá? Eh, a gente pode ter exceções a todas essas coisinhas aqui, geralmente. Na verdade, eu acho que uma versão talvez não tenha exceção, mas não sei também. Pô, isso daqui, né, dá uma simplicidade muito grande.
+
+**5:34** · Tipo assim, você não precisa fazer APIs entre um serviço e outro. Você não precisa se comunicar através de protocolos de rede que vão adicionar um pouco de latência e um pouco de complexidade. Você não precisa orquestrar os seus deploy de uma maneira muito mirabolante. Você tem aqui, né, que em microsserviços a gente tem vários deploys. A gente tem uma comunicação via protocolos ao invés de uma comunicação via funções. A gente tem um overhead de devops maior e a gente tem também melhor isolamento.
+
+**5:58** · Você consegue imaginar 200 desenvolvedores fazendo commits e deploys e rollbacks em uma única code. É complicado esse melhor isolamento, né, pô? Imagina que a equipe aqui de pagamentos lançou uma versão com problema e tem que fazer um rollback, OK? Você faz o rollback ali do do pagamentos e tudo certo. Agora imagina que no mesmo dia, certo? Se isso aqui tá de volta num monolito e você tem todas as equipes atualizando esse software, não é tão simples assim você deploar um problema no serviço de pagamentos e fazer um rollback.
+
+**6:29** · Tipo, se ocionamento e observabilidade tiverem boa, você até consegue remover só aquele código que deu problema, né? Só aquele comit que deu problema, mas você vai ter que deploiar tudo de novo. A não ser que você esteja usando elixir cas, você pode fazer um hot code swap, eu acho. Me disseram que isso funciona. Então, percebe microsserviços aqui, essa ideia aqui de ter tudo separado passa a ser muito interessante conforme a sua empresa vai escalando. Ah, inclusive, tá? É concordado geralmente que cada serviço vai ter o seu próprio banco de dados. Eu tenho minhas opiniões sobre isso, mas deixe quieto.
+
+**6:58** · Enfim, cada equipe vai ser dona do seu próprio serviço. Então você pode ter aqui, por exemplo, no serviço de pagamentos, um squad de seis pessoas. Você pode ter no serviço de users, um squad de seis pessoas. Você pode ter no serviço de produtos, um squad de seis pessoas. De modelos de a, um squad de seis pessoas.
+
+**7:14** · Autenticação, seis, hotéis, seis. Na sua equipe de devops, pô, você pode ter três pessoas também. E, cara, isso daqui pode começar a ficar muito bacana, né? Porque você tá quase que fazendo como se isso daqui fosse uma empresa diferente que se comunica com APIs externas de outra empresa. E cada uma dessas empresas é uma empresa simples de se rodar. É uma empresa pequena que tem um produto conciso. Isso pode funcionar também, funciona em muitos lugares. Conforme a gente viu essa migração nos últimos, digamos assim, 10 anos de quebrar monolitos tradicionais. Pô, todas as bigtech us f useram isso, tá?
+
+**7:43** · O Facebook fez isso. É, cita aí qualquer empresa grande que você conhece, eu te garanto que ou ela já começou distribuída, porque tinha muito venture capital, ou ela ficou distribuída ao longo do tempo, todas elas sem exceção. E a gente viu isso aqui, né, sendo popularizado em blog de tecnologia, galera escrevendo artigo, dando palestra sobre isso daqui.
+
+**8:02** · E conforme você vai escalando o seu time para 100, 200, 1000, 10.000 1000 pessoas, cada vez mais é esse tipo de solução começa a fazer mais sentido. Pô, assim, na maioria dos casos não é realista eu esperar que 200 desenvolvedores consigam fazer comits na mesma code base e o negócio não ficar um caos. Isso não existe. Mas, né, ao longo dos últimos 10 anos, a gente percebeu também que o que que acontece quando eu não tenho squad de seis pessoas, squad seis pessoas, squad de seis pessoas, squad de seis pessoas, eu tenho de repente uma empresa de seis pessoas.
+
+**8:34** · Como é que fica aí? Cada um faz o seu serviço. Quem que é o DevOps? Cada um faz o seu DevOps. Quem que cada um é seu banco de dados? Cada pessoa tem que agir como uma empresa completa. Então assim, para empresas médias de ali 10, 20, 50 pessoas, quando começa a ficar pegado essa coisa de monolito, quando começa a ficar difícil todo mundo trabalhar na mesma Cod Play A, no mesmo deploy, no
+
+**8:55** · mesmo serviço, quando o serviço começa a virar uma sopa, esse pulo aqui para uma empresa média parece que é muito doloroso também. ao mesmo tempo que tá ficando muito trabalhoso carregar esse um monolito, vai ser muito difícil lidar com todo esse overhead aqui devols, esse overhead de comunicação entre, né, comunicação entre os serviços. Aqui a gente vai ter que começar a pensar em loging distribuído, em falhas distribuídas. A gente vai ter que otimizar mais ainda a performance, porque, né, essa chamada aqui via API e via rede demora mais do que uma chamada de função. É óbvio, demora muito mais.
+
+**9:27** · Se cada serviço tiver o seu banco de dados, pode ser que um único request do usuário cause que eu tenho que consultar quatro bancos de dados diferentes. Como que você escala? Tem que existir meio termo, né? Eh, monolitos são perfeitos para MVP em muitos, muitos casos, né?
+
+**9:39** · Você consegue, por exemplo, o Perior Levels, que fez esse sitezinho aqui, é nome de list, ele sendo um único dev, tem alguns produtos de software, todos eles são monolitos e ele fatura milhões de dólares por ano. Então assim, dá para ser ir muito longe só com monolito. E, pô, a decisão dele é perfeitamente acertada. Eh, seria uma idiotícia eu tentar sugerir para ele mudar os serviços dele para microsserviços quando ele é um único desenvolvedor faz o menor sentido. O produto dele é simples, não é? Ele não tá recriando a Netflix.
+
+**10:03** · Tipo, nesse caso dele, pô, que seu produto é relativamente simples, você tem ali 1 milhão de usuários, bota seu monolito para rodar em três, quatro máquinas para ter uma redundância ali e acabou. Loader na frente, uma réplica ali do banco de dados, tudo certo. E, né, no outro lado da ponta, pô, quem sou eu para criticar as empresas grandes, né? Uber, Google, iFood que tão fazendo isso daqui, cara, eles têm problemas que eu nunca nem vi na vida. Tem demandas que são bizarras, os números nem fazem sentido. Mas eu trabalhei muito em empresas de médio porte, que a gente esbarrava muito nas limitações de monolitos.
+
+**10:34** · O monolito modular, então, ele surge na ideia de, será que a gente consegue aproveitar alguns dos prós dos microsserviços sem ter alguns dos contras? Quais são os pros que a gente quer aproveitar aqui, né? principalmente esse pro de melhor isolamento e principalmente, né, vamos, vamos adicionar aqui, coibir o espaguete, acabar com o código sopa totalmente desorganizado. Mas o que que a gente não quer de microsserviços também, né, pô? Essa história aqui de comunicação via protocolos não é necessariamente o que a gente quer.
+
+**10:59** · A gente tá num monolito e o nosso problema não é um problema necessariamente de hardware, e provavelmente não é um problema de hardware, tá? Porque qual que seria um problema de hardware?
+
+**11:08** · Seria, pô, eu tenho aqui que 80% da minha aplicação. É totalmente minúscula e uma maquinazinha pequena conseguiria dar conta. E 20% da minha aplicação é um cluster de inteligência artificial que tem que rodar num hardware totalmente diferente, que eu tenho que escalar aqui para várias GPUs. Aí beleza, aí é legal que esses serviços se comuniquem via protocolo de rede porque eles estão rodando em hardwares diferentes. Mas se eu não tenho esse problema ou nenhum problema dessa natureza, certo, que eu tenha precisa de um hardware específico para rodar algo em específico, eu não quero comunicação via protocolos. Não é uma vantagem, é mais lento.
+
+**11:38** · Uma chamada de função é mais rápida do que uma chamada, né, via rede, em máquinas diferentes. Pô, eu não quero complexidade no meu DevOps se minha empresa não é grande. Às vezes a empresa nem tem alguém dedicado no DevOps. Eu quero DevOps simples. Eu quero, na verdade, né, o que que eu tô buscando é que os meus desenvolvedores tropecem menos uns nos outros e que a Code base seja razoável de se manter, que exista um grau de raso, razoabilidade ali dentro. E é isso que eu tô buscando.
+
+**12:05** · Então, cara, esquece essa chamada viap que você vai fazer pensar que isso daqui tudo é Java. Cada um desses é um módulo, certo? Aqui é tudo módulo, tudo módulo, todo módulo. Olha, por isso o nome modulito modular. E você não vai chamar as funções do outro módulo. Você vai se comunicar através de interfaces, utilizando, de repente um design pattern de ports and adapters, uma arquitetura hexagonal, nosso monolito modular, né?
+
+**12:27** · É, foi um conceito que eu demorei muito para entender, tá? É porque, sei lá, eu nunca tinha sentado para estudar, achava que era outra coisa. Vai ser uma aplicação com um banco de dados, um runime, com módulos. E aí você pode dar que uma equipe é a dona de um módulo ou uma pessoa é a dona de um módulo. E esses módulos vão ter contratos. A gente pode chamar aqui de contrato, a gente pode chamar isso aqui de interface, em que ele expõe maneiras de comunicação específicas. Você pode pensar, pelo amor de Deus, não, não, não, eh, não leva isso aqui pro mau caminho, tá? Pensa em getters e setters, tá?
+
+**12:57** · Você vai definir como que os outros módulos podem interagir com o seu módulo. Da mesma maneira que uma classe define como o mundo de fora dela interage com ela através de getters e setters. Então você vai ter, né, contratos aqui, nome bonitinho para para interfaces, nome bonitinho para protocolos. O importante é que você compreenda que o user vai definir quais são os modos de interagir com ele, o que que tem de input, o que que tem de output. Isso aqui vai nos garantir, né, um sock separation of concerns, e encapsulamento.
+
+**13:27** · E a gente tem que, como ele continua sendo um monolito, né, o monolito modular ainda é um monolito, a gente tem um único artefato grande, mas dentro desse artefato, a gente tem como se fosse vários microsserviços dentro desse um artefato. Por que que isso daqui é legal, né? que isso aqui vai facilitar essa transição. Se o nosso monolito ele virou um monolito modular antes, depois para eu transformar cada módulo desses no seu próprio microsserviço, se for necessário, é mais simples.
+
+**13:55** · Se eu quiser pegar um módulo desse, se módulo de IA aqui, por exemplo, né, pô, a gente quer botar IA para rodar nas nossas próprias GPUs, então vai se comunicar via network, vai ter que sair daqui do nosso monolito. Cara, as interfaces já estavam expostas, certo? Só o que eu preciso trocar é como se comunica. Antes era uma chamada de função ali nas interfaces, agora é uma chamada via GRPC. Pronto. É, é, é a mesma mesma coisa. Não tinha um espaguete gigante antes, não tem espaguete gigante agora. É só que um módulo foi tirado de dentro do monolito e virou um serviço. Achou legal? É conceito simples aqui, tá?
+
+**14:25** · Mas isto aqui é importante pra gente elucidar a importância da da arquitetura na transição entre uma empresa pequena com poucos usuários serviços muito simples para uma empresa média com um número considerável de usuários um serviço que vem crescendo em complexidade, certo? O monolito modular é uma etapa para você facilitar essa transição de um MVP super simples para uma empresa madura. É a, é a boa arquitetura, né?

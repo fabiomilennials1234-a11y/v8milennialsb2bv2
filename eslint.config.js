@@ -3,6 +3,7 @@ import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
+import boundaries from "eslint-plugin-boundaries";
 import noBrittleSupabaseMocks from "./eslint-rules/no-brittle-supabase-mocks.js";
 
 export default tseslint.config(
@@ -25,7 +26,26 @@ export default tseslint.config(
     plugins: {
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh,
+      "boundaries": boundaries,
       "custom": { rules: { "no-brittle-supabase-mocks": noBrittleSupabaseMocks } },
+    },
+    settings: {
+      // Boundary enforcement em error mode (slice 17 — 2026-05-28).
+      // Estrutura modular consolidada (slices 1-16). Cross-module só via barrel
+      // `@/modules/<bc>` (deep-import apenas para pages/* — preserva React.lazy).
+      // Ver: .specs/features/modularizacao/SPEC.md
+      "boundaries/elements": [
+        { type: "module", pattern: "src/modules/*", mode: "folder" },
+        { type: "ui", pattern: "src/components/ui/**" },
+        { type: "shared", pattern: "src/shared/**" },
+        { type: "core", pattern: "src/core/**" },
+      ],
+      "boundaries/include": ["src/**/*"],
+      "boundaries/ignore": [
+        "src/integrations/supabase/types.ts",
+        "src/**/*.test.{ts,tsx}",
+        "src/**/*.stories.{ts,tsx}",
+      ],
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
@@ -47,6 +67,19 @@ export default tseslint.config(
       "react-hooks/rules-of-hooks": "warn",
       "@typescript-eslint/no-unsafe-function-type": "warn",
       "custom/no-brittle-supabase-mocks": "warn",
+      // Boundary rules (slice 17 — 2026-05-28: flip warn → error).
+      "boundaries/element-types": ["error", {
+        default: "allow",
+        rules: [
+          { from: "module", allow: ["ui", "shared", "core", "module"] },
+          { from: "ui", allow: ["ui", "shared", "core"] },
+          { from: "shared", allow: ["shared", "core"] },
+          { from: "core", allow: ["core"] },
+        ],
+      }],
+      "boundaries/no-private": ["error", { allowUncles: false }],
+      "boundaries/no-unknown": "off",
+      "boundaries/no-unknown-files": "off",
     },
   },
   // Grandfathered files — pre-existing brittle Supabase chain mocks.

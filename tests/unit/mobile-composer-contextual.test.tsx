@@ -17,7 +17,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 const mockSendMutateAsync = vi.fn().mockResolvedValue({});
 const mockMediaMutateAsync = vi.fn().mockResolvedValue({});
 
-vi.mock("@/hooks/chat/useWhatsAppSend", () => ({
+vi.mock("@/modules/communication/hooks/chat/useWhatsAppSend", () => ({
   useSendWhatsAppMessage: () => ({
     mutateAsync: mockSendMutateAsync,
     isPending: false,
@@ -31,7 +31,7 @@ vi.mock("@/hooks/chat/useWhatsAppSend", () => ({
 const mockSetDraft = vi.fn();
 let mockDraft = "";
 
-vi.mock("@/hooks/useConversationDraft", () => ({
+vi.mock("@/modules/communication/hooks/useConversationDraft", () => ({
   useConversationDraft: () => ({
     draft: mockDraft,
     setDraft: (v: string) => {
@@ -41,11 +41,11 @@ vi.mock("@/hooks/useConversationDraft", () => ({
   }),
 }));
 
-vi.mock("@/hooks/use-keyboard-offset", () => ({
+vi.mock("@/shared/hooks/use-keyboard-offset", () => ({
   useKeyboardOffset: () => ({ offset: 0, isKeyboardOpen: false }),
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "test-user-id" } }),
 }));
 
@@ -57,7 +57,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/components/chat/media/AudioRecorder", () => ({
+vi.mock("@/modules/communication/components/chat/media/AudioRecorder", () => ({
   AudioRecorder: ({ onCancel }: { onCancel: () => void }) => (
     <div data-testid="audio-recorder">
       <button onClick={onCancel}>Cancel</button>
@@ -65,11 +65,11 @@ vi.mock("@/components/chat/media/AudioRecorder", () => ({
   ),
 }));
 
-vi.mock("@/components/chat/ScheduleMessageModal", () => ({
+vi.mock("@/modules/communication/components/chat/ScheduleMessageModal", () => ({
   ScheduleMessageModal: () => <div data-testid="schedule-modal" />,
 }));
 
-vi.mock("@/lib/audioToMp3", () => ({
+vi.mock("@/modules/communication/lib/audioToMp3", () => ({
   convertAudioBlobToMp3: vi.fn().mockResolvedValue(new Blob()),
 }));
 
@@ -89,7 +89,7 @@ vi.mock("framer-motion", () => ({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-import { MobileComposerContextual } from "@/components/chat/composer/MobileComposerContextual";
+import { MobileComposerContextual } from "@/modules/communication/components/chat/composer/MobileComposerContextual";
 
 function createQueryClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });

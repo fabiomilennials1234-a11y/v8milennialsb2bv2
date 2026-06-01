@@ -32,21 +32,21 @@ vi.mock("@/integrations/supabase/client", () => ({
     storage: { from: vi.fn().mockReturnValue({ upload: vi.fn().mockResolvedValue({ error: null }), getPublicUrl: vi.fn().mockReturnValue({ data: { publicUrl: "" } }), download: vi.fn().mockResolvedValue({ data: new Blob(), error: null }) }) },
   },
 }));
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "t" } }) }));
-vi.mock("@/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
-vi.mock("@/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }), useResponsibleMembers: () => ({ data: [] }) }));
-vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: true }) }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {}, useAllPipelineStages: () => ({ data: [] }) }));
-vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
-vi.mock("@/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r), useAgentFollowupRules: () => ({ data: [] }) }));
-vi.mock("@/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
-vi.mock("@/hooks/useWhatsAppInstances", () => ({ useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }) }));
-vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined), triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "t" } }) }));
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }) }));
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }), useResponsibleMembers: () => ({ data: [] }) }));
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: true }) }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {}, useAllPipelineStages: () => ({ data: [] }), useAllPipelineStageOptions: vi.fn(() => ({ data: [] })) }));
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r), useAgentFollowupRules: () => ({ data: [] }) }));
+vi.mock("@/modules/copilot/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
+vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }) }));
+vi.mock("@/lib/workflowTrigger", () => ({ triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
 vi.mock("@/contexts/OrgFeaturesContext", () => ({ useOrgFeatures: () => ({ hasFeature: () => true, checkLimit: () => -1, canCreateCampaign: () => true, allFeatures: new Map(), allLimits: new Map(), isLoading: false }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 
@@ -59,7 +59,7 @@ function w() {
 beforeEach(() => { vi.clearAllMocks(); mF.mockReturnValue(c()); });
 
 // ═══ 1. useMetaConnection (72 LOC) ═══
-import { useMetaConnections, useMetaConnectionStatus, useConnectMeta, useDisconnectMeta, useToggleMetaPage } from "@/hooks/useMetaConnection";
+import { useMetaConnections, useMetaConnectionStatus, useConnectMeta, useDisconnectMeta, useToggleMetaPage } from "@/modules/communication/hooks/useMetaConnection";
 
 describe("useMetaConnection", () => {
   it("useMetaConnections fetches", async () => {
@@ -85,7 +85,7 @@ describe("useMetaConnection", () => {
 });
 
 // ═══ 2. useMktByOrigin (70 LOC) ═══
-import { useMktByOrigin } from "@/hooks/useMktByOrigin";
+import { useMktByOrigin } from "@/modules/analytics/hooks/useMktByOrigin";
 
 describe("useMktByOrigin", () => {
   it("renders hook", () => {
@@ -95,7 +95,7 @@ describe("useMktByOrigin", () => {
 });
 
 // ═══ 3. useGoogleCalendar (65 LOC) ═══
-import { useGoogleCalendarStatus, useConnectGoogleCalendar, useDisconnectGoogleCalendar, useCalendarEvents } from "@/hooks/useGoogleCalendar";
+import { useGoogleCalendarStatus, useConnectGoogleCalendar, useDisconnectGoogleCalendar, useCalendarEvents } from "@/modules/integrations/hooks/useGoogleCalendar";
 
 describe("useGoogleCalendar", () => {
   it("useGoogleCalendarStatus renders", () => {
@@ -117,7 +117,7 @@ describe("useGoogleCalendar", () => {
 });
 
 // ═══ 4. useHelpCenter (65 LOC) ═══
-import { useHelpCategories, useHelpArticles, useHelpArticle, useCreateHelpCategory, useCreateHelpArticle, useUpdateHelpArticle } from "@/hooks/useHelpCenter";
+import { useHelpCategories, useHelpArticles, useHelpArticle, useCreateHelpCategory, useCreateHelpArticle, useUpdateHelpArticle } from "@/modules/platform/hooks/useHelpCenter";
 
 describe("useHelpCenter", () => {
   it("useHelpCategories", async () => {
@@ -143,7 +143,7 @@ describe("useHelpCenter", () => {
 });
 
 // ═══ 5. useMasterOperations (61 LOC) ═══
-import { useOperationsOverview, useUsageByOrg, useRuntimeLogs, useJobsOverview } from "@/hooks/useMasterOperations";
+import { useOperationsOverview, useUsageByOrg, useRuntimeLogs, useJobsOverview } from "@/modules/identity/hooks/useMasterOperations";
 
 describe("useMasterOperations", () => {
   it("useOperationsOverview", async () => {
@@ -165,7 +165,7 @@ describe("useMasterOperations", () => {
 });
 
 // ═══ 6. useDispatchQueueItems (58 LOC) ═══
-import { useCampaignQueueItems } from "@/hooks/useDispatchQueueItems";
+import { useCampaignQueueItems } from "@/modules/campaigns/hooks/useDispatchQueueItems";
 
 describe("useDispatchQueueItems", () => {
   it("useCampaignQueueItems", async () => {
@@ -175,7 +175,7 @@ describe("useDispatchQueueItems", () => {
 });
 
 // ═══ 8. useMktOriginConfig (52 LOC) ═══
-import { ALL_ORIGINS, ORIGIN_LABELS, useMktOriginConfigs, useUpsertMktOriginConfig } from "@/hooks/useMktOriginConfig";
+import { ALL_ORIGINS, ORIGIN_LABELS, useMktOriginConfigs, useUpsertMktOriginConfig } from "@/modules/analytics/hooks/useMktOriginConfig";
 
 describe("useMktOriginConfig", () => {
   it("exports ALL_ORIGINS", () => { expect(ALL_ORIGINS.length).toBeGreaterThan(0); });
@@ -191,7 +191,7 @@ describe("useMktOriginConfig", () => {
 });
 
 // ═══ 9. useWhatsAppInstanceAllowedMembers (47 LOC) ═══
-import { useAllowedMembersForInstance, useCanReplyOnInstance, useSetAllowedMembersForInstance } from "@/hooks/useWhatsAppInstanceAllowedMembers";
+import { useAllowedMembersForInstance, useCanReplyOnInstance, useSetAllowedMembersForInstance } from "@/modules/communication/hooks/useWhatsAppInstanceAllowedMembers";
 
 describe("useWhatsAppInstanceAllowedMembers", () => {
   it("useAllowedMembersForInstance", async () => {
@@ -206,7 +206,7 @@ describe("useWhatsAppInstanceAllowedMembers", () => {
 });
 
 // ═══ 10. useGoogleCalendarSharing (39 LOC) ═══
-import { useCalendarSharing, useShareCalendar, useRevokeCalendarShare } from "@/hooks/useGoogleCalendarSharing";
+import { useCalendarSharing, useShareCalendar, useRevokeCalendarShare } from "@/modules/integrations/hooks/useGoogleCalendarSharing";
 
 describe("useGoogleCalendarSharing", () => {
   beforeEach(() => {
@@ -233,7 +233,7 @@ describe("useGoogleCalendarSharing", () => {
 });
 
 // ═══ 11. useCustomPipelineMembers (36 LOC) ═══
-import { usePipelineMembers, useAddPipelineMember, useRemovePipelineMember } from "@/hooks/useCustomPipelineMembers";
+import { usePipelineMembers, useAddPipelineMember, useRemovePipelineMember } from "@/modules/pipelines/hooks/custom/useCustomPipelineMembers";
 
 describe("useCustomPipelineMembers", () => {
   it("usePipelineMembers fetches", async () => {
@@ -251,7 +251,7 @@ describe("useCustomPipelineMembers", () => {
 });
 
 // ═══ 12. usePipeDistribution (25 LOC) ═══
-import { usePipeDistributionRule, useSavePipeDistribution } from "@/hooks/usePipeDistribution";
+import { usePipeDistributionRule, useSavePipeDistribution } from "@/modules/pipelines/hooks/config/usePipeDistribution";
 
 describe("usePipeDistribution", () => {
   it("usePipeDistributionRule fetches", async () => {
@@ -265,7 +265,7 @@ describe("usePipeDistribution", () => {
 });
 
 // ═══ 13. useWhatsAppFunnel (20 LOC) ═══
-import { FUNNEL_STAGES, useWhatsAppFunnelLeads, groupLeadsByStage } from "@/hooks/useWhatsAppFunnel";
+import { FUNNEL_STAGES, useWhatsAppFunnelLeads, groupLeadsByStage } from "@/modules/communication/hooks/useWhatsAppFunnel";
 
 describe("useWhatsAppFunnel", () => {
   it("FUNNEL_STAGES has stages", () => { expect(FUNNEL_STAGES.length).toBeGreaterThan(0); });
@@ -284,7 +284,7 @@ describe("useWhatsAppFunnel", () => {
 });
 
 // ═══ 14. useSellerActivity (17 LOC) ═══
-import { useSellerActivity } from "@/hooks/useSellerActivity";
+import { useSellerActivity } from "@/modules/engagement/hooks/useSellerActivity";
 
 describe("useSellerActivity", () => {
   it("fetches seller activity", async () => {
@@ -294,7 +294,7 @@ describe("useSellerActivity", () => {
 });
 
 // ═══ 15. useCadastroExterno (11 LOC) ═══
-import { useCadastroExternoEnabled, useCadastroExternoPush } from "@/hooks/useCadastroExterno";
+import { useCadastroExternoEnabled, useCadastroExternoPush } from "@/modules/marketing/hooks/useCadastroExterno";
 
 describe("useCadastroExterno", () => {
   it("useCadastroExternoEnabled returns boolean", () => {
@@ -308,7 +308,7 @@ describe("useCadastroExterno", () => {
 });
 
 // ═══ 16. useLogLeadAction (27 LOC) ═══
-import { useLogLeadAction as useLogAction } from "@/hooks/useLogLeadAction";
+import { useLogLeadAction as useLogAction } from "@/modules/leads";
 
 describe("useLogLeadAction", () => {
   it("returns a function", () => {
@@ -318,7 +318,7 @@ describe("useLogLeadAction", () => {
 });
 
 // ═══ 17. useWorkflowPortability (29 LOC) ═══
-import { useExportWorkflow, useImportWorkflow } from "@/hooks/useWorkflowPortability";
+import { useExportWorkflow, useImportWorkflow } from "@/modules/workflows/hooks/useWorkflowPortability";
 
 describe("useWorkflowPortability", () => {
   it("useExportWorkflow mutates", async () => {

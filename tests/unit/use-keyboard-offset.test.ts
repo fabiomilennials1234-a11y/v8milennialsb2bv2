@@ -9,12 +9,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
 
-vi.mock("@/hooks/use-viewport", () => ({
+vi.mock("@/shared/hooks/use-viewport", () => ({
   useViewport: vi.fn(() => ({ isMobile: true, isDesktop: false, width: 375 })),
 }));
 
-import { useViewport } from "@/hooks/use-viewport";
-import { useKeyboardOffset } from "@/hooks/use-keyboard-offset";
+import { useViewport } from "@/shared/hooks/use-viewport";
+import { useKeyboardOffset } from "@/shared/hooks/use-keyboard-offset";
 
 const mockUseViewport = vi.mocked(useViewport);
 

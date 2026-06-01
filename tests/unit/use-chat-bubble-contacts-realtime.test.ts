@@ -75,13 +75,13 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: mocks.supabaseMock,
 }));
 
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: mocks.teamMemberRef.value }),
 }));
 
-import { useChatBubbleContactsRealtime } from "@/hooks/chat/useChatBubbleContactsRealtime";
-import { chatQueryKeys } from "@/hooks/chat/shared/queryKeys";
-import type { ChatContact } from "@/hooks/chat/types";
+import { useChatBubbleContactsRealtime } from "@/modules/communication/hooks/chat/useChatBubbleContactsRealtime";
+import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
+import type { ChatContact } from "@/modules/communication/hooks/chat/types";
 
 // ── Wrapper ─────────────────────────────────────────────────────────────────
 function newQc() {

@@ -7,11 +7,11 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { createDefaultPlaygroundData } from "@/components/copilot/playground/types";
+import { createDefaultPlaygroundData } from "@/modules/copilot/components/playground/types";
 import {
   validateForActivation,
   BACKBONE_TOPICS,
-} from "@/lib/copilot/validate-activation";
+} from "@/modules/copilot/lib/validate-activation";
 
 describe("validateForActivation", () => {
   it("blocks activation when the name is empty", () => {

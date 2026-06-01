@@ -17,7 +17,15 @@ owner: claude-agent
 ## Notas nesta pasta
 
 - [[Areas Frageis|Áreas Frágeis — Mapa de Risco]]
+- [[Arquitetura Atual — As-Is|Arquitetura Atual — Estado Físico (As-Is)]]
+- [[Funcionalidades — Mapa Atual|Funcionalidades — Mapa Atual + Interações]]
+- [[Funcionalidades — Mapa To-Be|Funcionalidades — Mapa To-Be (norte)]]
 - [[Integracoes|Integrações Externas]] 🟡 draft
 - [[Modulos|Módulos — Mapa do Código]] 🟡 draft
 - [[Multi-tenancy|Multi-tenancy]]
+- [[Roadmap|Roadmap — visão estratégica]]
 - [[Visao Geral|Visão Geral — Arquitetura Torque CRM]]
+
+## Modulos
+
+- [[atendimento-meta|atendimento-meta]]

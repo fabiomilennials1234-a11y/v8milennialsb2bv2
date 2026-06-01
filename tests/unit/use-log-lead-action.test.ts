@@ -43,7 +43,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-1", isReady: true }),
 }));
 
@@ -53,7 +53,7 @@ vi.mock("@/lib/analytics", () => ({
   track: (...a: unknown[]) => mockTrack(...a),
 }));
 
-import { useLogLeadAction, type LeadActionType } from "@/hooks/useLogLeadAction";
+import { useLogLeadAction, type LeadActionType } from "@/modules/leads";
 
 describe("LeadActionType", () => {
   it("includes core action types", () => {

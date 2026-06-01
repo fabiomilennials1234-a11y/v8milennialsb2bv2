@@ -11,7 +11,8 @@ Este doc é **mínimo**. Para detalhe, navegar via:
   - `supabase/functions/whatsapp-webhook/CLAUDE.md` — Uazapi inbound 🔴
   - `supabase/functions/_shared/CLAUDE.md` — módulos compartilhados
   - `supabase/migrations/CLAUDE.md` — regras migration
-  - `src/lib/CLAUDE.md` — permissions + helpers frontend 🟠
+  - `src/modules/CLAUDE.md` — bounded contexts overview 🟠
+  - `src/modules/<bc>/CLAUDE.md` — 14 sub-CLAUDE.md (1 por BC)
 - **AGENTS.md** raiz — spec agent-agnostic
 - **llms.txt** raiz — index curado pra LLMs
 
@@ -52,9 +53,41 @@ Org Milennials: `6030520a-2ca7-477d-be89-55758e2cd808`
 
 ## Estrutura
 
+Monolito modular pós-modularização (slices 1–16, completo em 2026-05-28). 14 bounded contexts em `src/modules/<bc>/`.
+
 ```
-src/{components(46 cats, ui/54 primitivos), hooks(122+), pages(46 lazy), contexts, lib, integrations, types}
-supabase/{functions(78+ Deno, _shared/35 módulos), migrations(322+)}
+src/
+├── modules/                  # 14 BCs auto-contidos. API pública via index.ts. ESLint boundaries enforce (error mode após slice 17).
+│   ├── identity/             # Auth + org + team + permissions + master ops
+│   ├── leads/                # Lead CRUD + timeline + tags + import + bulk + enrichment
+│   ├── pipelines/            # pipe_* views + custom pipelines + kanban + dispatch + loss reasons
+│   ├── communication/        # WhatsApp + Meta + Email + SMS + AI email writer + history sync + mass send (UI)
+│   ├── copilot/              # Copilot agents + Oraculo + prompt builder + reasoning + tool logs
+│   ├── workflows/            # Workflow DAG + executor + triggers
+│   ├── campaigns/            # Campaigns + mass send
+│   ├── carteira/             # Carteira clients + orders + upsell
+│   ├── engagement/           # Activities + agenda + checklists + followups + gamification + commissions + goals + coaching IA + log call
+│   ├── analytics/            # Dashboards + metrics + cohorts + TV dashboard
+│   ├── billing/              # Subscription + plans
+│   ├── marketing/            # Lead forms + landing + UTM
+│   ├── integrations/         # Google Calendar adapter (+ resto via edge fns doc-only)
+│   └── platform/             # Onboarding + settings + observability + feature flags + command palette + saved views + layout + shortcuts
+├── components/ui/            # shadcn primitivos (53) — cross-cutting, NÃO é módulo
+├── shared/                   # Utils sem dependência de domínio
+│   ├── components/           # 8 widgets neutros (CreateNewModal, UpgradeModal, EmptyState, ...)
+│   ├── hooks/                # 11 hooks neutros (useDebounce, usePersistedState, useDataExport, ...)
+│   ├── format/               # lead-field-labels (formatters puros)
+│   ├── realtime/             # useRealtimeChannel + useRealtimeChannelStatus + useRealtimeSubscription (transport)
+│   └── permission-actions.ts
+├── core/                     # supabase client, env, sentry init (a popular)
+├── contexts/                 # AuthContext via identity export; FeaturesContext em platform
+├── integrations/supabase/    # Client + types (auto-gerado — não editar)
+├── hooks/                    # Vazio exceto use-toast (shadcn primitive)
+└── pages/                    # Vazio — pages residem nos módulos
+supabase/
+├── functions/                # 78+ edge functions Deno (flat layout — Supabase CLI exige). BC mapping doc-only em supabase/functions/CLAUDE.md (slice 15).
+├── functions/_shared/        # 35+ módulos compartilhados
+└── migrations/               # 322+ migrations
 ```
 
 ## Arquitetura
@@ -67,7 +100,7 @@ supabase/{functions(78+ Deno, _shared/35 módulos), migrations(322+)}
 
 **Edge Function pattern**: `Deno.serve(withSentry('nome', handler))` + `withSecurityHeaders(getCorsHeaders(req))` + OPTIONS early return.
 
-**Realtime**: `useRealtimeSubscription(table, queryKeys)` — postgres_changes, filtro org_id, debounce 2s.
+**Realtime**: `useRealtimeSubscription(table, queryKeys)` de `@/shared/realtime` — postgres_changes, filtro org_id, debounce 2s.
 
 **Cron (pg_cron)**: 10+ jobs/1min via pg_net → edge functions. Auth: `x-cron-secret`. Principais: webhook-deliveries, workflow-executions, outbound-dispatches, ai-actions, campaign-rule-dispatch.
 
@@ -77,18 +110,18 @@ supabase/{functions(78+ Deno, _shared/35 módulos), migrations(322+)}
 
 **Tipos**: `Tables<"leads">`, `TablesInsert<"leads">`, `TablesUpdate<"leads">` de `@/integrations/supabase/types`.
 
-**Imports**: Sempre `@/` alias. **Naming**: Componentes PascalCase, hooks `use*` camelCase, tabelas snake_case, env `VITE_SCREAMING_SNAKE`.
+**Imports**: Sempre `@/` alias. Cross-module SEMPRE via barrel: `@/modules/<bc>` (NÃO `@/modules/<bc>/hooks/...`). Deep-import só pra `pages/*` (preserva `React.lazy()` code-splitting). Enforce: ESLint `boundaries/element-types` (error). **Naming**: Componentes PascalCase, hooks `use*` camelCase, tabelas snake_case, env `VITE_SCREAMING_SNAKE`.
 
 ## Áreas frágeis
 
 ### Copilot (agentes IA)
 Fluxo mais frágil. Testar: criar→configurar→ativar→conversar. Edge cases: agente sem business_context, lead sem telefone, conversation sem messages.
-- UI: `src/components/copilot/` | CRUD: `src/hooks/useCopilotAgents.ts` | Backend: `supabase/functions/agent-message/`, `_shared/ai-action-executor.ts`, `outbound-trigger/`
+- UI: `src/modules/copilot/components/` | CRUD: `src/modules/copilot/hooks/useCopilotAgents.ts` | Backend: `supabase/functions/agent-message/`, `_shared/ai-action-executor.ts`, `outbound-trigger/`
 
 ### WhatsApp (Uazapi)
 Provider-agnostic via adapter. Migração Evolution→Uazapi completa.
 - Adapter: `_shared/whatsapp-client.ts` + `_shared/whatsapp-providers/` | Proxy: `whatsapp-api-proxy/` (JWT+tenant+rate limit) | Webhook: `whatsapp-webhook/` (secret path) | History: `history-sync-worker/` | Mass: `mass-send-{create,status,control}/`
-- Frontend: `src/lib/whatsappApi.ts`, `chat/actions/`, `chat/history-sync/`, `whatsapp-migration/`, `campaigns/MassSend.tsx`
+- Frontend: `src/modules/communication/lib/whatsappApi.ts`, `components/chat/actions/`, `components/chat/history-sync/`, `components/whatsapp-migration/`; mass send UI: `src/modules/campaigns/`
 - Tabelas: `whatsapp_instance_secrets` (RLS deny-all), `history_sync_jobs`, `uazapi_sender_jobs`
 - RPCs: `get/set_uazapi_credentials` (service_role only)
 - Features Uazapi-only: sendMenu, sendPixButton, react/edit/pin/deleteForAll/markRead, historySync, /sender/* mass send
@@ -97,7 +130,7 @@ Provider-agnostic via adapter. Migração Evolution→Uazapi completa.
 
 ### Permissões
 3 camadas, issues recorrentes. Testar com admin/membro/master separadamente.
-- `src/lib/permissions.ts` | `_shared/permission_engine.ts` | `src/hooks/useUserRole.ts` | `tests/integration/permission-engine.test.ts`
+- `src/modules/identity/lib/permissions.ts` | `_shared/permission_engine.ts` | `src/modules/identity/hooks/useUserRole.ts` | `tests/integration/permission-engine.test.ts`
 
 ## Gotchas
 

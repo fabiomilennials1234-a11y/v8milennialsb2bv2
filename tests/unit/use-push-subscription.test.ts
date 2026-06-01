@@ -21,7 +21,7 @@ const mockUseAuth = vi.fn(() => ({
   organizationId: 'org-1',
 }));
 
-vi.mock('@/contexts/AuthContext', () => ({
+vi.mock('@/modules/identity/contexts/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
@@ -98,13 +98,13 @@ function removeServiceWorkerMock() {
 
 // ─── Import under test ──────────────────────────────────
 // Lazy import to allow mocks to settle
-let usePushSubscription: typeof import('@/hooks/use-push-subscription').usePushSubscription;
+let usePushSubscription: typeof import('@/modules/platform/hooks/use-push-subscription').usePushSubscription;
 
 beforeEach(async () => {
   vi.clearAllMocks();
   mockGetSubscription.mockResolvedValue(null);
   // Fresh import each test to avoid stale module state
-  const mod = await import('@/hooks/use-push-subscription');
+  const mod = await import('@/modules/platform/hooks/use-push-subscription');
   usePushSubscription = mod.usePushSubscription;
 });
 

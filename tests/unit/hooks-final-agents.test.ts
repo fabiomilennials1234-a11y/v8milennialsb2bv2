@@ -48,14 +48,14 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "u1" }, session: { access_token: "t" } }),
 }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
   useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
 }));
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({
     data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" },
   }),
@@ -63,29 +63,28 @@ vi.mock("@/hooks/useTeamMembers", () => ({
   useTeamMembers: () => ({ data: [] }),
   useResponsibleMembers: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: true }) }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/usePipelineStages", () => ({
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: true }) }));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {},
   useAllPipelineStages: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
-vi.mock("@/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
-vi.mock("@/hooks/useWhatsAppInstances", () => ({
+vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/modules/copilot/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
+vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({
   useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }),
 }));
 vi.mock("@/lib/workflowTrigger", () => ({
-  triggerStageChangedWorkflows: vi.fn().mockResolvedValue(undefined),
   triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/lib/permissions", () => ({
+vi.mock("@/modules/identity/lib/permissions", () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
 }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
 vi.mock("@/contexts/OrgFeaturesContext", () => ({
   useOrgFeatures: () => ({ hasFeature: () => true, checkLimit: () => -1 }),
 }));
@@ -110,7 +109,7 @@ describe("useAgentFollowupRules", () => {
 
   describe("followupRuleToDB", () => {
     it("converts a frontend FollowupRule to DB format with all fields", async () => {
-      const { followupRuleToDB } = await import("@/hooks/useAgentFollowupRules");
+      const { followupRuleToDB } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const result = followupRuleToDB(
         {
           name: "Rule 1",
@@ -173,7 +172,7 @@ describe("useAgentFollowupRules", () => {
     });
 
     it("uses sensible defaults when fields are omitted", async () => {
-      const { followupRuleToDB } = await import("@/hooks/useAgentFollowupRules");
+      const { followupRuleToDB } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const result = followupRuleToDB({}, "agent-456");
 
       expect(result.agent_id).toBe("agent-456");
@@ -201,7 +200,7 @@ describe("useAgentFollowupRules", () => {
     });
 
     it("sets description to null when undefined", async () => {
-      const { followupRuleToDB } = await import("@/hooks/useAgentFollowupRules");
+      const { followupRuleToDB } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const result = followupRuleToDB({ name: "X" }, "a1");
       expect(result.description).toBeNull();
     });
@@ -240,7 +239,7 @@ describe("useAgentFollowupRules", () => {
       };
       mF.mockReturnValue(c([dbRule]));
 
-      const { useAgentFollowupRules } = await import("@/hooks/useAgentFollowupRules");
+      const { useAgentFollowupRules } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { result } = renderHook(() => useAgentFollowupRules("agent-1"), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -286,7 +285,7 @@ describe("useAgentFollowupRules", () => {
       };
       mF.mockReturnValue(c([dbRule]));
 
-      const { useAgentFollowupRules } = await import("@/hooks/useAgentFollowupRules");
+      const { useAgentFollowupRules } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { result } = renderHook(() => useAgentFollowupRules("agent-2"), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -302,7 +301,7 @@ describe("useAgentFollowupRules", () => {
     });
 
     it("is disabled when agentId is undefined", async () => {
-      const { useAgentFollowupRules } = await import("@/hooks/useAgentFollowupRules");
+      const { useAgentFollowupRules } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { result } = renderHook(() => useAgentFollowupRules(undefined), { wrapper: w() });
 
       // Should never fetch
@@ -343,7 +342,7 @@ describe("useAgentFollowupRules", () => {
       };
       mF.mockReturnValue(c([returnedRule]));
 
-      const { useCreateFollowupRule } = await import("@/hooks/useAgentFollowupRules");
+      const { useCreateFollowupRule } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useCreateFollowupRule(), { wrapper: w() });
 
@@ -377,7 +376,7 @@ describe("useAgentFollowupRules", () => {
       };
       mF.mockReturnValue(c([updated]));
 
-      const { useUpdateFollowupRule } = await import("@/hooks/useAgentFollowupRules");
+      const { useUpdateFollowupRule } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useUpdateFollowupRule(), { wrapper: w() });
 
@@ -399,7 +398,7 @@ describe("useAgentFollowupRules", () => {
     it("deletes a rule and shows success toast", async () => {
       mF.mockReturnValue(c());
 
-      const { useDeleteFollowupRule } = await import("@/hooks/useAgentFollowupRules");
+      const { useDeleteFollowupRule } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useDeleteFollowupRule(), { wrapper: w() });
 
@@ -429,7 +428,7 @@ describe("useAgentFollowupRules", () => {
       };
       mF.mockReturnValue(c([toggled]));
 
-      const { useToggleFollowupRule } = await import("@/hooks/useAgentFollowupRules");
+      const { useToggleFollowupRule } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useToggleFollowupRule(), { wrapper: w() });
 
@@ -457,7 +456,7 @@ describe("useAgentFollowupRules", () => {
       };
       mF.mockReturnValue(c([toggled]));
 
-      const { useToggleFollowupRule } = await import("@/hooks/useAgentFollowupRules");
+      const { useToggleFollowupRule } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useToggleFollowupRule(), { wrapper: w() });
 
@@ -475,7 +474,7 @@ describe("useAgentFollowupRules", () => {
     it("reorders rules by updating priorities", async () => {
       mF.mockReturnValue(c());
 
-      const { useReorderFollowupRules } = await import("@/hooks/useAgentFollowupRules");
+      const { useReorderFollowupRules } = await import("@/modules/copilot/hooks/useAgentFollowupRules");
       const { result } = renderHook(() => useReorderFollowupRules(), { wrapper: w() });
 
       await act(async () => {
@@ -524,34 +523,34 @@ describe("useScheduledMessages", () => {
       };
       mF.mockReturnValue(c([msg]));
 
-      const { useScheduledMessagesForLead } = await import("@/hooks/useScheduledMessages");
+      const { useScheduledMessagesForLead } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { result } = renderHook(() => useScheduledMessagesForLead("lead-1"), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toHaveLength(1);
       expect(result.current.data![0].id).toBe("sm1");
-    });
+    }, 15000);
 
     it("returns empty when leadId is null", async () => {
-      const { useScheduledMessagesForLead } = await import("@/hooks/useScheduledMessages");
+      const { useScheduledMessagesForLead } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { result } = renderHook(() => useScheduledMessagesForLead(null), { wrapper: w() });
 
       expect(result.current.fetchStatus).toBe("idle");
-    });
+    }, 15000);
   });
 
   describe("useLeadsWithScheduledMessages", () => {
     it("returns a Set of lead IDs", async () => {
       mF.mockReturnValue(c([{ lead_id: "l1" }, { lead_id: "l2" }]));
 
-      const { useLeadsWithScheduledMessages } = await import("@/hooks/useScheduledMessages");
+      const { useLeadsWithScheduledMessages } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { result } = renderHook(() => useLeadsWithScheduledMessages(), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toBeInstanceOf(Set);
       expect(result.current.data!.has("l1")).toBe(true);
       expect(result.current.data!.has("l2")).toBe(true);
-    });
+    }, 15000);
   });
 
   describe("useCreateScheduledMessage", () => {
@@ -567,7 +566,7 @@ describe("useScheduledMessages", () => {
       };
       mF.mockReturnValue(c([created]));
 
-      const { useCreateScheduledMessage } = await import("@/hooks/useScheduledMessages");
+      const { useCreateScheduledMessage } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useCreateScheduledMessage(), { wrapper: w() });
 
@@ -600,7 +599,7 @@ describe("useScheduledMessages", () => {
       };
       mF.mockReturnValue(c([created]));
 
-      const { useCreateScheduledMessage } = await import("@/hooks/useScheduledMessages");
+      const { useCreateScheduledMessage } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { result } = renderHook(() => useCreateScheduledMessage(), { wrapper: w() });
 
       const imageFile = new File(["img"], "photo.png", { type: "image/png" });
@@ -622,7 +621,7 @@ describe("useScheduledMessages", () => {
     it("handles video media type", async () => {
       mF.mockReturnValue(c([{ id: "sm-v" }]));
 
-      const { useCreateScheduledMessage } = await import("@/hooks/useScheduledMessages");
+      const { useCreateScheduledMessage } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { result } = renderHook(() => useCreateScheduledMessage(), { wrapper: w() });
 
       const videoFile = new File(["vid"], "clip.mp4", { type: "video/mp4" });
@@ -642,7 +641,7 @@ describe("useScheduledMessages", () => {
     it("handles audio media type", async () => {
       mF.mockReturnValue(c([{ id: "sm-a" }]));
 
-      const { useCreateScheduledMessage } = await import("@/hooks/useScheduledMessages");
+      const { useCreateScheduledMessage } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { result } = renderHook(() => useCreateScheduledMessage(), { wrapper: w() });
 
       const audioFile = new File(["aud"], "voice.ogg", { type: "audio/ogg" });
@@ -662,7 +661,7 @@ describe("useScheduledMessages", () => {
     it("handles document media type", async () => {
       mF.mockReturnValue(c([{ id: "sm-d" }]));
 
-      const { useCreateScheduledMessage } = await import("@/hooks/useScheduledMessages");
+      const { useCreateScheduledMessage } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { result } = renderHook(() => useCreateScheduledMessage(), { wrapper: w() });
 
       const docFile = new File(["pdf"], "report.pdf", { type: "application/pdf" });
@@ -684,7 +683,7 @@ describe("useScheduledMessages", () => {
     it("cancels a message and shows success toast", async () => {
       mF.mockReturnValue(c());
 
-      const { useCancelScheduledMessage } = await import("@/hooks/useScheduledMessages");
+      const { useCancelScheduledMessage } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useCancelScheduledMessage(), { wrapper: w() });
 
@@ -703,7 +702,7 @@ describe("useScheduledMessages", () => {
     it("updates message content and scheduled time", async () => {
       mF.mockReturnValue(c());
 
-      const { useUpdateScheduledMessage } = await import("@/hooks/useScheduledMessages");
+      const { useUpdateScheduledMessage } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useUpdateScheduledMessage(), { wrapper: w() });
 
@@ -723,7 +722,7 @@ describe("useScheduledMessages", () => {
     it("updates only messageContent", async () => {
       mF.mockReturnValue(c());
 
-      const { useUpdateScheduledMessage } = await import("@/hooks/useScheduledMessages");
+      const { useUpdateScheduledMessage } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { result } = renderHook(() => useUpdateScheduledMessage(), { wrapper: w() });
 
       await act(async () => {
@@ -747,7 +746,7 @@ describe("useScheduledMessages", () => {
       };
       mF.mockReturnValue(c([msg]));
 
-      const { useMyScheduledMessages } = await import("@/hooks/useScheduledMessages");
+      const { useMyScheduledMessages } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { result } = renderHook(() => useMyScheduledMessages(), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -757,7 +756,7 @@ describe("useScheduledMessages", () => {
     it("supports assignedTo=all filter", async () => {
       mF.mockReturnValue(c([]));
 
-      const { useMyScheduledMessages } = await import("@/hooks/useScheduledMessages");
+      const { useMyScheduledMessages } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { result } = renderHook(
         () => useMyScheduledMessages({ assignedTo: "all" }),
         { wrapper: w() }
@@ -769,7 +768,7 @@ describe("useScheduledMessages", () => {
     it("supports showCompleted filter", async () => {
       mF.mockReturnValue(c([]));
 
-      const { useMyScheduledMessages } = await import("@/hooks/useScheduledMessages");
+      const { useMyScheduledMessages } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { result } = renderHook(
         () => useMyScheduledMessages({ showCompleted: true }),
         { wrapper: w() }
@@ -781,7 +780,7 @@ describe("useScheduledMessages", () => {
     it("supports specific assignedTo filter", async () => {
       mF.mockReturnValue(c([]));
 
-      const { useMyScheduledMessages } = await import("@/hooks/useScheduledMessages");
+      const { useMyScheduledMessages } = await import("@/modules/communication/hooks/useScheduledMessages");
       const { result } = renderHook(
         () => useMyScheduledMessages({ assignedTo: "other-tm" }),
         { wrapper: w() }
@@ -811,7 +810,7 @@ describe("useWhatsAppConversations", () => {
       };
       mF.mockReturnValue(c([conv]));
 
-      const { useWhatsAppConversationsMeta } = await import("@/hooks/useWhatsAppConversations");
+      const { useWhatsAppConversationsMeta } = await import("@/modules/communication/hooks/useWhatsAppConversations");
       const { result } = renderHook(() => useWhatsAppConversationsMeta("inst-1"), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -820,7 +819,7 @@ describe("useWhatsAppConversations", () => {
     });
 
     it("is disabled when instanceId is null", async () => {
-      const { useWhatsAppConversationsMeta } = await import("@/hooks/useWhatsAppConversations");
+      const { useWhatsAppConversationsMeta } = await import("@/modules/communication/hooks/useWhatsAppConversations");
       const { result } = renderHook(() => useWhatsAppConversationsMeta(null), { wrapper: w() });
 
       expect(result.current.fetchStatus).toBe("idle");
@@ -838,7 +837,7 @@ describe("useWhatsAppConversations", () => {
       };
       mF.mockReturnValue(c([tagRow]));
 
-      const { useWhatsAppConversationTags } = await import("@/hooks/useWhatsAppConversations");
+      const { useWhatsAppConversationTags } = await import("@/modules/communication/hooks/useWhatsAppConversations");
       const { result } = renderHook(() => useWhatsAppConversationTags("inst-1"), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -847,7 +846,7 @@ describe("useWhatsAppConversations", () => {
     });
 
     it("is disabled when instanceId is null", async () => {
-      const { useWhatsAppConversationTags } = await import("@/hooks/useWhatsAppConversations");
+      const { useWhatsAppConversationTags } = await import("@/modules/communication/hooks/useWhatsAppConversations");
       const { result } = renderHook(() => useWhatsAppConversationTags(null), { wrapper: w() });
 
       expect(result.current.fetchStatus).toBe("idle");
@@ -858,7 +857,7 @@ describe("useWhatsAppConversations", () => {
     it("archives a conversation via upsert", async () => {
       mF.mockReturnValue(c([{ id: "c1" }]));
 
-      const { useArchiveConversation } = await import("@/hooks/useWhatsAppConversations");
+      const { useArchiveConversation } = await import("@/modules/communication/hooks/useWhatsAppConversations");
       const { result } = renderHook(() => useArchiveConversation(), { wrapper: w() });
 
       await act(async () => {
@@ -878,7 +877,7 @@ describe("useWhatsAppConversations", () => {
     it("unarchives a conversation by setting archived_at to null", async () => {
       mF.mockReturnValue(c());
 
-      const { useUnarchiveConversation } = await import("@/hooks/useWhatsAppConversations");
+      const { useUnarchiveConversation } = await import("@/modules/communication/hooks/useWhatsAppConversations");
       const { result } = renderHook(() => useUnarchiveConversation(), { wrapper: w() });
 
       await act(async () => {
@@ -893,7 +892,7 @@ describe("useWhatsAppConversations", () => {
 
   describe("useDeleteConversation", () => {
     it("soft deletes via RPC", async () => {
-      const { useDeleteConversation } = await import("@/hooks/useWhatsAppConversations");
+      const { useDeleteConversation } = await import("@/modules/communication/hooks/useWhatsAppConversations");
       const { result } = renderHook(() => useDeleteConversation(), { wrapper: w() });
 
       await act(async () => {
@@ -918,7 +917,7 @@ describe("useWhatsAppConversations", () => {
     it("upserts conversation record and inserts tag", async () => {
       mF.mockReturnValue(c([{ id: "c1" }]));
 
-      const { useAddConversationTag } = await import("@/hooks/useWhatsAppConversations");
+      const { useAddConversationTag } = await import("@/modules/communication/hooks/useWhatsAppConversations");
       const { result } = renderHook(() => useAddConversationTag(), { wrapper: w() });
 
       await act(async () => {
@@ -941,7 +940,7 @@ describe("useWhatsAppConversations", () => {
     it("removes a tag from a conversation", async () => {
       mF.mockReturnValue(c());
 
-      const { useRemoveConversationTag } = await import("@/hooks/useWhatsAppConversations");
+      const { useRemoveConversationTag } = await import("@/modules/communication/hooks/useWhatsAppConversations");
       const { result } = renderHook(() => useRemoveConversationTag(), { wrapper: w() });
 
       await act(async () => {

@@ -4,7 +4,7 @@
  * e estabilidade de tuple shape (TanStack Query exige imutabilidade estrutural).
  */
 import { describe, it, expect } from "vitest";
-import { chatQueryKeys } from "@/hooks/chat/shared/queryKeys";
+import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
 
 describe("chatQueryKeys", () => {
   describe("messages()", () => {

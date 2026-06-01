@@ -2,7 +2,7 @@
  * Unit tests — OptimisticLockConflictError + isPostgrestNoRows (Issue #307).
  */
 import { describe, it, expect } from "vitest";
-import { OptimisticLockConflictError, isPostgrestNoRows } from "@/lib/optimistic-lock";
+import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platform/lib/optimistic-lock";
 
 describe("OptimisticLockConflictError", () => {
   it("carries a stable code and is instanceof Error", () => {

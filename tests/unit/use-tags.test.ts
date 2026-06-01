@@ -10,11 +10,11 @@ vi.mock("@/integrations/supabase/client", () => ({
     channel: vi.fn().mockReturnValue({ on: vi.fn().mockReturnThis(), subscribe: vi.fn() }),
   },
 }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-test", isReady: true }),
 }));
 
-import { useTags, useCreateTag, useUpdateTag, useDeleteTag } from "@/hooks/useTags";
+import { useTags, useCreateTag, useUpdateTag, useDeleteTag } from "@/modules/leads/hooks/useTags";
 
 // ── Helpers ──
 const MOCK_TAGS = [

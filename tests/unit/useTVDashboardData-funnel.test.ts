@@ -28,14 +28,14 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
   useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
 }));
-vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false, isLoading: false }) }));
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false, isLoading: false }) }));
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }),
   useTeamMembers: () => ({ data: [
     { id: "tm1", name: "Closer 1", is_active: true, metric_type: "sales", role: "admin", user_id: "u1", organization_id: "org-t" },
@@ -46,23 +46,24 @@ vi.mock("@/hooks/useTeamMembers", () => ({
   setSelectedOrgId: vi.fn(),
   useResponsibleMembers: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/usePipePropostas", () => ({ usePipePropostas: () => ({ data: [] }) }));
-vi.mock("@/hooks/usePipeWhatsapp", () => ({ usePipeWhatsapp: () => ({ data: [] }) }));
-vi.mock("@/hooks/useGoals", () => ({
+vi.mock("@/modules/pipelines/hooks/legacy/usePipePropostas", () => ({ usePipePropostas: () => ({ data: [] }), useCreatePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useUpdatePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useDeletePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
+vi.mock("@/modules/pipelines/hooks/legacy/usePipeWhatsapp", () => ({ usePipeWhatsapp: () => ({ data: [] }), useCreatePipeWhatsapp: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useUpdatePipeWhatsapp: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
+vi.mock("@/modules/engagement/hooks/useGoals", () => ({
   useTeamGoals: () => ({ data: [{ type: "vendas", target_value: 100000, team_member_id: null, name: "Meta" }] }),
   useIndividualGoals: () => ({ data: { salesGoals: [], meetingsGoals: [] } }),
 }));
-vi.mock("@/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/hooks/useUserRole", () => ({
   useUserRole: () => "admin",
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
+  useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
 }));
-vi.mock("@/hooks/useDashboardMetrics", () => ({
+vi.mock("@/modules/analytics/hooks/useDashboardMetrics", () => ({
   useDashboardMetrics: () => ({ data: { vendaTotal: 0, vendaMRR: 0, vendaProjeto: 0 } }),
   useConversionRates: () => ({ data: { meetingsRates: [], salesRates: [] } }),
   useFunnelData: () => ({ data: [] }),
   useRankingData: () => ({ data: { salesRanking: [], meetingsRanking: [] } }),
 }));
-vi.mock("@/hooks/usePipelineStages", () => ({
+vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {},
   getPipelineTypeName: (t: string) => t,
@@ -70,6 +71,7 @@ vi.mock("@/hooks/usePipelineStages", () => ({
   stagesToSelectOptions: () => [],
   getSuccessStageTransition: () => null,
   useAllPipelineStages: () => ({ data: [] }),
+  useAllPipelineStageOptions: vi.fn(() => ({ data: [] })),
 }));
 
 const now = new Date();
@@ -116,7 +118,7 @@ const mockConfirmacoes = [
   },
 ];
 
-vi.mock("@/hooks/usePipeConfirmacao", () => ({ usePipeConfirmacao: () => ({ data: mockConfirmacoes }) }));
+vi.mock("@/modules/pipelines/hooks/legacy/usePipeConfirmacao", () => ({ usePipeConfirmacao: () => ({ data: mockConfirmacoes }), useCreatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useUpdatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useDeletePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
 
 function createWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -124,7 +126,7 @@ function createWrapper() {
     React.createElement(QueryClientProvider, { client: qc }, children);
 }
 
-import { useTVDashboardData } from "@/hooks/useTVDashboardData";
+import { useTVDashboardData } from "@/modules/analytics/hooks/useTVDashboardData";
 
 describe("useTVDashboardData — funnel regression", () => {
   it("reunioesMarcadas conta por metrics_period_at (não meeting_date)", async () => {

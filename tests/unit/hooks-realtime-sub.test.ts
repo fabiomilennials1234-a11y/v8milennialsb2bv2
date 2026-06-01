@@ -12,11 +12,11 @@ vi.mock("@/integrations/supabase/client", () => {
     },
   };
 });
-vi.mock("@/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t" }),
 }));
 
-import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { supabase } from "@/integrations/supabase/client";
 const mockChannel = (supabase.channel as any)();
 const mockRemoveChannel = supabase.removeChannel as any;

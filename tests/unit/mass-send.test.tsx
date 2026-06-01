@@ -25,7 +25,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({
     data: { organization_id: "org-a", id: "tm-1", user_id: "u-1" },
   }),
@@ -35,7 +35,7 @@ import {
   useCreateMassSend,
   useControlMassSend,
   useRefreshMassSendStatus,
-} from "@/hooks/useMassSendJobs";
+} from "@/modules/campaigns/hooks/useMassSendJobs";
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

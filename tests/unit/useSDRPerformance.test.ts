@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
-import { useSDRPerformance } from "@/hooks/useSDRPerformance";
+import { useSDRPerformance } from "@/modules/engagement/hooks/useSDRPerformance";
 import type { TVPeriodRange } from "@/lib/tv-periods";
 
 const now = new Date(2026, 4, 22, 12, 0, 0);
@@ -27,15 +27,18 @@ const mockConfirmacoes = [
   { id: "c7", status: "compareceu", metrics_period_at: outRangeDate, meeting_date: inRangeDate, sdr_id: "s2" },
 ];
 
-vi.mock("@/hooks/usePipeConfirmacao", () => ({
+vi.mock("@/modules/pipelines/hooks/legacy/usePipeConfirmacao", () => ({
   usePipeConfirmacao: () => ({ data: mockConfirmacoes }),
+  useCreatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })),
+  useUpdatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })),
+  useDeletePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })),
 }));
 
-vi.mock("@/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useTeamMembers: () => ({ data: mockSDRs }),
 }));
 
-vi.mock("@/hooks/useAvatarMap", () => ({
+vi.mock("@/modules/identity/hooks/useAvatarMap", () => ({
   useAvatarMap: () => new Map([["s1", "url-s1"]]),
 }));
 
