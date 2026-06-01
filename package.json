@@ -22,6 +22,7 @@
     "test:edge": "cd supabase/functions && deno task test",
     "test:edge:coverage": "cd supabase/functions && rm -rf .coverage && deno task test:coverage && deno task coverage:report",
     "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e",
+    "test:secrets": "bash scripts/test-secret-scan.sh",
     "vault:lint": "node scripts/vault-lint.mjs",
     "vault:regen": "node scripts/vault-regen-indexes.mjs",
     "vault:regen:check": "node scripts/vault-regen-indexes.mjs --check",

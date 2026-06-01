@@ -1,0 +1,48 @@
+name: CodeQL
+
+# Static Application Security Testing (SAST) for JS/TS via GitHub CodeQL.
+# Zero-config: the default query suite (security-extended) surfaces
+# high-severity findings in the repo's Security > Code scanning tab and, on
+# pull requests, as inline review annotations that can gate the merge.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Weekly full scan (Mondays 06:00 UTC) catches issues in dormant code paths
+    # and newly-published CodeQL queries even when nothing has been pushed.
+    - cron: '0 6 * * 1'
+
+# Least-privilege: CodeQL needs to read code and write SARIF results.
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # security-extended pulls in the high-severity security queries on
+          # top of the default set.
+          queries: security-extended
+
+      # No build step required: CodeQL extracts JS/TS by interpretation.
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'

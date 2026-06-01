@@ -6,10 +6,20 @@
 
 set -euo pipefail
 
-API_URL="https://alamaster.sz.chat/api/v4"
-EMAIL="api.fortics@alamaster.com.br"
-PASSWORD="ubvS1VNUijEA"
-CHANNEL_ID="685c0a87e083650018315d40"
+# Credentials come from the environment — NEVER hardcode them here (this file is
+# committed and scanned by gitleaks). Mirror the Supabase secret names used in
+# production: SZ_CHAT_AGENT_EMAIL / SZ_CHAT_AGENT_PASSWORD.
+#   export SZ_CHAT_AGENT_EMAIL=... SZ_CHAT_AGENT_PASSWORD=...
+#   bash scripts/test-szchat-api.sh
+API_URL="${SZ_CHAT_API_URL:-https://alamaster.sz.chat/api/v4}"
+EMAIL="${SZ_CHAT_AGENT_EMAIL:-}"
+PASSWORD="${SZ_CHAT_AGENT_PASSWORD:-}"
+CHANNEL_ID="${SZ_CHAT_CHANNEL_ID:-685c0a87e083650018315d40}"
+
+if [ -z "$EMAIL" ] || [ -z "$PASSWORD" ]; then
+  echo "ERROR: set SZ_CHAT_AGENT_EMAIL and SZ_CHAT_AGENT_PASSWORD before running." >&2
+  exit 2
+fi
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
