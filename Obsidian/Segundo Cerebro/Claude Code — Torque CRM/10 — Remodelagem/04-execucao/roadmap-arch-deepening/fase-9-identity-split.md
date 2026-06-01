@@ -220,7 +220,7 @@ Pattern Fase 8. Escopo definido por [[inventario-identity]] — statements 1, 4,
 - [ ] `/master/operations` carrega (hotfix #530 não regride) — **gate CTO**
 - ⚠️ `permission-engine.test.ts` (integration) = **env-blocked** (Supabase local sem seed de auth); backend não tocado pela slice — não-regressão. Rodar 3× quando ambiente disponível.
 
-### Slice 9.4a — Precursora: quebrar ciclo `useOrganization↔useTeamMembers` (PR #607) ✅
+### Slice 9.4a — Precursora: quebrar ciclo `useOrganization↔useTeamMembers` (PR #610) ✅
 
 Bloqueava o move 9.4 (mover ambos os arquivos cíclicos re-chaveava o ratchet edge-keyed). Decisão CTO (AskUserQuestion): precursora dedicada antes do move — espelha 9.1b. Ver changelog [[2026-06-01-arch-deepening-9-4a-break-org-team-cycle]].
 
