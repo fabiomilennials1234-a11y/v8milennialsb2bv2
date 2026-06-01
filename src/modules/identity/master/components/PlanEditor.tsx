@@ -20,10 +20,13 @@ import {
 
 interface PlanEditorProps {
   plan: Plan;
+  // NOTE: accepted for API compat (MasterPlans passes it) but the editor
+  // auto-saves on debounce and currently has no explicit close/cancel control,
+  // so it is never invoked. Follow-up: wire a close affordance or drop the prop.
   onClose?: () => void;
 }
 
-export function PlanEditor({ plan, onClose }: PlanEditorProps) {
+export function PlanEditor({ plan }: PlanEditorProps) {
   const updatePlan = useUpdatePlan();
 
   // Local state (cópia editável)

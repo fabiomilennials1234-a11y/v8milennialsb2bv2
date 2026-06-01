@@ -9,7 +9,6 @@ import {
   Users,
   CreditCard,
   Activity,
-  TrendingUp,
   AlertTriangle,
   Shield,
   Clock,

@@ -1,15 +1,11 @@
 import { motion } from "framer-motion";
-import { 
-  User, 
-  TrendingUp, 
-  Calendar, 
-  DollarSign, 
+import {
+  Calendar,
+  DollarSign,
   Star,
   MoreHorizontal,
   Edit2,
   Trash2,
-  Mail,
-  Phone,
   Trophy,
   Target,
   Flame
@@ -23,7 +19,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
-import { MiniProgressRing } from "@/modules/engagement/components/gamification/ProgressRing";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { cn } from "@/lib/utils";
 
@@ -94,12 +89,6 @@ export function TeamMemberCard({
 }: TeamMemberCardProps) {
   const config = roleConfig[member.role as keyof typeof roleConfig] || roleConfig.sdr;
   const Icon = config.icon;
-  const initials = member.name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 
   const totalOTE = (Number(member.ote_base) || 0) + (Number(member.ote_bonus) || 0);
   const goalProgress = stats?.goalProgress || 0;

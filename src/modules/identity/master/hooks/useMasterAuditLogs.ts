@@ -121,7 +121,7 @@ export function useMasterAuditStats() {
 
       const logs = allLogs || [];
       const todayLogs = logs.filter(
-        (l) => new Date(l.created_at) >= today
+        (l) => l.created_at != null && new Date(l.created_at) >= today
       );
 
       // Contagem por ação

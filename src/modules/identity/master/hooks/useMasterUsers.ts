@@ -6,7 +6,10 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Enums } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+
+type AppRole = Enums<"app_role">;
 
 export interface MasterUserView {
   id: string;
@@ -74,8 +77,8 @@ export function useMasterUsers() {
         email: "", // Não temos acesso direto ao email via RLS
         created_at: "",
         last_sign_in_at: null,
-        full_name: member.name || profileMap.get(member.user_id)?.full_name || null,
-        avatar_url: profileMap.get(member.user_id)?.avatar_url || null,
+        full_name: member.name || profileMap.get(member.user_id ?? "")?.full_name || null,
+        avatar_url: profileMap.get(member.user_id ?? "")?.avatar_url || null,
         team_member_id: member.id,
         organization_id: member.organization_id,
         organization_name: (member.organization as any)?.name || null,
@@ -129,7 +132,7 @@ export function useMasterUpdateUser() {
       teamMemberId: string;
       updates: {
         name?: string;
-        role?: string;
+        role?: AppRole;
         is_active?: boolean;
         organization_id?: string;
       };
@@ -167,7 +170,7 @@ export function useMasterChangeUserRole() {
       newRole,
     }: {
       userId: string;
-      newRole: string;
+      newRole: AppRole;
     }) => {
       // Atualizar na tabela user_roles
       const { error: deleteError } = await supabase
@@ -372,8 +375,6 @@ export function useMasterAssignUserToOrg() {
  * Chama a Edge Function admin-reset-user-password.
  */
 export function useMasterResetUserPassword() {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async ({
       user_id,

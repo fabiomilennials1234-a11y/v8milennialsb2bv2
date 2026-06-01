@@ -53,7 +53,10 @@ export function useTeamMembers() {
         throw error;
       }
 
-      return data as TeamMember[];
+      // org_visible_members is a view absent from the generated types, so the
+      // builder yields SelectQueryError and can't infer the row shape — cast via
+      // unknown to the known view row type (project pattern for un-typed views).
+      return data as unknown as TeamMember[];
     },
     enabled: isReady && !!organizationId,
     retry: 1,

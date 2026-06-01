@@ -21,7 +21,6 @@ interface Props {
 
 export function MatchCriteriaBuilder({ value, onChange }: Props) {
   const [newField, setNewField] = useState("");
-  const [newValue, setNewValue] = useState("");
 
   const fields = Object.keys(value);
 
@@ -36,7 +35,6 @@ export function MatchCriteriaBuilder({ value, onChange }: Props) {
     const existing = value[field] ?? [];
     if (existing.includes(val)) return;
     onChange({ ...value, [field]: [...existing, val] });
-    setNewValue("");
   };
 
   const removeValue = (field: string, val: string) => {

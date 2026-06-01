@@ -7,7 +7,12 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+
+type MasterOrganizationMember = Tables<"team_members"> & {
+  user_roles: { role: Tables<"user_roles">["role"] }[];
+};
 
 export type OrgType = "crm" | "outbound";
 
@@ -267,7 +272,7 @@ export function useMasterBillingOverride() {
         _org_id: orgId,
         _plan: plan,
         _reason: reason,
-        _expires_at: expiresAt || null,
+        _expires_at: expiresAt || undefined,
       });
 
       if (error) throw error;
@@ -290,11 +295,22 @@ export function useMasterBillingOverride() {
 export function useMasterOrganizationMembers(orgId: string | undefined) {
   return useQuery({
     queryKey: ["master-organization-members", orgId],
-    queryFn: async () => {
+    queryFn: async (): Promise<MasterOrganizationMember[]> => {
       if (!orgId) return [];
 
-      const { data, error } = await supabase
-        .from("team_members")
+      // The embedded `user_roles:user_roles(role)` select makes PostgREST's
+      // result-type parser explode (TS2589). The `from` result is typed loosely
+      // *before* `.select(...)` so the deep result-type parser never runs; the
+      // row shape is recovered via the cast below.
+      type LooseFilterBuilder = {
+        eq: (column: string, value: unknown) => LooseFilterBuilder;
+        order: (column: string) => LooseFilterBuilder;
+        then: PromiseLike<{ data: unknown; error: unknown }>["then"];
+      };
+      type LooseFrom = { select: (columns: string) => LooseFilterBuilder };
+
+      const { data, error } = await (supabase
+        .from("team_members") as unknown as LooseFrom)
         .select(`
           *,
           user_roles:user_roles(role)
@@ -303,7 +319,7 @@ export function useMasterOrganizationMembers(orgId: string | undefined) {
         .order("name");
 
       if (error) throw error;
-      return data;
+      return (data ?? []) as unknown as MasterOrganizationMember[];
     },
     enabled: !!orgId,
   });

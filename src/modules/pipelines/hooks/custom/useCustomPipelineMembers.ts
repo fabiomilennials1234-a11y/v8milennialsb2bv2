@@ -40,8 +40,18 @@ export function usePipelineMembers(pipelineId: string | undefined) {
     queryFn: async () => {
       if (!pipelineId) return [];
 
-      const { data, error } = await supabase
-        .from("custom_pipeline_members")
+      // Loosely-typed builder before `.select(...)` to avoid PostgREST's deep
+      // result-type instantiation (TS2589) from the nested team_member/profiles
+      // embed; row shape recovered via the cast below.
+      type LooseFilterBuilder = {
+        eq: (column: string, value: unknown) => LooseFilterBuilder;
+        order: (column: string, options: { ascending: boolean }) => LooseFilterBuilder;
+        then: PromiseLike<{ data: unknown; error: unknown }>["then"];
+      };
+      type LooseFrom = { select: (columns: string) => LooseFilterBuilder };
+
+      const { data, error } = await (supabase
+        .from("custom_pipeline_members") as unknown as LooseFrom)
         .select(`
           *,
           team_member:team_members(
@@ -54,7 +64,7 @@ export function usePipelineMembers(pipelineId: string | undefined) {
         .order("created_at", { ascending: true });
 
       if (error) throw error;
-      return (data || []) as CustomPipelineMember[];
+      return (data || []) as unknown as CustomPipelineMember[];
     },
     enabled: !!pipelineId,
   });

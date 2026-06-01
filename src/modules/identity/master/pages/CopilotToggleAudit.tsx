@@ -234,7 +234,7 @@ function HistoryTab() {
 }
 
 function DriftTab() {
-  const { data: drift, isLoading, refetch, isFetching } = useCopilotToggleDrift();
+  const { data: drift, refetch, isFetching } = useCopilotToggleDrift();
   const { data: orgs } = useMasterOrganizations();
   const orgNameById = useMemo(() => {
     const m = new Map<string, string>();
