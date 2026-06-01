@@ -12,11 +12,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
 
-const DEV_URL = 'https://bcfadphgsibjzivtbjvc.supabase.co';
-const DEV_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjZmFkcGhnc2lianppdnRianZjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzE5NDIxMywiZXhwIjoyMDg4NzcwMjEzfQ.cWrlxhVaw7qyGvSZmbDOUJSbQ-R555rGcPtNtX5hldE';
-const DEV_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjZmFkcGhnc2lianppdnRianZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTQyMTMsImV4cCI6MjA4ODc3MDIxM30.GVqmINdqS799BDoGdiKbnbQhs2LzLUKbLi-JToR4mMw';
+const DEV_URL =
+  process.env.DEV_SUPABASE_URL || 'https://bcfadphgsibjzivtbjvc.supabase.co';
+const DEV_SERVICE_KEY = process.env.DEV_SUPABASE_SERVICE_ROLE_KEY ?? '';
+const DEV_ANON_KEY = process.env.DEV_SUPABASE_ANON_KEY ?? '';
 
-const admin = createClient(DEV_URL, DEV_SERVICE_KEY);
+const admin = createClient(DEV_URL, DEV_SERVICE_KEY || 'skipped-no-key');
 
 const TEST_EMAIL = `test-toggle-ai-${Date.now()}@test.local`;
 const TEST_PASSWORD = 'TestToggleAI123!';
@@ -32,7 +33,7 @@ function parseRpcResponse(data: any): any {
   return typeof data === 'string' ? JSON.parse(data) : data;
 }
 
-describe('toggle_lead_ai RPC', () => {
+describe.skipIf(!DEV_SERVICE_KEY)('toggle_lead_ai RPC', () => {
   beforeAll(async () => {
     // Find an existing org
     const { data: orgs } = await admin.from('organizations').select('id').limit(1).single();
