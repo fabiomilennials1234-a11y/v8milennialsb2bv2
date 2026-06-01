@@ -34,6 +34,9 @@ dist
 dist-ssr
 *.local
 
+# TypeScript incremental build cache (typecheck usa --noEmit; cache nunca commitado)
+*.tsbuildinfo
+
 # Environment variables
 .env
 .env.local
