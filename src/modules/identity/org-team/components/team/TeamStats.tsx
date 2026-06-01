@@ -5,7 +5,6 @@ import {
   Calendar, 
   DollarSign,
   Target,
-  Trophy,
   Percent,
   Activity
 } from "lucide-react";

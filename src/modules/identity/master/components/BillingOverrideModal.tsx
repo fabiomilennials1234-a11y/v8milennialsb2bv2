@@ -28,7 +28,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { AlertTriangle, CreditCard, Flag, Calendar, Gauge } from "lucide-react";
+import { AlertTriangle, CreditCard, Flag, Gauge } from "lucide-react";
 import { useMasterBillingOverride } from "../hooks/useMasterOrganizations";
 import { QuotaManagementPanel } from "./QuotaManagementPanel";
 import { toast } from "sonner";
@@ -141,7 +141,7 @@ export function BillingOverrideModal({
             _org_id: organization.id,
             _feature_key: featureKey,
             _reason: featureReason,
-            _expires_at: expiresAt || null,
+            _expires_at: expiresAt || undefined,
           });
           if (error) throw error;
         } else {

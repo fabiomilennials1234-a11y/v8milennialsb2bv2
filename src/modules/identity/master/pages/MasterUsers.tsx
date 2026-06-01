@@ -67,7 +67,10 @@ import { useMasterOrganizations } from "../hooks/useMasterOrganizations";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Enums } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+
+type AppRole = Enums<"app_role">;
 
 export default function MasterUsers() {
   const [search, setSearch] = useState("");
@@ -234,7 +237,7 @@ export default function MasterUsers() {
   };
 
   // Roles disponíveis por tipo de organização
-  function getRolesForOrgType(_orgType?: string): { value: string; label: string }[] {
+  function getRolesForOrgType(_orgType?: string): { value: AppRole; label: string }[] {
     return [
       { value: "admin", label: "Admin" },
       { value: "member", label: "Membro" },
@@ -408,7 +411,7 @@ export default function MasterUsers() {
                               Alterar Role
                             </DropdownMenuSubTrigger>
                             <DropdownMenuSubContent>
-                              {getRolesForOrgType(user.org_type).map((r) => (
+                              {getRolesForOrgType(user.org_type ?? undefined).map((r) => (
                                 <DropdownMenuItem
                                   key={r.value}
                                   onClick={() =>
@@ -447,7 +450,7 @@ export default function MasterUsers() {
                           <DropdownMenuItem
                             onClick={() =>
                               toggleActive.mutate({
-                                teamMemberId: user.team_member_id,
+                                teamMemberId: user.team_member_id ?? "",
                                 isActive: !user.is_active,
                               })
                             }

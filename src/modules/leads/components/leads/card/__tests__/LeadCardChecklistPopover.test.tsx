@@ -1,3 +1,4 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { LeadCardMetrics } from "../LeadCardMetrics";
@@ -7,7 +8,7 @@ import { LeadCardChecklistPopover } from "../LeadCardChecklistPopover";
 
 const toggleMutate = vi.fn();
 
-const leadChecklists = vi.fn(() => ({
+const leadChecklists = vi.fn((..._args: unknown[]) => ({
   data: [
     { id: "cl-1", title: "Qualificação", total_items: 2, completed_items: 1 },
   ],
@@ -16,7 +17,7 @@ const leadChecklists = vi.fn(() => ({
   refetch: vi.fn(),
 }));
 
-const checklistItems = vi.fn(() => ({
+const checklistItems = vi.fn((..._args: unknown[]) => ({
   data: [
     { id: "it-1", checklist_id: "cl-1", title: "Confirmar telefone", is_completed: false },
     { id: "it-2", checklist_id: "cl-1", title: "Validar empresa", is_completed: true },

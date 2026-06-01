@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesInsert } from "@/integrations/supabase/types";
 import {
   Flag,
   Plus,
@@ -83,7 +84,7 @@ export default function MasterFeatures() {
   });
 
   const createFeature = useMutation({
-    mutationFn: async (data: Partial<FeatureFlag>) => {
+    mutationFn: async (data: TablesInsert<"feature_flags">) => {
       const { error } = await supabase.from("feature_flags").insert(data);
       if (error) throw error;
     },

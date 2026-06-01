@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
-  Users,
   Search,
   Edit2,
   Trash2,
@@ -104,7 +103,7 @@ export default function Equipe() {
   const { organizationId } = useOrganization();
   const { isAdmin } = useIdentity();
   const queryClient = useQueryClient();
-  const { data: seatUsage } = useSeatUsage(organizationId);
+  const { data: seatUsage } = useSeatUsage(organizationId ?? undefined);
 
   const { data: orgKeyData } = useQuery({
     queryKey: ["organization", "user_creation_key", organizationId],
