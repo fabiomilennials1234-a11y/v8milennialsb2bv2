@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { renderHook } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React from "react";
 import { useCloserPerformance } from "@/modules/engagement/hooks/useCloserPerformance";
 import type { TVPeriodRange } from "@/lib/tv-periods";
 
@@ -32,10 +34,32 @@ const mockConfirmacoes = [
   { id: "c5", status: "compareceu", meeting_date: outRangeDate, sale_responsible_id: "cl1" }, // fora
 ];
 
-vi.mock("@/modules/pipelines/hooks/legacy/usePipePropostas", () => ({ usePipePropostas: () => ({ data: mockPropostas }), useCreatePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useUpdatePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useDeletePipeProposta: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
-vi.mock("@/modules/pipelines/hooks/legacy/usePipeConfirmacao", () => ({ usePipeConfirmacao: () => ({ data: mockConfirmacoes }), useCreatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useUpdatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useDeletePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
+// Perf hooks agora leem as views direto via supabase. Mock retorna dados por tabela.
+vi.mock("@/integrations/supabase/client", () => ({
+  supabase: {
+    from: (table: string) => ({
+      select: () => ({
+        eq: () =>
+          Promise.resolve({
+            data: table === "pipe_propostas" ? mockPropostas : mockConfirmacoes,
+            error: null,
+          }),
+      }),
+    }),
+  },
+}));
+
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
+  useOrganization: () => ({ organizationId: "org-1", isReady: true }),
+}));
 vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({ useTeamMembers: () => ({ data: mockClosers }) }));
 vi.mock("@/modules/identity/hooks/useAvatarMap", () => ({ useAvatarMap: () => new Map() }));
+
+function createWrapper() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: qc }, children);
+}
 
 describe("useCloserPerformance", () => {
   const range: TVPeriodRange = {
@@ -43,8 +67,9 @@ describe("useCloserPerformance", () => {
     end: new Date(2026, 4, 22, 23, 59, 59),
   };
 
-  it("calcula vendas, valor, ticket, conversão por closer", () => {
-    const { result } = renderHook(() => useCloserPerformance(range));
+  it("calcula vendas, valor, ticket, conversão por closer", async () => {
+    const { result } = renderHook(() => useCloserPerformance(range), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.totals.vendas).toBe(2), { timeout: 3000 });
     const cl1 = result.current.byCloser.find((c) => c.id === "cl1")!;
     const cl2 = result.current.byCloser.find((c) => c.id === "cl2")!;
 
@@ -61,27 +86,31 @@ describe("useCloserPerformance", () => {
     expect(cl2.conversao).toBe(50);
   });
 
-  it("reuniões realizadas só conta compareceu", () => {
-    const { result } = renderHook(() => useCloserPerformance(range));
+  it("reuniões realizadas só conta compareceu", async () => {
+    const { result } = renderHook(() => useCloserPerformance(range), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.totals.reunioesRealizadas).toBe(3), { timeout: 3000 });
     const cl1 = result.current.byCloser.find((c) => c.id === "cl1")!;
     const cl2 = result.current.byCloser.find((c) => c.id === "cl2")!;
     expect(cl1.reunioesRealizadas).toBe(1);
     expect(cl2.reunioesRealizadas).toBe(2);
   });
 
-  it("ordena por vendasValor desc; topCloser = maior valor", () => {
-    const { result } = renderHook(() => useCloserPerformance(range));
+  it("ordena por vendasValor desc; topCloser = maior valor", async () => {
+    const { result } = renderHook(() => useCloserPerformance(range), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.totals.vendas).toBe(2), { timeout: 3000 });
     expect(result.current.byCloser[0].id).toBe("cl2");
     expect(result.current.topCloserId).toBe("cl2");
   });
 
-  it("ignora SDRs", () => {
-    const { result } = renderHook(() => useCloserPerformance(range));
+  it("ignora SDRs", async () => {
+    const { result } = renderHook(() => useCloserPerformance(range), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.byCloser.length).toBeGreaterThan(0), { timeout: 3000 });
     expect(result.current.byCloser.find((c) => c.id === "sdr1")).toBeUndefined();
   });
 
-  it("totals batem com soma dos closers", () => {
-    const { result } = renderHook(() => useCloserPerformance(range));
+  it("totals batem com soma dos closers", async () => {
+    const { result } = renderHook(() => useCloserPerformance(range), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.totals.vendas).toBe(2), { timeout: 3000 });
     const t = result.current.totals;
     expect(t.vendas).toBe(2);
     expect(t.vendasValor).toBe(40000);
