@@ -29,7 +29,7 @@ import { RealtimeStatusBadge } from "@/modules/communication/components/chat/Rea
 import { SyncChatButton } from "@/modules/communication/components/chat/history-sync/SyncChatButton";
 import { useMessageLimits } from "@/modules/communication/hooks/useMessageLimits";
 import { HumanPauseBadge } from "../HumanPauseBadge";
-import { getAvatarGradient } from "@/components/chat/list/avatarGradient";
+import { getAvatarGradient } from "@/modules/communication/components/chat/list/avatarGradient";
 
 export interface SzChatSession {
   sz_chat_session_id: string;

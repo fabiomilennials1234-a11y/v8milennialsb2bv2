@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { TrendingUp, Users, MapPin, User, Target } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
-import { FunnelChart } from "@/modules/analytics";
+import { FunnelChart } from "@/modules/analytics/components/dashboard/FunnelChart";
 import { ORIGIN_COLORS, CHART_TOOLTIP_STYLE, humanizeOrigin } from "./analytics-utils";
 
 interface WhatsappStats {

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { TrendingUp, MapPin, Users, User, CheckCircle2 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
-import { FunnelChart } from "@/modules/analytics";
+import { FunnelChart } from "@/modules/analytics/components/dashboard/FunnelChart";
 import { ConfirmacaoStats } from "../legacy/confirmacao";
 import { ORIGIN_COLORS, CHART_TOOLTIP_STYLE, humanizeOrigin } from "./analytics-utils";
 

@@ -11,7 +11,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { BuilderPanel } from "@/modules/copilot/components/builder/BuilderPanel";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useFeatureFlag } from "@/modules/platform/hooks/useFeatureFlag";
 import { buildCapabilityManifest, buildBuilderToolDefs } from "@/modules/copilot/lib/capability-manifest";
 import { applyBuilderAction, type BuilderAction, type BuilderFormState } from "@/modules/copilot/lib/builder-form-reducer";
 import { Save, Loader2, ChevronLeft, Bot, Power, Star, AlertTriangle } from "lucide-react";
