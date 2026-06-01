@@ -78,7 +78,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   isVirtualTeamMember: () => false,
   useTeamMembers: () => ({ data: [] }),
 }));
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
@@ -183,7 +183,7 @@ import {
   useMasterDeleteOrganization,
   useMasterBillingOverride,
   useMasterOrganizationMembers,
-} from "@/modules/identity/hooks/useMasterOrganizations";
+} from "@/modules/identity/master/hooks/useMasterOrganizations";
 import {
   useWhatsAppInstances,
   useWhatsAppInstancesWithAgent,

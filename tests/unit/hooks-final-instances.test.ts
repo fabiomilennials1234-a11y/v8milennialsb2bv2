@@ -64,7 +64,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useTeamMembers: () => ({ data: [] }),
   useResponsibleMembers: () => ({ data: [] }),
 }));
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: true }) }));
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: true }) }));
 vi.mock("@/modules/identity/auth/hooks/useIdentity", () => ({
   useIdentity: () => ({
     userId: "u1",
@@ -503,7 +503,7 @@ describe("useMasterOrganizations", () => {
       ];
       mF.mockReturnValue(c(orgs));
 
-      const { useMasterOrganizations } = await import("@/modules/identity/hooks/useMasterOrganizations");
+      const { useMasterOrganizations } = await import("@/modules/identity/master/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterOrganizations(), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -517,7 +517,7 @@ describe("useMasterOrganizations", () => {
       const org = { id: "o1", name: "Org 1", slug: "org-1" };
       mF.mockReturnValue(c([org]));
 
-      const { useMasterOrganization } = await import("@/modules/identity/hooks/useMasterOrganizations");
+      const { useMasterOrganization } = await import("@/modules/identity/master/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterOrganization("o1"), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -525,7 +525,7 @@ describe("useMasterOrganizations", () => {
     });
 
     it("is disabled when orgId is undefined", async () => {
-      const { useMasterOrganization } = await import("@/modules/identity/hooks/useMasterOrganizations");
+      const { useMasterOrganization } = await import("@/modules/identity/master/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterOrganization(undefined), { wrapper: w() });
 
       expect(result.current.fetchStatus).toBe("idle");
@@ -544,7 +544,7 @@ describe("useMasterOrganizations", () => {
       ];
       mF.mockReturnValue(c(orgs));
 
-      const { useMasterOrganizationStats } = await import("@/modules/identity/hooks/useMasterOrganizations");
+      const { useMasterOrganizationStats } = await import("@/modules/identity/master/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterOrganizationStats(), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -562,7 +562,7 @@ describe("useMasterOrganizations", () => {
       const created = { id: "o-new", name: "New Org", slug: "new-org", org_type: "crm" };
       mF.mockReturnValue(c([created]));
 
-      const { useMasterCreateOrganization } = await import("@/modules/identity/hooks/useMasterOrganizations");
+      const { useMasterCreateOrganization } = await import("@/modules/identity/master/hooks/useMasterOrganizations");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useMasterCreateOrganization(), { wrapper: w() });
 
@@ -580,7 +580,7 @@ describe("useMasterOrganizations", () => {
       const created = { id: "o-out", name: "Outbound Co", slug: "outbound", org_type: "outbound" };
       mF.mockReturnValue(c([created]));
 
-      const { useMasterCreateOrganization } = await import("@/modules/identity/hooks/useMasterOrganizations");
+      const { useMasterCreateOrganization } = await import("@/modules/identity/master/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterCreateOrganization(), { wrapper: w() });
 
       await act(async () => {
@@ -603,7 +603,7 @@ describe("useMasterOrganizations", () => {
       const updated = { id: "o1", name: "Updated Org" };
       mF.mockReturnValue(c([updated]));
 
-      const { useMasterUpdateOrganization } = await import("@/modules/identity/hooks/useMasterOrganizations");
+      const { useMasterUpdateOrganization } = await import("@/modules/identity/master/hooks/useMasterOrganizations");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useMasterUpdateOrganization(), { wrapper: w() });
 
@@ -621,7 +621,7 @@ describe("useMasterOrganizations", () => {
     it("deletes an organization", async () => {
       mF.mockReturnValue(c());
 
-      const { useMasterDeleteOrganization } = await import("@/modules/identity/hooks/useMasterOrganizations");
+      const { useMasterDeleteOrganization } = await import("@/modules/identity/master/hooks/useMasterOrganizations");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useMasterDeleteOrganization(), { wrapper: w() });
 
@@ -637,7 +637,7 @@ describe("useMasterOrganizations", () => {
 
   describe("useMasterBillingOverride", () => {
     it("overrides billing via RPC", async () => {
-      const { useMasterBillingOverride } = await import("@/modules/identity/hooks/useMasterOrganizations");
+      const { useMasterBillingOverride } = await import("@/modules/identity/master/hooks/useMasterOrganizations");
       const { toast } = await import("sonner");
       const { result } = renderHook(() => useMasterBillingOverride(), { wrapper: w() });
 
@@ -662,7 +662,7 @@ describe("useMasterOrganizations", () => {
     });
 
     it("handles billing override without expiresAt", async () => {
-      const { useMasterBillingOverride } = await import("@/modules/identity/hooks/useMasterOrganizations");
+      const { useMasterBillingOverride } = await import("@/modules/identity/master/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterBillingOverride(), { wrapper: w() });
 
       await act(async () => {
@@ -692,7 +692,7 @@ describe("useMasterOrganizations", () => {
       ];
       mF.mockReturnValue(c(members));
 
-      const { useMasterOrganizationMembers } = await import("@/modules/identity/hooks/useMasterOrganizations");
+      const { useMasterOrganizationMembers } = await import("@/modules/identity/master/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterOrganizationMembers("o1"), { wrapper: w() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -700,7 +700,7 @@ describe("useMasterOrganizations", () => {
     });
 
     it("is disabled when orgId is undefined", async () => {
-      const { useMasterOrganizationMembers } = await import("@/modules/identity/hooks/useMasterOrganizations");
+      const { useMasterOrganizationMembers } = await import("@/modules/identity/master/hooks/useMasterOrganizations");
       const { result } = renderHook(() => useMasterOrganizationMembers(undefined), { wrapper: w() });
 
       expect(result.current.fetchStatus).toBe("idle");

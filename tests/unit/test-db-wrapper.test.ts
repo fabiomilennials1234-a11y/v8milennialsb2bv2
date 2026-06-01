@@ -28,7 +28,7 @@ vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useIsAdmin: () => ({ isAdmin: (mockUserRoleState.data as any)?.role === "admin", isLoading: false }),
 }));
 
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
   useMasterAuth: () => mockMasterAuthState,
 }));
 

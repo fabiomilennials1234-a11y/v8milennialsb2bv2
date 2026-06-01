@@ -53,9 +53,9 @@ import {
   useMasterUpdateOrganization,
   useMasterDeleteOrganization,
   type OrgType,
-} from "../../hooks/useMasterOrganizations";
-import { BillingOverrideModal } from "../../components/master/BillingOverrideModal";
-import { useMasterAuth } from "../../hooks/useMasterAuth";
+} from "../hooks/useMasterOrganizations";
+import { BillingOverrideModal } from "../components/BillingOverrideModal";
+import { useMasterAuth } from "../hooks/useMasterAuth";
 import { toast } from "sonner";
 
 export default function MasterOrganizations() {

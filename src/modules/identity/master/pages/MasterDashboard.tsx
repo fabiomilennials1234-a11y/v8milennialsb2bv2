@@ -14,10 +14,10 @@ import {
   Shield,
   Clock,
 } from "lucide-react";
-import { useMasterOrganizationStats } from "../../hooks/useMasterOrganizations";
-import { useMasterUserStats } from "../../hooks/useMasterUsers";
-import { useMasterAuditStats } from "../../hooks/useMasterAuditLogs";
-import { useMasterAuth } from "../../hooks/useMasterAuth";
+import { useMasterOrganizationStats } from "../hooks/useMasterOrganizations";
+import { useMasterUserStats } from "../hooks/useMasterUsers";
+import { useMasterAuditStats } from "../hooks/useMasterAuditLogs";
+import { useMasterAuth } from "../hooks/useMasterAuth";
 import { Link } from "react-router-dom";
 
 export default function MasterDashboard() {

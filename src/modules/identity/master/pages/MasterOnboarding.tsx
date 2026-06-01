@@ -1,7 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PipelineTemplatesTab } from "../../components/master/onboarding/PipelineTemplatesTab";
-import { AutomationTemplatesTab } from "../../components/master/onboarding/AutomationTemplatesTab";
-import { OnboardingPreviewTab } from "../../components/master/onboarding/OnboardingPreviewTab";
+import { PipelineTemplatesTab } from "../components/onboarding/PipelineTemplatesTab";
+import { AutomationTemplatesTab } from "../components/onboarding/AutomationTemplatesTab";
+import { OnboardingPreviewTab } from "../components/onboarding/OnboardingPreviewTab";
 
 export default function MasterOnboarding() {
   return (

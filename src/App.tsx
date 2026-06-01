@@ -86,21 +86,21 @@ const Signup = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Signu
 const ResetPassword = lazy(() => lazyRetry(() => import("@/modules/identity/pages/ResetPassword")));
 
 // Master Admin — lazy loaded (com retry)
-const MasterDashboard = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterDashboard")));
-const MasterOrganizations = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterOrganizations")));
-const MasterUsers = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterUsers")));
-const MasterPlans = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterPlans")));
-const MasterFeatures = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterFeatures")));
-const MasterAuditLogs = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterAuditLogs")));
-const MasterOperations = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterOperations")));
-const MasterAutomationHealth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterAutomationHealth")));
-const MasterWhatsAppHealth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterWhatsAppHealth")));
-const CopilotReasoning = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/CopilotReasoning")));
-const CopilotToggleAudit = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/CopilotToggleAudit")));
-const MasterOnboarding = lazy(() => lazyRetry(() => import("@/modules/identity/pages/master/MasterOnboarding")));
+const MasterDashboard = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterDashboard")));
+const MasterOrganizations = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOrganizations")));
+const MasterUsers = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterUsers")));
+const MasterPlans = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterPlans")));
+const MasterFeatures = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterFeatures")));
+const MasterAuditLogs = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterAuditLogs")));
+const MasterOperations = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOperations")));
+const MasterAutomationHealth = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterAutomationHealth")));
+const MasterWhatsAppHealth = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterWhatsAppHealth")));
+const CopilotReasoning = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/CopilotReasoning")));
+const CopilotToggleAudit = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/CopilotToggleAudit")));
+const MasterOnboarding = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOnboarding")));
 // Master route/layout — carregam sob demanda quando acessar /master
-import { MasterRoute } from "@/modules/identity/components/master/MasterRoute";
-import { MasterLayout } from "@/modules/identity/components/master/MasterLayout";
+import { MasterRoute } from "@/modules/identity/master/components/MasterRoute";
+import { MasterLayout } from "@/modules/identity/master/components/MasterLayout";
 
 // Command Palette — global ⌘K (C24)
 import { CommandPaletteProvider } from "@/modules/platform/components/command/CommandPaletteProvider";

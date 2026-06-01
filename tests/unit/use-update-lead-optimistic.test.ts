@@ -46,7 +46,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
   useRequiredOrganization: () => ({ organizationId: "org-1", teamMemberId: "tm1", isReady: true }),
 }));
 
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({ isMaster: false, isLoading: false }),
 }));
 

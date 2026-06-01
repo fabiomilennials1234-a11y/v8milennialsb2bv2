@@ -6,7 +6,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "../auth/contexts/AuthContext";
+import { useAuth } from "../../auth/contexts/AuthContext";
 
 export interface MasterUser {
   id: string;

@@ -29,7 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { AlertTriangle, CreditCard, Flag, Calendar, Gauge } from "lucide-react";
-import { useMasterBillingOverride } from "../../hooks/useMasterOrganizations";
+import { useMasterBillingOverride } from "../hooks/useMasterOrganizations";
 import { QuotaManagementPanel } from "./QuotaManagementPanel";
 import { toast } from "sonner";
 

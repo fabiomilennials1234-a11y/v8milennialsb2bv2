@@ -60,7 +60,7 @@ vi.mock('@/modules/identity/hooks/useTeamMembers', () => ({
 }));
 
 // ─── Mock useMasterAuth ─────────────────────────────────
-vi.mock('@/modules/identity/hooks/useMasterAuth', () => ({
+vi.mock('@/modules/identity/master/hooks/useMasterAuth', () => ({
   useMasterAuth: () => ({
     isMaster: mockIsMaster,
     masterUser: null,

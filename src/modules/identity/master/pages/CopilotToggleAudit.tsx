@@ -50,7 +50,7 @@ import {
   useCopilotToggleDrift,
   type CopilotToggleAuditFilters,
 } from "@/modules/copilot/hooks/useCopilotToggleAudit";
-import { useMasterOrganizations } from "../../hooks/useMasterOrganizations";
+import { useMasterOrganizations } from "../hooks/useMasterOrganizations";
 
 const PRESET_RANGES = [
   { value: "24h", label: "Últimas 24h", hours: 24 },

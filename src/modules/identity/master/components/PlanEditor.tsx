@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Save, Loader2 } from "lucide-react";
 import { PlanFeatureCard } from "./PlanFeatureCard";
-import { useUpdatePlan, type Plan } from "../../hooks/useMasterPlans";
+import { useUpdatePlan, type Plan } from "../hooks/useMasterPlans";
 import {
   LIMITS,
   getFeaturesByCategory,

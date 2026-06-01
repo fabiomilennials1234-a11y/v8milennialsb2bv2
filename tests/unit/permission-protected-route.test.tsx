@@ -14,7 +14,7 @@ vi.mock('@/modules/identity/permissions/hooks/useUserRole', () => ({
   useHasRole: () => ({ hasRole: true, isLoading: false }),
 }));
 
-vi.mock('@/modules/identity/hooks/useMasterAuth', () => ({
+vi.mock('@/modules/identity/master/hooks/useMasterAuth', () => ({
   useMasterAuth: vi.fn(),
 }));
 
@@ -28,7 +28,7 @@ vi.mock('@/modules/identity/auth/hooks/useIdentity', () => ({
 }));
 
 import { useFeaturePermission, useIsAdmin } from '@/modules/identity/permissions/hooks/useUserRole';
-import { useMasterAuth } from '@/modules/identity/hooks/useMasterAuth';
+import { useMasterAuth } from '@/modules/identity/master/hooks/useMasterAuth';
 import { useCurrentTeamMember } from '@/modules/identity/hooks/useTeamMembers';
 import { PermissionProtectedRoute } from '@/modules/identity/permissions/components/PermissionProtectedRoute';
 

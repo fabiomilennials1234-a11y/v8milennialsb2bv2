@@ -32,7 +32,7 @@ vi.mock("@/modules/identity/hooks/useOrganization", () => ({
 
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false, isLoading: false }) }));
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false, isLoading: false }) }));
 
 vi.mock("@/modules/identity/auth/hooks/useIdentity", () => ({
   useIdentity: () => ({

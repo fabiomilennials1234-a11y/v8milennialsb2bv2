@@ -41,62 +41,8 @@ export {
 export type { AppRole, UserRole } from "./permissions";
 export { useCanDo } from "./permissions";
 
-// ── Hooks: master ops ──────────────────────────────────────────────────────
-export { useMasterAuth, useCanAccessMaster } from "./hooks/useMasterAuth";
-export type { MasterUser, MasterPermissions } from "./hooks/useMasterAuth";
-export {
-  useOperationsOverview,
-  useAutomationJobs,
-  useJobsOverview,
-  useRetryDeadLetter,
-  useRuntimeLogs,
-  useUsageByOrg,
-} from "./hooks/useMasterOperations";
-export type {
-  AutomationJob,
-  JobsOverview,
-  OperationsOverview,
-  RuntimeLog,
-  UsageByOrg,
-} from "./hooks/useMasterOperations";
-export {
-  useMasterOrganizations,
-  useMasterOrganization,
-  useMasterOrganizationMembers,
-  useMasterOrganizationStats,
-  useMasterCreateOrganization,
-  useMasterUpdateOrganization,
-  useMasterDeleteOrganization,
-  useMasterBillingOverride,
-} from "./hooks/useMasterOrganizations";
-export type {
-  MasterOrganization,
-  OrganizationStats,
-} from "./hooks/useMasterOrganizations";
-export { useMasterPlans, useUpdatePlan } from "./hooks/useMasterPlans";
-export type { Plan } from "./hooks/useMasterPlans";
-export {
-  useMasterUsers,
-  useMasterUserStats,
-  useMasterUnassignedUsers,
-  useMasterAssignUserToOrg,
-  useMasterMoveUserToOrg,
-  useMasterChangeUserRole,
-  useMasterToggleUserActive,
-  useMasterUpdateUser,
-  useMasterResetUserPassword,
-} from "./hooks/useMasterUsers";
-export type {
-  MasterUserView,
-  UnassignedUser,
-  UserStats,
-} from "./hooks/useMasterUsers";
-export {
-  useMasterAuditLogs,
-  useMasterAuditActions,
-  useMasterAuditStats,
-} from "./hooks/useMasterAuditLogs";
-export type { AuditLog, AuditLogFilters } from "./hooks/useMasterAuditLogs";
+// ── Hooks: master ops (sub-conceito master/ — só o entry público fica no barrel; resto em master/index.ts, slice 9.4) ──
+export { useMasterAuth, useCanAccessMaster } from "./master";
 
 // ── Hooks: permissions (granular) ──────────────────────────────────────────
 export {
