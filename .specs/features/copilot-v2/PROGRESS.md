@@ -7,10 +7,17 @@
 
 ## Feito (mergeado em `develop`)
 
+## 🟢 RUNTIME LIVE EM PROD (2026-06-01) — inerte até ativar
+
+Deployado e smoke-testado: `agent-runtime-v2` (border) + `copilot-v2-worker` (cron 1/min). Pipeline borda→fila→worker→cognição→WhatsApp roda end-to-end (smoke 2x verde, trace persiste). Agente Qualificador Milennials criado (`eb38b52f`, **is_active=FALSE** — silencioso). v1 100% on.
+
+**Pra ligar de verdade (Task #7, falta):** (1) apontar 1 instância WhatsApp de teste pro `agent-runtime-v2` (config Uazapi externa); (2) `is_active=true` + validar 1ª conversa real por trace; (3) wizard UI (Slice 8) pra criar/configurar sem SQL. Rollback = is_active=false.
+
 | PR | Conteúdo |
 |----|----------|
 | #593 | Foundation + Slices 1-4 + roteamento 10 — cores puros + cognição |
 | #594 | Tool executor foundation + 4 tools DB-backed |
+| #600/#601 | Queue worker + live deploy (runtime ON) |
 
 **Tabelas em PROD** (via MCP, verificadas):
 - `20260531174908_copilot_v2_foundation`: `copilot_v2_agents`, `_config`, `_message_queue`, `_dlq`, `_dedup_locks`, `_pause_state`, `_turn_counters`, `_traces`, `_trace_steps` + 5 RPCs SECURITY DEFINER (dedup atômico, enqueue, pause phone-keyed, next_turn atômico).

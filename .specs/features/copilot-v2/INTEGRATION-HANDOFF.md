@@ -1,7 +1,33 @@
 # Copilot v2 — Handoff da Sessão de Integração Ao Vivo
 
-**Criado:** 2026-05-31 · **Pré-req:** PRs #593/#594/#595 mergeadas em `develop`
+**Criado:** 2026-05-31 · **Atualizado:** 2026-06-01 · **Pré-req:** PRs #593/#594/#595/#600/#601 mergeadas (develop=main)
 **Ler antes:** `.specs/features/copilot-v2/PROGRESS.md` · `docs/adr/0002-copilot-v2-architecture.md` · `.specs/features/copilot-v2/SPEC.md`
+
+---
+## ✅ ESTADO 2026-06-01 — RUNTIME LIVE EM PROD (inerte)
+
+Já feito e verificado:
+- **2 edge fns deployadas**: `agent-runtime-v2` (border, OPTIONS→200) + `copilot-v2-worker` (cron 1/min, auth→401).
+- **Cron** `copilot_v2_worker @ * * * * *` ativo (pg_net + x-cron-secret via `cron_config`).
+- **RPCs em prod**: claim (SKIP LOCKED) / complete / fail (backoff 1→5→15min → DLQ).
+- **Pipeline borda→fila→worker→cognição→WhatsApp smoke-testada 2x end-to-end**: msg sintética → cron claim → cognição → defer (arquétipo inativo) → `processed`, trace+step persistem, zero erro.
+- **Agente Qualificador Milennials** `eb38b52f-5004-4bd1-897f-8f9f9ec952fe` criado: **is_active=FALSE** + config seed + rubric seed. (org `6030520a-2ca7-477d-be89-55758e2cd808`)
+- **9/13 tools live**; 152 testes copilot-v2 verdes; build front EXIT 0; main CI Build Image success.
+
+### ▶️ RETOMADA — 3 passos pra 1ª conversa real (Task #7)
+1. **Apontar 1 instância WhatsApp de teste pro border**: webhook Uazapi → `https://jsjsmuncfkbsbzqzqhfq.supabase.co/functions/v1/agent-runtime-v2`. (config no provider externo; escolher número controlado). Sem isso, nada entra na fila v2.
+   - ATENÇÃO: `agent-runtime-v2/index.ts` resolve org via lookup em `whatsapp_instances` por `instance_name`/`token` do payload — confirmar que a instância de teste existe nessa tabela pra Milennials.
+2. **Ativar**: `update copilot_v2_agents set is_active=true where id='eb38b52f-...'`. (para de deferir → responde). Rollback = is_active=false.
+3. **Validar 1ª conversa por trace**: mandar msg do número de teste → ler `copilot_v2_traces`/`_trace_steps` (rota certa? gates? tool calls? reply enviado?). Só então abrir pra mais leads.
+
+### Pendências (não bloqueiam a 1ª conversa, mas pré-rollout)
+- **Wizard UI (Slice 8/13)** — criar/configurar agente pela tela (hoje é SQL). Próxima feature frontend.
+- **4 tools restantes** (handoff_to_vendedor, send_media, search_knowledge/Slice-7, schedule_meeting) — ver abaixo.
+- **Hardening**: testes RLS cross-org, un-skip border-regression, LLM-judge+short-circuit (Slice 5).
+- **Border wiring**: aplicar `message-debounce` antes do enqueue + registrar `outgoing` (loop-gate hoje só vê inbound).
+- **CI Tests crônico** falha pré-existente (v1 stale) — não introduzido pelo v2.
+
+---
 
 > Estado ao fechar a sessão de núcleo: **9/13 tools live**, 146 testes TDD verdes, schema (foundation + slices 4/6/7) **em prod**, nada ativado. As 4 tools restantes + o queue-worker + deploy são **I/O ao vivo** — exigem ambiente real (WhatsApp, embeddings Gemini, Google Calendar) e validação por **trace numa conversa real na Milennials**, não por mock. Esta é a lista de execução dessa sessão.
 
