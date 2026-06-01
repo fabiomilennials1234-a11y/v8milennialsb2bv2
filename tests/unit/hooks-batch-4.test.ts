@@ -38,7 +38,7 @@ vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAut
 vi.mock("@/modules/leads/hooks/useTags", () => ({ useTags: () => ({ data: [] }) }));
 vi.mock("@/modules/carteira/hooks/useProducts", () => ({ useProducts: () => ({ data: [] }) }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerLeadCreatedInCustomPipeline: vi.fn() }));
-vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/lib/copilot/custom-instructions-utils", () => ({ parseCustomInstructions: () => ({ dos: "", donts: "" }), serializeCustomInstructions: () => null }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));

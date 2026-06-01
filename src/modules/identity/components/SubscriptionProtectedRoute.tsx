@@ -15,7 +15,7 @@ import {
   checkCurrentUserSubscription,
   type SubscriptionStatus,
 } from "@/modules/billing/lib/subscription";
-import { useUserRole, useCanManageCopilot } from "../hooks/useUserRole";
+import { useUserRole, useCanManageCopilot } from "../permissions/hooks/useUserRole";
 import { useIdentity } from "../auth/hooks/useIdentity";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { OverdueBanner } from "@/modules/billing/components/subscription/OverdueBanner";

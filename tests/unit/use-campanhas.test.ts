@@ -76,7 +76,7 @@ vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({
 vi.mock("@/integrations/supabase/events", () => ({
   publishEvent: vi.fn().mockResolvedValue("evt-test"),
 }));
-vi.mock("@/modules/identity/lib/permissions", () => ({
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
   assertPermission: vi.fn().mockResolvedValue(undefined),
   useCanPerformActionAsync: () => ({ data: { allowed: true }, isLoading: false }),
@@ -94,7 +94,7 @@ vi.mock("@/modules/identity/auth/hooks/useIdentity", () => ({
     isReady: true,
   }),
 }));
-vi.mock("@/modules/identity/hooks/useCanDo", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 vi.mock("sonner", () => ({

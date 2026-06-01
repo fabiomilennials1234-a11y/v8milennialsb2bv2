@@ -52,7 +52,7 @@ vi.mock("@/modules/engagement/hooks/useGoals", () => ({
   useTeamGoals: () => ({ data: [{ type: "vendas", target_value: 100000, team_member_id: null, name: "Meta" }] }),
   useIndividualGoals: () => ({ data: { salesGoals: [], meetingsGoals: [] } }),
 }));
-vi.mock("@/modules/identity/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useUserRole: () => "admin",
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),

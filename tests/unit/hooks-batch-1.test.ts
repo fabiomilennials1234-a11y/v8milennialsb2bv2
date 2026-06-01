@@ -56,7 +56,7 @@ vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscri
 vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerLeadCreatedInCustomPipeline: vi.fn() }));
-vi.mock("@/modules/identity/lib/permissions", () => ({
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({
   assertIsAdmin: vi.fn(),
   useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true),
 }));

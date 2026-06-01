@@ -97,7 +97,7 @@ vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({
 vi.mock("@/lib/workflowTrigger", () => ({
   triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/modules/identity/lib/permissions", () => ({
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
   useCanPerformActionAsync: () => ({ data: { allowed: true } }),
 }));

@@ -12,7 +12,7 @@ import { RealtimeOrgProvider } from "@/shared/realtime/realtime-org-context";
 import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
 import { PipeOpsProvider } from "@/modules/pipelines";
 import { ProtectedRoute } from "@/modules/identity/auth";
-import { PermissionProtectedRoute } from "@/modules/identity/components/PermissionProtectedRoute";
+import { PermissionProtectedRoute } from "@/modules/identity/permissions";
 import { MainLayout } from "@/modules/platform/components/layout/MainLayout";
 import { useAutoAdminAssignment } from "@/modules/identity/hooks/useAutoAdminAssignment";
 import { SubscriptionProtectedRoute } from "@/modules/identity/components/SubscriptionProtectedRoute";

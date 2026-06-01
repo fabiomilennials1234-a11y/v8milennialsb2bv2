@@ -44,9 +44,9 @@ vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({ followupRuleTo
 vi.mock("@/modules/copilot/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
 vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }) }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerLeadCreatedInCustomPipeline: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/modules/identity/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
 vi.mock("@/contexts/OrgFeaturesContext", () => ({ useOrgFeatures: () => ({ hasFeature: () => true, checkLimit: () => -1, canCreateCampaign: () => true, allFeatures: new Map(), allLimits: new Map(), isLoading: false }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 

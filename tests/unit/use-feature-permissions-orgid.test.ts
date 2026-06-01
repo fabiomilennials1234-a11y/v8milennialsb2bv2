@@ -43,7 +43,7 @@ vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
 vi.stubEnv("VITE_SUPABASE_URL", "https://proj.supabase.co");
 vi.stubEnv("VITE_SUPABASE_PUBLISHABLE_KEY", "anon-key");
 
-import { useFeaturePermissions } from "@/modules/identity/hooks/useUserRole";
+import { useFeaturePermissions } from "@/modules/identity/permissions/hooks/useUserRole";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 

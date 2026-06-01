@@ -84,7 +84,7 @@ import {
   useFeaturePermission,
   useCanManageCopilot,
   useHasRole,
-} from '@/modules/identity/hooks/useUserRole';
+} from '@/modules/identity/permissions/hooks/useUserRole';
 
 // ─── Helper: QueryClient wrapper ────────────────────────
 function createWrapper() {

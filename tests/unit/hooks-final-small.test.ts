@@ -38,9 +38,9 @@ vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({ usePipelin
 vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerLeadCreatedInCustomPipeline: vi.fn() }));
-vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/modules/identity/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({ useUserRole: () => "admin" }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 
 function w() {

@@ -42,7 +42,7 @@ vi.mock("@/modules/integrations/hooks/useGoogleCalendar", () => ({ useGoogleCale
 vi.mock("@/modules/workflows/hooks/useWorkflows", () => ({ useWorkflows: () => ({ data: [] }) }));
 vi.mock("@/hooks/useChannelChat", () => ({ useChannelChat: () => ({ data: null }) }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerLeadCreatedInCustomPipeline: vi.fn() }));
-vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
 

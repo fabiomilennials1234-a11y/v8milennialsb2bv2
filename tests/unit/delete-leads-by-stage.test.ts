@@ -49,7 +49,7 @@ vi.mock('@tanstack/react-query', () => ({
   }),
 }));
 
-vi.mock('@/modules/identity/lib/permissions', () => ({
+vi.mock('@/modules/identity/permissions/lib/permissions', () => ({
   useCanPerformActionAsync: () => vi.fn(),
   assertPermission: vi.fn().mockResolvedValue(undefined),
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
@@ -59,7 +59,7 @@ vi.mock('@/modules/identity/hooks/useMasterAuth', () => ({
   useMasterAuth: () => ({ isMaster: false, isLoading: false }),
 }));
 
-vi.mock('@/modules/identity/hooks/useUserRole', () => ({
+vi.mock('@/modules/identity/permissions/hooks/useUserRole', () => ({
   useIsAdmin: () => ({ isAdmin: false, isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),
   useFeaturePermission: () => ({ allowed: true, isLoading: false, hasError: false }),
@@ -86,7 +86,7 @@ vi.mock('@/modules/identity/auth/hooks/useIdentity', () => ({
   useIdentity: () => mockIdentity,
 }));
 
-vi.mock('@/modules/identity/hooks/useCanDo', () => ({
+vi.mock('@/modules/identity/permissions/hooks/useCanDo', () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 

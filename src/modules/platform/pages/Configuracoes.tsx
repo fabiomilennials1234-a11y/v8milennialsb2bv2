@@ -112,7 +112,7 @@ const ApiKeysPanel = lazy(() =>
   }))
 );
 const PermissionsSettings = lazy(() =>
-  import("@/modules/identity/components/PermissionsTab").then((m) => ({
+  import("@/modules/identity/permissions/components/PermissionsTab").then((m) => ({
     default: m.PermissionsTab,
   }))
 );

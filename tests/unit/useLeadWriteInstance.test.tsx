@@ -81,7 +81,7 @@ vi.mock("@/modules/identity/auth/hooks/useIdentity", () => ({
 }));
 
 // useUserRole consumed by hook → return based on team_member.
-vi.mock("@/modules/identity/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useUserRole: () => ({
     data: mockTeamMember
       ? { user_id: mockUser.id, role: mockTeamMember.role }

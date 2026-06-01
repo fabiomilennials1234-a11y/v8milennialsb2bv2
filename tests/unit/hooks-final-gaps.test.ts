@@ -47,7 +47,7 @@ vi.mock("@/modules/identity/auth/hooks/useIdentity", () => ({
     isReady: true,
   }),
 }));
-vi.mock("@/modules/identity/hooks/useCanDo", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
@@ -57,9 +57,9 @@ vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () 
 vi.mock("@/modules/copilot/hooks/useCopilotAgents", () => ({ useCopilotAgents: () => ({ data: [] }) }));
 vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({ useActiveWhatsAppInstance: () => ({ data: { id: "i1", instance_name: "Main" } }) }));
 vi.mock("@/lib/workflowTrigger", () => ({ triggerLeadCreatedInCustomPipeline: vi.fn() }));
-vi.mock("@/modules/identity/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), assertPermission: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
+vi.mock("@/modules/identity/permissions/lib/permissions", () => ({ assertIsAdmin: vi.fn().mockResolvedValue(undefined), assertPermission: vi.fn().mockResolvedValue(undefined), useCanPerformActionAsync: () => ({ data: { allowed: true } }) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/modules/identity/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
   useFeaturePermissions: () => ({ data: {}, isLoading: false, isError: false }),

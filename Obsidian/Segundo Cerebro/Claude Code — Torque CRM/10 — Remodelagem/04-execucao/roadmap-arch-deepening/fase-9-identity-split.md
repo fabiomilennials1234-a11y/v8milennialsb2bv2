@@ -209,14 +209,16 @@ Pattern Fase 8. Escopo definido por [[inventario-identity]] — statements 1, 4,
 4. Validar SEPARADAMENTE: admin / membro / master (Bloco 1.6, 1.7).
 5. Test integration `permission-engine.test.ts` rodar 3× consecutivas pra detectar flakiness.
 
-**Critério aceite 9.3:**
-- [ ] `permissions/` populada (13 statements / 33 símbolos movidos pra subpasta)
-- [ ] Barrel raiz statements: 44 (re-export ainda; demoção ocorre no 9.5)
-- [ ] Smoke admin OK
-- [ ] Smoke membro OK (sem fail-open)
-- [ ] Smoke master OK
-- [ ] `permission-engine.test.ts` 100% pass (3× consecutivas)
-- [ ] Hotfix #530 não regride (testar `/master/operations` carrega)
+**Critério aceite 9.3 (verificado 2026-06-01 — PR #605):**
+- [x] `permissions/` populada — 9 arquivos `git mv` (lib/permissions + 6 hooks role/perm + PermissionProtectedRoute + PermissionsTab) + `permissions/index.ts` sub-barrel privado
+- [x] Barrel raiz statements: **44** (`grep -c '^export'` = 44; 13 statements re-apontados `from "./permissions"`)
+- [x] `npx tsc --noEmit` (root) = **0** · leak grep = **0** · lint **0 errors** · ratchet **OK 56 0-new** (9 arquivos em zero ciclos → move neutro)
+- [x] test:unit zero regressão; subset permissão/identity = **8 files / 89 tests 100% pass** (use-user-role, use-can-do, use-permissions-hooks, permission-protected-route, permissions-fail-closed, permissions, use-feature-permissions-orgid, use-identity)
+- [ ] Smoke admin OK — **gate CTO**
+- [ ] Smoke membro OK (sem fail-open) — **gate CTO**
+- [ ] Smoke master OK — **gate CTO**
+- [ ] `/master/operations` carrega (hotfix #530 não regride) — **gate CTO**
+- ⚠️ `permission-engine.test.ts` (integration) = **env-blocked** (Supabase local sem seed de auth); backend não tocado pela slice — não-regressão. Rodar 3× quando ambiente disponível.
 
 ### Slice 9.4 — Reorganizar `org-team/` + `master/` internos (3-4h)
 

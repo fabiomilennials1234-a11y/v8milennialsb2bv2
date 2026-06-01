@@ -44,7 +44,7 @@ vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => mockTeamMember,
 }));
 
-vi.mock("@/modules/identity/hooks/useUserRole", () => ({
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useFeaturePermissions: () => mockFeaturePerms,
 }));
 
