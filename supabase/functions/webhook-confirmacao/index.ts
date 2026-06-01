@@ -20,14 +20,15 @@ Deno.serve(withSentry('webhook-confirmacao', async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // --- API Key Authentication (90-day grace period) ---
+    // --- API Key Authentication (obrigatória — fail-closed) ---
+    // SEGURANÇA (incidente 2026-06-01): janela de graça permitia criação anônima de leads.
     const authResult = await validateApiKey(supabase, req);
     if (!authResult.valid) {
-      const graceEnd = new Date("2026-07-09T00:00:00Z");
-      if (new Date() > graceEnd) {
-        return errorResponse(401, authResult.error || "API key required", corsHeaders, { req });
-      }
-      console.warn(`[DEPRECATION] Unauthenticated request to webhook-confirmacao. Auth required after 2026-07-09.`);
+      return errorResponse(401, authResult.error || "API key required", corsHeaders, { req });
+    }
+    const organization_id = authResult.organizationId;
+    if (!organization_id) {
+      return errorResponse(401, "organização não resolvida a partir da API key", corsHeaders, { req });
     }
 
     const body = await req.json();
@@ -80,6 +81,7 @@ Deno.serve(withSentry('webhook-confirmacao', async (req) => {
     // 1+2. Atomic lead + pipe_confirmacao creation via RPC (single transaction)
     const { data: result, error: rpcError } = await supabase.rpc('create_lead_with_pipe', {
       p_name: name,
+      p_organization_id: organization_id,
       p_email: email || null,
       p_phone: phone || null,
       p_company: company || null,
