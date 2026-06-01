@@ -221,6 +221,16 @@ export function LeadModal({
   // ── Pipe/funnel selection (creation mode only) ──
   const [selectedPipe, setSelectedPipe] = useState("");
   const [selectedStage, setSelectedStage] = useState("");
+  // Pipe-ops via porta injetada (arch-deepening Fase 7 — leads não importa pipelines direto).
+  const {
+    useCustomPipelines,
+    useCustomPipelineStages,
+    useAllPipelineStageOptions,
+    useCreatePipeWhatsapp,
+    useCreatePipeConfirmacao,
+    useCreatePipeProposta,
+    useAddLeadToCustomPipe,
+  } = usePipeOps();
   const { data: customPipelines = [] } = useCustomPipelines();
   const customPipelineId = selectedPipe.startsWith("custom:") ? selectedPipe.slice(7) : undefined;
   const { data: customStages = [] } = useCustomPipelineStages(customPipelineId);
