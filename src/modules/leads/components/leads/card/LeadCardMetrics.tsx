@@ -1,13 +1,16 @@
 import { memo } from "react";
-import { MessageSquare, CheckSquare, Paperclip } from "lucide-react";
+import { MessageSquare, CheckSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 /**
- * Métricas inline do LeadCard — comments, checklists, attachments,
+ * Métricas inline do LeadCard — comments, checklists,
  * mini avatares dos responsáveis (Pré-Venda + Venda).
  *
  * Estilo Trello: ícone + número compacto. Faded quando zero.
+ *
+ * Anexos: ícone omitido enquanto não existe a feature (sem tabela
+ * `lead_attachments`) — não exibir contagem falsa.
  */
 
 interface ResponsibleMini {
@@ -19,7 +22,6 @@ interface LeadCardMetricsProps {
   commentsCount?: number;
   checklistsCompleted?: number;
   checklistsTotal?: number;
-  attachmentsCount?: number;
   preSaleResponsible?: ResponsibleMini | null;
   saleResponsible?: ResponsibleMini | null;
   className?: string;
@@ -69,7 +71,6 @@ export const LeadCardMetrics = memo(function LeadCardMetrics({
   commentsCount = 0,
   checklistsCompleted = 0,
   checklistsTotal = 0,
-  attachmentsCount = 0,
   preSaleResponsible,
   saleResponsible,
   className,
@@ -77,7 +78,6 @@ export const LeadCardMetrics = memo(function LeadCardMetrics({
   const checklistDone = checklistsTotal > 0 && checklistsCompleted === checklistsTotal;
   const hasComments = commentsCount > 0;
   const hasChecklists = checklistsTotal > 0;
-  const hasAttachments = attachmentsCount > 0;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -118,19 +118,6 @@ export const LeadCardMetrics = memo(function LeadCardMetrics({
               : checklistDone
               ? "Checklist completo"
               : `${checklistsCompleted} de ${checklistsTotal} itens`}
-          </TooltipContent>
-        </Tooltip>
-
-        {/* Attachments */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className={cn("flex items-center gap-1", hasAttachments ? "text-foreground/70" : "text-muted-foreground/40")}>
-              <Paperclip className="w-3 h-3" />
-              <span>{attachmentsCount}</span>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-[10px]">
-            {attachmentsCount === 0 ? "Sem anexos (em breve)" : `${attachmentsCount} anexo${attachmentsCount > 1 ? "s" : ""}`}
           </TooltipContent>
         </Tooltip>
 

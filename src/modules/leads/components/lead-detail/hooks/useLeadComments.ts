@@ -78,6 +78,8 @@ export function useCreateLeadComment() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["lead-comments", vars.leadId] });
       qc.invalidateQueries({ queryKey: ["lead-timeline", vars.leadId] });
+      // Card metrics (lead_comments fora da publication realtime) — refletir no card.
+      qc.invalidateQueries({ queryKey: ["lead-card-metrics"] });
     },
   });
 }
@@ -95,6 +97,8 @@ export function useDeleteLeadComment() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["lead-comments", vars.leadId] });
       qc.invalidateQueries({ queryKey: ["lead-timeline", vars.leadId] });
+      // Card metrics (lead_comments fora da publication realtime) — refletir no card.
+      qc.invalidateQueries({ queryKey: ["lead-card-metrics"] });
     },
   });
 }

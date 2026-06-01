@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import {
   useChecklistItems,
   useCreateChecklist,
@@ -32,6 +33,14 @@ import { cn } from "@/lib/utils";
 
 function useLeadChecklists(leadId: string | null) {
   const { organizationId } = useOrganization();
+  // Realtime: checklists aplicados pelo backend (workflow apply_checklist,
+  // trigger de stage) precisam surgir no modal JÁ ABERTO sem refetch-on-focus.
+  // Invalidar ["checklists"] prefix-matcha este query ["checklists","lead",leadId].
+  useRealtimeSubscription("checklists", ["checklists"]);
+  // checklist_items invalida ["checklist_items"] (lista expandida de cada row) E,
+  // via fan-out staggered, ["checklists"] — pra manter as contagens do header
+  // (derivadas do join) frescas em mudança de item vinda de outro tab/backend.
+  useRealtimeSubscription("checklist_items", ["checklist_items", "checklists"]);
   return useQuery({
     queryKey: ["checklists", "lead", leadId],
     queryFn: async (): Promise<ChecklistWithCounts[]> => {
