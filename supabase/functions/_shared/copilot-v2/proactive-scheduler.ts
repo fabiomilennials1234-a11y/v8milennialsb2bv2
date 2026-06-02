@@ -127,3 +127,26 @@ export function interpretClaim(
   }
   return { enqueue: true, reason: null };
 }
+
+export interface ProactiveCandidate {
+  organizationId: string;
+  leadId: string;
+  canonicalPhone: string;
+  kind: ProactiveKind;
+  slot: string;
+}
+
+const DIRECTIVE_BY_KIND: Record<ProactiveKind, string> = {
+  first_touch: "Inicie o primeiro contato com este lead novo: apresente-se em nome da empresa e abra a qualificação de forma natural.",
+  followup: "Reengaje este lead que esfriou, retomando o assunto anterior de forma leve, sem soar insistente.",
+  carteira_rescue: "Reabra a conversa com este cliente que parou de comprar (resgate), de forma calorosa e útil — não como cobrança.",
+};
+
+/**
+ * O `content` da row proativa: um directive de SISTEMA (não uma fala do lead).
+ * O worker passa isso à cognição como o input do turno, então o agente produz
+ * a 1ª mensagem proativa respeitando o base-prompt + config do arquétipo.
+ */
+export function buildProactiveDirective(kind: ProactiveKind, slot: string): string {
+  return `[PROATIVO:${kind} ${slot}] ${DIRECTIVE_BY_KIND[kind]}`;
+}

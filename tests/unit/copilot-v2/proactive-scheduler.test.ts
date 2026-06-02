@@ -11,6 +11,7 @@ import {
   buildProactiveIdempotencyKey,
   decideRateLimitGate,
   decideProactiveSend,
+  buildProactiveDirective,
   type BusinessHoursWindow,
 } from '../../../supabase/functions/_shared/copilot-v2/proactive-scheduler.ts';
 
@@ -98,5 +99,16 @@ describe('decideProactiveSend — composed, first blocking reason wins', () => {
   it('blocks on rate-limit when inside hours but at ceiling', () => {
     expect(decideProactiveSend({ window: win, now: inside, sentToday: 50, ceiling: 50 }))
       .toEqual({ allowed: false, reason: 'rate_limit_reached' });
+  });
+});
+
+describe('buildProactiveDirective — system directive content', () => {
+  it('produces a tagged directive for followup', () => {
+    const d = buildProactiveDirective('followup', 'd3');
+    expect(d).toContain('[PROATIVO:followup');
+    expect(d).toContain('d3');
+  });
+  it('differs by kind', () => {
+    expect(buildProactiveDirective('first_touch', '1')).not.toBe(buildProactiveDirective('carteira_rescue', 'r1'));
   });
 });

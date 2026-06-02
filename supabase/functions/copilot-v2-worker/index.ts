@@ -122,6 +122,13 @@ serve(
  * Builds the ResolvedContext for one queued message from the DB:
  * contact-status → archetype, the org's active agent + config + capabilities,
  * and the live introspection (pipeline stages + custom fields).
+ *
+ * Proactive rows (Slice 11: source first_touch|followup|carteira_rescue) reuse
+ * this EXACT path with no change: their `content` is already a system directive
+ * (buildProactiveDirective), routing is by normalized_phone→contact-status
+ * (defined for all three kinds — carteira_rescue maps to CLIENTE_CARTEIRA), and
+ * the loop-gate (border.ts) only counts source === 'outbound' as outgoing, so
+ * proactive sources never falsely trip the identical_outgoing_burst signal.
  */
 async function resolveContext(supabase: any, row: QueueRow): Promise<ResolvedContext> {
   // Contact status: lead → carteira (upsell_clients) → qualifying tier.
