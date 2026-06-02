@@ -31,15 +31,39 @@ describe('Copilot v2 border regression — gate', () => {
 });
 
 describe.skip('Copilot v2 border regression [requires migration applied]', () => {
-  it('dedup race: 5 concurrent acquires of the same key → exactly 1 reserved', async () => {
-    const key = `test-dedup-${Date.now()}`;
+  it('dedup race: 5 concurrent enqueues of the same idempotency key → exactly 1 row', async () => {
+    const key = `test-idem-${Date.now()}`;
+    const trace = crypto.randomUUID();
     const calls = Array.from({ length: 5 }, () =>
-      getAdmin().rpc('copilot_v2_acquire_dedup_lock', { p_dedup_key: key, p_org_id: ORG, p_window_seconds: 30 }),
+      getAdmin().rpc('copilot_v2_enqueue_message', {
+        p_org_id: ORG, p_lead_id: null, p_canonical_phone: '11999990000',
+        p_message_type: 'text', p_content: 'corrida', p_source: 'inbound',
+        p_trace_id: trace, p_idempotency_key: key,
+      }),
     );
     const results = await Promise.all(calls);
-    const reservedCount = results.filter((r) => r.data === true).length;
-    expect(reservedCount).toBe(1);
-    await getAdmin().from('copilot_v2_dedup_locks').delete().eq('dedup_key', key);
+    const inserted = results.filter((r) => r.data != null).length;
+    expect(inserted).toBe(1); // ON CONFLICT DO NOTHING RETURNING → exactly one
+    await getAdmin().from('copilot_v2_message_queue').delete().eq('organization_id', ORG).eq('idempotency_key', key);
+  });
+
+  it('reaper: a stale processing row is returned to retry (#22)', async () => {
+    const key = `test-reap-${Date.now()}`;
+    const trace = crypto.randomUUID();
+    const { data: id } = await getAdmin().rpc('copilot_v2_enqueue_message', {
+      p_org_id: ORG, p_lead_id: null, p_canonical_phone: '11999990001',
+      p_message_type: 'text', p_content: 'reap', p_source: 'inbound',
+      p_trace_id: trace, p_idempotency_key: key,
+    });
+    // Force it stale-processing.
+    await getAdmin().from('copilot_v2_message_queue')
+      .update({ status: 'processing', updated_at: new Date(Date.now() - 10 * 60_000).toISOString() })
+      .eq('id', id);
+    const { data: reaped } = await getAdmin().rpc('copilot_v2_reap_stale_processing', { p_timeout_minutes: 5 });
+    expect((reaped as number) >= 1).toBe(true);
+    const { data: row } = await getAdmin().from('copilot_v2_message_queue').select('status').eq('id', id).single();
+    expect(row?.status).toBe('retry');
+    await getAdmin().from('copilot_v2_message_queue').delete().eq('id', id);
   });
 
   it('human-pause phone-keyed: set under one rendering, found under another', async () => {

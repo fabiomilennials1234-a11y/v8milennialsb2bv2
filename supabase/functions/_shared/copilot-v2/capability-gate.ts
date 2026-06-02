@@ -95,3 +95,24 @@ export function decideToolCallBudget(input: ToolCallBudgetInput): ToolCallBudget
   }
   return { allowed: true, reason: null };
 }
+
+/** The full set of write-capability flags this gate knows about. */
+export const ALL_WRITE_CAPABILITIES = Object.values(WRITE_TOOL_CAPABILITY);
+
+/**
+ * Resolves an agent's per-capability flags from its config slot, fail-CLOSED:
+ * a flag is enabled ONLY when explicitly `true` in `slots.capabilities`. Unset,
+ * null, missing, or a non-object slot → every capability OFF. This is the
+ * server-side authority surface — the LLM is never trusted, and neither is an
+ * un-configured agent.
+ */
+export function resolveAgentCapabilities(
+  slots: Record<string, unknown> | null | undefined,
+): Record<string, boolean> {
+  const raw = (slots && typeof slots === "object" ? (slots as any).capabilities : null) ?? {};
+  const caps: Record<string, boolean> = {};
+  for (const flag of ALL_WRITE_CAPABILITIES) {
+    caps[flag] = raw[flag] === true;
+  }
+  return caps;
+}

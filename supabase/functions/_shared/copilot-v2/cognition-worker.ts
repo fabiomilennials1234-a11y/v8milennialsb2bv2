@@ -25,6 +25,8 @@ export interface ResolvedContext {
   configByArchetype: Record<Archetype, AgentConfig>;
   capabilitiesByArchetype: Record<Archetype, Record<string, boolean | undefined>>;
   introspection: Introspection | null;
+  /** The active agent resolved for the routed archetype (null when none). */
+  _agentId: string | null;
 }
 
 export interface HandleQueuedMessageInput {

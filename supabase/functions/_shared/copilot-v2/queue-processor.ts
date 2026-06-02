@@ -32,7 +32,11 @@ export interface ProcessorDeps {
   makeLlm: (model: ModelId) => LlmClient;
   /** Builds the per-message tool executor (bound to this lead/agent/org). */
   makeExecutor: (row: QueueRow, context: ResolvedContext) => (name: string, args: Record<string, unknown>) => Promise<unknown>;
+  /** Re-checks the human-pause gate at SEND time (the durable-queue + retry window). */
+  checkPause: (row: QueueRow) => Promise<{ blocked: boolean; reason: string | null }>;
   sendReply: (canonicalPhone: string, text: string, row: QueueRow) => Promise<void>;
+  /** Records the sent reply as an outbound queue row so the loop gate sees the outgoing side. */
+  recordOutbound: (canonicalPhone: string, text: string, row: QueueRow) => Promise<void>;
   markComplete: (id: string) => Promise<void>;
   markFailed: (id: string, error: string) => Promise<void>;
   logStep: (traceId: string, step: string, reason: string | null, meta?: Record<string, unknown>) => Promise<void>;
@@ -61,7 +65,15 @@ export async function processQueueMessage(row: QueueRow, deps: ProcessorDeps): P
     });
 
     if (result.reply && result.reply.trim() !== "") {
+      const pause = await deps.checkPause(row);
+      if (pause.blocked) {
+        // A human took over between enqueue and now — suppress, do not talk over.
+        await deps.logStep(row.trace_id, "gate", pause.reason ?? "human_pause_active");
+        await deps.markComplete(row.id);
+        return;
+      }
       await deps.sendReply(row.canonical_phone, result.reply, row);
+      await deps.recordOutbound(row.canonical_phone, result.reply, row);
       await deps.logStep(row.trace_id, "outbound", null);
     }
 

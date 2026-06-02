@@ -22,11 +22,10 @@ function ctx(overrides: Partial<ResolvedContext> = {}): ResolvedContext {
     activeArchetypes: new Set(['qualificador', 'vendedor', 'carteira']),
     configByArchetype: { qualificador: cfg, vendedor: cfg, carteira: cfg },
     capabilitiesByArchetype: {
-      qualificador: { can_move_stage: true },
-      vendedor: { can_move_stage: true },
-      carteira: { can_move_stage: true },
+      qualificador: { can_move_stage: true }, vendedor: { can_move_stage: true }, carteira: { can_move_stage: true },
     },
     introspection: { stages: ['abordado'], fields: [] },
+    _agentId: 'agent-1',
     ...overrides,
   };
 }
@@ -82,6 +81,14 @@ describe('handleQueuedMessage — routing + model + prompt wiring', () => {
     await handleQueuedMessage({ ...baseInput, context: ctx(), makeLlm });
     expect(captured.system).toContain('Aços Brasil');
     expect(captured.system).not.toMatch(/\{\{\w+\}\}/);
+  });
+
+  it('carries _agentId as a first-class field (no untyped cast)', async () => {
+    const { makeLlm } = captureLlm(reply);
+    const out = await handleQueuedMessage({ ...baseInput, context: ctx({ _agentId: 'agent-42' }), makeLlm });
+    expect(out.handled).toBe(true);
+    // _agentId lives on the typed context — the executor reads it without a cast.
+    // (compile-time proof: ctx() now requires _agentId.)
   });
 
   it('passes capabilities through to the loop (a write with capability off is blocked)', async () => {

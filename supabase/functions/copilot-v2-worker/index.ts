@@ -21,8 +21,10 @@ import { getWhatsAppProvider } from "../_shared/whatsapp-client.ts";
 import { resolveInstance, normalizeBrazilianPhone } from "../_shared/whatsapp-dispatch.ts";
 import { processBatch, type QueueRow } from "../_shared/copilot-v2/queue-processor.ts";
 import { routeArchetype, type ContactStatus } from "../_shared/copilot-v2/contact-status.ts";
-import { modelForArchetype, type Archetype, type ModelId } from "../_shared/copilot-v2/model-selector.ts";
+import type { Archetype, ModelId } from "../_shared/copilot-v2/model-selector.ts";
 import { createToolExecutor } from "../_shared/copilot-v2/tool-executor.ts";
+import { decideHumanPauseGate } from "../_shared/copilot-v2/human-pause.ts";
+import { resolveAgentCapabilities } from "../_shared/copilot-v2/capability-gate.ts";
 import { createOpenRouterClient } from "../_shared/copilot-v2/openrouter-client.ts";
 import type { ResolvedContext } from "../_shared/copilot-v2/cognition-worker.ts";
 import type { AgentConfig } from "../_shared/copilot-v2/prompt-builder.ts";
@@ -76,9 +78,35 @@ serve(
         leadId: row.lead_id,
         conversationId: row.conversation_id,
         canonicalPhone: row.canonical_phone,
-        agentId: (context as ResolvedContext & { _agentId?: string | null })._agentId ?? null,
+        agentId: context._agentId,
       }),
       sendReply: (canonicalPhone, text, row) => sendReply(supabase, row.organization_id, canonicalPhone, text),
+      checkPause: async (row) => {
+        try {
+          const { data, error } = await supabase.rpc("copilot_v2_check_human_pause", {
+            p_org_id: row.organization_id, p_canonical_phone: row.canonical_phone,
+          });
+          if (error) throw error;
+          return decideHumanPauseGate({ record: data ? { paused_until: data } : null, checkErrored: false, now: new Date() });
+        } catch (_err) {
+          return decideHumanPauseGate({ record: null, checkErrored: true, now: new Date() });
+        }
+      },
+      recordOutbound: async (canonicalPhone, text, row) => {
+        // Unique key per send: identical replies must each be recorded so the
+        // identical_outgoing_burst signal can fire (do NOT collapse via dedup).
+        const idem = `${row.organization_id}:${canonicalPhone}:outbound:${row.trace_id}:${crypto.randomUUID()}`;
+        await supabase.rpc("copilot_v2_enqueue_message", {
+          p_org_id: row.organization_id,
+          p_lead_id: row.lead_id,
+          p_canonical_phone: canonicalPhone,
+          p_message_type: "text",
+          p_content: text,
+          p_source: "outbound",
+          p_trace_id: row.trace_id,
+          p_idempotency_key: idem,
+        }).then(() => {}, () => {});
+      },
       markComplete: async (id) => { await supabase.rpc("copilot_v2_complete_message", { p_id: id }); },
       markFailed: async (id, err) => { await supabase.rpc("copilot_v2_fail_message", { p_id: id, p_error: err.slice(0, 500) }); },
       logStep: async (traceId, step, reason, meta) => {
@@ -120,9 +148,10 @@ async function resolveContext(supabase: any, row: QueueRow): Promise<ResolvedCon
 
   // Config for the routed archetype.
   let config: AgentConfig = {};
+  let slots: Record<string, unknown> | null = null;
   if (agentRow) {
     const { data: cfg } = await supabase.from("copilot_v2_config").select("slots, escape_hatch_notes").eq("agent_id", agentRow.id).maybeSingle();
-    if (cfg) config = { ...(cfg.slots ?? {}), escapeHatchNotes: cfg.escape_hatch_notes };
+    if (cfg) { slots = cfg.slots ?? null; config = { ...(cfg.slots ?? {}), escapeHatchNotes: cfg.escape_hatch_notes }; }
   }
 
   // Live introspection: stages + custom fields (write-after-introspect uses these).
@@ -131,28 +160,23 @@ async function resolveContext(supabase: any, row: QueueRow): Promise<ResolvedCon
     supabase.from("lead_custom_fields").select("field_name").eq("organization_id", row.organization_id),
   ]);
 
-  const empty: AgentConfig = {};
+  const emptyConfig: AgentConfig = {};
+  const emptyCaps: Record<string, boolean | undefined> = {};
+  const baseConfigs: Record<Archetype, AgentConfig> = { qualificador: emptyConfig, vendedor: emptyConfig, carteira: emptyConfig };
+  const baseCaps: Record<Archetype, Record<string, boolean | undefined>> = { qualificador: emptyCaps, vendedor: emptyCaps, carteira: emptyCaps };
+
   return {
     contactStatus: status,
     activeArchetypes,
-    configByArchetype: { qualificador: config, vendedor: config, carteira: config } as Record<Archetype, AgentConfig>,
-    capabilitiesByArchetype: {
-      qualificador: capsFor(agentRow), vendedor: capsFor(agentRow), carteira: capsFor(agentRow),
-    } as Record<Archetype, Record<string, boolean | undefined>>,
+    // Only the routed archetype's config/caps are resolved this turn — key them
+    // there, not fanned across all three (that masked a real multi-agent bug).
+    configByArchetype: { ...baseConfigs, [archetype]: config },
+    capabilitiesByArchetype: { ...baseCaps, [archetype]: agentRow ? resolveAgentCapabilities(slots) : emptyCaps },
     introspection: {
       stages: (stages ?? []).map((s: any) => s.stage_key),
       fields: (fields ?? []).map((f: any) => f.field_name),
     },
     _agentId: agentRow?.id ?? null,
-  } as ResolvedContext & { _agentId: string | null };
-}
-
-// All capabilities on by default for an active agent; per-capability config is Slice 8.
-function capsFor(agentRow: any): Record<string, boolean | undefined> {
-  if (!agentRow) return {};
-  return {
-    can_move_stage: true, can_schedule_meeting: true, can_set_tier: true,
-    can_fill_field: true, can_send_media: true, can_transfer: true, can_handoff: true,
   };
 }
 

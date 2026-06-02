@@ -14,8 +14,7 @@ import { processInbound, type BorderContext } from '../../../supabase/functions/
 interface MockOpts {
   pauseUntil?: string | null;
   pauseThrows?: boolean;
-  reserved?: boolean;
-  dedupError?: boolean;
+  duplicate?: boolean;
   enqueueError?: boolean;
   loopRows?: Array<{ content: string; source: string; created_at: string }>;
 }
@@ -27,11 +26,9 @@ function makeSupabase(opts: MockOpts = {}) {
     if (name === 'copilot_v2_check_human_pause') {
       return opts.pauseThrows ? { data: null, error: { message: 'boom' } } : { data: opts.pauseUntil ?? null, error: null };
     }
-    if (name === 'copilot_v2_acquire_dedup_lock') {
-      return { data: opts.reserved ?? true, error: opts.dedupError ? { message: 'x' } : null };
-    }
     if (name === 'copilot_v2_enqueue_message') {
-      return { data: 'queue-1', error: opts.enqueueError ? { message: 'x' } : null };
+      // null return = ON CONFLICT duplicate suppressed (now the dedup primitive)
+      return { data: opts.duplicate ? null : 'queue-1', error: opts.enqueueError ? { message: 'x' } : null };
     }
     return { data: null, error: null };
   };
@@ -92,13 +89,40 @@ describe('processInbound — gates', () => {
     expect(sb.rpcCalls.some((c) => c.name === 'copilot_v2_enqueue_message')).toBe(false);
   });
 
-  it('suppresses a duplicate when the dedup lock is already held', async () => {
-    const ack = await processInbound(makeSupabase({ reserved: false }), ctx());
+  it('suppresses a duplicate when the enqueue ON CONFLICT returns null', async () => {
+    const ack = await processInbound(makeSupabase({ duplicate: true }), ctx());
     expect(ack).toMatchObject({ ack: 'skipped', reason: 'duplicate' });
   });
 
-  it('fail-CLOSED: a dedup-check error skips rather than risk a double-send', async () => {
-    const ack = await processInbound(makeSupabase({ dedupError: true }), ctx());
-    expect(ack).toMatchObject({ ack: 'skipped', reason: 'dedup_check_failed' });
+  it('does NOT call the separate dedup-lock RPC (single atomic enqueue path)', async () => {
+    const sb = makeSupabase();
+    await processInbound(sb, ctx());
+    expect(sb.rpcCalls.some((c) => c.name === 'copilot_v2_acquire_dedup_lock')).toBe(false);
+  });
+});
+
+describe('processInbound — fragment coalescing (#19/#69)', () => {
+  it('coalesces the just-arrived fragment with recent pending inbound into one enqueue', async () => {
+    const t = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
+    // Two recent inbound fragments already in the queue for this contact.
+    const sb = makeSupabase({
+      loopRows: [
+        { content: 'oi', source: 'inbound', created_at: t(1500) },
+        { content: 'tudo bem?', source: 'inbound', created_at: t(800) },
+      ],
+    });
+    const ack = await processInbound(sb, ctx({ content: 'queria um orçamento' }));
+    expect(ack.ack).toBe('queued');
+    const enq = sb.rpcCalls.find((c) => c.name === 'copilot_v2_enqueue_message');
+    // The enqueued content is the coalesced burst, not the lone fragment.
+    expect(enq!.args.p_content).toBe('oi tudo bem? queria um orçamento');
+  });
+
+  it('does NOT coalesce a fragment that arrives after the debounce window', async () => {
+    const old = new Date(Date.now() - 60_000).toISOString();
+    const sb = makeSupabase({ loopRows: [{ content: 'mensagem antiga', source: 'inbound', created_at: old }] });
+    const ack = await processInbound(sb, ctx({ content: 'pergunta nova' }));
+    const enq = sb.rpcCalls.find((c) => c.name === 'copilot_v2_enqueue_message');
+    expect(enq!.args.p_content).toBe('pergunta nova');
   });
 });
