@@ -10,9 +10,13 @@
  * Estimativa: 3h.
  */
 
+// Threshold RAG centralizado (Slice 7) — fonte única; mantém os nomes exportados
+// pra não quebrar importadores, mas o valor agora vem de RAG_THRESHOLDS.
+import { RAG_THRESHOLDS } from "../copilot-v2/rag-threshold.ts";
+
 export const MAX_SEARCH_KNOWLEDGE_ITERATIONS = 3;
-export const FAQ_SIMILARITY_THRESHOLD = 0.65;
-export const DOC_SIMILARITY_THRESHOLD = 0.6;
+export const FAQ_SIMILARITY_THRESHOLD = RAG_THRESHOLDS.faq;
+export const DOC_SIMILARITY_THRESHOLD = RAG_THRESHOLDS.doc;
 export const FAQ_RESULT_LIMIT = 3;
 export const DOC_RESULT_LIMIT = 5;
 
@@ -57,7 +61,7 @@ export async function executeSearchKnowledge(
       agent_id_filter: agentId,
       p_org_id: organizationId,
       match_count: 5,
-      similarity_threshold: 0.55,
+      similarity_threshold: RAG_THRESHOLDS.doc,
     });
 
     if (chunks && chunks.length > 0) {
@@ -73,7 +77,7 @@ export async function executeSearchKnowledge(
       agent_id_filter: agentId,
       p_org_id: organizationId,
       match_count: 4,
-      similarity_threshold: 0.5,
+      similarity_threshold: RAG_THRESHOLDS.faq,
     });
 
     if (faqs && faqs.length > 0) {

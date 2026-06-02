@@ -7,15 +7,17 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateEmbedding } from "../embeddings.ts";
+// Threshold RAG centralizado (Slice 7) — fonte única, sem literais soltos.
+import { RAG_THRESHOLDS } from "../copilot-v2/rag-threshold.ts";
 
 type RetrievalMode = "initial" | "tool";
 
 const THRESHOLDS = {
-  initial: { docThreshold: 0.5, docLimit: 8, faqThreshold: 0.65, faqLimit: 4 },
-  tool: { docThreshold: 0.55, docLimit: 5, faqThreshold: 0.5, faqLimit: 4 },
+  initial: { docThreshold: RAG_THRESHOLDS.doc, docLimit: 8, faqThreshold: RAG_THRESHOLDS.faq, faqLimit: 4 },
+  tool: { docThreshold: RAG_THRESHOLDS.doc, docLimit: 5, faqThreshold: RAG_THRESHOLDS.faq, faqLimit: 4 },
 } as const;
 
-const MEMORY_CONFIG = { threshold: 0.7, limit: 5 } as const;
+const MEMORY_CONFIG = { threshold: RAG_THRESHOLDS.memory, limit: 5 } as const;
 
 export class KnowledgeRetriever {
   constructor(private supabase: SupabaseClient) {}

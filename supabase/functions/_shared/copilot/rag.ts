@@ -15,6 +15,9 @@
 import { generateEmbedding, generateEmbeddingsBatch } from "../embeddings.ts";
 export { generateEmbedding, generateEmbeddingsBatch };
 
+// Threshold RAG centralizado (Slice 7) — fonte única, sem literais soltos.
+import { RAG_THRESHOLDS } from "../copilot-v2/rag-threshold.ts";
+
 export const EMBEDDING_DIMENSIONS = 1536; // gemini-embedding-2
 
 // ─── retrieveSemanticContext (extracted from agent-engine.ts:736) ────────────
@@ -46,7 +49,7 @@ export async function retrieveSemanticContext(
       agent_id_filter: agentId,
       p_org_id: organizationId,
       match_count: 6,
-      similarity_threshold: 0.55,
+      similarity_threshold: RAG_THRESHOLDS.doc,
     });
 
     if (!chunksErr && chunks && chunks.length > 0) {
@@ -61,7 +64,7 @@ export async function retrieveSemanticContext(
       agent_id_filter: agentId,
       p_org_id: organizationId,
       match_count: 4,
-      similarity_threshold: 0.5,
+      similarity_threshold: RAG_THRESHOLDS.faq,
     });
 
     if (!faqsErr && faqs && faqs.length > 0) {
@@ -102,7 +105,7 @@ export async function retrieveLongTermMemories(
       lead_id_filter: leadId,
       p_org_id: organizationId,
       match_count: 5,
-      similarity_threshold: 0.7,
+      similarity_threshold: RAG_THRESHOLDS.memory,
     });
 
     if (error || !memories || memories.length === 0) return "";
