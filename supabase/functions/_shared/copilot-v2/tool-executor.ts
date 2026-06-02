@@ -324,6 +324,23 @@ const transferToHuman: Handler = async (supabase, ctx, args) => {
   };
 };
 
+const handoffToVendedor: Handler = async (_supabase, ctx, args) => {
+  if (!ctx.leadId) throw new ToolError("missing_context", "handoff_to_vendedor:lead");
+  const summary = args.summary != null ? String(args.summary) : null;
+
+  // The structured handoff payload — the routing target + delivery is the Slice 5
+  // notification infra (dispatchHandoffNotification dep). When that dep is absent
+  // (Slice 5 not merged yet) the business handoff still happens; the notification
+  // is reported pending — NEVER a silent drop.
+  if (!ctx.dispatchHandoffNotification) {
+    return { handed_off: true, targetArchetype: "vendedor", notified: false, reason: "notify_pending", summary };
+  }
+  const res = await ctx.dispatchHandoffNotification({
+    leadId: ctx.leadId, reason: "handoff_qualificador_vendedor", summary, targetArchetype: "vendedor",
+  });
+  return { handed_off: true, targetArchetype: "vendedor", notified: res.dispatched, reason: res.reason ?? null, summary };
+};
+
 const fillLeadField: Handler = async (supabase, ctx, args) => {
   if (!ctx.leadId) throw new ToolError("missing_context", "fill_lead_field:lead");
   const field = String(args.field ?? "");
@@ -415,6 +432,7 @@ const HANDLERS: Record<string, Handler> = {
   schedule_meeting: scheduleMeeting,
   fill_lead_field: fillLeadField,
   transfer_to_human: transferToHuman,
+  handoff_to_vendedor: handoffToVendedor,
   send_media: sendMedia,
 };
 

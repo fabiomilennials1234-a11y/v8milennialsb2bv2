@@ -32,6 +32,8 @@ import { decideHitlGate } from "../_shared/copilot-v2/hitl-gate.ts";
 import { resolveHandoffTargets } from "../_shared/copilot-v2/handoff-routing.ts";
 import type { ResolvedContext } from "../_shared/copilot-v2/cognition-worker.ts";
 import type { AgentConfig } from "../_shared/copilot-v2/prompt-builder.ts";
+import { getValidAccessToken } from "../_shared/google-calendar-utils.ts";
+import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
 
 const BATCH_SIZE = 10;
 
@@ -83,7 +85,56 @@ serve(
         conversationId: row.conversation_id,
         canonicalPhone: row.canonical_phone,
         agentId: context._agentId,
+        now: new Date(),
         sendMediaViaProvider: (p) => sendMediaReply(supabase, row.organization_id, p),
+        getCalendarFreeBusy: async ({ userId, window }) => {
+          try {
+            const tok = await getValidAccessToken(userId, supabase);
+            if (!tok) return { ok: false, busy: [] };
+            const res = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${tok.accessToken}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ timeMin: window.start, timeMax: window.end, items: [{ id: "primary" }] }),
+            });
+            if (!res.ok) return { ok: false, busy: [] };
+            const j = await res.json();
+            return { ok: true, busy: (j.calendars?.primary?.busy ?? []) as { start: string; end: string }[] };
+          } catch { return { ok: false, busy: [] }; }
+        },
+        scheduleMeetingViaCalendar: async ({ userId, leadId, datetime, title }) => {
+          try {
+            const tok = await getValidAccessToken(userId, supabase);
+            if (!tok) return { created: false, error: "no_token" };
+            const start = new Date(datetime);
+            const end = new Date(start.getTime() + 3600_000);
+            const res = await fetch(
+              "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1",
+              {
+                method: "POST",
+                headers: { Authorization: `Bearer ${tok.accessToken}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  summary: title,
+                  start: { dateTime: start.toISOString(), timeZone: "America/Sao_Paulo" },
+                  end: { dateTime: end.toISOString(), timeZone: "America/Sao_Paulo" },
+                  conferenceData: { createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: "hangoutsMeet" } } },
+                  extendedProperties: { private: { lead_id: leadId, system: "copilot_v2" } },
+                }),
+              },
+            );
+            if (!res.ok) return { created: false, error: `google ${res.status}` };
+            const ev = await res.json();
+            const link = ev.conferenceData?.entryPoints?.find((e: any) => e.entryPointType === "video")?.uri ?? ev.hangoutLink ?? null;
+            return { created: true, meetLink: link };
+          } catch (e) { return { created: false, error: e instanceof Error ? e.message : String(e) }; }
+        },
+        upsertConfirmacaoEntry: async ({ leadId, orgId, meetingAt }) => {
+          const pipeId = await upsertPipeEntry(supabase, {
+            leadId, orgId, slug: "confirmacao", stageKey: "reuniao_marcada",
+            metadata: { meeting_at: meetingAt },
+          });
+          return { pipeId: pipeId ?? null };
+        },
+        // dispatchHandoffNotification: <plugado pelo Slice 5 quando mergeado>
       }),
       sendReply: (canonicalPhone, text, row) => sendReply(supabase, row.organization_id, canonicalPhone, text),
       checkPause: async (row) => {
@@ -290,6 +341,10 @@ async function resolveContext(supabase: any, row: QueueRow): Promise<ResolvedCon
     introspection: {
       stages: (stages ?? []).map((s: any) => s.stage_key),
       fields: (fields ?? []).map((f: any) => f.field_name),
+      // slots só existem APÓS check_agenda_availability rodar no turno; o
+      // introspect-guard fail-CLOSED bloqueia agendamento até lá (follow-up:
+      // propagação intra-turno dos slots do read — ver _MOC §Decisões abertas).
+      slots: [],
     },
     _agentId: agentRow?.id ?? null,
   };

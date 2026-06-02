@@ -355,6 +355,33 @@ describe('transfer_to_human', () => {
   });
 });
 
+describe('handoff_to_vendedor (reassign + notificação como dep)', () => {
+  const hoCtx = { organizationId: 'org-1', leadId: 'lead-1', canonicalPhone: '11987654321' };
+
+  it('registra o handoff e dispara a notificação via dep (infra = Slice 5)', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1', responsible_id: 'm-resp' } });
+    const dispatched: any[] = [];
+    const exec = createToolExecutor(sb, {
+      ...hoCtx,
+      dispatchHandoffNotification: async (p: any) => { dispatched.push(p); return { dispatched: true }; },
+    } as any);
+    const out: any = await exec('handoff_to_vendedor', { summary: 'lead diamante, quer proposta' });
+    expect(out).toMatchObject({ handed_off: true, targetArchetype: 'vendedor', notified: true });
+    expect(dispatched[0]).toMatchObject({ leadId: 'lead-1', targetArchetype: 'vendedor', summary: 'lead diamante, quer proposta' });
+  });
+
+  it('FALLBACK EXPLÍCITO notify_pending quando a infra de notificação ainda não está plugada (Slice 5)', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1' } });
+    const out: any = await createToolExecutor(sb, hoCtx as any)('handoff_to_vendedor', { summary: 's' });
+    expect(out).toMatchObject({ handed_off: true, notified: false, reason: 'notify_pending' });
+  });
+
+  it('exige lead no contexto', async () => {
+    await expect(createToolExecutor(mockSupabase({}), { organizationId: 'org-1' } as any)('handoff_to_vendedor', { summary: 's' }))
+      .rejects.toMatchObject({ code: 'missing_context' });
+  });
+});
+
 describe('get_conversation_history', () => {
   it('queries conversation_messages for the context conversation', async () => {
     const sb = mockSupabase({ conversation_messages: [{ role: 'user', content: 'oi' }] });
