@@ -16,6 +16,7 @@ import { normalizeCanonicalPhone } from "./phone-normalizer.ts";
 import { evaluateLoopSignal, decideLoopGate, type LoopMessage } from "./loop-detector.ts";
 import { decideHumanPauseGate } from "./human-pause.ts";
 import { buildDedupKey, dedupWindowSeconds, type DedupSource } from "./dedup-lock.ts";
+import { coalesceFragments, type InboundFragment } from "./message-debounce.ts";
 import { initTraceContext, logTraceStep, type TraceContext } from "./trace-context.ts";
 
 export interface BorderContext {
@@ -88,9 +89,14 @@ export async function processInbound(supabase: any, ctx: BorderContext): Promise
     return { ack: "skipped", reason: loopGate.reason ?? "loop", trace_id: trace.trace_id };
   }
 
-  // 6. Atomic dedup reservation.
+  // 6. Coalesce inbound fragments of the same burst into one turn (#19/#69).
   const source: DedupSource = ctx.source ?? "inbound";
-  const dedupKey = buildDedupKey({ orgId: ctx.organizationId, phone: canonicalPhone, content: ctx.content, source });
+  const content = source === "inbound"
+    ? await coalesceInbound(supabase, ctx.organizationId, canonicalPhone, ctx.content, new Date())
+    : ctx.content;
+
+  // 7. Atomic dedup reservation.
+  const dedupKey = buildDedupKey({ orgId: ctx.organizationId, phone: canonicalPhone, content, source });
   const { data: reserved, error: dedupErr } = await supabase.rpc("copilot_v2_acquire_dedup_lock", {
     p_dedup_key: dedupKey,
     p_org_id: ctx.organizationId,
@@ -112,7 +118,7 @@ export async function processInbound(supabase: any, ctx: BorderContext): Promise
     p_lead_id: ctx.leadId ?? null,
     p_canonical_phone: canonicalPhone,
     p_message_type: ctx.messageType ?? "text",
-    p_content: ctx.content,
+    p_content: content,
     p_source: source,
     p_trace_id: trace.trace_id,
     p_idempotency_key: dedupKey,
@@ -158,5 +164,41 @@ async function checkLoop(supabase: any, orgId: string, phone: string, now: Date)
     return decideLoopGate({ signal, checkErrored: false });
   } catch (_err) {
     return decideLoopGate({ signal: null, checkErrored: true });
+  }
+}
+
+const DEBOUNCE_MS = 8_000;
+
+/**
+ * Coalesces the just-arrived inbound fragment with this contact's recent
+ * un-replied inbound fragments (within the debounce window) into one turn.
+ * Returns the coalesced content for the burst that contains `current`, or
+ * `current` unchanged on any error (fail-OPEN here is safe: worst case is one
+ * extra turn, never a lost message and never a double-send).
+ */
+async function coalesceInbound(
+  supabase: any, orgId: string, phone: string, current: string, now: Date,
+): Promise<string> {
+  try {
+    const cutoff = new Date(now.getTime() - DEBOUNCE_MS).toISOString();
+    const { data, error } = await supabase
+      .from("copilot_v2_message_queue")
+      .select("content, source, created_at, status")
+      .eq("organization_id", orgId)
+      .eq("canonical_phone", phone)
+      .eq("source", "inbound")
+      .gte("created_at", cutoff)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    const prior: InboundFragment[] = (data ?? [])
+      .filter((r: any) => r.status === "pending" || r.status === "retry" || r.status == null)
+      .map((r: any) => ({ content: r.content, timestamp: r.created_at }));
+    const fragments: InboundFragment[] = [...prior, { content: current, timestamp: now.toISOString() }];
+    const groups = coalesceFragments(fragments, DEBOUNCE_MS);
+    // The burst containing `current` is the last group (chronological).
+    const last = groups[groups.length - 1];
+    return last?.content ?? current;
+  } catch (_err) {
+    return current;
   }
 }

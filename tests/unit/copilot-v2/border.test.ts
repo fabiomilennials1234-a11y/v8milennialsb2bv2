@@ -102,3 +102,29 @@ describe('processInbound — gates', () => {
     expect(ack).toMatchObject({ ack: 'skipped', reason: 'dedup_check_failed' });
   });
 });
+
+describe('processInbound — fragment coalescing (#19/#69)', () => {
+  it('coalesces the just-arrived fragment with recent pending inbound into one enqueue', async () => {
+    const t = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
+    // Two recent inbound fragments already in the queue for this contact.
+    const sb = makeSupabase({
+      loopRows: [
+        { content: 'oi', source: 'inbound', created_at: t(1500) },
+        { content: 'tudo bem?', source: 'inbound', created_at: t(800) },
+      ],
+    });
+    const ack = await processInbound(sb, ctx({ content: 'queria um orçamento' }));
+    expect(ack.ack).toBe('queued');
+    const enq = sb.rpcCalls.find((c) => c.name === 'copilot_v2_enqueue_message');
+    // The enqueued content is the coalesced burst, not the lone fragment.
+    expect(enq!.args.p_content).toBe('oi tudo bem? queria um orçamento');
+  });
+
+  it('does NOT coalesce a fragment that arrives after the debounce window', async () => {
+    const old = new Date(Date.now() - 60_000).toISOString();
+    const sb = makeSupabase({ loopRows: [{ content: 'mensagem antiga', source: 'inbound', created_at: old }] });
+    const ack = await processInbound(sb, ctx({ content: 'pergunta nova' }));
+    const enq = sb.rpcCalls.find((c) => c.name === 'copilot_v2_enqueue_message');
+    expect(enq!.args.p_content).toBe('pergunta nova');
+  });
+});
