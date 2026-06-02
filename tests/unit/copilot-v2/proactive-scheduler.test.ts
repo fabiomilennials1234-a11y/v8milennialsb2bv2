@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   decideBusinessHoursGate,
+  buildProactiveIdempotencyKey,
   type BusinessHoursWindow,
 } from '../../../supabase/functions/_shared/copilot-v2/proactive-scheduler.ts';
 
@@ -44,5 +45,26 @@ describe('decideBusinessHoursGate — fail-CLOSED', () => {
     const bad = { days: [1], start: '99:99', end: 'x', tz: 'America/Sao_Paulo' } as BusinessHoursWindow;
     expect(() => decideBusinessHoursGate({ window: bad, now: insideUtc })).not.toThrow();
     expect(decideBusinessHoursGate({ window: bad, now: insideUtc }).allowed).toBe(false);
+  });
+});
+
+describe('buildProactiveIdempotencyKey — stable, no timestamp', () => {
+  it('is deterministic for the same (org, lead, kind, slot)', () => {
+    const a = buildProactiveIdempotencyKey({ orgId: 'o1', leadId: 'l1', kind: 'first_touch', slot: '1' });
+    const b = buildProactiveIdempotencyKey({ orgId: 'o1', leadId: 'l1', kind: 'first_touch', slot: '1' });
+    expect(a).toBe(b); // dois ticks do cron → MESMA chave → fila colapsa pra 1 row
+  });
+
+  it('differs by kind, by slot, and by org (no cross-tenant collision)', () => {
+    const ft = buildProactiveIdempotencyKey({ orgId: 'o1', leadId: 'l1', kind: 'first_touch', slot: '1' });
+    const fu = buildProactiveIdempotencyKey({ orgId: 'o1', leadId: 'l1', kind: 'followup', slot: 'd3' });
+    const fu2 = buildProactiveIdempotencyKey({ orgId: 'o1', leadId: 'l1', kind: 'followup', slot: 'd7' });
+    const other = buildProactiveIdempotencyKey({ orgId: 'o2', leadId: 'l1', kind: 'first_touch', slot: '1' });
+    expect(new Set([ft, fu, fu2, other]).size).toBe(4);
+  });
+
+  it('carries the kind as a prefix so it never collides with an inbound dedup key', () => {
+    const k = buildProactiveIdempotencyKey({ orgId: 'o1', leadId: 'l1', kind: 'followup', slot: 'd3' });
+    expect(k.startsWith('proactive:')).toBe(true);
   });
 });

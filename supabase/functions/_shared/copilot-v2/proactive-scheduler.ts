@@ -72,3 +72,24 @@ export function decideBusinessHoursGate(
     ? { allowed: true, reason: null }
     : { allowed: false, reason: "outside_business_hours" };
 }
+
+export type ProactiveKind = "first_touch" | "followup" | "carteira_rescue";
+
+export interface ProactiveKeyArgs {
+  orgId: string;
+  leadId: string;
+  kind: ProactiveKind;
+  /** Discretiza o motivo: "1" (first-touch), "d3"/"d7" (cadência), rodada de resgate. NUNCA timestamp do tick. */
+  slot: string;
+}
+
+/**
+ * Chave de idempotência ESTÁVEL do proativo. Determinística por
+ * (org, lead, kind, slot) — sem timestamp — pra que o cron 1/min possa
+ * re-selecionar o mesmo candidato e a fila colapse pra UMA row via
+ * ON CONFLICT (org, idempotency_key). Prefixo "proactive:" garante que
+ * nunca colide com a dedup key de inbound (dedup-lock.ts). Mata #7/#8/#9.
+ */
+export function buildProactiveIdempotencyKey(args: ProactiveKeyArgs): string {
+  return `proactive:${args.orgId}:${args.kind}:${args.leadId}:${args.slot}`;
+}
