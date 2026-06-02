@@ -21,7 +21,7 @@ import { getWhatsAppProvider } from "../_shared/whatsapp-client.ts";
 import { resolveInstance, normalizeBrazilianPhone } from "../_shared/whatsapp-dispatch.ts";
 import { processBatch, type QueueRow } from "../_shared/copilot-v2/queue-processor.ts";
 import { routeArchetype, type ContactStatus } from "../_shared/copilot-v2/contact-status.ts";
-import { modelForArchetype, type Archetype, type ModelId } from "../_shared/copilot-v2/model-selector.ts";
+import type { Archetype, ModelId } from "../_shared/copilot-v2/model-selector.ts";
 import { createToolExecutor } from "../_shared/copilot-v2/tool-executor.ts";
 import { decideHumanPauseGate } from "../_shared/copilot-v2/human-pause.ts";
 import { createOpenRouterClient } from "../_shared/copilot-v2/openrouter-client.ts";
@@ -77,7 +77,7 @@ serve(
         leadId: row.lead_id,
         conversationId: row.conversation_id,
         canonicalPhone: row.canonical_phone,
-        agentId: (context as ResolvedContext & { _agentId?: string | null })._agentId ?? null,
+        agentId: context._agentId,
       }),
       sendReply: (canonicalPhone, text, row) => sendReply(supabase, row.organization_id, canonicalPhone, text),
       checkPause: async (row) => {
@@ -158,20 +158,24 @@ async function resolveContext(supabase: any, row: QueueRow): Promise<ResolvedCon
     supabase.from("lead_custom_fields").select("field_name").eq("organization_id", row.organization_id),
   ]);
 
-  const empty: AgentConfig = {};
+  const emptyConfig: AgentConfig = {};
+  const emptyCaps: Record<string, boolean | undefined> = {};
+  const baseConfigs: Record<Archetype, AgentConfig> = { qualificador: emptyConfig, vendedor: emptyConfig, carteira: emptyConfig };
+  const baseCaps: Record<Archetype, Record<string, boolean | undefined>> = { qualificador: emptyCaps, vendedor: emptyCaps, carteira: emptyCaps };
+
   return {
     contactStatus: status,
     activeArchetypes,
-    configByArchetype: { qualificador: config, vendedor: config, carteira: config } as Record<Archetype, AgentConfig>,
-    capabilitiesByArchetype: {
-      qualificador: capsFor(agentRow), vendedor: capsFor(agentRow), carteira: capsFor(agentRow),
-    } as Record<Archetype, Record<string, boolean | undefined>>,
+    // Only the routed archetype's config/caps are resolved this turn — key them
+    // there, not fanned across all three (that masked a real multi-agent bug).
+    configByArchetype: { ...baseConfigs, [archetype]: config },
+    capabilitiesByArchetype: { ...baseCaps, [archetype]: capsFor(agentRow) },
     introspection: {
       stages: (stages ?? []).map((s: any) => s.stage_key),
       fields: (fields ?? []).map((f: any) => f.field_name),
     },
     _agentId: agentRow?.id ?? null,
-  } as ResolvedContext & { _agentId: string | null };
+  };
 }
 
 // All capabilities on by default for an active agent; per-capability config is Slice 8.

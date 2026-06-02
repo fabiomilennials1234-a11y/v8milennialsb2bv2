@@ -22,6 +22,7 @@ const ctx: ResolvedContext = {
   configByArchetype: { qualificador: { company: { name: 'X' } }, vendedor: {}, carteira: {} },
   capabilitiesByArchetype: { qualificador: {}, vendedor: {}, carteira: {} },
   introspection: { stages: [], fields: [] },
+  _agentId: null,
 };
 
 function deps(over: Partial<ProcessorDeps> = {}): ProcessorDeps & { sent: string[]; completed: string[]; failed: Array<[string, string]> } {

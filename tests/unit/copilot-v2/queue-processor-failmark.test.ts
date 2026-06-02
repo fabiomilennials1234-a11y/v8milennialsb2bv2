@@ -19,6 +19,7 @@ const ctx = {
   configByArchetype: { qualificador: {}, vendedor: {}, carteira: {} },
   capabilitiesByArchetype: { qualificador: {}, vendedor: {}, carteira: {} },
   introspection: { stages: [], fields: [] },
+  _agentId: null,
 } as ResolvedContext;
 
 it('routes a turn exception to markFailed exactly once (attempts++ happens in SQL)', async () => {
