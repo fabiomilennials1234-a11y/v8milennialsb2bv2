@@ -32,7 +32,7 @@ vi.mock('@/integrations/supabase/client', () => ({
 // ─── Mock: useOrganization ──────────────────────────────
 
 const mockUseOrganization = vi.fn();
-vi.mock('@/modules/identity/hooks/useOrganization', () => ({
+vi.mock('@/modules/identity/org-team/hooks/useOrganization', () => ({
   useOrganization: (...args: unknown[]) => mockUseOrganization(...args),
 }));
 
@@ -48,14 +48,14 @@ vi.mock('@/modules/identity/permissions/hooks/useUserRole', () => ({
 // ─── Mock: useCurrentTeamMember ─────────────────────────
 
 const mockUseCurrentTeamMember = vi.fn();
-vi.mock('@/modules/identity/hooks/useTeamMembers', () => ({
+vi.mock('@/modules/identity/org-team/hooks/useTeamMembers', () => ({
   useCurrentTeamMember: (...args: unknown[]) => mockUseCurrentTeamMember(...args),
 }));
 
 // ─── Mock: useMasterAuth ────────────────────────────────
 
 const mockUseMasterAuth = vi.fn();
-vi.mock('@/modules/identity/hooks/useMasterAuth', () => ({
+vi.mock('@/modules/identity/master/hooks/useMasterAuth', () => ({
   useMasterAuth: (...args: unknown[]) => mockUseMasterAuth(...args),
 }));
 

@@ -23,6 +23,10 @@ jobs:
       - run: npm run lint
       - name: Dep-cruise ratchet (no new violations vs baseline)
         run: npm run lint:deps:check
+      - name: Migration version lint (no new duplicate version prefixes)
+        run: bash scripts/check-migration-versions.sh
+      - name: TSC ratchet (no new type errors vs baseline)
+        run: npm run typecheck:ratchet
       - name: Build (prod)
         run: npm run build
         env:

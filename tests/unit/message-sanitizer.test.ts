@@ -202,6 +202,58 @@ describe("sanitizeAssistantMessage", () => {
     const r = sanitizeAssistantMessage(raw, false);
     expect(r.text).toBe("Texto.");
   });
+
+  // ============================================================
+  // Regressão: leak de diretiva de mídia SEM "action" (incidente
+  // VitrineVET 2026-06-01). Agente "Luiza" improvisou {"file":"X.jpg"}
+  // porque o documento estava preso em status=processing (tool send_document
+  // não oferecido). Sem chave "action" → escapava de todos os filtros.
+  // ============================================================
+
+  it("strips leaked media directives without an action key (incidente VitrineVET)", () => {
+    const raw = [
+      "Com certeza, Auré! Vou te enviar agora mesmo as imagens do catálogo da Biocepa com a linha completa de suplementos.",
+      "",
+      "{",
+      '  "file": "CATALOGO BIOCEPA(2)_pag_001.jpg"',
+      "}",
+      "",
+      "{",
+      '  "file": "CATALOGO BIOCEPA(2)_pag_002.jpg"',
+      "}",
+    ].join("\n");
+
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe(
+      "Com certeza, Auré! Vou te enviar agora mesmo as imagens do catálogo da Biocepa com a linha completa de suplementos.",
+    );
+    expect(r.text).not.toMatch(/\{/); // JSON totalmente removido
+    expect(r.droppedBlocks).toBe(2);
+    // não recupera — resolução filename→document_id é fora do sanitizer
+    expect(r.recoveredAction).toBeNull();
+  });
+
+  it('strips a leaked { "document": ... } directive', () => {
+    const raw = 'Claro, segue o catálogo técnico:\n{\n  "document": "Catalogo Seamaty.pdf"\n}';
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Claro, segue o catálogo técnico:");
+    expect(r.text).not.toMatch(/\{/);
+    expect(r.droppedBlocks).toBe(1);
+  });
+
+  it("strips media directive with multiple allowlisted keys (file + caption)", () => {
+    const raw = 'Olha:\n{"image": "promo.png", "caption": "Promoção da semana"}';
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Olha:");
+    expect(r.droppedBlocks).toBe(1);
+  });
+
+  it("preserves legitimate JSON whose keys are NOT media (no over-stripping)", () => {
+    const raw = 'O preço fica assim: {"preco": "R$ 1.200", "parcelas": 12}';
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toContain('{"preco": "R$ 1.200", "parcelas": 12}');
+    expect(r.droppedBlocks).toBe(0);
+  });
 });
 
 describe("splitByDelimiter", () => {

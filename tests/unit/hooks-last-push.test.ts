@@ -28,8 +28,8 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" } }) }));
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }) }));
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t" } }) }));
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-t", isReady: true }) }));
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t" } }) }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));

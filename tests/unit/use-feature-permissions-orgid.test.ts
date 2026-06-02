@@ -31,11 +31,11 @@ vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
 }));
 
 const mockUseCurrentTeamMember = vi.fn();
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => mockUseCurrentTeamMember(),
 }));
 
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({ isMaster: false, isLoading: false }),
 }));
 

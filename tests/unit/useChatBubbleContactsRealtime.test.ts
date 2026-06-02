@@ -14,7 +14,7 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 const mockUseCurrentTeamMember = vi.fn();
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => mockUseCurrentTeamMember(),
 }));
 

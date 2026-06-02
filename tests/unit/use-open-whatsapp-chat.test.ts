@@ -22,7 +22,7 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({
     data: { id: "tm1", organization_id: "org-1", role: "admin", user_id: "u1" },
   }),

@@ -37,7 +37,7 @@ vi.mock('@/integrations/supabase/client', () => ({
   },
 }));
 
-vi.mock('@/modules/identity/hooks/useOrganization', () => ({
+vi.mock('@/modules/identity/org-team/hooks/useOrganization', () => ({
   useOrganization: () => ({ organizationId: 'org-123' }),
 }));
 
@@ -55,7 +55,7 @@ vi.mock('@/modules/identity/permissions/lib/permissions', () => ({
   assertIsAdmin: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@/modules/identity/hooks/useMasterAuth', () => ({
+vi.mock('@/modules/identity/master/hooks/useMasterAuth', () => ({
   useMasterAuth: () => ({ isMaster: false, isLoading: false }),
 }));
 

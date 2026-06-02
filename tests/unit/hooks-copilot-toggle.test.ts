@@ -26,7 +26,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 const mockMaster = vi.fn(() => ({ isMaster: false, masterUser: null, permissions: {}, isOutbounder: false, isLoading: false }));
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
   useMasterAuth: () => mockMaster(),
 }));
 
@@ -45,7 +45,7 @@ vi.mock("@/modules/identity/auth/hooks/useIdentity", () => ({
   useIdentity: () => mockIdentity,
 }));
 
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-test", isReady: true }),
 }));
 

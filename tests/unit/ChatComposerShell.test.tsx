@@ -38,7 +38,7 @@ vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useHasRole: () => ({ hasRole: true, isLoading: false }),
 }));
 
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({
     isMaster: mockIsMaster,
     masterUser: null,
