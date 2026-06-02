@@ -79,6 +79,21 @@ serve(
         agentId: (context as ResolvedContext & { _agentId?: string | null })._agentId ?? null,
       }),
       sendReply: (canonicalPhone, text, row) => sendReply(supabase, row.organization_id, canonicalPhone, text),
+      recordOutbound: async (canonicalPhone, text, row) => {
+        // Unique key per send: identical replies must each be recorded so the
+        // identical_outgoing_burst signal can fire (do NOT collapse via dedup).
+        const idem = `${row.organization_id}:${canonicalPhone}:outbound:${row.trace_id}:${crypto.randomUUID()}`;
+        await supabase.rpc("copilot_v2_enqueue_message", {
+          p_org_id: row.organization_id,
+          p_lead_id: row.lead_id,
+          p_canonical_phone: canonicalPhone,
+          p_message_type: "text",
+          p_content: text,
+          p_source: "outbound",
+          p_trace_id: row.trace_id,
+          p_idempotency_key: idem,
+        }).then(() => {}, () => {});
+      },
       markComplete: async (id) => { await supabase.rpc("copilot_v2_complete_message", { p_id: id }); },
       markFailed: async (id, err) => { await supabase.rpc("copilot_v2_fail_message", { p_id: id, p_error: err.slice(0, 500) }); },
       logStep: async (traceId, step, reason, meta) => {

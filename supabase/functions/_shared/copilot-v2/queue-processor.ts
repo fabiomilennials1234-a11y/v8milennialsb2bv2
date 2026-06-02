@@ -33,6 +33,8 @@ export interface ProcessorDeps {
   /** Builds the per-message tool executor (bound to this lead/agent/org). */
   makeExecutor: (row: QueueRow, context: ResolvedContext) => (name: string, args: Record<string, unknown>) => Promise<unknown>;
   sendReply: (canonicalPhone: string, text: string, row: QueueRow) => Promise<void>;
+  /** Records the sent reply as an outbound queue row so the loop gate sees the outgoing side. */
+  recordOutbound: (canonicalPhone: string, text: string, row: QueueRow) => Promise<void>;
   markComplete: (id: string) => Promise<void>;
   markFailed: (id: string, error: string) => Promise<void>;
   logStep: (traceId: string, step: string, reason: string | null, meta?: Record<string, unknown>) => Promise<void>;
@@ -62,6 +64,7 @@ export async function processQueueMessage(row: QueueRow, deps: ProcessorDeps): P
 
     if (result.reply && result.reply.trim() !== "") {
       await deps.sendReply(row.canonical_phone, result.reply, row);
+      await deps.recordOutbound(row.canonical_phone, result.reply, row);
       await deps.logStep(row.trace_id, "outbound", null);
     }
 

@@ -33,6 +33,7 @@ function deps(over: Partial<ProcessorDeps> = {}): ProcessorDeps & { sent: string
     makeLlm: () => ({ async complete() { return { text: 'olá!', toolCalls: [] }; } }),
     makeExecutor: () => async () => ({}),
     sendReply: async (_phone, text) => { sent.push(text); },
+    recordOutbound: async () => {},
     markComplete: async (id) => { completed.push(id); },
     markFailed: async (id, err) => { failed.push([id, err]); },
     logStep: async () => {},
