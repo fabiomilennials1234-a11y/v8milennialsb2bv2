@@ -101,6 +101,27 @@ describe('processInbound — gates', () => {
   });
 });
 
+describe('processInbound — input short-circuit (#7, no LLM)', () => {
+  it('short-circuits an abusive message with a canned reply (no cognition enqueue)', async () => {
+    const sb = makeSupabase();
+    const ack = await processInbound(sb, ctx({ content: 'vai se ferrar seu lixo idiota' }));
+    expect(ack).toMatchObject({ ack: 'skipped', reason: 'short_circuit:abuse' });
+    // The only enqueue is the canned reply (canned_out), never an inbound cognition turn.
+    const enqueues = sb.rpcCalls.filter((c) => c.name === 'copilot_v2_enqueue_message');
+    expect(enqueues).toHaveLength(1);
+    expect(enqueues[0].args.p_source).toBe('canned_out');
+    expect(enqueues[0].args.p_org_id).toBe('org-1'); // org from ctx, never payload
+  });
+
+  it('lets a normal business message pass through to the full gate/enqueue flow', async () => {
+    const sb = makeSupabase();
+    const ack = await processInbound(sb, ctx({ content: 'queria um orçamento de 500 peças' }));
+    expect(ack.ack).toBe('queued');
+    const enq = sb.rpcCalls.find((c) => c.name === 'copilot_v2_enqueue_message');
+    expect(enq!.args.p_source).toBe('inbound'); // normal cognition path, not canned
+  });
+});
+
 describe('processInbound — fragment coalescing (#19/#69)', () => {
   it('coalesces the just-arrived fragment with recent pending inbound into one enqueue', async () => {
     const t = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();

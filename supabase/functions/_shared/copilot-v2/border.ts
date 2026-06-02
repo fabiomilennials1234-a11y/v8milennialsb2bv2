@@ -18,6 +18,7 @@ import { decideHumanPauseGate } from "./human-pause.ts";
 import { buildDedupKey, type DedupSource } from "./dedup-lock.ts";
 import { coalesceFragments, type InboundFragment } from "./message-debounce.ts";
 import { initTraceContext, logTraceStep, type TraceContext } from "./trace-context.ts";
+import { classifyInbound } from "./input-short-circuit.ts";
 
 export interface BorderContext {
   /** Resolved from the instance/secret — the trusted source of org identity. */
@@ -64,6 +65,29 @@ export async function processInbound(supabase: any, ctx: BorderContext): Promise
   if (ctx.isGroup === true) {
     await logTraceStep(supabase, trace, "gate", "is_group_skipped");
     return { ack: "skipped", reason: "is_group", trace_id: trace.trace_id };
+  }
+
+  // 3.5 Input short-circuit (#7): deterministic spam/abuse/competitor handling — no LLM.
+  //     Runs before the gates/enqueue (the cheapest point). fail-OPEN: 'pass' on
+  //     ambiguity so normal cognition decides — never silences a legitimate lead.
+  if ((ctx.source ?? "inbound") === "inbound") {
+    const sc = classifyInbound(ctx.content);
+    if (sc.action === "drop") {
+      await logTraceStep(supabase, trace, "gate", `short_circuit:${sc.category}`);
+      return { ack: "skipped", reason: `short_circuit:${sc.category}`, trace_id: trace.trace_id };
+    }
+    if (sc.action === "canned" && sc.cannedReply) {
+      await logTraceStep(supabase, trace, "gate", `short_circuit:${sc.category}`);
+      // Ship the canned reply directly (no cognition). Idempotency unique per send.
+      // org_id comes from the trusted ctx (instance/secret), never the payload.
+      await supabase.rpc("copilot_v2_enqueue_message", {
+        p_org_id: ctx.organizationId, p_lead_id: ctx.leadId ?? null,
+        p_canonical_phone: canonicalPhone, p_message_type: "text",
+        p_content: sc.cannedReply, p_source: "canned_out", p_trace_id: trace.trace_id,
+        p_idempotency_key: `${ctx.organizationId}:${canonicalPhone}:canned:${trace.trace_id}`,
+      }).then(() => {}, () => {});
+      return { ack: "skipped", reason: `short_circuit:${sc.category}`, trace_id: trace.trace_id };
+    }
   }
 
   // 4. Human-pause gate (fail-CLOSED).
