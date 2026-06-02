@@ -96,6 +96,30 @@ serve(
           return decideHumanPauseGate({ record: null, checkErrored: true, now: new Date() });
         }
       },
+      checkLoop: async (row) => {
+        try {
+          const cutoff = new Date(Date.now() - 120_000).toISOString();
+          const { data, error } = await supabase
+            .from("copilot_v2_message_queue")
+            .select("content, source, created_at")
+            .eq("organization_id", row.organization_id)
+            .eq("canonical_phone", row.canonical_phone)
+            .gte("created_at", cutoff)
+            .order("created_at", { ascending: true });
+          if (error) throw error;
+          const messages: LoopMessage[] = (data ?? []).map((r: any) => ({
+            content_hash: r.content,
+            direction: r.source === "outbound" ? "outgoing" : "incoming",
+            timestamp: r.created_at,
+          }));
+          const signal = evaluateLoopSignal({ messages, now: new Date() });
+          const gate = decideLoopGate({ signal, checkErrored: false });
+          return { blocked: gate.block, reason: gate.reason };
+        } catch (_err) {
+          const gate = decideLoopGate({ signal: null, checkErrored: true });
+          return { blocked: gate.block, reason: gate.reason };
+        }
+      },
       judgeOutput: async (reply, _row, context) => {
         // Sampling: conservative default = judge every turn (rate from config slot).
         const rate = typeof (context as any)?._judgeSampleRate === "number" ? (context as any)._judgeSampleRate : 1.0;

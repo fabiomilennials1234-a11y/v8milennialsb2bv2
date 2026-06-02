@@ -34,6 +34,8 @@ export interface ProcessorDeps {
   makeExecutor: (row: QueueRow, context: ResolvedContext) => (name: string, args: Record<string, unknown>) => Promise<unknown>;
   /** Re-checks the human-pause gate at SEND time (the durable-queue + retry window). */
   checkPause: (row: QueueRow) => Promise<{ blocked: boolean; reason: string | null }>;
+  /** Re-checks the loop gate at SEND time (durable-queue window). fail-CLOSED. */
+  checkLoop?: (row: QueueRow) => Promise<{ blocked: boolean; reason: string | null }>;
   /** Output LLM-as-judge: vets the reply pre-send (Slice 5). fail-CLOSED. */
   judgeOutput?: (reply: string, row: QueueRow, context: ResolvedContext) => Promise<{ block: boolean; reason: string | null }>;
   sendReply: (canonicalPhone: string, text: string, row: QueueRow) => Promise<void>;
@@ -73,6 +75,16 @@ export async function processQueueMessage(row: QueueRow, deps: ProcessorDeps): P
         await deps.logStep(row.trace_id, "gate", pause.reason ?? "human_pause_active");
         await deps.markComplete(row.id);
         return;
+      }
+      if (deps.checkLoop) {
+        const loop = await deps.checkLoop(row);
+        if (loop.blocked) {
+          // The loop state evolved after enqueue (durable-queue window) — suppress
+          // (complete, not fail). Loop is cheaper than the judge, so it runs first.
+          await deps.logStep(row.trace_id, "gate", loop.reason ?? "bot_loop_detected");
+          await deps.markComplete(row.id);
+          return;
+        }
       }
       if (deps.judgeOutput) {
         const judge = await deps.judgeOutput(result.reply, row, context);
