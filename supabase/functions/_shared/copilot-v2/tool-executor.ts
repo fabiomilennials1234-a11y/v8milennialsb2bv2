@@ -20,6 +20,7 @@ import { fuseHybridResults, type KnowledgeHit } from "./hybrid-search.ts";
 import { RAG_THRESHOLDS } from "./rag-threshold.ts";
 import { decideSendMedia, type SendMediaItem } from "./send-media-selector.ts";
 import { resolveMediaDelivery, type SendMediaKind } from "./media-mime.ts";
+import { computeFreeSlots, decideScheduleSlot } from "./agenda.ts";
 
 export interface ToolContext {
   organizationId: string;
@@ -37,6 +38,26 @@ export interface ToolContext {
     number: string; type: "image" | "video" | "audio"; file: string;
     caption?: string; mediaId: string;
   }) => Promise<{ success: boolean; message_id?: string; error?: string }>;
+  /** Injected clock (tests pin it); the worker passes new Date(). */
+  now?: Date;
+  /**
+   * Calendar freeBusy I/O (injected by the worker). Pure tests pass a fake.
+   * Returns busy intervals for the lead's responsible user, or ok:false when no
+   * connected calendar (→ honest no_calendar fallback, never a silent empty).
+   */
+  getCalendarFreeBusy?: (p: { userId: string; window: { start: string; end: string } }) =>
+    Promise<{ ok: boolean; busy: { start: string; end: string }[] }>;
+  /** Scheduling I/O sink (injected by the worker) — Task 4. */
+  scheduleMeetingViaCalendar?: (p: {
+    userId: string; leadId: string; datetime: string; title: string;
+  }) => Promise<{ created: boolean; meetLink?: string | null; error?: string }>;
+  /** Persists the confirmacao pipe entry (injected; worker backs with pipeline-adapter) — Task 4. */
+  upsertConfirmacaoEntry?: (p: { leadId: string; orgId: string; meetingAt: string; meetLink?: string | null }) =>
+    Promise<{ pipeId: string | null }>;
+  /** Handoff notification dispatch (injected by the worker; infra = Slice 5) — Task 5. */
+  dispatchHandoffNotification?: (p: {
+    leadId: string; reason: string; summary: string | null; targetArchetype: "vendedor";
+  }) => Promise<{ dispatched: boolean; reason?: string }>;
 }
 
 export type ToolErrorCode = "unknown_tool" | "not_implemented" | "missing_context";
@@ -130,6 +151,36 @@ const searchKnowledge: Handler = async (supabase, ctx, args) => {
 
   if (fused.length === 0) return `Nenhuma informação encontrada na base para: "${query}"`;
   return ["=== BASE DE CONHECIMENTO ===", ...fused.map((h) => h.content)].join("\n\n");
+};
+
+/** Parse "<ISO>/<ISO>" (date_range) → window; default = próximas 48h. */
+function parseWindow(dateRange: unknown, now: Date): { start: string; end: string } {
+  if (typeof dateRange === "string" && dateRange.includes("/")) {
+    const [start, end] = dateRange.split("/");
+    if (!isNaN(new Date(start).getTime()) && !isNaN(new Date(end).getTime())) return { start, end };
+  }
+  return { start: now.toISOString(), end: new Date(now.getTime() + 48 * 3600_000).toISOString() };
+}
+
+async function resolveResponsibleUserId(supabase: any, ctx: ToolContext): Promise<string | null> {
+  if (!ctx.leadId) return null;
+  const { data: lead } = await supabase
+    .from("leads").select("responsible_id, sdr_id")
+    .eq("organization_id", ctx.organizationId).eq("id", ctx.leadId).maybeSingle();
+  return lead?.responsible_id ?? lead?.sdr_id ?? null;
+}
+
+const checkAgendaAvailability: Handler = async (supabase, ctx, args) => {
+  const now = ctx.now ?? new Date();
+  const userId = await resolveResponsibleUserId(supabase, ctx);
+  if (!userId || !ctx.getCalendarFreeBusy) return { slots: [], reason: "no_calendar" };
+
+  const window = parseWindow(args.date_range, now);
+  const fb = await ctx.getCalendarFreeBusy({ userId, window });
+  if (!fb.ok) return { slots: [], reason: "no_calendar" };
+
+  const slots = computeFreeSlots({ busy: fb.busy, window, slotMinutes: 60, now });
+  return { slots, window, reason: null };
 };
 
 // ── Write handlers (gated by capability + write-after-introspect upstream) ──
@@ -320,6 +371,7 @@ const HANDLERS: Record<string, Handler> = {
   get_conversation_history: getConversationHistory,
   get_contact_status: getContactStatus,
   list_custom_fields: listCustomFields,
+  check_agenda_availability: checkAgendaAvailability,
   search_knowledge: searchKnowledge,
   move_lead_stage: moveLeadStage,
   set_qualification_tier: setQualificationTier,

@@ -103,6 +103,43 @@ describe('send_media (acervo-aware, sem silent-drop)', () => {
   });
 });
 
+describe('check_agenda_availability (read via calendar adapter)', () => {
+  const agendaCtx = { organizationId: 'org-1', leadId: 'lead-1', canonicalPhone: '11987654321' };
+
+  function execWithCalendar(sb: any, freeBusyImpl: any, over: Record<string, unknown> = {}) {
+    return createToolExecutor(sb, {
+      ...agendaCtx,
+      getCalendarFreeBusy: freeBusyImpl,
+      now: new Date('2026-06-10T09:00:00-03:00'),
+      ...over,
+    } as any);
+  }
+
+  it('resolve o responsável do lead e devolve os slots livres da janela', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1', responsible_id: 'm-resp', sdr_id: null } });
+    const freeBusy = async () => ({ ok: true, busy: [{ start: '2026-06-10T10:00:00-03:00', end: '2026-06-10T11:00:00-03:00' }] });
+    const out: any = await execWithCalendar(sb, freeBusy)('check_agenda_availability', { date_range: '2026-06-10T09:00:00-03:00/2026-06-10T12:00:00-03:00' });
+    expect(out.slots).toContain('2026-06-10T09:00:00.000-03:00');
+    expect(out.slots).not.toContain('2026-06-10T10:00:00.000-03:00'); // ocupado
+    const q = sb.queries.find((x: any) => x.table === 'leads')!;
+    expect(q.filters).toContainEqual(['organization_id', 'org-1']);
+  });
+
+  it('FALLBACK EXPLÍCITO no_calendar quando o responsável não tem Calendar conectado', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1', responsible_id: 'm-resp' } });
+    const freeBusy = async () => ({ ok: false, busy: [] }); // sem token
+    const out: any = await execWithCalendar(sb, freeBusy)('check_agenda_availability', { date_range: 'x/y' });
+    expect(out).toMatchObject({ slots: [], reason: 'no_calendar' });
+  });
+
+  it('FALLBACK EXPLÍCITO no_calendar quando o lead não tem responsável', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1', responsible_id: null, sdr_id: null } });
+    const freeBusy = async () => ({ ok: true, busy: [] });
+    const out: any = await execWithCalendar(sb, freeBusy)('check_agenda_availability', { date_range: 'x/y' });
+    expect(out).toMatchObject({ slots: [], reason: 'no_calendar' });
+  });
+});
+
 describe('get_lead_360', () => {
   it('queries leads filtered by org + id and returns the row', async () => {
     const sb = mockSupabase({ leads: { id: 'lead-1', name: 'Aços Brasil' } });
