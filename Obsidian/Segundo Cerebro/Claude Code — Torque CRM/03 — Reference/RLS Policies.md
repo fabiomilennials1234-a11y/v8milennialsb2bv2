@@ -56,6 +56,34 @@ CREATE POLICY "master_only_select" ON <table>
   FOR SELECT USING (auth.is_master());
 ```
 
+### Master ghost (acesso total cross-org, invisível)
+
+Padrão "ghost master": o master é membro de nenhuma org (ou só de algumas), mas
+precisa de acesso **total** a tabelas operacionais de qualquer org — sem aparecer
+como `team_member`. Cada tabela operacional ganha **duas** policies permissivas
+(combinam por OR com as policies org-member, que continuam intactas):
+
+```sql
+-- por tabela:
+CREATE POLICY "master_ghost_select_<tbl>" ON public.<tbl>
+  FOR SELECT USING (public.is_master_user());
+
+CREATE POLICY "master_ghost_all_<tbl>" ON public.<tbl>
+  FOR ALL USING (public.is_master_user()) WITH CHECK (public.is_master_user());
+```
+
+`is_master_user()` é `SECURITY DEFINER STABLE` (forma zero-arg = `auth.uid()`).
+Não usa subquery inline em `team_members` → não dispara a recursão de
+`apply_rls()` no Realtime. Aplicado em massa em
+`20260901200000_ghost_master_rls_and_view.sql` (parte 5) para ~50 tabelas
+operacionais (`acoes_do_dia`, `custom_pipe_entries`, `leads`, `pipeline_entries`,
+`workflows`, …).
+
+#### `checklists` / `checklist_items`
+- Org-member: `Checklists visible to org members` (SELECT) + `Org members can {insert,update,delete} checklists` (e equivalentes em `checklist_items` via `checklist_id`), todas via `get_my_organization_ids()` — `20261031000008_fix_checklist_rls_use_helpers.sql`.
+- Master ghost: `master_ghost_select_<tbl>` + `master_ghost_all_<tbl>` em ambas as tabelas — `20261118000000_master_ghost_rls_checklists.sql`.
+- **Gap corrigido (2026-06-02)**: essas duas tabelas estavam SEM as policies `master_ghost_*` (presentes nas irmãs). Master que não é `team_member` da org-alvo não conseguia INSERT (`new row violates row-level security policy`). Migration de fix replica o idioma das irmãs 1:1.
+
 ### Soft RLS (org_id NULL aceito)
 
 Algumas tabelas de lookup global têm policy permissiva:
