@@ -233,6 +233,43 @@ const setQualificationTier: Handler = async (supabase, ctx, args) => {
   return { applied: true, tier, signals: args.signals ?? {} };
 };
 
+const CONFIRMACAO_STAGE = "reuniao_marcada";
+
+const scheduleMeeting: Handler = async (supabase, ctx, args) => {
+  if (!ctx.leadId) throw new ToolError("missing_context", "schedule_meeting:lead");
+  const datetime = String(args.datetime ?? "");
+  if (!datetime) throw new ToolError("missing_context", "schedule_meeting:datetime");
+  const now = ctx.now ?? new Date();
+
+  // Defesa em profundidade: o introspect-guard (Task 1) já garantiu que o
+  // datetime estava nos slots introspectados; aqui revalidamos só passado/ISO
+  // (clock-skew) sem re-bater no Calendar — fail-CLOSED com motivo explícito.
+  const slot = decideScheduleSlot({ datetime, freeSlots: [datetime], now });
+  if (!slot.ok) return { scheduled: false, reason: slot.reason };
+
+  // 1. Grava o pipe_confirmacao (sempre — o agendamento é o efeito de negócio).
+  if (!ctx.upsertConfirmacaoEntry) return { scheduled: false, reason: "no_pipe_writer" };
+  const { pipeId } = await ctx.upsertConfirmacaoEntry({
+    leadId: ctx.leadId, orgId: ctx.organizationId, meetingAt: datetime,
+  });
+
+  // 2. Google Calendar — GRACEFUL: falha NÃO desfaz o agendamento (só sem link).
+  let meetLink: string | null = null;
+  let calendar: "ok" | "failed" | "skipped" = "skipped";
+  if (ctx.scheduleMeetingViaCalendar) {
+    const userId = await resolveResponsibleUserId(supabase, ctx);
+    if (userId) {
+      const res = await ctx.scheduleMeetingViaCalendar({
+        userId, leadId: ctx.leadId, datetime, title: String(args.title ?? "Reunião"),
+      });
+      if (res.created) { meetLink = res.meetLink ?? null; calendar = "ok"; }
+      else calendar = "failed";
+    }
+  }
+
+  return { scheduled: true, stage: CONFIRMACAO_STAGE, pipeId, meetLink, calendar, datetime };
+};
+
 const QUALIFIED_TIERS = ["diamante", "ouro", "prata", "bronze"];
 
 const getContactStatus: Handler = async (supabase, ctx) => {
@@ -375,6 +412,7 @@ const HANDLERS: Record<string, Handler> = {
   search_knowledge: searchKnowledge,
   move_lead_stage: moveLeadStage,
   set_qualification_tier: setQualificationTier,
+  schedule_meeting: scheduleMeeting,
   fill_lead_field: fillLeadField,
   transfer_to_human: transferToHuman,
   send_media: sendMedia,

@@ -140,6 +140,49 @@ describe('check_agenda_availability (read via calendar adapter)', () => {
   });
 });
 
+describe('schedule_meeting (write after-introspect → pipe_confirmacao + calendar graceful)', () => {
+  const meetCtx = { organizationId: 'org-1', leadId: 'lead-1', canonicalPhone: '11987654321', now: new Date('2026-06-10T09:00:00-03:00') };
+
+  function execMeet(sb: any, calendar: any, confirmacao: any, over: Record<string, unknown> = {}) {
+    return createToolExecutor(sb, {
+      ...meetCtx,
+      scheduleMeetingViaCalendar: calendar,
+      upsertConfirmacaoEntry: confirmacao,
+      ...over,
+    } as any);
+  }
+
+  it('grava pipe_confirmacao (reuniao_marcada) e anexa meet_link quando o Calendar cria', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1', responsible_id: 'm-resp' } });
+    const confirmacao = async () => ({ pipeId: 'pe-1' });
+    const calendar = async () => ({ created: true, meetLink: 'https://meet/x' });
+    const out: any = await execMeet(sb, calendar, confirmacao)('schedule_meeting', { datetime: '2026-06-10T14:00:00.000-03:00', title: 'Discovery' });
+    expect(out).toMatchObject({ scheduled: true, stage: 'reuniao_marcada', meetLink: 'https://meet/x' });
+  });
+
+  it('GRACEFUL: agendamento persiste mesmo se o Calendar falhar (sem meet_link, sem silent-drop)', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1', responsible_id: 'm-resp' } });
+    const confirmacao = async () => ({ pipeId: 'pe-1' });
+    const calendar = async () => ({ created: false, error: 'google 403' });
+    const out: any = await execMeet(sb, calendar, confirmacao)('schedule_meeting', { datetime: '2026-06-10T14:00:00.000-03:00' });
+    expect(out).toMatchObject({ scheduled: true, stage: 'reuniao_marcada', meetLink: null, calendar: 'failed' });
+  });
+
+  it('bloqueio explícito quando o datetime está no passado (fail-CLOSED, sem write)', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1' } });
+    let wrote = false;
+    const out: any = await execMeet(sb, async () => ({ created: true }), async () => { wrote = true; return { pipeId: 'x' }; })(
+      'schedule_meeting', { datetime: '2026-06-10T08:00:00.000-03:00' });
+    expect(out).toMatchObject({ scheduled: false, reason: 'slot_in_past' });
+    expect(wrote).toBe(false);
+  });
+
+  it('exige lead no contexto', async () => {
+    const exec = createToolExecutor(mockSupabase({}), { organizationId: 'org-1', now: meetCtx.now } as any);
+    await expect(exec('schedule_meeting', { datetime: '2026-06-10T14:00:00.000-03:00' })).rejects.toMatchObject({ code: 'missing_context' });
+  });
+});
+
 describe('get_lead_360', () => {
   it('queries leads filtered by org + id and returns the row', async () => {
     const sb = mockSupabase({ leads: { id: 'lead-1', name: 'Aços Brasil' } });
