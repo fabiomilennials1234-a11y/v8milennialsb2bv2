@@ -15,7 +15,7 @@
 import { normalizeCanonicalPhone } from "./phone-normalizer.ts";
 import { evaluateLoopSignal, decideLoopGate, type LoopMessage } from "./loop-detector.ts";
 import { decideHumanPauseGate } from "./human-pause.ts";
-import { buildDedupKey, dedupWindowSeconds, type DedupSource } from "./dedup-lock.ts";
+import { buildDedupKey, type DedupSource } from "./dedup-lock.ts";
 import { coalesceFragments, type InboundFragment } from "./message-debounce.ts";
 import { initTraceContext, logTraceStep, type TraceContext } from "./trace-context.ts";
 
@@ -95,24 +95,10 @@ export async function processInbound(supabase: any, ctx: BorderContext): Promise
     ? await coalesceInbound(supabase, ctx.organizationId, canonicalPhone, ctx.content, new Date())
     : ctx.content;
 
-  // 7. Atomic dedup reservation.
-  const dedupKey = buildDedupKey({ orgId: ctx.organizationId, phone: canonicalPhone, content, source });
-  const { data: reserved, error: dedupErr } = await supabase.rpc("copilot_v2_acquire_dedup_lock", {
-    p_dedup_key: dedupKey,
-    p_org_id: ctx.organizationId,
-    p_window_seconds: dedupWindowSeconds(source),
-  });
-  if (dedupErr) {
-    // Dedup is fail-CLOSED: prefer dropping a possible duplicate to double-sending.
-    await logTraceStep(supabase, trace, "gate", "dedup_check_failed");
-    return { ack: "skipped", reason: "dedup_check_failed", trace_id: trace.trace_id };
-  }
-  if (reserved === false) {
-    await logTraceStep(supabase, trace, "gate", "duplicate_suppressed");
-    return { ack: "skipped", reason: "duplicate", trace_id: trace.trace_id };
-  }
-
-  // 7. Enqueue (idempotent).
+  // 7. Atomic dedup + enqueue in ONE statement (#21). The enqueue's
+  //    ON CONFLICT(org, idempotency_key) DO NOTHING RETURNING id IS the dedup
+  //    primitive — no separate pre-lock, so no crash window can lose a message.
+  const idempotencyKey = buildDedupKey({ orgId: ctx.organizationId, phone: canonicalPhone, content, source });
   const { data: queueId, error: enqErr } = await supabase.rpc("copilot_v2_enqueue_message", {
     p_org_id: ctx.organizationId,
     p_lead_id: ctx.leadId ?? null,
@@ -121,10 +107,17 @@ export async function processInbound(supabase: any, ctx: BorderContext): Promise
     p_content: content,
     p_source: source,
     p_trace_id: trace.trace_id,
-    p_idempotency_key: dedupKey,
+    p_idempotency_key: idempotencyKey,
   });
   if (enqErr) {
+    // Enqueue is fail-CLOSED on error: drop rather than risk an un-traced send.
+    await logTraceStep(supabase, trace, "gate", "enqueue_failed");
     return { ack: "error", reason: "enqueue_failed", trace_id: trace.trace_id };
+  }
+  if (queueId == null) {
+    // ON CONFLICT suppressed an identical message within the idempotency scope.
+    await logTraceStep(supabase, trace, "gate", "duplicate_suppressed");
+    return { ack: "skipped", reason: "duplicate", trace_id: trace.trace_id };
   }
 
   await logTraceStep(supabase, trace, "enqueue", null, { message_type: ctx.messageType ?? "text" });
