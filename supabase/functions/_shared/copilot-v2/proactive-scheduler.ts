@@ -93,3 +93,27 @@ export interface ProactiveKeyArgs {
 export function buildProactiveIdempotencyKey(args: ProactiveKeyArgs): string {
   return `proactive:${args.orgId}:${args.kind}:${args.leadId}:${args.slot}`;
 }
+
+/** Daily per-org rate-limit, fail-CLOSED (ceiling ≤ 0 or NaN → blocks). */
+export function decideRateLimitGate(input: { sentToday: number; ceiling: number }): GateDecision {
+  if (!Number.isFinite(input.ceiling) || input.ceiling <= 0) {
+    return { allowed: false, reason: "no_rate_ceiling" };
+  }
+  return input.sentToday >= input.ceiling
+    ? { allowed: false, reason: "rate_limit_reached" }
+    : { allowed: true, reason: null };
+}
+
+/**
+ * Composed proactive gate: business-hours → rate-limit. Returns the FIRST
+ * blocking reason; fail-CLOSED throughout. The caller still relies on the
+ * claim RPC (Task 4) for the atomic anti-double-send — this is the cheap
+ * pre-filter that avoids even attempting an enqueue out of hours / over budget.
+ */
+export function decideProactiveSend(
+  input: { window: BusinessHoursWindow | null | undefined; now: Date; sentToday: number; ceiling: number },
+): GateDecision {
+  const hours = decideBusinessHoursGate({ window: input.window, now: input.now });
+  if (!hours.allowed) return hours;
+  return decideRateLimitGate({ sentToday: input.sentToday, ceiling: input.ceiling });
+}

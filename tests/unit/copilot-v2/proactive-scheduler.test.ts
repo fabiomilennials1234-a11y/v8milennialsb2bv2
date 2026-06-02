@@ -9,6 +9,8 @@ import { describe, it, expect } from 'vitest';
 import {
   decideBusinessHoursGate,
   buildProactiveIdempotencyKey,
+  decideRateLimitGate,
+  decideProactiveSend,
   type BusinessHoursWindow,
 } from '../../../supabase/functions/_shared/copilot-v2/proactive-scheduler.ts';
 
@@ -66,5 +68,35 @@ describe('buildProactiveIdempotencyKey — stable, no timestamp', () => {
   it('carries the kind as a prefix so it never collides with an inbound dedup key', () => {
     const k = buildProactiveIdempotencyKey({ orgId: 'o1', leadId: 'l1', kind: 'followup', slot: 'd3' });
     expect(k.startsWith('proactive:')).toBe(true);
+  });
+});
+
+describe('decideRateLimitGate — fail-CLOSED', () => {
+  it('allows under the daily ceiling', () => {
+    expect(decideRateLimitGate({ sentToday: 9, ceiling: 50 })).toEqual({ allowed: true, reason: null });
+  });
+  it('blocks at the ceiling', () => {
+    expect(decideRateLimitGate({ sentToday: 50, ceiling: 50 })).toEqual({ allowed: false, reason: 'rate_limit_reached' });
+  });
+  it('fail-CLOSED: a non-positive ceiling blocks', () => {
+    expect(decideRateLimitGate({ sentToday: 0, ceiling: 0 })).toEqual({ allowed: false, reason: 'no_rate_ceiling' });
+  });
+});
+
+describe('decideProactiveSend — composed, first blocking reason wins', () => {
+  const win: BusinessHoursWindow = { days: [1,2,3,4,5], start: '08:00', end: '18:00', tz: 'America/Sao_Paulo' };
+  const inside = new Date('2026-06-01T17:00:00.000Z'); // Mon 14:00 BRT
+  it('allows when all gates pass', () => {
+    expect(decideProactiveSend({ window: win, now: inside, sentToday: 1, ceiling: 50 }))
+      .toEqual({ allowed: true, reason: null });
+  });
+  it('blocks on business-hours BEFORE checking rate-limit', () => {
+    const night = new Date('2026-06-01T06:00:00.000Z'); // Mon 03:00 BRT
+    expect(decideProactiveSend({ window: win, now: night, sentToday: 999, ceiling: 50 }))
+      .toEqual({ allowed: false, reason: 'outside_business_hours' });
+  });
+  it('blocks on rate-limit when inside hours but at ceiling', () => {
+    expect(decideProactiveSend({ window: win, now: inside, sentToday: 50, ceiling: 50 }))
+      .toEqual({ allowed: false, reason: 'rate_limit_reached' });
   });
 });
