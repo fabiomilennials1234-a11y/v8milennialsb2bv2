@@ -5,11 +5,12 @@
  * from the trusted ToolContext (resolved by the worker from the instance/secret),
  * NEVER from the LLM-provided args — a tool arg named organization_id is ignored.
  *
- * Tools whose backing table belongs to a later slice (search_knowledge →
- * copilot_v2_knowledge, set_qualification_tier → copilot_v2_rubric, send_media →
- * copilot_v2_send_media, plus get_contact_status/list_custom_fields which need
- * extra sourcing) throw `not_implemented` until that slice lands — honest, never
- * a silent no-op (the v1 NOOP-action bug class).
+ * Tools whose backing store belongs to a later slice (e.g. a custom-pipe
+ * move_lead_stage) throw `not_implemented` until that slice lands — honest,
+ * never a silent no-op (the v1 NOOP-action bug class). send_media is now live
+ * (Slice 6): it reads ONLY from copilot_v2_send_media (never the knowledge base
+ * — separate stores, ADR #12) and returns an explicit fallback on every failure
+ * path (never a silent drop — VitrineVET lesson).
  */
 
 import { TOOL_REGISTRY } from "./tool-registry.ts";
@@ -17,6 +18,8 @@ import { mapSignalsToTier, type Rubric, type Signals } from "./rubric-engine.ts"
 import { generateEmbedding } from "../embeddings.ts";
 import { fuseHybridResults, type KnowledgeHit } from "./hybrid-search.ts";
 import { RAG_THRESHOLDS } from "./rag-threshold.ts";
+import { decideSendMedia, type SendMediaItem } from "./send-media-selector.ts";
+import { resolveMediaDelivery, type SendMediaKind } from "./media-mime.ts";
 
 export interface ToolContext {
   organizationId: string;
@@ -25,6 +28,15 @@ export interface ToolContext {
   canonicalPhone?: string | null;
   /** The active agent for this turn (needed to load its rubric). */
   agentId?: string | null;
+  /**
+   * I/O sink for the actual WhatsApp delivery (injected by the worker). Pure
+   * tests pass a fake. Absent → send_media returns a fallback (never throws into
+   * a silent drop). Returns the provider's send result.
+   */
+  sendMediaViaProvider?: (p: {
+    number: string; type: "image" | "video" | "audio"; file: string;
+    caption?: string; mediaId: string;
+  }) => Promise<{ success: boolean; message_id?: string; error?: string }>;
 }
 
 export type ToolErrorCode = "unknown_tool" | "not_implemented" | "missing_context";
@@ -247,6 +259,61 @@ const fillLeadField: Handler = async (supabase, ctx, args) => {
   return { filled: true, field };
 };
 
+const SEND_MEDIA_BUCKET = "copilot-v2-send-media";
+
+const sendMedia: Handler = async (supabase, ctx, args) => {
+  if (!ctx.canonicalPhone) throw new ToolError("missing_context", "send_media:phone");
+  const mediaId = String(args.media_id ?? "");
+  if (!mediaId) throw new ToolError("missing_context", "send_media:media_id");
+
+  // 1. Resolve o item — org SEMPRE do ctx, nunca dos args/LLM.
+  const { data: item, error } = await supabase
+    .from("copilot_v2_send_media")
+    .select("id, organization_id, kind, storage_path, is_active, mime_type")
+    .eq("organization_id", ctx.organizationId)
+    .eq("id", mediaId)
+    .maybeSingle();
+  if (error) throw new Error(`send_media: ${error.message}`);
+
+  // 2. Já-enviados nesta conversa (anti-repetição) — gate de momento/repetição.
+  let alreadySent: string[] = [];
+  if (ctx.conversationId) {
+    const { data: prior } = await supabase
+      .from("copilot_v2_trace_steps")
+      .select("meta")
+      .eq("step", "send_media");
+    alreadySent = (prior ?? [])
+      .map((r: any) => r?.meta?.media_id)
+      .filter((x: any): x is string => typeof x === "string");
+  }
+
+  // 3. Gate puro (fail-CLOSED) — bloqueio devolve motivo EXPLÍCITO, sem silent-drop.
+  const gate = decideSendMedia({
+    orgId: ctx.organizationId,
+    item: (item as SendMediaItem | null),
+    alreadySentMediaIds: alreadySent,
+  });
+  if (!gate.allowed) return { sent: false, reason: gate.reason };
+
+  // 4. Valida MIME/messageType (heurística única).
+  const delivery = resolveMediaDelivery(item.kind as SendMediaKind, item.mime_type);
+  if (!delivery.valid || !delivery.messageType) return { sent: false, reason: "invalid_mime" };
+
+  // 5. Signed URL (1h) — bucket PRIVADO, nunca link público.
+  const { data: signed, error: urlErr } = await supabase.storage
+    .from(SEND_MEDIA_BUCKET).createSignedUrl(item.storage_path, 3600);
+  if (urlErr || !signed?.signedUrl) return { sent: false, reason: "signed_url_failed" };
+
+  // 6. Entrega real é I/O injetada (ausente em teste/contexto sem provider).
+  if (!ctx.sendMediaViaProvider) return { sent: false, reason: "no_provider" };
+  const res = await ctx.sendMediaViaProvider({
+    number: ctx.canonicalPhone, type: delivery.messageType, file: signed.signedUrl, mediaId: item.id,
+  });
+  if (!res.success) return { sent: false, reason: res.error ?? "provider_failed", media_id: item.id };
+
+  return { sent: true, media_id: item.id, kind: item.kind, message_id: res.message_id ?? null };
+};
+
 const HANDLERS: Record<string, Handler> = {
   get_lead_360: getLead360,
   list_pipeline_stages: listPipelineStages,
@@ -258,6 +325,7 @@ const HANDLERS: Record<string, Handler> = {
   set_qualification_tier: setQualificationTier,
   fill_lead_field: fillLeadField,
   transfer_to_human: transferToHuman,
+  send_media: sendMedia,
 };
 
 /**
