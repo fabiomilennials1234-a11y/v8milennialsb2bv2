@@ -26,6 +26,10 @@ import { createToolExecutor } from "../_shared/copilot-v2/tool-executor.ts";
 import { decideHumanPauseGate } from "../_shared/copilot-v2/human-pause.ts";
 import { resolveAgentCapabilities } from "../_shared/copilot-v2/capability-gate.ts";
 import { createOpenRouterClient } from "../_shared/copilot-v2/openrouter-client.ts";
+import { decideOutputJudge, shouldSampleJudge, buildJudgePrompt } from "../_shared/copilot-v2/output-judge.ts";
+import { evaluateLoopSignal, decideLoopGate, type LoopMessage } from "../_shared/copilot-v2/loop-detector.ts";
+import { decideHitlGate } from "../_shared/copilot-v2/hitl-gate.ts";
+import { resolveHandoffTargets } from "../_shared/copilot-v2/handoff-routing.ts";
 import type { ResolvedContext } from "../_shared/copilot-v2/cognition-worker.ts";
 import type { AgentConfig } from "../_shared/copilot-v2/prompt-builder.ts";
 
@@ -90,6 +94,20 @@ serve(
           return decideHumanPauseGate({ record: data ? { paused_until: data } : null, checkErrored: false, now: new Date() });
         } catch (_err) {
           return decideHumanPauseGate({ record: null, checkErrored: true, now: new Date() });
+        }
+      },
+      judgeOutput: async (reply, _row, context) => {
+        // Sampling: conservative default = judge every turn (rate from config slot).
+        const rate = typeof (context as any)?._judgeSampleRate === "number" ? (context as any)._judgeSampleRate : 1.0;
+        if (!shouldSampleJudge({ rng: Math.random, rate })) return { block: false, reason: null };
+        try {
+          const judgeLlm = createOpenRouterClient({ model: "google/gemini-2.5-flash", maxTokens: 64 });
+          const policy = (context.configByArchetype?.[routeArchetype(context.contactStatus)] as any)?.commercialPolicy ?? null;
+          const resp = await judgeLlm.complete({ system: buildJudgePrompt(reply, policy), messages: [], tools: [] });
+          const verdict = JSON.parse(resp.text ?? "null");
+          return decideOutputJudge({ verdict, checkErrored: false });
+        } catch (_err) {
+          return decideOutputJudge({ verdict: null, checkErrored: true });
         }
       },
       recordOutbound: async (canonicalPhone, text, row) => {

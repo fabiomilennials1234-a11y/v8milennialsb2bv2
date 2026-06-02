@@ -34,6 +34,8 @@ export interface ProcessorDeps {
   makeExecutor: (row: QueueRow, context: ResolvedContext) => (name: string, args: Record<string, unknown>) => Promise<unknown>;
   /** Re-checks the human-pause gate at SEND time (the durable-queue + retry window). */
   checkPause: (row: QueueRow) => Promise<{ blocked: boolean; reason: string | null }>;
+  /** Output LLM-as-judge: vets the reply pre-send (Slice 5). fail-CLOSED. */
+  judgeOutput?: (reply: string, row: QueueRow, context: ResolvedContext) => Promise<{ block: boolean; reason: string | null }>;
   sendReply: (canonicalPhone: string, text: string, row: QueueRow) => Promise<void>;
   /** Records the sent reply as an outbound queue row so the loop gate sees the outgoing side. */
   recordOutbound: (canonicalPhone: string, text: string, row: QueueRow) => Promise<void>;
@@ -71,6 +73,16 @@ export async function processQueueMessage(row: QueueRow, deps: ProcessorDeps): P
         await deps.logStep(row.trace_id, "gate", pause.reason ?? "human_pause_active");
         await deps.markComplete(row.id);
         return;
+      }
+      if (deps.judgeOutput) {
+        const judge = await deps.judgeOutput(result.reply, row, context);
+        if (judge.block) {
+          // The reply failed the pre-send judge (or the judge errored) — suppress,
+          // do not send. Logged for observability; the turn is correctly stopped.
+          await deps.logStep(row.trace_id, "gate", judge.reason ?? "output_judge_blocked");
+          await deps.markComplete(row.id);
+          return;
+        }
       }
       await deps.sendReply(row.canonical_phone, result.reply, row);
       await deps.recordOutbound(row.canonical_phone, result.reply, row);
