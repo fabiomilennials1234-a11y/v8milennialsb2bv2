@@ -28,6 +28,14 @@ import { inRange, type TVPeriodRange } from "@/lib/tv-periods";
 // vem de refetchInterval (polling): staleTime sozinho deixava o board congelado
 // após uma venda até o remount, pois não há realtime/invalidation e
 // refetchOnWindowFocus é global false (kiosk TV nunca dispara focus).
+//
+// ESCOPO = ORG-WIDE (decisão CTO 2026-06-02, finding ENG-USAB-1). As views são
+// filtradas apenas por organization_id — performance é métrica de equipe/gestão
+// (TV kiosk + página Performance), então todos os membros veem os números da org
+// inteira. Diferente da fonte antiga (usePipelineEntries) que filtrava por leads
+// visíveis ao caller como efeito colateral do embed `lead:leads(...)`. Não
+// reintroduzir filtro por lead-visibility aqui: org-wide é intencional. As views
+// expõem só ids/sale_value/status (sem PII de lead).
 
 type PipePropostaRow = Tables<"pipe_propostas">;
 type PipeConfirmacaoRow = Tables<"pipe_confirmacao">;
