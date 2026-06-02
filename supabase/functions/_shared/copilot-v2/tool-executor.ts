@@ -14,6 +14,9 @@
 
 import { TOOL_REGISTRY } from "./tool-registry.ts";
 import { mapSignalsToTier, type Rubric, type Signals } from "./rubric-engine.ts";
+import { generateEmbedding } from "../embeddings.ts";
+import { fuseHybridResults, type KnowledgeHit } from "./hybrid-search.ts";
+import { RAG_THRESHOLDS } from "./rag-threshold.ts";
 
 export interface ToolContext {
   organizationId: string;
@@ -85,6 +88,36 @@ const getConversationHistory: Handler = async (supabase, ctx, args) => {
     .limit(limit);
   if (error) throw new Error(`get_conversation_history: ${error.message}`);
   return data ?? [];
+};
+
+const searchKnowledge: Handler = async (supabase, ctx, args) => {
+  const query = String(args.query ?? "").trim();
+  if (!query) throw new ToolError("missing_context", "search_knowledge:query");
+
+  // Falha de credencial/embedding é NÃO-silenciosa: throw -> o cognition-loop
+  // registra como tool error no trace (nunca um "nenhum resultado" enganoso).
+  const apiKey = Deno.env.get("OPENROUTER_API_KEY");
+  if (!apiKey) throw new Error("search_knowledge: OPENROUTER_API_KEY ausente");
+  const embedding = await generateEmbedding(query, apiKey);
+  if (!embedding || embedding.length === 0) throw new Error("search_knowledge: embedding vazio");
+
+  // RPC org-scoped — org SEMPRE do ctx, nunca dos args do LLM.
+  const { data, error } = await supabase.rpc("copilot_v2_match_knowledge", {
+    query_embedding: `[${embedding.join(",")}]`,
+    p_org_id: ctx.organizationId,
+    query_text: query,
+    match_count: 8,
+    similarity_threshold: RAG_THRESHOLDS.doc,
+  });
+  if (error) throw new Error(`search_knowledge: ${error.message}`);
+
+  const rows = (data ?? []) as Array<{ id: number; content: string; similarity: number; source: string }>;
+  const semantic: KnowledgeHit[] = rows.filter((r) => r.source === "semantic");
+  const keyword: KnowledgeHit[] = rows.filter((r) => r.source === "keyword");
+  const fused = fuseHybridResults(semantic, keyword, { docThreshold: RAG_THRESHOLDS.doc, limit: 5 });
+
+  if (fused.length === 0) return `Nenhuma informação encontrada na base para: "${query}"`;
+  return ["=== BASE DE CONHECIMENTO ===", ...fused.map((h) => h.content)].join("\n\n");
 };
 
 // ── Write handlers (gated by capability + write-after-introspect upstream) ──
@@ -220,6 +253,7 @@ const HANDLERS: Record<string, Handler> = {
   get_conversation_history: getConversationHistory,
   get_contact_status: getContactStatus,
   list_custom_fields: listCustomFields,
+  search_knowledge: searchKnowledge,
   move_lead_stage: moveLeadStage,
   set_qualification_tier: setQualificationTier,
   fill_lead_field: fillLeadField,
