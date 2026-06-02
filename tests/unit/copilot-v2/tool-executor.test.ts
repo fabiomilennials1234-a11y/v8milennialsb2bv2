@@ -45,9 +45,61 @@ describe('createToolExecutor — dispatch', () => {
 
   it('throws not_implemented for a registered tool whose handler is not built yet', async () => {
     const exec = createToolExecutor(mockSupabase(), ctx);
-    // send_media is in the registry but backed by a later-slice table.
-    await expect(exec('send_media', {})).rejects.toBeInstanceOf(ToolError);
-    await expect(exec('send_media', {})).rejects.toMatchObject({ code: 'not_implemented' });
+    // A custom-pipe move is registered but backed by a later-slice store.
+    await expect(exec('move_lead_stage', { pipe: 'custom-xyz', stage: 's' })).rejects.toBeInstanceOf(ToolError);
+    await expect(exec('move_lead_stage', { pipe: 'custom-xyz', stage: 's' })).rejects.toMatchObject({ code: 'not_implemented' });
+  });
+});
+
+describe('send_media (acervo-aware, sem silent-drop)', () => {
+  const mediaCtx = { organizationId: 'org-1', leadId: 'lead-1', conversationId: 'conv-1', canonicalPhone: '11987654321' };
+
+  function execWithProvider(sb: any, sent: any[], over: Record<string, unknown> = {}) {
+    return createToolExecutor(sb, {
+      ...mediaCtx,
+      sendMediaViaProvider: async (p: any) => { sent.push(p); return { success: true, message_id: 'wamid-1' }; },
+      ...over,
+    } as any);
+  }
+
+  it('resolve item da org, valida gate, gera signed URL e delega ao adapter', async () => {
+    const sb = mockSupabase({ copilot_v2_send_media: { id: 'm1', organization_id: 'org-1', kind: 'audio', storage_path: 'org-1/a.ogg', is_active: true, mime_type: 'audio/ogg' } });
+    sb.storage = { from: () => ({ createSignedUrl: async () => ({ data: { signedUrl: 'https://signed/a.ogg' }, error: null }) }) };
+    const sent: any[] = [];
+    const out: any = await execWithProvider(sb, sent)('send_media', { media_id: 'm1' });
+    expect(out).toMatchObject({ sent: true });
+    expect(sent[0]).toMatchObject({ type: 'audio', file: 'https://signed/a.ogg', number: '11987654321' });
+    const q = sb.queries.find((x: any) => x.table === 'copilot_v2_send_media')!;
+    expect(q.filters).toContainEqual(['organization_id', 'org-1']);
+    expect(q.filters).toContainEqual(['id', 'm1']);
+  });
+
+  it('FALLBACK EXPLÍCITO (nunca silent-drop) quando o item não existe', async () => {
+    const sb = mockSupabase({}); // sem row
+    sb.storage = { from: () => ({ createSignedUrl: async () => ({ data: null, error: null }) }) };
+    const sent: any[] = [];
+    const out: any = await execWithProvider(sb, sent)('send_media', { media_id: 'ghost' });
+    expect(out).toMatchObject({ sent: false, reason: 'not_found' });
+    expect(sent).toHaveLength(0);
+  });
+
+  it('IGNORA organization_id vindo dos args — org só do ctx', async () => {
+    const sb = mockSupabase({ copilot_v2_send_media: { id: 'm1', organization_id: 'org-1', kind: 'image', storage_path: 'org-1/x.png', is_active: true, mime_type: 'image/png' } });
+    sb.storage = { from: () => ({ createSignedUrl: async () => ({ data: { signedUrl: 'https://signed/x.png' }, error: null }) }) };
+    const sent: any[] = [];
+    await execWithProvider(sb, sent)('send_media', { media_id: 'm1', organization_id: 'EVIL' });
+    const q = sb.queries.find((x: any) => x.table === 'copilot_v2_send_media')!;
+    expect(q.filters).toContainEqual(['organization_id', 'org-1']);
+    expect(q.filters).not.toContainEqual(['organization_id', 'EVIL']);
+  });
+
+  it('bloqueio explícito quando o MIME não casa com o kind (fallback, não silent-drop)', async () => {
+    const sb = mockSupabase({ copilot_v2_send_media: { id: 'm1', organization_id: 'org-1', kind: 'image', storage_path: 'org-1/x.pdf', is_active: true, mime_type: 'application/pdf' } });
+    sb.storage = { from: () => ({ createSignedUrl: async () => ({ data: { signedUrl: 'u' }, error: null }) }) };
+    const sent: any[] = [];
+    const out: any = await execWithProvider(sb, sent)('send_media', { media_id: 'm1' });
+    expect(out).toMatchObject({ sent: false, reason: 'invalid_mime' });
+    expect(sent).toHaveLength(0);
   });
 });
 
