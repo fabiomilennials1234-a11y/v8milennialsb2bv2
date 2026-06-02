@@ -24,7 +24,7 @@ Em casos como erro de rede no RPC `check_action_allowed`, ou enquanto a permissi
 - [ ] Converter para `allowed: false` (default deny).
 - [ ] Verificar se algum consumer assume `allowed === true` em loading e ajustar UX (spinner, disable).
 - [ ] Adicionar testes unit para todos os paths de erro/loading retornando `allowed: false`.
-- [ ] Mirror em `supabase/functions/_shared/permission_engine.ts` se houver paths similares.
+- [x] Mirror em `supabase/functions/_shared/permission_engine.ts` se houver paths similares. **(#647, 2026-06-01)** — `checkMatrixPermission` defaultava registro ausente para `"allowed"` (fail-OPEN); agora retorna `"not_set"` e o caller nega + loga. Fallback terminal `permission_not_defined` agora também loga. Tests: `tests/unit/permission-engine-fail-closed.test.ts`.
 
 ## Critérios de aceite
 
@@ -38,3 +38,9 @@ Em casos como erro de rede no RPC `check_action_allowed`, ou enquanto a permissi
 Esse padrão `allowed: true` em fallback aparece em `useCanPerformAction*` (linha ~140) e em `useCanPerformActionAsync` (linha ~207). Pode haver outros pontos — auditar com grep.
 
 Mudança é potencialmente disruptiva: se algum lugar do app dependia do fallback permissivo, vai começar a bloquear. Ship com observabilidade (Sentry breadcrumb em todo `allowed: false` por fallback).
+
+### Follow-up server-side (#647)
+
+Server-side `permission_engine.ts` já está fail-closed. Verificado: nenhum call site de edge function dependia do fallback permissivo do matrix — as únicas chamadas vivas ao engine (`move-card.ts` → `move_pipe_record`, `mass-send-create` → `mass_send`) não passam pelo matrix; `import-leads/index.ts` referencia `import_leads` apenas em `logRuntime`, sem `assertPermission`.
+
+**Pendente (frontend twin)**: `src/modules/identity/permissions/lib/permissions.ts:94` ainda retorna `matrix_default_allowed` quando o matrix não tem registro (mesmo bug fail-OPEN, lado cliente). Defesa server-side já cobre, mas o hook `useCanDo` deve espelhar o deny pra UX consistente.
