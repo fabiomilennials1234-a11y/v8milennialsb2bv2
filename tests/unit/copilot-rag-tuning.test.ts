@@ -109,11 +109,12 @@ describe("RAG tuning — search thresholds", () => {
         copilot_agent_documents: { data: [], error: null },
       });
 
-      await executeSearchKnowledge(supabase as any, "teste", "agent-1");
+      await executeSearchKnowledge(supabase as any, "teste", "agent-1", "org-1");
 
       expect(supabase.rpc).toHaveBeenCalledWith("match_document_chunks", expect.objectContaining({
         match_count: 5,
         similarity_threshold: 0.55,
+        p_org_id: "org-1",
       }));
     });
   });
@@ -128,11 +129,12 @@ describe("RAG tuning — search thresholds", () => {
       });
 
       const retriever = new KnowledgeRetriever(supabase as any);
-      await retriever.retrieve("teste", "agent-1", "tool");
+      await retriever.retrieve("teste", "agent-1", "org-1", "tool");
 
       expect(supabase.rpc).toHaveBeenCalledWith("match_document_chunks", expect.objectContaining({
         match_count: 5,
         similarity_threshold: 0.55,
+        p_org_id: "org-1",
       }));
     });
   });

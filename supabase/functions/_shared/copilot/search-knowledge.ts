@@ -38,6 +38,7 @@ export async function executeSearchKnowledge(
   supabase: SupabaseClient,
   query: string,
   agentId: string,
+  organizationId: string,
 ): Promise<string> {
   try {
     const apiKey = Deno.env.get("OPENROUTER_API_KEY");
@@ -54,6 +55,7 @@ export async function executeSearchKnowledge(
     const { data: chunks } = await (supabase as any).rpc("match_document_chunks", {
       query_embedding: embeddingStr,
       agent_id_filter: agentId,
+      p_org_id: organizationId,
       match_count: 5,
       similarity_threshold: 0.55,
     });
@@ -69,6 +71,7 @@ export async function executeSearchKnowledge(
     const { data: faqs } = await (supabase as any).rpc("match_faqs", {
       query_embedding: embeddingStr,
       agent_id_filter: agentId,
+      p_org_id: organizationId,
       match_count: 4,
       similarity_threshold: 0.5,
     });

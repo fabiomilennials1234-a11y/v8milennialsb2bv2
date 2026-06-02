@@ -11,7 +11,9 @@
  * Estimativa: 3h.
  */
 
-export { generateEmbedding, generateEmbeddingsBatch } from "../embeddings.ts";
+// Import local (o `export ... from` puro NÃO cria binding usável no módulo).
+import { generateEmbedding, generateEmbeddingsBatch } from "../embeddings.ts";
+export { generateEmbedding, generateEmbeddingsBatch };
 
 export const EMBEDDING_DIMENSIONS = 1536; // gemini-embedding-2
 
@@ -27,6 +29,7 @@ export async function retrieveSemanticContext(
   supabase: SupabaseClient,
   userMessage: string,
   agentId: string,
+  organizationId: string,
 ): Promise<string> {
   try {
     const apiKey = Deno.env.get("OPENROUTER_API_KEY");
@@ -41,8 +44,9 @@ export async function retrieveSemanticContext(
     const { data: chunks, error: chunksErr } = await (supabase as any).rpc("match_document_chunks", {
       query_embedding: embeddingStr,
       agent_id_filter: agentId,
+      p_org_id: organizationId,
       match_count: 6,
-      similarity_threshold: 0.6,
+      similarity_threshold: 0.55,
     });
 
     if (!chunksErr && chunks && chunks.length > 0) {
@@ -55,8 +59,9 @@ export async function retrieveSemanticContext(
     const { data: faqs, error: faqsErr } = await (supabase as any).rpc("match_faqs", {
       query_embedding: embeddingStr,
       agent_id_filter: agentId,
+      p_org_id: organizationId,
       match_count: 4,
-      similarity_threshold: 0.65,
+      similarity_threshold: 0.5,
     });
 
     if (!faqsErr && faqs && faqs.length > 0) {
@@ -81,6 +86,7 @@ export async function retrieveLongTermMemories(
   supabase: SupabaseClient,
   userMessage: string,
   leadId: string,
+  organizationId: string,
 ): Promise<string> {
   try {
     const apiKey = Deno.env.get("OPENROUTER_API_KEY");
@@ -94,6 +100,7 @@ export async function retrieveLongTermMemories(
     const { data: memories, error } = await (supabase as any).rpc("match_lead_memories", {
       query_embedding: embeddingStr,
       lead_id_filter: leadId,
+      p_org_id: organizationId,
       match_count: 5,
       similarity_threshold: 0.7,
     });
