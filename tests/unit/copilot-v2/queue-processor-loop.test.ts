@@ -18,7 +18,7 @@ const ctx = {
   contactStatus: 'NOVO', activeArchetypes: new Set(['qualificador']),
   configByArchetype: { qualificador: {}, vendedor: {}, carteira: {} },
   capabilitiesByArchetype: { qualificador: {}, vendedor: {}, carteira: {} },
-  introspection: { stages: [], fields: [] }, _agentId: null,
+  introspection: { stages: [], fields: [], slots: [] }, _agentId: null,
 } as ResolvedContext;
 
 function deps(over: Partial<ProcessorDeps> = {}) {

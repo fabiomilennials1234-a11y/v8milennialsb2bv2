@@ -8,6 +8,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createToolExecutor, ToolError, type ToolContext } from '../../../supabase/functions/_shared/copilot-v2/tool-executor.ts';
+import { TOOL_REGISTRY } from '../../../supabase/functions/_shared/copilot-v2/tool-registry.ts';
 
 function mockSupabase(results: Record<string, unknown> = {}) {
   const queries: Array<{ table: string; filters: [string, unknown][]; order: unknown; limit: unknown }> = [];
@@ -100,6 +101,86 @@ describe('send_media (acervo-aware, sem silent-drop)', () => {
     const out: any = await execWithProvider(sb, sent)('send_media', { media_id: 'm1' });
     expect(out).toMatchObject({ sent: false, reason: 'invalid_mime' });
     expect(sent).toHaveLength(0);
+  });
+});
+
+describe('check_agenda_availability (read via calendar adapter)', () => {
+  const agendaCtx = { organizationId: 'org-1', leadId: 'lead-1', canonicalPhone: '11987654321' };
+
+  function execWithCalendar(sb: any, freeBusyImpl: any, over: Record<string, unknown> = {}) {
+    return createToolExecutor(sb, {
+      ...agendaCtx,
+      getCalendarFreeBusy: freeBusyImpl,
+      now: new Date('2026-06-10T09:00:00-03:00'),
+      ...over,
+    } as any);
+  }
+
+  it('resolve o responsável do lead e devolve os slots livres da janela', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1', responsible_id: 'm-resp', sdr_id: null } });
+    const freeBusy = async () => ({ ok: true, busy: [{ start: '2026-06-10T10:00:00-03:00', end: '2026-06-10T11:00:00-03:00' }] });
+    const out: any = await execWithCalendar(sb, freeBusy)('check_agenda_availability', { date_range: '2026-06-10T09:00:00-03:00/2026-06-10T12:00:00-03:00' });
+    expect(out.slots).toContain('2026-06-10T09:00:00.000-03:00');
+    expect(out.slots).not.toContain('2026-06-10T10:00:00.000-03:00'); // ocupado
+    const q = sb.queries.find((x: any) => x.table === 'leads')!;
+    expect(q.filters).toContainEqual(['organization_id', 'org-1']);
+  });
+
+  it('FALLBACK EXPLÍCITO no_calendar quando o responsável não tem Calendar conectado', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1', responsible_id: 'm-resp' } });
+    const freeBusy = async () => ({ ok: false, busy: [] }); // sem token
+    const out: any = await execWithCalendar(sb, freeBusy)('check_agenda_availability', { date_range: 'x/y' });
+    expect(out).toMatchObject({ slots: [], reason: 'no_calendar' });
+  });
+
+  it('FALLBACK EXPLÍCITO no_calendar quando o lead não tem responsável', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1', responsible_id: null, sdr_id: null } });
+    const freeBusy = async () => ({ ok: true, busy: [] });
+    const out: any = await execWithCalendar(sb, freeBusy)('check_agenda_availability', { date_range: 'x/y' });
+    expect(out).toMatchObject({ slots: [], reason: 'no_calendar' });
+  });
+});
+
+describe('schedule_meeting (write after-introspect → pipe_confirmacao + calendar graceful)', () => {
+  const meetCtx = { organizationId: 'org-1', leadId: 'lead-1', canonicalPhone: '11987654321', now: new Date('2026-06-10T09:00:00-03:00') };
+
+  function execMeet(sb: any, calendar: any, confirmacao: any, over: Record<string, unknown> = {}) {
+    return createToolExecutor(sb, {
+      ...meetCtx,
+      scheduleMeetingViaCalendar: calendar,
+      upsertConfirmacaoEntry: confirmacao,
+      ...over,
+    } as any);
+  }
+
+  it('grava pipe_confirmacao (reuniao_marcada) e anexa meet_link quando o Calendar cria', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1', responsible_id: 'm-resp' } });
+    const confirmacao = async () => ({ pipeId: 'pe-1' });
+    const calendar = async () => ({ created: true, meetLink: 'https://meet/x' });
+    const out: any = await execMeet(sb, calendar, confirmacao)('schedule_meeting', { datetime: '2026-06-10T14:00:00.000-03:00', title: 'Discovery' });
+    expect(out).toMatchObject({ scheduled: true, stage: 'reuniao_marcada', meetLink: 'https://meet/x' });
+  });
+
+  it('GRACEFUL: agendamento persiste mesmo se o Calendar falhar (sem meet_link, sem silent-drop)', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1', responsible_id: 'm-resp' } });
+    const confirmacao = async () => ({ pipeId: 'pe-1' });
+    const calendar = async () => ({ created: false, error: 'google 403' });
+    const out: any = await execMeet(sb, calendar, confirmacao)('schedule_meeting', { datetime: '2026-06-10T14:00:00.000-03:00' });
+    expect(out).toMatchObject({ scheduled: true, stage: 'reuniao_marcada', meetLink: null, calendar: 'failed' });
+  });
+
+  it('bloqueio explícito quando o datetime está no passado (fail-CLOSED, sem write)', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1' } });
+    let wrote = false;
+    const out: any = await execMeet(sb, async () => ({ created: true }), async () => { wrote = true; return { pipeId: 'x' }; })(
+      'schedule_meeting', { datetime: '2026-06-10T08:00:00.000-03:00' });
+    expect(out).toMatchObject({ scheduled: false, reason: 'slot_in_past' });
+    expect(wrote).toBe(false);
+  });
+
+  it('exige lead no contexto', async () => {
+    const exec = createToolExecutor(mockSupabase({}), { organizationId: 'org-1', now: meetCtx.now } as any);
+    await expect(exec('schedule_meeting', { datetime: '2026-06-10T14:00:00.000-03:00' })).rejects.toMatchObject({ code: 'missing_context' });
   });
 });
 
@@ -275,6 +356,33 @@ describe('transfer_to_human', () => {
   });
 });
 
+describe('handoff_to_vendedor (reassign + notificação como dep)', () => {
+  const hoCtx = { organizationId: 'org-1', leadId: 'lead-1', canonicalPhone: '11987654321' };
+
+  it('registra o handoff e dispara a notificação via dep (infra = Slice 5)', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1', responsible_id: 'm-resp' } });
+    const dispatched: any[] = [];
+    const exec = createToolExecutor(sb, {
+      ...hoCtx,
+      dispatchHandoffNotification: async (p: any) => { dispatched.push(p); return { dispatched: true }; },
+    } as any);
+    const out: any = await exec('handoff_to_vendedor', { summary: 'lead diamante, quer proposta' });
+    expect(out).toMatchObject({ handed_off: true, targetArchetype: 'vendedor', notified: true });
+    expect(dispatched[0]).toMatchObject({ leadId: 'lead-1', targetArchetype: 'vendedor', summary: 'lead diamante, quer proposta' });
+  });
+
+  it('FALLBACK EXPLÍCITO notify_pending quando a infra de notificação ainda não está plugada (Slice 5)', async () => {
+    const sb = mockSupabase({ leads: { id: 'lead-1' } });
+    const out: any = await createToolExecutor(sb, hoCtx as any)('handoff_to_vendedor', { summary: 's' });
+    expect(out).toMatchObject({ handed_off: true, notified: false, reason: 'notify_pending' });
+  });
+
+  it('exige lead no contexto', async () => {
+    await expect(createToolExecutor(mockSupabase({}), { organizationId: 'org-1' } as any)('handoff_to_vendedor', { summary: 's' }))
+      .rejects.toMatchObject({ code: 'missing_context' });
+  });
+});
+
 describe('get_conversation_history', () => {
   it('queries conversation_messages for the context conversation', async () => {
     const sb = mockSupabase({ conversation_messages: [{ role: 'user', content: 'oi' }] });
@@ -308,5 +416,39 @@ describe('search_knowledge', () => {
     g.Deno = { env: { get: () => undefined } };
     const sb = mockSupabase();
     await expect(createToolExecutor(sb, ctx)('search_knowledge', { query: 'x' })).rejects.toThrow();
+  });
+});
+
+// DIVERGÊNCIA DO PLANO (registrada): a Task 6 do plano esperava send_media e
+// search_knowledge ainda not_implemented. Pós-merge de 5/6/7 em develop os dois
+// handlers JÁ ESTÃO VIVOS (donos: Slice 6 acervo-aware / Slice 7 RAG). O plano é
+// prescritivo mas honra a INTENÇÃO — contratos honestos, sem fingir. Então o
+// contrato aqui asserta a realidade VIVA: handlers honestos (sem silent-drop) +
+// o registry expondo áudio no send_media (Emenda ADR §1), em vez de not_implemented.
+describe('contrato dos handlers de mídia/conhecimento (donos: Slice 6/7, já mergeados)', () => {
+  it('send_media é um handler VIVO e honesto (Slice 6) — fallback explícito, nunca silent-drop', async () => {
+    const sb = mockSupabase({}); // item inexistente
+    sb.storage = { from: () => ({ createSignedUrl: async () => ({ data: null, error: null }) }) };
+    const out: any = await createToolExecutor(sb, { organizationId: 'org-1', canonicalPhone: '11987654321', leadId: 'lead-1' } as any)(
+      'send_media', { media_id: 'm1' });
+    // NÃO lança not_implemented: devolve motivo explícito (Slice 6 é o dono).
+    expect(out).toMatchObject({ sent: false, reason: 'not_found' });
+  });
+
+  it('search_knowledge é um handler VIVO e honesto (Slice 7) — não finge buscar (NOOP-bug-class)', async () => {
+    const g = globalThis as any;
+    const prev = { Deno: g.Deno };
+    g.Deno = { env: { get: () => undefined } }; // sem chave -> throw honesto, nunca "nenhum resultado"
+    try {
+      const exec = createToolExecutor(mockSupabase(), { organizationId: 'org-1' } as any);
+      await expect(exec('search_knowledge', { query: 'tabela de preços' })).rejects.toThrow();
+    } finally {
+      g.Deno = prev.Deno;
+    }
+  });
+
+  it('o registry expõe áudio no contrato do send_media (Emenda ADR §1)', () => {
+    const meta = TOOL_REGISTRY.find((t) => t.name === 'send_media')!;
+    expect(meta.description.toLowerCase()).toContain('áudio');
   });
 });

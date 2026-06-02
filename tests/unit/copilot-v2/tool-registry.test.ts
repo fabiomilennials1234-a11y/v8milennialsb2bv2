@@ -69,4 +69,9 @@ describe('writeTargetOf', () => {
     expect(writeTargetOf('transfer_to_human', { reason: 'x' })).toBeNull();
     expect(writeTargetOf('get_lead_360', {})).toBeNull();
   });
+
+  it('extrai o datetime de schedule_meeting (introspect target de agenda)', () => {
+    expect(writeTargetOf('schedule_meeting', { datetime: '2026-06-10T14:00:00-03:00' }))
+      .toBe('2026-06-10T14:00:00-03:00');
+  });
 });

@@ -20,6 +20,7 @@ import { fuseHybridResults, type KnowledgeHit } from "./hybrid-search.ts";
 import { RAG_THRESHOLDS } from "./rag-threshold.ts";
 import { decideSendMedia, type SendMediaItem } from "./send-media-selector.ts";
 import { resolveMediaDelivery, type SendMediaKind } from "./media-mime.ts";
+import { computeFreeSlots, decideScheduleSlot } from "./agenda.ts";
 
 export interface ToolContext {
   organizationId: string;
@@ -37,6 +38,26 @@ export interface ToolContext {
     number: string; type: "image" | "video" | "audio"; file: string;
     caption?: string; mediaId: string;
   }) => Promise<{ success: boolean; message_id?: string; error?: string }>;
+  /** Injected clock (tests pin it); the worker passes new Date(). */
+  now?: Date;
+  /**
+   * Calendar freeBusy I/O (injected by the worker). Pure tests pass a fake.
+   * Returns busy intervals for the lead's responsible user, or ok:false when no
+   * connected calendar (→ honest no_calendar fallback, never a silent empty).
+   */
+  getCalendarFreeBusy?: (p: { userId: string; window: { start: string; end: string } }) =>
+    Promise<{ ok: boolean; busy: { start: string; end: string }[] }>;
+  /** Scheduling I/O sink (injected by the worker) — Task 4. */
+  scheduleMeetingViaCalendar?: (p: {
+    userId: string; leadId: string; datetime: string; title: string;
+  }) => Promise<{ created: boolean; meetLink?: string | null; error?: string }>;
+  /** Persists the confirmacao pipe entry (injected; worker backs with pipeline-adapter) — Task 4. */
+  upsertConfirmacaoEntry?: (p: { leadId: string; orgId: string; meetingAt: string; meetLink?: string | null }) =>
+    Promise<{ pipeId: string | null }>;
+  /** Handoff notification dispatch (injected by the worker; infra = Slice 5) — Task 5. */
+  dispatchHandoffNotification?: (p: {
+    leadId: string; reason: string; summary: string | null; targetArchetype: "vendedor";
+  }) => Promise<{ dispatched: boolean; reason?: string }>;
 }
 
 export type ToolErrorCode = "unknown_tool" | "not_implemented" | "missing_context";
@@ -132,6 +153,36 @@ const searchKnowledge: Handler = async (supabase, ctx, args) => {
   return ["=== BASE DE CONHECIMENTO ===", ...fused.map((h) => h.content)].join("\n\n");
 };
 
+/** Parse "<ISO>/<ISO>" (date_range) → window; default = próximas 48h. */
+function parseWindow(dateRange: unknown, now: Date): { start: string; end: string } {
+  if (typeof dateRange === "string" && dateRange.includes("/")) {
+    const [start, end] = dateRange.split("/");
+    if (!isNaN(new Date(start).getTime()) && !isNaN(new Date(end).getTime())) return { start, end };
+  }
+  return { start: now.toISOString(), end: new Date(now.getTime() + 48 * 3600_000).toISOString() };
+}
+
+async function resolveResponsibleUserId(supabase: any, ctx: ToolContext): Promise<string | null> {
+  if (!ctx.leadId) return null;
+  const { data: lead } = await supabase
+    .from("leads").select("responsible_id, sdr_id")
+    .eq("organization_id", ctx.organizationId).eq("id", ctx.leadId).maybeSingle();
+  return lead?.responsible_id ?? lead?.sdr_id ?? null;
+}
+
+const checkAgendaAvailability: Handler = async (supabase, ctx, args) => {
+  const now = ctx.now ?? new Date();
+  const userId = await resolveResponsibleUserId(supabase, ctx);
+  if (!userId || !ctx.getCalendarFreeBusy) return { slots: [], reason: "no_calendar" };
+
+  const window = parseWindow(args.date_range, now);
+  const fb = await ctx.getCalendarFreeBusy({ userId, window });
+  if (!fb.ok) return { slots: [], reason: "no_calendar" };
+
+  const slots = computeFreeSlots({ busy: fb.busy, window, slotMinutes: 60, now });
+  return { slots, window, reason: null };
+};
+
 // ── Write handlers (gated by capability + write-after-introspect upstream) ──
 
 const SYSTEM_PIPE_TABLE: Record<string, string> = {
@@ -180,6 +231,43 @@ const setQualificationTier: Handler = async (supabase, ctx, args) => {
     .eq("id", ctx.leadId);
   if (error) throw new Error(`set_qualification_tier: ${error.message}`);
   return { applied: true, tier, signals: args.signals ?? {} };
+};
+
+const CONFIRMACAO_STAGE = "reuniao_marcada";
+
+const scheduleMeeting: Handler = async (supabase, ctx, args) => {
+  if (!ctx.leadId) throw new ToolError("missing_context", "schedule_meeting:lead");
+  const datetime = String(args.datetime ?? "");
+  if (!datetime) throw new ToolError("missing_context", "schedule_meeting:datetime");
+  const now = ctx.now ?? new Date();
+
+  // Defesa em profundidade: o introspect-guard (Task 1) já garantiu que o
+  // datetime estava nos slots introspectados; aqui revalidamos só passado/ISO
+  // (clock-skew) sem re-bater no Calendar — fail-CLOSED com motivo explícito.
+  const slot = decideScheduleSlot({ datetime, freeSlots: [datetime], now });
+  if (!slot.ok) return { scheduled: false, reason: slot.reason };
+
+  // 1. Grava o pipe_confirmacao (sempre — o agendamento é o efeito de negócio).
+  if (!ctx.upsertConfirmacaoEntry) return { scheduled: false, reason: "no_pipe_writer" };
+  const { pipeId } = await ctx.upsertConfirmacaoEntry({
+    leadId: ctx.leadId, orgId: ctx.organizationId, meetingAt: datetime,
+  });
+
+  // 2. Google Calendar — GRACEFUL: falha NÃO desfaz o agendamento (só sem link).
+  let meetLink: string | null = null;
+  let calendar: "ok" | "failed" | "skipped" = "skipped";
+  if (ctx.scheduleMeetingViaCalendar) {
+    const userId = await resolveResponsibleUserId(supabase, ctx);
+    if (userId) {
+      const res = await ctx.scheduleMeetingViaCalendar({
+        userId, leadId: ctx.leadId, datetime, title: String(args.title ?? "Reunião"),
+      });
+      if (res.created) { meetLink = res.meetLink ?? null; calendar = "ok"; }
+      else calendar = "failed";
+    }
+  }
+
+  return { scheduled: true, stage: CONFIRMACAO_STAGE, pipeId, meetLink, calendar, datetime };
 };
 
 const QUALIFIED_TIERS = ["diamante", "ouro", "prata", "bronze"];
@@ -234,6 +322,23 @@ const transferToHuman: Handler = async (supabase, ctx, args) => {
     paused_until: until,
     handoff: { leadId: ctx.leadId ?? null, reason, summary: args.summary ?? null },
   };
+};
+
+const handoffToVendedor: Handler = async (_supabase, ctx, args) => {
+  if (!ctx.leadId) throw new ToolError("missing_context", "handoff_to_vendedor:lead");
+  const summary = args.summary != null ? String(args.summary) : null;
+
+  // The structured handoff payload — the routing target + delivery is the Slice 5
+  // notification infra (dispatchHandoffNotification dep). When that dep is absent
+  // (Slice 5 not merged yet) the business handoff still happens; the notification
+  // is reported pending — NEVER a silent drop.
+  if (!ctx.dispatchHandoffNotification) {
+    return { handed_off: true, targetArchetype: "vendedor", notified: false, reason: "notify_pending", summary };
+  }
+  const res = await ctx.dispatchHandoffNotification({
+    leadId: ctx.leadId, reason: "handoff_qualificador_vendedor", summary, targetArchetype: "vendedor",
+  });
+  return { handed_off: true, targetArchetype: "vendedor", notified: res.dispatched, reason: res.reason ?? null, summary };
 };
 
 const fillLeadField: Handler = async (supabase, ctx, args) => {
@@ -320,11 +425,14 @@ const HANDLERS: Record<string, Handler> = {
   get_conversation_history: getConversationHistory,
   get_contact_status: getContactStatus,
   list_custom_fields: listCustomFields,
+  check_agenda_availability: checkAgendaAvailability,
   search_knowledge: searchKnowledge,
   move_lead_stage: moveLeadStage,
   set_qualification_tier: setQualificationTier,
+  schedule_meeting: scheduleMeeting,
   fill_lead_field: fillLeadField,
   transfer_to_human: transferToHuman,
+  handoff_to_vendedor: handoffToVendedor,
   send_media: sendMedia,
 };
 
