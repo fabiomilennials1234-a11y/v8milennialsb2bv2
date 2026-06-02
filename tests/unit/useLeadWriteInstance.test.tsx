@@ -48,13 +48,13 @@ vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => ({ user: mockUser, session: null, loading: false }),
 }));
 
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: mockTeamMember, isLoading: false }),
   isVirtualTeamMember: (id: string | null | undefined) =>
     !!id?.startsWith("master-virtual-"),
 }));
 
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({
     isMaster: mockIsMaster,
     masterUser: null,
@@ -101,7 +101,7 @@ vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useHasRole: () => ({ hasRole: true, isLoading: false }),
 }));
 
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({
     organizationId: mockTeamMember?.organization_id ?? null,
     teamMemberId: mockTeamMember?.id ?? null,

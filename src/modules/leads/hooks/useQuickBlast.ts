@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/modules/identity/hooks/useTeamMembers";
+import { useCurrentTeamMember } from "@/modules/identity/org-team/hooks/useTeamMembers";
 
 export interface QuickBlastInput {
   instance_id: string;

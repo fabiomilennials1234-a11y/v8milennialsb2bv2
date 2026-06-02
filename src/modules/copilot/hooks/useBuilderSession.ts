@@ -8,7 +8,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/modules/identity/hooks/useOrganization";
+import { useOrganization } from "@/modules/identity/org-team/hooks/useOrganization";
 
 export interface BuilderMessage {
   role: "user" | "assistant";

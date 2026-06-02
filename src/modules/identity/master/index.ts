@@ -1,0 +1,78 @@
+/**
+ * Sub-conceito master — API interna privada do módulo identity (slice 9.4 arch-deepening).
+ *
+ * Master ops (super-admin transversal a orgs): auth, organizations, users, plans,
+ * audit logs, operations health. Tudo aqui é privado ao módulo.
+ *
+ * Só o entry público (`useMasterAuth`, `useCanAccessMaster`) é re-exportado pelo
+ * barrel raiz (`../index.ts`). O restante NÃO sai do módulo — consumido apenas
+ * internamente pelas pages/components master (deep-import via `App.tsx` preserva
+ * code-splitting `React.lazy()`).
+ */
+
+// ── Auth / access gate ─────────────────────────────────────────────────────
+export { useMasterAuth, useCanAccessMaster } from "./hooks/useMasterAuth";
+export type { MasterUser, MasterPermissions } from "./hooks/useMasterAuth";
+
+// ── Operations health ──────────────────────────────────────────────────────
+export {
+  useOperationsOverview,
+  useAutomationJobs,
+  useJobsOverview,
+  useRetryDeadLetter,
+  useRuntimeLogs,
+  useUsageByOrg,
+} from "./hooks/useMasterOperations";
+export type {
+  AutomationJob,
+  JobsOverview,
+  OperationsOverview,
+  RuntimeLog,
+  UsageByOrg,
+} from "./hooks/useMasterOperations";
+
+// ── Organizations ──────────────────────────────────────────────────────────
+export {
+  useMasterOrganizations,
+  useMasterOrganization,
+  useMasterOrganizationMembers,
+  useMasterOrganizationStats,
+  useMasterCreateOrganization,
+  useMasterUpdateOrganization,
+  useMasterDeleteOrganization,
+  useMasterBillingOverride,
+} from "./hooks/useMasterOrganizations";
+export type {
+  MasterOrganization,
+  OrganizationStats,
+} from "./hooks/useMasterOrganizations";
+
+// ── Plans ──────────────────────────────────────────────────────────────────
+export { useMasterPlans, useUpdatePlan } from "./hooks/useMasterPlans";
+export type { Plan } from "./hooks/useMasterPlans";
+
+// ── Users ──────────────────────────────────────────────────────────────────
+export {
+  useMasterUsers,
+  useMasterUserStats,
+  useMasterUnassignedUsers,
+  useMasterAssignUserToOrg,
+  useMasterMoveUserToOrg,
+  useMasterChangeUserRole,
+  useMasterToggleUserActive,
+  useMasterUpdateUser,
+  useMasterResetUserPassword,
+} from "./hooks/useMasterUsers";
+export type {
+  MasterUserView,
+  UnassignedUser,
+  UserStats,
+} from "./hooks/useMasterUsers";
+
+// ── Audit logs ─────────────────────────────────────────────────────────────
+export {
+  useMasterAuditLogs,
+  useMasterAuditActions,
+  useMasterAuditStats,
+} from "./hooks/useMasterAuditLogs";
+export type { AuditLog, AuditLogFilters } from "./hooks/useMasterAuditLogs";

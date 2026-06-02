@@ -17,7 +17,7 @@ interface HelpCategoryAccordionProps {
 }
 
 function getLucideIcon(iconName: string) {
-  const icons = Icons as Record<string, React.ComponentType<{ className?: string }>>;
+  const icons = Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>;
   return icons[iconName] || Icons.HelpCircle;
 }
 

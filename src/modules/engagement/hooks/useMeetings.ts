@@ -115,8 +115,22 @@ export function useMeetings(filters?: MeetingFilters) {
     queryFn: async () => {
       if (!organizationId) return [];
 
-      let query = supabase
-        .from("meetings" as "leads")
+      // `meetings` is spoofed as "leads" to satisfy the table-name union; the
+      // embedded `lead:leads(...)` select plus the chained conditional filter
+      // reassignments make PostgREST's result-type parser explode (TS2589).
+      // The `from` result is typed loosely *before* `.select(...)` so the deep
+      // result-type parser never runs; the row shape is recovered via the
+      // explicit `as unknown as Meeting[]` cast below.
+      type LooseFilterBuilder = {
+        eq: (column: string, value: unknown) => LooseFilterBuilder;
+        gte: (column: string, value: unknown) => LooseFilterBuilder;
+        lte: (column: string, value: unknown) => LooseFilterBuilder;
+        order: (column: string, options: { ascending: boolean }) => LooseFilterBuilder;
+        then: PromiseLike<{ data: unknown; error: unknown }>["then"];
+      };
+      type LooseFrom = { select: (columns: string) => LooseFilterBuilder };
+
+      let query = (supabase.from("meetings" as "leads") as unknown as LooseFrom)
         .select(`
           *,
           lead:leads(id, name, company, phone, email)
@@ -158,8 +172,15 @@ export function useMeeting(id: string | null) {
     queryFn: async () => {
       if (!organizationId || !id) return null;
 
-      const { data, error } = await supabase
-        .from("meetings" as "leads")
+      // Loosely-typed builder before `.select(...)` to avoid PostgREST's deep
+      // result-type instantiation (TS2589); row shape recovered via cast below.
+      type LooseFilterBuilder = {
+        eq: (column: string, value: unknown) => LooseFilterBuilder;
+        single: () => PromiseLike<{ data: unknown; error: unknown }>;
+      };
+      type LooseFrom = { select: (columns: string) => LooseFilterBuilder };
+
+      const { data, error } = await (supabase.from("meetings" as "leads") as unknown as LooseFrom)
         .select(`
           *,
           lead:leads(id, name, company, phone, email)

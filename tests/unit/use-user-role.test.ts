@@ -52,7 +52,7 @@ vi.mock('@/modules/identity/auth/contexts/AuthContext', () => ({
 }));
 
 // ─── Mock useTeamMembers ────────────────────────────────
-vi.mock('@/modules/identity/hooks/useTeamMembers', () => ({
+vi.mock('@/modules/identity/org-team/hooks/useTeamMembers', () => ({
   useCurrentTeamMember: () => ({
     data: mockTeamMember,
     isLoading: false,
@@ -60,7 +60,7 @@ vi.mock('@/modules/identity/hooks/useTeamMembers', () => ({
 }));
 
 // ─── Mock useMasterAuth ─────────────────────────────────
-vi.mock('@/modules/identity/hooks/useMasterAuth', () => ({
+vi.mock('@/modules/identity/master/hooks/useMasterAuth', () => ({
   useMasterAuth: () => ({
     isMaster: mockIsMaster,
     masterUser: null,

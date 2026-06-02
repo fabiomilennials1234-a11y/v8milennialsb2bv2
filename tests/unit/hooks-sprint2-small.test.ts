@@ -67,18 +67,18 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }),
 }));
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true, teamMemberId: "tm1" }),
   useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
 }));
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({
     data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" },
   }),
   isVirtualTeamMember: () => false,
   useTeamMembers: () => ({ data: [] }),
 }));
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
@@ -183,7 +183,7 @@ import {
   useMasterDeleteOrganization,
   useMasterBillingOverride,
   useMasterOrganizationMembers,
-} from "@/modules/identity/hooks/useMasterOrganizations";
+} from "@/modules/identity/master/hooks/useMasterOrganizations";
 import {
   useWhatsAppInstances,
   useWhatsAppInstancesWithAgent,

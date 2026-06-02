@@ -6,7 +6,7 @@ import React from 'react';
 // ─── Mock: useCurrentTeamMember ─────────────────────────
 const mockUseCurrentTeamMember = vi.fn();
 
-vi.mock('@/modules/identity/hooks/useTeamMembers', () => ({
+vi.mock('@/modules/identity/org-team/hooks/useCurrentTeamMember', () => ({
   useCurrentTeamMember: () => mockUseCurrentTeamMember(),
 }));
 
@@ -21,7 +21,7 @@ vi.mock('@/integrations/supabase/client', () => ({
 }));
 
 // ─── Import after mocks ─────────────────────────────────
-import { useOrganization, useRequiredOrganization } from '@/modules/identity/hooks/useOrganization';
+import { useOrganization, useRequiredOrganization } from '@/modules/identity/org-team/hooks/useOrganization';
 
 // ─── Helpers ────────────────────────────────────────────
 function createWrapper() {

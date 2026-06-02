@@ -14,9 +14,17 @@
  *    (`<tool_call>{...}</tool_call>`, `<vertical_tool_calls>...`,
  *    `<no_tool_calls>`) como TEXTO no content em vez de native tool_calls.
  *    Schemas conhecidos: `{tool_name, tool_arguments}` e `{name, arguments}`.
+ * 4. Leak de diretiva de mídia SEM chave "action" — quando o agente é
+ *    instruído a enviar um arquivo mas o tool nativo não está disponível
+ *    (ex: documento preso em status!='ready'), o modelo improvisa um objeto
+ *    JSON tipo `{"file":"CATALOGO.jpg"}` / `{"document":"..."}` no texto.
+ *    Sem chave "action", escapava de TODOS os filtros (que só matcham
+ *    `"action":"..."`) e chegava cru ao cliente. Mitigação: Passo 2b remove
+ *    objetos JSON balanceados cujas chaves ⊆ allowlist de mídia.
  *
- * Incidentes-fonte: Barulhinho Bom 2026-04-24 (JSON ReAct) e 2026-05-21
- * (XML tool_call com gemini-3-flash-preview).
+ * Incidentes-fonte: Barulhinho Bom 2026-04-24 (JSON ReAct), 2026-05-21
+ * (XML tool_call com gemini-3-flash-preview) e VitrineVET 2026-06-01
+ * (diretiva `{"file":...}` sem action — documento preso em processing).
  */
 
 /** Mapa tool_name (snake_case) → action token (UPPER_CASE) usado pelo executor. */
@@ -135,6 +143,51 @@ function extractActionJsonBlocks(src: string): Array<{ start: number; end: numbe
     } else {
       i = found.end; // pula este objeto válido sem action
     }
+  }
+  return blocks;
+}
+
+/**
+ * Chaves permitidas num objeto de diretiva de mídia. Se TODAS as chaves de um
+ * objeto JSON balanceado pertencem a este conjunto, tratamos como diretiva
+ * improvisada (não-`action`) e removemos do texto antes de enviar ao lead.
+ * Mantido estreito de propósito (só mídia) pra não remover JSON legítimo que
+ * o agente eventualmente cite ao cliente.
+ */
+const MEDIA_DIRECTIVE_KEYS = new Set([
+  "file", "files", "filename", "file_name",
+  "document", "documents", "document_id",
+  "image", "images", "image_url",
+  "media", "media_id", "media_ids", "media_url",
+  "caption", "attachment", "attachments",
+]);
+
+/**
+ * Extrai objetos JSON balanceados cujas chaves de topo são TODAS de mídia
+ * (allowlist acima). Captura o leak `{"file":"X.jpg"}` / `{"document":"..."}`
+ * que não tem chave "action" e por isso escapa de extractActionJsonBlocks.
+ */
+function extractMediaDirectiveBlocks(src: string): Array<{ start: number; end: number }> {
+  const blocks: Array<{ start: number; end: number }> = [];
+  for (let i = 0; i < src.length; i++) {
+    if (src[i] !== "{") continue;
+    const found = findBalancedJson(src, i);
+    if (!found) continue;
+    const slice = src.slice(i, found.end + 1);
+    try {
+      const parsed = JSON.parse(slice);
+      if (
+        parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ) {
+        const keys = Object.keys(parsed);
+        if (keys.length > 0 && keys.every((k) => MEDIA_DIRECTIVE_KEYS.has(k.toLowerCase()))) {
+          blocks.push({ start: i, end: found.end });
+        }
+      }
+    } catch {
+      // não é JSON válido — deixa pro fallback / preserva
+    }
+    i = found.end; // avança além deste objeto independente do veredito
   }
   return blocks;
 }
@@ -266,6 +319,20 @@ export function sanitizeAssistantMessage(
         const rec = tryRecoverFromString(b.json);
         if (rec) recoveredAction = rec;
       }
+      text = text.slice(0, b.start) + text.slice(b.end + 1);
+    }
+  }
+
+  // Passo 2b: diretivas de mídia improvisadas SEM chave "action"
+  // (ex: {"file":"CATALOGO.jpg"}, {"document":"..."}). Incidente VitrineVET
+  // 2026-06-01. Remove o objeto pra não vazar; NÃO recupera ação aqui —
+  // resolver filename→document_id exige DB (fora do sanitizer puro). O envio
+  // correto volta pelo tool nativo send_document quando o doc está 'ready'.
+  const mediaBlocks = extractMediaDirectiveBlocks(text);
+  if (mediaBlocks.length > 0) {
+    for (let i = mediaBlocks.length - 1; i >= 0; i--) {
+      const b = mediaBlocks[i];
+      droppedBlocks += 1;
       text = text.slice(0, b.start) + text.slice(b.end + 1);
     }
   }

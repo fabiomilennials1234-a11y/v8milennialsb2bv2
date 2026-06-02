@@ -36,11 +36,11 @@ vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => mockAuth,
 }));
 
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
   useMasterAuth: () => mockMaster,
 }));
 
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => mockTeamMember,
 }));
 

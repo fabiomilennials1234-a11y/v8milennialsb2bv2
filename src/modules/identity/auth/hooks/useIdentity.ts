@@ -1,6 +1,6 @@
 import { useAuth } from "../contexts/AuthContext";
-import { useMasterAuth } from "../../hooks/useMasterAuth";
-import { useCurrentTeamMember } from "../../hooks/useTeamMembers";
+import { useMasterAuth } from "../../master/hooks/useMasterAuth";
+import { useCurrentTeamMember } from "../../org-team/hooks/useTeamMembers";
 import { useFeaturePermissions } from "../../permissions/hooks/useUserRole";
 
 export interface Identity {
