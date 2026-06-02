@@ -23,6 +23,7 @@ import { processBatch, type QueueRow } from "../_shared/copilot-v2/queue-process
 import { routeArchetype, type ContactStatus } from "../_shared/copilot-v2/contact-status.ts";
 import { modelForArchetype, type Archetype, type ModelId } from "../_shared/copilot-v2/model-selector.ts";
 import { createToolExecutor } from "../_shared/copilot-v2/tool-executor.ts";
+import { decideHumanPauseGate } from "../_shared/copilot-v2/human-pause.ts";
 import { createOpenRouterClient } from "../_shared/copilot-v2/openrouter-client.ts";
 import type { ResolvedContext } from "../_shared/copilot-v2/cognition-worker.ts";
 import type { AgentConfig } from "../_shared/copilot-v2/prompt-builder.ts";
@@ -79,6 +80,17 @@ serve(
         agentId: (context as ResolvedContext & { _agentId?: string | null })._agentId ?? null,
       }),
       sendReply: (canonicalPhone, text, row) => sendReply(supabase, row.organization_id, canonicalPhone, text),
+      checkPause: async (row) => {
+        try {
+          const { data, error } = await supabase.rpc("copilot_v2_check_human_pause", {
+            p_org_id: row.organization_id, p_canonical_phone: row.canonical_phone,
+          });
+          if (error) throw error;
+          return decideHumanPauseGate({ record: data ? { paused_until: data } : null, checkErrored: false, now: new Date() });
+        } catch (_err) {
+          return decideHumanPauseGate({ record: null, checkErrored: true, now: new Date() });
+        }
+      },
       recordOutbound: async (canonicalPhone, text, row) => {
         // Unique key per send: identical replies must each be recorded so the
         // identical_outgoing_burst signal can fire (do NOT collapse via dedup).

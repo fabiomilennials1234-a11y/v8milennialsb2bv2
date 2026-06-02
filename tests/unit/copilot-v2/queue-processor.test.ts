@@ -32,6 +32,7 @@ function deps(over: Partial<ProcessorDeps> = {}): ProcessorDeps & { sent: string
     resolveContext: async () => ctx,
     makeLlm: () => ({ async complete() { return { text: 'olá!', toolCalls: [] }; } }),
     makeExecutor: () => async () => ({}),
+    checkPause: async () => ({ blocked: false, reason: null }),
     sendReply: async (_phone, text) => { sent.push(text); },
     recordOutbound: async () => {},
     markComplete: async (id) => { completed.push(id); },
