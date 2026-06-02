@@ -120,6 +120,42 @@ serve(
           return { blocked: gate.block, reason: gate.reason };
         }
       },
+      checkHitl: async (row, context, toolNames) => {
+        try {
+          // Per-org toggle (default OFF) + judge sample rate live in org settings.
+          const { data: settings } = await supabase
+            .from("copilot_v2_org_settings")
+            .select("hitl_enabled, judge_sample_rate")
+            .eq("organization_id", row.organization_id).maybeSingle();
+          // Surface the sample rate to the judge dep via the resolved context.
+          if (settings && typeof settings.judge_sample_rate === "number") {
+            (context as any)._judgeSampleRate = settings.judge_sample_rate;
+          }
+          const enabled = settings?.hitl_enabled === true;
+          // Lead tier (org-scoped) — null when the lead is unknown/unclassified.
+          let leadTier: string | null = null;
+          if (row.lead_id) {
+            const { data: lead } = await supabase
+              .from("leads").select("qualification_tier")
+              .eq("organization_id", row.organization_id).eq("id", row.lead_id).maybeSingle();
+            leadTier = lead?.qualification_tier ?? null;
+          }
+          const decision = decideHitlGate({ enabled, toolNames, leadTier });
+          if (decision.requiresApproval) {
+            // Persist the proposal (org from the trusted row, never the LLM).
+            await supabase.rpc("copilot_v2_create_hitl_proposal", {
+              p_org_id: row.organization_id, p_lead_id: row.lead_id, p_trace_id: row.trace_id,
+              p_conversation_id: row.conversation_id, p_reply: null, p_tools: toolNames, p_tier: leadTier,
+            }).then(() => {}, () => {});
+          }
+          return { requiresApproval: decision.requiresApproval, reason: decision.reason };
+        } catch (_err) {
+          // fail-CLOSED on an infra error only when HITL is reachable-unknown is
+          // unsafe to assume ON; the org toggle defaults OFF, so a settings read
+          // failure leaves the agent autonomous (matching the default posture).
+          return { requiresApproval: false, reason: null };
+        }
+      },
       judgeOutput: async (reply, _row, context) => {
         // Sampling: conservative default = judge every turn (rate from config slot).
         const rate = typeof (context as any)?._judgeSampleRate === "number" ? (context as any)._judgeSampleRate : 1.0;
