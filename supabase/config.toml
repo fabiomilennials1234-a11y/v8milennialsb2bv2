@@ -287,5 +287,9 @@ verify_jwt = false
 [functions.copilot-v2-worker]
 verify_jwt = false
 
+# copilot-v2-ingest-knowledge: ingere KB (media->texto->embed); auth x-cron-secret; org da row
+[functions.copilot-v2-ingest-knowledge]
+verify_jwt = false
+
 
 
