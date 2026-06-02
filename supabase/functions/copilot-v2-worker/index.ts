@@ -24,6 +24,7 @@ import { routeArchetype, type ContactStatus } from "../_shared/copilot-v2/contac
 import type { Archetype, ModelId } from "../_shared/copilot-v2/model-selector.ts";
 import { createToolExecutor } from "../_shared/copilot-v2/tool-executor.ts";
 import { decideHumanPauseGate } from "../_shared/copilot-v2/human-pause.ts";
+import { resolveAgentCapabilities } from "../_shared/copilot-v2/capability-gate.ts";
 import { createOpenRouterClient } from "../_shared/copilot-v2/openrouter-client.ts";
 import type { ResolvedContext } from "../_shared/copilot-v2/cognition-worker.ts";
 import type { AgentConfig } from "../_shared/copilot-v2/prompt-builder.ts";
@@ -147,9 +148,10 @@ async function resolveContext(supabase: any, row: QueueRow): Promise<ResolvedCon
 
   // Config for the routed archetype.
   let config: AgentConfig = {};
+  let slots: Record<string, unknown> | null = null;
   if (agentRow) {
     const { data: cfg } = await supabase.from("copilot_v2_config").select("slots, escape_hatch_notes").eq("agent_id", agentRow.id).maybeSingle();
-    if (cfg) config = { ...(cfg.slots ?? {}), escapeHatchNotes: cfg.escape_hatch_notes };
+    if (cfg) { slots = cfg.slots ?? null; config = { ...(cfg.slots ?? {}), escapeHatchNotes: cfg.escape_hatch_notes }; }
   }
 
   // Live introspection: stages + custom fields (write-after-introspect uses these).
@@ -169,21 +171,12 @@ async function resolveContext(supabase: any, row: QueueRow): Promise<ResolvedCon
     // Only the routed archetype's config/caps are resolved this turn — key them
     // there, not fanned across all three (that masked a real multi-agent bug).
     configByArchetype: { ...baseConfigs, [archetype]: config },
-    capabilitiesByArchetype: { ...baseCaps, [archetype]: capsFor(agentRow) },
+    capabilitiesByArchetype: { ...baseCaps, [archetype]: agentRow ? resolveAgentCapabilities(slots) : emptyCaps },
     introspection: {
       stages: (stages ?? []).map((s: any) => s.stage_key),
       fields: (fields ?? []).map((f: any) => f.field_name),
     },
     _agentId: agentRow?.id ?? null,
-  };
-}
-
-// All capabilities on by default for an active agent; per-capability config is Slice 8.
-function capsFor(agentRow: any): Record<string, boolean | undefined> {
-  if (!agentRow) return {};
-  return {
-    can_move_stage: true, can_schedule_meeting: true, can_set_tier: true,
-    can_fill_field: true, can_send_media: true, can_transfer: true, can_handoff: true,
   };
 }
 
