@@ -114,4 +114,32 @@ describe.skip('Copilot v2 border regression [requires migration applied]', () =>
     expect(row?.error_message).toBeTruthy();
     await getAdmin().from('copilot_v2_knowledge').delete().eq('id', kn!.id);
   });
+
+  // ── Slice 11 — proactive anti-double-send (corrida + rate-limit) ──────────
+  it('proactive double-send: 5 concurrent claims of the same slot → exactly 1 enqueued (#7/#8/#9)', async () => {
+    const lead = crypto.randomUUID();
+    const idem = `proactive:${ORG}:first_touch:${lead}:1`;
+    const calls = Array.from({ length: 5 }, () =>
+      getAdmin().rpc('copilot_v2_claim_proactive_slot', {
+        p_org_id: ORG, p_lead_id: lead, p_kind: 'first_touch',
+        p_slot: '1', p_idempotency_key: idem, p_daily_ceiling: 100,
+      }),
+    );
+    const results = await Promise.all(calls);
+    const claimed = results.filter((r) => (Array.isArray(r.data) ? r.data[0] : r.data)?.claimed === true).length;
+    expect(claimed).toBe(1); // só um tick reivindica o slot — sem double first-touch
+    await getAdmin().from('copilot_v2_proactive_log').delete().eq('organization_id', ORG).eq('idempotency_key', idem);
+  });
+
+  it('proactive rate-limit: claim blocks at the daily ceiling', async () => {
+    const lead = crypto.randomUUID();
+    const idem = `proactive:${ORG}:followup:${lead}:d3`;
+    const { data } = await getAdmin().rpc('copilot_v2_claim_proactive_slot', {
+      p_org_id: ORG, p_lead_id: lead, p_kind: 'followup',
+      p_slot: 'd3', p_idempotency_key: idem, p_daily_ceiling: 0, // teto inválido → fail-closed
+    });
+    const row = Array.isArray(data) ? data[0] : data;
+    expect(row?.claimed).toBe(false);
+    expect(row?.reason).toBe('no_rate_ceiling');
+  });
 });

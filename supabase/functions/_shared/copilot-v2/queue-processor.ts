@@ -34,6 +34,14 @@ export interface ProcessorDeps {
   makeExecutor: (row: QueueRow, context: ResolvedContext) => (name: string, args: Record<string, unknown>) => Promise<unknown>;
   /** Re-checks the human-pause gate at SEND time (the durable-queue + retry window). */
   checkPause: (row: QueueRow) => Promise<{ blocked: boolean; reason: string | null }>;
+  /** Re-checks the loop gate at SEND time (durable-queue window). fail-CLOSED. */
+  checkLoop?: (row: QueueRow) => Promise<{ blocked: boolean; reason: string | null }>;
+  /** HITL gate (Slice 5): per-org toggle. ON + critical tool + high-value lead → require approval. */
+  checkHitl?: (row: QueueRow, context: ResolvedContext, toolNames: string[]) => Promise<{ requiresApproval: boolean; reason: string | null }>;
+  /** Dispatches the structured handoff notification (idempotent — RPC owns the key). */
+  dispatchHandoff?: (row: QueueRow, payload: { leadId: string | null; reason: string; summary: string | null; tier?: string | null }) => Promise<void>;
+  /** Output LLM-as-judge: vets the reply pre-send (Slice 5). fail-CLOSED. */
+  judgeOutput?: (reply: string, row: QueueRow, context: ResolvedContext) => Promise<{ block: boolean; reason: string | null }>;
   sendReply: (canonicalPhone: string, text: string, row: QueueRow) => Promise<void>;
   /** Records the sent reply as an outbound queue row so the loop gate sees the outgoing side. */
   recordOutbound: (canonicalPhone: string, text: string, row: QueueRow) => Promise<void>;
@@ -64,13 +72,60 @@ export async function processQueueMessage(row: QueueRow, deps: ProcessorDeps): P
       archetype: result.archetype, model: result.model, steps: result.steps.length,
     });
 
+    // Handoff dispatch: if a permitted transfer_to_human fired this turn, deliver
+    // the structured notification (idempotent — the RPC owns the stable key). The
+    // notification does NOT depend on the reply, so it runs before the send.
+    if (deps.dispatchHandoff) {
+      const transferStep = result.steps.find((s) => s.name === "transfer_to_human" && s.allowed);
+      if (transferStep) {
+        const h = (transferStep.result as any)?.handoff ?? {};
+        await deps.dispatchHandoff(row, {
+          leadId: h.leadId ?? row.lead_id ?? null,
+          reason: h.reason ?? "transfer",
+          summary: h.summary ?? null,
+        });
+      }
+    }
+
     if (result.reply && result.reply.trim() !== "") {
+      if (deps.checkHitl) {
+        const proposedTools = result.steps.filter((s) => s.allowed).map((s) => s.name);
+        const hitl = await deps.checkHitl(row, context, proposedTools);
+        if (hitl.requiresApproval) {
+          // HITL ON + a critical action on a high-value lead — do NOT send. The
+          // worker wrote an approval proposal; the turn is suppressed until a human
+          // approves/edits/rejects.
+          await deps.logStep(row.trace_id, "gate", hitl.reason ?? "hitl_approval_required", { tools: proposedTools });
+          await deps.markComplete(row.id);
+          return;
+        }
+      }
       const pause = await deps.checkPause(row);
       if (pause.blocked) {
         // A human took over between enqueue and now — suppress, do not talk over.
         await deps.logStep(row.trace_id, "gate", pause.reason ?? "human_pause_active");
         await deps.markComplete(row.id);
         return;
+      }
+      if (deps.checkLoop) {
+        const loop = await deps.checkLoop(row);
+        if (loop.blocked) {
+          // The loop state evolved after enqueue (durable-queue window) — suppress
+          // (complete, not fail). Loop is cheaper than the judge, so it runs first.
+          await deps.logStep(row.trace_id, "gate", loop.reason ?? "bot_loop_detected");
+          await deps.markComplete(row.id);
+          return;
+        }
+      }
+      if (deps.judgeOutput) {
+        const judge = await deps.judgeOutput(result.reply, row, context);
+        if (judge.block) {
+          // The reply failed the pre-send judge (or the judge errored) — suppress,
+          // do not send. Logged for observability; the turn is correctly stopped.
+          await deps.logStep(row.trace_id, "gate", judge.reason ?? "output_judge_blocked");
+          await deps.markComplete(row.id);
+          return;
+        }
       }
       await deps.sendReply(row.canonical_phone, result.reply, row);
       await deps.recordOutbound(row.canonical_phone, result.reply, row);

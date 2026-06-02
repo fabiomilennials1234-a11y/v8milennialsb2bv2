@@ -291,5 +291,9 @@ verify_jwt = false
 [functions.copilot-v2-ingest-knowledge]
 verify_jwt = false
 
+# copilot-v2-proactive: scheduler proativo (cron 1/min via pg_net); auth x-cron-secret
+[functions.copilot-v2-proactive]
+verify_jwt = false
+
 
 
