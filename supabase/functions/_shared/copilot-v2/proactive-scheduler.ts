@@ -117,3 +117,13 @@ export function decideProactiveSend(
   if (!hours.allowed) return hours;
   return decideRateLimitGate({ sentToday: input.sentToday, ceiling: input.ceiling });
 }
+
+/** Fail-CLOSED interpretation of copilot_v2_claim_proactive_slot's return. */
+export function interpretClaim(
+  result: { claimed: boolean; reason: string | null } | null | undefined,
+): { enqueue: boolean; reason: string | null } {
+  if (!result || result.claimed !== true) {
+    return { enqueue: false, reason: result?.reason ?? "claim_unavailable" };
+  }
+  return { enqueue: true, reason: null };
+}
