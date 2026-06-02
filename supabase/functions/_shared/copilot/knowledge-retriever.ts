@@ -7,20 +7,22 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateEmbedding } from "../embeddings.ts";
+// Threshold RAG centralizado (Slice 7) — fonte única, sem literais soltos.
+import { RAG_THRESHOLDS } from "../copilot-v2/rag-threshold.ts";
 
 type RetrievalMode = "initial" | "tool";
 
 const THRESHOLDS = {
-  initial: { docThreshold: 0.5, docLimit: 8, faqThreshold: 0.65, faqLimit: 4 },
-  tool: { docThreshold: 0.55, docLimit: 5, faqThreshold: 0.5, faqLimit: 4 },
+  initial: { docThreshold: RAG_THRESHOLDS.doc, docLimit: 8, faqThreshold: RAG_THRESHOLDS.faq, faqLimit: 4 },
+  tool: { docThreshold: RAG_THRESHOLDS.doc, docLimit: 5, faqThreshold: RAG_THRESHOLDS.faq, faqLimit: 4 },
 } as const;
 
-const MEMORY_CONFIG = { threshold: 0.7, limit: 5 } as const;
+const MEMORY_CONFIG = { threshold: RAG_THRESHOLDS.memory, limit: 5 } as const;
 
 export class KnowledgeRetriever {
   constructor(private supabase: SupabaseClient) {}
 
-  async retrieve(query: string, agentId: string, mode: RetrievalMode): Promise<string> {
+  async retrieve(query: string, agentId: string, organizationId: string, mode: RetrievalMode): Promise<string> {
     try {
       const embedding = await this.getEmbedding(query);
       if (!embedding) return mode === "tool" ? `Nenhuma informacao encontrada na base de conhecimento para: "${query}"` : "";
@@ -33,12 +35,14 @@ export class KnowledgeRetriever {
         (this.supabase as any).rpc("match_document_chunks", {
           query_embedding: embeddingStr,
           agent_id_filter: agentId,
+          p_org_id: organizationId,
           match_count: config.docLimit,
           similarity_threshold: config.docThreshold,
         }),
         (this.supabase as any).rpc("match_faqs", {
           query_embedding: embeddingStr,
           agent_id_filter: agentId,
+          p_org_id: organizationId,
           match_count: config.faqLimit,
           similarity_threshold: config.faqThreshold,
         }),
@@ -89,7 +93,7 @@ export class KnowledgeRetriever {
     }
   }
 
-  async retrieveMemories(query: string, leadId: string): Promise<string> {
+  async retrieveMemories(query: string, leadId: string, organizationId: string): Promise<string> {
     try {
       const embedding = await this.getEmbedding(query);
       if (!embedding) return "";
@@ -99,6 +103,7 @@ export class KnowledgeRetriever {
       const { data: memories, error } = await (this.supabase as any).rpc("match_lead_memories", {
         query_embedding: embeddingStr,
         lead_id_filter: leadId,
+        p_org_id: organizationId,
         match_count: MEMORY_CONFIG.limit,
         similarity_threshold: MEMORY_CONFIG.threshold,
       });

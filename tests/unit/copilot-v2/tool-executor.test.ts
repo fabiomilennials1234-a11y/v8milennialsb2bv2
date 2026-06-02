@@ -6,7 +6,7 @@
  * invariant — organization_id ALWAYS comes from ctx, NEVER from the LLM args.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createToolExecutor, ToolError, type ToolContext } from '../../../supabase/functions/_shared/copilot-v2/tool-executor.ts';
 
 function mockSupabase(results: Record<string, unknown> = {}) {
@@ -231,5 +231,30 @@ describe('get_conversation_history', () => {
     const q = sb.queries.find((x) => x.table === 'conversation_messages')!;
     expect(q.filters).toContainEqual(['conversation_id', 'conv-1']);
     expect(q.limit).toBe(10);
+  });
+});
+
+describe('search_knowledge', () => {
+  const g = globalThis as any;
+  const restore = { Deno: g.Deno, fetch: g.fetch };
+  beforeEach(() => {
+    g.Deno = { env: { get: (k: string) => (k === 'OPENROUTER_API_KEY' ? 'test-key' : undefined) } };
+    g.fetch = async () => ({ ok: true, json: async () => ({ data: [{ embedding: new Array(1536).fill(0.01), index: 0 }] }) });
+  });
+  afterEach(() => { g.Deno = restore.Deno; g.fetch = restore.fetch; });
+
+  it('chama copilot_v2_match_knowledge com p_org_id do ctx, NUNCA dos args', async () => {
+    const sb = mockSupabase({ 'rpc:copilot_v2_match_knowledge': [{ id: 1, content: 'Aço 1045', similarity: 0.8, source: 'semantic' }] });
+    const out = await createToolExecutor(sb, ctx)('search_knowledge', { query: 'aço 1045', organization_id: 'EVIL-ORG' });
+    const call = sb.rpcCalls.find((c: any) => c.name === 'copilot_v2_match_knowledge');
+    expect(call!.args.p_org_id).toBe('org-1');
+    expect(call!.args.p_org_id).not.toBe('EVIL-ORG');
+    expect(String(out)).toContain('Aço 1045');
+  });
+
+  it('throw (não silencioso) quando OPENROUTER_API_KEY falta', async () => {
+    g.Deno = { env: { get: () => undefined } };
+    const sb = mockSupabase();
+    await expect(createToolExecutor(sb, ctx)('search_knowledge', { query: 'x' })).rejects.toThrow();
   });
 });

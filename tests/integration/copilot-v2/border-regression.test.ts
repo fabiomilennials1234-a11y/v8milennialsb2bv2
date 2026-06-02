@@ -91,6 +91,30 @@ describe.skip('Copilot v2 border regression [requires migration applied]', () =>
     await getAdmin().from('copilot_v2_turn_counters').delete().eq('conversation_id', conv);
   });
 
+  // ── Slice 7 — RAG org-scope (#40/#41) + reaper de ingestão (#668/#670) ──
+  it('RLS cross-org: match_document_chunks com p_org_id errado devolve 0 (#40/#41)', async () => {
+    const emb = `[${new Array(1536).fill(0).join(',')}]`;
+    // org real do chunk vs org forjada — a forjada não pode ler.
+    const { data: foreign } = await getAdmin().rpc('match_document_chunks', {
+      query_embedding: emb, agent_id_filter: crypto.randomUUID(), p_org_id: '00000000-0000-0000-0000-000000000000',
+      match_count: 5, similarity_threshold: 0,
+    });
+    expect((foreign ?? []).length).toBe(0);
+  });
+
+  it('reaper de ingestão: row presa em ingesting -> failed (#668/#670)', async () => {
+    const { data: kn } = await getAdmin().from('copilot_v2_knowledge').insert({
+      organization_id: ORG, storage_path: `test/reap-${Date.now()}.pdf`, source_kind: 'pdf', status: 'ingesting',
+      ingesting_started_at: new Date(Date.now() - 20 * 60_000).toISOString(),
+    }).select('id').single();
+    const { data: reaped } = await getAdmin().rpc('copilot_v2_reap_stale_ingestion', { p_timeout_minutes: 10 });
+    expect((reaped as number) >= 1).toBe(true);
+    const { data: row } = await getAdmin().from('copilot_v2_knowledge').select('status, error_message').eq('id', kn!.id).single();
+    expect(row?.status).toBe('failed');
+    expect(row?.error_message).toBeTruthy();
+    await getAdmin().from('copilot_v2_knowledge').delete().eq('id', kn!.id);
+  });
+
   // ── Slice 11 — proactive anti-double-send (corrida + rate-limit) ──────────
   it('proactive double-send: 5 concurrent claims of the same slot → exactly 1 enqueued (#7/#8/#9)', async () => {
     const lead = crypto.randomUUID();

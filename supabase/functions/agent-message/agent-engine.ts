@@ -209,8 +209,8 @@ export class AgentEngine {
       this.loadLeadData(leadId),
       loadConversationContextExternal(this.supabase, this.organizationId, leadId),
       this.loadDocumentSummaries(capabilities.id),
-      this.retrieveSemanticContext(userMessage, capabilities.id),
-      this.retrieveLongTermMemories(userMessage, leadId),
+      this.retrieveSemanticContext(userMessage, capabilities.id, this.organizationId),
+      this.retrieveLongTermMemories(userMessage, leadId, this.organizationId),
       this.loadOrgCustomFields(),
       capabilities.can_qualify_lead ? this.loadPipelineStages() : Promise.resolve([]),
       this.loadProductCatalog(),
@@ -426,7 +426,7 @@ export class AgentEngine {
         const query = action.params.query as string;
         console.log(`[AgentEngine] search_knowledge("${query}") — executing inline...`);
 
-        const searchResult = await this.executeSearchKnowledge(query, capabilities.id);
+        const searchResult = await this.executeSearchKnowledge(query, capabilities.id, this.organizationId);
         console.log(`[AgentEngine] search_knowledge returned ${searchResult.length} chars`);
 
         // Adicionar tool call + resultado ao historico para proxima chamada
@@ -831,8 +831,8 @@ export class AgentEngine {
    * Retorna trechos relevantes + lista de arquivos disponiveis para envio.
    */
   /** T3B.7: delegado pra _shared/copilot/search-knowledge.ts */
-  private async executeSearchKnowledge(query: string, agentId: string): Promise<string> {
-    return executeSearchKnowledgeExternal(this.supabase, query, agentId);
+  private async executeSearchKnowledge(query: string, agentId: string, organizationId: string): Promise<string> {
+    return executeSearchKnowledgeExternal(this.supabase, query, agentId, organizationId);
   }
 
   /**
@@ -841,8 +841,8 @@ export class AgentEngine {
    * Retorna string formatada para injeção no prompt, ou "" se não houver resultados.
    */
   /** T3B.8d: delegado pra rag.ts */
-  private async retrieveSemanticContext(userMessage: string, agentId: string): Promise<string> {
-    return retrieveSemanticContextExternal(this.supabase, userMessage, agentId);
+  private async retrieveSemanticContext(userMessage: string, agentId: string, organizationId: string): Promise<string> {
+    return retrieveSemanticContextExternal(this.supabase, userMessage, agentId, organizationId);
   }
 
   /**
@@ -850,8 +850,8 @@ export class AgentEngine {
    * via pgvector. Retorna string formatada ou "" se não houver memórias.
    */
   /** T3B.8d: delegado pra rag.ts */
-  private async retrieveLongTermMemories(userMessage: string, leadId: string): Promise<string> {
-    return retrieveLongTermMemoriesExternal(this.supabase, userMessage, leadId);
+  private async retrieveLongTermMemories(userMessage: string, leadId: string, organizationId: string): Promise<string> {
+    return retrieveLongTermMemoriesExternal(this.supabase, userMessage, leadId, organizationId);
   }
 
   // extractAndSaveMemories extraido para engine/persist-response.ts
