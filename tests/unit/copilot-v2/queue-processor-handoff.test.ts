@@ -18,7 +18,7 @@ const ctx = {
   contactStatus: 'NOVO', activeArchetypes: new Set(['qualificador']),
   configByArchetype: { qualificador: {}, vendedor: {}, carteira: {} },
   capabilitiesByArchetype: { qualificador: { can_transfer: true }, vendedor: {}, carteira: {} },
-  introspection: { stages: [], fields: [] }, _agentId: 'agent-1',
+  introspection: { stages: [], fields: [], slots: [] }, _agentId: 'agent-1',
 } as ResolvedContext;
 
 // An LLM that calls transfer_to_human then replies.

@@ -13,6 +13,8 @@
 export interface Introspection {
   stages: string[];
   fields: string[];
+  /** ISO datetimes confirmed FREE by check_agenda_availability this turn. */
+  slots: string[];
 }
 
 export interface AssertWriteTargetInput {
@@ -32,6 +34,7 @@ export interface AssertWriteTargetResult {
 const TARGET_COLLECTION: Record<string, keyof Introspection> = {
   move_lead_stage: "stages",
   fill_lead_field: "fields",
+  schedule_meeting: "slots",
 };
 
 export function assertWriteTarget(input: AssertWriteTargetInput): AssertWriteTargetResult {

@@ -21,7 +21,7 @@ const ctx: ResolvedContext = {
   activeArchetypes: new Set(['qualificador']),
   configByArchetype: { qualificador: { company: { name: 'X' } }, vendedor: {}, carteira: {} },
   capabilitiesByArchetype: { qualificador: {}, vendedor: {}, carteira: {} },
-  introspection: { stages: [], fields: [] },
+  introspection: { stages: [], fields: [], slots: [] },
   _agentId: null,
 };
 
