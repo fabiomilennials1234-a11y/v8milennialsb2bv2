@@ -24,12 +24,20 @@ import { inRange, type TVPeriodRange } from "@/lib/tv-periods";
 // scoped por organization_id, em vez de importar os hooks de valor do módulo
 // pipelines. Quebra a aresta engagement→pipelines que fechava o
 // ciclo leads→engagement→pipelines→leads. Tipos vêm de core (Tables<...>).
-// Sem realtime (regra: nunca subscription em views pipe_*; dashboard → staleTime basta).
+// Sem realtime (regra: nunca subscription em views pipe_*). A atualização ao vivo
+// vem de refetchInterval (polling): staleTime sozinho deixava o board congelado
+// após uma venda até o remount, pois não há realtime/invalidation e
+// refetchOnWindowFocus é global false (kiosk TV nunca dispara focus).
 
 type PipePropostaRow = Tables<"pipe_propostas">;
 type PipeConfirmacaoRow = Tables<"pipe_confirmacao">;
 
 const PERF_STALE_TIME = 60 * 1000;
+// Polling p/ manter os dashboards de performance vivos (TV kiosk + páginas de perf)
+// sem reintroduzir subscription nas views. Casa com o setInterval de 30s do TVDashboard.
+// React Query pausa o polling com a aba oculta (refetchIntervalInBackground=false default),
+// então consumidores fora de foco não geram custo.
+const PERF_REFETCH_INTERVAL = 30 * 1000;
 
 export function usePerfPipePropostas() {
   const { organizationId, isReady } = useOrganization();
@@ -48,6 +56,7 @@ export function usePerfPipePropostas() {
     },
     enabled: isReady && !!organizationId,
     staleTime: PERF_STALE_TIME,
+    refetchInterval: PERF_REFETCH_INTERVAL,
   });
 }
 
@@ -68,6 +77,7 @@ export function usePerfPipeConfirmacao() {
     },
     enabled: isReady && !!organizationId,
     staleTime: PERF_STALE_TIME,
+    refetchInterval: PERF_REFETCH_INTERVAL,
   });
 }
 
