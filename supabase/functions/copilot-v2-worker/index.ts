@@ -170,6 +170,35 @@ serve(
           return decideOutputJudge({ verdict: null, checkErrored: true });
         }
       },
+      dispatchHandoff: async (row, payload) => {
+        // Lead owners + tier (org-scoped — org ALWAYS from the trusted row).
+        const { data: lead } = await supabase.from("leads")
+          .select("responsible_id, closer_id, sdr_id, sale_responsible_id, pre_sale_responsible_id, qualification_tier")
+          .eq("organization_id", row.organization_id).eq("id", payload.leadId ?? "__none__").maybeSingle();
+        // Active members of the org (PII phone opt-in).
+        const { data: members } = await supabase.from("team_members")
+          .select("id, user_id, phone, is_active, role")
+          .eq("organization_id", row.organization_id).eq("is_active", true);
+        const routing = resolveHandoffTargets({ lead: lead ?? {}, members: members ?? [], activeTeam: members ?? [] });
+        const optInPhones = routing.targets.map((t) => t.phone).filter((p): p is string => !!p);
+        const idem = `transfer:${row.organization_id}:${payload.leadId ?? "noLead"}:${row.trace_id}`;
+        const { data: status } = await supabase.rpc("copilot_v2_dispatch_handoff", {
+          p_org_id: row.organization_id, p_lead_id: payload.leadId, p_trace_id: row.trace_id,
+          p_idempotency_key: idem, p_reason: payload.reason, p_summary: payload.summary,
+          p_tier: lead?.qualification_tier ?? null,
+          p_target_user_ids: routing.targets.map((t) => t.userId),
+          p_whatsapp_phones: optInPhones,
+          p_title: "Lead precisa de atendimento humano",
+          p_link: "/pipe-whatsapp",
+        });
+        // Only fire WhatsApp on a FRESH dispatch (idempotent — never on already_dispatched).
+        if (status === "dispatched" && optInPhones.length) {
+          const text = `🤝 Handoff: lead ${payload.leadId ?? ""} (${lead?.qualification_tier ?? "s/ tier"}) — ${payload.reason}. ${payload.summary ?? ""}`.trim();
+          for (const phone of optInPhones) {
+            try { await sendReply(supabase, row.organization_id, phone, text); } catch (_e) { /* per-phone best-effort */ }
+          }
+        }
+      },
       recordOutbound: async (canonicalPhone, text, row) => {
         // Unique key per send: identical replies must each be recorded so the
         // identical_outgoing_burst signal can fire (do NOT collapse via dedup).

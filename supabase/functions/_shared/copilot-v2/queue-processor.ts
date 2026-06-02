@@ -38,6 +38,8 @@ export interface ProcessorDeps {
   checkLoop?: (row: QueueRow) => Promise<{ blocked: boolean; reason: string | null }>;
   /** HITL gate (Slice 5): per-org toggle. ON + critical tool + high-value lead → require approval. */
   checkHitl?: (row: QueueRow, context: ResolvedContext, toolNames: string[]) => Promise<{ requiresApproval: boolean; reason: string | null }>;
+  /** Dispatches the structured handoff notification (idempotent — RPC owns the key). */
+  dispatchHandoff?: (row: QueueRow, payload: { leadId: string | null; reason: string; summary: string | null; tier?: string | null }) => Promise<void>;
   /** Output LLM-as-judge: vets the reply pre-send (Slice 5). fail-CLOSED. */
   judgeOutput?: (reply: string, row: QueueRow, context: ResolvedContext) => Promise<{ block: boolean; reason: string | null }>;
   sendReply: (canonicalPhone: string, text: string, row: QueueRow) => Promise<void>;
@@ -69,6 +71,21 @@ export async function processQueueMessage(row: QueueRow, deps: ProcessorDeps): P
     await deps.logStep(row.trace_id, "cognition", result.stoppedReason, {
       archetype: result.archetype, model: result.model, steps: result.steps.length,
     });
+
+    // Handoff dispatch: if a permitted transfer_to_human fired this turn, deliver
+    // the structured notification (idempotent — the RPC owns the stable key). The
+    // notification does NOT depend on the reply, so it runs before the send.
+    if (deps.dispatchHandoff) {
+      const transferStep = result.steps.find((s) => s.name === "transfer_to_human" && s.allowed);
+      if (transferStep) {
+        const h = (transferStep.result as any)?.handoff ?? {};
+        await deps.dispatchHandoff(row, {
+          leadId: h.leadId ?? row.lead_id ?? null,
+          reason: h.reason ?? "transfer",
+          summary: h.summary ?? null,
+        });
+      }
+    }
 
     if (result.reply && result.reply.trim() !== "") {
       if (deps.checkHitl) {
