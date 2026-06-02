@@ -220,7 +220,18 @@ Pattern Fase 8. Escopo definido por [[inventario-identity]] — statements 1, 4,
 - [ ] `/master/operations` carrega (hotfix #530 não regride) — **gate CTO**
 - ⚠️ `permission-engine.test.ts` (integration) = **env-blocked** (Supabase local sem seed de auth); backend não tocado pela slice — não-regressão. Rodar 3× quando ambiente disponível.
 
+### Slice 9.4a — Precursora: quebrar ciclo `useOrganization↔useTeamMembers` (PR #610) ✅
+
+Bloqueava o move 9.4 (mover ambos os arquivos cíclicos re-chaveava o ratchet edge-keyed). Decisão CTO (AskUserQuestion): precursora dedicada antes do move — espelha 9.1b. Ver changelog [[2026-06-01-arch-deepening-9-4a-break-org-team-cycle]].
+
+- **Causa**: `useTeamMembers.ts` agregava `useCurrentTeamMember` (org-independente) com hooks org-scoped; `useOrganization` importava `useCurrentTeamMember` de lá ⇒ ciclo.
+- **Fix mecânico**: extraído `hooks/useCurrentTeamMember.ts` (bodies verbatim via slice por linha). `useTeamMembers.ts` re-exporta (superfície pública inalterada). `useOrganization`/`useOrgSwitcher` repontados pra fonte nova. Único teste tocado: `use-organization.test.ts` (mock repontado).
+- **Resultado**: baseline **56 → 55** (`no-circular` 33 → 32; removido só `useOrganization → useTeamMembers`, 0 add — provado por diff de chaves; baseline regenerado por ser redução). root tsc 0 · lint 0 err · test:unit zero regressão. **9.4 (move) agora ratchet-neutro.**
+- [x] Aceite 9.4a: ciclo morto, baseline 55, superfície pública 44 intacta, smoke org-context = gate CTO.
+
 ### Slice 9.4 — Reorganizar `org-team/` + `master/` internos (3-4h)
+
+> **FATIADA (CTO, AskUserQuestion 2026-06-01):** bundle grande demais p/ 1 PR em área frágil. **9.4 = master + demote** (PR #620, ✅ — alto valor, isolado, ~0 test-churn); **9.4b = org-team** (próxima — ~70 test-files de useOrganization/useTeamMembers, relocação pura). Ver changelog [[2026-06-01-arch-deepening-9-4-master-internal-demote]].
 
 Escopo definido por [[inventario-identity]] — `org-team`: statements 28-41 (14 / 30 símbolos). `master`: statements 9-20 (12 / 45 símbolos).
 
@@ -232,13 +243,22 @@ Escopo definido por [[inventario-identity]] — `org-team`: statements 28-41 (14
 3. **Demoção de barrel ALT** — `master`: dos 12 statements, **apenas `useMasterAuth, useCanAccessMaster` (statement 9) permanece re-exportado no barrel raiz**. Os outros 11 statements (44 símbolos master) ficam só em `identity/master/index.ts` (deep-import permitido p/ `pages/master/*` internas).
 4. Validar.
 
-**Critério aceite 9.4:**
-- [ ] `org-team/` + `master/` populadas
-- [ ] Barrel raiz: 44 → **≈ 33** statements (purga 11 statements master)
-- [ ] Smoke Bloco 1.3-1.5 (org switcher + equipe) verde
-- [ ] Smoke Bloco 11 (master ops) verde — TODAS pages master continuam carregando via deep-import autorizado
-- [ ] Hotfix #530 não regride (`useMasterOperations*` resolve via `identity/master/index.ts`)
-- [ ] ESLint boundaries não acusa (deep-import em pages é permitido)
+**Critério aceite 9.4 (master, PR #620):**
+- [x] `master/` populada — 34 `git mv` (6 hooks + 15 components incl `onboarding/` + 13 pages) + `master/index.ts` sub-barrel
+- [x] Barrel raiz: 44 → **33** (`grep -c '^export'` = 33; só `useMasterAuth, useCanAccessMaster` via `./master`; 11 statements demovidos)
+- [x] root tsc 0 · leak grep 0 · mojibake 0 · lint 0 err · ratchet **OK 55 0-new** · `npm run build` exit 0 (rotas master lazy resolvem)
+- [x] test:unit zero regressão; subset repointado (use-identity/use-user-role/use-master-auth/use-can-do/use-permissions-hooks) = **5 files / 52 tests pass**
+- [ ] Smoke Bloco 11 (master ops) — **gate CTO** (`/master`, `/master/operations` hotfix #530, `/master/organizations`, `/master/users`)
+- [x] ESLint boundaries não acusa (deep-import em pages/App é permitido)
+- ⏭️ `org-team/` (Bloco 1.3-1.5 org switcher + equipe) = **slice 9.4b**
+
+**Critério aceite 9.4b (org-team, PR #626):**
+- [x] `org-team/` populada — 14 `git mv` (8 hooks + 4 team components + ProfileSettings + Equipe) + `org-team/index.ts` sub-barrel; useAutoAdminAssignment/useAvatarMap ficam em `hooks/`
+- [x] Barrel raiz **33** (re-aponta 14 statements org-team `from "./org-team"`, SEM demote — org-team é PUB)
+- [x] root tsc 0 · leak grep 0 (alias+relativo) · mojibake 0 · lint 0 err · ratchet **OK 55 0-new** · build exit 0 · 14 renames
+- [x] test:unit zero regressão (red set pré-existente; subset org/team/identity = **7 files / 78 tests pass**)
+- [ ] Smoke Bloco 1.3-1.5 (org switcher + equipe + carga de org context) — **gate CTO**
+- Débito pré-existente flagado: deep-imports cross-module (useBuilderSession/useQuickBlast) pro org-team barrel; orphans ProfileSettings/TeamMemberCard/TeamStats.
 
 ### Slice 9.5 — Reduzir barrel `identity/index.ts` (3-4h)
 
@@ -250,14 +270,15 @@ Escopo definido por [[inventario-identity]] — `org-team`: statements 28-41 (14
 3. Alvo: **≈ 18 export statements** (66/18 ≈ 3.7 — supera alvo ≥ 3.0).
 4. Atualizar `identity/CLAUDE.md` refletindo nova estrutura interna (`auth/`, `permissions/`, `org-team/`, `master/`).
 
-**Critério aceite 9.5:**
-- [ ] `identity/index.ts` ≤ 20 export statements (alvo concreto: ~18)
-- [ ] files-per-export ≥ 3.0 (alvo concreto: 3.7)
-- [ ] Build + lint + lint:deps:check verde
-- [ ] Suite tests pass (não regride vs baseline)
-- [ ] Baseline ratchet reduzido em ≥ 3 violations
-- [ ] Sub-CLAUDE.md `identity` atualizado com 4 sub-pastas
-- [ ] 25 símbolos com reach externo (inventário 9.1) continuam acessíveis via `@/modules/identity` (zero regressão consumer)
+**Critério aceite 9.5 (PR #627 — Fase 9 CONCLUÍDA):**
+- [x] `identity/index.ts` = **9 export statements** (era 33; ≤20 ✓, superou alvo ~18 — reach-driven minimal)
+- [x] files-per-export = **7.9** (71/9; ≥3.0 ✓)
+- [x] Build exit 0 + lint 0 err + ratchet OK 55 0-new (todos verdes)
+- [x] test:unit não regride (23 fail files/38 tests = baseline; zero "has no exported member")
+- [~] Baseline ratchet: NEUTRO nesta slice (purga de re-exports não-cíclicos); a redução 83→55 (−28) veio cumulativa de 9.1b+9.4a
+- [x] Sub-CLAUDE.md `identity` atualizado (4 sub-pastas: auth/permissions/master/org-team)
+- [x] 24 símbolos com reach externo (medido empírico ripgrep quote-agnostic) + 4 route guards/provider continuam no barrel — zero regressão consumer (tsc 0 prova)
+- 1 repoint interno: SeatUsageBar (type SeatUsage via barrel → relativo). Único self-import de símbolo demovido.
 
 ## Riscos + mitigação
 
