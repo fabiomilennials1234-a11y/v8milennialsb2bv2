@@ -8,6 +8,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createToolExecutor, ToolError, type ToolContext } from '../../../supabase/functions/_shared/copilot-v2/tool-executor.ts';
+import { TOOL_REGISTRY } from '../../../supabase/functions/_shared/copilot-v2/tool-registry.ts';
 
 function mockSupabase(results: Record<string, unknown> = {}) {
   const queries: Array<{ table: string; filters: [string, unknown][]; order: unknown; limit: unknown }> = [];
@@ -415,5 +416,39 @@ describe('search_knowledge', () => {
     g.Deno = { env: { get: () => undefined } };
     const sb = mockSupabase();
     await expect(createToolExecutor(sb, ctx)('search_knowledge', { query: 'x' })).rejects.toThrow();
+  });
+});
+
+// DIVERGÊNCIA DO PLANO (registrada): a Task 6 do plano esperava send_media e
+// search_knowledge ainda not_implemented. Pós-merge de 5/6/7 em develop os dois
+// handlers JÁ ESTÃO VIVOS (donos: Slice 6 acervo-aware / Slice 7 RAG). O plano é
+// prescritivo mas honra a INTENÇÃO — contratos honestos, sem fingir. Então o
+// contrato aqui asserta a realidade VIVA: handlers honestos (sem silent-drop) +
+// o registry expondo áudio no send_media (Emenda ADR §1), em vez de not_implemented.
+describe('contrato dos handlers de mídia/conhecimento (donos: Slice 6/7, já mergeados)', () => {
+  it('send_media é um handler VIVO e honesto (Slice 6) — fallback explícito, nunca silent-drop', async () => {
+    const sb = mockSupabase({}); // item inexistente
+    sb.storage = { from: () => ({ createSignedUrl: async () => ({ data: null, error: null }) }) };
+    const out: any = await createToolExecutor(sb, { organizationId: 'org-1', canonicalPhone: '11987654321', leadId: 'lead-1' } as any)(
+      'send_media', { media_id: 'm1' });
+    // NÃO lança not_implemented: devolve motivo explícito (Slice 6 é o dono).
+    expect(out).toMatchObject({ sent: false, reason: 'not_found' });
+  });
+
+  it('search_knowledge é um handler VIVO e honesto (Slice 7) — não finge buscar (NOOP-bug-class)', async () => {
+    const g = globalThis as any;
+    const prev = { Deno: g.Deno };
+    g.Deno = { env: { get: () => undefined } }; // sem chave -> throw honesto, nunca "nenhum resultado"
+    try {
+      const exec = createToolExecutor(mockSupabase(), { organizationId: 'org-1' } as any);
+      await expect(exec('search_knowledge', { query: 'tabela de preços' })).rejects.toThrow();
+    } finally {
+      g.Deno = prev.Deno;
+    }
+  });
+
+  it('o registry expõe áudio no contrato do send_media (Emenda ADR §1)', () => {
+    const meta = TOOL_REGISTRY.find((t) => t.name === 'send_media')!;
+    expect(meta.description.toLowerCase()).toContain('áudio');
   });
 });
