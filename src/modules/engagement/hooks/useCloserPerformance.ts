@@ -13,10 +13,81 @@
  * Atribuição SDR (pra reunião): closer real = sale_responsible_id ?? closer_id da confirmacao.
  */
 import { useMemo } from "react";
-import { usePipePropostas, usePipeConfirmacao } from "@/modules/pipelines";
-import { useTeamMembers } from "@/modules/identity";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
+import { useOrganization, useTeamMembers } from "@/modules/identity";
 import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { inRange, type TVPeriodRange } from "@/lib/tv-periods";
+
+// Leitura direta das views `pipe_propostas` / `pipe_confirmacao` (data layer),
+// scoped por organization_id, em vez de importar os hooks de valor do módulo
+// pipelines. Quebra a aresta engagement→pipelines que fechava o
+// ciclo leads→engagement→pipelines→leads. Tipos vêm de core (Tables<...>).
+// Sem realtime (regra: nunca subscription em views pipe_*). A atualização ao vivo
+// vem de refetchInterval (polling): staleTime sozinho deixava o board congelado
+// após uma venda até o remount, pois não há realtime/invalidation e
+// refetchOnWindowFocus é global false (kiosk TV nunca dispara focus).
+//
+// ESCOPO = ORG-WIDE (decisão CTO 2026-06-02, finding ENG-USAB-1). As views são
+// filtradas apenas por organization_id — performance é métrica de equipe/gestão
+// (TV kiosk + página Performance), então todos os membros veem os números da org
+// inteira. Diferente da fonte antiga (usePipelineEntries) que filtrava por leads
+// visíveis ao caller como efeito colateral do embed `lead:leads(...)`. Não
+// reintroduzir filtro por lead-visibility aqui: org-wide é intencional. As views
+// expõem só ids/sale_value/status (sem PII de lead).
+
+type PipePropostaRow = Tables<"pipe_propostas">;
+type PipeConfirmacaoRow = Tables<"pipe_confirmacao">;
+
+const PERF_STALE_TIME = 60 * 1000;
+// Polling p/ manter os dashboards de performance vivos (TV kiosk + páginas de perf)
+// sem reintroduzir subscription nas views. Casa com o setInterval de 30s do TVDashboard.
+// React Query pausa o polling com a aba oculta (refetchIntervalInBackground=false default),
+// então consumidores fora de foco não geram custo.
+const PERF_REFETCH_INTERVAL = 30 * 1000;
+
+export function usePerfPipePropostas() {
+  const { organizationId, isReady } = useOrganization();
+  return useQuery({
+    queryKey: ["pipe_propostas", "perf", organizationId],
+    queryFn: async () => {
+      if (!organizationId) return [] as PipePropostaRow[];
+      const { data, error } = await supabase
+        .from("pipe_propostas")
+        .select(
+          "status, metrics_period_at, created_at, closed_at, sale_value, sale_responsible_id, closer_id"
+        )
+        .eq("organization_id", organizationId);
+      if (error) throw error;
+      return (data ?? []) as PipePropostaRow[];
+    },
+    enabled: isReady && !!organizationId,
+    staleTime: PERF_STALE_TIME,
+    refetchInterval: PERF_REFETCH_INTERVAL,
+  });
+}
+
+export function usePerfPipeConfirmacao() {
+  const { organizationId, isReady } = useOrganization();
+  return useQuery({
+    queryKey: ["pipe_confirmacao", "perf", organizationId],
+    queryFn: async () => {
+      if (!organizationId) return [] as PipeConfirmacaoRow[];
+      const { data, error } = await supabase
+        .from("pipe_confirmacao")
+        .select(
+          "status, meeting_date, metrics_period_at, created_at, sale_responsible_id, closer_id, pre_sale_responsible_id, sdr_id"
+        )
+        .eq("organization_id", organizationId);
+      if (error) throw error;
+      return (data ?? []) as PipeConfirmacaoRow[];
+    },
+    enabled: isReady && !!organizationId,
+    staleTime: PERF_STALE_TIME,
+    refetchInterval: PERF_REFETCH_INTERVAL,
+  });
+}
 
 export interface CloserPerformanceRow {
   id: string;
@@ -47,8 +118,8 @@ const closerOf = (row: any): string | null =>
   row.sale_responsible_id ?? row.closer_id ?? null;
 
 export function useCloserPerformance(range: TVPeriodRange): CloserPerformanceData {
-  const { data: propostas = [] } = usePipePropostas();
-  const { data: confirmacoes = [] } = usePipeConfirmacao();
+  const { data: propostas = [] } = usePerfPipePropostas();
+  const { data: confirmacoes = [] } = usePerfPipeConfirmacao();
   const { data: teamMembers = [] } = useTeamMembers();
   const avatarMap = useAvatarMap();
 

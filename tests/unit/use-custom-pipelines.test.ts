@@ -48,7 +48,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "u1" }, session: { access_token: "token" } }),
 }));
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", profile_id: "p1" } }),
   isVirtualTeamMember: () => false,
   useTeamMembers: () => ({ data: [] }),

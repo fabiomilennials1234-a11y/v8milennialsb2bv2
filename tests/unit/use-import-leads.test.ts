@@ -22,7 +22,7 @@ vi.mock("@/integrations/supabase/client", () => ({
     functions: { invoke: vi.fn().mockResolvedValue({ data: null, error: null }) },
   },
 }));
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-test" }),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));

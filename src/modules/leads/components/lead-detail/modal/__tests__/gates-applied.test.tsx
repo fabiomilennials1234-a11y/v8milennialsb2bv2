@@ -50,7 +50,7 @@ vi.mock("@/modules/leads/hooks/useLeads", () => ({
   useUpdateLead: () => ({ mutateAsync: vi.fn() }),
 }));
 
-vi.mock("@/modules/identity/hooks/useTeamMembers", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useResponsibleMembers: () => [],
 }));
 

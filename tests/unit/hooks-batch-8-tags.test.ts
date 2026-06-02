@@ -44,7 +44,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
   useRequiredOrganization: () => ({ organizationId: "org-t", teamMemberId: "tm1" }),
 }));
@@ -71,7 +71,7 @@ describe("useTags", () => {
   });
 
   it("returns empty array when no organizationId", async () => {
-    const mod = await import("@/modules/identity/hooks/useOrganization");
+    const mod = await import("@/modules/identity/org-team/hooks/useOrganization");
     vi.spyOn(mod, "useOrganization").mockReturnValueOnce({ organizationId: null as any, isReady: true } as any);
     // With isReady true but no orgId the query is disabled, so data remains undefined
     const { result } = renderHook(() => useTags(), { wrapper: createWrapper() });

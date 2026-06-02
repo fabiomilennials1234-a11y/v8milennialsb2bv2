@@ -27,7 +27,7 @@ vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({
   useLogLeadAction: () => vi.fn(),
 }));
 
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-1" }),
 }));
 
@@ -43,7 +43,7 @@ vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
   useFeaturePermissions: () => ({ data: {}, isLoading: false }),
 }));
 
-vi.mock("@/modules/identity/hooks/useMasterAuth", () => ({
+vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({ isMaster: false }),
 }));
 

@@ -4,7 +4,7 @@ import { getPresetDates, getComparisonDates } from "@/modules/analytics/hooks/us
 
 // ─── Mocks required to import the hook file ───────────────────────────────────
 vi.mock("@/integrations/supabase/client", () => ({ supabase: {} }));
-vi.mock("@/modules/identity/hooks/useOrganization", () => ({
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-1", teamMemberId: "tm-1" }),
 }));
 vi.mock("@/shared/hooks/usePersistedState", () => ({

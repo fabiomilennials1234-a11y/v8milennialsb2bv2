@@ -117,11 +117,31 @@ async function fetchAgendaFallback(
     }
   };
 
+  // The agenda fallback queries source tables (meetings, follow_ups,
+  // pipe_confirmacao) that are spoofed as "leads" to satisfy the table-name
+  // union. The embedded `lead:leads(...)` select makes PostgREST's recursive
+  // result-type parser explode (TS2589 — "type instantiation excessively
+  // deep"). `from` returns a loosely-typed builder so the `.select(...)` chain
+  // never triggers that deep instantiation; row shapes are recovered
+  // downstream via the explicit `safe<Record<string, unknown>>` casts and the
+  // `r.<field> as <type>` reads when mapping into AgendaEvent.
+  type LooseQueryBuilder = {
+    select: (columns: string) => LooseQueryBuilder;
+    eq: (column: string, value: unknown) => LooseQueryBuilder;
+    is: (column: string, value: unknown) => LooseQueryBuilder;
+    not: (column: string, operator: string, value: unknown) => LooseQueryBuilder;
+    gt: (column: string, value: unknown) => LooseQueryBuilder;
+    gte: (column: string, value: unknown) => LooseQueryBuilder;
+    lt: (column: string, value: unknown) => LooseQueryBuilder;
+    then: PromiseLike<{ data: unknown; error: unknown }>["then"];
+  };
+  const from = (table: string): LooseQueryBuilder =>
+    supabase.from(table as "leads") as unknown as LooseQueryBuilder;
+
   const [meetings, followUps, confirmacoes] = await Promise.all([
     // Source 1: meetings (overlap with range)
     safe<Record<string, unknown>>(
-      supabase
-        .from("meetings" as "leads")
+      from("meetings")
         .select(
           "id, title, description, start_at, end_at, all_day, event_type, status, lead_id, created_by, location, meet_link, color, google_event_id, lead:leads(name, company)",
         )
@@ -131,8 +151,7 @@ async function fetchAgendaFallback(
     ),
     // Source 2: follow_ups (non-archived, due_date in range)
     safe<Record<string, unknown>>(
-      supabase
-        .from("follow_ups" as "leads")
+      from("follow_ups")
         .select(
           "id, title, description, due_date, completed_at, lead_id, assigned_to, lead:leads(name, company)",
         )
@@ -143,8 +162,7 @@ async function fetchAgendaFallback(
     ),
     // Source 4: pipe_confirmacao (non-null meeting_date in range)
     safe<Record<string, unknown>>(
-      supabase
-        .from("pipe_confirmacao" as "leads")
+      from("pipe_confirmacao")
         .select(
           "id, notes, meeting_date, status, lead_id, lead:leads(name, company)",
         )
