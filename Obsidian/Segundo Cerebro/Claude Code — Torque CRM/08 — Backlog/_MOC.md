@@ -14,6 +14,10 @@ owner: claude-agent
 > Auto-gerado por `scripts/vault-regen-indexes.mjs`.
 > Seções marcadas `<!-- manual -->` são preservadas.
 
+## Features (manual) <!-- manual -->
+
+- [[copilot-v2-remodel/_MOC|Copilot v2 — Remodelagem]] 🔵 plano definitivo de execução (13 slices; [[slice-0C-cleanup]] + [[slice-1H-harness-hardening]] prontos)
+
 ## backlog
 
 - [[consolidate-permissions-storage|consolidate-permissions-storage]] (backlog)
