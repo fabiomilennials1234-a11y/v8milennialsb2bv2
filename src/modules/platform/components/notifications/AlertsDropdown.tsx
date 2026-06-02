@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell,
@@ -22,6 +22,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useAuth } from "@/modules/identity";
+import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
+import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow, isToday, isBefore, addHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -208,8 +210,34 @@ export function AlertsDropdown() {
       });
     },
     enabled: isReady && !!organizationId && !!user?.id,
-    refetchInterval: 60000, // Refresh every minute
+    // Realtime is the primary path; the poll is a disconnect safety-net only.
+    refetchInterval: 120000,
   });
+
+  const { toast } = useToast();
+
+  // Realtime: a new handoff notification invalidates the bell query immediately
+  // (org-scoped channel, 2s debounce) — replaces minute polling with push.
+  useRealtimeSubscription("notifications", ["user-alerts"]);
+
+  // Toast on a freshly-arrived handoff alert (transfer_to_human) for THIS user.
+  const lastToastedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const alert of alerts) {
+      if (
+        alert.type === "transfer_to_human" &&
+        alert.notificationId &&
+        !viewedIds.has(alert.id) &&
+        !lastToastedRef.current.has(alert.notificationId)
+      ) {
+        lastToastedRef.current.add(alert.notificationId);
+        toast({
+          title: alert.title || "Lead precisa de atendimento humano",
+          description: alert.description || undefined,
+        });
+      }
+    }
+  }, [alerts, viewedIds, toast]);
 
   const unseenAlerts = alerts.filter((a) => !viewedIds.has(a.id));
   const unseenCount = unseenAlerts.length;
