@@ -163,21 +163,27 @@ export async function canUserPerformAction(params: {
   }
 
   // 7. Verificar na matriz legada team_member_permissions (fallback).
+  // Fail-closed (#647): apenas um grant EXPLÍCITO value="allowed" libera.
+  // Ausência de registro ("not_set") ou value="denied" bloqueiam — antes
+  // a ausência defaultava para "allowed" (fail-OPEN).
   const matrixMapping = ACTION_TO_MATRIX[action];
   if (matrixMapping) {
     const matrixResult = await checkMatrixPermission(
       supabase, tm.id, matrixMapping.resource, matrixMapping.action,
     );
 
-    if (matrixResult === "denied") {
-      await logDenied(userId, organizationId, action, "matrix_denied");
+    if (matrixResult !== "allowed") {
+      const reasonTag = matrixResult === "denied" ? "matrix_denied" : "matrix_not_set";
+      await logDenied(userId, organizationId, action, reasonTag);
       return { allowed: false, reason: `Sem permissão: ${matrixMapping.resource}.${matrixMapping.action}` };
     }
 
-    return { allowed: true, reason: `matrix_${matrixResult}` };
+    return { allowed: true, reason: "matrix_allowed" };
   }
 
-  // 8. Fallback: deny by default — every action must be explicitly mapped
+  // 8. Fallback terminal: deny by default — toda ação precisa de mapeamento
+  // explícito. Logado para auditoria (#647).
+  await logDenied(userId, organizationId, action, "permission_not_defined");
   return { allowed: false, reason: "permission_not_defined" };
 }
 
@@ -302,7 +308,7 @@ async function checkMatrixPermission(
   teamMemberId: string,
   resource: string,
   action: string,
-): Promise<string> {
+): Promise<"allowed" | "denied" | "not_set"> {
   const { data } = await supabase
     .from("team_member_permissions")
     .select("value")
@@ -311,8 +317,12 @@ async function checkMatrixPermission(
     .eq("action_key", action)
     .maybeSingle();
 
-  // Se não tem registro, default = allowed (compatibilidade com orgs que não configuraram)
-  return data?.value || "allowed";
+  // Fail-closed (#647): ausência de registro NÃO libera. Apenas um grant
+  // explícito value="allowed" concede; "denied" e ausência ("not_set")
+  // bloqueiam. O caller (canUserPerformAction) loga o motivo para auditoria.
+  if (data?.value === "allowed") return "allowed";
+  if (data?.value === "denied") return "denied";
+  return "not_set";
 }
 
 async function logDenied(
