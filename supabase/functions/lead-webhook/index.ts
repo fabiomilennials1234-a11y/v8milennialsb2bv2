@@ -19,6 +19,7 @@ import type { PipeSlug } from "../_shared/pipeline-adapter.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare, checkRateLimitPersistent, getClientIdentifier, checkRateLimit, rateLimitedResponse } from "../_shared/auth.ts";
+import { buildProactiveIdempotencyKey, buildProactiveDirective } from "../_shared/copilot-v2/proactive-scheduler.ts";
 
 // Destino opcional: colocar o lead em um pipe (funil) em uma etapa específica
 interface PlaceInPipe {
@@ -882,6 +883,53 @@ serve(withSentry('lead-webhook', async (req) => {
           .then(() => console.log("[lead-webhook] Triggered outbound check for lead:", leadId))
           .catch((e) => console.warn("[lead-webhook] Failed to trigger outbound:", e)),
       );
+
+      // ── Copilot v2 first-touch (proativo) — ADITIVO, NÃO remove o v1 ──────
+      // Só dispara se a org tem um Qualificador v2 ATIVO. Idempotente por lead
+      // (slot "1"): a mesma chave nunca enfileira 2x (mata #7/#8/#9 no first-touch).
+      backgroundTasks.push((async () => {
+        try {
+          const phone = result.lead.normalized_phone || result.lead.phone;
+          if (!phone) return;
+          const { data: qualAgent } = await supabase
+            .from("copilot_v2_agents").select("id")
+            .eq("organization_id", organizationId).eq("archetype", "qualificador").eq("is_active", true)
+            .maybeSingle();
+          if (!qualAgent) return; // org não ativou o Qualificador v2 → nada (v1 cuida)
+
+          const idem = buildProactiveIdempotencyKey({ orgId: organizationId, leadId, kind: "first_touch", slot: "1" });
+          const ceilingRow = await supabase
+            .from("copilot_v2_config").select("slots")
+            .eq("organization_id", organizationId).limit(1).maybeSingle();
+          const ceiling = Number(ceilingRow.data?.slots?.proactiveDailyCeiling) || 50;
+
+          const { data: claimRows } = await supabase.rpc("copilot_v2_claim_proactive_slot", {
+            p_org_id: organizationId, p_lead_id: leadId, p_kind: "first_touch",
+            p_slot: "1", p_idempotency_key: idem, p_daily_ceiling: ceiling,
+          });
+          const claim = Array.isArray(claimRows) ? claimRows[0] : claimRows;
+          if (!claim?.claimed) return; // já reivindicado ou rate-limit → não duplica
+
+          const traceId = crypto.randomUUID();
+          const { data: queueId } = await supabase.rpc("copilot_v2_enqueue_message", {
+            p_org_id: organizationId,
+            p_lead_id: leadId,
+            p_canonical_phone: phone,
+            p_message_type: "text",
+            p_content: buildProactiveDirective("first_touch", "1"),
+            p_source: "first_touch",
+            p_trace_id: traceId,
+            p_idempotency_key: idem,
+          });
+          if (queueId) {
+            await supabase.from("copilot_v2_proactive_log")
+              .update({ enqueued_queue_id: queueId }).eq("idempotency_key", idem);
+            console.log("[lead-webhook] copilot-v2 first-touch enqueued for lead:", leadId);
+          }
+        } catch (e) {
+          console.warn("[lead-webhook] copilot-v2 first-touch failed (non-fatal):", e);
+        }
+      })());
     }
 
     backgroundTasks.push(
