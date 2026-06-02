@@ -83,6 +83,7 @@ serve(
         conversationId: row.conversation_id,
         canonicalPhone: row.canonical_phone,
         agentId: context._agentId,
+        sendMediaViaProvider: (p) => sendMediaReply(supabase, row.organization_id, p),
       }),
       sendReply: (canonicalPhone, text, row) => sendReply(supabase, row.organization_id, canonicalPhone, text),
       checkPause: async (row) => {
@@ -301,4 +302,29 @@ async function sendReply(supabase: any, orgId: string, canonicalPhone: string, t
   const number = normalizeBrazilianPhone(canonicalPhone) ?? canonicalPhone;
   const res = await provider.sendText({ number, text, trackSource: "copilot_v2" });
   if (!res?.success && (res as any)?.error) throw new Error(`sendText failed: ${(res as any).error}`);
+}
+
+/**
+ * Real WhatsApp delivery for the send_media handler (Slice 6). Mirrors sendReply:
+ * the instance is resolved by the row's org (border-trusted), never the LLM. A
+ * failure is returned as { success:false } so the handler surfaces an explicit
+ * fallback — never a silent drop (VitrineVET lesson).
+ */
+async function sendMediaReply(
+  supabase: any, orgId: string,
+  p: { number: string; type: "image" | "video" | "audio"; file: string; caption?: string; mediaId: string },
+): Promise<{ success: boolean; message_id?: string; error?: string }> {
+  const instance = await resolveInstance(supabase, orgId, { requireConnected: true });
+  if (!instance) return { success: false, error: `no connected WhatsApp instance for org ${orgId}` };
+  const provider = await getWhatsAppProvider(instance, supabase);
+  const number = normalizeBrazilianPhone(p.number) ?? p.number;
+  try {
+    const res = await provider.sendMedia({
+      number, type: p.type, file: p.file, caption: p.caption,
+      trackSource: "copilot_v2_send_media", trackId: p.mediaId,
+    });
+    return { success: res?.success !== false, message_id: (res as any)?.message_id };
+  } catch (e) {
+    return { success: false, error: (e as Error).message };
+  }
 }
