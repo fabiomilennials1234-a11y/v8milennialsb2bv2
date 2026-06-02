@@ -81,7 +81,7 @@ operacionais (`acoes_do_dia`, `custom_pipe_entries`, `leads`, `pipeline_entries`
 
 #### `checklists` / `checklist_items`
 - Org-member: `Checklists visible to org members` (SELECT) + `Org members can {insert,update,delete} checklists` (e equivalentes em `checklist_items` via `checklist_id`), todas via `get_my_organization_ids()` — `20261031000008_fix_checklist_rls_use_helpers.sql`.
-- Master ghost: `master_ghost_select_<tbl>` + `master_ghost_all_<tbl>` em ambas as tabelas — `20261114000000_master_ghost_rls_checklists.sql`.
+- Master ghost: `master_ghost_select_<tbl>` + `master_ghost_all_<tbl>` em ambas as tabelas — `20261118000000_master_ghost_rls_checklists.sql`.
 - **Gap corrigido (2026-06-02)**: essas duas tabelas estavam SEM as policies `master_ghost_*` (presentes nas irmãs). Master que não é `team_member` da org-alvo não conseguia INSERT (`new row violates row-level security policy`). Migration de fix replica o idioma das irmãs 1:1.
 
 ### Soft RLS (org_id NULL aceito)

@@ -4,7 +4,7 @@
 - **RLS / Permissões**: `checklists` e `checklist_items` recuperaram as policies `master_ghost_*` (presentes nas irmãs `acoes_do_dia`, `custom_pipe_entries`, `leads`, `pipeline_entries`…). Master que não é `team_member` da org-alvo voltou a conseguir criar/ler checklist (antes: `new row violates row-level security policy`).
 
 ## Arquivos tocados
-- `supabase/migrations/20261114000000_master_ghost_rls_checklists.sql` — 4 policies novas (2 por tabela): `master_ghost_select_*` (FOR SELECT USING `is_master_user()`) + `master_ghost_all_*` (FOR ALL USING/WITH CHECK `is_master_user()`). Idempotente (`DROP POLICY IF EXISTS` + `BEGIN/COMMIT`).
+- `supabase/migrations/20261118000000_master_ghost_rls_checklists.sql` — 4 policies novas (2 por tabela): `master_ghost_select_*` (FOR SELECT USING `is_master_user()`) + `master_ghost_all_*` (FOR ALL USING/WITH CHECK `is_master_user()`). Idempotente (`DROP POLICY IF EXISTS` + `BEGIN/COMMIT`).
 - `tests/integration/rls-checklists-master.test.ts` — regressão: master insere/lê checklist + item em Org B (onde não é membro) → OK; admin org A insere/lê checklist com `organization_id = Org B` → RLS bloqueia / 0 rows.
 - `Obsidian/.../03 — Reference/RLS Policies.md` — nova seção "Master ghost" + entrada checklists/checklist_items documentando o gap.
 
