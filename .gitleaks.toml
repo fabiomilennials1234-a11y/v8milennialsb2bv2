@@ -1,0 +1,100 @@
+# =============================================================================
+# .gitleaks.toml — secret-scanning config for Torque CRM (issue #653)
+# =============================================================================
+# Strategy: stand on gitleaks' battle-tested default ruleset (useDefault), then
+# add a few project-specific rules and a tight allowlist.
+#
+#   * extend.useDefault = true  → keeps the ~150 upstream rules (AWS, GCP,
+#     Stripe, generic-api-key, jwt, private-key, …). We only ADD on top.
+#   * Custom rules give Supabase-specific findings a precise, actionable name
+#     instead of a vague "generic-api-key", and tighten detection of the two
+#     credentials that would actually hurt us: the service_role JWT and the
+#     `sbp_` personal access token.
+#   * The allowlist keeps known-safe documentation/CI values from failing the
+#     build: the *.example env templates and the PUBLIC Supabase local demo
+#     JWTs (issuer "supabase-demo") that our test workflow legitimately embeds.
+#
+# Validate locally:
+#   gitleaks detect --no-git --config .gitleaks.toml --source .
+# Prove the rules work (plants fake secrets in a scratch dir, then cleans up):
+#   bash scripts/test-secret-scan.sh
+# =============================================================================
+
+title = "Torque CRM secret-scanning config"
+
+[extend]
+# Inherit the full upstream ruleset; our [[rules]] below are additive.
+useDefault = true
+
+# -----------------------------------------------------------------------------
+# Custom rules (additive to the default set)
+# -----------------------------------------------------------------------------
+
+# Supabase service_role JWT. These are HS256 JWTs whose base64url payload decodes
+# to a JSON object containing "role":"service_role". The payload segment always
+# starts with "eyJ" (base64 of '{"'). We match a 3-segment JWT and require the
+# middle segment to contain the base64url-encoded fragment of "role":"service_role".
+# Catching this is the single most important rule here: a leaked service_role
+# key bypasses RLS and reads/writes every tenant's data.
+[[rules]]
+id = "supabase-service-role-jwt"
+description = "Supabase service_role JWT (bypasses RLS — full DB access)"
+# 2nd JWT segment contains the base64url of  "role":"service_role"
+# ("role":"service_role"  ->  InJvbGUiOiJzZXJ2aWNlX3JvbGUi)
+regex = '''eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*InJvbGUiOiJzZXJ2aWNlX3JvbGUi[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+'''
+keywords = ["service_role", "eyJ"]
+
+# Supabase personal access token (CLI / Management API). Fixed prefix `sbp_`
+# followed by 40 hex chars. A leaked PAT lets an attacker drive the Management
+# API: create projects, rotate keys, read secrets.
+[[rules]]
+id = "supabase-personal-access-token"
+description = "Supabase personal access token (sbp_ — Management API access)"
+regex = '''\bsbp_[0-9a-f]{40}\b'''
+keywords = ["sbp_"]
+
+# -----------------------------------------------------------------------------
+# Global allowlist
+# -----------------------------------------------------------------------------
+[allowlist]
+description = "Known-safe documentation and CI values"
+
+# Example / template env files are documentation; their values are placeholders.
+# Test fixtures and this scanner's own self-test carry intentionally-fake
+# secrets — they exercise the detectors, they are not real credentials.
+paths = [
+  '''(^|/)\.env\.example$''',
+  '''(^|/)\.env\.local\.example$''',
+  '''(^|/)\.env\.e2e\.example$''',
+  # Any *.example file anywhere is a template, not a real secret store.
+  '''\.example$''',
+  # Test suites use fake tokens/keys as fixtures (tok_…, sk-…, TEST_KEY_HEX, …).
+  '''(^|/)tests/''',
+  '''(^|/)__tests__/''',
+  '''\.test\.(ts|tsx|js|jsx|mjs|cjs)$''',
+  '''(^|/)conftest\.py$''',
+  # This file plants fake service_role JWTs / sbp_ PATs to prove the rules fire.
+  '''(^|/)scripts/test-secret-scan\.sh$''',
+]
+
+# Regex allowlist: values that LOOK like secrets but are public-by-design.
+regexes = [
+  # Public Supabase local demo keys (issuer "supabase-demo"). These ship with
+  # every Supabase install and are embedded in our CI to talk to the local
+  # stack. Their JWT payload segment begins with the canonical, byte-aligned
+  # base64url prefix below, which decodes to  {"iss":"supabase-demo .
+  '''eyJ[A-Za-z0-9_-]+\.eyJpc3MiOiJzdXBhYmFzZS1kZW1v[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+''',
+  # Supabase anon (publishable) JWTs are public BY DESIGN — safe to ship in the
+  # client bundle (see .env.example). The default `jwt` rule flags every JWT;
+  # we exempt anon keys here while still catching service_role. base64url is
+  # phase-dependent, so all three byte-alignments of  "role":"anon"  are listed.
+  '''eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*(InJvbGUiOiJhbm9uIi|Jyb2xlIjoiYW5vbiI|icm9sZSI6ImFub24i)[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+''',
+  # Documentation shows curl examples like:
+  #   curl -H "Authorization: Bearer $SERVICE_KEY" ...
+  # The default `curl-auth-header` rule flags the placeholder VARIABLE NAME
+  # (SERVICE_KEY / ANON_KEY / $TOKEN), not a real value. Exempt these tokens.
+  '''(?i)(?:Bearer\s+)?\$?\{?(SERVICE_KEY|SERVICE_ROLE_KEY|ANON_KEY|SUPABASE_[A-Z_]*KEY|TOKEN|ACCESS_TOKEN|API_KEY)\}?''',
+]
+
+# Honour inline `gitleaks:allow` comments for deliberate, reviewed exceptions.
+# (This is the default behaviour; stated here for clarity.)

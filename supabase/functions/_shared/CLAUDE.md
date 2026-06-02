@@ -92,7 +92,10 @@ local rodando.
 
 ## Áreas frágeis
 
-- `permission_engine.ts` — 3 camadas + fallback `allowed: true`
-  ([permissions-fallback-fail-closed](../../../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/08%20—%20Backlog/backlog/permissions-fallback-fail-closed.md) MEDIUM)
+- `permission_engine.ts` — 3 camadas, **fail-closed** (#647). Toda via não-mapeada
+  nega + loga (`logDenied`). Matriz legada (`checkMatrixPermission`) só libera com
+  grant explícito `value="allowed"` — ausência de registro = deny.
+  Frontend twin (`src/modules/identity/permissions/lib/permissions.ts`) ainda tem
+  o default permissivo do matrix (`matrix_default_allowed`) — follow-up.
 - `whatsapp-client.ts` — schema Uazapi instável (incidente 2026-05-14)
 - `embeddings.ts` — quota Gemini, fallback gracefully
