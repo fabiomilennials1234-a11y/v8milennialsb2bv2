@@ -83,6 +83,14 @@ export async function checkDocumentAlreadySent(
   const basename = filePath.split("/").pop();
   if (!basename) return false;
 
+  // The stored media_url is a Supabase signed URL whose object path is
+  // URL-encoded (spaces → %20, accents → %XX). The raw basename has literal
+  // spaces, so a `%${basename}%` ILIKE never matches an encoded URL and the
+  // fallback silently let every re-send through (2026-06-02 incident: same
+  // video delivered 3×). Match against the encoded form actually present in
+  // the URL.
+  const encodedBasename = encodeURIComponent(basename);
+
   const { data: sentMessages } = await supabase
     .from("whatsapp_messages")
     .select("id")
@@ -90,7 +98,7 @@ export async function checkDocumentAlreadySent(
     .eq("direction", "outgoing")
     .eq("sent_by_ai", true)
     .in("message_type", ["document", "image", "video", "audio"])
-    .ilike("media_url", `%${basename}%`)
+    .ilike("media_url", `%${encodedBasename}%`)
     .gte("timestamp", new Date(Date.now() - 3600_000).toISOString())
     .limit(1);
 
@@ -106,6 +114,59 @@ export async function checkDocumentAlreadySent(
   }
 
   return false;
+}
+
+// ─── Atomic send lock (idempotência de entrega) ────────────────────────────
+//
+// O gate checkDocumentAlreadySent acima é uma checagem read-then-act: não é
+// race-free. O process-ai-actions mata a ação aos 30s (ACTION_TIMEOUT_MS) mas
+// NÃO aborta o provider.sendMedia em voo — o envio completa no provider mesmo
+// após o timeout, a ação é marcada failed e o cron re-claim reenvia. Resultado:
+// N entregas idênticas (incidente 2026-06-02, vídeo 3×).
+//
+// Este lock atômico (INSERT ON CONFLICT DO NOTHING via RPC) garante AT-MOST-ONCE
+// por (conversa, documento): a 1ª tentativa reserva e envia; retries/órfãos
+// colidem no lock e viram no-op. Liberado apenas em falha REAL de envio, para
+// não travar um retry legítimo.
+const SEND_DOCUMENT_LOCK_TTL_SECONDS = 24 * 60 * 60; // 24h
+
+function buildSendDocumentLockKey(
+  conversationId: string | null,
+  leadId: string,
+  documentId: string,
+): string {
+  const scope = conversationId ? `conv:${conversationId}` : `lead:${leadId}`;
+  return `send_document:${scope}:${documentId}`;
+}
+
+async function acquireSendDocumentLock(
+  supabase: SupabaseClient,
+  organizationId: string,
+  lockKey: string,
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc("copilot_v2_acquire_dedup_lock", {
+    p_dedup_key: lockKey,
+    p_org_id: organizationId,
+    p_window_seconds: SEND_DOCUMENT_LOCK_TTL_SECONDS,
+  });
+  if (error) {
+    // Fail-open: erro transitório no lock não pode bloquear envio legítimo.
+    // checkDocumentAlreadySent (lifetime) segue como rede secundária.
+    console.warn("[executeSendDocument] dedup lock acquire failed:", error.message);
+    return true;
+  }
+  return data === true;
+}
+
+async function releaseSendDocumentLock(
+  supabase: SupabaseClient,
+  lockKey: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("copilot_v2_dedup_locks")
+    .delete()
+    .eq("dedup_key", lockKey);
+  if (error) console.warn("[executeSendDocument] dedup lock release failed:", error.message);
 }
 
 export async function executeSendDocument(
@@ -249,6 +310,21 @@ export async function executeSendDocument(
 
   const { provider, instance, normalizedPhone: phone } = ctx;
 
+  // Idempotência atômica: reserva o envio (conversa, documento) ANTES de
+  // despachar. Retry após timeout / órfão de envio colide aqui e vira no-op.
+  const lockKey = buildSendDocumentLockKey(conversationId, leadId, documentId);
+  const lockAcquired = await acquireSendDocumentLock(supabase, organizationId, lockKey);
+  if (!lockAcquired) {
+    console.debug("[executeSendDocument] Send already in-flight/done (lock held), skipping:", {
+      lockKey,
+    });
+    return {
+      success: true,
+      message: "Document send already in-flight or completed — skipped",
+      data: { skipped: true, reason: "send_lock_held" },
+    };
+  }
+
   // Detect media type based on file_type column (image/video/document)
   const fileType = (doc as any).file_type || "document";
   let mediaType: "image" | "video" | "document" = "document";
@@ -324,6 +400,10 @@ export async function executeSendDocument(
     } else {
       detail = String(error);
     }
+    // Falha REAL de envio → libera o lock para permitir retry legítimo.
+    // (Timeout no nível do worker NÃO chega aqui: o provider.sendMedia segue em
+    // voo, o lock permanece e bloqueia o reenvio — comportamento desejado.)
+    await releaseSendDocumentLock(supabase, lockKey);
     return {
       success: false,
       error: `Failed to send document: ${detail}`,
