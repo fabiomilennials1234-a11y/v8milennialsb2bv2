@@ -105,25 +105,45 @@ function getServiceClient() {
   );
 }
 
-function formatPhone(phone: string): string {
-  // Trata notação científica do Excel — suporta ponto ("5.51E+12") e vírgula pt-BR ("7,1994E+10")
-  const trimmed = (phone || "").trim();
-  const dotted = trimmed.replace(",", ".");
+/**
+ * Extrai os dígitos locais (DDD + número, 10-11) de UM telefone a partir de uma célula
+ * possivelmente suja: vários números, prefixos, texto solto, ou notação científica.
+ * Defesa em profundidade — o frontend (pickBestPhone) já normaliza, mas outras origens
+ * (XLSX, n8n, payload externo) podem mandar célula crua. Sem isto, "X / Y" vira string
+ * de 20+ dígitos e o lead é rejeitado por validatePhone. "" quando não há candidato.
+ */
+function bestPhoneDigits(phone: string): string {
+  // Notação científica do Excel — ponto ("5.51E+12") e vírgula pt-BR ("7,1994E+10")
+  let work = (phone || "").trim();
+  const dotted = work.replace(",", ".");
   if (/^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$/.test(dotted)) {
     const num = Number(dotted);
-    if (!isNaN(num) && num > 0) {
-      return formatPhone(Math.round(num).toString());
-    }
+    if (!isNaN(num) && num > 0) work = Math.round(num).toString();
   }
-  const digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("55") && digits.length >= 12) return digits;
-  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
-  return digits;
+
+  const chunks = work.split(/[/;,|\n]|\s+ou\s+|\s+e\s+/i);
+  const candidates: string[] = [];
+  for (const chunk of chunks) {
+    let digits = chunk.replace(/\D/g, "");
+    if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+      digits = digits.slice(2);
+    }
+    if (digits.length === 10 || digits.length === 11) candidates.push(digits);
+  }
+  if (candidates.length === 0) return "";
+  candidates.sort((a, b) => b.length - a.length); // celular (11) antes de fixo (10)
+  return candidates[0];
+}
+
+function formatPhone(phone: string): string {
+  const local = bestPhoneDigits(phone);
+  if (local) return `55${local}`;
+  // Sem candidato válido: devolve dígitos crus (validatePhone abaixo decide rejeição).
+  return (phone || "").replace(/\D/g, "");
 }
 
 function validatePhone(phone: string): boolean {
-  const digits = phone.replace(/\D/g, "");
-  return digits.length >= 10 && digits.length <= 13;
+  return bestPhoneDigits(phone) !== "";
 }
 
 function normalizeName(s: string): string {
@@ -415,6 +435,7 @@ async function importToCampaign(
           if (shouldReplaceValue(existingLead.name, lead.name, "name")) updates.name = lead.name;
           if (shouldReplaceValue(existingLead.company, lead.company, "company")) updates.company = lead.company;
           if (shouldReplaceValue(existingLead.email, lead.email, "email")) updates.email = lead.email;
+          if (shouldReplaceValue(existingLead.phone, formattedPhone, "phone")) updates.phone = formattedPhone;
           if (shouldReplaceValue(existingLead.faturamento, lead.faturamento ? normalizeFaturamento(lead.faturamento) : undefined, "faturamento"))
             updates.faturamento = normalizeFaturamento(lead.faturamento!);
           if (shouldReplaceValue(existingLead.segment, lead.segment, "segment")) updates.segment = lead.segment;
@@ -709,6 +730,7 @@ async function importToFunnel(
           if (shouldReplaceValue(existingLead.name, lead.name, "name")) updates.name = lead.name;
           if (shouldReplaceValue(existingLead.company, lead.company, "company")) updates.company = lead.company;
           if (shouldReplaceValue(existingLead.email, lead.email, "email")) updates.email = lead.email;
+          if (shouldReplaceValue(existingLead.phone, formattedPhone, "phone")) updates.phone = formattedPhone;
           if (shouldReplaceValue(existingLead.faturamento, lead.faturamento ? normalizeFaturamento(lead.faturamento) : undefined, "faturamento"))
             updates.faturamento = normalizeFaturamento(lead.faturamento!);
           if (shouldReplaceValue(existingLead.segment, lead.segment, "segment")) updates.segment = lead.segment;
@@ -980,6 +1002,7 @@ async function importToCustomPipeline(
           if (shouldReplaceValue(existingLead.name, lead.name, "name")) updates.name = lead.name;
           if (shouldReplaceValue(existingLead.company, lead.company, "company")) updates.company = lead.company;
           if (shouldReplaceValue(existingLead.email, lead.email, "email")) updates.email = lead.email;
+          if (shouldReplaceValue(existingLead.phone, formattedPhone, "phone")) updates.phone = formattedPhone;
           if (shouldReplaceValue(existingLead.faturamento, lead.faturamento ? normalizeFaturamento(lead.faturamento) : undefined, "faturamento"))
             updates.faturamento = normalizeFaturamento(lead.faturamento!);
           if (shouldReplaceValue(existingLead.segment, lead.segment, "segment")) updates.segment = lead.segment;
