@@ -93,12 +93,19 @@ describe('runTurn', () => {
 
   it('stops at the tool-call budget and returns to the lead (does not call the 6th)', async () => {
     let executions = 0;
-    // LLM always asks for another (allowed) tool call → only the budget stops it.
-    const llm = scriptedLlm([
-      { text: null, toolCalls: [{ id: 'x', name: 'fill_lead_field', args: { field: 'cnpj' } }] },
-    ]);
+    // LLM always asks for another allowed tool call → only the budget stops it.
+    // DISTINCT args each call so the W4 repeat-dedup doesn't collapse them — the
+    // budget cap is what this proves, not dedup. (get_conversation_history is a
+    // read tool: no capability/introspect gate to confound the count.)
+    const llm = {
+      calls: 0,
+      async complete(): Promise<LlmResponse> {
+        const i = llm.calls++;
+        return { text: null, toolCalls: [{ id: `x${i}`, name: 'get_conversation_history', args: { page: i } }] };
+      },
+    };
     const out = await runTurn({
-      ...baseInput, llm,
+      ...baseInput, llm: llm as LlmClient,
       executeTool: async () => { executions++; return {}; },
       maxToolCalls: 5,
     });

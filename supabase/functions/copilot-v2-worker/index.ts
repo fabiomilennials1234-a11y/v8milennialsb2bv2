@@ -138,6 +138,34 @@ serve(
         // dispatchHandoffNotification: <plugado pelo Slice 5 quando mergeado>
       }),
       sendReply: (canonicalPhone, text, row) => sendReply(supabase, row.organization_id, canonicalPhone, text),
+      // W4 — human latency: the worker sleeps the per-chunk delay computed by the
+      // pure planner (first reply ≥ 1s). Sequential drain, so this paces output.
+      delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      // W4 — "typing"/composing presence before each chunk. Best-effort: a
+      // presence failure (or no instance) must NEVER block the actual send.
+      setTyping: async (canonicalPhone, on, row) => {
+        try {
+          const instance = await resolveInstance(supabase, row.organization_id, { requireConnected: true });
+          if (!instance) return;
+          const provider = await getWhatsAppProvider(instance, supabase);
+          const number = normalizeBrazilianPhone(canonicalPhone) ?? canonicalPhone;
+          await provider.setPresence(number, on ? "composing" : "available");
+        } catch (_e) { /* presence is cosmetic — never block delivery */ }
+      },
+      // W4 — outbound content dedup: reserves the chunk's key for the window so an
+      // identical message is never sent twice. fail-safe = ALLOW on error (a rare
+      // duplicate beats a dropped reply; dedup is a polish guard, not a gate).
+      acquireOutboundLock: async (dedupKey, windowSeconds, row) => {
+        try {
+          const { data, error } = await supabase.rpc("copilot_v2_acquire_dedup_lock", {
+            p_dedup_key: dedupKey, p_org_id: row.organization_id, p_window_seconds: windowSeconds,
+          });
+          if (error) throw error;
+          return data === true;
+        } catch (_e) {
+          return true;
+        }
+      },
       checkPause: async (row) => {
         try {
           const { data, error } = await supabase.rpc("copilot_v2_check_human_pause", {

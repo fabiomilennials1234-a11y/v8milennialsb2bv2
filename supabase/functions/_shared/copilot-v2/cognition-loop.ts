@@ -13,6 +13,14 @@
 import { decideCapabilityGate, decideToolCallBudget, isReadTool, TOOL_CALL_BUDGET } from "./capability-gate.ts";
 import { assertWriteTarget, type Introspection } from "./introspect-guard.ts";
 
+/** Property-order-independent serialization, for the tool-call dedup key. */
+function stableStringify(v: unknown): string {
+  if (v === null || typeof v !== "object") return JSON.stringify(v) ?? "null";
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(",")}]`;
+  const obj = v as Record<string, unknown>;
+  return `{${Object.keys(obj).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
+}
+
 export interface LlmToolCall {
   id: string;
   name: string;
@@ -68,6 +76,10 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
   const max = input.maxToolCalls ?? TOOL_CALL_BUDGET;
   const convo: Msg[] = [...input.messages];
   const steps: ToolStep[] = [];
+  // Results of tool calls already executed this turn, keyed by name+args. A
+  // repeated identical call reuses the cached result — never a second side
+  // effect (W4: dedup de tool-call repetida; guards the send_media double-send).
+  const executed = new Map<string, unknown>();
   let calls = 0;
 
   // Bounded by the budget; the while-true exits on a text reply or budget stop.
@@ -103,7 +115,21 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         }
       }
 
+      // Dedup an identical call already executed this turn — reuse the cached
+      // result, no second side effect. Still counts against the budget so a
+      // model that loops on the same call can't spin past the cap.
+      const dedupKey = `${tc.name}:${stableStringify(tc.args)}`;
+      if (executed.has(dedupKey)) {
+        const cached = executed.get(dedupKey);
+        steps.push({ name: tc.name, allowed: true, reason: "duplicate_tool_call", result: cached });
+        convo.push({ role: "assistant", content: `tool:${tc.name}` });
+        convo.push({ role: "tool", content: JSON.stringify(cached ?? null) });
+        calls++;
+        continue;
+      }
+
       const result = await input.executeTool(tc.name, tc.args);
+      executed.set(dedupKey, result);
       steps.push({ name: tc.name, allowed: true, reason: null, result });
       convo.push({ role: "assistant", content: `tool:${tc.name}` });
       convo.push({ role: "tool", content: JSON.stringify(result ?? null) });
