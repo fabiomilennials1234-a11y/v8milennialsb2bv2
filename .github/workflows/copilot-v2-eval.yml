@@ -1,0 +1,40 @@
+name: Copilot v2 Eval Gate
+
+# W13 — pre-merge eval regression gate (CTO decision D5). The main Tests workflow
+# only triggers on pull_request:[main] + push:[main,develop], so a PR targeting
+# develop never runs it — an eval regression would only turn CI red AFTER it lands
+# on develop. This surgical, path-filtered job blocks the PR BEFORE merge whenever
+# Copilot v2 surface changes, without burdening unrelated develop PRs with the full
+# (integration/rls/e2e) suite. Hermetic: the eval dataset gate replays cached LLM
+# responses (no DB, no secrets, no live model).
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'supabase/functions/_shared/copilot-v2/**'
+      - 'supabase/functions/copilot-v2-*/**'
+      - 'supabase/functions/evaluate-eval-suite/**'
+      - 'tests/unit/copilot-v2/**'
+      - 'tests/fixtures/copilot-v2/**'
+      - 'supabase/migrations/*copilot_v2_eval*'
+      - '.github/workflows/copilot-v2-eval.yml'
+
+jobs:
+  eval-gate:
+    name: Copilot v2 eval regression gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci
+      # Runs the full copilot-v2 unit suite — the eval dataset gate, the
+      # prompt/model/tool fingerprint lock, the base-prompts contract, the
+      # seed↔fixture drift guard, and the judge→dataset mapper. A prompt/tool/model
+      # edit that regresses the golden dataset (or drifts the fixture) fails here,
+      # blocking the PR. Hermetic, no live LLM.
+      - name: Copilot v2 eval + contract suite (hermetic)
+        run: npx vitest run tests/unit/copilot-v2 --reporter=dot
