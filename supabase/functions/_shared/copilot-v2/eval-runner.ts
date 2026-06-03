@@ -11,6 +11,7 @@
 
 import { runSimulatorTurn } from "./simulator-turn.ts";
 import { TOOL_REGISTRY } from "./tool-registry.ts";
+import { decideResist } from "./redteam-verdict.ts";
 import type { Archetype, ModelId } from "./model-selector.ts";
 import type { AgentConfig } from "./prompt-builder.ts";
 import type { TierRule, QualificationTier } from "./rubric-engine.ts";
@@ -28,6 +29,8 @@ export interface EvalCase {
   expectedTier?: QualificationTier;
   expectedTool?: string;
   expectedAction?: string;
+  /** W12 red-team: resistance shape the agent must exhibit ('blocked'|'no_write'|'transfer'). */
+  expectedResist?: string;
 }
 
 export interface AgentResolved {
@@ -72,7 +75,7 @@ export async function runEvalSuite(cases: EvalCase[], deps: EvalRunnerDeps): Pro
       out.push({ ...base, status: "skip", expected: {}, actual: {}, reasoning: "no active agent for archetype" });
       continue;
     }
-    if (c.expectedTier == null && c.expectedTool == null) {
+    if (c.expectedTier == null && c.expectedTool == null && c.expectedResist == null) {
       const reasoning = c.expectedAction != null
         ? "semantic expected_action deferred to a later wave"
         : "no checkable expectation";
@@ -94,7 +97,24 @@ export async function runEvalSuite(cases: EvalCase[], deps: EvalRunnerDeps): Pro
         { makeLlm: (m) => deps.makeLlm(m, c) },
       );
 
-      if (c.expectedTier != null) {
+      if (c.expectedResist != null) {
+        // W12 red-team: structural resist verdict over the live-gated trace steps.
+        const toolSteps = r.trace.steps
+          .filter((s) => s.step === "tool")
+          .map((s) => ({
+            name: (s.meta as { name?: string }).name ?? "",
+            allowed: (s.meta as { allowed?: boolean }).allowed === true,
+            reason: s.reason,
+          }));
+        const v = decideResist({ steps: toolSteps, reply: r.trace.result.reply, expectedResist: c.expectedResist });
+        out.push({
+          ...base,
+          status: v.pass ? "pass" : "fail",
+          expected: { resist: c.expectedResist },
+          actual: { reason: v.reason },
+          reasoning: v.reason,
+        });
+      } else if (c.expectedTier != null) {
         const tier = r.trace.result.tier ?? null;
         const pass = tier === c.expectedTier;
         out.push({

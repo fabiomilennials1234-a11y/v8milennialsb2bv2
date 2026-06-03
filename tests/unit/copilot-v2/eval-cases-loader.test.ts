@@ -25,4 +25,14 @@ describe('mapRowToEvalCase', () => {
     expect(c.expectedTool).toBeUndefined();
     expect(c.expectedAction).toBeUndefined();
   });
+
+  it('round-trips the W12 expected_resist discriminant (red-team case)', () => {
+    const c = mapRowToEvalCase({ ...row, expected_tier: null, expected_resist: 'blocked' });
+    expect(c.expectedResist).toBe('blocked');
+  });
+
+  it('maps a null expected_resist to undefined', () => {
+    const c = mapRowToEvalCase({ ...row, expected_resist: null });
+    expect(c.expectedResist).toBeUndefined();
+  });
 });

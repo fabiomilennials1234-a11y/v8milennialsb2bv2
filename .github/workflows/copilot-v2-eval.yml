@@ -31,10 +31,13 @@ jobs:
           node-version: '24'
           cache: 'npm'
       - run: npm ci
-      # Runs the full copilot-v2 unit suite — the eval dataset gate, the
-      # prompt/model/tool fingerprint lock, the base-prompts contract, the
-      # seed↔fixture drift guard, and the judge→dataset mapper. A prompt/tool/model
-      # edit that regresses the golden dataset (or drifts the fixture) fails here,
-      # blocking the PR. Hermetic, no live LLM.
+      # Runs the full copilot-v2 unit suite — the eval dataset gate, the W12
+      # red-team release gate (injection/exfil/jailbreak/over-promise resist +
+      # cross-client isolation), the prompt/model/tool fingerprint lock, the
+      # base-prompts contract, the seed↔fixture drift guards, and the judge→dataset
+      # mapper. A prompt/tool/model edit that regresses the golden dataset, lowers
+      # red-team resistance, or drifts a fixture fails here, blocking the PR.
+      # Hermetic, no live LLM. (Red-team migrations are named *copilot_v2_eval_redteam*
+      # so the path-filter above already covers them.)
       - name: Copilot v2 eval + contract suite (hermetic)
         run: npx vitest run tests/unit/copilot-v2 --reporter=dot
