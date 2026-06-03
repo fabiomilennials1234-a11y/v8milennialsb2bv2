@@ -207,6 +207,10 @@ function playgroundToAgentPayload(data: PlaygroundData, conexaoState?: ConexaoSt
     agent: {
       name: data.name,
       template_type: data.templateType || "custom",
+      // "Novo Copilot" is a complete, explicit creation — finalize immediately so
+      // it shows in the main list. Builder drafts (handleCreateWithAI) use their
+      // own minimal payload and intentionally stay finalized_at NULL until graduated.
+      finalized_at: new Date().toISOString(),
       system_prompt: systemPrompt,
       system_prompt_version: 1,
       personality_tone: "profissional",
