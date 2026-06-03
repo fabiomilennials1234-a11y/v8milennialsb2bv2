@@ -21,6 +21,7 @@
 
 import type { Archetype } from "./model-selector.ts";
 import type { AgentConfig } from "./prompt-builder.ts";
+import type { Level, TierRule } from "./rubric-engine.ts";
 import { ALL_WRITE_CAPABILITIES } from "./capability-gate.ts";
 
 export const ESCAPE_HATCH_MAX = 500;
@@ -62,10 +63,66 @@ export const ALLOWED_CAPABILITIES_BY_ARCHETYPE: Record<Archetype, readonly strin
   ],
 };
 
+// ── Section 4 closed enums (behavior-driving; validated server-side) ──────────
+// Qualificador's Section 4 is the rubric (copilot_v2_rubric), NOT an objective.
+export const VENDEDOR_OBJECTIVES = [
+  "fechar_conversa",
+  "marcar_reuniao",
+  "apresentar_nutrir",
+  "hibrido",
+] as const;
+export const CARTEIRA_OBJECTIVES = [
+  "recompra",
+  "upsell",
+  "winback",
+  "equilibrado",
+  "onboarding",
+] as const;
+export const CARTEIRA_SEGMENTS = ["ouro", "prata", "novo", "resgate", "dormindo"] as const;
+
+const OBJECTIVES_BY_ARCHETYPE: Partial<Record<Archetype, readonly string[]>> = {
+  vendedor: VENDEDOR_OBJECTIVES,
+  carteira: CARTEIRA_OBJECTIVES,
+};
+
+// ── Dropdown option sets the wizard renders (UI-constrained; not hard-validated
+// here so a structured "Personalizado" hours value and styling tone stay free). ─
+export const TONE_OPTIONS: Record<Archetype, readonly string[]> = {
+  qualificador: [
+    "Profissional e direto",
+    "Consultivo e acolhedor",
+    "Técnico e objetivo",
+    "Próximo e informal (sem gírias)",
+    "Formal e institucional",
+  ],
+  vendedor: [
+    "Consultivo e direto (parceiro de negócio, sem rodeio)",
+    "Formal e técnico (especificação, engenharia, compras industriais)",
+    "Próximo e caloroso (relacionamento, sempre profissional)",
+    "Objetivo e enxuto (comprador ocupado)",
+  ],
+  carteira: [
+    "Parceiro próximo (caloroso, informal-profissional)",
+    "Consultivo sóbrio (técnico, direto)",
+    "Cordial formal (você, institucional)",
+    "Direto e ágil (objetivo, curto)",
+  ],
+};
+
+export const BUSINESS_HOURS_OPTIONS = [
+  "Seg–Sex 08h–18h",
+  "Seg–Sex 09h–19h",
+  "Seg–Sáb 08h–18h",
+  "24/7",
+  "Personalizado",
+] as const;
+
 export interface CopilotV2Config {
   company?: { name?: string; about?: string };
   products?: string[];
   icp?: string;
+  objective?: string;
+  segments?: string[];
   objections?: string[];
   socialProof?: string[];
   commercialPolicy?: string;
@@ -89,6 +146,8 @@ const TOP_LEVEL_KEYS = new Set<string>([
   "company",
   "products",
   "icp",
+  "objective",
+  "segments",
   "objections",
   "socialProof",
   "commercialPolicy",
@@ -148,6 +207,28 @@ export function validateConfig(archetype: Archetype, raw: unknown): ValidationRe
     }
   }
 
+  // Section 4: objective (vendedor/carteira only) — closed enum.
+  if ("objective" in raw && raw.objective !== undefined) {
+    const allowed = OBJECTIVES_BY_ARCHETYPE[archetype];
+    if (!allowed) {
+      errors.push(`objective is not configurable for archetype ${archetype}`);
+    } else if (typeof raw.objective !== "string" || !allowed.includes(raw.objective)) {
+      errors.push(`objective must be one of: ${allowed.join(", ")}`);
+    }
+  }
+
+  // Section 4: segments (carteira only) — subset of the known segments.
+  if ("segments" in raw && raw.segments !== undefined) {
+    if (archetype !== "carteira") {
+      errors.push(`segments are only configurable for carteira`);
+    } else if (
+      !Array.isArray(raw.segments) ||
+      raw.segments.some((s) => typeof s !== "string" || !CARTEIRA_SEGMENTS.includes(s as any))
+    ) {
+      errors.push(`segments must be a subset of: ${CARTEIRA_SEGMENTS.join(", ")}`);
+    }
+  }
+
   if ("escapeHatchNotes" in raw && raw.escapeHatchNotes !== undefined && raw.escapeHatchNotes !== null) {
     if (typeof raw.escapeHatchNotes !== "string") {
       errors.push("escapeHatchNotes must be a string or null");
@@ -190,6 +271,8 @@ export function validateConfig(archetype: Archetype, raw: unknown): ValidationRe
   for (const key of STRING_LIST_KEYS) {
     if (Array.isArray(raw[key])) (value as any)[key] = [...(raw[key] as string[])];
   }
+  if (typeof raw.objective === "string") value.objective = raw.objective;
+  if (Array.isArray(raw.segments)) value.segments = [...(raw.segments as string[])];
   if ("escapeHatchNotes" in raw) {
     value.escapeHatchNotes = (raw.escapeHatchNotes as string | null) ?? null;
   }
@@ -219,7 +302,81 @@ export function mergeFromPersistence(
  * capabilities, which the gate reads from slots — not the prompt). This is the
  * single seam between the wizard contract and the ONE prompt-builder.
  */
+// ── Rubric (Qualificador Section 4) — TierRule[] for copilot_v2_rubric ────────
+export const RUBRIC_TIERS = ["diamante", "ouro", "prata", "bronze"] as const;
+export const RUBRIC_LEVELS: readonly Level[] = ["alta", "media", "baixa"];
+const RUBRIC_RULE_KEYS = new Set([
+  "tier",
+  "minFaturamento",
+  "minVolume",
+  "minRecorrencia",
+  "minUrgencia",
+  "requiresIcp",
+]);
+
+export interface RubricValidationResult {
+  ok: boolean;
+  errors: string[];
+  value?: TierRule[];
+}
+
+/**
+ * Validates the wizard rubric-form output into TierRule[] the engine reads.
+ * Closed tier names (no 'desqualificado' — implicit fallback), numeric floors
+ * (no coercion), Level enums, strict keys, no duplicate tier. Pure, fail-CLOSED.
+ */
+export function validateRubricRules(raw: unknown): RubricValidationResult {
+  const errors: string[] = [];
+  if (!Array.isArray(raw)) return { ok: false, errors: ["rubric rules must be an array"] };
+
+  const seen = new Set<string>();
+  const value: TierRule[] = [];
+
+  raw.forEach((rule, i) => {
+    if (!isObject(rule)) {
+      errors.push(`rule[${i}] must be an object`);
+      return;
+    }
+    for (const k of Object.keys(rule)) {
+      if (!RUBRIC_RULE_KEYS.has(k)) errors.push(`rule[${i}] unknown key: ${k}`);
+    }
+    const tier = rule.tier;
+    if (typeof tier !== "string" || !(RUBRIC_TIERS as readonly string[]).includes(tier)) {
+      errors.push(`rule[${i}] tier must be one of: ${RUBRIC_TIERS.join(", ")}`);
+      return;
+    }
+    if (seen.has(tier)) errors.push(`rule[${i}] duplicate tier: ${tier}`);
+    seen.add(tier);
+
+    for (const numKey of ["minFaturamento", "minVolume"] as const) {
+      if (numKey in rule && rule[numKey] !== undefined) {
+        const n = rule[numKey];
+        if (typeof n !== "number" || !Number.isFinite(n) || n < 0) {
+          errors.push(`rule[${i}] ${numKey} must be a non-negative number`);
+        }
+      }
+    }
+    for (const lvlKey of ["minRecorrencia", "minUrgencia"] as const) {
+      if (lvlKey in rule && rule[lvlKey] !== undefined) {
+        if (!RUBRIC_LEVELS.includes(rule[lvlKey] as Level)) {
+          errors.push(`rule[${i}] ${lvlKey} must be one of: ${RUBRIC_LEVELS.join(", ")}`);
+        }
+      }
+    }
+    if ("requiresIcp" in rule && rule.requiresIcp !== undefined && typeof rule.requiresIcp !== "boolean") {
+      errors.push(`rule[${i}] requiresIcp must be a boolean`);
+    }
+
+    value.push(rule as unknown as TierRule);
+  });
+
+  if (errors.length > 0) return { ok: false, errors };
+  return { ok: true, errors: [], value };
+}
+
 export function toAgentConfig(config: CopilotV2Config): AgentConfig {
-  const { capabilities: _capabilities, ...agentConfig } = config;
+  // Drop the non-prompt metadata: capabilities (read by the gate) + Section-4
+  // objective/segments (compiled into specific_notes for carteira at build time).
+  const { capabilities: _c, objective: _o, segments: _s, ...agentConfig } = config;
   return agentConfig;
 }

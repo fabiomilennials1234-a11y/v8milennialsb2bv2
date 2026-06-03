@@ -20,7 +20,8 @@
 create or replace function public.save_copilot_v2_config(
   p_agent_id           uuid,
   p_slots              jsonb,
-  p_escape_hatch_notes text
+  p_escape_hatch_notes text,
+  p_rubric_rules       jsonb default null
 ) returns public.copilot_v2_config
 language plpgsql
 security definer
@@ -55,12 +56,21 @@ begin
         updated_at         = now()
   returning * into v_row;
 
+  -- Qualificador Section 4: upsert the rubric in the SAME transaction. NULL = the
+  -- caller is not touching the rubric (e.g. a Vendedor/Carteira save); [] clears it.
+  if p_rubric_rules is not null then
+    insert into public.copilot_v2_rubric (agent_id, organization_id, rules, updated_at)
+    values (p_agent_id, v_org, p_rubric_rules, now())
+    on conflict (agent_id) do update
+      set rules = excluded.rules, updated_at = now();
+  end if;
+
   return v_row;
 end;
 $$;
 
-revoke all on function public.save_copilot_v2_config(uuid, jsonb, text) from public, anon;
-grant execute on function public.save_copilot_v2_config(uuid, jsonb, text) to authenticated;
+revoke all on function public.save_copilot_v2_config(uuid, jsonb, text, jsonb) from public, anon;
+grant execute on function public.save_copilot_v2_config(uuid, jsonb, text, jsonb) to authenticated;
 
 -- ── set_copilot_v2_agent_active ──────────────────────────────────────────────
 create or replace function public.set_copilot_v2_agent_active(

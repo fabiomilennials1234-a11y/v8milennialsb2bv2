@@ -13,6 +13,7 @@ import { orchestrateSaveConfig } from '../../../supabase/functions/_shared/copil
 const validRaw = {
   company: { name: 'Aço Forte', about: 'x' },
   icp: 'construtoras',
+  products: ['Vergalhão'],
   tone: 'consultivo',
   businessHours: '8h-18h',
   capabilities: { can_move_stage: true },
@@ -116,6 +117,46 @@ describe('orchestrateSaveConfig — activation gate', () => {
     expect(r.status).toBe('ok');
     expect(d.saveConfig).toHaveBeenCalledTimes(1);
     expect(d.setActive).toHaveBeenCalledWith('a1', true);
+  });
+});
+
+describe('orchestrateSaveConfig — rubric (Qualificador Section 4)', () => {
+  it('rejects invalid rubric rules as invalid (pre-DB)', async () => {
+    const d = deps();
+    const r = await orchestrateSaveConfig(
+      { agentId: 'a1', archetype: 'qualificador', rawConfig: validRaw, activate: false, rubricRules: [{ tier: 'platina' }] },
+      d,
+    );
+    expect(r.status).toBe('invalid');
+    expect(d.saveConfig).not.toHaveBeenCalled();
+  });
+
+  it('rejects rubric on a non-qualificador archetype', async () => {
+    const d = deps();
+    const r = await orchestrateSaveConfig(
+      { agentId: 'a1', archetype: 'vendedor', rawConfig: validRaw, activate: false, rubricRules: [{ tier: 'ouro' }] },
+      d,
+    );
+    expect(r.status).toBe('invalid');
+  });
+
+  it('treats an incoming rubric as present for activation (no prior DB rubric)', async () => {
+    const d = deps({ rubricPresent: false });
+    const r = await orchestrateSaveConfig(
+      { agentId: 'a1', archetype: 'qualificador', rawConfig: validRaw, activate: true, rubricRules: [{ tier: 'bronze' }] },
+      d,
+    );
+    expect(r.status).toBe('ok');
+    expect(d.setActive).toHaveBeenCalledWith('a1', true);
+  });
+
+  it('passes the validated rubric rules to the save RPC', async () => {
+    const d = deps();
+    await orchestrateSaveConfig(
+      { agentId: 'a1', archetype: 'qualificador', rawConfig: validRaw, activate: false, rubricRules: [{ tier: 'ouro', minFaturamento: 30000 }] },
+      d,
+    );
+    expect(d.saveConfig).toHaveBeenCalledWith('a1', expect.anything(), null, [{ tier: 'ouro', minFaturamento: 30000 }]);
   });
 });
 

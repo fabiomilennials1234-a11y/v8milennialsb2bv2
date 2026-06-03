@@ -59,6 +59,7 @@ serve(
     const archetype: string | undefined = payload?.archetype;
     const rawConfig = payload?.config;
     const activate = payload?.activate === true;
+    const rubricRules = payload?.rubricRules; // undefined = don't touch rubric
 
     if (!agentId || !archetype) return json({ error: "missing_agent_or_archetype" }, 400);
 
@@ -86,15 +87,16 @@ serve(
     })();
 
     const result = await orchestrateSaveConfig(
-      { agentId, archetype: archetype as any, rawConfig, activate },
+      { agentId, archetype: archetype as any, rawConfig, activate, rubricRules },
       {
         classifyEscapeHatch,
         rubricPresent,
-        saveConfig: async (id, slots, escapeHatchNotes) => {
+        saveConfig: async (id, slots, escapeHatchNotes, rules) => {
           const { data, error } = await supabase.rpc("save_copilot_v2_config", {
             p_agent_id: id,
             p_slots: slots,
             p_escape_hatch_notes: escapeHatchNotes,
+            p_rubric_rules: rules,
           });
           if (error) throw new Error(error.message);
           const row = data as { slots: Record<string, unknown>; escape_hatch_notes: string | null };

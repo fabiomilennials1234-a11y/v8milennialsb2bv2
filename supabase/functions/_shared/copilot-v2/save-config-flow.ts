@@ -18,10 +18,12 @@
 import type { Archetype } from "./model-selector.ts";
 import {
   validateConfig,
+  validateRubricRules,
   splitForPersistence,
   type CopilotV2Config,
   type PersistedSlots,
 } from "./config-schema.ts";
+import type { TierRule } from "./rubric-engine.ts";
 import {
   prefilterEscapeHatch,
   decideEscapeHatchLinter,
@@ -32,13 +34,18 @@ import { decideActivation } from "./activation-gate.ts";
 export interface SaveConfigDeps {
   /** Cheap LLM classify of the escape-hatch (gemini-2.5-flash). Throwing → fail-CLOSED. */
   classifyEscapeHatch: (notes: string, policy: string | null) => Promise<LinterVerdict>;
-  /** Whether a non-empty rubric row exists for the agent (only Qualificador needs it). */
+  /** Whether a non-empty rubric row ALREADY exists in the DB for the agent. */
   rubricPresent: boolean;
-  /** Transactional upsert RPC. Resolves the org server-side; never takes a payload org. */
+  /**
+   * Transactional upsert RPC. Resolves the org server-side; never takes a payload
+   * org. When rubricRules is non-null, the rubric is upserted in the SAME
+   * transaction (Qualificador Section 4) — no orphan window.
+   */
   saveConfig: (
     agentId: string,
     slots: PersistedSlots,
     escapeHatchNotes: string | null,
+    rubricRules: TierRule[] | null,
   ) => Promise<CopilotV2Config>;
   /** Flips copilot_v2_agents.is_active via its own org-scoped RPC. */
   setActive: (agentId: string, active: boolean) => Promise<void>;
@@ -49,6 +56,8 @@ export interface SaveConfigInput {
   archetype: Archetype;
   rawConfig: unknown;
   activate: boolean;
+  /** Qualificador Section 4 rubric-form output (TierRule[]); ignored elsewhere. */
+  rubricRules?: unknown;
 }
 
 export type SaveConfigResult =
@@ -67,6 +76,17 @@ export async function orchestrateSaveConfig(
     return { status: "invalid", errors: validation.errors };
   }
   const config = validation.value;
+
+  // 1b. rubric (Qualificador Section 4) — structural validation, pre-DB.
+  let rubricRules: TierRule[] | null = null;
+  if (input.rubricRules !== undefined) {
+    if (input.archetype !== "qualificador") {
+      return { status: "invalid", errors: ["rubric is only configurable for the qualificador"] };
+    }
+    const rr = validateRubricRules(input.rubricRules);
+    if (!rr.ok) return { status: "invalid", errors: rr.errors };
+    rubricRules = rr.value ?? [];
+  }
 
   // 2. escape-hatch linter — pre-DB, fail-CLOSED. Only runs if there is text.
   const notes = config.escapeHatchNotes;
@@ -88,17 +108,20 @@ export async function orchestrateSaveConfig(
     }
   }
 
-  // 3. activation gate — reject a non-operable agent BEFORE any write.
+  // 3. activation gate — reject a non-operable agent BEFORE any write. The rubric
+  // counts as present if it exists OR is being saved in this same request.
   if (input.activate) {
-    const act = decideActivation(input.archetype, config, deps.rubricPresent);
+    const effectiveRubricPresent = (rubricRules != null && rubricRules.length > 0) || deps.rubricPresent;
+    const act = decideActivation(input.archetype, config, effectiveRubricPresent);
     if (!act.ok) {
       return { status: "not_activatable", missingHard: act.missingHard, missingSoft: act.missingSoft };
     }
   }
 
-  // 4. transactional save — org resolved server-side inside the RPC.
+  // 4. transactional save — org resolved server-side inside the RPC; rubric
+  // upserted in the same transaction when provided.
   const { slots, escapeHatchNotes } = splitForPersistence(config);
-  const persisted = await deps.saveConfig(input.agentId, slots, escapeHatchNotes);
+  const persisted = await deps.saveConfig(input.agentId, slots, escapeHatchNotes, rubricRules);
 
   // 5. flip active only after a clean save.
   if (input.activate) {
