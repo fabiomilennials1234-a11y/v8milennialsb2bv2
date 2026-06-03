@@ -213,6 +213,16 @@ const normalizeForPreview = (s: string) =>
     .trim();
 
 /**
+ * Lookup de alias normalizado (sem acento). `HEADER_TO_FIELD` tem chaves acentuadas
+ * (ex. "p\u00fablico de origem"), mas o header de entrada chega sem acento via
+ * `normalizeForPreview`. Sem este mapa, toda chave acentuada nunca casava e a coluna
+ * aparecia como "n\u00e3o reconhecida" no modal de mapeamento.
+ */
+const HEADER_TO_FIELD_NORMALIZED: Record<string, string> = Object.fromEntries(
+  Object.entries(HEADER_TO_FIELD).map(([key, field]) => [normalizeForPreview(key), field])
+);
+
+/**
  * Faz preview do arquivo: colunas, amostra, sugestão de mapeamento e colunas não mapeadas.
  * Use antes de importar para notificar o usuário a mapear ou criar custom field.
  */
@@ -241,8 +251,8 @@ export function parseFilePreview(
 
     for (const col of columns) {
       const norm = normalizeForPreview(col);
-      if (HEADER_TO_FIELD[norm]) {
-        suggestedMapping[col] = HEADER_TO_FIELD[norm];
+      if (HEADER_TO_FIELD_NORMALIZED[norm]) {
+        suggestedMapping[col] = HEADER_TO_FIELD_NORMALIZED[norm];
         mappedNormalized.add(norm);
       } else if (customSet.has(norm)) {
         const customName = customFieldNames.find((n) => normalizeForPreview(n) === norm);
@@ -619,26 +629,26 @@ export function useImportLeads() {
     };
     otherFields: Array<{ key: string; value: string }>;
   }) => {
-    const lines: string[] = [KOMMO_BLOCK_START];
+    const lines: string[] = [];
 
-    const addList = (label: string, values: string[]) => {
-      const cleaned = values.map(v => v.trim()).filter(Boolean);
-      if (cleaned.length === 0) return;
+    // Campos estruturados só entram no bloco quando há MAIS DE UM valor distinto —
+    // o valor único já está na coluna dedicada do lead (phone/email/company/...), então
+    // repeti-lo na observação é puro ruído. Multi-valor (típico de export Kommo real,
+    // ex. "Email(s): a | b") é preservado porque a coluna dedicada só guarda um.
+    const addListIfMultiple = (label: string, values: string[]) => {
+      const cleaned = [...new Set(values.map(v => v.trim()).filter(Boolean))];
+      if (cleaned.length <= 1) return;
       lines.push(`${label}: ${cleaned.join(" | ")}`);
     };
 
-    addList("Nome(s)", input.nameValues);
-    addList("Empresa(s)", input.companyValues);
-    addList("Email(s)", input.emailValues);
-    addList("Telefone(s)", input.phoneValues);
-    addList("Faturamento(s)", input.faturamentoValues);
-    addList("Segmento(s)", input.segmentValues);
+    addListIfMultiple("Nome(s)", input.nameValues);
+    addListIfMultiple("Empresa(s)", input.companyValues);
+    addListIfMultiple("Email(s)", input.emailValues);
+    addListIfMultiple("Telefone(s)", input.phoneValues);
+    addListIfMultiple("Faturamento(s)", input.faturamentoValues);
+    addListIfMultiple("Segmento(s)", input.segmentValues);
 
-    const utmPairs = Object.entries(input.utm).filter(([, v]) => !!v);
-    if (utmPairs.length > 0) {
-      lines.push("UTM:");
-      for (const [k, v] of utmPairs) lines.push(`- ${k}: ${v}`);
-    }
+    // UTM omitido de propósito: já gravado em colunas dedicadas (utm_campaign/source/...).
 
     if (input.otherFields.length > 0) {
       lines.push("Outros campos:");
@@ -647,8 +657,9 @@ export function useImportLeads() {
       }
     }
 
-    lines.push(KOMMO_BLOCK_END);
-    return lines.join("\n");
+    // Sem conteúdo → não envolver em marcadores (evita bloco vazio na observação).
+    if (lines.length === 0) return "";
+    return [KOMMO_BLOCK_START, ...lines, KOMMO_BLOCK_END].join("\n");
   };
 
   const parseCSV = async (file: File, userColumnMapping?: Record<string, string>): Promise<ParsedLead[]> => {
@@ -664,6 +675,16 @@ export function useImportLeads() {
               for (const [fileCol, field] of Object.entries(userColumnMapping)) {
                 if (field && field !== "ignore" && row[fileCol] != null) {
                   rowForParse[field] = String(row[fileCol]).trim();
+                  // Toda coluna mapeada explicitamente para um campo do sistema é consumida:
+                  // seu valor vai para a coluna dedicada (ou metadata de etapa), nunca para
+                  // "Outros campos" da observação. Sem isso, campos cujo nome não casa o
+                  // próprio coletor (segment/rating/origin/...) vazavam para o notes.
+                  // Exceção: "notes" é capturado depois via noteColumns (lê pela chave),
+                  // então consumi-lo aqui esvaziaria a observação legítima.
+                  if (!field.startsWith("custom:") && field !== "notes") {
+                    usedKeys.add(field);
+                    usedKeys.add(fileCol);
+                  }
                 }
               }
             }
@@ -977,37 +998,30 @@ export function useImportLeads() {
             observacoesEtapaField.matchedKeys.forEach(k => usedKeys.add(k));
             const pipe_notes = chooseBestValue("name", observacoesEtapaField.values);
 
-            // UTM (variações de header)
-            const utm_campaign = chooseBestValue(
-              "utm",
-              collectFieldValues(rowForParse, ["utm_campaign", "UTM Campaign", "UTM campaign"], [/utm.*campaign/]).values
-            );
-            const utm_source = chooseBestValue(
-              "utm",
-              collectFieldValues(rowForParse, ["utm_source", "UTM Source", "UTM source"], [/utm.*source/]).values
-            );
-            const utm_medium = chooseBestValue(
-              "utm",
-              collectFieldValues(rowForParse, ["utm_medium", "UTM Medium", "UTM medium"], [/utm.*medium/]).values
-            );
-            const utm_content = chooseBestValue(
-              "utm",
-              collectFieldValues(rowForParse, ["utm_content", "UTM Content", "UTM content"], [/utm.*content/]).values
-            );
-            const utm_term = chooseBestValue(
-              "utm",
-              collectFieldValues(rowForParse, ["utm_term", "UTM Term", "UTM term"], [/utm.*term/]).values
-            );
+            // UTM (variações de header). Marca as colunas como consumidas (usedKeys) para
+            // não vazarem em "Outros campos" da observação — já vão para colunas dedicadas.
+            const collectUtm = (exact: string[], patterns: RegExp[]) => {
+              const f = collectFieldValues(rowForParse, exact, patterns);
+              f.matchedKeys.forEach(k => usedKeys.add(k));
+              return chooseBestValue("utm", f.values);
+            };
+            const utm_campaign = collectUtm(["utm_campaign", "UTM Campaign", "UTM campaign"], [/utm.*campaign/]);
+            const utm_source = collectUtm(["utm_source", "UTM Source", "UTM source"], [/utm.*source/]);
+            const utm_medium = collectUtm(["utm_medium", "UTM Medium", "UTM medium"], [/utm.*medium/]);
+            const utm_content = collectUtm(["utm_content", "UTM Content", "UTM content"], [/utm.*content/]);
+            const utm_term = collectUtm(["utm_term", "UTM Term", "UTM term"], [/utm.*term/]);
 
-            // NOTES - concatena colunas de nota/observação
+            // NOTES - concatena colunas de nota/observação ainda não consumidas.
+            // Exclui usedKeys: "Observações etapa" já virou pipe_notes; sem isso ela
+            // duplicava na observação principal. Dedup de valores evita repetição quando
+            // a coluna original e a chave mapeada (ex. "Notas" + "notes") coexistem.
             const noteColumns = Object.keys(rowForParse).filter(key =>
-              /nota|note|observa|comentario|comentário/.test(normalizeHeader(key))
+              !usedKeys.has(key) && /nota|note|observa|comentario|comentário/.test(normalizeHeader(key))
             );
             noteColumns.forEach(k => usedKeys.add(k));
-            const notes = noteColumns
-              .map(col => rowForParse[col]?.trim())
-              .filter(Boolean)
-              .join("\n\n");
+            const notes = [...new Set(
+              noteColumns.map(col => rowForParse[col]?.trim()).filter(Boolean)
+            )].join("\n\n");
 
             // Outros campos: tudo o que tem valor e não foi mapeado acima
             const otherFields = Object.keys(rowForParse)
