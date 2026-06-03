@@ -26,7 +26,7 @@ import { createToolExecutor } from "../_shared/copilot-v2/tool-executor.ts";
 import { decideHumanPauseGate } from "../_shared/copilot-v2/human-pause.ts";
 import { resolveAgentCapabilities } from "../_shared/copilot-v2/capability-gate.ts";
 import { createOpenRouterClient } from "../_shared/copilot-v2/openrouter-client.ts";
-import { decideOutputJudge, shouldSampleJudge, buildJudgePrompt } from "../_shared/copilot-v2/output-judge.ts";
+import { decideOutputJudge, shouldSampleJudge, buildJudgePrompt, type JudgeVerdict } from "../_shared/copilot-v2/output-judge.ts";
 import { judgeToEvalCaseCandidate, candidateToEvalCaseRow } from "../_shared/copilot-v2/judge-to-eval-case.ts";
 import { evaluateLoopSignal, decideLoopGate, type LoopMessage } from "../_shared/copilot-v2/loop-detector.ts";
 import { decideHitlGate } from "../_shared/copilot-v2/hitl-gate.ts";
@@ -214,14 +214,14 @@ serve(
         const rate = typeof (context as any)?._judgeSampleRate === "number" ? (context as any)._judgeSampleRate : 1.0;
         if (!shouldSampleJudge({ rng: Math.random, rate })) return { block: false, reason: null };
         const archetype = routeArchetype(context.contactStatus);
-        let verdict: { violation: boolean; category: string | null } | null = null;
+        let verdict: JudgeVerdict | null = null;
         let decision: { block: boolean; reason: string | null };
         try {
           const judgeLlm = createOpenRouterClient({ model: "google/gemini-2.5-flash", maxTokens: 64 });
-          const policy = (context.configByArchetype?.[archetype] as any)?.commercialPolicy ?? null;
+          const policy = (context.configByArchetype?.[archetype] as AgentConfig | undefined)?.commercialPolicy ?? null;
           const resp = await judgeLlm.complete({ system: buildJudgePrompt(reply, policy), messages: [], tools: [] });
-          verdict = JSON.parse(resp.text ?? "null");
-          decision = decideOutputJudge({ verdict: verdict as any, checkErrored: false });
+          verdict = JSON.parse(resp.text ?? "null") as JudgeVerdict | null;
+          decision = decideOutputJudge({ verdict, checkErrored: false });
         } catch (_err) {
           decision = decideOutputJudge({ verdict: null, checkErrored: true });
         }
@@ -231,7 +231,7 @@ serve(
         if (decision.block && verdict?.violation === true) {
           try {
             const candidate = judgeToEvalCaseCandidate({
-              verdict: verdict as any,
+              verdict,
               archetype,
               inputMessage: row.content,
               conversationId: row.conversation_id ?? row.trace_id,

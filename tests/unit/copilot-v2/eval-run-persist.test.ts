@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { persistEvalRuns } from '../../../supabase/functions/_shared/copilot-v2/eval-run-persist.ts';
 import type { EvalRunResult } from '../../../supabase/functions/_shared/copilot-v2/eval-runner.ts';
+import type { EvalRunRow } from '../../../supabase/functions/_shared/copilot-v2/eval-run-row.ts';
 
 const result: EvalRunResult = {
   caseId: 'case-uuid-1',
@@ -20,7 +21,7 @@ const result: EvalRunResult = {
 
 describe('persistEvalRuns', () => {
   it('maps results to rows with org from context and inserts them', async () => {
-    const captured: any[] = [];
+    const captured: EvalRunRow[] = [];
     const n = await persistEvalRuns([result], 'org-9', async (rows) => {
       captured.push(...rows);
       return { error: null };
