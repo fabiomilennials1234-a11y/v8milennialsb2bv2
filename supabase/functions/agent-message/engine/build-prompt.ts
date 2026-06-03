@@ -400,6 +400,13 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
     "natural — não invente sintaxe. O cliente JAMAIS pode ver nomes de ferramentas, " +
     "tags, colchetes angulares (<>) ou JSON.",
   );
+  sections.push(
+    "IGUALMENTE OBRIGATÓRIO: chamar uma ferramenta NÃO substitui conversar. Em TODO " +
+    "turno você DEVE escrever também uma mensagem de texto natural e engajada ao cliente " +
+    "— mesmo quando enviar mídia. Contextualize o que está mandando, comente e conduza a " +
+    "venda com uma pergunta. NUNCA responda apenas com a ferramenta deixando a mensagem " +
+    "de texto vazia; a legenda da mídia não conta como a sua resposta.",
+  );
   sections.push("");
 
   // =====================================================
