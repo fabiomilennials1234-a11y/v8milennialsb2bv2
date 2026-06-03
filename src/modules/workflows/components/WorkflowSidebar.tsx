@@ -1,4 +1,4 @@
-import { X, Trash2, AlertTriangle } from "lucide-react";
+import { X, Trash2, AlertTriangle, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TriggerPanel } from "./sidebar-panels/TriggerPanel";
@@ -50,6 +50,7 @@ interface WorkflowSidebarProps {
   onClose: () => void;
   onUpdateNode: (nodeId: string, data: Partial<WorkflowNodeData>) => void;
   onDeleteNode?: (nodeId: string) => void;
+  onDuplicateNode?: (nodeId: string) => void;
   allNodes?: WorkflowNode[];
 }
 
@@ -58,12 +59,15 @@ export function WorkflowSidebar({
   onClose,
   onUpdateNode,
   onDeleteNode,
+  onDuplicateNode,
   allNodes = [],
 }: WorkflowSidebarProps) {
   if (!selectedNode) return null;
 
   const nodeData = selectedNode.data as unknown as WorkflowNodeData;
   const nodeType = nodeData.type;
+  // Trigger is singular per workflow — never duplicable.
+  const canDuplicate = nodeType !== "trigger";
   const title = NODE_LABELS[nodeType] || "Configuração";
 
   const handleUpdate = (updates: Partial<WorkflowNodeData>) => {
@@ -141,18 +145,31 @@ export function WorkflowSidebar({
         </div>
       </ScrollArea>
 
-      {/* Delete button */}
-      {onDeleteNode && (
-        <div className="px-4 py-3 border-t">
-          <Button
-            variant="destructive"
-            size="sm"
-            className="w-full"
-            onClick={() => onDeleteNode(selectedNode.id)}
-          >
-            <Trash2 className="w-4 h-4 mr-2" />
-            Excluir Nó
-          </Button>
+      {/* Actions */}
+      {(onDeleteNode || (onDuplicateNode && canDuplicate)) && (
+        <div className="px-4 py-3 border-t space-y-2">
+          {onDuplicateNode && canDuplicate && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => onDuplicateNode(selectedNode.id)}
+            >
+              <Copy className="w-4 h-4 mr-2" />
+              Duplicar Nó
+            </Button>
+          )}
+          {onDeleteNode && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="w-full"
+              onClick={() => onDeleteNode(selectedNode.id)}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Excluir Nó
+            </Button>
+          )}
         </div>
       )}
     </div>
