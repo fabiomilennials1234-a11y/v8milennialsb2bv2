@@ -26,6 +26,15 @@ const BATCH_SIZE = 10;
 const MAX_RETRIES = 3;
 const RETRY_BACKOFF_MINUTES = [1, 5, 15]; // escalada de retry
 
+// Ações que despacham mídia via provider.sendMedia. O cliente Uazapi já aplica
+// um cap INTERNO de 60s (MEDIA_TIMEOUT_MS) com AbortController. O cap externo
+// abaixo precisa ser MAIOR que 60s, senão a race externa dispara primeiro,
+// o cron re-claim reenvia, e o fetch interno ainda em voo ENTREGA — duplicando
+// a mídia (incidente 2026-06-02: mesmo vídeo entregue 3×).
+const MEDIA_ACTION_TYPES = new Set(["send_document"]);
+const MEDIA_ACTION_TIMEOUT_MS = 90_000;
+const DEFAULT_ACTION_TIMEOUT_MS = 30_000;
+
 Deno.serve(
   withSentry("process-ai-actions", async (req: Request): Promise<Response> => {
     const corsHeaders = getCorsHeaders(req.headers.get("origin"));
@@ -127,9 +136,17 @@ async function processAction(
 
     // 4. Executar ação com timeout duro (Onda 1 / T1.1.4)
     // Telemetria 30d (2026-04-26): 6 pending órfãs >24h confirmaram que ação
-    // travada bloqueia batch indefinidamente. Cap de 30s força failure path
-    // → retry com backoff [1,5,15min] → dead_letter ao terceiro retry.
-    const ACTION_TIMEOUT_MS = 30_000;
+    // travada bloqueia batch indefinidamente. Cap força failure path → retry
+    // com backoff [1,5,15min] → dead_letter ao terceiro retry.
+    //
+    // Por tipo (incidente 2026-06-02): mídia precisa de cap > 60s para o
+    // AbortController INTERNO do cliente Uazapi governar o timeout e cancelar o
+    // fetch de forma limpa, em vez do cap externo abortar antes e orfanar um
+    // envio que ainda completa. A idempotência do send_document (send lock)
+    // garante at-most-once mesmo se este cap ainda for excedido.
+    const ACTION_TIMEOUT_MS = MEDIA_ACTION_TYPES.has(action_type)
+      ? MEDIA_ACTION_TIMEOUT_MS
+      : DEFAULT_ACTION_TIMEOUT_MS;
     const timeoutPromise = new Promise<{ success: false; error: string }>((_, reject) =>
       setTimeout(
         () => reject(new Error(`timeout: action ${action_type} exceeded ${ACTION_TIMEOUT_MS}ms`)),
