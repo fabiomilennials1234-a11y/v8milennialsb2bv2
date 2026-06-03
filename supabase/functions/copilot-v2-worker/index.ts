@@ -27,6 +27,7 @@ import { decideHumanPauseGate } from "../_shared/copilot-v2/human-pause.ts";
 import { resolveAgentCapabilities } from "../_shared/copilot-v2/capability-gate.ts";
 import { createOpenRouterClient } from "../_shared/copilot-v2/openrouter-client.ts";
 import { decideOutputJudge, shouldSampleJudge, buildJudgePrompt } from "../_shared/copilot-v2/output-judge.ts";
+import { judgeToEvalCaseCandidate, candidateToEvalCaseRow } from "../_shared/copilot-v2/judge-to-eval-case.ts";
 import { evaluateLoopSignal, decideLoopGate, type LoopMessage } from "../_shared/copilot-v2/loop-detector.ts";
 import { decideHitlGate } from "../_shared/copilot-v2/hitl-gate.ts";
 import { resolveHandoffTargets } from "../_shared/copilot-v2/handoff-routing.ts";
@@ -208,19 +209,46 @@ serve(
           return { requiresApproval: false, reason: null };
         }
       },
-      judgeOutput: async (reply, _row, context) => {
+      judgeOutput: async (reply, row, context) => {
         // Sampling: conservative default = judge every turn (rate from config slot).
         const rate = typeof (context as any)?._judgeSampleRate === "number" ? (context as any)._judgeSampleRate : 1.0;
         if (!shouldSampleJudge({ rng: Math.random, rate })) return { block: false, reason: null };
+        const archetype = routeArchetype(context.contactStatus);
+        let verdict: { violation: boolean; category: string | null } | null = null;
+        let decision: { block: boolean; reason: string | null };
         try {
           const judgeLlm = createOpenRouterClient({ model: "google/gemini-2.5-flash", maxTokens: 64 });
-          const policy = (context.configByArchetype?.[routeArchetype(context.contactStatus)] as any)?.commercialPolicy ?? null;
+          const policy = (context.configByArchetype?.[archetype] as any)?.commercialPolicy ?? null;
           const resp = await judgeLlm.complete({ system: buildJudgePrompt(reply, policy), messages: [], tools: [] });
-          const verdict = JSON.parse(resp.text ?? "null");
-          return decideOutputJudge({ verdict, checkErrored: false });
+          verdict = JSON.parse(resp.text ?? "null");
+          decision = decideOutputJudge({ verdict: verdict as any, checkErrored: false });
         } catch (_err) {
-          return decideOutputJudge({ verdict: null, checkErrored: true });
+          decision = decideOutputJudge({ verdict: null, checkErrored: true });
         }
+        // judge→dataset (W13): a REAL violation (not a judge/parse error) is promoted
+        // to a DISABLED eval-case candidate for manual curation (CTO D2). Best-effort:
+        // never let the promotion break the turn; an admin blesses it before it gates CI.
+        if (decision.block && verdict?.violation === true) {
+          try {
+            const candidate = judgeToEvalCaseCandidate({
+              verdict: verdict as any,
+              archetype,
+              inputMessage: row.content,
+              conversationId: row.conversation_id ?? row.trace_id,
+            });
+            if (candidate) {
+              const insertRow = candidateToEvalCaseRow(candidate, row.organization_id);
+              const { data: existing } = await supabase
+                .from("copilot_v2_eval_cases")
+                .select("id")
+                .eq("organization_id", insertRow.organization_id)
+                .eq("case_name", insertRow.case_name)
+                .maybeSingle();
+              if (!existing) await supabase.from("copilot_v2_eval_cases").insert(insertRow);
+            }
+          } catch (_e) { /* best-effort: judge→dataset never blocks the turn */ }
+        }
+        return decision;
       },
       dispatchHandoff: async (row, payload) => {
         // Lead owners + tier (org-scoped — org ALWAYS from the trusted row).

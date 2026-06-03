@@ -21,6 +21,7 @@ import { resolveAgentCapabilities } from "../_shared/copilot-v2/capability-gate.
 import { mergeFromPersistence, toAgentConfig } from "../_shared/copilot-v2/config-schema.ts";
 import { loadEvalCases } from "../_shared/copilot-v2/eval-cases-loader.ts";
 import { runEvalSuite, type AgentResolved } from "../_shared/copilot-v2/eval-runner.ts";
+import { persistEvalRuns } from "../_shared/copilot-v2/eval-run-persist.ts";
 import type { Archetype, ModelId } from "../_shared/copilot-v2/model-selector.ts";
 
 serve(
@@ -84,6 +85,30 @@ serve(
       skip: results.filter((r) => r.status === "skip").length,
       error: results.filter((r) => r.status === "error").length,
     };
+
+    // Persist the run (Slice 9 follow-up): service_role write, org resolved from
+    // the RLS-scoped cases (NEVER the payload). Best-effort — a broken sink must
+    // not fail the eval the operator is watching.
+    try {
+      const { data: orgRow } = await supabase
+        .from("copilot_v2_eval_cases")
+        .select("organization_id")
+        .limit(1)
+        .maybeSingle();
+      const orgId = orgRow?.organization_id as string | undefined;
+      if (orgId && results.length > 0) {
+        const admin = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        );
+        await persistEvalRuns(results, orgId, (rows) =>
+          admin.from("copilot_v2_eval_runs").insert(rows),
+        );
+      }
+    } catch (e) {
+      console.error("evaluate-eval-suite: eval_runs persist failed", e);
+    }
+
     return json({ summary, results });
   }),
 );

@@ -51,3 +51,32 @@ export function judgeToEvalCaseCandidate(input: JudgeToEvalInput): EvalCaseCandi
       `só casos enabled=true entram no gate de CI.`,
   };
 }
+
+/** The copilot_v2_eval_cases insert row for a candidate. */
+export interface EvalCaseInsertRow {
+  organization_id: string;
+  archetype: Archetype;
+  case_name: string;
+  input_message: string;
+  enabled: boolean;
+  system_context: string;
+}
+
+/**
+ * Serializes a candidate to a DB row. org ALWAYS from the caller's context, never
+ * the candidate/payload (the candidate carries no org). The edge does the
+ * service_role insert (RLS has no authenticated write on eval_cases).
+ */
+export function candidateToEvalCaseRow(
+  candidate: EvalCaseCandidate,
+  organizationId: string,
+): EvalCaseInsertRow {
+  return {
+    organization_id: organizationId,
+    archetype: candidate.archetype,
+    case_name: candidate.caseName,
+    input_message: candidate.inputMessage,
+    enabled: candidate.enabled,
+    system_context: candidate.systemContext,
+  };
+}

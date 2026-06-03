@@ -7,7 +7,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { judgeToEvalCaseCandidate } from '../../../supabase/functions/_shared/copilot-v2/judge-to-eval-case.ts';
+import {
+  judgeToEvalCaseCandidate,
+  candidateToEvalCaseRow,
+} from '../../../supabase/functions/_shared/copilot-v2/judge-to-eval-case.ts';
 
 describe('judge-to-eval-case', () => {
   it('maps a judge violation to a DISABLED candidate (never auto-admitted to the gate)', () => {
@@ -55,5 +58,21 @@ describe('judge-to-eval-case', () => {
         conversationId: 'c3',
       });
     expect(mk()!.caseName).toEqual(mk()!.caseName);
+  });
+
+  it('candidateToEvalCaseRow serializes with org from context + enabled=false', () => {
+    const candidate = judgeToEvalCaseCandidate({
+      verdict: { violation: true, category: 'forbidden_promise' },
+      archetype: 'vendedor',
+      inputMessage: 'garante entrega em 2 dias?',
+      conversationId: 'conv-7',
+    })!;
+    const row = candidateToEvalCaseRow(candidate, 'org-42');
+    expect(row.organization_id).toBe('org-42');
+    expect(row.archetype).toBe('vendedor');
+    expect(row.input_message).toBe('garante entrega em 2 dias?');
+    expect(row.enabled).toBe(false);
+    expect(row.case_name).toContain('forbidden_promise');
+    expect(typeof row.system_context).toBe('string');
   });
 });
