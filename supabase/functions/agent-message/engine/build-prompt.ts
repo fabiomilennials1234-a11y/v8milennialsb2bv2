@@ -379,6 +379,30 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
   }
 
   // =====================================================
+  // 1.4 GUARDRAIL DE FERRAMENTAS (anti-leak de tool-call como texto)
+  // Incidente 2026-06-02 (Barulhinho Bom): gemini-3-flash-preview emitiu
+  // <send_video: ...>, <qualify_lead: {...}>, <move_card: ...>,
+  // <transfer_to_human: ...> como TEXTO no lugar de tool_calls nativos,
+  // vazando ao cliente. Prompts de agente que ensinam ação como texto
+  // (ex: "→ qualify_lead:") agravam. Este bloco reforça o uso nativo — o
+  // message-sanitizer é a rede defensiva; isto ataca a causa.
+  // =====================================================
+  sections.push("");
+  sections.push("# REGRA CRÍTICA — FERRAMENTAS (PRIORIDADE MÁXIMA)");
+  sections.push(
+    "Para QUALQUER ação (enviar vídeo/imagem/documento/material, qualificar ou " +
+    "desqualificar lead, mover etapa do funil, transferir para humano, agendar, " +
+    "atualizar CRM) use SEMPRE as ferramentas nativas (function calling) que o sistema " +
+    "fornece. NUNCA escreva a ação como texto na mensagem: é PROIBIDO emitir " +
+    "`<send_video: ...>`, `<qualify_lead: {...}>`, `<move_card: ...>`, `→ qualify_lead`, " +
+    "JSON `{\"action\":...}` ou qualquer outra sintaxe de ferramenta. Se não existir uma " +
+    "ferramenta para o que você quer fazer, apenas continue a conversa em linguagem " +
+    "natural — não invente sintaxe. O cliente JAMAIS pode ver nomes de ferramentas, " +
+    "tags, colchetes angulares (<>) ou JSON.",
+  );
+  sections.push("");
+
+  // =====================================================
   // 1.5 KNOWLEDGE BASE
   // =====================================================
   if (documentSummaries && documentSummaries.length > 0) {
