@@ -48,14 +48,24 @@ Deno.serve(withSentry('summarize-conversation', async (req) => {
     return unauthorizedResponse("Missing Authorization header", corsHeaders);
   }
   const jwt = authHeader.slice(7);
-  const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const { data: userData, error: userErr } = await supabaseUser.auth.getUser(jwt);
-  if (userErr || !userData?.user) {
-    return unauthorizedResponse("Invalid token", corsHeaders);
+
+  // Callers internos server-to-server (workflow executor, cron) autenticam com
+  // a SERVICE_ROLE_KEY — não é um JWT de usuário, então auth.getUser falharia
+  // com "Invalid token" (era a causa do nó summarize_conversation quebrar todo
+  // o workflow de handoff). Aceita esse caso como caller confiável; a org é
+  // resolvida a partir do lead logo abaixo.
+  const isServiceRole = jwt === supabaseKey;
+  let userId: string | null = null;
+  if (!isServiceRole) {
+    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: userData, error: userErr } = await supabaseUser.auth.getUser(jwt);
+    if (userErr || !userData?.user) {
+      return unauthorizedResponse("Invalid token", corsHeaders);
+    }
+    userId = userData.user.id;
   }
-  const userId = userData.user.id;
 
   const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
   if (!openRouterApiKey) {
@@ -93,9 +103,13 @@ Deno.serve(withSentry('summarize-conversation', async (req) => {
     }
 
     // ── Auth: verify caller belongs to lead's organization ──
-    const hasAccess = await validateOrganizationAccess(supabase, userId, lead.organization_id);
-    if (!hasAccess) {
-      return unauthorizedResponse("User does not belong to lead's organization", corsHeaders);
+    // Service-role (caller interno) já é confiável e não tem userId — pula o
+    // check de membership, que é específico de usuários autenticados.
+    if (!isServiceRole) {
+      const hasAccess = await validateOrganizationAccess(supabase, userId!, lead.organization_id);
+      if (!hasAccess) {
+        return unauthorizedResponse("User does not belong to lead's organization", corsHeaders);
+      }
     }
 
     // 2. Buscar a conversa do lead (mais recente)
