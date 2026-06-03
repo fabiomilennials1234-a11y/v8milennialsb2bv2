@@ -295,5 +295,9 @@ verify_jwt = false
 [functions.copilot-v2-proactive]
 verify_jwt = false
 
+# copilot-v2-save-config: wizard save (Slice 8); verify_jwt=false p/ preflight OPTIONS, JWT do admin validado dentro (RPC SECURITY DEFINER assert org+admin)
+[functions.copilot-v2-save-config]
+verify_jwt = false
+
 
 
