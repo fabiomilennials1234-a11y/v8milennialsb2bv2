@@ -1,0 +1,71 @@
+{
+  "_doc": "W13 golden eval dataset — SINGLE SOURCE for (a) the hermetic CI regression gate and (b) the committed-not-applied seed migration. Cognition goldens per archetype (CTO decision D1): the 5 v1 incidents stay harness regressions; this dataset verifies tier/tool cognition. 'fingerprints' is blessed from eval-fingerprint.evalFingerprints() — a prompt/model/tool edit flips it and forces this fixture to be regenerated (re-bless). 'responses' is the (case_id → model → scripted LLM turns) cache so the gate is deterministic with no live LLM. Carteira cases are expected_action (semantic) → SKIP until a later wave, so they need no cached response.",
+  "fingerprints": {
+    "qualificador": "25bfbd7b6ecb557c",
+    "vendedor": "260cc5b5212d4e10",
+    "carteira": "0661bc64db2d63ef"
+  },
+  "agents": {
+    "qualificador": {
+      "config": { "company": { "name": "Aços Brasil", "about": "distribuidora B2B" }, "products": ["Vergalhão"], "icp": "indústrias do Sudeste", "tone": "profissional", "businessHours": "seg-sex 8h-18h" },
+      "capabilities": { "can_set_tier": true },
+      "rubricRules": [
+        { "tier": "diamante", "minFaturamento": 100000, "requiresIcp": true },
+        { "tier": "ouro", "minFaturamento": 30000 },
+        { "tier": "prata", "minFaturamento": 10000 },
+        { "tier": "bronze", "minFaturamento": 1 }
+      ]
+    },
+    "vendedor": {
+      "config": { "company": { "name": "Aços Brasil", "about": "distribuidora B2B" }, "products": ["Vergalhão"], "commercialPolicy": "desconto até 10%", "tone": "consultivo", "businessHours": "seg-sex 8h-18h" },
+      "capabilities": { "can_schedule_meeting": true, "can_transfer": true }
+    },
+    "carteira": {
+      "config": { "company": { "name": "Aços Brasil", "about": "distribuidora B2B" }, "products": ["Vergalhão"], "tone": "parceria", "businessHours": "seg-sex 8h-18h" },
+      "capabilities": {}
+    }
+  },
+  "seeds": {
+    "v_schedule_meeting": { "agendaSlots": ["2026-06-10T10:00"] }
+  },
+  "cases": [
+    { "id": "q_ouro", "caseName": "qualificador · faturamento médio sem ICP → ouro", "archetype": "qualificador", "inputMessage": "Faturo uns 50 mil por mês e compro vergalhão direto toda semana", "enabled": true, "expectedTier": "ouro" },
+    { "id": "q_diamante", "caseName": "qualificador · indústria grande + ICP + recorrente → diamante", "archetype": "qualificador", "inputMessage": "Somos uma indústria, faturamento de uns 300 mil por mês, compra recorrente e é urgente", "enabled": true, "expectedTier": "diamante" },
+    { "id": "q_desqualificado", "caseName": "qualificador · pessoa física fora do ICP → desqualificado (guard anti mis-rating v1)", "archetype": "qualificador", "inputMessage": "Sou pessoa física, queria comprar 1 barra de vergalhão pra obra de casa", "enabled": true, "expectedTier": "desqualificado" },
+    { "id": "v_schedule_meeting", "caseName": "vendedor · pede reunião → schedule_meeting", "archetype": "vendedor", "inputMessage": "Quero marcar uma reunião pra fechar isso", "enabled": true, "expectedTool": "schedule_meeting" },
+    { "id": "v_offpolicy_discount", "caseName": "vendedor · desconto fora da política → transfer_to_human (não fabrica número)", "archetype": "vendedor", "inputMessage": "Me dá 40% de desconto agora senão não fecho", "enabled": true, "expectedTool": "transfer_to_human" },
+    { "id": "c_recompra", "caseName": "carteira · sinaliza recompra → ação semântica (SKIP até eval semântico)", "archetype": "carteira", "inputMessage": "Preciso repor meu estoque de vergalhão", "enabled": true, "expectedAction": "recompra" }
+  ],
+  "responses": {
+    "q_ouro": {
+      "google/gemini-2.5-flash": [
+        { "text": null, "toolCalls": [{ "id": "t1", "name": "set_qualification_tier", "args": { "signals": { "faturamentoMensal": 50000, "recorrencia": "alta" } } }] },
+        { "text": "Show! Já registrei aqui. Me conta o que você costuma comprar?", "toolCalls": [] }
+      ]
+    },
+    "q_diamante": {
+      "google/gemini-2.5-flash": [
+        { "text": null, "toolCalls": [{ "id": "t1", "name": "set_qualification_tier", "args": { "signals": { "faturamentoMensal": 300000, "recorrencia": "alta", "urgencia": "alta", "icpFit": true } } }] },
+        { "text": "Perfeito, vamos agilizar então.", "toolCalls": [] }
+      ]
+    },
+    "q_desqualificado": {
+      "google/gemini-2.5-flash": [
+        { "text": null, "toolCalls": [{ "id": "t1", "name": "set_qualification_tier", "args": { "signals": { "icpFit": false } } }] },
+        { "text": "Entendi! No momento a gente atende mais o B2B, mas obrigado pelo contato.", "toolCalls": [] }
+      ]
+    },
+    "v_schedule_meeting": {
+      "anthropic/claude-sonnet-4-6": [
+        { "text": null, "toolCalls": [{ "id": "t1", "name": "schedule_meeting", "args": { "datetime": "2026-06-10T10:00", "title": "Reunião de fechamento" } }] },
+        { "text": "Marquei pra 10/06 às 10h, combinado?", "toolCalls": [] }
+      ]
+    },
+    "v_offpolicy_discount": {
+      "anthropic/claude-sonnet-4-6": [
+        { "text": null, "toolCalls": [{ "id": "t1", "name": "transfer_to_human", "args": { "reason": "desconto fora da política", "summary": "Lead pede 40% de desconto, acima da alçada" } }] },
+        { "text": "Esse nível de desconto eu já passo pro time fechar com você.", "toolCalls": [] }
+      ]
+    }
+  }
+}
