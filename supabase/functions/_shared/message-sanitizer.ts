@@ -36,6 +36,24 @@ export const TOOL_NAME_TO_ACTION: Record<string, string> = {
   send_product_material: "SEND_PRODUCT_MATERIAL",
 };
 
+/**
+ * Tool names que o prompt do agente usa em pseudo-tags inline `<tool: args>`.
+ * Inclui o executor map + aliases de mídia/kanban que o prompt usa mas não
+ * estão no map (send_video, move_card, ...). Allowlist evita comer texto
+ * legítimo que por acaso tenha `<algo: coisa>`.
+ */
+const INLINE_TOOL_TAG_NAMES: Set<string> = new Set<string>([
+  ...Object.keys(TOOL_NAME_TO_ACTION),
+  "send_video", "send_image", "send_audio", "send_media", "send_photo",
+  "send_product", "send_material", "send_file", "move_card", "move_stage",
+]);
+
+/** Defensivo final: nuke de qualquer abertura de tag de tool (mesmo sem fechar). */
+const INLINE_TOOL_TAG_RE = new RegExp(
+  `<\\s*(?:${[...INLINE_TOOL_TAG_NAMES].join("|")})\\b[^>]*>?`,
+  "gi",
+);
+
 export interface RecoveredAction {
   action: string;
   params: Record<string, unknown>;
@@ -213,6 +231,43 @@ function extractFirstJsonObject(src: string): string | null {
   return null;
 }
 
+/**
+ * Strip de pseudo-tags inline `<tool_name: args>` emitidas como TEXTO
+ * (incidente Barulhinho Bom 2026-06-02: `<send_video: Linha.mp4>`,
+ * `<qualify_lead: {...}>`, `<move_card: "Qualificado">`,
+ * `<transfer_to_human: "...">`). Modelo emite a ação como texto em vez de
+ * tool_call nativo — sem este strip, a tag vaza no WhatsApp do cliente.
+ *
+ * Allowlist (INLINE_TOOL_TAG_NAMES) garante que só tags de tool sejam
+ * removidas. Args em JSON viram candidatos a recovery.
+ */
+function stripInlineToolTags(
+  input: string,
+): { cleaned: string; dropped: number; candidates: string[] } {
+  if (!input || input.indexOf("<") === -1) {
+    return { cleaned: input, dropped: 0, candidates: [] };
+  }
+  let dropped = 0;
+  const candidates: string[] = [];
+  const RE = /<\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([^>]*)>/g;
+  let cleaned = input.replace(RE, (match, rawName: string, rawArgs: string) => {
+    if (!INLINE_TOOL_TAG_NAMES.has(rawName.toLowerCase())) return match; // não é tool — preserva
+    dropped += 1;
+    const args = rawArgs.trim();
+    if (args.startsWith("{")) {
+      candidates.push(JSON.stringify({ tool_name: rawName.toLowerCase(), tool_arguments: args }));
+    }
+    return "";
+  });
+  // Defensivo: abertura órfã (args continham `>` e cortou cedo).
+  if (INLINE_TOOL_TAG_RE.test(cleaned)) {
+    INLINE_TOOL_TAG_RE.lastIndex = 0;
+    cleaned = cleaned.replace(INLINE_TOOL_TAG_RE, () => { dropped += 1; return ""; });
+  }
+  INLINE_TOOL_TAG_RE.lastIndex = 0;
+  return { cleaned, dropped, candidates };
+}
+
 export function sanitizeAssistantMessage(
   raw: string,
   alreadyHasAction: boolean,
@@ -255,6 +310,21 @@ export function sanitizeAssistantMessage(
     }
   }
 
+  // Passo 1c: pseudo-tags inline `<tool_name: args>` emitidas como texto
+  // (incidente Barulhinho Bom 2026-06-02).
+  const inlineStrip = stripInlineToolTags(text);
+  text = inlineStrip.cleaned;
+  droppedBlocks += inlineStrip.dropped;
+  if (!alreadyHasAction && !recoveredAction) {
+    for (const candidate of inlineStrip.candidates) {
+      const rec = tryRecoverFromString(candidate);
+      if (rec) {
+        recoveredAction = rec;
+        break;
+      }
+    }
+  }
+
   // Passo 2: objetos JSON soltos contendo "action":"..."
   const blocks = extractActionJsonBlocks(text);
   if (blocks.length > 0) {
@@ -281,11 +351,15 @@ export function sanitizeAssistantMessage(
   // Normalização de whitespace
   text = text.replace(/\n{3,}/g, "\n\n").trim();
 
-  // Defensive final: garantir zero vazamento de tags reasoning + tool_call residual
+  // Defensive final: garantir zero vazamento de tags reasoning + tool_call +
+  // pseudo-tags inline `<tool_name: args>` residuais.
+  INLINE_TOOL_TAG_RE.lastIndex = 0;
   text = text
     .replace(/<\/?(?:thinking|response)[^>]*>/gi, "")
     .replace(/<\/?(?:tool_call|vertical_tool_calls|no_tool_calls)\b[^>]*\/?\s*>/gi, "")
+    .replace(INLINE_TOOL_TAG_RE, "")
     .trim();
+  INLINE_TOOL_TAG_RE.lastIndex = 0;
 
   return { text, droppedBlocks, recoveredAction, reasoning };
 }
