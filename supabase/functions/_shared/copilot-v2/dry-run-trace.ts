@@ -13,7 +13,8 @@ import type { ToolStep } from "./cognition-loop.ts";
 import type { Archetype, ModelId } from "./model-selector.ts";
 import type { QualificationTier } from "./rubric-engine.ts";
 
-export type DryRunStepKind = "border" | "gate" | "enqueue" | "cognition" | "tool" | "outbound";
+export const DRY_RUN_STEP_KINDS = ["border", "gate", "enqueue", "cognition", "tool", "outbound"] as const;
+export type DryRunStepKind = (typeof DRY_RUN_STEP_KINDS)[number];
 
 export interface DryRunTraceStep {
   step: DryRunStepKind;

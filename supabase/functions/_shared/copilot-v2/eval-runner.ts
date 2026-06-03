@@ -44,7 +44,8 @@ export interface EvalRunnerDeps {
   seedFor?: (evalCase: EvalCase) => SeedSnapshot;
 }
 
-export type EvalStatus = "pass" | "fail" | "skip" | "error";
+export const EVAL_STATUSES = ["pass", "fail", "skip", "error"] as const;
+export type EvalStatus = (typeof EVAL_STATUSES)[number];
 
 export interface EvalRunResult {
   caseId: string;
