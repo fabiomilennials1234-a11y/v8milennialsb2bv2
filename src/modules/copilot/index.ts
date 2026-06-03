@@ -155,3 +155,9 @@ export {
 } from "./components/BehaviorWindowsEditor";
 
 export { CopilotPlayground } from "./components/playground/CopilotPlayground";
+
+// Copilot v2 wizard (Slice 8) — typed-slot authoring surface (replaces the
+// Playground for v2 agents). Hook + contract for the config save/read.
+export { CopilotV2Wizard, type CopilotV2WizardProps } from "./components/v2-wizard/CopilotV2Wizard";
+export { useCopilotV2Config, useSaveCopilotV2Config } from "./hooks/useCopilotV2Config";
+export * as copilotV2Config from "./lib/copilot-v2-config";
