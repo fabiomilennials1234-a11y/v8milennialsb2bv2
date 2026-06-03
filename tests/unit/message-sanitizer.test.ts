@@ -36,6 +36,35 @@ describe("sanitizeAssistantMessage", () => {
     expect(r.droppedBlocks).toBe(1);
   });
 
+  it("strips inline <tool_name: args> pseudo-tags leaked as text (Barulhinho Bom 2026-06-02)", () => {
+    const raw = [
+      "Vou te encaminhar agora para o consultor que ele já te passa a tabela de preços junto com os vídeos, pode ser?",
+      "",
+      "<send_video: Linha de produtos.mp4>",
+      '<qualify_lead: {"nome": "gabriel", "empresa": "Mtech", "segmento": "mercadinho", "cidade": "não informada", "linha_interesse": "batata doce e mix nuts", "volume_estimado": "não informado"}>',
+      '<move_card: "Qualificado">',
+      '<transfer_to_human: "Lead Gabriel do mercadinho quer saber preços e ver vídeos da linha. Já sabe do pedido mínimo de R$ 300.">',
+    ].join("\n");
+
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe(
+      "Vou te encaminhar agora para o consultor que ele já te passa a tabela de preços junto com os vídeos, pode ser?",
+    );
+    // Nenhuma tag de tool pode sobrar no texto que vai pro cliente.
+    expect(r.text).not.toContain("<");
+    expect(r.droppedBlocks).toBe(4);
+    // qualify_lead tem args JSON e mapeia → recupera a ação.
+    expect(r.recoveredAction?.action).toBe("QUALIFY_LEAD");
+    expect((r.recoveredAction?.params as Record<string, unknown>)?.empresa).toBe("Mtech");
+  });
+
+  it("does NOT strip legitimate text with a non-tool <word: value> shape", () => {
+    const raw = "Horário de atendimento <segunda: 9h às 18h>, pode contar comigo!";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe(raw);
+    expect(r.droppedBlocks).toBe(0);
+  });
+
   it("recovers mapped tool as action when tool_call was missed", () => {
     const raw =
       'Vou enviar o catálogo.\n{ "action": "send_product_material", "action_input": "{\\"material_id\\":\\"mat-1\\"}" }';
