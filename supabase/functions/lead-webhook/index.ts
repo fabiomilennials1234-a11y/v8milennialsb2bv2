@@ -220,7 +220,10 @@ serve(withSentry('lead-webhook', async (req) => {
       for (const key of Object.keys(payload.fields)) {
         const val = payload.fields[key];
         if (typeof val === "string") {
-          const trimmed = val.trim();
+          // Strip prefixo "?" espúrio que a origem (Meta Ads/n8n) às vezes injeta
+          // nos valores (ex: "?Jhonny's Drinkeria", "?outro") — vazava literal pro
+          // cliente nas mensagens da automação. Bug C, incidente Bertin 2026-06-03.
+          const trimmed = val.trim().replace(/^\?+\s*/, "");
           payload.fields[key] = trimmed === "" ? undefined : trimmed;
         }
       }

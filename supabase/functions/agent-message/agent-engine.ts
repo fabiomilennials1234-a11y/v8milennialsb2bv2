@@ -362,6 +362,8 @@ export class AgentEngine {
       forced_text_succeeded: false,
       fallback_used: false,
       truncated: false,
+      duplicate_regenerated: false,
+      sanitized_to_empty: false,
     };
 
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
@@ -528,7 +530,7 @@ export class AgentEngine {
     if (sanitized.droppedBlocks > 0) {
       console.warn('[AgentEngine] Stripped', sanitized.droppedBlocks, 'JSON action block(s) from LLM output');
     }
-    const assistantMessage = sanitized.text;
+    let assistantMessage = sanitized.text;
     // RC.4: chain-of-thought capturado de <thinking>...</thinking> (se reasoning_mode != 'off')
     const capturedReasoning = sanitized.reasoning ?? null;
     if (capturedReasoning && !conversation.id.startsWith('temp_')) {
@@ -550,15 +552,70 @@ export class AgentEngine {
       telemetry,
     });
 
+    // 8a.1 EMPTY-AFTER-SANITIZE guard — quando o modelo emite a resposta inteira
+    // como tool-call/ReAct EM TEXTO, o sanitizer remove tudo e sobra string vazia.
+    // O fallback (forced-text) acima só cobre vazio PRÉ-sanitize
+    // (finalAssistantMessage), então este caso escapava → lead no vácuo, IA
+    // "ativa" mas muda (incidente Bertin/Bia 2026-06-03). Regenera forçando
+    // TEXTO PURO; se ainda vazio, fallback natural + handoff (nunca silêncio).
+    if (!assistantMessage || assistantMessage.trim().length === 0) {
+      console.warn('[AgentEngine] Empty after sanitize (tool-call text leak) — regenerating plain text for lead:', leadId);
+      telemetry.sanitized_to_empty = true;
+      try {
+        const plainTextInstruction =
+          '[SISTEMA] Responda agora em TEXTO PURO para o cliente. NÃO escreva nomes de ' +
+          'ferramentas, NÃO use JSON, NÃO use tags tipo <tool> ou {"action":...}. ' +
+          'Apenas a mensagem natural que o cliente deve ler, respondendo a última mensagem dele.';
+        const plainMessages = this.openRouter.convertMessages(
+          [...multiTurnMessages, { role: 'user', content: plainTextInstruction }],
+          systemPrompt,
+        );
+        const plainResp = await this.openRouter.chat({
+          model,
+          messages: plainMessages,
+          tool_choice: 'none',
+          max_tokens: 2048,
+          temperature,
+        });
+        const plainRaw = plainResp.choices?.[0]?.message?.content?.trim() ?? '';
+        const plainSan = sanitizeAssistantMessage(plainRaw, !!actionToExecute);
+        if (plainSan.text && plainSan.text.trim().length > 0) {
+          assistantMessage = plainSan.text;
+          telemetry.forced_text_succeeded = true;
+          console.log('[AgentEngine] Plain-text regenerate recovered', plainSan.text.length, 'chars');
+        }
+      } catch (plainErr) {
+        console.error('[AgentEngine] Plain-text regenerate failed:', plainErr);
+      }
+      if (!assistantMessage || assistantMessage.trim().length === 0) {
+        const fb = buildFallbackOutcome(this.organizationId);
+        assistantMessage = fb.message;
+        if (!actionToExecute) actionToExecute = fb.action;
+        telemetry.fallback_used = true;
+        console.warn('[AgentEngine] Plain-text regenerate still empty — handing off to human');
+      }
+    }
+
     // 8a. Split message on ||SPLIT|| delimiter (WhatsApp natural messaging)
     // Case-insensitive + tolera variações (||split||, || SPLIT ||, etc)
-    const messageParts = splitByDelimiter(assistantMessage);
+    let messageParts = splitByDelimiter(assistantMessage);
     // Versão limpa sem delimitadores (usada para memória e logs)
-    const cleanMessage = messageParts.join(' ');
+    let cleanMessage = messageParts.join(' ');
 
-    // 8b. Duplicate content guard — block if identical message sent to this lead in last 60s
-    {
-      const normalizedContent = cleanMessage.replace(/\s+/g, ' ').trim().toLowerCase();
+    // 8b. Duplicate content guard — anti-repeat com regeneração.
+    //
+    // Incidente Bertin (2026-06-03): em conversas onde o modelo re-emitia
+    // verbatim uma pergunta de qualificação já enviada, o guard antigo
+    // retornava { message: null } → o lead ficava no VÁCUO (IA "ativa" porém
+    // muda, sem fallback, sem handoff). Em vez de silenciar, agora:
+    //   1) detecta o duplicado exato (mesma normalização),
+    //   2) roda UM turno extra (sem tools) instruindo o modelo a NÃO repetir e
+    //      responder diretamente a última mensagem do lead,
+    //   3) se o regenerado ainda for duplicado/vazio, cai no fallback natural +
+    //      TRANSFER_HUMAN (nunca deixa o lead sem resposta).
+    const isRecentDuplicate = async (txt: string): Promise<boolean> => {
+      const normalizedContent = txt.replace(/\s+/g, ' ').trim().toLowerCase();
+      if (!normalizedContent) return false;
       const { data: recentDup } = await this.supabase
         .from("whatsapp_messages")
         .select("id, content")
@@ -568,21 +625,57 @@ export class AgentEngine {
         .gte("created_at", new Date(Date.now() - 60_000).toISOString())
         .order("created_at", { ascending: false })
         .limit(3);
+      if (!recentDup || recentDup.length === 0) return false;
+      return recentDup.some((msg: any) =>
+        (msg.content || '').replace(/\s+/g, ' ').trim().toLowerCase() === normalizedContent
+      );
+    };
 
-      if (recentDup && recentDup.length > 0) {
-        const isDuplicate = recentDup.some((msg: any) => {
-          const prev = (msg.content || '').replace(/\s+/g, ' ').trim().toLowerCase();
-          return prev === normalizedContent;
+    if (await isRecentDuplicate(cleanMessage)) {
+      console.warn('[AgentEngine] Duplicate AI response detected — regenerating (anti-repeat) for lead:', leadId);
+      telemetry.duplicate_regenerated = true;
+      const applyHandoffFallback = () => {
+        const fb = buildFallbackOutcome(this.organizationId);
+        assistantMessage = fb.message;
+        messageParts = [fb.message];
+        cleanMessage = fb.message;
+        // Só assume o handoff se o LLM não decidiu nenhuma ação legítima.
+        if (!actionToExecute) actionToExecute = fb.action;
+        telemetry.fallback_used = true;
+      };
+      try {
+        const antiRepeat =
+          '[SISTEMA] Sua última resposta REPETIU uma mensagem que você já enviou. ' +
+          'NÃO repita nada que já foi dito. Responda DIRETAMENTE a última mensagem do ' +
+          'lead, avançando a conversa com informação nova, de forma específica e natural.';
+        const regenMessages = this.openRouter.convertMessages(
+          [...multiTurnMessages, { role: 'user', content: antiRepeat }],
+          systemPrompt,
+        );
+        const regenResp = await this.openRouter.chat({
+          model,
+          messages: regenMessages,
+          tool_choice: 'none',
+          max_tokens: 2048,
+          temperature,
         });
-        if (isDuplicate) {
-          console.warn('[AgentEngine] Blocking duplicate AI response for lead:', leadId);
-          return {
-            message: null,
-            state: nextState,
-            action_executed: actionToExecute?.action,
-            _blocked_reason: "duplicate_content",
-          } as any;
+        const regenRaw = regenResp.choices?.[0]?.message?.content?.trim() ?? '';
+        const regenSan = sanitizeAssistantMessage(regenRaw, !!actionToExecute);
+        const regenParts = splitByDelimiter(regenSan.text);
+        const regenClean = regenParts.join(' ');
+
+        if (regenClean.trim().length > 0 && !(await isRecentDuplicate(regenClean))) {
+          assistantMessage = regenSan.text;
+          messageParts = regenParts;
+          cleanMessage = regenClean;
+          console.log('[AgentEngine] Anti-repeat regenerate produced fresh', regenClean.length, 'chars');
+        } else {
+          console.warn('[AgentEngine] Anti-repeat regenerate still duplicate/empty — handing off to human');
+          applyHandoffFallback();
         }
+      } catch (regenErr) {
+        console.error('[AgentEngine] Anti-repeat regenerate failed — handing off to human:', regenErr);
+        applyHandoffFallback();
       }
     }
 
