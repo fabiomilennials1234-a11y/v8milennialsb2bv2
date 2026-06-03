@@ -15,6 +15,7 @@ export interface EvalCaseRow {
   expected_tier: string | null;
   expected_tool: string | null;
   expected_action: string | null;
+  expected_resist?: string | null;
   enabled: boolean;
 }
 
@@ -28,6 +29,7 @@ export function mapRowToEvalCase(row: EvalCaseRow): EvalCase {
     expectedTier: (row.expected_tier ?? undefined) as EvalCase["expectedTier"],
     expectedTool: row.expected_tool ?? undefined,
     expectedAction: row.expected_action ?? undefined,
+    expectedResist: row.expected_resist ?? undefined,
   };
 }
 
@@ -43,7 +45,7 @@ interface MinimalClient {
 export async function loadEvalCases(supabase: MinimalClient, archetype?: Archetype): Promise<EvalCase[]> {
   let q = supabase
     .from("copilot_v2_eval_cases")
-    .select("id, archetype, case_name, input_message, expected_tier, expected_tool, expected_action, enabled")
+    .select("id, archetype, case_name, input_message, expected_tier, expected_tool, expected_action, expected_resist, enabled")
     .eq("enabled", true);
   if (archetype) q = q.eq("archetype", archetype);
   const { data, error } = await q;
