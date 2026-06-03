@@ -26,6 +26,14 @@ const ENGINE_FUNCTIONS: Record<string, string> = {
   copilot: "process-ai-actions",
 };
 
+// Resurrection caps (incidente 2026-06-03): este reaper ressuscitava ações
+// copilot com retry_count=0 e SEM teto, anulando o MAX_RETRIES do
+// process-ai-actions. Ações permanentemente inválidas (Uazapi 500, document_id
+// não-UUID) reviviam a cada 5min por SEMANAS (32k jobs / 5 ações), martelando o
+// provider e arriscando reentregar mídia velha. Cap por idade + tentativas.
+const RESURRECTION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // ação mais velha que 24h não ressuscita
+const MAX_RESURRECTION_RETRIES = 5; // teto absoluto de tentativas
+
 Deno.serve(
   withSentry("retry-dead-letter-jobs", async (req: Request): Promise<Response> => {
     const corsHeaders = getCorsHeaders(req.headers.get("origin"));
@@ -326,12 +334,45 @@ async function redispatchJob(
       return true;
 
     } else if (sourceEngine === "copilot" && sourceTable === "pending_ai_actions" && sourceId) {
-      // Reset the pending_ai_action to pending so it gets re-claimed
+      // Resurrection guard (ver constantes acima). Lê o estado atual antes de
+      // resetar para não reviver ações terminais/abandonadas indefinidamente.
+      const { data: action } = await supabase
+        .from("pending_ai_actions")
+        .select("created_at, retry_count, status")
+        .eq("id", sourceId)
+        .maybeSingle();
+
+      // Linha removida ou já terminal → nada a ressuscitar; encerra o job.
+      if (!action || action.status === "dead_letter" || action.status === "completed") {
+        return true;
+      }
+
+      const ageMs = Date.now() - new Date(action.created_at as string).getTime();
+      const tooOld = ageMs > RESURRECTION_MAX_AGE_MS;
+      const tooManyRetries = ((action.retry_count as number) ?? 0) >= MAX_RESURRECTION_RETRIES;
+
+      if (tooOld || tooManyRetries) {
+        // Terminal de verdade: marca dead_letter e NÃO re-despacha.
+        await supabase
+          .from("pending_ai_actions")
+          .update({
+            status: "dead_letter",
+            processed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            error_message: `dead_letter permanente (reaper): ${
+              tooOld ? `idade > ${RESURRECTION_MAX_AGE_MS / 3_600_000}h` : `retries >= ${MAX_RESURRECTION_RETRIES}`
+            }`,
+          })
+          .eq("id", sourceId);
+        return true; // job concluído, sem resurreição
+      }
+
+      // Ressuscita preservando retry_count — zerá-lo anulava o MAX_RETRIES do
+      // process-ai-actions e criava o loop infinito.
       const { error } = await supabase
         .from("pending_ai_actions")
         .update({
           status: "pending",
-          retry_count: 0,
           error_message: null,
           next_retry_at: null,
           updated_at: new Date().toISOString(),
