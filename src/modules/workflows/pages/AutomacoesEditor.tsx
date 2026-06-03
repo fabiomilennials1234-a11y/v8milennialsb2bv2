@@ -1,8 +1,14 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useNodesState, useEdgesState } from "@xyflow/react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+
+import {
+  extractSelection,
+  cloneSelection,
+  type WorkflowSelection,
+} from "@/modules/workflows/lib/clipboard";
 
 import { WorkflowCanvas } from "@/modules/workflows/components/WorkflowCanvas";
 import { WorkflowToolbar } from "@/modules/workflows/components/WorkflowToolbar";
@@ -133,6 +139,12 @@ export default function AutomacoesEditor() {
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNode>([DEFAULT_TRIGGER_NODE]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<WorkflowEdge>([]);
 
+  // In-memory clipboard for copy/paste of node subgraphs (same editor only).
+  const clipboardRef = useRef<WorkflowSelection | null>(null);
+
+  // Mint a fresh, globally-unique node id from the shared counter.
+  const genNodeId = useCallback((type: string) => `${type}-${nodeIdCounter++}`, []);
+
   // Load workflow data when editing
   useEffect(() => {
     if (workflow && !initialized) {
@@ -203,7 +215,7 @@ export default function AutomacoesEditor() {
 
   const handleAddNode = useCallback(
     (type: WorkflowNodeType) => {
-      const newId = `${type}-${nodeIdCounter++}`;
+      const newId = genNodeId(type);
       // Place below the last node
       const maxY = nodes.reduce((max, n) => Math.max(max, n.position.y), 0);
       const newNode: WorkflowNode = {
@@ -215,7 +227,7 @@ export default function AutomacoesEditor() {
       setNodes((nds) => [...nds, newNode]);
       setSelectedNodeId(newId);
     },
-    [nodes, setNodes]
+    [nodes, setNodes, genNodeId]
   );
 
   const handleNodeClick = useCallback((nodeId: string) => {
@@ -263,6 +275,98 @@ export default function AutomacoesEditor() {
     },
     [setNodes, setEdges]
   );
+
+  // Paste a cloned selection into the graph: deselect originals, append clones,
+  // select the clones, and focus the single pasted node (if exactly one).
+  const pasteSelection = useCallback(
+    (selection: WorkflowSelection) => {
+      const cloned = cloneSelection(selection, genNodeId);
+      if (cloned.nodes.length === 0) return 0;
+      setNodes((nds) => [
+        ...nds.map((n) => (n.selected ? { ...n, selected: false } : n)),
+        ...cloned.nodes,
+      ]);
+      if (cloned.edges.length > 0) {
+        setEdges((eds) => [...eds, ...cloned.edges]);
+      }
+      setSelectedNodeId(cloned.nodes.length === 1 ? cloned.nodes[0].id : null);
+      return cloned.nodes.length;
+    },
+    [genNodeId, setNodes, setEdges]
+  );
+
+  // Ctrl/Cmd+C — capture selected copyable nodes + internal edges to clipboard.
+  const handleCopy = useCallback((): number => {
+    const selection = extractSelection(nodes, edges);
+    if (selection.nodes.length === 0) return 0;
+    clipboardRef.current = selection;
+    toast.success(`${selection.nodes.length} nó(s) copiado(s)`);
+    return selection.nodes.length;
+  }, [nodes, edges]);
+
+  // Ctrl/Cmd+V — paste the clipboard contents (no-op if empty).
+  const handlePaste = useCallback((): number => {
+    const clip = clipboardRef.current;
+    if (!clip || clip.nodes.length === 0) return 0;
+    const count = pasteSelection(clip);
+    if (count > 0) toast.success(`${count} nó(s) colado(s)`);
+    return count;
+  }, [pasteSelection]);
+
+  // Ctrl/Cmd+D — duplicate the current selection without touching the clipboard.
+  // Falls back to the sidebar-selected node when nothing is multi-selected.
+  const handleDuplicate = useCallback((): number => {
+    let selection = extractSelection(nodes, edges);
+    if (selection.nodes.length === 0 && selectedNodeId) {
+      const node = nodes.find((n) => n.id === selectedNodeId && n.type !== "trigger");
+      if (node) selection = { nodes: [node], edges: [] };
+    }
+    if (selection.nodes.length === 0) return 0;
+    const count = pasteSelection(selection);
+    if (count > 0) toast.success(`${count} nó(s) duplicado(s)`);
+    return count;
+  }, [nodes, edges, selectedNodeId, pasteSelection]);
+
+  // Duplicate a single node by id (sidebar "Duplicar" button).
+  const handleDuplicateNode = useCallback(
+    (nodeId: string) => {
+      const node = nodes.find((n) => n.id === nodeId);
+      if (!node || node.type === "trigger") return;
+      const count = pasteSelection({ nodes: [node], edges: [] });
+      if (count > 0) toast.success("Nó duplicado");
+    },
+    [nodes, pasteSelection]
+  );
+
+  // Keyboard shortcuts — ignored while typing in form fields.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      switch (e.key.toLowerCase()) {
+        case "c":
+          if (handleCopy() > 0) e.preventDefault();
+          break;
+        case "v":
+          if (handlePaste() > 0) e.preventDefault();
+          break;
+        case "d":
+          e.preventDefault(); // always — overrides browser "bookmark"
+          handleDuplicate();
+          break;
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleCopy, handlePaste, handleDuplicate]);
 
   const handleSave = useCallback(async () => {
     if (!name.trim()) {
@@ -364,6 +468,7 @@ export default function AutomacoesEditor() {
           onClose={() => setSelectedNodeId(null)}
           onUpdateNode={handleUpdateNode}
           onDeleteNode={handleDeleteNode}
+          onDuplicateNode={handleDuplicateNode}
           allNodes={nodes as any}
         />
       </div>

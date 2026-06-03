@@ -47,6 +47,10 @@ Inclui:
 
 Internals (não re-exportados — usados apenas via Pages do próprio módulo): WorkflowCanvas, WorkflowSidebar, WorkflowToolbar, WorkflowAnalytics, WorkflowImportDialog, WorkflowTemplates, EnrollmentCriteria, ReenrollmentConfig, SplitAbAnalytics, TemplateTextarea, VariableInserter + subpastas `action-configs/`, `edges/`, `nodes/`, `sidebar-panels/`.
 
+### Lib interna
+
+- `lib/clipboard.ts` — copy/paste de nós no editor. `extractSelection` (seleção copiável + edges internas) + `cloneSelection` (remap IDs/edges/goto, preserva splitAb `sourceHandle`, filtra trigger). Pura, testada (`clipboard.test.ts`). Consumida só por `AutomacoesEditor`. Feature doc: `06 — Features/automacoes/copy-paste-nodes.md`.
+
 ### Pages
 
 NÃO re-exportadas — App.tsx faz deep-import via React.lazy:
