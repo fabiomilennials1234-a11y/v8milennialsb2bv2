@@ -53,9 +53,9 @@ describe('CopilotV2Wizard — save', () => {
 });
 
 describe('CopilotV2Wizard — stepper (create)', () => {
-  it('renders the linear stepper starting at section 1 of 13', () => {
+  it('renders the linear stepper starting at section 1 of 14 (12 sections + escape-hatch + Testar)', () => {
     render(<CopilotV2Wizard agentId="a1" archetype="qualificador" mode="create" />);
-    expect(screen.getByText('1/13')).toBeInTheDocument();
+    expect(screen.getByText('1/14')).toBeInTheDocument();
     expect(screen.getByText('Empresa')).toBeInTheDocument();
   });
 });

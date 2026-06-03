@@ -19,6 +19,7 @@ import { sectionsFor, type SectionDef } from "./wizardSections";
 import { FieldRenderer } from "./fields";
 import { setPath } from "./pathUtils";
 import { RubricForm } from "./RubricForm";
+import { SimulatorPanel } from "./SimulatorPanel";
 import { useSaveCopilotV2Config } from "../../hooks/useCopilotV2Config";
 import {
   missingHardForActivation,
@@ -139,12 +140,16 @@ export function CopilotV2Wizard({
                   {s.required && <span className="ml-0.5 text-primary">*</span>}
                 </TabsTrigger>
               ))}
+              <TabsTrigger value="__teste" className="text-xs">Teste</TabsTrigger>
             </TabsList>
             {sections.map((s) => (
               <TabsContent key={s.id} value={s.id} className="pt-4">
                 {renderSection(s)}
               </TabsContent>
             ))}
+            <TabsContent value="__teste" className="pt-4">
+              <SimulatorPanel archetype={archetype} mode="edit" agentId={agentId} />
+            </TabsContent>
           </Tabs>
           {footer}
         </CardContent>
@@ -152,38 +157,47 @@ export function CopilotV2Wizard({
     );
   }
 
-  // ── CREATE mode: linear stepper ──
+  // ── CREATE mode: linear stepper (+ a final synthetic "Testar" step) ──
+  const SIM_STEP = sections.length;
+  const total = sections.length + 1;
+  const onSim = step === SIM_STEP;
   const current = sections[step];
-  const pct = Math.round(((step + 1) / sections.length) * 100);
+  const pct = Math.round(((step + 1) / total) * 100);
   return (
     <Card className="border-border/60">
       <CardHeader className="space-y-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">
-            {current.title}
-            {current.required && <span className="ml-0.5 text-primary">*</span>}
+            {onSim ? "Testar agente" : current.title}
+            {!onSim && current.required && <span className="ml-0.5 text-primary">*</span>}
           </CardTitle>
           <span className="text-xs text-muted-foreground">
-            {step + 1}/{sections.length}
+            {step + 1}/{total}
           </span>
         </div>
         <Progress value={pct} className="h-1" />
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="min-h-[180px]">{renderSection(current)}</div>
+        <div className="min-h-[180px]">
+          {onSim ? (
+            <SimulatorPanel archetype={archetype} mode="create" draftConfig={config} draftRubric={rubricRules} />
+          ) : (
+            renderSection(current)
+          )}
+        </div>
         <div className="flex items-center justify-between">
           <Button variant="ghost" disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>
             Voltar
           </Button>
-          {step < sections.length - 1 ? (
-            <Button onClick={() => setStep((s) => Math.min(sections.length - 1, s + 1))}>Continuar</Button>
+          {step < SIM_STEP ? (
+            <Button onClick={() => setStep((s) => Math.min(SIM_STEP, s + 1))}>Continuar</Button>
           ) : (
             <span className={cn("text-xs", canActivate ? "text-primary" : "text-muted-foreground")}>
               {canActivate ? "Pronto para ativar" : `Faltam: ${missing.join(", ")}`}
             </span>
           )}
         </div>
-        {step === sections.length - 1 && footer}
+        {onSim && footer}
       </CardContent>
     </Card>
   );

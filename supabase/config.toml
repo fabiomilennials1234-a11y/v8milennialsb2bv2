@@ -299,5 +299,12 @@ verify_jwt = false
 [functions.copilot-v2-save-config]
 verify_jwt = false
 
+# copilot-v2-simulate: simulador dry-run (Slice 9); verify_jwt=false p/ OPTIONS, JWT do user via client; zero escrita
+[functions.copilot-v2-simulate]
+verify_jwt = false
+
+# evaluate-eval-suite: roda eval_cases do arquétipo (Slice 9); verify_jwt=false p/ OPTIONS, RLS org-scoped; zero escrita
+[functions.evaluate-eval-suite]
+verify_jwt = false
 
 

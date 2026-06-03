@@ -161,3 +161,7 @@ export { CopilotPlayground } from "./components/playground/CopilotPlayground";
 export { CopilotV2Wizard, type CopilotV2WizardProps } from "./components/v2-wizard/CopilotV2Wizard";
 export { useCopilotV2Config, useSaveCopilotV2Config } from "./hooks/useCopilotV2Config";
 export * as copilotV2Config from "./lib/copilot-v2-config";
+
+// Copilot v2 simulator + eval-suite (Slice 9) — dry-run authoring test surface.
+export { SimulatorPanel } from "./components/v2-wizard/SimulatorPanel";
+export { useSimulateTurn, useRunEvalSuite } from "./hooks/useCopilotV2Simulator";
