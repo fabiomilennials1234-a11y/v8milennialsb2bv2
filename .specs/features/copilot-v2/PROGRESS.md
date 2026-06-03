@@ -5,6 +5,27 @@
 
 > Estado vivo da reconstrução. v2 é **isolado da v1** (tabelas `copilot_v2_*`, edge fn `agent-runtime-v2`, módulos `_shared/copilot-v2/`). Nada ativado em prod — v1 100% operante. Rollout por-org via `copilot_v2_agents.is_active`.
 
+## W13 — Industrialização do eval (PR aberto → develop, 2026-06-03)
+
+Primeira das 4 waves must-have do ⛳ portão de produção (Fase D). **Não** "ligar eval no CI" (a Slice 9 já fazia isso via `eval-suite-smoke`); W13 **industrializa** o dataset + fecha o loop judge→dataset + garante determinismo.
+
+**Decisões do CTO:** D1 cognition goldens (os 5 incidentes v1 ficam regressões de harness, não eval-cases) · D2 judge→dataset **manual-curado** (candidato `enabled=false`) · D3 fixture commitado `eval-golden.json` (seed SQL gerado dele) · D4 `trace_id` nullable em eval_runs (forward-compat) · D5 gate path-filtered pré-merge.
+
+**Entregue (TDD, reusa `runEvalSuite`/`createFakeLlm` verbatim):**
+- `eval-fingerprint.ts` — FNV-1a da superfície de eval (base prompt + modelo + tool-registry) por arquétipo; o fixture trava os fingerprints → editar prompt/modelo/tool força re-bless.
+- `llm-cache.ts` — `makeCachedLlm` (respostas commitadas por (case_id, model)); cache-miss = throw (nunca LLM ao vivo no CI).
+- `eval-golden.json` — dataset golden de cognição por arquétipo (fonte única) + respostas cacheadas + fingerprints.
+- `eval-dataset-gate.test.ts` — gate hermético sobre o dataset; **bloqueia regressão** (verificado: flip de tier → vermelho). + `eval-seed-drift.test.ts` (paridade fixture↔seed).
+- `judge-to-eval-case.ts` — mapper puro rejeição-do-judge → candidato `enabled=false` (+ `candidateToEvalCaseRow`).
+- `eval-run-row.ts` / `eval-run-persist.ts` — persiste `eval_runs` (org do contexto, `trace_id` nullable).
+- Edge wiring: `evaluate-eval-suite` persiste runs (service_role, best-effort); `copilot-v2-worker` `judgeOutput` promove violação real → candidato (best-effort, idempotente, nunca quebra o turno).
+- CI `copilot-v2-eval.yml` — gate path-filtered, pré-merge, em PRs a develop/main que tocam copilot-v2 (herma, sem DB/secret).
+- Migrations **committed-not-applied**: `20260603120000_..._eval_seed_golden` (org-guarded, idempotente) + `20260603120100_..._eval_runs_trace_id`.
+
+**Verificação:** copilot-v2 unit **64 files / 442 pass**; eslint 0 err (0 warn nos novos); tsc ratchet 0 novos. (Full `tests/unit/` tem 42 falhas **pré-existentes** em develop, fora de copilot-v2.)
+
+**Follow-up explícito (fora do gate):** UI de **curadoria** dos candidatos judge→dataset (flipar `enabled=true`) + espelho FE `JUDGE_CATEGORIES` + contract-lock — net-new, design. Até lá, curar via SQL. Eval semântico de `expected_action` (carteira).
+
 ## Feito (mergeado em `develop`)
 
 ## 🟢 RUNTIME LIVE EM PROD (2026-06-01) — inerte até ativar

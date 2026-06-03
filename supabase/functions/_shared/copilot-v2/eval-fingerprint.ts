@@ -1,0 +1,61 @@
+/**
+ * eval-fingerprint — Copilot v2 (W13). A deterministic fingerprint of the
+ * eval-relevant surface per archetype: the immutable BASE_PROMPT + the routed
+ * model + the tool-registry contract. The golden eval fixture commits these
+ * fingerprints; the dataset-gate test asserts the live fingerprint still matches.
+ *
+ * Editing a base prompt, swapping a model, or changing a tool's contract flips
+ * the fingerprint and forces the golden eval to be re-blessed (re-run + fixture
+ * regenerated) — this is how "a prompt/tool/model change triggers the archetype
+ * eval suite" is structurally enforced (W13, SPEC Slice 10 / Fase D).
+ *
+ * Pure, synchronous, zero-dep (FNV-1a, NOT a crypto hash): a change-detection
+ * tripwire, not a security boundary. Runtime-agnostic (Deno + Vitest), no
+ * dependency on a global crypto API.
+ */
+
+import { BASE_PROMPTS } from "./base-prompts.ts";
+import { TOOL_REGISTRY } from "./tool-registry.ts";
+import { modelForArchetype, type Archetype } from "./model-selector.ts";
+
+export const ARCHETYPES: Archetype[] = ["qualificador", "vendedor", "carteira"];
+
+const FNV_OFFSET = 0xcbf29ce484222325n;
+const FNV_PRIME = 0x100000001b3n;
+const MASK_64 = 0xffffffffffffffffn;
+
+/** Field join for the fingerprint. Fields are concatenated in a fixed order
+ *  (prompt, model, tools); any edit to any field flips the hash, which is all a
+ *  change-detection tripwire needs — so no separator is required. */
+const SEP = "";
+
+/** FNV-1a 64-bit over the string's UTF-16 code units → 16-char lowercase hex. */
+export function fingerprintOf(input: string): string {
+  let hash = FNV_OFFSET;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= BigInt(input.charCodeAt(i));
+    hash = (hash * FNV_PRIME) & MASK_64;
+  }
+  return hash.toString(16).padStart(16, "0");
+}
+
+/** The tool-contract surface that, if changed, should re-trigger the eval. */
+function toolSurface(): string {
+  return JSON.stringify(TOOL_REGISTRY);
+}
+
+/** Fingerprint of one archetype's eval surface (base prompt + model + tools). */
+export function evalFingerprint(archetype: Archetype): string {
+  return fingerprintOf(
+    [BASE_PROMPTS[archetype], modelForArchetype(archetype), toolSurface()].join(SEP),
+  );
+}
+
+/** All three archetype fingerprints, the shape committed to the golden fixture. */
+export function evalFingerprints(): Record<Archetype, string> {
+  return {
+    qualificador: evalFingerprint("qualificador"),
+    vendedor: evalFingerprint("vendedor"),
+    carteira: evalFingerprint("carteira"),
+  };
+}
