@@ -1,9 +1,9 @@
 {
   "_doc": "W13 golden eval dataset — SINGLE SOURCE for (a) the hermetic CI regression gate and (b) the committed-not-applied seed migration. Cognition goldens per archetype (CTO decision D1): the 5 v1 incidents stay harness regressions; this dataset verifies tier/tool cognition. 'fingerprints' is blessed from eval-fingerprint.evalFingerprints() — a prompt/model/tool edit flips it and forces this fixture to be regenerated (re-bless). 'responses' is the (case_id → model → scripted LLM turns) cache so the gate is deterministic with no live LLM. Carteira cases are expected_action (semantic) → SKIP until a later wave, so they need no cached response.",
   "fingerprints": {
-    "qualificador": "25bfbd7b6ecb557c",
-    "vendedor": "260cc5b5212d4e10",
-    "carteira": "0661bc64db2d63ef"
+    "qualificador": "e6cf7b40a6ce1d50",
+    "vendedor": "d3cc29785937989e",
+    "carteira": "092e2633a88729df"
   },
   "agents": {
     "qualificador": {
