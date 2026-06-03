@@ -434,6 +434,63 @@ export function resolveProductToId(
   return closest ? closest.id : defaultId;
 }
 
+/**
+ * Extrai UM telefone limpo de uma célula que pode conter vários números, prefixos
+ * ou texto solto. Export Cauta/ERP traz coisas como:
+ *   "(16)3234-1290 /(16)99778-0380 Bruno"  → dois números + nome
+ *   "(15)3282-2223 (marcio)"               → número + nome
+ *   "7,1994E+10"                            → notação científica do Excel
+ *
+ * Sem este passo, `parseCSV` mandava a célula crua como `phone`. A edge `import-leads`
+ * tira todos os não-dígitos e gera string de 20+ dígitos → `validatePhone` (10-13)
+ * REJEITA o lead inteiro ("telefone inválido") → lead some, com email e tudo.
+ *
+ * Estratégia: normaliza sci-notation, quebra em candidatos por separadores comuns
+ * (/, ;, |, vírgula, quebra de linha, " e ", " ou "), reduz cada um a dígitos, mantém
+ * só os com 10-11 dígitos locais (DDD + número; remove código país 55 quando presente)
+ * e devolve o melhor (celular 11 dígitos > fixo 10). Sem candidato válido → undefined
+ * (lead importa como incompleto em vez de ser rejeitado).
+ */
+export function pickBestPhone(raw: string | undefined | null): string | undefined {
+  if (!raw) return undefined;
+
+  // Notação científica do Excel (ponto ou vírgula pt-BR): "5.51E+12" / "7,1994E+10"
+  let work = String(raw).trim();
+  const dotted = work.replace(",", ".");
+  if (/^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$/.test(dotted)) {
+    const num = Number(dotted);
+    if (!isNaN(num) && num > 0) work = Math.round(num).toString();
+  }
+
+  const chunks = work.split(/[/;,|\n]|\s+ou\s+|\s+e\s+/i);
+  const candidates: string[] = [];
+  for (const chunk of chunks) {
+    let digits = chunk.replace(/\D/g, "");
+    if (!digits) continue;
+    // Remove código de país BR quando vier junto (55 + 10/11 dígitos locais)
+    if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+      digits = digits.slice(2);
+    }
+    if (digits.length === 10 || digits.length === 11) candidates.push(digits);
+  }
+  if (candidates.length === 0) return undefined;
+
+  // Prefere celular (11 dígitos) a fixo (10); empate mantém ordem de aparição.
+  candidates.sort((a, b) => b.length - a.length);
+  return candidates[0];
+}
+
+/**
+ * Limpa célula de email: extrai o primeiro endereço com "@" válido. Export Cauta às
+ * vezes traz "Email:foo@bar.com" (prefixo) ou "CNPJ:123..." (coluna desalinhada).
+ * Sem "@" → undefined (não grava lixo no campo email do lead).
+ */
+export function cleanEmail(raw: string | undefined | null): string | undefined {
+  if (!raw) return undefined;
+  const match = String(raw).match(/[^\s,;:|<>()]+@[^\s,;:|<>()]+\.[^\s,;:|<>()]+/);
+  return match ? match[0].trim().toLowerCase() : undefined;
+}
+
 /** Normaliza texto para comparação (lowercase, sem acentos, trim, sem ✓/✗ no final). */
 function normalizeStageName(s: string): string {
   return s
@@ -804,18 +861,12 @@ export function useImportLeads() {
               [/celular/, /telefone/, /\bphone\b/, /whatsapp/, /\bfone\b/, /\btel\b/]
             );
             phoneField.matchedKeys.forEach(k => usedKeys.add(k));
-            // Normaliza notação científica do Excel (ex: 5.51E+12 ou 7,1994E+10 → "5511987654321")
-            const normalizedPhoneValues = phoneField.values.map((v) => {
-              const trimmed = (v || "").trim();
-              // Normaliza vírgula decimal (locale pt-BR: "7,1994E+10") para ponto antes de testar
-              const dotted = trimmed.replace(",", ".");
-              if (/^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$/.test(dotted)) {
-                const num = Number(dotted);
-                if (!isNaN(num) && num > 0) return Math.round(num).toString();
-              }
-              return trimmed;
-            });
-            const phone = chooseBestValue("phone", normalizedPhoneValues);
+            // Extrai UM telefone válido por célula (multi-número, sci-notation, texto solto).
+            // Ver pickBestPhone: sem isso a célula crua virava 20+ dígitos e a edge rejeitava o lead.
+            const phoneCandidates = phoneField.values
+              .map((v) => pickBestPhone(v))
+              .filter((v): v is string => !!v);
+            const phone = chooseBestValue("phone", phoneCandidates);
 
             // EMAIL
             const emailField = collectFieldValues(
@@ -831,7 +882,11 @@ export function useImportLeads() {
               [/\bemail\b/, /e-mail/, /\bmail\b/]
             );
             emailField.matchedKeys.forEach(k => usedKeys.add(k));
-            const email = chooseBestValue("email", emailField.values);
+            // Extrai endereço com "@" válido por célula (corta prefixo "Email:" e células desalinhadas com CNPJ).
+            const emailCandidates = emailField.values
+              .map((v) => cleanEmail(v))
+              .filter((v): v is string => !!v);
+            const email = chooseBestValue("email", emailCandidates);
 
             // Leads sem telefone e sem email são permitidos (importados como incompletos)
 
