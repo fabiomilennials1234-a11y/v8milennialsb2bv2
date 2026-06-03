@@ -27,9 +27,17 @@ export interface LlmToolCall {
   args: Record<string, unknown>;
 }
 
+/** Per-call token usage the LlmClient may report (W10 cost accounting). */
+export interface LlmUsage {
+  promptTokens: number;
+  completionTokens: number;
+}
+
 export interface LlmResponse {
   text: string | null;
   toolCalls: LlmToolCall[];
+  /** Token usage for this single completion, when the provider reports it. */
+  usage?: LlmUsage;
 }
 
 export interface ToolSchema {
@@ -70,12 +78,29 @@ export interface RunTurnResult {
   reply: string | null;
   steps: ToolStep[];
   stoppedReason: "text_reply" | "budget_exceeded";
+  /** Total token usage summed across every completion this turn (W10). Absent
+   *  when no completion reported usage (keeps fake-LLM loop tests unchanged). */
+  usage?: LlmUsage;
 }
 
 export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
   const max = input.maxToolCalls ?? TOOL_CALL_BUDGET;
   const convo: Msg[] = [...input.messages];
   const steps: ToolStep[] = [];
+  // Sum token usage across every complete() call this turn. `sawUsage` keeps the
+  // field absent (not {0,0}) when the provider reports nothing, so existing loop
+  // tests that toEqual the result are unaffected.
+  let sumPrompt = 0;
+  let sumCompletion = 0;
+  let sawUsage = false;
+  const accUsage = (u: LlmUsage | undefined) => {
+    if (!u) return;
+    sawUsage = true;
+    sumPrompt += Number.isFinite(u.promptTokens) ? u.promptTokens : 0;
+    sumCompletion += Number.isFinite(u.completionTokens) ? u.completionTokens : 0;
+  };
+  const withUsage = (r: RunTurnResult): RunTurnResult =>
+    sawUsage ? { ...r, usage: { promptTokens: sumPrompt, completionTokens: sumCompletion } } : r;
   // Results of tool calls already executed this turn, keyed by name+args. A
   // repeated identical call reuses the cached result — never a second side
   // effect (W4: dedup de tool-call repetida; guards the send_media double-send).
@@ -86,14 +111,15 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
   // Belt-and-suspenders cap so a misbehaving fake/LLM can never spin forever.
   for (let guard = 0; guard < max + 2; guard++) {
     const resp = await input.llm.complete({ system: input.system, messages: convo, tools: input.toolSchemas });
+    accUsage(resp.usage);
 
     if (!resp.toolCalls || resp.toolCalls.length === 0) {
-      return { reply: resp.text, steps, stoppedReason: "text_reply" };
+      return withUsage({ reply: resp.text, steps, stoppedReason: "text_reply" });
     }
 
     for (const tc of resp.toolCalls) {
       if (!decideToolCallBudget({ callsThisTurn: calls, max }).allowed) {
-        return { reply: null, steps, stoppedReason: "budget_exceeded" };
+        return withUsage({ reply: null, steps, stoppedReason: "budget_exceeded" });
       }
 
       const cap = decideCapabilityGate({ tool: tc.name, capabilities: input.capabilities });
@@ -138,5 +164,5 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
   }
 
   // Reached only if the LLM kept proposing tool calls up to the budget.
-  return { reply: null, steps, stoppedReason: "budget_exceeded" };
+  return withUsage({ reply: null, steps, stoppedReason: "budget_exceeded" });
 }

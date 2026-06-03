@@ -24,6 +24,7 @@ import { routeArchetype, type ContactStatus } from "../_shared/copilot-v2/contac
 import type { Archetype, ModelId } from "../_shared/copilot-v2/model-selector.ts";
 import { createToolExecutor } from "../_shared/copilot-v2/tool-executor.ts";
 import { decideHumanPauseGate } from "../_shared/copilot-v2/human-pause.ts";
+import { decideOrgPauseGate, unionPause } from "../_shared/copilot-v2/org-pause.ts";
 import { resolveAgentCapabilities } from "../_shared/copilot-v2/capability-gate.ts";
 import { createOpenRouterClient } from "../_shared/copilot-v2/openrouter-client.ts";
 import { decideOutputJudge, shouldSampleJudge, buildJudgePrompt, type JudgeVerdict } from "../_shared/copilot-v2/output-judge.ts";
@@ -31,6 +32,8 @@ import { judgeToEvalCaseCandidate, candidateToEvalCaseRow } from "../_shared/cop
 import { evaluateLoopSignal, decideLoopGate, type LoopMessage } from "../_shared/copilot-v2/loop-detector.ts";
 import { decideHitlGate } from "../_shared/copilot-v2/hitl-gate.ts";
 import { resolveHandoffTargets } from "../_shared/copilot-v2/handoff-routing.ts";
+import { decideCostGate } from "../_shared/copilot-v2/cost-gate.ts";
+import { computeCostUsd } from "../_shared/copilot-v2/cost-pricing.ts";
 import type { ResolvedContext } from "../_shared/copilot-v2/cognition-worker.ts";
 import type { AgentConfig } from "../_shared/copilot-v2/prompt-builder.ts";
 import { getValidAccessToken } from "../_shared/google-calendar-utils.ts";
@@ -80,13 +83,15 @@ serve(
     const result = await processBatch(rows, {
       resolveContext: async (row) => { await ensureTrace(row); return resolveContext(supabase, row); },
       makeLlm: (model: ModelId) => createOpenRouterClient({ model, maxTokens: 2048 }),
-      makeExecutor: (row, context) => createToolExecutor(supabase, {
+      makeExecutor: (row, context, opts) => createToolExecutor(supabase, {
         organizationId: row.organization_id,
         leadId: row.lead_id,
         conversationId: row.conversation_id,
         canonicalPhone: row.canonical_phone,
         agentId: context._agentId,
         now: new Date(),
+        // W10: shrink retrieval under cost pressure (degrade L2+).
+        ragShrink: opts?.ragShrink === true,
         sendMediaViaProvider: (p) => sendMediaReply(supabase, row.organization_id, p),
         getCalendarFreeBusy: async ({ userId, window }) => {
           try {
@@ -167,15 +172,28 @@ serve(
         }
       },
       checkPause: async (row) => {
+        const now = new Date();
+        // Phone-keyed human-pause (existing) UNION org-level kill-switch (W10).
+        // Either pause blocks; the org reason wins the banner. Each is fail-CLOSED.
+        let phone;
         try {
           const { data, error } = await supabase.rpc("copilot_v2_check_human_pause", {
             p_org_id: row.organization_id, p_canonical_phone: row.canonical_phone,
           });
           if (error) throw error;
-          return decideHumanPauseGate({ record: data ? { paused_until: data } : null, checkErrored: false, now: new Date() });
+          phone = decideHumanPauseGate({ record: data ? { paused_until: data } : null, checkErrored: false, now });
         } catch (_err) {
-          return decideHumanPauseGate({ record: null, checkErrored: true, now: new Date() });
+          phone = decideHumanPauseGate({ record: null, checkErrored: true, now });
         }
+        let org;
+        try {
+          const { data, error } = await supabase.rpc("copilot_v2_check_org_pause", { p_org_id: row.organization_id });
+          if (error) throw error;
+          org = decideOrgPauseGate({ record: data ? { paused_until: data } : null, checkErrored: false, now });
+        } catch (_err) {
+          org = decideOrgPauseGate({ record: null, checkErrored: true, now });
+        }
+        return unionPause(phone, org);
       },
       checkLoop: async (row) => {
         try {
@@ -306,6 +324,96 @@ serve(
             try { await sendReply(supabase, row.organization_id, phone, text); } catch (_e) { /* per-phone best-effort */ }
           }
         }
+      },
+      // ── W10 cost governance deps ────────────────────────────────────────────
+      // Read caps + accrued spend → cost gate. Governance OFF (explicit) → no gate.
+      // No settings row → defaults (soft $3/day, hard $50/month) still apply. Any
+      // read failure → decideCostGate(checkErrored) = serve-cheapest, never pause.
+      checkCost: async (row) => {
+        try {
+          const { data: settings } = await supabase
+            .from("copilot_v2_org_settings")
+            .select("cost_governance_enabled, soft_daily_usd, hard_monthly_usd")
+            .eq("organization_id", row.organization_id).maybeSingle();
+          if (settings && settings.cost_governance_enabled === false) {
+            return { degradeLevel: 0 as const, hardPause: false, reason: null };
+          }
+          const { data: win, error } = await supabase.rpc("copilot_v2_cost_window", { p_org_id: row.organization_id });
+          if (error) throw error;
+          const w = Array.isArray(win) ? win[0] : win;
+          return decideCostGate({
+            dailySpendUsd: Number(w?.daily_usd ?? 0),
+            monthSpendUsd: Number(w?.monthly_usd ?? 0),
+            softDailyUsd: Number(settings?.soft_daily_usd ?? 3),
+            hardMonthlyUsd: Number(settings?.hard_monthly_usd ?? 50),
+            checkErrored: false,
+          });
+        } catch (_err) {
+          return decideCostGate({ dailySpendUsd: 0, monthSpendUsd: 0, softDailyUsd: 1, hardMonthlyUsd: 1, checkErrored: true });
+        }
+      },
+      // Hard monthly cap → auto-pause the org until the monthly budget resets
+      // (1st of next UTC month). An admin can lift it earlier via the kill-switch
+      // after raising the cap.
+      pauseOrg: async (row, reason) => {
+        const now = new Date();
+        const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+        await supabase.rpc("copilot_v2_set_org_pause", {
+          p_org_id: row.organization_id, p_until: reset.toISOString(), p_reason: reason, p_paused_by: null,
+        }).then(() => {}, () => {});
+      },
+      // In-app notification to every active org admin (PII-free, links to settings).
+      // Deduped: at most ONE cost-cap notification per org per UTC day — the hard
+      // cap re-fires on every queued message until the pause lands, so without this
+      // a 10-message batch would storm 10×(admins) duplicate notifications.
+      notifyAdmin: async (row, reason) => {
+        try {
+          const since = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())).toISOString();
+          const { count: already } = await supabase
+            .from("notifications")
+            .select("id", { count: "exact", head: true })
+            .eq("organization_id", row.organization_id)
+            .eq("type", "copilot_cost_cap")
+            .gte("created_at", since);
+          if ((already ?? 0) > 0) return; // already notified today — no storm
+          const { data: admins } = await supabase
+            .from("team_members").select("user_id")
+            .eq("organization_id", row.organization_id).eq("role", "admin").eq("is_active", true);
+          const notes = (admins ?? [])
+            .filter((a: any) => a.user_id)
+            .map((a: any) => ({
+              organization_id: row.organization_id,
+              user_id: a.user_id,
+              type: "copilot_cost_cap",
+              title: "Copilot pausado — teto de custo atingido",
+              description: `O teto mensal de custo do Copilot foi atingido (${reason}). Os agentes foram pausados até o próximo ciclo. Ajuste o teto em Configurações para retomar.`,
+              link: "/configuracoes",
+            }));
+          if (notes.length) await supabase.from("notifications").insert(notes);
+        } catch (_e) { /* best-effort */ }
+      },
+      // Holding pattern: re-queue the SAME inbound for a cheaper window. The 'held'
+      // message_type bounds it to one hop (the gate serves degraded on a 'held' row).
+      holdTurn: async (row) => {
+        const idem = `${row.organization_id}:${row.canonical_phone}:held:${row.trace_id}:${crypto.randomUUID()}`;
+        await supabase.rpc("copilot_v2_enqueue_message", {
+          p_org_id: row.organization_id, p_lead_id: row.lead_id, p_canonical_phone: row.canonical_phone,
+          p_message_type: "held", p_content: row.content, p_source: "inbound",
+          p_trace_id: row.trace_id, p_idempotency_key: idem,
+        }).then(() => {}, () => {});
+      },
+      // Records the turn's token spend, priced via the model actually used. THROWS
+      // on a record failure so the spine logs cost_record_failed to the trace — a
+      // silently-lost write would stale the ledger and let the gate under-degrade.
+      recordCost: async (row, usage, model) => {
+        const cost = computeCostUsd({ promptTokens: usage.promptTokens, completionTokens: usage.completionTokens }, model as ModelId);
+        const { error } = await supabase.rpc("copilot_v2_record_cost", {
+          p_org_id: row.organization_id,
+          p_prompt_tokens: usage.promptTokens,
+          p_completion_tokens: usage.completionTokens,
+          p_cost_usd: cost,
+        });
+        if (error) throw new Error(`record_cost: ${error.message}`);
       },
       recordOutbound: async (canonicalPhone, text, row) => {
         // Unique key per send: identical replies must each be recorded so the

@@ -40,6 +40,8 @@ export interface ToolContext {
   }) => Promise<{ success: boolean; message_id?: string; error?: string }>;
   /** Injected clock (tests pin it); the worker passes new Date(). */
   now?: Date;
+  /** W10: under cost pressure (degrade L2+), shrink retrieval (fewer RAG chunks). */
+  ragShrink?: boolean;
   /**
    * Calendar freeBusy I/O (injected by the worker). Pure tests pass a fake.
    * Returns busy intervals for the lead's responsible user, or ok:false when no
@@ -134,12 +136,17 @@ const searchKnowledge: Handler = async (supabase, ctx, args) => {
   const embedding = await generateEmbedding(query, apiKey);
   if (!embedding || embedding.length === 0) throw new Error("search_knowledge: embedding vazio");
 
+  // W10: under cost pressure, shrink retrieval — fewer candidates + a tighter
+  // fused result set. Recall degrades gracefully (still searches both branches).
+  const matchCount = ctx.ragShrink ? 4 : 8;
+  const fusionLimit = ctx.ragShrink ? 3 : 5;
+
   // RPC org-scoped — org SEMPRE do ctx, nunca dos args do LLM.
   const { data, error } = await supabase.rpc("copilot_v2_match_knowledge", {
     query_embedding: `[${embedding.join(",")}]`,
     p_org_id: ctx.organizationId,
     query_text: query,
-    match_count: 8,
+    match_count: matchCount,
     similarity_threshold: RAG_THRESHOLDS.doc,
   });
   if (error) throw new Error(`search_knowledge: ${error.message}`);
@@ -147,7 +154,7 @@ const searchKnowledge: Handler = async (supabase, ctx, args) => {
   const rows = (data ?? []) as Array<{ id: number; content: string; similarity: number; source: string }>;
   const semantic: KnowledgeHit[] = rows.filter((r) => r.source === "semantic");
   const keyword: KnowledgeHit[] = rows.filter((r) => r.source === "keyword");
-  const fused = fuseHybridResults(semantic, keyword, { docThreshold: RAG_THRESHOLDS.doc, limit: 5 });
+  const fused = fuseHybridResults(semantic, keyword, { docThreshold: RAG_THRESHOLDS.doc, limit: fusionLimit });
 
   if (fused.length === 0) return `Nenhuma informação encontrada na base para: "${query}"`;
   return ["=== BASE DE CONHECIMENTO ===", ...fused.map((h) => h.content)].join("\n\n");
