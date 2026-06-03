@@ -14,6 +14,8 @@
 import { handleQueuedMessage, type ResolvedContext } from "./cognition-worker.ts";
 import type { LlmClient } from "./cognition-loop.ts";
 import type { ModelId } from "./model-selector.ts";
+import { buildDeliveryPlan, deliveryProfileFor } from "./outbound-delivery.ts";
+import { buildDedupKey, dedupWindowSeconds } from "./dedup-lock.ts";
 
 export interface QueueRow {
   id: string;
@@ -45,6 +47,12 @@ export interface ProcessorDeps {
   sendReply: (canonicalPhone: string, text: string, row: QueueRow) => Promise<void>;
   /** Records the sent reply as an outbound queue row so the loop gate sees the outgoing side. */
   recordOutbound: (canonicalPhone: string, text: string, row: QueueRow) => Promise<void>;
+  /** W4: human latency — sleeps `ms` before a chunk. Absent (tests) = instant. */
+  delay?: (ms: number) => Promise<void>;
+  /** W4: "typing"/composing presence before a chunk (best-effort, never blocks send). */
+  setTyping?: (canonicalPhone: string, on: boolean, row: QueueRow) => Promise<void>;
+  /** W4: atomic outbound dedup — reserves the chunk key; false = already sent within the window. */
+  acquireOutboundLock?: (dedupKey: string, windowSeconds: number, row: QueueRow) => Promise<boolean>;
   markComplete: (id: string) => Promise<void>;
   markFailed: (id: string, error: string) => Promise<void>;
   logStep: (traceId: string, step: string, reason: string | null, meta?: Record<string, unknown>) => Promise<void>;
@@ -100,13 +108,6 @@ export async function processQueueMessage(row: QueueRow, deps: ProcessorDeps): P
           return;
         }
       }
-      const pause = await deps.checkPause(row);
-      if (pause.blocked) {
-        // A human took over between enqueue and now — suppress, do not talk over.
-        await deps.logStep(row.trace_id, "gate", pause.reason ?? "human_pause_active");
-        await deps.markComplete(row.id);
-        return;
-      }
       if (deps.checkLoop) {
         const loop = await deps.checkLoop(row);
         if (loop.blocked) {
@@ -127,9 +128,48 @@ export async function processQueueMessage(row: QueueRow, deps: ProcessorDeps): P
           return;
         }
       }
-      await deps.sendReply(row.canonical_phone, result.reply, row);
-      await deps.recordOutbound(row.canonical_phone, result.reply, row);
-      await deps.logStep(row.trace_id, "outbound", null);
+
+      // W4 — delivery realism. Split the reply into natural WhatsApp chunks, then
+      // for each chunk: re-check human-pause (a human may take over mid-stream
+      // while the per-chunk latency elapses — never talk over them); suppress an
+      // exact duplicate within the outbound window (per-chunk → retry-safe: a
+      // failed partial send resumes without re-sending what already went out);
+      // drive a "typing" presence + human delay; then send + record.
+      const profile = deliveryProfileFor(result.archetype);
+      const plan = buildDeliveryPlan(result.reply, row.content?.length ?? 0, profile);
+      let sentAny = false;
+      for (let i = 0; i < plan.chunks.length; i++) {
+        const pause = await deps.checkPause(row);
+        if (pause.blocked) {
+          await deps.logStep(row.trace_id, "gate", pause.reason ?? "human_pause_active");
+          await deps.markComplete(row.id);
+          return;
+        }
+        const chunk = plan.chunks[i];
+        if (deps.acquireOutboundLock) {
+          const dedupKey = buildDedupKey({
+            orgId: row.organization_id,
+            phone: row.canonical_phone,
+            content: chunk,
+            source: "outbound",
+          });
+          const reserved = await deps.acquireOutboundLock(dedupKey, dedupWindowSeconds("outbound"), row);
+          if (!reserved) {
+            // Identical chunk already sent within the window — skip, do not repeat.
+            await deps.logStep(row.trace_id, "outbound", "duplicate_suppressed", { chunk: i });
+            continue;
+          }
+        }
+        const ms = plan.delays[i];
+        if (ms > 0) {
+          if (deps.setTyping) await deps.setTyping(row.canonical_phone, true, row);
+          if (deps.delay) await deps.delay(ms);
+        }
+        await deps.sendReply(row.canonical_phone, chunk, row);
+        await deps.recordOutbound(row.canonical_phone, chunk, row);
+        sentAny = true;
+      }
+      if (sentAny) await deps.logStep(row.trace_id, "outbound", null);
     }
 
     await deps.markComplete(row.id);
