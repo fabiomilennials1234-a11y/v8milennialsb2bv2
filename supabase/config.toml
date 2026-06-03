@@ -37,6 +37,10 @@ verify_jwt = false
 [functions.summarize-conversation]
 verify_jwt = false
 
+# recover-stuck-conversations: admin/interno, auth via service_role no corpo
+[functions.recover-stuck-conversations]
+verify_jwt = false
+
 [functions.webhook-orchestrator]
 verify_jwt = false
 
