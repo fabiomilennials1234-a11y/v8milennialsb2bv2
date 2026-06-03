@@ -253,4 +253,18 @@ describe("splitByDelimiter", () => {
   it("drops empty chunks", () => {
     expect(splitByDelimiter("||SPLIT||a||SPLIT||")).toEqual(["a"]);
   });
+
+  it("splits on paragraph breaks (\\n\\n) into separate bubbles", () => {
+    expect(
+      splitByDelimiter("Que bom que gostou, Gabriel!\n\nTenho sim a foto. Qual prefere?"),
+    ).toEqual(["Que bom que gostou, Gabriel!", "Tenho sim a foto. Qual prefere?"]);
+  });
+
+  it("does NOT split on a single newline (stays one bubble)", () => {
+    expect(splitByDelimiter("linha 1\nlinha 2")).toEqual(["linha 1\nlinha 2"]);
+  });
+
+  it("combines ||SPLIT|| and paragraph breaks", () => {
+    expect(splitByDelimiter("a\n\nb ||SPLIT|| c\n\n\nd")).toEqual(["a", "b", "c", "d"]);
+  });
 });

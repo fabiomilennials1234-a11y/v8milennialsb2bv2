@@ -408,9 +408,19 @@ function tryRecoverFromString(jsonStr: string): RecoveredAction | null {
  */
 export const SPLIT_DELIMITER_RE = /\|\|\s*split\s*\|\|/gi;
 
+/**
+ * Quebra de parágrafo (linha em branco). Modelos como gemini-2.5-flash separam
+ * pensamentos com `\n\n` em vez de emitir `||SPLIT||`, então sem isto o texto
+ * vira UM balão único com quebra de linha (incidente Barulhinho 2026-06-02:
+ * "cada parágrafo tinha que ser um balão"). `\n` simples NÃO quebra (mantém
+ * quebras dentro do mesmo balão).
+ */
+const PARAGRAPH_BREAK_RE = /\n[ \t]*\n+/g;
+
 export function splitByDelimiter(text: string): string[] {
   return text
     .split(SPLIT_DELIMITER_RE)
+    .flatMap((chunk) => chunk.split(PARAGRAPH_BREAK_RE))
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 }
