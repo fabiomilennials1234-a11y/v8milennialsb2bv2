@@ -36,6 +36,12 @@ import { decideCostGate } from "../_shared/copilot-v2/cost-gate.ts";
 import { computeCostUsd } from "../_shared/copilot-v2/cost-pricing.ts";
 import type { ResolvedContext } from "../_shared/copilot-v2/cognition-worker.ts";
 import type { AgentConfig } from "../_shared/copilot-v2/prompt-builder.ts";
+import {
+  whatsappRowsToHistory,
+  dropTrailingCurrent,
+  DEFAULT_HISTORY_TURNS,
+  type HistoryEntry,
+} from "../_shared/copilot-v2/turn-history.ts";
 import { getValidAccessToken } from "../_shared/google-calendar-utils.ts";
 import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
 
@@ -495,6 +501,34 @@ async function resolveContext(supabase: any, row: QueueRow): Promise<ResolvedCon
   const baseConfigs: Record<Archetype, AgentConfig> = { qualificador: emptyConfig, vendedor: emptyConfig, carteira: emptyConfig };
   const baseCaps: Record<Archetype, Record<string, boolean | undefined>> = { qualificador: emptyCaps, vendedor: emptyCaps, carteira: emptyCaps };
 
+  // Slice 12 — recent shared-transcript history for the turn (W2-lite). Read the
+  // engine-agnostic whatsapp_messages store: the webhook persists every inbound
+  // and Uazapi echoes every outbound there regardless of engine, so it survives
+  // the v1→v2 cutover with NO v2 writes (and conversations.agent_id is a v1 FK we
+  // must not fabricate). Best-effort: any read failure → empty history → the
+  // legacy single-message turn (never blocks cognition). The trailing entry equal
+  // to the current inbound (the webhook just persisted it) is dropped — the
+  // cognition layer re-appends it as the current turn.
+  let history: HistoryEntry[] = [];
+  try {
+    let q = supabase
+      .from("whatsapp_messages")
+      .select("direction, content, created_at")
+      .eq("organization_id", row.organization_id)
+      .is("deleted_at", null)
+      .not("content", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(DEFAULT_HISTORY_TURNS + 1);
+    q = lead?.id
+      ? q.eq("lead_id", lead.id)
+      : q.ilike("phone_number", `%${row.canonical_phone.slice(-8)}%`);
+    const { data: wm } = await q;
+    const ordered = [...((wm ?? []) as { direction?: string | null; content?: string | null }[])].reverse();
+    history = dropTrailingCurrent(whatsappRowsToHistory(ordered), row.content);
+  } catch (_e) {
+    history = [];
+  }
+
   return {
     contactStatus: status,
     activeArchetypes,
@@ -510,6 +544,7 @@ async function resolveContext(supabase: any, row: QueueRow): Promise<ResolvedCon
       // propagação intra-turno dos slots do read — ver _MOC §Decisões abertas).
       slots: [],
     },
+    history,
     _agentId: agentRow?.id ?? null,
   };
 }
