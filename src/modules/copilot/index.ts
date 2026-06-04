@@ -165,3 +165,11 @@ export * as copilotV2Config from "./lib/copilot-v2-config";
 // Copilot v2 simulator + eval-suite (Slice 9) — dry-run authoring test surface.
 export { SimulatorPanel } from "./components/v2-wizard/SimulatorPanel";
 export { useSimulateTurn, useRunEvalSuite } from "./hooks/useCopilotV2Simulator";
+
+// Copilot v2 cost governance + kill-switch (W10) — org-wide pause banner + control.
+export { CopilotOrgKillSwitch } from "./components/governance/CopilotOrgKillSwitch";
+export {
+  useCopilotV2OrgPause,
+  ORG_PAUSE_REASON_LABEL,
+  type OrgPauseReason,
+} from "./hooks/useCopilotV2OrgPause";

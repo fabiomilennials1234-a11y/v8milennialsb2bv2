@@ -13,9 +13,10 @@
 
 import { routeArchetype, type ContactStatus } from "./contact-status.ts";
 import { modelForArchetype, type Archetype, type ModelId } from "./model-selector.ts";
+import { decideDegradation } from "./degradation.ts";
 import { buildSystemPrompt, type AgentConfig } from "./prompt-builder.ts";
 import { BASE_PROMPTS } from "./base-prompts.ts";
-import { runTurn, type LlmClient, type ToolSchema, type ToolStep } from "./cognition-loop.ts";
+import { runTurn, type LlmClient, type LlmUsage, type ToolSchema, type ToolStep } from "./cognition-loop.ts";
 import { TOOL_SCHEMAS, writeTargetOf as registryWriteTargetOf } from "./tool-registry.ts";
 import type { Introspection } from "./introspect-guard.ts";
 
@@ -39,6 +40,9 @@ export interface HandleQueuedMessageInput {
   executeTool: (name: string, args: Record<string, unknown>) => Promise<unknown>;
   writeTargetOf?: (name: string, args: Record<string, unknown>) => string | null;
   maxToolCalls?: number;
+  /** W10 cost degrade level (0..3). >=1 may override the model to a cheaper one
+   *  via decideDegradation. Absent (eval/sim) → 0 → base model, fingerprint intact. */
+  degradeLevel?: 0 | 1 | 2 | 3;
 }
 
 export type HandleQueuedMessageResult =
@@ -50,6 +54,8 @@ export type HandleQueuedMessageResult =
       reply: string | null;
       steps: ToolStep[];
       stoppedReason: "text_reply" | "budget_exceeded";
+      /** Total token usage of the turn (W10 cost accounting), when reported. */
+      usage?: LlmUsage;
     };
 
 export async function handleQueuedMessage(
@@ -62,9 +68,14 @@ export async function handleQueuedMessage(
   }
 
   const model = modelForArchetype(archetype);
+  // W10: under cost pressure, swap to a cheaper model at the CALL SITE. This
+  // never edits modelForArchetype, so the eval fingerprint (W13) is untouched —
+  // eval/sim pass no degradeLevel, so effectiveModel === model there.
+  const degradation = decideDegradation({ degradeLevel: input.degradeLevel ?? 0, baseModel: model });
+  const effectiveModel = degradation.modelOverride ?? model;
   const config = input.context.configByArchetype[archetype];
   const system = buildSystemPrompt(archetype, config, BASE_PROMPTS);
-  const llm = input.makeLlm(model);
+  const llm = input.makeLlm(effectiveModel);
 
   const result = await runTurn({
     llm,
@@ -81,9 +92,12 @@ export async function handleQueuedMessage(
   return {
     handled: true,
     archetype,
-    model,
+    // The model ACTUALLY used this turn (post-degradation) — so accounting prices
+    // the real call and the trace shows the true model.
+    model: effectiveModel,
     reply: result.reply,
     steps: result.steps,
     stoppedReason: result.stoppedReason,
+    usage: result.usage,
   };
 }

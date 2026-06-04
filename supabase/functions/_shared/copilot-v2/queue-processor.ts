@@ -32,8 +32,9 @@ export interface ProcessorDeps {
   /** Builds the ResolvedContext (contact-status, agents, config, introspection) from the DB. */
   resolveContext: (row: QueueRow) => Promise<ResolvedContext>;
   makeLlm: (model: ModelId) => LlmClient;
-  /** Builds the per-message tool executor (bound to this lead/agent/org). */
-  makeExecutor: (row: QueueRow, context: ResolvedContext) => (name: string, args: Record<string, unknown>) => Promise<unknown>;
+  /** Builds the per-message tool executor (bound to this lead/agent/org). W10:
+   *  `opts.ragShrink` shrinks retrieval under cost pressure. */
+  makeExecutor: (row: QueueRow, context: ResolvedContext, opts?: { ragShrink?: boolean }) => (name: string, args: Record<string, unknown>) => Promise<unknown>;
   /** Re-checks the human-pause gate at SEND time (the durable-queue + retry window). */
   checkPause: (row: QueueRow) => Promise<{ blocked: boolean; reason: string | null }>;
   /** Re-checks the loop gate at SEND time (durable-queue window). fail-CLOSED. */
@@ -56,17 +57,70 @@ export interface ProcessorDeps {
   markComplete: (id: string) => Promise<void>;
   markFailed: (id: string, error: string) => Promise<void>;
   logStep: (traceId: string, step: string, reason: string | null, meta?: Record<string, unknown>) => Promise<void>;
+  // ── W10 cost governance (all optional — absent = no governance, flow unchanged) ──
+  /** Reads the org's caps + accrued spend and decides the cost gate for this turn.
+   *  fail-CLOSED inside the impl; if it throws, the spine degrades-and-serves. */
+  checkCost?: (row: QueueRow) => Promise<{ degradeLevel: 0 | 1 | 2 | 3; hardPause: boolean; reason: string | null }>;
+  /** Auto-pauses the whole org (hard monthly cap). Reason is the org-pause enum. */
+  pauseOrg?: (row: QueueRow, reason: string) => Promise<void>;
+  /** Notifies the org admin (in-app) that the org was auto-paused. */
+  notifyAdmin?: (row: QueueRow, reason: string) => Promise<void>;
+  /** Holding pattern: re-queues the turn for a cheaper window (bounded — see below). */
+  holdTurn?: (row: QueueRow) => Promise<void>;
+  /** Records the turn's token usage + USD cost into the ledger (best-effort). */
+  recordCost?: (row: QueueRow, usage: { promptTokens: number; completionTokens: number }, model: string) => Promise<void>;
 }
+
+// Mirrors decideDegradation's thresholds (degradation.ts) so the spine can act
+// before the model is resolved: L2+ shrinks retrieval, L3 holds the turn.
+const RAG_SHRINK_LEVEL = 2;
+const HOLDING_LEVEL = 3;
+// fail-safe when the cost dep itself throws: serve at cheapest (model+retrieval),
+// never hold/pause on an unexpected error.
+const COST_FAILSAFE = { degradeLevel: 2 as const, hardPause: false, reason: 'cost_check_failed' };
 
 export async function processQueueMessage(row: QueueRow, deps: ProcessorDeps): Promise<void> {
   try {
     const context = await deps.resolveContext(row);
 
+    // ── W10 cost gate (pre-LLM) ──────────────────────────────────────────────
+    // Read the org's spend vs caps. fail-safe: a throwing dep degrades-and-serves
+    // (never fails the message). hardPause → auto-pause the org + notify, no send.
+    // L3 → hold the turn once (bounded). L2 → shrink retrieval. L1 → cheaper model.
+    let cost: { degradeLevel: 0 | 1 | 2 | 3; hardPause: boolean; reason: string | null } = { degradeLevel: 0, hardPause: false, reason: null };
+    if (deps.checkCost) {
+      try { cost = await deps.checkCost(row); }
+      catch { cost = COST_FAILSAFE; }
+    }
+
+    if (cost.hardPause) {
+      // Hard monthly cap breached → take the whole org offline (best-effort) and
+      // tell the admin. The turn is completed (not failed) — nothing to send.
+      try { await deps.pauseOrg?.(row, 'teto'); } catch { /* best-effort */ }
+      try { await deps.notifyAdmin?.(row, 'teto'); } catch { /* best-effort */ }
+      await deps.logStep(row.trace_id, "gate", cost.reason ?? "hard_monthly_cap");
+      await deps.markComplete(row.id);
+      return;
+    }
+
+    // Holding pattern (deepest soft band): defer this turn to a cheaper window by
+    // re-queuing ONCE. Bounded — a row that is already a 'held' re-queue serves
+    // degraded instead, so a persistently-over-soft org is never starved.
+    if (cost.degradeLevel >= HOLDING_LEVEL && row.message_type !== 'held' && deps.holdTurn) {
+      try { await deps.holdTurn(row); } catch { /* best-effort: fall through to serve */ }
+      await deps.logStep(row.trace_id, "gate", "cost_holding_pattern", { degradeLevel: cost.degradeLevel });
+      await deps.markComplete(row.id);
+      return;
+    }
+
+    const ragShrink = cost.degradeLevel >= RAG_SHRINK_LEVEL;
+
     const result = await handleQueuedMessage({
       message: { content: row.content, canonicalPhone: row.canonical_phone },
       context,
       makeLlm: deps.makeLlm,
-      executeTool: deps.makeExecutor(row, context),
+      executeTool: deps.makeExecutor(row, context, { ragShrink }),
+      degradeLevel: cost.degradeLevel,
     });
 
     if (!result.handled) {
@@ -79,6 +133,18 @@ export async function processQueueMessage(row: QueueRow, deps: ProcessorDeps): P
     await deps.logStep(row.trace_id, "cognition", result.stoppedReason, {
       archetype: result.archetype, model: result.model, steps: result.steps.length,
     });
+
+    // W10: record the turn's token spend into the ledger. Best-effort for the
+    // TURN (a ledger hiccup must never drop the reply), but the failure is logged
+    // to the trace — a PERSISTENT silent loss would stale the ledger and let the
+    // cost gate under-degrade, so it must be detectable, not swallowed.
+    if (deps.recordCost && result.usage) {
+      try {
+        await deps.recordCost(row, result.usage, result.model);
+      } catch {
+        await deps.logStep(row.trace_id, "gate", "cost_record_failed");
+      }
+    }
 
     // Handoff dispatch: if a permitted transfer_to_human fired this turn, deliver
     // the structured notification (idempotent — the RPC owns the stable key). The

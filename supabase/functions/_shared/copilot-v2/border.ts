@@ -19,6 +19,11 @@ import { buildDedupKey, type DedupSource } from "./dedup-lock.ts";
 import { coalesceFragments, type InboundFragment } from "./message-debounce.ts";
 import { initTraceContext, logTraceStep, type TraceContext } from "./trace-context.ts";
 import { classifyInbound } from "./input-short-circuit.ts";
+import { decideInboundRateLimit } from "./rate-limit-inbound.ts";
+
+const RATE_WINDOW_MS = 60_000;
+const DEFAULT_INBOUND_RATE = 15;
+const RATE_LIMIT_NOTICE = "Recebi suas mensagens! 👍 Já estou organizando tudo por aqui e já te respondo.";
 
 export interface BorderContext {
   /** Resolved from the instance/secret — the trusted source of org identity. */
@@ -113,6 +118,28 @@ export async function processInbound(supabase: any, ctx: BorderContext): Promise
     return { ack: "skipped", reason: loopGate.reason ?? "loop", trace_id: trace.trace_id };
   }
 
+  // 5.5 Inbound rate-limit (W10, fail-CLOSED on the COUNT). Caps how many inbound
+  //     a single phone drives per minute. On breach: drop, and on the FIRST breach
+  //     of the window send one canned deflection. Inbound-only (proactive/canned
+  //     bypass). The org's configured rate falls back to the default if unset.
+  if ((ctx.source ?? "inbound") === "inbound") {
+    const rl = await checkRateLimit(supabase, ctx.organizationId, canonicalPhone, new Date());
+    if (rl.blocked) {
+      if (rl.sendNotice) {
+        // One notice per minute-bucket (idempotency dedups repeats in the window).
+        const bucket = Math.floor(Date.now() / RATE_WINDOW_MS);
+        await supabase.rpc("copilot_v2_enqueue_message", {
+          p_org_id: ctx.organizationId, p_lead_id: ctx.leadId ?? null,
+          p_canonical_phone: canonicalPhone, p_message_type: "text",
+          p_content: RATE_LIMIT_NOTICE, p_source: "canned_out", p_trace_id: trace.trace_id,
+          p_idempotency_key: `${ctx.organizationId}:${canonicalPhone}:ratelimit:${bucket}`,
+        }).then(() => {}, () => {});
+      }
+      await logTraceStep(supabase, trace, "gate", rl.reason);
+      return { ack: "skipped", reason: rl.reason ?? "rate_limited", trace_id: trace.trace_id };
+    }
+  }
+
   // 6. Coalesce inbound fragments of the same burst into one turn (#19/#69).
   const source: DedupSource = ctx.source ?? "inbound";
   const content = source === "inbound"
@@ -158,6 +185,44 @@ async function checkHumanPause(supabase: any, orgId: string, phone: string, now:
     return decideHumanPauseGate({ record: data ? { paused_until: data } : null, checkErrored: false, now });
   } catch (_err) {
     return decideHumanPauseGate({ record: null, checkErrored: true, now });
+  }
+}
+
+/**
+ * Inbound rate-limit check. The org's configured rate (copilot_v2_org_settings
+ * .inbound_rate_per_min) falls back to the default on ANY config-read miss
+ * (fail-OPEN to default — a settings hiccup must not block traffic). The COUNT
+ * of recent inbound is fail-CLOSED: a count error blocks (a flood must never
+ * slip through). `countInWindow` is the PRIOR inbound (current not yet enqueued),
+ * so a rate of N admits exactly N before blocking.
+ */
+async function checkRateLimit(supabase: any, orgId: string, phone: string, now: Date) {
+  let maxPerWindow = DEFAULT_INBOUND_RATE;
+  try {
+    const { data } = await supabase
+      .from("copilot_v2_org_settings")
+      .select("inbound_rate_per_min")
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (data && typeof data.inbound_rate_per_min === "number" && data.inbound_rate_per_min > 0) {
+      maxPerWindow = data.inbound_rate_per_min;
+    }
+  } catch (_e) { /* fail-OPEN to the default rate */ }
+
+  try {
+    const cutoff = new Date(now.getTime() - RATE_WINDOW_MS).toISOString();
+    const { count, error } = await supabase
+      .from("copilot_v2_message_queue")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", orgId)
+      .eq("canonical_phone", phone)
+      .eq("source", "inbound")
+      .gte("created_at", cutoff);
+    if (error) throw error;
+    const c = count ?? 0;
+    return decideInboundRateLimit({ countInWindow: c, maxPerWindow, alreadyNotified: c > maxPerWindow, checkErrored: false });
+  } catch (_e) {
+    return decideInboundRateLimit({ countInWindow: 0, maxPerWindow, alreadyNotified: false, checkErrored: true });
   }
 }
 

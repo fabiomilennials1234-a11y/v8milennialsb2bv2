@@ -66,6 +66,13 @@ export function createOpenRouterClient(opts: OpenRouterClientOptions): LlmClient
       const rawToolCalls: Array<{ id?: string; function?: { name?: string; arguments?: string } }> =
         message.tool_calls ?? [];
 
+      // Surface token usage for W10 cost accounting (the worker sums it per turn
+      // and prices it via cost-pricing). Absent/partial usage maps to undefined.
+      const u = json?.usage;
+      const usage = u && (typeof u.prompt_tokens === "number" || typeof u.completion_tokens === "number")
+        ? { promptTokens: u.prompt_tokens ?? 0, completionTokens: u.completion_tokens ?? 0 }
+        : undefined;
+
       return {
         text: typeof message.content === "string" ? message.content : null,
         toolCalls: rawToolCalls.map((tc, i) => ({
@@ -73,6 +80,7 @@ export function createOpenRouterClient(opts: OpenRouterClientOptions): LlmClient
           name: tc.function?.name ?? "",
           args: safeParseArgs(tc.function?.arguments),
         })),
+        usage,
       };
     },
   };

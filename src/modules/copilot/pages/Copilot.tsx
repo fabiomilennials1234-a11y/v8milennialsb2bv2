@@ -54,6 +54,7 @@ import {
   useDraftCopilotAgents,
 } from "@/modules/copilot/hooks/useCopilotAgents";
 import { useCopilotSubscription } from "@/modules/copilot/hooks/useCopilotSubscription";
+import { CopilotOrgKillSwitch } from "@/modules/copilot/components/governance/CopilotOrgKillSwitch";
 import { useFeatureFlag } from "@/modules/platform";
 import { useCanManageCopilot } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
@@ -157,6 +158,9 @@ export default function Copilot() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* W10 — org-wide kill-switch / cost-cap pause banner (reflects realtime). */}
+      <CopilotOrgKillSwitch />
+
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
