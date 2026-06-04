@@ -62,6 +62,7 @@ const Produtos = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Pro
 const Negocios = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Negocios")));
 const Copilot = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/Copilot")));
 const CopilotMetrics = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/CopilotMetrics")));
+const CopilotV2 = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/CopilotV2")));
 const ChatWhatsApp = lazy(() => lazyRetry(() => import("@/modules/communication/pages/ChatWhatsApp")));
 const AtendimentoMeta = lazy(() => lazyRetry(() => import("@/modules/communication/pages/AtendimentoMeta")));
 // ChatSkeleton é eager (não lazy) — precisa estar disponível no instante
@@ -462,6 +463,31 @@ function AppRoutes() {
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="copilot.view">
                 <CopilotMetrics />
+              </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      {/* Copilot v2 wizard route (Slice 12b) — page gates on the copilot_v2 flag + admin. */}
+      <Route
+        path="/copilot/v2"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <PermissionProtectedRoute featureKey="copilot.view">
+                <CopilotV2 />
+              </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/copilot/v2/:archetype"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <PermissionProtectedRoute featureKey="copilot.view">
+                <CopilotV2 />
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>

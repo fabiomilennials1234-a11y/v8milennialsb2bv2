@@ -75,6 +75,7 @@ export default function Copilot() {
   const setDefault = useSetDefaultCopilotAgent();
   const createAgent = useCreateCopilotAgent();
   const { enabled: builderEnabled } = useFeatureFlag("copilot_builder");
+  const { enabled: v2Enabled } = useFeatureFlag("copilot_v2");
   const { data: drafts = [] } = useDraftCopilotAgents();
 
   const [agentToDelete, setAgentToDelete] = useState<string | null>(null);
@@ -197,6 +198,16 @@ export default function Copilot() {
             <BarChart3 className="w-4 h-4 mr-2" />
             Métricas LLM
           </Button>
+          {v2Enabled && canManageCopilot && (
+            <Button
+              variant="outline"
+              onClick={() => navigate("/copilot/v2")}
+              className="border-primary/40 text-primary hover:bg-primary/10"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              Copilot v2
+            </Button>
+          )}
           {canManageCopilot && builderEnabled && (
             <Button
               onClick={handleCreateWithAI}
