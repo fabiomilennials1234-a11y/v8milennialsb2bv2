@@ -26,6 +26,12 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
+// Slice 12 — Copilot v2 cutover routing: the per-org engine flag selects v1
+// (legacy queue) vs v2 (border). routeCopilotInbound holds the 🔴 fail-safe
+// contract (unit-tested); processInbound is the v2 border entry (reused, not
+// re-implemented).
+import { routeCopilotInbound } from "../_shared/copilot-v2/engine-router.ts";
+import { processInbound } from "../_shared/copilot-v2/border.ts";
 import {
   downloadAndPersistMedia,
   enqueueMediaJob,
@@ -504,37 +510,87 @@ export async function triggerReactions(
       });
   }
 
-  // 2. Copilot dispatch — queue for batching instead of direct call
+  // 2. Copilot dispatch — Slice 12 per-org engine routing (🔴 fail-safe v1).
+  //    The flag (organizations.copilot_engine_version) picks v1 (legacy queue +
+  //    agent-message) or v2 (the copilot-v2 border). Any flag-read error → v1.
+  //    Rollback for a v2 org = flip the flag back to 'v1' (no deploy).
   if (!context.shouldTriggerCopilot) return;
 
-  // Try queue INSERT first; fall back to direct agent-message on failure
-  const { error: queueError } = await supabase
-    .from("copilot_message_queue")
-    .insert({
-      organization_id: persisted.organization_id,
-      conversation_id: context.conversationId ?? null,
-      message_id: persisted.message_id,
-      phone: persisted.phone_number,
-    });
-
-  if (!queueError) {
-    void logRuntime({
-      organizationId: persisted.organization_id,
-      module: "webhook",
-      action: "copilot_queued",
-      status: "success",
-      payloadSnapshot: {
-        instance_id: persisted.instance_id,
+  await routeCopilotInbound({
+    readEngineFlag: async () => {
+      const { data } = await supabase
+        .from("organizations")
+        .select("copilot_engine_version")
+        .eq("id", persisted.organization_id)
+        .maybeSingle();
+      return (data as { copilot_engine_version?: string } | null)?.copilot_engine_version ?? null;
+    },
+    // v2: hand the inbound to the border (its own gates/dedup/trace). Reuse the
+    // shared processInbound directly — org is already trusted, so no HTTP hop and
+    // no instance-token round-trip. Groups never reach here (returned above).
+    dispatchV2: async () => {
+      const ack = await processInbound(supabase, {
+        organizationId: persisted.organization_id,
+        rawPhone: persisted.phone_number,
+        content: persisted.content ?? "",
+        messageType: persisted.message_type,
+        source: "inbound",
+        conversationId: context.conversationId ?? null,
+        isGroup: false,
+      });
+      void logRuntime({
+        organizationId: persisted.organization_id,
+        module: "webhook",
+        action: "copilot_v2_routed",
+        status: ack.ack === "error" ? "error" : "success",
+        payloadSnapshot: {
+          instance_id: persisted.instance_id,
+          message_id: persisted.message_id,
+          ack: ack.ack,
+          reason: (ack as { reason?: string }).reason ?? null,
+          trace_id: (ack as { trace_id?: string }).trace_id ?? null,
+        },
+      });
+    },
+    enqueueV1: async () => {
+      const { error } = await supabase.from("copilot_message_queue").insert({
+        organization_id: persisted.organization_id,
+        conversation_id: context.conversationId ?? null,
         message_id: persisted.message_id,
-        channel: "whatsapp",
-      },
-    });
-    return;
-  }
+        phone: persisted.phone_number,
+      });
+      return { error };
+    },
+    fallbackV1Direct: () => dispatchAgentMessageFallback(supabase, persisted),
+    log: (event) =>
+      void logRuntime({
+        organizationId: persisted.organization_id,
+        module: "webhook",
+        action: event,
+        status: "success",
+        payloadSnapshot: {
+          instance_id: persisted.instance_id,
+          message_id: persisted.message_id,
+          channel: "whatsapp",
+        },
+      }),
+  });
+}
 
-  console.error("[whatsapp-webhook] Queue insert failed, falling back to direct call:", queueError.message);
+// ============================================================================
+// dispatchAgentMessageFallback — legacy v1 direct call (removed at decommission)
+// ============================================================================
 
-  // FALLBACK: call agent-message directly (existing code)
+/**
+ * Direct agent-message call + inline delivery — the pre-existing v1 fallback for
+ * when the copilot_message_queue insert fails. Extracted verbatim (Slice 12) so
+ * the routing orchestrator can pass it as a dependency; behavior is unchanged.
+ * Deleted together with agent-message at the GEN-1 decommission.
+ */
+async function dispatchAgentMessageFallback(
+  supabase: ReturnType<typeof createClient>,
+  persisted: PersistedMessage,
+): Promise<void> {
   const agentMessagePayload = {
     from: persisted.phone_number,
     message: persisted.content,

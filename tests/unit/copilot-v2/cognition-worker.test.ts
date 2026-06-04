@@ -105,3 +105,34 @@ describe('handleQueuedMessage — routing + model + prompt wiring', () => {
     if (out.handled) expect(out.steps[0]).toMatchObject({ name: 'move_lead_stage', allowed: false, reason: 'capability_off' });
   });
 });
+
+describe('handleQueuedMessage — conversation history injection (Slice 12)', () => {
+  /** Captures the messages array the loop hands to the LLM. */
+  function captureMessagesLlm(response: LlmResponse) {
+    const captured: { messages?: { role: string; content: string }[] } = {};
+    const makeLlm = (): LlmClient => ({
+      async complete(input) { captured.messages = input.messages; return response; },
+    });
+    return { makeLlm, captured };
+  }
+
+  it('with NO history the turn sees only the current message (eval-safe: identical to the legacy single-message turn)', async () => {
+    const { makeLlm, captured } = captureMessagesLlm(reply);
+    await handleQueuedMessage({ ...baseInput, context: ctx(), makeLlm });
+    expect(captured.messages).toEqual([{ role: 'user', content: 'oi' }]);
+  });
+
+  it('injects the recent shared-transcript history before the current message', async () => {
+    const { makeLlm, captured } = captureMessagesLlm(reply);
+    const history = [
+      { role: 'user' as const, content: 'bom dia' },
+      { role: 'assistant' as const, content: 'Bom dia! Como posso ajudar?' },
+    ];
+    await handleQueuedMessage({ ...baseInput, context: ctx({ history }), makeLlm });
+    expect(captured.messages).toEqual([
+      { role: 'user', content: 'bom dia' },
+      { role: 'assistant', content: 'Bom dia! Como posso ajudar?' },
+      { role: 'user', content: 'oi' },
+    ]);
+  });
+});

@@ -19,6 +19,7 @@ import { BASE_PROMPTS } from "./base-prompts.ts";
 import { runTurn, type LlmClient, type LlmUsage, type ToolSchema, type ToolStep } from "./cognition-loop.ts";
 import { TOOL_SCHEMAS, writeTargetOf as registryWriteTargetOf } from "./tool-registry.ts";
 import type { Introspection } from "./introspect-guard.ts";
+import { buildTurnMessages, type HistoryEntry } from "./turn-history.ts";
 
 export interface ResolvedContext {
   contactStatus: ContactStatus;
@@ -26,6 +27,14 @@ export interface ResolvedContext {
   configByArchetype: Record<Archetype, AgentConfig>;
   capabilitiesByArchetype: Record<Archetype, Record<string, boolean | undefined>>;
   introspection: Introspection | null;
+  /**
+   * Recent shared-transcript history (oldest→newest), injected before the
+   * current message (Slice 12, W2-lite). Populated by the worker's
+   * resolveContext from conversations/conversation_messages. ABSENT in
+   * eval/sim — which keeps those turns byte-identical to the legacy
+   * single-message turn, so the W13/W12 goldens never need re-blessing.
+   */
+  history?: HistoryEntry[];
   /** The active agent resolved for the routed archetype (null when none). */
   _agentId: string | null;
 }
@@ -80,7 +89,9 @@ export async function handleQueuedMessage(
   const result = await runTurn({
     llm,
     system,
-    messages: [{ role: "user", content: input.message.content }],
+    // History injected before the current inbound (Slice 12). Empty history →
+    // [{ role:'user', content }], identical to the legacy turn (eval-safe).
+    messages: buildTurnMessages(input.context.history ?? [], input.message.content),
     toolSchemas: input.toolSchemas ?? TOOL_SCHEMAS,
     capabilities: input.context.capabilitiesByArchetype[archetype] ?? {},
     introspection: input.context.introspection,
