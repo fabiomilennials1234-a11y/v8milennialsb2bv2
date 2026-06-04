@@ -303,6 +303,10 @@ verify_jwt = false
 [functions.copilot-v2-save-config]
 verify_jwt = false
 
+# copilot-v2-prefill: wizard v1→v2 seed (Slice 12b); verify_jwt=false p/ OPTIONS, JWT do admin via RPC SECURITY DEFINER (admin+org assert); read-only
+[functions.copilot-v2-prefill]
+verify_jwt = false
+
 # copilot-v2-simulate: simulador dry-run (Slice 9); verify_jwt=false p/ OPTIONS, JWT do user via client; zero escrita
 [functions.copilot-v2-simulate]
 verify_jwt = false

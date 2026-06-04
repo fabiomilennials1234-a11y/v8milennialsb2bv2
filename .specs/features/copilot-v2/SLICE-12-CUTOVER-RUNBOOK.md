@@ -102,7 +102,21 @@ first with `scripts/mgmt_query_ref.py <prod-ref> scripts/_slice12_inventory.sql`
 20260603130000  eval_redteam_col           (W12)
 20260603140000  eval_redteam_seed          (W12)  (org-guarded idempotent)
 20260603150000  w10_governance             (W10)
+20260604120000  wizard_route_rpcs          (12b) create_copilot_v2_agent + v1_prefill_candidates
 ```
+
+> **Update (Slice 12b — wizard route):** the "Zero new migrations" line in §0 was
+> true for the Slice 12 PR; the follow-up **Slice 12b** adds the one migration
+> above (`20260604120000`) — the missing CREATE path + the admin-gated v1 prefill
+> reader the wizard route needs. Apply it in version order with the rest.
+
+**Edge functions to deploy (CTO-gated, before the first prod flip):** the cutover
+needs the v2 engine + wizard fns live in prod. Deploy (per the standard
+`supabase functions deploy <fn> --project-ref <prod-ref>`): the wizard surface
+`copilot-v2-save-config`, `copilot-v2-simulate`, **`copilot-v2-prefill`** (12b,
+new), plus the inbound engine `whatsapp-webhook` (now flag-routing) +
+`copilot-v2-border` / `copilot-v2-worker` / `copilot-v2-proactive`. Confirm each
+is deployed before flipping any prod org.
 
 Notes:
 - These are already applied in **dev**. Several are org-guarded/idempotent (eval/redteam seeds) → safe to replay.
