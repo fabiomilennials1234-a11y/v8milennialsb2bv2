@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { motion } from "framer-motion";
-import { Search, Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List, ChevronUp, ChevronDown, BarChart3 } from "lucide-react";
+import { Search, Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List, ChevronUp, ChevronDown, BarChart3, Send } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,6 +42,7 @@ import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/lead
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { LeadModal } from "@/modules/leads";
 import { CreateOpportunityModal } from "@/modules/pipelines/components/kanban/CreateOpportunityModal";
+import { DisparoWizard } from "@/modules/pipelines/components/disparo";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
 import { AddMeetingModal } from "@/modules/pipelines/components/legacy/confirmacao/AddMeetingModal";
 import { format } from "date-fns";
@@ -137,6 +138,7 @@ function PipeWhatsappInner() {
   const [isCreateLeadModalOpen, setIsCreateLeadModalOpen] = useState(false);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDisparoOpen, setIsDisparoOpen] = useState(false);
   const { openLead } = useLeadSheet();
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
@@ -509,6 +511,15 @@ function PipeWhatsappInner() {
             <Settings2 className="w-4 h-4 mr-2" />
             Configurações
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-primary/30 text-foreground hover:border-primary/60 hover:bg-primary/5"
+            onClick={() => setIsDisparoOpen(true)}
+          >
+            <Send className="w-4 h-4 mr-2 text-primary" />
+            Disparo
+          </Button>
           <Button size="sm" variant="outline" onClick={() => setIsCreateLeadModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Novo Lead
@@ -717,6 +728,9 @@ function PipeWhatsappInner() {
         pipeType="whatsapp"
         stages={pipelineStages}
       />
+
+      {/* Disparo Wizard (Mass Send — stage source, single-day) */}
+      <DisparoWizard open={isDisparoOpen} onOpenChange={setIsDisparoOpen} />
 
       {/* Create Opportunity Modal */}
       <CreateOpportunityModal
