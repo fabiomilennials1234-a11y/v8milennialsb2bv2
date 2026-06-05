@@ -15,6 +15,10 @@
  */
 
 import { UazapiClient } from "./uazapi-client.ts";
+import type {
+  UazapiSenderAdvancedInput,
+  UazapiSenderResponse,
+} from "./uazapi-types.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ---------------------------------------------------------------------------
@@ -157,6 +161,13 @@ export interface WhatsAppProvider {
     limit: number;
     reachout_timelock?: number;
   }>;
+
+  // Mass send / sender (Uazapi-only) — drives Quick Blast + CSV Mass Send
+  senderAdvanced?(input: UazapiSenderAdvancedInput): Promise<UazapiSenderResponse>;
+  senderGet?(senderId: string): Promise<UazapiSenderResponse>;
+  senderPause?(senderId: string): Promise<void>;
+  senderResume?(senderId: string): Promise<void>;
+  senderStop?(senderId: string): Promise<void>;
 
   readonly provider: "evolution" | "uazapi";
 }
