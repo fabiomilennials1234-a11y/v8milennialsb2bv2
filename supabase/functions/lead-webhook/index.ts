@@ -404,9 +404,24 @@ serve(withSentry('lead-webhook', async (req) => {
 
     let result: Awaited<ReturnType<typeof getOrCreateLead>>;
 
+    // ── Meta dummy/test lead — nunca deduplica ───────────────────────────
+    // A "Testing Tool" do Meta Lead Ads envia leads com email test@meta.com e
+    // valores literais "<test lead: dummy data for {campo}>". Com
+    // update_existing_if_match esses casam um registro de teste já existente
+    // (até soft-deletado) e o atualizam silenciosamente — o envio "dá sucesso"
+    // mas nada novo aparece. Dummy = sempre criar, jamais deduplicar.
+    const isDummyTestLead = [email, name, phone, company, ...Object.values(customFields)]
+      .some((v) => typeof v === "string" &&
+        (v.trim().toLowerCase() === "test@meta.com" || /^<test lead: dummy data for\b/i.test(v.trim())));
+    if (isDummyTestLead) {
+      console.log("[lead-webhook] Meta dummy/test lead detectado — pulando dedup (sempre cria):", { email });
+    }
+
     // Padrão: sempre criar novo lead. Só busca por telefone/email quando o cliente envia update_existing_if_match = true.
     // Aceita boolean true ou string "true" (n8n body fields envia como string).
-    const shouldDeduplicate = payload.update_existing_if_match === true || payload.update_existing_if_match === "true";
+    // Dummy do Meta nunca deduplica (senão atualiza um lead de teste pré-existente).
+    const shouldDeduplicate = !isDummyTestLead &&
+      (payload.update_existing_if_match === true || payload.update_existing_if_match === "true");
     if (shouldDeduplicate) {
       result = await getOrCreateLead(supabase, {
         organizationId,

@@ -517,6 +517,72 @@ describe("lead-webhook — update_existing_if_match", () => {
   });
 });
 
+// ─── Meta dummy/test lead — bypass dedup ─────────────────────────────────
+
+describe("lead-webhook — Meta dummy/test lead skips dedup", () => {
+  function freshOrg() {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("organizations", [{ id: "org-1" }]);
+    mockTable("leads", []);
+    mockTable("pipe_whatsapp", []);
+    mockTable("lead_custom_fields", []);
+    mockTable("lead_custom_field_values", []);
+    state.mock = { sb, mockTable } as any;
+  }
+
+  it("email test@meta.com forces create even with update_existing_if_match=true", async () => {
+    freshOrg();
+    const res = await invoke({
+      source: "meta_ads",
+      update_existing_if_match: true,
+      fields: { email: "test@meta.com", phone: "11999", name: "Whoever" },
+    });
+    expect(res.status).toBe(200);
+    expect(mockGetOrCreateLead).not.toHaveBeenCalled();
+    const body = await res.json();
+    expect(body.is_new).toBe(true);
+  });
+
+  it("dummy placeholder value forces create (string 'true' too)", async () => {
+    freshOrg();
+    const res = await invoke({
+      source: "meta_ads",
+      update_existing_if_match: "true",
+      fields: {
+        name: "<test lead: dummy data for nome_completo>",
+        phone: "<test lead: dummy data for número_do_whatsapp>",
+        email: "test@meta.com",
+      },
+    });
+    expect(res.status).toBe(200);
+    expect(mockGetOrCreateLead).not.toHaveBeenCalled();
+    const body = await res.json();
+    expect(body.is_new).toBe(true);
+  });
+
+  it("dummy detected in a custom field value also skips dedup", async () => {
+    freshOrg();
+    const res = await invoke({
+      source: "meta_ads",
+      update_existing_if_match: true,
+      fields: { phone: "11999", "Qual seu cargo?": "<test lead: dummy data for cargo>" },
+    });
+    expect(res.status).toBe(200);
+    expect(mockGetOrCreateLead).not.toHaveBeenCalled();
+  });
+
+  it("real lead with update_existing_if_match=true still dedups (no false positive)", async () => {
+    freshOrg();
+    const res = await invoke({
+      source: "meta_ads",
+      update_existing_if_match: true,
+      fields: { email: "real.person@gmail.com", phone: "11988887777", name: "Maria" },
+    });
+    expect(res.status).toBe(200);
+    expect(mockGetOrCreateLead).toHaveBeenCalledOnce();
+  });
+});
+
 // ─── place_in_pipe paths ─────────────────────────────────────────────────
 
 describe("lead-webhook — place_in_pipe", () => {
