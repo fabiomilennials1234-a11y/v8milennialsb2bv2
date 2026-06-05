@@ -22,6 +22,10 @@ import type {
   SendTextOptions,
   WhatsAppProvider,
 } from "../whatsapp-client.ts";
+import type {
+  UazapiSenderAdvancedInput,
+  UazapiSenderResponse,
+} from "../uazapi-types.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ---------------------------------------------------------------------------
@@ -239,6 +243,32 @@ export class UazapiProvider implements WhatsAppProvider {
       status: resp.status,
       timestamp: resp.timestamp,
     };
+  }
+
+  // =========================================================================
+  // Sender (mass send) — delegates to UazapiClient /sender/* (Uazapi-only)
+  // =========================================================================
+
+  async senderAdvanced(
+    input: UazapiSenderAdvancedInput
+  ): Promise<UazapiSenderResponse> {
+    return this.client.senderAdvanced(input);
+  }
+
+  async senderGet(senderId: string): Promise<UazapiSenderResponse> {
+    return this.client.senderGet(senderId);
+  }
+
+  async senderPause(senderId: string): Promise<void> {
+    await this.client.senderPause(senderId);
+  }
+
+  async senderResume(senderId: string): Promise<void> {
+    await this.client.senderResume(senderId);
+  }
+
+  async senderStop(senderId: string): Promise<void> {
+    await this.client.senderStop(senderId);
   }
 
   async setPresence(
