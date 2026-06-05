@@ -252,6 +252,11 @@ verify_jwt = false
 [functions.blast-plan-release]
 verify_jwt = false
 
+# blast-plan-control: pause/resume/cancel de Blast Plan (ADR-0003 / #707). JWT validado
+# no handler (getUser); SEM role gate — qualquer membro da org controla seus planos.
+[functions.blast-plan-control]
+verify_jwt = false
+
 # mass-send-status: polls status (JWT user OR x-cron-secret)
 [functions.mass-send-status]
 verify_jwt = false

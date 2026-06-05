@@ -56,6 +56,7 @@ const Configuracoes = lazy(() => lazyRetry(() => import("@/modules/platform/page
 const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
 const Campanhas = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/Campanhas")));
 const CampanhaDetail = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/CampanhaDetail")));
+const DisparosPanel = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/DisparosPanel")));
 const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));
 // Marketing and Analytics are unified in the Analytics tab — see TabAnalyticsV2.tsx
 const Produtos = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Produtos")));
@@ -235,6 +236,18 @@ function AppRoutes() {
       <Route
         path="/campanhas"
         element={<Navigate to="/funis" replace />}
+      />
+      <Route
+        path="/disparos"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <PermissionProtectedRoute featureKey="campaigns.view">
+                <DisparosPanel />
+              </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
       />
       <Route
         path="/campanhas/:id"
