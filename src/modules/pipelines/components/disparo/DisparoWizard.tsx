@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
-  Check, ChevronLeft, ChevronRight, ImagePlus, Info, Layers, Loader2,
-  ListFilter, MousePointerClick, Send, Sparkles, Users, X,
+  CalendarClock, Check, ChevronLeft, ChevronRight, ImagePlus, Info, Layers, Loader2,
+  ListFilter, MousePointerClick, Send, Sparkles, Users, X, Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,6 +27,11 @@ import {
   useCampaignTemplates,
 } from "@/modules/campaigns";
 import { useQuickBlast, type QuickBlastResult } from "@/modules/leads";
+import {
+  useCreateBlastPlan,
+  type BlastPlanLotBreakdown,
+  type CreateBlastPlanResult,
+} from "@/modules/campaigns";
 
 import { usePipelineStages } from "../../hooks/model/usePipelineStages";
 import { useStageLeadIds } from "../../hooks/model/useStageLeadIds";
@@ -142,13 +147,19 @@ export function DisparoWizard({
   // Step 3 — Revisão
   const [when, setWhen] = useState<"now" | "schedule">("now");
   const [scheduledFor, setScheduledFor] = useState<string>("");
+  // When the audience overflows today's budget, the operator picks between
+  // draining it over days ("plan") or sending only what fits today ("today").
+  // Defaults to "plan" — the recommended path that loses no one.
+  const [overBudgetChoice, setOverBudgetChoice] = useState<"plan" | "today">("plan");
   const [result, setResult] = useState<QuickBlastResult | null>(null);
+  const [planResult, setPlanResult] = useState<CreateBlastPlanResult | null>(null);
 
   const { data: stages = [], isLoading: stagesLoading } = usePipelineStages("whatsapp");
   const responsibleMembers = useResponsibleMembers();
   const { data: templates = [] } = useCampaignTemplates();
   const { data: instances = [] } = useWhatsAppInstances();
   const blast = useQuickBlast();
+  const createPlan = useCreateBlastPlan();
 
   // Does the board carry an active server-side filter at all? Without one the
   // "Filtro ativo" source has nothing to honor and is empty/disabled.
@@ -228,7 +239,7 @@ export function DisparoWizard({
     instanceId: previewInstanceId,
     message,
     refinements,
-    enabled: open && sourceReady && audienceSize > 0 && !result,
+    enabled: open && sourceReady && audienceSize > 0 && !result && !planResult,
   });
 
   const stepIndex = STEPS.findIndex((s) => s.id === step);
@@ -252,11 +263,58 @@ export function DisparoWizard({
         ? "filtro do funil"
         : `${manualLeadIds.length} selecionados`;
 
+  // Audience provenance descriptor — best-effort, recorded on the plan for its
+  // panel label. Mirrors the same fields the fire path already resolves.
+  const audienceSourceDescriptor = useMemo<Record<string, unknown>>(
+    () =>
+      source === "estagio"
+        ? { kind: "estagio", stageKey }
+        : source === "filtro"
+          ? { kind: "filtro" }
+          : { kind: "manual" },
+    [source, stageKey],
+  );
+
+  // Over-budget decision (#707). The dry-run preview reports `remaining` —
+  // today's Daily Blast Budget headroom — plus the refined eligible set
+  // (would-send today + the slice it clipped as `overDailyBudget`). The blast
+  // overflows today when that eligible set exceeds the headroom. We surface the
+  // scheduled-plan choice ONLY with a settled preview that proves the overflow;
+  // a preview hiccup (`remaining` unknown) silently keeps the single-day flow.
+  const previewData = blastPreview.data;
+  const remaining = previewData?.remaining;
+  // Eligible-today = what would send + what the budget clipped. This is the true
+  // size the plan must drain; `count` alone is already clamped to the budget.
+  const eligibleToday =
+    previewData != null ? previewData.count + (previewData.skipped.overDailyBudget ?? 0) : null;
+  const overBudget =
+    remaining != null &&
+    eligibleToday != null &&
+    !blastPreview.isLoading &&
+    eligibleToday > remaining;
+  // The single-day path sends at most `remaining`; the plan drains all eligible.
+  const todayCount = overBudget ? remaining ?? 0 : eligibleToday ?? audienceSize;
+  const planAudience = eligibleToday ?? audienceSize;
+  // Projected number of daily lots, assuming each day clears one full budget.
+  // Best-effort, shown upfront so "Agendar N lotes" carries a real N; the
+  // backend returns the authoritative breakdown on creation.
+  const projectedLots =
+    overBudget && remaining != null && remaining > 0
+      ? Math.ceil(planAudience / remaining)
+      : null;
+
   const canAdvancePublico = sourceReady && !audienceLoading && audienceSize > 0;
   const canAdvanceMensagem =
     message.trim().length > 0 && !!instanceId && delayMin >= 0 && delayMax >= delayMin && !uploading;
   const scheduleValid = when === "now" || (!!scheduledFor && new Date(scheduledFor).getTime() > Date.now());
-  const canFire = canAdvancePublico && canAdvanceMensagem && scheduleValid && !blast.isPending && !result;
+  const busy = blast.isPending || createPlan.isPending;
+  // The active CTA: schedule a plan only when over budget AND the operator kept
+  // the recommended "plan" choice. Everything else fires the single-day blast.
+  const fireAsPlan = overBudget && overBudgetChoice === "plan";
+  const canFire =
+    canAdvancePublico && canAdvanceMensagem && scheduleValid && !busy && !result && !planResult;
+  // Terminal state — either a single-day blast fired or a plan was created.
+  const done = !!result || !!planResult;
 
   function resetAll() {
     setStep("publico");
@@ -274,7 +332,9 @@ export function DisparoWizard({
     setImageUrl(null);
     setWhen("now");
     setScheduledFor("");
+    setOverBudgetChoice("plan");
     setResult(null);
+    setPlanResult(null);
   }
 
   function handleClose(next: boolean) {
@@ -359,6 +419,32 @@ export function DisparoWizard({
     }
   }
 
+  // Schedule a Blast Plan (#707): the same audience + refinements the fire path
+  // resolves, but drained over consecutive days. Backend freezes the snapshot
+  // and fires lot 1 today; the returned breakdown drives the success panel.
+  async function handleCreatePlan() {
+    if (!audienceLeadIds || audienceLeadIds.length === 0) {
+      toast.error("Nenhum lead no público selecionado");
+      return;
+    }
+    try {
+      const res = await createPlan.mutateAsync({
+        instance_id: instanceId,
+        lead_ids: audienceLeadIds,
+        message: message.trim(),
+        delay_min_ms: Math.round(delayMin * 1000),
+        delay_max_ms: Math.round(delayMax * 1000),
+        image_url: imageUrl ?? undefined,
+        // Same refinements as the fire path — the server re-resolves them.
+        ...resolveRefinementFields(refinements),
+        source: audienceSourceDescriptor,
+      });
+      setPlanResult(res);
+    } catch (e) {
+      toast.error((e as Error).message ?? "Falha ao criar o plano");
+    }
+  }
+
   const variants = {
     enter: (dir: 1 | -1) => ({ opacity: 0, x: reduceMotion ? 0 : dir * 24 }),
     center: { opacity: 1, x: 0 },
@@ -383,13 +469,13 @@ export function DisparoWizard({
         </DialogHeader>
 
         {/* Stepper */}
-        <Stepper steps={STEPS} activeIndex={stepIndex} done={!!result} />
+        <Stepper steps={STEPS} activeIndex={stepIndex} done={done} />
 
         {/* Corpo dos passos */}
         <div className="relative min-h-[336px] px-6 py-5">
           <AnimatePresence mode="wait" custom={direction} initial={false}>
             <motion.div
-              key={result ? "done" : step}
+              key={done ? "done" : step}
               custom={direction}
               variants={variants}
               initial="enter"
@@ -397,7 +483,9 @@ export function DisparoWizard({
               exit="exit"
               transition={{ duration: 0.25, ease: EASE }}
             >
-              {result ? (
+              {planResult ? (
+                <PlanSuccessPanel result={planResult} />
+              ) : result ? (
                 <SuccessPanel result={result} scheduled={when === "schedule"} />
               ) : step === "publico" ? (
                 <PublicoStep
@@ -455,6 +543,12 @@ export function DisparoWizard({
                   preview={blastPreview}
                   activeRecentDays={activeRecentDays}
                   onlyNonResponders={refinements.onlyNonResponders}
+                  overBudget={overBudget}
+                  overBudgetChoice={overBudgetChoice}
+                  onOverBudgetChoice={setOverBudgetChoice}
+                  todayCount={todayCount}
+                  planAudience={planAudience}
+                  projectedLots={projectedLots}
                 />
               )}
             </motion.div>
@@ -463,7 +557,7 @@ export function DisparoWizard({
 
         {/* Rodapé / navegação */}
         <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-muted/20 px-6 py-4">
-          {result ? (
+          {done ? (
             <Button className="ml-auto gradient-gold" onClick={() => handleClose(false)}>
               Concluir
             </Button>
@@ -474,7 +568,7 @@ export function DisparoWizard({
                 size="sm"
                 className="text-muted-foreground"
                 onClick={() => (stepIndex === 0 ? handleClose(false) : goTo(STEPS[stepIndex - 1].id))}
-                disabled={blast.isPending}
+                disabled={busy}
               >
                 {stepIndex === 0 ? (
                   "Cancelar"
@@ -486,14 +580,29 @@ export function DisparoWizard({
               </Button>
 
               {step === "revisao" ? (
-                <Button className="gradient-gold" onClick={handleFire} disabled={!canFire}>
-                  {blast.isPending ? (
-                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="mr-1.5 h-4 w-4" />
-                  )}
-                  {when === "schedule" ? "Agendar disparo" : "Disparar agora"}
-                </Button>
+                fireAsPlan ? (
+                  <Button className="gradient-gold" onClick={handleCreatePlan} disabled={!canFire}>
+                    {createPlan.isPending ? (
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                    ) : (
+                      <CalendarClock className="mr-1.5 h-4 w-4" />
+                    )}
+                    {projectedLots != null ? `Agendar ${projectedLots} lotes` : "Agendar lotes"}
+                  </Button>
+                ) : (
+                  <Button className="gradient-gold" onClick={handleFire} disabled={!canFire}>
+                    {blast.isPending ? (
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="mr-1.5 h-4 w-4" />
+                    )}
+                    {overBudget
+                      ? `Disparar só hoje (${todayCount.toLocaleString("pt-BR")})`
+                      : when === "schedule"
+                        ? "Agendar disparo"
+                        : "Disparar agora"}
+                  </Button>
+                )
               ) : (
                 <Button
                   className="gradient-gold"
@@ -1050,6 +1159,12 @@ function RevisaoStep({
   preview,
   activeRecentDays,
   onlyNonResponders,
+  overBudget,
+  overBudgetChoice,
+  onOverBudgetChoice,
+  todayCount,
+  planAudience,
+  projectedLots,
 }: {
   audienceSize: number;
   sourceLabel: string;
@@ -1062,6 +1177,16 @@ function RevisaoStep({
   preview: BlastPreviewState;
   activeRecentDays: number | null;
   onlyNonResponders: boolean;
+  /** Audience overflows today's Daily Blast Budget — offer the plan choice. */
+  overBudget: boolean;
+  overBudgetChoice: "plan" | "today";
+  onOverBudgetChoice: (v: "plan" | "today") => void;
+  /** What a single-day blast would send today (= today's headroom). */
+  todayCount: number;
+  /** Full eligible audience the plan would drain over days. */
+  planAudience: number;
+  /** Projected lot count, when derivable from headroom; null otherwise. */
+  projectedLots: number | null;
 }) {
   const activeRefinements = [
     activeRecentDays != null ? `recebidos nos últimos ${activeRecentDays}d excluídos` : null,
@@ -1102,53 +1227,204 @@ function RevisaoStep({
         )}
       </div>
 
-      {/* Quando */}
-      <div className="space-y-2.5">
-        <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Quando disparar
-        </Label>
-        <div className="grid grid-cols-2 gap-2.5">
-          {(["now", "schedule"] as const).map((opt) => {
-            const selected = when === opt;
-            return (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => onWhen(opt)}
-                className={cn(
-                  "flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors",
-                  selected ? "border-primary/60 bg-primary/[0.06]" : "border-border hover:border-border/80",
-                )}
-              >
-                <span className="text-sm font-medium">
-                  {opt === "now" ? "Agora" : "Agendar"}
-                </span>
-                <span className="text-[11px] leading-tight text-muted-foreground">
-                  {opt === "now" ? "Dispara de supetão ao confirmar" : "Escolha data e hora"}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {overBudget ? (
+        <OverBudgetChoice
+          choice={overBudgetChoice}
+          onChoice={onOverBudgetChoice}
+          todayCount={todayCount}
+          planAudience={planAudience}
+          projectedLots={projectedLots}
+        />
+      ) : (
+        <>
+          {/* Quando */}
+          <div className="space-y-2.5">
+            <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Quando disparar
+            </Label>
+            <div className="grid grid-cols-2 gap-2.5">
+              {(["now", "schedule"] as const).map((opt) => {
+                const selected = when === opt;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => onWhen(opt)}
+                    className={cn(
+                      "flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors",
+                      selected ? "border-primary/60 bg-primary/[0.06]" : "border-border hover:border-border/80",
+                    )}
+                  >
+                    <span className="text-sm font-medium">
+                      {opt === "now" ? "Agora" : "Agendar"}
+                    </span>
+                    <span className="text-[11px] leading-tight text-muted-foreground">
+                      {opt === "now" ? "Dispara de supetão ao confirmar" : "Escolha data e hora"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-      {when === "schedule" && (
-        <div className="space-y-1.5">
-          <Label htmlFor="disparo-schedule" className="text-sm">
-            Data e hora
-          </Label>
-          <Input
-            id="disparo-schedule"
-            type="datetime-local"
-            value={scheduledFor}
-            onChange={(e) => onScheduledFor(e.target.value)}
-          />
-          {!scheduleValid && scheduledFor && (
-            <p className="text-[11px] text-destructive">Escolha um horário no futuro.</p>
+          {when === "schedule" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="disparo-schedule" className="text-sm">
+                Data e hora
+              </Label>
+              <Input
+                id="disparo-schedule"
+                type="datetime-local"
+                value={scheduledFor}
+                onChange={(e) => onScheduledFor(e.target.value)}
+              />
+              {!scheduleValid && scheduledFor && (
+                <p className="text-[11px] text-destructive">Escolha um horário no futuro.</p>
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
     </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Over-budget — escolha calma entre agendar lotes e disparar só hoje (#707)
+ *
+ * Read as a single explained decision, not two competing CTAs: one line states
+ * why a plan exists ("seu público passa do teto de hoje"), then two stacked
+ * option-rows — the plan recommended (gold ring + selo), the single-day option
+ * honest about the drop. The footer CTA reflects whichever is selected.
+ * ────────────────────────────────────────────────────────────────────────── */
+function OverBudgetChoice({
+  choice,
+  onChoice,
+  todayCount,
+  planAudience,
+  projectedLots,
+}: {
+  choice: "plan" | "today";
+  onChoice: (v: "plan" | "today") => void;
+  todayCount: number;
+  planAudience: number;
+  projectedLots: number | null;
+}) {
+  const fmt = (n: number) => n.toLocaleString("pt-BR");
+  const dropped = Math.max(0, planAudience - todayCount);
+
+  return (
+    <div className="space-y-2.5">
+      <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Como enviar
+      </Label>
+
+      {/* Por que existe a escolha — uma linha, calma, sem alarme */}
+      <p className="flex items-start gap-2 text-[12px] leading-snug text-muted-foreground">
+        <Info className="mt-px h-3.5 w-3.5 shrink-0 text-warning" />
+        <span>
+          Seu público (<span className="tabular-nums text-foreground">{fmt(planAudience)}</span>) passa
+          do teto de hoje (<span className="tabular-nums text-foreground">{fmt(todayCount)}</span>).
+          Agende para enviar tudo ao longo dos dias.
+        </span>
+      </p>
+
+      <div className="space-y-2.5" role="radiogroup" aria-label="Como enviar">
+        {/* Recomendado — agendar lotes */}
+        <OverBudgetOption
+          selected={choice === "plan"}
+          onSelect={() => onChoice("plan")}
+          icon={CalendarClock}
+          recommended
+          title={projectedLots != null ? `Agendar ${projectedLots} lotes` : "Agendar lotes"}
+          desc={
+            <>
+              <span className="tabular-nums text-foreground">{fmt(todayCount)}</span> hoje, o resto nos
+              próximos dias — ninguém fica de fora.
+            </>
+          }
+        />
+
+        {/* Alternativa honesta — só hoje, o excedente cai */}
+        <OverBudgetOption
+          selected={choice === "today"}
+          onSelect={() => onChoice("today")}
+          icon={Zap}
+          title={`Disparar só hoje (${fmt(todayCount)})`}
+          desc={
+            dropped > 0 ? (
+              <>
+                Envia até o teto de hoje;{" "}
+                <span className="tabular-nums text-foreground">{fmt(dropped)}</span> ficam de fora.
+              </>
+            ) : (
+              <>Envia o que cabe hoje.</>
+            )
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+/** One option-row in the over-budget choice — selectable, ring on select. */
+function OverBudgetOption({
+  selected,
+  onSelect,
+  icon: Icon,
+  title,
+  desc,
+  recommended = false,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  icon: typeof CalendarClock;
+  title: string;
+  desc: React.ReactNode;
+  recommended?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onSelect}
+      className={cn(
+        "flex w-full items-start gap-3 rounded-lg border p-3.5 text-left transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+        selected
+          ? "border-primary/60 bg-primary/[0.06]"
+          : "border-border hover:border-border/80 hover:bg-muted/30",
+      )}
+    >
+      <span
+        className={cn(
+          "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md",
+          selected ? "bg-primary/15 text-primary" : "bg-muted/50 text-muted-foreground",
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium leading-none">{title}</span>
+          {recommended && (
+            <span className="rounded-full border border-primary/30 bg-primary/[0.08] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
+              Recomendado
+            </span>
+          )}
+        </div>
+        <p className="text-[12px] leading-snug text-muted-foreground">{desc}</p>
+      </div>
+      <span
+        className={cn(
+          "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors",
+          selected ? "border-primary bg-primary text-primary-foreground" : "border-border",
+        )}
+      >
+        {selected && <Check className="h-2.5 w-2.5" />}
+      </span>
+    </button>
   );
 }
 
@@ -1195,6 +1471,66 @@ function SuccessPanel({ result, scheduled }: { result: QuickBlastResult; schedul
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Plan success — plano de lotes criado, lote 1 disparado hoje (#707)
+ *
+ * Mirrors SuccessPanel's success-state styling (success ring + Check + editorial
+ * headline), then surfaces the per-day breakdown as a receipt — "hoje X · amanhã
+ * Y · dia 3 Z …" — so the operator sees exactly how the audience drains.
+ * ────────────────────────────────────────────────────────────────────────── */
+function lotDayLabel(lot: BlastPlanLotBreakdown): string {
+  if (lot.lotIndex === 1) return "hoje";
+  if (lot.lotIndex === 2) return "amanhã";
+  // Past lot 2: a plain "dia N" reads cleaner than a date the operator must parse.
+  return `dia ${lot.lotIndex}`;
+}
+
+function PlanSuccessPanel({ result }: { result: CreateBlastPlanResult }) {
+  const fmt = (n: number) => n.toLocaleString("pt-BR");
+
+  return (
+    <div className="flex flex-col items-center justify-center py-6 text-center">
+      <motion.div
+        initial={{ scale: 0.6, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.4, ease: EASE }}
+        className="flex h-14 w-14 items-center justify-center rounded-full bg-success/15 text-success"
+      >
+        <Check className="h-7 w-7" />
+      </motion.div>
+
+      <h3 className="mt-4 text-lg font-semibold tracking-tight">Plano criado</h3>
+      <p className="mt-1 text-sm text-muted-foreground">
+        <span className="font-medium text-foreground tabular-nums">{fmt(result.lots_total)}</span>{" "}
+        {result.lots_total === 1 ? "lote" : "lotes"} ·{" "}
+        <span className="font-medium text-foreground tabular-nums">{fmt(result.total_recipients)}</span>{" "}
+        {result.total_recipients === 1 ? "lead no total" : "leads no total"}. Lote 1 disparado hoje.
+      </p>
+
+      {/* Breakdown por dia — recibo tabular (hoje X · amanhã Y · dia 3 Z …) */}
+      {result.breakdown.length > 0 && (
+        <div className="mt-4 w-full max-w-sm rounded-lg border border-border/70 bg-muted/30 px-4 py-3">
+          <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Cronograma
+          </p>
+          <dl className="space-y-1">
+            {result.breakdown.map((lot) => (
+              <div key={lot.lotIndex} className="flex items-center justify-between text-xs">
+                <dt className="text-muted-foreground">{lotDayLabel(lot)}</dt>
+                <dd className="font-medium tabular-nums text-foreground">{fmt(lot.count)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Acompanhe e pause o plano a qualquer momento na aba Disparos.
+      </p>
     </div>
   );
 }
