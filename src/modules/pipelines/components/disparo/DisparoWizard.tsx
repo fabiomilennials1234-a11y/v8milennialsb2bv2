@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
-  Check, ChevronLeft, ChevronRight, ImagePlus, Layers, Loader2,
+  Check, ChevronLeft, ChevronRight, ImagePlus, Info, Layers, Loader2,
   ListFilter, MousePointerClick, Send, Sparkles, Users, X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -30,6 +30,7 @@ import { useQuickBlast, type QuickBlastResult } from "@/modules/leads";
 
 import { usePipelineStages } from "../../hooks/model/usePipelineStages";
 import { useStageLeadIds } from "../../hooks/model/useStageLeadIds";
+import { useFilteredLeadIds } from "../../hooks/model/useFilteredLeadIds";
 
 import { BlastBreakdown } from "./BlastBreakdown";
 import { BlastRefinementsControls } from "./BlastRefinementsControls";
@@ -41,9 +42,39 @@ import {
   type BlastRefinements,
 } from "./useBlastPreview";
 
+/**
+ * The funnel board's live filter, narrowed to the dimensions the "Filtro ativo"
+ * audience source can honor — exactly the ones the board resolves SERVER-SIDE
+ * (search, responsible, tags). The page-only filters (origin, calor, range, …)
+ * are deliberately absent: they never reach the full result set, so the wizard
+ * cannot replay them. Threaded from `PipeWhatsapp` so the wizard count matches
+ * the board after the same filter.
+ *
+ * `chips` carry human labels for the active server-side dimensions so the
+ * operator sees precisely what "Filtro ativo" honors — resolved by the page
+ * (which owns the member/tag dictionaries), not re-fetched here.
+ */
+export interface DisparoBoardFilter {
+  search?: string;
+  /** Pre/sale responsible id, or `"all"`/null when cleared (board convention). */
+  responsibleId?: string | null;
+  tagIds?: string[];
+  /** Pre-resolved labels for the active honored dimensions (page-owned). */
+  chips?: string[];
+}
+
+/** Source of the audience: a whole stage, the board's live filter, or a hand-picked set. */
+export type DisparoSource = "estagio" | "filtro" | "manual";
+
 interface DisparoWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The funnel board's live server-side filter (powers the "Filtro ativo" source). */
+  boardFilter?: DisparoBoardFilter;
+  /** Pre-seeded lead ids for the "Manual" source (from the kanban bulk-bar). */
+  initialManualLeadIds?: string[];
+  /** Source to open on — defaults to "estagio". Pass "manual" with seeded ids. */
+  initialSource?: DisparoSource;
 }
 
 type StepId = "publico" | "mensagem" | "revisao";
@@ -66,15 +97,33 @@ function previewMessage(template: string): string {
   return withVars.replace(/\{([^{}]*\|[^{}]*)\}/g, (_m, body: string) => body.split("|")[0]);
 }
 
-export function DisparoWizard({ open, onOpenChange }: DisparoWizardProps) {
+export function DisparoWizard({
+  open,
+  onOpenChange,
+  boardFilter,
+  initialManualLeadIds,
+  initialSource = "estagio",
+}: DisparoWizardProps) {
   const reduceMotion = useReducedMotion();
 
   const [step, setStep] = useState<StepId>("publico");
   const [direction, setDirection] = useState<1 | -1>(1);
 
-  // Step 1 — Público (somente fonte "Estágio" nesta fatia)
+  // Step 1 — Público
+  const [source, setSource] = useState<DisparoSource>(initialSource);
   const [stageKey, setStageKey] = useState<string>("");
+  const [manualLeadIds, setManualLeadIds] = useState<string[]>(initialManualLeadIds ?? []);
   const [refinements, setRefinements] = useState<BlastRefinements>(DEFAULT_REFINEMENTS);
+
+  // Seed source + manual ids whenever the dialog (re)opens — the caller may
+  // open with a fresh kanban selection each time.
+  useEffect(() => {
+    if (!open) return;
+    setSource(initialSource);
+    setManualLeadIds(initialManualLeadIds ?? []);
+    // Only on open: an open dialog must not have its source yanked mid-edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Step 2 — Mensagem
   const [templateId, setTemplateId] = useState<string>("");
@@ -92,13 +141,66 @@ export function DisparoWizard({ open, onOpenChange }: DisparoWizardProps) {
   const [result, setResult] = useState<QuickBlastResult | null>(null);
 
   const { data: stages = [], isLoading: stagesLoading } = usePipelineStages("whatsapp");
-  const { data: stageLeadIds, isLoading: audienceLoading } = useStageLeadIds("whatsapp", stageKey);
   const { data: templates = [] } = useCampaignTemplates();
   const { data: instances = [] } = useWhatsAppInstances();
   const blast = useQuickBlast();
 
-  const audienceSize = stageLeadIds?.length ?? 0;
+  // Does the board carry an active server-side filter at all? Without one the
+  // "Filtro ativo" source has nothing to honor and is empty/disabled.
+  const boardFilterActive = useMemo(() => {
+    if (!boardFilter) return false;
+    const { search, responsibleId, tagIds } = boardFilter;
+    return (
+      (!!search && search.trim().length > 0) ||
+      (!!responsibleId && responsibleId !== "all") ||
+      (!!tagIds && tagIds.length > 0)
+    );
+  }, [boardFilter]);
+
+  // Stage source — every lead in a stage.
+  const { data: stageLeadIds, isLoading: stageLoading } = useStageLeadIds(
+    "whatsapp",
+    source === "estagio" ? stageKey : "",
+  );
+
+  // Filtro source — the board's live server-side filter, replayed across the
+  // whole pipeline (not just the loaded page). Only fetched when this source is
+  // active AND the board actually has a filter on.
+  const { data: filteredLeadIds, isLoading: filteredLoading } = useFilteredLeadIds(
+    "whatsapp",
+    source === "filtro" && boardFilterActive
+      ? {
+          search: boardFilter?.search,
+          responsibleId: boardFilter?.responsibleId,
+          tagIds: boardFilter?.tagIds,
+        }
+      : {},
+  );
+
+  // Resolve the active source into a single candidate set + loading flag.
+  const audienceLeadIds =
+    source === "estagio"
+      ? stageLeadIds
+      : source === "filtro"
+        ? boardFilterActive
+          ? filteredLeadIds
+          : []
+        : manualLeadIds;
+
+  const audienceLoading =
+    source === "estagio"
+      ? stageLoading && !!stageKey
+      : source === "filtro"
+        ? boardFilterActive && filteredLoading
+        : false;
+
+  const audienceSize = audienceLeadIds?.length ?? 0;
   const selectedStage = stages.find((s) => s.stage_key === stageKey);
+
+  // Whether the active source has a "chosen target" (a stage picked, the board
+  // filter present, or a manual set seeded) — gates the live count panel.
+  const sourceReady =
+    source === "estagio" ? !!stageKey : source === "filtro" ? boardFilterActive : audienceSize > 0;
 
   const connectedInstances = useMemo(
     () => instances.filter((i: any) => CONNECTED.has(i.status)),
@@ -108,13 +210,15 @@ export function DisparoWizard({ open, onOpenChange }: DisparoWizardProps) {
 
   // Live dry-run preview. Uses the chosen instance; before one is picked, a
   // connected instance stands in purely for the count — the preview never sends.
+  // Feeds the SAME downstream regardless of source — the resolved lead ids are
+  // all the preview needs.
   const previewInstanceId = instanceId || connectedInstances[0]?.id || instances[0]?.id;
   const blastPreview = useBlastPreview({
-    leadIds: stageLeadIds,
+    leadIds: audienceLeadIds,
     instanceId: previewInstanceId,
     message,
     refinements,
-    enabled: open && !!stageKey && !result,
+    enabled: open && sourceReady && audienceSize > 0 && !result,
   });
 
   const stepIndex = STEPS.findIndex((s) => s.id === step);
@@ -124,7 +228,21 @@ export function DisparoWizard({ open, onOpenChange }: DisparoWizardProps) {
   const activeRecentDays =
     refinements.excludeRecent && refinements.recentDays > 0 ? refinements.recentDays : null;
 
-  const canAdvancePublico = !!stageKey && !audienceLoading && audienceSize > 0;
+  // Source recap shown in Revisão — names the audience provenance plainly.
+  const sourceLabel =
+    source === "estagio"
+      ? "Estágio"
+      : source === "filtro"
+        ? "Filtro ativo"
+        : "Manual";
+  const sourceValue =
+    source === "estagio"
+      ? selectedStage?.name ?? "—"
+      : source === "filtro"
+        ? "filtro do funil"
+        : `${manualLeadIds.length} selecionados`;
+
+  const canAdvancePublico = sourceReady && !audienceLoading && audienceSize > 0;
   const canAdvanceMensagem =
     message.trim().length > 0 && !!instanceId && delayMin >= 0 && delayMax >= delayMin && !uploading;
   const scheduleValid = when === "now" || (!!scheduledFor && new Date(scheduledFor).getTime() > Date.now());
@@ -133,7 +251,9 @@ export function DisparoWizard({ open, onOpenChange }: DisparoWizardProps) {
   function resetAll() {
     setStep("publico");
     setDirection(1);
+    setSource(initialSource);
     setStageKey("");
+    setManualLeadIds(initialManualLeadIds ?? []);
     setRefinements(DEFAULT_REFINEMENTS);
     setTemplateId("");
     setMessage("");
@@ -205,14 +325,14 @@ export function DisparoWizard({ open, onOpenChange }: DisparoWizardProps) {
   }
 
   async function handleFire() {
-    if (!stageLeadIds || stageLeadIds.length === 0) {
-      toast.error("Nenhum lead no estágio selecionado");
+    if (!audienceLeadIds || audienceLeadIds.length === 0) {
+      toast.error("Nenhum lead no público selecionado");
       return;
     }
     try {
       const res = await blast.mutateAsync({
         instance_id: instanceId,
-        lead_ids: stageLeadIds,
+        lead_ids: audienceLeadIds,
         message: message.trim(),
         delay_min_ms: Math.round(delayMin * 1000),
         delay_max_ms: Math.round(delayMax * 1000),
@@ -246,8 +366,8 @@ export function DisparoWizard({ open, onOpenChange }: DisparoWizardProps) {
             <DialogTitle className="text-lg font-semibold tracking-tight">Disparo</DialogTitle>
           </div>
           <DialogDescription className="text-sm text-muted-foreground">
-            Envio em massa para um estágio inteiro do funil. Leads sem telefone, duplicados e o teto
-            da organização são tratados automaticamente.
+            Envio em massa por estágio, filtro ativo do funil ou seleção manual. Leads sem telefone,
+            duplicados e o teto da organização são tratados automaticamente.
           </DialogDescription>
         </DialogHeader>
 
@@ -270,16 +390,21 @@ export function DisparoWizard({ open, onOpenChange }: DisparoWizardProps) {
                 <SuccessPanel result={result} scheduled={when === "schedule"} />
               ) : step === "publico" ? (
                 <PublicoStep
+                  source={source}
+                  onSource={setSource}
                   stages={stages}
                   stagesLoading={stagesLoading}
                   stageKey={stageKey}
                   onStageKey={setStageKey}
                   audienceSize={audienceSize}
-                  audienceLoading={audienceLoading && !!stageKey}
+                  audienceLoading={audienceLoading}
                   refinements={refinements}
                   onRefinements={setRefinements}
                   preview={blastPreview}
                   activeRecentDays={activeRecentDays}
+                  boardFilterActive={boardFilterActive}
+                  boardFilterChips={boardFilter?.chips ?? []}
+                  manualCount={manualLeadIds.length}
                 />
               ) : step === "mensagem" ? (
                 <MensagemStep
@@ -306,7 +431,8 @@ export function DisparoWizard({ open, onOpenChange }: DisparoWizardProps) {
               ) : (
                 <RevisaoStep
                   audienceSize={audienceSize}
-                  stageName={selectedStage?.name ?? "—"}
+                  sourceLabel={sourceLabel}
+                  sourceValue={sourceValue}
                   when={when}
                   onWhen={setWhen}
                   scheduledFor={scheduledFor}
@@ -433,7 +559,20 @@ function Stepper({
 /* ──────────────────────────────────────────────────────────────────────────
  * Step 1 — Público
  * ────────────────────────────────────────────────────────────────────────── */
+const SOURCE_OPTIONS: {
+  id: DisparoSource;
+  label: string;
+  desc: string;
+  icon: typeof Layers;
+}[] = [
+  { id: "estagio", label: "Estágio", desc: "Todos de uma etapa", icon: Layers },
+  { id: "filtro", label: "Filtro ativo", desc: "Como está no funil", icon: ListFilter },
+  { id: "manual", label: "Manual", desc: "Selecionados no quadro", icon: MousePointerClick },
+];
+
 function PublicoStep({
+  source,
+  onSource,
   stages,
   stagesLoading,
   stageKey,
@@ -444,7 +583,12 @@ function PublicoStep({
   onRefinements,
   preview,
   activeRecentDays,
+  boardFilterActive,
+  boardFilterChips,
+  manualCount,
 }: {
+  source: DisparoSource;
+  onSource: (s: DisparoSource) => void;
   stages: { stage_key: string; name: string; color?: string | null }[];
   stagesLoading: boolean;
   stageKey: string;
@@ -455,30 +599,40 @@ function PublicoStep({
   onRefinements: (next: BlastRefinements) => void;
   preview: BlastPreviewState;
   activeRecentDays: number | null;
+  boardFilterActive: boolean;
+  boardFilterChips: string[];
+  manualCount: number;
 }) {
-  const sources = [
-    { id: "estagio", label: "Estágio", desc: "Todos os leads de uma etapa", icon: Layers, enabled: true },
-    { id: "filtro", label: "Filtro", desc: "Por origem, tag, responsável", icon: ListFilter, enabled: false },
-    { id: "manual", label: "Manual", desc: "Seleção individual de leads", icon: MousePointerClick, enabled: false },
-  ];
+  // The target is "chosen" when the active source has something to resolve.
+  const sourceReady =
+    source === "estagio" ? !!stageKey : source === "filtro" ? boardFilterActive : manualCount > 0;
+
+  // Refinements only make sense once there is an audience to narrow.
+  const showRefinements = sourceReady;
 
   return (
     <div className="space-y-5">
+      {/* Origem do público — segmented radio-cards (Linear) */}
       <div className="space-y-2.5">
         <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Origem do público
         </Label>
-        <div className="grid grid-cols-3 gap-2.5">
-          {sources.map((src) => {
-            const selected = src.id === "estagio";
+        <div className="grid grid-cols-3 gap-2.5" role="radiogroup" aria-label="Origem do público">
+          {SOURCE_OPTIONS.map((src) => {
+            const selected = src.id === source;
             return (
-              <div
+              <button
                 key={src.id}
-                aria-disabled={!src.enabled}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => onSource(src.id)}
                 className={cn(
                   "relative flex flex-col gap-1.5 rounded-lg border p-3 text-left transition-colors",
-                  selected && "border-primary/60 bg-primary/[0.06]",
-                  !src.enabled && "cursor-not-allowed opacity-55",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                  selected
+                    ? "border-primary/60 bg-primary/[0.06]"
+                    : "border-border hover:border-border/80 hover:bg-muted/30",
                 )}
               >
                 <src.icon
@@ -486,43 +640,47 @@ function PublicoStep({
                 />
                 <span className="text-sm font-medium leading-none">{src.label}</span>
                 <span className="text-[11px] leading-tight text-muted-foreground">{src.desc}</span>
-                {!src.enabled && (
-                  <span className="absolute right-2 top-2 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Em breve
-                  </span>
-                )}
-              </div>
+              </button>
             );
           })}
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="disparo-stage" className="text-sm">
-          Estágio do funil
-        </Label>
-        <Select value={stageKey} onValueChange={onStageKey} disabled={stagesLoading}>
-          <SelectTrigger id="disparo-stage">
-            <SelectValue placeholder={stagesLoading ? "Carregando etapas…" : "Selecione o estágio"} />
-          </SelectTrigger>
-          <SelectContent>
-            {stages.map((s) => (
-              <SelectItem key={s.stage_key} value={s.stage_key}>
-                <span className="flex items-center gap-2">
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: s.color ?? "hsl(var(--muted-foreground))" }}
-                  />
-                  {s.name}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Configuração por fonte */}
+      {source === "estagio" && (
+        <div className="space-y-2">
+          <Label htmlFor="disparo-stage" className="text-sm">
+            Estágio do funil
+          </Label>
+          <Select value={stageKey} onValueChange={onStageKey} disabled={stagesLoading}>
+            <SelectTrigger id="disparo-stage">
+              <SelectValue placeholder={stagesLoading ? "Carregando etapas…" : "Selecione o estágio"} />
+            </SelectTrigger>
+            <SelectContent>
+              {stages.map((s) => (
+                <SelectItem key={s.stage_key} value={s.stage_key}>
+                  <span className="flex items-center gap-2">
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: s.color ?? "hsl(var(--muted-foreground))" }}
+                    />
+                    {s.name}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
-      {/* Refinos do público — só fazem sentido com um estágio escolhido */}
-      {stageKey && (
+      {source === "filtro" && (
+        <FiltroSourcePanel active={boardFilterActive} chips={boardFilterChips} />
+      )}
+
+      {source === "manual" && <ManualSourcePanel count={manualCount} />}
+
+      {/* Refinos do público — comuns às três fontes */}
+      {showRefinements && (
         <BlastRefinementsControls
           value={refinements}
           onChange={onRefinements}
@@ -531,15 +689,8 @@ function PublicoStep({
       )}
 
       {/* Contagem viva do público */}
-      {!stageKey ? (
-        <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/30 px-4 py-3.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary">
-            <Users className="h-4 w-4" />
-          </span>
-          <span className="text-sm text-muted-foreground">
-            Escolha um estágio para ver o público
-          </span>
-        </div>
+      {!sourceReady ? (
+        <EmptyAudienceHint source={source} />
       ) : audienceLoading ? (
         <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/30 px-4 py-3.5">
           <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary">
@@ -553,7 +704,11 @@ function PublicoStep({
             <Users className="h-4 w-4" />
           </span>
           <span className="text-sm text-muted-foreground">
-            Nenhum lead neste estágio — escolha outro
+            {source === "estagio"
+              ? "Nenhum lead neste estágio — escolha outro"
+              : source === "filtro"
+                ? "Nenhum lead bate com o filtro do funil"
+                : "Nenhum lead selecionado"}
           </span>
         </div>
       ) : (
@@ -565,6 +720,80 @@ function PublicoStep({
           recentDays={activeRecentDays}
         />
       )}
+    </div>
+  );
+}
+
+/** Empty-state hint shown before a source target is chosen — per-source copy. */
+function EmptyAudienceHint({ source }: { source: DisparoSource }) {
+  const copy =
+    source === "estagio"
+      ? "Escolha um estágio para ver o público"
+      : source === "filtro"
+        ? "Ative um filtro no funil para usar esta fonte"
+        : "Selecione leads no quadro para disparar manualmente";
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/30 px-4 py-3.5">
+      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary">
+        <Users className="h-4 w-4" />
+      </span>
+      <span className="text-sm text-muted-foreground">{copy}</span>
+    </div>
+  );
+}
+
+/**
+ * "Filtro ativo" config — a calm helper that states exactly which board filters
+ * this source honors (search, responsible, tags — the only ones resolved
+ * server-side), with the active ones surfaced as chips. Origin/calor/range are
+ * page-only and silently dropped, so we say so plainly: the operator is never
+ * surprised that a chip they set on the board isn't applied here.
+ */
+function FiltroSourcePanel({ active, chips }: { active: boolean; chips: string[] }) {
+  return (
+    <div className="space-y-2.5">
+      <div className="flex items-start gap-2.5 rounded-lg border border-border/70 bg-muted/20 px-4 py-3">
+        <Info className="mt-px h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 space-y-2">
+          <p className="text-[12px] leading-snug text-muted-foreground">
+            Honra <span className="text-foreground">busca</span>,{" "}
+            <span className="text-foreground">responsável</span> e{" "}
+            <span className="text-foreground">tags</span> do funil. Origem, calor e período ficam só
+            no quadro — não entram aqui.
+          </p>
+          {active && chips.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {chips.map((chip) => (
+                <span
+                  key={chip}
+                  className="rounded-full border border-primary/30 bg-primary/[0.06] px-2 py-0.5 text-[10px] font-medium text-foreground"
+                >
+                  {chip}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** "Manual" config — read-only recap of the kanban-seeded selection. */
+function ManualSourcePanel({ count }: { count: number }) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/20 px-4 py-3">
+      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary">
+        <MousePointerClick className="h-4 w-4" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-medium tabular-nums">
+          {count.toLocaleString("pt-BR")} {count === 1 ? "lead selecionado" : "leads selecionados"}
+        </p>
+        <p className="text-[11px] leading-tight text-muted-foreground">
+          Selecionados no quadro antes de abrir o disparo
+        </p>
+      </div>
     </div>
   );
 }
@@ -767,7 +996,8 @@ function MensagemStep({
  * ────────────────────────────────────────────────────────────────────────── */
 function RevisaoStep({
   audienceSize,
-  stageName,
+  sourceLabel,
+  sourceValue,
   when,
   onWhen,
   scheduledFor,
@@ -778,7 +1008,8 @@ function RevisaoStep({
   onlyNonResponders,
 }: {
   audienceSize: number;
-  stageName: string;
+  sourceLabel: string;
+  sourceValue: string;
   when: "now" | "schedule";
   onWhen: (v: "now" | "schedule") => void;
   scheduledFor: string;
@@ -802,7 +1033,7 @@ function RevisaoStep({
             Público final
           </span>
           <span className="text-[11px] text-muted-foreground">
-            Estágio <span className="text-foreground">{stageName}</span>
+            {sourceLabel} <span className="text-foreground">{sourceValue}</span>
           </span>
         </div>
         <BlastBreakdown

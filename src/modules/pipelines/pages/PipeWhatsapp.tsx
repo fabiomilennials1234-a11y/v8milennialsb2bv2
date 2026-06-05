@@ -42,7 +42,7 @@ import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/lead
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { LeadModal } from "@/modules/leads";
 import { CreateOpportunityModal } from "@/modules/pipelines/components/kanban/CreateOpportunityModal";
-import { DisparoWizard } from "@/modules/pipelines/components/disparo";
+import { DisparoWizard, type DisparoBoardFilter, type DisparoSource } from "@/modules/pipelines/components/disparo";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
 import { AddMeetingModal } from "@/modules/pipelines/components/legacy/confirmacao/AddMeetingModal";
 import { format } from "date-fns";
@@ -139,6 +139,10 @@ function PipeWhatsappInner() {
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDisparoOpen, setIsDisparoOpen] = useState(false);
+  // Disparo source on open: "estagio" for the header button, "manual" when
+  // launched from the bulk-bar with a kanban selection seeded.
+  const [disparoSource, setDisparoSource] = useState<DisparoSource>("estagio");
+  const [disparoManualIds, setDisparoManualIds] = useState<string[]>([]);
   const { openLead } = useLeadSheet();
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
@@ -216,6 +220,49 @@ function PipeWhatsappInner() {
       filterScheduled: false,
     }));
   }, [setFilterState]);
+
+  // Board filter handed to the Disparo "Filtro ativo" source. Mirrors EXACTLY
+  // the dimensions usePaginatedPipeline resolves server-side (search,
+  // responsible, tags) — origin/scheduled/period are page-only and deliberately
+  // excluded (the wizard surfaces this honestly). Chips carry human labels so
+  // the operator sees what's honored; the page owns the member/tag dictionaries.
+  const disparoBoardFilter: DisparoBoardFilter = useMemo(() => {
+    const chips: string[] = [];
+    const term = searchTerm.trim();
+    if (term) chips.push(`Busca: "${term}"`);
+    if (filterResponsible && filterResponsible !== "all") {
+      const member = responsibleMembers.find((m: any) => m.id === filterResponsible);
+      chips.push(`Responsável: ${member?.name ?? "selecionado"}`);
+    }
+    if (filterTags.length > 0) {
+      const names = filterTags
+        .map((id) => orgTags.find((t: any) => t.id === id)?.name)
+        .filter(Boolean) as string[];
+      if (names.length > 0) chips.push(`Tags: ${names.join(", ")}`);
+    }
+    return {
+      search: searchTerm,
+      responsibleId: filterResponsible,
+      tagIds: filterTags,
+      chips,
+    };
+  }, [searchTerm, filterResponsible, filterTags, responsibleMembers, orgTags]);
+
+  // Bulk-bar → Disparo (Manual). Seed the kanban selection and open the wizard
+  // in "manual" mode. Defined HERE (pipelines page may import both modules), so
+  // BulkActionBar never imports pipelines — the forbidden direction stays clean.
+  const handleDispararManual = useCallback((leadIds: string[]) => {
+    setDisparoManualIds(leadIds);
+    setDisparoSource("manual");
+    setIsDisparoOpen(true);
+  }, []);
+
+  // Header "Disparo" button always opens the stage source.
+  const handleOpenDisparoStage = useCallback(() => {
+    setDisparoManualIds([]);
+    setDisparoSource("estagio");
+    setIsDisparoOpen(true);
+  }, []);
 
   // Build IDs list pra fetch batched metrics
   const allRawLeadIds = useMemo(() => {
@@ -515,7 +562,7 @@ function PipeWhatsappInner() {
             size="sm"
             variant="outline"
             className="border-primary/30 text-foreground hover:border-primary/60 hover:bg-primary/5"
-            onClick={() => setIsDisparoOpen(true)}
+            onClick={handleOpenDisparoStage}
           >
             <Send className="w-4 h-4 mr-2 text-primary" />
             Disparo
@@ -729,8 +776,18 @@ function PipeWhatsappInner() {
         stages={pipelineStages}
       />
 
-      {/* Disparo Wizard (Mass Send — stage source, single-day) */}
-      <DisparoWizard open={isDisparoOpen} onOpenChange={setIsDisparoOpen} />
+      {/* Disparo Wizard (Mass Send — stage / active filter / manual sources).
+          Mounted only while open so its audience-resolution queries (stage /
+          filtered lead ids) never run in the background on the funnel page. */}
+      {isDisparoOpen && (
+        <DisparoWizard
+          open={isDisparoOpen}
+          onOpenChange={setIsDisparoOpen}
+          boardFilter={disparoBoardFilter}
+          initialSource={disparoSource}
+          initialManualLeadIds={disparoManualIds}
+        />
+      )}
 
       {/* Create Opportunity Modal */}
       <CreateOpportunityModal
@@ -809,8 +866,17 @@ function PipeWhatsappInner() {
         leadCount={stageToExport?.count ?? 0}
       />
 
-      {/* Bulk Action Bar */}
-      <BulkActionBar selectedIds={bulk.selectedIds} onClear={bulk.clearSelection} leadIds={allLeadIds} />
+      {/* Bulk Action Bar — "Disparar" opens the full Disparo wizard pre-seeded
+          with the selection (Manual source), instead of the in-bar QuickBlast. */}
+      <BulkActionBar
+        selectedIds={bulk.selectedIds}
+        onClear={bulk.clearSelection}
+        leadIds={allLeadIds}
+        onDisparar={(leadIds) => {
+          handleDispararManual(leadIds);
+          bulk.clearSelection();
+        }}
+      />
 
       {/* AddMeetingModal — opened when a lead is dragged to an "agendado" stage.
           The pipe_whatsapp stage change is deferred until the meeting is saved;
