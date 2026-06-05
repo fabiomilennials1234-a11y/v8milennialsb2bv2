@@ -5,7 +5,7 @@ import {
   Search, Plus, Calendar as CalendarIcon, User, Building2,
   DollarSign, Loader2, TrendingUp, Package,
   ArrowUpRight, Percent, BarChart3, Target, Flame, MessageCircle, Settings2,
-  MoreVertical, Trash2, LayoutGrid
+  MoreVertical, Trash2, LayoutGrid, Send
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -78,6 +78,7 @@ import { useTags } from "@/modules/leads/hooks/useTags";
 import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
+import { DisparoWizard, type DisparoBoardFilter, type DisparoSource } from "@/modules/pipelines/components/disparo";
 import { useLossReasons } from "@/modules/pipelines/hooks/config/useLossReasons";
 import { useSearchParams } from "react-router-dom";
 import { useMetricDrilldown, type MetricType } from "@/modules/carteira/hooks/useMetricDrilldown";
@@ -220,6 +221,9 @@ function PipePropostasInner() {
   const { openLead } = useLeadSheet();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDisparoOpen, setIsDisparoOpen] = useState(false);
+  const [disparoSource, setDisparoSource] = useState<DisparoSource>("estagio");
+  const [disparoManualIds, setDisparoManualIds] = useState<string[]>([]);
   const [analyticsTab, setAnalyticsTab] = useState<"propostas" | "produtos">("propostas");
 
   // State for commitment date modal
@@ -325,6 +329,39 @@ function PipePropostasInner() {
     { type: "priority", value: filterPriority, onChange: (v: string) => setFilterState((f) => ({ ...f, filterPriority: v })) },
     { type: "scheduled", value: filterScheduled, onChange: (v: boolean) => setFilterState((f) => ({ ...f, filterScheduled: v })) },
   ], [filterResponsible, filterOrigin, filterTags, filterProductType, filterCalor, filterPriority, filterScheduled, responsibleMembers, orgTags, setFilterState]);
+
+  // Board filter handed to the Disparo "Filtro ativo" source. Mirrors EXACTLY
+  // the dimensions usePaginatedPipeline resolves server-side (search,
+  // responsible, tags) — origin/product/priority/calor/scheduled are page-only
+  // and deliberately excluded. Chips carry human labels (page owns dictionaries).
+  const disparoBoardFilter: DisparoBoardFilter = useMemo(() => {
+    const chips: string[] = [];
+    const term = searchTerm.trim();
+    if (term) chips.push(`Busca: "${term}"`);
+    if (filterResponsible && filterResponsible !== "all") {
+      const member = responsibleMembers.find((m: any) => m.id === filterResponsible);
+      chips.push(`Responsável: ${member?.name ?? "selecionado"}`);
+    }
+    if (filterTags.length > 0) {
+      const names = filterTags
+        .map((id) => orgTags.find((t: any) => t.id === id)?.name)
+        .filter(Boolean) as string[];
+      if (names.length > 0) chips.push(`Tags: ${names.join(", ")}`);
+    }
+    return { search: searchTerm, responsibleId: filterResponsible, tagIds: filterTags, chips };
+  }, [searchTerm, filterResponsible, filterTags, responsibleMembers, orgTags]);
+
+  const handleOpenDisparoStage = useCallback(() => {
+    setDisparoManualIds([]);
+    setDisparoSource("estagio");
+    setIsDisparoOpen(true);
+  }, []);
+
+  const handleDispararManual = useCallback((leadIds: string[]) => {
+    setDisparoManualIds(leadIds);
+    setDisparoSource("manual");
+    setIsDisparoOpen(true);
+  }, []);
 
   // Transform pipe data to LeadCardData format
   const transformToCard = (item: any): LeadCardData => {
@@ -1010,6 +1047,14 @@ function PipePropostasInner() {
             <Settings2 className="w-4 h-4" />
             Configurações
           </Button>
+          <Button
+            variant="outline"
+            className="gap-2 border-primary/30 text-foreground hover:border-primary/60 hover:bg-primary/5"
+            onClick={handleOpenDisparoStage}
+          >
+            <Send className="w-4 h-4 text-primary" />
+            Disparo
+          </Button>
           <Button className="gap-2" onClick={() => setIsCreateModalOpen(true)}>
             <Plus className="w-4 h-4" />
             Nova Proposta
@@ -1489,8 +1534,30 @@ function PipePropostasInner() {
         isLoading={drilldownLoading}
       />
 
-      {/* Bulk Action Bar */}
-      <BulkActionBar selectedIds={bulk.selectedIds} onClear={bulk.clearSelection} leadIds={allLeadIds} />
+      {/* Bulk Action Bar — "Disparar" opens the full Disparo wizard pre-seeded
+          with the selection (Manual source), instead of the in-bar QuickBlast. */}
+      <BulkActionBar
+        selectedIds={bulk.selectedIds}
+        onClear={bulk.clearSelection}
+        leadIds={allLeadIds}
+        onDisparar={(leadIds) => {
+          handleDispararManual(leadIds);
+          bulk.clearSelection();
+        }}
+      />
+
+      {/* Disparo Wizard (system funnel: propostas). Mounted only while open so
+          its audience-resolution queries never run in the background. */}
+      {isDisparoOpen && (
+        <DisparoWizard
+          open={isDisparoOpen}
+          onOpenChange={setIsDisparoOpen}
+          context={{ kind: "system", pipelineType: "propostas" }}
+          boardFilter={disparoBoardFilter}
+          initialSource={disparoSource}
+          initialManualLeadIds={disparoManualIds}
+        />
+      )}
 
       {/* Delete single lead from pipe */}
       <AlertDialog open={deleteDialog?.open} onOpenChange={(open) => !open && setDeleteDialog(null)}>

@@ -182,6 +182,12 @@ export {
 } from "./hooks/lead/useLeadTagsAttached";
 export type { AttachedLeadTag } from "./hooks/lead/useLeadTagsAttached";
 
+// Org-scoped tag dictionary (CRUD). Consumed cross-module by the Disparo
+// audience-conditions selector (tag filter) and any surface that needs the
+// org's tag list outside a lead context.
+export { useTags, useCreateTag, useUpdateTag, useDeleteTag } from "./hooks/useTags";
+export type { Tag, TagInsert, TagUpdate } from "./hooks/useTags";
+
 // ── Components: lead-detail (modal redesign — ADR-2026-05-17) ──────────────
 // V2 é o modal redesenhado (feature-flag `new_lead_modal_v2`). V1 = legado.
 // LeadDetailSheet é alias de LeadDetailDialog para compat com call sites antigos.
