@@ -144,6 +144,23 @@ export {
 
 export type { UazapiSenderJob } from "./hooks/useMassSendJobs";
 
+// ── Blast Plans (auto-batched Mass Send — ADR-0003 / #707) ────────────────
+export {
+  useCreateBlastPlan,
+  useBlastPlans,
+  useBlastPlanProgress,
+  useBlastPlanControl,
+} from "./hooks/useBlastPlans";
+export type {
+  BlastPlan,
+  BlastPlanStatus,
+  BlastPlanLotBreakdown,
+  CreateBlastPlanInput,
+  CreateBlastPlanResult,
+  BlastPlanProgress,
+  BlastPlanAction,
+} from "./hooks/useBlastPlans";
+
 // ────────────────────────────────────────────────────────────────────────
 // Hooks — Dispatch queue (cross-module: pipelines + campaigns)
 // ────────────────────────────────────────────────────────────────────────
