@@ -244,6 +244,19 @@ export {
   CreateTemporaryFunnelModal,
 } from "./components/funis";
 
+// ── Components: disparo (Quick Blast wizard — mass send) ──────────────────
+// Cross-module surface so carteira can mount the unified wizard via the public
+// barrel (module→module allowed by `boundaries`); deep-importing the private
+// `./components/disparo` sub-barrel from outside would trip `boundaries/no-private`.
+// In-module call sites (funnel pages) keep importing the sub-barrel directly.
+export { DisparoWizard } from "./components/disparo";
+export type {
+  DisparoContext,
+  DisparoBoardFilter,
+  DisparoSource,
+  SystemPipelineType,
+} from "./components/disparo";
+
 // ── Components: legacy (confirmacao standalone — pre-modelo-novo) ─────────
 export {
   AddMeetingModal,
