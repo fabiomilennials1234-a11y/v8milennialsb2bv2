@@ -99,6 +99,11 @@ export type {
 export { useUpsellClientByLeadId } from "./hooks/useUpsellClientByLeadId";
 export type { UpsellClientRow } from "./hooks/useUpsellClientByLeadId";
 
+// Disparo Phase 1 — carteira (post-sale) audience resolver. Returns lead_ids of
+// active carteira clients matching the wizard's audience conditions.
+export { useCarteiraLeadIds } from "./hooks/useCarteiraLeadIds";
+export type { CarteiraLeadIdsParams } from "./hooks/useCarteiraLeadIds";
+
 export {
   useUpsellClientProducts,
   useCreateUpsellClientProduct,
