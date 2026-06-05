@@ -31,6 +31,16 @@ import { useQuickBlast, type QuickBlastResult } from "@/modules/leads";
 import { usePipelineStages } from "../../hooks/model/usePipelineStages";
 import { useStageLeadIds } from "../../hooks/model/useStageLeadIds";
 
+import { BlastBreakdown } from "./BlastBreakdown";
+import { BlastRefinementsControls } from "./BlastRefinementsControls";
+import {
+  DEFAULT_REFINEMENTS,
+  resolveRefinementFields,
+  useBlastPreview,
+  type BlastPreviewState,
+  type BlastRefinements,
+} from "./useBlastPreview";
+
 interface DisparoWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -64,6 +74,7 @@ export function DisparoWizard({ open, onOpenChange }: DisparoWizardProps) {
 
   // Step 1 — Público (somente fonte "Estágio" nesta fatia)
   const [stageKey, setStageKey] = useState<string>("");
+  const [refinements, setRefinements] = useState<BlastRefinements>(DEFAULT_REFINEMENTS);
 
   // Step 2 — Mensagem
   const [templateId, setTemplateId] = useState<string>("");
@@ -95,8 +106,23 @@ export function DisparoWizard({ open, onOpenChange }: DisparoWizardProps) {
   );
   const selectableInstances = connectedInstances.length > 0 ? connectedInstances : instances;
 
+  // Live dry-run preview. Uses the chosen instance; before one is picked, a
+  // connected instance stands in purely for the count — the preview never sends.
+  const previewInstanceId = instanceId || connectedInstances[0]?.id || instances[0]?.id;
+  const blastPreview = useBlastPreview({
+    leadIds: stageLeadIds,
+    instanceId: previewInstanceId,
+    message,
+    refinements,
+    enabled: open && !!stageKey && !result,
+  });
+
   const stepIndex = STEPS.findIndex((s) => s.id === step);
   const preview = previewMessage(message);
+
+  // Days label only when the recency refinement is actually engaged.
+  const activeRecentDays =
+    refinements.excludeRecent && refinements.recentDays > 0 ? refinements.recentDays : null;
 
   const canAdvancePublico = !!stageKey && !audienceLoading && audienceSize > 0;
   const canAdvanceMensagem =
@@ -108,6 +134,7 @@ export function DisparoWizard({ open, onOpenChange }: DisparoWizardProps) {
     setStep("publico");
     setDirection(1);
     setStageKey("");
+    setRefinements(DEFAULT_REFINEMENTS);
     setTemplateId("");
     setMessage("");
     setInstanceId("");
@@ -192,6 +219,8 @@ export function DisparoWizard({ open, onOpenChange }: DisparoWizardProps) {
         image_url: imageUrl ?? undefined,
         scheduled_for:
           when === "schedule" && scheduledFor ? new Date(scheduledFor).toISOString() : undefined,
+        // Server re-resolves the same refinements authoritatively on fire.
+        ...resolveRefinementFields(refinements),
       });
       setResult(res);
     } catch (e) {
@@ -247,6 +276,10 @@ export function DisparoWizard({ open, onOpenChange }: DisparoWizardProps) {
                   onStageKey={setStageKey}
                   audienceSize={audienceSize}
                   audienceLoading={audienceLoading && !!stageKey}
+                  refinements={refinements}
+                  onRefinements={setRefinements}
+                  preview={blastPreview}
+                  activeRecentDays={activeRecentDays}
                 />
               ) : step === "mensagem" ? (
                 <MensagemStep
@@ -279,6 +312,9 @@ export function DisparoWizard({ open, onOpenChange }: DisparoWizardProps) {
                   scheduledFor={scheduledFor}
                   onScheduledFor={setScheduledFor}
                   scheduleValid={scheduleValid}
+                  preview={blastPreview}
+                  activeRecentDays={activeRecentDays}
+                  onlyNonResponders={refinements.onlyNonResponders}
                 />
               )}
             </motion.div>
@@ -404,6 +440,10 @@ function PublicoStep({
   onStageKey,
   audienceSize,
   audienceLoading,
+  refinements,
+  onRefinements,
+  preview,
+  activeRecentDays,
 }: {
   stages: { stage_key: string; name: string; color?: string | null }[];
   stagesLoading: boolean;
@@ -411,6 +451,10 @@ function PublicoStep({
   onStageKey: (v: string) => void;
   audienceSize: number;
   audienceLoading: boolean;
+  refinements: BlastRefinements;
+  onRefinements: (next: BlastRefinements) => void;
+  preview: BlastPreviewState;
+  activeRecentDays: number | null;
 }) {
   const sources = [
     { id: "estagio", label: "Estágio", desc: "Todos os leads de uma etapa", icon: Layers, enabled: true },
@@ -477,37 +521,50 @@ function PublicoStep({
         </Select>
       </div>
 
+      {/* Refinos do público — só fazem sentido com um estágio escolhido */}
+      {stageKey && (
+        <BlastRefinementsControls
+          value={refinements}
+          onChange={onRefinements}
+          disabled={audienceLoading || audienceSize === 0}
+        />
+      )}
+
       {/* Contagem viva do público */}
-      <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/30 px-4 py-3.5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary">
-          <Users className="h-4 w-4" />
-        </span>
-        <div className="flex flex-col">
-          {!stageKey ? (
-            <span className="text-sm text-muted-foreground">
-              Escolha um estágio para ver o público
-            </span>
-          ) : audienceLoading ? (
-            <span className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Calculando público…
-            </span>
-          ) : (
-            <>
-              <span className="text-2xl font-semibold leading-none tabular-nums tracking-tight">
-                {audienceSize.toLocaleString("pt-BR")}
-                <span className="ml-1.5 text-sm font-normal text-muted-foreground">
-                  {audienceSize === 1 ? "lead" : "leads"}
-                </span>
-              </span>
-              <span className="mt-0.5 text-xs text-muted-foreground">
-                {audienceSize === 0
-                  ? "Nenhum lead neste estágio — escolha outro"
-                  : "Filtros finais (sem telefone, duplicados, teto) aplicados no envio"}
-              </span>
-            </>
-          )}
+      {!stageKey ? (
+        <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/30 px-4 py-3.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary">
+            <Users className="h-4 w-4" />
+          </span>
+          <span className="text-sm text-muted-foreground">
+            Escolha um estágio para ver o público
+          </span>
         </div>
-      </div>
+      ) : audienceLoading ? (
+        <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/30 px-4 py-3.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary">
+            <Loader2 className="h-4 w-4 animate-spin" />
+          </span>
+          <span className="text-sm text-muted-foreground">Calculando público…</span>
+        </div>
+      ) : audienceSize === 0 ? (
+        <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/30 px-4 py-3.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary">
+            <Users className="h-4 w-4" />
+          </span>
+          <span className="text-sm text-muted-foreground">
+            Nenhum lead neste estágio — escolha outro
+          </span>
+        </div>
+      ) : (
+        <BlastBreakdown
+          candidates={audienceSize}
+          preview={preview.data}
+          isLoading={preview.isLoading}
+          error={preview.error}
+          recentDays={activeRecentDays}
+        />
+      )}
     </div>
   );
 }
@@ -716,6 +773,9 @@ function RevisaoStep({
   scheduledFor,
   onScheduledFor,
   scheduleValid,
+  preview,
+  activeRecentDays,
+  onlyNonResponders,
 }: {
   audienceSize: number;
   stageName: string;
@@ -724,27 +784,47 @@ function RevisaoStep({
   scheduledFor: string;
   onScheduledFor: (v: string) => void;
   scheduleValid: boolean;
+  preview: BlastPreviewState;
+  activeRecentDays: number | null;
+  onlyNonResponders: boolean;
 }) {
+  const activeRefinements = [
+    activeRecentDays != null ? `recebidos nos últimos ${activeRecentDays}d excluídos` : null,
+    onlyNonResponders ? "só não respondentes" : null,
+  ].filter(Boolean) as string[];
+
   return (
     <div className="space-y-5">
-      {/* Resumo do público */}
-      <div className="flex items-center justify-between rounded-lg border border-border/70 bg-muted/30 px-4 py-4">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/12 text-primary">
-            <Users className="h-4 w-4" />
+      {/* Resumo do público — contagem refinada + breakdown completo */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Público final
           </span>
-          <div className="flex flex-col">
-            <span className="text-xl font-semibold leading-none tabular-nums">
-              {audienceSize.toLocaleString("pt-BR")}{" "}
-              <span className="text-sm font-normal text-muted-foreground">
-                {audienceSize === 1 ? "lead" : "leads"}
-              </span>
-            </span>
-            <span className="mt-1 text-xs text-muted-foreground">
-              Estágio <span className="text-foreground">{stageName}</span>
-            </span>
-          </div>
+          <span className="text-[11px] text-muted-foreground">
+            Estágio <span className="text-foreground">{stageName}</span>
+          </span>
         </div>
+        <BlastBreakdown
+          candidates={audienceSize}
+          preview={preview.data}
+          isLoading={preview.isLoading}
+          error={preview.error}
+          recentDays={activeRecentDays}
+          variant="inline"
+        />
+        {activeRefinements.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {activeRefinements.map((label) => (
+              <span
+                key={label}
+                className="rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Quando */}
