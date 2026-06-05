@@ -66,3 +66,34 @@ export function useQuickBlast() {
     },
   });
 }
+
+export interface QuickBlastPreview {
+  ok: true;
+  dry_run: true;
+  count: number;
+  skipped: {
+    noPhone: number;
+    duplicates: number;
+    overCap: number;
+    alreadyContactedWithinWindow: number;
+    replied: number;
+  };
+}
+
+/**
+ * Preview a Quick Blast without dispatching — resolves the audience + Blast
+ * Audience refinements server-side and returns the would-send count + skip
+ * breakdown. Powers the Disparo wizard's live count. Creates no job.
+ */
+export function useQuickBlastPreview() {
+  return useMutation({
+    mutationFn: async (input: QuickBlastInput): Promise<QuickBlastPreview> => {
+      const { data, error } = await supabase.functions.invoke("quick-blast-create", {
+        body: { ...input, message: input.message ?? "", dry_run: true },
+      });
+      if (error) throw new Error(error.message);
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data as QuickBlastPreview;
+    },
+  });
+}

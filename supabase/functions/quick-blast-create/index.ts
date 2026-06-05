@@ -82,6 +82,7 @@ Deno.serve(
       image_url,
       exclude_blasted_within_days,
       only_non_responders,
+      dry_run,
     } = body as {
       instance_id?: string;
       lead_ids?: string[];
@@ -93,6 +94,7 @@ Deno.serve(
       image_url?: string;
       exclude_blasted_within_days?: number;
       only_non_responders?: boolean;
+      dry_run?: boolean;
     };
 
     // Blast Audience refinements (#704). Recency window must be a positive
@@ -105,7 +107,7 @@ Deno.serve(
       onlyNonResponders: only_non_responders === true,
     };
 
-    if (!instance_id || !Array.isArray(lead_ids) || lead_ids.length === 0 || !message) {
+    if (!instance_id || !Array.isArray(lead_ids) || lead_ids.length === 0 || (!message && dry_run !== true)) {
       return jsonResponse(400, { error: "Missing instance_id, lead_ids or message" }, corsHeaders);
     }
 
@@ -141,11 +143,17 @@ Deno.serve(
           scheduledFor: scheduled_for,
           imageUrl: image_url,
           refinements,
+          dryRun: dry_run === true,
         },
       );
 
       if (!result.ok) {
         return jsonResponse(400, { error: result.error ?? "blast_failed", skipped: result.skipped }, corsHeaders);
+      }
+
+      // Preview: counts only — no job created, no "created" runtime log.
+      if (dry_run === true) {
+        return jsonResponse(200, { ok: true, dry_run: true, count: result.count, skipped: result.skipped }, corsHeaders);
       }
 
       await logRuntime({
