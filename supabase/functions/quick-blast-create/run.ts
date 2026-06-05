@@ -11,6 +11,13 @@
 import { getOrgBlastCap } from "../_shared/quick-blast/org-cap.ts";
 import { buildRecipients, type BlastLead } from "../_shared/quick-blast/recipients.ts";
 import { buildBlastLogRows } from "../_shared/quick-blast/message-log.ts";
+import {
+  refineBlastAudience,
+  channelMessagesActivitySource,
+  type BlastActivitySource,
+  type BlastRefinementOptions,
+  type BlastRefinementSkips,
+} from "../_shared/quick-blast/refinements.ts";
 
 export interface QuickBlastDeps {
   supabaseAdmin: { from: (t: string) => any };
@@ -26,6 +33,10 @@ export interface QuickBlastDeps {
       trackSource?: string;
     },
   ) => Promise<{ sender_job_id: string; uazapi_sender_id: string }>;
+  /** Activity source for the Blast Audience refinements (#704). Injected so the
+   *  refinement is testable without a live DB; defaults to a channel_messages
+   *  read over `supabaseAdmin` when omitted. */
+  activitySource?: BlastActivitySource;
 }
 
 export interface QuickBlastParams {
@@ -41,6 +52,10 @@ export interface QuickBlastParams {
   /** Optional single image (Supabase Storage URL). Resolved text becomes the
    *  caption. V1 supports image only (video deferred). */
   imageUrl?: string;
+  /** Blast Audience refinements (#704) applied server-side BEFORE dispatch.
+   *  Omitted / all-false → current behavior (no narrowing). The engine still
+   *  applies its own org cap + phone normalization afterward (fail-closed). */
+  refinements?: BlastRefinementOptions;
 }
 
 export interface QuickBlastResult {
@@ -48,11 +63,27 @@ export interface QuickBlastResult {
   sender_job_id?: string;
   uazapi_sender_id?: string;
   count: number;
-  skipped: { noPhone: number; duplicates: number; overCap: number };
+  /** Per-reason skip breakdown. `noPhone`/`duplicates`/`overCap` come from the
+   *  dispatch engine (buildRecipients + org cap). `alreadyContactedWithinWindow`
+   *  + `replied` come from the Blast Audience refinements (#704); they are 0
+   *  when no refinement narrowed the set. */
+  skipped: {
+    noPhone: number;
+    duplicates: number;
+    overCap: number;
+    alreadyContactedWithinWindow: number;
+    replied: number;
+  };
   error?: string;
 }
 
-const EMPTY_SKIPPED = { noPhone: 0, duplicates: 0, overCap: 0 };
+const EMPTY_SKIPPED = {
+  noPhone: 0,
+  duplicates: 0,
+  overCap: 0,
+  alreadyContactedWithinWindow: 0,
+  replied: 0,
+};
 
 export async function runQuickBlast(
   deps: QuickBlastDeps,
@@ -87,15 +118,33 @@ export async function runQuickBlast(
 
   const baseLeads = (leads ?? []) as BlastLead[];
 
+  // Blast Audience refinements (#704) — narrow the candidate set BEFORE building
+  // recipients: drop leads contacted within the recency window and/or leads that
+  // already replied to their last blast. Runs against the org-scoped leads only,
+  // so foreign-org ids can never leak in. Default (no refinements) is a no-op.
+  const refineSkips = await applyRefinements(deps, params, baseLeads);
+  const refinedLeads = refineSkips.kept;
+
   // Left-join carteira data so {segmento}/{ticket_medio}/{dias_sem_pedido}/{ltv}
   // resolve when the lead is also a portfolio client. Absent → empty (Slice 2).
-  const merged = await mergePortfolioData(supabaseAdmin, params.orgId, baseLeads);
+  const merged = await mergePortfolioData(supabaseAdmin, params.orgId, refinedLeads);
 
-  const { recipients, skipped } = buildRecipients(merged, {
+  const { recipients, skipped: engineSkips } = buildRecipients(merged, {
     template: params.message,
     cap: effectiveCap,
     imageUrl: params.imageUrl,
   });
+
+  // Single reconciled breakdown: refinement skips (pre-dispatch narrowing) +
+  // engine skips (phone/dedup/cap). Counts never double — a lead removed by a
+  // refinement is no longer present for buildRecipients to skip.
+  const skipped = {
+    noPhone: engineSkips.noPhone,
+    duplicates: engineSkips.duplicates,
+    overCap: engineSkips.overCap,
+    alreadyContactedWithinWindow: refineSkips.skipped.alreadyContactedWithinWindow,
+    replied: refineSkips.skipped.replied,
+  };
 
   if (recipients.length === 0) {
     return { ok: false, count: 0, skipped, error: "no_recipients" };
@@ -134,6 +183,45 @@ export async function runQuickBlast(
   }
 
   return { ok: true, sender_job_id, uazapi_sender_id, count: recipients.length, skipped };
+}
+
+/**
+ * Apply the Blast Audience refinements to the org-scoped candidate leads and
+ * return the kept leads + the refinement skip counts.
+ *
+ * Only the activity-based refinements (contact recency, non-responder) run here:
+ * `excludeNoPhone` is deliberately left to the dispatch engine (buildRecipients
+ * already counts `noPhone`), so phone-less leads are counted exactly once. When
+ * no activity-based refinement is requested this is a pure pass-through and no
+ * channel_messages read is issued.
+ */
+async function applyRefinements(
+  deps: QuickBlastDeps,
+  params: QuickBlastParams,
+  leads: BlastLead[],
+): Promise<{ kept: BlastLead[]; skipped: BlastRefinementSkips }> {
+  const r = params.refinements;
+  const recencyOn = typeof r?.excludeBlastedWithinDays === "number" && r.excludeBlastedWithinDays > 0;
+  const nonResponderOn = r?.onlyNonResponders === true;
+
+  if (!recencyOn && !nonResponderOn) {
+    return { kept: leads, skipped: { alreadyContactedWithinWindow: 0, replied: 0, noPhone: 0 } };
+  }
+
+  const source = deps.activitySource ?? channelMessagesActivitySource(deps.supabaseAdmin);
+  const { keptLeadIds, skipped } = await refineBlastAudience({
+    orgId: params.orgId,
+    candidates: leads.map((l) => ({ leadId: l.id, phone: l.phone })),
+    options: {
+      excludeBlastedWithinDays: r?.excludeBlastedWithinDays,
+      onlyNonResponders: nonResponderOn,
+      // noPhone stays with the dispatch engine to avoid double-counting.
+    },
+    source,
+  });
+
+  const keep = new Set(keptLeadIds);
+  return { kept: leads.filter((l) => keep.has(l.id)), skipped };
 }
 
 /**

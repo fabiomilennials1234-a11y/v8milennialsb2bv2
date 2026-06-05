@@ -193,4 +193,128 @@ describe("runQuickBlast", () => {
     expect(out.ok).toBe(false);
     expect(dispatch).not.toHaveBeenCalled();
   });
+
+  it("defaults the new skip counts to zero when no refinements are passed", async () => {
+    const dispatch = vi.fn(async () => ({ sender_job_id: "j", uazapi_sender_id: "u" }));
+    const supabase = supabaseStub({ cap: 200, leads: [lead("a", "11999990001")] });
+
+    const out = await runQuickBlast(
+      { supabaseAdmin: supabase, dispatch },
+      { orgId: "org-1", userId: "u", instance: INSTANCE, leadIds: ["a"], message: "Hi" },
+    );
+
+    expect(out.skipped).toMatchObject({ alreadyContactedWithinWindow: 0, replied: 0 });
+  });
+
+  it("honors a contact-recency refinement, excluding a recently-blasted lead before dispatch", async () => {
+    let recipients: any[] = [];
+    const dispatch = vi.fn(async (_inst: any, input: any) => {
+      recipients = input.recipients;
+      return { sender_job_id: "j", uazapi_sender_id: "u" };
+    });
+    const supabase = supabaseStub({ cap: 200, leads: [lead("a", "11999990001"), lead("b", "11999990002")] });
+    // a was blasted recently → refinement drops it; b is kept.
+    const activitySource = {
+      async getLeadActivity() {
+        return new Map([
+          ["a", { lastOutgoingAt: new Date("2026-06-04T00:00:00Z"), lastIncomingAt: null }],
+          ["b", { lastOutgoingAt: null, lastIncomingAt: null }],
+        ]);
+      },
+    };
+
+    const out = await runQuickBlast(
+      { supabaseAdmin: supabase, dispatch, activitySource },
+      {
+        orgId: "org-1",
+        userId: "u",
+        instance: INSTANCE,
+        leadIds: ["a", "b"],
+        message: "Hi",
+        refinements: { excludeBlastedWithinDays: 7 },
+      },
+    );
+
+    expect(out.ok).toBe(true);
+    expect(out.count).toBe(1);
+    // dispatch recipients carry the normalized number (leadId is stripped at
+    // the dispatch boundary); 11999990002 → 5511999990002 is lead b.
+    expect(recipients.map((r) => r.number)).toEqual(["5511999990002"]);
+    expect(out.skipped.alreadyContactedWithinWindow).toBe(1);
+    expect(out.skipped.replied).toBe(0);
+  });
+
+  it("honors a non-responder refinement, keeping only leads silent since their last blast", async () => {
+    let recipients: any[] = [];
+    const dispatch = vi.fn(async (_inst: any, input: any) => {
+      recipients = input.recipients;
+      return { sender_job_id: "j", uazapi_sender_id: "u" };
+    });
+    const supabase = supabaseStub({ cap: 200, leads: [lead("a", "11999990001"), lead("b", "11999990002")] });
+    // a replied after its last send → excluded. b silent since last send → kept.
+    const activitySource = {
+      async getLeadActivity() {
+        return new Map([
+          ["a", { lastOutgoingAt: new Date("2026-05-01T10:00:00Z"), lastIncomingAt: new Date("2026-05-01T11:00:00Z") }],
+          ["b", { lastOutgoingAt: new Date("2026-05-01T10:00:00Z"), lastIncomingAt: null }],
+        ]);
+      },
+    };
+
+    const out = await runQuickBlast(
+      { supabaseAdmin: supabase, dispatch, activitySource },
+      {
+        orgId: "org-1",
+        userId: "u",
+        instance: INSTANCE,
+        leadIds: ["a", "b"],
+        message: "Hi",
+        refinements: { onlyNonResponders: true },
+      },
+    );
+
+    expect(out.count).toBe(1);
+    expect(recipients.map((r) => r.number)).toEqual(["5511999990002"]);
+    expect(out.skipped.replied).toBe(1);
+  });
+
+  it("does not query the activity source when no refinement is requested", async () => {
+    const dispatch = vi.fn(async () => ({ sender_job_id: "j", uazapi_sender_id: "u" }));
+    const supabase = supabaseStub({ cap: 200, leads: [lead("a", "11999990001")] });
+    const getLeadActivity = vi.fn(async () => new Map());
+
+    await runQuickBlast(
+      { supabaseAdmin: supabase, dispatch, activitySource: { getLeadActivity } },
+      { orgId: "org-1", userId: "u", instance: INSTANCE, leadIds: ["a"], message: "Hi" },
+    );
+
+    expect(getLeadActivity).not.toHaveBeenCalled();
+  });
+
+  it("returns no_recipients with refinement skips when a refinement empties the set", async () => {
+    const dispatch = vi.fn(async () => ({ sender_job_id: "j", uazapi_sender_id: "u" }));
+    const supabase = supabaseStub({ cap: 200, leads: [lead("a", "11999990001")] });
+    const activitySource = {
+      async getLeadActivity() {
+        return new Map([["a", { lastOutgoingAt: new Date("2026-06-04T00:00:00Z"), lastIncomingAt: null }]]);
+      },
+    };
+
+    const out = await runQuickBlast(
+      { supabaseAdmin: supabase, dispatch, activitySource },
+      {
+        orgId: "org-1",
+        userId: "u",
+        instance: INSTANCE,
+        leadIds: ["a"],
+        message: "Hi",
+        refinements: { excludeBlastedWithinDays: 7 },
+      },
+    );
+
+    expect(out.ok).toBe(false);
+    expect(out.error).toBe("no_recipients");
+    expect(out.skipped.alreadyContactedWithinWindow).toBe(1);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
 });
