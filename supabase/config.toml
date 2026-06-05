@@ -243,6 +243,15 @@ verify_jwt = false
 [functions.quick-blast-create]
 verify_jwt = false
 
+# blast-plan-create: cria Blast Plan auto-batched (ADR-0003 / #707). JWT validado
+# no handler (getUser); SEM role gate — qualquer membro da org, teto diário é a trava.
+[functions.blast-plan-create]
+verify_jwt = false
+
+# blast-plan-release: releaser diário de lotes (pg_cron via pg_net); auth x-cron-secret.
+[functions.blast-plan-release]
+verify_jwt = false
+
 # mass-send-status: polls status (JWT user OR x-cron-secret)
 [functions.mass-send-status]
 verify_jwt = false
