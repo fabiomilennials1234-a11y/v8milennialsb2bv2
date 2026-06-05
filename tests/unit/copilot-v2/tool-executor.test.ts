@@ -20,6 +20,7 @@ function mockSupabase(results: Record<string, unknown> = {}) {
       update: (vals: unknown) => { (q as any).update = vals; return b; },
       upsert: (vals: unknown, opts: unknown) => { (q as any).upsert = vals; (q as any).onConflict = opts; return b; },
       eq: (c: string, v: unknown) => { q.filters.push([c, v]); return b; },
+      in: (c: string, v: unknown) => { q.filters.push([c, v]); return b; },
       is: (c: string, v: unknown) => { q.filters.push([c, v]); return b; },
       order: (c: string, o: unknown) => { q.order = [c, o]; return b; },
       limit: (n: number) => { q.limit = n; return b; },
@@ -100,6 +101,42 @@ describe('send_media (acervo-aware, sem silent-drop)', () => {
     const sent: any[] = [];
     const out: any = await execWithProvider(sb, sent)('send_media', { media_id: 'm1' });
     expect(out).toMatchObject({ sent: false, reason: 'invalid_mime' });
+    expect(sent).toHaveLength(0);
+  });
+
+  // SECURITY: o anti-repetição NÃO pode ler trace_steps de outras orgs. O escopo
+  // de tenant/conversa vem dos traces (trace_steps só tem trace_id).
+  it('dedup de send_media é escopado por org + conversa (sem leitura cross-tenant)', async () => {
+    const sb = mockSupabase({
+      copilot_v2_send_media: { id: 'm1', organization_id: 'org-1', kind: 'image', storage_path: 'org-1/x.png', is_active: true, mime_type: 'image/png' },
+      copilot_v2_traces: [{ trace_id: 't-1' }, { trace_id: 't-2' }],
+      copilot_v2_trace_steps: [{ meta: { media_id: 'outra' } }],
+    });
+    sb.storage = { from: () => ({ createSignedUrl: async () => ({ data: { signedUrl: 'https://signed/x.png' }, error: null }) }) };
+    const sent: any[] = [];
+    await execWithProvider(sb, sent)('send_media', { media_id: 'm1' });
+
+    // traces buscados SEMPRE filtrados por org + conversa do ctx.
+    const tq = sb.queries.find((x: any) => x.table === 'copilot_v2_traces')!;
+    expect(tq.filters).toContainEqual(['organization_id', 'org-1']);
+    expect(tq.filters).toContainEqual(['conversation_id', 'conv-1']);
+
+    // steps lidos SÓ dos traces desta conversa (nunca um SELECT global por step).
+    const sq = sb.queries.find((x: any) => x.table === 'copilot_v2_trace_steps')!;
+    expect(sq.filters).toContainEqual(['step', 'send_media']);
+    expect(sq.filters).toContainEqual(['trace_id', ['t-1', 't-2']]);
+  });
+
+  it('bloqueia re-envio quando a MESMA mídia já foi enviada nesta conversa', async () => {
+    const sb = mockSupabase({
+      copilot_v2_send_media: { id: 'm1', organization_id: 'org-1', kind: 'image', storage_path: 'org-1/x.png', is_active: true, mime_type: 'image/png' },
+      copilot_v2_traces: [{ trace_id: 't-1' }],
+      copilot_v2_trace_steps: [{ meta: { media_id: 'm1' } }], // já enviada nesta conversa
+    });
+    sb.storage = { from: () => ({ createSignedUrl: async () => ({ data: { signedUrl: 'u' }, error: null }) }) };
+    const sent: any[] = [];
+    const out: any = await execWithProvider(sb, sent)('send_media', { media_id: 'm1' });
+    expect(out).toMatchObject({ sent: false });
     expect(sent).toHaveLength(0);
   });
 });
