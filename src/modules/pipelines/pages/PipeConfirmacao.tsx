@@ -21,6 +21,8 @@ import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanba
 import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import { usePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus } from "@/modules/pipelines/hooks/legacy/usePipeConfirmacao";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/modules/pipelines/hooks/model/usePipelineStages";
+import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/modules/leads";
@@ -266,6 +268,7 @@ function PipeConfirmacaoInner() {
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
 
   const { organizationId } = useOrganization();
+  const queryClient = useQueryClient();
   useEffect(() => { trackModuleVisit("pipe_confirmacao", organizationId); }, []);
 
   const overdueDays = useConfirmacaoOverdueDays();
@@ -510,6 +513,35 @@ function PipeConfirmacaoInner() {
     // Check if moving to a success stage
     const movedStage = pipelineStages.find(s => s.stage_key === newStatus);
     if (movedStage?.is_final_positive) {
+      // Destino = funil customizado (target_pipeline_id/target_stage_id). Trata
+      // antes do fallback "propostas" para não abrir o CompareceuModal por engano.
+      const hasCustomTarget = !!(movedStage.target_pipeline_id && movedStage.target_stage_id);
+      if (hasCustomTarget) {
+        try {
+          await updatePipeConfirmacao.mutateAsync({
+            id: itemId,
+            status: newStatus as PipeConfirmacaoStatus,
+            leadId: item.lead_id,
+            assignedTo: item.sdr_id || item.closer_id,
+          });
+          if (organizationId) {
+            await upsertLeadIntoCustomPipe({
+              leadId: item.lead_id,
+              organizationId,
+              targetPipelineId: movedStage.target_pipeline_id!,
+              targetStageId: movedStage.target_stage_id!,
+            });
+            queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
+          }
+          logAction({ leadId: item.lead_id, action: "stage_changed", description: `Etapa alterada para "${stageLabel}" no Pipe Confirmação` });
+          if (organizationId) track({ event: "card_moved", organizationId, entityType: "pipe_confirmacao", entityId: itemId, metadata: { from_stage: item.status, to_stage: newStatus } });
+          toast.success("Lead movido para o funil de destino automaticamente!");
+        } catch (error) {
+          toast.error("Erro ao atualizar status");
+        }
+        return;
+      }
+
       const targetPipe = movedStage.target_pipe_type || "propostas"; // fallback
 
       // If target is propostas, open CompareceuModal to select SDR/Closer

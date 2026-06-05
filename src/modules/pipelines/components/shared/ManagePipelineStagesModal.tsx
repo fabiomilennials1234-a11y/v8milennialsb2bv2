@@ -24,9 +24,13 @@ import {
   useUpdatePipelineStage,
   useDeletePipelineStage,
   useReorderPipelineStages,
-  useAllPipelineStages,
   getPipelineTypeName,
 } from "@/modules/pipelines/hooks/model/usePipelineStages";
+import { useCustomPipelines } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
+import {
+  TransitionSelector,
+  type TransitionTarget,
+} from "@/modules/pipelines/components/shared/TransitionSelector";
 import {
   Plus,
   Trash2,
@@ -89,8 +93,6 @@ const STAGE_COLORS = [
   "#64748b", // slate
 ];
 
-const ALL_PIPE_TYPES: PipelineType[] = ["whatsapp", "confirmacao", "propostas", "upsell_base", "upsell_gestao"];
-
 // Gerar stage_key a partir do nome
 function generateStageKey(name: string): string {
   return name
@@ -112,15 +114,15 @@ function SortableStageItem({
   editColor,
   editIsFinalPositive,
   editIsFinalNegative,
+  editTargetPipelineId,
+  editTargetStageId,
   editTargetPipeType,
   editTargetStageKey,
-  targetStageOptions,
   onEditNameChange,
   onEditColorChange,
   onEditIsFinalPositiveChange,
   onEditIsFinalNegativeChange,
-  onEditTargetPipeTypeChange,
-  onEditTargetStageKeyChange,
+  onEditTargetChange,
   onSaveEdit,
   onCancelEdit,
   isSaving,
@@ -136,15 +138,15 @@ function SortableStageItem({
   editColor: string;
   editIsFinalPositive: boolean;
   editIsFinalNegative: boolean;
-  editTargetPipeType: string;
-  editTargetStageKey: string;
-  targetStageOptions: { value: string; label: string }[];
+  editTargetPipelineId: string | null;
+  editTargetStageId: string | null;
+  editTargetPipeType: string | null;
+  editTargetStageKey: string | null;
   onEditNameChange: (name: string) => void;
   onEditColorChange: (color: string) => void;
   onEditIsFinalPositiveChange: (value: boolean) => void;
   onEditIsFinalNegativeChange: (value: boolean) => void;
-  onEditTargetPipeTypeChange: (value: string) => void;
-  onEditTargetStageKeyChange: (value: string) => void;
+  onEditTargetChange: (updates: TransitionTarget) => void;
   onSaveEdit: () => void;
   onCancelEdit: () => void;
   isSaving: boolean;
@@ -159,6 +161,8 @@ function SortableStageItem({
     transition,
     isDragging,
   } = useSortable({ id: stage.id });
+
+  const { data: customPipelines } = useCustomPipelines();
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -254,58 +258,18 @@ function SortableStageItem({
               </Label>
             </div>
           </div>
-          {/* Target pipe/stage selectors — only for success stages */}
+          {/* Transição automática — só para etapas de sucesso. Destino pode ser
+              pipe padrão OU funil customizado da org (componente unificado). */}
           {editIsFinalPositive && (
-            <div className="space-y-2 pt-2 border-t border-border/50">
-              <Label className="text-xs text-muted-foreground font-medium">
-                Transição automática ao atingir sucesso
-              </Label>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Pipe destino</Label>
-                  <Select
-                    value={editTargetPipeType || "__none__"}
-                    onValueChange={(v) => {
-                      const val = v === "__none__" ? "" : v;
-                      onEditTargetPipeTypeChange(val);
-                      onEditTargetStageKeyChange("");
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Nenhum</SelectItem>
-                      {ALL_PIPE_TYPES.filter((t) => t !== pipelineType).map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {getPipelineTypeName(t)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {editTargetPipeType && (
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Etapa destino</Label>
-                    <Select
-                      value={editTargetStageKey || "__none__"}
-                      onValueChange={(v) => onEditTargetStageKeyChange(v === "__none__" ? "" : v)}
-                    >
-                      <SelectTrigger className="h-8 text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Selecione...</SelectItem>
-                        {targetStageOptions.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
+            <div className="pt-2 border-t border-border/50">
+              <TransitionSelector
+                targetPipelineId={editTargetPipelineId}
+                targetStageId={editTargetStageId}
+                targetPipeType={editTargetPipeType}
+                targetStageKey={editTargetStageKey}
+                currentPipeType={pipelineType}
+                onChangeTarget={onEditTargetChange}
+              />
             </div>
           )}
         </div>
@@ -326,6 +290,11 @@ function SortableStageItem({
               {stage.is_final_positive && stage.target_pipe_type && (
                 <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
                   → {getPipelineTypeName(stage.target_pipe_type as PipelineType)}
+                </span>
+              )}
+              {stage.is_final_positive && stage.target_pipeline_id && (
+                <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                  → {customPipelines?.find((p) => p.id === stage.target_pipeline_id)?.name ?? "Funil custom"}
                 </span>
               )}
               {stage.is_final_negative && (
@@ -390,8 +359,10 @@ export function ManagePipelineStagesContent({
   const [editColor, setEditColor] = useState("");
   const [editIsFinalPositive, setEditIsFinalPositive] = useState(false);
   const [editIsFinalNegative, setEditIsFinalNegative] = useState(false);
-  const [editTargetPipeType, setEditTargetPipeType] = useState("");
-  const [editTargetStageKey, setEditTargetStageKey] = useState("");
+  const [editTargetPipelineId, setEditTargetPipelineId] = useState<string | null>(null);
+  const [editTargetStageId, setEditTargetStageId] = useState<string | null>(null);
+  const [editTargetPipeType, setEditTargetPipeType] = useState<string | null>(null);
+  const [editTargetStageKey, setEditTargetStageKey] = useState<string | null>(null);
   const [newStageName, setNewStageName] = useState("");
   const [newStageColor, setNewStageColor] = useState(STAGE_COLORS[0]);
   const [newStageIsFinalPositive, setNewStageIsFinalPositive] = useState(false);
@@ -404,7 +375,6 @@ export function ManagePipelineStagesContent({
   const updateStage = useUpdatePipelineStage();
   const deleteStage = useDeletePipelineStage();
   const reorderStages = useReorderPipelineStages();
-  const { data: allStages } = useAllPipelineStages();
   const { data: templates = [] } = useChecklistTemplates();
 
   const handleChecklistTemplateChange = async (
@@ -427,11 +397,6 @@ export function ManagePipelineStagesContent({
       toast.error("Erro ao atualizar checklist automático");
     }
   };
-
-  // Compute target stage options based on selected target pipe type
-  const targetStageOptions = (allStages || [])
-    .filter((s) => s.pipeline_type === editTargetPipeType && s.is_active)
-    .map((s) => ({ value: s.stage_key, label: s.name }));
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -476,8 +441,10 @@ export function ManagePipelineStagesContent({
     setEditColor(stage.color || STAGE_COLORS[0]);
     setEditIsFinalPositive(stage.is_final_positive);
     setEditIsFinalNegative(stage.is_final_negative);
-    setEditTargetPipeType(stage.target_pipe_type || "");
-    setEditTargetStageKey(stage.target_stage_key || "");
+    setEditTargetPipelineId(stage.target_pipeline_id || null);
+    setEditTargetStageId(stage.target_stage_id || null);
+    setEditTargetPipeType(stage.target_pipe_type || null);
+    setEditTargetStageKey(stage.target_stage_key || null);
   };
 
   const cancelEditing = () => {
@@ -486,8 +453,10 @@ export function ManagePipelineStagesContent({
     setEditColor("");
     setEditIsFinalPositive(false);
     setEditIsFinalNegative(false);
-    setEditTargetPipeType("");
-    setEditTargetStageKey("");
+    setEditTargetPipelineId(null);
+    setEditTargetStageId(null);
+    setEditTargetPipeType(null);
+    setEditTargetStageKey(null);
   };
 
   const handleSaveEdit = async () => {
@@ -501,8 +470,13 @@ export function ManagePipelineStagesContent({
         color: editColor,
         is_final_positive: editIsFinalPositive,
         is_final_negative: editIsFinalNegative,
+        // Só persiste destino em etapa de sucesso. Destino é custom XOR standard.
         target_pipe_type: editIsFinalPositive && editTargetPipeType ? editTargetPipeType : null,
-        target_stage_key: editIsFinalPositive && editTargetPipeType && editTargetStageKey ? editTargetStageKey : null,
+        target_stage_key:
+          editIsFinalPositive && editTargetPipeType && editTargetStageKey ? editTargetStageKey : null,
+        target_pipeline_id: editIsFinalPositive && editTargetPipelineId ? editTargetPipelineId : null,
+        target_stage_id:
+          editIsFinalPositive && editTargetPipelineId && editTargetStageId ? editTargetStageId : null,
       });
       toast.success("Etapa atualizada");
       cancelEditing();
@@ -585,15 +559,20 @@ export function ManagePipelineStagesContent({
                       editColor={editColor}
                       editIsFinalPositive={editIsFinalPositive}
                       editIsFinalNegative={editIsFinalNegative}
+                      editTargetPipelineId={editTargetPipelineId}
+                      editTargetStageId={editTargetStageId}
                       editTargetPipeType={editTargetPipeType}
                       editTargetStageKey={editTargetStageKey}
-                      targetStageOptions={targetStageOptions}
                       onEditNameChange={setEditName}
                       onEditColorChange={setEditColor}
                       onEditIsFinalPositiveChange={setEditIsFinalPositive}
                       onEditIsFinalNegativeChange={setEditIsFinalNegative}
-                      onEditTargetPipeTypeChange={setEditTargetPipeType}
-                      onEditTargetStageKeyChange={setEditTargetStageKey}
+                      onEditTargetChange={(t) => {
+                        setEditTargetPipelineId(t.targetPipelineId);
+                        setEditTargetStageId(t.targetStageId);
+                        setEditTargetPipeType(t.targetPipeType);
+                        setEditTargetStageKey(t.targetStageKey);
+                      }}
                       onSaveEdit={handleSaveEdit}
                       onCancelEdit={cancelEditing}
                       isSaving={updateStage.isPending}

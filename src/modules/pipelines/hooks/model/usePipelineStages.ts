@@ -229,6 +229,8 @@ export function useUpdatePipelineStage() {
       auto_move_max_days?: number | null;
       target_pipe_type?: string | null;
       target_stage_key?: string | null;
+      target_pipeline_id?: string | null;
+      target_stage_id?: string | null;
       checklist_template_id?: string | null;
     }) => {
       const { data, error } = await supabase

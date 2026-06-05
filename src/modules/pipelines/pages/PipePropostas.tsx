@@ -42,6 +42,8 @@ import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLea
 import { PipeViewToggle } from "@/modules/pipelines/components/shared/PipeViewToggle";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/modules/leads";
 import { usePipelineStages, stagesToColumns } from "@/modules/pipelines/hooks/model/usePipelineStages";
+import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
+import { useQueryClient } from "@tanstack/react-query";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
 import { useTeamMembers, useResponsibleMembers } from "@/modules/identity";
 import { CreateProposalModal } from "@/modules/carteira/components/proposal/CreateProposalModal";
@@ -269,6 +271,7 @@ function PipePropostasInner() {
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
 
   const { organizationId } = useOrganization();
+  const queryClient = useQueryClient();
   useEffect(() => { trackModuleVisit("pipe_propostas", organizationId); }, []);
 
   const { data: pipelineStages = [] } = usePipelineStages("propostas");
@@ -852,6 +855,24 @@ function PipePropostasInner() {
         toast.success("📅 Compromisso agendado!");
       } else {
         toast.success("Status atualizado!");
+      }
+
+      // Transição automática: etapa de sucesso com destino = funil customizado.
+      const movedStage = pipelineStages.find((s) => s.stage_key === newStatus);
+      if (
+        movedStage?.is_final_positive &&
+        movedStage.target_pipeline_id &&
+        movedStage.target_stage_id &&
+        organizationId
+      ) {
+        await upsertLeadIntoCustomPipe({
+          leadId,
+          organizationId,
+          targetPipelineId: movedStage.target_pipeline_id,
+          targetStageId: movedStage.target_stage_id,
+        });
+        queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
+        toast.success("Lead movido para o funil de destino automaticamente!");
       }
     } catch (error) {
       toast.error("Erro ao atualizar status");
