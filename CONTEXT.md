@@ -62,6 +62,12 @@ Canonical terms used across the system. No implementation details here — this 
 
 - **Quick Blast (Disparo Rápido)**: An ad-hoc Mass Send triggered directly from a kanban/list lead selection — "de supetão", without planning. Reuses the Mass Send dispatch core. Defining traits: no role gate (any logged-in member may fire it, scoped to their Organization by RLS), with an Organization-level cap on leads-per-blast as the safety guardrail instead of a permission; per-recipient personalization (variables + spintax) to reduce ban risk; optional single image; randomized inter-message delay. A Quick Blast is a Mass Send — same domain concept, different entry point and access policy.
 
+- **Blast Audience**: The resolved set of Leads a Mass Send targets. Selected from a source — all Leads in a Stage, the Leads matching the board's active filter, or a manual card selection — then optionally narrowed by two refinements: **contact recency** (exclude Leads who already received a blast within a configurable window, default 7 days) and **reply status** ("não respondeu" = a Lead with zero inbound Messages after their most recent blast send). These refinements supersede the manual "Reencaminhar disparo" stage workaround some Orgs created to re-target non-responders by hand.
+
+- **Daily Blast Budget**: An Organization-wide ceiling on how many Leads may be messaged via Mass Send per calendar day, summed across every blast — manual Quick Blasts and Blast Plan lots alike (default 200). Server-enforced, fail-closed. Supersedes the per-blast cap framing of ADR-0002: the guardrail is now throughput-per-day, not size-per-blast. A blast or lot that would exceed the remaining budget is truncated or deferred to the next day.
+
+- **Blast Plan**: A Mass Send whose Audience exceeds one day's budget, sliced into daily lots over consecutive days. The Audience is **frozen at creation** (a snapshot — Leads that enter the source Stage afterward are not added); each lot is released by a daily job that re-applies the audience refinements (reply status, contact recency) at send time and consumes at most the remaining Daily Blast Budget. A Blast Plan is finite and self-terminating — distinct from a Workflow (event-triggered, standing) and a Campaign (stages + enrollment). It is "a blast spread over days," not a rule.
+
 ## Automation
 
 - **Action Handler**: A function that executes a specific domain operation (move_stage, send_whatsapp, update_lead, etc.). Registered in a handler map and dispatched by the Workflow engine or Copilot.
