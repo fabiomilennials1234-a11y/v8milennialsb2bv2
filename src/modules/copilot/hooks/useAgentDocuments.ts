@@ -196,6 +196,83 @@ export function useDeleteAgentDocument() {
 }
 
 /**
+ * Atualizar metadata de um documento existente (description / send_when).
+ *
+ * Para mídia (image/video), `description` + `send_when` alimentam o summary e os
+ * embeddings (ver `process-agent-document`), então a edição precisa re-disparar o
+ * processamento (`reprocessMedia: true`) para não deixar summary/chunks stale.
+ *
+ * Para documento (PDF/DOC/TXT), o summary vem do conteúdo do arquivo (não do
+ * gatilho). O `send_when` é exposto direto na tool `send_document` do agente
+ * (build-tools.ts), então NÃO há reprocess — só persiste.
+ */
+export function useUpdateAgentDocument() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      documentId,
+      agentId,
+      updates,
+      reprocessMedia,
+    }: {
+      documentId: string;
+      agentId: string;
+      updates: Partial<Pick<AgentDocument, "description" | "send_when">>;
+      /** Re-run process-agent-document after persisting (media only). */
+      reprocessMedia?: boolean;
+    }) => {
+      const patch: Record<string, unknown> = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+      };
+      // Reprocess path: mark pending so the operator sees it rebuild + clear any
+      // stale error from a previous run.
+      if (reprocessMedia) {
+        patch.status = "pending";
+        patch.error_message = null;
+      }
+
+      const { error } = await supabase
+        .from("copilot_agent_documents")
+        .update(patch)
+        .eq("id", documentId);
+
+      if (error) throw error;
+
+      if (reprocessMedia) {
+        try {
+          const { error: fnError } = await supabase.functions.invoke(
+            "process-agent-document",
+            { body: { documentId } }
+          );
+          if (fnError) {
+            // Não falha a edição — metadata já persistiu. Apenas avisa que o
+            // reprocessamento não disparou (operador pode reprocessar manual).
+            console.warn("Error invoking process-agent-document after update:", fnError);
+          }
+        } catch (processError) {
+          console.warn("Error reprocessing document after update:", processError);
+        }
+      }
+
+      return { documentId, agentId };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({
+        queryKey: ["agent_documents", result.agentId],
+      });
+      toast.success("Documento atualizado");
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao atualizar documento", {
+        description: error.message,
+      });
+    },
+  });
+}
+
+/**
  * Reprocessar documento (gerar resumo novamente)
  */
 export function useReprocessDocument() {

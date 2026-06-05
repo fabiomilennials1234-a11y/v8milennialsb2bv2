@@ -35,6 +35,7 @@ export {
 export {
   useAgentDocuments,
   useUploadAgentDocument,
+  useUpdateAgentDocument,
   useDeleteAgentDocument,
   useReprocessDocument,
   fetchAgentDocumentSummaries,
