@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useResponsibleMembers } from "@/modules/identity";
 import { CONDITION_OPERATOR_LABELS, WEEKDAY_OPTIONS } from "@/types/workflow";
 import type { ConditionNodeData, ConditionOperator, ConditionMode } from "@/types/workflow";
 import { Clock, Filter } from "lucide-react";
@@ -32,12 +33,30 @@ const FIELD_OPTIONS = [
   { value: "score", label: "Score" },
   { value: "tag", label: "Tag" },
   { value: "stage", label: "Estagio" },
-  { value: "sdr_id", label: "Responsavel (Qualificacao)" },
-  { value: "sale_responsible_id", label: "Vendedor" },
+  { value: "pre_sale_responsible_id", label: "Responsavel Pre-vendas" },
+  { value: "sale_responsible_id", label: "Responsavel Vendas" },
+  { value: "any_responsible", label: "Responsavel (qualquer)" },
+  { value: "sdr_id", label: "Responsavel Qualificacao (legado)" },
   { value: "last_message", label: "Ultima mensagem" },
   { value: "message_count", label: "Qtd. mensagens" },
   { value: "days_since_contact", label: "Dias sem contato" },
   { value: "custom", label: "Campo customizado" },
+];
+
+// Fields that reference a team member (FK). Value picks a member, not free text.
+const RESPONSIBLE_FIELDS = new Set([
+  "pre_sale_responsible_id",
+  "sale_responsible_id",
+  "any_responsible",
+  "sdr_id",
+]);
+
+// Only these operators make sense against a responsible (member) field.
+const RESPONSIBLE_OPERATORS: ConditionOperator[] = [
+  "equals",
+  "not_equals",
+  "is_empty",
+  "is_not_empty",
 ];
 
 const NO_VALUE_OPERATORS: ConditionOperator[] = ["is_empty", "is_not_empty"];
@@ -56,6 +75,24 @@ const TIMEZONE_OPTIONS = [
 export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
   const mode: ConditionMode = data.conditionMode || "field";
   const needsValue = !NO_VALUE_OPERATORS.includes(data.operator);
+  const members = useResponsibleMembers();
+  const isResponsibleField = RESPONSIBLE_FIELDS.has(data.field || "");
+
+  const handleFieldChange = (v: string) => {
+    const nowResponsible = RESPONSIBLE_FIELDS.has(v);
+    const updates: Partial<ConditionNodeData> = { field: v };
+    // Switching responsible <-> non-responsible swaps value semantics (member id vs free text) → clear.
+    if (nowResponsible !== isResponsibleField) updates.value = "";
+    // Carry over only operators valid for a member field.
+    if (nowResponsible && !RESPONSIBLE_OPERATORS.includes(data.operator)) {
+      updates.operator = "equals";
+    }
+    onUpdate(updates);
+  };
+
+  const operatorEntries: Array<[string, string]> = isResponsibleField
+    ? RESPONSIBLE_OPERATORS.map((k) => [k, CONDITION_OPERATOR_LABELS[k]])
+    : (Object.entries(CONDITION_OPERATOR_LABELS) as Array<[string, string]>);
 
   const timeWindow = data.timeWindow || {
     days: ["seg", "ter", "qua", "qui", "sex"],
@@ -136,7 +173,7 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
             <Label>Campo</Label>
             <Select
               value={data.field?.startsWith("custom.") ? "custom" : data.field || ""}
-              onValueChange={(v) => onUpdate({ field: v })}
+              onValueChange={handleFieldChange}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o campo" />
@@ -172,7 +209,7 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
                 <SelectValue placeholder="Selecione o operador" />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(CONDITION_OPERATOR_LABELS).map(([key, label]) => (
+                {operatorEntries.map(([key, label]) => (
                   <SelectItem key={key} value={key}>
                     {label}
                   </SelectItem>
@@ -184,11 +221,35 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
           {needsValue && (
             <div className="space-y-2">
               <Label>Valor</Label>
-              <Input
-                value={data.value || ""}
-                onChange={(e) => onUpdate({ value: e.target.value })}
-                placeholder="Ex: 50"
-              />
+              {isResponsibleField ? (
+                <Select
+                  value={data.value || ""}
+                  onValueChange={(v) => onUpdate({ value: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o responsavel" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {members.length === 0 ? (
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                        Nenhum responsavel disponivel
+                      </div>
+                    ) : (
+                      members.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={data.value || ""}
+                  onChange={(e) => onUpdate({ value: e.target.value })}
+                  placeholder="Ex: 50"
+                />
+              )}
             </div>
           )}
         </>

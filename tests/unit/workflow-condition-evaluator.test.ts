@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { compare } from '../../supabase/functions/_shared/workflow-condition-evaluator';
+import {
+  compare,
+  compareAnyResponsible,
+} from '../../supabase/functions/_shared/workflow-condition-evaluator';
 
 describe('workflow-condition-evaluator — compare()', () => {
   // 1. equals
@@ -215,5 +218,51 @@ describe('workflow-condition-evaluator — compare()', () => {
   // Edge: unknown operator
   it('unknown operator returns false', () => {
     expect(compare('abc', 'unknown_op', 'xyz')).toBe(false);
+  });
+});
+
+describe('workflow-condition-evaluator — compareAnyResponsible()', () => {
+  const PRE = 'pre-sale-uuid';
+  const SALE = 'sale-uuid';
+
+  // equals → OR (either column matches)
+  it('equals: matches pré-vendas column → true', () => {
+    expect(compareAnyResponsible(PRE, SALE, 'equals', PRE)).toBe(true);
+  });
+  it('equals: matches vendas column → true', () => {
+    expect(compareAnyResponsible(PRE, SALE, 'equals', SALE)).toBe(true);
+  });
+  it('equals: matches neither column → false', () => {
+    expect(compareAnyResponsible(PRE, SALE, 'equals', 'other-uuid')).toBe(false);
+  });
+  it('equals: case-insensitive (inherited from compare)', () => {
+    expect(compareAnyResponsible(PRE, SALE, 'equals', PRE.toUpperCase())).toBe(true);
+  });
+
+  // not_equals → AND (neither column matches)
+  it('not_equals: value absent from both → true', () => {
+    expect(compareAnyResponsible(PRE, SALE, 'not_equals', 'other-uuid')).toBe(true);
+  });
+  it('not_equals: value present in pré-vendas → false', () => {
+    expect(compareAnyResponsible(PRE, SALE, 'not_equals', PRE)).toBe(false);
+  });
+  it('not_equals: value present in vendas → false', () => {
+    expect(compareAnyResponsible(PRE, SALE, 'not_equals', SALE)).toBe(false);
+  });
+
+  // is_empty → AND (both columns empty)
+  it('is_empty: both empty → true', () => {
+    expect(compareAnyResponsible(null, null, 'is_empty', '')).toBe(true);
+  });
+  it('is_empty: only one set → false', () => {
+    expect(compareAnyResponsible(PRE, null, 'is_empty', '')).toBe(false);
+  });
+
+  // is_not_empty → OR (at least one set)
+  it('is_not_empty: one set → true', () => {
+    expect(compareAnyResponsible(null, SALE, 'is_not_empty', '')).toBe(true);
+  });
+  it('is_not_empty: both empty → false', () => {
+    expect(compareAnyResponsible(null, null, 'is_not_empty', '')).toBe(false);
   });
 });
