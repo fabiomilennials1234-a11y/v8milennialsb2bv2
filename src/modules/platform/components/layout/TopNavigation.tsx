@@ -43,6 +43,7 @@ import {
   Copy,
   Trash2,
   Instagram,
+  Send,
 } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueLogoDark from "@/assets/torque-logo-dark.png";
@@ -140,6 +141,7 @@ const moreNavItems: NavItemWithChildren[] = [
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Combustível", icon: Fuel, path: "/leads" },
   { label: "Negócios", icon: Briefcase, path: "/negocios" },
+  { label: "Disparos", icon: Send, path: "/disparos" },
   { label: "Checklists", icon: ListChecks, path: "/checklists" },
   { label: "Templates", icon: FileText, path: "/templates" },
   { label: "Duplicatas", icon: Copy, path: "/duplicatas" },
@@ -159,6 +161,7 @@ const allNavItems: NavItemWithChildren[] = [
   { label: "Ranking", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
+  { label: "Disparos", icon: Send, path: "/disparos" },
   { label: "Checklists", icon: ListChecks, path: "/checklists" },
   { label: "Templates", icon: FileText, path: "/templates" },
   { label: "Duplicatas", icon: Copy, path: "/duplicatas" },
@@ -202,6 +205,7 @@ const CUSTOM_PIPE_ICON_MAP: Record<string, React.ElementType> = {
 
 const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/campanhas": "campaigns.view",
+  "/disparos": "campaigns.view",
   "/marketing": "marketing.view",
   "/chat": "whatsapp.view",
   "/pipe-whatsapp": "pipeline.view",
