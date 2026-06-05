@@ -34,6 +34,7 @@ import { useTags } from "@/modules/leads/hooks/useTags";
 import { useBulkTag } from "@/modules/leads/hooks/useBulkActions";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
+import { DisparoWizard } from "@/modules/pipelines";
 import type { PortfolioClientRow } from "@/modules/carteira/hooks/usePortfolioClients";
 
 interface CarteiraBulkBarProps {
@@ -46,7 +47,14 @@ export function CarteiraBulkBar({ selectedClients, onClear }: CarteiraBulkBarPro
   const [assignOpen, setAssignOpen] = useState(false);
   const [tagOpen, setTagOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
-  const [messageOpen, setMessageOpen] = useState(false);
+  const [disparoOpen, setDisparoOpen] = useState(false);
+
+  // Selected clients → their lead_ids. Only clients with a linked lead can be
+  // blasted (the engine keys on lead_id); clients without one are silently
+  // dropped, matching the legacy dialog's "sem lead vinculado" handling.
+  const manualLeadIds = selectedClients
+    .map((c) => c.lead_id)
+    .filter((id): id is string => !!id);
 
   if (count === 0) return null;
 
@@ -87,7 +95,7 @@ export function CarteiraBulkBar({ selectedClients, onClear }: CarteiraBulkBarPro
             size="sm"
             variant="outline"
             className="border-border bg-transparent text-foreground hover:bg-muted"
-            onClick={() => setMessageOpen(true)}
+            onClick={() => setDisparoOpen(true)}
           >
             <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
             Mensagem
@@ -133,12 +141,25 @@ export function CarteiraBulkBar({ selectedClients, onClear }: CarteiraBulkBarPro
         clients={selectedClients.filter((c) => c.lead_id)}
         onSuccess={onClear}
       />
-      <BulkMessageDialog
-        open={messageOpen}
-        onOpenChange={setMessageOpen}
-        clients={selectedClients}
-        onSuccess={onClear}
-      />
+
+      {/* Unified Quick Blast wizard, carteira context, seeded with the selected
+          clients' lead_ids (Manual source). Replaces the legacy BulkMessageDialog
+          / carteira-bulk-message path — that component is kept below as a fallback
+          but is no longer routed to. Carteira template vars ({segmento},
+          {ticket_medio}, …) keep working: the engine injects carteira fields
+          server-side per recipient. Mounted only while open. */}
+      {disparoOpen && (
+        <DisparoWizard
+          open={disparoOpen}
+          onOpenChange={(next) => {
+            setDisparoOpen(next);
+            if (!next) onClear();
+          }}
+          context={{ kind: "carteira" }}
+          initialSource="manual"
+          initialManualLeadIds={manualLeadIds}
+        />
+      )}
     </>
   );
 }

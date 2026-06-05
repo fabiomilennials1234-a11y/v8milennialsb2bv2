@@ -28,6 +28,7 @@ import {
   Star,
   Zap,
   Gift,
+  Send,
 } from "lucide-react";
 import {
   useCustomPipeline,
@@ -41,6 +42,7 @@ import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/lead
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { AddLeadToPipeModal } from "@/modules/pipelines/components/custom/AddLeadToPipeModal";
 import { CustomPipeSettingsDialog } from "@/modules/pipelines/components/custom/CustomPipeSettingsDialog";
+import { DisparoWizard } from "../components/disparo";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 import { useFeaturePermission } from "@/modules/identity";
@@ -66,6 +68,7 @@ function CustomPipelinePageInner() {
   const [showSettings, setShowSettings] = useState(false);
   const [removeEntryId, setRemoveEntryId] = useState<string | null>(null);
   const [showDeletePipeline, setShowDeletePipeline] = useState(false);
+  const [isDisparoOpen, setIsDisparoOpen] = useState(false);
 
   const { data: pipeline, isLoading: loadingPipeline } = useCustomPipeline(slug);
   const { data: stages = [], isLoading: loadingStages } = useCustomPipelineStages(pipeline?.id);
@@ -142,6 +145,17 @@ function CustomPipelinePageInner() {
         </div>
 
         <div className="flex items-center gap-2">
+          {stages.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-primary/30 text-foreground hover:border-primary/60 hover:bg-primary/5"
+              onClick={() => setIsDisparoOpen(true)}
+            >
+              <Send className="w-4 h-4 mr-2 text-primary" />
+              Disparo
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -217,6 +231,21 @@ function CustomPipelinePageInner() {
           onRequestDelete={() => {
             setShowSettings(false);
             setShowDeletePipeline(true);
+          }}
+        />
+      )}
+
+      {/* Disparo Wizard (Mass Send — custom funnel context). Mounted only while
+          open so the stage/conditions lead-id resolution never runs in the
+          background on the funnel page. Custom stages carry uuid `id`s. */}
+      {isDisparoOpen && pipeline && (
+        <DisparoWizard
+          open={isDisparoOpen}
+          onOpenChange={setIsDisparoOpen}
+          context={{
+            kind: "custom",
+            pipelineId: pipeline.id,
+            stages: stages.map((s) => ({ id: s.id, name: s.name, color: s.color })),
           }}
         />
       )}
