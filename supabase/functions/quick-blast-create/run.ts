@@ -18,9 +18,18 @@ import {
   type BlastRefinementOptions,
   type BlastRefinementSkips,
 } from "../_shared/quick-blast/refinements.ts";
+import {
+  getDailyBlastBudget,
+  blastDailyUsageSource,
+  computeDailyClamp,
+  saoPauloUsageDate,
+  type BlastUsageSource,
+} from "../_shared/quick-blast/daily-budget.ts";
 
 export interface QuickBlastDeps {
-  supabaseAdmin: { from: (t: string) => any };
+  // `rpc` is needed by the default daily-budget usage source (atomic ledger
+  // increment); optional so callers that inject a `usageSource` need not provide it.
+  supabaseAdmin: { from: (t: string) => any; rpc?: (fn: string, args: Record<string, unknown>) => any };
   dispatch: (
     instance: any,
     input: {
@@ -37,6 +46,11 @@ export interface QuickBlastDeps {
    *  refinement is testable without a live DB; defaults to a channel_messages
    *  read over `supabaseAdmin` when omitted. */
   activitySource?: BlastActivitySource;
+  /** Daily Blast Budget ledger source (#706, ADR-0003). Reads today's usage and
+   *  atomically increments after a real dispatch. Injected so the budget logic
+   *  is unit-testable without a live DB; defaults to a `blast_daily_usage` read
+   *  over `supabaseAdmin` when omitted. */
+  usageSource?: BlastUsageSource;
 }
 
 export interface QuickBlastParams {
@@ -59,6 +73,9 @@ export interface QuickBlastParams {
   /** Resolve audience + refinements and return the would-send count + skip
    *  breakdown WITHOUT dispatching — powers the wizard's live preview. */
   dryRun?: boolean;
+  /** Injected clock for deterministic Sao Paulo usage-date resolution. Defaults
+   *  to now. Only the calendar date (the ledger partition key) is derived. */
+  now?: Date;
 }
 
 export interface QuickBlastResult {
@@ -67,16 +84,22 @@ export interface QuickBlastResult {
   uazapi_sender_id?: string;
   count: number;
   /** Per-reason skip breakdown. `noPhone`/`duplicates`/`overCap` come from the
-   *  dispatch engine (buildRecipients + org cap). `alreadyContactedWithinWindow`
+   *  dispatch engine (buildRecipients + per-blast cap). `alreadyContactedWithinWindow`
    *  + `replied` come from the Blast Audience refinements (#704); they are 0
-   *  when no refinement narrowed the set. */
+   *  when no refinement narrowed the set. `overDailyBudget` (#706, ADR-0003) is
+   *  the count clipped by the Org-wide daily ceiling shared across all blasts. */
   skipped: {
     noPhone: number;
     duplicates: number;
     overCap: number;
     alreadyContactedWithinWindow: number;
     replied: number;
+    overDailyBudget: number;
   };
+  /** Daily Blast Budget headroom available to THIS blast before it consumed —
+   *  `max(0, daily_blast_budget - usage_today)`. The wizard reads it as "today's
+   *  remaining budget" to render "X de Y — N acima do teto diário". */
+  remaining?: number;
   error?: string;
 }
 
@@ -86,6 +109,7 @@ const EMPTY_SKIPPED = {
   overCap: 0,
   alreadyContactedWithinWindow: 0,
   replied: 0,
+  overDailyBudget: 0,
 };
 
 export async function runQuickBlast(
@@ -106,11 +130,27 @@ export async function runQuickBlast(
     return { ok: false, count: 0, skipped: { ...EMPTY_SKIPPED }, error: "no_leads" };
   }
 
-  // Org cap is the guardrail; per-blast max is clamped within it.
+  // Per-blast clamp (ADR-0002): org cap is the ceiling, per-blast max clamps
+  // within it. This is now the INNER clamp — the daily budget (ADR-0003) is the
+  // outer, Org-wide ceiling shared across every blast that day.
   const orgCap = await getOrgBlastCap(supabaseAdmin, params.orgId);
-  const effectiveCap = params.maxLeads && params.maxLeads > 0
+  const perBlastCap = params.maxLeads && params.maxLeads > 0
     ? Math.min(params.maxLeads, orgCap)
     : orgCap;
+
+  // Daily Blast Budget (ADR-0003, #706) — fail-closed Org-wide daily ceiling.
+  // `remaining` is today's headroom shared by manual blasts + Plan lots; the
+  // effective cap is the tightest of (per-blast cap, daily budget, remaining).
+  // A ledger read error resolves to remaining 0 (block), never unlimited.
+  const usageSource = deps.usageSource ?? blastDailyUsageSource(supabaseAdmin as any);
+  const usageDate = saoPauloUsageDate(params.now ?? new Date());
+  const dailyBudget = await getDailyBlastBudget(supabaseAdmin, params.orgId);
+  const usedToday = await usageSource.getUsedToday(params.orgId, usageDate, dailyBudget);
+  const { remaining, effectiveCap } = computeDailyClamp({
+    dailyBudget,
+    usedToday,
+    perBlastMax: perBlastCap,
+  });
 
   // Org-scoped fetch — foreign-org lead ids are excluded by the org filter.
   const { data: leads } = await supabaseAdmin
@@ -138,24 +178,46 @@ export async function runQuickBlast(
     imageUrl: params.imageUrl,
   });
 
+  // Attribute the engine's over-cap drops (valid-phone candidates beyond the
+  // effective cap) to the binding constraint. When the daily budget `remaining`
+  // is the tightest limit, the overflow is reported as `overDailyBudget` so the
+  // wizard can show "N acima do teto diário"; otherwise it stays per-blast
+  // `overCap`. Same total — only the label changes.
+  const dailyIsBinding = remaining <= perBlastCap && remaining === effectiveCap;
+  const overDailyBudget = dailyIsBinding ? engineSkips.overCap : 0;
+  const overCap = dailyIsBinding ? 0 : engineSkips.overCap;
+
   // Single reconciled breakdown: refinement skips (pre-dispatch narrowing) +
-  // engine skips (phone/dedup/cap). Counts never double — a lead removed by a
-  // refinement is no longer present for buildRecipients to skip.
+  // engine skips (phone/dedup/cap) + daily-budget overflow. Counts never double —
+  // a lead removed by a refinement is no longer present for buildRecipients to
+  // skip, and each over-cap lead is labelled exactly once.
   const skipped = {
     noPhone: engineSkips.noPhone,
     duplicates: engineSkips.duplicates,
-    overCap: engineSkips.overCap,
+    overCap,
     alreadyContactedWithinWindow: refineSkips.skipped.alreadyContactedWithinWindow,
     replied: refineSkips.skipped.replied,
+    overDailyBudget,
   };
 
-  // Preview (dry run): resolved audience + refinements, no dispatch, no logging.
+  // Preview (dry run): resolved audience + refinements + daily clamp, no
+  // dispatch, no logging, and crucially NO ledger increment — a preview must
+  // never consume budget.
   if (params.dryRun) {
-    return { ok: true, count: recipients.length, skipped };
+    return { ok: true, count: recipients.length, skipped, remaining };
+  }
+
+  // Daily budget exhausted — nothing may go out today. Reject explicitly so the
+  // wizard distinguishes "blocked by the daily ceiling" from "no recipients".
+  // With remaining 0 the effective cap is 0, so every valid-phone candidate fell
+  // into the engine's over-cap bucket, which `dailyIsBinding` already relabelled
+  // as `overDailyBudget` — no recomputation needed.
+  if (remaining <= 0) {
+    return { ok: false, count: 0, skipped, remaining, error: "daily_budget_exhausted" };
   }
 
   if (recipients.length === 0) {
-    return { ok: false, count: 0, skipped, error: "no_recipients" };
+    return { ok: false, count: 0, skipped, remaining, error: "no_recipients" };
   }
 
   const { sender_job_id, uazapi_sender_id } = await dispatch(params.instance, {
@@ -174,6 +236,17 @@ export async function runQuickBlast(
     trackSource: "quick-blast",
   });
 
+  // Consume the Daily Blast Budget by the ACTUALLY-dispatched count (ADR-0003).
+  // Atomic UPSERT-increment so concurrent same-day blasts never lose a count.
+  // Only reached after a real (non-dry-run) dispatch — a preview short-circuits
+  // above. Best-effort: a ledger write failure must not fail a blast that has
+  // already left for the provider; it is logged, not thrown.
+  try {
+    await usageSource.increment(params.orgId, usageDate, recipients.length);
+  } catch {
+    // ledger increment is best-effort; the blast already dispatched
+  }
+
   // Per-lead conversation logging — optimistic at enqueue, non-fatal. Lets the
   // rep see what was sent and gives the Copilot context if the lead replies.
   try {
@@ -190,7 +263,7 @@ export async function runQuickBlast(
     // logging is best-effort; the blast already dispatched
   }
 
-  return { ok: true, sender_job_id, uazapi_sender_id, count: recipients.length, skipped };
+  return { ok: true, sender_job_id, uazapi_sender_id, count: recipients.length, skipped, remaining };
 }
 
 /**

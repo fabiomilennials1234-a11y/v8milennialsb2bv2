@@ -148,12 +148,24 @@ Deno.serve(
       );
 
       if (!result.ok) {
-        return jsonResponse(400, { error: result.error ?? "blast_failed", skipped: result.skipped }, corsHeaders);
+        return jsonResponse(400, {
+          error: result.error ?? "blast_failed",
+          skipped: result.skipped,
+          remaining: result.remaining,
+        }, corsHeaders);
       }
 
-      // Preview: counts only — no job created, no "created" runtime log.
+      // Preview: counts only — no job created, no "created" runtime log. Surfaces
+      // `remaining` (today's Daily Blast Budget headroom) so the wizard can render
+      // "X de Y — N acima do teto diário" without consuming any budget.
       if (dry_run === true) {
-        return jsonResponse(200, { ok: true, dry_run: true, count: result.count, skipped: result.skipped }, corsHeaders);
+        return jsonResponse(200, {
+          ok: true,
+          dry_run: true,
+          count: result.count,
+          skipped: result.skipped,
+          remaining: result.remaining,
+        }, corsHeaders);
       }
 
       await logRuntime({
@@ -172,6 +184,7 @@ Deno.serve(
         uazapi_sender_id: result.uazapi_sender_id,
         count: result.count,
         skipped: result.skipped,
+        remaining: result.remaining,
       }, corsHeaders);
     } catch (e) {
       const msg = (e as Error).message ?? "unknown error";

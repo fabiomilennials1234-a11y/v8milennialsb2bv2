@@ -16,10 +16,13 @@ const { runQuickBlast } = await import(
 
 const INSTANCE = { id: "inst-1", organization_id: "org-1", provider: "uazapi" } as any;
 
-/** Chainable Supabase stub. Returns org-cap row for `organizations`,
- *  and the provided leads for `leads` (only those matching org filter). */
-function supabaseStub(opts: { cap?: number | null; leads: any[]; upsell?: any[] }) {
-  const calls: any = { leadsQuery: {} };
+/** Chainable Supabase stub. Returns org-cap + daily-budget row for
+ *  `organizations`, the provided leads for `leads` (only those matching the org
+ *  filter), and a `blast_daily_usage` ledger (#706, ADR-0003) defaulting to zero
+ *  usage with a generous daily budget so the per-blast assertions below are not
+ *  clipped by the daily ceiling. `rpc` models the atomic increment. */
+function supabaseStub(opts: { cap?: number | null; leads: any[]; upsell?: any[]; dailyBudget?: number | null; usedToday?: number }) {
+  const calls: any = { leadsQuery: {}, increments: [] as number[] };
   const queryReturning = (rows: any[]) => {
     const q: any = {};
     q.select = () => q;
@@ -28,14 +31,37 @@ function supabaseStub(opts: { cap?: number | null; leads: any[]; upsell?: any[] 
     q.then = (resolve: (v: any) => void) => resolve({ data: rows, error: null });
     return q;
   };
+  // Default to a budget large enough that the daily ceiling never clips the
+  // per-blast tests (which assert org-cap behavior). Individual tests can lower it.
+  const dailyBudget = opts.dailyBudget !== undefined ? opts.dailyBudget : 100000;
+  const usedToday = opts.usedToday ?? 0;
   return {
     calls,
+    rpc: async (fn: string, args: any) => {
+      if (fn === "increment_blast_daily_usage") {
+        calls.increments.push(args?.p_count);
+        return { data: null, error: null };
+      }
+      return { data: null, error: null };
+    },
     from(table: string) {
       if (table === "organizations") {
         return {
           select: () => ({
             eq: () => ({
-              maybeSingle: async () => ({ data: { quick_blast_max_leads: opts.cap ?? null }, error: null }),
+              maybeSingle: async () => ({
+                data: { quick_blast_max_leads: opts.cap ?? null, daily_blast_budget: dailyBudget },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "blast_daily_usage") {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({ maybeSingle: async () => ({ data: { leads_sent: usedToday }, error: null }) }),
             }),
           }),
         };
