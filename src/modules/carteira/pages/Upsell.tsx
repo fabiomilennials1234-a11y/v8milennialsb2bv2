@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Plus, Search, LayoutGrid, List, TrendingUp, ShoppingCart, Upload, BarChart3, Users, ClipboardCheck } from "lucide-react";
+import { Plus, Search, LayoutGrid, List, TrendingUp, ShoppingCart, Upload, BarChart3, Users, ClipboardCheck, Send } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import { UpsellGestaoKanban } from "@/modules/carteira/components/upsell/UpsellG
 import { CreateClientModal } from "@/modules/carteira/components/upsell/CreateClientModal";
 import { NewOrderModal } from "@/modules/carteira/components/client/NewOrderModal";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
-import { usePipelineStages, type PipelineType } from "@/modules/pipelines";
+import { usePipelineStages, DisparoWizard, type PipelineType } from "@/modules/pipelines";
 import { useAutoMoveUpsellClients } from "@/modules/carteira/hooks/useAutoMoveUpsellClients";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { usePortfolioKPIs } from "@/modules/carteira/hooks/usePortfolioKPIs";
@@ -80,6 +80,7 @@ export default function Upsell() {
 
   const [currentRows, setCurrentRows] = useState<PortfolioClientRow[]>([]);
   const [carteiraView, setCarteiraView] = useState<"clientes" | "analytics" | "aprovacoes">("clientes");
+  const [disparoOpen, setDisparoOpen] = useState(false);
   const bulk = useBulkSelection();
   const { data: kpiData } = usePortfolioKPIs();
 
@@ -115,6 +116,14 @@ export default function Upsell() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              onClick={() => setDisparoOpen(true)}
+              variant="outline"
+              className="gap-2 border-primary/30 text-foreground hover:border-primary/60 hover:bg-primary/5"
+            >
+              <Send className="w-4 h-4 text-primary" />
+              Disparo
+            </Button>
             <Button onClick={() => setImportOpen(true)} variant="outline" className="gap-2">
               <Upload className="w-4 h-4" />
               Importar Planilha
@@ -313,6 +322,18 @@ export default function Upsell() {
           stages={importStages}
           defaultTab="importar"
         />
+
+        {/* Disparo Wizard (Mass Send — carteira context). Header entry opens the
+            Segmento source so the operator can blast by segment + conditions.
+            Mounted only while open so the carteira lead-id resolution never runs
+            in the background. */}
+        {disparoOpen && (
+          <DisparoWizard
+            open={disparoOpen}
+            onOpenChange={setDisparoOpen}
+            context={{ kind: "carteira" }}
+          />
+        )}
       </div>
     );
   }
