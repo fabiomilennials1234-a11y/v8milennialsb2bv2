@@ -69,11 +69,43 @@ export async function evaluateCondition(
     fieldValue = leadData.pipe_whatsapp || "";
   } else if (field === "score") {
     fieldValue = leadData.qualification_score ?? 0;
+  } else if (field === "any_responsible") {
+    // Matches if EITHER the pre-sales or the sales responsible satisfies the operator.
+    return compareAnyResponsible(
+      leadData.pre_sale_responsible_id,
+      leadData.sale_responsible_id,
+      operator,
+      value,
+    );
   } else {
     fieldValue = leadData[field];
   }
 
   return compare(fieldValue, operator, value);
+}
+
+/**
+ * Evaluates an operator against BOTH responsible columns (pré-vendas + vendas),
+ * for the `any_responsible` pseudo-field. Reuses `compare` per column and
+ * combines with the semantically correct boolean:
+ * - equals / default        → OR  (either column matches)
+ * - not_equals              → AND (neither column matches)
+ * - is_empty                → AND (both columns empty)
+ * - is_not_empty            → OR  (at least one column set)
+ */
+export function compareAnyResponsible(
+  preSale: unknown,
+  sale: unknown,
+  operator: string,
+  value: string,
+): boolean {
+  switch (operator) {
+    case "not_equals":
+    case "is_empty":
+      return compare(preSale, operator, value) && compare(sale, operator, value);
+    default:
+      return compare(preSale, operator, value) || compare(sale, operator, value);
+  }
 }
 
 export function compare(fieldValue: unknown, operator: string, conditionValue: string): boolean {
