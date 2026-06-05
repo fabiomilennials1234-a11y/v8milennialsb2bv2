@@ -40,9 +40,18 @@ interface BulkActionBarProps {
   selectedIds: Set<string>;
   onClear: () => void;
   leadIds: string[];
+  /**
+   * When provided, "Disparar" hands the selected ids to the host instead of
+   * opening the in-bar QuickBlastDialog. The pipelines funnel page wires this to
+   * open the full Disparo wizard pre-seeded with the manual selection — keeping
+   * the leads→pipelines dependency OUT of this module (forbidden direction). The
+   * host owns clearing the selection after a successful blast. When omitted, the
+   * bar keeps its standalone QuickBlastDialog (back-compat for other mounts).
+   */
+  onDisparar?: (leadIds: string[]) => void;
 }
 
-export function BulkActionBar({ selectedIds, onClear, leadIds }: BulkActionBarProps) {
+export function BulkActionBar({ selectedIds, onClear, leadIds, onDisparar }: BulkActionBarProps) {
   const count = selectedIds.size;
   const [moveOpen, setMoveOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
@@ -79,7 +88,11 @@ export function BulkActionBar({ selectedIds, onClear, leadIds }: BulkActionBarPr
             <Tag className="mr-1.5 h-3.5 w-3.5" />
             Tags
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setBlastOpen(true)}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => (onDisparar ? onDisparar(ids) : setBlastOpen(true))}
+          >
             <Send className="mr-1.5 h-3.5 w-3.5" />
             Disparar
           </Button>
@@ -103,7 +116,10 @@ export function BulkActionBar({ selectedIds, onClear, leadIds }: BulkActionBarPr
       <BulkAssignDialog open={assignOpen} onOpenChange={setAssignOpen} leadIds={ids} onSuccess={onClear} />
       <BulkTagDialog open={tagOpen} onOpenChange={setTagOpen} leadIds={ids} onSuccess={onClear} />
       <BulkDeleteDialog open={deleteOpen} onOpenChange={setDeleteOpen} leadIds={ids} count={count} onSuccess={onClear} />
-      <QuickBlastDialog open={blastOpen} onOpenChange={setBlastOpen} leadIds={ids} onDone={onClear} />
+      {/* In-bar QuickBlast only when the host did NOT take over "Disparar". */}
+      {!onDisparar && (
+        <QuickBlastDialog open={blastOpen} onOpenChange={setBlastOpen} leadIds={ids} onDone={onClear} />
+      )}
     </>
   );
 }
