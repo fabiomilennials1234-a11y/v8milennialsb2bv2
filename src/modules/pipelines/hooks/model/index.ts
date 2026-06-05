@@ -12,3 +12,4 @@ export * from "./usePipelines";
 export * from "./usePipelineEntries";
 export * from "./usePipelineStages";
 export * from "./useStageLeadIds";
+export * from "./useFilteredLeadIds";

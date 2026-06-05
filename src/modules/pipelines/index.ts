@@ -109,6 +109,7 @@ export {
   usePipelineStageOptions,
   getPipelineTypeName,
   useStageLeadIds,
+  useFilteredLeadIds,
 } from "./hooks/model";
 export type {
   Pipeline,
@@ -116,6 +117,7 @@ export type {
   PipelineType,
   PipelineStage,
   PipelineStageInsert,
+  FilteredLeadIdsParams,
 } from "./hooks/model";
 
 // ── Hooks: display config + metrics + dispatch + distribution ─────────────
