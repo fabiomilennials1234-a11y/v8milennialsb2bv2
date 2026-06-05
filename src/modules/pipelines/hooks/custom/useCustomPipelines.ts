@@ -4,6 +4,7 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { triggerLeadCreatedInCustomPipeline } from "@/lib/workflowTrigger";
 import { useCanDo } from "@/modules/identity";
+import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
 // ────────────────────────────────────────────────────────────
 // Types — definição canônica em contracts (puros, sem React/Supabase).
 // Re-exportados aqui para manter a API pública do módulo inalterada.
@@ -834,29 +835,13 @@ export function useMoveLeadInCustomPipe() {
 
       if (stageRow?.is_final_positive && data.lead_id && data.organization_id) {
         if (stageRow.target_pipeline_id && stageRow.target_stage_id) {
-          // Transition to another custom pipeline
-          const { data: existingEntry } = await supabase
-            .from("custom_pipe_entries")
-            .select("id")
-            .eq("lead_id", data.lead_id)
-            .eq("pipeline_id", stageRow.target_pipeline_id)
-            .maybeSingle();
-
-          if (existingEntry) {
-            await supabase
-              .from("custom_pipe_entries")
-              .update({ stage_id: stageRow.target_stage_id, stage_changed_at: new Date().toISOString() })
-              .eq("id", existingEntry.id);
-          } else {
-            await supabase.from("custom_pipe_entries").insert({
-              lead_id: data.lead_id,
-              organization_id: data.organization_id,
-              pipeline_id: stageRow.target_pipeline_id,
-              stage_id: stageRow.target_stage_id,
-              entered_at: new Date().toISOString(),
-              stage_changed_at: new Date().toISOString(),
-            });
-          }
+          // Transition to another custom pipeline (helper compartilhado)
+          await upsertLeadIntoCustomPipe({
+            leadId: data.lead_id,
+            organizationId: data.organization_id,
+            targetPipelineId: stageRow.target_pipeline_id,
+            targetStageId: stageRow.target_stage_id,
+          });
         } else if (stageRow.target_pipe_type && stageRow.target_stage_key) {
           // Transition to a standard pipeline
           const pipeType = stageRow.target_pipe_type;

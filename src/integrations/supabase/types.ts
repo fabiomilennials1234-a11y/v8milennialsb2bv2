@@ -10236,6 +10236,8 @@ export type Database = {
           sla_hours: number | null
           stage_key: string
           target_pipe_type: string | null
+          target_pipeline_id: string | null
+          target_stage_id: string | null
           target_stage_key: string | null
           updated_at: string | null
         }
@@ -10260,6 +10262,8 @@ export type Database = {
           sla_hours?: number | null
           stage_key: string
           target_pipe_type?: string | null
+          target_pipeline_id?: string | null
+          target_stage_id?: string | null
           target_stage_key?: string | null
           updated_at?: string | null
         }
@@ -10284,6 +10288,8 @@ export type Database = {
           sla_hours?: number | null
           stage_key?: string
           target_pipe_type?: string | null
+          target_pipeline_id?: string | null
+          target_stage_id?: string | null
           target_stage_key?: string | null
           updated_at?: string | null
         }
@@ -10300,6 +10306,20 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_stages_target_pipeline_id_fkey"
+            columns: ["target_pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "custom_pipelines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_stages_target_stage_id_fkey"
+            columns: ["target_stage_id"]
+            isOneToOne: false
+            referencedRelation: "custom_pipeline_stages"
             referencedColumns: ["id"]
           },
         ]
