@@ -22,6 +22,7 @@ import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanba
 import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import { useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/modules/pipelines/hooks/legacy/usePipeWhatsapp";
 import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
+import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePipeWhatsappMetrics } from "@/modules/pipelines/hooks/config/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
@@ -424,15 +425,19 @@ function PipeWhatsappInner() {
     if (!item) return;
 
     const movedStage = pipelineStages.find(s => s.stage_key === newStatus);
+    // Destino pode ser um funil customizado (target_pipeline_id/target_stage_id)
+    // OU um pipe padrão (target_pipe_type/target_stage_key) — mutuamente exclusivos.
+    const hasCustomTarget = !!(movedStage?.target_pipeline_id && movedStage?.target_stage_id);
     // `confirmacao` is the fallback target when a success stage has no
-    // target_pipe_type configured — matches the legacy default below.
+    // target_pipe_type configured — matches the legacy default below. Não aplica
+    // quando o destino é um funil customizado.
     const resolvedTargetPipe = movedStage?.target_pipe_type || "confirmacao";
 
     // Intercept BEFORE committing the stage change: moves into a success stage
     // that targets `confirmacao` require a meeting to be scheduled. Open the
     // modal first and defer the pipe_whatsapp status update to its onSuccess.
     // If the user cancels the modal, the card stays where it was.
-    if (movedStage?.is_final_positive && resolvedTargetPipe === "confirmacao") {
+    if (movedStage?.is_final_positive && !hasCustomTarget && resolvedTargetPipe === "confirmacao") {
       setMeetingModal({
         open: true,
         pipeId: itemId,
@@ -459,7 +464,19 @@ function PipeWhatsappInner() {
       if (organizationId) track({ event: "card_moved", organizationId, entityType: "pipe_whatsapp", entityId: itemId, metadata: { from_stage: item.status, to_stage: newStatus } });
 
       // If moved to a success stage, automatically create entry in the target pipe
-      if (movedStage?.is_final_positive) {
+      if (movedStage?.is_final_positive && hasCustomTarget) {
+        // Destino = funil customizado da org.
+        if (organizationId) {
+          await upsertLeadIntoCustomPipe({
+            leadId: item.lead_id,
+            organizationId,
+            targetPipelineId: movedStage.target_pipeline_id!,
+            targetStageId: movedStage.target_stage_id!,
+          });
+          queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
+        }
+        toast.success("Lead movido para o funil de destino automaticamente!");
+      } else if (movedStage?.is_final_positive) {
         const targetStage = movedStage.target_stage_key || "reuniao_marcada"; // fallback
         const targetPipeName = getPipelineTypeName(resolvedTargetPipe as any);
 

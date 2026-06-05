@@ -141,8 +141,14 @@ export interface PipelineStage {
   is_final_negative: boolean;
   auto_move_min_days: number | null;
   auto_move_max_days: number | null;
+  // Transição automática ao atingir etapa de sucesso. Destino é custom XOR
+  // standard (espelha custom_pipeline_stages): target_pipeline_id/target_stage_id
+  // apontam para um funil customizado; target_pipe_type/target_stage_key para
+  // um pipe padrão.
   target_pipe_type: string | null;
   target_stage_key: string | null;
+  target_pipeline_id: string | null;
+  target_stage_id: string | null;
   checklist_template_id: string | null;
   created_at: string;
   updated_at: string;
