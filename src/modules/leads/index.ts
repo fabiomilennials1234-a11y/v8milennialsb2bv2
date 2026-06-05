@@ -117,8 +117,8 @@ export { useLogLeadAction, logLeadActionDirect } from "./hooks/useLogLeadAction"
 export type { LeadActionType, LeadActionTier } from "./hooks/useLogLeadAction";
 
 // ── Hooks: Quick Blast (Disparo engine — reused by the pipelines Disparo wizard)
-export { useQuickBlast } from "./hooks/useQuickBlast";
-export type { QuickBlastInput, QuickBlastResult } from "./hooks/useQuickBlast";
+export { useQuickBlast, useQuickBlastPreview } from "./hooks/useQuickBlast";
+export type { QuickBlastInput, QuickBlastResult, QuickBlastPreview } from "./hooks/useQuickBlast";
 
 // ── Hooks: import (CSV/Excel + funnel/custom-pipeline) ─────────────────────
 export {
