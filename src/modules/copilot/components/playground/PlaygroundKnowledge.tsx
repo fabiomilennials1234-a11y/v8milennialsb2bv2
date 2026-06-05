@@ -51,6 +51,15 @@ interface PlaygroundKnowledgeProps {
   onLinksChange: (links: KnowledgeLink[]) => void;
   existingDocuments?: ExistingDocument[];
   onDeleteExisting?: (docId: string, filePath: string) => void;
+  /**
+   * Persist a metadata edit (description / send_when) on an already-saved document.
+   * `fileType` lets the caller decide whether to reprocess (media) or just save (document).
+   */
+  onUpdateExisting?: (
+    docId: string,
+    updates: { description?: string; send_when?: string },
+    fileType: KnowledgeFileType,
+  ) => void;
 }
 
 const ACCEPTED_TYPES = ".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.mp4,.mov";
@@ -96,12 +105,24 @@ export function PlaygroundKnowledge({
   onLinksChange,
   existingDocuments = [],
   onDeleteExisting,
+  onUpdateExisting,
 }: PlaygroundKnowledgeProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [newLinkAlias, setNewLinkAlias] = useState("");
   const [newLinkUrl, setNewLinkUrl] = useState("");
+  // Local draft of existing-doc metadata edits, keyed by doc id. Persisted on
+  // blur (not per keystroke) via onUpdateExisting.
+  const [existingDrafts, setExistingDrafts] = useState<
+    Record<string, { description: string; send_when: string }>
+  >({});
 
-  const docCount = documents.length + existingDocuments.length;
+  // Pending list shows ONLY genuinely new uploads (no existingId). Saved docs —
+  // which CopilotPlayground also seeds into `documents` for prompt/mention use —
+  // are rendered (and edited) in the existing-documents block below, avoiding the
+  // double render that previously showed each saved doc twice.
+  const pendingDocs = documents.filter((d) => !d.existingId);
+
+  const docCount = pendingDocs.length + existingDocuments.length;
   const linkCount = links.length;
 
   // Handle file upload
@@ -156,6 +177,45 @@ export function PlaygroundKnowledge({
 
   const updateDoc = (id: string, updates: Partial<KnowledgeDocument>) => {
     onDocumentsChange(documents.map((d) => (d.id === id ? { ...d, ...updates } : d)));
+  };
+
+  // ── Existing-doc metadata editing ──────────────────────────────────────────
+  const existingDraftValue = (
+    doc: ExistingDocument,
+    field: "description" | "send_when",
+  ): string => {
+    const draft = existingDrafts[doc.id];
+    if (draft) return draft[field];
+    return (field === "description" ? doc.description : doc.send_when) || "";
+  };
+
+  const setExistingDraft = (
+    doc: ExistingDocument,
+    field: "description" | "send_when",
+    value: string,
+  ) => {
+    setExistingDrafts((prev) => ({
+      ...prev,
+      [doc.id]: {
+        description: prev[doc.id]?.description ?? doc.description ?? "",
+        send_when: prev[doc.id]?.send_when ?? doc.send_when ?? "",
+        [field]: value,
+      },
+    }));
+  };
+
+  // Persist on blur, only when the value actually changed vs the stored one.
+  const commitExistingDraft = (
+    doc: ExistingDocument,
+    field: "description" | "send_when",
+  ) => {
+    const draft = existingDrafts[doc.id];
+    if (!draft || !onUpdateExisting) return;
+    const stored = (field === "description" ? doc.description : doc.send_when) || "";
+    const next = draft[field];
+    if (next === stored) return;
+    const ft = (doc.file_type || "document") as KnowledgeFileType;
+    onUpdateExisting(doc.id, { [field]: next }, ft);
   };
 
   // Handle link add
@@ -229,44 +289,78 @@ export function PlaygroundKnowledge({
                 const ft = (doc.file_type || "document") as KnowledgeFileType;
                 const Icon = getFileIcon(ft);
                 const badge = getTypeBadge(ft);
+                const isMedia = isMediaType(ft);
                 return (
-                  <div
-                    key={doc.id}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/30 group"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Icon className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                      <span className="text-xs truncate">{doc.file_name}</span>
-                      {isMediaType(ft) && (
-                        <span className={`text-[9px] px-1.5 py-0 rounded-full border font-medium ${badge.className}`}>
-                          {badge.label}
-                        </span>
-                      )}
-                      {doc.file_size && (
-                        <span className="text-[10px] text-muted-foreground flex-shrink-0">
-                          {formatSize(doc.file_size)}
-                        </span>
-                      )}
-                      <span className="flex items-center gap-0.5 text-[10px]">
-                        {doc.status === "ready" ? (
-                          <CheckCircle2 className="w-3 h-3 text-green-500" />
-                        ) : doc.status === "processing" ? (
-                          <Loader2 className="w-3 h-3 text-yellow-500 animate-spin" />
-                        ) : doc.status === "error" ? (
-                          <AlertCircle className="w-3 h-3 text-red-500" />
-                        ) : (
-                          <Loader2 className="w-3 h-3 text-muted-foreground animate-spin" />
+                  <div key={doc.id} className="rounded-lg bg-muted/30 overflow-hidden">
+                    {/* Header row */}
+                    <div className="flex items-center justify-between px-3 py-2 group">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Icon className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                        <span className="text-xs truncate">{doc.file_name}</span>
+                        {isMedia && (
+                          <span className={`text-[9px] px-1.5 py-0 rounded-full border font-medium ${badge.className}`}>
+                            {badge.label}
+                          </span>
                         )}
-                      </span>
+                        {doc.file_size && (
+                          <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                            {formatSize(doc.file_size)}
+                          </span>
+                        )}
+                        <span className="flex items-center gap-0.5 text-[10px]">
+                          {doc.status === "ready" ? (
+                            <CheckCircle2 className="w-3 h-3 text-green-500" />
+                          ) : doc.status === "processing" ? (
+                            <Loader2 className="w-3 h-3 text-yellow-500 animate-spin" />
+                          ) : doc.status === "error" ? (
+                            <AlertCircle className="w-3 h-3 text-red-500" />
+                          ) : (
+                            <Loader2 className="w-3 h-3 text-muted-foreground animate-spin" />
+                          )}
+                        </span>
+                      </div>
+                      {onDeleteExisting && (
+                        <button
+                          type="button"
+                          className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => onDeleteExisting(doc.id, doc.file_path)}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
-                    {onDeleteExisting && (
-                      <button
-                        type="button"
-                        className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => onDeleteExisting(doc.id, doc.file_path)}
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+
+                    {/* Editable metadata — description + "quando enviar". Available
+                        for documents (PDF) and media alike. Persisted on blur. */}
+                    {onUpdateExisting && (
+                      <div className="px-3 pb-3 space-y-2 border-t border-border/30 pt-2">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-medium text-muted-foreground">
+                            {isMedia ? "Descricao do conteudo" : "Descricao (opcional)"}
+                          </Label>
+                          <Input
+                            value={existingDraftValue(doc, "description")}
+                            onChange={(e) => setExistingDraft(doc, "description", e.target.value)}
+                            onBlur={() => commitExistingDraft(doc, "description")}
+                            placeholder={
+                              isMedia
+                                ? "Ex: Tabela de precos 2026 com planos e comparativo"
+                                : "Ex: Catalogo completo de produtos 2026"
+                            }
+                            className="h-7 text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-medium text-muted-foreground">Quando enviar</Label>
+                          <Input
+                            value={existingDraftValue(doc, "send_when")}
+                            onChange={(e) => setExistingDraft(doc, "send_when", e.target.value)}
+                            onBlur={() => commitExistingDraft(doc, "send_when")}
+                            placeholder="Ex: Quando o lead pedir o catalogo ou tabela de precos"
+                            className="h-7 text-xs"
+                          />
+                        </div>
+                      </div>
                     )}
                   </div>
                 );
@@ -275,9 +369,9 @@ export function PlaygroundKnowledge({
           )}
 
           {/* Pending document list (local, not yet uploaded) */}
-          {documents.length > 0 && (
+          {pendingDocs.length > 0 && (
             <div className="space-y-2">
-              {documents.map((doc) => {
+              {pendingDocs.map((doc) => {
                 const Icon = getFileIcon(doc.fileType);
                 const badge = getTypeBadge(doc.fileType);
                 const isMedia = isMediaType(doc.fileType);
@@ -317,29 +411,39 @@ export function PlaygroundKnowledge({
                       </div>
                     </div>
 
-                    {/* Media metadata fields */}
-                    {isMedia && (
-                      <div className="px-3 pb-3 space-y-2 border-t border-border/30 pt-2">
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-medium text-muted-foreground">Descricao do conteudo</Label>
-                          <Input
-                            value={doc.description || ""}
-                            onChange={(e) => updateDoc(doc.id, { description: e.target.value })}
-                            placeholder="Ex: Tabela de precos 2026 com planos e comparativo"
-                            className="h-7 text-xs"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-medium text-muted-foreground">Quando enviar</Label>
-                          <Input
-                            value={doc.sendWhen || ""}
-                            onChange={(e) => updateDoc(doc.id, { sendWhen: e.target.value })}
-                            placeholder="Ex: Quando o lead perguntar sobre preco ou pedir proposta"
-                            className="h-7 text-xs"
-                          />
-                        </div>
+                    {/* Metadata fields — description + "quando enviar". Shown for
+                        documents (PDF) and media alike; for documents the
+                        description is optional (summary is auto-generated). */}
+                    <div className="px-3 pb-3 space-y-2 border-t border-border/30 pt-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-medium text-muted-foreground">
+                          {isMedia ? "Descricao do conteudo" : "Descricao (opcional)"}
+                        </Label>
+                        <Input
+                          value={doc.description || ""}
+                          onChange={(e) => updateDoc(doc.id, { description: e.target.value })}
+                          placeholder={
+                            isMedia
+                              ? "Ex: Tabela de precos 2026 com planos e comparativo"
+                              : "Ex: Catalogo completo de produtos 2026"
+                          }
+                          className="h-7 text-xs"
+                        />
                       </div>
-                    )}
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-medium text-muted-foreground">Quando enviar</Label>
+                        <Input
+                          value={doc.sendWhen || ""}
+                          onChange={(e) => updateDoc(doc.id, { sendWhen: e.target.value })}
+                          placeholder={
+                            isMedia
+                              ? "Ex: Quando o lead perguntar sobre preco ou pedir proposta"
+                              : "Ex: Quando o lead pedir o catalogo ou tabela de precos"
+                          }
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                    </div>
                   </div>
                 );
               })}

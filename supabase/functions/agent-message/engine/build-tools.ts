@@ -298,15 +298,21 @@ export async function buildDynamicTools(params: BuildToolsParams): Promise<any[]
   try {
     const { data: agentDocs } = await supabase
       .from("copilot_agent_documents")
-      .select("id, file_name, summary")
+      .select("id, file_name, summary, send_when")
       .eq("agent_id", capabilities.id)
       .eq("status", "ready");
 
     if (agentDocs && agentDocs.length > 0) {
       const docList = agentDocs
         .map(
-          (d: { id: string; file_name: string; summary: string | null }) =>
-            `- "${d.file_name}" (id: ${d.id})${d.summary ? ` — ${d.summary.substring(0, 80)}...` : ""}`,
+          (d: { id: string; file_name: string; summary: string | null; send_when: string | null }) => {
+            const summaryPart = d.summary ? ` — ${d.summary.substring(0, 80)}...` : "";
+            // send_when é o gatilho explícito definido pelo operador (Playground).
+            // Para documento (PDF), o summary descreve o conteúdo; send_when diz
+            // QUANDO mandar. Surfar separado pra o agente não depender só do summary.
+            const trigger = d.send_when ? ` [Enviar quando: ${d.send_when}]` : "";
+            return `- "${d.file_name}" (id: ${d.id})${summaryPart}${trigger}`;
+          },
         )
         .join("\n");
 

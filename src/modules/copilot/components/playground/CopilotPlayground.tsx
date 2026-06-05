@@ -76,7 +76,7 @@ import {
   useToggleCopilotAgent,
   useSetDefaultCopilotAgent,
 } from "@/modules/copilot/hooks/useCopilotAgents";
-import { useUploadAgentDocument, useAgentDocuments, useDeleteAgentDocument } from "@/modules/copilot/hooks/useAgentDocuments";
+import { useUploadAgentDocument, useAgentDocuments, useDeleteAgentDocument, useUpdateAgentDocument } from "@/modules/copilot/hooks/useAgentDocuments";
 
 import { useCurrentTeamMember } from "@/modules/identity";
 import { hasFullBehaviorCoverage } from "@/modules/copilot/components/BehaviorWindowsEditor";
@@ -320,6 +320,7 @@ export function CopilotPlayground() {
   const updateAgent = useUpdateCopilotAgentFromWizard();
   const uploadDocument = useUploadAgentDocument();
   const deleteDocument = useDeleteAgentDocument();
+  const updateDocument = useUpdateAgentDocument();
   const toggleAgent = useToggleCopilotAgent();
   const setDefault = useSetDefaultCopilotAgent();
   const { data: editData, isLoading: isLoadingEdit } = useCopilotAgentForEdit(editId);
@@ -841,6 +842,32 @@ export function CopilotPlayground() {
                 existingDocuments={existingDocs}
                 onDeleteExisting={(docId, filePath) => {
                   if (editId) deleteDocument.mutate({ documentId: docId, filePath, agentId: editId });
+                }}
+                onUpdateExisting={(docId, updates, fileType) => {
+                  if (!editId) return;
+                  // Media: description/send_when feed the summary + embeddings, so
+                  // reprocess. Document: trigger is surfaced directly in the
+                  // send_document tool — just persist, no reprocess.
+                  updateDocument.mutate({
+                    documentId: docId,
+                    agentId: editId,
+                    updates,
+                    reprocessMedia: fileType !== "document",
+                  });
+                  // Keep the in-memory copy (used by the prompt preview's media
+                  // section + @mentions) in sync without refetching the whole form.
+                  setData((prev) => ({
+                    ...prev,
+                    documents: prev.documents.map((d) =>
+                      d.id === docId
+                        ? {
+                            ...d,
+                            ...(updates.description !== undefined ? { description: updates.description } : {}),
+                            ...(updates.send_when !== undefined ? { sendWhen: updates.send_when } : {}),
+                          }
+                        : d,
+                    ),
+                  }));
                 }}
               />
             </TabsContent>

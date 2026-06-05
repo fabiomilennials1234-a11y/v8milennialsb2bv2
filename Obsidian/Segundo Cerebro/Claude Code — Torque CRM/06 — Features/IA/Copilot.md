@@ -261,6 +261,7 @@ Bugs reportados pelo time ("switch não desliga", "responde mesmo desligado", "s
 
 ## Historico de mudancas
 
+- **2026-06-05**: Gatilho "Quando enviar" para documentos (PDF) na Knowledge Base. Campos `description`/`send_when` (antes só mídia) liberados pra documento; edição inline de metadata de doc/mídia já salvos; tool `send_document` passa a expor `[Enviar quando: …]` pro agente. Hardening RLS UPDATE (`WITH CHECK`). Corrige double-render de doc existente no Playground. Ver `07 — Changelog/2026-06-05-copilot-pdf-send-trigger.md`.
 - **2026-04-26**: Toggle Copilot Onda 1+2+3 — fonte única canônica + hook unificado + realtime + audit page. Ver `07 — Changelog/2026-04-26.md`.
 - **2026-04-26**: Cancel-on-Disable (RC-cancel) — cancela copilot mid-flight em todas as janelas de delay. Ver `07 — Changelog/2026-04-26.md` (seção RC-cancel).
 - **2026-04-26**: Reasoning Chain v1 — chain-of-thought visível pra debug, configurável por agente, default `'always'`. Ver `07 — Changelog/2026-04-26.md` (seção RC).
