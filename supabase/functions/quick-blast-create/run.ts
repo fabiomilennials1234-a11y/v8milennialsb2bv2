@@ -56,6 +56,9 @@ export interface QuickBlastParams {
    *  Omitted / all-false → current behavior (no narrowing). The engine still
    *  applies its own org cap + phone normalization afterward (fail-closed). */
   refinements?: BlastRefinementOptions;
+  /** Resolve audience + refinements and return the would-send count + skip
+   *  breakdown WITHOUT dispatching — powers the wizard's live preview. */
+  dryRun?: boolean;
 }
 
 export interface QuickBlastResult {
@@ -96,7 +99,7 @@ export async function runQuickBlast(
     return { ok: false, count: 0, skipped: { ...EMPTY_SKIPPED }, error: "instance_org_mismatch" };
   }
 
-  if (!params.message || params.message.trim().length === 0) {
+  if (!params.dryRun && (!params.message || params.message.trim().length === 0)) {
     return { ok: false, count: 0, skipped: { ...EMPTY_SKIPPED }, error: "empty_message" };
   }
   if (!Array.isArray(params.leadIds) || params.leadIds.length === 0) {
@@ -130,7 +133,7 @@ export async function runQuickBlast(
   const merged = await mergePortfolioData(supabaseAdmin, params.orgId, refinedLeads);
 
   const { recipients, skipped: engineSkips } = buildRecipients(merged, {
-    template: params.message,
+    template: params.message ?? "",
     cap: effectiveCap,
     imageUrl: params.imageUrl,
   });
@@ -145,6 +148,11 @@ export async function runQuickBlast(
     alreadyContactedWithinWindow: refineSkips.skipped.alreadyContactedWithinWindow,
     replied: refineSkips.skipped.replied,
   };
+
+  // Preview (dry run): resolved audience + refinements, no dispatch, no logging.
+  if (params.dryRun) {
+    return { ok: true, count: recipients.length, skipped };
+  }
 
   if (recipients.length === 0) {
     return { ok: false, count: 0, skipped, error: "no_recipients" };
