@@ -9,6 +9,8 @@
  * pure contract.
  */
 
+import type { Introspection } from "./introspect-guard.ts";
+
 export type ToolKind = "read" | "write";
 
 export interface ToolMeta {
@@ -67,4 +69,23 @@ export function writeTargetOf(name: string, args: Record<string, unknown>): stri
   if (!arg) return null;
   const value = args[arg];
   return typeof value === "string" ? value : null;
+}
+
+/**
+ * Introspection a READ tool's result contributes THIS turn, feeding the
+ * write-after-introspect guard for a subsequent write. Only check_agenda_availability
+ * needs it: agenda is dynamic (per-lead/per-window) so its free slots CANNOT be
+ * pre-loaded like stages/fields — without propagating them intra-turn,
+ * schedule_meeting stays fail-CLOSED forever. The result shape mirrors the
+ * tool-executor handler ({ slots: ISO[] }).
+ */
+export function introspectionUpdateOf(name: string, result: unknown): Partial<Introspection> | null {
+  if (name === "check_agenda_availability") {
+    const slots = (result as { slots?: unknown } | null)?.slots;
+    if (Array.isArray(slots)) {
+      const clean = slots.filter((s): s is string => typeof s === "string");
+      if (clean.length > 0) return { slots: clean };
+    }
+  }
+  return null;
 }

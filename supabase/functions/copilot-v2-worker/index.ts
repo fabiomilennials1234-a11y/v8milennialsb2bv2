@@ -539,9 +539,10 @@ async function resolveContext(supabase: any, row: QueueRow): Promise<ResolvedCon
     introspection: {
       stages: (stages ?? []).map((s: any) => s.stage_key),
       fields: (fields ?? []).map((f: any) => f.field_name),
-      // slots só existem APÓS check_agenda_availability rodar no turno; o
-      // introspect-guard fail-CLOSED bloqueia agendamento até lá (follow-up:
-      // propagação intra-turno dos slots do read — ver _MOC §Decisões abertas).
+      // slots começam vazios: a agenda é dinâmica (por lead/janela), só conhecida
+      // APÓS check_agenda_availability rodar no turno. A propagação intra-turno
+      // (cognition-loop + introspectionUpdateOf) injeta os slots livres no guard,
+      // destravando schedule_meeting — sem pré-carregar nada aqui.
       slots: [],
     },
     history,

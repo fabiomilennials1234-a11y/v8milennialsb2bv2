@@ -64,6 +64,13 @@ export interface RunTurnInput {
   executeTool: (name: string, args: Record<string, unknown>) => Promise<unknown>;
   /** Extracts the structural target (stage_key/field_key) of a write tool. */
   writeTargetOf?: (name: string, args: Record<string, unknown>) => string | null;
+  /**
+   * Introspection a READ tool's result contributes THIS turn (e.g.
+   * check_agenda_availability → its free slots), so a subsequent write to that
+   * target passes the write-after-introspect guard. Only augments a non-null
+   * introspection; absent → no augmentation (legacy behavior).
+   */
+  introspectionUpdateOf?: (name: string, result: unknown) => Partial<Introspection> | null;
   maxToolCalls?: number;
 }
 
@@ -87,6 +94,17 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
   const max = input.maxToolCalls ?? TOOL_CALL_BUDGET;
   const convo: Msg[] = [...input.messages];
   const steps: ToolStep[] = [];
+  // Mutable introspection so an in-turn read (e.g. check_agenda_availability's
+  // free slots) satisfies the write-after-introspect guard for a later write
+  // THIS turn. stages/fields arrive pre-loaded; slots can ONLY be known after the
+  // agenda read runs — without this propagation schedule_meeting stays fail-CLOSED.
+  const live: Introspection | null = input.introspection
+    ? {
+        stages: [...(input.introspection.stages ?? [])],
+        fields: [...(input.introspection.fields ?? [])],
+        slots: [...(input.introspection.slots ?? [])],
+      }
+    : null;
   // Sum token usage across every complete() call this turn. `sawUsage` keeps the
   // field absent (not {0,0}) when the provider reports nothing, so existing loop
   // tests that toEqual the result are unaffected.
@@ -132,7 +150,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
 
       if (!isReadTool(tc.name)) {
         const target = input.writeTargetOf?.(tc.name, tc.args) ?? null;
-        const guardResult = assertWriteTarget({ tool: tc.name, target, introspected: input.introspection });
+        const guardResult = assertWriteTarget({ tool: tc.name, target, introspected: live });
         if (!guardResult.ok) {
           steps.push({ name: tc.name, allowed: false, reason: guardResult.reason });
           convo.push({ role: "tool", content: `blocked:${guardResult.reason}` });
@@ -156,6 +174,14 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
 
       const result = await input.executeTool(tc.name, tc.args);
       executed.set(dedupKey, result);
+      // Propagate what this read introspected (e.g. agenda slots) into the live
+      // introspection so a later write THIS turn can validate against it.
+      if (live && input.introspectionUpdateOf) {
+        const upd = input.introspectionUpdateOf(tc.name, result);
+        if (upd?.slots) for (const s of upd.slots) if (!live.slots.includes(s)) live.slots.push(s);
+        if (upd?.stages) for (const s of upd.stages) if (!live.stages.includes(s)) live.stages.push(s);
+        if (upd?.fields) for (const f of upd.fields) if (!live.fields.includes(f)) live.fields.push(f);
+      }
       steps.push({ name: tc.name, allowed: true, reason: null, result });
       convo.push({ role: "assistant", content: `tool:${tc.name}` });
       convo.push({ role: "tool", content: JSON.stringify(result ?? null) });
