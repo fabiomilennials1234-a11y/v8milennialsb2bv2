@@ -25,7 +25,8 @@ interface SkipRow {
 }
 
 function buildSkipRows(preview: QuickBlastPreview, recentDays: number | null): SkipRow[] {
-  const { noPhone, alreadyContactedWithinWindow, replied, duplicates, overCap } = preview.skipped;
+  const { noPhone, alreadyContactedWithinWindow, replied, duplicates, overCap, overDailyBudget } =
+    preview.skipped;
   return [
     {
       key: "recent",
@@ -36,6 +37,8 @@ function buildSkipRows(preview: QuickBlastPreview, recentDays: number | null): S
     { key: "noPhone", label: "sem telefone", n: noPhone },
     { key: "duplicates", label: "duplicados", n: duplicates },
     { key: "overCap", label: "acima do teto", n: overCap },
+    // Org-wide Daily Blast Budget shared across every blast today (ADR-0003).
+    { key: "overDailyBudget", label: "acima do teto diário", n: overDailyBudget ?? 0 },
   ].filter((r) => r.n > 0);
 }
 

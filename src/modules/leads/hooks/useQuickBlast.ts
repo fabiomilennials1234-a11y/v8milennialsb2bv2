@@ -31,7 +31,9 @@ export interface QuickBlastResult {
   /**
    * Per-reason skip breakdown. `noPhone`/`duplicates`/`overCap` come from the
    * dispatch engine; `alreadyContactedWithinWindow`/`replied` come from the
-   * Blast Audience refinements (0 when no refinement narrowed the set).
+   * Blast Audience refinements (0 when no refinement narrowed the set);
+   * `overDailyBudget` (ADR-0003, #706) is the count clipped by the Org-wide
+   * Daily Blast Budget shared across every blast that day.
    */
   skipped: {
     noPhone: number;
@@ -39,7 +41,12 @@ export interface QuickBlastResult {
     overCap: number;
     alreadyContactedWithinWindow: number;
     replied: number;
+    overDailyBudget: number;
   };
+  /** Today's Daily Blast Budget headroom available to this blast before it
+   *  consumed (`max(0, daily_blast_budget - usage_today)`). The wizard renders
+   *  "X de Y — N acima do teto diário" from `count` / `remaining` / skipped. */
+  remaining?: number;
 }
 
 /**
@@ -77,7 +84,11 @@ export interface QuickBlastPreview {
     overCap: number;
     alreadyContactedWithinWindow: number;
     replied: number;
+    overDailyBudget: number;
   };
+  /** Today's Daily Blast Budget headroom (ADR-0003, #706). The preview reports
+   *  the same clamp/remaining as a real send WITHOUT consuming budget. */
+  remaining?: number;
 }
 
 /**
