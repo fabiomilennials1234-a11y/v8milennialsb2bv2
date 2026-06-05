@@ -14,6 +14,7 @@ import {
   type LlmClient,
   type LlmResponse,
 } from '../../../supabase/functions/_shared/copilot-v2/cognition-loop.ts';
+import { introspectionUpdateOf } from '../../../supabase/functions/_shared/copilot-v2/tool-registry.ts';
 
 /** Fake LLM that replays a scripted sequence of responses, one per call. */
 function scriptedLlm(responses: LlmResponse[]): LlmClient & { calls: number } {
@@ -122,5 +123,58 @@ describe('runTurn', () => {
     const out = await runTurn({ ...baseInput, llm, executeTool: async () => { executed = true; return {}; } });
     expect(executed).toBe(false);
     expect(out.steps[0]).toMatchObject({ name: 'drop_database', allowed: false, reason: 'unknown_tool' });
+  });
+});
+
+// Regression: schedule_meeting was fail-CLOSED forever because agenda slots
+// (dynamic, can't be pre-loaded) never reached the write-after-introspect guard.
+// The loop now propagates check_agenda_availability's free slots intra-turn.
+describe('runTurn — agenda introspection unlocks schedule_meeting (intra-turn slots)', () => {
+  const slot = '2026-06-10T14:00:00.000-03:00';
+  const sched = {
+    ...baseInput,
+    capabilities: { can_schedule_meeting: true },
+    introspection: { stages: [], fields: [], slots: [] },
+    writeTargetOf: (name: string, args: Record<string, unknown>) =>
+      name === 'schedule_meeting' ? (args.datetime as string) : null,
+    introspectionUpdateOf, // the REAL registry mapping
+  };
+
+  it('blocks schedule_meeting BEFORE any agenda read (slots empty → orphaned, fail-CLOSED)', async () => {
+    const llm = scriptedLlm([
+      { text: null, toolCalls: [{ id: '1', name: 'schedule_meeting', args: { datetime: slot } }] },
+      { text: 'ok', toolCalls: [] },
+    ]);
+    const out = await runTurn({ ...sched, llm });
+    expect(out.steps[0]).toMatchObject({ name: 'schedule_meeting', allowed: false, reason: 'orphaned_target' });
+  });
+
+  it('ALLOWS schedule_meeting after check_agenda_availability returns that slot', async () => {
+    const llm = scriptedLlm([
+      { text: null, toolCalls: [{ id: '1', name: 'check_agenda_availability', args: { date_range: 'x/y' } }] },
+      { text: null, toolCalls: [{ id: '2', name: 'schedule_meeting', args: { datetime: slot } }] },
+      { text: 'agendado', toolCalls: [] },
+    ]);
+    const out = await runTurn({
+      ...sched, llm,
+      executeTool: async (name: string) => (name === 'check_agenda_availability' ? { slots: [slot] } : { scheduled: true }),
+    });
+    const sm = out.steps.find((s) => s.name === 'schedule_meeting')!;
+    expect(sm).toMatchObject({ allowed: true, reason: null });
+    expect(out.reply).toBe('agendado');
+  });
+
+  it('still blocks a datetime NOT among the offered slots (guard stays precise)', async () => {
+    const llm = scriptedLlm([
+      { text: null, toolCalls: [{ id: '1', name: 'check_agenda_availability', args: {} }] },
+      { text: null, toolCalls: [{ id: '2', name: 'schedule_meeting', args: { datetime: '2026-06-10T18:00:00.000-03:00' } }] },
+      { text: 'ok', toolCalls: [] },
+    ]);
+    const out = await runTurn({
+      ...sched, llm,
+      executeTool: async (name: string) => (name === 'check_agenda_availability' ? { slots: [slot] } : { scheduled: true }),
+    });
+    const sm = out.steps.find((s) => s.name === 'schedule_meeting')!;
+    expect(sm).toMatchObject({ allowed: false, reason: 'orphaned_target' });
   });
 });

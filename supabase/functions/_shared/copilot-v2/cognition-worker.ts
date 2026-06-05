@@ -17,7 +17,11 @@ import { decideDegradation } from "./degradation.ts";
 import { buildSystemPrompt, type AgentConfig } from "./prompt-builder.ts";
 import { BASE_PROMPTS } from "./base-prompts.ts";
 import { runTurn, type LlmClient, type LlmUsage, type ToolSchema, type ToolStep } from "./cognition-loop.ts";
-import { TOOL_SCHEMAS, writeTargetOf as registryWriteTargetOf } from "./tool-registry.ts";
+import {
+  TOOL_SCHEMAS,
+  writeTargetOf as registryWriteTargetOf,
+  introspectionUpdateOf as registryIntrospectionUpdateOf,
+} from "./tool-registry.ts";
 import type { Introspection } from "./introspect-guard.ts";
 import { buildTurnMessages, type HistoryEntry } from "./turn-history.ts";
 
@@ -48,6 +52,9 @@ export interface HandleQueuedMessageInput {
   toolSchemas?: ToolSchema[];
   executeTool: (name: string, args: Record<string, unknown>) => Promise<unknown>;
   writeTargetOf?: (name: string, args: Record<string, unknown>) => string | null;
+  /** Maps a read tool's result → the introspection it contributes this turn
+   *  (defaults to the registry mapping; check_agenda_availability → free slots). */
+  introspectionUpdateOf?: (name: string, result: unknown) => Partial<Introspection> | null;
   maxToolCalls?: number;
   /** W10 cost degrade level (0..3). >=1 may override the model to a cheaper one
    *  via decideDegradation. Absent (eval/sim) → 0 → base model, fingerprint intact. */
@@ -97,6 +104,7 @@ export async function handleQueuedMessage(
     introspection: input.context.introspection,
     executeTool: input.executeTool,
     writeTargetOf: input.writeTargetOf ?? registryWriteTargetOf,
+    introspectionUpdateOf: input.introspectionUpdateOf ?? registryIntrospectionUpdateOf,
     maxToolCalls: input.maxToolCalls,
   });
 
