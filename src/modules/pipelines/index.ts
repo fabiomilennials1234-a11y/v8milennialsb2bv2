@@ -108,6 +108,7 @@ export {
   useAllPipelineStageOptions,
   usePipelineStageOptions,
   getPipelineTypeName,
+  useStageLeadIds,
 } from "./hooks/model";
 export type {
   Pipeline,
