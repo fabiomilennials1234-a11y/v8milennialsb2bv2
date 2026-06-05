@@ -387,16 +387,32 @@ const sendMedia: Handler = async (supabase, ctx, args) => {
     .maybeSingle();
   if (error) throw new Error(`send_media: ${error.message}`);
 
-  // 2. Já-enviados nesta conversa (anti-repetição) — gate de momento/repetição.
+  // 2. Já-enviados NESTA conversa (anti-repetição) — gate de momento/repetição.
+  // SECURITY: copilot_v2_trace_steps NÃO tem organization_id/conversation_id (só
+  // trace_id), então o escopo de tenant/conversa vem dos traces. Buscar os
+  // trace_ids desta (org, conversa) primeiro e ler SÓ os steps desses traces —
+  // sem isso a query lia send_media de TODAS as orgs (vazamento cross-tenant +
+  // dedup global que bloqueava org B por causa de um envio da org A).
   let alreadySent: string[] = [];
   if (ctx.conversationId) {
-    const { data: prior } = await supabase
-      .from("copilot_v2_trace_steps")
-      .select("meta")
-      .eq("step", "send_media");
-    alreadySent = (prior ?? [])
-      .map((r: any) => r?.meta?.media_id)
+    const { data: traces } = await supabase
+      .from("copilot_v2_traces")
+      .select("trace_id")
+      .eq("organization_id", ctx.organizationId)
+      .eq("conversation_id", ctx.conversationId);
+    const traceIds = (traces ?? [])
+      .map((t: any) => t?.trace_id)
       .filter((x: any): x is string => typeof x === "string");
+    if (traceIds.length > 0) {
+      const { data: prior } = await supabase
+        .from("copilot_v2_trace_steps")
+        .select("meta")
+        .eq("step", "send_media")
+        .in("trace_id", traceIds);
+      alreadySent = (prior ?? [])
+        .map((r: any) => r?.meta?.media_id)
+        .filter((x: any): x is string => typeof x === "string");
+    }
   }
 
   // 3. Gate puro (fail-CLOSED) — bloqueio devolve motivo EXPLÍCITO, sem silent-drop.
