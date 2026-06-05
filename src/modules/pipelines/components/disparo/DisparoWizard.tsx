@@ -26,20 +26,28 @@ import {
   replaceVariablesWithExamples,
   useCampaignTemplates,
 } from "@/modules/campaigns";
-import { useQuickBlast, type QuickBlastResult } from "@/modules/leads";
+import { useQuickBlast, useTags, type QuickBlastResult } from "@/modules/leads";
 import {
   useCreateBlastPlan,
   type BlastPlanLotBreakdown,
   type CreateBlastPlanResult,
 } from "@/modules/campaigns";
+import { useCarteiraLeadIds } from "@/modules/carteira";
 
 import { usePipelineStages } from "../../hooks/model/usePipelineStages";
 import { useStageLeadIds } from "../../hooks/model/useStageLeadIds";
 import { useFilteredLeadIds } from "../../hooks/model/useFilteredLeadIds";
+import { useCustomFilteredLeadIds } from "../../hooks/model/useCustomFilteredLeadIds";
+import type { PipelineType } from "../../hooks/model/usePipelineEntries";
 import { useResponsibleMembers } from "@/modules/identity";
 
 import { BlastBreakdown } from "./BlastBreakdown";
 import { BlastRefinementsControls } from "./BlastRefinementsControls";
+import {
+  AudienceConditionsControls,
+  EMPTY_CONDITIONS,
+  type AudienceConditions,
+} from "./AudienceConditionsControls";
 import {
   DEFAULT_REFINEMENTS,
   resolveRefinementFields,
@@ -69,12 +77,57 @@ export interface DisparoBoardFilter {
   chips?: string[];
 }
 
-/** Source of the audience: a whole stage, the board's live filter, or a hand-picked set. */
+/**
+ * Source of the audience. For funnels the primary source is a whole stage; for
+ * carteira it's a segment set (post-sale). "filtro" replays the board's live
+ * filter; "manual" is a hand-picked set seeded from the kanban bulk-bar. The
+ * value strings are stable across contexts — only the LABEL changes ("Estágio"
+ * for funis, "Segmento" for carteira), keeping downstream logic uniform.
+ */
 export type DisparoSource = "estagio" | "filtro" | "manual";
+
+/** System (canonical) funnels the stage/filtro resolvers understand. */
+export type SystemPipelineType = "whatsapp" | "confirmacao" | "propostas";
+
+/**
+ * Where the wizard is mounted — discriminates how the audience resolves. All
+ * three kinds funnel into the SAME refinements + dry-run preview + fire +
+ * "agendar lotes" downstream (those take lead_ids and never branch on context):
+ *
+ *   - system  : a canonical pipe (`pipe_whatsapp/confirmacao/propostas`). Stage
+ *               source via `useStageLeadIds`; conditions/responsible route the
+ *               stage through `useFilteredLeadIds` with the stageKey.
+ *   - custom  : a user-defined pipeline (`pipeline_entries`, stage_id uuid).
+ *               Resolves via `useCustomFilteredLeadIds`. Stage picker reads the
+ *               passed `stages` (uuid ids). (Phase 2b mount.)
+ *   - carteira: the post-sale portfolio. Source picker becomes "Segmento";
+ *               resolves via `useCarteiraLeadIds`. No responsible filter.
+ *               (Phase 2b mount.)
+ */
+export type DisparoContext =
+  | { kind: "system"; pipelineType: SystemPipelineType }
+  | { kind: "custom"; pipelineId: string; stages: { id: string; name: string; color?: string | null }[] }
+  | { kind: "carteira" };
+
+const DEFAULT_CONTEXT: DisparoContext = { kind: "system", pipelineType: "whatsapp" };
+
+/** Carteira segment options for the "Segmento" source picker (multi-select). */
+const CARTEIRA_SEGMENT_OPTIONS: { value: string; label: string }[] = [
+  { value: "ouro", label: "Ouro" },
+  { value: "prata", label: "Prata" },
+  { value: "novo", label: "Novo" },
+  { value: "resgate", label: "Resgate" },
+  { value: "dormindo", label: "Dormindo" },
+];
 
 interface DisparoWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Where the wizard targets. Defaults to the WhatsApp system funnel so the
+   * existing `PipeWhatsapp` mount keeps working unchanged.
+   */
+  context?: DisparoContext;
   /** The funnel board's live server-side filter (powers the "Filtro ativo" source). */
   boardFilter?: DisparoBoardFilter;
   /** Pre-seeded lead ids for the "Manual" source (from the kanban bulk-bar). */
@@ -106,23 +159,42 @@ function previewMessage(template: string): string {
 export function DisparoWizard({
   open,
   onOpenChange,
+  context = DEFAULT_CONTEXT,
   boardFilter,
   initialManualLeadIds,
   initialSource = "estagio",
 }: DisparoWizardProps) {
   const reduceMotion = useReducedMotion();
 
+  const isCarteira = context.kind === "carteira";
+  const isCustom = context.kind === "custom";
+  const isSystem = context.kind === "system";
+  // The system funnel feeding the stage/filtro resolvers. Custom/carteira don't
+  // use it (they have their own resolvers) — default to whatsapp to satisfy the
+  // type when the hooks are called with `enabled:false` inputs.
+  const systemPipelineType: SystemPipelineType = isSystem
+    ? (context as { pipelineType: SystemPipelineType }).pipelineType
+    : "whatsapp";
+  // The primary source label flips for carteira (a Segment set, not a Stage).
+  const primarySourceLabel = isCarteira ? "Segmento" : "Estágio";
+
   const [step, setStep] = useState<StepId>("publico");
   const [direction, setDirection] = useState<1 | -1>(1);
 
   // Step 1 — Público
   const [source, setSource] = useState<DisparoSource>(initialSource);
+  // Funnel stage selection. system: stage_key slug; custom: stage_id uuid.
   const [stageKey, setStageKey] = useState<string>("");
+  // Carteira segment multi-select (only used when context.kind === "carteira").
+  const [segments, setSegments] = useState<string[]>([]);
   // "all" = no responsible filter; a member id scopes the Estágio audience to
   // that responsible's leads (resolved via get_filtered_lead_ids, #705 RPC).
+  // Carteira has no responsible surface — the picker is hidden there.
   const [responsibleId, setResponsibleId] = useState<string>("all");
   const [manualLeadIds, setManualLeadIds] = useState<string[]>(initialManualLeadIds ?? []);
   const [refinements, setRefinements] = useState<BlastRefinements>(DEFAULT_REFINEMENTS);
+  // Audience conditions (Phase 2a) — narrow EVERY source except Manual.
+  const [conditions, setConditions] = useState<AudienceConditions>(EMPTY_CONDITIONS);
 
   // Seed source + manual ids whenever the dialog (re)opens — the caller may
   // open with a fresh kanban selection each time.
@@ -130,6 +202,8 @@ export function DisparoWizard({
     if (!open) return;
     setSource(initialSource);
     setManualLeadIds(initialManualLeadIds ?? []);
+    setSegments([]);
+    setConditions(EMPTY_CONDITIONS);
     // Only on open: an open dialog must not have its source yanked mid-edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -154,74 +228,165 @@ export function DisparoWizard({
   const [result, setResult] = useState<QuickBlastResult | null>(null);
   const [planResult, setPlanResult] = useState<CreateBlastPlanResult | null>(null);
 
-  const { data: stages = [], isLoading: stagesLoading } = usePipelineStages("whatsapp");
+  // System-funnel stages (slug-keyed). Only fetched for the system context;
+  // custom/carteira don't read it. The hook is cheap + cached, gated on enabled.
+  const { data: systemStages = [], isLoading: systemStagesLoading } = usePipelineStages(
+    isSystem ? systemPipelineType : ("whatsapp" as PipelineType),
+  );
+  // Unified stage list for the picker, keyed by `key` (slug for system,
+  // stage_id uuid for custom). Carteira has no stage picker.
+  const stages = useMemo<{ key: string; name: string; color?: string | null }[]>(() => {
+    if (isCustom) {
+      return (context as { stages: { id: string; name: string; color?: string | null }[] }).stages.map(
+        (s) => ({ key: s.id, name: s.name, color: s.color }),
+      );
+    }
+    if (isSystem) return systemStages.map((s) => ({ key: s.stage_key, name: s.name, color: s.color }));
+    return [];
+  }, [isCustom, isSystem, context, systemStages]);
+  const stagesLoading = isSystem ? systemStagesLoading : false;
+
   const responsibleMembers = useResponsibleMembers();
+  const { data: orgTags = [] } = useTags();
   const { data: templates = [] } = useCampaignTemplates();
   const { data: instances = [] } = useWhatsAppInstances();
   const blast = useQuickBlast();
   const createPlan = useCreateBlastPlan();
 
+  // Any audience condition active? These narrow EVERY source except Manual, and
+  // route the Estágio source through the filtered RPC (which honors them).
+  const conditionsActive =
+    conditions.tagIds.length > 0 ||
+    conditions.qualificationTier.length > 0 ||
+    conditions.preQualificationTier.length > 0 ||
+    conditions.origin.length > 0;
+  // A responsible scope also forces the filtered path (system/custom only).
+  const responsibleScoped = !isCarteira && responsibleId !== "all";
+  // The Estágio source needs the FILTERED resolver when a condition or a
+  // responsible narrows it; otherwise the plain stage resolver suffices.
+  const stageNeedsFilter = conditionsActive || responsibleScoped;
+
   // Does the board carry an active server-side filter at all? Without one the
-  // "Filtro ativo" source has nothing to honor and is empty/disabled.
+  // "Filtro ativo" source has nothing to honor and is empty/disabled. Carteira
+  // has no funnel board, so it never offers the "filtro" source.
   const boardFilterActive = useMemo(() => {
-    if (!boardFilter) return false;
+    if (isCarteira || !boardFilter) return false;
     const { search, responsibleId, tagIds } = boardFilter;
     return (
       (!!search && search.trim().length > 0) ||
       (!!responsibleId && responsibleId !== "all") ||
       (!!tagIds && tagIds.length > 0)
     );
-  }, [boardFilter]);
+  }, [isCarteira, boardFilter]);
 
-  // Stage source — every lead in a stage.
-  const { data: stageLeadIds, isLoading: stageLoading } = useStageLeadIds(
-    "whatsapp",
-    // Only the plain stage path; a responsible filter routes through the filtered RPC.
-    source === "estagio" && responsibleId === "all" ? stageKey : "",
+  // Conditions shared across the filtered resolvers (system/custom).
+  const conditionFields = {
+    tagIds: conditions.tagIds,
+    qualificationTier: conditions.qualificationTier,
+    preQualificationTier: conditions.preQualificationTier,
+    origin: conditions.origin,
+  };
+
+  // ── SYSTEM resolvers ──────────────────────────────────────────────────────
+  // Plain stage source — every lead in a stage, no narrowing. Only when no
+  // condition/responsible forces the filtered path.
+  const { data: sysStageLeadIds, isLoading: sysStageLoading } = useStageLeadIds(
+    systemPipelineType,
+    isSystem && source === "estagio" && !stageNeedsFilter ? stageKey : "",
   );
-
-  // Filtro source — the board's live server-side filter, replayed across the
-  // whole pipeline (not just the loaded page). Only fetched when this source is
-  // active AND the board actually has a filter on.
-  const { data: filteredLeadIds, isLoading: filteredLoading } = useFilteredLeadIds(
-    "whatsapp",
-    source === "filtro" && boardFilterActive
+  // Filtered source — board's "filtro" replay, OR the narrowed Estágio (stageKey
+  // + conditions + responsible). Conditions ALWAYS apply; the board's filter
+  // adds its own search/responsible/tags on top for the "filtro" source.
+  const { data: sysFilteredLeadIds, isLoading: sysFilteredLoading } = useFilteredLeadIds(
+    systemPipelineType,
+    isSystem && source === "filtro" && boardFilterActive
       ? {
           search: boardFilter?.search,
           responsibleId: boardFilter?.responsibleId,
-          tagIds: boardFilter?.tagIds,
+          // Board tags + condition tags both narrow; merge them (intersection
+          // semantics are server-side ALL-of, so union the requested lists).
+          tagIds: [...(boardFilter?.tagIds ?? []), ...conditions.tagIds],
+          qualificationTier: conditions.qualificationTier,
+          preQualificationTier: conditions.preQualificationTier,
+          origin: conditions.origin,
         }
-      : source === "estagio" && !!stageKey && responsibleId !== "all"
-        ? { stageKey, responsibleId }
+      : isSystem && source === "estagio" && !!stageKey && stageNeedsFilter
+        ? {
+            stageKey,
+            responsibleId: responsibleScoped ? responsibleId : undefined,
+            ...conditionFields,
+          }
         : {},
   );
 
-  // Resolve the active source into a single candidate set + loading flag.
-  const audienceLeadIds =
-    source === "estagio"
-      ? responsibleId !== "all"
-        ? filteredLeadIds
-        : stageLeadIds
-      : source === "filtro"
-        ? boardFilterActive
-          ? filteredLeadIds
-          : []
-        : manualLeadIds;
+  // ── CUSTOM resolver ───────────────────────────────────────────────────────
+  // Single resolver covers stage + conditions + responsible for custom funnels.
+  // Fetched when on a stage/filtro source with a target chosen.
+  const customPipelineId = isCustom
+    ? (context as { pipelineId: string }).pipelineId
+    : null;
+  const { data: customLeadIds, isLoading: customLoading } = useCustomFilteredLeadIds(
+    isCustom && (source === "estagio" || source === "filtro") ? customPipelineId : null,
+    {
+      stageId: source === "estagio" ? stageKey || null : null,
+      responsibleId: responsibleScoped ? responsibleId : undefined,
+      ...conditionFields,
+    },
+  );
 
-  const audienceLoading =
-    source === "estagio"
-      ? (responsibleId !== "all" ? filteredLoading : stageLoading) && !!stageKey
-      : source === "filtro"
-        ? boardFilterActive && filteredLoading
-        : false;
+  // ── CARTEIRA resolver ─────────────────────────────────────────────────────
+  // Segment source + conditions. Fetched only on the carteira context; the
+  // "filtro" source there means "all carteira narrowed by conditions" (no board).
+  const { data: carteiraLeadIds, isLoading: carteiraLoading } = useCarteiraLeadIds(
+    isCarteira && (source === "estagio" || source === "filtro")
+      ? {
+          segments: source === "estagio" ? segments : undefined,
+          ...conditionFields,
+        }
+      : {},
+  );
+
+  // ── Resolve the active source into a single candidate set + loading flag ───
+  const audienceLeadIds = (() => {
+    if (source === "manual") return manualLeadIds;
+    if (isCarteira) return carteiraLeadIds;
+    if (isCustom) return customLeadIds;
+    // system
+    if (source === "filtro") return boardFilterActive ? sysFilteredLeadIds : [];
+    return stageNeedsFilter ? sysFilteredLeadIds : sysStageLeadIds;
+  })();
+
+  const audienceLoading = (() => {
+    if (source === "manual") return false;
+    if (isCarteira) {
+      // estagio needs a segment chosen; filtro is always resolvable.
+      const ready = source === "filtro" || segments.length > 0;
+      return carteiraLoading && ready;
+    }
+    if (isCustom) {
+      const ready = source === "filtro" || !!stageKey;
+      return customLoading && ready;
+    }
+    if (source === "filtro") return boardFilterActive && sysFilteredLoading;
+    return (stageNeedsFilter ? sysFilteredLoading : sysStageLoading) && !!stageKey;
+  })();
 
   const audienceSize = audienceLeadIds?.length ?? 0;
-  const selectedStage = stages.find((s) => s.stage_key === stageKey);
+  const selectedStage = stages.find((s) => s.key === stageKey);
 
-  // Whether the active source has a "chosen target" (a stage picked, the board
-  // filter present, or a manual set seeded) — gates the live count panel.
+  // Whether the active source has a "chosen target" — gates the live count
+  // panel. Carteira "estagio" needs ≥1 segment; carteira "filtro" is always
+  // ready (conditions-only narrowing of the whole carteira).
   const sourceReady =
-    source === "estagio" ? !!stageKey : source === "filtro" ? boardFilterActive : audienceSize > 0;
+    source === "manual"
+      ? audienceSize > 0
+      : isCarteira
+        ? source === "filtro"
+          ? true
+          : segments.length > 0
+        : source === "filtro"
+          ? boardFilterActive
+          : !!stageKey;
 
   const connectedInstances = useMemo(
     () => instances.filter((i: any) => CONNECTED.has(i.status)),
@@ -250,29 +415,44 @@ export function DisparoWizard({
     refinements.excludeRecent && refinements.recentDays > 0 ? refinements.recentDays : null;
 
   // Source recap shown in Revisão — names the audience provenance plainly.
+  // The primary-source label flips to "Segmento" for carteira; "filtro" reads
+  // as a plain conditions narrowing there (no funnel board behind it).
   const sourceLabel =
     source === "estagio"
-      ? "Estágio"
+      ? primarySourceLabel
       : source === "filtro"
-        ? "Filtro ativo"
+        ? isCarteira
+          ? "Condições"
+          : "Filtro ativo"
         : "Manual";
   const sourceValue =
     source === "estagio"
-      ? selectedStage?.name ?? "—"
+      ? isCarteira
+        ? segments.length > 0
+          ? segments
+              .map((seg) => CARTEIRA_SEGMENT_OPTIONS.find((s) => s.value === seg)?.label ?? seg)
+              .join(", ")
+          : "—"
+        : selectedStage?.name ?? "—"
       : source === "filtro"
-        ? "filtro do funil"
+        ? isCarteira
+          ? "carteira filtrada"
+          : "filtro do funil"
         : `${manualLeadIds.length} selecionados`;
 
   // Audience provenance descriptor — best-effort, recorded on the plan for its
   // panel label. Mirrors the same fields the fire path already resolves.
   const audienceSourceDescriptor = useMemo<Record<string, unknown>>(
-    () =>
-      source === "estagio"
-        ? { kind: "estagio", stageKey }
-        : source === "filtro"
-          ? { kind: "filtro" }
-          : { kind: "manual" },
-    [source, stageKey],
+    () => ({
+      context: context.kind,
+      source,
+      ...(source === "estagio"
+        ? isCarteira
+          ? { segments }
+          : { stageKey }
+        : {}),
+    }),
+    [context.kind, source, isCarteira, segments, stageKey],
   );
 
   // Over-budget decision (#707). The dry-run preview reports `remaining` —
@@ -321,6 +501,8 @@ export function DisparoWizard({
     setDirection(1);
     setSource(initialSource);
     setStageKey("");
+    setSegments([]);
+    setConditions(EMPTY_CONDITIONS);
     setResponsibleId("all");
     setManualLeadIds(initialManualLeadIds ?? []);
     setRefinements(DEFAULT_REFINEMENTS);
@@ -463,8 +645,10 @@ export function DisparoWizard({
             <DialogTitle className="text-lg font-semibold tracking-tight">Disparo</DialogTitle>
           </div>
           <DialogDescription className="text-sm text-muted-foreground">
-            Envio em massa por estágio, filtro ativo do funil ou seleção manual. Leads sem telefone,
-            duplicados e o teto da organização são tratados automaticamente.
+            {isCarteira
+              ? "Envio em massa por segmento da carteira ou seleção manual."
+              : "Envio em massa por estágio, filtro ativo do funil ou seleção manual."}{" "}
+            Leads sem telefone, duplicados e o teto da organização são tratados automaticamente.
           </DialogDescription>
         </DialogHeader>
 
@@ -489,15 +673,22 @@ export function DisparoWizard({
                 <SuccessPanel result={result} scheduled={when === "schedule"} />
               ) : step === "publico" ? (
                 <PublicoStep
+                  contextKind={context.kind}
+                  primarySourceLabel={primarySourceLabel}
                   source={source}
                   onSource={setSource}
                   stages={stages}
                   stagesLoading={stagesLoading}
                   stageKey={stageKey}
                   onStageKey={setStageKey}
+                  segments={segments}
+                  onSegments={setSegments}
                   responsibleId={responsibleId}
                   onResponsibleId={setResponsibleId}
                   responsibleMembers={responsibleMembers}
+                  conditions={conditions}
+                  onConditions={setConditions}
+                  orgTags={orgTags}
                   audienceSize={audienceSize}
                   audienceLoading={audienceLoading}
                   refinements={refinements}
@@ -682,27 +873,45 @@ function Stepper({
 /* ──────────────────────────────────────────────────────────────────────────
  * Step 1 — Público
  * ────────────────────────────────────────────────────────────────────────── */
-const SOURCE_OPTIONS: {
-  id: DisparoSource;
-  label: string;
-  desc: string;
-  icon: typeof Layers;
-}[] = [
-  { id: "estagio", label: "Estágio", desc: "Todos de uma etapa", icon: Layers },
-  { id: "filtro", label: "Filtro ativo", desc: "Como está no funil", icon: ListFilter },
-  { id: "manual", label: "Manual", desc: "Selecionados no quadro", icon: MousePointerClick },
-];
+/**
+ * Source options for the picker, context-aware. The primary source flips its
+ * label/copy/icon for carteira (a Segment set, not a funnel Stage); "filtro"
+ * is dropped on carteira (no funnel board behind it).
+ */
+function sourceOptionsFor(
+  contextKind: DisparoContext["kind"],
+  primarySourceLabel: string,
+): { id: DisparoSource; label: string; desc: string; icon: typeof Layers }[] {
+  if (contextKind === "carteira") {
+    return [
+      { id: "estagio", label: primarySourceLabel, desc: "Clientes de um segmento", icon: Layers },
+      { id: "manual", label: "Manual", desc: "Selecionados no quadro", icon: MousePointerClick },
+    ];
+  }
+  return [
+    { id: "estagio", label: primarySourceLabel, desc: "Todos de uma etapa", icon: Layers },
+    { id: "filtro", label: "Filtro ativo", desc: "Como está no funil", icon: ListFilter },
+    { id: "manual", label: "Manual", desc: "Selecionados no quadro", icon: MousePointerClick },
+  ];
+}
 
 function PublicoStep({
+  contextKind,
+  primarySourceLabel,
   source,
   onSource,
   stages,
   stagesLoading,
   stageKey,
   onStageKey,
+  segments,
+  onSegments,
   responsibleId,
   onResponsibleId,
   responsibleMembers,
+  conditions,
+  onConditions,
+  orgTags,
   audienceSize,
   audienceLoading,
   refinements,
@@ -713,15 +922,23 @@ function PublicoStep({
   boardFilterChips,
   manualCount,
 }: {
+  contextKind: DisparoContext["kind"];
+  primarySourceLabel: string;
   source: DisparoSource;
   onSource: (s: DisparoSource) => void;
-  stages: { stage_key: string; name: string; color?: string | null }[];
+  /** Unified stage list keyed by `key` (slug for system, stage_id for custom). */
+  stages: { key: string; name: string; color?: string | null }[];
   stagesLoading: boolean;
   stageKey: string;
   onStageKey: (v: string) => void;
+  segments: string[];
+  onSegments: (v: string[]) => void;
   responsibleId: string;
   onResponsibleId: (v: string) => void;
   responsibleMembers: { id: string; name: string }[];
+  conditions: AudienceConditions;
+  onConditions: (next: AudienceConditions) => void;
+  orgTags: { id: string; name: string; color?: string | null }[];
   audienceSize: number;
   audienceLoading: boolean;
   refinements: BlastRefinements;
@@ -732,10 +949,24 @@ function PublicoStep({
   boardFilterChips: string[];
   manualCount: number;
 }) {
+  const isCarteira = contextKind === "carteira";
+  const sourceOptions = sourceOptionsFor(contextKind, primarySourceLabel);
+  const gridCols = sourceOptions.length === 2 ? "grid-cols-2" : "grid-cols-3";
+
   // The target is "chosen" when the active source has something to resolve.
   const sourceReady =
-    source === "estagio" ? !!stageKey : source === "filtro" ? boardFilterActive : manualCount > 0;
+    source === "estagio"
+      ? isCarteira
+        ? segments.length > 0
+        : !!stageKey
+      : source === "filtro"
+        ? isCarteira
+          ? true
+          : boardFilterActive
+        : manualCount > 0;
 
+  // Conditions narrow EVERY source except a hand-picked Manual set.
+  const showConditions = source !== "manual";
   // Refinements only make sense once there is an audience to narrow.
   const showRefinements = sourceReady;
 
@@ -746,8 +977,12 @@ function PublicoStep({
         <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Origem do público
         </Label>
-        <div className="grid grid-cols-3 gap-2.5" role="radiogroup" aria-label="Origem do público">
-          {SOURCE_OPTIONS.map((src) => {
+        <div
+          className={cn("grid gap-2.5", gridCols)}
+          role="radiogroup"
+          aria-label="Origem do público"
+        >
+          {sourceOptions.map((src) => {
             const selected = src.id === source;
             return (
               <button
@@ -778,61 +1013,83 @@ function PublicoStep({
       {/* Configuração por fonte */}
       {source === "estagio" && (
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="disparo-stage" className="text-sm">
-              Estágio do funil
-            </Label>
-            <Select value={stageKey} onValueChange={onStageKey} disabled={stagesLoading}>
-              <SelectTrigger id="disparo-stage">
-                <SelectValue placeholder={stagesLoading ? "Carregando etapas…" : "Selecione o estágio"} />
-              </SelectTrigger>
-              <SelectContent>
-                {stages.map((s) => (
-                  <SelectItem key={s.stage_key} value={s.stage_key}>
-                    <span className="flex items-center gap-2">
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: s.color ?? "hsl(var(--muted-foreground))" }}
-                      />
-                      {s.name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {isCarteira ? (
+            <SegmentPicker value={segments} onChange={onSegments} />
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="disparo-stage" className="text-sm">
+                  {primarySourceLabel} do funil
+                </Label>
+                <Select value={stageKey} onValueChange={onStageKey} disabled={stagesLoading}>
+                  <SelectTrigger id="disparo-stage">
+                    <SelectValue
+                      placeholder={stagesLoading ? "Carregando etapas…" : "Selecione o estágio"}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {stages.map((s) => (
+                      <SelectItem key={s.key} value={s.key}>
+                        <span className="flex items-center gap-2">
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: s.color ?? "hsl(var(--muted-foreground))" }}
+                          />
+                          {s.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="disparo-responsible" className="text-sm">
-              Responsável <span className="font-normal text-muted-foreground">(opcional)</span>
-            </Label>
-            <Select value={responsibleId} onValueChange={onResponsibleId}>
-              <SelectTrigger id="disparo-responsible">
-                <SelectValue placeholder="Todos os responsáveis" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os responsáveis</SelectItem>
-                {responsibleMembers.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Dispara só os leads atribuídos a este responsável no estágio escolhido.
-            </p>
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="disparo-responsible" className="text-sm">
+                  Responsável <span className="font-normal text-muted-foreground">(opcional)</span>
+                </Label>
+                <Select value={responsibleId} onValueChange={onResponsibleId}>
+                  <SelectTrigger id="disparo-responsible">
+                    <SelectValue placeholder="Todos os responsáveis" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os responsáveis</SelectItem>
+                    {responsibleMembers.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Dispara só os leads atribuídos a este responsável no estágio escolhido.
+                </p>
+              </div>
+            </>
+          )}
         </div>
       )}
 
-      {source === "filtro" && (
-        <FiltroSourcePanel active={boardFilterActive} chips={boardFilterChips} />
-      )}
+      {source === "filtro" &&
+        (isCarteira ? (
+          <CarteiraFiltroPanel />
+        ) : (
+          <FiltroSourcePanel active={boardFilterActive} chips={boardFilterChips} />
+        ))}
 
       {source === "manual" && <ManualSourcePanel count={manualCount} />}
 
-      {/* Refinos do público — comuns às três fontes */}
+      {/* Condições do público — narram tags/qualificação/origem (Phase 2a).
+          Comuns a todas as fontes exceto Manual (ids explícitos). */}
+      {showConditions && (
+        <AudienceConditionsControls
+          value={conditions}
+          onChange={onConditions}
+          tags={orgTags}
+          disabled={audienceLoading}
+        />
+      )}
+
+      {/* Refinos do público — comuns às fontes com público resolvível */}
       {showRefinements && (
         <BlastRefinementsControls
           value={refinements}
@@ -843,7 +1100,7 @@ function PublicoStep({
 
       {/* Contagem viva do público */}
       {!sourceReady ? (
-        <EmptyAudienceHint source={source} />
+        <EmptyAudienceHint source={source} contextKind={contextKind} />
       ) : audienceLoading ? (
         <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/30 px-4 py-3.5">
           <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary">
@@ -858,9 +1115,13 @@ function PublicoStep({
           </span>
           <span className="text-sm text-muted-foreground">
             {source === "estagio"
-              ? "Nenhum lead neste estágio — escolha outro"
+              ? isCarteira
+                ? "Nenhum cliente neste segmento com essas condições"
+                : "Nenhum lead neste estágio com essas condições"
               : source === "filtro"
-                ? "Nenhum lead bate com o filtro do funil"
+                ? isCarteira
+                  ? "Nenhum cliente bate com as condições"
+                  : "Nenhum lead bate com o filtro do funil"
                 : "Nenhum lead selecionado"}
           </span>
         </div>
@@ -877,11 +1138,78 @@ function PublicoStep({
   );
 }
 
+/** Carteira segment multi-select — chips for ouro/prata/novo/resgate/dormindo. */
+function SegmentPicker({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  function toggle(seg: string) {
+    onChange(value.includes(seg) ? value.filter((s) => s !== seg) : [...value, seg]);
+  }
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm">Segmento da carteira</Label>
+      <div className="flex flex-wrap gap-2">
+        {CARTEIRA_SEGMENT_OPTIONS.map((seg) => {
+          const selected = value.includes(seg.value);
+          return (
+            <button
+              key={seg.value}
+              type="button"
+              role="checkbox"
+              aria-checked={selected}
+              onClick={() => toggle(seg.value)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                selected
+                  ? "border-primary/60 bg-primary/[0.08] text-foreground"
+                  : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground",
+              )}
+            >
+              {selected && <Check className="h-3 w-3 text-primary" />}
+              {seg.label}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Dispara para clientes ativos nos segmentos escolhidos.
+      </p>
+    </div>
+  );
+}
+
+/** Carteira "filtro" panel — there's no funnel board; conditions do the work. */
+function CarteiraFiltroPanel() {
+  return (
+    <div className="flex items-start gap-2.5 rounded-lg border border-border/70 bg-muted/20 px-4 py-3">
+      <Info className="mt-px h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <p className="text-[12px] leading-snug text-muted-foreground">
+        Toda a carteira ativa, narrada apenas pelas{" "}
+        <span className="text-foreground">condições</span> abaixo (tag, qualificação, origem).
+      </p>
+    </div>
+  );
+}
+
 /** Empty-state hint shown before a source target is chosen — per-source copy. */
-function EmptyAudienceHint({ source }: { source: DisparoSource }) {
+function EmptyAudienceHint({
+  source,
+  contextKind,
+}: {
+  source: DisparoSource;
+  contextKind: DisparoContext["kind"];
+}) {
+  const isCarteira = contextKind === "carteira";
   const copy =
     source === "estagio"
-      ? "Escolha um estágio para ver o público"
+      ? isCarteira
+        ? "Escolha um segmento para ver o público"
+        : "Escolha um estágio para ver o público"
       : source === "filtro"
         ? "Ative um filtro no funil para usar esta fonte"
         : "Selecione leads no quadro para disparar manualmente";

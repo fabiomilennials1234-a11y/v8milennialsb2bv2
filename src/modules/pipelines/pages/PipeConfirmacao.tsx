@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { motion } from "framer-motion";
-import { Search, Plus, Calendar, LayoutGrid, List, BarChart3, Settings2, X } from "lucide-react";
+import { Search, Plus, Calendar, LayoutGrid, List, BarChart3, Settings2, X, Send } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,6 +57,7 @@ import { useTags } from "@/modules/leads/hooks/useTags";
 import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
+import { DisparoWizard, type DisparoBoardFilter, type DisparoSource } from "@/modules/pipelines/components/disparo";
 import { useSearchParams } from "react-router-dom";
 import { matchesResponsibleFilter } from "@/lib/kanban-filters";
 
@@ -249,6 +250,9 @@ function PipeConfirmacaoInner() {
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDisparoOpen, setIsDisparoOpen] = useState(false);
+  const [disparoSource, setDisparoSource] = useState<DisparoSource>("estagio");
+  const [disparoManualIds, setDisparoManualIds] = useState<string[]>([]);
   const [editingLead, setEditingLead] = useState<any>(null);
 
   // Reschedule modal state
@@ -343,6 +347,41 @@ function PipeConfirmacaoInner() {
     setSelectedResponsibleId("all");
     setFilterScheduled(false);
   }, [setOriginFilter, setTimeFilter, setUrgencyFilter, setSelectedStatuses, setSelectedTags, setSelectedResponsibleId]);
+
+  // Board filter handed to the Disparo "Filtro ativo" source. Mirrors EXACTLY
+  // the dimensions usePaginatedPipeline resolves server-side (search,
+  // responsible, tags) — origin/urgency/time/status/scheduled are page-only and
+  // deliberately excluded. Chips carry human labels (page owns the dictionaries).
+  const disparoBoardFilter: DisparoBoardFilter = useMemo(() => {
+    const chips: string[] = [];
+    const term = searchQuery.trim();
+    if (term) chips.push(`Busca: "${term}"`);
+    if (selectedResponsibleId && selectedResponsibleId !== "all") {
+      const member = responsibleMembers.find((m: any) => m.id === selectedResponsibleId);
+      chips.push(`Responsável: ${member?.name ?? "selecionado"}`);
+    }
+    if (selectedTags.length > 0) {
+      const names = selectedTags
+        .map((id) => orgTags.find((t: any) => t.id === id)?.name)
+        .filter(Boolean) as string[];
+      if (names.length > 0) chips.push(`Tags: ${names.join(", ")}`);
+    }
+    return { search: searchQuery, responsibleId: selectedResponsibleId, tagIds: selectedTags, chips };
+  }, [searchQuery, selectedResponsibleId, selectedTags, responsibleMembers, orgTags]);
+
+  // Header "Disparo" button opens the stage source.
+  const handleOpenDisparoStage = useCallback(() => {
+    setDisparoManualIds([]);
+    setDisparoSource("estagio");
+    setIsDisparoOpen(true);
+  }, []);
+
+  // Bulk-bar → Disparo (Manual): seed the selection and open in manual mode.
+  const handleDispararManual = useCallback((leadIds: string[]) => {
+    setDisparoManualIds(leadIds);
+    setDisparoSource("manual");
+    setIsDisparoOpen(true);
+  }, []);
 
   // Auto-update statuses based on meeting dates
   const autoUpdateStatuses = useCallback(async () => {
@@ -660,6 +699,15 @@ function PipeConfirmacaoInner() {
             <Settings2 className="w-4 h-4 mr-2" />
             Configurações
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-primary/30 text-foreground hover:border-primary/60 hover:bg-primary/5"
+            onClick={handleOpenDisparoStage}
+          >
+            <Send className="w-4 h-4 mr-2 text-primary" />
+            Disparo
+          </Button>
           <Button size="sm" className="gradient-gold" onClick={() => setIsMeetingModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Nova Reunião
@@ -865,8 +913,30 @@ function PipeConfirmacaoInner() {
         leadCount={stageToExport?.count ?? 0}
       />
 
-      {/* Bulk Action Bar */}
-      <BulkActionBar selectedIds={bulk.selectedIds} onClear={bulk.clearSelection} leadIds={allLeadIds} />
+      {/* Bulk Action Bar — "Disparar" opens the full Disparo wizard pre-seeded
+          with the selection (Manual source), instead of the in-bar QuickBlast. */}
+      <BulkActionBar
+        selectedIds={bulk.selectedIds}
+        onClear={bulk.clearSelection}
+        leadIds={allLeadIds}
+        onDisparar={(leadIds) => {
+          handleDispararManual(leadIds);
+          bulk.clearSelection();
+        }}
+      />
+
+      {/* Disparo Wizard (system funnel: confirmacao). Mounted only while open so
+          its audience-resolution queries never run in the background. */}
+      {isDisparoOpen && (
+        <DisparoWizard
+          open={isDisparoOpen}
+          onOpenChange={setIsDisparoOpen}
+          context={{ kind: "system", pipelineType: "confirmacao" }}
+          boardFilter={disparoBoardFilter}
+          initialSource={disparoSource}
+          initialManualLeadIds={disparoManualIds}
+        />
+      )}
 
       {/* Delete single lead from pipe */}
       <AlertDialog open={deleteDialog?.open} onOpenChange={(open) => !open && setDeleteDialog(null)}>
