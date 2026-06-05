@@ -80,6 +80,8 @@ Deno.serve(
       max_leads,
       scheduled_for,
       image_url,
+      exclude_blasted_within_days,
+      only_non_responders,
     } = body as {
       instance_id?: string;
       lead_ids?: string[];
@@ -89,6 +91,18 @@ Deno.serve(
       max_leads?: number;
       scheduled_for?: string;
       image_url?: string;
+      exclude_blasted_within_days?: number;
+      only_non_responders?: boolean;
+    };
+
+    // Blast Audience refinements (#704). Recency window must be a positive
+    // integer to engage; anything else leaves the refinement off (fail-safe).
+    const refinements = {
+      excludeBlastedWithinDays:
+        typeof exclude_blasted_within_days === "number" && exclude_blasted_within_days > 0
+          ? Math.floor(exclude_blasted_within_days)
+          : undefined,
+      onlyNonResponders: only_non_responders === true,
     };
 
     if (!instance_id || !Array.isArray(lead_ids) || lead_ids.length === 0 || !message) {
@@ -126,6 +140,7 @@ Deno.serve(
           maxLeads: max_leads,
           scheduledFor: scheduled_for,
           imageUrl: image_url,
+          refinements,
         },
       );
 
