@@ -310,6 +310,70 @@ async function persistMediaToStorage(
   }
 }
 
+/**
+ * Extracts the text of the quoted/replied-to message from a Uazapi inbound
+ * payload. A reply such as "esse é o valor" quoting a previous "500k" bubble is
+ * meaningless to the copilot without the quoted content — the lead is pointing
+ * at the earlier message. Dropping it makes the agent answer "o valor não
+ * carregou" because it received a reference with no referent.
+ *
+ * Uazapi forwards the underlying Baileys `contextInfo.quotedMessage`. The exact
+ * nesting has drifted across provider versions (schema incident 2026-05-14), so
+ * we probe every shape we've observed: flat V2, nested `message.*`, and the
+ * legacy top-level `contextInfo`. Returns null when there is no quote.
+ */
+export function extractQuotedText(data: any): string | null {
+  if (!data || typeof data !== "object") return null;
+
+  const ctx =
+    data.contextInfo ??
+    data.message?.contextInfo ??
+    data.message?.extendedTextMessage?.contextInfo ??
+    data.message?.imageMessage?.contextInfo ??
+    data.message?.videoMessage?.contextInfo ??
+    data.quoted?.contextInfo ??
+    null;
+
+  const q =
+    ctx?.quotedMessage ??
+    data.quotedMessage ??
+    data.quotedMsg ??
+    (data.quoted && typeof data.quoted === "object" ? data.quoted : null) ??
+    null;
+
+  // Some provider versions flatten the quoted text straight onto the payload.
+  if (!q) {
+    const flat =
+      data.quotedText ??
+      (typeof data.quoted === "string" ? data.quoted : null) ??
+      null;
+    return typeof flat === "string" && flat.trim() ? flat.trim() : null;
+  }
+
+  const text =
+    q.conversation ??
+    q.text ??
+    q.extendedTextMessage?.text ??
+    q.imageMessage?.caption ??
+    q.videoMessage?.caption ??
+    q.documentMessage?.caption ??
+    q.caption ??
+    null;
+
+  if (typeof text === "string" && text.trim()) return text.trim();
+
+  // Quoted a media message with no caption — surface a typed placeholder so the
+  // copilot knows the lead referenced something rather than nothing at all.
+  if (q.imageMessage) return "[imagem]";
+  if (q.videoMessage) return "[vídeo]";
+  if (q.audioMessage || q.pttMessage) return "[áudio]";
+  if (q.documentMessage) return "[documento]";
+  if (q.stickerMessage) return "[figurinha]";
+  if (q.locationMessage) return "[localização]";
+
+  return null;
+}
+
 function normalizeMessage(data: any, instance: ResolvedInstance) {
   const fromMe = data.fromMe === true || data.fromme === true;
   const direction = fromMe ? "outgoing" : "incoming";
@@ -423,6 +487,19 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     } else {
       content = "👤 Contato compartilhado";
     }
+  }
+
+  // Reply/quoted context: fold the quoted message into content so the copilot
+  // sees what the lead is pointing at. Without this, a reply like "esse é o
+  // valor" (quoting a "500k" bubble) reaches the LLM stripped of the value and
+  // the agent answers "o valor não carregou".
+  const quotedText = extractQuotedText(data);
+  if (quotedText) {
+    const quotedLabel =
+      quotedText.length > 280 ? `${quotedText.slice(0, 280)}…` : quotedText;
+    content = content
+      ? `[Em resposta a: "${quotedLabel}"]\n${content}`
+      : `[Em resposta a: "${quotedLabel}"]`;
   }
 
   const mediaUrl =

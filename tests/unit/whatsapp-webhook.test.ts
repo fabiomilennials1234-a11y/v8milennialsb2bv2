@@ -43,6 +43,7 @@ const {
   checkRateLimit,
   normalizeMessage,
   handleConnectionEvent,
+  extractQuotedText,
   rateLimitState,
   RATE_LIMIT_MAX,
   REPLAY_WINDOW_MS,
@@ -55,6 +56,7 @@ const {
     instance: { id: string; organization_id: string; instance_name: string },
     data: unknown,
   ) => Promise<void>;
+  extractQuotedText: (data: unknown) => string | null;
   rateLimitState: Map<string, unknown>;
   RATE_LIMIT_MAX: number;
   REPLAY_WINDOW_MS: number;
@@ -228,6 +230,113 @@ describe("normalizeMessage", () => {
   it("preserves raw_payload", () => {
     const data = { id: "m", fromMe: false, custom: "xyz" };
     expect(normalizeMessage(data, instance).raw_payload).toEqual(data);
+  });
+
+  // Regression: a reply ("esse é o valor" quoting "500k") used to reach the
+  // copilot stripped of the quoted content, so the agent answered "o valor não
+  // carregou". Fold the quoted text into content.
+  it("folds quoted text into content (flat V2 contextInfo shape)", () => {
+    const n = normalizeMessage(
+      {
+        id: "r1",
+        chatid: "5511@c.us",
+        fromMe: false,
+        type: "text",
+        text: "Esse é o valor",
+        contextInfo: { quotedMessage: { conversation: "500k" } },
+      },
+      instance
+    );
+    expect(n.message_type).toBe("text");
+    expect(n.content).toBe('[Em resposta a: "500k"]\nEsse é o valor');
+  });
+  it("folds quoted text into content (legacy nested message shape)", () => {
+    const n = normalizeMessage(
+      {
+        id: "r2",
+        chatid: "5511@c.us",
+        fromMe: false,
+        messageType: "conversation",
+        message: { conversation: "João Pessoa" },
+        contextInfo: {
+          quotedMessage: { conversation: "E você é de qual cidade?" },
+        },
+      },
+      instance
+    );
+    // No flat `text`, so body stays null but the quote is still surfaced.
+    expect(n.content).toBe('[Em resposta a: "E você é de qual cidade?"]');
+  });
+  it("uses quoted media caption, else a typed placeholder", () => {
+    const withCaption = normalizeMessage(
+      {
+        id: "r3",
+        chatid: "5511@c.us",
+        fromMe: false,
+        type: "text",
+        text: "esse aqui",
+        contextInfo: { quotedMessage: { imageMessage: { caption: "tabela" } } },
+      },
+      instance
+    );
+    expect(withCaption.content).toBe('[Em resposta a: "tabela"]\nesse aqui');
+
+    const noCaption = normalizeMessage(
+      {
+        id: "r4",
+        chatid: "5511@c.us",
+        fromMe: false,
+        type: "text",
+        text: "esse aqui",
+        contextInfo: { quotedMessage: { imageMessage: {} } },
+      },
+      instance
+    );
+    expect(noCaption.content).toBe('[Em resposta a: "[imagem]"]\nesse aqui');
+  });
+  it("leaves content untouched when there is no quote", () => {
+    const n = normalizeMessage(
+      { id: "n1", chatid: "5511@c.us", fromMe: false, type: "text", text: "oi" },
+      instance
+    );
+    expect(n.content).toBe("oi");
+  });
+});
+
+describe("extractQuotedText", () => {
+  it("reads flat contextInfo.quotedMessage.conversation", () => {
+    expect(
+      extractQuotedText({ contextInfo: { quotedMessage: { conversation: "500k" } } })
+    ).toBe("500k");
+  });
+  it("reads quoted extendedTextMessage.text", () => {
+    expect(
+      extractQuotedText({
+        contextInfo: { quotedMessage: { extendedTextMessage: { text: "oi" } } },
+      })
+    ).toBe("oi");
+  });
+  it("reads quoted nested under message.contextInfo", () => {
+    expect(
+      extractQuotedText({
+        message: { contextInfo: { quotedMessage: { conversation: "x" } } },
+      })
+    ).toBe("x");
+  });
+  it("falls back to a typed placeholder for captionless media", () => {
+    expect(
+      extractQuotedText({ contextInfo: { quotedMessage: { audioMessage: {} } } })
+    ).toBe("[áudio]");
+  });
+  it("returns null when there is no quote", () => {
+    expect(extractQuotedText({ text: "plain" })).toBeNull();
+    expect(extractQuotedText(null)).toBeNull();
+    expect(extractQuotedText("string")).toBeNull();
+  });
+  it("trims whitespace from quoted text", () => {
+    expect(
+      extractQuotedText({ contextInfo: { quotedMessage: { conversation: "  hey  " } } })
+    ).toBe("hey");
   });
 });
 
