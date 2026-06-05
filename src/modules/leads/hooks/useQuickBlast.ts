@@ -11,6 +11,16 @@ export interface QuickBlastInput {
   max_leads?: number;
   scheduled_for?: string;
   image_url?: string;
+  /**
+   * Blast Audience refinements (#704), applied server-side before dispatch.
+   * Omitted → no narrowing (backward compatible).
+   * - exclude_blasted_within_days: drop leads already blasted within N days
+   *   (contact recency; UI default 7). Must be a positive integer to engage.
+   * - only_non_responders: keep only "não respondeu" leads — zero inbound
+   *   since their most recent blast send.
+   */
+  exclude_blasted_within_days?: number;
+  only_non_responders?: boolean;
 }
 
 export interface QuickBlastResult {
@@ -18,7 +28,18 @@ export interface QuickBlastResult {
   sender_job_id: string;
   uazapi_sender_id: string;
   count: number;
-  skipped: { noPhone: number; duplicates: number; overCap: number };
+  /**
+   * Per-reason skip breakdown. `noPhone`/`duplicates`/`overCap` come from the
+   * dispatch engine; `alreadyContactedWithinWindow`/`replied` come from the
+   * Blast Audience refinements (0 when no refinement narrowed the set).
+   */
+  skipped: {
+    noPhone: number;
+    duplicates: number;
+    overCap: number;
+    alreadyContactedWithinWindow: number;
+    replied: number;
+  };
 }
 
 /**
