@@ -62,6 +62,8 @@ Rename físico = projeto separado (ver "Rename futuro" abaixo).
 
 | Função | Trigger | Auth |
 |--------|---------|------|
+| `blast-plan-create` | UI | JWT (no role gate, ADR-0003) |
+| `blast-plan-release` | pg_cron diário | x-cron-secret |
 | `history-sync-worker` | pg_cron | x-cron-secret |
 | `mass-send-control` | UI admin | JWT admin/master |
 | `mass-send-create` | UI admin | JWT admin/master |
