@@ -31,6 +31,7 @@ import { useQuickBlast, type QuickBlastResult } from "@/modules/leads";
 import { usePipelineStages } from "../../hooks/model/usePipelineStages";
 import { useStageLeadIds } from "../../hooks/model/useStageLeadIds";
 import { useFilteredLeadIds } from "../../hooks/model/useFilteredLeadIds";
+import { useResponsibleMembers } from "@/modules/identity";
 
 import { BlastBreakdown } from "./BlastBreakdown";
 import { BlastRefinementsControls } from "./BlastRefinementsControls";
@@ -112,6 +113,9 @@ export function DisparoWizard({
   // Step 1 — Público
   const [source, setSource] = useState<DisparoSource>(initialSource);
   const [stageKey, setStageKey] = useState<string>("");
+  // "all" = no responsible filter; a member id scopes the Estágio audience to
+  // that responsible's leads (resolved via get_filtered_lead_ids, #705 RPC).
+  const [responsibleId, setResponsibleId] = useState<string>("all");
   const [manualLeadIds, setManualLeadIds] = useState<string[]>(initialManualLeadIds ?? []);
   const [refinements, setRefinements] = useState<BlastRefinements>(DEFAULT_REFINEMENTS);
 
@@ -141,6 +145,7 @@ export function DisparoWizard({
   const [result, setResult] = useState<QuickBlastResult | null>(null);
 
   const { data: stages = [], isLoading: stagesLoading } = usePipelineStages("whatsapp");
+  const responsibleMembers = useResponsibleMembers();
   const { data: templates = [] } = useCampaignTemplates();
   const { data: instances = [] } = useWhatsAppInstances();
   const blast = useQuickBlast();
@@ -160,7 +165,8 @@ export function DisparoWizard({
   // Stage source — every lead in a stage.
   const { data: stageLeadIds, isLoading: stageLoading } = useStageLeadIds(
     "whatsapp",
-    source === "estagio" ? stageKey : "",
+    // Only the plain stage path; a responsible filter routes through the filtered RPC.
+    source === "estagio" && responsibleId === "all" ? stageKey : "",
   );
 
   // Filtro source — the board's live server-side filter, replayed across the
@@ -174,13 +180,17 @@ export function DisparoWizard({
           responsibleId: boardFilter?.responsibleId,
           tagIds: boardFilter?.tagIds,
         }
-      : {},
+      : source === "estagio" && !!stageKey && responsibleId !== "all"
+        ? { stageKey, responsibleId }
+        : {},
   );
 
   // Resolve the active source into a single candidate set + loading flag.
   const audienceLeadIds =
     source === "estagio"
-      ? stageLeadIds
+      ? responsibleId !== "all"
+        ? filteredLeadIds
+        : stageLeadIds
       : source === "filtro"
         ? boardFilterActive
           ? filteredLeadIds
@@ -189,7 +199,7 @@ export function DisparoWizard({
 
   const audienceLoading =
     source === "estagio"
-      ? stageLoading && !!stageKey
+      ? (responsibleId !== "all" ? filteredLoading : stageLoading) && !!stageKey
       : source === "filtro"
         ? boardFilterActive && filteredLoading
         : false;
@@ -253,6 +263,7 @@ export function DisparoWizard({
     setDirection(1);
     setSource(initialSource);
     setStageKey("");
+    setResponsibleId("all");
     setManualLeadIds(initialManualLeadIds ?? []);
     setRefinements(DEFAULT_REFINEMENTS);
     setTemplateId("");
@@ -396,6 +407,9 @@ export function DisparoWizard({
                   stagesLoading={stagesLoading}
                   stageKey={stageKey}
                   onStageKey={setStageKey}
+                  responsibleId={responsibleId}
+                  onResponsibleId={setResponsibleId}
+                  responsibleMembers={responsibleMembers}
                   audienceSize={audienceSize}
                   audienceLoading={audienceLoading}
                   refinements={refinements}
@@ -577,6 +591,9 @@ function PublicoStep({
   stagesLoading,
   stageKey,
   onStageKey,
+  responsibleId,
+  onResponsibleId,
+  responsibleMembers,
   audienceSize,
   audienceLoading,
   refinements,
@@ -593,6 +610,9 @@ function PublicoStep({
   stagesLoading: boolean;
   stageKey: string;
   onStageKey: (v: string) => void;
+  responsibleId: string;
+  onResponsibleId: (v: string) => void;
+  responsibleMembers: { id: string; name: string }[];
   audienceSize: number;
   audienceLoading: boolean;
   refinements: BlastRefinements;
@@ -648,28 +668,52 @@ function PublicoStep({
 
       {/* Configuração por fonte */}
       {source === "estagio" && (
-        <div className="space-y-2">
-          <Label htmlFor="disparo-stage" className="text-sm">
-            Estágio do funil
-          </Label>
-          <Select value={stageKey} onValueChange={onStageKey} disabled={stagesLoading}>
-            <SelectTrigger id="disparo-stage">
-              <SelectValue placeholder={stagesLoading ? "Carregando etapas…" : "Selecione o estágio"} />
-            </SelectTrigger>
-            <SelectContent>
-              {stages.map((s) => (
-                <SelectItem key={s.stage_key} value={s.stage_key}>
-                  <span className="flex items-center gap-2">
-                    <span
-                      className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: s.color ?? "hsl(var(--muted-foreground))" }}
-                    />
-                    {s.name}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="disparo-stage" className="text-sm">
+              Estágio do funil
+            </Label>
+            <Select value={stageKey} onValueChange={onStageKey} disabled={stagesLoading}>
+              <SelectTrigger id="disparo-stage">
+                <SelectValue placeholder={stagesLoading ? "Carregando etapas…" : "Selecione o estágio"} />
+              </SelectTrigger>
+              <SelectContent>
+                {stages.map((s) => (
+                  <SelectItem key={s.stage_key} value={s.stage_key}>
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: s.color ?? "hsl(var(--muted-foreground))" }}
+                      />
+                      {s.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="disparo-responsible" className="text-sm">
+              Responsável <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
+            <Select value={responsibleId} onValueChange={onResponsibleId}>
+              <SelectTrigger id="disparo-responsible">
+                <SelectValue placeholder="Todos os responsáveis" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os responsáveis</SelectItem>
+                {responsibleMembers.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Dispara só os leads atribuídos a este responsável no estágio escolhido.
+            </p>
+          </div>
         </div>
       )}
 
