@@ -26,6 +26,7 @@ import {
 } from "../_shared/google-calendar-utils.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { withSentry } from '../_shared/sentry.ts';
+import { isFeatureFlagEnabled } from "../_shared/feature-flags.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getPipeEntry, upsertPipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
 
@@ -261,9 +262,13 @@ async function processEvent(
     return;
   }
 
-  // Atualiza meet_link no pipeline_entries (confirmacao) se houver
+  // Atualiza meet_link na entry de reunião. Merge ON (ADR-0004): whatsapp:agendado.
   if (meetLink) {
-    const existing = await getPipeEntry(supabase, leadId, orgId, "confirmacao");
+    const useMergedFunnel = await isFeatureFlagEnabled(supabase, orgId, "merged_opportunity_funnel");
+    const mSlug: "whatsapp" | "confirmacao" = useMergedFunnel ? "whatsapp" : "confirmacao";
+    const mStage = useMergedFunnel ? "agendado" : "reuniao_marcada";
+
+    const existing = await getPipeEntry(supabase, leadId, orgId, mSlug);
     if (existing) {
       await updatePipeEntryById(supabase, existing.id, {
         metadata: { meet_link: meetLink },
@@ -272,9 +277,11 @@ async function processEvent(
       await upsertPipeEntry(supabase, {
         leadId,
         orgId,
-        slug: "confirmacao",
-        stageKey: "reuniao_marcada",
-        metadata: { meet_link: meetLink },
+        slug: mSlug,
+        stageKey: mStage,
+        metadata: useMergedFunnel
+          ? { meet_link: meetLink, confirmation_status: "pendente", is_confirmed: false }
+          : { meet_link: meetLink },
       });
     }
   }
