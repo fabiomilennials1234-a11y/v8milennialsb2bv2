@@ -10,6 +10,10 @@
  */
 export * from "./usePipelines";
 export * from "./usePipelineEntries";
+// Disambiguate: usePipelines.ts and usePipelineEntries.ts both export
+// `usePipelineEntries`. Public surface = slug-typed version (per module CLAUDE.md).
+// Explicit re-export overrides the ambiguous `export *` for dev (esbuild) parity.
+export { usePipelineEntries } from "./usePipelineEntries";
 export * from "./usePipelineStages";
 export * from "./useStageLeadIds";
 export * from "./useFilteredLeadIds";

@@ -78,10 +78,19 @@ export type {
   DeleteInstanceResult,
 } from "./hooks/useWhatsAppInstances";
 
-export { useWhatsAppInstanceAllowedMembers } from "./hooks/useWhatsAppInstanceAllowedMembers";
+export {
+  useAllowedMembersForInstance,
+  useCanReplyOnInstance,
+  useCanReplyOnInstanceByName,
+  useSetAllowedMembersForInstance,
+} from "./hooks/useWhatsAppInstanceAllowedMembers";
 export { usePreferredInstance } from "./hooks/usePreferredInstance";
 export { useUserWriteInstanceFlag } from "./hooks/useUserWriteInstanceFlag";
-export { useOrgWhatsAppMigration } from "./hooks/useOrgWhatsAppMigration";
+export {
+  useOrgMigrationStatus,
+  useSetMigrationStatus,
+  useSetProviderOverride,
+} from "./hooks/useOrgWhatsAppMigration";
 
 // ── Hooks: WhatsApp conversations (CRUD/archive/tags/funnel) ──────────────
 export {
@@ -98,8 +107,19 @@ export type {
   ConversationTagLink,
 } from "./hooks/useWhatsAppConversations";
 
-export { useWhatsAppFunnel } from "./hooks/useWhatsAppFunnel";
-export { useWhatsAppLeadIntegration } from "./hooks/useWhatsAppLeadIntegration";
+export {
+  useWhatsAppFunnelLeads,
+  useUpdateLeadFunnelStage,
+  groupLeadsByStage,
+  FUNNEL_STAGES,
+} from "./hooks/useWhatsAppFunnel";
+export {
+  useLeadByPhone,
+  usePipeWhatsappByLeadId,
+  useCreateLeadFromWhatsApp,
+  useLinkLeadToWhatsApp,
+  useUpdateLeadPipelineStatus,
+} from "./hooks/useWhatsAppLeadIntegration";
 
 // ── Hooks: composer state + chat bubble ──────────────────────────────────
 export { useConversationDraft } from "./hooks/useConversationDraft";
@@ -133,7 +153,14 @@ export type { MessageTemplate, MediaType } from "./hooks/useMessageTemplates";
 export { useIncomingMessageToast } from "./hooks/useIncomingMessageToast";
 
 // ── Hooks: Meta (Messenger / Instagram) ───────────────────────────────────
-export { useMetaConnection } from "./hooks/useMetaConnection";
+export {
+  useMetaConnections,
+  useMetaConnectionStatusByType,
+  useMetaConnectionStatus,
+  useConnectMeta,
+  useDisconnectMeta,
+  useToggleMetaPage,
+} from "./hooks/useMetaConnection";
 export { useMetaPages } from "./hooks/chat-meta/useMetaPages";
 export { useMetaConversations } from "./hooks/chat-meta/useMetaConversations";
 export { useMetaConversationProfile } from "./hooks/chat-meta/useMetaConversationProfile";
@@ -180,7 +207,7 @@ export { ChatSkeleton } from "./components/chat/ChatSkeleton";
 // ── Components: chat ancillary (banner, modal, schedule) ─────────────────
 export { ScheduledMessagesBanner } from "./components/chat/ScheduledMessagesBanner";
 export { ScheduleMessageModal } from "./components/chat/ScheduleMessageModal";
-export { ConversationNotes } from "./components/chat/ConversationNotes";
+export { default as ConversationNotes } from "./components/chat/ConversationNotes";
 export { LeadContactModal } from "./components/chat/LeadContactModal";
 export { HumanPauseBadge } from "./components/chat/HumanPauseBadge";
 export { ChannelBadge } from "./components/chat/ChannelBadge";
