@@ -62,6 +62,7 @@ interface ClientRow {
   lead_id: string | null;
   closer_id: string | null;
   name: string;
+  last_order_at: string | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -156,7 +157,14 @@ async function processClient(
     (a, b) => new Date(a.sold_at).getTime() - new Date(b.sold_at).getTime(),
   );
   const lastOrder = sorted.at(-1);
-  const lastOrderAt = lastOrder ? new Date(lastOrder.sold_at) : null;
+  // Carteira CSV imports seed `last_order_at` on the client without any order row
+  // (the sheet carries the purchase date but no value, and sale_value has a > 0
+  // CHECK). Fall back to that stored date when there are no orders so recency,
+  // days-since and reorder-overdue survive the nightly recompute instead of
+  // being zeroed back to null / 999.
+  const importedLastOrderAt =
+    !lastOrder && client.last_order_at ? new Date(client.last_order_at) : null;
+  const lastOrderAt = lastOrder ? new Date(lastOrder.sold_at) : importedLastOrderAt;
   const daysSinceLastOrder = lastOrderAt
     ? Math.round(daysBetween(lastOrderAt, now))
     : 999;
@@ -511,7 +519,7 @@ async function processOrg(
   while (true) {
     const { data: clients, error: clientsError } = await supabase
       .from("upsell_clients")
-      .select("id, organization_id, lead_id, closer_id, name")
+      .select("id, organization_id, lead_id, closer_id, name, last_order_at")
       .eq("organization_id", orgId)
       .eq("is_active", true)
       .range(offset, offset + BATCH_SIZE - 1);
