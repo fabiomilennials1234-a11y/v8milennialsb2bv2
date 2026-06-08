@@ -10,6 +10,7 @@ import {
   rateLimitedResponse
 } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { isFeatureFlagEnabled } from "../_shared/feature-flags.ts";
 import { upsertPipeEntry, getPipeEntry, deletePipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
 
 // Helper function to normalize email (lowercase, trim)
@@ -239,6 +240,12 @@ Deno.serve(withSentry('webhook-calcom', async (req) => {
       );
     }
 
+    // Merge Agendamentos→Oportunidades (ADR-0004): org com flag ON recebe a reunião
+    // no funil whatsapp em `agendado`; o funil de Oportunidades NÃO é mais removido.
+    const useMergedFunnel = await isFeatureFlagEnabled(supabase, targetOrganizationId, "merged_opportunity_funnel");
+    const mSlug: "whatsapp" | "confirmacao" = useMergedFunnel ? "whatsapp" : "confirmacao";
+    const mStage = useMergedFunnel ? "agendado" : "reuniao_marcada";
+
     // 1. First, try to find by email (case-insensitive)
     // SECURITY: Filter by organization_id
     if (normalizedEmail) {
@@ -348,22 +355,23 @@ Deno.serve(withSentry('webhook-calcom', async (req) => {
       // Use effective date - existing or new
       const effectiveMeetingDate = existingCompromissoDate || startTime;
 
-      // Create or update pipeline_entries(confirmacao) - with closer_id
-      const existingConfirmacao = await getPipeEntry(supabase, existingLead.id, targetOrganizationId, "confirmacao");
+      // Create or update the meeting entry (whatsapp:agendado quando merge ON, senão confirmacao)
+      const existingConfirmacao = await getPipeEntry(supabase, existingLead.id, targetOrganizationId, mSlug);
 
       if (existingConfirmacao) {
         const confirmacaoUpdates: { stageKey?: string; metadata?: Record<string, unknown>; assignedTo?: string | null } = {};
         const metaUpdates: Record<string, unknown> = {};
 
         if (!(existingConfirmacao.metadata as any)?.meeting_date) {
-          confirmacaoUpdates.stageKey = "reuniao_marcada";
+          confirmacaoUpdates.stageKey = mStage;
           metaUpdates.meeting_date = effectiveMeetingDate;
+          if (useMergedFunnel) { metaUpdates.confirmation_status = "pendente"; metaUpdates.is_confirmed = false; }
         }
 
         // Assign closer if found and not already set
         if (closerId && !(existingConfirmacao.metadata as any)?.closer_id) {
           metaUpdates.closer_id = closerId;
-          console.log("Assigning closer to existing pipeline_entries(confirmacao):", closerId);
+          console.log("Assigning closer to existing meeting entry:", closerId);
         }
 
         if (Object.keys(metaUpdates).length > 0) confirmacaoUpdates.metadata = metaUpdates;
@@ -373,26 +381,27 @@ Deno.serve(withSentry('webhook-calcom', async (req) => {
         }
       } else {
         const metadata: Record<string, unknown> = { meeting_date: effectiveMeetingDate };
+        if (useMergedFunnel) { metadata.confirmation_status = "pendente"; metadata.is_confirmed = false; }
         if (closerId) {
           metadata.closer_id = closerId;
-          console.log("Creating pipeline_entries(confirmacao) with closer:", closerId);
+          console.log("Creating meeting entry with closer:", closerId);
         }
 
         await upsertPipeEntry(supabase, {
           leadId: existingLead.id,
           orgId: targetOrganizationId,
-          slug: "confirmacao",
-          stageKey: "reuniao_marcada",
+          slug: mSlug,
+          stageKey: mStage,
           metadata,
           assignedTo: closerId,
         });
       }
 
-      // Check if lead is in pipeline_entries(propostas) with stage "compromisso_marcado"
-      // If so, keep in pipeline_entries(whatsapp) (exception rule)
+      // Com o merge OFF: o lead sai da qualificação (whatsapp) ao agendar. Com merge
+      // ON, whatsapp É o destino — não remove.
       const existingProposta = await getPipeEntry(supabase, existingLead.id, targetOrganizationId, "propostas");
 
-      if (!existingProposta || existingProposta.stage_key !== "compromisso_marcado") {
+      if (!useMergedFunnel && (!existingProposta || existingProposta.stage_key !== "compromisso_marcado")) {
         // Only remove from pipeline_entries(whatsapp) if NOT in compromisso_marcado
         const deleted = await deletePipeEntry(supabase, existingLead.id, targetOrganizationId, "whatsapp");
 
@@ -474,18 +483,19 @@ Deno.serve(withSentry('webhook-calcom', async (req) => {
       // Add "Cal" tag to new lead
       await addTagToLead(newLead.id, calTagId);
 
-      // Create pipeline_entries(confirmacao) with closer_id
+      // Create meeting entry (whatsapp:agendado quando merge ON, senão confirmacao)
       const confirmacaoMeta: Record<string, unknown> = { meeting_date: startTime };
+      if (useMergedFunnel) { confirmacaoMeta.confirmation_status = "pendente"; confirmacaoMeta.is_confirmed = false; }
       if (closerId) {
         confirmacaoMeta.closer_id = closerId;
-        console.log("Creating pipeline_entries(confirmacao) for new lead with closer:", closerId);
+        console.log("Creating meeting entry for new lead with closer:", closerId);
       }
 
       await upsertPipeEntry(supabase, {
         leadId: newLead.id,
         orgId: targetOrganizationId,
-        slug: "confirmacao",
-        stageKey: "reuniao_marcada",
+        slug: mSlug,
+        stageKey: mStage,
         metadata: confirmacaoMeta,
         assignedTo: closerId,
       });
