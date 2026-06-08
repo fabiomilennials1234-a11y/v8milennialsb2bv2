@@ -19,6 +19,7 @@ import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modu
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { useCanDo } from "@/modules/identity";
 import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanban/StageWorkflowsBadgeWrapper";
+import { MeetingConfirmationButton } from "@/modules/pipelines/components/kanban/MeetingConfirmationButton";
 import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import { useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/modules/pipelines/hooks/legacy/usePipeWhatsapp";
 import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
@@ -301,6 +302,11 @@ function PipeWhatsappInner() {
       metrics: metricsMap[item.lead_id],
       preSaleResponsible: preSale ? { name: preSale.name, avatar_url: preSale.avatar_url } : null,
       saleResponsible:    sale    ? { name: sale.name,    avatar_url: sale.avatar_url    } : null,
+      // ── Confirmação de reunião (funil mergeado — ADR-0004) ──
+      stageKey: item.status ?? item.stage_key ?? null,
+      meetingDate: item.meeting_date ?? item.metadata?.meeting_date ?? null,
+      confirmationStatus:
+        item.metadata?.confirmation_status ?? (item.is_confirmed ? "confirmado" : "pendente"),
     };
   };
 
@@ -729,6 +735,14 @@ function PipeWhatsappInner() {
             <LeadCard
               lead={card}
               variant="whatsapp"
+              extraActions={
+                <MeetingConfirmationButton
+                  entryId={card.id}
+                  stageKey={card.stageKey}
+                  meetingDate={card.meetingDate}
+                  confirmationStatus={card.confirmationStatus}
+                />
+              }
               selected={bulk.isSelected(card.leadId || "")}
               onSelect={(e) => {
                 const lid = card.leadId || "";
