@@ -43,7 +43,9 @@ export type FeatureKey =
   | "campaigns_prospeccao"
   | "campaigns_reativacao"
   | "message_templates"
-  | "customer_portfolio";
+  | "customer_portfolio"
+  // Rollout flags (per-org, not a plan feature)
+  | "merged_opportunity_funnel";
 
 export type LimitKey =
   | "max_leads"
@@ -117,6 +119,8 @@ export const FEATURES: FeatureMeta[] = [
   { key: "campaigns_indicacao", label: "Campanha de Indicação (legacy)", description: "Deprecated — use funnels_template_indicacao", icon: "Heart", category: "campaigns" },
   { key: "campaigns_prospeccao", label: "Campanha de Prospecção (legacy)", description: "Deprecated — use funnels_template_prospeccao", icon: "Target", category: "campaigns" },
   { key: "campaigns_reativacao", label: "Campanha de Reativação (legacy)", description: "Deprecated — use funnels_template_reativacao", icon: "RefreshCw", category: "campaigns" },
+  // Rollout flags
+  { key: "merged_opportunity_funnel", label: "Funil Oportunidades Consolidado", description: "Mergeia Agendamentos em Oportunidades — anexa etapas de reunião + confirmação por status (ADR-0004)", icon: "GitMerge", category: "advanced" },
 ];
 
 // ─── Limits Catalog ────────────────────────────────────────────

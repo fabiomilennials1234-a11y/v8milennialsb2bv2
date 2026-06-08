@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oportunidades — funil mergeado (mockup)</title>
+<style>
+  :root{
+    --bg:#0a0a0b; --panel:#121214; --panel-2:#171719; --border:#232327;
+    --border-soft:#1c1c1f; --text:#ededef; --text-dim:#a1a1aa; --text-faint:#6b6b73;
+    --gold:hsl(47 100% 50%); --gold-dim:hsl(47 70% 45%);
+    --pend:#52525b; --pre:#f59e0b; --conf:#22c55e; --danger:#ef4444; --info:#6366f1;
+    --radius:12px; --radius-sm:9px;
+    --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--text);font-family:var(--font);
+    font-feature-settings:"cv11","ss01";-webkit-font-smoothing:antialiased;
+    padding:28px 24px 60px;letter-spacing:-0.01em;
+  }
+  .top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:8px}
+  h1{font-size:19px;font-weight:600;letter-spacing:-0.02em}
+  h1 .merge{color:var(--text-faint);font-weight:400}
+  .sub{color:var(--text-dim);font-size:13px;margin-bottom:24px;max-width:760px;line-height:1.5}
+  .sub code{background:var(--panel-2);padding:1px 6px;border-radius:5px;font-size:12px;color:var(--gold-dim)}
+
+  /* board */
+  .board{display:flex;gap:14px;overflow-x:auto;padding-bottom:14px;align-items:flex-start}
+  .col{flex:0 0 252px;background:var(--panel);border:1px solid var(--border-soft);
+    border-radius:var(--radius);padding:10px 10px 14px}
+  .col-head{display:flex;align-items:center;gap:8px;padding:4px 4px 12px}
+  .col-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+  .col-title{font-size:12.5px;font-weight:600;letter-spacing:0.01em}
+  .col-count{margin-left:auto;font-size:11px;color:var(--text-faint);
+    background:var(--panel-2);padding:1px 7px;border-radius:20px}
+  .col.spot{position:relative}
+  .col.spot::after{content:'simplificado de Agendamentos';position:absolute;top:-9px;left:12px;
+    font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:var(--bg);
+    background:var(--gold);padding:2px 7px;border-radius:5px;font-weight:700}
+
+  /* card */
+  .card{background:var(--panel-2);border:1px solid var(--border);border-radius:var(--radius-sm);
+    padding:11px 11px 10px;margin-bottom:9px;position:relative;transition:.15s}
+  .card:hover{border-color:#2f2f35}
+  .card .name{font-size:13.5px;font-weight:600;margin-bottom:2px}
+  .card .co{font-size:11.5px;color:var(--text-dim);margin-bottom:9px}
+  .meta{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-faint);margin-bottom:9px}
+  .meta svg{width:12px;height:12px;opacity:.7}
+  .tags{display:flex;gap:5px;margin-bottom:9px;flex-wrap:wrap}
+  .tag{font-size:10px;padding:2px 7px;border-radius:5px;background:#1f1f23;color:var(--text-dim);border:1px solid var(--border)}
+  .tag.gold{color:var(--gold);border-color:rgba(255,200,0,.25);background:rgba(255,200,0,.06)}
+  .row{display:flex;align-items:center;gap:7px}
+  .avatars{display:flex;margin-left:auto}
+  .av{width:21px;height:21px;border-radius:50%;background:linear-gradient(135deg,#3f3f46,#27272a);
+    border:2px solid var(--panel-2);margin-left:-6px;font-size:9px;display:grid;place-items:center;color:var(--text-dim);font-weight:600}
+
+  /* confirm button — the signature feature */
+  .confirm-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:7px;
+    font-size:12px;font-weight:600;padding:8px;border-radius:7px;cursor:pointer;
+    border:1px solid;transition:.15s;font-family:var(--font);letter-spacing:-0.01em}
+  .confirm-btn .ic{width:13px;height:13px}
+  /* pendente */
+  .cb-pend{background:transparent;border-color:var(--border);color:var(--text-dim)}
+  .cb-pend:hover{border-color:var(--pre);color:var(--pre)}
+  /* pre-confirmado */
+  .cb-pre{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.4);color:var(--pre)}
+  /* confirmar (no dia) */
+  .cb-day{background:rgba(34,197,94,.10);border-color:rgba(34,197,94,.35);color:var(--conf);
+    box-shadow:0 0 0 1px rgba(34,197,94,.08)}
+  .cb-day:hover{background:rgba(34,197,94,.16)}
+  /* confirmado */
+  .cb-done{background:rgba(34,197,94,.16);border-color:rgba(34,197,94,.5);color:var(--conf);cursor:default}
+  /* sem data CTA */
+  .cb-nodate{background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.3);color:var(--pre);border-style:dashed}
+
+  /* state accent stripe on card */
+  .card.s-pre{border-left:2px solid var(--pre)}
+  .card.s-done{border-left:2px solid var(--conf)}
+  .card.s-day{border-left:2px solid var(--conf)}
+  .card.s-nodate{border-left:2px solid var(--pre)}
+
+  .daybadge{position:absolute;top:10px;right:10px;font-size:9px;font-weight:700;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--conf);background:rgba(34,197,94,.12);padding:2px 6px;border-radius:5px}
+
+  .secondary{width:100%;margin-top:7px;font-size:11px;color:var(--text-faint);background:transparent;
+    border:none;cursor:pointer;padding:5px;display:flex;align-items:center;justify-content:center;gap:5px}
+  .secondary:hover{color:var(--text-dim)}
+
+  /* legend */
+  .legend{margin-top:34px;border-top:1px solid var(--border-soft);padding-top:20px;
+    display:flex;gap:28px;flex-wrap:wrap}
+  .leg-group h3{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-faint);margin-bottom:11px;font-weight:600}
+  .leg-item{display:flex;align-items:center;gap:9px;margin-bottom:9px;font-size:12.5px;color:var(--text-dim)}
+  .swatch{width:26px;height:18px;border-radius:5px;border:1px solid;flex:0 0 auto}
+  .leg-item b{color:var(--text);font-weight:600}
+
+  /* modal */
+  .modal-wrap{margin-top:34px;display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+  .modal{flex:0 0 320px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
+  .modal h4{font-size:14px;font-weight:600;margin-bottom:4px}
+  .modal .mh-sub{font-size:11.5px;color:var(--text-faint);margin-bottom:16px}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:11px;color:var(--text-dim);margin-bottom:5px}
+  .field .inp{width:100%;background:var(--panel-2);border:1px solid var(--border);border-radius:7px;
+    padding:9px 11px;color:var(--text);font-size:13px;font-family:var(--font)}
+  .field .inp.ph{color:var(--text-faint)}
+  .modal-actions{display:flex;gap:8px;margin-top:18px}
+  .btn{flex:1;padding:9px;border-radius:7px;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid;font-family:var(--font)}
+  .btn-ghost{background:transparent;border-color:var(--border);color:var(--text-dim)}
+  .btn-gold{background:var(--gold);border-color:var(--gold);color:#000}
+
+  .note{flex:1;min-width:280px;font-size:12.5px;color:var(--text-dim);line-height:1.7}
+  .note h3{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--gold-dim);margin-bottom:10px;font-weight:600}
+  .note ul{list-style:none;padding:0}
+  .note li{padding-left:16px;position:relative;margin-bottom:7px}
+  .note li::before{content:'';position:absolute;left:0;top:8px;width:5px;height:5px;border-radius:50%;background:var(--gold-dim)}
+  .note code{background:var(--panel-2);padding:1px 5px;border-radius:4px;font-size:11px;color:var(--gold-dim)}
+</style>
+</head>
+<body>
+  <div class="top">
+    <h1>Oportunidades <span class="merge">· Agendamentos mergeado</span></h1>
+  </div>
+  <p class="sub">Mockup v1 — funil único de 8 colunas. As 6 etapas de confirmação (D-5…no-dia) viraram um <b>botão de status no card</b>. Confirmação = cor, não coluna. <code>Compareceu</code> empurra o lead pra Orçamentos automático. Perda real = ação "Marcar perdido" (loss reason), não coluna.</p>
+
+  <div class="board">
+
+    <!-- Novo -->
+    <div class="col">
+      <div class="col-head"><span class="col-dot" style="background:#64748b"></span><span class="col-title">Novo</span><span class="col-count">12</span></div>
+      <div class="card">
+        <div class="name">Marcos Antunes</div><div class="co">Distribuidora Norte</div>
+        <div class="tags"><span class="tag gold">Ouro</span><span class="tag">Meta Ads</span></div>
+        <div class="row"><span class="meta">há 2h</span><div class="avatars"><div class="av">JS</div></div></div>
+      </div>
+      <div class="card">
+        <div class="name">Carla Ramos</div><div class="co">Têxtil Sul</div>
+        <div class="tags"><span class="tag">Indicação</span></div>
+        <div class="row"><span class="meta">há 5h</span><div class="avatars"><div class="av">RP</div></div></div>
+      </div>
+    </div>
+
+    <!-- Abordado -->
+    <div class="col">
+      <div class="col-head"><span class="col-dot" style="background:#3b82f6"></span><span class="col-title">Abordado</span><span class="col-count">8</span></div>
+      <div class="card">
+        <div class="name">Pedro Galvão</div><div class="co">MetalForte Ind.</div>
+        <div class="tags"><span class="tag gold">Diamante</span></div>
+        <div class="row"><span class="meta">há 1d</span><div class="avatars"><div class="av">JS</div></div></div>
+      </div>
+    </div>
+
+    <!-- Respondeu -->
+    <div class="col">
+      <div class="col-head"><span class="col-dot" style="background:#06b6d4"></span><span class="col-title">Respondeu</span><span class="col-count">6</span></div>
+      <div class="card">
+        <div class="name">Luiza Fontes</div><div class="co">Embalagens BR</div>
+        <div class="tags"><span class="tag">Prata</span></div>
+        <div class="row"><span class="meta">há 3h</span><div class="avatars"><div class="av">RP</div><div class="av">MC</div></div></div>
+      </div>
+    </div>
+
+    <!-- Esfriou -->
+    <div class="col">
+      <div class="col-head"><span class="col-dot" style="background:#71717a"></span><span class="col-title">Esfriou</span><span class="col-count">4</span></div>
+      <div class="card" style="opacity:.7">
+        <div class="name">Roberto Lima</div><div class="co">AgroTech</div>
+        <div class="row"><span class="meta">há 9d sem resposta</span></div>
+      </div>
+    </div>
+
+    <!-- Agendado — the spotlight column -->
+    <div class="col spot">
+      <div class="col-head"><span class="col-dot" style="background:var(--info)"></span><span class="col-title">Agendado</span><span class="col-count">5</span></div>
+
+      <!-- pendente -->
+      <div class="card">
+        <div class="name">João Silva</div><div class="co">ACME Distribuição</div>
+        <div class="meta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          sex, 12/06 · 14:00
+        </div>
+        <button class="confirm-btn cb-pend">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+          Pré-confirmar
+        </button>
+      </div>
+
+      <!-- pré-confirmado -->
+      <div class="card s-pre">
+        <div class="name">Fernanda Costa</div><div class="co">Polímeros SA</div>
+        <div class="meta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          seg, 15/06 · 10:30
+        </div>
+        <button class="confirm-btn cb-pre">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+          Pré-confirmado
+        </button>
+      </div>
+
+      <!-- no dia: botão Confirmar -->
+      <div class="card s-day">
+        <span class="daybadge">hoje</span>
+        <div class="name">Ana Beatriz</div><div class="co">Nordeste Atacado</div>
+        <div class="meta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          hoje · 16:00
+        </div>
+        <button class="confirm-btn cb-day">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+          Confirmar
+        </button>
+      </div>
+
+      <!-- confirmado -->
+      <div class="card s-done">
+        <span class="daybadge">hoje</span>
+        <div class="name">Ricardo Mendes</div><div class="co">Construfer</div>
+        <div class="meta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          hoje · 11:00 · <span style="color:var(--conf)">confirmado</span>
+        </div>
+        <button class="confirm-btn cb-done">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>
+          Confirmado
+        </button>
+        <button class="secondary">→ Compareceu / Não compareceu</button>
+      </div>
+
+      <!-- sem data: CTA -->
+      <div class="card s-nodate">
+        <div class="name">Tiago Nunes</div><div class="co">VidroPlus</div>
+        <button class="confirm-btn cb-nodate">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Definir data
+        </button>
+      </div>
+    </div>
+
+    <!-- Remarcar -->
+    <div class="col spot">
+      <div class="col-head"><span class="col-dot" style="background:var(--pre)"></span><span class="col-title">Remarcar</span><span class="col-count">2</span></div>
+      <div class="card">
+        <div class="name">Gustavo Pires</div><div class="co">Hidráulica RS</div>
+        <div class="meta" style="color:var(--pre)">reunião furou · sem data nova</div>
+        <button class="confirm-btn cb-nodate">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          Nova data → Agendado
+        </button>
+      </div>
+    </div>
+
+    <!-- Compareceu -->
+    <div class="col spot">
+      <div class="col-head"><span class="col-dot" style="background:var(--conf)"></span><span class="col-title">Compareceu</span><span class="col-count">3</span></div>
+      <div class="card s-done">
+        <div class="name">Sandra Oliveira</div><div class="co">Cosméticos MG</div>
+        <div class="meta" style="color:var(--conf)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+          compareceu · 10/06
+        </div>
+        <div class="tags"><span class="tag" style="color:var(--info);border-color:rgba(99,102,241,.3)">→ em Orçamentos</span></div>
+      </div>
+    </div>
+
+    <!-- Não compareceu -->
+    <div class="col">
+      <div class="col-head"><span class="col-dot" style="background:var(--danger)"></span><span class="col-title">Não compareceu</span><span class="col-count">1</span></div>
+      <div class="card" style="border-left:2px solid var(--danger)">
+        <div class="name">Otávio Reis</div><div class="co">Ferragens União</div>
+        <div class="meta" style="color:var(--danger)">no-show · 09/06</div>
+        <button class="secondary" style="color:var(--pre)">↻ Remarcar</button>
+        <button class="secondary" style="color:var(--danger)">✕ Marcar perdido (motivo)</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend">
+    <div class="leg-group">
+      <h3>Estados do botão de confirmação</h3>
+      <div class="leg-item"><span class="swatch" style="background:transparent;border-color:var(--border)"></span><span><b>Pendente</b> — antes do dia, sem ação. "Pré-confirmar"</span></div>
+      <div class="leg-item"><span class="swatch" style="background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.4)"></span><span><b>Pré-confirmado</b> — âmbar. Lead sinalizou que vem</span></div>
+      <div class="leg-item"><span class="swatch" style="background:rgba(34,197,94,.10);border-color:rgba(34,197,94,.35)"></span><span><b>Confirmar (no dia)</b> — verde claro. Botão muda no dia da reunião</span></div>
+      <div class="leg-item"><span class="swatch" style="background:rgba(34,197,94,.16);border-color:rgba(34,197,94,.5)"></span><span><b>Confirmado</b> — verde sólido. Travado</span></div>
+      <div class="leg-item"><span class="swatch" style="background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.3);border-style:dashed"></span><span><b>Sem data</b> — tracejado. CTA "Definir data"</span></div>
+    </div>
+    <div class="leg-group">
+      <h3>Regras</h3>
+      <div class="leg-item">Botão só aparece em <b>Agendado</b></div>
+      <div class="leg-item">Label muda por <b>data-calendário</b> (fuso da org)</div>
+      <div class="leg-item"><b>Manual</b> no v1 — IA lembra, não pinta</div>
+      <div class="leg-item">Remarcar → nova data <b>reseta</b> p/ pendente</div>
+      <div class="leg-item">Compareceu → <b>auto-cria</b> em Orçamentos</div>
+    </div>
+  </div>
+
+  <!-- MODAL + nota -->
+  <div class="modal-wrap">
+    <div class="modal">
+      <h4>Definir data da reunião</h4>
+      <div class="mh-sub">João Silva · ACME Distribuição</div>
+      <div class="field"><label>Data</label><div class="inp">12/06/2026</div></div>
+      <div class="field"><label>Hora</label><div class="inp">14:00</div></div>
+      <div class="field"><label>Link da reunião <span style="color:var(--text-faint)">(opcional)</span></label><div class="inp ph">meet.google.com/…</div></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost">Cancelar</button>
+        <button class="btn btn-gold">Salvar</button>
+      </div>
+    </div>
+    <div class="note">
+      <h3>O que muda na prática</h3>
+      <ul>
+        <li>Some o board "Agendamentos" do menu. Tudo vive em <b>Oportunidades</b>.</li>
+        <li>As 6 colunas de lembrete (<code>confirmar_d5/d3/d2/d1</code>, <code>confirmacao_no_dia</code>) deixam de existir — viram <b>1 botão</b>.</li>
+        <li>O vendedor para de arrastar card entre 9 colunas todo dia. Ele <b>clica</b> e a cor conta a história.</li>
+        <li>Lembretes D-5/D-3/D-1 continuam (copilot Vendedor), mas <b>não</b> mexem na cor — humano confirma.</li>
+        <li><code>webhook-confirmacao</code> / Cal.com / Google Calendar passam a cair em <b>Agendado</b> do funil mergeado.</li>
+      </ul>
+    </div>
+  </div>
+
+</body>
+</html>

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { usePermanentCustomFunnels, useTemporaryFunnels } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { usePipelineDisplayConfig } from "@/modules/pipelines/hooks/config/usePipelineDisplayConfig";
 import { useOrganization } from "@/modules/identity";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { trackModuleVisit } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ const PIPE_COLOR_MAP: Record<string, string> = {
 export default function FunisHub() {
   const navigate = useNavigate();
   const { organizationId } = useOrganization();
+  const { hasFeature } = useOrgFeatures();
   const { data: displayConfigs = [], isLoading: configLoading } = usePipelineDisplayConfig();
   const { data: permanentFunnels = [], isLoading: permanentLoading } = usePermanentCustomFunnels();
   const { data: temporaryFunnels = [], isLoading: temporaryLoading } = useTemporaryFunnels();
@@ -62,8 +64,10 @@ export default function FunisHub() {
 
   const isLoading = configLoading || permanentLoading || temporaryLoading;
 
-  // Structural funnels — only visible ones
-  const visibleStructural = displayConfigs.filter((c) => c.is_visible);
+  // Structural funnels — only visible ones; Agendamentos some quando o merge está ON (ADR-0004)
+  const visibleStructural = displayConfigs.filter(
+    (c) => c.is_visible && !(c.pipe_type === "confirmacao" && hasFeature("merged_opportunity_funnel")),
+  );
 
   // Temporary funnels — active vs ended
   const activeTemporary = temporaryFunnels.filter((f) => f.status !== "ended");
