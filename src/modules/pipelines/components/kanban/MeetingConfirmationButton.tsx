@@ -28,6 +28,10 @@ export interface MeetingConfirmationButtonProps {
   stageKey?: string | null;
   meetingDate?: string | null;
   confirmationStatus?: ConfirmationStatus | null;
+  leadId?: string | null;
+  leadName?: string | null;
+  leadCompany?: string | null;
+  leadPhone?: string | null;
 }
 
 export function MeetingConfirmationButton({
@@ -35,6 +39,10 @@ export function MeetingConfirmationButton({
   stageKey,
   meetingDate,
   confirmationStatus,
+  leadId,
+  leadName,
+  leadCompany,
+  leadPhone,
 }: MeetingConfirmationButtonProps) {
   const { hasFeature } = useOrgFeatures();
   const setStatus = useSetConfirmationStatus();
@@ -64,7 +72,15 @@ export function MeetingConfirmationButton({
           <CalendarPlus className="w-3.5 h-3.5" />
           {btn.label}
         </button>
-        <SetMeetingDateModal open={dateModalOpen} onOpenChange={setDateModalOpen} entryId={entryId} />
+        <SetMeetingDateModal
+          open={dateModalOpen}
+          onOpenChange={setDateModalOpen}
+          entryId={entryId}
+          leadId={leadId}
+          leadName={leadName}
+          leadCompany={leadCompany}
+          leadPhone={leadPhone}
+        />
       </>
     );
   }

@@ -1,8 +1,9 @@
 /**
- * Modal leve para definir a data da reunião (ADR-0004, Slice 3).
+ * Modal para definir a data da reunião no funil mergeado (ADR-0004).
  *
- * Grava só meeting_date (+ link opcional) na entry do funil mergeado — NÃO cria
- * entry de confirmacao nem evento de calendário (diferente do AddMeetingModal legacy).
+ * Grava meeting_date (+ link opcional) na entry whatsapp:agendado E cria o evento
+ * no Google Calendar (quando o usuário tem calendário conectado) — paridade com
+ * o fluxo legacy de Agendamentos.
  */
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -14,14 +15,21 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useSetMeetingDate } from "../../hooks/model/useSetMeetingDate";
 import { useRescheduleMeeting } from "../../hooks/model/useMergedFunnelActions";
+import { useCreateMeetingEvent } from "../../hooks/model/useCreateMeetingEvent";
 
 export interface SetMeetingDateModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   entryId: string;
+  /** Dados do lead — pro evento de calendário. */
+  leadId?: string | null;
+  leadName?: string | null;
+  leadCompany?: string | null;
+  leadPhone?: string | null;
   /** "reschedule" volta o card pra `agendado` e reseta a confirmação. */
   variant?: "set" | "reschedule";
 }
@@ -34,23 +42,41 @@ function combine(day: Date, time: string): Date {
   return d;
 }
 
-export function SetMeetingDateModal({ open, onOpenChange, entryId, variant = "set" }: SetMeetingDateModalProps) {
+export function SetMeetingDateModal({
+  open, onOpenChange, entryId, leadId, leadName, leadCompany, leadPhone, variant = "set",
+}: SetMeetingDateModalProps) {
   const [day, setDay] = useState<Date | undefined>();
   const [time, setTime] = useState("10:00");
   const [link, setLink] = useState("");
   const setMeetingDate = useSetMeetingDate();
   const reschedule = useRescheduleMeeting();
-  const pending = setMeetingDate.isPending || reschedule.isPending;
+  const createEvent = useCreateMeetingEvent();
+  const pending = setMeetingDate.isPending || reschedule.isPending || createEvent.isPending;
+
+  // Cria o evento no Google Calendar (best-effort) após gravar a data.
+  const fireCalendar = (meetingDate: string) => {
+    if (!leadId || !leadName) return;
+    createEvent.mutate(
+      { leadId, leadName, leadCompany, leadPhone, meetingDateISO: meetingDate },
+      {
+        onSuccess: (r) => {
+          if (r?.meetLink) toast.success("Reunião criada no Google Calendar (link do Meet gerado).");
+          else if (createEvent.calendarConnected) toast.success("Evento criado no Google Calendar.");
+        },
+        onError: () => toast.warning("Data salva, mas falhou criar o evento no Google Calendar."),
+      },
+    );
+  };
 
   const save = () => {
     if (!day) return;
     const meetingDate = combine(day, time).toISOString();
     if (variant === "reschedule") {
-      reschedule.mutate({ entryId, meetingDate }, { onSuccess: () => onOpenChange(false) });
+      reschedule.mutate({ entryId, meetingDate }, { onSuccess: () => { fireCalendar(meetingDate); onOpenChange(false); } });
     } else {
       setMeetingDate.mutate(
         { entryId, meetingDate, meetLink: link.trim() || null },
-        { onSuccess: () => onOpenChange(false) },
+        { onSuccess: () => { fireCalendar(meetingDate); onOpenChange(false); } },
       );
     }
   };
