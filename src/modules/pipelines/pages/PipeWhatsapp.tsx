@@ -19,6 +19,8 @@ import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modu
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { useCanDo } from "@/modules/identity";
 import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanban/StageWorkflowsBadgeWrapper";
+import { MergedFunnelCardActions } from "@/modules/pipelines/components/kanban/MergedFunnelCardActions";
+import { supabase } from "@/integrations/supabase/client";
 import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import { useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/modules/pipelines/hooks/legacy/usePipeWhatsapp";
 import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
@@ -301,6 +303,11 @@ function PipeWhatsappInner() {
       metrics: metricsMap[item.lead_id],
       preSaleResponsible: preSale ? { name: preSale.name, avatar_url: preSale.avatar_url } : null,
       saleResponsible:    sale    ? { name: sale.name,    avatar_url: sale.avatar_url    } : null,
+      // ── Confirmação de reunião (funil mergeado — ADR-0004) ──
+      stageKey: item.status ?? item.stage_key ?? null,
+      meetingDate: item.meeting_date ?? item.metadata?.meeting_date ?? null,
+      confirmationStatus:
+        item.metadata?.confirmation_status ?? (item.is_confirmed ? "confirmado" : "pendente"),
     };
   };
 
@@ -333,6 +340,12 @@ function PipeWhatsappInner() {
     }
     return stagesToColumns(pipelineStages);
   }, [pipelineStages]);
+
+  // Stage final_negative da org — destino do "Marcar perdido" (funil mergeado).
+  const lostStageKey = useMemo(
+    () => pipelineStages.find((s) => s.is_final_negative)?.stage_key ?? null,
+    [pipelineStages],
+  );
 
   // Build columns from server-paginated stageData
   const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
@@ -464,11 +477,20 @@ function PipeWhatsappInner() {
         const targetPipeName = getPipelineTypeName(resolvedTargetPipe as any);
 
         if (resolvedTargetPipe === "propostas") {
-          await createPipeProposta.mutateAsync({
-            lead_id: item.lead_id,
-            closer_id: item.lead?.closer?.id || null,
-            status: targetStage,
-          });
+          // Idempotência: não duplicar entry em Orçamentos se o lead já estiver lá
+          // (ex: mover o card de volta pra Compareceu uma segunda vez).
+          const { data: existing } = await supabase
+            .from("pipe_propostas")
+            .select("id")
+            .eq("lead_id", item.lead_id)
+            .limit(1);
+          if (!existing || existing.length === 0) {
+            await createPipeProposta.mutateAsync({
+              lead_id: item.lead_id,
+              closer_id: item.lead?.closer?.id || null,
+              status: targetStage,
+            });
+          }
         }
 
         toast.success(`Lead movido para ${targetPipeName} automaticamente!`);
@@ -729,6 +751,16 @@ function PipeWhatsappInner() {
             <LeadCard
               lead={card}
               variant="whatsapp"
+              extraActions={
+                <MergedFunnelCardActions
+                  entryId={card.id}
+                  stageKey={card.stageKey}
+                  meetingDate={card.meetingDate}
+                  confirmationStatus={card.confirmationStatus}
+                  lostStageKey={lostStageKey}
+                  onMoveStage={(toStage) => handleStatusChange(card.id, toStage)}
+                />
+              }
               selected={bulk.isSelected(card.leadId || "")}
               onSelect={(e) => {
                 const lid = card.leadId || "";

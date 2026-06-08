@@ -257,6 +257,8 @@ export function TopNavigation() {
   // Build dynamic funnel sub-items from display config
   const dynamicFunisChildren: NavItem[] = (displayConfig ?? [])
     .filter((c) => c.is_visible)
+    // Agendamentos colapsado em Oportunidades quando o merge está ON (ADR-0004)
+    .filter((c) => !(c.pipe_type === "confirmacao" && hasFeature("merged_opportunity_funnel")))
     .sort((a, b) => a.position - b.position)
     .map((c) => ({
       label: c.display_name,

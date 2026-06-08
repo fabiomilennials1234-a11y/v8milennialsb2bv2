@@ -6,6 +6,8 @@ import { validateApiKey } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { isValidUUID, isValidISODate } from "../_shared/validation.ts";
 import { successResponse, errorResponse } from "../_shared/response.ts";
+import { isFeatureFlagEnabled } from "../_shared/feature-flags.ts";
+import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
 
 Deno.serve(withSentry('webhook-confirmacao', async (req) => {
   const origin = req.headers.get("origin");
@@ -78,7 +80,14 @@ Deno.serve(withSentry('webhook-confirmacao', async (req) => {
       return errorResponse(400, "Nome é obrigatório", corsHeaders, { req });
     }
 
-    // 1+2. Atomic lead + pipe_confirmacao creation via RPC (single transaction)
+    // Merge Agendamentos→Oportunidades (ADR-0004): orgs com a flag ON recebem o
+    // lead no funil whatsapp em `agendado` (não no confirmacao legacy).
+    const useMergedFunnel = await isFeatureFlagEnabled(supabase, organization_id, "merged_opportunity_funnel");
+
+    // 1+2. Atomic lead + pipe creation via RPC. Com o merge ON, cria só o lead
+    // (p_pipe_type null) e a entry de whatsapp:agendado é feita logo abaixo via
+    // upsertPipeEntry (preserva meeting_date no metadata — o branch whatsapp do
+    // RPC não grava meeting_date).
     const { data: result, error: rpcError } = await supabase.rpc('create_lead_with_pipe', {
       p_name: name,
       p_organization_id: organization_id,
@@ -102,24 +111,37 @@ Deno.serve(withSentry('webhook-confirmacao', async (req) => {
       p_utm_campaign: utm_campaign || null,
       p_utm_term: utm_term || null,
       p_utm_content: utm_content || null,
-      p_pipe_type: 'confirmacao',
-      p_pipe_status: 'reuniao_marcada',
+      p_pipe_type: useMergedFunnel ? null : 'confirmacao',
+      p_pipe_status: useMergedFunnel ? null : 'reuniao_marcada',
       p_pipe_meeting_date: meeting_date || null,
       p_pipe_responsible_id: closer_id || sdr_id || null,
     });
 
     if (rpcError) {
-      console.error("Error creating lead + pipe_confirmacao:", rpcError);
+      console.error("Error creating lead + pipe:", rpcError);
       return errorResponse(500, "Erro ao criar lead", corsHeaders, { req, details: rpcError.message });
     }
 
     const leadId = result.lead_id;
 
+    // Merge ON: cria a entry no funil de Oportunidades (whatsapp:agendado) com a
+    // data da reunião no metadata + confirmação pendente.
+    if (useMergedFunnel) {
+      await upsertPipeEntry(supabase, {
+        leadId,
+        orgId: organization_id,
+        slug: "whatsapp",
+        stageKey: "agendado",
+        metadata: { meeting_date: meeting_date || null, confirmation_status: "pendente", is_confirmed: false },
+        assignedTo: closer_id || sdr_id || null,
+      });
+    }
+
     // 3. Create history entry
     await supabase.from("lead_history").insert({
       lead_id: leadId,
       action: "Lead criado via integração (Confirmação)",
-      description: `Lead ${name} adicionado automaticamente no pipe de confirmação${meeting_date ? ` com reunião em ${meeting_date}` : ""}`,
+      description: `Lead ${name} adicionado automaticamente em ${useMergedFunnel ? "Oportunidades (Agendado)" : "Agendamentos"}${meeting_date ? ` com reunião em ${meeting_date}` : ""}`,
     });
 
     await logRuntime({
