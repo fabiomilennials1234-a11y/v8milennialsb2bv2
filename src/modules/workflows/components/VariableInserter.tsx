@@ -1,24 +1,48 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Search, ChevronDown, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { WORKFLOW_VARIABLES } from "@/types/workflow";
+import { WORKFLOW_VARIABLES, type WorkflowVariable } from "@/types/workflow";
+import { useTags, useLeadCustomFields } from "@/modules/leads";
 
 interface VariableInserterProps {
   /** Chamado ao clicar em um chip. Insere a variável no cursor do textarea. */
   onInsert: (variable: string) => void;
 }
 
-const CATEGORIES = Array.from(new Set(WORKFLOW_VARIABLES.map((v) => v.category)));
-
 export function VariableInserter({ onInsert }: VariableInserterProps) {
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
-    Personalizado: true,
     Sistema: true,
+    Tags: true,
+    "Campos Personalizados": true,
   });
 
-  const filtered = WORKFLOW_VARIABLES.filter(
+  const { data: tags } = useTags();
+  const { data: customFields } = useLeadCustomFields();
+
+  // Org-real Tags and Custom Fields become clickable chips, so the author picks
+  // the exact key instead of typing {{tag.X}} / {{custom.X}} by hand.
+  const variables = useMemo<WorkflowVariable[]>(() => {
+    const tagVars: WorkflowVariable[] = (tags || []).map((t) => ({
+      key: `{{tag.${t.name}}}`,
+      label: t.name,
+      category: "Tags",
+    }));
+    const customVars: WorkflowVariable[] = (customFields || []).map((f) => ({
+      key: `{{custom.${f.field_name}}}`,
+      label: f.field_name,
+      category: "Campos Personalizados",
+    }));
+    return [...WORKFLOW_VARIABLES, ...tagVars, ...customVars];
+  }, [tags, customFields]);
+
+  const CATEGORIES = useMemo(
+    () => Array.from(new Set(variables.map((v) => v.category))),
+    [variables],
+  );
+
+  const filtered = variables.filter(
     (v) =>
       !search ||
       v.label.toLowerCase().includes(search.toLowerCase()) ||

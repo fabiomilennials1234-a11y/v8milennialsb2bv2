@@ -292,5 +292,23 @@ export async function resolveVariables(
     }
   }
 
+  // Tags: {{tag.<name>}} → echoes the tag name if the Lead carries that tag, else "".
+  const tagMatches = result.match(/\{\{tag\.([^}]+)\}\}/g);
+  if (tagMatches) {
+    const { data: leadTags } = await supabase
+      .from("lead_tags")
+      .select("tags(name)")
+      .eq("lead_id", leadId);
+    const tagNames = new Set(
+      (leadTags || [])
+        .map((lt: { tags?: { name?: string } | null }) => lt.tags?.name)
+        .filter((n): n is string => Boolean(n)),
+    );
+    for (const match of tagMatches) {
+      const tagName = match.replace("{{tag.", "").replace("}}", "");
+      result = result.replaceAll(match, tagNames.has(tagName) ? tagName : "");
+    }
+  }
+
   return result;
 }
