@@ -70,13 +70,23 @@ export function resolveSituation(params: {
   enabled: EnabledSituation[];
   lead: SituationLeadState;
   now: Date;
+  /**
+   * When a cadence is already running, the Cadence Stepper owns timing — the
+   * resolver should only confirm the situation still structurally holds and
+   * skip the initial-trigger delay gate. Defaults to false (first touch).
+   */
+  ignoreDelay?: boolean;
 }): ResolveResult {
-  const { enabled, lead, now } = params;
+  const { enabled, lead, now, ignoreDelay = false } = params;
 
   const proposal = enabled.find((e) => e.situationId === "proposal_no_reply");
   if (proposal && lead.propostasStage === "enviada" && ourMessageWasLast(lead)) {
-    if (delayElapsed(lead.lastOutboundAt, proposal.delayHours, proposal.delayMinutes, now)) {
-      return { eligible: true, situationId: "proposal_no_reply", reason: "delay_elapsed" };
+    if (ignoreDelay || delayElapsed(lead.lastOutboundAt, proposal.delayHours, proposal.delayMinutes, now)) {
+      return {
+        eligible: true,
+        situationId: "proposal_no_reply",
+        reason: ignoreDelay ? "situation_holds" : "delay_elapsed",
+      };
     }
   }
 
