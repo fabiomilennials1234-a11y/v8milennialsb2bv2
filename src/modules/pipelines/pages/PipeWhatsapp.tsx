@@ -20,6 +20,7 @@ import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { useCanDo } from "@/modules/identity";
 import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanban/StageWorkflowsBadgeWrapper";
 import { MeetingConfirmationButton } from "@/modules/pipelines/components/kanban/MeetingConfirmationButton";
+import { supabase } from "@/integrations/supabase/client";
 import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import { useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/modules/pipelines/hooks/legacy/usePipeWhatsapp";
 import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
@@ -470,11 +471,20 @@ function PipeWhatsappInner() {
         const targetPipeName = getPipelineTypeName(resolvedTargetPipe as any);
 
         if (resolvedTargetPipe === "propostas") {
-          await createPipeProposta.mutateAsync({
-            lead_id: item.lead_id,
-            closer_id: item.lead?.closer?.id || null,
-            status: targetStage,
-          });
+          // Idempotência: não duplicar entry em Orçamentos se o lead já estiver lá
+          // (ex: mover o card de volta pra Compareceu uma segunda vez).
+          const { data: existing } = await supabase
+            .from("pipe_propostas")
+            .select("id")
+            .eq("lead_id", item.lead_id)
+            .limit(1);
+          if (!existing || existing.length === 0) {
+            await createPipeProposta.mutateAsync({
+              lead_id: item.lead_id,
+              closer_id: item.lead?.closer?.id || null,
+              status: targetStage,
+            });
+          }
         }
 
         toast.success(`Lead movido para ${targetPipeName} automaticamente!`);
