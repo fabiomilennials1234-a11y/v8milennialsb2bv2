@@ -40,6 +40,10 @@ Canonical terms used across the system. No implementation details here — this 
 
 - **Follow-up**: A scheduled future contact with a Lead. Can be manual, automated by Workflow, or scheduled by Copilot. Has cadence rules and expiration.
 
+- **Custom Field (Campo Personalizado)**: A per-Organization dynamic Lead attribute defined in `lead_custom_fields` (with a `field_type`: text/number/date/select/boolean). Its `field_name` is the human label — often phrased as a form question (e.g. "Qual o tipo do seu negócio?") — and doubles as the field's key. Per-Lead answers live in `lead_custom_field_values`. Referenced in message templates as `{{custom.<field_name>}}` (matched on exact `field_name`). Distinct from the Lead's built-in columns (name, company, …) and from a Tag (a label, not a key/value).
+
+- **Tag**: A free-form, N:N label attached to a Lead (`tags` + `lead_tags`), scoped to an Organization. A Lead can carry several. Distinct from **Qualification Tier** (a ranked enum, even when a tag happens to be named "Ouro") and from a **Custom Field** (a key/value attribute, not a label).
+
 ## Post-Sale
 
 - **Carteira (Customer Portfolio)**: Unified module for post-sale client management. Subsumes the legacy "Upsell" concept. Includes: client health scoring, segmentation (ouro/prata/novo/resgate/dormindo), reorder cycle prediction, churn probability, retention actions, and bulk operations. Backed by `upsell_clients` table.
@@ -73,6 +77,8 @@ Canonical terms used across the system. No implementation details here — this 
 ## Automation
 
 - **Action Handler**: A function that executes a specific domain operation (move_stage, send_whatsapp, update_lead, etc.). Registered in a handler map and dispatched by the Workflow engine or Copilot.
+
+- **Template Variable**: A `{{...}}` placeholder in an outbound message template, resolved per-Lead at send time by the Workflow message resolver. Three families: **built-in** (`{{nome}}`, `{{empresa}}`, `{{ai_resumo}}`, …) mapped to Lead/Pipeline/AI attributes; **Custom Field** (`{{custom.<field_name>}}`) → the Lead's answer for that field, empty if unanswered; **Tag** (`{{tag.<tag_name>}}`) → the tag name itself **if the Lead carries that tag, else empty** (a conditional echo, not a value lookup). All unresolved/absent values render as empty string (no fallback). The authoring UI offers a picker that lists the Organization's real Custom Fields and Tags so the author clicks instead of typing the key.
 
 - **Dead Letter Event**: A domain event that was emitted but had no handler, or whose handler failed/timed out. Stored for audit and manual resolution.
 
