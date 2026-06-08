@@ -23,6 +23,7 @@ import {
   BarChart2,
   Workflow,
   TrendingUp,
+  Wallet,
   Lock,
   Camera,
   Loader2,
@@ -130,6 +131,7 @@ const primaryNavItems: NavItemWithChildren[] = [
   { label: "Chat", icon: Zap, path: "/chat" },
   // { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
+  { label: "Carteira", icon: Wallet, path: "/upsell" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Ranking", icon: Trophy, path: "/performance" },
@@ -156,6 +158,7 @@ const allNavItems: NavItemWithChildren[] = [
   { label: "Chat", icon: Zap, path: "/chat" },
   // { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
+  { label: "Carteira", icon: Wallet, path: "/upsell" },
   { label: "Combustível", icon: Fuel, path: "/leads" },
   { label: "Negócios", icon: Briefcase, path: "/negocios" },
   { label: "Ranking", icon: Trophy, path: "/performance" },
@@ -178,7 +181,7 @@ const bottomNavItems: NavItem[] = [
   { label: "Pitstop", icon: Settings, path: "/configuracoes" },
 ];
 
-const FUNIS_PATHS = ["/pipe-whatsapp", "/pipe-confirmacao", "/pipe-propostas", "/upsell", "/funis", "/pipe/custom"] as const;
+const FUNIS_PATHS = ["/pipe-whatsapp", "/pipe-confirmacao", "/pipe-propostas", "/funis", "/pipe/custom"] as const;
 const TURBO_PATHS = ["/copilot", "/automacoes"] as const;
 
 const OUTBOUND_MEMBER_ALLOWED_PATHS = [
@@ -257,6 +260,8 @@ export function TopNavigation() {
   // Build dynamic funnel sub-items from display config
   const dynamicFunisChildren: NavItem[] = (displayConfig ?? [])
     .filter((c) => c.is_visible)
+    // Carteira (upsell) agora é item próprio na top bar — não entra no dropdown de Funis
+    .filter((c) => c.pipe_type !== "upsell")
     // Agendamentos colapsado em Oportunidades quando o merge está ON (ADR-0004)
     .filter((c) => !(c.pipe_type === "confirmacao" && hasFeature("merged_opportunity_funnel")))
     .sort((a, b) => a.position - b.position)
