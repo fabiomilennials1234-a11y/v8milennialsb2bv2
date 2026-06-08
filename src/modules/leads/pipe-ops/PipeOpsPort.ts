@@ -97,6 +97,18 @@ export interface RescheduleModalSlotProps {
   } | null;
 }
 
+/** Props do MergedMeetingEditor (slot — funil mergeado, ADR-0004). */
+export interface MergedMeetingEditorSlotProps {
+  /** pipeline_entries.id da entry whatsapp (agendado/remarcar/...). */
+  entryId: string;
+  leadId: string;
+  leadName?: string | null;
+  leadCompany?: string | null;
+  leadPhone?: string | null;
+  currentMeetingDate?: string | null;
+  locked?: boolean;
+}
+
 /**
  * Superfície completa de pipeline-ops que leads consome. Implementada por
  * `pipelines` (PipeOpsProvider) usando os hooks/components reais.
@@ -168,6 +180,7 @@ export interface PipeOpsPort {
 
   // ── Component slots (domínio pipelines, montados dentro de leads) ─────────
   RescheduleModal: ComponentType<RescheduleModalSlotProps>;
+  MergedMeetingEditor: ComponentType<MergedMeetingEditorSlotProps>;
 }
 
 export type { ReactNode };

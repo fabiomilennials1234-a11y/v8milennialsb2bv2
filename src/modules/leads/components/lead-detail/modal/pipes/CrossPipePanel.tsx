@@ -11,6 +11,7 @@ import {
   type StandardPipelineStatus,
 } from "../../../../hooks/useLeadAllPipelines";
 import { usePipeOps } from "../../../../pipe-ops";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { useLogLeadAction } from "../../../../hooks/useLogLeadAction";
 import { useLeadActionGates } from "../../hooks/useLeadActionGates";
 import { MeetingFieldBlock } from "../../cross-pipe/MeetingFieldBlock";
@@ -103,7 +104,8 @@ export const CrossPipePanel = memo(function CrossPipePanel({
   defaultExpandedPipeEntryId,
   userId,
 }: CrossPipePanelProps) {
-  const { usePipeConfirmacaoByLeadId, usePipePropostaByLeadId, useAddLeadToCustomPipe, useRemoveLeadFromCustomPipe } = usePipeOps();
+  const { usePipeConfirmacaoByLeadId, usePipePropostaByLeadId, useAddLeadToCustomPipe, useRemoveLeadFromCustomPipe, MergedMeetingEditor } = usePipeOps();
+  const { hasFeature } = useOrgFeatures();
   const { data: pipelines = [], isLoading } = useLeadAllPipelines(leadId);
   const { data: confirmacaoData } = usePipeConfirmacaoByLeadId(leadId);
   const { data: propostaData } = usePipePropostaByLeadId(leadId);
@@ -150,6 +152,14 @@ export const CrossPipePanel = memo(function CrossPipePanel({
 
   const hasConfirmacao = activeSystem.some((p) => p.pipeType === "confirmacao");
   const hasPropostas = activeSystem.some((p) => p.pipeType === "propostas");
+
+  // Funil mergeado (ADR-0004): a reunião vive na entry whatsapp (qualificacao)
+  // num stage de reunião. Habilita o editor de data dentro do modal.
+  const whatsappEntry = activeSystem.find((p) => p.pipeType === "qualificacao") as StandardPipelineStatus | undefined;
+  const mergedMeeting =
+    hasFeature("merged_opportunity_funnel") &&
+    !!whatsappEntry?.pipeId &&
+    ["agendado", "remarcar", "compareceu", "nao_compareceu"].includes(whatsappEntry?.currentStage ?? "");
 
   // ─── Expanded action state ──────────────────────────────────────────
   const key = storageKey(userId, leadId);
@@ -491,10 +501,10 @@ export const CrossPipePanel = memo(function CrossPipePanel({
       )}
 
       {/* Zone B — Action pills + panel */}
-      {(hasConfirmacao || hasPropostas) && (
+      {(hasConfirmacao || hasPropostas || mergedMeeting) && (
         <div className="space-y-2">
           <div className="flex items-center gap-2 flex-wrap" data-testid="action-pills-row">
-            {hasConfirmacao && (
+            {(hasConfirmacao || mergedMeeting) && (
               <ActionPill
                 type="meeting"
                 value={confirmacaoData?.meeting_date ?? null}
@@ -512,7 +522,18 @@ export const CrossPipePanel = memo(function CrossPipePanel({
             )}
           </div>
 
-          {expanded === "meeting" && confirmacaoEntry && (
+          {/* Merge ON: edita a reunião na entry whatsapp (+ cria evento no Calendar). */}
+          {expanded === "meeting" && mergedMeeting && whatsappEntry?.pipeId && (
+            <ActionPanel pipeLabel="Reunião" canRemove={false} onRemove={() => {}} isRemoving={false}>
+              <MergedMeetingEditor
+                entryId={whatsappEntry.pipeId}
+                leadId={leadId}
+                currentMeetingDate={null}
+                locked={!canMoveMeeting.allowed}
+              />
+            </ActionPanel>
+          )}
+          {expanded === "meeting" && !mergedMeeting && confirmacaoEntry && (
             <ActionPanel
               pipeLabel={confirmacaoEntry.label}
               canRemove={canRemoveFromPipe.allowed}
