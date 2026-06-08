@@ -49,6 +49,14 @@ const UPSELL_HEADER_ALIASES: Record<string, string> = {
   "primeira venda": "data_primeira_venda",
   "first sale": "data_primeira_venda",
   "data venda": "data_primeira_venda",
+  // última compra → grava em upsell_clients.last_order_at (sem order;
+  // sale_value tem CHECK > 0 e a planilha não traz valor). O cron
+  // calculate-portfolio-health preserva last_order_at quando há 0 orders.
+  "data ultima compra": "data_ultima_compra",
+  "data da ultima compra": "data_ultima_compra",
+  "ultima compra": "data_ultima_compra",
+  "last purchase": "data_ultima_compra",
+  "data ultima venda": "data_ultima_compra",
   // order-scope fields (customer_portfolio)
   produto: "produto",
   product: "produto",
@@ -92,6 +100,7 @@ const UPSELL_SYSTEM_FIELDS: { key: string; label: string; required?: boolean }[]
   { key: "phone", label: "Telefone" },
   { key: "potencial", label: "Potencial" },
   { key: "data_primeira_venda", label: "Data Primeira Venda" },
+  { key: "data_ultima_compra", label: "Data Última Compra" },
   { key: "vendedor", label: "Vendedor / Responsável" },
   { key: "stage", label: "Etapa" },
   { key: "faturamento", label: "Faturamento" },
@@ -537,11 +546,33 @@ export function ImportUpsellClientsContent({
             );
 
             const potencial = resolvePotencial(lead.potencial);
-            const firstSaleAt = parseDateValue(lead.data_primeira_venda);
+            // first_sale_at: usa primeira venda; cai pra última compra quando só esta existe.
+            const firstSaleAt = parseDateValue(lead.data_primeira_venda || lead.data_ultima_compra);
             const stageKey = resolveStageFromName(lead.stage, stagesList, effectiveDefaultStageKey);
 
             const baseStageKey = baseStages.find((s) => s.position === 0)?.stage_key || baseStages[0]?.stage_key || "0-3m";
             const tipoClienteTempo = pipeType === "upsell_base" ? stageKey : baseStageKey;
+
+            // Última compra → last_order_at direto (sem order). Quando presente,
+            // semeia recência/saúde iniciais; o cron calculate-portfolio-health
+            // (patchado) preserva e refina, pois esses clientes têm 0 orders.
+            const lastOrderAt = lead.data_ultima_compra ? parseDateValue(lead.data_ultima_compra) : null;
+            const REORDER_CYCLE_FALLBACK = 30;
+            const lastOrderFields = lastOrderAt
+              ? {
+                  last_order_at: lastOrderAt,
+                  days_since_last_order: Math.round(
+                    Math.abs(Date.now() - new Date(lastOrderAt).getTime()) / 86_400_000,
+                  ),
+                  reorder_cycle_days: REORDER_CYCLE_FALLBACK,
+                  next_order_expected: new Date(
+                    new Date(lastOrderAt).getTime() + REORDER_CYCLE_FALLBACK * 86_400_000,
+                  ).toISOString(),
+                  health_score: 70,
+                  health_status: "atencao",
+                  segment: "novo",
+                }
+              : {};
 
             const clientData = {
               organization_id: organizationId,
@@ -556,6 +587,7 @@ export function ImportUpsellClientsContent({
               sale_responsible_id: responsibleId,
               first_sale_at: firstSaleAt,
               tipo_cliente_tempo: tipoClienteTempo,
+              ...lastOrderFields,
               ...(pipeType === "upsell_gestao"
                 ? { gestao_stage: stageKey, gestao_manual_override: true }
                 : {}),
@@ -637,14 +669,22 @@ export function ImportUpsellClientsContent({
               .filter(Boolean)
               .join(", ");
 
+            // upsell_orders: client_id (não upsell_client_id), product_name/product_type/
+            // sale_value são NOT NULL e sale_value tem CHECK > 0. Sem valor positivo,
+            // não há order a criar (a recência já vem de last_order_at no cliente).
+            if (!(saleValue > 0)) {
+              continue;
+            }
+
             const { data: newOrder, error: orderError } = await supabase
               .from("upsell_orders")
               .insert({
                 organization_id: organizationId,
-                upsell_client_id: group.upsellClientId,
+                client_id: group.upsellClientId,
                 source: "csv_import",
-                sale_value: saleValue || null,
-                product_name: productNames || null,
+                sale_value: saleValue,
+                product_name: productNames || "Importação",
+                product_type: "unitario",
                 sold_at: soldAt,
               })
               .select("id")
