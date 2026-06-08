@@ -7,11 +7,13 @@
  *
  * Sem meeting_date → não renderiza (o CTA "Definir data" é a Slice 3).
  */
-import { Check, Clock } from "lucide-react";
+import { useState } from "react";
+import { Check, Clock, CalendarPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { resolveConfirmButton, type ConfirmationStatus } from "../../lib/confirmation-button";
 import { useSetConfirmationStatus } from "../../hooks/model/useSetConfirmationStatus";
+import { SetMeetingDateModal } from "./SetMeetingDateModal";
 
 const ORG_TZ = "America/Sao_Paulo"; // sem campo de tz por org ainda — default
 
@@ -36,16 +38,36 @@ export function MeetingConfirmationButton({
 }: MeetingConfirmationButtonProps) {
   const { hasFeature } = useOrgFeatures();
   const setStatus = useSetConfirmationStatus();
+  const [dateModalOpen, setDateModalOpen] = useState(false);
 
   if (!hasFeature("merged_opportunity_funnel") || stageKey !== "agendado") return null;
-  if (!meetingDate) return null; // CTA "Definir data" = Slice 3
 
   const btn = resolveConfirmButton({
-    meetingDate,
+    meetingDate: meetingDate ?? null,
     confirmationStatus: confirmationStatus ?? "pendente",
     now: new Date(),
     orgTz: ORG_TZ,
   });
+
+  // Sem data → CTA "Definir data" (abre modal). Slice 3.
+  if (btn.action === "definir_data") {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setDateModalOpen(true); }}
+          className={cn(
+            "w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border border-dashed text-xs font-semibold transition-colors",
+            "border-amber-500/40 text-amber-600 hover:bg-amber-500/8",
+          )}
+        >
+          <CalendarPlus className="w-3.5 h-3.5" />
+          {btn.label}
+        </button>
+        <SetMeetingDateModal open={dateModalOpen} onOpenChange={setDateModalOpen} entryId={entryId} />
+      </>
+    );
+  }
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
