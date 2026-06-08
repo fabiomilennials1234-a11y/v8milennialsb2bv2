@@ -19,7 +19,7 @@ import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modu
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { useCanDo } from "@/modules/identity";
 import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanban/StageWorkflowsBadgeWrapper";
-import { MeetingConfirmationButton } from "@/modules/pipelines/components/kanban/MeetingConfirmationButton";
+import { MergedFunnelCardActions } from "@/modules/pipelines/components/kanban/MergedFunnelCardActions";
 import { supabase } from "@/integrations/supabase/client";
 import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import { useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/modules/pipelines/hooks/legacy/usePipeWhatsapp";
@@ -341,6 +341,12 @@ function PipeWhatsappInner() {
     }
     return stagesToColumns(pipelineStages);
   }, [pipelineStages]);
+
+  // Stage final_negative da org — destino do "Marcar perdido" (funil mergeado).
+  const lostStageKey = useMemo(
+    () => pipelineStages.find((s) => s.is_final_negative)?.stage_key ?? null,
+    [pipelineStages],
+  );
 
   // Build columns from server-paginated stageData
   const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
@@ -763,11 +769,13 @@ function PipeWhatsappInner() {
               lead={card}
               variant="whatsapp"
               extraActions={
-                <MeetingConfirmationButton
+                <MergedFunnelCardActions
                   entryId={card.id}
                   stageKey={card.stageKey}
                   meetingDate={card.meetingDate}
                   confirmationStatus={card.confirmationStatus}
+                  lostStageKey={lostStageKey}
+                  onMoveStage={(toStage) => handleStatusChange(card.id, toStage)}
                 />
               }
               selected={bulk.isSelected(card.leadId || "")}
