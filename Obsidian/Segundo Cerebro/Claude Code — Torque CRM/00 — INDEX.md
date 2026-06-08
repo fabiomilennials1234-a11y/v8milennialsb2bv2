@@ -75,6 +75,7 @@ Org Milennials: `6030520a-2ca7-477d-be89-55758e2cd808`.
 - [[ADR-2026-05-15-consolidacao-subagentes]] — Consolidação 10→3 subagentes do harness Claude Code
 - [ADR-2026-05-25 — Meta Chat canal separado](04%20—%20Decisões/ADR-2026-05-25-meta-chat-canal-separado.md)
 - [ADR-2026-05-26 — Modularização monolito modular](04%20—%20Decisões/ADR-2026-05-26-modularizacao-monolito-modular.md)
+- [ADR-2026-06-08 — Disparo fallback instância conectada](04%20—%20Decisões/ADR-2026-06-08-disparo-fallback-instancia-conectada.md) — vínculo responsável→instância vira preferência, não gate (trade-off LGPD)
 
 ### 06 — Features
 

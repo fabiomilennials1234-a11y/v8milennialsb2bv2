@@ -305,3 +305,35 @@ PROD intocada por design. Aplicação em PROD requer autorização explícita do
 5. **Atribuição de owners em instâncias PROD**: usar [InstanceOwnerModal](../../../src/components/chat/admin/InstanceOwnerModal.tsx) ou backfill SQL §2 do toolkit.
 6. **UI viewer para `whatsapp_instance_owner_history`**: tabela existe, viewer não. Útil para auditoria visual.
 7. **Bypass "assumir conversa"** para outro user: fluxo separado, futuro.
+
+---
+
+## 13. Hotfix 2026-06-08 — vínculo vira PREFERÊNCIA (fallback connected)
+
+**Branch:** `hotfix/dispatch-fallback-connected-instance` (de `main`).
+
+### Correção de fato (doc §11 estava desatualizado)
+
+Apesar do §11 afirmar "PROD intocada", a flag `user_write_instance_strict` estava **ON em PROD para a org Milennials** (`6030520a-2ca7-477d-be89-55758e2cd808`, override em `organization_features.enabled = true`, confirmado por leitura read-only da Management API em 2026-06-08). A Migration A foi aplicada em PROD em algum momento após este doc. **Esta seção é a fonte de verdade; §11 ficou histórico.**
+
+### Sintoma
+
+Com a flag ON, **todo disparo de lead sem responsável era bloqueado**: o resolver estrito lançava sem fallback (`NO_RESPONSIBLE`/`NO_INSTANCE`/`INSTANCE_INACTIVE`). Afetava copilot outbound, followups, send-document, message-gateway e as regras de disparo. Percepção do CTO: "o botão de disparo só funciona se o lead tiver responsável".
+
+### Decisão (CTO)
+
+O vínculo responsável→instância passa a ser **preferência, não gate**. Quando o vínculo não resolve uma instância usável, o disparo **cai para a primeira instância CONECTADA da org** em vez de falhar. Só `LEAD_NOT_FOUND` (lead inexistente) permanece erro.
+
+### Implementação (camada TS, sem migration)
+
+- `supabase/functions/_shared/whatsapp-dispatch.ts` — `resolveDispatchContext`: soft codes → fallback `resolveInstance(org, { requireConnected: true })`. Quando há instância do responsável conectada, ela é mantida (preferência).
+- `supabase/functions/_shared/instance-write-guard.ts` — `resolveStrictInstanceForCaller`: soft codes → devolve `null` (caller usa precedência legada); só `LEAD_NOT_FOUND` lança. Os 4 callers (whatsapp-helpers, process-scheduled-user-messages, pipe-rule-dispatch, campaign-rule-dispatch) já tratavam o erro com fallback — comportamento preservado.
+- RPC `get_lead_write_instance` e a flag **inalterados** — o vínculo per-user continua válido como preferência.
+
+### Trade-off
+
+Relaxa o isolamento per-user (LGPD) que a feature impunha: leads sem responsável passam a sair por instância compartilhada. Decisão explícita do CTO — ver `04 — Decisões/ADR-2026-06-08-disparo-fallback-instancia-conectada.md`.
+
+### Cobertura
+
+`tests/integration/instance-write-guard.test.ts` estendido (27 testes, 11 novos): fallback por soft code, preferência mantida no sucesso, `LEAD_NOT_FOUND` propaga, org sem instância conectada → `no_instance`.

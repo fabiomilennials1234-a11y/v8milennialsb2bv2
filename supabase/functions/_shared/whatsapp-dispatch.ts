@@ -16,11 +16,18 @@
  *
  * ─── Bifurcação por flag user_write_instance_strict (Etapa B) ───────────────
  * Quando o caller informa `lead_id` E a flag está ATIVA na organização,
- * `resolveDispatchContext` resolve a instância via instance-write-guard
- * (vínculo responsável→instância). Em caso de erro propaga
- * `DispatchResolutionError` com code `lead_no_instance` etc — NÃO faz fallback
- * para a primeira instância da org. Quando a flag está OFF ou `lead_id` é
- * omitido, o comportamento legado é preservado byte-a-byte.
+ * `resolveDispatchContext` PREFERE a instância vinculada ao responsável do lead
+ * (instance-write-guard). Mas o vínculo é apenas uma PREFERÊNCIA: quando ele não
+ * resolve uma instância usável — lead sem responsável (NO_RESPONSIBLE),
+ * responsável sem instância (NO_INSTANCE) ou instância do responsável inativa
+ * (INSTANCE_INACTIVE) — o envio NÃO falha; cai para a primeira instância
+ * CONECTADA da org (fallback). Só LEAD_NOT_FOUND (o lead nem existe) permanece
+ * erro real. Quando a flag está OFF ou `lead_id` é omitido, o comportamento
+ * legado é preservado byte-a-byte.
+ *
+ * Hotfix 2026-06-08: antes o caminho estrito LANÇAVA sem fallback, bloqueando
+ * todo disparo de lead sem responsável. Decisão do CTO: disparo sempre possível
+ * pela instância conectada da org. Trade-off LGPD em `04 — Decisões`.
  */
 
 import {
@@ -143,9 +150,11 @@ export async function resolveInstance(
  *
  * Strict-write flag (Etapa B):
  *   - Quando `lead_id` é informado E feature flag `user_write_instance_strict`
- *     está ON na org, resolve a instância via responsible_user_id (RPC
- *     get_lead_write_instance). Erros NÃO caem para a primeira instância da
- *     org; propagam como DispatchResolutionError com code específico.
+ *     está ON na org, PREFERE a instância via responsible_user_id (RPC
+ *     get_lead_write_instance). Falhas "soft" do vínculo (NO_RESPONSIBLE,
+ *     NO_INSTANCE, INSTANCE_INACTIVE) caem para a primeira instância CONECTADA
+ *     da org — o disparo nunca depende de haver responsável. Só LEAD_NOT_FOUND
+ *     propaga como DispatchResolutionError("lead_not_found").
  *   - Quando flag OFF ou `lead_id` ausente, comportamento legado: precedência
  *     `preferred_instance_id` → primeira instância da org (filtro
  *     status=open|connected quando require_connected=true).
@@ -172,39 +181,60 @@ export async function resolveDispatchContext(
   }
 
   let instance: WhatsAppInstance | null = null;
+  // True quando o vínculo estrito foi tentado mas não rendeu instância usável
+  // (soft fail) — sinaliza ao fallback legado que deve exigir CONECTADA.
+  let strictFellBack = false;
 
   // ── Caminho ESTRITO: flag ON e lead_id presente ─────────────────────────
+  // O vínculo responsável→instância é PREFERÊNCIA, não gate. Soft fails caem
+  // para a instância conectada da org; só LEAD_NOT_FOUND é erro real.
   if (input.lead_id) {
     const strict = await isStrictWriteEnabled(supabaseAdmin, input.organization_id);
     if (strict) {
       const result = await resolveLeadWriteInstance(supabaseAdmin, input.lead_id);
-      if (!result.ok || !result.instance) {
+      if (result.ok && result.instance) {
+        // Carrega o row completo de whatsapp_instances (provider precisa de tudo)
+        const { data: full } = await supabaseAdmin
+          .from("whatsapp_instances")
+          .select("*")
+          .eq("id", result.instance.instanceId)
+          .maybeSingle();
+        if (full) {
+          instance = full as WhatsAppInstance;
+        } else {
+          // Resolveu mas não carregou → trata como soft, cai pro fallback.
+          strictFellBack = true;
+          console.warn(
+            "[whatsapp-dispatch] strict_write_fallback lead=%s code=NO_INSTANCE_LOAD — usando instância conectada da org",
+            input.lead_id,
+          );
+        }
+      } else if (result.errorCode === "LEAD_NOT_FOUND") {
+        // Hard: o lead nem existe — propaga.
         throw new DispatchResolutionError(
           mapWriteGuardError(result.errorCode),
-          `Strict write failed: ${result.errorCode ?? "unknown"}`,
+          `Strict write failed: ${result.errorCode}`,
+        );
+      } else {
+        // Soft (NO_RESPONSIBLE | NO_INSTANCE | INSTANCE_INACTIVE) → fallback.
+        strictFellBack = true;
+        console.warn(
+          "[whatsapp-dispatch] strict_write_fallback lead=%s code=%s — usando instância conectada da org",
+          input.lead_id,
+          result.errorCode ?? "unknown",
         );
       }
-      // Carrega o row completo de whatsapp_instances (provider precisa de tudo)
-      const { data: full } = await supabaseAdmin
-        .from("whatsapp_instances")
-        .select("*")
-        .eq("id", result.instance.instanceId)
-        .maybeSingle();
-      if (!full) {
-        throw new DispatchResolutionError(
-          "lead_no_instance",
-          "Strict write resolved instance not loadable",
-        );
-      }
-      instance = full as WhatsAppInstance;
     }
   }
 
-  // ── Caminho LEGADO: flag OFF ou lead_id ausente ─────────────────────────
+  // ── Caminho LEGADO / FALLBACK ───────────────────────────────────────────
+  // flag OFF, lead_id ausente, OU soft fail do strict-write. No fallback do
+  // strict-write forçamos requireConnected (o CTO quer a instância CONECTADA);
+  // caso contrário honramos o flag do caller (comportamento legado byte-a-byte).
   if (!instance) {
     instance = await resolveInstance(supabaseAdmin, input.organization_id, {
       preferredInstanceId: input.preferred_instance_id,
-      requireConnected: input.require_connected,
+      requireConnected: strictFellBack ? true : input.require_connected,
     });
   }
 

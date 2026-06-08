@@ -63,8 +63,10 @@ export class WriteAuthorizationError extends Error {
 }
 
 /**
- * Erro propagado por callers de envio quando a flag está ON e nenhuma
- * instância pôde ser resolvida pelo vínculo do responsável (sem fallback).
+ * Erro propagado SOMENTE quando o lead nem existe (LEAD_NOT_FOUND) durante a
+ * resolução estrita. Falhas "soft" do vínculo (NO_RESPONSIBLE, NO_INSTANCE,
+ * INSTANCE_INACTIVE) NÃO lançam — `resolveStrictInstanceForCaller` devolve
+ * `null` e o caller cai para a precedência legada (instância conectada da org).
  */
 export class StrictWriteResolutionError extends Error {
   override readonly name = "StrictWriteResolutionError";
@@ -82,12 +84,22 @@ export class StrictWriteResolutionError extends Error {
  * workflow-action-handler, process-scheduled-user-messages).
  *
  * Quando a flag user_write_instance_strict está ON na org E `leadId` é
- * informado, tenta resolver pelo vínculo do responsável e devolve a row
- * canônica de whatsapp_instances (ou lança StrictWriteResolutionError).
+ * informado, PREFERE a instância vinculada ao responsável e devolve a row
+ * canônica de whatsapp_instances.
  *
- * Quando flag OFF ou `leadId` ausente, devolve `null` e o caller segue com
- * sua precedência legada — ZERO mudança comportamental.
+ * Contrato de fallback (hotfix 2026-06-08): o vínculo é preferência, não gate.
+ *   - Soft fails (NO_RESPONSIBLE, NO_INSTANCE, INSTANCE_INACTIVE) → devolve
+ *     `null`; o caller cai para sua precedência legada (instância conectada da
+ *     org). O disparo nunca depende de haver responsável.
+ *   - LEAD_NOT_FOUND (o lead nem existe) → lança StrictWriteResolutionError.
+ *   - Flag OFF ou `leadId` ausente → `null` (ZERO mudança comportamental).
  */
+const SOFT_FALLBACK_CODES: ReadonlySet<WriteInstanceErrorCode> = new Set([
+  "NO_RESPONSIBLE",
+  "NO_INSTANCE",
+  "INSTANCE_INACTIVE",
+]);
+
 export async function resolveStrictInstanceForCaller(
   client: SupabaseClient,
   organizationId: string,
@@ -99,10 +111,17 @@ export async function resolveStrictInstanceForCaller(
 
   const result = await resolveLeadWriteInstance(client, leadId);
   if (!result.ok || !result.instance) {
-    throw new StrictWriteResolutionError(
-      result.errorCode ?? "NO_INSTANCE",
-      leadId,
-    );
+    const code = result.errorCode ?? "NO_INSTANCE";
+    if (SOFT_FALLBACK_CODES.has(code)) {
+      console.warn(
+        "[InstanceWriteGuard] strict_write_fallback lead=%s code=%s — caller usa instância conectada da org",
+        leadId,
+        code,
+      );
+      return null;
+    }
+    // LEAD_NOT_FOUND (hard) — propaga.
+    throw new StrictWriteResolutionError(code, leadId);
   }
 
   const { data: full, error } = await client
@@ -112,7 +131,12 @@ export async function resolveStrictInstanceForCaller(
     .maybeSingle();
 
   if (error || !full) {
-    throw new StrictWriteResolutionError("NO_INSTANCE", leadId);
+    // Resolveu pelo vínculo mas não carregou a row → soft, cai pro fallback.
+    console.warn(
+      "[InstanceWriteGuard] strict_write_fallback lead=%s code=NO_INSTANCE_LOAD — caller usa instância conectada da org",
+      leadId,
+    );
+    return null;
   }
 
   return full as Record<string, unknown>;
