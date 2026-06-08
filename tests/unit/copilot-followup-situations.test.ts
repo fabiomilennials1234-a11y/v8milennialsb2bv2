@@ -92,4 +92,32 @@ describe("resolveSituation — proposal_no_reply", () => {
 
     expect(result.eligible).toBe(false);
   });
+
+  // RED→GREEN 6 — ignoreDelay: once a cadence is running, the Stepper owns
+  // timing; the resolver only confirms the situation still structurally holds.
+  it("is eligible with ignoreDelay even before the initial delay elapses", () => {
+    const lead: SituationLeadState = {
+      propostasStage: "enviada",
+      lastOutboundAt: "2026-06-08T11:30:00Z", // 30min ago, delay is 24h
+      lastInboundAt: null,
+    };
+
+    const eager = resolveSituation({ enabled: PROPOSAL_ENABLED, lead, now: NOW });
+    expect(eager.eligible).toBe(false); // initial-delay gate still active
+
+    const running = resolveSituation({ enabled: PROPOSAL_ENABLED, lead, now: NOW, ignoreDelay: true });
+    expect(running.eligible).toBe(true); // structural match, timing deferred to Stepper
+  });
+
+  // RED→GREEN 7 — ignoreDelay must NOT bypass the structural guards
+  it("is NOT eligible with ignoreDelay when the situation no longer holds", () => {
+    const lead: SituationLeadState = {
+      propostasStage: "vendido", // situation resolved
+      lastOutboundAt: "2026-06-07T08:00:00Z",
+      lastInboundAt: null,
+    };
+
+    const result = resolveSituation({ enabled: PROPOSAL_ENABLED, lead, now: NOW, ignoreDelay: true });
+    expect(result.eligible).toBe(false);
+  });
 });
