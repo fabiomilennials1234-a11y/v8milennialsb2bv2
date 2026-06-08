@@ -78,10 +78,14 @@ export type {
   DeleteInstanceResult,
 } from "./hooks/useWhatsAppInstances";
 
-export { useWhatsAppInstanceAllowedMembers } from "./hooks/useWhatsAppInstanceAllowedMembers";
+// NOTE: vários hooks/componentes deste módulo foram refatorados/renomeados, mas o barrel
+// continuava re-exportando nomes que não existem mais (useWhatsAppInstanceAllowedMembers,
+// useOrgWhatsAppMigration, useWhatsAppFunnel, useWhatsAppLeadIntegration, useMetaConnection).
+// Esses re-exports mortos quebravam o ESM em dev (Vite) → tela branca (o build de produção
+// os tree-shakava, mascarando o problema). Removidos. Consumidores usam os nomes reais via
+// deep-import dos arquivos (ex.: useOrgMigrationStatus, useLeadByPhone, useMetaConnectionStatus).
 export { usePreferredInstance } from "./hooks/usePreferredInstance";
 export { useUserWriteInstanceFlag } from "./hooks/useUserWriteInstanceFlag";
-export { useOrgWhatsAppMigration } from "./hooks/useOrgWhatsAppMigration";
 
 // ── Hooks: WhatsApp conversations (CRUD/archive/tags/funnel) ──────────────
 export {
@@ -97,9 +101,6 @@ export type {
   ConversationMeta,
   ConversationTagLink,
 } from "./hooks/useWhatsAppConversations";
-
-export { useWhatsAppFunnel } from "./hooks/useWhatsAppFunnel";
-export { useWhatsAppLeadIntegration } from "./hooks/useWhatsAppLeadIntegration";
 
 // ── Hooks: composer state + chat bubble ──────────────────────────────────
 export { useConversationDraft } from "./hooks/useConversationDraft";
@@ -133,7 +134,6 @@ export type { MessageTemplate, MediaType } from "./hooks/useMessageTemplates";
 export { useIncomingMessageToast } from "./hooks/useIncomingMessageToast";
 
 // ── Hooks: Meta (Messenger / Instagram) ───────────────────────────────────
-export { useMetaConnection } from "./hooks/useMetaConnection";
 export { useMetaPages } from "./hooks/chat-meta/useMetaPages";
 export { useMetaConversations } from "./hooks/chat-meta/useMetaConversations";
 export { useMetaConversationProfile } from "./hooks/chat-meta/useMetaConversationProfile";
@@ -180,7 +180,7 @@ export { ChatSkeleton } from "./components/chat/ChatSkeleton";
 // ── Components: chat ancillary (banner, modal, schedule) ─────────────────
 export { ScheduledMessagesBanner } from "./components/chat/ScheduledMessagesBanner";
 export { ScheduleMessageModal } from "./components/chat/ScheduleMessageModal";
-export { ConversationNotes } from "./components/chat/ConversationNotes";
+export { default as ConversationNotes } from "./components/chat/ConversationNotes";
 export { LeadContactModal } from "./components/chat/LeadContactModal";
 export { HumanPauseBadge } from "./components/chat/HumanPauseBadge";
 export { ChannelBadge } from "./components/chat/ChannelBadge";
