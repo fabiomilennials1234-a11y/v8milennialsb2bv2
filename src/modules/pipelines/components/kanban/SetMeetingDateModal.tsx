@@ -16,11 +16,14 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useSetMeetingDate } from "../../hooks/model/useSetMeetingDate";
+import { useRescheduleMeeting } from "../../hooks/model/useMergedFunnelActions";
 
 export interface SetMeetingDateModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   entryId: string;
+  /** "reschedule" volta o card pra `agendado` e reseta a confirmação. */
+  variant?: "set" | "reschedule";
 }
 
 /** Combina o dia escolhido + "HH:mm" num instante (hora local do navegador). */
@@ -31,25 +34,32 @@ function combine(day: Date, time: string): Date {
   return d;
 }
 
-export function SetMeetingDateModal({ open, onOpenChange, entryId }: SetMeetingDateModalProps) {
+export function SetMeetingDateModal({ open, onOpenChange, entryId, variant = "set" }: SetMeetingDateModalProps) {
   const [day, setDay] = useState<Date | undefined>();
   const [time, setTime] = useState("10:00");
   const [link, setLink] = useState("");
   const setMeetingDate = useSetMeetingDate();
+  const reschedule = useRescheduleMeeting();
+  const pending = setMeetingDate.isPending || reschedule.isPending;
 
   const save = () => {
     if (!day) return;
-    setMeetingDate.mutate(
-      { entryId, meetingDate: combine(day, time).toISOString(), meetLink: link.trim() || null },
-      { onSuccess: () => onOpenChange(false) },
-    );
+    const meetingDate = combine(day, time).toISOString();
+    if (variant === "reschedule") {
+      reschedule.mutate({ entryId, meetingDate }, { onSuccess: () => onOpenChange(false) });
+    } else {
+      setMeetingDate.mutate(
+        { entryId, meetingDate, meetLink: link.trim() || null },
+        { onSuccess: () => onOpenChange(false) },
+      );
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
         <DialogHeader>
-          <DialogTitle>Definir data da reunião</DialogTitle>
+          <DialogTitle>{variant === "reschedule" ? "Remarcar reunião" : "Definir data da reunião"}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
@@ -88,9 +98,9 @@ export function SetMeetingDateModal({ open, onOpenChange, entryId }: SetMeetingD
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button onClick={save} disabled={!day || setMeetingDate.isPending}>
-            {setMeetingDate.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Salvar
+          <Button onClick={save} disabled={!day || pending}>
+            {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {variant === "reschedule" ? "Remarcar" : "Salvar"}
           </Button>
         </DialogFooter>
       </DialogContent>
