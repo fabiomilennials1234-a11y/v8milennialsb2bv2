@@ -60,7 +60,8 @@ import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { DisparoWizard, type DisparoBoardFilter, type DisparoSource } from "@/modules/pipelines/components/disparo";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Navigate } from "react-router-dom";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { matchesResponsibleFilter } from "@/lib/kanban-filters";
 
 // Filter type aliases (previously from ConfirmacaoFilters)
@@ -1026,6 +1027,10 @@ function PipeConfirmacaoInner() {
 }
 
 export default function PipeConfirmacao() {
+  const { hasFeature } = useOrgFeatures();
+  // Agendamentos foi mergeado em Oportunidades — board standalone aposentado (ADR-0004).
+  if (hasFeature("merged_opportunity_funnel")) return <Navigate to="/funis" replace />;
+
   return (
     <LeadPanelProvider>
       <LeadPanelLayout panel={<LeadDetailSheet />}>
