@@ -43,6 +43,7 @@ export function makeMockPipeOps(overrides: Partial<PipeOpsPort> = {}): PipeOpsPo
     useDeletePipePropostaItem: noopMutation,
     useLossReasons: noopQuery,
     RescheduleModal: () => null,
+    MergedMeetingEditor: () => null,
   };
   return { ...base, ...overrides };
 }

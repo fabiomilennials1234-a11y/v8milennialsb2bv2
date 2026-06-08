@@ -47,6 +47,7 @@ import {
 } from "./hooks/legacy/usePipePropostaItems";
 import { useLossReasons } from "./hooks/config/useLossReasons";
 import { RescheduleModal } from "./components/legacy/confirmacao/RescheduleModal";
+import { MergedMeetingEditor } from "./components/kanban/MergedMeetingEditor";
 
 /**
  * Objeto-port estável. Os hooks são referências de função (estáveis entre
@@ -76,6 +77,7 @@ const port: PipeOpsPort = {
   useDeletePipePropostaItem,
   useLossReasons,
   RescheduleModal,
+  MergedMeetingEditor,
 } as PipeOpsPort;
 
 export function PipeOpsProvider({ children }: { children: ReactNode }) {
