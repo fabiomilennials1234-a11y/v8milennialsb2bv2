@@ -51,6 +51,8 @@ interface CreateEventPayload {
   calendar_owner_id?: string;   // user_id do dono do calendário (para criar no calendário de outro)
   color_id?: string;            // Google Calendar colorId ("1"–"11", vazio = padrão)
   with_meet?: boolean;          // Gerar link do Google Meet (default: true)
+  pipe_slug?: string;           // Pipe destino do meet_link (default "confirmacao"; merge ADR-0004 usa "whatsapp")
+  pipe_stage_key?: string;      // Stage destino caso a entry não exista (default "reuniao_marcada"; merge usa "agendado")
 }
 
 interface UpdateEventPayload {
@@ -132,11 +134,13 @@ async function saveMeetLinkToPipe(
   meetLink: string | null,
   leadId?: string,
   orgId?: string,
+  pipeSlug: string = "confirmacao",
+  pipeStageKey: string = "reuniao_marcada",
 ): Promise<void> {
   if (!meetLink) return;
   // If we have leadId + orgId, use the pipeline adapter (preferred path)
   if (leadId && orgId) {
-    const existing = await getPipeEntry(supabase, leadId, orgId, "confirmacao");
+    const existing = await getPipeEntry(supabase, leadId, orgId, pipeSlug as "whatsapp" | "confirmacao" | "propostas");
     if (existing) {
       // Only update metadata, preserve current stage
       await updatePipeEntryById(supabase, existing.id, {
@@ -146,8 +150,8 @@ async function saveMeetLinkToPipe(
       await upsertPipeEntry(supabase, {
         leadId,
         orgId,
-        slug: "confirmacao",
-        stageKey: "reuniao_marcada",
+        slug: pipeSlug as "whatsapp" | "confirmacao" | "propostas",
+        stageKey: pipeStageKey,
         metadata: { meet_link: meetLink },
       });
     }
@@ -408,6 +412,8 @@ Deno.serve(withSentry('google-calendar-events', async (req) => {
           meetLink,
           payload.lead_id,
           orgId,
+          payload.pipe_slug ?? "confirmacao",
+          payload.pipe_stage_key ?? "reuniao_marcada",
         );
       }
 
