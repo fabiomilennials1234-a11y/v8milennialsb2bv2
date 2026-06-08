@@ -20,6 +20,7 @@ import {
   validateConfig,
   validateRubricRules,
   splitForPersistence,
+  defaultCapabilitiesFor,
   type CopilotV2Config,
   type PersistedSlots,
 } from "./config-schema.ts";
@@ -66,12 +67,25 @@ export type SaveConfigResult =
   | { status: "not_activatable"; missingHard: string[]; missingSoft: string[] }
   | { status: "ok"; config: CopilotV2Config };
 
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
 export async function orchestrateSaveConfig(
   input: SaveConfigInput,
   deps: SaveConfigDeps,
 ): Promise<SaveConfigResult> {
+  // 0. capabilities are LOCKED per-archetype (ADR — the client never edits them in
+  // v1). The server DERIVES them from the whitelist (all ON) and overrides whatever
+  // the payload carried, so the activation "≥1 capability" gate is always satisfied
+  // and a malicious/stale client cap map can never widen or narrow the agent.
+  const rawWithCaps =
+    isPlainObject(input.rawConfig)
+      ? { ...input.rawConfig, capabilities: defaultCapabilitiesFor(input.archetype) }
+      : input.rawConfig;
+
   // 1. schema — strict, pre-DB.
-  const validation = validateConfig(input.archetype, input.rawConfig);
+  const validation = validateConfig(input.archetype, rawWithCaps);
   if (!validation.ok || !validation.value) {
     return { status: "invalid", errors: validation.errors };
   }

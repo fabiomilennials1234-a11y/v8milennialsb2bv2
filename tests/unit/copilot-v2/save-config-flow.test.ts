@@ -160,6 +160,75 @@ describe('orchestrateSaveConfig — rubric (Qualificador Section 4)', () => {
   });
 });
 
+describe('orchestrateSaveConfig — capabilities are server-derived (locked per-archetype)', () => {
+  it('ignores the client capabilities and persists the full archetype whitelist (all ON)', async () => {
+    const d = deps();
+    // Client sends NO caps + an empty cap map — the server must still derive them.
+    const r = await orchestrateSaveConfig(
+      {
+        agentId: 'a1',
+        archetype: 'qualificador',
+        rawConfig: { ...validRaw, capabilities: {} },
+        activate: false,
+      },
+      d,
+    );
+    expect(r.status).toBe('ok');
+    const savedSlots = (d.saveConfig as any).mock.calls[0][1];
+    // Qualificador whitelist = all 7 caps, every one true.
+    expect(savedSlots.capabilities).toEqual({
+      can_move_stage: true,
+      can_schedule_meeting: true,
+      can_set_tier: true,
+      can_fill_field: true,
+      can_send_media: true,
+      can_transfer: true,
+      can_handoff: true,
+    });
+  });
+
+  it('a client trying to widen caps beyond its archetype is overridden, never trusted', async () => {
+    const d = deps();
+    // carteira may NOT have can_set_tier; a malicious payload sets it true.
+    const r = await orchestrateSaveConfig(
+      {
+        agentId: 'a1',
+        archetype: 'carteira',
+        rawConfig: {
+          ...validRaw,
+          objective: 'recompra',
+          commercialPolicy: 'x',
+          handoffTarget: 'time',
+          capabilities: { can_set_tier: true },
+        },
+        activate: false,
+      },
+      d,
+    );
+    // The server replaces the payload caps with the carteira whitelist → no can_set_tier.
+    expect(r.status).toBe('ok');
+    const savedSlots = (d.saveConfig as any).mock.calls[0][1];
+    expect(savedSlots.capabilities.can_set_tier).toBeUndefined();
+    expect(savedSlots.capabilities.can_handoff).toBe(true);
+  });
+
+  it('activation "≥1 capability" is always satisfied by the derived caps', async () => {
+    const d = deps();
+    // Client sends empty caps but activates — derived caps make the gate pass.
+    const r = await orchestrateSaveConfig(
+      {
+        agentId: 'a1',
+        archetype: 'vendedor',
+        rawConfig: { ...validRaw, objective: 'fechar_conversa', commercialPolicy: 'x', capabilities: {} },
+        activate: true,
+      },
+      d,
+    );
+    expect(r.status).toBe('ok');
+    expect(d.setActive).toHaveBeenCalledWith('a1', true);
+  });
+});
+
 describe('orchestrateSaveConfig — happy path (draft save, no activation)', () => {
   it('saves a valid draft and returns the persisted config without activating', async () => {
     const d = deps();

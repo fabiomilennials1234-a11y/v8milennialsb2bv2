@@ -120,6 +120,43 @@ describe('validateConfig — per-archetype capability whitelist', () => {
   });
 });
 
+describe('validateConfig — companyParticularities (new curated company-level slot)', () => {
+  it('accepts a companyParticularities string', () => {
+    const r = validateConfig('qualificador', { ...fullValid, companyParticularities: 'Atendemos só a Grande SP; entrega em 48h; pagamento via boleto faturado.' });
+    expect(r.ok).toBe(true);
+    expect(r.value?.companyParticularities).toContain('Grande SP');
+  });
+
+  it('accepts an omitted companyParticularities (optional)', () => {
+    const r = validateConfig('vendedor', { company: { name: 'X' }, capabilities: { can_move_stage: true } });
+    expect(r.ok).toBe(true);
+    expect(r.value?.companyParticularities).toBeUndefined();
+  });
+
+  it('rejects a non-string companyParticularities (no coercion)', () => {
+    const r = validateConfig('qualificador', { ...fullValid, companyParticularities: 123 as unknown as string });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join(' ')).toMatch(/companyParticularities/);
+  });
+
+  it('rejects companyParticularities over 1000 chars', () => {
+    const r = validateConfig('qualificador', { ...fullValid, companyParticularities: 'a'.repeat(1001) });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join(' ')).toMatch(/companyParticularities/);
+  });
+
+  it('accepts companyParticularities at exactly 1000 chars', () => {
+    const r = validateConfig('qualificador', { ...fullValid, companyParticularities: 'a'.repeat(1000) });
+    expect(r.ok).toBe(true);
+  });
+
+  it('keeps companyParticularities in the slots blob (injected into the prompt, not the escape-hatch column)', () => {
+    const { value } = validateConfig('qualificador', { ...fullValid, companyParticularities: 'região: Sul' });
+    const { slots } = splitForPersistence(value!);
+    expect((slots as { companyParticularities?: string }).companyParticularities).toBe('região: Sul');
+  });
+});
+
 describe('validateConfig — escape-hatch length', () => {
   it('rejects escapeHatchNotes over 500 chars', () => {
     const r = validateConfig('qualificador', { ...fullValid, escapeHatchNotes: 'a'.repeat(501) });

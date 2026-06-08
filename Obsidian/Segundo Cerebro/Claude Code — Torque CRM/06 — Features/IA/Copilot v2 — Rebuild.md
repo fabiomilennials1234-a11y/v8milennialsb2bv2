@@ -35,7 +35,7 @@ Org habilita subset (≤1 de cada). Roteamento determinístico por `get_contact_
 1. 3 arquétipos, roteamento por contact-status + stage
 2. Clean-slate total (fn + tabelas novas), **incidente → teste de regressão**
 3. Qualificação híbrida: LLM extrai sinais → rúbrica determinística → `qualification_tier`
-4. Contrato estrito: 12 seções de slots tipados + escape-hatch ≤500c vigiado por LLM-linter
+4. Contrato estrito: slots tipados + `companyParticularities` ≤1000c + escape-hatch ≤500c vigiado por LLM-linter. Capabilities **travadas por arquétipo** (server deriva do whitelist; cliente não edita)
 5. Mídia de envio: gatilho estruturado + nuance + gate (máx 5 img/video)
 6. Leitura Lead 360 + KB org + read-tools; **write sempre após introspect**
 7. Guardrails: capability-gate, budget, loop-detector, output judge, input short-circuit (+ HITL toggle, PII v2); **notificação estruturada no handoff**
@@ -64,6 +64,23 @@ human-pause phone-keyed (40% ai_disabled quebrado) · Bertin bot-loop · dedup r
 ## Rollout
 
 Milennials-first (dogfood, popular eval) → org-a-org (CTO re-preenche wizard, testa dry-run, flipa) → v1 coexiste até migrar tudo → decommission. Casa com o precedente Milennials-only do Copilot Builder.
+
+## Wizard — toggle + 2 abas (redesign 2026-06-08)
+
+O wizard de 12 seções planas misturava base imutável e dados-de-empresa, abrindo espaço pra misconfiguração. Redesenhado:
+
+- **Toggle de personalidade** (qualificador/vendedor/carteira) = **navegação por rota** `/copilot/v2/:archetype` (radiogroup desktop com underline gold + status Ativo/Rascunho/Não criado; mobile = Select). Dirty-guard com `confirm` ao trocar.
+- **Aba BASE (de fábrica, read-only)** — transmite solidez, nunca "desabilitado". Selo "Verificado pela Torque"; **tom em cards** com micro-exemplo (único editável da base); **capabilities como chips informativos** (não switches); accordion "Garantias" (Quem ele é · O que ele busca · Como ele age · **O que ele nunca faz** em verde · Segurança e limites). Conteúdo = `src/modules/copilot/lib/copilot-v2-base-narrative.ts` (`BASE_NARRATIVE`, curado à mão, **não regex do prompt**) protegido por `base-narrative-hash.test.ts`.
+- **Aba ESPECIFICIDADES (editável)** — 5 grupos: Sua empresa · **Produtos e particularidades ★** (com `companyParticularities`) · Quem você atende · Como vender · Observações. `*` gold, validação on-blur.
+- **Aba TESTAR** — o `SimulatorPanel` dry-run (criar E editar; aceita rascunho).
+- **Criar = Editar** (mesmo layout 2-abas; stepper morto). Criar tem banner onboarding + prefill v1 visível; editar não.
+- **Save**: 1 save transacional pras 2 abas; erro `not_activatable` pula pra aba do 1º campo faltante; tom faltando → aba Base.
+- **Capabilities locked**: front envia o whitelist `true`; server re-deriva via `defaultCapabilitiesFor()` (payload do cliente ignorado). Activation "≥1 cap" sempre ok.
+- **Novo slot `{{company_particularities}}`** injetado nos 3 base-prompts (subordinado a `commercial_policy`). `slots` JSONB → sem migration.
+
+## Histórico
+
+- 2026-06-08 — Wizard redesign (toggle + 2 abas Base/Especificidades + companyParticularities + capabilities locked). Changelog: `07 — Changelog/2026-06-08-copilot-v2-wizard-redesign.md`.
 
 ## Glossário relacionado
 

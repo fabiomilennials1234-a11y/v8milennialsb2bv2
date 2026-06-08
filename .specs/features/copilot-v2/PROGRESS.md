@@ -1,9 +1,23 @@
 # Copilot v2 — Progresso & Próximos Passos
 
-**Atualizado:** 2026-05-31 · **Branch atual:** `feat/copilot-v2-slices-4-6-7-tables`
+**Atualizado:** 2026-06-08 · **Branch atual:** `feat/copilot-v2-slices-4-6-7-tables`
 **ADR:** `docs/adr/0002-copilot-v2-architecture.md` · **SPEC:** `.specs/features/copilot-v2/SPEC.md`
 
 > Estado vivo da reconstrução. v2 é **isolado da v1** (tabelas `copilot_v2_*`, edge fn `agent-runtime-v2`, módulos `_shared/copilot-v2/`). Nada ativado em prod — v1 100% operante. Rollout por-org via `copilot_v2_agents.is_active`.
+
+## Wizard redesign — toggle + 2 abas (Base/Especificidades) (2026-06-08)
+
+Redesenho do fluxo de criação/edição (mata o stepper de 12 seções planas; unifica criar/editar num layout único). Decisões travadas pelo CTO:
+1. **Toggle de personalidade = navegação por rota** `/copilot/v2/:archetype` (radiogroup desktop com underline gold `topnav-item-active::after` + status Ativo/Rascunho/Não criado; mobile vira Select). Dirty-guard: `window.confirm` ao trocar com alterações não salvas.
+2. **Aba BASE (de fábrica, read-only)** — selo "Verificado pela Torque", **tom em cards** com micro-exemplo (único editável da base), **capabilities como chips read-only** (não switches), accordion "Garantias" (5 itens; "O que ele nunca faz" em **verde** `text-success`). Conteúdo = nova constante front `src/modules/copilot/lib/copilot-v2-base-narrative.ts` (`BASE_NARRATIVE`) — **não derivada por regex**; smoke-test `base-narrative-hash.test.ts` trava o FNV dos 3 prompts (muda prompt → re-review forçado).
+3. **Aba ESPECIFICIDADES (editável)** — slots de `wizardSections.ts` reagrupados em 5 grupos (Sua empresa · Produtos+particularidades ★ · Quem você atende · Como vender · Observações). NADA sumiu; tom+capabilities saíram pra BASE. `*` GOLD, validação on-blur.
+4. **Capabilities travadas por arquétipo (v1)** — cliente NÃO edita. Front envia o whitelist inteiro `true`; **server re-deriva via `defaultCapabilitiesFor(archetype)` em `save-config-flow.ts`** (payload do cliente ignorado). Gate "≥1 capability" sempre satisfeito.
+5. **NOVO slot `companyParticularities?: string`** (≤1000, opcional) — separado de `products`. Injetado nos 3 base-prompts como seção `{{company_particularities}}` (subordinada a `commercial_policy`). `slots` é JSONB → sem migration; agentes existentes ficam sem ele (ok).
+6. **Simulador vira a 3ª aba `Testar`** (criar E editar; aceita rascunho incompleto com nudge).
+
+**Re-bless consciente dos fingerprints:** o texto dos 3 base-prompts mudou (nova seção) → eval-golden.json + redteam-golden.json regenerados (`qualificador fa1cda15d2dd930c · vendedor f3fefc8eab904cd0 · carteira 4644b50761a3b7e8`). Casos golden NÃO setam companyParticularities → comportamento inalterado; eval+redteam gate **verdes**.
+
+**QA:** `tests/unit/copilot-v2/` 86 files / 638 tests pass. tsc 0 erros · build OK · eslint 0 erros nos arquivos novos. Verificado ao vivo (dev, Milennials qualificador ativo) via Playwright: toggle+3 abas, Base read-only com selo/tom-cards/chips/accordion verde, Especificidades 5 grupos + companyParticularities, agente ativo carrega sem quebrar.
 
 ## W13 — Industrialização do eval (PR aberto → develop, 2026-06-03)
 

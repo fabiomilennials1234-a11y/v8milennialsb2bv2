@@ -26,6 +26,11 @@ import { ALL_WRITE_CAPABILITIES } from "./capability-gate.ts";
 
 export const ESCAPE_HATCH_MAX = 500;
 
+/** companyParticularities is a curated company-level slot (NOT free text smuggling:
+ * it is injected as data into a dedicated, subordinated prompt section). Capped so
+ * it stays a particularities note, not a second prompt. */
+export const COMPANY_PARTICULARITIES_MAX = 1000;
+
 /** Contract-locked to the capability-gate's write flags (asserted in tests). */
 export const CAPABILITY_FLAGS: readonly string[] = [...ALL_WRITE_CAPABILITIES];
 
@@ -62,6 +67,19 @@ export const ALLOWED_CAPABILITIES_BY_ARCHETYPE: Record<Archetype, readonly strin
     "can_handoff",
   ],
 };
+
+/**
+ * The capability map an archetype runs with in v1: EVERY whitelisted capability ON.
+ * Capabilities are locked per-archetype (ADR — v1 does not let the client edit them),
+ * so the server derives them from the whitelist rather than trusting the payload. This
+ * makes the activation "≥1 capability" requirement always satisfied and keeps the
+ * fail-CLOSED gate honest (only real booleans, only whitelisted flags).
+ */
+export function defaultCapabilitiesFor(archetype: Archetype): Record<string, boolean> {
+  const caps: Record<string, boolean> = {};
+  for (const flag of ALLOWED_CAPABILITIES_BY_ARCHETYPE[archetype]) caps[flag] = true;
+  return caps;
+}
 
 // ── Section 4 closed enums (behavior-driving; validated server-side) ──────────
 // Qualificador's Section 4 is the rubric (copilot_v2_rubric), NOT an objective.
@@ -120,6 +138,7 @@ export const BUSINESS_HOURS_OPTIONS = [
 export interface CopilotV2Config {
   company?: { name?: string; about?: string };
   products?: string[];
+  companyParticularities?: string;
   icp?: string;
   objective?: string;
   segments?: string[];
@@ -145,6 +164,7 @@ export type PersistedSlots = Omit<CopilotV2Config, "escapeHatchNotes">;
 const TOP_LEVEL_KEYS = new Set<string>([
   "company",
   "products",
+  "companyParticularities",
   "icp",
   "objective",
   "segments",
@@ -195,6 +215,15 @@ export function validateConfig(archetype: Archetype, raw: unknown): ValidationRe
   for (const key of SCALAR_STRING_KEYS) {
     if (key in raw && raw[key] !== undefined && typeof raw[key] !== "string") {
       errors.push(`${key} must be a string`);
+    }
+  }
+
+  // companyParticularities — scalar string, capped (curated company-level slot).
+  if ("companyParticularities" in raw && raw.companyParticularities !== undefined) {
+    if (typeof raw.companyParticularities !== "string") {
+      errors.push("companyParticularities must be a string");
+    } else if (raw.companyParticularities.length > COMPANY_PARTICULARITIES_MAX) {
+      errors.push(`companyParticularities exceeds ${COMPANY_PARTICULARITIES_MAX} chars`);
     }
   }
 
@@ -268,6 +297,7 @@ export function validateConfig(archetype: Archetype, raw: unknown): ValidationRe
   for (const key of SCALAR_STRING_KEYS) {
     if (typeof raw[key] === "string") (value as any)[key] = raw[key];
   }
+  if (typeof raw.companyParticularities === "string") value.companyParticularities = raw.companyParticularities;
   for (const key of STRING_LIST_KEYS) {
     if (Array.isArray(raw[key])) (value as any)[key] = [...(raw[key] as string[])];
   }

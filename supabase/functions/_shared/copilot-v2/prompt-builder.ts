@@ -14,6 +14,7 @@ import type { Archetype } from "./model-selector.ts";
 export interface AgentConfig {
   company?: { name?: string; about?: string };
   products?: string[];
+  companyParticularities?: string;
   icp?: string;
   objections?: string[];
   socialProof?: string[];
@@ -37,6 +38,7 @@ export function configToSlots(config: AgentConfig): Record<string, string | unde
     company_name: config.company?.name,
     company_about: config.company?.about,
     products: list(config.products),
+    company_particularities: config.companyParticularities,
     icp: config.icp,
     objections: list(config.objections),
     social_proof: list(config.socialProof),

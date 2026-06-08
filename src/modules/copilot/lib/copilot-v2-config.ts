@@ -112,6 +112,15 @@ export const CARTEIRA_HANDOFF_TARGETS = [
 export const RUBRIC_TIERS = ["diamante", "ouro", "prata", "bronze"] as const;
 export const RUBRIC_LEVELS = ["alta", "media", "baixa"] as const;
 export const ESCAPE_HATCH_MAX = 500;
+export const COMPANY_PARTICULARITIES_MAX = 1000;
+
+/** Per-archetype capabilities are LOCKED in v1 (ADR): the client never edits them.
+ * The wizard sends the full whitelist as ON; the server re-derives them anyway. */
+export function defaultCapabilitiesFor(archetype: Archetype): Record<CapabilityFlag, boolean> {
+  return Object.fromEntries(
+    ALLOWED_CAPABILITIES_BY_ARCHETYPE[archetype].map((f) => [f, true]),
+  ) as Record<CapabilityFlag, boolean>;
+}
 
 // ── Zod form schema (client mirror of the server validator) ──────────────────
 const capabilitiesSchema = z
@@ -122,6 +131,7 @@ export const copilotV2ConfigSchema = z
   .object({
     company: z.object({ name: z.string().optional(), about: z.string().optional() }).strict().optional(),
     products: z.array(z.string()).optional(),
+    companyParticularities: z.string().max(COMPANY_PARTICULARITIES_MAX).optional(),
     icp: z.string().optional(),
     objective: z.string().optional(),
     segments: z.array(z.enum(CARTEIRA_SEGMENTS)).optional(),

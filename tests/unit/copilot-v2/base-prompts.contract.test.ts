@@ -16,8 +16,9 @@ const ARCHETYPES = ['qualificador', 'vendedor', 'carteira'] as const;
 
 const FORBIDDEN_TOOLS = ['build_quote', 'get_product_pricing', 'propose_payment_terms', 'remember_lead_fact', 'get_reorder_forecast'];
 const ALLOWED_PLACEHOLDERS = new Set([
-  'company_name', 'company_about', 'products', 'icp', 'objections', 'social_proof',
-  'commercial_policy', 'tone', 'business_hours', 'handoff_target', 'specific_notes',
+  'company_name', 'company_about', 'products', 'company_particularities', 'icp',
+  'objections', 'social_proof', 'commercial_policy', 'tone', 'business_hours',
+  'handoff_target', 'specific_notes',
 ]);
 
 const fullConfig: AgentConfig = {

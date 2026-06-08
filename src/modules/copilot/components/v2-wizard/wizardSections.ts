@@ -1,27 +1,32 @@
 /**
- * wizardSections — declarative 12-section registry for the Copilot v2 wizard
- * (Slice 8), per the CTO-approved design spec. The wizard is data-driven: each
- * section lists typed fields; a generic renderer maps each field kind to a
- * shadcn primitive. There is NO free text anywhere except the escape-hatch.
- * Capability toggles are filtered to the per-archetype whitelist at render time.
+ * wizardSections — declarative registry for the Copilot v2 ESPECIFICIDADES tab
+ * (redesign 2026-06-08). The flat 12-section wizard was regrouped into 4–5
+ * product groups; NOTHING was removed — tone and capabilities moved to the BASE
+ * tab (they belong to the factory core), and the new companyParticularities slot
+ * sits next to products. There is NO free text anywhere except the escape-hatch.
+ *
+ * A group is required when it owns at least one hard-required field; the `*`
+ * (gold) is driven by the field's own `required` flag, mirroring
+ * missingHardForActivation() so the checklist and the form never disagree.
  */
 
-import type { Archetype, CapabilityFlag } from "../../lib/copilot-v2-config";
+import type { Archetype } from "../../lib/copilot-v2-config";
 import {
   VENDEDOR_OBJECTIVES,
   CARTEIRA_OBJECTIVES,
-  TONE_OPTIONS,
-  BUSINESS_HOURS_OPTIONS,
   CARTEIRA_HANDOFF_TARGETS,
+  BUSINESS_HOURS_OPTIONS,
   OBJECTIVE_LABELS,
+  COMPANY_PARTICULARITIES_MAX,
 } from "../../lib/copilot-v2-config";
 
 export type FieldKind =
   | "text"
   | "textarea"
+  | "particularities"
   | "chips"
   | "enum"
-  | "capabilities"
+  | "objective-cards"
   | "segments"
   | "rubric"
   | "escape-hatch";
@@ -32,152 +37,182 @@ export interface FieldDef {
   path: string;
   label?: string;
   hint?: string;
+  placeholder?: string;
+  required?: boolean;
   maxLength?: number;
+  rows?: number;
   options?: readonly string[];
   optionLabels?: Record<string, string>;
-  /** capability flags surfaced by a "capabilities" field (filtered to whitelist). */
-  flags?: readonly CapabilityFlag[];
+  /** Renders a "[Só Qualificador]"-style context chip in the sub-block header. */
+  archetypeChip?: string;
 }
 
-export interface SectionDef {
+export interface GroupDef {
   id: string;
   title: string;
+  /** Short scannable subtitle under the group title. */
+  subtitle?: string;
+  /** A required group shows a gold `*` and is part of the activation checklist. */
   required: boolean;
+  /** The "★ produtos e particularidades" group gets the accent-bar treatment. */
+  featured?: boolean;
   fields: FieldDef[];
 }
 
-/** The 12 sections (+ escape-hatch) for an archetype, in canonical order. */
-export function sectionsFor(archetype: Archetype): SectionDef[] {
-  const objectiveOptions = archetype === "vendedor" ? VENDEDOR_OBJECTIVES : CARTEIRA_OBJECTIVES;
+/** The Especificidades groups for an archetype, in canonical order. */
+export function groupsFor(archetype: Archetype): GroupDef[] {
+  const groups: GroupDef[] = [];
 
-  // Section 4 differs by archetype.
-  const section4: SectionDef =
-    archetype === "qualificador"
-      ? { id: "rubrica", title: "Rúbrica de qualificação", required: true, fields: [{ kind: "rubric", path: "__rubric" }] }
-      : {
-          id: "objetivo",
-          title: archetype === "vendedor" ? "Objetivo de venda" : "Objetivo por segmento",
-          required: true,
-          fields: [
-            {
-              kind: "enum",
-              path: "objective",
-              label: "Objetivo",
-              options: objectiveOptions,
-              optionLabels: OBJECTIVE_LABELS,
-              hint: "Define a postura do agente. Sem texto livre.",
-            },
-            ...(archetype === "carteira"
-              ? [{ kind: "segments" as const, path: "segments", label: "Segmentos atendidos" }]
-              : []),
-          ],
-        };
-
-  // Section 10 — transferência + notificação (carteira also picks a handoff target).
-  const section10: SectionDef = {
-    id: "transferencia",
-    title: "Transferência + notificação",
+  // ── Grupo 1 · Sua empresa ──────────────────────────────────────────────────
+  groups.push({
+    id: "empresa",
+    title: "Sua empresa",
+    subtitle: "Como o agente se apresenta e o que ele diz que vocês fazem.",
     required: true,
     fields: [
-      ...(archetype === "carteira"
-        ? [
-            {
-              kind: "enum" as const,
-              path: "handoffTarget",
-              label: "Destino do handoff",
-              options: CARTEIRA_HANDOFF_TARGETS,
-              hint: "Quem recebe a transferência estruturada.",
-            },
-          ]
-        : []),
-      { kind: "capabilities", path: "capabilities", flags: ["can_transfer", "can_handoff", "can_set_tier"] },
+      { kind: "text", path: "company.name", label: "Nome", required: true, maxLength: 80, hint: "Razão/marca como o lead conhece." },
+      {
+        kind: "textarea",
+        path: "company.about",
+        label: "Sobre",
+        required: true,
+        maxLength: 280,
+        rows: 3,
+        hint: "UMA frase: o que a empresa faz e pra quem.",
+      },
+    ],
+  });
+
+  // ── Grupo 2 · Produtos e particularidades ★ ────────────────────────────────
+  groups.push({
+    id: "produtos",
+    title: "Produtos e particularidades",
+    subtitle: "É aqui que o seu conhecimento faz o agente brilhar.",
+    required: true,
+    featured: true,
+    fields: [
+      {
+        kind: "chips",
+        path: "products",
+        label: "Produtos",
+        required: true,
+        maxLength: 120,
+        hint: "Linhas e categorias — 3 a 8 itens.",
+        placeholder: "Ex.: Tubos de PVC · Conexões hidráulicas · Reservatórios",
+      },
+      {
+        kind: "particularities",
+        path: "companyParticularities",
+        label: "Particularidades da empresa e do segmento",
+        maxLength: COMPANY_PARTICULARITIES_MAX,
+        rows: 5,
+        hint: "Particularidades da sua empresa e do segmento do cliente: região, condições, diferenciais, assuntos que importam pra esse perfil.",
+      },
+    ],
+  });
+
+  // ── Grupo 3 · Quem você atende ─────────────────────────────────────────────
+  const group3: GroupDef = {
+    id: "publico",
+    title: "Quem você atende",
+    subtitle: "O perfil de cliente e o objetivo do agente com ele.",
+    required: true,
+    fields: [
+      {
+        kind: "textarea",
+        path: "icp",
+        label: "Cliente ideal (ICP)",
+        required: true,
+        maxLength: 300,
+        rows: 3,
+        hint: "Quem é o cliente ideal — ramo, porte, uso.",
+      },
     ],
   };
+  if (archetype === "qualificador") {
+    group3.fields.push({
+      kind: "rubric",
+      path: "__rubric",
+      label: "Rúbrica de qualificação",
+      required: true,
+      archetypeChip: "Só Qualificador",
+      hint: "Os sinais e os cortes que definem cada tier. O agente extrai; a rúbrica decide.",
+    });
+  } else {
+    group3.fields.push({
+      kind: "objective-cards",
+      path: "objective",
+      label: "Objetivo do agente",
+      required: true,
+      options: archetype === "vendedor" ? VENDEDOR_OBJECTIVES : CARTEIRA_OBJECTIVES,
+      optionLabels: OBJECTIVE_LABELS,
+      archetypeChip: archetype === "vendedor" ? "Só Vendedor" : "Só Carteira",
+      hint: "Define a postura do agente. Sem texto livre.",
+    });
+    if (archetype === "carteira") {
+      group3.fields.push({
+        kind: "segments",
+        path: "segments",
+        label: "Segmentos atendidos",
+        archetypeChip: "Só Carteira",
+        hint: "Quais segmentos de carteira este agente cobre.",
+      });
+    }
+  }
+  groups.push(group3);
 
-  return [
-    {
-      id: "empresa",
-      title: "Empresa",
+  // ── Grupo 4 · Como vender ──────────────────────────────────────────────────
+  const group4: GroupDef = {
+    id: "venda",
+    title: "Como vender",
+    subtitle: "A política comercial, os reforços e os limites de atendimento.",
+    required: archetype !== "qualificador",
+    fields: [],
+  };
+  if (archetype !== "qualificador") {
+    group4.fields.push({
+      kind: "textarea",
+      path: "commercialPolicy",
+      label: "Política comercial",
       required: true,
-      fields: [
-        { kind: "text", path: "company.name", label: "Nome", maxLength: 80, hint: "Razão/marca como o lead conhece." },
-        {
-          kind: "textarea",
-          path: "company.about",
-          label: "Sobre",
-          maxLength: 280,
-          hint: "UMA frase: o que a empresa faz e pra quem.",
-        },
-      ],
-    },
+      maxLength: 500,
+      rows: 4,
+      hint: "Única fonte autorizada de preço/prazo/MOQ além da base. Fora disso → transfere.",
+    });
+  }
+  group4.fields.push(
+    { kind: "chips", path: "socialProof", label: "Prova social", maxLength: 200, hint: "Reforço, nunca pressão. Só o que é verdade." },
+    { kind: "chips", path: "objections", label: "Objeções", maxLength: 240, hint: "'Objeção → como responder'. 3 a 6 itens." },
     {
-      id: "produtos",
-      title: "Produtos",
+      kind: "enum",
+      path: "businessHours",
+      label: "Horário de atendimento",
       required: true,
-      fields: [{ kind: "chips", path: "products", maxLength: 120, hint: "Uma linha por linha/categoria. 3 a 8 itens." }],
+      options: BUSINESS_HOURS_OPTIONS,
+      hint: "Janela de atendimento.",
     },
-    {
-      id: "icp",
-      title: "ICP",
+  );
+  if (archetype === "carteira") {
+    group4.fields.push({
+      kind: "enum",
+      path: "handoffTarget",
+      label: "Destino do handoff",
       required: true,
-      fields: [{ kind: "textarea", path: "icp", maxLength: 300, hint: "Quem é o cliente ideal — ramo, porte, uso." }],
-    },
-    section4,
-    {
-      id: "objecoes",
-      title: "Objeções",
-      required: false,
-      fields: [{ kind: "chips", path: "objections", maxLength: 240, hint: "'Objeção → como responder'. 3 a 6 itens." }],
-    },
-    {
-      id: "prova-social",
-      title: "Prova social",
-      required: false,
-      fields: [{ kind: "chips", path: "socialProof", maxLength: 200, hint: "Reforço, nunca pressão. Só o que é verdade." }],
-    },
-    {
-      id: "politica",
-      title: "Política comercial",
-      required: archetype !== "qualificador",
-      fields: [
-        {
-          kind: "textarea",
-          path: "commercialPolicy",
-          maxLength: 500,
-          hint: "Única fonte autorizada de preço/prazo/MOQ além da base. Fora disso → transfere.",
-        },
-      ],
-    },
-    {
-      id: "midia",
-      title: "Mídia de envio",
-      required: false,
-      fields: [{ kind: "capabilities", path: "capabilities", flags: ["can_send_media"] }],
-    },
-    {
-      id: "agendamento",
-      title: "Agendamento + funil",
-      required: false,
-      fields: [{ kind: "capabilities", path: "capabilities", flags: ["can_schedule_meeting", "can_move_stage", "can_fill_field"] }],
-    },
-    section10,
-    {
-      id: "tom",
-      title: "Tom de voz",
-      required: true,
-      fields: [{ kind: "enum", path: "tone", options: TONE_OPTIONS[archetype], hint: "Estilo da comunicação." }],
-    },
-    {
-      id: "horario",
-      title: "Horário",
-      required: true,
-      fields: [{ kind: "enum", path: "businessHours", options: BUSINESS_HOURS_OPTIONS, hint: "Janela de atendimento." }],
-    },
-    {
-      id: "observacoes",
-      title: "Observações (escape-hatch)",
-      required: false,
-      fields: [{ kind: "escape-hatch", path: "escapeHatchNotes" }],
-    },
-  ];
+      options: CARTEIRA_HANDOFF_TARGETS,
+      archetypeChip: "Só Carteira",
+      hint: "Quem recebe a transferência estruturada.",
+    });
+  }
+  groups.push(group4);
+
+  // ── Grupo 5 · Observações (opcional, colapsado) ────────────────────────────
+  groups.push({
+    id: "observacoes",
+    title: "Observações",
+    subtitle: "Único campo livre — subordinado às regras de fábrica.",
+    required: false,
+    fields: [{ kind: "escape-hatch", path: "escapeHatchNotes" }],
+  });
+
+  return groups;
 }

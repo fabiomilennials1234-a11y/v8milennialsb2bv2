@@ -17,9 +17,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Bot, Lock, Sparkles, Wand2 } from "lucide-react";
+import { ArrowLeft, Bot, Lock, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -35,6 +36,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useFeatureFlag } from "@/modules/platform";
 import { useCanManageCopilot } from "@/modules/identity";
@@ -168,12 +170,93 @@ function ArchetypeLanding() {
   );
 }
 
+// ── Personality toggle (navigation by route, with a dirty-guard) ─────────────
+function PersonalityToggle({
+  current,
+  dirty,
+  onNavigate,
+}: {
+  current: Archetype;
+  dirty: boolean;
+  onNavigate: (a: Archetype) => void;
+}) {
+  const { data: agents = [] } = useCopilotV2Agents();
+  const byArchetype = useMemo(() => {
+    const map = new Map<Archetype, CopilotV2AgentRow>();
+    for (const a of agents) map.set(a.archetype, a);
+    return map;
+  }, [agents]);
+
+  const statusOf = (a: Archetype): { label: string; dot: string } => {
+    const row = byArchetype.get(a);
+    if (!row) return { label: "Não criado", dot: "bg-muted-foreground/50" };
+    return row.is_active ? { label: "Ativo", dot: "bg-success" } : { label: "Rascunho", dot: "bg-amber-500" };
+  };
+
+  const guardedNavigate = (a: Archetype) => {
+    if (a === current) return;
+    if (dirty && !window.confirm("Você tem alterações não salvas. Descartar e trocar de personalidade?")) return;
+    onNavigate(a);
+  };
+
+  return (
+    <>
+      {/* Desktop: segmented full-width with the gold underline pattern */}
+      <div role="radiogroup" aria-label="Personalidade do agente" className="hidden grid-cols-3 border-b border-border/60 md:grid">
+        {ARCHETYPES.map((a) => {
+          const on = a.key === current;
+          const st = statusOf(a.key);
+          return (
+            <button
+              key={a.key}
+              role="radio"
+              aria-checked={on}
+              type="button"
+              onClick={() => guardedNavigate(a.key)}
+              className={cn(
+                "relative flex flex-col items-center gap-1 px-3 py-3 text-sm transition-colors",
+                on ? "topnav-item-active" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <span className="font-medium">{a.title}</span>
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className={cn("h-1.5 w-1.5 rounded-full", st.dot)} />
+                {st.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Mobile: a Select */}
+      <div className="md:hidden">
+        <Select value={current} onValueChange={(v) => guardedNavigate(v as Archetype)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ARCHETYPES.map((a) => {
+              const st = statusOf(a.key);
+              return (
+                <SelectItem key={a.key} value={a.key}>
+                  {a.title} · {st.label}
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+      </div>
+    </>
+  );
+}
+
 // ── Editor: get-or-create the agent, host the wizard ─────────────────────────
 function ArchetypeEditor({ archetype }: { archetype: Archetype }) {
   const navigate = useNavigate();
   const createAgent = useCreateCopilotV2Agent();
   const [agentId, setAgentId] = useState<string | null>(null);
   const [createError, setCreateError] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
   // Seed override from the v1 prefill (create-time only).
   const [seed, setSeed] = useState<CopilotV2Config | null>(null);
@@ -212,25 +295,26 @@ function ArchetypeEditor({ archetype }: { archetype: Archetype }) {
     toast.success("Rascunho pré-preenchido do v1 — revise os campos faltantes.");
   };
 
+  // Trocar de personalidade = navegar por rota (mantém get-or-create, URL, back).
+  const goToArchetype = (a: Archetype) => {
+    setDirty(false);
+    navigate(`/copilot/v2/${a}`);
+  };
+
   const header = (
-    <div className="flex items-center justify-between">
+    <div className="space-y-4">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate("/copilot/v2")}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
-          <h1 className="text-xl font-bold capitalize">Copilot v2 — {archetype}</h1>
+          <h1 className="text-xl font-bold">Copilot v2 — Agentes</h1>
           <p className="text-xs text-muted-foreground">
             {isConfigured ? "Editando configuração" : "Nova configuração"}
           </p>
         </div>
       </div>
-      {!isConfigured && (
-        <Button variant="outline" onClick={() => setPickerOpen(true)} className="border-primary/40 text-primary hover:bg-primary/10">
-          <Wand2 className="mr-2 h-4 w-4" />
-          Pré-preencher do v1
-        </Button>
-      )}
+      <PersonalityToggle current={archetype} dirty={dirty} onNavigate={goToArchetype} />
     </div>
   );
 
@@ -286,7 +370,10 @@ function ArchetypeEditor({ archetype }: { archetype: Archetype }) {
         mode={mode}
         initialConfig={initialConfig}
         initialRubric={loaded.rubricRules}
+        onPrefill={mode === "create" ? () => setPickerOpen(true) : undefined}
+        onDirtyChange={setDirty}
         onSaved={(activated) => {
+          setDirty(false);
           if (activated) navigate("/copilot/v2");
         }}
       />
