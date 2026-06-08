@@ -7,6 +7,11 @@ import { MockPipeOpsProvider } from "@/modules/leads/pipe-ops/testing";
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
+// Funil mergeado OFF nos testes (comportamento legacy assertado abaixo).
+vi.mock("@/contexts/OrgFeaturesContext", () => ({
+  useOrgFeatures: () => ({ hasFeature: () => false }),
+}));
+
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: () => ({
