@@ -759,6 +759,10 @@ function PipeWhatsappInner() {
                   confirmationStatus={card.confirmationStatus}
                   lostStageKey={lostStageKey}
                   onMoveStage={(toStage) => handleStatusChange(card.id, toStage)}
+                  leadId={card.leadId}
+                  leadName={card.name}
+                  leadCompany={card.company}
+                  leadPhone={card.phone}
                 />
               }
               selected={bulk.isSelected(card.leadId || "")}

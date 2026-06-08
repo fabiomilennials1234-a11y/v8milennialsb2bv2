@@ -35,6 +35,10 @@ export interface MergedFunnelCardActionsProps {
   /** Stage is_final_negative da org — destino do "Marcar perdido". */
   lostStageKey?: string | null;
   onMoveStage: (toStageKey: string) => void;
+  leadId?: string | null;
+  leadName?: string | null;
+  leadCompany?: string | null;
+  leadPhone?: string | null;
 }
 
 /** Cor do foco de data por stage/confirmação. */
@@ -55,6 +59,10 @@ export function MergedFunnelCardActions({
   confirmationStatus,
   lostStageKey,
   onMoveStage,
+  leadId,
+  leadName,
+  leadCompany,
+  leadPhone,
 }: MergedFunnelCardActionsProps) {
   const { hasFeature } = useOrgFeatures();
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
@@ -90,6 +98,10 @@ export function MergedFunnelCardActions({
         stageKey={stageKey}
         meetingDate={meetingDate}
         confirmationStatus={confirmationStatus}
+        leadId={leadId}
+        leadName={leadName}
+        leadCompany={leadCompany}
+        leadPhone={leadPhone}
       />
     );
   } else if (stageKey === "remarcar") {
@@ -103,7 +115,16 @@ export function MergedFunnelCardActions({
           <CalendarPlus className="w-3.5 h-3.5" />
           Nova data → Agendado
         </button>
-        <SetMeetingDateModal open={rescheduleOpen} onOpenChange={setRescheduleOpen} entryId={entryId} variant="reschedule" />
+        <SetMeetingDateModal
+          open={rescheduleOpen}
+          onOpenChange={setRescheduleOpen}
+          entryId={entryId}
+          leadId={leadId}
+          leadName={leadName}
+          leadCompany={leadCompany}
+          leadPhone={leadPhone}
+          variant="reschedule"
+        />
       </>
     );
   } else if (stageKey === "nao_compareceu") {
