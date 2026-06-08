@@ -125,11 +125,19 @@ export interface LeadCardData extends DraggableItem {
    * shell pula `useResolveChatDeepLink`. Quando ausente, o resolver decide.
    */
   primaryInstanceId?: string | null;
+  /** Stage atual da entry (slug). Usado p/ confirmação de reunião no funil mergeado. */
+  stageKey?: string | null;
+  /** Data da reunião (ISO) — funil mergeado Oportunidades. */
+  meetingDate?: string | null;
+  /** Status de confirmação da reunião — funil mergeado (ADR-0004). */
+  confirmationStatus?: "pendente" | "pre_confirmado" | "confirmado" | null;
 }
 
 export interface LeadCardProps {
   lead: LeadCardData;
   variant: LeadCardVariant;
+  /** Slot de ações extra (domínio) renderizado antes do footer. Ex: botão de confirmação. */
+  extraActions?: React.ReactNode;
   showContact?: boolean;
   showValue?: boolean;
   showDate?: boolean;
@@ -247,7 +255,7 @@ function formatCurrency(value: number): string {
 
 export const LeadCard = memo(function LeadCard({
   lead, variant, selected, onSelect, onClick, onRemove,
-  onCalorChange, onQuickAction, onInlineEdit, ...overrides
+  onCalorChange, onQuickAction, onInlineEdit, extraActions, ...overrides
 }: LeadCardProps) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -303,6 +311,8 @@ export const LeadCard = memo(function LeadCard({
           "kanban-card group cursor-pointer relative",
           lead.isInactive && "opacity-60",
           selected && "ring-2 ring-primary/50",
+          !selected && lead.stageKey === "agendado" && lead.confirmationStatus === "confirmado" && "ring-1 ring-green-500/50",
+          !selected && lead.stageKey === "agendado" && lead.confirmationStatus === "pre_confirmado" && "ring-1 ring-amber-500/50",
         )}
         style={{
           '--card-accent': lead.calor != null && lead.calor >= 8
@@ -581,6 +591,9 @@ export const LeadCard = memo(function LeadCard({
               {onQuickAction && <QuickActionPopover onAction={onQuickAction} />}
             </div>
           )}
+
+          {/* ── Extra actions slot (ex: confirmação de reunião) ── */}
+          {extraActions}
 
           {/* ── Footer: Inline metrics (Trello-style) ── */}
           <div className="flex items-center justify-between pt-2 mt-auto border-t border-border/40">
