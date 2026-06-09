@@ -14,10 +14,11 @@
 /** The Copilot Archetype that owns a Lead's re-engagement (CONTEXT.md). */
 export type Archetype = "qualificador" | "vendedor" | "carteira";
 
-/** The six canonical Follow-up Situations, each owned by an Archetype. */
+/** The canonical Follow-up Situations, each owned by an Archetype. */
 export type SituationId =
   | "new_lead_no_reply" // Qualificador
   | "qualified_no_meeting" // Qualificador
+  | "cold_reengage" // Qualificador — re-warm leads parked in nurture stages
   | "meeting_reminder" // Vendedor (reminder only)
   | "no_show_rebook" // Vendedor
   | "proposal_no_reply" // Vendedor
@@ -74,6 +75,63 @@ function delayElapsed(
   return now.getTime() - new Date(since).getTime() >= delayMs;
 }
 
+/** Which lead-state stage field a situation matches its triggerStageKeys against. */
+const STAGE_FIELD: Record<SituationId, keyof SituationLeadState> = {
+  new_lead_no_reply: "pipeWhatsappStage",
+  qualified_no_meeting: "pipeWhatsappStage",
+  cold_reengage: "pipeWhatsappStage",
+  no_show_rebook: "pipeWhatsappStage",
+  meeting_reminder: "pipeWhatsappStage",
+  proposal_no_reply: "propostasStage",
+  dormant_winback: "carteiraSegment",
+};
+
+/** Re-engagement situations: only chase when our message was the last one. */
+const REQUIRES_OUR_MESSAGE_LAST: Record<SituationId, boolean> = {
+  new_lead_no_reply: true,
+  qualified_no_meeting: true,
+  cold_reengage: true,
+  proposal_no_reply: true,
+  // Proactive situations fire regardless of who messaged last:
+  no_show_rebook: false,
+  meeting_reminder: false,
+  dormant_winback: false,
+};
+
+/** The timestamp a situation's delay is measured from. */
+function delayAnchor(situationId: SituationId, lead: SituationLeadState): string | null | undefined {
+  switch (situationId) {
+    case "no_show_rebook":
+      return lead.stageChangedAt;
+    case "dormant_winback":
+      return lead.lastOrderAt;
+    default:
+      return lead.lastOutboundAt;
+  }
+}
+
+/** Structural match: the Lead is IN the situation, independent of timing. */
+function structuralMatch(s: EnabledSituation, lead: SituationLeadState): boolean {
+  const value = lead[STAGE_FIELD[s.situationId]] as string | null | undefined;
+  if (!value || !s.triggerStageKeys.includes(value)) return false;
+
+  // new_lead_no_reply means the Lead has never replied at all.
+  if (s.situationId === "new_lead_no_reply" && lead.lastInboundAt) return false;
+
+  if (REQUIRES_OUR_MESSAGE_LAST[s.situationId] && !ourMessageWasLast(lead)) return false;
+
+  return true;
+}
+
+/** meeting_reminder fires inside a window BEFORE the meeting, not after a delay. */
+function meetingReminderDue(s: EnabledSituation, lead: SituationLeadState, now: Date): boolean {
+  if (!lead.meetingDate) return false;
+  const meeting = new Date(lead.meetingDate).getTime();
+  if (now.getTime() >= meeting) return false; // never remind after the meeting
+  const leadMs = (s.delayHours * 60 + s.delayMinutes) * 60 * 1000;
+  return meeting - now.getTime() <= leadMs;
+}
+
 export function resolveSituation(params: {
   enabled: EnabledSituation[];
   lead: SituationLeadState;
@@ -87,20 +145,22 @@ export function resolveSituation(params: {
 }): ResolveResult {
   const { enabled, lead, now, ignoreDelay = false } = params;
 
-  const proposal = enabled.find((e) => e.situationId === "proposal_no_reply");
-  if (
-    proposal &&
-    !!lead.propostasStage &&
-    proposal.triggerStageKeys.includes(lead.propostasStage) &&
-    ourMessageWasLast(lead)
-  ) {
-    if (ignoreDelay || delayElapsed(lead.lastOutboundAt, proposal.delayHours, proposal.delayMinutes, now)) {
-      return {
-        eligible: true,
-        situationId: "proposal_no_reply",
-        reason: ignoreDelay ? "situation_holds" : "delay_elapsed",
-      };
+  for (const s of enabled) {
+    if (!structuralMatch(s, lead)) continue;
+
+    let timingOk: boolean;
+    if (s.situationId === "meeting_reminder") {
+      timingOk = ignoreDelay || meetingReminderDue(s, lead, now);
+    } else {
+      timingOk = ignoreDelay || delayElapsed(delayAnchor(s.situationId, lead), s.delayHours, s.delayMinutes, now);
     }
+    if (!timingOk) continue;
+
+    return {
+      eligible: true,
+      situationId: s.situationId,
+      reason: ignoreDelay ? "situation_holds" : "delay_elapsed",
+    };
   }
 
   return { eligible: false, reason: "no_situation_matched" };
