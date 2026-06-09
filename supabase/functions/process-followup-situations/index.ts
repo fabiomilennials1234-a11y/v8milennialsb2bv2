@@ -22,14 +22,50 @@ import { isCopilotCanceled } from "../_shared/copilot/cancellation.ts";
 import { getTimeBasedVariables as getTimeVars } from "../_shared/time-variables.ts";
 import { decideFollowup } from "../_shared/copilot/followup-decide.ts";
 import { composeBaseText } from "../_shared/copilot/followup-compose.ts";
+import { buildRefinePrompt, type RefineMessage } from "../_shared/copilot/followup-refine.ts";
 import { getSituationDefault } from "../_shared/copilot/followup-catalog.ts";
+import { OpenRouterClient } from "../agent-message/openrouter-client.ts";
 import type { EnabledSituation, SituationLeadState } from "../_shared/copilot/followup-situations.ts";
 import type { StepLogEntry } from "../_shared/copilot/followup-cadence.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
+const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
 const BATCH_PER_SITUATION = 20;
+
+/** Personalize the base text from live conversation; base text is the fallback. */
+async function refineMessage(supabase: Supa, orgId: string, leadId: string, baseText: string): Promise<string> {
+  if (!OPENROUTER_API_KEY) return baseText;
+  try {
+    const { data: msgs } = await supabase
+      .from("whatsapp_messages")
+      .select("direction, content")
+      .eq("lead_id", leadId)
+      .eq("organization_id", orgId)
+      .eq("message_type", "text")
+      .order("timestamp", { ascending: false })
+      .limit(6);
+    const recentMessages: RefineMessage[] = (msgs || [])
+      .reverse()
+      .filter((m: Record<string, string>) => m.content)
+      .map((m: Record<string, string>) => ({
+        role: m.direction === "incoming" ? "user" : "assistant",
+        content: m.content,
+      }));
+    const openRouter = new OpenRouterClient(OPENROUTER_API_KEY);
+    const resp = await openRouter.chat({
+      model: Deno.env.get("OPENROUTER_DEFAULT_MODEL") || "google/gemini-2.5-flash",
+      messages: [{ role: "user", content: buildRefinePrompt({ baseText, recentMessages }) }],
+      max_tokens: 220,
+      temperature: 0.7,
+    });
+    const refined = resp?.choices?.[0]?.message?.content?.trim();
+    return refined && refined.length > 0 ? refined : baseText;
+  } catch {
+    return baseText;
+  }
+}
 
 interface SituationConfigRow {
   id: string;
@@ -234,12 +270,15 @@ Deno.serve(withSentry("process-followup-situations", async (req) => {
         continue;
       }
 
+      // Hybrid: LLM personalizes the base text from context; base is the fallback.
+      const finalContent = await refineMessage(supabase, cfg.organization_id, c.lead_id, messageContent);
+
       const result = await sendFollowupMessage(supabase, {
         organizationId: cfg.organization_id,
         leadId: c.lead_id,
         ruleId: cfg.id, // telemetry trackId; situation config id
         phone: lead.phone,
-        messageContent,
+        messageContent: finalContent,
         instanceId: instance.id,
         instanceName: instance.name ?? undefined,
       });
