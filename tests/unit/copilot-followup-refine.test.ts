@@ -27,6 +27,9 @@ describe("buildRefinePrompt", () => {
     expect(prompt).toContain("Oi {nome}, vamos retomar?");
     expect(prompt).toContain("Açaizinho");
     expect(prompt.toLowerCase()).toContain("não invente");
+    // forward-moving re-engagement, not echoing the prior context
+    expect(prompt.toLowerCase()).toContain("silêncio");
+    expect(prompt.toLowerCase()).toContain("não repita");
   });
 
   // RED→GREEN 2 — works with no conversation history
