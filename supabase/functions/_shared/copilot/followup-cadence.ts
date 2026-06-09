@@ -13,7 +13,10 @@ export interface CadenceStep {
 }
 
 export interface StepLogEntry {
-  rule_id: string;
+  /** Legacy per-rule cadence owner. Mutually exclusive with situation_config_id. */
+  rule_id?: string | null;
+  /** Situation-based cadence owner (ADR-0006). Mutually exclusive with rule_id. */
+  situation_config_id?: string | null;
   lead_id: string;
   current_step: number;
   last_step_sent_at: string | null;
