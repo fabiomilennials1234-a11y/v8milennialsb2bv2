@@ -19,6 +19,7 @@ export const ACTION_MAP: Record<string, string> = {
   TRANSFER_HUMAN: "transfer_to_human",
   TRANSFER_HUMAN_NOTIFY: "transfer_to_human_notify",
   TRANSFER_HUMAN_WHATSAPP_NOTIFY: "transfer_to_human_whatsapp_notify",
+  SCHEDULE_MEETING_WHATSAPP_NOTIFY: "schedule_meeting_whatsapp_notify",
   UPDATE_QUALIFICATION_SCORE: "update_qualification_score",
   ADVANCE_STAGE: "advance_stage",
   CONFIRM_MEETING: "confirm_meeting",
