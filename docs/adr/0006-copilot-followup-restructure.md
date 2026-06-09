@@ -67,3 +67,18 @@ Restructure Copilot Follow-up as a **dedicated, situation-bound, owner-driven, T
 **Follow-ups**
 - Sharpen the live system: replace/narrow `get_followup_eligible_leads`, finish the situation-eligibility logic, wire the new stop conditions (human-reply cancel, situation-resolved cancel, owner-handoff kill), curate the six Situations + default copy, rebuild the config UI from free-form rules to enable/disable + basics.
 - Glossary updated in `CONTEXT.md` (Follow-up split into **Copilot Follow-up** vs **Follow-up Task**; **Follow-up Situation** defined).
+
+## Amendment — 2026-06-08 — Per-org stage mapping + AI Stage Classifier
+
+Real prod data (Milennials) invalidated the assumption that Situations can key on canonical stage keys:
+
+- Orgs **rename funnel stages freely**, and the `stage_key` is desynced legacy noise — Milennials' propostas stage `marcar_compromisso` is literally named **"Proposta Gerada"**, `r2_fechamento` is **"Negociando"**. Only the `name` carries meaning. A resolver hardcoding `'enviada'`/`'vendido'` never fires (or misfires) for ~30 customized orgs.
+- The old "last message was ours + N hours" filter would have re-engaged **38 Milennials leads sitting in won (`Vendido`) or lost (`Perdido`)** stages — exactly the false-fire the restructure exists to kill.
+
+**Decisions:**
+
+1. **A Situation's trigger stages are per-org config**, not hardcoded. `copilot_followup_situation_config.trigger_stage_keys text[]` holds the org's own stage_keys that place a Lead IN the Situation. The resolver consumes this set; a Lead whose stage leaves the set exits the situation automatically (this replaces the hardcoded `vendido` stop — won/lost/other stages simply aren't in the trigger set).
+
+2. **`trigger_stage_keys` is populated automatically by an AI Stage Classifier**, not by hand (does not scale to 30 orgs). An LLM reads each org's stages (`name` + `position` + the reliable `is_final_positive`/`is_final_negative` flags) and maps each stage to a canonical situation role (proposta_ativa / frio / ganho / perdido / reuniao / no_show / novo / qualificado), re-run on stage change. `is_final_positive`/`is_final_negative` are a **hard override** — terminal stages never enter any trigger set regardless of the LLM. The org may review/override the mapping in the config UI.
+
+3. **The resolver stays pure and deterministic** — it never calls an LLM; it only consumes the classified `trigger_stage_keys`. The AI lives entirely in the offline population step.
