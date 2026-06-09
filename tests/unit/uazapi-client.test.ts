@@ -145,7 +145,7 @@ describe("sendText — success", () => {
 
     expect(result).toEqual(OK_MESSAGE);
 
-    const state = UazapiClient._circuitState().get("token:[present]");
+    const state = UazapiClient._circuitState().get("token:[present]:default");
     expect(state?.failures ?? 0).toBe(0);
   });
 });
@@ -202,7 +202,7 @@ describe("sendText — 4xx error", () => {
       ).rejects.toMatchObject({ status: 401 });
     }
 
-    const state = UazapiClient._circuitState().get("token:[present]");
+    const state = UazapiClient._circuitState().get("token:[present]:default");
     expect(state?.failures ?? 0).toBe(0);
     expect(state?.openUntil ?? 0).toBe(0);
   });
@@ -288,13 +288,13 @@ describe("timeout — AbortError handling", () => {
       withTimers(client.sendText({ number: "5511999999999", text: "Hi" }))
     ).rejects.toBeDefined();
 
-    const state = UazapiClient._circuitState().get("token:[present]");
+    const state = UazapiClient._circuitState().get("token:[present]:default");
     expect(state?.openUntil).toBeGreaterThan(Date.now());
   });
 
   it("throws circuit_breaker_open immediately when breaker is open", async () => {
     // Force breaker open by setting state directly
-    UazapiClient._circuitState().set("token:[present]", {
+    UazapiClient._circuitState().set("token:[present]:default", {
       failures: 0,
       openUntil: Date.now() + 120_000,
     });
@@ -453,6 +453,75 @@ describe("sendMedia — extended timeout", () => {
     expect(result).toEqual(OK_MESSAGE);
     const [url] = vi.mocked(fetch).mock.calls[0];
     expect(url).toBe("https://uazapi.example.com/send/media");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Circuit breaker — per-endpoint isolation
+// ---------------------------------------------------------------------------
+
+describe("circuit breaker — per-endpoint isolation", () => {
+  it("media failures open the media circuit, not the default one", async () => {
+    // All /send/media calls 500; one call exhausts 3 retries → 3 failures →
+    // media circuit opens.
+    vi.mocked(fetch).mockResolvedValue(makeResponse(500, { message: "boom" }));
+
+    const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 50 });
+    await expect(
+      withTimers(
+        client.sendMedia({
+          number: "5511999999999",
+          type: "ptt",
+          file: "https://cdn.example.com/audio.mp3",
+        })
+      )
+    ).rejects.toMatchObject({ status: 500 });
+
+    const mediaState = UazapiClient._circuitState().get("token:[present]:media");
+    const defaultState = UazapiClient._circuitState().get(
+      "token:[present]:default"
+    );
+    expect(mediaState?.openUntil ?? 0).toBeGreaterThan(Date.now());
+    // Default circuit untouched — text sends must remain available.
+    expect(defaultState?.openUntil ?? 0).toBe(0);
+  });
+
+  it("text still sends while the media circuit is open", async () => {
+    // Pre-open the media circuit; default circuit is clean.
+    UazapiClient._circuitState().set("token:[present]:media", {
+      failures: 0,
+      openUntil: Date.now() + 120_000,
+    });
+    vi.mocked(fetch).mockResolvedValueOnce(makeResponse(200, OK_MESSAGE));
+
+    const client = new UazapiClient(BASE_CONFIG);
+    const result = await client.sendText({
+      number: "5511999999999",
+      text: "Hi",
+    });
+
+    expect(result).toEqual(OK_MESSAGE);
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks further media calls while the media circuit is open", async () => {
+    UazapiClient._circuitState().set("token:[present]:media", {
+      failures: 0,
+      openUntil: Date.now() + 120_000,
+    });
+
+    const client = new UazapiClient(BASE_CONFIG);
+    await expect(
+      client.sendMedia({
+        number: "5511999999999",
+        type: "ptt",
+        file: "https://cdn.example.com/audio.mp3",
+      })
+    ).rejects.toMatchObject<Partial<UazapiError>>({
+      status: 503,
+      provider_code: "circuit_breaker_open",
+    });
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
 });
 
