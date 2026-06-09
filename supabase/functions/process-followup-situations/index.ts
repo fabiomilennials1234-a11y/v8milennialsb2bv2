@@ -59,25 +59,61 @@ async function resolveInstance(supabase: Supa, orgId: string): Promise<{ id: str
   return { id: inst?.id ?? null, name: inst?.instance_name ?? null };
 }
 
-/** Source candidates for a Situation. Slice 1: proposal_no_reply only. */
-async function sourceCandidates(
-  supabase: Supa,
-  cfg: SituationConfigRow,
-): Promise<Array<{ lead_id: string; propostasStage: string | null; lastInboundAt: string | null; lastOutboundAt: string | null }>> {
-  if (cfg.situation_id !== "proposal_no_reply") return [];
+const WHATSAPP_SITUATIONS = new Set([
+  "new_lead_no_reply",
+  "qualified_no_meeting",
+  "cold_reengage",
+  "no_show_rebook",
+]);
+
+interface Candidate {
+  lead_id: string;
+  leadState: SituationLeadState;
+}
+
+/**
+ * Source candidates for a Situation, returning a partial SituationLeadState the
+ * resolver reasons over. proposal_no_reply reads the Orçamentos pipe; the
+ * Oportunidades situations read the whatsapp pipe. meeting_reminder and
+ * dormant_winback are not sourced yet.
+ */
+async function sourceCandidates(supabase: Supa, cfg: SituationConfigRow): Promise<Candidate[]> {
   if (!cfg.trigger_stage_keys?.length) return [];
 
-  const { data, error } = await supabase.rpc("get_proposal_no_reply_candidates", {
-    p_organization_id: cfg.organization_id,
-    p_stage_keys: cfg.trigger_stage_keys,
-  });
-  if (error || !data) return [];
-  return data.map((r: Record<string, string | null>) => ({
-    lead_id: r.lead_id as string,
-    propostasStage: r.propostas_stage ?? null,
-    lastInboundAt: r.last_inbound_at ?? null,
-    lastOutboundAt: r.last_outbound_at ?? null,
-  }));
+  if (cfg.situation_id === "proposal_no_reply") {
+    const { data, error } = await supabase.rpc("get_proposal_no_reply_candidates", {
+      p_organization_id: cfg.organization_id,
+      p_stage_keys: cfg.trigger_stage_keys,
+    });
+    if (error || !data) return [];
+    return data.map((r: Record<string, string | null>) => ({
+      lead_id: r.lead_id as string,
+      leadState: {
+        propostasStage: r.propostas_stage ?? null,
+        lastInboundAt: r.last_inbound_at ?? null,
+        lastOutboundAt: r.last_outbound_at ?? null,
+      },
+    }));
+  }
+
+  if (WHATSAPP_SITUATIONS.has(cfg.situation_id)) {
+    const { data, error } = await supabase.rpc("get_whatsapp_situation_candidates", {
+      p_organization_id: cfg.organization_id,
+      p_stage_keys: cfg.trigger_stage_keys,
+    });
+    if (error || !data) return [];
+    return data.map((r: Record<string, string | null>) => ({
+      lead_id: r.lead_id as string,
+      leadState: {
+        pipeWhatsappStage: r.whatsapp_stage ?? null,
+        stageChangedAt: r.stage_changed_at ?? null,
+        lastInboundAt: r.last_inbound_at ?? null,
+        lastOutboundAt: r.last_outbound_at ?? null,
+      },
+    }));
+  }
+
+  return [];
 }
 
 Deno.serve(withSentry("process-followup-situations", async (req) => {
@@ -158,11 +194,7 @@ Deno.serve(withSentry("process-followup-situations", async (req) => {
         continue;
       }
 
-      const leadState: SituationLeadState = {
-        propostasStage: c.propostasStage,
-        lastInboundAt: c.lastInboundAt,
-        lastOutboundAt: c.lastOutboundAt,
-      };
+      const leadState = c.leadState;
       const stepLog = stepLogMap.get(c.lead_id) ?? null;
 
       const decision = decideFollowup({ enabled, lead: leadState, stepLog, now });
@@ -172,7 +204,7 @@ Deno.serve(withSentry("process-followup-situations", async (req) => {
       }
 
       // Defer outside business hours to the next window.
-      const anchor = c.lastOutboundAt ? new Date(c.lastOutboundAt) : now;
+      const anchor = leadState.lastOutboundAt ? new Date(leadState.lastOutboundAt) : now;
       if (getNextSendTime(ruleSchedule, anchor).getTime() > now.getTime()) {
         totalSkipped++;
         continue;
