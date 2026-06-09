@@ -86,11 +86,13 @@ function BasicField({
 function SituationRow({
   meta,
   config,
+  organizationId,
 }: {
   meta: SituationMeta;
   config: FollowupSituationConfig | undefined;
+  organizationId?: string;
 }) {
-  const upsert = useUpsertFollowupSituationConfig();
+  const upsert = useUpsertFollowupSituationConfig(organizationId);
   const reduce = useReducedMotion();
   const [open, setOpen] = useState(false);
 
@@ -181,8 +183,8 @@ function SituationRow({
   );
 }
 
-export function FollowupSituationsTab() {
-  const { data: configs = [], isLoading } = useFollowupSituationConfig();
+export function FollowupSituationsTab({ organizationId }: { organizationId?: string } = {}) {
+  const { data: configs = [], isLoading } = useFollowupSituationConfig(organizationId);
 
   const byId = useMemo(() => {
     const m = new Map<SituationId, FollowupSituationConfig>();
@@ -222,7 +224,7 @@ export function FollowupSituationsTab() {
             </div>
             <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border bg-card/40">
               {items.map((meta) => (
-                <SituationRow key={meta.id} meta={meta} config={byId.get(meta.id)} />
+                <SituationRow key={meta.id} meta={meta} config={byId.get(meta.id)} organizationId={organizationId} />
               ))}
             </div>
           </section>

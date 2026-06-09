@@ -61,9 +61,9 @@ const QUERY_KEY = "copilot_followup_situation_config";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const client = supabase as any;
 
-export function useFollowupSituationConfig() {
+export function useFollowupSituationConfig(orgIdOverride?: string) {
   const { data: teamMember } = useCurrentTeamMember();
-  const orgId = teamMember?.organization_id;
+  const orgId = orgIdOverride ?? teamMember?.organization_id;
   return useQuery({
     queryKey: [QUERY_KEY, orgId],
     enabled: !!orgId,
@@ -79,9 +79,9 @@ export function useFollowupSituationConfig() {
 }
 
 /** Upsert a Situation's config. The classifier owns trigger_stage_keys. */
-export function useUpsertFollowupSituationConfig() {
+export function useUpsertFollowupSituationConfig(orgIdOverride?: string) {
   const { data: teamMember } = useCurrentTeamMember();
-  const orgId = teamMember?.organization_id;
+  const orgId = orgIdOverride ?? teamMember?.organization_id;
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: { situationId: SituationId } & FollowupSituationPatch) => {
