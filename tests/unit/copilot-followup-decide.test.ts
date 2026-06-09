@@ -21,7 +21,7 @@ import type { StepLogEntry } from "../../supabase/functions/_shared/copilot/foll
 
 const NOW = new Date("2026-06-08T12:00:00Z");
 const ENABLED: EnabledSituation[] = [
-  { situationId: "proposal_no_reply", delayHours: 24, delayMinutes: 0 },
+  { situationId: "proposal_no_reply", delayHours: 24, delayMinutes: 0, triggerStageKeys: ["enviada"] },
 ];
 
 describe("decideFollowup — proposal_no_reply", () => {
