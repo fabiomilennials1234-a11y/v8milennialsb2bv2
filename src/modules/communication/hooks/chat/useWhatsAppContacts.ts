@@ -53,6 +53,94 @@ export function useWhatsAppContacts(instanceId: string | null) {
     queryFn: async () => {
       if (!organizationId || !instanceId) return [];
 
+      // ── V3: lista server-side via RPC (flag `v3_server_contacts`, default OFF) ──
+      // Substitui o fetch de 8000 linhas + dedup-em-JS por uma RPC skip-scan
+      // (get_whatsapp_conversation_list): ~6x mais rápida em prod. Unread continua
+      // do localStorage até conversation_read_state popular (evita badge explodir).
+      // Caminho antigo abaixo intocado — flag liga só por device.
+      const useServerList =
+        typeof localStorage !== "undefined" &&
+        localStorage.getItem("v3_server_contacts") === "1";
+
+      if (useServerList) {
+        const { data: rows, error: rpcError } = await supabase.rpc(
+          "get_whatsapp_conversation_list",
+          { p_org: organizationId, p_instance: instanceId, p_limit: 200 } as any
+        );
+        if (rpcError) throw rpcError;
+
+        const lastSeen = getLastSeenMap();
+        const contacts: ChatContact[] = (rows ?? []).map((r: any) => {
+          const key = normalizePhone(r.phone_number);
+          const isUnread =
+            r.last_message_direction === "incoming" &&
+            new Date(r.last_message_time).getTime() > (lastSeen[key] ?? 0);
+          return {
+            phone_number: r.phone_number,
+            // unread server-side fica p/ fase 2 (read_state). Coarse via localStorage.
+            unread_count: isUnread ? Math.max(r.unread_count ?? 1, 1) : 0,
+            push_name: r.push_name,
+            last_message: r.last_message,
+            last_message_time: r.last_message_time,
+            last_message_direction:
+              r.last_message_direction === "incoming" || r.last_message_direction === "outgoing"
+                ? r.last_message_direction
+                : null,
+            last_message_sent_source: r.last_message_sent_source ?? null,
+            lead_id: r.lead_id,
+            lead_name: null,
+            conversation_id: r.conversation_id,
+            archived_at: r.archived_at,
+            tags: [],
+            is_group: r.is_group === true,
+          } as ChatContact;
+        });
+
+        // Enriquecimento (lead names + tags) — mesmo padrão do caminho antigo.
+        const leadIds = [...new Set(contacts.map((c) => c.lead_id).filter((id): id is string => !!id))];
+        const convIds = contacts.map((c) => c.conversation_id).filter((id): id is string => !!id);
+        const [leadNamesRes, leadTagsRes, convTagsRes] = await Promise.all([
+          leadIds.length
+            ? supabase.from("leads").select("id, name").in("id", leadIds)
+            : Promise.resolve({ data: [] as { id: string; name: string | null }[] }),
+          leadIds.length
+            ? supabase.from("lead_tags").select("lead_id, tags!inner(id, name, color)").in("lead_id", leadIds)
+            : Promise.resolve({ data: [] as any[] }),
+          convIds.length
+            ? supabase
+                .from("whatsapp_conversation_tags")
+                .select("conversation_id, tags!inner(id, name, color)")
+                .in("conversation_id", convIds)
+            : Promise.resolve({ data: [] as any[] }),
+        ]);
+
+        const leadNameMap = new Map<string, string>();
+        for (const row of leadNamesRes.data || []) if (row.name) leadNameMap.set(row.id, row.name);
+        const leadTagsMap = new Map<string, ChatContactTag[]>();
+        for (const row of (leadTagsRes.data || []) as any[]) {
+          const tag = (row as { tags: ChatContactTag }).tags;
+          leadTagsMap.set(row.lead_id, [...(leadTagsMap.get(row.lead_id) || []), tag]);
+        }
+        const convTagsMap = new Map<string, ChatContactTag[]>();
+        for (const row of (convTagsRes.data || []) as any[]) {
+          const tag = (row as { tags: ChatContactTag }).tags;
+          convTagsMap.set(row.conversation_id, [...(convTagsMap.get(row.conversation_id) || []), tag]);
+        }
+
+        for (const c of contacts) {
+          if (c.lead_id) c.lead_name = leadNameMap.get(c.lead_id) ?? null;
+          const tagIds = new Set<string>();
+          const merged: ChatContactTag[] = [];
+          for (const t of (c.lead_id ? leadTagsMap.get(c.lead_id) : undefined) || [])
+            if (!tagIds.has(t.id)) { tagIds.add(t.id); merged.push(t); }
+          for (const t of (c.conversation_id ? convTagsMap.get(c.conversation_id) : undefined) || [])
+            if (!tagIds.has(t.id)) { tagIds.add(t.id); merged.push(t); }
+          c.tags = merged;
+        }
+
+        return contacts;
+      }
+
       // Query 1: mensagens recentes (limitadas) + metadados de conversas em paralelo
       const [{ data: msgData, error: msgError }, { data: convMeta }] = await Promise.all([
         supabase
