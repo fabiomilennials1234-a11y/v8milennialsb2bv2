@@ -152,6 +152,41 @@ async function sourceCandidates(supabase: Supa, cfg: SituationConfigRow): Promis
     }));
   }
 
+  if (cfg.situation_id === "meeting_reminder") {
+    const { data, error } = await supabase.rpc("get_meeting_reminder_candidates", {
+      p_organization_id: cfg.organization_id,
+      p_stage_keys: cfg.trigger_stage_keys,
+    });
+    if (error || !data) return [];
+    return data.map((r: Record<string, string | null>) => ({
+      lead_id: r.lead_id as string,
+      leadState: {
+        pipeWhatsappStage: r.whatsapp_stage ?? null,
+        meetingDate: r.meeting_date ?? null,
+        lastInboundAt: r.last_inbound_at ?? null,
+        lastOutboundAt: r.last_outbound_at ?? null,
+      },
+    }));
+  }
+
+  if (cfg.situation_id === "dormant_winback") {
+    // trigger_stage_keys holds the org's dormant/resgate carteira segments.
+    const { data, error } = await supabase.rpc("get_dormant_winback_candidates", {
+      p_organization_id: cfg.organization_id,
+      p_segments: cfg.trigger_stage_keys,
+    });
+    if (error || !data) return [];
+    return data.map((r: Record<string, string | null>) => ({
+      lead_id: r.lead_id as string,
+      leadState: {
+        carteiraSegment: r.carteira_segment ?? null,
+        lastOrderAt: r.last_order_at ?? null,
+        lastInboundAt: r.last_inbound_at ?? null,
+        lastOutboundAt: r.last_outbound_at ?? null,
+      },
+    }));
+  }
+
   return [];
 }
 
