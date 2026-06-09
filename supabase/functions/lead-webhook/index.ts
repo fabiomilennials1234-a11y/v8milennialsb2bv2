@@ -14,7 +14,7 @@ import { getCampaignLeadAssignment, getCampaignCloserAssignment } from "../_shar
 import { logRuntime } from "../_shared/logger.ts";
 import { isValidUUID, isValidISODate, validateArraySize, validateReferencedId } from "../_shared/validation.ts";
 import { successResponse, errorResponse } from "../_shared/response.ts";
-import { upsertPipeEntry, getPipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
+import { upsertPipeEntry, getPipeEntry, updatePipeEntryById, resolveActiveStageKey } from "../_shared/pipeline-adapter.ts";
 import type { PipeSlug } from "../_shared/pipeline-adapter.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -445,13 +445,19 @@ serve(withSentry('lead-webhook', async (req) => {
     } else {
       // Sempre criar novo lead (padrão do sistema)
       const leadName = name || "Lead sem nome";
+      // Resolve a etapa de entrada do whatsapp contra as etapas ATIVAS da org.
+      // Evita o bug de "stage fantasma": orgs que renomearam/desativaram a etapa
+      // seed "novo" (ex: usam "novo_lead") recebiam leads num stage invisível no
+      // Kanban. Cai pra "novo" só se a org nunca teve etapas semeadas.
+      const defaultWhatsappStage =
+        (await resolveActiveStageKey(supabase, organizationId, "whatsapp")) ?? "novo";
       const insertData: Record<string, unknown> = {
         name: leadName,
         phone: phone || null,
         email: email || null,
         origin,
         organization_id: organizationId,
-        pipe_whatsapp: "novo",
+        pipe_whatsapp: defaultWhatsappStage,
         utm_source: utmSource,
         utm_medium: utmMedium,
         utm_campaign: utmCampaign,
@@ -481,7 +487,7 @@ serve(withSentry('lead-webhook', async (req) => {
           leadId: newLead.id,
           orgId: organizationId,
           slug: "whatsapp",
-          stageKey: "novo",
+          stageKey: defaultWhatsappStage,
           metadata: { sdr_id: payload.assigned_user_id ?? null },
           assignedTo: payload.assigned_user_id ?? null,
         });
@@ -736,15 +742,20 @@ serve(withSentry('lead-webhook', async (req) => {
           );
         }
       } else {
+        // Resolve o stage pedido contra as etapas ATIVAS da org (guard fantasma).
+        // Make/n8n manda o slug como string fixa; se foi desativado/renomeado,
+        // o lead cairia num stage invisível. Cai pra 1ª etapa ativa nesse caso.
+        const resolvedStage =
+          (await resolveActiveStageKey(supabase, organizationId, pipeSlug, stageVal)) ?? stageVal;
         await upsertPipeEntry(supabase, {
           leadId,
           orgId: organizationId,
           slug: pipeSlug,
-          stageKey: stageVal,
+          stageKey: resolvedStage,
           metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
         });
         await autoDistributePipe(pipeSlug);
-        console.log(`[lead-webhook] Lead placed in pipeline_entries(${pipeSlug}) stage:`, stageVal);
+        console.log(`[lead-webhook] Lead placed in pipeline_entries(${pipeSlug}) stage:`, resolvedStage);
       }
     }
 

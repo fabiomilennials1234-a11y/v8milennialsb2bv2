@@ -28,6 +28,57 @@ export interface PipelineEntry {
 
 const pipelineIdCache = new Map<string, string>();
 
+/**
+ * Resolve a target stage_key against the org's ACTIVE pipeline_stages.
+ *
+ * Root-cause guard for "ghost stages": external ingest (Make/n8n/Meta) sends a
+ * stage slug as a fixed string. If that slug was deactivated/renamed in the org
+ * (or is a hardcoded default the org never uses), the lead lands in a stage the
+ * Kanban does not render — invisible. This resolver coerces the target to a real
+ * active stage so a lead can never enter a ghost stage from ingest.
+ *
+ * Resolution order:
+ *   1. `requested` if it matches an active stage_key → use as-is.
+ *   2. else → first active stage (min position).
+ *   3. else (org has no active stages — never seeded) → `null`; caller decides
+ *      a last-resort fallback (e.g. the static DEFAULT seed slug).
+ */
+export async function resolveActiveStageKey(
+  supabase: SupabaseClient,
+  orgId: string,
+  slug: PipeSlug,
+  requested?: string | null,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("pipeline_stages")
+    .select("stage_key, position")
+    .eq("organization_id", orgId)
+    .eq("pipeline_type", slug)
+    .eq("is_active", true)
+    .order("position", { ascending: true });
+
+  if (error) {
+    console.warn(`[pipeline-adapter] resolveActiveStageKey query failed for ${slug}@${orgId}:`, error);
+    // On query failure, trust the requested value rather than dropping the lead.
+    return requested ?? null;
+  }
+
+  const active = (data ?? []) as { stage_key: string; position: number }[];
+  if (active.length === 0) return null;
+
+  if (requested && active.some((s) => s.stage_key === requested)) {
+    return requested;
+  }
+
+  const fallback = active[0].stage_key;
+  if (requested && requested !== fallback) {
+    console.warn(
+      `[pipeline-adapter] stage "${requested}" not active in ${slug}@${orgId}; remapping to first active stage "${fallback}" (ghost-stage guard).`,
+    );
+  }
+  return fallback;
+}
+
 export async function resolvePipelineId(
   supabase: SupabaseClient,
   orgId: string,
