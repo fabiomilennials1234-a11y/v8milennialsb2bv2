@@ -26,6 +26,11 @@ CREATE TABLE public.copilot_followup_situation_config (
   delay_hours integer NOT NULL DEFAULT 24,
   delay_minutes integer NOT NULL DEFAULT 0,
 
+  -- Org-configured stage_keys (of the owning pipe) that place a Lead IN this
+  -- situation. Stage keys are per-Organization (custom funnels), so the trigger
+  -- is never a hardcoded canonical key. Empty = never fires until configured.
+  trigger_stage_keys text[] NOT NULL DEFAULT '{}',
+
   -- Optional overrides on top of the catalog default cadence (NULL = use default)
   touch_count integer,
   spacing_hours integer,

@@ -19,9 +19,11 @@ import {
 
 const NOW = new Date("2026-06-08T12:00:00Z");
 
-// proposal_no_reply enabled with a 24h delay — the Org's tuned catalog entry.
+// proposal_no_reply enabled with a 24h delay + the Org's own stage mapping.
+// Stage keys are per-Organization (Milennials renamed theirs), so the trigger
+// stage is config, never a hardcoded canonical key.
 const PROPOSAL_ENABLED: EnabledSituation[] = [
-  { situationId: "proposal_no_reply", delayHours: 24, delayMinutes: 0 },
+  { situationId: "proposal_no_reply", delayHours: 24, delayMinutes: 0, triggerStageKeys: ["enviada"] },
 ];
 
 describe("resolveSituation — proposal_no_reply", () => {
@@ -54,10 +56,10 @@ describe("resolveSituation — proposal_no_reply", () => {
     expect(result.eligible).toBe(false);
   });
 
-  // RED→GREEN 3 — proposal closed (vendido): the situation is resolved
-  it("is NOT eligible when the proposal reached vendido", () => {
+  // RED→GREEN 3 — stage left the trigger set (e.g. won/lost): situation resolved
+  it("is NOT eligible when the stage is no longer in the trigger set", () => {
     const lead: SituationLeadState = {
-      propostasStage: "vendido",
+      propostasStage: "vendido", // not in triggerStageKeys → situation no longer holds
       lastOutboundAt: "2026-06-07T08:00:00Z",
       lastInboundAt: null,
     };
@@ -65,6 +67,23 @@ describe("resolveSituation — proposal_no_reply", () => {
     const result = resolveSituation({ enabled: PROPOSAL_ENABLED, lead, now: NOW });
 
     expect(result.eligible).toBe(false);
+  });
+
+  // RED→GREEN — per-org stage mapping: a custom stage_key fires (not hardcoded)
+  it("fires on the Org's own custom stage_key, not a canonical one", () => {
+    const milennials: EnabledSituation[] = [
+      { situationId: "proposal_no_reply", delayHours: 24, delayMinutes: 0, triggerStageKeys: ["r2_fechamento", "prioridade"] },
+    ];
+    const lead: SituationLeadState = {
+      propostasStage: "r2_fechamento", // Milennials' stage, no 'enviada' exists
+      lastOutboundAt: "2026-06-07T08:00:00Z",
+      lastInboundAt: null,
+    };
+
+    const result = resolveSituation({ enabled: milennials, lead, now: NOW });
+
+    expect(result.eligible).toBe(true);
+    if (result.eligible) expect(result.situationId).toBe("proposal_no_reply");
   });
 
   // RED→GREEN 4 — delay not yet elapsed

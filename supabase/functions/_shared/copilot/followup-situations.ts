@@ -42,6 +42,14 @@ export interface EnabledSituation {
   situationId: SituationId;
   delayHours: number;
   delayMinutes: number;
+  /**
+   * Org-configured stage_keys (of the situation's owning pipe) that place a
+   * Lead IN this situation. Stage keys are customized per Organization, so the
+   * trigger can never be a hardcoded canonical key. When the Lead's stage is
+   * not in this set the situation no longer holds, which also serves as the
+   * natural exit (e.g. moving to a won/lost stage stops the cadence).
+   */
+  triggerStageKeys: string[];
 }
 
 export type ResolveResult =
@@ -80,7 +88,12 @@ export function resolveSituation(params: {
   const { enabled, lead, now, ignoreDelay = false } = params;
 
   const proposal = enabled.find((e) => e.situationId === "proposal_no_reply");
-  if (proposal && lead.propostasStage === "enviada" && ourMessageWasLast(lead)) {
+  if (
+    proposal &&
+    !!lead.propostasStage &&
+    proposal.triggerStageKeys.includes(lead.propostasStage) &&
+    ourMessageWasLast(lead)
+  ) {
     if (ignoreDelay || delayElapsed(lead.lastOutboundAt, proposal.delayHours, proposal.delayMinutes, now)) {
       return {
         eligible: true,
