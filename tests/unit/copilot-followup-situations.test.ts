@@ -140,3 +140,74 @@ describe("resolveSituation — proposal_no_reply", () => {
     expect(result.eligible).toBe(false);
   });
 });
+
+describe("resolveSituation — Oportunidades situations", () => {
+  const en = (situationId: string, keys: string[], h = 24): EnabledSituation[] =>
+    [{ situationId: situationId as EnabledSituation["situationId"], delayHours: h, delayMinutes: 0, triggerStageKeys: keys }];
+
+  it("new_lead_no_reply fires for an approached Lead who never replied", () => {
+    const lead: SituationLeadState = {
+      pipeWhatsappStage: "novo",
+      lastOutboundAt: "2026-06-06T08:00:00Z",
+      lastInboundAt: null, // never replied
+    };
+    const r = resolveSituation({ enabled: en("new_lead_no_reply", ["novo"]), lead, now: NOW });
+    expect(r.eligible).toBe(true);
+    if (r.eligible) expect(r.situationId).toBe("new_lead_no_reply");
+  });
+
+  it("new_lead_no_reply does NOT fire once the Lead has ever replied", () => {
+    const lead: SituationLeadState = {
+      pipeWhatsappStage: "novo",
+      lastOutboundAt: "2026-06-06T08:00:00Z",
+      lastInboundAt: "2026-06-05T08:00:00Z", // replied at some point
+    };
+    const r = resolveSituation({ enabled: en("new_lead_no_reply", ["novo"]), lead, now: NOW });
+    expect(r.eligible).toBe(false);
+  });
+
+  it("cold_reengage fires for a Lead parked in a nurture stage, our msg last", () => {
+    const lead: SituationLeadState = {
+      pipeWhatsappStage: "nutricao_infinita",
+      lastOutboundAt: "2026-06-01T08:00:00Z",
+      lastInboundAt: "2026-05-20T08:00:00Z",
+    };
+    const r = resolveSituation({ enabled: en("cold_reengage", ["nutricao_infinita", "em_andamento"]), lead, now: NOW });
+    expect(r.eligible).toBe(true);
+    if (r.eligible) expect(r.situationId).toBe("cold_reengage");
+  });
+
+  it("no_show_rebook fires from the no-show stage regardless of who messaged last", () => {
+    const lead: SituationLeadState = {
+      pipeWhatsappStage: "nao_compareceu",
+      stageChangedAt: "2026-06-06T08:00:00Z",
+      lastInboundAt: "2026-06-07T09:00:00Z", // lead messaged last — still proactive
+    };
+    const r = resolveSituation({ enabled: en("no_show_rebook", ["nao_compareceu"]), lead, now: NOW });
+    expect(r.eligible).toBe(true);
+    if (r.eligible) expect(r.situationId).toBe("no_show_rebook");
+  });
+
+  it("meeting_reminder fires inside the window before the meeting, not after", () => {
+    const enabled = en("meeting_reminder", ["agendado"], 24); // 24h before
+    const before: SituationLeadState = { pipeWhatsappStage: "agendado", meetingDate: "2026-06-08T20:00:00Z" }; // 8h away
+    const after: SituationLeadState = { pipeWhatsappStage: "agendado", meetingDate: "2026-06-08T06:00:00Z" }; // already passed
+
+    expect(resolveSituation({ enabled, lead: before, now: NOW }).eligible).toBe(true);
+    expect(resolveSituation({ enabled, lead: after, now: NOW }).eligible).toBe(false);
+  });
+
+  it("meeting_reminder does NOT fire while the meeting is further than the window", () => {
+    const enabled = en("meeting_reminder", ["agendado"], 24);
+    const farAway: SituationLeadState = { pipeWhatsappStage: "agendado", meetingDate: "2026-06-12T12:00:00Z" }; // 4 days
+    expect(resolveSituation({ enabled, lead: farAway, now: NOW }).eligible).toBe(false);
+  });
+
+  it("dormant_winback fires by carteira segment + days since last order", () => {
+    const enabled = en("dormant_winback", ["dormindo", "resgate"], 720); // 30 days
+    const lead: SituationLeadState = { carteiraSegment: "dormindo", lastOrderAt: "2026-04-01T08:00:00Z" }; // >30d
+    const r = resolveSituation({ enabled, lead, now: NOW });
+    expect(r.eligible).toBe(true);
+    if (r.eligible) expect(r.situationId).toBe("dormant_winback");
+  });
+});

@@ -56,14 +56,24 @@ describe("buildTriggerStageMap", () => {
     expect(map.proposal_no_reply ?? []).not.toContain("perdido");
   });
 
-  // RED→GREEN 3 — a role with no Situation (frio) lands nowhere
+  // RED→GREEN 3 — a role with no Situation (ganho/perdido) lands nowhere
   it("drops stages whose role maps to no Situation", () => {
-    const stages = [stage({ stageKey: "esfriou", name: "Esfriou" })];
-    const classification = { esfriou: "frio" as const };
+    const stages = [stage({ stageKey: "organizar", name: "Organizar" })];
+    const classification = { organizar: "ganho" as const };
 
     const map = buildTriggerStageMap({ stages, classification });
 
     expect(Object.keys(map)).toHaveLength(0);
+  });
+
+  // RED→GREEN — frio role routes nurture/parked stages to cold_reengage
+  it("routes a frio stage into cold_reengage", () => {
+    const stages = [stage({ stageKey: "nutricao_infinita", name: "Nutrição Infinita" })];
+    const classification = { nutricao_infinita: "frio" as const };
+
+    const map = buildTriggerStageMap({ stages, classification });
+
+    expect(map.cold_reengage).toEqual(["nutricao_infinita"]);
   });
 
   // RED→GREEN 4 — multiple stages grouped by Situation (Milennials-shaped)
