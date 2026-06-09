@@ -70,16 +70,21 @@ export function useWhatsAppContacts(instanceId: string | null) {
         );
         if (rpcError) throw rpcError;
 
-        const lastSeen = getLastSeenMap();
+        // unread: server-side (read_state) por padrão; localStorage coarse no escape hatch.
+        const useServerUnread =
+          typeof localStorage === "undefined" || localStorage.getItem("v3_server_unread") !== "0";
+        const lastSeen = useServerUnread ? {} : getLastSeenMap();
         const contacts: ChatContact[] = (rows ?? []).map((r: any) => {
           const key = normalizePhone(r.phone_number);
-          const isUnread =
-            r.last_message_direction === "incoming" &&
-            new Date(r.last_message_time).getTime() > (lastSeen[key] ?? 0);
+          const unread = useServerUnread
+            ? (r.unread_count ?? 0)
+            : (r.last_message_direction === "incoming" &&
+               new Date(r.last_message_time).getTime() > (lastSeen[key] ?? 0)
+                ? Math.max(r.unread_count ?? 1, 1)
+                : 0);
           return {
             phone_number: r.phone_number,
-            // unread server-side fica p/ fase 2 (read_state). Coarse via localStorage.
-            unread_count: isUnread ? Math.max(r.unread_count ?? 1, 1) : 0,
+            unread_count: unread,
             push_name: r.push_name,
             last_message: r.last_message,
             last_message_time: r.last_message_time,
