@@ -159,6 +159,10 @@ verify_jwt = false
 [functions.process-followup-situations]
 verify_jwt = false
 
+# classify-followup-stages: AI Stage Classifier (ADR-0006); x-cron-secret
+[functions.classify-followup-stages]
+verify_jwt = false
+
 # process-outbound-dispatches: chamado por pg_cron; autenticação via x-cron-secret
 [functions.process-outbound-dispatches]
 verify_jwt = false
