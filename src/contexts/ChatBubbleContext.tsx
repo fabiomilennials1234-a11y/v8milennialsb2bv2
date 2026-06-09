@@ -36,6 +36,16 @@ import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKe
 import { normalizePhone } from "@/lib/normalizePhone";
 import type { ChatContact, WhatsAppInstanceForUser } from "@/modules/communication/hooks/chat/types";
 
+/**
+ * Janela do badge de não-lidas. Mensagens recebidas mais antigas que isto não
+ * contam no badge — uma não-lida de meses atrás é ruído, não sinal. Limita a
+ * query a uma fatia recente em vez de varrer todo o histórico de incoming
+ * (antes: SELECT sem LIMIT = full scan por instância × por usuário, ~57% do CPU
+ * do banco). Casa com o índice parcial idx_whatsapp_msgs_org_inst_dir_ts.
+ */
+const UNREAD_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+const UNREAD_BADGE_ROW_CAP = 3000; // teto defensivo por instância
+
 export interface ChatBubbleContextValue {
   // estado
   isOpen: boolean;
@@ -205,13 +215,16 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
         // Query leve apenas das colunas necessárias para badge de unread.
         // Cache separado (unreadBadge) para não poluir contacts com stubs
         // sem content — evita "Sem mensagens" no /chat.
+        const sinceIso = new Date(Date.now() - UNREAD_LOOKBACK_MS).toISOString();
         const { data, error } = await supabase
           .from("whatsapp_messages")
-          .select("phone_number, direction, timestamp")
+          .select("phone_number, timestamp")
           .eq("organization_id", organizationId)
           .eq("instance_id", inst.id)
           .eq("direction", "incoming")
-          .order("timestamp", { ascending: false });
+          .gte("timestamp", sinceIso)
+          .order("timestamp", { ascending: false })
+          .limit(UNREAD_BADGE_ROW_CAP);
         if (error) throw error;
 
         // Compõe ChatContact mínimo apenas pra calcular unread (sem enriquecimento).
