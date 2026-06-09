@@ -42,6 +42,7 @@ import {
   executeTransferSzChat,
 } from "./transfer-human.ts";
 import { executeTransferHumanWhatsappNotify } from "./transfer-human-whatsapp-notify.ts";
+import { executeScheduleMeetingWhatsappNotify } from "./schedule-meeting-whatsapp-notify.ts";
 import { executeSendDocument } from "./send-document.ts";
 
 export async function executeAiAction(
@@ -84,6 +85,9 @@ export async function executeAiAction(
       break;
     case "transfer_to_human_whatsapp_notify":
       result = await executeTransferHumanWhatsappNotify(supabase, payload, organization_id, lead_id);
+      break;
+    case "schedule_meeting_whatsapp_notify":
+      result = await executeScheduleMeetingWhatsappNotify(supabase, payload, organization_id, lead_id, conversation_id);
       break;
     case "update_qualification_score":
       result = await executeUpdateQualificationScore(supabase, payload);

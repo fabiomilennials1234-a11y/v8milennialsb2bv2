@@ -17,6 +17,7 @@ import {
   logCalendarOp,
 } from "../google-calendar-utils.ts";
 import { getPipeEntry, upsertPipeEntry, updatePipeEntryById } from "../pipeline-adapter.ts";
+import { enqueueAiAction } from "../ai-queue.ts";
 import type { ActionResult } from "./types.ts";
 
 export async function executeScheduleMeeting(
@@ -161,6 +162,27 @@ export async function executeScheduleMeeting(
     }
   } catch (calendarErr) {
     console.warn("[executeScheduleMeeting] Google Calendar error (non-fatal):", calendarErr);
+  }
+
+  // 3. Notificação WhatsApp para equipe (determinístico, não-fatal).
+  // Enfileira ação separada — desacopla retry/timeout do agendamento em si.
+  // Recipiente resolvido pelo handler via handoff_notify_phones do agente.
+  try {
+    await enqueueAiAction(supabase, {
+      organizationId: tenantId,
+      leadId: lead_id,
+      conversationId: conversationId || undefined,
+      actionType: "schedule_meeting_whatsapp_notify",
+      payload: {
+        lead_id,
+        meeting_date: preferred_date,
+        meeting_time: preferred_time || "09:00",
+        ...(meetLink ? { meet_link: meetLink } : {}),
+      },
+      idempotencyKey: `meeting_wa_notify_${lead_id}_${preferred_date}`,
+    });
+  } catch (notifyErr) {
+    console.warn("[executeScheduleMeeting] Failed to enqueue WhatsApp notify (non-fatal):", notifyErr);
   }
 
   return {
