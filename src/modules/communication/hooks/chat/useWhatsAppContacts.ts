@@ -53,19 +53,20 @@ export function useWhatsAppContacts(instanceId: string | null) {
     queryFn: async () => {
       if (!organizationId || !instanceId) return [];
 
-      // ── V3: lista server-side via RPC (flag `v3_server_contacts`, default OFF) ──
-      // Substitui o fetch de 8000 linhas + dedup-em-JS por uma RPC skip-scan
-      // (get_whatsapp_conversation_list): ~6x mais rápida em prod. Unread continua
-      // do localStorage até conversation_read_state popular (evita badge explodir).
-      // Caminho antigo abaixo intocado — flag liga só por device.
+      // ── V3: lista server-side via RPC (DEFAULT ON; escape hatch localStorage '0') ──
+      // get_whatsapp_conversation_list lê da tabela-resumo whatsapp_conversation_summary
+      // (1 linha/conversa, mantida por trigger): ~85x mais rápida que o fetch de 8000
+      // linhas + dedup-em-JS (2906ms → ~34ms p/ 500 conversas). Unread continua do
+      // localStorage até conversation_read_state popular (evita badge explodir).
+      // Desligar por device: localStorage.setItem('v3_server_contacts','0').
       const useServerList =
-        typeof localStorage !== "undefined" &&
-        localStorage.getItem("v3_server_contacts") === "1";
+        typeof localStorage === "undefined" ||
+        localStorage.getItem("v3_server_contacts") !== "0";
 
       if (useServerList) {
         const { data: rows, error: rpcError } = await supabase.rpc(
           "get_whatsapp_conversation_list",
-          { p_org: organizationId, p_instance: instanceId, p_limit: 200 } as any
+          { p_org: organizationId, p_instance: instanceId, p_limit: 500 } as any
         );
         if (rpcError) throw rpcError;
 
