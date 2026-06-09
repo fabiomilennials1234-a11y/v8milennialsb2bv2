@@ -142,6 +142,13 @@ export {
 // ────────────────────────────────────────────────────────────────────────
 
 export { AgentFollowupRulesTab } from "./components/AgentFollowupRulesTab";
+export { FollowupSituationsTab } from "./components/FollowupSituationsTab";
+export {
+  useFollowupSituationConfig,
+  useUpsertFollowupSituationConfig,
+  type FollowupSituationConfig,
+  type SituationId as FollowupSituationId,
+} from "./hooks/useFollowupSituationConfig";
 export { AgentKanbanRulesTab } from "./components/AgentKanbanRulesTab";
 export { AgentMetricsTab } from "./components/AgentMetricsTab";
 export { AgentTasksTab } from "./components/AgentTasksTab";
