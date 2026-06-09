@@ -693,10 +693,11 @@ Deno.serve(
             return jsonResponse(400, { error: "Missing message_id/number" }, corsHeaders);
           }
           await provider.deleteForAll(message_id, number);
-          // Reflect locally
+          // Reflect locally: usa deleted_at (a UI esconde por deleted_at, MessagePrimitives.tsx).
+          // status="deleted" violava o CHECK de status (rejeição silenciosa) e nem é o campo lido.
           await supabaseAdmin
             .from("whatsapp_messages")
-            .update({ status: "deleted" })
+            .update({ deleted_at: new Date().toISOString() })
             .eq("message_id", message_id)
             .eq("instance_id", instanceId);
           result = { ok: true };
