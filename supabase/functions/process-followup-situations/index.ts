@@ -85,14 +85,17 @@ interface SituationConfigRow {
 type Supa = any;
 
 async function resolveInstance(supabase: Supa, orgId: string): Promise<{ id: string | null; name: string | null }> {
-  const { data: inst } = await supabase
+  // Provider status strings vary (Uazapi reports "connected", others "open").
+  // Prefer a live instance, but accept any of the org's instances — the
+  // dispatch layer resolves the real provider session.
+  const { data: insts } = await supabase
     .from("whatsapp_instances")
-    .select("id, instance_name")
-    .eq("organization_id", orgId)
-    .eq("status", "open")
-    .limit(1)
-    .maybeSingle();
-  return { id: inst?.id ?? null, name: inst?.instance_name ?? null };
+    .select("id, instance_name, status")
+    .eq("organization_id", orgId);
+  if (!insts?.length) return { id: null, name: null };
+  const live = insts.find((i: Record<string, string>) => i.status === "open" || i.status === "connected");
+  const chosen = live ?? insts[0];
+  return { id: chosen.id ?? null, name: chosen.instance_name ?? null };
 }
 
 const WHATSAPP_SITUATIONS = new Set([
@@ -166,6 +169,16 @@ Deno.serve(withSentry("process-followup-situations", async (req) => {
     });
   }
 
+  // Optional targeted run: process a single lead only (controlled test / ops
+  // re-run). When set, every candidate except this lead is filtered out.
+  let onlyLeadId: string | null = null;
+  try {
+    const body = await req.json();
+    onlyLeadId = typeof body?.only_lead_id === "string" ? body.only_lead_id : null;
+  } catch {
+    /* no body */
+  }
+
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   const now = new Date();
   let totalSent = 0;
@@ -186,7 +199,8 @@ Deno.serve(withSentry("process-followup-situations", async (req) => {
   }
 
   for (const cfg of configs as SituationConfigRow[]) {
-    const candidates = await sourceCandidates(supabase, cfg);
+    let candidates = await sourceCandidates(supabase, cfg);
+    if (onlyLeadId) candidates = candidates.filter((c) => c.lead_id === onlyLeadId);
     if (!candidates.length) continue;
 
     const instance = await resolveInstance(supabase, cfg.organization_id);
