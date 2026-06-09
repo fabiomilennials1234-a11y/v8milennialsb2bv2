@@ -90,20 +90,8 @@ CREATE TRIGGER update_copilot_followup_situation_config_updated_at
 COMMENT ON TABLE public.copilot_followup_situation_config IS
   'Per-Organization enable/disable + basics for the six canonical Follow-up Situations (ADR-0006). Overlays the Torque-curated catalog defaults.';
 
--- =====================================================
--- 2. EXTEND step-log completed_reason with new stop causes
--- =====================================================
-
-ALTER TABLE public.copilot_followup_step_log
-  DROP CONSTRAINT IF EXISTS copilot_followup_step_log_completed_reason_check;
-
-ALTER TABLE public.copilot_followup_step_log
-  ADD CONSTRAINT copilot_followup_step_log_completed_reason_check
-  CHECK (completed_reason IN (
-    'all_steps_done',
-    'lead_responded',
-    'manual_stop',
-    'human_replied',
-    'situation_resolved',
-    'owner_changed'
-  ));
+-- NOTE: the copilot_followup_step_log.completed_reason extension (new stop
+-- causes: human_replied, situation_resolved, owner_changed) lives with the
+-- Stop Evaluator work (#737). It is intentionally NOT here because
+-- copilot_followup_step_log is part of the cadence schema (20261028000000),
+-- which is not yet applied in prod (drift). Apply that first, then extend.
