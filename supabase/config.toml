@@ -155,6 +155,10 @@ verify_jwt = false
 [functions.process-copilot-followups]
 verify_jwt = false
 
+# process-followup-situations: follow-up situation-based (ADR-0006); x-cron-secret
+[functions.process-followup-situations]
+verify_jwt = false
+
 # process-outbound-dispatches: chamado por pg_cron; autenticação via x-cron-secret
 [functions.process-outbound-dispatches]
 verify_jwt = false
