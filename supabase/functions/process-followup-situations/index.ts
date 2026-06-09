@@ -21,6 +21,7 @@ import { sendFollowupMessage } from "../_shared/followup-sender.ts";
 import { isCopilotCanceled } from "../_shared/copilot/cancellation.ts";
 import { getTimeBasedVariables as getTimeVars } from "../_shared/time-variables.ts";
 import { decideFollowup } from "../_shared/copilot/followup-decide.ts";
+import { applySituationStop } from "../_shared/copilot/followup-response-detector.ts";
 import { composeBaseText } from "../_shared/copilot/followup-compose.ts";
 import { buildRefinePrompt, type RefineMessage } from "../_shared/copilot/followup-refine.ts";
 import { getSituationDefault } from "../_shared/copilot/followup-catalog.ts";
@@ -284,6 +285,25 @@ Deno.serve(withSentry("process-followup-situations", async (req) => {
 
       const decision = decideFollowup({ enabled, lead: leadState, stepLog, now });
       if (!decision.send) {
+        totalSkipped++;
+        continue;
+      }
+
+      // Human takeover guard: if the most recent outbound message was sent by a
+      // human teammate (not the AI), a person is handling this lead — cancel the
+      // cadence (human_replied), never cutuca behind them. The resolver can't
+      // catch this because a human's outbound message looks like "our" message.
+      const { data: lastOut } = await supabase
+        .from("whatsapp_messages")
+        .select("sent_by_ai")
+        .eq("lead_id", c.lead_id)
+        .eq("organization_id", cfg.organization_id)
+        .eq("direction", "outgoing")
+        .order("timestamp", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastOut && lastOut.sent_by_ai === false) {
+        await applySituationStop(supabase, c.lead_id, { type: "human_reply" });
         totalSkipped++;
         continue;
       }
