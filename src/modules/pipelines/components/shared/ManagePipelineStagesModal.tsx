@@ -24,6 +24,7 @@ import {
   useUpdatePipelineStage,
   useDeletePipelineStage,
   useReorderPipelineStages,
+  usePipelineStageLeadCounts,
   getPipelineTypeName,
 } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { useCustomPipelines } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
@@ -369,6 +370,7 @@ export function ManagePipelineStagesContent({
   const [newStageIsFinalNegative, setNewStageIsFinalNegative] = useState(false);
   const [showNewStageForm, setShowNewStageForm] = useState(false);
   const [deleteStageId, setDeleteStageId] = useState<string | null>(null);
+  const [migrateToStageKey, setMigrateToStageKey] = useState<string>("");
   const [localStages, setLocalStages] = useState<PipelineStage[]>(stages);
 
   const createStage = useCreatePipelineStage();
@@ -376,6 +378,15 @@ export function ManagePipelineStagesContent({
   const deleteStage = useDeletePipelineStage();
   const reorderStages = useReorderPipelineStages();
   const { data: templates = [] } = useChecklistTemplates();
+  const { data: stageLeadCounts = {} } = usePipelineStageLeadCounts(pipelineType);
+
+  // Etapa marcada para remoção + quantos leads ela ainda tem.
+  const stageToDelete = localStages.find((s) => s.id === deleteStageId) ?? null;
+  const leadsInStageToDelete = stageToDelete
+    ? stageLeadCounts[stageToDelete.stage_key] ?? 0
+    : 0;
+  // Destinos possíveis: outras etapas (exclui a que está sendo removida).
+  const migrationTargets = localStages.filter((s) => s.id !== deleteStageId);
 
   const handleChecklistTemplateChange = async (
     stage: PipelineStage,
@@ -516,15 +527,28 @@ export function ManagePipelineStagesContent({
   };
 
   const handleDeleteStage = async () => {
-    if (!deleteStageId) return;
+    if (!deleteStageId || !stageToDelete) return;
+
+    // Etapa com leads exige destino de migração (evita leads fantasmas).
+    if (leadsInStageToDelete > 0 && !migrateToStageKey) {
+      toast.error("Escolha uma etapa de destino para os leads antes de remover.");
+      return;
+    }
 
     try {
       await deleteStage.mutateAsync({
         id: deleteStageId,
         pipeline_type: pipelineType,
+        stageKey: stageToDelete.stage_key,
+        migrateToStageKey: leadsInStageToDelete > 0 ? migrateToStageKey : undefined,
       });
-      toast.success("Etapa removida");
+      toast.success(
+        leadsInStageToDelete > 0
+          ? `Etapa removida. ${leadsInStageToDelete} lead(s) migrado(s).`
+          : "Etapa removida",
+      );
       setDeleteStageId(null);
+      setMigrateToStageKey("");
     } catch (error: any) {
       console.error("Error deleting stage:", error);
       toast.error(error.message || "Erro ao remover etapa");
@@ -684,7 +708,15 @@ export function ManagePipelineStagesContent({
           </div>
 
       {/* Confirmação de exclusão */}
-      <AlertDialog open={!!deleteStageId} onOpenChange={() => setDeleteStageId(null)}>
+      <AlertDialog
+        open={!!deleteStageId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteStageId(null);
+            setMigrateToStageKey("");
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
@@ -692,22 +724,59 @@ export function ManagePipelineStagesContent({
               Remover Etapa
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja remover esta etapa? A etapa será desativada mas os dados históricos serão preservados.
-              <br />
-              <br />
-              <strong>Atenção:</strong> Leads que estão nesta etapa continuarão com o status atual, mas a etapa não aparecerá mais no Kanban.
+              A etapa será desativada — os dados históricos são preservados e ela
+              deixa de aparecer no Kanban.
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          {leadsInStageToDelete > 0 ? (
+            <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+              <div className="flex items-start gap-2 text-sm">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                <span>
+                  Esta etapa tem{" "}
+                  <strong>
+                    {leadsInStageToDelete} lead{leadsInStageToDelete > 1 ? "s" : ""}
+                  </strong>
+                  . Escolha para onde migrá-los antes de remover.
+                </span>
+              </div>
+              <Label className="text-xs text-muted-foreground">Migrar leads para:</Label>
+              <Select value={migrateToStageKey} onValueChange={setMigrateToStageKey}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a etapa de destino" />
+                </SelectTrigger>
+                <SelectContent>
+                  {migrationTargets.map((s) => (
+                    <SelectItem key={s.id} value={s.stage_key}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDeleteStage}
+              onClick={(e) => {
+                // Não fechar o dialog quando faltar destino — deixa o usuário escolher.
+                if (leadsInStageToDelete > 0 && !migrateToStageKey) {
+                  e.preventDefault();
+                }
+                handleDeleteStage();
+              }}
+              disabled={
+                deleteStage.isPending ||
+                (leadsInStageToDelete > 0 && !migrateToStageKey)
+              }
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleteStage.isPending ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : null}
-              Remover
+              {leadsInStageToDelete > 0 ? "Migrar e remover" : "Remover"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

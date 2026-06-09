@@ -6,7 +6,7 @@ import { validateLeadInput, sanitizeString, isValidUUID, isValidISODate } from "
 import { enqueueWebhookDeliveries } from "../_shared/webhook-utils.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { successResponse, errorResponse } from "../_shared/response.ts";
-import { upsertPipeEntry, getPipeEntry, deletePipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
+import { upsertPipeEntry, getPipeEntry, deletePipeEntry, updatePipeEntryById, resolveActiveStageKey } from "../_shared/pipeline-adapter.ts";
 
 // Helper functions (reutilizadas do webhook-new-lead)
 function normalizeEmail(email: string | null | undefined): string | null {
@@ -322,11 +322,14 @@ async function handleProcessLead(supabase: any, data: any, tenantId: string | nu
     };
   }
 
+  // Resolve contra etapas ativas da org (guard fantasma — ver pipeline-adapter).
+  const entryStage =
+    (await resolveActiveStageKey(supabase, tenantId!, "whatsapp")) ?? "novo";
   await upsertPipeEntry(supabase, {
     leadId: lead.id,
     orgId: tenantId!,
     slug: "whatsapp",
-    stageKey: "novo",
+    stageKey: entryStage,
     metadata: { sdr_id },
     assignedTo: sdr_id || null,
   });

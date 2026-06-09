@@ -251,13 +251,121 @@ export function useUpdatePipelineStage() {
 }
 
 /**
- * Hook para deletar/desativar uma etapa
+ * Resolve o pipeline_id do pipe de sistema (org + slug + type=system).
+ * Usado pela migração de leads no delete de etapa.
+ */
+async function resolveSystemPipelineId(
+  organizationId: string,
+  slug: PipelineType,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("pipelines")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("slug", slug)
+    .eq("type", "system")
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
+/**
+ * Conta quantos leads estão em cada etapa de um pipe (por stage_key).
+ * Alimenta a UI de delete: se a etapa tem leads, exige destino de migração
+ * antes de desativar (senão os leads viram "fantasmas" — caem numa etapa que
+ * o Kanban não renderiza). Ver `useDeletePipelineStage`.
+ */
+export function usePipelineStageLeadCounts(pipelineType: PipelineType) {
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id;
+
+  return useQuery({
+    queryKey: ["pipeline_stage_lead_counts", pipelineType, organizationId],
+    queryFn: async () => {
+      if (!organizationId) return {} as Record<string, number>;
+
+      const pipelineId = await resolveSystemPipelineId(organizationId, pipelineType);
+      if (!pipelineId) return {} as Record<string, number>;
+
+      const { data, error } = await supabase
+        .from("pipeline_entries")
+        .select("stage_key")
+        .eq("pipeline_id", pipelineId);
+
+      if (error) {
+        console.warn("Error counting pipeline_entries per stage:", error.message);
+        return {} as Record<string, number>;
+      }
+
+      const counts: Record<string, number> = {};
+      for (const row of data ?? []) {
+        const key = (row as { stage_key: string }).stage_key;
+        counts[key] = (counts[key] ?? 0) + 1;
+      }
+      return counts;
+    },
+    enabled: !!organizationId,
+  });
+}
+
+/**
+ * Hook para deletar/desativar uma etapa.
+ *
+ * Soft-delete (is_active=false) preserva histórico. PORÉM, se a etapa ainda tem
+ * leads, eles precisam ser migrados para uma etapa ativa ANTES de desativar —
+ * caso contrário ficam num stage_key que o Kanban não renderiza (leads
+ * "fantasmas"). `migrateToStageKey` é obrigatório quando há leads na etapa.
  */
 export function useDeletePipelineStage() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
-    mutationFn: async ({ id, pipeline_type }: { id: string; pipeline_type: PipelineType }) => {
+    mutationFn: async ({
+      id,
+      pipeline_type,
+      stageKey,
+      migrateToStageKey,
+    }: {
+      id: string;
+      pipeline_type: PipelineType;
+      stageKey: string;
+      migrateToStageKey?: string;
+    }) => {
+      const organizationId = teamMember?.organization_id;
+      if (!organizationId) throw new Error("Organização não encontrada");
+
+      const pipelineId = await resolveSystemPipelineId(organizationId, pipeline_type);
+
+      // Migrar leads que ainda estão nesta etapa antes de desativar.
+      if (pipelineId) {
+        const { count, error: countError } = await supabase
+          .from("pipeline_entries")
+          .select("id", { count: "exact", head: true })
+          .eq("pipeline_id", pipelineId)
+          .eq("stage_key", stageKey);
+
+        if (countError) throw countError;
+
+        if ((count ?? 0) > 0) {
+          if (!migrateToStageKey) {
+            throw new Error(
+              `Esta etapa tem ${count} lead(s). Escolha uma etapa de destino para migrar antes de remover.`,
+            );
+          }
+          if (migrateToStageKey === stageKey) {
+            throw new Error("A etapa de destino deve ser diferente da etapa removida.");
+          }
+
+          const { error: migrateError } = await supabase
+            .from("pipeline_entries")
+            .update({ stage_key: migrateToStageKey, updated_at: new Date().toISOString() })
+            .eq("pipeline_id", pipelineId)
+            .eq("stage_key", stageKey);
+
+          if (migrateError) throw migrateError;
+        }
+      }
+
       // Ao invés de deletar, desativamos a etapa para preservar dados históricos
       const { error } = await supabase
         .from("pipeline_stages")
@@ -269,6 +377,8 @@ export function useDeletePipelineStage() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["pipeline_stages", variables.pipeline_type] });
       queryClient.invalidateQueries({ queryKey: ["all_pipeline_stages"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_stage_lead_counts", variables.pipeline_type] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries", variables.pipeline_type] });
     },
   });
 }
