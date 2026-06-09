@@ -118,6 +118,11 @@ function structuralMatch(s: EnabledSituation, lead: SituationLeadState): boolean
   // new_lead_no_reply means the Lead has never replied at all.
   if (s.situationId === "new_lead_no_reply" && lead.lastInboundAt) return false;
 
+  // cold_reengage is the inverse: the Lead engaged at least once, then went
+  // quiet. This keeps it mutually exclusive from new_lead_no_reply when a stage
+  // (e.g. "Automação") holds both never-replied and replied-then-cold leads.
+  if (s.situationId === "cold_reengage" && !lead.lastInboundAt) return false;
+
   if (REQUIRES_OUR_MESSAGE_LAST[s.situationId] && !ourMessageWasLast(lead)) return false;
 
   return true;

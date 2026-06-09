@@ -177,6 +177,16 @@ describe("resolveSituation — Oportunidades situations", () => {
     if (r.eligible) expect(r.situationId).toBe("cold_reengage");
   });
 
+  it("cold_reengage does NOT fire for a lead who never replied (that is new_lead)", () => {
+    const lead: SituationLeadState = {
+      pipeWhatsappStage: "em_andamento",
+      lastOutboundAt: "2026-06-01T08:00:00Z",
+      lastInboundAt: null, // never engaged → belongs to new_lead, not cold_reengage
+    };
+    const r = resolveSituation({ enabled: en("cold_reengage", ["em_andamento"]), lead, now: NOW });
+    expect(r.eligible).toBe(false);
+  });
+
   it("no_show_rebook fires from the no-show stage regardless of who messaged last", () => {
     const lead: SituationLeadState = {
       pipeWhatsappStage: "nao_compareceu",
