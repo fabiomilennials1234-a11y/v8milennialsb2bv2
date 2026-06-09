@@ -38,7 +38,8 @@ const ROLE_TO_SITUATION: Partial<Record<StageRole, SituationId>> = {
   proposta_ativa: "proposal_no_reply",
   reuniao: "meeting_reminder",
   no_show: "no_show_rebook",
-  // frio / ganho / perdido map to no Situation.
+  frio: "cold_reengage", // nurture / parked stages → cold re-engagement
+  // ganho / perdido map to no Situation (terminal).
 };
 
 export function buildTriggerStageMap(params: {
