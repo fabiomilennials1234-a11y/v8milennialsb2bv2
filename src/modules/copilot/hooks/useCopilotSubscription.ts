@@ -37,9 +37,12 @@ export function useCopilotSubscription() {
 
   const isLoading = adminLoading || subLoading;
 
-  // Admins e Vendedores têm acesso completo, outros precisam de subscription ativa
+  // Admins e Vendedores têm acesso completo, outros precisam de subscription ativa.
+  // `'unknown'` = status indeterminado por erro de transporte → fail-open (não
+  // negar gestão por timeout de rede; enforcement real é server-side).
   const hasAccess = canManage ||
-    (subscription?.isValid === true && subscription?.status === "active");
+    (subscription?.isValid === true &&
+      (subscription?.status === "active" || subscription?.status === "unknown"));
   const isTrial = !canManage && subscription?.status === "trial";
 
   return {

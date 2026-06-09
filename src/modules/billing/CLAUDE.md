@@ -68,6 +68,8 @@ NÃO re-exportados. `SubscriptionProtectedRoute` (em `identity`) faz deep-import
 
 🟠 **Trial / grace period** — lógica em `lib/subscription.ts` cruza `daysRemaining`, `graceRemaining`, `isOverdue`, `isBlocked`. NÃO tocar comportamento sem auditar a RPC `org_get_subscription_status` (server-side).
 
+🟠 **Fail-open em erro de transporte (desde 2026-06-09)** — `checkSubscription` faz retry curto e, persistindo erro de RPC (timeout/rede), devolve `status:'unknown'` com `isBlocked:false`. NUNCA assume `'expired'` por falha de transporte. O guard (`SubscriptionProtectedRoute`) trata `'unknown'`/`null` como fail-open e renderiza children. Razão: o guard é DISPLAY/UX — enforcement real é server-side (RLS). Bloquear cliente pagante por timeout é pior que liberar acesso a um guard cosmético. Bloqueio só nos terminais afirmados pelo DB (suspended/cancelled/expired sem `billing_override`). Regressão coberta em `tests/unit/subscription.test.ts`. Incidente: Grafica Cauta vista como "Assinatura Expirada" sob timeouts intermitentes de prod.
+
 🟠 **Multi-tenancy + plan limits enforcement server-side** — depende da RPC; client-side é display only.
 
 ## Dependências cross-module

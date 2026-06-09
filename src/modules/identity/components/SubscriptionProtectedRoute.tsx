@@ -79,8 +79,12 @@ export function SubscriptionProtectedRoute({
     return <Navigate to="/auth" replace />;
   }
 
-  if (!subscription) {
-    return <Navigate to="/subscription-required" replace />;
+  // Fail-open: subscription indeterminada (erro de transporte, sem team_member
+  // ativo resolvido, etc). NÃO bloquear — o guard é cosmético; enforcement real
+  // é server-side (RLS). Antes redirecionava para "/subscription-required", rota
+  // que não existe, deixando o usuário num beco sem saída.
+  if (!subscription || subscription.status === "unknown") {
+    return <>{children}</>;
   }
 
   // Blocked states — full-page block
