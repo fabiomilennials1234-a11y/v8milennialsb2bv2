@@ -842,7 +842,7 @@ export function CopilotPlayground() {
             </TabsContent>
 
             <TabsContent value="followup" className="flex-1 overflow-y-auto m-0 p-6 data-[state=inactive]:hidden">
-              <FollowupSituationsTab />
+              <FollowupSituationsTab organizationId={organizationId || currentAgent?.organization_id} />
             </TabsContent>
 
             <TabsContent value="conexao" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
