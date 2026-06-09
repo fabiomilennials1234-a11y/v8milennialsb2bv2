@@ -39,7 +39,6 @@ import { useStageLeadIds } from "../../hooks/model/useStageLeadIds";
 import { useFilteredLeadIds } from "../../hooks/model/useFilteredLeadIds";
 import { useCustomFilteredLeadIds } from "../../hooks/model/useCustomFilteredLeadIds";
 import type { PipelineType } from "../../hooks/model/usePipelineEntries";
-import { useResponsibleMembers } from "@/modules/identity";
 
 import { BlastBreakdown } from "./BlastBreakdown";
 import { BlastRefinementsControls } from "./BlastRefinementsControls";
@@ -95,8 +94,9 @@ export type SystemPipelineType = "whatsapp" | "confirmacao" | "propostas";
  * "agendar lotes" downstream (those take lead_ids and never branch on context):
  *
  *   - system  : a canonical pipe (`pipe_whatsapp/confirmacao/propostas`). Stage
- *               source via `useStageLeadIds`; conditions/responsible route the
- *               stage through `useFilteredLeadIds` with the stageKey.
+ *               source via `useStageLeadIds` (every lead in the stage, no
+ *               responsible scope); audience conditions route the stage through
+ *               `useFilteredLeadIds` with the stageKey.
  *   - custom  : a user-defined pipeline (`pipeline_entries`, stage_id uuid).
  *               Resolves via `useCustomFilteredLeadIds`. Stage picker reads the
  *               passed `stages` (uuid ids). (Phase 2b mount.)
@@ -187,10 +187,6 @@ export function DisparoWizard({
   const [stageKey, setStageKey] = useState<string>("");
   // Carteira segment multi-select (only used when context.kind === "carteira").
   const [segments, setSegments] = useState<string[]>([]);
-  // "all" = no responsible filter; a member id scopes the Estágio audience to
-  // that responsible's leads (resolved via get_filtered_lead_ids, #705 RPC).
-  // Carteira has no responsible surface — the picker is hidden there.
-  const [responsibleId, setResponsibleId] = useState<string>("all");
   const [manualLeadIds, setManualLeadIds] = useState<string[]>(initialManualLeadIds ?? []);
   const [refinements, setRefinements] = useState<BlastRefinements>(DEFAULT_REFINEMENTS);
   // Audience conditions (Phase 2a) — narrow EVERY source except Manual.
@@ -246,7 +242,6 @@ export function DisparoWizard({
   }, [isCustom, isSystem, context, systemStages]);
   const stagesLoading = isSystem ? systemStagesLoading : false;
 
-  const responsibleMembers = useResponsibleMembers();
   const { data: orgTags = [] } = useTags();
   const { data: templates = [] } = useCampaignTemplates();
   const { data: instances = [] } = useWhatsAppInstances();
@@ -260,11 +255,12 @@ export function DisparoWizard({
     conditions.qualificationTier.length > 0 ||
     conditions.preQualificationTier.length > 0 ||
     conditions.origin.length > 0;
-  // A responsible scope also forces the filtered path (system/custom only).
-  const responsibleScoped = !isCarteira && responsibleId !== "all";
-  // The Estágio source needs the FILTERED resolver when a condition or a
-  // responsible narrows it; otherwise the plain stage resolver suffices.
-  const stageNeedsFilter = conditionsActive || responsibleScoped;
+  // The Estágio source needs the FILTERED resolver only when an audience
+  // condition narrows it; otherwise the plain stage resolver suffices. Audience
+  // is no longer scoped by responsible — every lead in the stage (with or
+  // without a responsible) is included; the sending instance is chosen in the
+  // Mensagem step and is who sends, for everyone.
+  const stageNeedsFilter = conditionsActive;
 
   // Does the board carry an active server-side filter at all? Without one the
   // "Filtro ativo" source has nothing to honor and is empty/disabled. Carteira
@@ -289,7 +285,7 @@ export function DisparoWizard({
 
   // ── SYSTEM resolvers ──────────────────────────────────────────────────────
   // Plain stage source — every lead in a stage, no narrowing. Only when no
-  // condition/responsible forces the filtered path.
+  // audience condition forces the filtered path.
   const { data: sysStageLeadIds, isLoading: sysStageLoading } = useStageLeadIds(
     systemPipelineType,
     isSystem && source === "estagio" && !stageNeedsFilter ? stageKey : "",
@@ -313,7 +309,6 @@ export function DisparoWizard({
       : isSystem && source === "estagio" && !!stageKey && stageNeedsFilter
         ? {
             stageKey,
-            responsibleId: responsibleScoped ? responsibleId : undefined,
             ...conditionFields,
           }
         : {},
@@ -329,7 +324,6 @@ export function DisparoWizard({
     isCustom && (source === "estagio" || source === "filtro") ? customPipelineId : null,
     {
       stageId: source === "estagio" ? stageKey || null : null,
-      responsibleId: responsibleScoped ? responsibleId : undefined,
       ...conditionFields,
     },
   );
@@ -503,7 +497,6 @@ export function DisparoWizard({
     setStageKey("");
     setSegments([]);
     setConditions(EMPTY_CONDITIONS);
-    setResponsibleId("all");
     setManualLeadIds(initialManualLeadIds ?? []);
     setRefinements(DEFAULT_REFINEMENTS);
     setTemplateId("");
@@ -683,9 +676,6 @@ export function DisparoWizard({
                   onStageKey={setStageKey}
                   segments={segments}
                   onSegments={setSegments}
-                  responsibleId={responsibleId}
-                  onResponsibleId={setResponsibleId}
-                  responsibleMembers={responsibleMembers}
                   conditions={conditions}
                   onConditions={setConditions}
                   orgTags={orgTags}
@@ -906,9 +896,6 @@ function PublicoStep({
   onStageKey,
   segments,
   onSegments,
-  responsibleId,
-  onResponsibleId,
-  responsibleMembers,
   conditions,
   onConditions,
   orgTags,
@@ -933,9 +920,6 @@ function PublicoStep({
   onStageKey: (v: string) => void;
   segments: string[];
   onSegments: (v: string[]) => void;
-  responsibleId: string;
-  onResponsibleId: (v: string) => void;
-  responsibleMembers: { id: string; name: string }[];
   conditions: AudienceConditions;
   onConditions: (next: AudienceConditions) => void;
   orgTags: { id: string; name: string; color?: string | null }[];
@@ -1016,55 +1000,37 @@ function PublicoStep({
           {isCarteira ? (
             <SegmentPicker value={segments} onChange={onSegments} />
           ) : (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="disparo-stage" className="text-sm">
-                  {primarySourceLabel} do funil
-                </Label>
-                <Select value={stageKey} onValueChange={onStageKey} disabled={stagesLoading}>
-                  <SelectTrigger id="disparo-stage">
-                    <SelectValue
-                      placeholder={stagesLoading ? "Carregando etapas…" : "Selecione o estágio"}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stages.map((s) => (
-                      <SelectItem key={s.key} value={s.key}>
-                        <span className="flex items-center gap-2">
-                          <span
-                            className="h-2 w-2 shrink-0 rounded-full"
-                            style={{ backgroundColor: s.color ?? "hsl(var(--muted-foreground))" }}
-                          />
-                          {s.name}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="disparo-responsible" className="text-sm">
-                  Responsável <span className="font-normal text-muted-foreground">(opcional)</span>
-                </Label>
-                <Select value={responsibleId} onValueChange={onResponsibleId}>
-                  <SelectTrigger id="disparo-responsible">
-                    <SelectValue placeholder="Todos os responsáveis" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os responsáveis</SelectItem>
-                    {responsibleMembers.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Dispara só os leads atribuídos a este responsável no estágio escolhido.
-                </p>
-              </div>
-            </>
+            // Sem recorte por responsável: o estágio dispara para TODOS os leads
+            // da etapa, com ou sem responsável atribuído. A instância de envio é
+            // escolhida no passo Mensagem — ela é quem envia, para todos.
+            <div className="space-y-2">
+              <Label htmlFor="disparo-stage" className="text-sm">
+                {primarySourceLabel} do funil
+              </Label>
+              <Select value={stageKey} onValueChange={onStageKey} disabled={stagesLoading}>
+                <SelectTrigger id="disparo-stage">
+                  <SelectValue
+                    placeholder={stagesLoading ? "Carregando etapas…" : "Selecione o estágio"}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {stages.map((s) => (
+                    <SelectItem key={s.key} value={s.key}>
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: s.color ?? "hsl(var(--muted-foreground))" }}
+                        />
+                        {s.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Todos os leads desta etapa entram no disparo, inclusive os sem responsável.
+              </p>
+            </div>
           )}
         </div>
       )}
