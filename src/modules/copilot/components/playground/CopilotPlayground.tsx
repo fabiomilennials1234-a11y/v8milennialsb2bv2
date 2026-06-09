@@ -44,7 +44,7 @@ import { PlaygroundKnowledge } from "./PlaygroundKnowledge";
 import { PlaygroundFunis } from "./PlaygroundFunis";
 import { PlaygroundConexao } from "./PlaygroundConexao";
 import { PlaygroundComportamento } from "./PlaygroundComportamento";
-import { PlaygroundFollowup } from "./PlaygroundFollowup";
+import { FollowupSituationsTab } from "../FollowupSituationsTab";
 import { PlaygroundHandoffNotify } from "./PlaygroundHandoffNotify";
 import { LivePreviewChat } from "./LivePreviewChat";
 import { PromptAnalysisTab } from "./PromptAnalysisTab";
@@ -841,8 +841,8 @@ export function CopilotPlayground() {
               />
             </TabsContent>
 
-            <TabsContent value="followup" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
-              <PlaygroundFollowup agentId={editId} />
+            <TabsContent value="followup" className="flex-1 overflow-y-auto m-0 p-6 data-[state=inactive]:hidden">
+              <FollowupSituationsTab />
             </TabsContent>
 
             <TabsContent value="conexao" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">

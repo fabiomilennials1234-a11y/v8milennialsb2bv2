@@ -24,7 +24,6 @@ import {
   GitBranch,
   BarChart3,
   AlertTriangle,
-  MessageSquareReply,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -192,13 +191,6 @@ export default function Copilot() {
               {copilotQuota.current_usage} de {copilotQuota.effective_limit} agentes
             </Badge>
           )}
-          <Button
-            variant="outline"
-            onClick={() => navigate("/copilot/followup")}
-          >
-            <MessageSquareReply className="w-4 h-4 mr-2" />
-            Follow-up
-          </Button>
           <Button
             variant="outline"
             onClick={() => navigate("/copilot/metricas")}
