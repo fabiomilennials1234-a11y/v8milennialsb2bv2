@@ -53,8 +53,8 @@ function RankingTableBase({ month, year }: Props) {
                 <tr className="border-b text-left">
                   <th className="pb-2 w-10 font-medium text-muted-foreground">#</th>
                   <th className="pb-2 font-medium text-muted-foreground">Nome</th>
-                  <th className="pb-2 font-medium text-muted-foreground">{tab === "closers" ? "Vendas (R$)" : "Reuniões"}</th>
-                  <th className="pb-2 font-medium text-muted-foreground">{tab === "closers" ? "Nº Vendas" : "Meta"}</th>
+                  <th className="pb-2 font-medium text-muted-foreground">{tab === "closers" ? "Vendas (R$)" : "Realizadas"}</th>
+                  <th className="pb-2 font-medium text-muted-foreground">{tab === "closers" ? "Nº Vendas" : "Marcadas"}</th>
                   {tab === "closers" && <th className="pb-2 font-medium text-muted-foreground">Ticket Médio</th>}
                   <th className="pb-2 font-medium text-muted-foreground">Meta</th>
                   <th className="pb-2 font-medium text-muted-foreground min-w-[120px]">% Atingido</th>
@@ -80,7 +80,20 @@ function RankingTableBase({ month, year }: Props) {
                       </td>
                       <td className="py-2.5 font-medium">{item.name}{isMe && <span className="text-xs text-primary ml-1">(você)</span>}</td>
                       <td className="py-2.5">{tab === "closers" ? fmt(item.value) : (item as any).meetings ?? 0}</td>
-                      <td className="py-2.5">{tab === "closers" ? item.conversions : item.goal}</td>
+                      <td className="py-2.5">
+                        {tab === "closers" ? (
+                          item.conversions
+                        ) : (
+                          <span>
+                            {(item as any).meetingsBooked ?? 0}
+                            <span className="ml-2 inline-block rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                              {(item as any).goalBooked > 0
+                                ? `meta ${(item as any).goalBooked} · ${(item as any).goalBookedProgress}%`
+                                : "sem meta"}
+                            </span>
+                          </span>
+                        )}
+                      </td>
                       {tab === "closers" && <td className="py-2.5">{fmt(ticketMedio)}</td>}
                       <td className="py-2.5">{tab === "closers" ? fmt(item.goal) : item.goal}</td>
                       <td className="py-2.5">
