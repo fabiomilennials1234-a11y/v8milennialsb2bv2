@@ -100,6 +100,9 @@ interface RankingUser {
   value: number;
   conversions?: number;
   meetings?: number;
+  meetingsBooked?: number;
+  goalBooked?: number;
+  goalBookedProgress?: number;
   goalProgress: number;
   position: number;
 }
@@ -222,15 +225,25 @@ function RankingCard({ user, showValue = true, avatarUrl }: { user: RankingUser;
           ) : (
             <>
               <p className="text-xl font-bold">{user.meetings || 0}</p>
-              <p className="text-sm text-muted-foreground">reuniões</p>
+              <p className="text-sm text-muted-foreground">
+                realizadas · <span className="font-medium text-foreground">{user.meetingsBooked ?? 0} marcadas</span>
+              </p>
             </>
           )}
         </div>
 
-        <MiniProgressRing 
-          progress={user.goalProgress} 
-          color={user.goalProgress >= 100 ? "success" : "primary"} 
-        />
+        <div className="flex items-center gap-2">
+          <MiniProgressRing
+            progress={user.goalProgress}
+            color={user.goalProgress >= 100 ? "success" : "primary"}
+          />
+          {!showValue && (user.goalBooked ?? 0) > 0 && (
+            <MiniProgressRing
+              progress={user.goalBookedProgress ?? 0}
+              color="warning"
+            />
+          )}
+        </div>
       </div>
     </motion.div>
   );
