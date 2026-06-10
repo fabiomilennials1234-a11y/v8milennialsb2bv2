@@ -38,7 +38,15 @@ Canonical terms used across the system. No implementation details here — this 
 
 - **Campaign**: A time-bound sales initiative parallel to pipelines. Has objective, deadline, AI agent, goals, round robin assignment, and message sequences. A Lead can be enrolled in multiple campaigns.
 
-- **Follow-up**: A scheduled future contact with a Lead. Can be manual, automated by Workflow, or scheduled by Copilot. Has cadence rules and expiration.
+- **Follow-up**: Umbrella term for a scheduled future re-contact with a Lead. Two distinct kinds that must **not** be conflated:
+  - **Copilot Follow-up (Re-engagement Cadence)**: an autonomous WhatsApp re-engagement sequence the Copilot sends when a Lead goes silent. Owned by whichever **Archetype currently owns the Lead** (Qualificador / Vendedor / Carteira) — there is no separate "followup" agent. It fires only from a fixed set of canonical **Follow-up Situations** (never from a generic "last message was ours + N hours" timer). Torque owns the situation set and the default cadence + copy; the Organization only enables/disables each situation and tunes basics (number of touches, spacing, optional copy override). Each touch's text is a Torque-authored base, optionally refined by the LLM from live conversation context (base text is the fallback). A cadence **stops** when any of: the Lead replies, the Lead opts out, steps are exhausted, the owning human replies (cancel — not merely pause), the triggering Situation is resolved (e.g. the proposal reaches `vendido`), or the Lead's owner changes (the old cadence dies; the new owner may start its own).
+  - **Follow-up Task**: a human to-do created for a Team Member to contact a Lead — **no message is sent automatically**. Distinct from Copilot Follow-up by actor (human vs Copilot) and output (a task row vs a WhatsApp message).
+
+- **Follow-up Situation**: One of the fixed, Torque-owned moments that can trigger a Copilot Follow-up, each bound to a funnel position and an owning Archetype, with its own timing, tone, and stop rule. The canonical seven: (Qualificador) **new Lead approached, no reply**; **qualified, no meeting booked**; **cold re-engage** (a Lead parked in a nurture/holding stage that went quiet); (Vendedor) **meeting reminder** (reminder only — the Copilot never sets the Meeting Confirmation Status); **no-show → rebook**; **proposal sent, no reply**; (Carteira) **dormant client → win-back**. A Situation is configured (on/off + basics), never authored from scratch by the Organization. Which of the org's stage_keys map to each Situation is set by `trigger_stage_keys` and populated automatically by an **AI Stage Classifier** (an LLM reads stage names + the `is_final_positive`/`is_final_negative` flags), never hardcoded — see ADR-0006.
+
+- **Custom Field (Campo Personalizado)**: A per-Organization dynamic Lead attribute defined in `lead_custom_fields` (with a `field_type`: text/number/date/select/boolean). Its `field_name` is the human label — often phrased as a form question (e.g. "Qual o tipo do seu negócio?") — and doubles as the field's key. Per-Lead answers live in `lead_custom_field_values`. Referenced in message templates as `{{custom.<field_name>}}` (matched on exact `field_name`). Distinct from the Lead's built-in columns (name, company, …) and from a Tag (a label, not a key/value).
+
+- **Tag**: A free-form, N:N label attached to a Lead (`tags` + `lead_tags`), scoped to an Organization. A Lead can carry several. Distinct from **Qualification Tier** (a ranked enum, even when a tag happens to be named "Ouro") and from a **Custom Field** (a key/value attribute, not a label).
 
 - **Custom Field (Campo Personalizado)**: A per-Organization dynamic Lead attribute defined in `lead_custom_fields` (with a `field_type`: text/number/date/select/boolean). Its `field_name` is the human label — often phrased as a form question (e.g. "Qual o tipo do seu negócio?") — and doubles as the field's key. Per-Lead answers live in `lead_custom_field_values`. Referenced in message templates as `{{custom.<field_name>}}` (matched on exact `field_name`). Distinct from the Lead's built-in columns (name, company, …) and from a Tag (a label, not a key/value).
 
@@ -46,7 +54,7 @@ Canonical terms used across the system. No implementation details here — this 
 
 ## Post-Sale
 
-- **Carteira (Customer Portfolio)**: Unified module for post-sale client management. Subsumes the legacy "Upsell" concept. Includes: client health scoring, segmentation (ouro/prata/novo/resgate/dormindo), reorder cycle prediction, churn probability, retention actions, and bulk operations. Backed by `upsell_clients` table.
+- **Carteira (Customer Portfolio)**: Standalone post-sale module — a top-level feature (its own topbar entry next to Agenda), **not a Pipeline and not a kanban**. A table/analytics surface over `upsell_clients`: client health scoring, segmentation (ouro/prata/novo/resgate/dormindo), reorder cycle prediction, churn probability, retention actions, bulk operations. Retires the legacy "Upsell" kanban (the `upsell_base` / `upsell_gestao` pipe-type boards, labeled "Carteira Base" / "Carteira Gestão") — those are removed. **Carteira entry is deterministic-by-sale**: an Orçamento reaching `vendido` creates the Carteira Client (via `handle_proposta_vendida` trigger). A single optional Stage destination **"Carteira"** also lets any funnel's success stage admit a Lead manually (idempotent on `organization_id + lead_id`, lands in segment `novo`); this replaces the two dead legacy destinations. Distinct from Pipeline (Carteira tracks recurring post-sale relationship by segment, not stage progression).
 
 - **Order**: A purchase record linked to a Carteira client. Has items, approval workflow, and ERP sync capability.
 
@@ -54,9 +62,19 @@ Canonical terms used across the system. No implementation details here — this 
 
 - **Organization (Org)**: A tenant. All data is scoped by `organization_id`. Represents a customer company using Torque CRM.
 
-- **Team Member**: A salesperson within an Organization. Has roles and assignment types (SDR, Closer, Responsible). Tracks commissions and goals.
+- **Team Member**: A salesperson within an Organization. Has roles and assignment types (Pré-vendas, Closer). Tracks commissions and goals.
+
+- **Pré-vendas (Pre-Sale Responsible)**: The Team Member accountable for a Lead's pre-sale work — qualification and meeting booking. The ONLY canonical pre-sale assignment on a Lead. Meeting metrics credit the Pré-vendas. Legacy aliases `SDR` (`sdr_id`) and the generic `Responsible` (`responsible_id`) are deprecated and slated for cleanup; during transition they act only as fallback when the canonical field is empty.
+
+- **Closer (Sale Responsible)**: The Team Member accountable for a Lead's sale — proposals, negotiation, closing. The ONLY canonical sale assignment on a Lead. Sales metrics and commissions credit the Closer. Legacy alias `closer_id` is deprecated (fallback-only during transition).
 
 - **Role (code)**: Always one of `admin`, `master`, `membro`. SDR/Closer are UI/docs labels only, not code roles.
+
+## Metrics
+
+- **Reunião Marcada (Meeting Booked)**: The countable event of a meeting being scheduled for a Lead. Credits the Lead's **Pré-vendas** in the period the booking happened. Distinct from Reunião Realizada — booking is the pre-sale output metric. **Reschedules do not count as a new booking** (including after a no-show): the same meeting keeps its one `meeting_booked` event with an updated meeting_date. A reschedule only becomes a NEW booking when the new meeting_date differs from the previous one by **more than 30 days**.
+
+- **Reunião Realizada (Meeting Held)**: The countable event of a booked meeting actually happening (`compareceu`). Credits the Lead's **Pré-vendas** in the period of the meeting date. Distinct from Reunião Marcada — held is the quality/outcome metric. Goals can target either kind independently (`reunioes_marcadas` / `reunioes_realizadas` are separate goal types; the legacy single `reunioes` goal type measured held only).
 
 ## Communication
 

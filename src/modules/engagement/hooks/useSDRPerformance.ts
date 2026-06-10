@@ -1,20 +1,22 @@
 /**
  * useSDRPerformance(range)
  *
- * Agrega métricas de pré-vendas por SDR no range:
- * - marcadas: pipe_confirmacao com metrics_period_at ?? created_at no range
- * - comparecidas: pipe_confirmacao status=compareceu, meeting_date no range
- * - noShow: pipe_confirmacao status in (remarcar, perdido), meeting_date no range
+ * Agrega métricas de pré-vendas por SDR no range — fonte: meeting_events (ADR-0007).
+ * - marcadas: eventos meeting_booked com occurred_at no range
+ * - comparecidas: eventos meeting_held com (meeting_date ?? occurred_at) no range
+ * - noShow: meeting_booked com meeting_date no range já passada e sem meeting_held vinculado
  *
- * Atribuição: pre_sale_responsible_id ?? sdr_id (snapshot dual ADR 2026-05-18).
+ * Atribuição: pre_sale_responsible_id (snapshot no momento do evento — canônico).
  */
 import { useMemo } from "react";
-import { useTeamMembers } from "@/modules/identity";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useOrganization, useTeamMembers } from "@/modules/identity";
 import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { inRange, type TVPeriodRange } from "@/lib/tv-periods";
-// Lê a view pipe_confirmacao direto via supabase (data layer), reusando o
-// query hook do perf de closer. Quebra o import do módulo pipelines.
-import { usePerfPipeConfirmacao } from "./useCloserPerformance";
+import type { Tables } from "@/integrations/supabase/types";
+
+type MeetingEvent = Tables<"meeting_events">;
 
 export interface SDRPerformanceRow {
   id: string;
@@ -35,66 +37,80 @@ export interface SDRPerformanceData {
   bySDR: SDRPerformanceRow[];
 }
 
+function useMeetingEvents() {
+  const { organizationId, isReady } = useOrganization();
+
+  return useQuery({
+    queryKey: ["meeting_events", organizationId],
+    queryFn: async (): Promise<MeetingEvent[]> => {
+      if (!organizationId) return [];
+      const { data, error } = await supabase
+        .from("meeting_events")
+        .select("*")
+        .eq("organization_id", organizationId);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: isReady && !!organizationId,
+    refetchInterval: 60_000, // TV roda sem realtime nesta tabela
+  });
+}
+
 export function useSDRPerformance(range: TVPeriodRange): SDRPerformanceData {
-  const { data: confirmacoes = [] } = usePerfPipeConfirmacao();
+  const { data: events = [] } = useMeetingEvents();
   const { data: teamMembers = [] } = useTeamMembers();
   const avatarMap = useAvatarMap();
 
   return useMemo(() => {
     const sdrs = (teamMembers ?? []).filter((m: any) => m.metric_type === "meetings" && m.is_active);
-
     const sdrIdSet = new Set(sdrs.map((s: any) => s.id));
 
-    // Crédito SDR: pre_sale_responsible_id ?? sdr_id
-    const sdrOf = (c: any): string | null =>
-      c.pre_sale_responsible_id ?? c.sdr_id ?? null;
+    const booked = events.filter((e) => e.event_type === "meeting_booked");
+    const held = events.filter((e) => e.event_type === "meeting_held");
+    const heldByBookedId = new Set(held.map((h) => h.booked_event_id).filter(Boolean));
 
-    const marcadasNoRange = (confirmacoes as any[]).filter((c) => {
-      const periodAt = c.metrics_period_at ?? c.created_at;
-      return inRange(periodAt, range);
-    });
+    const marcadasNoRange = booked.filter((e) => inRange(e.occurred_at, range));
 
-    const eventoNoRange = (confirmacoes as any[]).filter((c) =>
-      inRange(c.meeting_date, range)
+    const comparecidas = held.filter((e) => inRange(e.meeting_date ?? e.occurred_at, range));
+
+    const now = Date.now();
+    const noShows = booked.filter(
+      (e) =>
+        e.meeting_date &&
+        inRange(e.meeting_date, range) &&
+        new Date(e.meeting_date).getTime() < now &&
+        !heldByBookedId.has(e.id)
     );
 
-    const comparecidas = eventoNoRange.filter((c) => c.status === "compareceu");
-    const noShows = eventoNoRange.filter(
-      (c) => c.status === "remarcar" || c.status === "perdido"
-    );
+    const presaleOf = (e: MeetingEvent): string | null => e.pre_sale_responsible_id ?? null;
 
-    const bySDR: SDRPerformanceRow[] = sdrs.map((sdr: any) => {
-      const marc = marcadasNoRange.filter((c) => sdrOf(c) === sdr.id).length;
-      const comp = comparecidas.filter((c) => sdrOf(c) === sdr.id).length;
-      const ns = noShows.filter((c) => sdrOf(c) === sdr.id).length;
-      return {
-        id: sdr.id,
-        name: sdr.name,
-        avatarUrl: avatarMap.get(sdr.id),
-        marcadas: marc,
-        comparecidas: comp,
-        noShow: ns,
-      };
-    });
+    const countFor = (list: MeetingEvent[], id: string) =>
+      list.filter((e) => presaleOf(e) === id).length;
 
-    // Inclui SDRs que aparecem nos dados mas não estão no team_members ativo
-    // (snapshot histórico — ex.: SDR desativado mas com cards atribuídos).
+    const bySDR: SDRPerformanceRow[] = sdrs.map((sdr: any) => ({
+      id: sdr.id,
+      name: sdr.name,
+      avatarUrl: avatarMap.get(sdr.id),
+      marcadas: countFor(marcadasNoRange, sdr.id),
+      comparecidas: countFor(comparecidas, sdr.id),
+      noShow: countFor(noShows, sdr.id),
+    }));
+
+    // Inclui pré-vendas que aparecem nos eventos mas não estão no team_members ativo
+    // (snapshot histórico — ex.: membro desativado com reuniões no período).
     const orphanIds = new Set<string>();
-    for (const c of [...marcadasNoRange, ...eventoNoRange]) {
-      const id = sdrOf(c);
+    for (const e of [...marcadasNoRange, ...comparecidas, ...noShows]) {
+      const id = presaleOf(e);
       if (id && !sdrIdSet.has(id)) orphanIds.add(id);
     }
     for (const oid of orphanIds) {
-      const marc = marcadasNoRange.filter((c) => sdrOf(c) === oid).length;
-      const comp = comparecidas.filter((c) => sdrOf(c) === oid).length;
-      const ns = noShows.filter((c) => sdrOf(c) === oid).length;
       bySDR.push({
         id: oid,
         name: "—",
         avatarUrl: avatarMap.get(oid),
-        marcadas: marc,
-        comparecidas: comp,
-        noShow: ns,
+        marcadas: countFor(marcadasNoRange, oid),
+        comparecidas: countFor(comparecidas, oid),
+        noShow: countFor(noShows, oid),
       });
     }
 
@@ -116,5 +132,5 @@ export function useSDRPerformance(range: TVPeriodRange): SDRPerformanceData {
       },
       bySDR,
     };
-  }, [confirmacoes, teamMembers, avatarMap, range.start.getTime(), range.end.getTime()]);
+  }, [events, teamMembers, avatarMap, range.start.getTime(), range.end.getTime()]);
 }
