@@ -309,17 +309,13 @@ export function useDeleteLead() {
         throw new Error("Lead not found or access denied");
       }
       
-      // Delete all dependent records (upsell, pipes, tags, history, etc.)
-      await cleanupLeadDependencies([id]);
+      // Soft-delete (move to trash) via the same RPC the bulk paths use.
+      // Sets deleted_at + deleted_by (recoverable + records WHO deleted) and clears
+      // pipeline entries so the kanban is clean, while PRESERVING the lead and its
+      // conversation/history/meetings so it can be restored from the trash page.
+      // Previously this hard-deleted the row + all dependents (irreversible, untracked).
+      const { error } = await supabase.rpc("bulk_delete_leads", { p_lead_ids: [id] });
 
-      // Then delete the lead
-      const { error } = await supabase
-        .from("leads")
-        .delete()
-        .eq("id", id)
-        // SECURITY: Double-check organization ownership
-        .eq("organization_id", organizationId);
-      
       if (error) throw error;
     },
     onSuccess: () => {
@@ -334,68 +330,7 @@ export function useDeleteLead() {
   });
 }
 
-const BATCH_SIZE = 200;
 const FETCH_PAGE_SIZE = 1000;
-
-/**
- * Cleanup all dependent records for a list of lead IDs before deleting the leads themselves.
- * Handles upsell tables (which have ON DELETE RESTRICT) first, then all other FKs.
- * SECURITY: Relies on RLS — caller must already have verified org ownership.
- */
-async function cleanupLeadDependencies(ids: string[]): Promise<void> {
-  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-    const batch = ids.slice(i, i + BATCH_SIZE);
-
-    // 1. Upsell tables — must be deleted before leads due to ON DELETE RESTRICT on upsell_clients.lead_id
-    // Fetch upsell_client IDs for this batch of leads
-    const { data: upsellClientRows } = await supabase
-      .from("upsell_clients")
-      .select("id")
-      .in("lead_id", batch);
-    const upsellClientIds = (upsellClientRows ?? []).map((x: { id: string }) => x.id);
-
-    if (upsellClientIds.length > 0) {
-      for (let j = 0; j < upsellClientIds.length; j += BATCH_SIZE) {
-        const ucBatch = upsellClientIds.slice(j, j + BATCH_SIZE);
-        // Delete children of upsell_clients (these CASCADE but we clean explicitly for safety)
-        await supabase.from("upsell_orders").delete().in("client_id", ucBatch);
-        await supabase.from("upsell_campanhas").delete().in("client_id", ucBatch);
-        await supabase.from("upsell_client_products").delete().in("client_id", ucBatch);
-      }
-      // Now delete the upsell_clients themselves
-      for (let j = 0; j < upsellClientIds.length; j += BATCH_SIZE) {
-        const ucBatch = upsellClientIds.slice(j, j + BATCH_SIZE);
-        await supabase.from("upsell_clients").delete().in("id", ucBatch);
-      }
-    }
-
-    // 2. pipe_proposta_items (via pipe_propostas)
-    const { data: propostaRows } = await supabase
-      .from("pipe_propostas")
-      .select("id")
-      .in("lead_id", batch);
-    const propostaIds = (propostaRows ?? []).map((x: { id: string }) => x.id);
-    if (propostaIds.length > 0) {
-      for (let j = 0; j < propostaIds.length; j += BATCH_SIZE) {
-        const propBatch = propostaIds.slice(j, j + BATCH_SIZE);
-        await supabase.from("pipe_proposta_items").delete().in("pipe_proposta_id", propBatch);
-      }
-    }
-
-    // 3. All other lead-dependent tables
-    await supabase.from("lead_tags").delete().in("lead_id", batch);
-    await supabase.from("lead_history").delete().in("lead_id", batch);
-    await supabase.from("follow_ups").delete().in("lead_id", batch);
-    await supabase.from("acoes_do_dia").delete().in("lead_id", batch);
-    await supabase.from("campanha_leads").delete().in("lead_id", batch);
-    await supabase.from("lead_scores").delete().in("lead_id", batch);
-    await supabase.from("leads_reativacao").delete().in("lead_id", batch);
-    await supabase.from("pipe_whatsapp").delete().in("lead_id", batch);
-    await supabase.from("pipe_confirmacao").delete().in("lead_id", batch);
-    await supabase.from("pipe_propostas").delete().in("lead_id", batch);
-    await supabase.from("custom_pipe_entries").delete().in("lead_id", batch);
-  }
-}
 
 /**
  * Fetch all lead ids for the organization, including:
@@ -492,20 +427,6 @@ async function fetchAllLeadIdsInPipe(
     offset += FETCH_PAGE_SIZE;
   }
   return Array.from(idSet);
-}
-
-function deleteLeadsAndRelated(ids: string[]): Promise<void> {
-  return (async () => {
-    // Clean up all dependent records (upsell, pipes, tags, history, etc.)
-    await cleanupLeadDependencies(ids);
-
-    // Now delete the leads themselves
-    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-      const batch = ids.slice(i, i + BATCH_SIZE);
-      const { error: deleteError } = await supabase.from("leads").delete().in("id", batch);
-      if (deleteError) throw deleteError;
-    }
-  })();
 }
 
 /**
