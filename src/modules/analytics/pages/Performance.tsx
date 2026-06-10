@@ -61,6 +61,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { resolveMeetingGoals } from "@/modules/engagement/lib/goal-progress";
 import badgeIcon from "@/assets/badge-icon.png";
 
 // ============ CONSTANTS ============
@@ -72,7 +73,8 @@ const months = [
 const goalTypes = [
   { value: "faturamento", label: "Faturamento", icon: "💰" },
   { value: "clientes", label: "Novos Clientes", icon: "👥" },
-  { value: "reunioes", label: "Reuniões", icon: "📅" },
+  { value: "reunioes_marcadas", label: "Reuniões Marcadas", icon: "📅" },
+  { value: "reunioes_realizadas", label: "Reuniões Realizadas", icon: "🤝" },
   { value: "conversao", label: "Taxa de Conversão", icon: "📈" },
   { value: "vendas", label: "Vendas (Individual)", icon: "🎯" },
 ];
@@ -931,11 +933,14 @@ export default function Performance() {
   // Goals calculations
   const faturamentoGoal = teamGoals?.find((g) => g.type === "faturamento");
   const clientesGoal = teamGoals?.find((g) => g.type === "clientes");
-  const reunioesGoal = teamGoals?.find((g) => g.type === "reunioes");
-
+  // Metas de reunião: tipos novos (marcadas/realizadas) + legado 'reunioes' = realizadas (ADR-0007)
+  const meetingGoals = resolveMeetingGoals(teamGoals ?? [], {
+    reunioesMarcadas: metrics?.reunioesMarcadas || 0,
+    reunioesComparecidas: metrics?.reunioesComparecidas || 0,
+  });
   const currentFaturamento = metrics?.vendaTotal || 0;
   const currentClientes = metrics?.novosClientes || 0;
-  const currentReunioes = metrics?.reunioesComparecidas || 0;
+  const currentReunioes = meetingGoals.realizadas?.current ?? (metrics?.reunioesComparecidas || 0);
 
   const faturamentoProgress = faturamentoGoal 
     ? (currentFaturamento / faturamentoGoal.target_value) * 100 
@@ -943,9 +948,9 @@ export default function Performance() {
   const clientesProgress = clientesGoal 
     ? (currentClientes / clientesGoal.target_value) * 100 
     : 0;
-  const reunioesProgress = reunioesGoal 
-    ? (currentReunioes / reunioesGoal.target_value) * 100 
-    : 0;
+  const reunioesProgress = meetingGoals.realizadas?.progress ?? 0;
+  const reunioesMarcadasProgress = meetingGoals.marcadas?.progress ?? 0;
+  void reunioesProgress; void reunioesMarcadasProgress; // exibição detalhada: issue #753 fase UI
 
   const expectedFaturamento = faturamentoGoal 
     ? (faturamentoGoal.target_value * expectedProgress) / 100 
