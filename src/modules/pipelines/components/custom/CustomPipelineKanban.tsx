@@ -14,6 +14,8 @@ import {
 import { toast } from "sonner";
 import { useCanDo } from "@/modules/identity";
 import { useUpdateLead } from "@/modules/leads";
+import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
+import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -68,6 +70,7 @@ export function CustomPipelineKanban({
   const { allowed: canMovePipe } = useCanDo("move_pipe_record");
   const { data: workflowCounts = {} } = useCustomPipeWorkflowCounts(pipeline.id);
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
+  const bulk = useBulkSelection();
 
   // Filtrar entries por busca
   const filteredEntries = useMemo(() => {
@@ -91,6 +94,12 @@ export function CustomPipelineKanban({
       return name.includes(query) || company.includes(query) || phone.includes(query);
     });
   }, [entries, searchQuery]);
+
+  // Ordered lead ids (para shift-select em range) — só entries com lead vinculado
+  const allLeadIds = useMemo(
+    () => filteredEntries.filter((e) => e.lead_id).map((e) => e.lead_id as string),
+    [filteredEntries],
+  );
 
   // Transforma CustomPipeEntry â†’ LeadCardData
   const transformToCard = (entry: CustomPipeEntry): LeadCardData => {
@@ -162,6 +171,12 @@ export function CustomPipelineKanban({
         <LeadCard
           lead={card}
           variant="custom"
+          selected={bulk.isSelected(card.leadId || "")}
+          onSelect={(e) => {
+            const lid = card.leadId || "";
+            if (e.shiftKey) bulk.toggleRange(lid, allLeadIds);
+            else bulk.toggle(lid);
+          }}
           onClick={() => {
             const entry = filteredEntries.find(e => e.id === card.id);
             if (entry) onClickEntry?.(entry);
@@ -184,6 +199,11 @@ export function CustomPipelineKanban({
       pipe="custom"
       customPipelineId={pipeline.id}
       leadCount={stageToExport?.count ?? 0}
+    />
+    <BulkActionBar
+      selectedIds={bulk.selectedIds}
+      onClear={bulk.clearSelection}
+      leadIds={allLeadIds}
     />
     </>
   );
