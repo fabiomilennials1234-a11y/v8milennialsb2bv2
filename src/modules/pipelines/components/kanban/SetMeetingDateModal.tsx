@@ -16,6 +16,8 @@ import { CalendarIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import * as Sentry from "@sentry/react";
+import { getErrorMessage } from "@/shared/errors";
 import { cn } from "@/lib/utils";
 import { useSetMeetingDate } from "../../hooks/model/useSetMeetingDate";
 import { useRescheduleMeeting } from "../../hooks/model/useMergedFunnelActions";
@@ -68,15 +70,30 @@ export function SetMeetingDateModal({
     );
   };
 
+  const onSaveError = (err: unknown) => {
+    console.error("[SetMeetingDateModal] Falha ao salvar data da reunião:", err);
+    Sentry.captureException(err, {
+      tags: { feature: "pipelines", kind: "set-meeting-date-failed" },
+      extra: { entryId, leadId, variant },
+    });
+    toast.error(
+      variant === "reschedule" ? "Erro ao remarcar reunião" : "Erro ao salvar data da reunião",
+      { description: getErrorMessage(err) },
+    );
+  };
+
   const save = () => {
     if (!day) return;
     const meetingDate = combine(day, time).toISOString();
     if (variant === "reschedule") {
-      reschedule.mutate({ entryId, meetingDate }, { onSuccess: () => { fireCalendar(meetingDate); onOpenChange(false); } });
+      reschedule.mutate(
+        { entryId, meetingDate },
+        { onSuccess: () => { fireCalendar(meetingDate); onOpenChange(false); }, onError: onSaveError },
+      );
     } else {
       setMeetingDate.mutate(
         { entryId, meetingDate, meetLink: link.trim() || null },
-        { onSuccess: () => { fireCalendar(meetingDate); onOpenChange(false); } },
+        { onSuccess: () => { fireCalendar(meetingDate); onOpenChange(false); }, onError: onSaveError },
       );
     }
   };

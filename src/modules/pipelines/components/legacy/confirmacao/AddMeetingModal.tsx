@@ -20,6 +20,8 @@ import { useGoogleCalendarStatus } from "@/modules/integrations/hooks/useGoogleC
 import { useCalendarSharing } from "@/modules/integrations/hooks/useGoogleCalendarSharing";
 import { useAuth } from "@/modules/identity";
 import { toast } from "sonner";
+import * as Sentry from "@sentry/react";
+import { getErrorMessage } from "@/shared/errors";
 
 interface AddMeetingModalProps {
   open: boolean;
@@ -262,8 +264,13 @@ export function AddMeetingModal({
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
-      console.error(error);
-      toast.error("Erro ao adicionar reunião");
+      const message = getErrorMessage(error);
+      console.error("[AddMeetingModal] Falha ao adicionar reunião:", error);
+      Sentry.captureException(error, {
+        tags: { feature: "pipelines", kind: "add-meeting-failed" },
+        extra: { leadId: selectedLeadId, status },
+      });
+      toast.error("Erro ao adicionar reunião", { description: message });
     } finally {
       setIsSubmitting(false);
     }
