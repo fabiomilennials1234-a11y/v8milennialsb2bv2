@@ -145,6 +145,42 @@ export default function AutomacoesEditor() {
   // Mint a fresh, globally-unique node id from the shared counter.
   const genNodeId = useCallback((type: string) => `${type}-${nodeIdCounter++}`, []);
 
+  // ── Histórico (undo/redo) ──────────────────────────────────────────────
+  // Refs com o estado atual, pra snapshots sempre lerem o valor mais recente
+  // sem recriar callbacks a cada render.
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  nodesRef.current = nodes;
+  edgesRef.current = edges;
+
+  const historyPast = useRef<{ nodes: WorkflowNode[]; edges: WorkflowEdge[] }[]>([]);
+  const historyFuture = useRef<{ nodes: WorkflowNode[]; edges: WorkflowEdge[] }[]>([]);
+
+  // Captura o estado atual ANTES de uma mudança. Limpa o "refazer" (nova ramificação).
+  const takeSnapshot = useCallback(() => {
+    historyPast.current.push({ nodes: nodesRef.current, edges: edgesRef.current });
+    if (historyPast.current.length > 100) historyPast.current.shift();
+    historyFuture.current = [];
+  }, []);
+
+  const undo = useCallback(() => {
+    const prev = historyPast.current.pop();
+    if (!prev) return;
+    historyFuture.current.push({ nodes: nodesRef.current, edges: edgesRef.current });
+    setNodes(prev.nodes);
+    setEdges(prev.edges);
+    setSelectedNodeId(null);
+  }, [setNodes, setEdges]);
+
+  const redo = useCallback(() => {
+    const next = historyFuture.current.pop();
+    if (!next) return;
+    historyPast.current.push({ nodes: nodesRef.current, edges: edgesRef.current });
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    setSelectedNodeId(null);
+  }, [setNodes, setEdges]);
+
   // Load workflow data when editing
   useEffect(() => {
     if (workflow && !initialized) {
@@ -215,6 +251,7 @@ export default function AutomacoesEditor() {
 
   const handleAddNode = useCallback(
     (type: WorkflowNodeType) => {
+      takeSnapshot();
       const newId = genNodeId(type);
       // Place below the last node
       const maxY = nodes.reduce((max, n) => Math.max(max, n.position.y), 0);
@@ -227,7 +264,7 @@ export default function AutomacoesEditor() {
       setNodes((nds) => [...nds, newNode]);
       setSelectedNodeId(newId);
     },
-    [nodes, setNodes, genNodeId]
+    [nodes, setNodes, genNodeId, takeSnapshot]
   );
 
   const handleNodeClick = useCallback((nodeId: string) => {
@@ -240,6 +277,7 @@ export default function AutomacoesEditor() {
 
   const handleUpdateNode = useCallback(
     (nodeId: string, dataUpdates: Partial<WorkflowNodeData>) => {
+      takeSnapshot();
       setNodes((nds) =>
         nds.map((n) =>
           n.id === nodeId
@@ -264,16 +302,17 @@ export default function AutomacoesEditor() {
         );
       }
     },
-    [setNodes, setEdges]
+    [setNodes, setEdges, takeSnapshot]
   );
 
   const handleDeleteNode = useCallback(
     (nodeId: string) => {
+      takeSnapshot();
       setNodes((nds) => nds.filter((n) => n.id !== nodeId));
       setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
       setSelectedNodeId(null);
     },
-    [setNodes, setEdges]
+    [setNodes, setEdges, takeSnapshot]
   );
 
   // Paste a cloned selection into the graph: deselect originals, append clones,
@@ -282,6 +321,7 @@ export default function AutomacoesEditor() {
     (selection: WorkflowSelection) => {
       const cloned = cloneSelection(selection, genNodeId);
       if (cloned.nodes.length === 0) return 0;
+      takeSnapshot();
       setNodes((nds) => [
         ...nds.map((n) => (n.selected ? { ...n, selected: false } : n)),
         ...cloned.nodes,
@@ -292,7 +332,7 @@ export default function AutomacoesEditor() {
       setSelectedNodeId(cloned.nodes.length === 1 ? cloned.nodes[0].id : null);
       return cloned.nodes.length;
     },
-    [genNodeId, setNodes, setEdges]
+    [genNodeId, setNodes, setEdges, takeSnapshot]
   );
 
   // Ctrl/Cmd+C — capture selected copyable nodes + internal edges to clipboard.
@@ -362,11 +402,22 @@ export default function AutomacoesEditor() {
           e.preventDefault(); // always — overrides browser "bookmark"
           handleDuplicate();
           break;
+        case "z":
+          // Ctrl/Cmd+Z = desfazer | Ctrl/Cmd+Shift+Z = refazer
+          e.preventDefault();
+          if (e.shiftKey) redo();
+          else undo();
+          break;
+        case "y":
+          // Ctrl/Cmd+Y = refazer (padrão Windows)
+          e.preventDefault();
+          redo();
+          break;
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleCopy, handlePaste, handleDuplicate]);
+  }, [handleCopy, handlePaste, handleDuplicate, undo, redo]);
 
   const handleSave = useCallback(async () => {
     if (!name.trim()) {
@@ -461,6 +512,7 @@ export default function AutomacoesEditor() {
           setEdges={setEdges}
           onNodeClick={handleNodeClick}
           onPaneClick={handlePaneClick}
+          onTakeSnapshot={takeSnapshot}
         />
 
         <WorkflowSidebar
