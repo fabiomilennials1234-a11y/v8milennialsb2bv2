@@ -14,7 +14,7 @@ import { getCampaignLeadAssignment, getCampaignCloserAssignment } from "../_shar
 import { logRuntime } from "../_shared/logger.ts";
 import { isValidUUID, isValidISODate, validateArraySize, validateReferencedId } from "../_shared/validation.ts";
 import { successResponse, errorResponse } from "../_shared/response.ts";
-import { upsertPipeEntry, getPipeEntry, updatePipeEntryById, resolveActiveStageKey } from "../_shared/pipeline-adapter.ts";
+import { upsertPipeEntry, getPipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
 import type { PipeSlug } from "../_shared/pipeline-adapter.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -445,19 +445,13 @@ serve(withSentry('lead-webhook', async (req) => {
     } else {
       // Sempre criar novo lead (padrão do sistema)
       const leadName = name || "Lead sem nome";
-      // Resolve a etapa de entrada do whatsapp contra as etapas ATIVAS da org.
-      // Evita o bug de "stage fantasma": orgs que renomearam/desativaram a etapa
-      // seed "novo" (ex: usam "novo_lead") recebiam leads num stage invisível no
-      // Kanban. Cai pra "novo" só se a org nunca teve etapas semeadas.
-      const defaultWhatsappStage =
-        (await resolveActiveStageKey(supabase, organizationId, "whatsapp")) ?? "novo";
       const insertData: Record<string, unknown> = {
         name: leadName,
         phone: phone || null,
         email: email || null,
         origin,
         organization_id: organizationId,
-        pipe_whatsapp: defaultWhatsappStage,
+        pipe_whatsapp: "novo",
         utm_source: utmSource,
         utm_medium: utmMedium,
         utm_campaign: utmCampaign,
@@ -479,6 +473,14 @@ serve(withSentry('lead-webhook', async (req) => {
 
       if (createError) {
         console.error("[lead-webhook] Failed to create lead:", createError);
+        if (createError.code === "23505") {
+          return errorResponse(
+            409,
+            "Lead já existe com este telefone nesta organização. Envie update_existing_if_match=true (Make: 'Atualizar lead existente?' = Sim) para atualizar o lead existente.",
+            corsHeaders,
+            { req, details: createError.message },
+          );
+        }
         return errorResponse(500, "Failed to create lead", corsHeaders, { req, details: createError.message });
       }
 
@@ -487,7 +489,7 @@ serve(withSentry('lead-webhook', async (req) => {
           leadId: newLead.id,
           orgId: organizationId,
           slug: "whatsapp",
-          stageKey: defaultWhatsappStage,
+          stageKey: "novo",
           metadata: { sdr_id: payload.assigned_user_id ?? null },
           assignedTo: payload.assigned_user_id ?? null,
         });
@@ -729,33 +731,65 @@ serve(withSentry('lead-webhook', async (req) => {
       const metadata: Record<string, unknown> = {};
       if (meeting_date) metadata.meeting_date = meeting_date;
 
+      // Aceita stage_key exato ou nome da etapa (case-insensitive) — Make/n8n enviam rótulos como "Novo".
+      let resolvedStageKey = stageVal;
+      const { data: orgStages } = await supabase
+        .from("pipeline_stages")
+        .select("stage_key, name")
+        .eq("organization_id", organizationId)
+        .eq("pipeline_type", pipeSlug)
+        .eq("is_active", true);
+      if (orgStages && orgStages.length > 0) {
+        const requested = stageVal.trim().toLowerCase();
+        const match =
+          orgStages.find((s) => s.stage_key.toLowerCase() === requested) ||
+          orgStages.find((s) => s.name?.trim().toLowerCase() === requested);
+        if (match) resolvedStageKey = match.stage_key;
+      }
+
       const existingEntry = await getPipeEntry(supabase, leadId, organizationId, pipeSlug);
       if (existingEntry) {
-        // Ingestão externa (n8n/Meta Ads) não pode regredir um lead que já está em movimento no funil.
-        // Atualiza só metadata; preserva stage_key atual.
-        if (Object.keys(metadata).length > 0) {
-          await updatePipeEntryById(supabase, existingEntry.id, { metadata });
+        // Reingestão externa (Make/n8n/Meta Ads) move o lead para o stage pedido — lead que
+        // reconverte volta a aparecer na coluna solicitada. Registra reconversão na timeline.
+        const stageChanged = existingEntry.stage_key !== resolvedStageKey;
+        const entryUpdates: { stageKey?: string; metadata?: Record<string, unknown> } = {};
+        if (stageChanged) entryUpdates.stageKey = resolvedStageKey;
+        if (Object.keys(metadata).length > 0) entryUpdates.metadata = metadata;
+        if (Object.keys(entryUpdates).length > 0) {
+          await updatePipeEntryById(supabase, existingEntry.id, entryUpdates);
         }
-        if (existingEntry.stage_key !== stageVal) {
+        if (stageChanged) {
+          const { error: historyErr } = await supabase.from("lead_history").insert({
+            lead_id: leadId,
+            organization_id: organizationId,
+            action: "stage_changed",
+            description: `Lead reconverteu via webhook (${origin}): movido de "${existingEntry.stage_key}" para "${resolvedStageKey}" no funil ${pipeSlug}.`,
+            created_by: null,
+            source: "system",
+            metadata: {
+              pipe: pipeSlug,
+              from_stage: existingEntry.stage_key,
+              to_stage: resolvedStageKey,
+              reconversion: true,
+            },
+          });
+          if (historyErr) {
+            console.warn("[lead-webhook] lead_history reconversion insert failed:", historyErr);
+          }
           console.log(
-            `[lead-webhook] Lead já existe em pipeline_entries(${pipeSlug}) stage="${existingEntry.stage_key}"; ignorando place_in_pipe.stage="${stageVal}" (não regride stage via webhook).`
+            `[lead-webhook] Lead reconverteu em pipeline_entries(${pipeSlug}): "${existingEntry.stage_key}" → "${resolvedStageKey}".`
           );
         }
       } else {
-        // Resolve o stage pedido contra as etapas ATIVAS da org (guard fantasma).
-        // Make/n8n manda o slug como string fixa; se foi desativado/renomeado,
-        // o lead cairia num stage invisível. Cai pra 1ª etapa ativa nesse caso.
-        const resolvedStage =
-          (await resolveActiveStageKey(supabase, organizationId, pipeSlug, stageVal)) ?? stageVal;
         await upsertPipeEntry(supabase, {
           leadId,
           orgId: organizationId,
           slug: pipeSlug,
-          stageKey: resolvedStage,
+          stageKey: resolvedStageKey,
           metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
         });
         await autoDistributePipe(pipeSlug);
-        console.log(`[lead-webhook] Lead placed in pipeline_entries(${pipeSlug}) stage:`, resolvedStage);
+        console.log(`[lead-webhook] Lead placed in pipeline_entries(${pipeSlug}) stage:`, resolvedStageKey);
       }
     }
 

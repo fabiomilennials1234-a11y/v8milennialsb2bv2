@@ -142,7 +142,6 @@ const primaryNavItems: NavItemWithChildren[] = [
 const moreNavItems: NavItemWithChildren[] = [
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Combustível", icon: Fuel, path: "/leads" },
-  { label: "Negócios", icon: Briefcase, path: "/negocios" },
   { label: "Disparos", icon: Send, path: "/disparos" },
   { label: "Checklists", icon: ListChecks, path: "/checklists" },
   { label: "Templates", icon: FileText, path: "/templates" },
@@ -160,7 +159,6 @@ const allNavItems: NavItemWithChildren[] = [
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
   { label: "Carteira", icon: Wallet, path: "/upsell" },
   { label: "Combustível", icon: Fuel, path: "/leads" },
-  { label: "Negócios", icon: Briefcase, path: "/negocios" },
   { label: "Ranking", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
