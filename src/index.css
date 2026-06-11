@@ -811,6 +811,12 @@
 .cmd-livepulse { animation: cmd-livepulse 2s ease-in-out infinite; }
 .cmd-sparkpulse { animation: cmd-sparkpulse 3s ease-in-out infinite; }
 .cmd-drawline { animation: cmd-drawline 1.6s cubic-bezier(.4,0,.2,1) forwards; }
+/* Aba Mapa — choropleth */
+.tabmapa-svg svg { width: 100%; height: auto; filter: drop-shadow(0 18px 40px hsl(0 0% 0% / .45)); }
+.tabmapa-svg svg path { stroke: hsl(35 10% 9%); stroke-width: 1.2; cursor: pointer; transition: filter .15s; }
+.tabmapa-svg svg path:hover { filter: brightness(1.35); }
+.tabmapa-svg svg path.uf-sel { stroke: hsl(var(--primary)); stroke-width: 2.5; filter: drop-shadow(0 0 14px hsl(var(--primary) / .55)) brightness(1.15); }
+
 @media (prefers-reduced-motion: reduce) {
   .cmd-rise, .cmd-slidein, .cmd-fadein, .cmd-growy { animation-duration: .01s; animation-delay: 0s !important; }
   .cmd-livepulse, .cmd-sparkpulse { animation: none; }

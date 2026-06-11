@@ -9,6 +9,7 @@ import { TelemetryTicker } from "@/modules/analytics/components/dashboard/v2/Tel
 import { TabVisaoGeralV2 } from "@/modules/analytics/components/dashboard/v2/TabVisaoGeralV2";
 import { TabPerformanceV2 } from "@/modules/analytics/components/dashboard/v2/TabPerformanceV2";
 import { TabInteligenciaV2 } from "@/modules/analytics/components/dashboard/v2/TabInteligenciaV2";
+import { TabMapa } from "@/modules/analytics/components/dashboard/v2/TabMapa";
 import { OraculoChat } from "@/modules/analytics/components/dashboard/OraculoChat";
 import { useOraculoChat } from "@/modules/copilot/hooks/useOraculoChat";
 import {
@@ -142,6 +143,17 @@ export default function Dashboard() {
             transition={{ duration: 0.3 }}
           >
             <TabInteligenciaV2 month={selectedMonth} year={selectedYear} />
+          </motion.div>
+        </TabsContent>
+
+        <TabsContent value="mapa" className="mt-0">
+          <motion.div
+            key="mapa"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <TabMapa />
           </motion.div>
         </TabsContent>
 

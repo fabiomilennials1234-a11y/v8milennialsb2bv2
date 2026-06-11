@@ -121,6 +121,9 @@ const STANDARD_FIELD_ALIASES: Record<string, string> = {
   // segment
   "segmento": "segment",
   "setor": "segment",
+  // uf (Estado)
+  "estado": "uf",
+  "uf": "uf",
   // faturamento
   "faturamento mensal": "faturamento",
   "receita": "faturamento",
@@ -138,7 +141,7 @@ const STANDARD_FIELD_ALIASES: Record<string, string> = {
 };
 
 const STANDARD_FIELD_NAMES = new Set([
-  "name", "phone", "email", "company", "notes", "segment", "faturamento", "urgency", "rating",
+  "name", "phone", "email", "company", "notes", "segment", "faturamento", "uf", "urgency", "rating",
   "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
 ]);
 
@@ -326,6 +329,7 @@ serve(withSentry('lead-webhook', async (req) => {
       notes: fieldsNotes,
       segment,
       faturamento,
+      uf: rawUf,
       urgency,
       rating,
       utm_source: fieldsUtmSource,
@@ -531,6 +535,17 @@ serve(withSentry('lead-webhook', async (req) => {
       updateData.notes = `Fonte: ${payload.source}`;
     }
     if (segment !== undefined) updateData.segment = segment || null;
+    // UF: valida 27 estados; resposta explícita vence o DDD derivado
+    const VALID_UFS = new Set(["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SE","SP","TO"]);
+    if (rawUf !== undefined && typeof rawUf === "string") {
+      const normUf = rawUf.trim().toUpperCase();
+      if (VALID_UFS.has(normUf)) {
+        updateData.uf = normUf;
+        updateData.uf_source = "webhook";
+      } else if (normUf) {
+        console.warn("[lead-webhook] UF inválida ignorada:", rawUf);
+      }
+    }
     if (faturamento !== undefined) updateData.faturamento = faturamento || null;
     if (urgency !== undefined) updateData.urgency = urgency || null;
     if (rating !== undefined && rating !== "") {
