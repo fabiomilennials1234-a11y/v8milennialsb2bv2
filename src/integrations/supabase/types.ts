@@ -15883,7 +15883,7 @@ export type Database = {
         }[]
       }
       get_leads_by_uf: {
-        Args: { p_limit?: number; p_uf: string }
+        Args: { p_limit?: number; p_org_id?: string; p_uf: string }
         Returns: {
           company: string
           created_at: string
@@ -15961,7 +15961,7 @@ export type Database = {
       get_my_organization_ids: { Args: never; Returns: string[] }
       get_my_team_member_ids: { Args: never; Returns: string[] }
       get_next_best_actions: {
-        Args: { p_limit?: number }
+        Args: { p_limit?: number; p_org_id?: string }
         Returns: {
           action_type: string
           deal_id: string
@@ -16121,6 +16121,7 @@ export type Database = {
       get_sales_cycle_analysis: {
         Args: {
           p_end_date?: string
+          p_org_id?: string
           p_pipeline_type?: string
           p_start_date?: string
         }
@@ -16163,7 +16164,7 @@ export type Database = {
         }[]
       }
       get_uf_heatmap: {
-        Args: never
+        Args: { p_org_id?: string }
         Returns: {
           clients_count: number
           leads_count: number
@@ -16251,7 +16252,7 @@ export type Database = {
         }[]
       }
       get_win_loss_analysis: {
-        Args: { p_end_date?: string; p_start_date?: string }
+        Args: { p_end_date?: string; p_org_id?: string; p_start_date?: string }
         Returns: {
           count: number
           loss_reason: string
@@ -16510,6 +16511,7 @@ export type Database = {
         Args: { p_org_id: string; p_target_state?: string }
         Returns: undefined
       }
+      resolve_org_for_rpc: { Args: { p_org_id?: string }; Returns: string }
       resolve_wait_response: {
         Args: {
           p_channel?: string
