@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Plus, Calendar as CalendarIcon, User, Building2,
   DollarSign, Loader2, TrendingUp, Package,
-  ArrowUpRight, Percent, BarChart3, Target, Flame, MessageCircle, Settings2,
+  BarChart3, MessageCircle, Settings2,
   MoreVertical, Trash2, LayoutGrid, Send
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -49,7 +49,13 @@ import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportS
 import { LeadCard, type LeadCardData } from "@/modules/leads";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
-import { FunnelChart } from "@/modules/analytics/components/dashboard/FunnelChart";
+import {
+  AnalyticsPanel,
+  AnalyticsStatCard,
+  ContinuousFunnel,
+  CalorBars,
+  MemberLeaderboard,
+} from "@/modules/pipelines/components/shared/analytics-ui";
 import { CalorSlider, CalorBadge } from "@/modules/carteira/components/proposal/CalorSlider";
 import { QuickAddDailyAction } from "@/modules/carteira/components/proposal/QuickAddDailyAction";
 import { CommitmentDateModal } from "@/modules/carteira/components/proposal/CommitmentDateModal";
@@ -61,7 +67,6 @@ import { CadastroExternoConfirmDialog } from "@/modules/carteira/components/prop
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { useLeadsWithScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
 import { supabase } from "@/integrations/supabase/client";
-import { CalorAnalyticsChart } from "@/modules/carteira/components/proposal/CalorAnalyticsChart";
 import { ProductAnalyticsChart } from "@/modules/carteira/components/proposal/ProductAnalyticsChart";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -1057,79 +1062,47 @@ function PipePropostasInner() {
       {/* Summary Cards — só no modo Analytics */}
       {viewMode === "analytics" && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="stat-card cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
+          <AnalyticsStatCard
+            label="Pipeline Ativo"
+            value={formatCurrency(displayStats.inProgress)}
+            sub={`${displayStats.inProgressCount} propostas`}
+            accent="gold"
             onClick={() => setDrilldownMetric("pipeline_ativo")}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-muted-foreground">Pipeline Ativo</p>
-              <Target className="w-4 h-4 text-primary" />
-            </div>
-            <p className="text-xl font-bold">{formatCurrency(displayStats.inProgress)}</p>
-            <p className="text-xs text-muted-foreground">{displayStats.inProgressCount} propostas</p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 }}
-            className="stat-card cursor-pointer hover:ring-1 hover:ring-success/30 transition-all"
+          />
+          <AnalyticsStatCard
+            label="Vendas Total"
+            value={formatCurrency(displayStats.sold)}
+            sub={`${displayStats.soldCount} vendas`}
+            accent="success"
+            tintValue
+            delay={0.05}
             onClick={() => setDrilldownMetric("vendas_total")}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-muted-foreground">Vendas Total</p>
-              <TrendingUp className="w-4 h-4 text-success" />
-            </div>
-            <p className="text-xl font-bold text-success">{formatCurrency(displayStats.sold)}</p>
-            <p className="text-xs text-muted-foreground">{displayStats.soldCount} vendas</p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="stat-card cursor-pointer hover:ring-1 hover:ring-chart-5/30 transition-all"
+          />
+          <AnalyticsStatCard
+            label="Rec. Vendida"
+            value={formatCurrency(displayStats.mrr)}
+            sub="valor vendido /mês"
+            accent="blue"
+            delay={0.1}
             onClick={() => setDrilldownMetric("rec_vendida")}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-muted-foreground">Rec. Vendida</p>
-              <ArrowUpRight className="w-4 h-4 text-chart-5" />
-            </div>
-            <p className="text-xl font-bold text-chart-5">{formatCurrency(displayStats.mrr)}</p>
-            <p className="text-xs text-muted-foreground">valor vendido /mês</p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="stat-card cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
+          />
+          <AnalyticsStatCard
+            label="Projetos Vendidos"
+            value={formatCurrency(displayStats.projeto)}
+            sub="valor vendido"
+            accent="neutral"
+            delay={0.15}
             onClick={() => setDrilldownMetric("projetos_vendidos")}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-muted-foreground">Projetos Vendidos</p>
-              <Package className="w-4 h-4 text-primary" />
-            </div>
-            <p className="text-xl font-bold text-primary">{formatCurrency(displayStats.projeto)}</p>
-            <p className="text-xs text-muted-foreground">valor vendido</p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="stat-card cursor-pointer hover:ring-1 hover:ring-chart-3/30 transition-all"
+          />
+          <AnalyticsStatCard
+            label="Taxa de Conversão"
+            value={`${displayStats.conversionRate.toFixed(1)}%`}
+            sub="vendas / total no pipe"
+            accent="gold"
+            tintValue
+            delay={0.2}
             onClick={() => setDrilldownMetric("taxa_conversao")}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-muted-foreground">Taxa de Conversão</p>
-              <Percent className="w-4 h-4 text-chart-3" />
-            </div>
-            <p className="text-xl font-bold">{displayStats.conversionRate.toFixed(1)}%</p>
-            <p className="text-xs text-muted-foreground">vendas / total no pipe</p>
-          </motion.div>
+          />
         </div>
       )}
 
@@ -1273,73 +1246,56 @@ function PipePropostasInner() {
                   className="grid md:grid-cols-2 gap-6"
                 >
                   {/* Funnel */}
-                  <div className="glass-card p-6">
-                    <h3 className="font-semibold mb-6 flex items-center gap-2">
-                      <TrendingUp className="w-5 h-5 text-primary" />
-                      Funil de Vendas
-                    </h3>
-                    <FunnelChart
-                      title="Pipeline"
-                      steps={funnelData.map(stage => ({
+                  <AnalyticsPanel title="Funil de Vendas" subtitle="Volume e valor por etapa">
+                    <ContinuousFunnel
+                      unit="propostas"
+                      stages={funnelData.map(stage => ({
+                        key: stage.id,
                         label: stage.name,
-                        value: stage.count,
-                        color: `bg-[${stage.color}]`,
+                        count: stage.count,
+                        valueLabel: formatCurrency(stage.value),
+                        tone: stage.id === "vendido" ? ("success" as const) : undefined,
                       }))}
                     />
-                  </div>
+                  </AnalyticsPanel>
 
                   {/* Calor Analysis */}
-                  <div className="glass-card p-6">
-                    <h3 className="font-semibold mb-6 flex items-center gap-2">
-                      <Flame className="w-5 h-5 text-destructive" />
-                      Propostas por Calor
-                    </h3>
-                    <CalorAnalyticsChart data={calorData} />
-                  </div>
+                  <AnalyticsPanel
+                    title="Propostas por Calor"
+                    subtitle="Valor em aberto por temperatura"
+                    dot="destructive"
+                  >
+                    <CalorBars data={calorData} />
+                  </AnalyticsPanel>
 
                   {/* By Responsible */}
-                  <div className="glass-card p-6">
-                    <h3 className="font-semibold mb-6 flex items-center gap-2">
-                      <User className="w-5 h-5 text-primary" />
-                      Performance por Responsável
-                    </h3>
-                    <div className="space-y-4">
-                      {responsibleMembers.map(member => {
-                        const memberProposals = pipeData?.filter(p => p.responsible_id === member.id) || [];
-                        const memberValue = memberProposals.reduce((sum, p) => sum + (p.sale_value || 0), 0);
-                        const memberSold = memberProposals.filter(p => p.status === "vendido");
-                        const memberSoldValue = memberSold.reduce((sum, p) => sum + (p.sale_value || 0), 0);
-
-                        return (
-                          <div key={member.id} className="flex items-center justify-between p-3 rounded-lg border">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                                <User className="w-5 h-5 text-primary" />
-                              </div>
-                              <div>
-                                <p className="font-medium">{member.name}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {memberProposals.length} propostas
-                                </p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-semibold text-success">{formatCurrency(memberSoldValue)}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {memberSold.length} vendas
-                              </p>
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                      {responsibleMembers.length === 0 && (
-                        <p className="text-center text-muted-foreground py-4">
-                          Nenhum responsável cadastrado
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                  <AnalyticsPanel
+                    title="Performance por Responsável"
+                    subtitle="Propostas trabalhadas e valor fechado"
+                  >
+                    <MemberLeaderboard
+                      rows={responsibleMembers
+                        .map(member => {
+                          const memberProposals = pipeData?.filter(p => p.responsible_id === member.id) || [];
+                          const memberSold = memberProposals.filter(p => p.status === "vendido");
+                          const memberSoldValue = memberSold.reduce((sum, p) => sum + (p.sale_value || 0), 0);
+                          const rate = memberProposals.length > 0
+                            ? (memberSold.length / memberProposals.length) * 100
+                            : 0;
+                          return {
+                            id: member.id,
+                            name: member.name,
+                            ratePct: rate,
+                            headline: formatCurrency(memberSoldValue),
+                            subline: `${rate.toFixed(0)}% de fechamento`,
+                            context: `${memberProposals.length} propostas · ${memberSold.length} venda${memberSold.length !== 1 ? "s" : ""}`,
+                            currency: true,
+                            total: memberProposals.length,
+                          };
+                        })
+                        .sort((a, b) => b.total - a.total)}
+                    />
+                  </AnalyticsPanel>
 
                   {/* Recent Sales */}
                   <div className="glass-card p-6">
