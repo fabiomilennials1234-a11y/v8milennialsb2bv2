@@ -47,11 +47,20 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   useMasterOrganizations,
   useMasterCreateOrganization,
   useMasterUpdateOrganization,
   useMasterDeleteOrganization,
+  FUNNEL_TEMPLATES,
   type OrgType,
+  type FunnelTemplateKey,
 } from "../hooks/useMasterOrganizations";
 import { BillingOverrideModal } from "../components/BillingOverrideModal";
 import { useMasterAuth } from "../hooks/useMasterAuth";
@@ -69,6 +78,7 @@ export default function MasterOrganizations() {
   const [newOrgName, setNewOrgName] = useState("");
   const [newOrgSlug, setNewOrgSlug] = useState("");
   const [newOrgType, setNewOrgType] = useState<OrgType>(isOutbounder ? "outbound" : "crm");
+  const [newOrgFunnel, setNewOrgFunnel] = useState<FunnelTemplateKey | "none">("none");
 
   const { data: organizations, isLoading } = useMasterOrganizations();
   const createOrg = useMasterCreateOrganization();
@@ -93,10 +103,12 @@ export default function MasterOrganizations() {
       name: newOrgName,
       slug: newOrgSlug.toLowerCase().replace(/\s+/g, "-"),
       org_type: newOrgType,
+      funnelTemplate: newOrgFunnel === "none" ? null : newOrgFunnel,
     });
     setNewOrgName("");
     setNewOrgSlug("");
     setNewOrgType("crm");
+    setNewOrgFunnel("none");
     setCreateOpen(false);
   };
 
@@ -347,6 +359,36 @@ export default function MasterOrganizations() {
                 onChange={(e) => setNewOrgSlug(e.target.value)}
                 placeholder="nome-da-empresa"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Modelo de funil (kanban)</Label>
+              <Select
+                value={newOrgFunnel}
+                onValueChange={(v) => setNewOrgFunnel(v as FunnelTemplateKey | "none")}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um modelo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Padrão (sem modelo)</SelectItem>
+                  {(
+                    Object.entries(FUNNEL_TEMPLATES) as [
+                      FunnelTemplateKey,
+                      (typeof FUNNEL_TEMPLATES)[FunnelTemplateKey],
+                    ][]
+                  ).map(([key, tpl]) => (
+                    <SelectItem key={key} value={key}>
+                      {tpl.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {newOrgFunnel === "none"
+                  ? "A org começa com os kanbans padrão do sistema."
+                  : FUNNEL_TEMPLATES[newOrgFunnel].description +
+                    " — os kanbans já vêm setados automaticamente."}
+              </p>
             </div>
           </div>
           <DialogFooter>
