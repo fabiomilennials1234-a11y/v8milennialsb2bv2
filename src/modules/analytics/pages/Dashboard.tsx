@@ -7,8 +7,8 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { CommandHeader } from "@/modules/analytics/components/dashboard/v2/CommandHeader";
 import { TelemetryTicker } from "@/modules/analytics/components/dashboard/v2/TelemetryTicker";
 import { TabVisaoGeralV2 } from "@/modules/analytics/components/dashboard/v2/TabVisaoGeralV2";
-import { TabPerformance } from "@/modules/analytics/components/dashboard/TabPerformance";
-import { TabInteligencia } from "@/modules/analytics/components/dashboard/TabInteligencia";
+import { TabPerformanceV2 } from "@/modules/analytics/components/dashboard/v2/TabPerformanceV2";
+import { TabInteligenciaV2 } from "@/modules/analytics/components/dashboard/v2/TabInteligenciaV2";
 import { OraculoChat } from "@/modules/analytics/components/dashboard/OraculoChat";
 import { useOraculoChat } from "@/modules/copilot/hooks/useOraculoChat";
 import {
@@ -123,25 +123,25 @@ export default function Dashboard() {
           />
         </TabsContent>
 
-        <TabsContent value="performance" className="mt-6">
+        <TabsContent value="performance" className="mt-0">
           <motion.div
             key="performance"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <TabPerformance month={selectedMonth} year={selectedYear} />
+            <TabPerformanceV2 month={selectedMonth} year={selectedYear} />
           </motion.div>
         </TabsContent>
 
-        <TabsContent value="inteligencia" className="mt-6">
+        <TabsContent value="inteligencia" className="mt-0">
           <motion.div
             key="inteligencia"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <TabInteligencia month={selectedMonth} year={selectedYear} isAdmin={isUserAdmin} />
+            <TabInteligenciaV2 month={selectedMonth} year={selectedYear} />
           </motion.div>
         </TabsContent>
 
