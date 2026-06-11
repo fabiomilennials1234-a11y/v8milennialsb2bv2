@@ -20,6 +20,7 @@ export interface LeadsFilterParams {
   searchQuery?: string;
   filterOrigin?: string;
   filterRating?: string;
+  filterUf?: string;
 }
 
 /**
@@ -45,6 +46,10 @@ function applyLeadsFilters(
     query = query.eq("origin", filters.filterOrigin);
   }
 
+  if (filters.filterUf) {
+    query = query.eq("uf", filters.filterUf);
+  }
+
   if (filters.filterRating && filters.filterRating !== "all") {
     if (filters.filterRating === "high") query = query.gte("rating", 7);
     else if (filters.filterRating === "medium") query = query.gte("rating", 4).lt("rating", 7);
@@ -60,13 +65,13 @@ function applyLeadsFilters(
  * Retorna até LEADS_PAGE_SIZE leads por página.
  */
 export function useLeads(params: LeadsFilterParams = {}) {
-  const { page = 0, searchQuery, filterOrigin, filterRating } = params;
+  const { page = 0, searchQuery, filterOrigin, filterRating, filterUf } = params;
   const { organizationId, isReady } = useOrganization();
 
   useRealtimeSubscription("leads", ["leads"]);
 
   return useQuery({
-    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterRating],
+    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterRating, filterUf],
     queryFn: async () => {
       if (!organizationId) {
         console.warn("[useLeads] No organization_id available - returning empty array");
@@ -90,7 +95,7 @@ export function useLeads(params: LeadsFilterParams = {}) {
           )
         `);
 
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating });
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterUf });
 
       const { data, error } = await query
         .order("created_at", { ascending: false })
@@ -108,11 +113,11 @@ export function useLeads(params: LeadsFilterParams = {}) {
  * Hook para contar total de leads (para paginação) — COM OS MESMOS FILTROS
  */
 export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
-  const { searchQuery, filterOrigin, filterRating } = filters;
+  const { searchQuery, filterOrigin, filterRating, filterUf } = filters;
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
-    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterRating],
+    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterRating, filterUf],
     queryFn: async () => {
       if (!organizationId) return 0;
 
@@ -120,7 +125,7 @@ export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
         .from("leads")
         .select("*", { count: "exact", head: true });
 
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating });
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterUf });
 
       const { count, error } = await query;
       if (error) throw error;

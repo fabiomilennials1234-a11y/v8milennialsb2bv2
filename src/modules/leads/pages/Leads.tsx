@@ -229,9 +229,11 @@ function LeadsInner() {
   }, [deepLinkLeadId, openLead]);
 
   const [page, setPage] = useState(0);
-  const filterParams = { page, searchQuery, filterOrigin, filterRating };
+  // Filtro por estado (?uf=) — deep-link vindo da aba Mapa do Comando
+  const ufFilter = searchParams.get("uf")?.toUpperCase() || undefined;
+  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterUf: ufFilter };
   const { data: leads = [], isLoading } = useLeads(filterParams);
-  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating });
+  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterUf: ufFilter });
   const { data: teamMembers = [] } = useTeamMembers();
   const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
