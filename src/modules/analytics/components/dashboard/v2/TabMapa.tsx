@@ -23,8 +23,6 @@ function heatColor(value: number, max: number): string {
   return "hsl(47 100% 52%)";
 }
 
-const LABELED_UFS = ["SP", "MG", "BA", "PI", "RJ", "PR", "RS", "MT", "PA", "AM", "GO", "CE", "SC", "PE", "MA", "TO", "MS"];
-
 interface TooltipState {
   uf: string;
   count: number;
