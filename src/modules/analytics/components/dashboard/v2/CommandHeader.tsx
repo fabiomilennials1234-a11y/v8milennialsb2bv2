@@ -77,7 +77,6 @@ function CommandHeaderBase({
       <TabsList className="ml-[18px] h-auto gap-1 bg-transparent p-0">
         <TabsTrigger value="visao-geral" className={TAB_TRIGGER_CLASS}>Visão Geral</TabsTrigger>
         <TabsTrigger value="performance" className={TAB_TRIGGER_CLASS}>Performance</TabsTrigger>
-        <TabsTrigger value="inteligencia" className={TAB_TRIGGER_CLASS}>Inteligência</TabsTrigger>
         <TabsTrigger value="mapa" className={TAB_TRIGGER_CLASS}>Mapa</TabsTrigger>
         {showAnalytics && (
           <TabsTrigger value="analytics" className={TAB_TRIGGER_CLASS}>Analytics</TabsTrigger>
