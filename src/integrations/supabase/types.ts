@@ -8195,6 +8195,8 @@ export type Database = {
           sale_responsible_id: string | null
           sdr_id: string | null
           segment: string | null
+          uf: string | null
+          uf_source: string | null
           updated_at: string
           urgency: string | null
           utm_campaign: string | null
@@ -8247,6 +8249,8 @@ export type Database = {
           sale_responsible_id?: string | null
           sdr_id?: string | null
           segment?: string | null
+          uf?: string | null
+          uf_source?: string | null
           updated_at?: string
           urgency?: string | null
           utm_campaign?: string | null
@@ -8299,6 +8303,8 @@ export type Database = {
           sale_responsible_id?: string | null
           sdr_id?: string | null
           segment?: string | null
+          uf?: string | null
+          uf_source?: string | null
           updated_at?: string
           urgency?: string | null
           utm_campaign?: string | null
@@ -15876,6 +15882,19 @@ export type Database = {
           responsible_user_id: string
         }[]
       }
+      get_leads_by_uf: {
+        Args: { p_limit?: number; p_uf: string }
+        Returns: {
+          company: string
+          created_at: string
+          id: string
+          is_client: boolean
+          name: string
+          phone: string
+          sold_value: number
+          uf_source: string
+        }[]
+      }
       get_leads_no_response_from_lead: {
         Args: {
           p_delay_hours: number
@@ -16141,6 +16160,16 @@ export type Database = {
           uazapi_instance_id: string
           uazapi_token: string
           webhook_secret: string
+        }[]
+      }
+      get_uf_heatmap: {
+        Args: never
+        Returns: {
+          clients_count: number
+          leads_count: number
+          total_sold: number
+          uf: string
+          unmapped_count: number
         }[]
       }
       get_unified_conversations: {
@@ -16606,6 +16635,7 @@ export type Database = {
         Returns: undefined
       }
       try_provision_lock: { Args: { p_user_id: string }; Returns: boolean }
+      uf_from_ddd: { Args: { p_digits: string }; Returns: string }
       unlink_agent_from_instance: {
         Args: { p_agent_id: string }
         Returns: undefined
