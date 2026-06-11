@@ -51,7 +51,7 @@ function KpiCardCompactBase({
     <button
       type="button"
       onClick={() => navigate(quickActionTo)}
-      className="cmd-cell cmd-rise group cursor-pointer px-[15px] pb-3.5 pt-[13px] text-left"
+      className="cmd-cell cmd-rise group block h-full min-h-[96px] w-full cursor-pointer px-[15px] pb-3.5 pt-[13px] text-left"
       style={{ animationDelay: `${delay}s` }}
       aria-label={`${label}: ${formatValue(value, format)}. ${quickActionLabel}`}
     >

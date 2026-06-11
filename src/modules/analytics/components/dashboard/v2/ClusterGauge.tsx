@@ -142,17 +142,17 @@ function ClusterGaugeBase({ currentPercent, expectedPercent, subtitle, statusTex
   return (
     <svg width={310} height={300} viewBox="0 0 360 348" role="img" aria-label={`Meta do período: ${Math.round(clamped)}% realizado, ${Math.round(clampedExpected)}% esperado`}>
       {/* Trilho + redline */}
-      <path d={arcPath(0, MAX_PCT, R)} fill="none" stroke="hsl(0 0% 100% / .06)" strokeWidth={11} strokeLinecap="round" />
-      <path d={arcPath(100, MAX_PCT, R)} fill="none" stroke="hsl(0 62% 50% / .22)" strokeWidth={11} />
+      <path d={arcPath(0, MAX_PCT, R)} fill="none" stroke="hsl(var(--foreground) / .07)" strokeWidth={11} strokeLinecap="round" />
+      <path d={arcPath(100, MAX_PCT, R)} fill="none" stroke="hsl(var(--destructive) / .22)" strokeWidth={11} />
       {redlineHatch.map((ln, i) => (
-        <line key={`h${i}`} {...ln} stroke="hsl(0 62% 52% / .6)" strokeWidth={2} />
+        <line key={`h${i}`} {...ln} stroke="hsl(var(--destructive) / .6)" strokeWidth={2} />
       ))}
       {/* Ticks */}
       {ticks.map((tk, i) => (
         <line
           key={`t${i}`}
           x1={tk.x1} y1={tk.y1} x2={tk.x2} y2={tk.y2}
-          stroke={tk.major ? "hsl(0 0% 100% / .4)" : "hsl(0 0% 100% / .13)"}
+          stroke={tk.major ? "hsl(var(--foreground) / .4)" : "hsl(var(--foreground) / .13)"}
           strokeWidth={tk.major ? 2 : 1}
         />
       ))}
@@ -194,7 +194,7 @@ function ClusterGaugeBase({ currentPercent, expectedPercent, subtitle, statusTex
         <circle cx={CX - 22} cy={CY} r={3.5} fill="hsl(var(--primary))" />
       </g>
       {/* Hub */}
-      <circle cx={CX} cy={CY} r={14} fill="hsl(35 10% 10%)" stroke="hsl(0 0% 100% / .15)" strokeWidth={2} />
+      <circle cx={CX} cy={CY} r={14} fill="hsl(var(--card))" stroke="hsl(var(--foreground) / .15)" strokeWidth={2} />
       <circle cx={CX} cy={CY} r={5} fill="hsl(var(--primary))" />
       {/* Leitura digital */}
       <text
@@ -220,7 +220,7 @@ function ClusterGaugeBase({ currentPercent, expectedPercent, subtitle, statusTex
         className="cmd-mono"
         style={{
           fontSize: 10, fontWeight: 600, letterSpacing: ".18em",
-          fill: isAhead ? "hsl(142 70% 50%)" : "hsl(0 62% 55%)",
+          fill: isAhead ? "hsl(var(--success))" : "hsl(var(--destructive))",
         }}
       >
         {statusText}

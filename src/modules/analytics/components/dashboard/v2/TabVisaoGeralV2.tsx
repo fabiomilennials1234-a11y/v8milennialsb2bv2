@@ -9,6 +9,7 @@ import {
   type PeriodRange,
 } from "@/modules/analytics/hooks/useCommandMetrics";
 import { ClusterGauge } from "./ClusterGauge";
+import { GaugeEmptyState } from "./GaugeEmptyState";
 import { KpiCardCompact, type KpiDelta } from "./KpiCardCompact";
 import { RevenueAccumulatedChart } from "./RevenueAccumulatedChart";
 import { TrapezoidFunnel } from "./TrapezoidFunnel";
@@ -190,9 +191,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
               isAhead={gauge.isAhead}
             />
           ) : (
-            <div className="px-6 text-center text-[13px] text-muted-foreground">
-              Configure uma meta de faturamento pra ligar o velocímetro.
-            </div>
+            <GaugeEmptyState />
           )}
         </div>
         <div className="grid grid-cols-3 border-t border-border/70 pt-3.5 text-center">
