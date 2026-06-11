@@ -313,8 +313,12 @@ export function useRankingData(month?: number, year?: number) {
           name: string | null;
           job_title: string | null;
           metric_type: string;
+          /** Placeholder na RPC (sempre 0) — usar `meetings`/`meetingsBooked`. */
           value: number;
+          /** Reuniões realizadas (meeting_held, ADR-0007). */
           meetings: number;
+          /** Reuniões marcadas (meeting_booked, ADR-0007). */
+          meetingsBooked?: number;
           goal: number;
           goalProgress: number;
           position: number;

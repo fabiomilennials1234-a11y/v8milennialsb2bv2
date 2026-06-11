@@ -72,16 +72,18 @@ function RankingPodiumBase({ month, year }: RankingPodiumProps) {
       const total = (data?.salesRanking ?? []).reduce((acc, r) => acc + r.value, 0);
       return { ranked: list, totalLabel: `${formatK(total)} no time` };
     }
+    // No meetingsRanking, `value` é placeholder (sempre 0 na RPC) — o dado real
+    // é `meetings` (realizadas) e `meetingsBooked` (marcadas)
     const list = (data?.meetingsRanking ?? []).map((r, i): RankedItem => ({
       id: r.id,
       name: r.name ?? "Sem nome",
-      valueLabel: `${Math.round(r.value)} reuni${r.value === 1 ? "ão" : "ões"}`,
-      subLabel: `${r.meetings} compareceram`,
+      valueLabel: `${r.meetings} reuni${r.meetings === 1 ? "ão" : "ões"}`,
+      subLabel: `${r.meetingsBooked ?? 0} marcadas`,
       goalProgress: Math.round(r.goalProgress),
       position: r.position,
       colorIdx: i % AV_COLORS.length,
     }));
-    const total = (data?.meetingsRanking ?? []).reduce((acc, r) => acc + r.value, 0);
+    const total = (data?.meetingsRanking ?? []).reduce((acc, r) => acc + r.meetings, 0);
     return { ranked: list, totalLabel: `${Math.round(total)} reuniões no time` };
   }, [data, mode]);
 
