@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useOrganization } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -18,15 +19,20 @@ export interface NextBestAction {
 }
 
 export function useNextBestActions(limit = 10) {
+  const { organizationId } = useOrganization();
   return useQuery<NextBestAction[]>({
-    queryKey: ["next-best-actions", limit],
+    queryKey: ["next-best-actions", organizationId, limit],
     queryFn: async () => {
       const { data, error } = await (supabase.rpc as any)("get_next_best_actions", {
         p_limit: limit,
+        // org ativa do front — sem isso, user multi-org (master) cai numa org
+        // arbitrária do team_members LIMIT 1 e a fila vem vazia/errada
+        p_org_id: organizationId,
       });
       if (error) throw error;
       return (data ?? []) as NextBestAction[];
     },
+    enabled: !!organizationId,
     staleTime: 2 * 60 * 1000,
   });
 }
