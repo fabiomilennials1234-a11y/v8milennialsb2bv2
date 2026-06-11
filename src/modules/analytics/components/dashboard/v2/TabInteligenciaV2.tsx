@@ -50,13 +50,25 @@ function TabInteligenciaV2Base({ month, year }: TabInteligenciaV2Props) {
         caption: `${m?.novosClientes ?? 0} / ${cli.target_value} novos`,
       });
     }
-    const reu = teamGoals?.find((g) => g.type === "reunioes" && g.target_value > 0);
-    if (reu) {
+    // ADR-0007: metas novas separam realizadas (meeting_held) de marcadas
+    // (meeting_booked); 'reunioes' legado segue como fallback de realizadas
+    const reuRealizadas = teamGoals?.find((g) => g.type === "reunioes_realizadas" && g.target_value > 0)
+      ?? teamGoals?.find((g) => g.type === "reunioes" && g.target_value > 0);
+    if (reuRealizadas) {
       out.push({
-        label: "Reuniões",
+        label: "Reuniões feitas",
         current: m?.reunioesComparecidas ?? 0,
-        target: reu.target_value,
-        caption: `${m?.reunioesComparecidas ?? 0} / ${reu.target_value} feitas`,
+        target: reuRealizadas.target_value,
+        caption: `${m?.reunioesComparecidas ?? 0} / ${reuRealizadas.target_value} realizadas`,
+      });
+    }
+    const reuMarcadas = teamGoals?.find((g) => g.type === "reunioes_marcadas" && g.target_value > 0);
+    if (reuMarcadas) {
+      out.push({
+        label: "Reuniões marcadas",
+        current: m?.reunioesMarcadas ?? 0,
+        target: reuMarcadas.target_value,
+        caption: `${m?.reunioesMarcadas ?? 0} / ${reuMarcadas.target_value} marcadas`,
       });
     }
     return out;

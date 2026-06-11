@@ -319,6 +319,9 @@ export function useRankingData(month?: number, year?: number) {
           meetings: number;
           /** Reuniões marcadas (meeting_booked, ADR-0007). */
           meetingsBooked?: number;
+          /** Meta de marcadas (goals type reunioes_marcadas). */
+          goalBooked?: number;
+          goalBookedProgress?: number;
           goal: number;
           goalProgress: number;
           position: number;

@@ -21,7 +21,7 @@ function TabPerformanceV2Base({ month, year }: TabPerformanceV2Props) {
   return (
     <div className="mt-3.5 grid grid-cols-12 gap-3.5">
       <div className="col-span-8">
-        <RankingPodium month={month} year={year} />
+        <RankingPodium month={month} year={year} teamSalesTotal={totalMetrics?.vendaTotal ?? 0} />
       </div>
       <div className="col-span-4">
         <ProductChampions month={month} year={year} />
