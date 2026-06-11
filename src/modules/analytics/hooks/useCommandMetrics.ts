@@ -183,7 +183,7 @@ export function useCommandMetrics(
         p_org_id: organizationId,
         p_start_date: startStr,
         p_end_date: endStr,
-        p_filter_member_id: effectiveFilter,
+        p_filter_member_id: effectiveFilter ?? undefined,
       });
       if (error) {
         if (isMissingSchemaError(error)) {
