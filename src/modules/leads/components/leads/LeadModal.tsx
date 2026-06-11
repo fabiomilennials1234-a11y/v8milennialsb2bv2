@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { BR_UFS } from "@/shared/format/br-uf";
 
 const originLabels: Record<string, string> = {
   whatsapp: "WhatsApp",

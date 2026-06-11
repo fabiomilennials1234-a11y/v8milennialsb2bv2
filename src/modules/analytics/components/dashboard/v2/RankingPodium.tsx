@@ -6,6 +6,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface RankingPodiumProps {
   month: number;
   year: number;
+  /** vendaTotal do período (RPC) — detecta vendas sem vendedor atribuído. */
+  teamSalesTotal?: number;
 }
 
 type Mode = "vendas" | "reunioes";
@@ -54,7 +56,7 @@ function formatK(value: number): string {
  * Ranking do mês — pódio top 3 (líder elevado ao centro) + tabela do restante,
  * com toggle Vendas | Reuniões (metric_type sales/meetings do RankingTable legado).
  */
-function RankingPodiumBase({ month, year }: RankingPodiumProps) {
+function RankingPodiumBase({ month, year, teamSalesTotal }: RankingPodiumProps) {
   const { data, isLoading } = useRankingData(month, year);
   const [mode, setMode] = useState<Mode>("vendas");
 
@@ -74,18 +76,32 @@ function RankingPodiumBase({ month, year }: RankingPodiumProps) {
     }
     // No meetingsRanking, `value` é placeholder (sempre 0 na RPC) — o dado real
     // é `meetings` (realizadas) e `meetingsBooked` (marcadas)
-    const list = (data?.meetingsRanking ?? []).map((r, i): RankedItem => ({
-      id: r.id,
-      name: r.name ?? "Sem nome",
-      valueLabel: `${r.meetings} reuni${r.meetings === 1 ? "ão" : "ões"}`,
-      subLabel: `${r.meetingsBooked ?? 0} marcadas`,
-      goalProgress: Math.round(r.goalProgress),
-      position: r.position,
-      colorIdx: i % AV_COLORS.length,
-    }));
+    const list = (data?.meetingsRanking ?? []).map((r, i): RankedItem => {
+      const booked = r.meetingsBooked ?? 0;
+      const goalBookedProgress = r.goalBookedProgress ?? 0;
+      return {
+        id: r.id,
+        name: r.name ?? "Sem nome",
+        valueLabel: `${r.meetings} realizada${r.meetings === 1 ? "" : "s"}`,
+        subLabel: goalBookedProgress > 0
+          ? `${booked} marcadas · ${goalBookedProgress}% da meta de marcadas`
+          : `${booked} marcadas`,
+        goalProgress: Math.round(r.goalProgress),
+        position: r.position,
+        colorIdx: i % AV_COLORS.length,
+      };
+    });
     const total = (data?.meetingsRanking ?? []).reduce((acc, r) => acc + r.meetings, 0);
     return { ranked: list, totalLabel: `${Math.round(total)} reuniões no time` };
   }, [data, mode]);
+
+  // Vendas fechadas sem vendedor atribuído somem do ranking — avisar
+  const unassignedSales = useMemo(() => {
+    if (mode !== "vendas" || !teamSalesTotal) return 0;
+    const rankedSum = (data?.salesRanking ?? []).reduce((acc, r) => acc + r.value, 0);
+    const diff = teamSalesTotal - rankedSum;
+    return diff > 1 ? diff : 0;
+  }, [mode, teamSalesTotal, data]);
 
   // Pódio na ordem visual P2 · P1 · P3
   const podium = useMemo(() => {
@@ -127,6 +143,12 @@ function RankingPodiumBase({ month, year }: RankingPodiumProps) {
         </div>
       </div>
 
+      {unassignedSales > 0 && (
+        <div className="mb-3 flex items-center gap-2 rounded-[10px] border border-[hsl(36_80%_45%/.4)] bg-[hsl(36_80%_50%/.08)] px-3 py-2 text-[11.5px] text-muted-foreground">
+          <b className="font-extrabold text-[hsl(36_85%_60%)]">{formatK(unassignedSales)} em vendas sem vendedor atribuído</b>
+          <span>— atribua o vendedor nos cards de Orçamentos pra contar no ranking.</span>
+        </div>
+      )}
       {ranked.length === 0 ? (
         <p className="py-10 text-center text-[13px] text-muted-foreground">
           Nenhum resultado no período ainda.
