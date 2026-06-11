@@ -82,32 +82,15 @@ function TabPerformanceV2Base({ month, year }: TabPerformanceV2Props) {
 
   return (
     <div className="mt-3.5 grid grid-cols-12 gap-3.5">
+      {/* Performance original — intocada */}
       <div className="col-span-8">
         <RankingPodium month={month} year={year} teamSalesTotal={totalMetrics?.vendaTotal ?? 0} />
       </div>
       <div className="col-span-4">
-        <TeamGoalsGauges gauges={gauges} expectedPercent={expectedPercent} />
+        <ProductChampions month={month} year={year} />
       </div>
       <div className="col-span-8">
-        <RealVsExpectedChart
-          dailySales={totalMetrics?.dailySales ?? []}
-          goalTarget={faturamentoGoal?.target_value ?? 0}
-          month={month}
-          year={year}
-        />
-      </div>
-      <div className="col-span-4">
-        <LossReasonsCard
-          startDate={range.start.toISOString()}
-          endDate={range.end.toISOString()}
-          totalWon={totalMetrics?.funnelVendas ?? 0}
-        />
-      </div>
-      <div className="col-span-4">
-        <IndividualGoalsList month={month} year={year} />
-      </div>
-      <div className="col-span-4">
-        <ProductChampions month={month} year={year} />
+        <TeamActivityCard month={month} year={year} />
       </div>
       <div className="col-span-4">
         <LeadJourney
@@ -116,8 +99,28 @@ function TabPerformanceV2Base({ month, year }: TabPerformanceV2Props) {
           totalSales={totalMetrics?.funnelVendas ?? 0}
         />
       </div>
+
+      {/* Blocos vindos da antiga aba Inteligência */}
+      <div className="col-span-5">
+        <TeamGoalsGauges gauges={gauges} expectedPercent={expectedPercent} />
+      </div>
+      <div className="col-span-4">
+        <IndividualGoalsList month={month} year={year} />
+      </div>
+      <div className="col-span-3">
+        <LossReasonsCard
+          startDate={range.start.toISOString()}
+          endDate={range.end.toISOString()}
+          totalWon={totalMetrics?.funnelVendas ?? 0}
+        />
+      </div>
       <div className="col-span-12">
-        <TeamActivityCard month={month} year={year} />
+        <RealVsExpectedChart
+          dailySales={totalMetrics?.dailySales ?? []}
+          goalTarget={faturamentoGoal?.target_value ?? 0}
+          month={month}
+          year={year}
+        />
       </div>
     </div>
   );
