@@ -90,7 +90,9 @@ export function useSalesCycleAnalysis(pipelineType?: string, startDate?: string,
     queryKey: ["sales-cycle", pipelineType, startDate, endDate],
     queryFn: async () => {
       const { data, error } = await (supabase.rpc as any)("get_sales_cycle_analysis", {
-        p_pipeline_type: pipelineType ?? "propostas",
+        // null = todas as transições (jornada cross-pipe); consumidores que
+        // querem um pipe específico passam o nome explícito
+        p_pipeline_type: pipelineType ?? null,
         p_start_date: startDate ?? null,
         p_end_date: endDate ?? null,
       });

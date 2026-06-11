@@ -43,6 +43,8 @@ function OraculoBriefingBase() {
         )}
         {list.map((action, i) => {
           const p = PRIORITY_STYLE(action.priority);
+          // Rows derivadas on-the-fly pela RPC não existem na tabela — dispensar não se aplica
+          const isDerived = action.metadata?.derived === true;
           return (
             <div
               key={action.id}
@@ -69,14 +71,16 @@ function OraculoBriefingBase() {
                 >
                   Abrir →
                 </button>
-                <button
-                  type="button"
-                  aria-label="Dispensar"
-                  onClick={() => dismiss.mutate(action.id)}
-                  className="text-muted-foreground/40 opacity-0 transition-opacity hover:text-muted-foreground group-hover:opacity-100"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+                {!isDerived && (
+                  <button
+                    type="button"
+                    aria-label="Dispensar"
+                    onClick={() => dismiss.mutate(action.id)}
+                    className="text-muted-foreground/40 opacity-0 transition-opacity hover:text-muted-foreground group-hover:opacity-100"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </span>
             </div>
           );
