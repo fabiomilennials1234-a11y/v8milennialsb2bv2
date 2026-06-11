@@ -10,11 +10,16 @@ const PRIORITY_STYLE = (priority: number) => {
   return { tag: "P2", cls: "text-chart-5 bg-chart-5/10" };
 };
 
+interface OraculoBriefingProps {
+  /** Abre o chat do Oráculo (⌘J). Quando presente, mostra o input no rodapé. */
+  onAsk?: () => void;
+}
+
 /**
  * Briefing do Oráculo — fila priorizada de next-best actions (P0/P1/P2) com
- * motivo e CTA. Substitui o NextBestActionsPanel genérico na Inteligência.
+ * motivo e CTA, mais o atalho pra conversar com o Oráculo.
  */
-function OraculoBriefingBase() {
+function OraculoBriefingBase({ onAsk }: OraculoBriefingProps) {
   const { data: actions, isLoading } = useNextBestActions(5);
   const dismiss = useDismissAction();
   const navigate = useNavigate();
@@ -86,6 +91,16 @@ function OraculoBriefingBase() {
           );
         })}
       </div>
+      {onAsk && (
+        <button
+          type="button"
+          onClick={onAsk}
+          className="mt-3 flex w-full cursor-text items-center gap-2 rounded-[9px] border border-border bg-background px-[11px] py-[9px] text-left transition-all hover:border-primary/60 hover:shadow-[0_0_0_3px_hsl(var(--primary)/.15)]"
+        >
+          <span className="text-[12px] text-muted-foreground/60">Perguntar ao Oráculo...</span>
+          <kbd className="ml-auto rounded border border-border bg-card px-[5px] py-[2px] font-sans text-[10px] font-bold text-muted-foreground">⌘ J</kbd>
+        </button>
+      )}
     </div>
   );
 }

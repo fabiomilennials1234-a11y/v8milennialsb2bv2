@@ -13,7 +13,7 @@ import { GaugeEmptyState } from "./GaugeEmptyState";
 import { KpiCardCompact, type KpiDelta } from "./KpiCardCompact";
 import { RevenueAccumulatedChart } from "./RevenueAccumulatedChart";
 import { TrapezoidFunnel } from "./TrapezoidFunnel";
-import { OraculoPanel, type OraculoInsight } from "./OraculoPanel";
+import { OraculoBriefing } from "./OraculoBriefing";
 import { LiveOpsFeed } from "./LiveOpsFeed";
 
 interface TabVisaoGeralV2Props {
@@ -103,40 +103,6 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
     };
   }, [gaugeMetrics?.vendaTotal, faturamentoGoal?.target_value, monthRange, month, year]);
 
-  const insights = useMemo<OraculoInsight[]>(() => {
-    const out: OraculoInsight[] = [];
-    if (!metrics || !prevMetrics) return out;
-    const propDelta = pctDelta(metrics.propostasEnviadas, prevMetrics.propostasEnviadas);
-    if (propDelta !== null && propDelta < -2) {
-      out.push({
-        tone: "attention",
-        tag: "Atenção",
-        content: (
-          <>Propostas caíram <b>{Math.abs(Math.round(propDelta))}%</b> vs {range.prevLabel} — investigue a origem.</>
-        ),
-      });
-    }
-    if (overdueCount > 0) {
-      out.push({
-        tone: "opportunity",
-        tag: "Oportunidade",
-        content: (
-          <><b>{overdueCount} follow-up{overdueCount > 1 ? "s" : ""}</b> atrasado{overdueCount > 1 ? "s" : ""} agora — potencial parado na base.</>
-        ),
-      });
-    }
-    const respDelta = pctDelta(metrics.tempoMedioResposta, prevMetrics.tempoMedioResposta);
-    if (respDelta !== null && respDelta < -5 && metrics.tempoMedioResposta > 0) {
-      out.push({
-        tone: "highlight",
-        tag: "Destaque",
-        content: (
-          <>Tempo de resposta caiu pra <b>{Math.round(metrics.tempoMedioResposta)}min</b> — {Math.abs(Math.round(respDelta))}% melhor que {range.prevLabel}.</>
-        ),
-      });
-    }
-    return out.slice(0, 3);
-  }, [metrics, prevMetrics, overdueCount, range.prevLabel]);
 
   if (isLoading) {
     return (
@@ -310,7 +276,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
         />
       </div>
       <div className="col-span-4">
-        <OraculoPanel insights={insights} onAsk={onAskOraculo} />
+        <OraculoBriefing onAsk={onAskOraculo} />
       </div>
       <div className="col-span-4">
         <LiveOpsFeed />
