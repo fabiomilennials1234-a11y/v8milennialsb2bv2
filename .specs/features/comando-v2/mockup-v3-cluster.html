@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Comando v2 — V3 Cluster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: hsl(36 11% 9%);
+    --card: hsl(35 10% 13%);
+    --card-2: hsl(35 10% 11%);
+    --border: hsl(35 8% 19%);
+    --border-soft: hsl(35 8% 16%);
+    --fg: hsl(45 20% 95%);
+    --muted: hsl(40 7% 56%);
+    --muted-2: hsl(40 7% 40%);
+    --gold: hsl(47 100% 50%);
+    --gold-dim: hsl(47 100% 50% / .14);
+    --success: hsl(142 70% 45%);
+    --success-dim: hsl(142 70% 45% / .12);
+    --danger: hsl(0 62% 50%);
+    --danger-dim: hsl(0 62% 50% / .12);
+    --blue: hsl(200 80% 50%);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;padding:32px 40px 48px}
+  .wrap{max-width:1360px;margin:0 auto}
+  .tnum{font-variant-numeric:tabular-nums}
+  .mono{font-family:'JetBrains Mono',monospace}
+
+  @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @keyframes fadein{to{opacity:1}}
+  @keyframes growx{to{transform:scaleX(1)}}
+  @keyframes growy{to{transform:scaleY(1)}}
+  .cell,.bar,.ticker{animation:rise .5s cubic-bezier(.22,1,.36,1) both}
+
+  .bar{display:flex;align-items:center;gap:22px;padding-bottom:20px;border-bottom:1px solid var(--border-soft)}
+  .ident h1{font-size:19px;font-weight:800;letter-spacing:-.03em}
+  .ident span{font-size:12px;color:var(--muted)}
+  .tabs{display:flex;gap:4px;margin-left:18px}
+  .tabs a{position:relative;font-size:13px;font-weight:600;color:var(--muted);padding:9px 14px;text-decoration:none;transition:color .15s}
+  .tabs a:hover{color:var(--fg)}
+  .tabs a.on{color:var(--fg)}
+  .tabs a.on::after{content:"";position:absolute;left:14px;right:14px;bottom:-21px;height:2px;background:var(--gold);border-radius:2px}
+  .spacer{flex:1}
+  .range{display:flex;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:3px;gap:2px}
+  .range a{font-size:12px;font-weight:600;color:var(--muted);padding:6px 12px;border-radius:6px;text-decoration:none;transition:all .15s}
+  .range a.on{background:var(--bg);color:var(--fg);box-shadow:inset 0 0 0 1px var(--border)}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:700;border-radius:9px;padding:9px 16px;cursor:pointer;border:none;background:var(--gold);color:hsl(30 18% 12%);box-shadow:0 1px 0 hsl(47 100% 65%/.45) inset,0 6px 18px hsl(47 100% 50%/.18);transition:transform .15s,box-shadow .2s}
+  .btn:hover{transform:translateY(-1px)}
+  .btn svg{width:14px;height:14px}
+
+  .ticker{margin-top:16px;display:flex;align-items:center;gap:14px;background:var(--card-2);border:1px solid var(--border-soft);border-radius:11px;padding:9px 16px;overflow:hidden;animation-delay:.05s}
+  .ticker .tag{font-size:10px;font-weight:800;letter-spacing:.1em;color:var(--gold);text-transform:uppercase;flex:none;display:flex;align-items:center;gap:7px}
+  .ticker .tag i{width:6px;height:6px;border-radius:50%;background:var(--success);animation:livepulse 2s ease-in-out infinite}
+  .tk-view{flex:1;overflow:hidden;height:18px;position:relative}
+  .tk-item{position:absolute;inset:0;font-size:12.5px;color:var(--muted);white-space:nowrap;opacity:0;transform:translateY(12px);transition:opacity .4s,transform .4s}
+  .tk-item.on{opacity:1;transform:none}
+  .tk-item b{color:var(--fg);font-weight:600}
+  @keyframes livepulse{0%,100%{box-shadow:0 0 0 0 hsl(142 70% 45%/.5)}50%{box-shadow:0 0 0 6px hsl(142 70% 45%/0)}}
+
+  .bento{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;margin-top:14px}
+  .cell{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;position:relative;overflow:hidden;transition:transform .2s cubic-bezier(.22,1,.36,1),border-color .2s}
+  .cell:hover{transform:translateY(-2px);border-color:hsl(35 8% 26%)}
+  .lbl{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+  .delta{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2.5px 7px;border-radius:7px}
+  .delta.up{color:var(--success);background:var(--success-dim)}
+  .delta.down{color:var(--danger);background:var(--danger-dim)}
+
+  /* cluster gauge — ocupa 3 rows; direita fica compacta */
+  .c-meta{grid-column:span 4;grid-row:span 3;display:flex;flex-direction:column;animation-delay:.1s;background:
+    radial-gradient(300px 300px at 50% 42%, hsl(47 100% 50%/.06), transparent 70%), var(--card-2)}
+  .c-meta .head{display:flex;justify-content:space-between;align-items:center}
+  .adjust{font-size:11.5px;font-weight:700;color:var(--muted);text-decoration:none;transition:color .15s}
+  .adjust:hover{color:var(--gold)}
+  .gwrap{flex:1;display:flex;align-items:center;justify-content:center}
+  .gauge-foot{display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid var(--border-soft);padding-top:14px;text-align:center}
+  .gauge-foot div b{display:block;font-size:15px;font-weight:800;letter-spacing:-.02em}
+  .gauge-foot div span{font-size:11px;color:var(--muted-2);font-weight:600}
+  .gauge-foot div + div{border-left:1px solid var(--border-soft)}
+
+  /* KPI compacto — sem espaço morto */
+  .c-kpi{grid-column:span 2;padding:13px 15px 14px;cursor:pointer}
+  .c-kpi:nth-of-type(2){animation-delay:.14s}
+  .c-kpi:nth-of-type(3){animation-delay:.18s}
+  .c-kpi:nth-of-type(4){animation-delay:.22s}
+  .c-kpi:nth-of-type(5){animation-delay:.26s}
+  .c-kpi:nth-of-type(6){animation-delay:.3s}
+  .c-kpi:nth-of-type(7){animation-delay:.34s}
+  .c-kpi:nth-of-type(8){animation-delay:.38s}
+  .c-kpi:nth-of-type(9){animation-delay:.42s}
+  .c-kpi .head{display:flex;justify-content:space-between;align-items:center}
+  .c-kpi .v{font-size:21px;font-weight:800;letter-spacing:-.035em;margin-top:6px}
+  .c-kpi .cap{font-size:10.5px;color:var(--muted-2);margin-top:2px}
+  .c-kpi .qa{position:absolute;inset:auto 0 0 0;background:var(--gold-dim);color:var(--gold);font-size:10.5px;font-weight:700;text-align:center;padding:5px;transform:translateY(100%);transition:transform .2s cubic-bezier(.22,1,.36,1)}
+  .c-kpi:hover .qa{transform:none}
+
+  /* receita ao lado do gauge — fecha a altura sem vazio */
+  .c-rev{grid-column:span 8;animation-delay:.46s;padding:18px 20px 14px}
+  .c-rev .head{display:flex;justify-content:space-between;align-items:baseline}
+  .c-rev .v{font-size:26px;font-weight:900;letter-spacing:-.04em;margin-top:4px}
+  .c-rev .legend{display:flex;gap:16px;font-size:11.5px;color:var(--muted);font-weight:600}
+  .c-rev .legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+  @keyframes drawline{to{stroke-dashoffset:0}}
+  .revline{stroke-dasharray:900;stroke-dashoffset:900;animation:drawline 1.6s .7s cubic-bezier(.4,0,.2,1) forwards}
+  .revproj{stroke-dasharray:500;stroke-dashoffset:500;animation:drawline 1s 2.1s cubic-bezier(.4,0,.2,1) forwards}
+  .revarea{opacity:0;animation:fadein .9s 1.7s forwards}
+  .revdot{opacity:0;animation:fadein .4s 2.1s forwards}
+
+  /* ===== Funil trapezoidal ===== */
+  .c-fun{grid-column:span 4;animation-delay:.5s}
+  .c-fun .head{display:flex;justify-content:space-between;align-items:center}
+  .convchip{font-size:10.5px;font-weight:800;color:var(--gold);background:var(--gold-dim);padding:3px 9px;border-radius:99px;letter-spacing:.02em}
+  .funnel{margin-top:16px;display:flex;flex-direction:column;align-items:center}
+  .flevel{position:relative;width:100%;display:flex;align-items:center;justify-content:center;height:50px;
+    clip-path:polygon(var(--inset) 0, calc(100% - var(--inset)) 0, calc(100% - var(--inset-b)) 100%, var(--inset-b) 100%);
+    transform:scaleY(0);transform-origin:top;animation:growy .55s cubic-bezier(.22,1,.36,1) forwards;
+    cursor:pointer;transition:filter .15s}
+  .flevel:hover{filter:brightness(1.18)}
+  .flevel .num{font-size:17px;font-weight:800;letter-spacing:-.02em}
+  .flevel .stg{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.75;margin-left:8px}
+  .flevel .share{position:absolute;right:14px;font-size:10.5px;font-weight:700;opacity:.65}
+  .fgap{height:26px;display:flex;align-items:center;gap:8px;opacity:0;animation:fadein .4s forwards}
+  .fgap .arrow{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid var(--muted-2)}
+  .fgap .rate{font-size:10.5px;font-weight:800;color:var(--gold);background:var(--gold-dim);padding:2px 8px;border-radius:99px}
+  .fgap .rlbl{font-size:10.5px;color:var(--muted-2);font-weight:600}
+  .l1{--inset:0%;--inset-b:7%;background:linear-gradient(180deg,hsl(47 100% 50%),hsl(47 100% 43%));color:hsl(30 18% 12%);animation-delay:.6s}
+  .l2{--inset:7%;--inset-b:14%;background:linear-gradient(180deg,hsl(46 85% 38%),hsl(46 85% 32%));color:hsl(45 30% 96%);animation-delay:.85s}
+  .l3{--inset:14%;--inset-b:21%;background:linear-gradient(180deg,hsl(44 50% 25%),hsl(44 50% 20%));color:hsl(45 25% 92%);animation-delay:1.1s}
+  .l4{--inset:21%;--inset-b:26%;background:linear-gradient(180deg,hsl(142 70% 42%),hsl(142 70% 34%));color:hsl(0 0% 100%);animation-delay:1.35s}
+  .g1{animation-delay:1s}.g2{animation-delay:1.25s}.g3{animation-delay:1.5s}
+  .fnote{margin-top:14px;padding-top:12px;border-top:1px solid var(--border-soft);display:flex;justify-content:space-between;align-items:center;opacity:0;animation:fadein .5s 1.7s forwards}
+  .fnote span{font-size:11px;color:var(--muted-2);font-weight:600}
+  .fnote b{font-size:11px;color:var(--success);font-weight:800}
+  .fnote a{font-size:11px;font-weight:700;color:var(--muted);text-decoration:none;transition:color .15s}
+  .fnote a:hover{color:var(--gold)}
+
+  .c-ins{grid-column:span 4;background:var(--card-2);animation-delay:.54s}
+  .ins-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .ins-head .spark{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,var(--gold),hsl(36 100% 60%));display:flex;align-items:center;justify-content:center;animation:sparkpulse 3s ease-in-out infinite}
+  @keyframes sparkpulse{0%,100%{box-shadow:0 0 0 0 hsl(47 100% 50%/.4)}50%{box-shadow:0 0 0 8px hsl(47 100% 50%/0)}}
+  .ins-head .spark svg{width:12px;height:12px;color:var(--bg)}
+  .ins-head b{font-size:13px;font-weight:700}
+  .ins{padding:11px 12px;border:1px solid var(--border-soft);border-radius:10px;margin-bottom:8px;background:var(--card);opacity:0;transform:translateX(16px);animation:slidein .5s cubic-bezier(.22,1,.36,1) forwards;cursor:pointer;transition:border-color .15s}
+  .ins:hover{border-color:hsl(47 70% 40%/.5)}
+  .ins:nth-child(2){animation-delay:.8s}
+  .ins:nth-child(3){animation-delay:.95s}
+  @keyframes slidein{to{opacity:1;transform:none}}
+  .ins .tag{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:2px 6px;border-radius:5px;display:inline-block;margin-bottom:5px}
+  .ins p{font-size:12px;line-height:1.45}
+  .ins p b{font-weight:700}
+  .ins-input{display:flex;align-items:center;gap:9px;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px 11px;cursor:text;transition:all .15s}
+  .ins-input:hover{border-color:hsl(47 70% 45%);box-shadow:0 0 0 3px var(--gold-dim)}
+  .ins-input span{font-size:12px;color:var(--muted-2)}
+  .ins-input kbd{margin-left:auto;font-family:inherit;font-size:10px;font-weight:700;color:var(--muted);background:var(--card);border:1px solid var(--border);border-radius:4px;padding:2px 5px}
+
+  .c-act{grid-column:span 4;animation-delay:.58s}
+  .live{font-size:11px;font-weight:700;color:var(--success);display:flex;align-items:center;gap:6px}
+  .live i{width:7px;height:7px;border-radius:50%;background:var(--success);animation:livepulse 2s ease-in-out infinite}
+  .feed{display:flex;flex-direction:column;margin-top:11px}
+  .ev{display:grid;grid-template-columns:14px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-soft);align-items:start;opacity:0;animation:rise .45s cubic-bezier(.22,1,.36,1) forwards}
+  .ev:nth-child(1){animation-delay:.9s}
+  .ev:nth-child(2){animation-delay:1.05s}
+  .ev:nth-child(3){animation-delay:1.2s}
+  .ev:last-child{border-bottom:none}
+  .ev .dot{width:8px;height:8px;border-radius:50%;margin-top:4px}
+  .ev p{font-size:12px;color:var(--muted);line-height:1.45}
+  .ev p b{color:var(--fg);font-weight:600}
+  .ev time{font-size:10.5px;color:var(--muted-2);font-weight:600;display:block;margin-top:1px}
+
+  .glabels text{font-family:'Inter',sans-serif;font-size:9.5px;font-weight:600;fill:hsl(40 7% 46%)}
+  .gdigit{font-family:'JetBrains Mono',monospace;font-size:44px;font-weight:800;letter-spacing:-.02em;fill:var(--fg)}
+  .gsub{font-size:11px;font-weight:600;fill:hsl(40 7% 56%)}
+  .gstatus{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.18em;fill:hsl(142 70% 50%)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="bar">
+    <div class="ident">
+      <h1>Comando</h1>
+      <span>Junho 2026 · dia 11</span>
+    </div>
+    <nav class="tabs">
+      <a class="on" href="#">Visão Geral</a>
+      <a href="#">Performance</a>
+      <a href="#">Inteligência</a>
+      <a href="#">Analytics</a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="range">
+      <a href="#">Hoje</a><a href="#">Semana</a><a class="on" href="#">Mês</a><a href="#">Trim.</a>
+    </div>
+    <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14m-7-7h14"/></svg>Novo lead</button>
+  </div>
+
+  <div class="ticker">
+    <span class="tag"><i></i>Telemetria</span>
+    <div class="tk-view">
+      <div class="tk-item on"><b>Marina Rocha</b> fechou venda de <b>R$ 12,4K</b> — Metalúrgica Andrade · há 4 min</div>
+      <div class="tk-item"><b>Copilot SDR</b> agendou reunião com <b>Distribuidora Vale Sul</b> · há 11 min</div>
+      <div class="tk-item"><b>14 leads quentes</b> sem follow-up há 48h — R$ 38K em potencial parado</div>
+    </div>
+  </div>
+
+  <div class="bento">
+
+    <div class="cell c-meta">
+      <div class="head">
+        <span class="lbl">Meta do mês</span>
+        <a class="adjust" href="#">Ajustar →</a>
+      </div>
+      <div class="gwrap">
+        <svg id="gauge" width="310" height="300" viewBox="0 0 360 348"></svg>
+      </div>
+      <div class="gauge-foot">
+        <div><b class="tnum" data-count="142" data-fmt="kR">R$ 0</b><span>Realizado</span></div>
+        <div><b class="tnum">R$ 200K</b><span>Meta</span></div>
+        <div><b class="tnum" data-count="4.8" data-fmt="kR1">R$ 0</b><span>Por dia útil</span></div>
+      </div>
+    </div>
+
+    <div class="cell c-kpi">
+      <div class="head"><span class="lbl">Leads</span><span class="delta up">+12%</span></div>
+      <div class="v tnum" data-count="312" data-fmt="int">0</div>
+      <div class="cap">278 em maio</div>
+      <div class="qa">Ver leads do mês →</div>
+    </div>
+    <div class="cell c-kpi">
+      <div class="head"><span class="lbl">Reuniões</span><span class="delta up">+9%</span></div>
+      <div class="v tnum" data-count="96" data-fmt="int">0</div>
+      <div class="cap">88 em maio</div>
+      <div class="qa">Abrir agenda →</div>
+    </div>
+    <div class="cell c-kpi">
+      <div class="head"><span class="lbl">Propostas</span><span class="delta down">-4%</span></div>
+      <div class="v tnum" data-count="48" data-fmt="int">0</div>
+      <div class="cap">50 em maio</div>
+      <div class="qa">Ver propostas →</div>
+    </div>
+    <div class="cell c-kpi">
+      <div class="head"><span class="lbl">Vendas</span><span class="delta up">+11%</span></div>
+      <div class="v tnum" data-count="21" data-fmt="int">0</div>
+      <div class="cap">19 em maio</div>
+      <div class="qa">Ver fechamentos →</div>
+    </div>
+    <div class="cell c-kpi">
+      <div class="head"><span class="lbl">Ticket</span><span class="delta up">+6%</span></div>
+      <div class="v tnum" data-count="6.8" data-fmt="kR1">R$ 0</div>
+      <div class="cap">R$ 6,4K em maio</div>
+      <div class="qa">Por produto →</div>
+    </div>
+    <div class="cell c-kpi">
+      <div class="head"><span class="lbl">Resposta</span><span class="delta up">-22%</span></div>
+      <div class="v tnum" data-count="14" data-fmt="min">0</div>
+      <div class="cap">18min em maio</div>
+      <div class="qa">Por vendedor →</div>
+    </div>
+    <div class="cell c-kpi">
+      <div class="head"><span class="lbl">Conversão</span><span class="delta up">+2pp</span></div>
+      <div class="v tnum" data-count="18" data-fmt="pct">0%</div>
+      <div class="cap">16% em maio</div>
+      <div class="qa">Funil completo →</div>
+    </div>
+    <div class="cell c-kpi">
+      <div class="head"><span class="lbl">Follow-ups</span><span class="delta down">14</span></div>
+      <div class="v tnum" data-count="14" data-fmt="int">0</div>
+      <div class="cap">atrasados agora</div>
+      <div class="qa">Resolver agora →</div>
+    </div>
+
+    <div class="cell c-rev">
+      <div class="head">
+        <div>
+          <span class="lbl">Receita acumulada</span>
+          <div class="v tnum"><span data-count="142.4" data-fmt="kR1">R$ 0</span> <span class="delta up" style="vertical-align:5px">+18,2%</span></div>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--gold)"></i>Junho</span>
+          <span><i style="background:hsl(40 7% 40%)"></i>Maio</span>
+          <span><i style="background:transparent;border-top:2px dashed hsl(40 7% 50%);height:0"></i>Projeção</span>
+        </div>
+      </div>
+      <svg width="100%" height="128" viewBox="0 0 800 128" preserveAspectRatio="none" style="margin-top:10px">
+        <defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="hsl(47 100% 50%)" stop-opacity=".22"/><stop offset="1" stop-color="hsl(47 100% 50%)" stop-opacity="0"/>
+        </linearGradient></defs>
+        <polyline points="0,115 80,109 160,100 240,95 320,84 400,78 480,64 560,51 640,44" fill="none" stroke="hsl(40 7% 38%)" stroke-width="2" class="revline" style="animation-delay:.9s"/>
+        <polygon class="revarea" points="0,119 60,110 120,105 180,92 240,82 300,75 360,59 420,46 420,128 0,128" fill="url(#area)"/>
+        <polyline class="revline" points="0,119 60,110 120,105 180,92 240,82 300,75 360,59 420,46" fill="none" stroke="hsl(47 100% 50%)" stroke-width="2.5" stroke-linecap="round"/>
+        <polyline class="revproj" points="420,46 500,35 580,25 660,16 740,10 800,5" fill="none" stroke="hsl(47 100% 50%)" stroke-width="2" stroke-dasharray="3 6" opacity=".6"/>
+        <circle class="revdot" cx="420" cy="46" r="4.5" fill="hsl(47 100% 50%)" stroke="hsl(36 11% 9%)" stroke-width="2"/>
+      </svg>
+    </div>
+
+    <div class="cell c-fun">
+      <div class="head">
+        <span class="lbl">Funil de vendas</span>
+        <span class="convchip">conv. total 6,7%</span>
+      </div>
+      <div class="funnel">
+        <div class="flevel l1"><span class="num tnum">312</span><span class="stg">Leads</span><span class="share tnum">100%</span></div>
+        <div class="fgap g1"><span class="arrow"></span><span class="rate">31%</span><span class="rlbl">viram reunião</span></div>
+        <div class="flevel l2"><span class="num tnum">96</span><span class="stg">Reuniões</span><span class="share tnum">31%</span></div>
+        <div class="fgap g2"><span class="arrow"></span><span class="rate">50%</span><span class="rlbl">recebem proposta</span></div>
+        <div class="flevel l3"><span class="num tnum">48</span><span class="stg">Propostas</span><span class="share tnum">15%</span></div>
+        <div class="fgap g3"><span class="arrow"></span><span class="rate">44%</span><span class="rlbl">fecham</span></div>
+        <div class="flevel l4"><span class="num tnum">21</span><span class="stg">Vendas</span><span class="share tnum">7%</span></div>
+      </div>
+      <div class="fnote">
+        <span>Gargalo: <b style="color:var(--danger)">Leads → Reuniões</b></span>
+        <b>+2pp vs maio</b>
+        <a href="#">Ver funis →</a>
+      </div>
+    </div>
+
+    <div class="cell c-ins">
+      <div class="ins-head">
+        <div class="spark"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z"/></svg></div>
+        <b>Oráculo</b>
+      </div>
+      <div class="ins">
+        <span class="tag" style="color:var(--danger);background:var(--danger-dim)">Atenção</span>
+        <p>Conversão de propostas caiu <b>4%</b> — concentrada em <b>Meta Ads</b>.</p>
+      </div>
+      <div class="ins">
+        <span class="tag" style="color:var(--gold);background:var(--gold-dim)">Oportunidade</span>
+        <p><b>14 leads quentes</b> sem follow-up. <b>R$ 38K</b> parado.</p>
+      </div>
+      <div class="ins-input">
+        <span>Perguntar ao Oráculo...</span>
+        <kbd>⌘ J</kbd>
+      </div>
+    </div>
+
+    <div class="cell c-act">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="lbl">Agora na operação</span>
+        <span class="live"><i></i>ao vivo</span>
+      </div>
+      <div class="feed">
+        <div class="ev"><span class="dot" style="background:var(--success)"></span><p><b>Marina Rocha</b> fechou <b>R$ 12,4K</b> — Metalúrgica Andrade<time>há 4 min</time></p></div>
+        <div class="ev"><span class="dot" style="background:var(--gold)"></span><p><b>Copilot SDR</b> agendou reunião — Distribuidora Vale Sul<time>há 11 min</time></p></div>
+        <div class="ev"><span class="dot" style="background:var(--blue)"></span><p><b>Diego Farias</b> enviou proposta de <b>R$ 8,9K</b> — Fábrica Lumen<time>há 26 min</time></p></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ===== Cluster gauge — 270 graus, leitura digital central, redline =====
+(function(){
+  const svg=document.getElementById('gauge');
+  const NS='http://www.w3.org/2000/svg';
+  const CX=180, CY=176, R=148;
+  const START=135, SWEEP=270, MAXP=130;
+  const CUR=71, EXP=36.6;
+  const a=p=>(START+(p/MAXP)*SWEEP)*Math.PI/180;
+  const pt=(ang,r)=>[CX+Math.cos(ang)*r,CY+Math.sin(ang)*r];
+  const el=(n,attrs)=>{const e=document.createElementNS(NS,n);for(const k in attrs)e.setAttribute(k,attrs[k]);svg.appendChild(e);return e};
+  function arcPath(p0,p1,r){
+    const [x0,y0]=pt(a(p0),r),[x1,y1]=pt(a(p1),r);
+    const large=((p1-p0)/MAXP)*SWEEP>180?1:0;
+    return `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1}`;
+  }
+  el('path',{d:arcPath(0,130,R),fill:'none',stroke:'hsl(0 0% 100%/.06)','stroke-width':11,'stroke-linecap':'round'});
+  el('path',{d:arcPath(100,130,R),fill:'none',stroke:'hsl(0 62% 50%/.22)','stroke-width':11});
+  for(let p=102;p<130;p+=3.5){
+    const [x0,y0]=pt(a(p),R-4),[x1,y1]=pt(a(p),R+4);
+    el('line',{x1:x0,y1:y0,x2:x1,y2:y1,stroke:'hsl(0 62% 52%/.6)','stroke-width':2});
+  }
+  const labels=el('g',{class:'glabels'});
+  for(let p=0;p<=130;p+=2.5){
+    const major=p%10===0;
+    if(!major&&p%5!==0)continue;
+    const [x0,y0]=pt(a(p),R-(major?17:11)),[x1,y1]=pt(a(p),R-6);
+    el('line',{x1:x0,y1:y0,x2:x1,y2:y1,stroke:major?'hsl(0 0% 100%/.4)':'hsl(0 0% 100%/.13)','stroke-width':major?2:1});
+    if(p%20===0){
+      const [lx,ly]=pt(a(p),R-29);
+      const t=document.createElementNS(NS,'text');
+      t.setAttribute('x',lx);t.setAttribute('y',ly);
+      t.setAttribute('text-anchor','middle');t.setAttribute('dominant-baseline','middle');
+      t.textContent=p;labels.appendChild(t);
+    }
+  }
+  svg.appendChild(labels);
+  const prog=el('path',{fill:'none',stroke:'hsl(47 100% 50%)','stroke-width':11,'stroke-linecap':'round',
+    style:'filter:drop-shadow(0 0 7px hsl(47 100% 50%/.5))'});
+  const expG=el('g',{opacity:0});
+  const expDeg=START+(EXP/MAXP)*SWEEP;
+  expG.innerHTML=`<polygon points="${CX+R+7},${CY-5} ${CX+R+16},${CY} ${CX+R+7},${CY+5}"
+    fill="hsl(45 20% 95%/.9)" transform="rotate(${expDeg} ${CX} ${CY})"/>`;
+  const needle=el('g',{});
+  needle.innerHTML=`
+    <line x1="${CX-22}" y1="${CY}" x2="${CX+R-30}" y2="${CY}" stroke="hsl(47 100% 50%)" stroke-width="3" stroke-linecap="round"
+      style="filter:drop-shadow(0 0 5px hsl(47 100% 50%/.55))"/>
+    <circle cx="${CX-22}" cy="${CY}" r="3.5" fill="hsl(47 100% 50%)"/>`;
+  el('circle',{cx:CX,cy:CY,r:14,fill:'hsl(35 10% 10%)',stroke:'hsl(0 0% 100%/.15)','stroke-width':2});
+  el('circle',{cx:CX,cy:CY,r:5,fill:'hsl(47 100% 50%)'});
+  const dig=document.createElementNS(NS,'text');
+  dig.setAttribute('x',CX);dig.setAttribute('y',CY+82);
+  dig.setAttribute('text-anchor','middle');dig.setAttribute('class','gdigit tnum');
+  dig.textContent='0';svg.appendChild(dig);
+  const digPct=document.createElementNS(NS,'text');
+  digPct.setAttribute('x',CX+58);digPct.setAttribute('y',CY+82);
+  digPct.setAttribute('text-anchor','start');digPct.setAttribute('class','gsub');
+  digPct.textContent='%';svg.appendChild(digPct);
+  const sub=document.createElementNS(NS,'text');
+  sub.setAttribute('x',CX);sub.setAttribute('y',CY+104);
+  sub.setAttribute('text-anchor','middle');sub.setAttribute('class','gsub');
+  sub.textContent='esperado 37% · dia 11 de 30';svg.appendChild(sub);
+  const status=document.createElementNS(NS,'text');
+  status.setAttribute('x',CX);status.setAttribute('y',CY+126);
+  status.setAttribute('text-anchor','middle');status.setAttribute('class','gstatus');
+  status.textContent='// NO RITMO +34PP';status.setAttribute('opacity',0);svg.appendChild(status);
+  svg.appendChild(expG);svg.appendChild(needle);
+
+  const T0=performance.now(),DUR=1600,DELAY=400;
+  function easeOutBack(x){const c1=1.3,c3=c1+1;return 1+c3*Math.pow(x-1,3)+c1*Math.pow(x-1,2)}
+  function frame(now){
+    let t=Math.min(Math.max((now-T0-DELAY)/DUR,0),1);
+    const e=easeOutBack(t),p=Math.max(CUR*e,0.01);
+    needle.setAttribute('transform',`rotate(${START+(p/MAXP)*SWEEP} ${CX} ${CY})`);
+    prog.setAttribute('d',arcPath(0,Math.max(Math.min(p,CUR),.5),R));
+    dig.textContent=Math.round(Math.min(p,CUR));
+    expG.setAttribute('opacity',Math.min(t*1.8,1));
+    if(t>=.85)status.setAttribute('opacity',Math.min((t-.85)*6,1));
+    if(t<1)requestAnimationFrame(frame);
+    else{
+      const settle=now;
+      (function idle(n2){
+        const j=Math.sin((n2-settle)/650)*.45;
+        needle.setAttribute('transform',`rotate(${START+(CUR/MAXP)*SWEEP+j} ${CX} ${CY})`);
+        requestAnimationFrame(idle);
+      })(now);
+    }
+  }
+  requestAnimationFrame(frame);
+})();
+
+// count-up
+(function(){
+  const fmts={
+    int:v=>Math.round(v).toLocaleString('pt-BR'),
+    kR:v=>'R$ '+Math.round(v)+'K',
+    kR1:v=>'R$ '+v.toFixed(1).replace('.',',')+'K',
+    min:v=>Math.round(v)+'min',
+    pct:v=>Math.round(v)+'%'
+  };
+  document.querySelectorAll('[data-count]').forEach(elm=>{
+    const target=parseFloat(elm.dataset.count),fmt=fmts[elm.dataset.fmt]||fmts.int;
+    const T0=performance.now(),DUR=1300,DELAY=450;
+    function f(now){
+      let t=Math.min(Math.max((now-T0-DELAY)/DUR,0),1);
+      elm.textContent=fmt(target*(1-Math.pow(1-t,3)));
+      if(t<1)requestAnimationFrame(f);
+    }
+    requestAnimationFrame(f);
+  });
+})();
+
+// ticker rotativo
+(function(){
+  const items=document.querySelectorAll('.tk-item');
+  let i=0;
+  setInterval(()=>{
+    items[i].classList.remove('on');
+    i=(i+1)%items.length;
+    items[i].classList.add('on');
+  },4200);
+})();
+</script>
+</body>
+</html>
