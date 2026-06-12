@@ -64,6 +64,8 @@ import {
 } from "@/modules/communication/hooks/useWhatsAppConversations";
 import { supabase } from "@/integrations/supabase/client";
 import { usePreferredInstance } from "@/modules/communication/hooks/usePreferredInstance";
+import { useLeadByPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
+import { resolveEffectiveLead } from "@/modules/communication/lib/resolveEffectiveLead";
 import type { ChatContact, FailedMessage } from "@/modules/communication/hooks/chat/types";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
 
@@ -103,6 +105,20 @@ function ChatView({
   const phoneNumber = selectedContact?.phone_number ?? selectedPhone;
   const conversationId = selectedContact?.conversation_id ?? null;
 
+  // Fallback de vínculo lead↔conversa. A lista de contatos deriva o `lead_id`
+  // de `whatsapp_messages.lead_id` (gravado no ingest da mensagem). Dois casos
+  // deixam o contato sem lead apesar de existir um lead com o mesmo telefone:
+  //   1. mensagens órfãs (lead criado/migrado DEPOIS das mensagens → lead_id null);
+  //   2. lead sem nenhuma mensagem WhatsApp (sem contato na lista).
+  // Resolvemos por telefone via `leads.normalized_phone` — mesmo padrão que o
+  // ContextPanel já usa — pra header/composer/toggle ficarem consistentes com o
+  // painel. Mesma queryKey → TanStack dedupa, sem custo de rede extra.
+  const { data: leadByPhone } = useLeadByPhone(
+    selectedContact?.lead_id ? null : phoneNumber,
+  );
+  const { leadId: effectiveLeadId, leadName: effectiveLeadName } =
+    resolveEffectiveLead(selectedContact, leadByPhone);
+
   const { data: messages = [], isLoading: messagesLoading } = useWhatsAppMessages(
     phoneNumber,
     instanceId,
@@ -128,7 +144,7 @@ function ChatView({
   // ["copilot-toggle", orgId, normalizedPhone], realtime via MainLayout.
   const copilotToggle = useCopilotToggle({
     phone: phoneNumber,
-    leadId: selectedContact?.lead_id ?? null,
+    leadId: effectiveLeadId,
   });
   // Human pause state — countdown + reactivate
   const copilotPause = useCopilotPause({
@@ -159,7 +175,7 @@ function ChatView({
   }
 
   const contactName =
-    selectedContact?.lead_name ?? selectedContact?.push_name ?? phoneNumber ?? "";
+    effectiveLeadName ?? selectedContact?.push_name ?? phoneNumber ?? "";
 
   const conversationKey = `${instanceId}:${phoneNumber}`;
 
@@ -190,8 +206,8 @@ function ChatView({
         <MobileChatThreadHeader
           contactName={contactName}
           phoneNumber={phoneNumber ?? ""}
-          hasLead={!!selectedContact?.lead_id}
-          leadId={selectedContact?.lead_id ?? undefined}
+          hasLead={!!effectiveLeadId}
+          leadId={effectiveLeadId ?? undefined}
           onBack={onBack}
           onTapContact={onOpenLeadModal}
         />
@@ -199,8 +215,8 @@ function ChatView({
         <ChatHeader
           phoneNumber={phoneNumber ?? ""}
           contactName={contactName}
-          hasLead={!!selectedContact?.lead_id}
-          leadId={selectedContact?.lead_id ?? undefined}
+          hasLead={!!effectiveLeadId}
+          leadId={effectiveLeadId ?? undefined}
           conversationId={conversationId}
           instanceId={instanceId ?? undefined}
           aiDisabled={aiDisabled || isHumanActive}
@@ -261,13 +277,13 @@ function ChatView({
           contactName={contactName}
           instanceName={instanceName}
           instanceId={instanceId}
-          leadId={selectedContact?.lead_id ?? undefined}
+          leadId={effectiveLeadId ?? undefined}
           canReply
           selectedContact={{
             push_name: selectedContact?.push_name ?? null,
-            lead_name: selectedContact?.lead_name ?? null,
+            lead_name: effectiveLeadName,
             phone_number: phoneNumber ?? "",
-            lead_id: selectedContact?.lead_id ?? null,
+            lead_id: effectiveLeadId,
           }}
         />
       ) : (
@@ -277,14 +293,14 @@ function ChatView({
           contactName={contactName}
           instanceName={instanceName}
           instanceId={instanceId}
-          leadId={selectedContact?.lead_id ?? undefined}
+          leadId={effectiveLeadId ?? undefined}
           canReply
           density={density}
           selectedContact={{
             push_name: selectedContact?.push_name ?? null,
-            lead_name: selectedContact?.lead_name ?? null,
+            lead_name: effectiveLeadName,
             phone_number: phoneNumber ?? "",
-            lead_id: selectedContact?.lead_id ?? null,
+            lead_id: effectiveLeadId,
           }}
         />
       )}
