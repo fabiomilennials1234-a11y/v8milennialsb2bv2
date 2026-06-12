@@ -16,7 +16,11 @@ export function useTrashLeads() {
   return useQuery({
     queryKey: ["trash_leads", organizationId],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_trash_leads" as any);
+      // p_org_id scopes the master shadow to the org open in the UI; members
+      // ignore it server-side (they always read their own team_members org).
+      const { data, error } = await supabase.rpc("get_trash_leads" as any, {
+        p_org_id: organizationId,
+      });
       if (error) throw error;
       return (data ?? []) as TrashLead[];
     },
