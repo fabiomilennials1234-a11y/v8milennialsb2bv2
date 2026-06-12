@@ -15,6 +15,8 @@
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "typecheck:ratchet": "node scripts/tsc-ratchet.cjs",
     "typecheck:baseline": "node scripts/tsc-ratchet.cjs --write",
+    "guard:master-ghost": "node scripts/definer-master-ghost-ratchet.cjs",
+    "guard:master-ghost:write": "node scripts/definer-master-ghost-ratchet.cjs --write",
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
