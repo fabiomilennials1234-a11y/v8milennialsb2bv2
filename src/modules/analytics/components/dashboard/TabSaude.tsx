@@ -196,7 +196,7 @@ function TabSaudeBase({ range }: TabSaudeProps) {
 
   if (isLoading || !data) {
     return (
-      <div className="grid items-start gap-4 lg:grid-cols-[380px_1fr]">
+      <div className="mt-4 grid items-start gap-4 lg:grid-cols-[380px_1fr]">
         <Skeleton className="h-[420px]" />
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
@@ -241,10 +241,10 @@ function TabSaudeBase({ range }: TabSaudeProps) {
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="grid items-start gap-4 lg:grid-cols-[380px_1fr]">
+      <div className="mt-4 grid items-start gap-4 lg:grid-cols-[380px_1fr]">
         {/* ───── Rail: gargalo + ranking de transições ───── */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-          <Card className="lg:sticky lg:top-5">
+          <Card>
             <CardContent className="p-6">
               {bottleneck ? (
                 <>
