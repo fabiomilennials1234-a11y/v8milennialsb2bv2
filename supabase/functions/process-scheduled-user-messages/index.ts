@@ -4,6 +4,15 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { withSentry } from "../_shared/sentry.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
+import {
+  resolveStrictInstanceForCaller,
+  StrictWriteResolutionError,
+} from "../_shared/instance-write-guard.ts";
+import {
+  sendTextViaInstance,
+  sendMediaViaInstance,
+  sendAudioViaInstance,
+} from "../_shared/whatsapp-dispatch.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -74,9 +83,6 @@ Deno.serve(withSentry("process-scheduled-user-messages", async (req) => {
         let isSzChat = false;
 
         if (msg.lead_id) {
-          const { resolveStrictInstanceForCaller, StrictWriteResolutionError } = await import(
-            "../_shared/instance-write-guard.ts"
-          );
           try {
             const strict = await resolveStrictInstanceForCaller(
               supabase,
@@ -138,9 +144,6 @@ Deno.serve(withSentry("process-scheduled-user-messages", async (req) => {
               },
             });
           } else {
-            const { sendTextViaInstance } = await import(
-              "../_shared/whatsapp-dispatch.ts"
-            );
             await sendTextViaInstance(
               supabase,
               instance,
@@ -152,9 +155,6 @@ Deno.serve(withSentry("process-scheduled-user-messages", async (req) => {
         }
 
         if (msg.media_url && msg.media_type) {
-          const { sendMediaViaInstance, sendAudioViaInstance } = await import(
-            "../_shared/whatsapp-dispatch.ts"
-          );
           if (msg.media_type === "audio") {
             await sendAudioViaInstance(
               supabase,
