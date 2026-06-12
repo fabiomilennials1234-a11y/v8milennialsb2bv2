@@ -73,13 +73,15 @@ async function seedLead(overrides: LeadOverrides): Promise<string> {
 async function seedMeeting(
   leadId: string,
   eventType: 'meeting_booked' | 'meeting_held',
-  occurredAt: string
+  occurredAt: string,
+  meetingDate?: string
 ) {
   const { error } = await supabase.from('meeting_events').insert({
     organization_id: ORG,
     lead_id: leadId,
     event_type: eventType,
     occurred_at: occurredAt,
+    ...(meetingDate ? { meeting_date: meetingDate } : {}),
     source: 'integration-test',
   });
   if (error) throw new Error(`seedMeeting failed: ${error.message}`);
@@ -89,12 +91,13 @@ const PIPELINE_PROPOSTAS_ID = 'ffffffff-0000-4000-a000-0000000000d1';
 const TM1 = 'ffffffff-0000-4000-a000-0000000000a1';
 const TM2 = 'ffffffff-0000-4000-a000-0000000000a2';
 
-async function seedPropostaEntry(leadId: string, stageKey: string) {
+async function seedPropostaEntry(leadId: string, stageKey: string, metadata?: object) {
   const { error } = await supabase.from('pipeline_entries').insert({
     organization_id: ORG,
     pipeline_id: PIPELINE_PROPOSTAS_ID,
     lead_id: leadId,
     stage_key: stageKey,
+    ...(metadata ? { metadata } : {}),
   });
   if (error) throw new Error(`seedPropostaEntry failed: ${error.message}`);
 }
@@ -312,5 +315,80 @@ describe.skipIf(shouldSkip)('get_funnel_health RPC', () => {
     });
     expect(tm2).toMatchObject({ vinculados: 1, avaliados: 1, bons: 0 });
     expect(unassigned).toMatchObject({ vinculados: 1, avaliados: 0 });
+  });
+
+  it('stage_leads: returns only the leads of the requested stage, newest first', async () => {
+    const M = 10;
+    const w = window(M);
+    await seedLead({ created_at: w.inside, qualification_tier: 'ouro' }); // bom
+    await seedLead({ created_at: '2030-10-12T12:00:00Z', pre_qualification_tier: 'diamante' }); // bom, mais novo
+    await seedLead({ created_at: w.inside, qualification_tier: 'bronze' }); // não bom
+    await seedLead({ created_at: w.inside }); // não avaliado
+
+    const { data, error } = await supabase.rpc('get_funnel_health_stage_leads', {
+      p_org_id: ORG,
+      p_start_date: w.start,
+      p_end_date: w.end,
+      p_stage: 'bons',
+    });
+    if (error) throw new Error(error.message);
+
+    expect(data).toHaveLength(2);
+    expect(data[0].tier).toBe('diamante'); // created 12/10 — newest first
+    expect(data[1].tier).toBe('ouro');
+    expect(data[0].name).toContain('Funnel Health Fixture');
+  });
+
+  it('stage_leads: enriches each lead with pre-vendas name, propostas status + value, and meeting dates', async () => {
+    const M = 11;
+    const w = window(M);
+    const sold = await seedLead({
+      created_at: w.inside,
+      qualification_tier: 'diamante',
+      pre_sale_responsible_id: TM1,
+    });
+    await seedMeeting(sold, 'meeting_booked', w.inside, '2030-11-20');
+    await seedMeeting(sold, 'meeting_held', '2030-11-20T15:00:00Z');
+    await seedPropostaEntry(sold, 'vendido', { sale_value: 18400 });
+
+    const bare = await seedLead({ created_at: '2030-11-09T12:00:00Z', pre_qualification_tier: 'ouro' });
+
+    const { data, error } = await supabase.rpc('get_funnel_health_stage_leads', {
+      p_org_id: ORG,
+      p_start_date: w.start,
+      p_end_date: w.end,
+      p_stage: 'bons',
+    });
+    if (error) throw new Error(error.message);
+
+    const rich = data.find((l: any) => l.id === sold);
+    const plain = data.find((l: any) => l.id === bare);
+
+    expect(rich).toMatchObject({
+      pre_vendas: 'Pré-vendas Um',
+      proposta_stage: 'vendido',
+      sale_value: 18400,
+    });
+    expect(rich.meeting_date).toContain('2030-11-20');
+    expect(rich.held_at).toBeTruthy();
+    expect(plain).toMatchObject({
+      pre_vendas: null,
+      proposta_stage: null,
+      sale_value: null,
+      meeting_date: null,
+      held_at: null,
+      whatsapp_stage: null,
+    });
+  });
+
+  it('stage_leads: rejects an unknown stage', async () => {
+    const w = window(11);
+    const { error } = await supabase.rpc('get_funnel_health_stage_leads', {
+      p_org_id: ORG,
+      p_start_date: w.start,
+      p_end_date: w.end,
+      p_stage: 'xpto',
+    });
+    expect(error?.message).toContain('invalid_stage');
   });
 });
