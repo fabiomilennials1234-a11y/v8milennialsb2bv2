@@ -46,6 +46,7 @@ function window(monthIdx: number) {
 interface LeadOverrides {
   organization_id?: string;
   created_at?: string;
+  origin?: string | null;
   deleted_at?: string | null;
   qualification_tier?: string | null;
   pre_qualification_tier?: string | null;
@@ -91,23 +92,30 @@ const PIPELINE_PROPOSTAS_ID = 'ffffffff-0000-4000-a000-0000000000d1';
 const TM1 = 'ffffffff-0000-4000-a000-0000000000a1';
 const TM2 = 'ffffffff-0000-4000-a000-0000000000a2';
 
-async function seedPropostaEntry(leadId: string, stageKey: string, metadata?: object) {
+async function seedPropostaEntry(
+  leadId: string,
+  stageKey: string,
+  metadata?: object,
+  closedAt?: string
+) {
   const { error } = await supabase.from('pipeline_entries').insert({
     organization_id: ORG,
     pipeline_id: PIPELINE_PROPOSTAS_ID,
     lead_id: leadId,
     stage_key: stageKey,
     ...(metadata ? { metadata } : {}),
+    ...(closedAt ? { closed_at: closedAt, stage_changed_at: closedAt } : {}),
   });
   if (error) throw new Error(`seedPropostaEntry failed: ${error.message}`);
 }
 
-async function callRpc(monthIdx: number, orgId: string = ORG) {
+async function callRpc(monthIdx: number, orgId: string = ORG, origins?: string[]) {
   const w = window(monthIdx);
   const { data, error } = await supabase.rpc('get_funnel_health', {
     p_org_id: orgId,
     p_start_date: w.start,
     p_end_date: w.end,
+    ...(origins !== undefined ? { p_origins: origins } : {}),
   });
   if (error) throw new Error(`rpc failed: ${error.message}`);
   return data;
@@ -274,6 +282,55 @@ describe.skipIf(shouldSkip)('get_funnel_health RPC', () => {
     expect(res.depth).toEqual({ pre_only: 2, final: 3 });
   });
 
+  it('p_origins filters the cohort to the given origins; null/omitted keeps everything', async () => {
+    const M = 8;
+    const w = window(M);
+    await seedLead({ created_at: w.inside, origin: 'meta_ads', qualification_tier: 'ouro' });
+    await seedLead({ created_at: w.inside, origin: 'instagram' });
+    await seedLead({ created_at: w.inside, origin: 'site' });
+    await seedLead({ created_at: w.inside }); // origem default do schema
+
+    const all = await callRpc(M);
+    expect(all.cohort_total).toBe(4);
+
+    const one = await callRpc(M, ORG, ['meta_ads']);
+    expect(one.cohort_total).toBe(1);
+    expect(one.stages.avaliados).toBe(1);
+
+    const two = await callRpc(M, ORG, ['meta_ads', 'instagram']);
+    expect(two.cohort_total).toBe(2);
+
+    const empty = await callRpc(M, ORG, []);
+    expect(empty.cohort_total).toBe(4); // array vazio = sem filtro
+  });
+
+  it('cycles: averages lead→sale over cohort sales and meeting→sale over sales with a held meeting', async () => {
+    const M = 12;
+    // l1: entrou dia 10, reunião dia 20 (10d), vendeu dia 25 (15d total, 5d pós-reunião)
+    const l1 = await seedLead({ created_at: '2030-12-10T12:00:00Z' });
+    await seedMeeting(l1, 'meeting_held', '2030-12-20T12:00:00Z');
+    await seedPropostaEntry(l1, 'vendido', undefined, '2030-12-25T12:00:00Z');
+    // l2: entrou dia 10, vendeu dia 20 (10d), sem reunião registrada
+    const l2 = await seedLead({ created_at: '2030-12-10T12:00:00Z' });
+    await seedPropostaEntry(l2, 'vendido', undefined, '2030-12-20T12:00:00Z');
+    // l3: na coorte, sem venda — fora das médias
+    await seedLead({ created_at: '2030-12-10T12:00:00Z' });
+
+    const res = await callRpc(M);
+
+    expect(res.cycles.sales_count).toBe(2);
+    expect(res.cycles.lead_to_sale_days).toBeCloseTo(12.5, 1); // (15+10)/2
+    expect(res.cycles.meeting_sales_count).toBe(1);
+    expect(res.cycles.meeting_to_sale_days).toBeCloseTo(5, 1);
+    expect(res.cycles.lead_to_meeting_days).toBeCloseTo(10, 1);
+
+    // sem vendas no recorte → contagens zeradas e médias nulas
+    const none = await callRpc(M, ORG, ['evento']);
+    expect(none.cycles.sales_count).toBe(0);
+    expect(none.cycles.lead_to_sale_days).toBeNull();
+    expect(none.cycles.meeting_to_sale_days).toBeNull();
+  });
+
   it('sellers matrix credits the Pré-vendas (with legacy fallback) and buckets unassigned leads', async () => {
     const M = 9;
     const w = window(M);
@@ -379,6 +436,25 @@ describe.skipIf(shouldSkip)('get_funnel_health RPC', () => {
       held_at: null,
       whatsapp_stage: null,
     });
+  });
+
+  it('stage_leads: respects p_origins like the main RPC', async () => {
+    const start = '2031-01-01T00:00:00Z';
+    const end = '2031-01-28T23:59:59Z';
+    const inside = '2031-01-10T12:00:00Z';
+    await seedLead({ created_at: inside, origin: 'meta_ads' });
+    await seedLead({ created_at: inside, origin: 'instagram' });
+
+    const { data, error } = await supabase.rpc('get_funnel_health_stage_leads', {
+      p_org_id: ORG,
+      p_start_date: start,
+      p_end_date: end,
+      p_stage: 'entraram',
+      p_origins: ['meta_ads'],
+    });
+    if (error) throw new Error(error.message);
+
+    expect(data).toHaveLength(1);
   });
 
   it('stage_leads: rejects an unknown stage', async () => {
