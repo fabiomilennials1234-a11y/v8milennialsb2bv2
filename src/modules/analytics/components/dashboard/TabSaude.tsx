@@ -105,12 +105,14 @@ const TRANSITION_LABELS = [
 ];
 
 const MATRIX_TOOLTIPS: Record<string, string> = {
-  Vinculados: "Leads do período atribuídos a este pré-vendas.",
-  Avaliados: "Quantos dos vinculados receberam classificação de qualidade.",
-  Bons: "Quantos foram classificados Prata, Ouro ou Diamante.",
-  Reunião: "Quantos tiveram reunião marcada.",
-  Compareceram: "Quantos tiveram reunião realizada.",
-  Compraram: "Quantos fecharam negócio em Orçamentos.",
+  Vinculados:
+    "Leads criados no período cujo campo Pré-vendas aponta para esta pessoa. Todas as colunas desta linha falam só desses leads.",
+  Avaliados: "Desses leads, quantos receberam classificação de qualidade.",
+  Bons: "Desses leads, quantos foram classificados Prata, Ouro ou Diamante.",
+  Reunião: "Desses leads, quantos tiveram reunião marcada.",
+  Compareceram: "Desses leads, quantos tiveram reunião realizada.",
+  Compraram:
+    "Desses leads, quantos chegaram à etapa de venda em Orçamentos. O crédito é de quem fez a pré-venda — mesmo que outro vendedor tenha fechado. Negócio ainda aberto em Orçamentos não conta.",
 };
 
 interface TransitionRow {
@@ -442,7 +444,12 @@ function TabSaudeBase({ range }: TabSaudeProps) {
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-            <div className="mb-3 text-sm font-semibold">Pré-vendas × etapas</div>
+            <div className="mb-3">
+              <div className="text-sm font-semibold">Pré-vendas × etapas</div>
+              <div className="mt-0.5 text-[11.5px] text-muted-foreground">
+                Leads do período agrupados por quem fez a pré-venda — a venda credita o pré-vendas, não quem fechou.
+              </div>
+            </div>
             <Card>
               <Table>
                 <TableHeader>
