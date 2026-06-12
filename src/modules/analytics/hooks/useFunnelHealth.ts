@@ -80,3 +80,48 @@ export function useFunnelHealth({ start, end }: FunnelHealthRange) {
     staleTime: 60_000,
   });
 }
+
+export interface FunnelStageLead {
+  id: string;
+  name: string;
+  company: string | null;
+  tier: string | null;
+  created_at: string;
+  pre_vendas: string | null;
+  proposta_stage: string | null;
+  sale_value: number | null;
+  meeting_date: string | null;
+  held_at: string | null;
+  whatsapp_stage: string | null;
+}
+
+/** Drill-down: leads de uma etapa da coorte (sheet da aba Saúde). */
+export function useFunnelHealthStageLeads(
+  { start, end }: FunnelHealthRange,
+  stage: keyof FunnelHealthStages | null
+) {
+  const { data: currentTeamMember } = useCurrentTeamMember();
+  const organizationId = currentTeamMember?.organization_id ?? null;
+  const startStr = start.toISOString();
+  const endStr = end.toISOString();
+
+  return useQuery({
+    queryKey: ["funnel-health-stage-leads", startStr, endStr, stage, organizationId],
+    queryFn: async (): Promise<FunnelStageLead[]> => {
+      if (!organizationId || !stage) return [];
+
+      // RPC nova — ainda fora do types.ts auto-gerado; regen pendente.
+      const { data, error } = await supabase.rpc("get_funnel_health_stage_leads" as never, {
+        p_org_id: organizationId,
+        p_start_date: startStr,
+        p_end_date: endStr,
+        p_stage: stage,
+      } as never);
+
+      if (error) throw error;
+      return (data ?? []) as unknown as FunnelStageLead[];
+    },
+    enabled: !!organizationId && !!stage,
+    staleTime: 60_000,
+  });
+}

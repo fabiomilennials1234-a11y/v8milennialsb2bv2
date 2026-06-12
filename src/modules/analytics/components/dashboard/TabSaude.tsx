@@ -24,6 +24,9 @@ import {
 } from "@/modules/analytics/hooks/useFunnelHealth";
 import type { PeriodRange } from "@/modules/analytics/hooks/useCommandMetrics";
 import { format } from "date-fns";
+import { useState } from "react";
+import { LeadPanelProvider, LeadDetailSheet, useLeadSheet } from "@/modules/leads";
+import { FunnelStageLeadsSheet } from "./FunnelStageLeadsSheet";
 
 interface TabSaudeProps {
   range: PeriodRange;
@@ -193,6 +196,8 @@ function StatusChip({ status }: { status: HealthStatus }) {
 
 function TabSaudeBase({ range }: TabSaudeProps) {
   const { data, isLoading } = useFunnelHealth({ start: range.start, end: range.end });
+  const [openStage, setOpenStage] = useState<StageKey | null>(null);
+  const { openLead } = useLeadSheet();
 
   const periodLabel = `de ${format(range.start, "dd/MM")} a ${format(range.end, "dd/MM")}`;
 
@@ -399,7 +404,11 @@ function TabSaudeBase({ range }: TabSaudeProps) {
                       conv !== null && s.goal !== null ? statusOf(conv, s.goal) : null;
                     const isLast = s.key === "compraram";
                     return (
-                      <TableRow key={s.key} className={cn(status === "bad" && "bg-red-500/5")}>
+                      <TableRow
+                        key={s.key}
+                        onClick={() => setOpenStage(s.key)}
+                        className={cn("cursor-pointer", status === "bad" && "bg-red-500/5")}
+                      >
                         <TableCell className="pl-5 font-semibold">
                           <HelpTip text={s.tooltip}>{s.label}</HelpTip>
                         </TableCell>
@@ -518,8 +527,31 @@ function TabSaudeBase({ range }: TabSaudeProps) {
           </motion.div>
         </div>
       </div>
+
+      <FunnelStageLeadsSheet
+        stage={openStage}
+        label={openStage ? STAGE_DEFS.find((d) => d.key === openStage)!.label : ""}
+        description={openStage ? STAGE_DEFS.find((d) => d.key === openStage)!.tooltip : ""}
+        count={openStage ? data.stages[openStage] : 0}
+        range={{ start: range.start, end: range.end }}
+        periodLabel={periodLabel}
+        onClose={() => setOpenStage(null)}
+        onOpenLead={(id) => {
+          setOpenStage(null);
+          openLead(id);
+        }}
+      />
     </TooltipProvider>
   );
 }
 
-export const TabSaude = memo(TabSaudeBase);
+function TabSaudeWithProviders(props: TabSaudeProps) {
+  return (
+    <LeadPanelProvider>
+      <TabSaudeBase {...props} />
+      <LeadDetailSheet />
+    </LeadPanelProvider>
+  );
+}
+
+export const TabSaude = memo(TabSaudeWithProviders);
