@@ -22,10 +22,11 @@ import {
   type FunnelHealthSeller,
   type FunnelHealthStages,
 } from "@/modules/analytics/hooks/useFunnelHealth";
+import type { PeriodRange } from "@/modules/analytics/hooks/useCommandMetrics";
+import { format } from "date-fns";
 
 interface TabSaudeProps {
-  month: number;
-  year: number;
+  range: PeriodRange;
 }
 
 type HealthStatus = "ok" | "warn" | "bad";
@@ -188,13 +189,10 @@ function StatusChip({ status }: { status: HealthStatus }) {
   );
 }
 
-function TabSaudeBase({ month, year }: TabSaudeProps) {
-  const { data, isLoading } = useFunnelHealth(month, year);
+function TabSaudeBase({ range }: TabSaudeProps) {
+  const { data, isLoading } = useFunnelHealth({ start: range.start, end: range.end });
 
-  const monthLabel = new Date(year, month - 1).toLocaleDateString("pt-BR", {
-    month: "long",
-    year: "numeric",
-  });
+  const periodLabel = `de ${format(range.start, "dd/MM")} a ${format(range.end, "dd/MM")}`;
 
   if (isLoading || !data) {
     return (
@@ -338,7 +336,7 @@ function TabSaudeBase({ month, year }: TabSaudeProps) {
                 <div className="mt-1.5 text-[26px] font-extrabold tracking-tight tabular-nums">
                   {cohort}
                 </div>
-                <div className="text-[11px] text-muted-foreground">criados em {monthLabel}</div>
+                <div className="text-[11px] text-muted-foreground">criados {periodLabel}</div>
               </CardContent>
             </Card>
             <Card>

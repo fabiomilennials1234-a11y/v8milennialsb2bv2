@@ -49,22 +49,22 @@ export interface FunnelHealthData {
   sellers: FunnelHealthSeller[];
 }
 
-/** Intervalo do mês em UTC — mesmo critério do useDashboardMetrics. */
-function getMonthRangeUTC(month: number, year: number) {
-  const start = new Date(Date.UTC(year, month - 1, 1));
-  const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
-  return { startStr: start.toISOString(), endStr: end.toISOString() };
+export interface FunnelHealthRange {
+  start: Date;
+  end: Date;
 }
 
-export function useFunnelHealth(month: number, year: number) {
+/** Mesmo contrato de range do useCommandMetrics — segue o período do Comando. */
+export function useFunnelHealth({ start, end }: FunnelHealthRange) {
   const { data: currentTeamMember } = useCurrentTeamMember();
   const organizationId = currentTeamMember?.organization_id ?? null;
+  const startStr = start.toISOString();
+  const endStr = end.toISOString();
 
   return useQuery({
-    queryKey: ["funnel-health", month, year, organizationId],
+    queryKey: ["funnel-health", startStr, endStr, organizationId],
     queryFn: async (): Promise<FunnelHealthData | null> => {
       if (!organizationId) return null;
-      const { startStr, endStr } = getMonthRangeUTC(month, year);
 
       // RPC nova — ainda fora do types.ts auto-gerado; regen pendente.
       const { data, error } = await supabase.rpc("get_funnel_health" as never, {
