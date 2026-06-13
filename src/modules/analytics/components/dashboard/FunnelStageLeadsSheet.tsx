@@ -17,6 +17,7 @@ interface FunnelStageLeadsSheetProps {
   description: string;
   count: number;
   range: FunnelHealthRange;
+  origins: string[];
   periodLabel: string;
   onClose: () => void;
   onOpenLead: (leadId: string) => void;
@@ -73,11 +74,12 @@ export function FunnelStageLeadsSheet({
   description,
   count,
   range,
+  origins,
   periodLabel,
   onClose,
   onOpenLead,
 }: FunnelStageLeadsSheetProps) {
-  const { data: leads, isLoading } = useFunnelHealthStageLeads(range, stage);
+  const { data: leads, isLoading } = useFunnelHealthStageLeads(range, stage, origins);
   const [query, setQuery] = useState("");
   const [tierFilter, setTierFilter] = useState<string | null>(null);
 

@@ -27,6 +27,8 @@ import { format } from "date-fns";
 import { useState } from "react";
 import { LeadPanelProvider, LeadDetailSheet, useLeadSheet } from "@/modules/leads";
 import { FunnelStageLeadsSheet } from "./FunnelStageLeadsSheet";
+import { SaudeOriginFilter } from "./SaudeOriginFilter";
+import { ORIGIN_LABELS } from "@/modules/analytics/hooks/useMktOriginConfig";
 
 interface TabSaudeProps {
   range: PeriodRange;
@@ -153,6 +155,11 @@ function fmtPct(v: number) {
   return `${v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
 
+function fmtDays(v: number | null | undefined) {
+  if (v == null) return "—";
+  return v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+}
+
 function HelpTip({
   text,
   children,
@@ -195,11 +202,15 @@ function StatusChip({ status }: { status: HealthStatus }) {
 }
 
 function TabSaudeBase({ range }: TabSaudeProps) {
-  const { data, isLoading } = useFunnelHealth({ start: range.start, end: range.end });
+  const [origins, setOrigins] = useState<string[]>([]);
+  const { data, isLoading } = useFunnelHealth({ start: range.start, end: range.end }, origins);
   const [openStage, setOpenStage] = useState<StageKey | null>(null);
   const { openLead } = useLeadSheet();
 
   const periodLabel = `de ${format(range.start, "dd/MM")} a ${format(range.end, "dd/MM")}`;
+  const originsLabel = origins
+    .map((o) => ORIGIN_LABELS[o as keyof typeof ORIGIN_LABELS] ?? o)
+    .join(" + ");
 
   if (isLoading || !data) {
     return (
@@ -248,7 +259,10 @@ function TabSaudeBase({ range }: TabSaudeProps) {
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="mt-4 grid items-start gap-4 lg:grid-cols-[380px_1fr]">
+      <div className="mt-4 flex items-center justify-end">
+        <SaudeOriginFilter value={origins} onChange={setOrigins} />
+      </div>
+      <div className="mt-3 grid items-start gap-4 lg:grid-cols-[380px_1fr]">
         {/* ───── Rail: gargalo + ranking de transições ───── */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
           <Card>
@@ -323,6 +337,67 @@ function TabSaudeBase({ range }: TabSaudeProps) {
                   );
                 })}
               </div>
+
+              {/* ───── Tempo até a venda (ciclos médios, variante V3) ───── */}
+              {data.cycles && (
+                <div className="mt-5 border-t border-border pt-4">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                      <HelpTip text="Médias calculadas só sobre os leads do período que viraram venda. A venda vale a primeira chegada à etapa de venda em Orçamentos; a reunião, a primeira reunião realizada.">
+                        Tempo até a venda
+                      </HelpTip>
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {data.cycles.sales_count > 0
+                        ? `média · ${data.cycles.sales_count} ${data.cycles.sales_count === 1 ? "venda" : "vendas"}`
+                        : "sem vendas no recorte"}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 flex items-center">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-muted-foreground ring-[1.5px] ring-border" />
+                    <div className="relative h-3.5 min-w-0 flex-1">
+                      <i className="absolute inset-x-0.5 top-1.5 block h-0.5 rounded-full bg-gradient-to-r from-muted-foreground/50 to-primary" />
+                      <b className="absolute left-1/2 top-[-7px] -translate-x-1/2 whitespace-nowrap bg-card px-1.5 text-[13.5px] font-extrabold tabular-nums">
+                        {fmtDays(data.cycles.lead_to_meeting_days)}
+                        <span className="text-[10.5px] font-bold text-muted-foreground">
+                          {data.cycles.lead_to_meeting_days != null && "d"}
+                        </span>
+                      </b>
+                    </div>
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary ring-[1.5px] ring-primary/50 shadow-[0_0_10px_hsl(47_100%_50%/.35)]" />
+                    <div className="relative h-3.5 min-w-0 flex-1">
+                      <i className="absolute inset-x-0.5 top-1.5 block h-0.5 rounded-full bg-gradient-to-r from-primary to-emerald-500" />
+                      <b className="absolute left-1/2 top-[-7px] -translate-x-1/2 whitespace-nowrap bg-card px-1.5 text-[13.5px] font-extrabold tabular-nums">
+                        {fmtDays(data.cycles.meeting_to_sale_days)}
+                        <span className="text-[10.5px] font-bold text-muted-foreground">
+                          {data.cycles.meeting_to_sale_days != null && "d"}
+                        </span>
+                      </b>
+                    </div>
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500 ring-[1.5px] ring-emerald-500/50 shadow-[0_0_10px_hsl(152_76%_40%/.35)]" />
+                  </div>
+                  <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
+                    <span>lead entrou</span>
+                    <span>compareceu</span>
+                    <span>venda</span>
+                  </div>
+
+                  <div className="mt-4 flex items-center gap-3 rounded-xl bg-background/60 px-4 py-3">
+                    <span className="whitespace-nowrap text-3xl font-black tracking-tight text-primary tabular-nums">
+                      {fmtDays(data.cycles.lead_to_sale_days)}
+                      <span className="text-[15px] font-bold text-muted-foreground">
+                        {data.cycles.lead_to_sale_days != null && "d"}
+                      </span>
+                    </span>
+                    <span className="text-[11.5px] leading-snug text-muted-foreground">
+                      <b className="font-semibold text-foreground">Ciclo médio de venda</b>
+                      <br />
+                      da entrada do lead até fechar em Orçamentos
+                    </span>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -343,7 +418,9 @@ function TabSaudeBase({ range }: TabSaudeProps) {
                 <div className="mt-1.5 text-[26px] font-extrabold tracking-tight tabular-nums">
                   {cohort}
                 </div>
-                <div className="text-[11px] text-muted-foreground">criados {periodLabel}</div>
+                <div className="truncate text-[11px] text-muted-foreground">
+                  {origins.length > 0 ? originsLabel : `criados ${periodLabel}`}
+                </div>
               </CardContent>
             </Card>
             <Card>
@@ -534,6 +611,7 @@ function TabSaudeBase({ range }: TabSaudeProps) {
         description={openStage ? STAGE_DEFS.find((d) => d.key === openStage)!.tooltip : ""}
         count={openStage ? data.stages[openStage] : 0}
         range={{ start: range.start, end: range.end }}
+        origins={origins}
         periodLabel={periodLabel}
         onClose={() => setOpenStage(null)}
         onOpenLead={(id) => {
