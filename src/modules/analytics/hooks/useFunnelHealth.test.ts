@@ -76,4 +76,45 @@ describe('useFunnelHealth', () => {
 
     expect(rpcMock).toHaveBeenCalledTimes(2);
   });
+
+  it('passes p_origins when origins are selected and refetches when they change', async () => {
+    const range = {
+      start: new Date('2026-06-01T00:00:00.000Z'),
+      end: new Date('2026-06-30T23:59:59.999Z'),
+    };
+
+    const { result, rerender } = renderHook(
+      ({ origins }) => useFunnelHealth(range, origins),
+      { wrapper: createWrapper(), initialProps: { origins: ['meta_ads'] } }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(rpcMock).toHaveBeenCalledWith(
+      'get_funnel_health',
+      expect.objectContaining({ p_origins: ['meta_ads'] })
+    );
+
+    rerender({ origins: ['meta_ads', 'instagram'] });
+    await waitFor(() =>
+      expect(rpcMock).toHaveBeenCalledWith(
+        'get_funnel_health',
+        expect.objectContaining({ p_origins: ['meta_ads', 'instagram'] })
+      )
+    );
+  });
+
+  it('omits p_origins entirely when no origin filter is active', async () => {
+    const range = {
+      start: new Date('2026-06-01T00:00:00.000Z'),
+      end: new Date('2026-06-30T23:59:59.999Z'),
+    };
+
+    const { result } = renderHook(() => useFunnelHealth(range, []), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const payload = rpcMock.mock.calls[0][1] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('p_origins');
+  });
 });
