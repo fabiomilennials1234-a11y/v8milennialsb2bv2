@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 
@@ -41,12 +41,21 @@ export interface FunnelHealthSeller {
   compraram: number;
 }
 
+export interface FunnelHealthCycles {
+  sales_count: number;
+  lead_to_sale_days: number | null;
+  meeting_sales_count: number;
+  meeting_to_sale_days: number | null;
+  lead_to_meeting_days: number | null;
+}
+
 export interface FunnelHealthData {
   cohort_total: number;
   stages: FunnelHealthStages;
   tiers: FunnelHealthTiers;
   depth: FunnelHealthDepth;
   sellers: FunnelHealthSeller[];
+  cycles?: FunnelHealthCycles;
 }
 
 export interface FunnelHealthRange {
@@ -54,15 +63,18 @@ export interface FunnelHealthRange {
   end: Date;
 }
 
-/** Mesmo contrato de range do useCommandMetrics — segue o período do Comando. */
-export function useFunnelHealth({ start, end }: FunnelHealthRange) {
+/**
+ * Mesmo contrato de range do useCommandMetrics — segue o período do Comando.
+ * `origins` (multi-select) filtra a coorte por leads.origin; vazio = todas.
+ */
+export function useFunnelHealth({ start, end }: FunnelHealthRange, origins: string[] = []) {
   const { data: currentTeamMember } = useCurrentTeamMember();
   const organizationId = currentTeamMember?.organization_id ?? null;
   const startStr = start.toISOString();
   const endStr = end.toISOString();
 
   return useQuery({
-    queryKey: ["funnel-health", startStr, endStr, organizationId],
+    queryKey: ["funnel-health", startStr, endStr, organizationId, [...origins].sort()],
     queryFn: async (): Promise<FunnelHealthData | null> => {
       if (!organizationId) return null;
 
@@ -71,6 +83,7 @@ export function useFunnelHealth({ start, end }: FunnelHealthRange) {
         p_org_id: organizationId,
         p_start_date: startStr,
         p_end_date: endStr,
+        ...(origins.length > 0 ? { p_origins: origins } : {}),
       } as never);
 
       if (error) throw error;
@@ -78,6 +91,8 @@ export function useFunnelHealth({ start, end }: FunnelHealthRange) {
     },
     enabled: !!organizationId,
     staleTime: 60_000,
+    // troca de filtro/período mantém os dados anteriores na tela (sem skeleton)
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -98,7 +113,8 @@ export interface FunnelStageLead {
 /** Drill-down: leads de uma etapa da coorte (sheet da aba Saúde). */
 export function useFunnelHealthStageLeads(
   { start, end }: FunnelHealthRange,
-  stage: keyof FunnelHealthStages | null
+  stage: keyof FunnelHealthStages | null,
+  origins: string[] = []
 ) {
   const { data: currentTeamMember } = useCurrentTeamMember();
   const organizationId = currentTeamMember?.organization_id ?? null;
@@ -106,7 +122,7 @@ export function useFunnelHealthStageLeads(
   const endStr = end.toISOString();
 
   return useQuery({
-    queryKey: ["funnel-health-stage-leads", startStr, endStr, stage, organizationId],
+    queryKey: ["funnel-health-stage-leads", startStr, endStr, stage, organizationId, [...origins].sort()],
     queryFn: async (): Promise<FunnelStageLead[]> => {
       if (!organizationId || !stage) return [];
 
@@ -116,6 +132,7 @@ export function useFunnelHealthStageLeads(
         p_start_date: startStr,
         p_end_date: endStr,
         p_stage: stage,
+        ...(origins.length > 0 ? { p_origins: origins } : {}),
       } as never);
 
       if (error) throw error;
