@@ -16,6 +16,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { checkRateLimit, validateApiKey } from "../_shared/auth.ts";
 import { apiResource } from "../_shared/api/responses.ts";
 import { handleApiRequest, type ApiRoute } from "../_shared/api/router.ts";
+import { listLeads } from "../_shared/api/routes/leads.ts";
 
 const routes: ApiRoute[] = [
   {
@@ -33,6 +34,12 @@ const routes: ApiRoute[] = [
           ctx.cors,
         ),
       ),
+  },
+  {
+    method: "GET",
+    pattern: "/api/v1/leads",
+    scope: "lead:read",
+    handler: listLeads,
   },
 ];
 
