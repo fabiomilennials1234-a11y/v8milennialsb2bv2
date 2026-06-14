@@ -1,0 +1,446 @@
+{
+  "info": {
+    "name": "Torque CRM — REST API v1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "X-API-Key"
+      },
+      {
+        "key": "value",
+        "value": "{{api_key}}"
+      },
+      {
+        "key": "in",
+        "value": "header"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://jsjsmuncfkbsbzqzqhfq.supabase.co/functions/v1"
+    },
+    {
+      "key": "api_key",
+      "value": "tq_live_xxx"
+    }
+  ],
+  "item": [
+    {
+      "name": "GET Ping",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/ping",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "ping"
+          ],
+          "query": []
+        }
+      }
+    },
+    {
+      "name": "GET Listar leads",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/leads",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads"
+          ],
+          "query": [
+            {
+              "key": "stage",
+              "value": "",
+              "description": "Etapas (csv). Lead com entry em qualquer pipe nessas etapas. Ex: \"novo,abordado\".",
+              "disabled": true
+            },
+            {
+              "key": "tier",
+              "value": "",
+              "description": "Tier efetivo (csv): diamante, ouro, prata, bronze, desqualificado.",
+              "disabled": true
+            },
+            {
+              "key": "tag",
+              "value": "",
+              "description": "Nomes de tag (csv, case-insensitive).",
+              "disabled": true
+            },
+            {
+              "key": "origin",
+              "value": "",
+              "description": "Origem (csv).",
+              "disabled": true
+            },
+            {
+              "key": "responsible_id",
+              "value": "",
+              "description": "Casa responsible/sdr/closer/pré-vendas/vendas.",
+              "disabled": true
+            },
+            {
+              "key": "created_from",
+              "value": "",
+              "description": "created_at >= (ISO 8601).",
+              "disabled": true
+            },
+            {
+              "key": "created_to",
+              "value": "",
+              "description": "created_at <= (ISO 8601).",
+              "disabled": true
+            },
+            {
+              "key": "q",
+              "value": "",
+              "description": "Busca em nome, empresa, email, telefone.",
+              "disabled": true
+            },
+            {
+              "key": "limit",
+              "value": "",
+              "description": "1–100. Default 50.",
+              "disabled": true
+            },
+            {
+              "key": "cursor",
+              "value": "",
+              "description": "next_cursor da página anterior (opaco).",
+              "disabled": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GET Lead 360",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/leads/{id}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads",
+            "{id}"
+          ],
+          "query": []
+        }
+      }
+    },
+    {
+      "name": "GET Timeline do lead",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/leads/{id}/timeline",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads",
+            "{id}",
+            "timeline"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "",
+              "description": "1–100. Default 50.",
+              "disabled": true
+            },
+            {
+              "key": "cursor",
+              "value": "",
+              "description": "next_cursor da página anterior.",
+              "disabled": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GET Listar funis",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/pipelines",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "pipelines"
+          ],
+          "query": []
+        }
+      }
+    },
+    {
+      "name": "GET Listar tags",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/tags",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "tags"
+          ],
+          "query": []
+        }
+      }
+    },
+    {
+      "name": "GET Listar custom fields",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/custom-fields",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "custom-fields"
+          ],
+          "query": []
+        }
+      }
+    },
+    {
+      "name": "PATCH Editar lead",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/leads/{id}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads",
+            "{id}"
+          ],
+          "query": []
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Acme Renomeado\",\n  \"tier\": \"ouro\",\n  \"rating\": 5\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "POST Mover etapa",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/leads/{id}/stage",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads",
+            "{id}",
+            "stage"
+          ],
+          "query": []
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"pipe\": \"confirmacao\",\n  \"stage\": \"compareceu\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "POST Adicionar tags",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/leads/{id}/tags",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads",
+            "{id}",
+            "tags"
+          ],
+          "query": []
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tags\": [\n    \"VIP\",\n    \"Quente\"\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "DELETE Remover tag",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/leads/{id}/tags/{tag}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads",
+            "{id}",
+            "tags",
+            "{tag}"
+          ],
+          "query": []
+        }
+      }
+    },
+    {
+      "name": "PUT Setar custom fields",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/leads/{id}/custom-fields",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads",
+            "{id}",
+            "custom-fields"
+          ],
+          "query": []
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"faturamento\": \"5M\",\n  \"segmento\": \"varejo\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
