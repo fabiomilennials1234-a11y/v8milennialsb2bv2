@@ -7,9 +7,9 @@
  * stripping internal columns so they can never leak.
  */
 import type { ApiRouteContext } from "../router.ts";
-import { apiError, apiList } from "../responses.ts";
+import { apiError, apiList, apiResource } from "../responses.ts";
 import { parseLeadFilters, parseLimit } from "../filters.ts";
-import { decodeCursor, encodeCursor } from "../cursor.ts";
+import { decodeCursor, paginateByCursor } from "../cursor.ts";
 
 /** Minimal Supabase surface the handler needs (keeps it injectable/testable). */
 interface RpcClient {
@@ -74,12 +74,39 @@ export async function listLeads(ctx: ApiRouteContext): Promise<Response> {
   }
 
   const rows = (data ?? []) as LeadRow[];
-  const hasMore = rows.length > limit;
-  const page = hasMore ? rows.slice(0, limit) : rows;
-  const last = page[page.length - 1];
-  const nextCursor = hasMore && last
-    ? encodeCursor({ created_at: last.created_at, id: last.id })
-    : null;
-
+  const { page, nextCursor } = paginateByCursor(rows, limit);
   return apiList(page.map(serializeLeadRow), nextCursor, ctx.cors);
+}
+
+/** `GET /api/v1/leads/{id}` — lead 360 (tier, tags, custom fields, pipes). */
+export async function getLead(ctx: ApiRouteContext): Promise<Response> {
+  const supabase = ctx.supabase as RpcClient;
+  const { data, error } = await supabase.rpc("api_get_lead", {
+    p_org: ctx.organizationId,
+    p_lead_id: ctx.params.id,
+  });
+  if (error) return apiError(500, "internal_error", "Erro ao buscar lead", ctx.cors);
+  if (data == null) return apiError(404, "not_found", "Lead não encontrado", ctx.cors);
+  return apiResource(data, ctx.cors);
+}
+
+/** `GET /api/v1/leads/{id}/timeline` — keyset-paginated lead_history. */
+export async function getLeadTimeline(ctx: ApiRouteContext): Promise<Response> {
+  const url = new URL(ctx.req.url);
+  const limit = parseLimit(url.searchParams);
+  const cursor = decodeCursor(url.searchParams.get("cursor"));
+  const supabase = ctx.supabase as RpcClient;
+
+  const { data, error } = await supabase.rpc("api_lead_timeline", {
+    p_org: ctx.organizationId,
+    p_lead_id: ctx.params.id,
+    p_limit: limit + 1,
+    p_cursor_created_at: cursor?.created_at ?? null,
+    p_cursor_id: cursor?.id ?? null,
+  });
+  if (error) return apiError(500, "internal_error", "Erro ao buscar timeline", ctx.cors);
+
+  const rows = (data ?? []) as Array<{ created_at: string; id: string; [k: string]: unknown }>;
+  const { page, nextCursor } = paginateByCursor(rows, limit);
+  return apiList(page, nextCursor, ctx.cors);
 }
