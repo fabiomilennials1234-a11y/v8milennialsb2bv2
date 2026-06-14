@@ -1,0 +1,895 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Torque CRM — Public REST API",
+    "version": "1.0.0",
+    "description": "API REST pública lead-cêntrica (ADR-0008). Auth via API Key escopada (tq_live_*)."
+  },
+  "servers": [
+    {
+      "url": "https://jsjsmuncfkbsbzqzqhfq.supabase.co/functions/v1",
+      "description": "Produção"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    }
+  },
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ],
+  "paths": {
+    "/api/v1/ping": {
+      "get": {
+        "operationId": "api-ping",
+        "summary": "Ping",
+        "description": "Smoke check autenticado. Confirma que a API Key é válida e retorna a organização vinculada. Não exige escopo específico.",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "pong": true,
+                  "organization_id": "6030520a-2ca7-477d-be89-55758e2cd808",
+                  "timestamp": "2026-06-14T19:05:04.767Z"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Erro",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "string",
+                    "message": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leads": {
+      "get": {
+        "operationId": "api-list-leads",
+        "summary": "Listar leads",
+        "description": "Lista leads com paginação keyset (cursor) e filtros flat. Cada item traz tier efetivo, tags, responsáveis e se foi vendido (+ valor). Escopo: lead:read.\n\nListas retornam { data, next_cursor, has_more }. Pagine passando next_cursor de volta em ?cursor=. Erros: { error: { code, message, details? } }.\n\nOrdenação fixa: created_at desc, id desc.",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "stage",
+            "in": "query",
+            "required": false,
+            "description": "Etapas (csv). Lead com entry em qualquer pipe nessas etapas. Ex: \"novo,abordado\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tier",
+            "in": "query",
+            "required": false,
+            "description": "Tier efetivo (csv): diamante, ouro, prata, bronze, desqualificado.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "description": "Nomes de tag (csv, case-insensitive).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "description": "Origem (csv).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "responsible_id",
+            "in": "query",
+            "required": false,
+            "description": "Casa responsible/sdr/closer/pré-vendas/vendas.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "created_from",
+            "in": "query",
+            "required": false,
+            "description": "created_at >= (ISO 8601).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "created_to",
+            "in": "query",
+            "required": false,
+            "description": "created_at <= (ISO 8601).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Busca em nome, empresa, email, telefone.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "1–100. Default 50.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "next_cursor da página anterior (opaco).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "id": "f21072f1-…",
+                      "name": "Nairde",
+                      "company": "Valim",
+                      "origin": "outro",
+                      "tier": "ouro",
+                      "tags": [
+                        {
+                          "id": "t1",
+                          "name": "VIP",
+                          "color": "#F5C518"
+                        }
+                      ],
+                      "responsible_id": "bf98…",
+                      "sdr_id": null,
+                      "closer_id": null,
+                      "sold": false,
+                      "sale_value": null,
+                      "rating": 4,
+                      "qualification_score": 80,
+                      "created_at": "2026-06-14T14:30:22Z"
+                    }
+                  ],
+                  "next_cursor": "eyJjIjoi…",
+                  "has_more": true
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Erro",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "string",
+                    "message": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{id}": {
+      "get": {
+        "operationId": "api-get-lead",
+        "summary": "Lead 360",
+        "description": "Retorna um lead completo: tier, tags, custom fields (valores), responsáveis e posições em todos os pipes (com vendido/valor). 404 se não existir na org. Escopo: lead:read.",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID do lead (path).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": "f21072f1-…",
+                  "name": "Nairde",
+                  "company": "Valim",
+                  "email": null,
+                  "phone": "+5511…",
+                  "origin": "outro",
+                  "tier": "ouro",
+                  "rating": 4,
+                  "qualification_score": 80,
+                  "responsible_id": "bf98…",
+                  "sdr_id": null,
+                  "closer_id": null,
+                  "pre_sale_responsible_id": null,
+                  "sale_responsible_id": null,
+                  "tags": [
+                    {
+                      "id": "t1",
+                      "name": "VIP",
+                      "color": "#F5C518"
+                    }
+                  ],
+                  "custom_fields": [
+                    {
+                      "field_name": "faturamento",
+                      "field_type": "text",
+                      "value": "5M"
+                    }
+                  ],
+                  "pipes": [
+                    {
+                      "pipeline": "whatsapp",
+                      "pipeline_name": "WhatsApp",
+                      "type": "system",
+                      "stage_key": "novo",
+                      "sold": false,
+                      "sale_value": null,
+                      "entered_at": "2026-06-14T14:30:22Z",
+                      "stage_changed_at": "2026-06-14T14:30:22Z"
+                    }
+                  ],
+                  "created_at": "2026-06-14T14:30:22Z",
+                  "updated_at": "2026-06-14T14:30:22Z"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Erro",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "string",
+                    "message": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "api-patch-lead",
+        "summary": "Editar lead",
+        "description": "Atualização parcial de campos permitidos. Campos não-allowlistados são ignorados. Escopo: lead:write.\n\n422 invalid_tier para tier fora do enum. 422 invalid_responsible se o responsável não pertence à org. 422 no_valid_fields se nenhum campo editável foi enviado.\n\nCampos de negócio como segmento/faturamento/urgência são custom fields — use PUT /custom-fields.",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID do lead (path).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": "f21072f1-…",
+                  "name": "Acme Renomeado",
+                  "tier": "ouro",
+                  "rating": 5
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Erro",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "string",
+                    "message": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "Acme Renomeado",
+                "tier": "ouro",
+                "rating": 5
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{id}/timeline": {
+      "get": {
+        "operationId": "api-lead-timeline",
+        "summary": "Timeline do lead",
+        "description": "Histórico do lead (lead_history) com paginação keyset. Escopo: lead:read.\n\nListas retornam { data, next_cursor, has_more }. Pagine passando next_cursor de volta em ?cursor=. Erros: { error: { code, message, details? } }.",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID do lead (path).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "1–100. Default 50.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "next_cursor da página anterior.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "id": "e1",
+                      "created_at": "2026-06-14T14:30:22Z",
+                      "action": "lead_created",
+                      "description": "Lead criado",
+                      "source": "api",
+                      "entity_type": null,
+                      "entity_id": null,
+                      "metadata": {}
+                    }
+                  ],
+                  "next_cursor": null,
+                  "has_more": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Erro",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "string",
+                    "message": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pipelines": {
+      "get": {
+        "operationId": "api-list-pipelines",
+        "summary": "Listar funis",
+        "description": "Catálogo de funis com etapas. Funis system trazem etapas; funis custom vêm com stages vazio no v1. Escopo: pipeline:read.\n\nCatálogo sem paginação (next_cursor sempre null).",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "id": "p1",
+                      "name": "WhatsApp",
+                      "slug": "whatsapp",
+                      "type": "system",
+                      "color": "#25D366",
+                      "icon": "message-circle",
+                      "display_order": 1,
+                      "is_active": true,
+                      "stages": [
+                        {
+                          "stage_key": "novo",
+                          "name": "Novo",
+                          "color": "#888",
+                          "position": 0,
+                          "is_active": true,
+                          "is_final_positive": false,
+                          "is_final_negative": false
+                        }
+                      ]
+                    }
+                  ],
+                  "next_cursor": null,
+                  "has_more": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Erro",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "string",
+                    "message": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tags": {
+      "get": {
+        "operationId": "api-list-tags",
+        "summary": "Listar tags",
+        "description": "Catálogo de tags da organização. Escopo: metadata:read.",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "id": "t1",
+                      "name": "VIP",
+                      "color": "#F5C518"
+                    }
+                  ],
+                  "next_cursor": null,
+                  "has_more": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Erro",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "string",
+                    "message": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/custom-fields": {
+      "get": {
+        "operationId": "api-list-custom-fields",
+        "summary": "Listar custom fields",
+        "description": "Catálogo de definições de campos customizados. Escopo: metadata:read.",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "id": "cf1",
+                      "field_name": "faturamento",
+                      "field_type": "text",
+                      "field_options": null,
+                      "is_required": false,
+                      "display_order": 0
+                    }
+                  ],
+                  "next_cursor": null,
+                  "has_more": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Erro",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "string",
+                    "message": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{id}/stage": {
+      "post": {
+        "operationId": "api-move-stage",
+        "summary": "Mover etapa",
+        "description": "Move o lead para uma etapa de um funil. Dispara as mesmas automações da UI (workflows, meeting_events, auto-Orçamentos ao compareceu). Escopo: lead:write.\n\n400 missing_stage sem stage. 404 se o lead não for da org. 422 stage_move_failed para etapa inválida (a mensagem lista as válidas).\n\nmeeting_date não é suportado no v1.",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID do lead (path).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "moved": true,
+                  "target_stage": "compareceu",
+                  "target_pipe": "confirmacao"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Erro",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "string",
+                    "message": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "pipe": "confirmacao",
+                "stage": "compareceu"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{id}/tags": {
+      "post": {
+        "operationId": "api-add-tags",
+        "summary": "Adicionar tags",
+        "description": "Adiciona tags por nome ao lead, criando as que não existem. Escopo: lead:write.\n\n400 se tags não for array. 404 se o lead não for da org.",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID do lead (path).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "tags": [
+                    {
+                      "id": "t1",
+                      "name": "VIP",
+                      "color": "#F5C518"
+                    },
+                    {
+                      "id": "t2",
+                      "name": "Quente",
+                      "color": "#F5C518"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Erro",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "string",
+                    "message": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "tags": [
+                  "VIP",
+                  "Quente"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{id}/tags/{tag}": {
+      "delete": {
+        "operationId": "api-remove-tag",
+        "summary": "Remover tag",
+        "description": "Remove uma tag (por nome) do lead. Idempotente. Escopo: lead:write.\n\n404 se o lead não for da org.",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID do lead (path).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "description": "Nome da tag (path, case-insensitive).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "removed": true
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Erro",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "string",
+                    "message": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{id}/custom-fields": {
+      "put": {
+        "operationId": "api-put-custom-fields",
+        "summary": "Setar custom fields",
+        "description": "Define valores de campos customizados existentes. Não cria campos novos no v1. Escopo: lead:write.\n\n422 unknown_field (com details.unknown_fields) se algum campo não existe na org — nada é gravado. 404 se o lead não for da org.",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID do lead (path).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "updated": true
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Erro",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "string",
+                    "message": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "faturamento": "5M",
+                "segmento": "varejo"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
