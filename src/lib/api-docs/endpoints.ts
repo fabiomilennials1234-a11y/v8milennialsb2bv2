@@ -1,6 +1,8 @@
 import { ApiCategory } from "./types";
+import { restApiCategory } from "./rest-api-endpoints";
 
 export const apiCategories: ApiCategory[] = [
+  restApiCategory,
   {
     id: "partner",
     name: "Partner API",

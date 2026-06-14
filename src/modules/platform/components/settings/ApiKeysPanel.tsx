@@ -53,12 +53,14 @@ import { ptBR } from "date-fns/locale";
 
 // ── Available scopes ──────────────────────────────────────────
 
+// Mirrors API_SCOPES in supabase/functions/_shared/api/scopes.ts (ADR-0008).
 const AVAILABLE_SCOPES = [
-  { value: "read", label: "Leitura", description: "Consultar dados" },
-  { value: "write", label: "Escrita", description: "Criar e atualizar dados" },
-  { value: "leads", label: "Leads", description: "Acesso a leads" },
-  { value: "deals", label: "Negocios", description: "Acesso a negocios" },
-  { value: "webhooks", label: "Webhooks", description: "Gerenciar webhooks" },
+  { value: "lead:read", label: "Leads (leitura)", description: "Listar e ler leads, timeline e 360" },
+  { value: "lead:write", label: "Leads (escrita)", description: "Editar campos, mover etapa, tags e custom fields" },
+  { value: "lead:ingest", label: "Leads (ingestão)", description: "Criar leads via webhook" },
+  { value: "pipeline:read", label: "Funis (leitura)", description: "Listar funis e etapas" },
+  { value: "metadata:read", label: "Catálogos (leitura)", description: "Tags e campos customizados" },
+  { value: "webhook:read", label: "Webhooks", description: "Consumir webhooks de saída" },
 ];
 
 // ── Component ─────────────────────────────────────────────────
@@ -75,7 +77,7 @@ export function ApiKeysPanel() {
 
   // Create form
   const [name, setName] = useState("");
-  const [scopes, setScopes] = useState<string[]>(["read"]);
+  const [scopes, setScopes] = useState<string[]>(["lead:read"]);
   const [rateLimit, setRateLimit] = useState(100);
   const [expiryDays, setExpiryDays] = useState("");
 

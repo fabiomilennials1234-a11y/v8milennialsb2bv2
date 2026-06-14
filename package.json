@@ -15,6 +15,7 @@
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "typecheck:ratchet": "node scripts/tsc-ratchet.cjs",
     "typecheck:baseline": "node scripts/tsc-ratchet.cjs --write",
+    "gen:api-spec": "deno run --no-check --unstable-sloppy-imports --allow-read --allow-write scripts/gen-api-spec.ts",
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
