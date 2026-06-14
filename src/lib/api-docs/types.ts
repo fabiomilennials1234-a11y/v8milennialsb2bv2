@@ -11,7 +11,7 @@ export interface ApiEndpoint {
   id: string;
   name: string;
   description: string;
-  category: "webhooks" | "internal" | "leads" | "partner";
+  category: "webhooks" | "internal" | "leads" | "partner" | "rest-api";
   version: string;
   method: "GET" | "POST" | "PUT" | "DELETE";
   path: string;
