@@ -14,10 +14,11 @@ function fakeCtx(
   url: string,
   rpcResult: { data?: unknown; error?: unknown },
   calls: RpcCall[] = [],
+  params: Record<string, string> = {},
 ): ApiRouteContext {
   return {
     req: new Request(url),
-    params: {},
+    params,
     organizationId: "org-1",
     scopes: ["lead:read"],
     supabase: {
@@ -138,4 +139,77 @@ Deno.test("listLeads — rpc error → 500 internal_error", async () => {
   assertEquals(res.status, 500);
   const body = await res.json();
   assertEquals(body.error.code, "internal_error");
+});
+
+// ── getLead (360) ──────────────────────────────────────────────
+
+Deno.test("getLead — calls api_get_lead with org + lead id from params", async () => {
+  const calls: RpcCall[] = [];
+  const ctx = fakeCtx("https://x/api/v1/leads/l-9", { data: { id: "l-9", name: "Acme" } }, calls, { id: "l-9" });
+  const { getLead } = await import("./leads.ts");
+  await getLead(ctx);
+  assertEquals(calls[0].name, "api_get_lead");
+  assertEquals(calls[0].args, { p_org: "org-1", p_lead_id: "l-9" });
+});
+
+Deno.test("getLead — returns the 360 object verbatim (200)", async () => {
+  const ctx = fakeCtx("https://x/api/v1/leads/l-9", { data: { id: "l-9", name: "Acme", tags: [] } }, [], { id: "l-9" });
+  const { getLead } = await import("./leads.ts");
+  const res = await getLead(ctx);
+  assertEquals(res.status, 200);
+  assertEquals(await res.json(), { id: "l-9", name: "Acme", tags: [] });
+});
+
+Deno.test("getLead — 404 when rpc returns null", async () => {
+  const ctx = fakeCtx("https://x/api/v1/leads/missing", { data: null }, [], { id: "missing" });
+  const { getLead } = await import("./leads.ts");
+  const res = await getLead(ctx);
+  assertEquals(res.status, 404);
+  assertEquals((await res.json()).error.code, "not_found");
+});
+
+Deno.test("getLead — 500 on rpc error", async () => {
+  const ctx = fakeCtx("https://x/api/v1/leads/l-9", { error: { message: "x" } }, [], { id: "l-9" });
+  const { getLead } = await import("./leads.ts");
+  const res = await getLead(ctx);
+  assertEquals(res.status, 500);
+});
+
+// ── getLeadTimeline ────────────────────────────────────────────
+
+Deno.test("getLeadTimeline — calls api_lead_timeline with org, lead, limit+1, cursor", async () => {
+  const calls: RpcCall[] = [];
+  const ctx = fakeCtx("https://x/api/v1/leads/l-9/timeline?limit=2", { data: [] }, calls, { id: "l-9" });
+  const { getLeadTimeline } = await import("./leads.ts");
+  await getLeadTimeline(ctx);
+  assertEquals(calls[0].name, "api_lead_timeline");
+  assertEquals(calls[0].args, {
+    p_org: "org-1",
+    p_lead_id: "l-9",
+    p_limit: 3,
+    p_cursor_created_at: null,
+    p_cursor_id: null,
+  });
+});
+
+Deno.test("getLeadTimeline — has_more + next_cursor when limit+1 rows", async () => {
+  const rows = [
+    { id: "e3", created_at: "2026-06-03T00:00:00Z", action: "a" },
+    { id: "e2", created_at: "2026-06-02T00:00:00Z", action: "b" },
+    { id: "e1", created_at: "2026-06-01T00:00:00Z", action: "c" },
+  ];
+  const ctx = fakeCtx("https://x/api/v1/leads/l-9/timeline?limit=2", { data: rows }, [], { id: "l-9" });
+  const { getLeadTimeline } = await import("./leads.ts");
+  const res = await getLeadTimeline(ctx);
+  const body = await res.json();
+  assertEquals(body.data.length, 2);
+  assertEquals(body.has_more, true);
+  assertEquals(decodeCursor(body.next_cursor), { created_at: "2026-06-02T00:00:00Z", id: "e2" });
+});
+
+Deno.test("getLeadTimeline — 500 on rpc error", async () => {
+  const ctx = fakeCtx("https://x/api/v1/leads/l-9/timeline", { error: { message: "x" } }, [], { id: "l-9" });
+  const { getLeadTimeline } = await import("./leads.ts");
+  const res = await getLeadTimeline(ctx);
+  assertEquals(res.status, 500);
 });
