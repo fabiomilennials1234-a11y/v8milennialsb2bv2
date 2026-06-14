@@ -18,6 +18,13 @@ import { apiResource } from "../_shared/api/responses.ts";
 import { handleApiRequest, type ApiRoute } from "../_shared/api/router.ts";
 import { getLead, getLeadTimeline, listLeads } from "../_shared/api/routes/leads.ts";
 import { listCustomFields, listPipelines, listTags } from "../_shared/api/routes/catalogs.ts";
+import {
+  addLeadTags,
+  moveLeadStage,
+  patchLead,
+  putCustomFields,
+  removeLeadTag,
+} from "../_shared/api/routes/leads-write.ts";
 
 const routes: ApiRoute[] = [
   {
@@ -42,6 +49,12 @@ const routes: ApiRoute[] = [
   { method: "GET", pattern: "/api/v1/pipelines", scope: "pipeline:read", handler: listPipelines },
   { method: "GET", pattern: "/api/v1/tags", scope: "metadata:read", handler: listTags },
   { method: "GET", pattern: "/api/v1/custom-fields", scope: "metadata:read", handler: listCustomFields },
+  // P2 — writes (lead:write)
+  { method: "PATCH", pattern: "/api/v1/leads/{id}", scope: "lead:write", handler: patchLead },
+  { method: "POST", pattern: "/api/v1/leads/{id}/stage", scope: "lead:write", handler: moveLeadStage },
+  { method: "POST", pattern: "/api/v1/leads/{id}/tags", scope: "lead:write", handler: addLeadTags },
+  { method: "DELETE", pattern: "/api/v1/leads/{id}/tags/{tag}", scope: "lead:write", handler: removeLeadTag },
+  { method: "PUT", pattern: "/api/v1/leads/{id}/custom-fields", scope: "lead:write", handler: putCustomFields },
 ];
 
 Deno.serve(
