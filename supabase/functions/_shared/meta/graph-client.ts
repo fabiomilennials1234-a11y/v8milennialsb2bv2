@@ -171,10 +171,22 @@ export function createMetaGraphClient(opts: MetaGraphClientOptions) {
    * revenue is never exposed to Meta. `eventName` is one of the escalated
    * funnel events (qualified | meeting | sold).
    */
+  /**
+   * Lists the datasets (a.k.a. pixels / event sets) a given Ad Account can use,
+   * via /{act}/adspixels. Lets the dispatcher auto-resolve the conversion
+   * destination instead of the master typing a dataset id by hand. Returns
+   * [] when none, multiple when the account has several.
+   */
+  async function listAdAccountDatasets(adAccountId: string): Promise<Array<{ id: string; name: string }>> {
+    return paginate<{ id: string; name: string }>(
+      `${base}/${adAccountId}/adspixels?fields=id,name&limit=50&access_token=${opts.token}`,
+    );
+  }
+
   async function sendConversion(input: {
     datasetId: string;
     leadId: string;
-    eventName: "qualified" | "meeting" | "sold";
+    eventName: string;
     eventTime?: number;
   }): Promise<{ events_received: number }> {
     const payload = {
@@ -198,5 +210,5 @@ export function createMetaGraphClient(opts: MetaGraphClientOptions) {
     return json;
   }
 
-  return { listAdAccounts, listPages, listLeadForms, fetchLeadsSince, sendConversion };
+  return { listAdAccounts, listAdAccountDatasets, listPages, listLeadForms, fetchLeadsSince, sendConversion };
 }

@@ -170,6 +170,25 @@ Deno.test("sendConversion — passes each escalated event_name through unchanged
   }
 });
 
+Deno.test("listAdAccountDatasets — lists the datasets/pixels of an ad account", async () => {
+  const { impl, calls } = fakeFetch([
+    {
+      body: {
+        data: [
+          { id: "624880360656588", name: "[PIXEL] MilennialsB2B" },
+          { id: "1445327329911725", name: "Milennialsb2b" },
+        ],
+        paging: {},
+      },
+    },
+  ]);
+  const client = createMetaGraphClient({ token: "T", fetchImpl: impl });
+  const datasets = await client.listAdAccountDatasets("act_738610258782410");
+
+  assertStringIncludes(calls[0].url, "/act_738610258782410/adspixels");
+  assertEquals(datasets.map((d) => d.id), ["624880360656588", "1445327329911725"]);
+});
+
 Deno.test("listPages — merges owned + client pages and dedups by id", async () => {
   // First call → owned_pages; second → client_pages (overlaps on page_shared).
   const { impl, calls } = fakeFetch([
