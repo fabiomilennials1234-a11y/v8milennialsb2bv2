@@ -196,6 +196,10 @@ export function createMetaGraphClient(opts: MetaGraphClientOptions) {
           event_time: input.eventTime ?? Math.floor(Date.now() / 1000),
           action_source: "system_generated",
           user_data: { lead_id: input.leadId },
+          // Required for CRM lead events: without custom_data.event_source +
+          // lead_event_source Meta accepts the event but never maps it to the
+          // Leads Center funnel stage (the lead card stays put).
+          custom_data: { event_source: "crm", lead_event_source: "Torque CRM" },
         },
       ],
     };
