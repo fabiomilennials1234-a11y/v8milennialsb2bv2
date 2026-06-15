@@ -1,9 +1,16 @@
 -- 20261128000003_meta_asset_bindings.sql
--- Meta agency integration (ADR-0009) — Slice 2 (#808).
+-- Meta agency integration (ADR-0009) — Slice 2 (#808). APPLIED TO PROD 2026-06-15.
 -- Master-managed binding of Meta assets (Pages + Ad Accounts) to Orgs, the
 -- meta_lead_id join key on leads, and the idempotency ledger for Lead
 -- Conversion Signals. Writes happen server-side (master edge fn + cron) as
 -- service_role; authenticated gets read-only / no access, fail-closed.
+--
+-- Prod findings on apply: (1) auth.org_id() does NOT exist in prod (despite a
+-- few recent migrations referencing it — history drift); canonical helper is
+-- public.get_user_organization_id(). (2) leads has NO `metadata` JSONB column,
+-- so the legacy meta-webhook leadgen insert into `metadata` fails in prod —
+-- the root reason Make stayed in the loop. No leadgen_id exists to backfill;
+-- the poller (slice 4) populates meta_lead_id forward.
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- 1. meta_asset_bindings — org → { page | ad_account }, the source of truth
@@ -34,25 +41,19 @@ ALTER TABLE public.meta_asset_bindings ENABLE ROW LEVEL SECURITY;
 -- Org members may READ their own bindings (status surfacing). No authenticated
 -- writes — binding is master-only via service_role edge function.
 CREATE POLICY "tenant_isolation_select" ON public.meta_asset_bindings
-  FOR SELECT USING (organization_id = auth.org_id());
+  FOR SELECT USING (organization_id = public.get_user_organization_id());
 
 GRANT SELECT ON public.meta_asset_bindings TO authenticated;
 
 -- ───────────────────────────────────────────────────────────────────────────
--- 2. leads.meta_lead_id — promote metadata->>'leadgen_id' to an indexed column.
---    Join key for the Lead Conversion Signal (only leads with one can signal).
+-- 2. leads.meta_lead_id — indexed join key for the Lead Conversion Signal
+--    (only leads carrying one can signal). Populated forward by the poller;
+--    no backfill (prod has no metadata column holding a leadgen_id).
 -- ───────────────────────────────────────────────────────────────────────────
 ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS meta_lead_id text;
 
 CREATE INDEX IF NOT EXISTS idx_leads_meta_lead_id
   ON public.leads(meta_lead_id) WHERE meta_lead_id IS NOT NULL;
-
--- Backfill from existing leadgen captures.
-UPDATE public.leads
-  SET meta_lead_id = metadata->>'leadgen_id'
-  WHERE meta_lead_id IS NULL
-    AND metadata ? 'leadgen_id'
-    AND coalesce(metadata->>'leadgen_id', '') <> '';
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- 3. meta_signals_sent — idempotency ledger: each event_name at most once/lead.
