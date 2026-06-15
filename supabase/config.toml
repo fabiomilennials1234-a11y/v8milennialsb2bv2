@@ -30,6 +30,10 @@ verify_jwt = false
 [functions.meta-asset-admin]
 verify_jwt = false
 
+# meta: conversion signal dispatcher (ADR-0009); auth via x-cron-secret inside fn
+[functions.meta-conversion-dispatch]
+verify_jwt = false
+
 # api: public REST API router /api/v1/* (ADR-0008); auth via API key inside fn
 [functions.api]
 verify_jwt = false
