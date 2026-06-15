@@ -733,6 +733,9 @@ serve(withSentry('lead-webhook', async (req) => {
       if (meeting_date) metadata.meeting_date = meeting_date;
 
       // Aceita stage_key exato ou nome da etapa (case-insensitive) — Make/n8n enviam rótulos como "Novo".
+      // Normaliza whitespace (colapsa espaços repetidos + trim) pra resiliência: rótulos com emoji
+      // costumam ter espaço duplo ("📥  Novo Lead") que diverge do que o caller digita ("📥 Novo Lead").
+      const normalizeLabel = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
       let resolvedStageKey = stageVal;
       const { data: orgStages } = await supabase
         .from("pipeline_stages")
@@ -741,11 +744,19 @@ serve(withSentry('lead-webhook', async (req) => {
         .eq("pipeline_type", pipeSlug)
         .eq("is_active", true);
       if (orgStages && orgStages.length > 0) {
-        const requested = stageVal.trim().toLowerCase();
+        const requested = normalizeLabel(stageVal);
         const match =
           orgStages.find((s) => s.stage_key.toLowerCase() === requested) ||
-          orgStages.find((s) => s.name?.trim().toLowerCase() === requested);
-        if (match) resolvedStageKey = match.stage_key;
+          orgStages.find((s) => s.name && normalizeLabel(s.name) === requested);
+        if (match) {
+          resolvedStageKey = match.stage_key;
+        } else {
+          // Stage não resolveu: grava o literal cru e o lead some do kanban (coluna é keyed por
+          // stage_key). Loga warn pra não falhar mudo — caller deve mandar stage_key, não rótulo.
+          console.warn(
+            `[lead-webhook] stage não resolvido em ${pipeSlug}: "${stageVal}" não casa stage_key nem nome de etapa ativa (org ${organizationId}). Gravando literal — lead pode não aparecer no funil.`,
+          );
+        }
       }
 
       const existingEntry = await getPipeEntry(supabase, leadId, organizationId, pipeSlug);
