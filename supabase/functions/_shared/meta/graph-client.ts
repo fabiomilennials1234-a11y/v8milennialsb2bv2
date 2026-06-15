@@ -63,6 +63,12 @@ export interface FetchLeadsResult {
  * the Graph-supplied message + code — never the access token, which would
  * otherwise leak through logs/Sentry if callers print the error.
  */
+/** SHA-256 hex of a string (for hashing PII identifiers before sending to Meta). */
+async function sha256Hex(s: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 function graphError(error: { message?: string; code?: number; type?: string }): Error {
   const code = error.code != null ? ` (code ${error.code})` : "";
   return new Error(`Meta Graph error: ${error.message ?? "unknown"}${code}`);
@@ -188,14 +194,24 @@ export function createMetaGraphClient(opts: MetaGraphClientOptions) {
     leadId: string;
     eventName: string;
     eventTime?: number;
+    email?: string | null;
+    phone?: string | null;
   }): Promise<{ events_received: number }> {
+    // More identifiers = better match quality (Meta sends a 0/10 score with
+    // lead_id alone). Email/phone are SHA-256 hashed + normalized per spec.
+    const userData: Record<string, unknown> = { lead_id: input.leadId };
+    if (input.email) userData.em = [await sha256Hex(input.email.trim().toLowerCase())];
+    if (input.phone) {
+      const digits = input.phone.replace(/\D/g, "");
+      if (digits) userData.ph = [await sha256Hex(digits)];
+    }
     const payload = {
       data: [
         {
           event_name: input.eventName,
           event_time: input.eventTime ?? Math.floor(Date.now() / 1000),
           action_source: "system_generated",
-          user_data: { lead_id: input.leadId },
+          user_data: userData,
           // Required for CRM lead events: without custom_data.event_source +
           // lead_event_source Meta accepts the event but never maps it to the
           // Leads Center funnel stage (the lead card stays put).

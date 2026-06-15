@@ -9,19 +9,21 @@
  * carry a Meta lead id (join key), and each event fires at most once per lead.
  */
 
-export type ConversionEvent = "qualified" | "meeting" | "sold";
+export type ConversionEvent = "initial" | "qualified" | "meeting" | "sold";
 
 /**
  * Maps our internal milestone (the ledger key) to the Meta event_name sent via
- * the Conversions API for CRM. Aligned to Meta's recommended lead funnel terms
- * (meeting-booked, closed-won) so the events read as standard in Ads Manager.
- * The ledger keeps the milestone keys for idempotency; only the wire label
- * changes.
+ * the Conversions API for CRM. Labels match the Leads Center funnel stages so
+ * the events map straight onto the Org's pipeline when the funnel is configured.
+ * `initial` is the entry stage Meta's spec requires to be sent first ("send all
+ * stages including the initial lead stage"). The ledger keeps the internal keys
+ * for idempotency; only the wire label changes.
  */
 export const META_EVENT_LABEL: Record<ConversionEvent, string> = {
-  qualified: "qualified",
-  meeting: "meeting_booked",
-  sold: "closed_won",
+  initial: "Em análise",
+  qualified: "Qualificado",
+  meeting: "Reunião",
+  sold: "Convertido",
 };
 
 export interface ConversionSignalPlan {

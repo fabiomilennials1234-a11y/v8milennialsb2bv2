@@ -34,7 +34,12 @@ interface Candidate {
   event_name: ConversionEvent;
   ad_account_id: string;
   dataset_override: string | null;
+  email: string | null;
+  phone: string | null;
 }
+
+// event_time stagger so Meta sees the funnel order (initial before later stages).
+const EVENT_RANK: Record<ConversionEvent, number> = { initial: 0, qualified: 1, meeting: 2, sold: 3 };
 
 Deno.serve(withSentry("meta-conversion-dispatch", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("Origin") ?? undefined));
@@ -85,7 +90,14 @@ Deno.serve(withSentry("meta-conversion-dispatch", async (req) => {
     const datasetId = await resolveDataset(c.ad_account_id, c.dataset_override);
     if (!datasetId) { skipped++; continue; } // no/ambiguous dataset — wait for resolution
     try {
-      await graph.sendConversion({ datasetId, leadId: c.meta_lead_id, eventName: META_EVENT_LABEL[c.event_name] });
+      await graph.sendConversion({
+        datasetId,
+        leadId: c.meta_lead_id,
+        eventName: META_EVENT_LABEL[c.event_name],
+        eventTime: Math.floor(Date.now() / 1000) - (3 - EVENT_RANK[c.event_name]) * 60,
+        email: c.email,
+        phone: c.phone,
+      });
       await supabase.from("meta_signals_sent").insert({
         organization_id: c.organization_id, lead_id: c.lead_id, event_name: c.event_name,
       });
