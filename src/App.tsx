@@ -100,6 +100,7 @@ const MasterWhatsAppHealth = lazy(() => lazyRetry(() => import("@/modules/identi
 const CopilotReasoning = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/CopilotReasoning")));
 const CopilotToggleAudit = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/CopilotToggleAudit")));
 const MasterOnboarding = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOnboarding")));
+const MasterMetaAssets = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterMetaAssets")));
 // Master route/layout — carregam sob demanda quando acessar /master
 import { MasterRoute } from "@/modules/identity/master/components/MasterRoute";
 import { MasterLayout } from "@/modules/identity/master/components/MasterLayout";
@@ -697,6 +698,7 @@ function AppRoutes() {
         <Route path="copilot-reasoning" element={<CopilotReasoning />} />
         <Route path="copilot-toggle-audit" element={<CopilotToggleAudit />} />
         <Route path="onboarding" element={<MasterOnboarding />} />
+        <Route path="meta-assets" element={<MasterMetaAssets />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
