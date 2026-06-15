@@ -11,6 +11,19 @@
 
 export type ConversionEvent = "qualified" | "meeting" | "sold";
 
+/**
+ * Maps our internal milestone (the ledger key) to the Meta event_name sent via
+ * the Conversions API for CRM. Aligned to Meta's recommended lead funnel terms
+ * (meeting-booked, closed-won) so the events read as standard in Ads Manager.
+ * The ledger keeps the milestone keys for idempotency; only the wire label
+ * changes.
+ */
+export const META_EVENT_LABEL: Record<ConversionEvent, string> = {
+  qualified: "qualified",
+  meeting: "meeting_booked",
+  sold: "closed_won",
+};
+
 export interface ConversionSignalPlan {
   send: boolean;
   reason: "ok" | "no_meta_lead_id" | "already_sent";

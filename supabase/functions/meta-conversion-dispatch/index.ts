@@ -25,14 +25,15 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { createMetaGraphClient } from "../_shared/meta/graph-client.ts";
-import { planConversionSignal, type ConversionEvent } from "../_shared/meta/conversion-signal.ts";
+import { planConversionSignal, META_EVENT_LABEL, type ConversionEvent } from "../_shared/meta/conversion-signal.ts";
 
 interface Candidate {
   lead_id: string;
   organization_id: string;
   meta_lead_id: string;
   event_name: ConversionEvent;
-  dataset_id: string;
+  ad_account_id: string;
+  dataset_override: string | null;
 }
 
 Deno.serve(withSentry("meta-conversion-dispatch", async (req) => {
@@ -55,12 +56,36 @@ Deno.serve(withSentry("meta-conversion-dispatch", async (req) => {
   if (error) return json(corsHeaders, 500, { error: `candidate query failed: ${error.message}` });
   const candidates = (rows ?? []) as Candidate[];
 
+  // Auto-resolve each ad account's conversion dataset once (cached per account).
+  // override wins; else exactly one dataset → use it; 0 or >1 → unresolved.
+  const datasetCache = new Map<string, string | null>();
+  async function resolveDataset(adAccountId: string, override: string | null): Promise<string | null> {
+    if (override) return override;
+    if (datasetCache.has(adAccountId)) return datasetCache.get(adAccountId)!;
+    let resolved: string | null = null;
+    try {
+      const ds = await graph.listAdAccountDatasets(adAccountId);
+      if (ds.length === 1) resolved = ds[0].id;
+      else if (ds.length > 1) {
+        await supabase.from("meta_asset_bindings")
+          .update({ last_error: `Múltiplos datasets (${ds.length}) — escolha um` })
+          .eq("asset_type", "ad_account").eq("asset_id", adAccountId);
+      }
+    } catch (e) {
+      console.error(`[meta-conversion-dispatch] dataset resolve ${adAccountId} failed:`, (e as Error).message);
+    }
+    datasetCache.set(adAccountId, resolved);
+    return resolved;
+  }
+
   let sent = 0, skipped = 0, failed = 0;
   for (const c of candidates) {
     const plan = planConversionSignal({ metaLeadId: c.meta_lead_id, eventName: c.event_name, alreadySentEvents: new Set() });
     if (!plan.send) { skipped++; continue; }
+    const datasetId = await resolveDataset(c.ad_account_id, c.dataset_override);
+    if (!datasetId) { skipped++; continue; } // no/ambiguous dataset — wait for resolution
     try {
-      await graph.sendConversion({ datasetId: c.dataset_id, leadId: c.meta_lead_id, eventName: c.event_name });
+      await graph.sendConversion({ datasetId, leadId: c.meta_lead_id, eventName: META_EVENT_LABEL[c.event_name] });
       await supabase.from("meta_signals_sent").insert({
         organization_id: c.organization_id, lead_id: c.lead_id, event_name: c.event_name,
       });

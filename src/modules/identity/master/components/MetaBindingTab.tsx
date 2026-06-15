@@ -36,7 +36,8 @@ function AssetChip({ asset, onUnbind, onDataset }: {
       )}
       {asset.type === "ad_account" && (
         <Input value={ds} onChange={(e) => setDs(e.target.value)} onBlur={() => ds !== (asset.datasetId ?? "") && onDataset(ds)}
-          placeholder="Dataset ID" className="h-6 w-28 text-[11px] font-mono px-1.5" />
+          title="Dataset resolvido automaticamente da conta. Preencha só se a conta tiver vários datasets."
+          placeholder="Dataset (auto)" className="h-6 w-28 text-[11px] font-mono px-1.5" />
       )}
       <button onClick={onUnbind} className="ml-0.5 grid place-items-center w-5 h-5 rounded text-muted-foreground hover:text-foreground hover:bg-muted">
         <X className="w-3 h-3" />
@@ -171,7 +172,7 @@ export function MetaBindingTab() {
       </div>
 
       <p className="text-[11.5px] text-muted-foreground flex items-center gap-1.5 pt-1">
-        <Lock className="w-3 h-3" /> Cada ativo pertence a uma única organização. Conta de anúncio precisa do Dataset ID para otimizar.
+        <Lock className="w-3 h-3" /> Cada ativo pertence a uma única organização. O Dataset da conta é resolvido automaticamente — preencha só se a conta tiver vários.
       </p>
     </div>
   );
