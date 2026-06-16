@@ -51,6 +51,9 @@ src/modules/carteira/
 - **Portfolio**: `usePortfolioKPIs`, `usePortfolioClients`, `usePortfolioTrends`, `useRevenueAtRisk`, `useClientAlerts`
 - **Retention**: `useRetentionSuggestion`, `useGenerateRetentionSuggestion`
 - **Order**: `useNewOrder`, `useLastOrder`, `useCreateOrder`, `usePendingOrders`, `useApproveOrder`, `useRejectOrder`, `useBulkApproveOrders`
+  - `useNewOrder` aceita `NewOrderParams` (discriminated union por `mode`):
+    - `mode: "items"` (default, `mode` omissível) — `{ items: OrderLineItem[] }`. Insere `upsell_orders` + `client_purchase_items` + `upsell_client_products` (distinct). `sale_value` derivado da soma dos itens.
+    - `mode: "manual_total"` — `{ saleValue: number; description?: string }`. Insere SÓ 1 row em `upsell_orders` (`product_name = description || "Venda avulsa"`, `product_type: "unitario"`). NÃO insere `client_purchase_items` nem `upsell_client_products`. Exige `saleValue > 0` (throw). Não vai pro TinyERP (venda sem SKU) — `NewOrderModal` pula o `TinyErpUpsellConfirmDialog` nesse modo.
 - **Upsell clients**: `useUpsellClients`, `useUpsellClient`, `useCreate/Update/DeleteUpsellClient`, `useUpsellClientByLeadId`
 - **Upsell products**: `useUpsellClientProducts`, `useCreate/Update/DeleteUpsellClientProduct`
 - **Upsell campanhas**: `useUpsellCampanhas`, `useCreate/Update/DeleteUpsellCampanha`

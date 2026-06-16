@@ -17,8 +17,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, maskCurrencyInput, parseCurrencyInput } from "@/lib/format";
 import { toast } from "sonner";
 
 import { ClientChipSelector } from "./ClientChipSelector";
@@ -55,6 +57,9 @@ export function NewOrderModal({
   const [selectedClientId, setSelectedClientId] = useState(initialClientId ?? "");
   const [selectedClientName, setSelectedClientName] = useState(initialClientName ?? "");
   const [items, setItems] = useState<OrderLineItem[]>([]);
+  const [valueOnly, setValueOnly] = useState(false);
+  const [finalValue, setFinalValue] = useState("");
+  const [saleDescription, setSaleDescription] = useState("");
   const [closerId, setCloserId] = useState("");
   const [soldAt, setSoldAt] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
@@ -74,6 +79,23 @@ export function NewOrderModal({
   );
 
   const total = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
+  const finalValueNumber = parseCurrencyInput(finalValue);
+
+  const footerTotal = valueOnly ? finalValueNumber : total;
+  const footerHasValue = valueOnly ? finalValueNumber > 0 : items.length > 0;
+
+  const handleToggleValueOnly = useCallback((checked: boolean) => {
+    setValueOnly(checked);
+    if (checked) {
+      // Entering value-only mode — clear any line items.
+      setItems([]);
+      setPrefilled(false);
+    } else {
+      // Leaving value-only mode — clear the manual total fields.
+      setFinalValue("");
+      setSaleDescription("");
+    }
+  }, []);
 
   const handleClientChange = useCallback((id: string, name: string) => {
     setSelectedClientId(id);
@@ -140,6 +162,9 @@ export function NewOrderModal({
       setSelectedClientName("");
     }
     setItems([]);
+    setValueOnly(false);
+    setFinalValue("");
+    setSaleDescription("");
     setCloserId("");
     setSoldAt(new Date().toISOString().slice(0, 10));
     setNotes("");
@@ -150,6 +175,38 @@ export function NewOrderModal({
   const handleSubmit = async () => {
     if (!effectiveClientId) {
       toast.error("Selecione um cliente");
+      return;
+    }
+
+    // ── Value-only mode: single order with the typed total, no products ──
+    if (valueOnly) {
+      if (finalValueNumber <= 0) {
+        toast.error("Informe o valor da venda");
+        return;
+      }
+
+      try {
+        await createOrder.mutateAsync({
+          clientId: effectiveClientId,
+          closerId: closerId || undefined,
+          campanhaId: campanhaId || undefined,
+          soldAt,
+          notes: notes || undefined,
+          source: "manual",
+          mode: "manual_total",
+          saleValue: finalValueNumber,
+          description: saleDescription || undefined,
+        });
+
+        toast.success("Pedido registrado com sucesso");
+
+        // Sale without SKU never goes to the ERP — skip TinyERP confirmation.
+        resetState();
+        onOpenChange(false);
+        onComplete?.();
+      } catch (err: any) {
+        toast.error("Erro ao registrar pedido: " + (err?.message ?? ""));
+      }
       return;
     }
 
@@ -221,39 +278,126 @@ export function NewOrderModal({
               onChange={handleClientChange}
             />
 
-            {/* Product search + Repeat last */}
-            <div className="flex items-center gap-2">
-              <ProductCombobox
-                onAdd={handleAddProduct}
-                disabled={!effectiveClientId}
-              />
-
-              {effectiveClientId && lastOrderData && !loadingLast && (
-                <button
-                  type="button"
-                  onClick={handleRepeatLast}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-2 rounded-lg shrink-0",
-                    "text-sm font-medium transition-all",
-                    prefilled
-                      ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                      : "bg-muted/40 border border-border/50 hover:border-emerald-500/40 text-muted-foreground hover:text-emerald-400",
-                  )}
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">
-                    {prefilled ? "Repetido" : "Repetir último"}
-                  </span>
-                </button>
+            {/* Value-only mode toggle */}
+            <label
+              htmlFor="value-only-mode"
+              className={cn(
+                "flex items-start gap-3 rounded-lg border px-3.5 py-3 cursor-pointer select-none transition-colors duration-150",
+                valueOnly
+                  ? "border-primary/40 bg-primary/[0.06]"
+                  : "border-border/40 bg-muted/30 hover:bg-muted/50",
               )}
-            </div>
+            >
+              <Checkbox
+                id="value-only-mode"
+                checked={valueOnly}
+                onCheckedChange={(c) => handleToggleValueOnly(c === true)}
+                className="mt-0.5"
+              />
+              <div className="min-w-0 space-y-0.5">
+                <span className="block text-sm font-medium leading-none text-foreground">
+                  Registrar só o valor total
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  Sem vincular produto — informe o valor da venda
+                </span>
+              </div>
+            </label>
 
-            {/* Item list */}
-            <OrderItemList
-              items={items}
-              onChangeItem={handleChangeItem}
-              onRemoveItem={handleRemoveItem}
-            />
+            {!valueOnly ? (
+              <>
+                {/* Product search + Repeat last */}
+                <div className="flex items-center gap-2">
+                  <ProductCombobox
+                    onAdd={handleAddProduct}
+                    disabled={!effectiveClientId}
+                  />
+
+                  {effectiveClientId && lastOrderData && !loadingLast && (
+                    <button
+                      type="button"
+                      onClick={handleRepeatLast}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-2 rounded-lg shrink-0",
+                        "text-sm font-medium transition-all",
+                        prefilled
+                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                          : "bg-muted/40 border border-border/50 hover:border-emerald-500/40 text-muted-foreground hover:text-emerald-400",
+                      )}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">
+                        {prefilled ? "Repetido" : "Repetir último"}
+                      </span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Item list */}
+                <OrderItemList
+                  items={items}
+                  onChangeItem={handleChangeItem}
+                  onRemoveItem={handleRemoveItem}
+                />
+              </>
+            ) : (
+              <div className="space-y-4 motion-reduce:animate-none animate-[panel-down_0.25s_cubic-bezier(0.16,1,0.3,1)]">
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="final-value"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    Valor final da venda
+                  </Label>
+                  <div className="relative">
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-semibold tabular-nums",
+                        finalValueNumber > 0
+                          ? "text-primary"
+                          : "text-muted-foreground/50",
+                      )}
+                    >
+                      R$
+                    </span>
+                    <Input
+                      id="final-value"
+                      inputMode="decimal"
+                      autoFocus
+                      value={finalValue}
+                      onChange={(e) =>
+                        setFinalValue(maskCurrencyInput(e.target.value))
+                      }
+                      placeholder="0,00"
+                      className={cn(
+                        "h-12 pl-11 pr-3 text-right text-2xl font-bold tabular-nums tracking-tight border-border/60 focus-visible:border-primary/60",
+                        finalValueNumber > 0 ? "text-primary" : "text-foreground",
+                      )}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="sale-description"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    Descrição da venda
+                    <span className="ml-1.5 font-normal text-muted-foreground/60">
+                      opcional
+                    </span>
+                  </Label>
+                  <Textarea
+                    id="sale-description"
+                    value={saleDescription}
+                    onChange={(e) => setSaleDescription(e.target.value)}
+                    placeholder="Ex.: Pedido fechado por telefone, mix de embalagens"
+                    rows={2}
+                    className="text-sm resize-none"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Metadata row */}
             <div className="flex items-center gap-3 pt-2">
@@ -322,14 +466,19 @@ export function NewOrderModal({
               <span
                 className={cn(
                   "text-xl font-bold tabular-nums tracking-tight",
-                  items.length > 0 ? "text-primary" : "text-muted-foreground/40",
+                  footerHasValue ? "text-primary" : "text-muted-foreground/40",
                 )}
               >
-                {formatBRL(total, 2)}
+                {formatBRL(footerTotal, 2)}
               </span>
-              {items.length > 0 && (
+              {!valueOnly && items.length > 0 && (
                 <span className="text-xs text-muted-foreground ml-2">
                   {items.length} {items.length === 1 ? "item" : "itens"}
+                </span>
+              )}
+              {valueOnly && (
+                <span className="text-xs text-muted-foreground ml-2">
+                  valor total
                 </span>
               )}
             </div>
@@ -345,7 +494,9 @@ export function NewOrderModal({
                 size="sm"
                 onClick={handleSubmit}
                 disabled={
-                  createOrder.isPending || items.length === 0 || !effectiveClientId
+                  createOrder.isPending ||
+                  !effectiveClientId ||
+                  (valueOnly ? finalValueNumber <= 0 : items.length === 0)
                 }
                 className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold px-6"
               >
