@@ -526,26 +526,29 @@ describe("circuit breaker — per-endpoint isolation", () => {
 });
 
 // ---------------------------------------------------------------------------
-// senderGet — path parameter encoding
+// senderGet — resolves via /sender/listfolders (GET /sender/{id} is 404)
+// Real contract verified live 2026-06-15. The full mapping/status matrix lives
+// in uazapi-sender-contract.test.ts; this case guards the endpoint + find-by-id.
 // ---------------------------------------------------------------------------
 
-describe("senderGet — path encoding", () => {
-  it("encodes sender_id in URL path", async () => {
+describe("senderGet — listfolders find-by-id", () => {
+  it("queries /sender/listfolders and finds the folder by exact id", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
-      makeResponse(200, {
-        sender_id: "abc/def",
-        status: "completed",
-        total: 10,
-        sent: 10,
-        failed: 0,
-      })
+      makeResponse(200, [
+        { id: "other", status: "done", log_total: 1, log_sucess: 1, log_failed: 0 },
+        { id: "abc/def", status: "done", log_total: 10, log_sucess: 10, log_failed: 0 },
+      ])
     );
 
     const client = new UazapiClient(BASE_CONFIG);
-    await client.senderGet("abc/def");
+    const res = await client.senderGet("abc/def");
 
-    const [url] = vi.mocked(fetch).mock.calls[0];
-    expect(url).toBe("https://uazapi.example.com/sender/abc%2Fdef");
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("https://uazapi.example.com/sender/listfolders");
+    expect((init as RequestInit | undefined)?.method).toBe("GET");
+    expect(res.status).toBe("completed");
+    expect(res.sent).toBe(10);
+    expect(res.total).toBe(10);
   });
 });
 

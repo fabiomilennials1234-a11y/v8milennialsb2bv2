@@ -173,26 +173,81 @@ export type UazapiMessageResponse = {
 // Sender (mass send)
 // ---------------------------------------------------------------------------
 
+/**
+ * Item of a /sender/advanced batch.
+ *
+ * CONTRACT (verified live 2026-06-15): every item MUST carry `type`
+ * ("text" for plain text, "image" for media). An item without `type` makes
+ * Uazapi silently accept 0 messages (count=0) → empty campaign → 0 sent.
+ */
+export type UazapiSenderMessageItem = {
+  number: string;
+  type: "text" | "image";
+  text?: string;
+  file?: string;
+  caption?: string;
+};
+
 export type UazapiSenderAdvancedInput = {
-  messages: Array<{
-    number: string;
-    text?: string;
-    type?: string;
-    file?: string;
-    caption?: string;
-  }>;
+  messages: UazapiSenderMessageItem[];
   /** Min inter-message delay in ms */
   delayMin?: number;
   /** Max inter-message delay in ms */
   delayMax?: number;
-  /** ISO 8601 — schedule for later */
-  scheduled_for?: string;
+  /** Epoch milliseconds — schedule for later. Undefined → send immediately. */
+  scheduled_for?: number;
   track_source?: string;
 };
 
+/**
+ * Canonical, app-level sender status enum. Maps from the Uazapi vocabulary
+ * (queued | scheduled | running | done | deleting) — see mapUazapiSenderStatus.
+ */
+export type UazapiSenderStatus =
+  | "queued"
+  | "running"
+  | "paused"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+/**
+ * Response of CREATE — POST /sender/advanced.
+ * `count` = number of messages ACCEPTED; `folder_id` = the campaign id (the
+ * same value surfaced as `id` in /sender/listfolders).
+ */
+export type UazapiSenderCreateResponse = {
+  folder_id: string;
+  count: number;
+  status: string;
+};
+
+/**
+ * Entity of LIST — GET /sender/listfolders. `id` === the CREATE `folder_id`.
+ * Note `log_sucess` is spelled with a single 'c' by Uazapi (sic).
+ */
+export type UazapiSenderFolder = {
+  id: string;
+  info?: string;
+  status: string;
+  scheduled_for?: number;
+  delayMin?: number;
+  delayMax?: number;
+  log_total?: number;
+  log_sucess?: number;
+  log_delivered?: number;
+  log_failed?: number;
+  log_read?: number;
+  log_played?: number;
+  owner?: string;
+};
+
+/**
+ * Normalized view of a single sender campaign, mapped from a UazapiSenderFolder.
+ * This is what senderGet returns to callers (mass-send-status, etc.).
+ */
 export type UazapiSenderResponse = {
-  sender_id: string;
-  status: "queued" | "running" | "paused" | "completed" | "failed";
+  status: UazapiSenderStatus;
   total: number;
   sent: number;
   failed: number;

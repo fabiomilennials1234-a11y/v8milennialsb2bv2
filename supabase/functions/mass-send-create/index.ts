@@ -154,14 +154,20 @@ Deno.serve(
       );
     }
 
-    // Normalize recipients with template_text if provided
-    const msgs = recipients.map((r) => ({
-      number: r.number,
-      text: r.text ?? template_text,
-      type: r.type,
-      file: r.file,
-      caption: r.caption,
-    }));
+    // Normalize recipients with template_text if provided. Every item MUST
+    // carry a `type` — Uazapi silently rejects (count=0) any item without one.
+    // Infer "image" when a file is present, otherwise "text".
+    const msgs = recipients.map((r) => {
+      const type: "text" | "image" =
+        r.type === "image" || (r.type == null && r.file) ? "image" : "text";
+      return {
+        number: r.number,
+        type,
+        text: r.text ?? template_text,
+        file: r.file,
+        caption: r.caption,
+      };
+    });
 
     try {
       const { sender_job_id, uazapi_sender_id } = await runUazapiSenderJob(

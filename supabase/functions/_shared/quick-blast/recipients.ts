@@ -17,10 +17,12 @@ export interface BlastLead {
 
 export interface BlastRecipient {
   number: string;
+  // Uazapi /sender/advanced requires a `type` on EVERY item — an item without
+  // one is silently rejected (count=0 → empty campaign). "text" for plain text,
+  // "image" for media blasts.
+  type: "text" | "image";
   text?: string;
   leadId: string;
-  // Set only for image blasts — Uazapi /sender/advanced media shape.
-  type?: "image";
   file?: string;
   caption?: string;
 }
@@ -58,7 +60,8 @@ export function buildRecipients(
       // Image blast: resolved text becomes the caption (Uazapi media shape).
       recipients.push({ number, leadId: lead.id, type: "image", file: opts.imageUrl, caption: text });
     } else {
-      recipients.push({ number, text, leadId: lead.id });
+      // Text blast: `type:"text"` is mandatory — Uazapi rejects items without it.
+      recipients.push({ number, leadId: lead.id, type: "text", text });
     }
   }
 

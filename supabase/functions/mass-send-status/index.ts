@@ -47,6 +47,15 @@ async function refreshJob(
   const instance = (job as any).whatsapp_instances;
   if (!instance) return { ok: false, error: "Instance not found" };
 
+  // Terminal jobs are never re-polled: the Uazapi folder may already be gone
+  // (a cancelled job deletes its folder), so senderGet would 404 and the catch
+  // below would clobber a legitimate completed/cancelled state to "failed".
+  // The cron only polls queued|running, so this guards the manual re-poll path.
+  const TERMINAL = new Set(["completed", "failed", "cancelled"]);
+  if (TERMINAL.has((job as any).status)) {
+    return { ok: true, status: (job as any).status };
+  }
+
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
     const impl = (provider as any).senderGet as

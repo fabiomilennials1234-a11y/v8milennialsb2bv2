@@ -22,12 +22,56 @@ import type {
   UazapiInstanceResponse,
   UazapiMessageResponse,
   UazapiSenderAdvancedInput,
+  UazapiSenderCreateResponse,
+  UazapiSenderFolder,
   UazapiSenderResponse,
+  UazapiSenderStatus,
   UazapiSendMediaInput,
   UazapiSendMenuInput,
   UazapiSendPixButtonInput,
   UazapiSendTextInput,
 } from "./uazapi-types.ts";
+
+// ---------------------------------------------------------------------------
+// Sender status mapping — Uazapi vocabulary → app canonical enum
+// ---------------------------------------------------------------------------
+
+/**
+ * Map the Uazapi /sender folder status to the app's canonical enum.
+ *
+ * Uazapi statuses observed live (2026-06-15):
+ *   queued | scheduled | running | done | deleting
+ *
+ *   done     → completed
+ *   scheduled→ queued
+ *   queued   → queued
+ *   running  → running
+ *   failed   → failed       (defensive — not observed but mapped 1:1)
+ *   deleting → cancelled    (terminal; user stop/cancel via /sender/edit delete)
+ */
+export function mapUazapiSenderStatus(raw: string | undefined): UazapiSenderStatus {
+  switch ((raw ?? "").toLowerCase()) {
+    case "done":
+      return "completed";
+    case "scheduled":
+    case "queued":
+      return "queued";
+    case "running":
+      return "running";
+    case "paused":
+      return "paused";
+    case "failed":
+      return "failed";
+    case "deleting":
+      // Folder is being torn down — reached only via /sender/edit action:delete,
+      // which is how a user-initiated stop/cancel manifests. Surface as the
+      // canonical "cancelled" (a terminal, non-running state in the DB CHECK) so
+      // pollers stop and a user stop is never mislabelled as a failure.
+      return "cancelled";
+    default:
+      return "failed";
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -198,43 +242,80 @@ export class UazapiClient {
   // Sender (mass send)
   // =========================================================================
 
+  /**
+   * CREATE a sender campaign. Returns { folder_id, count, status } where
+   * `folder_id` is the campaign id and `count` is the number of messages
+   * ACCEPTED by Uazapi (0 if any item was rejected — e.g. missing `type`).
+   */
   async senderAdvanced(
     input: UazapiSenderAdvancedInput
-  ): Promise<UazapiSenderResponse> {
-    return this.request<UazapiSenderResponse>(
+  ): Promise<UazapiSenderCreateResponse> {
+    return this.request<UazapiSenderCreateResponse>(
       "POST",
       "/sender/advanced",
       input
     );
   }
 
-  async senderList(): Promise<UazapiSenderResponse[]> {
-    return this.request<UazapiSenderResponse[]>("GET", "/sender/list");
-  }
-
-  async senderGet(senderId: string): Promise<UazapiSenderResponse> {
-    return this.request<UazapiSenderResponse>(
+  /** LIST all sender campaigns (folders). GET /sender/list is 404 — use listfolders. */
+  async senderList(): Promise<UazapiSenderFolder[]> {
+    const res = await this.request<UazapiSenderFolder[]>(
       "GET",
-      `/sender/${encodeURIComponent(senderId)}`
+      "/sender/listfolders"
     );
+    return Array.isArray(res) ? res : [];
   }
 
-  async senderPause(senderId: string): Promise<void> {
-    await this.request<unknown>("POST", "/sender/pause", {
-      sender_id: senderId,
+  /**
+   * Resolve a single campaign by id. GET /sender/{id} is 404; the campaign
+   * lives in /sender/listfolders. Find by id, then map the Uazapi metric/status
+   * vocabulary to the app's canonical shape.
+   */
+  async senderGet(folderId: string): Promise<UazapiSenderResponse> {
+    const folders = await this.senderList();
+    const folder = folders.find((f) => f.id === folderId);
+    if (!folder) {
+      throw {
+        status: 404,
+        message: `Sender folder ${folderId} not found in /sender/listfolders`,
+        provider_code: "sender_folder_not_found",
+      } satisfies UazapiError;
+    }
+    return {
+      status: mapUazapiSenderStatus(folder.status),
+      sent: folder.log_sucess ?? 0,
+      failed: folder.log_failed ?? 0,
+      total: folder.log_total ?? 0,
+    };
+  }
+
+  /**
+   * Sender campaign control. Uazapi exposes only POST /sender/edit with
+   * action stop | continue | delete (no pause/resume primitive).
+   */
+  private async senderEdit(
+    folderId: string,
+    action: "stop" | "continue" | "delete"
+  ): Promise<void> {
+    await this.request<unknown>("POST", "/sender/edit", {
+      folder_id: folderId,
+      action,
     });
   }
 
-  async senderResume(senderId: string): Promise<void> {
-    await this.request<unknown>("POST", "/sender/resume", {
-      sender_id: senderId,
-    });
+  // NOTE: Uazapi has no native pause/resume. We map the app's pause→stop and
+  // resume→continue onto /sender/edit. A stopped campaign that is continued
+  // resumes from where it stopped.
+  async senderPause(folderId: string): Promise<void> {
+    await this.senderEdit(folderId, "stop");
   }
 
-  async senderStop(senderId: string): Promise<void> {
-    await this.request<unknown>("POST", "/sender/stop", {
-      sender_id: senderId,
-    });
+  async senderResume(folderId: string): Promise<void> {
+    await this.senderEdit(folderId, "continue");
+  }
+
+  async senderStop(folderId: string): Promise<void> {
+    await this.senderEdit(folderId, "delete");
   }
 
   // =========================================================================

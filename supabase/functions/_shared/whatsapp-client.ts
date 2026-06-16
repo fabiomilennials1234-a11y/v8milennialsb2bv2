@@ -17,6 +17,7 @@
 import { UazapiClient } from "./uazapi-client.ts";
 import type {
   UazapiSenderAdvancedInput,
+  UazapiSenderCreateResponse,
   UazapiSenderResponse,
 } from "./uazapi-types.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -167,12 +168,14 @@ export interface WhatsAppProvider {
     reachout_timelock?: number;
   }>;
 
-  // Mass send / sender (Uazapi-only) — drives Quick Blast + CSV Mass Send
-  senderAdvanced?(input: UazapiSenderAdvancedInput): Promise<UazapiSenderResponse>;
-  senderGet?(senderId: string): Promise<UazapiSenderResponse>;
-  senderPause?(senderId: string): Promise<void>;
-  senderResume?(senderId: string): Promise<void>;
-  senderStop?(senderId: string): Promise<void>;
+  // Mass send / sender (Uazapi-only) — drives Quick Blast + CSV Mass Send.
+  // CREATE returns { folder_id, count, status }; GET resolves the campaign via
+  // /sender/listfolders into a normalized { status, sent, failed, total }.
+  senderAdvanced?(input: UazapiSenderAdvancedInput): Promise<UazapiSenderCreateResponse>;
+  senderGet?(folderId: string): Promise<UazapiSenderResponse>;
+  senderPause?(folderId: string): Promise<void>;
+  senderResume?(folderId: string): Promise<void>;
+  senderStop?(folderId: string): Promise<void>;
 
   readonly provider: "evolution" | "uazapi";
 }

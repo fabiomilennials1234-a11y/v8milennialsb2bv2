@@ -87,15 +87,37 @@ describe("buildRecipients — image attachment", () => {
     expect(r.caption).toBe("Oi Ana");
   });
 
-  it("emits plain text recipients (no type/file) when imageUrl is absent", () => {
+  // ---------------------------------------------------------------------------
+  // B1 (NO-SEND BUG) — verified Uazapi /sender/advanced contract (2026-06-15):
+  // every message item MUST carry a `type`. A {number,text} item without `type`
+  // makes Uazapi accept 0 messages (count=0) → empty campaign → 0 sent. The text
+  // path must therefore emit type:"text"; the image path keeps type:"image".
+  // ---------------------------------------------------------------------------
+
+  it("emits text recipients with type:'text' (Uazapi requires a type on every item)", () => {
     const out = buildRecipients(
       [{ id: "a", name: "Ana", company: "Co", phone: "11999990001" }],
       { template: "Oi {primeiro_nome}", cap: 10 },
     );
     const r = out.recipients[0];
     expect(r.text).toBe("Oi Ana");
-    expect(r.type).toBeUndefined();
+    expect(r.type).toBe("text");
     expect(r.file).toBeUndefined();
+  });
+
+  it("stamps a type on EVERY recipient (text + image), never undefined", () => {
+    const out = buildRecipients(
+      [
+        { id: "a", name: "Ana", company: "Co", phone: "11999990001" },
+        { id: "b", name: "Bia", company: "Co", phone: "11999990002" },
+      ],
+      { template: "Oi {primeiro_nome}", cap: 10 },
+    );
+    expect(out.recipients).toHaveLength(2);
+    for (const r of out.recipients) {
+      expect(r.type).toBeDefined();
+      expect(["text", "image"]).toContain(r.type);
+    }
   });
 });
 
