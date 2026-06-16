@@ -3,15 +3,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import type { OrderLineItem } from "@/modules/carteira/hooks/useQuickOrder";
 
-export type NewOrderParams = {
+type NewOrderBaseParams = {
   clientId: string;
   closerId?: string;
   campanhaId?: string;
   soldAt?: string;
   notes?: string;
-  items: OrderLineItem[];
   source: "manual" | "copilot";
 };
+
+export type NewOrderParams = NewOrderBaseParams &
+  (
+    | { mode?: "items"; items: OrderLineItem[] }
+    | { mode: "manual_total"; saleValue: number; description?: string }
+  );
 
 export function useNewOrder() {
   const { organizationId } = useOrganization();
@@ -21,12 +26,50 @@ export function useNewOrder() {
     mutationFn: async (params: NewOrderParams) => {
       if (!organizationId) throw new Error("No organization");
 
-      const totalValue = params.items.reduce(
+      const soldAtIso = params.soldAt
+        ? new Date(params.soldAt + "T12:00:00").toISOString()
+        : undefined;
+
+      // ── Manual total mode: single order row, no line items, no client products ──
+      if ("mode" in params && params.mode === "manual_total") {
+        if (!(params.saleValue > 0)) {
+          throw new Error("Informe um valor de venda maior que zero");
+        }
+
+        const productName = params.description?.trim() || "Venda avulsa";
+
+        const { data: order, error: orderError } = await supabase
+          .from("upsell_orders")
+          .insert({
+            organization_id: organizationId,
+            client_id: params.clientId,
+            closer_id: params.closerId || null,
+            campanha_id: params.campanhaId || null,
+            product_name: productName,
+            product_type: "unitario",
+            sale_value: params.saleValue,
+            source: params.source,
+            origin: "upsell",
+            sold_at: soldAtIso,
+            notes: params.notes || null,
+          })
+          .select("id")
+          .single();
+
+        if (orderError) throw orderError;
+
+        return { orderId: order.id, totalValue: params.saleValue, productName };
+      }
+
+      // ── Items mode (default): order + line items + distinct client products ──
+      const items = params.items;
+
+      const totalValue = items.reduce(
         (sum, item) => sum + item.quantity * item.unit_price,
         0,
       );
 
-      const productName = params.items
+      const productName = items
         .map((i) => i.product_name)
         .join(", ");
 
@@ -42,9 +85,7 @@ export function useNewOrder() {
           sale_value: totalValue,
           source: params.source,
           origin: "upsell",
-          sold_at: params.soldAt
-            ? new Date(params.soldAt + "T12:00:00").toISOString()
-            : undefined,
+          sold_at: soldAtIso,
           notes: params.notes || null,
         })
         .select("id")
@@ -52,11 +93,11 @@ export function useNewOrder() {
 
       if (orderError) throw orderError;
 
-      if (params.items.length > 0) {
+      if (items.length > 0) {
         const { error: itemsError } = await supabase
           .from("client_purchase_items")
           .insert(
-            params.items.map((item) => ({
+            items.map((item) => ({
               order_id: order.id,
               product_id: item.product_id,
               product_name: item.product_name,
@@ -69,7 +110,7 @@ export function useNewOrder() {
       }
 
       const distinctProducts = new Map<string, OrderLineItem>();
-      for (const item of params.items) {
+      for (const item of items) {
         if (!distinctProducts.has(item.product_name)) {
           distinctProducts.set(item.product_name, item);
         }
