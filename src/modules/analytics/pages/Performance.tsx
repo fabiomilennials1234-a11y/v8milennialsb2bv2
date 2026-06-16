@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -383,6 +383,21 @@ function GoalFormDialog({
     month: goal?.month || selectedMonth,
     year: goal?.year || selectedYear,
   });
+
+  // O dialog fica sempre montado, então o initializer do useState só roda uma vez
+  // (com goal=null). Ao abrir para editar uma meta existente, é preciso resincronizar
+  // o form com o goal recebido — senão os campos ficam zerados e o Salvar reseta a meta.
+  useEffect(() => {
+    if (!open) return;
+    setFormData({
+      name: goal?.name || "",
+      type: goal?.type || "faturamento",
+      target_value: goal?.target_value || 0,
+      team_member_id: goal?.team_member_id || null,
+      month: goal?.month || selectedMonth,
+      year: goal?.year || selectedYear,
+    });
+  }, [open, goal, selectedMonth, selectedYear]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
