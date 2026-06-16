@@ -96,15 +96,26 @@ export function decideDispatchRoute(
 // ============================================================================
 
 export type UazapiSenderInput = {
-  recipients: Array<{ number: string; text?: string; type?: string; file?: string; caption?: string }>;
+  recipients: Array<{ number: string; type: "text" | "image"; text?: string; file?: string; caption?: string }>;
   delayMin?: number;
   delayMax?: number;
-  scheduledFor?: string; // ISO 8601
+  scheduledFor?: string; // ISO 8601 — converted to epoch ms for Uazapi
   campaignId?: string | null;
   triggeredByUserId?: string | null;
   triggeredVia?: "ui" | "api" | "cron" | "workflow";
   trackSource?: string;
 };
+
+/**
+ * Uazapi expects `scheduled_for` as epoch milliseconds. Our callers pass an
+ * ISO 8601 string (or nothing, for immediate send). Convert here; an undefined
+ * or unparseable value resolves to undefined (immediate send).
+ */
+function toEpochMs(iso: string | undefined): number | undefined {
+  if (!iso) return undefined;
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? undefined : ms;
+}
 
 export async function runUazapiSenderJob(
   supabaseAdmin: any,
@@ -114,7 +125,7 @@ export async function runUazapiSenderJob(
   const provider = await getWhatsAppProvider(instance, supabaseAdmin);
   const impl = (provider as any).senderAdvanced as undefined | ((
     p: Record<string, unknown>
-  ) => Promise<{ sender_id: string; total: number }>);
+  ) => Promise<{ folder_id?: string; count?: number; status?: string }>);
 
   if (!impl) {
     throw new Error("provider does not support senderAdvanced");
@@ -124,9 +135,25 @@ export async function runUazapiSenderJob(
     messages: input.recipients,
     delayMin: input.delayMin,
     delayMax: input.delayMax,
-    scheduled_for: input.scheduledFor,
+    scheduled_for: toEpochMs(input.scheduledFor),
     track_source: input.trackSource ?? "dispatch-router-mass",
   });
+
+  // CREATE contract (verified live 2026-06-15): { folder_id, count, status }.
+  // `folder_id` is the campaign id (persisted as uazapi_sender_id); `count` is
+  // the number of messages Uazapi ACCEPTED. Fail loud rather than persist an
+  // unpollable row: a missing folder_id or count===0 means nothing went out
+  // (e.g. items dispatched without `type`) — surface it instead of leaving the
+  // job stuck in "queued" forever.
+  const folderId = res?.folder_id;
+  const count = typeof res?.count === "number" ? res.count : undefined;
+  if (!folderId || count === 0) {
+    throw new Error(
+      `uazapi_no_messages_accepted: Uazapi accepted ${count ?? 0} messages (folder_id=${folderId ?? "missing"})`
+    );
+  }
+
+  const totalMessages = count ?? input.recipients.length;
 
   // Persist tracking row
   const { data: row, error } = await supabaseAdmin
@@ -135,9 +162,9 @@ export async function runUazapiSenderJob(
       organization_id: instance.organization_id,
       instance_id: instance.id,
       campaign_id: input.campaignId ?? null,
-      uazapi_sender_id: res.sender_id,
+      uazapi_sender_id: folderId,
       status: "queued",
-      total_messages: res.total ?? input.recipients.length,
+      total_messages: totalMessages,
       triggered_by_user_id: input.triggeredByUserId ?? null,
       triggered_via: input.triggeredVia ?? "api",
       payload: {
@@ -157,5 +184,5 @@ export async function runUazapiSenderJob(
     );
   }
 
-  return { sender_job_id: row.id, uazapi_sender_id: res.sender_id };
+  return { sender_job_id: row.id, uazapi_sender_id: folderId };
 }

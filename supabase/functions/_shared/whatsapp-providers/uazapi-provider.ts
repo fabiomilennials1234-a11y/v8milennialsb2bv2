@@ -24,6 +24,7 @@ import type {
 } from "../whatsapp-client.ts";
 import type {
   UazapiSenderAdvancedInput,
+  UazapiSenderCreateResponse,
   UazapiSenderResponse,
 } from "../uazapi-types.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -251,24 +252,24 @@ export class UazapiProvider implements WhatsAppProvider {
 
   async senderAdvanced(
     input: UazapiSenderAdvancedInput
-  ): Promise<UazapiSenderResponse> {
+  ): Promise<UazapiSenderCreateResponse> {
     return this.client.senderAdvanced(input);
   }
 
-  async senderGet(senderId: string): Promise<UazapiSenderResponse> {
-    return this.client.senderGet(senderId);
+  async senderGet(folderId: string): Promise<UazapiSenderResponse> {
+    return this.client.senderGet(folderId);
   }
 
-  async senderPause(senderId: string): Promise<void> {
-    await this.client.senderPause(senderId);
+  async senderPause(folderId: string): Promise<void> {
+    await this.client.senderPause(folderId);
   }
 
-  async senderResume(senderId: string): Promise<void> {
-    await this.client.senderResume(senderId);
+  async senderResume(folderId: string): Promise<void> {
+    await this.client.senderResume(folderId);
   }
 
-  async senderStop(senderId: string): Promise<void> {
-    await this.client.senderStop(senderId);
+  async senderStop(folderId: string): Promise<void> {
+    await this.client.senderStop(folderId);
   }
 
   async setPresence(
