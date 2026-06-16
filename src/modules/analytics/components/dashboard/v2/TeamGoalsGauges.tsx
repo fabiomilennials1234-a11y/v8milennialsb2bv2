@@ -69,7 +69,7 @@ function TeamGoalsGaugesBase({ gauges, expectedPercent }: TeamGoalsGaugesProps) 
         <>
           <div className="mt-3.5 grid gap-2.5" style={{ gridTemplateColumns: `repeat(${Math.min(gauges.length, 3)}, 1fr)` }}>
             {gauges.map((g) => {
-              const pct = g.target > 0 ? (g.current / g.target) * 100 : 0;
+              const pct = g.target > 0 ? Math.min((g.current / g.target) * 100, 100) : 0;
               const color = gaugeColor(pct, expectedPercent);
               return (
                 <div key={g.label} className="rounded-xl border border-border/70 bg-card px-2 py-3.5 text-center">
