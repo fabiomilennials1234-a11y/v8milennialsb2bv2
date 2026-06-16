@@ -269,35 +269,24 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
       };
 
       if ((member as any).metric_type === "meetings") {
-        // Meta de reuniões (quantidade)
-        goalTarget = await fetchGoalTarget("reunioes");
+        // Meta de reuniões realizadas — tipo novo tem precedência sobre o legado (ADR-0007)
+        const realizadasTarget = await fetchGoalTarget("reunioes_realizadas");
+        goalTarget = realizadasTarget > 0 ? realizadasTarget : await fetchGoalTarget("reunioes");
 
-        // Contar reuniões comparecidas do SDR: COALESCE(metrics_period_at, created_at) no intervalo (alinhado ao dashboard).
-        // Fase A descomissionamento: crédito de comparecimento lê EXCLUSIVAMENTE
-        // `pre_sale_responsible_id`. Fallback para `sdr_id` legacy removido —
-        // mesma regra do `get_ranking_data` corrigido em `e3ac4599`.
-        const [confQ1, confQ2] = await Promise.all([
-          supabase
-            .from("pipe_confirmacao")
-            .select("id")
-            .eq("organization_id", organizationId)
-            .eq("pre_sale_responsible_id", teamMemberId)
-            .eq("status", "compareceu")
-            .not("metrics_period_at", "is", null)
-            .gte("metrics_period_at", startStr)
-            .lte("metrics_period_at", endStr),
-          supabase
-            .from("pipe_confirmacao")
-            .select("id")
-            .eq("organization_id", organizationId)
-            .eq("pre_sale_responsible_id", teamMemberId)
-            .eq("status", "compareceu")
-            .is("metrics_period_at", null)
-            .gte("created_at", startStr)
-            .lte("created_at", endStr),
-        ]);
-        const confirmations = [...(confQ1.data || []), ...(confQ2.data || [])];
-        goalCurrent = confirmations?.length || 0;
+        // Reuniões realizadas via meeting_events (ADR-0007): evento imutável,
+        // conta no período da data da reunião, crédito = snapshot do pré-vendas.
+        const { data: heldEvents } = await supabase
+          .from("meeting_events")
+          .select("id, meeting_date, occurred_at")
+          .eq("organization_id", organizationId)
+          .eq("event_type", "meeting_held")
+          .eq("pre_sale_responsible_id", teamMemberId);
+        const start = new Date(startStr).getTime();
+        const end = new Date(endStr).getTime();
+        goalCurrent = (heldEvents ?? []).filter((e) => {
+          const t = new Date(e.meeting_date ?? e.occurred_at).getTime();
+          return t >= start && t <= end;
+        }).length;
         goalProgress = goalTarget > 0 ? (goalCurrent / goalTarget) * 100 : 0;
       } else {
         // Sales (ex-Closer): tenta usar meta em ordem de prioridade

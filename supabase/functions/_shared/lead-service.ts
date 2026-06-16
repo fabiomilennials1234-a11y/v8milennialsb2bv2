@@ -9,7 +9,7 @@
  */
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { upsertPipeEntry } from "./pipeline-adapter.ts";
+import { upsertPipeEntry, resolveActiveStageKey } from "./pipeline-adapter.ts";
 import type { PipeSlug } from "./pipeline-adapter.ts";
 
 /**
@@ -324,11 +324,14 @@ export async function getOrCreateLead(
   // Shadow leads não entram em pipe até serem promovidos
   if (!isShadow) {
     try {
+      // Resolve contra etapas ativas da org (guard fantasma — ver pipeline-adapter).
+      const entryStage =
+        (await resolveActiveStageKey(supabase, organizationId, "whatsapp")) ?? "novo";
       await upsertPipeEntry(supabase, {
         leadId: newLead.id,
         orgId: organizationId,
         slug: "whatsapp",
-        stageKey: "novo",
+        stageKey: entryStage,
         metadata: sdrId ? { sdr_id: sdrId } : {},
         assignedTo: sdrId || null,
       });
@@ -475,12 +478,15 @@ export async function promoveShadowLead(
 
     // 3. Inserir no pipeline unificado
     const pipeType = (destination.pipe || "whatsapp") as PipeSlug;
+    const promoteStage =
+      (await resolveActiveStageKey(supabase, organizationId, pipeType, destination.stage)) ??
+      destination.stage;
 
     await upsertPipeEntry(supabase, {
       leadId,
       orgId: organizationId,
       slug: pipeType,
-      stageKey: destination.stage,
+      stageKey: promoteStage,
       metadata: sdrId ? { sdr_id: sdrId } : {},
       assignedTo: sdrId || null,
     });

@@ -457,9 +457,17 @@ export class UazapiClient {
     opts?: { useAdminToken?: boolean; timeoutMs?: number }
   ): Promise<T> {
     const useAdmin = opts?.useAdminToken ?? false;
-    const cbKey = useAdmin
+    const scope = useAdmin
       ? `admin:${this.adminToken ? "[present]" : "[missing]"}`
       : `token:${this.token ? "[present]" : "[missing]"}`;
+    // Circuit breaker is scoped per endpoint group so a transient failure on
+    // one endpoint never blocks unrelated ones sharing the same token. Media
+    // sends transcode server-side on the provider (mp3/webm → ogg/opus for
+    // WhatsApp voice notes) and 500 intermittently under load; isolating their
+    // circuit prevents a media blip from cascading to text sends in the same
+    // cron batch (observed: workflow audio 500 opening the shared breaker and
+    // failing unrelated /send/text for 2 min).
+    const cbKey = `${scope}:${UazapiClient.circuitGroup(path)}`;
 
     // ---- circuit breaker check ----
     const cb = circuitState.get(cbKey);
@@ -589,6 +597,17 @@ export class UazapiClient {
     }
 
     throw lastError;
+  }
+
+  /**
+   * Maps a request path to a circuit-breaker group. Endpoints in different
+   * groups have independent breakers, so a transient outage on one cannot
+   * trip the breaker for another. Media is isolated because its server-side
+   * transcode fails transiently under load far more often than text sends.
+   */
+  private static circuitGroup(path: string): string {
+    if (path.startsWith("/send/media")) return "media";
+    return "default";
   }
 
   private async backoff(attempt: number): Promise<void> {

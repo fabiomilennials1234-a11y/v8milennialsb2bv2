@@ -1,0 +1,135 @@
+# Torque CRM — Public REST API v1
+
+> API REST lead-cêntrica (ADR-0008). Base: https://jsjsmuncfkbsbzqzqhfq.supabase.co/functions/v1
+> Auth: header `X-API-Key: tq_live_...` (ou `Authorization: Bearer tq_live_...`). Escopos por rota.
+> Envelopes: listas `{ data, next_cursor, has_more }`; recurso único = objeto; erro `{ error: { code, message, details? } }`.
+
+## GET /api/v1/ping
+Smoke check autenticado. Confirma que a API Key é válida e retorna a organização vinculada. Não exige escopo específico.
+
+Resposta (exemplo): `{"pong":true,"organization_id":"6030520a-2ca7-477d-be89-55758e2cd808","timestamp":"2026-06-14T19:05:04.767Z"}`
+
+## GET /api/v1/leads
+Lista leads com paginação keyset (cursor) e filtros flat. Cada item traz tier efetivo, tags, responsáveis e se foi vendido (+ valor). Escopo: lead:read.
+
+Parâmetros:
+- `stage` (string): Etapas (csv). Lead com entry em qualquer pipe nessas etapas. Ex: "novo,abordado".
+- `tier` (string): Tier efetivo (csv): diamante, ouro, prata, bronze, desqualificado.
+- `tag` (string): Nomes de tag (csv, case-insensitive).
+- `origin` (string): Origem (csv).
+- `responsible_id` (string (uuid)): Casa responsible/sdr/closer/pré-vendas/vendas.
+- `created_from` (string): created_at >= (ISO 8601).
+- `created_to` (string): created_at <= (ISO 8601).
+- `q` (string): Busca em nome, empresa, email, telefone.
+- `limit` (number): 1–100. Default 50.
+- `cursor` (string): next_cursor da página anterior (opaco).
+
+Resposta (exemplo): `{"data":[{"id":"f21072f1-…","name":"Nairde","company":"Valim","origin":"outro","tier":"ouro","tags":[{"id":"t1","name":"VIP","color":"#F5C518"}],"responsible_id":"bf98…","sdr_id":null,"closer_id":null,"sold":false,"sale_value":null,"rating":4,"qualification_score":80,"created_at":"2026-06-14T14:30:22Z"}],"next_cursor":"eyJjIjoi…","has_more":true}`
+
+Nota: Listas retornam { data, next_cursor, has_more }. Pagine passando next_cursor de volta em ?cursor=. Erros: { error: { code, message, details? } }.
+Nota: Ordenação fixa: created_at desc, id desc.
+
+## GET /api/v1/leads/{id}
+Retorna um lead completo: tier, tags, custom fields (valores), responsáveis e posições em todos os pipes (com vendido/valor). 404 se não existir na org. Escopo: lead:read.
+
+Parâmetros:
+- `id` (string (uuid), obrigatório): ID do lead (path).
+
+Resposta (exemplo): `{"id":"f21072f1-…","name":"Nairde","company":"Valim","email":null,"phone":"+5511…","origin":"outro","tier":"ouro","rating":4,"qualification_score":80,"responsible_id":"bf98…","sdr_id":null,"closer_id":null,"pre_sale_responsible_id":null,"sale_responsible_id":null,"tags":[{"id":"t1","name":"VIP","color":"#F5C518"}],"custom_fields":[{"field_name":"faturamento","field_type":"text","value":"5M"}],"pipes":[{"pipeline":"whatsapp","pipeline_name":"WhatsApp","type":"system","stage_key":"novo","sold":false,"sale_value":null,"entered_at":"2026-06-14T14:30:22Z","stage_changed_at":"2026-06-14T14:30:22Z"}],"created_at":"2026-06-14T14:30:22Z","updated_at":"2026-06-14T14:30:22Z"}`
+
+## GET /api/v1/leads/{id}/timeline
+Histórico do lead (lead_history) com paginação keyset. Escopo: lead:read.
+
+Parâmetros:
+- `id` (string (uuid), obrigatório): ID do lead (path).
+- `limit` (number): 1–100. Default 50.
+- `cursor` (string): next_cursor da página anterior.
+
+Resposta (exemplo): `{"data":[{"id":"e1","created_at":"2026-06-14T14:30:22Z","action":"lead_created","description":"Lead criado","source":"api","entity_type":null,"entity_id":null,"metadata":{}}],"next_cursor":null,"has_more":false}`
+
+Nota: Listas retornam { data, next_cursor, has_more }. Pagine passando next_cursor de volta em ?cursor=. Erros: { error: { code, message, details? } }.
+
+## GET /api/v1/pipelines
+Catálogo de funis com etapas. Funis system trazem etapas; funis custom vêm com stages vazio no v1. Escopo: pipeline:read.
+
+Resposta (exemplo): `{"data":[{"id":"p1","name":"WhatsApp","slug":"whatsapp","type":"system","color":"#25D366","icon":"message-circle","display_order":1,"is_active":true,"stages":[{"stage_key":"novo","name":"Novo","color":"#888","position":0,"is_active":true,"is_final_positive":false,"is_final_negative":false}]}],"next_cursor":null,"has_more":false}`
+
+Nota: Catálogo sem paginação (next_cursor sempre null).
+
+## GET /api/v1/tags
+Catálogo de tags da organização. Escopo: metadata:read.
+
+Resposta (exemplo): `{"data":[{"id":"t1","name":"VIP","color":"#F5C518"}],"next_cursor":null,"has_more":false}`
+
+## GET /api/v1/custom-fields
+Catálogo de definições de campos customizados. Escopo: metadata:read.
+
+Resposta (exemplo): `{"data":[{"id":"cf1","field_name":"faturamento","field_type":"text","field_options":null,"is_required":false,"display_order":0}],"next_cursor":null,"has_more":false}`
+
+## PATCH /api/v1/leads/{id}
+Atualização parcial de campos permitidos. Campos não-allowlistados são ignorados. Escopo: lead:write.
+
+Parâmetros:
+- `id` (string (uuid), obrigatório): ID do lead (path).
+- `name` (string): Nome.
+- `company` (string): Empresa.
+- `email` (string): Email.
+- `phone` (string): Telefone.
+- `notes` (string): Observações.
+- `rating` (number): Avaliação (numérico).
+- `qualification_score` (number): Score 0–100.
+- `tier` (string): qualification_tier: diamante|ouro|prata|bronze|desqualificado.
+- `pre_qualification_tier` (string): Mesmos valores de tier.
+- `responsible_id` (string (uuid)): Responsável (deve pertencer à org).
+- `sdr_id` (string (uuid)): Pré-vendas.
+- `closer_id` (string (uuid)): Closer.
+
+Resposta (exemplo): `{"id":"f21072f1-…","name":"Acme Renomeado","tier":"ouro","rating":5}`
+
+Nota: 422 invalid_tier para tier fora do enum. 422 invalid_responsible se o responsável não pertence à org. 422 no_valid_fields se nenhum campo editável foi enviado.
+Nota: Campos de negócio como segmento/faturamento/urgência são custom fields — use PUT /custom-fields.
+
+## POST /api/v1/leads/{id}/stage
+Move o lead para uma etapa de um funil. Dispara as mesmas automações da UI (workflows, meeting_events, auto-Orçamentos ao compareceu). Escopo: lead:write.
+
+Parâmetros:
+- `id` (string (uuid), obrigatório): ID do lead (path).
+- `pipe` (string): Funil: whatsapp, confirmacao, propostas, … Default: whatsapp.
+- `stage` (string, obrigatório): stage_key de destino (validado contra as etapas do funil).
+
+Resposta (exemplo): `{"moved":true,"target_stage":"compareceu","target_pipe":"confirmacao"}`
+
+Nota: 400 missing_stage sem stage. 404 se o lead não for da org. 422 stage_move_failed para etapa inválida (a mensagem lista as válidas).
+Nota: meeting_date não é suportado no v1.
+
+## POST /api/v1/leads/{id}/tags
+Adiciona tags por nome ao lead, criando as que não existem. Escopo: lead:write.
+
+Parâmetros:
+- `id` (string (uuid), obrigatório): ID do lead (path).
+- `tags` (string[], obrigatório): Nomes de tag. Ex: ["VIP", "Quente"].
+
+Resposta (exemplo): `{"tags":[{"id":"t1","name":"VIP","color":"#F5C518"},{"id":"t2","name":"Quente","color":"#F5C518"}]}`
+
+Nota: 400 se tags não for array. 404 se o lead não for da org.
+
+## DELETE /api/v1/leads/{id}/tags/{tag}
+Remove uma tag (por nome) do lead. Idempotente. Escopo: lead:write.
+
+Parâmetros:
+- `id` (string (uuid), obrigatório): ID do lead (path).
+- `tag` (string, obrigatório): Nome da tag (path, case-insensitive).
+
+Resposta (exemplo): `{"removed":true}`
+
+Nota: 404 se o lead não for da org.
+
+## PUT /api/v1/leads/{id}/custom-fields
+Define valores de campos customizados existentes. Não cria campos novos no v1. Escopo: lead:write.
+
+Parâmetros:
+- `id` (string (uuid), obrigatório): ID do lead (path).
+
+Resposta (exemplo): `{"updated":true}`
+
+Nota: 422 unknown_field (com details.unknown_fields) se algum campo não existe na org — nada é gravado. 404 se o lead não for da org.

@@ -1,23 +1,38 @@
-import { useState, lazy, Suspense } from "react";
+import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DashboardHeader } from "@/modules/analytics/components/dashboard/DashboardHeader";
-import { TabVisaoGeral } from "@/modules/analytics/components/dashboard/TabVisaoGeral";
-import { TabPerformance } from "@/modules/analytics/components/dashboard/TabPerformance";
-import { TabInteligencia } from "@/modules/analytics/components/dashboard/TabInteligencia";
-
-const TabAnalyticsV2 = lazy(() => import("@/modules/analytics/components/dashboard/TabAnalyticsV2").then(m => ({ default: m.TabAnalyticsV2 })));
-import { OraculoFloatingButton } from "@/modules/analytics/components/dashboard/OraculoFloatingButton";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { CommandHeader } from "@/modules/analytics/components/dashboard/v2/CommandHeader";
+import { TelemetryTicker } from "@/modules/analytics/components/dashboard/v2/TelemetryTicker";
+import { TabVisaoGeralV2 } from "@/modules/analytics/components/dashboard/v2/TabVisaoGeralV2";
+import { TabPerformanceV2 } from "@/modules/analytics/components/dashboard/v2/TabPerformanceV2";
+import { TabSaude } from "@/modules/analytics/components/dashboard/TabSaude";
+import { TabMapa } from "@/modules/analytics/components/dashboard/v2/TabMapa";
 import { OraculoChat } from "@/modules/analytics/components/dashboard/OraculoChat";
 import { useOraculoChat } from "@/modules/copilot/hooks/useOraculoChat";
+import {
+  computePeriodRange,
+  type CommandPeriod,
+} from "@/modules/analytics/hooks/useCommandMetrics";
 import { useAuth } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
 import { useUserRole } from "@/modules/identity";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
+import { LeadModal } from "@/modules/leads";
 import { Skeleton } from "@/components/ui/skeleton";
 import DashboardOutbound from "./DashboardOutbound";
+
+const TabAnalyticsV2 = lazy(() => import("@/modules/analytics/components/dashboard/TabAnalyticsV2").then(m => ({ default: m.TabAnalyticsV2 })));
+
+const PERIOD_LABEL: Record<CommandPeriod, string> = {
+  today: "Hoje",
+  week: "Semana atual",
+  month: "",
+  quarter: "Trimestre atual",
+};
 
 export default function Dashboard() {
   useAuth();
@@ -31,8 +46,38 @@ export default function Dashboard() {
 
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const [period, setPeriod] = useState<CommandPeriod>("month");
+  const [leadModalOpen, setLeadModalOpen] = useState(false);
 
   const oraculo = useOraculoChat({ month: selectedMonth, year: selectedYear });
+  const setOraculoOpen = oraculo.setIsOpen;
+  const openOraculo = useCallback(() => setOraculoOpen(true), [setOraculoOpen]);
+
+  // ⌘J / Ctrl+J abre o Oráculo de qualquer lugar da página
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        setOraculoOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [setOraculoOpen]);
+
+  const range = useMemo(
+    () => computePeriodRange(period, selectedMonth, selectedYear),
+    [period, selectedMonth, selectedYear],
+  );
+
+  const subtitle = useMemo(() => {
+    if (period === "month") {
+      const monthLabel = format(new Date(selectedYear, selectedMonth - 1, 1), "MMMM yyyy", { locale: ptBR });
+      const capitalized = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
+      return `${capitalized} · dia ${range.dayOfPeriod}`;
+    }
+    return `${PERIOD_LABEL[period]} · dia ${range.dayOfPeriod} de ${range.daysTotal}`;
+  }, [period, selectedMonth, selectedYear, range]);
 
   if (orgType === "outbound" && role === "member") {
     return <DashboardOutbound />;
@@ -53,53 +98,62 @@ export default function Dashboard() {
   const isUserAdmin = role === "admin";
 
   return (
-    <div className="space-y-6 relative">
-      <DashboardHeader
-        month={selectedMonth}
-        year={selectedYear}
-        onMonthChange={(m, y) => { setSelectedMonth(m); setSelectedYear(y); }}
-      />
-
+    <div className="relative">
       <Tabs defaultValue="visao-geral" className="w-full">
-        <TabsList>
-          <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
-          <TabsTrigger value="performance">Performance</TabsTrigger>
-          <TabsTrigger value="inteligencia">Inteligência</TabsTrigger>
-          {showAnalytics && (
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          )}
-        </TabsList>
+        <CommandHeader
+          month={selectedMonth}
+          year={selectedYear}
+          onMonthChange={(m, y) => { setSelectedMonth(m); setSelectedYear(y); }}
+          period={period}
+          onPeriodChange={setPeriod}
+          onNewLead={() => setLeadModalOpen(true)}
+          showAnalytics={showAnalytics}
+          subtitle={subtitle}
+        />
 
-        <TabsContent value="visao-geral" className="mt-6">
-          <motion.div
-            key="visao-geral"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <TabVisaoGeral month={selectedMonth} year={selectedYear} isAdmin={isUserAdmin} />
-          </motion.div>
+        <TelemetryTicker />
+
+        <TabsContent value="visao-geral" className="mt-0">
+          <TabVisaoGeralV2
+            period={period}
+            month={selectedMonth}
+            year={selectedYear}
+            range={range}
+            isAdmin={isUserAdmin}
+            onAskOraculo={openOraculo}
+          />
         </TabsContent>
 
-        <TabsContent value="performance" className="mt-6">
+        <TabsContent value="performance" className="mt-0">
           <motion.div
             key="performance"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <TabPerformance month={selectedMonth} year={selectedYear} />
+            <TabPerformanceV2 month={selectedMonth} year={selectedYear} />
           </motion.div>
         </TabsContent>
 
-        <TabsContent value="inteligencia" className="mt-6">
+        <TabsContent value="saude" className="mt-0">
           <motion.div
-            key="inteligencia"
+            key="saude"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <TabInteligencia month={selectedMonth} year={selectedYear} isAdmin={isUserAdmin} />
+            <TabSaude range={range} />
+          </motion.div>
+        </TabsContent>
+
+        <TabsContent value="mapa" className="mt-0">
+          <motion.div
+            key="mapa"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <TabMapa />
           </motion.div>
         </TabsContent>
 
@@ -119,11 +173,8 @@ export default function Dashboard() {
         )}
       </Tabs>
 
-      <OraculoFloatingButton
-        remaining={oraculo.rateLimit.remaining}
-        isOpen={oraculo.isOpen}
-        onClick={() => oraculo.setIsOpen(!oraculo.isOpen)}
-      />
+      <LeadModal open={leadModalOpen} onOpenChange={setLeadModalOpen} />
+
       <AnimatePresence>
         {oraculo.isOpen && (
           <OraculoChat

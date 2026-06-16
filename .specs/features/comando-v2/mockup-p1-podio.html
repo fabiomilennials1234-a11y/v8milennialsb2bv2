@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Comando — P1 Pódio (Performance + Inteligência)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/_tabs-base.css">
+<style>
+  /* ===== PERFORMANCE — pódio ===== */
+  .podium{display:grid;grid-template-columns:1fr 1.25fr 1fr;gap:14px;align-items:end}
+  .pcard{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;text-align:center;position:relative;overflow:hidden}
+  .pcard.first{background:linear-gradient(180deg,hsl(47 60% 16%/.5),var(--card) 55%);border-color:hsl(47 70% 40%/.5);padding:24px 18px}
+  .pcard .rank{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:800;letter-spacing:.15em;color:var(--muted-2)}
+  .pcard.first .rank{color:var(--gold)}
+  .pcard .pav{width:52px;height:52px;margin:10px auto 8px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;color:var(--bg)}
+  .pcard.first .pav{width:64px;height:64px;font-size:21px;box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--gold),0 8px 28px hsl(47 100% 50%/.3)}
+  .pcard .nm{font-size:13.5px;font-weight:700}
+  .pcard .val{font-size:22px;font-weight:900;letter-spacing:-.03em;margin-top:4px}
+  .pcard.first .val{font-size:27px}
+  .pcard .sub{font-size:11px;color:var(--muted-2);font-weight:600;margin-top:2px}
+  .pcard .goalbar{margin-top:12px}
+  .pcard .goalpct{font-size:10.5px;font-weight:700;color:var(--muted);margin-top:5px}
+
+  .rtable{width:100%;border-collapse:collapse;margin-top:4px}
+  .rtable td{padding:9px 8px;border-top:1px solid var(--border-soft);font-size:12.5px;vertical-align:middle}
+  .rtable .pos{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:800;color:var(--muted-2);width:30px}
+  .rtable .who{display:flex;align-items:center;gap:9px;font-weight:600}
+  .rtable .who .av{width:26px;height:26px;border-radius:8px;font-size:10px}
+  .rtable .num{text-align:right;font-weight:700}
+  .rtable .dim{color:var(--muted-2);font-size:11px}
+
+  .prodrow{display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-soft)}
+  .prodrow:last-child{border-bottom:none}
+  .prodrow .i{font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:800;color:var(--muted-2)}
+  .prodrow .pn{font-size:12.5px;font-weight:600}
+  .prodrow .pn small{display:block;font-size:10.5px;color:var(--muted-2);font-weight:600}
+  .prodrow .pv{font-size:13px;font-weight:800;text-align:right}
+
+  /* Toggle Vendas | Reunioes */
+  .seg-toggle{display:inline-flex;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:3px;gap:2px}
+  .seg-toggle button{font-family:inherit;font-size:11.5px;font-weight:700;color:var(--muted);padding:5px 14px;border-radius:6px;border:none;background:none;cursor:pointer;transition:all .15s}
+  .seg-toggle button.on{background:var(--gold-dim);color:var(--gold);box-shadow:inset 0 0 0 1px hsl(47 70% 40%/.5)}
+
+  /* Atividade da equipe — legível */
+  .actrow{display:grid;grid-template-columns:34px 130px 1fr auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-soft)}
+  .actrow:last-child{border-bottom:none}
+  .actrow .av{width:32px;height:32px;font-size:11px;border-radius:10px}
+  .actrow .an{font-size:12.5px;font-weight:700}
+  .actrow .an small{display:block;font-size:10px;color:var(--muted-2);font-weight:600}
+  .actrow .abar{height:18px;border-radius:6px;background:var(--bg);overflow:hidden;position:relative}
+  .actrow .abar i{position:absolute;inset:0 auto 0 0;border-radius:6px;transform-origin:left;transform:scaleX(0);animation:growx 1s .6s cubic-bezier(.22,1,.36,1) forwards}
+  .actrow .abar span{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:10.5px;font-weight:800;z-index:1}
+  .actrow .abreak{display:flex;gap:12px;font-size:10.5px;color:var(--muted-2);font-weight:600;white-space:nowrap}
+  .actrow .abreak b{color:var(--fg);font-weight:800}
+
+  /* Jornada do lead — timeline vertical */
+  .vjourney{margin-top:16px;display:flex;flex-direction:column}
+  .vstage{display:grid;grid-template-columns:38px 1fr;gap:12px;align-items:center}
+  .vstage .vdot{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid var(--gold);background:var(--gold-dim);color:var(--gold)}
+  .vstage.win .vdot{border-color:var(--success);background:var(--success-dim);color:var(--success)}
+  .vstage .vn{font-size:13px;font-weight:700}
+  .vstage .vn small{display:block;font-size:10.5px;color:var(--muted-2);font-weight:600;margin-top:1px}
+  .vgap{display:grid;grid-template-columns:38px 1fr;gap:12px;align-items:center;min-height:44px}
+  .vgap .vline{width:3px;height:100%;min-height:36px;margin:4px auto;border-radius:2px;background:var(--border-soft);position:relative;overflow:hidden}
+  .vgap .vline i{position:absolute;inset:0;background:var(--gold);transform-origin:top;transform:scaleY(0);animation:cmdgrowy .6s cubic-bezier(.22,1,.36,1) forwards}
+  @keyframes cmdgrowy{to{transform:scaleY(1)}}
+  .vgap.slow .vline i{background:hsl(0 62% 52%)}
+  .vgap .vinfo{display:flex;align-items:center;gap:10px}
+  .vgap .vdays{font-size:13px;font-weight:800;letter-spacing:-.01em;width:64px;flex:none}
+  .vgap.slow .vdays{color:hsl(0 70% 62%)}
+  .vgap .vbar{flex:1;height:7px;border-radius:99px;background:var(--bg);overflow:hidden}
+  .vgap .vbar i{display:block;height:100%;border-radius:99px;background:hsl(47 100% 50%/.65);transform-origin:left;transform:scaleX(0);animation:growx .8s cubic-bezier(.22,1,.36,1) forwards}
+  .vgap.slow .vbar i{background:hsl(0 62% 52%/.8)}
+  .vgap .vtag{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:99px;flex:none}
+  .vgap .vtag.fast{color:var(--success);background:var(--success-dim)}
+  .vgap .vtag.ok{color:var(--muted);background:var(--bg)}
+  .vgap .vtag.slow{color:hsl(0 70% 62%);background:var(--danger-dim)}
+  .jtotal{margin-top:16px;padding:11px 14px;border:1px solid var(--border-soft);border-radius:11px;background:var(--card-2);display:flex;justify-content:space-between;align-items:center}
+  .jtotal span{font-size:11.5px;color:var(--muted);font-weight:600}
+  .jtotal span b{color:var(--fg);font-weight:800}
+
+  /* ===== INTELIGÊNCIA — mini-gauges + briefing ===== */
+  .brief{display:flex;flex-direction:column;gap:9px;margin-top:14px}
+  .action{display:grid;grid-template-columns:26px 1fr auto;gap:12px;align-items:center;padding:11px 13px;border:1px solid var(--border-soft);border-radius:11px;background:var(--card-2)}
+  .action .pr{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;border-radius:6px;width:26px;height:26px;display:flex;align-items:center;justify-content:center}
+  .action p{font-size:12.5px;line-height:1.45;color:var(--muted)}
+  .action p b{color:var(--fg);font-weight:700}
+  .action .cta{font-size:11.5px;font-weight:700;color:var(--gold);white-space:nowrap;cursor:pointer}
+  .action .impact{display:block;font-size:10.5px;color:var(--muted-2);font-weight:600;margin-top:2px}
+
+  .gauges3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:14px}
+  .mg{text-align:center;padding:14px 8px;border:1px solid var(--border-soft);border-radius:12px;background:var(--card-2)}
+  .mg .mgl{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .mg svg{margin:8px auto 0;display:block}
+  .mg .mgv{font-size:16px;font-weight:900;letter-spacing:-.02em;margin-top:-30px}
+  .mg .mgs{font-size:10px;color:var(--muted-2);font-weight:600;margin-top:14px}
+
+  .igoal{display:grid;grid-template-columns:30px 1fr 52px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-soft)}
+  .igoal:last-child{border-bottom:none}
+  .igoal .av{width:28px;height:28px;border-radius:9px;font-size:10.5px}
+  .igoal .gn{font-size:12.5px;font-weight:600}
+  .igoal .gp{font-size:12px;font-weight:800;text-align:right}
+
+  .wl{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+  .wlrow{display:grid;grid-template-columns:1fr 60px 1fr;gap:8px;align-items:center}
+  .wlrow .wlb{height:18px;border-radius:6px;background:var(--bg);position:relative;overflow:hidden}
+  .wlrow .wlb i{position:absolute;top:0;bottom:0;transform-origin:inherit}
+  .wlrow .wlb.l i{right:0;background:hsl(0 62% 50%/.75);border-radius:6px}
+  .wlrow .wlb.w i{left:0;background:var(--success);border-radius:6px}
+  .wlrow .wlc{font-size:10.5px;font-weight:700;color:var(--muted);text-align:center;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="bar">
+    <div class="ident"><h1>Comando</h1><span>Junho 2026 · dia 11</span></div>
+    <nav class="tabs"><a href="#">Visão Geral</a><a class="on" href="#perf">Performance</a><a class="on" style="opacity:.55" href="#intel">Inteligência</a><a href="#">Analytics</a></nav>
+    <div class="spacer"></div>
+    <div class="range"><a href="#">Hoje</a><a href="#">Semana</a><a class="on" href="#">Mês</a><a href="#">Trim.</a></div>
+    <button class="btn">+ Novo lead</button>
+  </div>
+
+  <div class="divider" id="perf"><span class="tag">Aba — Performance</span><span class="line"></span></div>
+
+  <div class="grid12">
+    <!-- Pódio + tabela -->
+    <div class="cell" style="grid-column:span 8">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+        <span class="lbl">Ranking do mês</span>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="seg-toggle" id="rankToggle">
+            <button class="on" data-mode="vendas">Vendas</button>
+            <button data-mode="reunioes">Reuniões</button>
+          </div>
+          <span class="goldchip" id="rankTotal">R$ 142,4K no time</span>
+        </div>
+      </div>
+      <div class="podium" id="podium">
+        <div class="pcard">
+          <span class="rank">P2</span>
+          <div class="pav" style="background:hsl(200 80% 50%)">DF</div>
+          <div class="nm">Diego Farias</div>
+          <div class="val tnum">R$ 38,9K</div>
+          <div class="sub">6 vendas · ticket R$ 6,5K</div>
+          <div class="goalbar minibar"><i style="width:78%;background:hsl(200 80% 50%)"></i></div>
+          <div class="goalpct">78% da meta</div>
+        </div>
+        <div class="pcard first">
+          <span class="rank">P1 — LÍDER</span>
+          <div class="pav" style="background:linear-gradient(135deg,hsl(47 100% 50%),hsl(36 100% 58%))">MR</div>
+          <div class="nm">Marina Rocha</div>
+          <div class="val tnum">R$ 48,2K</div>
+          <div class="sub">7 vendas · ticket R$ 6,9K</div>
+          <div class="goalbar minibar"><i style="width:96%;background:var(--gold)"></i></div>
+          <div class="goalpct" style="color:var(--gold)">96% da meta</div>
+        </div>
+        <div class="pcard">
+          <span class="rank">P3</span>
+          <div class="pav" style="background:hsl(142 70% 45%)">CA</div>
+          <div class="nm">Carla Antunes</div>
+          <div class="val tnum">R$ 31,7K</div>
+          <div class="sub">5 vendas · ticket R$ 6,3K</div>
+          <div class="goalbar minibar"><i style="width:63%;background:hsl(142 70% 45%)"></i></div>
+          <div class="goalpct">63% da meta</div>
+        </div>
+      </div>
+      <table class="rtable" id="rtable">
+        <tr>
+          <td class="pos">P4</td>
+          <td><span class="who"><span class="av" style="background:hsl(280 55% 55%)">RS</span>Rafael Souza</span></td>
+          <td class="num tnum">R$ 23,6K</td>
+          <td class="num dim">3 vendas</td>
+          <td class="num dim">47% da meta</td>
+          <td class="num"><span class="delta up">+9%</span></td>
+        </tr>
+        <tr>
+          <td class="pos">P5</td>
+          <td><span class="who"><span class="av" style="background:hsl(16 75% 55%)">PL</span>Paula Lima</span></td>
+          <td class="num tnum">R$ 18,4K</td>
+          <td class="num dim">3 vendas</td>
+          <td class="num dim">37% da meta</td>
+          <td class="num"><span class="delta down">-6%</span></td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Produtos -->
+    <div class="cell" style="grid-column:span 4">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="lbl">Produtos campeões</span>
+        <a class="panel-link" href="#">Catálogo →</a>
+      </div>
+      <div style="margin-top:10px">
+        <div class="prodrow"><span class="i">01</span><span class="pn">Compressor industrial CX-90<small>12 unidades</small></span><span class="pv tnum">R$ 38,4K</span></div>
+        <div class="prodrow"><span class="i">02</span><span class="pn">Kit hidráulico PRO<small>9 unidades</small></span><span class="pv tnum">R$ 27,1K</span></div>
+        <div class="prodrow"><span class="i">03</span><span class="pn">Válvula térmica V8<small>21 unidades</small></span><span class="pv tnum">R$ 19,8K</span></div>
+        <div class="prodrow"><span class="i">04</span><span class="pn">Esteira modular M2<small>4 unidades</small></span><span class="pv tnum">R$ 15,2K</span></div>
+        <div class="prodrow"><span class="i">05</span><span class="pn">Sensor IoT S5<small>33 unidades</small></span><span class="pv tnum">R$ 11,6K</span></div>
+      </div>
+    </div>
+
+    <!-- Atividade da equipe -->
+    <div class="cell" style="grid-column:span 8">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="lbl">Atividade da equipe — junho</span>
+        <span style="font-size:11px;color:var(--muted-2);font-weight:600">tudo que cada vendedor fez no mês: mensagens, ligações e reuniões</span>
+      </div>
+      <div style="margin-top:10px">
+        <div class="actrow">
+          <span class="av" style="background:linear-gradient(135deg,hsl(47 100% 50%),hsl(36 100% 58%))">MR</span>
+          <span class="an">Marina Rocha<small>mais ativa do mês</small></span>
+          <div class="abar"><i style="width:100%;background:linear-gradient(90deg,hsl(47 100% 44%),var(--gold))"></i><span style="color:hsl(30 18% 12%)">214 interações</span></div>
+          <span class="abreak"><span><b>142</b> mensagens</span><span><b>54</b> ligações</span><span><b>18</b> reuniões</span></span>
+        </div>
+        <div class="actrow">
+          <span class="av" style="background:hsl(200 80% 50%)">DF</span>
+          <span class="an">Diego Farias<small>&nbsp;</small></span>
+          <div class="abar"><i style="width:81%;background:hsl(200 80% 50%/.8)"></i><span>173 interações</span></div>
+          <span class="abreak"><span><b>118</b> mensagens</span><span><b>40</b> ligações</span><span><b>15</b> reuniões</span></span>
+        </div>
+        <div class="actrow">
+          <span class="av" style="background:hsl(280 55% 55%)">RS</span>
+          <span class="an">Rafael Souza<small>&nbsp;</small></span>
+          <div class="abar"><i style="width:74%;background:hsl(280 55% 55%/.8)"></i><span>158 interações</span></div>
+          <span class="abreak"><span><b>96</b> mensagens</span><span><b>40</b> ligações</span><span><b>22</b> reuniões</span></span>
+        </div>
+        <div class="actrow">
+          <span class="av" style="background:hsl(142 70% 45%)">CA</span>
+          <span class="an">Carla Antunes<small>&nbsp;</small></span>
+          <div class="abar"><i style="width:62%;background:hsl(142 70% 45%/.8)"></i><span>132 interações</span></div>
+          <span class="abreak"><span><b>88</b> mensagens</span><span><b>32</b> ligações</span><span><b>12</b> reuniões</span></span>
+        </div>
+        <div class="actrow">
+          <span class="av" style="background:hsl(16 75% 55%)">PL</span>
+          <span class="an">Paula Lima<small>atenção: 38% abaixo da média</small></span>
+          <div class="abar"><i style="width:38%;background:hsl(0 62% 52%/.8)"></i><span>81 interações</span></div>
+          <span class="abreak"><span><b>52</b> mensagens</span><span><b>12</b> ligações</span><span><b>17</b> reuniões</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Jornada do lead -->
+    <div class="cell" style="grid-column:span 4">
+      <span class="lbl">Jornada do lead — tempo até a venda</span>
+      <div style="font-size:11px;color:var(--muted-2);font-weight:600;margin-top:4px">quantos dias o lead leva, em média, pra avançar de etapa</div>
+      <div class="vjourney">
+        <div class="vstage">
+          <span class="vdot"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg></span>
+          <span class="vn">Lead chega</span>
+        </div>
+        <div class="vgap">
+          <span class="vline"><i style="animation-delay:.5s"></i></span>
+          <span class="vinfo"><span class="vdays tnum">0,8 dia</span><span class="vbar"><i style="width:14%;animation-delay:.6s"></i></span><span class="vtag fast">rápido</span></span>
+        </div>
+        <div class="vstage">
+          <span class="vdot"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></span>
+          <span class="vn">Primeiro contato</span>
+        </div>
+        <div class="vgap">
+          <span class="vline"><i style="animation-delay:.7s"></i></span>
+          <span class="vinfo"><span class="vdays tnum">3,4 dias</span><span class="vbar"><i style="width:61%;animation-delay:.8s"></i></span><span class="vtag ok">normal</span></span>
+        </div>
+        <div class="vstage">
+          <span class="vdot"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+          <span class="vn">Reunião</span>
+        </div>
+        <div class="vgap">
+          <span class="vline"><i style="animation-delay:.9s"></i></span>
+          <span class="vinfo"><span class="vdays tnum">2,1 dias</span><span class="vbar"><i style="width:38%;animation-delay:1s"></i></span><span class="vtag ok">normal</span></span>
+        </div>
+        <div class="vstage">
+          <span class="vdot"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></span>
+          <span class="vn">Proposta enviada</span>
+        </div>
+        <div class="vgap slow">
+          <span class="vline"><i style="animation-delay:1.1s"></i></span>
+          <span class="vinfo"><span class="vdays tnum">5,6 dias</span><span class="vbar"><i style="width:100%;animation-delay:1.2s"></i></span><span class="vtag slow">gargalo</span></span>
+        </div>
+        <div class="vstage win">
+          <span class="vdot"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>
+          <span class="vn">Venda fechada<small>21 vendas este mês</small></span>
+        </div>
+      </div>
+      <div class="jtotal">
+        <span>Do lead à venda: <b>11,9 dias</b> em média</span>
+        <span class="delta up">1,3 dia mais rápido que maio</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider" id="intel"><span class="tag">Aba — Inteligência</span><span class="line"></span></div>
+
+  <div class="grid12">
+    <!-- Briefing IA -->
+    <div class="cell" style="grid-column:span 7">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="lbl">Briefing do Oráculo — próximas jogadas</span>
+        <span class="goldchip">impacto estimado R$ 64K</span>
+      </div>
+      <div class="brief">
+        <div class="action">
+          <span class="pr" style="color:var(--danger);background:var(--danger-dim)">P0</span>
+          <p><b>Resgatar 14 leads quentes</b> sem follow-up há 48h — maioria origem Meta Ads.<span class="impact">Impacto: R$ 38K · esforço: 2h de cadência</span></p>
+          <span class="cta">Distribuir →</span>
+        </div>
+        <div class="action">
+          <span class="pr" style="color:var(--gold);background:var(--gold-dim)">P1</span>
+          <p><b>Reagendar 6 no-shows</b> da semana — taxa de comparecimento caiu pra 71%.<span class="impact">Impacto: R$ 18K · 6 ligações</span></p>
+          <span class="cta">Ver lista →</span>
+        </div>
+        <div class="action">
+          <span class="pr" style="color:var(--gold);background:var(--gold-dim)">P1</span>
+          <p><b>Acelerar 4 propostas paradas</b> há mais de 7 dias no pipe.<span class="impact">Impacto: R$ 8K · follow-up hoje</span></p>
+          <span class="cta">Abrir propostas →</span>
+        </div>
+        <div class="action">
+          <span class="pr" style="color:var(--blue);background:hsl(200 80% 50%/.12)">P2</span>
+          <p><b>Equilibrar carteira da Paula</b> — 40% dos leads dela estão frios.<span class="impact">Redistribuição sugerida: 12 leads</span></p>
+          <span class="cta">Revisar →</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mini gauges -->
+    <div class="cell" style="grid-column:span 5">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="lbl">Metas da equipe</span>
+        <a class="panel-link" href="#">Ajustar →</a>
+      </div>
+      <div class="gauges3">
+        <div class="mg">
+          <span class="mgl">Faturamento</span>
+          <svg width="92" height="58" viewBox="0 0 92 58">
+            <path d="M 8 54 A 38 38 0 0 1 84 54" fill="none" stroke="hsl(0 0% 100%/.08)" stroke-width="7" stroke-linecap="round"/>
+            <path d="M 8 54 A 38 38 0 0 1 73 28" fill="none" stroke="var(--gold)" stroke-width="7" stroke-linecap="round" style="filter:drop-shadow(0 0 4px hsl(47 100% 50%/.4))"/>
+          </svg>
+          <div class="mgv tnum">71%</div>
+          <div class="mgs">R$ 142K / 200K</div>
+        </div>
+        <div class="mg">
+          <span class="mgl">Clientes</span>
+          <svg width="92" height="58" viewBox="0 0 92 58">
+            <path d="M 8 54 A 38 38 0 0 1 84 54" fill="none" stroke="hsl(0 0% 100%/.08)" stroke-width="7" stroke-linecap="round"/>
+            <path d="M 8 54 A 38 38 0 0 1 80 38" fill="none" stroke="var(--success)" stroke-width="7" stroke-linecap="round"/>
+          </svg>
+          <div class="mgv tnum">84%</div>
+          <div class="mgs">21 / 25 novos</div>
+        </div>
+        <div class="mg">
+          <span class="mgl">Reuniões</span>
+          <svg width="92" height="58" viewBox="0 0 92 58">
+            <path d="M 8 54 A 38 38 0 0 1 84 54" fill="none" stroke="hsl(0 0% 100%/.08)" stroke-width="7" stroke-linecap="round"/>
+            <path d="M 8 54 A 38 38 0 0 1 52 17" fill="none" stroke="hsl(0 62% 52%)" stroke-width="7" stroke-linecap="round"/>
+          </svg>
+          <div class="mgv tnum">58%</div>
+          <div class="mgs">64 / 110 feitas</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding:10px 12px;border:1px solid var(--border-soft);border-radius:10px;background:var(--card-2);font-size:11.5px;color:var(--muted)">
+        <b style="color:var(--danger);font-weight:800">Reuniões abaixo do ritmo</b> — esperado 37% do mês, time entregou 58% da meta de reuniões com pacing de 64%.
+      </div>
+    </div>
+
+    <!-- Metas individuais -->
+    <div class="cell" style="grid-column:span 4">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="lbl">Metas individuais</span>
+        <span style="font-size:11px;color:var(--muted-2);font-weight:600">vendas</span>
+      </div>
+      <div style="margin-top:8px">
+        <div class="igoal"><span class="av" style="background:linear-gradient(135deg,hsl(47 100% 50%),hsl(36 100% 58%))">MR</span><div><div class="gn">Marina Rocha</div><div class="minibar" style="margin-top:5px"><i style="width:96%;background:var(--success)"></i></div></div><span class="gp tnum" style="color:var(--success)">96%</span></div>
+        <div class="igoal"><span class="av" style="background:hsl(200 80% 50%)">DF</span><div><div class="gn">Diego Farias</div><div class="minibar" style="margin-top:5px"><i style="width:78%;background:var(--gold)"></i></div></div><span class="gp tnum" style="color:var(--gold)">78%</span></div>
+        <div class="igoal"><span class="av" style="background:hsl(142 70% 45%)">CA</span><div><div class="gn">Carla Antunes</div><div class="minibar" style="margin-top:5px"><i style="width:63%;background:var(--gold)"></i></div></div><span class="gp tnum" style="color:var(--gold)">63%</span></div>
+        <div class="igoal"><span class="av" style="background:hsl(280 55% 55%)">RS</span><div><div class="gn">Rafael Souza</div><div class="minibar" style="margin-top:5px"><i style="width:47%;background:var(--gold)"></i></div></div><span class="gp tnum">47%</span></div>
+        <div class="igoal"><span class="av" style="background:hsl(16 75% 55%)">PL</span><div><div class="gn">Paula Lima</div><div class="minibar" style="margin-top:5px"><i style="width:37%;background:hsl(0 62% 52%)"></i></div></div><span class="gp tnum" style="color:var(--danger)">37%</span></div>
+      </div>
+    </div>
+
+    <!-- Real vs esperado -->
+    <div class="cell" style="grid-column:span 5">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="lbl">Real vs esperado — faturamento</span>
+        <span class="delta up">+34pp à frente</span>
+      </div>
+      <svg width="100%" height="150" viewBox="0 0 460 150" preserveAspectRatio="none" style="margin-top:14px">
+        <defs><linearGradient id="a1" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="hsl(47 100% 50%)" stop-opacity=".22"/><stop offset="1" stop-color="hsl(47 100% 50%)" stop-opacity="0"/>
+        </linearGradient></defs>
+        <line x1="0" y1="130" x2="460" y2="20" stroke="hsl(40 7% 45%)" stroke-width="1.5" stroke-dasharray="5 5"/>
+        <polygon points="0,142 55,128 110,118 165,98 220,86 260,70 260,150 0,150" fill="url(#a1)"/>
+        <polyline points="0,142 55,128 110,118 165,98 220,86 260,70" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="260" cy="70" r="4.5" fill="var(--gold)" stroke="var(--bg)" stroke-width="2"/>
+        <text x="266" y="62" fill="hsl(45 20% 95%)" style="font:800 11px Inter">R$ 142K</text>
+        <text x="350" y="44" fill="hsl(40 7% 50%)" style="font:600 10px Inter">linha esperada</text>
+      </svg>
+    </div>
+
+    <!-- Win/Loss -->
+    <div class="cell" style="grid-column:span 3">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="lbl">Ganho vs perda</span>
+      </div>
+      <div style="text-align:center;margin-top:10px">
+        <span style="font-size:26px;font-weight:900;letter-spacing:-.03em" class="tnum">21<span style="color:var(--muted-2);font-size:15px"> / </span><span style="color:var(--danger)">9</span></span>
+        <div style="font-size:10.5px;color:var(--muted-2);font-weight:600">fechadas vs perdidas</div>
+      </div>
+      <div class="wl">
+        <div class="wlrow"><div class="wlb w"><i style="width:85%"></i></div><span class="wlc">Preço</span><div class="wlb l"><i style="width:55%"></i></div></div>
+        <div class="wlrow"><div class="wlb w"><i style="width:60%"></i></div><span class="wlc">Prazo</span><div class="wlb l"><i style="width:30%"></i></div></div>
+        <div class="wlrow"><div class="wlb w"><i style="width:40%"></i></div><span class="wlc">Concorrente</span><div class="wlb l"><i style="width:70%"></i></div></div>
+        <div class="wlrow"><div class="wlb w"><i style="width:30%"></i></div><span class="wlc">Sem resposta</span><div class="wlb l"><i style="width:45%"></i></div></div>
+      </div>
+      <div style="margin-top:12px;font-size:11px;color:var(--muted-2);font-weight:600;text-align:center">maior causa de perda: <b style="color:var(--danger)">concorrente</b></div>
+    </div>
+  </div>
+
+</div>
+<script>
+// Toggle Vendas | Reunioes — pódio e tabela trocam de métrica
+(function(){
+  const data = {
+    vendas: {
+      total: 'R$ 142,4K no time',
+      podium: [
+        {pos:'P2',init:'DF',bg:'hsl(200 80% 50%)',nm:'Diego Farias',val:'R$ 38,9K',sub:'6 vendas · ticket R$ 6,5K',pct:78,color:'hsl(200 80% 50%)'},
+        {pos:'P1 — LÍDER',init:'MR',bg:'linear-gradient(135deg,hsl(47 100% 50%),hsl(36 100% 58%))',nm:'Marina Rocha',val:'R$ 48,2K',sub:'7 vendas · ticket R$ 6,9K',pct:96,color:'var(--gold)'},
+        {pos:'P3',init:'CA',bg:'hsl(142 70% 45%)',nm:'Carla Antunes',val:'R$ 31,7K',sub:'5 vendas · ticket R$ 6,3K',pct:63,color:'hsl(142 70% 45%)'}
+      ],
+      rest: [
+        {pos:'P4',init:'RS',bg:'hsl(280 55% 55%)',nm:'Rafael Souza',val:'R$ 23,6K',sub:'3 vendas',meta:'47% da meta',delta:'+9%',up:true},
+        {pos:'P5',init:'PL',bg:'hsl(16 75% 55%)',nm:'Paula Lima',val:'R$ 18,4K',sub:'3 vendas',meta:'37% da meta',delta:'-6%',up:false}
+      ]
+    },
+    reunioes: {
+      total: '96 reuniões no time',
+      podium: [
+        {pos:'P2',init:'MR',bg:'linear-gradient(135deg,hsl(47 100% 50%),hsl(36 100% 58%))',nm:'Marina Rocha',val:'18 reuniões',sub:'14 compareceram · 78%',pct:82,color:'hsl(200 80% 50%)'},
+        {pos:'P1 — LÍDER',init:'RS',bg:'hsl(280 55% 55%)',nm:'Rafael Souza',val:'22 reuniões',sub:'19 compareceram · 86%',pct:96,color:'var(--gold)'},
+        {pos:'P3',init:'PL',bg:'hsl(16 75% 55%)',nm:'Paula Lima',val:'17 reuniões',sub:'12 compareceram · 71%',pct:74,color:'hsl(142 70% 45%)'}
+      ],
+      rest: [
+        {pos:'P4',init:'DF',bg:'hsl(200 80% 50%)',nm:'Diego Farias',val:'15 reuniões',sub:'11 compareceram',meta:'68% da meta',delta:'+5%',up:true},
+        {pos:'P5',init:'CA',bg:'hsl(142 70% 45%)',nm:'Carla Antunes',val:'12 reuniões',sub:'9 compareceram',meta:'55% da meta',delta:'+2%',up:true}
+      ]
+    }
+  };
+  const podium=document.getElementById('podium'),rtable=document.getElementById('rtable'),
+        total=document.getElementById('rankTotal'),toggle=document.getElementById('rankToggle');
+  function render(mode){
+    const d=data[mode];
+    total.textContent=d.total;
+    podium.innerHTML=d.podium.map((p,i)=>{
+      const first=i===1;
+      return `<div class="pcard${first?' first':''}">
+        <span class="rank">${p.pos}</span>
+        <div class="pav" style="background:${p.bg}">${p.init}</div>
+        <div class="nm">${p.nm}</div>
+        <div class="val tnum">${p.val}</div>
+        <div class="sub">${p.sub}</div>
+        <div class="goalbar minibar"><i style="width:${p.pct}%;background:${p.color};animation-delay:.1s"></i></div>
+        <div class="goalpct"${first?' style="color:var(--gold)"':''}>${p.pct}% da meta</div>
+      </div>`;
+    }).join('');
+    rtable.innerHTML=d.rest.map(r=>`<tr>
+      <td class="pos">${r.pos}</td>
+      <td><span class="who"><span class="av" style="background:${r.bg}">${r.init}</span>${r.nm}</span></td>
+      <td class="num tnum">${r.val}</td>
+      <td class="num dim">${r.sub}</td>
+      <td class="num dim">${r.meta}</td>
+      <td class="num"><span class="delta ${r.up?'up':'down'}">${r.delta}</span></td>
+    </tr>`).join('');
+  }
+  toggle.addEventListener('click',e=>{
+    const btn=e.target.closest('button');if(!btn)return;
+    toggle.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+    render(btn.dataset.mode);
+  });
+})();
+</script>
+</body>
+</html>

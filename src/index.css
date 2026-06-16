@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Racing+Sans+One&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
 
@@ -381,7 +382,8 @@
   }
 
   .topnav-item {
-    @apply relative flex items-center gap-1.5 px-3 py-1.5 text-[13.5px] text-foreground/55 rounded-md cursor-pointer select-none;
+    /* Compacto em lg (1024-1280 -- notebooks 1366 com escala do SO); cheio em xl+ */
+    @apply relative flex items-center gap-1.5 px-2 xl:px-3 py-1.5 text-[12.5px] xl:text-[13.5px] text-foreground/55 rounded-md cursor-pointer select-none;
     @apply transition-all duration-150 ease-out;
     @apply hover:text-foreground/85;
     font-weight: 460;
@@ -769,4 +771,54 @@
       transform: translateX(50px) scale(2); 
     }
   }
+}
+
+/* ===== Comando v2 (Central de Comando) ===== */
+@layer components {
+  .cmd-cell {
+    @apply bg-card border border-border rounded-2xl relative overflow-hidden;
+    transition: transform .2s cubic-bezier(.22,1,.36,1), border-color .2s;
+  }
+  .cmd-cell:hover {
+    transform: translateY(-2px);
+    border-color: hsl(var(--border) / 0.7);
+    filter: brightness(1.04);
+  }
+  .cmd-lbl {
+    @apply text-[11px] font-bold uppercase text-muted-foreground;
+    letter-spacing: .09em;
+  }
+  .cmd-mono { font-family: 'JetBrains Mono', monospace; }
+}
+
+@keyframes cmd-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes cmd-fadein { to { opacity: 1; } }
+@keyframes cmd-growy { to { transform: scaleY(1); } }
+@keyframes cmd-slidein { to { opacity: 1; transform: none; } }
+@keyframes cmd-drawline { to { stroke-dashoffset: 0; } }
+@keyframes cmd-livepulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--success) / .5); }
+  50% { box-shadow: 0 0 0 6px hsl(var(--success) / 0); }
+}
+@keyframes cmd-sparkpulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / .4); }
+  50% { box-shadow: 0 0 0 8px hsl(var(--primary) / 0); }
+}
+.cmd-rise { animation: cmd-rise .5s cubic-bezier(.22,1,.36,1) both; }
+.cmd-slidein { opacity: 0; transform: translateX(16px); animation: cmd-slidein .5s cubic-bezier(.22,1,.36,1) forwards; }
+.cmd-fadein { opacity: 0; animation: cmd-fadein .45s forwards; }
+.cmd-growy { transform: scaleY(0); transform-origin: top; animation: cmd-growy .55s cubic-bezier(.22,1,.36,1) forwards; }
+.cmd-livepulse { animation: cmd-livepulse 2s ease-in-out infinite; }
+.cmd-sparkpulse { animation: cmd-sparkpulse 3s ease-in-out infinite; }
+.cmd-drawline { animation: cmd-drawline 1.6s cubic-bezier(.4,0,.2,1) forwards; }
+/* Aba Mapa — choropleth */
+.tabmapa-svg svg { width: 100%; height: auto; filter: drop-shadow(0 18px 40px hsl(0 0% 0% / .45)); }
+.tabmapa-svg svg path { stroke: hsl(35 10% 9%); stroke-width: 1.2; cursor: pointer; transition: filter .15s; }
+.tabmapa-svg svg path:hover { filter: brightness(1.35); }
+.tabmapa-svg svg path.uf-sel { stroke: hsl(var(--primary)); stroke-width: 2.5; filter: drop-shadow(0 0 14px hsl(var(--primary) / .55)) brightness(1.15); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cmd-rise, .cmd-slidein, .cmd-fadein, .cmd-growy { animation-duration: .01s; animation-delay: 0s !important; }
+  .cmd-livepulse, .cmd-sparkpulse { animation: none; }
+  .cmd-drawline { animation-duration: .01s; animation-delay: 0s !important; }
 }

@@ -62,6 +62,10 @@ export const LeadCardChecklistPopover = memo(function LeadCardChecklistPopover({
           type="button"
           // dnd-kit: não iniciar drag ao abrir o popover.
           onPointerDown={(e) => e.stopPropagation()}
+          // Card root tem onClick → abre modal do lead. Sem isto, clicar no
+          // badge abre o popover E o modal (click borbulha pro root). Cobre
+          // mouse + ativação por teclado (Enter/Space disparam click).
+          onClick={(e) => e.stopPropagation()}
           aria-label={`Checklists: ${completed} de ${total} itens concluídos`}
           className={cn(
             "flex items-center gap-1 px-1 py-px rounded cursor-pointer select-none transition-colors duration-150",

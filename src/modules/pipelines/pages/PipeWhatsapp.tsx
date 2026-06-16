@@ -31,6 +31,7 @@ import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from 
 import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/MetricsPeriodSelector";
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
 import { PipeWhatsappAnalytics } from "@/modules/pipelines/components/shared/PipeWhatsappAnalytics";
+import { AnalyticsStatCard } from "@/modules/pipelines/components/shared/analytics-ui";
 import { PipeViewToggle } from "@/modules/pipelines/components/shared/PipeViewToggle";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
@@ -51,6 +52,8 @@ import { AddMeetingModal } from "@/modules/pipelines/components/legacy/confirmac
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import * as Sentry from "@sentry/react";
+import { getErrorMessage } from "@/shared/errors";
 import { useOrganization } from "@/modules/identity";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useLeadsWithScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
@@ -652,22 +655,41 @@ function PipeWhatsappInner() {
           exit={{ opacity: 0, height: 0 }}
           className="grid grid-cols-2 md:grid-cols-4 gap-4"
         >
-          <div className="bg-card rounded-lg border border-border p-4">
-            <p className="text-sm text-muted-foreground">Total Leads</p>
-            <p className="text-2xl font-bold mt-1">{displayStats.total}</p>
-          </div>
-          <div className="bg-card rounded-lg border border-border p-4">
-            <p className="text-sm text-muted-foreground">Abordados</p>
-            <p className="text-2xl font-bold text-success mt-1">{displayStats.abordado}</p>
-          </div>
-          <div className="bg-card rounded-lg border border-border p-4">
-            <p className="text-sm text-muted-foreground">Respondeu</p>
-            <p className="text-2xl font-bold text-blue-500 mt-1">{displayStats.respondeu}</p>
-          </div>
-          <div className="bg-card rounded-lg border border-border p-4">
-            <p className="text-sm text-muted-foreground">Agendados</p>
-            <p className="text-2xl font-bold text-primary mt-1">{displayStats.scheduled}</p>
-          </div>
+          <AnalyticsStatCard label="Total de Leads" value={displayStats.total} accent="neutral" />
+          <AnalyticsStatCard
+            label="Abordados"
+            value={displayStats.abordado}
+            sub={
+              displayStats.total > 0
+                ? `${((displayStats.abordado / displayStats.total) * 100).toFixed(0)}% do total`
+                : undefined
+            }
+            accent="blue"
+            delay={0.05}
+          />
+          <AnalyticsStatCard
+            label="Respondeu"
+            value={displayStats.respondeu}
+            sub={
+              displayStats.abordado > 0
+                ? `${((displayStats.respondeu / displayStats.abordado) * 100).toFixed(0)}% dos abordados`
+                : undefined
+            }
+            accent="success"
+            delay={0.1}
+          />
+          <AnalyticsStatCard
+            label="Agendados"
+            value={displayStats.scheduled}
+            sub={
+              displayStats.total > 0
+                ? `${((displayStats.scheduled / displayStats.total) * 100).toFixed(1)}% de conversão total`
+                : undefined
+            }
+            accent="gold"
+            tintValue
+            delay={0.15}
+          />
         </motion.div>
       )}
 
@@ -958,7 +980,13 @@ function PipeWhatsappInner() {
               toast.success("Reunião agendada e lead movido para Confirmação!");
             } catch (err) {
               console.error("[PipeWhatsapp] Falha ao mover card após agendar reunião:", err);
-              toast.error("Reunião agendada, mas não foi possível mover o card no funil");
+              Sentry.captureException(err, {
+                tags: { feature: "pipelines", kind: "post-meeting-move-failed" },
+                extra: { pipeId: pending.pipeId, leadId: pending.leadId, toStage: pending.newStatus },
+              });
+              toast.error("Reunião agendada, mas não foi possível mover o card no funil", {
+                description: getErrorMessage(err),
+              });
             } finally {
               refetch();
             }

@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { BR_UFS } from "@/shared/format/br-uf";
 
 const originLabels: Record<string, string> = {
   whatsapp: "WhatsApp",
@@ -76,6 +77,7 @@ interface FormData {
   rating: number;
   segment: string;
   faturamento: string;
+  uf: string;
   urgency: string;
   notes: string;
   responsible_id: string | null;
@@ -199,6 +201,7 @@ export function LeadModal({
     rating: lead?.rating || 5,
     segment: lead?.segment || "",
     faturamento: lead?.faturamento || "",
+    uf: lead?.uf || "",
     urgency: lead?.urgency || "",
     notes: lead?.notes || "",
     responsible_id: lead?.responsible_id || defaultResponsibleId || "",
@@ -325,10 +328,14 @@ export function LeadModal({
     }
 
     try {
+      const ufChanged = formData.uf !== (lead?.uf || "");
       const payload = {
         ...formData,
         origin: formData.origin as any,
         faturamento: formData.faturamento || null,
+        uf: formData.uf || null,
+        // resposta explícita vence DDD e nunca é sobrescrita por ele
+        uf_source: formData.uf ? (ufChanged ? "manual" : lead?.uf_source ?? "manual") : null,
         responsible_id: formData.responsible_id || null,
         organization_id: currentTeamMember.organization_id,
       };
@@ -343,6 +350,7 @@ export function LeadModal({
         if (formData.email !== (lead.email || "")) changes.push("email");
         if (formData.phone !== (lead.phone || "")) changes.push("telefone");
         if (formData.segment !== (lead.segment || "")) changes.push("segmento");
+        if (formData.uf !== (lead.uf || "")) changes.push("estado");
         if (formData.notes !== (lead.notes || "")) changes.push("observacoes");
         if (formData.responsible_id !== (lead.responsible_id || null)) changes.push("Responsavel");
         if (changes.length > 0) {
@@ -447,6 +455,7 @@ export function LeadModal({
         rating: lead?.rating || 5,
         segment: lead?.segment || "",
         faturamento: lead?.faturamento || "",
+        uf: lead?.uf || "",
         urgency: lead?.urgency || "",
         notes: lead?.notes || "",
         responsible_id: lead?.responsible_id || defaultResponsibleId || "",
@@ -695,6 +704,23 @@ export function LeadModal({
                           onChange={(e) => setFormData({ ...formData, faturamento: e.target.value })}
                           placeholder="Ex: R$ 100.000, Acima de 1M..."
                         />
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="uf" className="text-xs">Estado</Label>
+                        <Select
+                          value={formData.uf || "none"}
+                          onValueChange={(v) => setFormData({ ...formData, uf: v === "none" ? "" : v })}
+                        >
+                          <SelectTrigger id="uf">
+                            <SelectValue placeholder="Selecione o estado" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-64">
+                            <SelectItem value="none">Não informado</SelectItem>
+                            {BR_UFS.map((u) => (
+                              <SelectItem key={u.code} value={u.code}>{u.code} — {u.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="grid gap-1.5">
                         <Label htmlFor="urgency" className="text-xs">Urgencia</Label>

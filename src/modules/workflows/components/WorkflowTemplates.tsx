@@ -15,9 +15,10 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreateWorkflow } from "@/modules/workflows/hooks/useWorkflows";
+import { FUNIL_A_TEMPLATES, FUNIL_B_TEMPLATES } from "@/modules/workflows/lib/funnelTemplates";
 import { toast } from "sonner";
 
-interface WorkflowTemplate {
+export interface WorkflowTemplate {
   id: string;
   name: string;
   description: string | null;
@@ -34,6 +35,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   follow_up: "Follow-up",
   post_sale: "Pos-venda",
   qualification: "Qualificacao",
+  funil_a: "Funil A",
+  funil_b: "Funil B",
 };
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
@@ -42,6 +45,8 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
   follow_up: Clock,
   post_sale: Star,
   qualification: TrendingUp,
+  funil_a: GitBranch,
+  funil_b: GitBranch,
 };
 
 /**
@@ -204,6 +209,57 @@ export function WorkflowTemplates() {
     }
   }
 
+  const matchesSearch = (t: WorkflowTemplate) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      t.name.toLowerCase().includes(q) ||
+      t.description?.toLowerCase().includes(q) ||
+      t.tags?.some((tag) => tag.toLowerCase().includes(q)) ||
+      false
+    );
+  };
+
+  const renderCard = (tpl: WorkflowTemplate) => {
+    const CatIcon = CATEGORY_ICONS[tpl.category] ?? Zap;
+    return (
+      <Card
+        key={tpl.id}
+        className="hover:shadow-md transition-shadow cursor-pointer group"
+        onClick={() => setSelected(tpl)}
+      >
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-md bg-primary/10 text-primary">
+              <CatIcon className="h-4 w-4" />
+            </div>
+            <CardTitle className="text-sm">{tpl.name}</CardTitle>
+          </div>
+          {tpl.description && (
+            <CardDescription className="text-xs line-clamp-2">
+              {tpl.description}
+            </CardDescription>
+          )}
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="flex flex-wrap gap-1.5">
+            {(tpl.tags ?? []).slice(0, 3).map((tag) => (
+              <Badge key={tag} variant="secondary" className="text-[10px]">
+                {tag}
+              </Badge>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // Seções de templates por funil — base de sistema, sempre visível (toda org).
+  const funnelSections = [
+    { key: "funil_a", label: "Funil A", items: FUNIL_A_TEMPLATES.filter(matchesSearch) },
+    { key: "funil_b", label: "Funil B", items: FUNIL_B_TEMPLATES.filter(matchesSearch) },
+  ];
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -253,43 +309,26 @@ export function WorkflowTemplates() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filtered.map((tpl) => {
-                const CatIcon = CATEGORY_ICONS[tpl.category] ?? Zap;
-                return (
-                  <Card
-                    key={tpl.id}
-                    className="hover:shadow-md transition-shadow cursor-pointer group"
-                    onClick={() => setSelected(tpl)}
-                  >
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="p-1.5 rounded-md bg-primary/10 text-primary">
-                          <CatIcon className="h-4 w-4" />
-                        </div>
-                        <CardTitle className="text-sm">{tpl.name}</CardTitle>
-                      </div>
-                      {tpl.description && (
-                        <CardDescription className="text-xs line-clamp-2">
-                          {tpl.description}
-                        </CardDescription>
-                      )}
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="flex flex-wrap gap-1.5">
-                        {(tpl.tags ?? []).slice(0, 3).map((tag) => (
-                          <Badge key={tag} variant="secondary" className="text-[10px]">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+              {filtered.map(renderCard)}
             </div>
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Seções por funil — templates-base de sistema, abaixo dos templates gerais */}
+      {funnelSections.map((section) =>
+        section.items.length === 0 ? null : (
+          <div key={section.key} className="space-y-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-primary" />
+              {section.label} ({section.items.length})
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {section.items.map(renderCard)}
+            </div>
+          </div>
+        ),
+      )}
 
       {/* Preview + Use dialog */}
       <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>

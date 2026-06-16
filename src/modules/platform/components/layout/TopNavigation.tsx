@@ -142,7 +142,6 @@ const primaryNavItems: NavItemWithChildren[] = [
 const moreNavItems: NavItemWithChildren[] = [
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Combustível", icon: Fuel, path: "/leads" },
-  { label: "Negócios", icon: Briefcase, path: "/negocios" },
   { label: "Disparos", icon: Send, path: "/disparos" },
   { label: "Checklists", icon: ListChecks, path: "/checklists" },
   { label: "Templates", icon: FileText, path: "/templates" },
@@ -160,7 +159,6 @@ const allNavItems: NavItemWithChildren[] = [
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
   { label: "Carteira", icon: Wallet, path: "/upsell" },
   { label: "Combustível", icon: Fuel, path: "/leads" },
-  { label: "Negócios", icon: Briefcase, path: "/negocios" },
   { label: "Ranking", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
@@ -680,12 +678,12 @@ export function TopNavigation() {
       <header className="topnav-header" data-topnav>
         {/* ── Left: Logo ── */}
         <NavLink to="/dashboard" className="flex items-center flex-shrink-0" title="Central de Comando">
-          <img src={torqueIcon} alt="Torque" className="h-7 w-7 object-contain xl:hidden" />
-          <img src={isDark ? torqueLogo : torqueLogoDark} alt="Torque CRM" className="h-7 object-contain object-left hidden xl:block" style={{ width: 110 }} />
+          <img src={torqueIcon} alt="Torque" className="h-7 w-7 object-contain lg:hidden" />
+          <img src={isDark ? torqueLogo : torqueLogoDark} alt="Torque CRM" className="h-7 object-contain object-left hidden lg:block" style={{ width: 110 }} />
         </NavLink>
 
         {/* ── Center: Desktop Navigation (text-only, Clint-style) ── */}
-        <nav className="hidden xl:flex items-center gap-1 ml-10">
+        <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1 ml-4 xl:ml-10">
           {visiblePrimary.map(renderDesktopNavItem)}
 
           {/* "Mais" overflow menu */}
@@ -835,7 +833,7 @@ export function TopNavigation() {
           {/* Mobile hamburger */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="xl:hidden h-9 w-9">
+              <Button variant="ghost" size="icon" className="lg:hidden h-9 w-9">
                 <Menu className="w-5 h-5" />
               </Button>
             </SheetTrigger>

@@ -1,0 +1,180 @@
+/**
+ * Behaviour tests for useDeletePipelineStage migration guard + usePipelineStageLeadCounts.
+ *
+ * Root cause of "ghost stages": deleting a stage that still has leads left those
+ * leads in a stage_key the Kanban no longer renders. The hook now migrates leads
+ * to a chosen active stage BEFORE deactivating, and refuses to delete a non-empty
+ * stage without a destination.
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React from "react";
+
+// Per-test scenario knobs + recorded calls.
+const scenario: { entryCount: number; pipelineId: string | null } = {
+  entryCount: 0,
+  pipelineId: "pipe-1",
+};
+const recorded: { table: string; op: string; payload?: unknown; filters: Record<string, unknown> }[] = [];
+
+function makeChain(table: string) {
+  const filters: Record<string, unknown> = {};
+  let countMode = false;
+  let op = "select";
+  let updatePayload: unknown;
+
+  const chain: Record<string, any> = {};
+  chain.select = (_cols?: unknown, opts?: { head?: boolean; count?: string }) => {
+    if (opts?.head) countMode = true;
+    return chain;
+  };
+  chain.update = (payload: unknown) => {
+    op = "update";
+    updatePayload = payload;
+    return chain;
+  };
+  chain.eq = (col: string, val: unknown) => {
+    filters[col] = val;
+    return chain;
+  };
+  chain.maybeSingle = () => {
+    recorded.push({ table, op: "maybeSingle", filters });
+    if (table === "pipelines") {
+      return Promise.resolve({
+        data: scenario.pipelineId ? { id: scenario.pipelineId } : null,
+        error: null,
+      });
+    }
+    return Promise.resolve({ data: null, error: null });
+  };
+  chain.then = (resolve: (v: unknown) => unknown, reject?: any) => {
+    recorded.push({ table, op, payload: updatePayload, filters });
+    let result: unknown;
+    if (op === "update") {
+      result = { error: null };
+    } else if (countMode) {
+      result = { count: scenario.entryCount, error: null };
+    } else {
+      result = { data: [], error: null };
+    }
+    return Promise.resolve(result).then(resolve, reject);
+  };
+  return chain;
+}
+
+const mockFrom = vi.fn((table: string) => makeChain(table));
+
+vi.mock("@/integrations/supabase/client", () => ({
+  supabase: {
+    from: (...args: any[]) => mockFrom(args[0] as string),
+    channel: vi.fn().mockReturnValue({ on: vi.fn().mockReturnThis(), subscribe: vi.fn() }),
+    removeChannel: vi.fn(),
+    rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
+  },
+}));
+vi.mock("@/modules/identity", () => ({
+  useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-1" } }),
+}));
+vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+
+import {
+  useDeletePipelineStage,
+  usePipelineStageLeadCounts,
+} from "@/modules/pipelines/hooks/model/usePipelineStages";
+
+function createWrapper() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: qc }, children);
+}
+
+beforeEach(() => {
+  recorded.length = 0;
+  scenario.entryCount = 0;
+  scenario.pipelineId = "pipe-1";
+  mockFrom.mockClear();
+});
+
+describe("useDeletePipelineStage — migration guard", () => {
+  it("empty stage: deactivates without migrating", async () => {
+    scenario.entryCount = 0;
+    const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
+
+    await result.current.mutateAsync({ id: "s1", pipeline_type: "whatsapp", stageKey: "novo" });
+
+    const updates = recorded.filter((r) => r.op === "update");
+    // Only the pipeline_stages deactivation — no pipeline_entries migration.
+    expect(updates.some((r) => r.table === "pipeline_stages")).toBe(true);
+    expect(updates.some((r) => r.table === "pipeline_entries")).toBe(false);
+  });
+
+  it("non-empty stage without destination: throws and does NOT deactivate", async () => {
+    scenario.entryCount = 7;
+    const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
+
+    await expect(
+      result.current.mutateAsync({ id: "s1", pipeline_type: "whatsapp", stageKey: "novo" }),
+    ).rejects.toThrow(/7 lead/);
+
+    const updates = recorded.filter((r) => r.op === "update");
+    expect(updates.length).toBe(0); // nothing migrated, nothing deactivated
+  });
+
+  it("non-empty stage with destination: migrates leads then deactivates", async () => {
+    scenario.entryCount = 7;
+    const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
+
+    await result.current.mutateAsync({
+      id: "s1",
+      pipeline_type: "whatsapp",
+      stageKey: "novo",
+      migrateToStageKey: "novo_lead",
+    });
+
+    const migrate = recorded.find((r) => r.op === "update" && r.table === "pipeline_entries");
+    expect(migrate).toBeTruthy();
+    expect((migrate!.payload as { stage_key: string }).stage_key).toBe("novo_lead");
+    expect(migrate!.filters.stage_key).toBe("novo"); // moved FROM the deleted stage
+    expect(migrate!.filters.pipeline_id).toBe("pipe-1");
+
+    expect(recorded.some((r) => r.op === "update" && r.table === "pipeline_stages")).toBe(true);
+  });
+
+  it("destination equal to deleted stage: throws", async () => {
+    scenario.entryCount = 3;
+    const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
+
+    await expect(
+      result.current.mutateAsync({
+        id: "s1",
+        pipeline_type: "whatsapp",
+        stageKey: "novo",
+        migrateToStageKey: "novo",
+      }),
+    ).rejects.toThrow(/diferente/);
+  });
+});
+
+describe("usePipelineStageLeadCounts", () => {
+  it("tallies leads per stage_key", async () => {
+    // Override the entries select to return rows for this test.
+    mockFrom.mockImplementation((table: string) => {
+      const chain: Record<string, any> = {};
+      ["select", "eq"].forEach((m) => (chain[m] = () => chain));
+      chain.maybeSingle = () => Promise.resolve({ data: { id: "pipe-1" }, error: null });
+      chain.then = (resolve: (v: unknown) => unknown) =>
+        Promise.resolve(
+          table === "pipeline_entries"
+            ? { data: [{ stage_key: "novo" }, { stage_key: "novo" }, { stage_key: "abordado" }], error: null }
+            : { data: [], error: null },
+        ).then(resolve);
+      return chain;
+    });
+
+    const { result } = renderHook(() => usePipelineStageLeadCounts("whatsapp"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toEqual({ novo: 2, abordado: 1 });
+  });
+});

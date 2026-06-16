@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useOrganization } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface FunnelStage {
@@ -86,25 +87,32 @@ export function useRevenueAttribution(startDate?: string, endDate?: string) {
 }
 
 export function useSalesCycleAnalysis(pipelineType?: string, startDate?: string, endDate?: string) {
+  const { organizationId } = useOrganization();
   return useQuery<SalesCycleStage[]>({
-    queryKey: ["sales-cycle", pipelineType, startDate, endDate],
+    queryKey: ["sales-cycle", organizationId, pipelineType, startDate, endDate],
     queryFn: async () => {
       const { data, error } = await (supabase.rpc as any)("get_sales_cycle_analysis", {
-        p_pipeline_type: pipelineType ?? "propostas",
+        p_org_id: organizationId,
+        // null = todas as transições (jornada cross-pipe); consumidores que
+        // querem um pipe específico passam o nome explícito
+        p_pipeline_type: pipelineType ?? null,
         p_start_date: startDate ?? null,
         p_end_date: endDate ?? null,
       });
       if (error) throw error;
       return (data ?? []) as SalesCycleStage[];
     },
+    enabled: !!organizationId,
   });
 }
 
 export function useWinLossAnalysis(startDate?: string, endDate?: string) {
+  const { organizationId } = useOrganization();
   return useQuery<WinLossItem[]>({
-    queryKey: ["win-loss", startDate, endDate],
+    queryKey: ["win-loss", organizationId, startDate, endDate],
     queryFn: async () => {
       const { data, error } = await (supabase.rpc as any)("get_win_loss_analysis", {
+        p_org_id: organizationId,
         p_start_date: startDate ?? null,
         p_end_date: endDate ?? null,
       });

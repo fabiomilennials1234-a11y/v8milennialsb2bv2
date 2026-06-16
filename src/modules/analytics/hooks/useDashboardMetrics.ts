@@ -4,6 +4,7 @@ import { useIdentity } from "@/modules/identity";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
+import { computeMeetingRates, type MeetingEventLike } from "@/modules/analytics/lib/meeting-rates";
 
 /** Intervalo do mês em UTC — igual ao usado na importação (metrics_period_at = 1º do mês 00:00 UTC). */
 function getMonthRangeUTC(month: number, year: number) {
@@ -166,11 +167,12 @@ export function useConversionRates(month?: number, year?: number) {
       const salesMembers = teamMembers?.filter((m) => m.metric_type === "sales") || [];
       const meetingsMembers = teamMembers?.filter((m) => m.metric_type === "meetings") || [];
 
-      const [{ data: conf1 }, { data: conf2 }] = await Promise.all([
-        supabase.from("pipe_confirmacao").select("pre_sale_responsible_id, responsible_id, sdr_id, closer_id, status").eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
-        supabase.from("pipe_confirmacao").select("pre_sale_responsible_id, responsible_id, sdr_id, closer_id, status").eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
-      ]);
-      const confirmacaoData = [...(conf1 || []), ...(conf2 || [])];
+      // Reuniões: meeting_events (ADR-0007) — marcadas no mês da marcação,
+      // realizadas no mês da reunião. Atribuição = snapshot do pré-vendas no evento.
+      const { data: meetingEvents } = await supabase
+        .from("meeting_events")
+        .select("id, event_type, pre_sale_responsible_id, booked_event_id, occurred_at, meeting_date")
+        .eq("organization_id", organizationId);
 
       // Propostas: TODOS os leads no pipe (sem filtro de período) para taxa de conversão correta
       const { data: propostasData } = await supabase
@@ -178,23 +180,11 @@ export function useConversionRates(month?: number, year?: number) {
         .select("sale_responsible_id, responsible_id, closer_id, status")
         .eq("organization_id", organizationId);
 
-      // Calculate meetings conversion (reuniões marcadas -> comparecidas)
-      // Crédito de comparecimento é exclusivo do SDR:
-      // COALESCE(pre_sale_responsible_id, sdr_id). NÃO usar responsible_id —
-      // em muitas orgs ele guarda o closer e creditaria o time errado.
-      const meetingsRates: ConversionRate[] = meetingsMembers.map((member) => {
-        const total = confirmacaoData?.filter((c) => ((c as any).pre_sale_responsible_id || c.sdr_id) === member.id).length || 0;
-        const comparecidas = confirmacaoData?.filter(
-          (c) => ((c as any).pre_sale_responsible_id || c.sdr_id) === member.id && c.status === "compareceu"
-        ).length || 0;
-        return {
-          id: member.id,
-          name: member.name,
-          meetings: total,
-          sales: comparecidas,
-          rate: total > 0 ? (comparecidas / total) * 100 : 0,
-        };
-      });
+      const meetingsRates: ConversionRate[] = computeMeetingRates(
+        (meetingEvents ?? []) as MeetingEventLike[],
+        meetingsMembers,
+        { start: startStr, end: endStr },
+      );
 
       // Calculate sales conversion: TODOS no pipe X vendido
       const salesRates: ConversionRate[] = salesMembers.map((member) => {
@@ -323,8 +313,15 @@ export function useRankingData(month?: number, year?: number) {
           name: string | null;
           job_title: string | null;
           metric_type: string;
+          /** Placeholder na RPC (sempre 0) — usar `meetings`/`meetingsBooked`. */
           value: number;
+          /** Reuniões realizadas (meeting_held, ADR-0007). */
           meetings: number;
+          /** Reuniões marcadas (meeting_booked, ADR-0007). */
+          meetingsBooked?: number;
+          /** Meta de marcadas (goals type reunioes_marcadas). */
+          goalBooked?: number;
+          goalBookedProgress?: number;
           goal: number;
           goalProgress: number;
           position: number;

@@ -5,6 +5,7 @@ import {
   Controls,
   Background,
   BackgroundVariant,
+  SelectionMode,
   useNodesState,
   useEdgesState,
   addEdge,
@@ -58,6 +59,8 @@ interface WorkflowCanvasProps {
   setEdges: ReturnType<typeof useEdgesState>[1];
   onNodeClick: (nodeId: string) => void;
   onPaneClick: () => void;
+  /** Captura um snapshot do estado atual ANTES de uma mudança (para undo/redo). */
+  onTakeSnapshot?: () => void;
 }
 
 export function WorkflowCanvas({
@@ -68,9 +71,11 @@ export function WorkflowCanvas({
   setEdges,
   onNodeClick,
   onPaneClick,
+  onTakeSnapshot,
 }: WorkflowCanvasProps) {
   const onConnect = useCallback(
     (params: Connection) => {
+      onTakeSnapshot?.();
       setEdges((eds) =>
         addEdge(
           {
@@ -82,14 +87,32 @@ export function WorkflowCanvas({
         )
       );
     },
-    [setEdges]
+    [setEdges, onTakeSnapshot]
   );
+
+  // Snapshot ao começar a arrastar um nó — assim o undo restaura a posição anterior.
+  const handleNodeDragStart = useCallback(() => {
+    onTakeSnapshot?.();
+  }, [onTakeSnapshot]);
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: any) => {
       onNodeClick(node.id);
     },
     [onNodeClick]
+  );
+
+  // Protege o nó Trigger: ele é obrigatório pra salvar, então nunca pode sair
+  // numa exclusão em massa. Filtra-o do conjunto a remover; se a seleção só
+  // tinha o trigger, cancela a exclusão.
+  const onBeforeDelete = useCallback(
+    async ({ nodes: toDelete, edges: edgesToDelete }: { nodes: WorkflowNode[]; edges: WorkflowEdge[] }) => {
+      const deletableNodes = toDelete.filter((n) => n.type !== "trigger");
+      if (toDelete.length > 0 && deletableNodes.length === 0) return false;
+      if (deletableNodes.length > 0 || edgesToDelete.length > 0) onTakeSnapshot?.();
+      return { nodes: deletableNodes, edges: edgesToDelete };
+    },
+    [onTakeSnapshot]
   );
 
   const defaultEdgeOptions = useMemo(
@@ -109,6 +132,7 @@ export function WorkflowCanvas({
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeClick={handleNodeClick}
+        onNodeDragStart={handleNodeDragStart}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
@@ -116,6 +140,16 @@ export function WorkflowCanvas({
         fitView
         fitViewOptions={{ padding: 0.2 }}
         deleteKeyCode={["Backspace", "Delete"]}
+        onBeforeDelete={onBeforeDelete}
+        // Seleção em massa estilo "área de trabalho":
+        // Shift OU Ctrl/Cmd + arrastar = desenha a caixa de seleção (marquee).
+        // Shift OU Ctrl/Cmd + clique = soma/remove um nó da seleção.
+        // Arrastar sem modificador segue movendo o canvas (pan), como antes.
+        // Com a seleção pronta: Delete/Backspace exclui em massa e Ctrl+C/Ctrl+V copia/cola.
+        selectionMode={SelectionMode.Partial}
+        selectionKeyCode={["Shift", "Meta", "Control"]}
+        multiSelectionKeyCode={["Shift", "Meta", "Control"]}
+        selectionOnDrag={false}
         className="bg-background"
       >
         <Background

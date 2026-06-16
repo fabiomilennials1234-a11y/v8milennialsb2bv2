@@ -1,9 +1,14 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useMemo } from "react";
-import { TrendingUp, MapPin, Users, User, CheckCircle2 } from "lucide-react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
-import { FunnelChart } from "@/modules/analytics/components/dashboard/FunnelChart";
-import { ConfirmacaoStats } from "../legacy/confirmacao";
-import { ORIGIN_COLORS, CHART_TOOLTIP_STYLE, humanizeOrigin } from "./analytics-utils";
+import { humanizeOrigin } from "./analytics-utils";
+import {
+  AnalyticsPanel,
+  AnalyticsStatCard,
+  ContinuousFunnel,
+  ConversionHealth,
+  OriginDonut,
+  MemberLeaderboard,
+} from "./analytics-ui";
 
 interface PipeConfirmacaoAnalyticsProps {
   items: any[];
@@ -11,19 +16,33 @@ interface PipeConfirmacaoAnalyticsProps {
 }
 
 export function PipeConfirmacaoAnalytics({ items, responsibleMembers }: PipeConfirmacaoAnalyticsProps) {
-  // Funil de comparecimento — contagens sobre os itens do período
-  const funnelSteps = useMemo(() => {
+  // Contagens do funil de comparecimento sobre os itens do período
+  const counts = useMemo(() => {
     const total = items.length;
     const confirmadas = items.filter(
       (it) => it.is_confirmed === true || it.status === "compareceu"
     ).length;
     const compareceram = items.filter((it) => it.status === "compareceu").length;
-    return [
-      { label: "Reuniões Marcadas", value: total, color: "" },
-      { label: "Confirmadas", value: confirmadas, color: "" },
-      { label: "Compareceram", value: compareceram, color: "" },
-    ];
+    const showRate = total > 0 ? (compareceram / total) * 100 : 0;
+    return { total, confirmadas, compareceram, showRate };
   }, [items]);
+
+  const funnelStages = useMemo(
+    () => [
+      { key: "marcadas", label: "Reuniões Marcadas", count: counts.total },
+      { key: "confirmadas", label: "Confirmadas", count: counts.confirmadas },
+      { key: "compareceram", label: "Compareceram", count: counts.compareceram, tone: "success" as const },
+    ],
+    [counts]
+  );
+
+  const conversions = useMemo(
+    () => [
+      { label: "Confirmação", from: counts.total, to: counts.confirmadas },
+      { label: "Comparecimento", from: counts.confirmadas, to: counts.compareceram },
+    ],
+    [counts]
+  );
 
   // Distribuição por origem
   const originData = useMemo(() => {
@@ -38,7 +57,7 @@ export function PipeConfirmacaoAnalytics({ items, responsibleMembers }: PipeConf
   }, [items]);
 
   // Performance por responsável — reuniões e comparecimentos
-  const responsiblePerf = useMemo(() => {
+  const leaderboard = useMemo(() => {
     return responsibleMembers
       .map((member) => {
         const memberItems = items.filter(
@@ -49,103 +68,74 @@ export function PipeConfirmacaoAnalytics({ items, responsibleMembers }: PipeConf
         );
         const compareceu = memberItems.filter((it) => it.status === "compareceu").length;
         const rate = memberItems.length > 0 ? (compareceu / memberItems.length) * 100 : 0;
-        return { id: member.id, name: member.name, total: memberItems.length, compareceu, rate };
+        return {
+          id: member.id,
+          name: member.name,
+          ratePct: rate,
+          headline: (
+            <>
+              {compareceu}{" "}
+              <span className="text-xs text-muted-foreground font-medium">
+                / {memberItems.length} reuniões
+              </span>
+            </>
+          ),
+          subline: `${rate.toFixed(0)}% de comparecimento`,
+          total: memberItems.length,
+        };
       })
       .sort((a, b) => b.total - a.total);
   }, [items, responsibleMembers]);
 
   return (
     <div className="space-y-6">
-      {/* Informações (cards de stats) */}
-      <ConfirmacaoStats data={items} />
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <AnalyticsStatCard label="Marcadas" value={counts.total} accent="neutral" />
+        <AnalyticsStatCard
+          label="Confirmadas"
+          value={counts.confirmadas}
+          sub={counts.total > 0 ? `${((counts.confirmadas / counts.total) * 100).toFixed(0)}% das marcadas` : undefined}
+          accent="blue"
+          delay={0.05}
+        />
+        <AnalyticsStatCard
+          label="Compareceram"
+          value={counts.compareceram}
+          accent="success"
+          tintValue
+          delay={0.1}
+        />
+        <AnalyticsStatCard
+          label="Show rate"
+          value={`${counts.showRate.toFixed(1)}%`}
+          sub="compareceram / marcadas"
+          accent="gold"
+          tintValue
+          delay={0.15}
+        />
+      </div>
 
       {/* Gráficos */}
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Funil de Comparecimento */}
-        <div className="glass-card p-6">
-          <h3 className="font-semibold mb-6 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-primary" />
-            Funil de Comparecimento
-          </h3>
-          <FunnelChart title="Reuniões" steps={funnelSteps} />
-        </div>
+        <AnalyticsPanel title="Funil de Comparecimento" subtitle="Volume por etapa e perda entre etapas">
+          <ContinuousFunnel stages={funnelStages} unit="reuniões" />
+        </AnalyticsPanel>
 
-        {/* Reuniões por Origem */}
-        <div className="glass-card p-6">
-          <h3 className="font-semibold mb-6 flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-primary" />
-            Reuniões por Origem
-          </h3>
-          {originData.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-              <MapPin className="w-12 h-12 mb-4 opacity-20" />
-              <p>Nenhuma reunião no período</p>
-            </div>
-          ) : (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={originData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={4}
-                    dataKey="value"
-                    label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                    labelLine={false}
-                  >
-                    {originData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={ORIGIN_COLORS[index % ORIGIN_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={CHART_TOOLTIP_STYLE}
-                    formatter={(value: number, name: string) => [`${value} reuniões`, name]}
-                  />
-                  <Legend formatter={(value) => <span className="text-sm">{value}</span>} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </div>
+        <AnalyticsPanel title="Taxa de Conversão" subtitle="Saúde de cada passagem" dot="success">
+          <ConversionHealth items={conversions} />
+        </AnalyticsPanel>
 
-        {/* Performance por Responsável */}
-        <div className="glass-card p-6 md:col-span-2">
-          <h3 className="font-semibold mb-6 flex items-center gap-2">
-            <Users className="w-5 h-5 text-primary" />
-            Performance por Responsável
-          </h3>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {responsiblePerf.map((member) => (
-              <div key={member.id} className="flex items-center justify-between p-3 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <User className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium">{member.name}</p>
-                    <p className="text-xs text-muted-foreground">{member.total} reuniões</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold text-success flex items-center gap-1 justify-end">
-                    <CheckCircle2 className="w-4 h-4" />
-                    {member.compareceu}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{member.rate.toFixed(0)}% comparecimento</p>
-                </div>
-              </div>
-            ))}
+        <AnalyticsPanel title="Reuniões por Origem" subtitle="Distribuição do período" dot="blue">
+          <OriginDonut slices={originData} unit="reuniões" />
+        </AnalyticsPanel>
 
-            {responsiblePerf.length === 0 && (
-              <p className="text-center text-muted-foreground py-4 sm:col-span-2">
-                Nenhum responsável cadastrado
-              </p>
-            )}
-          </div>
-        </div>
+        <AnalyticsPanel
+          title="Performance por Responsável"
+          subtitle="Reuniões trabalhadas e comparecimento"
+        >
+          <MemberLeaderboard rows={leaderboard} />
+        </AnalyticsPanel>
       </div>
     </div>
   );

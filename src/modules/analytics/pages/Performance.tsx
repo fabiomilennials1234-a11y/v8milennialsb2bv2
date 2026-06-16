@@ -61,6 +61,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { resolveMeetingGoals } from "@/modules/engagement/lib/goal-progress";
 import badgeIcon from "@/assets/badge-icon.png";
 
 // ============ CONSTANTS ============
@@ -72,7 +73,8 @@ const months = [
 const goalTypes = [
   { value: "faturamento", label: "Faturamento", icon: "💰" },
   { value: "clientes", label: "Novos Clientes", icon: "👥" },
-  { value: "reunioes", label: "Reuniões", icon: "📅" },
+  { value: "reunioes_marcadas", label: "Reuniões Marcadas", icon: "📅" },
+  { value: "reunioes_realizadas", label: "Reuniões Realizadas", icon: "🤝" },
   { value: "conversao", label: "Taxa de Conversão", icon: "📈" },
   { value: "vendas", label: "Vendas (Individual)", icon: "🎯" },
 ];
@@ -98,6 +100,9 @@ interface RankingUser {
   value: number;
   conversions?: number;
   meetings?: number;
+  meetingsBooked?: number;
+  goalBooked?: number;
+  goalBookedProgress?: number;
   goalProgress: number;
   position: number;
 }
@@ -220,15 +225,25 @@ function RankingCard({ user, showValue = true, avatarUrl }: { user: RankingUser;
           ) : (
             <>
               <p className="text-xl font-bold">{user.meetings || 0}</p>
-              <p className="text-sm text-muted-foreground">reuniões</p>
+              <p className="text-sm text-muted-foreground">
+                realizadas · <span className="font-medium text-foreground">{user.meetingsBooked ?? 0} marcadas</span>
+              </p>
             </>
           )}
         </div>
 
-        <MiniProgressRing 
-          progress={user.goalProgress} 
-          color={user.goalProgress >= 100 ? "success" : "primary"} 
-        />
+        <div className="flex items-center gap-2">
+          <MiniProgressRing
+            progress={user.goalProgress}
+            color={user.goalProgress >= 100 ? "success" : "primary"}
+          />
+          {!showValue && (user.goalBooked ?? 0) > 0 && (
+            <MiniProgressRing
+              progress={user.goalBookedProgress ?? 0}
+              color="warning"
+            />
+          )}
+        </div>
       </div>
     </motion.div>
   );
@@ -931,11 +946,14 @@ export default function Performance() {
   // Goals calculations
   const faturamentoGoal = teamGoals?.find((g) => g.type === "faturamento");
   const clientesGoal = teamGoals?.find((g) => g.type === "clientes");
-  const reunioesGoal = teamGoals?.find((g) => g.type === "reunioes");
-
+  // Metas de reunião: tipos novos (marcadas/realizadas) + legado 'reunioes' = realizadas (ADR-0007)
+  const meetingGoals = resolveMeetingGoals(teamGoals ?? [], {
+    reunioesMarcadas: metrics?.reunioesMarcadas || 0,
+    reunioesComparecidas: metrics?.reunioesComparecidas || 0,
+  });
   const currentFaturamento = metrics?.vendaTotal || 0;
   const currentClientes = metrics?.novosClientes || 0;
-  const currentReunioes = metrics?.reunioesComparecidas || 0;
+  const currentReunioes = meetingGoals.realizadas?.current ?? (metrics?.reunioesComparecidas || 0);
 
   const faturamentoProgress = faturamentoGoal 
     ? (currentFaturamento / faturamentoGoal.target_value) * 100 
@@ -943,9 +961,9 @@ export default function Performance() {
   const clientesProgress = clientesGoal 
     ? (currentClientes / clientesGoal.target_value) * 100 
     : 0;
-  const reunioesProgress = reunioesGoal 
-    ? (currentReunioes / reunioesGoal.target_value) * 100 
-    : 0;
+  const reunioesProgress = meetingGoals.realizadas?.progress ?? 0;
+  const reunioesMarcadasProgress = meetingGoals.marcadas?.progress ?? 0;
+  void reunioesProgress; void reunioesMarcadasProgress; // exibição detalhada: issue #753 fase UI
 
   const expectedFaturamento = faturamentoGoal 
     ? (faturamentoGoal.target_value * expectedProgress) / 100 

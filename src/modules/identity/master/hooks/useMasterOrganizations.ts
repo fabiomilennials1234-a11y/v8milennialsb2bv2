@@ -7,8 +7,84 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+
+/**
+ * Modelos de funil (kanban) para novas organizações.
+ *
+ * Ao criar uma org, o Master pode escolher um modelo. Os kanbans
+ * (linhas de `pipeline_stages` de todos os pipes) são clonados AO VIVO da
+ * organização-base correspondente — sempre refletem a configuração atual da base.
+ *
+ * Requer usuário Master: a policy RLS `master_all_pipeline_stages`
+ * (FOR ALL USING is_master_user()) permite ler/gravar stages de qualquer org.
+ */
+export type FunnelTemplateKey = "funil_a" | "funil_b";
+
+export const FUNNEL_TEMPLATES: Record<
+  FunnelTemplateKey,
+  { label: string; description: string; sourceOrgId: string }
+> = {
+  funil_a: {
+    label: "Funil A",
+    description: "Puxa os kanbans do modelo Funil A",
+    // org-base interna (não exibida na UI): Natu Flores
+    sourceOrgId: "249b55e0-4389-4b32-b6ab-f9f091139fba",
+  },
+  funil_b: {
+    label: "Funil B",
+    description: "Puxa os kanbans do modelo Funil B",
+    // org-base interna (não exibida na UI): Bennedita Pan
+    sourceOrgId: "9d0367c6-2ae8-40cf-9862-a225a5b19026",
+  },
+};
+
+// Colunas seguras para clonar entre orgs. Excluídas de propósito:
+// id / organization_id / created_at / updated_at (gerados) e
+// checklist_template_id / sla_escalate_to (uuid org-specific — apontariam pra
+// registros da org-base; ficam nulos no clone).
+const CLONEABLE_STAGE_COLUMNS =
+  "pipeline_type, stage_key, name, color, position, is_active, is_final_positive, is_final_negative, auto_move_min_days, auto_move_max_days, target_pipe_type, target_stage_key, default_probability, sla_hours, sla_action, max_days_in_stage";
+
+/**
+ * Clona os `pipeline_stages` de uma org-base para a org-alvo.
+ *
+ * O trigger `trigger_create_default_stages` já cria etapas padrão quando a org
+ * é criada — por isso removemos essas antes de inserir as do modelo, evitando
+ * conflito de unique key (organization_id, pipeline_type, stage_key) e mistura
+ * de etapas padrão com as do modelo.
+ */
+async function cloneFunnelStages(sourceOrgId: string, targetOrgId: string) {
+  const read = await supabase
+    .from("pipeline_stages")
+    .select(CLONEABLE_STAGE_COLUMNS)
+    .eq("organization_id", sourceOrgId);
+
+  if (read.error) throw read.error;
+
+  const srcStages = (read.data ?? []) as Record<string, unknown>[];
+  if (srcStages.length === 0) {
+    console.warn("Modelo de funil: org-base sem etapas, clone ignorado:", sourceOrgId);
+    return;
+  }
+
+  // Remove as etapas padrão auto-criadas pelo trigger de criação da org.
+  const del = await supabase
+    .from("pipeline_stages")
+    .delete()
+    .eq("organization_id", targetOrgId);
+  if (del.error) throw del.error;
+
+  // Insere as etapas clonadas, reapontando para a org nova.
+  const rows = srcStages.map((s) => ({
+    ...s,
+    organization_id: targetOrgId,
+  })) as TablesInsert<"pipeline_stages">[];
+
+  const ins = await supabase.from("pipeline_stages").insert(rows);
+  if (ins.error) throw ins.error;
+}
 
 type MasterOrganizationMember = Tables<"team_members"> & {
   user_roles: { role: Tables<"user_roles">["role"] }[];
@@ -139,6 +215,7 @@ export function useMasterCreateOrganization() {
       org_type?: OrgType;
       subscription_plan?: string;
       subscription_status?: string;
+      funnelTemplate?: FunnelTemplateKey | null;
     }) => {
       const orgType = data.org_type || "crm";
 
@@ -175,6 +252,22 @@ export function useMasterCreateOrganization() {
 
         if (badgesError) {
           console.error("Error seeding badges:", badgesError);
+        }
+      }
+
+      // 3. Se um modelo de funil foi escolhido: clona os kanbans da org-base.
+      if (data.funnelTemplate && FUNNEL_TEMPLATES[data.funnelTemplate]) {
+        try {
+          await cloneFunnelStages(
+            FUNNEL_TEMPLATES[data.funnelTemplate].sourceOrgId,
+            org.id,
+          );
+        } catch (cloneError) {
+          console.error("Error cloning funnel template:", cloneError);
+          // Não falha a criação da org — apenas avisa que o modelo não aplicou.
+          toast.error(
+            "Organização criada, mas houve falha ao aplicar o modelo de funil.",
+          );
         }
       }
 

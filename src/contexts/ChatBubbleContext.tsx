@@ -23,7 +23,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useChatBubbleState } from "@/modules/communication/hooks/useChatBubbleState";
@@ -35,6 +35,16 @@ import { usePreferredInstance } from "@/modules/communication/hooks/usePreferred
 import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
 import { normalizePhone } from "@/lib/normalizePhone";
 import type { ChatContact, WhatsAppInstanceForUser } from "@/modules/communication/hooks/chat/types";
+
+/**
+ * Janela do badge de não-lidas. Mensagens recebidas mais antigas que isto não
+ * contam no badge — uma não-lida de meses atrás é ruído, não sinal. Limita a
+ * query a uma fatia recente em vez de varrer todo o histórico de incoming
+ * (antes: SELECT sem LIMIT = full scan por instância × por usuário, ~57% do CPU
+ * do banco). Casa com o índice parcial idx_whatsapp_msgs_org_inst_dir_ts.
+ */
+const UNREAD_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+const UNREAD_BADGE_ROW_CAP = 3000; // teto defensivo por instância
 
 export interface ChatBubbleContextValue {
   // estado
@@ -111,6 +121,19 @@ function writeLastSeen(phone: string): void {
   } catch {
     /* falha silenciosa */
   }
+}
+
+// V3 Fase 2: persiste read-state no servidor (conversation_read_state) ao ler
+// uma conversa. Fire-and-forget; localStorage continua sendo o fallback.
+function markReadServer(instanceId: string | null, phone: string): void {
+  if (!instanceId) return;
+  const norm = normalizePhone(phone);
+  if (!norm) return;
+  void supabase
+    .rpc("mark_conversation_read", { p_instance_id: instanceId, p_normalized_phone: norm } as never)
+    .then(undefined, () => {
+      /* tabela/perm indisponível — localStorage cobre */
+    });
 }
 
 interface ChatBubbleProviderProps {
@@ -196,77 +219,115 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
     }
   }, [deepLink.data, deepLink.isLoading, deepLink.isFetching, pendingPhoneToResolve]);
 
-  // ── Unread total: soma unread_count de cada instância permitida ────────────
+  // ── Unread total (V3 Fase 2): server-side via get_unread_total (DEFAULT ON) ──
+  // Escape hatch: localStorage v3_server_unread='0' volta ao cálculo via localStorage.
+  // (instanceIds já declarado acima — reutiliza.)
+  const useServerUnread =
+    typeof localStorage === "undefined" || localStorage.getItem("v3_server_unread") !== "0";
+
+  // Seed 1x por device: migra last-seen do localStorage → conversation_read_state
+  // (mapeando phone→instance via tabela-resumo no servidor). Evita o badge "explodir"
+  // no corte, pois read_state passa a refletir o que o device já tinha como lido.
+  useEffect(() => {
+    if (!organizationId || typeof localStorage === "undefined") return;
+    if (localStorage.getItem("v3_read_state_seeded") === "1") return;
+    const seen = new Map<string, number>();
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      let phone: string | null = null;
+      if (k.startsWith(LAST_SEEN_KEY_PREFIX)) phone = k.slice(LAST_SEEN_KEY_PREFIX.length);
+      else if (k.startsWith("chat-last-read:")) phone = k.slice(k.lastIndexOf(":") + 1);
+      if (!phone) continue;
+      const t = new Date(localStorage.getItem(k) || "").getTime();
+      if (t > 0) seen.set(phone, Math.max(seen.get(phone) ?? 0, t));
+    }
+    const entries = Array.from(seen, ([phone, t]) => ({ phone, t }));
+    if (entries.length === 0) {
+      localStorage.setItem("v3_read_state_seeded", "1");
+      return;
+    }
+    void supabase
+      .rpc("seed_conversation_read_state", { p_entries: entries } as never)
+      .then(
+        () => localStorage.setItem("v3_read_state_seeded", "1"),
+        () => {/* retry no próximo mount */ }
+      );
+  }, [organizationId]);
+
+  // Badge server-side: 1 RPC pra todas as instâncias permitidas.
+  const serverUnreadQuery = useQuery({
+    queryKey: ["unread-total-server", organizationId, instanceIds],
+    queryFn: async (): Promise<number> => {
+      if (!organizationId || instanceIds.length === 0) return 0;
+      const { data, error } = await supabase.rpc("get_unread_total", {
+        p_instance_ids: instanceIds,
+      } as never);
+      if (error) throw error;
+      return (data as number) ?? 0;
+    },
+    enabled: useServerUnread && !!organizationId && instanceIds.length > 0,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
+  // Fallback localStorage (só quando flag desligada): caminho antigo intocado.
   const contactsQueries = useQueries({
-    queries: instances.map((inst) => ({
-      queryKey: chatQueryKeys.unreadBadge(organizationId, inst.id),
-      queryFn: async (): Promise<ChatContact[]> => {
-        if (!organizationId) return [];
-        // Query leve apenas das colunas necessárias para badge de unread.
-        // Cache separado (unreadBadge) para não poluir contacts com stubs
-        // sem content — evita "Sem mensagens" no /chat.
-        const { data, error } = await supabase
-          .from("whatsapp_messages")
-          .select("phone_number, direction, timestamp")
-          .eq("organization_id", organizationId)
-          .eq("instance_id", inst.id)
-          .eq("direction", "incoming")
-          .order("timestamp", { ascending: false });
-        if (error) throw error;
-
-        // Compõe ChatContact mínimo apenas pra calcular unread (sem enriquecimento).
-        // useWhatsAppContacts montado pela UI da lista substitui esse cache com dados completos.
-        if (typeof localStorage === "undefined") return [];
-        const lastSeenMap: Record<string, string> = {};
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (k?.startsWith(LAST_SEEN_KEY_PREFIX)) {
-            const p = k.slice(LAST_SEEN_KEY_PREFIX.length);
-            lastSeenMap[p] = localStorage.getItem(k) || "";
-          }
-        }
-
-        const unreadByPhone: Record<string, number> = {};
-        for (const m of data || []) {
-          const norm = normalizePhone(m.phone_number) ?? "";
-          if (!norm) continue;
-          const lastSeen = lastSeenMap[norm] ? new Date(lastSeenMap[norm]).getTime() : 0;
-          if (new Date(m.timestamp).getTime() > lastSeen) {
-            unreadByPhone[norm] = (unreadByPhone[norm] ?? 0) + 1;
-          }
-        }
-
-        // Stub mínimo de ChatContact apenas para somatório do badge.
-        return Object.entries(unreadByPhone).map(([phone, unread]) => ({
-          phone_number: phone,
-          push_name: null,
-          last_message: null,
-          last_message_time: new Date().toISOString(),
-          last_message_direction: null,
-          unread_count: unread,
-          lead_id: null,
-          lead_name: null,
-          conversation_id: null,
-          archived_at: null,
-          tags: [],
-        })) as ChatContact[];
-      },
-      enabled: !!organizationId && !!inst.id,
-      staleTime: 5 * 60_000,
-    })),
+    queries: useServerUnread
+      ? []
+      : instances.map((inst) => ({
+          queryKey: chatQueryKeys.unreadBadge(organizationId, inst.id),
+          queryFn: async (): Promise<ChatContact[]> => {
+            if (!organizationId) return [];
+            const sinceIso = new Date(Date.now() - UNREAD_LOOKBACK_MS).toISOString();
+            const { data, error } = await supabase
+              .from("whatsapp_messages")
+              .select("phone_number, timestamp")
+              .eq("organization_id", organizationId)
+              .eq("instance_id", inst.id)
+              .eq("direction", "incoming")
+              .gte("timestamp", sinceIso)
+              .order("timestamp", { ascending: false })
+              .limit(UNREAD_BADGE_ROW_CAP);
+            if (error) throw error;
+            if (typeof localStorage === "undefined") return [];
+            const lastSeenMap: Record<string, string> = {};
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (k?.startsWith(LAST_SEEN_KEY_PREFIX)) {
+                const p = k.slice(LAST_SEEN_KEY_PREFIX.length);
+                lastSeenMap[p] = localStorage.getItem(k) || "";
+              }
+            }
+            const unreadByPhone: Record<string, number> = {};
+            for (const m of data || []) {
+              const norm = normalizePhone(m.phone_number) ?? "";
+              if (!norm) continue;
+              const lastSeen = lastSeenMap[norm] ? new Date(lastSeenMap[norm]).getTime() : 0;
+              if (new Date(m.timestamp).getTime() > lastSeen) {
+                unreadByPhone[norm] = (unreadByPhone[norm] ?? 0) + 1;
+              }
+            }
+            return Object.entries(unreadByPhone).map(([phone, unread]) => ({
+              phone_number: phone, push_name: null, last_message: null,
+              last_message_time: new Date().toISOString(), last_message_direction: null,
+              unread_count: unread, lead_id: null, lead_name: null, conversation_id: null,
+              archived_at: null, tags: [],
+            })) as ChatContact[];
+          },
+          enabled: !!organizationId && !!inst.id,
+          staleTime: 5 * 60_000,
+        })),
   });
 
   const unreadTotal = useMemo(() => {
+    if (useServerUnread) return serverUnreadQuery.data ?? 0;
     let total = 0;
     for (const q of contactsQueries) {
-      const data = q.data;
-      if (!data) continue;
-      for (const c of data) {
-        total += c.unread_count ?? 0;
-      }
+      for (const c of q.data ?? []) total += c.unread_count ?? 0;
     }
     return total;
-  }, [contactsQueries]);
+  }, [useServerUnread, serverUnreadQuery.data, contactsQueries]);
 
   // ── Auto-minimize quando drawer Lead (ou outro Radix Dialog) abre ─────────
   // Drawer do shadcn/Radix renderiza com [role="dialog"][data-state="open"].
@@ -365,6 +426,7 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
     setPendingLeadName(null);
     setNeedsPhoneHint(false);
     writeLastSeen(phone);
+    markReadServer(instanceId, phone);
   }, []);
 
   const backToList = useCallback(() => {
@@ -378,8 +440,9 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
     setNeedsPhoneHint(false);
   }, []);
 
-  const markAsRead = useCallback((phone: string, _instanceId: string) => {
+  const markAsRead = useCallback((phone: string, instanceId: string) => {
     writeLastSeen(phone);
+    markReadServer(instanceId, phone);
   }, []);
 
   const setListInstanceFilter = useCallback((next: string | "all") => {

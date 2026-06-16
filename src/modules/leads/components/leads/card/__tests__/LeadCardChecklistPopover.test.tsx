@@ -68,6 +68,21 @@ describe("LeadCardChecklistPopover", () => {
     expect(screen.getByText("Validar empresa")).toBeInTheDocument();
   });
 
+  it("does not bubble the click to a parent handler (card root opens modal)", () => {
+    const parentClick = vi.fn();
+    renderWithClient(
+      <div onClick={parentClick}>
+        <LeadCardChecklistPopover leadId="lead-1" completed={1} total={2} />
+      </div>,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /Checklists: 1 de 2/ }),
+    );
+    // Popover opens (badge interactive) mas o click NÃO sobe pro root → modal não abre.
+    expect(screen.getByText("Confirmar telefone")).toBeInTheDocument();
+    expect(parentClick).not.toHaveBeenCalled();
+  });
+
   it("calls the toggle mutation when an item checkbox is clicked", () => {
     renderWithClient(
       <LeadCardChecklistPopover leadId="lead-1" completed={1} total={2} />,

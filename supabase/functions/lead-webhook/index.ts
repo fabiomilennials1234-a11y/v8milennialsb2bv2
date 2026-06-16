@@ -121,6 +121,9 @@ const STANDARD_FIELD_ALIASES: Record<string, string> = {
   // segment
   "segmento": "segment",
   "setor": "segment",
+  // uf (Estado)
+  "estado": "uf",
+  "uf": "uf",
   // faturamento
   "faturamento mensal": "faturamento",
   "receita": "faturamento",
@@ -138,7 +141,7 @@ const STANDARD_FIELD_ALIASES: Record<string, string> = {
 };
 
 const STANDARD_FIELD_NAMES = new Set([
-  "name", "phone", "email", "company", "notes", "segment", "faturamento", "urgency", "rating",
+  "name", "phone", "email", "company", "notes", "segment", "faturamento", "uf", "urgency", "rating",
   "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
 ]);
 
@@ -326,6 +329,7 @@ serve(withSentry('lead-webhook', async (req) => {
       notes: fieldsNotes,
       segment,
       faturamento,
+      uf: rawUf,
       urgency,
       rating,
       utm_source: fieldsUtmSource,
@@ -473,6 +477,14 @@ serve(withSentry('lead-webhook', async (req) => {
 
       if (createError) {
         console.error("[lead-webhook] Failed to create lead:", createError);
+        if (createError.code === "23505") {
+          return errorResponse(
+            409,
+            "Lead já existe com este telefone nesta organização. Envie update_existing_if_match=true (Make: 'Atualizar lead existente?' = Sim) para atualizar o lead existente.",
+            corsHeaders,
+            { req, details: createError.message },
+          );
+        }
         return errorResponse(500, "Failed to create lead", corsHeaders, { req, details: createError.message });
       }
 
@@ -523,6 +535,17 @@ serve(withSentry('lead-webhook', async (req) => {
       updateData.notes = `Fonte: ${payload.source}`;
     }
     if (segment !== undefined) updateData.segment = segment || null;
+    // UF: valida 27 estados; resposta explícita vence o DDD derivado
+    const VALID_UFS = new Set(["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SE","SP","TO"]);
+    if (rawUf !== undefined && typeof rawUf === "string") {
+      const normUf = rawUf.trim().toUpperCase();
+      if (VALID_UFS.has(normUf)) {
+        updateData.uf = normUf;
+        updateData.uf_source = "webhook";
+      } else if (normUf) {
+        console.warn("[lead-webhook] UF inválida ignorada:", rawUf);
+      }
+    }
     if (faturamento !== undefined) updateData.faturamento = faturamento || null;
     if (urgency !== undefined) updateData.urgency = urgency || null;
     if (rating !== undefined && rating !== "") {
@@ -723,16 +746,64 @@ serve(withSentry('lead-webhook', async (req) => {
       const metadata: Record<string, unknown> = {};
       if (meeting_date) metadata.meeting_date = meeting_date;
 
+      // Aceita stage_key exato ou nome da etapa (case-insensitive) — Make/n8n enviam rótulos como "Novo".
+      // Normaliza whitespace (colapsa espaços repetidos + trim) pra resiliência: rótulos com emoji
+      // costumam ter espaço duplo ("📥  Novo Lead") que diverge do que o caller digita ("📥 Novo Lead").
+      const normalizeLabel = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+      let resolvedStageKey = stageVal;
+      const { data: orgStages } = await supabase
+        .from("pipeline_stages")
+        .select("stage_key, name")
+        .eq("organization_id", organizationId)
+        .eq("pipeline_type", pipeSlug)
+        .eq("is_active", true);
+      if (orgStages && orgStages.length > 0) {
+        const requested = normalizeLabel(stageVal);
+        const match =
+          orgStages.find((s) => s.stage_key.toLowerCase() === requested) ||
+          orgStages.find((s) => s.name && normalizeLabel(s.name) === requested);
+        if (match) {
+          resolvedStageKey = match.stage_key;
+        } else {
+          // Stage não resolveu: grava o literal cru e o lead some do kanban (coluna é keyed por
+          // stage_key). Loga warn pra não falhar mudo — caller deve mandar stage_key, não rótulo.
+          console.warn(
+            `[lead-webhook] stage não resolvido em ${pipeSlug}: "${stageVal}" não casa stage_key nem nome de etapa ativa (org ${organizationId}). Gravando literal — lead pode não aparecer no funil.`,
+          );
+        }
+      }
+
       const existingEntry = await getPipeEntry(supabase, leadId, organizationId, pipeSlug);
       if (existingEntry) {
-        // Ingestão externa (n8n/Meta Ads) não pode regredir um lead que já está em movimento no funil.
-        // Atualiza só metadata; preserva stage_key atual.
-        if (Object.keys(metadata).length > 0) {
-          await updatePipeEntryById(supabase, existingEntry.id, { metadata });
+        // Reingestão externa (Make/n8n/Meta Ads) move o lead para o stage pedido — lead que
+        // reconverte volta a aparecer na coluna solicitada. Registra reconversão na timeline.
+        const stageChanged = existingEntry.stage_key !== resolvedStageKey;
+        const entryUpdates: { stageKey?: string; metadata?: Record<string, unknown> } = {};
+        if (stageChanged) entryUpdates.stageKey = resolvedStageKey;
+        if (Object.keys(metadata).length > 0) entryUpdates.metadata = metadata;
+        if (Object.keys(entryUpdates).length > 0) {
+          await updatePipeEntryById(supabase, existingEntry.id, entryUpdates);
         }
-        if (existingEntry.stage_key !== stageVal) {
+        if (stageChanged) {
+          const { error: historyErr } = await supabase.from("lead_history").insert({
+            lead_id: leadId,
+            organization_id: organizationId,
+            action: "stage_changed",
+            description: `Lead reconverteu via webhook (${origin}): movido de "${existingEntry.stage_key}" para "${resolvedStageKey}" no funil ${pipeSlug}.`,
+            created_by: null,
+            source: "system",
+            metadata: {
+              pipe: pipeSlug,
+              from_stage: existingEntry.stage_key,
+              to_stage: resolvedStageKey,
+              reconversion: true,
+            },
+          });
+          if (historyErr) {
+            console.warn("[lead-webhook] lead_history reconversion insert failed:", historyErr);
+          }
           console.log(
-            `[lead-webhook] Lead já existe em pipeline_entries(${pipeSlug}) stage="${existingEntry.stage_key}"; ignorando place_in_pipe.stage="${stageVal}" (não regride stage via webhook).`
+            `[lead-webhook] Lead reconverteu em pipeline_entries(${pipeSlug}): "${existingEntry.stage_key}" → "${resolvedStageKey}".`
           );
         }
       } else {
@@ -740,11 +811,11 @@ serve(withSentry('lead-webhook', async (req) => {
           leadId,
           orgId: organizationId,
           slug: pipeSlug,
-          stageKey: stageVal,
+          stageKey: resolvedStageKey,
           metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
         });
         await autoDistributePipe(pipeSlug);
-        console.log(`[lead-webhook] Lead placed in pipeline_entries(${pipeSlug}) stage:`, stageVal);
+        console.log(`[lead-webhook] Lead placed in pipeline_entries(${pipeSlug}) stage:`, resolvedStageKey);
       }
     }
 
