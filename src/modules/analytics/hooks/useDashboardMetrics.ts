@@ -77,8 +77,13 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
   // muda (venda fechada, reunião compareceu, proposta criada) para que TV
   // Dashboard e aba de comando reflitam em tempo real. Debounce de 2s já
   // tratado em useRealtimeSubscription.
-  useRealtimeSubscription("pipe_propostas", ["dashboard-metrics"]);
-  useRealtimeSubscription("pipe_confirmacao", ["dashboard-metrics"]);
+  //
+  // Assina pipeline_entries (tabela base, publicada na supabase_realtime),
+  // NÃO pipe_propostas/pipe_confirmacao — essas são VIEWS compat e não podem
+  // entrar em logical replication: Realtime não resolve as colunas e gera
+  // churn de "invalid column for filter organization_id" + estoura o pool de
+  // auth-check do serviço. pipeline_entries cobre todos os stages dos pipes.
+  useRealtimeSubscription("pipeline_entries", ["dashboard-metrics"]);
   useRealtimeSubscription("leads", ["dashboard-metrics"]);
 
   return useQuery({
@@ -269,9 +274,10 @@ export function useRankingData(month?: number, year?: number) {
   const { data: currentTeamMember } = useCurrentTeamMember();
   const organizationId = currentTeamMember?.organization_id ?? null;
 
-  // Single subscription — propostas are the primary ranking driver.
-  // Goals and confirmacao changes are infrequent and staleTime: 0 handles fresh fetches.
-  useRealtimeSubscription("pipe_propostas", ["ranking-data"]);
+  // Single subscription — pipeline_entries (tabela base publicada) cobre os
+  // stages de propostas, driver primário do ranking. NÃO assinar pipe_propostas:
+  // view não replica e estoura o pool de Realtime (ver useDashboardMetrics).
+  useRealtimeSubscription("pipeline_entries", ["ranking-data"]);
 
   return useQuery({
     queryKey: ["ranking-data", selectedMonth, selectedYear, organizationId],
