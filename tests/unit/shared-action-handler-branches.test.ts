@@ -87,7 +87,7 @@ describe("resolveVariables — template substitution", () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_FULL]);
     mockTable("whatsapp_instances", [
-      { id: "inst-1", instance_name: "Main", organization_id: "org-1", status: "open" },
+      { id: "inst-1", instance_name: "Main", organization_id: "org-1", status: "open", provider: "uazapi" },
     ]);
     mockTable("team_members", [
       { id: "tm-sdr", name: "SDR Joe", phone: "11111" },
@@ -297,7 +297,7 @@ describe("resolveVariables — template substitution", () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", []);
     mockTable("whatsapp_instances", [
-      { id: "inst-1", instance_name: "Main", organization_id: "org-1", status: "open" },
+      { id: "inst-1", instance_name: "Main", organization_id: "org-1", status: "open", provider: "uazapi" },
     ]);
 
     const result = await executeWorkflowAction({

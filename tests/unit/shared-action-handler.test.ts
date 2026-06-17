@@ -482,7 +482,7 @@ const LEAD_WITH_PHONE = {
 
 const WA_INSTANCE = {
   id: "wi-1", organization_id: "org-1", instance_name: "MainInstance",
-  status: "open", is_active: true,
+  status: "open", is_active: true, provider: "uazapi",
 };
 
 function setupEvolutionEnv() {

@@ -1,0 +1,40 @@
+tests/unit/agent-message-batch.test.ts > absorbPendingMessages > processes new messages that arrive during LLM call (1 iteration)
+tests/unit/agent-message-batch.test.ts > absorbPendingMessages > stops at MAX_ABSORB_ITERATIONS even if messages keep arriving
+tests/unit/copilot-rag-tuning.test.ts > RAG tuning — prompt instruction with documents > inclui instrucao obrigatoria de search_knowledge quando agente tem documentos
+tests/unit/copilot-rag-tuning.test.ts > RAG tuning — search thresholds > KnowledgeRetriever (tool mode) > chama match_document_chunks com threshold 0.55 e match_count 5
+tests/unit/copilot-rag-tuning.test.ts > RAG tuning — search thresholds > executeSearchKnowledge (legacy) > chama match_document_chunks com threshold 0.55 e match_count 5
+tests/unit/copilot/knowledge-retriever.test.ts > KnowledgeRetriever > embedding reuse > generates embedding only once per retrieve call
+tests/unit/copilot/knowledge-retriever.test.ts > KnowledgeRetriever > retrieve (initial mode) > returns formatted docs + FAQs with initial thresholds
+tests/unit/copilot/knowledge-retriever.test.ts > KnowledgeRetriever > retrieve (tool mode) > uses lower thresholds and includes available docs
+tests/unit/copilot/knowledge-retriever.test.ts > KnowledgeRetriever > retrieveMemories > returns formatted lead memories sorted by importance
+tests/unit/cors.test.ts > getCorsHeaders > returns first allowed when origin not in list
+tests/unit/cors.test.ts > getCorsHeaders > returns wildcard when no origin and no ALLOWED_ORIGINS
+tests/unit/cors.test.ts > getCorsHeaders > returns wildcard when origin provided but no ALLOWED_ORIGINS
+tests/unit/history-sync.test.tsx > SyncProgressCard > renders chat scope label with jid
+tests/unit/history-sync.test.tsx > SyncProgressCard > renders completed + final count
+tests/unit/protected-route.test.tsx > ProtectedRoute > does NOT redirect when pending_payment and on /checkout
+tests/unit/protected-route.test.tsx > ProtectedRoute > does NOT redirect when pending_payment and on /checkout/success
+tests/unit/protected-route.test.tsx > ProtectedRoute > redirects to /checkout when no teamMember + requireOrganization + !master
+tests/unit/protected-route.test.tsx > ProtectedRoute > redirects to /checkout when pending_payment metadata
+tests/unit/protected-route.test.tsx > ProtectedRoute > redirects to /checkout when teamMember has no organization_id
+tests/unit/protected-route.test.tsx > ProtectedRoute > renders children when no teamMember + already on /checkout path
+tests/unit/protected-route.test.tsx > ProtectedRoute > shows error UI when teamMemberError + no teamMember
+tests/unit/quick-blast-run.test.ts > runQuickBlast > honors a contact-recency refinement, excluding a recently-blasted lead before dispatch
+tests/unit/quick-blast-run.test.ts > runQuickBlast > returns no_recipients with refinement skips when a refinement empties the set
+tests/unit/refactor-smoke.test.ts > Stress — utils puros sob volume > checkOutOfHours em 10k chamadas com configs aleatorias nao joga
+tests/unit/revision-item.test.tsx > RevisionItem > calls onComplete with notes when 'Concluir com nota' clicked
+tests/unit/revision-item.test.tsx > RevisionItem > shows completion section with notes when expanded (follow-up)
+tests/unit/shared-action-handler-compat.test.ts > post-cleanup — move-card.ts gutted, imports resolve > move-card.ts no longer exports executeAdvanceStage (removed)
+tests/unit/shared-action-handler-compat.test.ts > post-cleanup — move-card.ts gutted, imports resolve > move-card.ts no longer exports executeUpdatePipelineStage (removed)
+tests/unit/shared-auth.test.ts > validateEvolutionWebhook > allows when no secret configured (backward compat)
+tests/unit/shared-batch-1.test.ts > getCorsHeaders (with Deno mock) > defaults to wildcard
+tests/unit/shared-meta-api-branches.test.ts > verifyWebhookSignature > returns true when signature matches computed hmac
+tests/unit/uazapi-provider.test.ts > UazapiProvider — Uazapi-only methods call correct endpoints > historySync() calls /message/history-sync
+tests/unit/uazapi-provider.test.ts > UazapiProvider.createInstance > calls initInstance on /instance/init with admintoken header
+tests/unit/uazapi-provider.test.ts > UazapiProvider.createInstance > calls set_uazapi_credentials RPC with correct parameters
+tests/unit/uazapi-provider.test.ts > UazapiProvider.createInstance > returns CreateInstanceResult with provider_instance_id and provider_token
+tests/unit/useRealtimeFallback.test.ts > shouldFallback > respects custom threshold
+tests/unit/useRealtimeFallback.test.ts > shouldFallback > returns false during grace window for non-healthy states
+tests/unit/whatsapp-messages-idempotency-contract.test.ts > whatsapp_messages global idempotency contract > webhook echo paths use ignoreDuplicates:true (preserve first write)
+tests/unit/workflow-trigger-branches.test.ts > fireTrigger — error paths > filters out non-matching workflows before insert
+tests/unit/workflow-trigger-branches.test.ts > fireTrigger — error paths > inserts and returns matching count on success

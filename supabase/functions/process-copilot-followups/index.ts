@@ -135,6 +135,8 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
         .from("whatsapp_instances")
         .select("instance_name")
         .eq("organization_id", orgId)
+        // Meta isolation (cert Rule 2): never auto-pick a Meta number for a legacy send.
+        .in("provider", ["uazapi", "evolution"])
         .eq("status", "open")
         .limit(1)
         .maybeSingle();

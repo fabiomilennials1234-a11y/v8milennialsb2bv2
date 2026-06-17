@@ -120,11 +120,20 @@ export async function resolveInstance(
     if (data) return data as WhatsAppInstance;
   }
 
-  // 2) First connected instance of the org
+  // 2) First connected instance of the org.
+  //
+  // Provider-scoped (Meta Cloud isolation, Rule 1): this provider-BLIND
+  // fallback feeds legacy auto-dispatch (copilot/follow-up/campaign/pipe). A
+  // Meta Cloud number is gated by Meta's 24h window + templates and must NEVER
+  // be picked here, or a free-form Uazapi-intended reply mis-routes through the
+  // Meta API. meta_cloud instances are reachable only via an explicit
+  // preferredInstanceId (step 1) or the strict-write binding. Filtering to the
+  // legacy providers is a no-op for current orgs (all uazapi/evolution).
   const query = supabaseAdmin
     .from("whatsapp_instances")
     .select("*")
     .eq("organization_id", organizationId)
+    .in("provider", ["uazapi", "evolution"])
     .order("created_at", { ascending: true })
     .limit(1);
 

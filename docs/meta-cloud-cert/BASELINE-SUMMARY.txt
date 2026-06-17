@@ -1,0 +1,6 @@
+BASELINE on main (clean run)
+build: GREEN (exit 0)
+typecheck:ratchet: GREEN (exit 0, tolerated baseline errors unchanged)
+unit: 40 failed | 4465 passed | 150 skipped (24 files failed / 340 passed)
+edge (deno): NOT runnable locally (deno missing) -> CI only
+Gate rule: zero NEW failures vs this list; touch-zone passing tests must stay green

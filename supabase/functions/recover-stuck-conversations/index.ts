@@ -85,6 +85,8 @@ Deno.serve(withSentry("recover-stuck-conversations", async (req) => {
     .from("whatsapp_instances")
     .select("*")
     .eq("organization_id", organization_id)
+    // Meta isolation (cert Rule 2): never auto-pick a Meta number for a legacy send.
+    .in("provider", ["uazapi", "evolution"])
     .in("status", ["open", "connected"])
     .limit(1)
     .maybeSingle();
