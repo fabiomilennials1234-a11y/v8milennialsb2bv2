@@ -45,6 +45,8 @@ import {
   useLogoutInstance,
   WhatsAppInstance,
 } from "@/modules/communication/hooks/useWhatsAppInstances";
+import { WhatsAppProviderChooser, getProviderProfile } from "@/modules/communication";
+import { useFeatureFlag } from "../../hooks/useFeatureFlag";
 import { useCanManageWhatsApp } from "@/modules/identity";
 import { useTeamMembers } from "@/modules/identity";
 import {
@@ -349,7 +351,12 @@ function MessageLimitsCard({ instanceId }: { instanceId: string }) {
 }
 
 export function WhatsAppSettings() {
+  // Meta Cloud (slice 3/7) is behind a flag until Meta App Review + the Meta
+  // migrations are applied. Flag OFF → the connections UI is byte-identical to
+  // today (direct Uazapi create dialog, no provider chip).
+  const metaCloudFlag = useFeatureFlag("meta_cloud");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isChooserOpen, setIsChooserOpen] = useState(false);
   const [instanceName, setInstanceName] = useState("");
   const [qrCodeInstanceId, setQrCodeInstanceId] = useState<string | null>(null);
   const [deleteInstanceId, setDeleteInstanceId] = useState<{ id: string; name: string } | null>(null);
@@ -598,7 +605,9 @@ export function WhatsAppSettings() {
           )}
           {canManage && (
             <Button
-              onClick={() => setIsCreateDialogOpen(true)}
+              onClick={() =>
+                metaCloudFlag.enabled ? setIsChooserOpen(true) : setIsCreateDialogOpen(true)
+              }
               size="sm"
               className="gap-2"
               disabled={!whatsappQuota.can_add}
@@ -673,6 +682,11 @@ export function WhatsAppSettings() {
                   <div className="flex items-center gap-3 mb-2">
                     <h4 className="font-medium">{instance.instance_name}</h4>
                     {getStatusBadge(effectiveStatus)}
+                    {metaCloudFlag.enabled && (
+                      <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+                        {getProviderProfile(instance.provider).label}
+                      </Badge>
+                    )}
                   </div>
                   {instance.phone_number && (
                     <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -772,6 +786,18 @@ export function WhatsAppSettings() {
           })}
         </div>
       )}
+
+      {/* Provider chooser (Meta Cloud flag) — Uazapi QR vs Meta Oficial */}
+      <WhatsAppProviderChooser
+        open={isChooserOpen}
+        onOpenChange={setIsChooserOpen}
+        onChooseUazapi={() => setIsCreateDialogOpen(true)}
+        onChooseMeta={() =>
+          toast.info(
+            "WhatsApp Oficial (Meta): conexão via Embedded Signup em preparação — disponível após aprovação Meta.",
+          )
+        }
+      />
 
       {/* Create Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>

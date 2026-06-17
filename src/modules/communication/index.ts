@@ -21,6 +21,16 @@
  * (continua em `src/hooks/` enquanto não houver `core/realtime/` — slice 14).
  */
 
+// ── WhatsApp — provider-aware connections (Uazapi / Meta Cloud) ───────────
+export { WhatsAppProviderChooser } from "./components/whatsapp/WhatsAppProviderChooser";
+export {
+  getProviderProfile,
+  canUseUazapiActions,
+  type WhatsAppProviderId,
+  type ProviderProfile,
+  type ProviderCapabilities,
+} from "./lib/whatsapp-provider";
+
 // ── Hooks: WhatsApp — chat shell barrel (re-exports principais) ───────────
 export {
   useWhatsAppInstancesForUser,
