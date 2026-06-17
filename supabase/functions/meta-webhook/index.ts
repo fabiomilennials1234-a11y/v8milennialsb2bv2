@@ -73,6 +73,11 @@ Deno.serve(withSentry('meta-webhook', async (req) => {
         } else if (payload.object === "instagram") {
           // Instagram Direct messages
           await processInstagramEntry(supabase, entry);
+        } else if (payload.object === "whatsapp_business_account") {
+          // WhatsApp Cloud API — SLICE 4. Inbound lands in whatsapp_messages
+          // (the live chat surface), NOT channel_messages. See
+          // docs/meta-cloud-cert/CERTIFICATION.md §5 + rules 8/11.
+          await processWhatsAppCloudEntry(supabase, entry as WhatsAppCloudEntry);
         }
       } catch (err) {
         console.error(`[meta-webhook] Error processing entry ${entry.id}:`, err);
@@ -96,7 +101,7 @@ Deno.serve(withSentry('meta-webhook', async (req) => {
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface WebhookPayload {
-  object: "page" | "instagram";
+  object: "page" | "instagram" | "whatsapp_business_account";
   entry: WebhookEntry[];
 }
 
@@ -634,6 +639,388 @@ async function processLeadgen(
       } catch (pipeErr) {
         console.error(`[meta-webhook] Error adding to ${pipeTable}:`, pipeErr);
       }
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SLICE 4 — WhatsApp Cloud API inbound
+//
+// Locked decisions (docs/meta-cloud-cert/CERTIFICATION.md §5 + rules 8/11):
+//  - Inbound lands in `whatsapp_messages` (the live chat surface), NOT
+//    channel_messages. Resolution requires a provisioned phone_number_id →
+//    whatsapp_instances(provider='meta_cloud') row.
+//  - The REAL Meta `wamid` is the `message_id` so status callbacks
+//    (sent/delivered/read/failed) update the right row.
+//  - Per-WABA binding (Rule 11): trust ONLY a provisioned
+//    whatsapp_instance_secrets.meta_phone_number_id mapping. Reject inbound with
+//    no matching active instance — never trust an arbitrary payload id.
+//  - Always return 200 (handled by the POST handler). Unresolved phone_number_id
+//    is logged, never 5xx — prevents Meta retry storms.
+//  - Media (image/audio/video/document) arrives as a Cloud media_id, NOT a URL.
+//    We store the id; the authenticated /<media-id> download is a later slice.
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── WA Cloud webhook types ──────────────────────────────────────────────────
+
+interface WhatsAppCloudEntry {
+  id: string; // WABA id
+  changes?: WhatsAppCloudChange[];
+}
+
+interface WhatsAppCloudChange {
+  field: string; // "messages" for inbound + statuses
+  value: WhatsAppCloudValue;
+}
+
+interface WhatsAppCloudValue {
+  messaging_product?: string; // "whatsapp"
+  metadata?: {
+    display_phone_number?: string;
+    phone_number_id?: string;
+  };
+  contacts?: Array<{
+    wa_id?: string;
+    profile?: { name?: string };
+  }>;
+  messages?: WhatsAppCloudMessage[];
+  statuses?: WhatsAppCloudStatus[];
+}
+
+interface WhatsAppCloudMessage {
+  id: string; // wamid
+  from: string; // sender phone (no @ suffix)
+  timestamp: string; // epoch seconds (string)
+  type: string;
+  text?: { body?: string };
+  image?: { id?: string; caption?: string; mime_type?: string };
+  video?: { id?: string; caption?: string; mime_type?: string };
+  audio?: { id?: string; mime_type?: string; voice?: boolean };
+  voice?: { id?: string; mime_type?: string };
+  document?: { id?: string; caption?: string; filename?: string; mime_type?: string };
+  sticker?: { id?: string; mime_type?: string };
+  location?: { latitude?: number; longitude?: number; name?: string; address?: string };
+  contacts?: Array<{ name?: { formatted_name?: string } }>;
+  button?: { text?: string; payload?: string };
+  interactive?: {
+    type?: string;
+    button_reply?: { id?: string; title?: string };
+    list_reply?: { id?: string; title?: string };
+  };
+  reaction?: { message_id?: string; emoji?: string };
+  context?: { from?: string; id?: string };
+  errors?: Array<{ code?: number; title?: string }>;
+}
+
+interface WhatsAppCloudStatus {
+  id: string; // wamid the status refers to
+  status: string; // sent | delivered | read | failed
+  timestamp?: string;
+  recipient_id?: string;
+  errors?: Array<{ code?: number; title?: string }>;
+}
+
+export interface MetaCloudResolvedInstance {
+  instance_id: string;
+  organization_id: string;
+}
+
+// WA Cloud → whatsapp_messages.message_type (mirrors the Uazapi MESSAGE_TYPE_MAP
+// vocabulary used by the live chat + copilot).
+const WA_CLOUD_TYPE_MAP: Record<string, string> = {
+  text: "text",
+  image: "image",
+  video: "video",
+  audio: "audio",
+  voice: "ptt",
+  document: "document",
+  sticker: "sticker",
+  location: "location",
+  contacts: "contact",
+  button: "buttonResponse",
+  interactive: "buttonResponse",
+  reaction: "reaction",
+  order: "order",
+  system: "system",
+  unknown: "unknown",
+  unsupported: "unknown",
+};
+
+/**
+ * Maps a single WA Cloud media-bearing message to the (type, content, mediaId)
+ * triple. WA Cloud sends a `media_id`, NOT a downloadable URL — we store the id
+ * in media_url and let a later slice perform the authenticated download.
+ * Pure + exported for unit testing.
+ */
+export function normalizeCloudMessage(
+  msg: WhatsAppCloudMessage,
+  contactName: string | null,
+): {
+  message_id: string;
+  phone_number: string;
+  message_type: string;
+  content: string | null;
+  media_url: string | null;
+  push_name: string | null;
+  timestamp: string;
+} {
+  const messageType = WA_CLOUD_TYPE_MAP[msg.type] ?? msg.type ?? "unknown";
+
+  let content: string | null = null;
+  let mediaId: string | null = null;
+
+  switch (msg.type) {
+    case "text":
+      content = msg.text?.body ?? null;
+      break;
+    case "image":
+      mediaId = msg.image?.id ?? null;
+      content = msg.image?.caption ?? null;
+      break;
+    case "video":
+      mediaId = msg.video?.id ?? null;
+      content = msg.video?.caption ?? null;
+      break;
+    case "audio":
+      mediaId = msg.audio?.id ?? null;
+      break;
+    case "voice":
+      mediaId = msg.voice?.id ?? null;
+      break;
+    case "document":
+      mediaId = msg.document?.id ?? null;
+      content = msg.document?.caption ?? msg.document?.filename ?? null;
+      break;
+    case "sticker":
+      mediaId = msg.sticker?.id ?? null;
+      break;
+    case "location": {
+      const lat = msg.location?.latitude;
+      const lng = msg.location?.longitude;
+      if (lat != null && lng != null) content = `📍 ${lat}, ${lng}`;
+      break;
+    }
+    case "contacts": {
+      const name = msg.contacts?.[0]?.name?.formatted_name;
+      content = name ? `👤 ${name}` : "👤 Contato compartilhado";
+      break;
+    }
+    case "button":
+      // Template quick-reply button tap.
+      content = msg.button?.text ?? msg.button?.payload ?? null;
+      break;
+    case "interactive":
+      content =
+        msg.interactive?.button_reply?.title ??
+        msg.interactive?.list_reply?.title ??
+        msg.interactive?.button_reply?.id ??
+        msg.interactive?.list_reply?.id ??
+        null;
+      break;
+    case "reaction":
+      content = msg.reaction?.emoji ?? null;
+      break;
+    default:
+      content = null;
+  }
+
+  // epoch seconds (string) → ISO. Fall back to now on a malformed timestamp.
+  const tsSeconds = Number(msg.timestamp);
+  const timestamp = Number.isFinite(tsSeconds) && tsSeconds > 0
+    ? new Date(tsSeconds * 1000).toISOString()
+    : new Date().toISOString();
+
+  return {
+    message_id: msg.id,
+    phone_number: msg.from,
+    message_type: messageType,
+    content,
+    media_url: mediaId, // Cloud media_id — download deferred to a later slice.
+    push_name: contactName,
+    timestamp,
+  };
+}
+
+/**
+ * Per-WABA binding (Rule 11). Resolves the provisioned org/instance for a
+ * Cloud phone_number_id strictly via whatsapp_instance_secrets.meta_phone_number_id
+ * → whatsapp_instances (provider='meta_cloud', is_active). Returns null when no
+ * provisioned active row exists — the caller logs + drops (still 200). NEVER
+ * trusts an arbitrary payload id.
+ */
+async function resolveMetaCloudInstance(
+  supabase: ReturnType<typeof createClient>,
+  phoneNumberId: string,
+): Promise<MetaCloudResolvedInstance | null> {
+  if (!phoneNumberId) return null;
+
+  const { data: secret, error: secretErr } = await supabase
+    .from("whatsapp_instance_secrets")
+    .select("instance_id, organization_id")
+    .eq("meta_phone_number_id", phoneNumberId)
+    .maybeSingle();
+
+  if (secretErr || !secret?.instance_id) return null;
+
+  // Confirm a live meta_cloud instance still backs this mapping (the secrets row
+  // could outlive a deactivated/repurposed instance). Trust only an active
+  // provider='meta_cloud' row.
+  const { data: inst, error: instErr } = await supabase
+    .from("whatsapp_instances")
+    .select("id, organization_id, provider, is_active")
+    .eq("id", secret.instance_id)
+    .eq("provider", "meta_cloud")
+    .maybeSingle();
+
+  if (instErr || !inst) return null;
+  if ((inst as { is_active?: boolean }).is_active === false) return null;
+
+  return {
+    instance_id: inst.id as string,
+    organization_id: (inst.organization_id ?? secret.organization_id) as string,
+  };
+}
+
+/**
+ * Persists one inbound Cloud message into whatsapp_messages using the idempotent
+ * webhook upsert contract (onConflict message_id,instance_id +
+ * ignoreDuplicates:true). The real wamid is the message_id so status callbacks
+ * land on this row.
+ */
+async function persistCloudMessage(
+  supabase: ReturnType<typeof createClient>,
+  resolved: MetaCloudResolvedInstance,
+  msg: WhatsAppCloudMessage,
+  contactName: string | null,
+): Promise<void> {
+  const n = normalizeCloudMessage(msg, contactName);
+  if (!n.message_id || !n.phone_number) {
+    console.error(
+      `[meta-webhook] Cloud message missing id/from; dropping (instance ${resolved.instance_id})`,
+    );
+    return;
+  }
+
+  // Idempotent webhook upsert — global write contract
+  // (tests/unit/whatsapp-messages-idempotency-contract.test.ts). Inbound is an
+  // echo-safe write: never overwrite a first row (ignoreDuplicates:true).
+  const { error } = await supabase
+    .from("whatsapp_messages")
+    .upsert(
+      {
+        organization_id: resolved.organization_id,
+        instance_id: resolved.instance_id,
+        message_id: n.message_id, // real wamid → status callbacks land here
+        remote_jid: `${n.phone_number}@s.whatsapp.net`,
+        phone_number: n.phone_number,
+        direction: "incoming",
+        message_type: n.message_type,
+        content: n.content,
+        media_url: n.media_url, // Cloud media_id (download deferred)
+        push_name: n.push_name,
+        status: "received",
+        timestamp: n.timestamp,
+        raw_payload: msg as unknown as Record<string, unknown>,
+        received_via: "webhook",
+      },
+      { onConflict: "message_id,instance_id", ignoreDuplicates: true },
+    );
+
+  if (error) {
+    console.error(`[meta-webhook] Cloud message upsert failed:`, error.message);
+    await logRuntime({
+      organizationId: resolved.organization_id,
+      module: "webhook",
+      action: "meta_cloud_message_upsert_error",
+      status: "error",
+      payloadSnapshot: {
+        instance_id: resolved.instance_id,
+        message_id: n.message_id,
+        error: error.message,
+      },
+    });
+    return;
+  }
+
+  console.log(
+    `[meta-webhook] Saved WA Cloud inbound ${n.message_id} (${n.message_type}) for instance ${resolved.instance_id}`,
+  );
+}
+
+/**
+ * Reflects a WA Cloud delivery status (sent/delivered/read/failed) onto the
+ * matching outbound whatsapp_messages row, keyed by the real wamid. No-op if the
+ * status is unknown or the row hasn't been written yet (echo ordering tolerated).
+ */
+async function applyCloudStatus(
+  supabase: ReturnType<typeof createClient>,
+  resolved: MetaCloudResolvedInstance,
+  status: WhatsAppCloudStatus,
+): Promise<void> {
+  const wamid = status.id;
+  const mapped = String(status.status ?? "").toLowerCase();
+  const ALLOWED = new Set(["sent", "delivered", "read", "failed"]);
+  if (!wamid || !ALLOWED.has(mapped)) return;
+
+  await supabase
+    .from("whatsapp_messages")
+    .update({ status: mapped })
+    .eq("message_id", wamid)
+    .eq("instance_id", resolved.instance_id);
+}
+
+/**
+ * Processes one WA Cloud `entry`: iterates its `changes[]` where
+ * field === 'messages', resolves the provisioned instance per change (each
+ * change carries its own metadata.phone_number_id), then persists inbound
+ * messages and applies status updates. Exported for unit testing.
+ */
+export async function processWhatsAppCloudEntry(
+  supabase: ReturnType<typeof createClient>,
+  entry: WhatsAppCloudEntry,
+): Promise<void> {
+  for (const change of entry.changes ?? []) {
+    if (change.field !== "messages") continue;
+
+    const value = change.value ?? {};
+    const phoneNumberId = value.metadata?.phone_number_id ?? "";
+
+    const resolved = await resolveMetaCloudInstance(supabase, phoneNumberId);
+    if (!resolved) {
+      // Rule 11: unprovisioned phone_number_id is rejected (logged + dropped).
+      // Returning 200 is the caller's job — never 5xx (Meta retry storm).
+      console.warn(
+        `[meta-webhook] WA Cloud inbound for unprovisioned phone_number_id ${phoneNumberId} — dropping`,
+      );
+      await logRuntime({
+        module: "webhook",
+        action: "meta_cloud_unprovisioned_phone_number_id",
+        status: "error",
+        payloadSnapshot: {
+          waba_id: entry.id,
+          phone_number_id: phoneNumberId,
+          messages: value.messages?.length ?? 0,
+          statuses: value.statuses?.length ?? 0,
+        },
+      });
+      continue;
+    }
+
+    // Contact push_name map keyed by wa_id (Cloud sends it in value.contacts[]).
+    const nameByWaId = new Map<string, string>();
+    for (const c of value.contacts ?? []) {
+      if (c.wa_id && c.profile?.name) nameByWaId.set(c.wa_id, c.profile.name);
+    }
+
+    // Inbound messages
+    for (const msg of value.messages ?? []) {
+      const contactName = nameByWaId.get(msg.from) ?? null;
+      await persistCloudMessage(supabase, resolved, msg, contactName);
+    }
+
+    // Delivery / read / failure statuses
+    for (const status of value.statuses ?? []) {
+      await applyCloudStatus(supabase, resolved, status);
     }
   }
 }
