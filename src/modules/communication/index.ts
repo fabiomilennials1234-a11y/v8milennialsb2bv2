@@ -23,6 +23,10 @@
 
 // ── WhatsApp — provider-aware connections (Uazapi / Meta Cloud) ───────────
 export { WhatsAppProviderChooser } from "./components/whatsapp/WhatsAppProviderChooser";
+// Meta WhatsApp Cloud CONNECTION via Embedded Signup (Slice 3, ADR-0009).
+// INERT until Meta App Review + VITE_META_WA_CONFIG_ID — graceful fallback toast.
+export { useConnectWhatsAppCloud } from "./hooks/useConnectWhatsAppCloud";
+export type { UseConnectWhatsAppCloudResult } from "./hooks/useConnectWhatsAppCloud";
 export {
   getProviderProfile,
   canUseUazapiActions,
