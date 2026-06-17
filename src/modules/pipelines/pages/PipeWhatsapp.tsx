@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { motion } from "framer-motion";
-import { Search, Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List, ChevronUp, ChevronDown, BarChart3, Send } from "lucide-react";
+import { Search, Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List, BarChart3, Send } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,12 +26,10 @@ import { useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, ty
 import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
 import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
 import { useQueryClient } from "@tanstack/react-query";
-import { usePipeWhatsappMetrics } from "@/modules/pipelines/hooks/config/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/MetricsPeriodSelector";
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
 import { PipeWhatsappAnalytics } from "@/modules/pipelines/components/shared/PipeWhatsappAnalytics";
-import { AnalyticsStatCard } from "@/modules/pipelines/components/shared/analytics-ui";
 import { PipeViewToggle } from "@/modules/pipelines/components/shared/PipeViewToggle";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
@@ -163,7 +161,6 @@ function PipeWhatsappInner() {
     closerId: string | null;
   } | null>(null);
   const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
-  const [metricsCollapsed, setMetricsCollapsed] = usePersistedState<boolean>("pipe-whatsapp-metrics-collapsed", false);
 
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_whatsapp", organizationId); }, []);
@@ -186,7 +183,14 @@ function PipeWhatsappInner() {
   }, [queryClient]);
   const { data: workflowCounts = {} } = useStageWorkflowCounts("whatsapp");
   const metricsRange = useMemo(() => getDateRange(periodState), [periodState]);
-  const { data: metricsByPeriod } = usePipeWhatsappMetrics(metricsRange);
+  // Janela da coorte do Funil de Saúde (aba Analytics): segue o período
+  // selecionado; "Geral" (sem range) = janela ampla = todos os leads.
+  const healthRange = useMemo(() => {
+    if (metricsRange) {
+      return { start: new Date(metricsRange.startStr), end: new Date(metricsRange.endStr) };
+    }
+    return { start: new Date("2015-01-01T00:00:00Z"), end: new Date() };
+  }, [metricsRange]);
 
   const { data: userRole } = useUserRole();
   const createPipeWhatsapp = useCreatePipeWhatsapp();
@@ -411,21 +415,6 @@ function PipeWhatsappInner() {
     return pipeData.filter(item => item.lead == null).length;
   }, [pipeData]);
 
-  // Stats from server-side counts (accurate totals, not limited by loaded pages)
-  const stats = useMemo(() => {
-    const total = Object.values(stageData).reduce((sum, s) => sum + (s?.totalCount ?? 0), 0);
-    const abordado = stageData["abordado"]?.totalCount ?? 0;
-    const respondeu = stageData["respondeu"]?.totalCount ?? 0;
-    const scheduled = stageData["agendado"]?.totalCount ?? 0;
-    const pending = stageData["novo"]?.totalCount ?? 0;
-    return { total, abordado, respondeu, scheduled, pending };
-  }, [stageData]);
-
-  const displayStats = useMemo(() => {
-    if (!metricsRange || !metricsByPeriod) return stats;
-    return metricsByPeriod;
-  }, [metricsRange, metricsByPeriod, stats]);
-
   // Itens para o Analytics — respeita o período selecionado (subset carregado)
   const analyticsItems = useMemo(() => {
     if (!pipeData) return [];
@@ -623,75 +612,10 @@ function PipeWhatsappInner() {
       {/* Ghost leads (RLS divergente entre pipe e leads) */}
       <GhostLeadsBanner pipeType="whatsapp" ghostCount={ghostLeadsCount} />
 
-      {/* Período + toggle recolher métricas (toggle só no Analytics) */}
+      {/* Período (segue para a coorte do Funil de Saúde no Analytics) */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
-        {viewMode === "analytics" && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs gap-1.5 text-muted-foreground"
-            onClick={() => setMetricsCollapsed(!metricsCollapsed)}
-            aria-expanded={!metricsCollapsed}
-          >
-            {metricsCollapsed ? (
-              <>
-                <ChevronDown className="w-3.5 h-3.5" /> Mostrar métricas
-              </>
-            ) : (
-              <>
-                <ChevronUp className="w-3.5 h-3.5" /> Recolher métricas
-              </>
-            )}
-          </Button>
-        )}
       </div>
-
-      {/* Stats Bar - colapsível, só no Analytics */}
-      {viewMode === "analytics" && !metricsCollapsed && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          exit={{ opacity: 0, height: 0 }}
-          className="grid grid-cols-2 md:grid-cols-4 gap-4"
-        >
-          <AnalyticsStatCard label="Total de Leads" value={displayStats.total} accent="neutral" />
-          <AnalyticsStatCard
-            label="Abordados"
-            value={displayStats.abordado}
-            sub={
-              displayStats.total > 0
-                ? `${((displayStats.abordado / displayStats.total) * 100).toFixed(0)}% do total`
-                : undefined
-            }
-            accent="blue"
-            delay={0.05}
-          />
-          <AnalyticsStatCard
-            label="Respondeu"
-            value={displayStats.respondeu}
-            sub={
-              displayStats.abordado > 0
-                ? `${((displayStats.respondeu / displayStats.abordado) * 100).toFixed(0)}% dos abordados`
-                : undefined
-            }
-            accent="success"
-            delay={0.1}
-          />
-          <AnalyticsStatCard
-            label="Agendados"
-            value={displayStats.scheduled}
-            sub={
-              displayStats.total > 0
-                ? `${((displayStats.scheduled / displayStats.total) * 100).toFixed(1)}% de conversão total`
-                : undefined
-            }
-            accent="gold"
-            tintValue
-            delay={0.15}
-          />
-        </motion.div>
-      )}
 
       {/* Filters — ocultos no modo Analytics (são específicos do board) */}
       {viewMode !== "analytics" && (
@@ -749,7 +673,7 @@ function PipeWhatsappInner() {
       {viewMode === "analytics" ? (
         <PipeWhatsappAnalytics
           items={analyticsItems}
-          stats={displayStats}
+          range={healthRange}
           responsibleMembers={responsibleMembers}
         />
       ) : isMobile ? (

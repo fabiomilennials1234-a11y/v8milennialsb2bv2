@@ -3,46 +3,56 @@ import { useMemo } from "react";
 import { humanizeOrigin } from "./analytics-utils";
 import {
   AnalyticsPanel,
+  AnalyticsStatCard,
   ContinuousFunnel,
   ConversionHealth,
   OriginDonut,
-  MemberLeaderboard,
 } from "./analytics-ui";
-
-interface WhatsappStats {
-  total: number;
-  abordado: number;
-  respondeu: number;
-  scheduled: number;
-  pending: number;
-}
+import { MeetingPerformancePanel } from "./MeetingPerformancePanel";
+import { useFunnelHealth } from "@/modules/analytics";
 
 interface PipeWhatsappAnalyticsProps {
   items: any[];
-  stats: WhatsappStats;
+  /** Janela da coorte (segue o seletor de período; "Geral" = janela ampla). */
+  range: { start: Date; end: Date };
   responsibleMembers: { id: string; name: string }[];
 }
 
-export function PipeWhatsappAnalytics({ items, stats, responsibleMembers }: PipeWhatsappAnalyticsProps) {
-  // Funil — usa contagens server-side (precisas, sensíveis ao período)
+export function PipeWhatsappAnalytics({ items, range, responsibleMembers }: PipeWhatsappAnalyticsProps) {
+  // Mesma fonte da aba Saúde (RPC get_funnel_health). Usamos as etapas de
+  // "Entraram" até "Compareceram" — apresentadas no formato dos analytics do
+  // funil (cards + funil contínuo + taxas), não no formato de tabela da Saúde.
+  const { data: health } = useFunnelHealth(range, []);
+  const s = health?.stages;
+  const entraram = s?.entraram ?? 0;
+  const avaliados = s?.avaliados ?? 0;
+  const bons = s?.bons ?? 0;
+  const reuniao = s?.reuniao ?? 0;
+  const compareceram = s?.compareceram ?? 0;
+
+  const pct = (to: number, from: number) => (from > 0 ? `${((to / from) * 100).toFixed(0)}%` : undefined);
+
+  // Funil — etapas de Saúde (Entraram → Compareceram)
   const funnelStages = useMemo(
     () => [
-      { key: "total", label: "Total de Leads", count: stats.total },
-      { key: "abordado", label: "Abordados", count: stats.abordado },
-      { key: "respondeu", label: "Respondeu", count: stats.respondeu },
-      { key: "agendado", label: "Agendados", count: stats.scheduled },
+      { key: "entraram", label: "Entraram", count: entraram },
+      { key: "avaliados", label: "Avaliados", count: avaliados },
+      { key: "bons", label: "Bons leads", count: bons },
+      { key: "reuniao", label: "Reunião marcada", count: reuniao },
+      { key: "compareceram", label: "Compareceram", count: compareceram },
     ],
-    [stats]
+    [entraram, avaliados, bons, reuniao, compareceram]
   );
 
-  // Conversões entre etapas — também das contagens precisas
+  // Conversões entre etapas (mesma semântica da Saúde)
   const conversions = useMemo(
     () => [
-      { label: "Abordagem", from: stats.total, to: stats.abordado },
-      { label: "Resposta", from: stats.abordado, to: stats.respondeu },
-      { label: "Agendamento", from: stats.respondeu, to: stats.scheduled },
+      { label: "Entraram → Avaliados", from: entraram, to: avaliados },
+      { label: "Avaliados → Bons", from: avaliados, to: bons },
+      { label: "Bons → Reunião", from: bons, to: reuniao },
+      { label: "Reunião → Compareceu", from: reuniao, to: compareceram },
     ],
-    [stats]
+    [entraram, avaliados, bons, reuniao, compareceram]
   );
 
   // Distribuição por origem (subset carregado)
@@ -57,54 +67,57 @@ export function PipeWhatsappAnalytics({ items, stats, responsibleMembers }: Pipe
       .sort((a, b) => b.value - a.value);
   }, [items]);
 
-  // Performance por responsável (subset carregado)
-  const leaderboard = useMemo(() => {
-    return responsibleMembers
-      .map((member) => {
-        const memberLeads = items.filter(
-          (it) => it.responsible_id === member.id || it.sdr_id === member.id
-        );
-        const scheduled = memberLeads.filter((it) => it.status === "agendado").length;
-        const rate = memberLeads.length > 0 ? (scheduled / memberLeads.length) * 100 : 0;
-        return {
-          id: member.id,
-          name: member.name,
-          ratePct: rate,
-          headline: (
-            <>
-              {scheduled}{" "}
-              <span className="text-xs text-muted-foreground font-medium">
-                / {memberLeads.length} leads
-              </span>
-            </>
-          ),
-          subline: `${rate.toFixed(0)}% de agendamento`,
-          total: memberLeads.length,
-        };
-      })
-      .sort((a, b) => b.total - a.total);
-  }, [items, responsibleMembers]);
-
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <AnalyticsPanel title="Funil de Qualificação" subtitle="Volume por etapa e perda entre etapas">
-        <ContinuousFunnel stages={funnelStages} unit="leads" />
-      </AnalyticsPanel>
+    <div className="space-y-6">
+      {/* Stat cards — uma por etapa do funil de Saúde */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <AnalyticsStatCard label="Entraram" value={entraram} sub="no período" accent="neutral" />
+        <AnalyticsStatCard
+          label="Avaliados"
+          value={avaliados}
+          sub={pct(avaliados, entraram) && `${pct(avaliados, entraram)} dos que entraram`}
+          accent="blue"
+          delay={0.05}
+        />
+        <AnalyticsStatCard
+          label="Bons leads"
+          value={bons}
+          sub={pct(bons, avaliados) && `${pct(bons, avaliados)} dos avaliados`}
+          accent="success"
+          delay={0.1}
+        />
+        <AnalyticsStatCard
+          label="Reunião marcada"
+          value={reuniao}
+          sub={pct(reuniao, bons) && `${pct(reuniao, bons)} dos bons`}
+          accent="gold"
+          delay={0.15}
+        />
+        <AnalyticsStatCard
+          label="Compareceram"
+          value={compareceram}
+          sub={pct(compareceram, reuniao) && `${pct(compareceram, reuniao)} das reuniões`}
+          accent="gold"
+          tintValue
+          delay={0.2}
+        />
+      </div>
 
-      <AnalyticsPanel title="Taxa de Conversão" subtitle="Saúde de cada passagem do funil" dot="success">
-        <ConversionHealth items={conversions} />
-      </AnalyticsPanel>
+      <div className="grid md:grid-cols-2 gap-6">
+        <AnalyticsPanel title="Funil de Qualificação" subtitle="Volume por etapa e perda entre etapas">
+          <ContinuousFunnel stages={funnelStages} unit="leads" />
+        </AnalyticsPanel>
 
-      <AnalyticsPanel title="Leads por Origem" subtitle="Distribuição do período" dot="blue">
-        <OriginDonut slices={originData} unit="leads" />
-      </AnalyticsPanel>
+        <AnalyticsPanel title="Taxa de Conversão" subtitle="Saúde de cada passagem do funil" dot="success">
+          <ConversionHealth items={conversions} />
+        </AnalyticsPanel>
 
-      <AnalyticsPanel
-        title="Performance por Responsável"
-        subtitle="Volume trabalhado e conversão em agendamento"
-      >
-        <MemberLeaderboard rows={leaderboard} />
-      </AnalyticsPanel>
+        <AnalyticsPanel title="Leads por Origem" subtitle="Distribuição do período" dot="blue">
+          <OriginDonut slices={originData} unit="leads" />
+        </AnalyticsPanel>
+
+        <MeetingPerformancePanel responsibleMembers={responsibleMembers} />
+      </div>
     </div>
   );
 }
