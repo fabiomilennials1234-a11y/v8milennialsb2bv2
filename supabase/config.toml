@@ -34,6 +34,18 @@ verify_jwt = false
 [functions.meta-conversion-dispatch]
 verify_jwt = false
 
+# meta: list org WhatsApp Cloud message templates (Slice 6, ADR-0009); JWT (requireAuth) inside fn
+[functions.meta-template-list]
+verify_jwt = false
+
+# meta: create + submit a WhatsApp Cloud message template to Graph (Slice 6, ADR-0009); JWT (requireAuth) inside fn
+[functions.meta-template-create]
+verify_jwt = false
+
+# meta: poll Meta for pending template approval status (Slice 6, ADR-0009); x-cron-secret OR JWT inside fn
+[functions.meta-template-sync]
+verify_jwt = false
+
 # api: public REST API router /api/v1/* (ADR-0008); auth via API key inside fn
 [functions.api]
 verify_jwt = false
