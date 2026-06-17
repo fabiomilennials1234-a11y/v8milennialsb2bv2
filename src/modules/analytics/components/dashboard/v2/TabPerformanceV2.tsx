@@ -8,7 +8,10 @@ import { IndividualGoalsList } from "./IndividualGoalsList";
 import { RealVsExpectedChart } from "./RealVsExpectedChart";
 import { LossReasonsCard } from "./LossReasonsCard";
 import { computePeriodRange, useCommandMetrics } from "@/modules/analytics/hooks/useCommandMetrics";
+import { useFunnelHealth } from "@/modules/analytics/hooks/useFunnelHealth";
+import { MILENNIALS_ORG_ID } from "@/modules/analytics/lib/org-overrides";
 import { useTeamGoals } from "@/modules/engagement";
+import { useCurrentTeamMember } from "@/modules/identity";
 
 interface TabPerformanceV2Props {
   month: number;
@@ -30,6 +33,11 @@ function TabPerformanceV2Base({ month, year }: TabPerformanceV2Props) {
   const range = useMemo(() => computePeriodRange("month", month, year), [month, year]);
   const { data: totalMetrics } = useCommandMetrics({ start: range.start, end: range.end }, null);
   const { data: teamGoals } = useTeamGoals(month, year);
+  // Override Milennials: "reuniões marcadas" segue a coorte correta da aba
+  // Saúde (get_funnel_health) em vez do get_dashboard_metrics inflado.
+  const { data: currentTeamMember } = useCurrentTeamMember();
+  const isMilennials = currentTeamMember?.organization_id === MILENNIALS_ORG_ID;
+  const { data: funnelHealth } = useFunnelHealth({ start: range.start, end: range.end });
 
   const expectedPercent = (range.dayOfPeriod / range.daysTotal) * 100;
 
@@ -68,15 +76,18 @@ function TabPerformanceV2Base({ month, year }: TabPerformanceV2Props) {
     }
     const reuMarcadas = teamGoals?.find((g) => g.type === "reunioes_marcadas" && g.target_value > 0);
     if (reuMarcadas) {
+      const reuMarcadasValue = isMilennials
+        ? (funnelHealth?.stages.reuniao ?? 0)
+        : (m?.reunioesMarcadas ?? 0);
       out.push({
         label: "Reuniões marcadas",
-        current: m?.reunioesMarcadas ?? 0,
+        current: reuMarcadasValue,
         target: reuMarcadas.target_value,
-        caption: `${m?.reunioesMarcadas ?? 0} / ${reuMarcadas.target_value} marcadas`,
+        caption: `${reuMarcadasValue} / ${reuMarcadas.target_value} marcadas`,
       });
     }
     return out;
-  }, [teamGoals, totalMetrics]);
+  }, [teamGoals, totalMetrics, isMilennials, funnelHealth]);
 
   const faturamentoGoal = teamGoals?.find((g) => g.type === "faturamento" && g.target_value > 0);
 

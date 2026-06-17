@@ -8,6 +8,9 @@ import {
   type CommandPeriod,
   type PeriodRange,
 } from "@/modules/analytics/hooks/useCommandMetrics";
+import { useFunnelHealth } from "@/modules/analytics/hooks/useFunnelHealth";
+import { MILENNIALS_ORG_ID } from "@/modules/analytics/lib/org-overrides";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { ClusterGauge } from "./ClusterGauge";
 import { GaugeEmptyState } from "./GaugeEmptyState";
 import { KpiCardCompact, type KpiDelta } from "./KpiCardCompact";
@@ -67,6 +70,11 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
   const { data: metrics, isLoading } = useCommandMetrics({ start: range.start, end: range.end });
   // Funil é sempre total da org
   const { data: totalMetrics } = useCommandMetrics({ start: range.start, end: range.end }, null);
+  // Override Milennials: reuniões marcadas do funil seguem a coorte correta da
+  // aba Saúde (get_funnel_health) em vez do get_dashboard_metrics inflado.
+  const { data: currentTeamMember } = useCurrentTeamMember();
+  const isMilennials = currentTeamMember?.organization_id === MILENNIALS_ORG_ID;
+  const { data: funnelHealth } = useFunnelHealth({ start: range.start, end: range.end });
   // Período anterior pros deltas (mesmo filtro dos KPIs)
   const { data: prevMetrics } = useCommandMetrics({ start: range.prevStart, end: range.prevEnd });
 
@@ -267,7 +275,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
         <TrapezoidFunnel
           stages={[
             { label: "Leads", value: totalMetrics?.totalLeads ?? 0 },
-            { label: "Reuniões", value: totalMetrics?.funnelReunioesMarcadas ?? 0 },
+            { label: "Reuniões", value: isMilennials ? (funnelHealth?.stages.reuniao ?? 0) : (totalMetrics?.funnelReunioesMarcadas ?? 0) },
             { label: "Propostas", value: totalMetrics?.funnelPropostas ?? 0 },
             { label: "Vendas", value: totalMetrics?.funnelVendas ?? 0 },
           ]}
