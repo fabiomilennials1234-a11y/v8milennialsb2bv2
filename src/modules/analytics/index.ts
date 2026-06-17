@@ -115,3 +115,10 @@ export * from "./hooks/useSplitAbMetrics";
 
 export * from "./hooks/useTVDashboardData";
 export * from "./hooks/useTVKPIs";
+
+// ────────────────────────────────────────────────────────────────────────
+// Hooks — Funnel Health (indicador de saúde do funil, coorte por criação)
+// ────────────────────────────────────────────────────────────────────────
+
+export * from "./hooks/useFunnelHealth";
+export * from "./lib/funnel-health-stages";
