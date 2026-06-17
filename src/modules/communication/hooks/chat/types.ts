@@ -74,4 +74,6 @@ export interface WhatsAppInstanceForUser {
   id: string;
   instance_name: string;
   status: string;
+  /** Provider — drives capability gating (Uazapi/Evolution/Meta Cloud). Rule 13. */
+  provider?: string;
 }

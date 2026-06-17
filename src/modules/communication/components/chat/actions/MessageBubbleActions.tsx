@@ -24,6 +24,7 @@ import {
   useDownloadMedia,
   isFeatureUnavailable,
 } from "@/modules/communication/hooks/useMessageActions";
+import { useInstanceCapabilities } from "@/modules/communication/hooks/useInstanceCapabilities";
 import { EmojiPickerPopover } from "./EmojiPickerPopover";
 import { DeleteMessageConfirm } from "./DeleteMessageConfirm";
 
@@ -63,6 +64,9 @@ export function MessageBubbleActions({
   const markReadMut = useMarkMessageRead();
   const downloadMut = useDownloadMedia();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // Provider-aware gating (Rule 13): react/edit/pin/markRead/download/delete are
+  // all Uazapi-only here. Hide the whole bar for Meta/Evolution instances.
+  const caps = useInstanceCapabilities(instanceId);
 
   const handleError = (err: unknown, fallback: string) => {
     if (isFeatureUnavailable(err)) {
@@ -122,6 +126,8 @@ export function MessageBubbleActions({
       handleError(e, "Erro ao apagar");
     }
   };
+
+  if (!caps.canUseUazapiActions) return null;
 
   return (
     <TooltipProvider delayDuration={300}>

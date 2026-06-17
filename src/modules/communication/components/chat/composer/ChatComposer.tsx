@@ -31,6 +31,7 @@ import { AudioRecorder } from "@/modules/communication/components/chat/media/Aud
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
 import { SlashCommandPopover } from "@/modules/communication/components/chat/SlashCommandPopover";
 import { useMessageTemplates } from "@/modules/communication/hooks/useMessageTemplates";
+import { useInstanceCapabilities } from "@/modules/communication/hooks/useInstanceCapabilities";
 import { resolveVariables } from "@/lib/template-variables";
 import { convertAudioBlobToMp3, preloadLamejs } from "@/modules/communication/lib/audioToMp3";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
@@ -99,6 +100,9 @@ export function ChatComposer({
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [menuDialogOpen, setMenuDialogOpen] = useState(false);
   const [pixDialogOpen, setPixDialogOpen] = useState(false);
+  // Provider-aware gating: interactive menu + Pix are Uazapi-only. Hidden for
+  // Meta/Evolution instances (no-op for uazapi/legacy — positive allowlist, R13).
+  const caps = useInstanceCapabilities(instanceId);
   const [isDragOver, setIsDragOver] = useState(false);
   const [sendAsSticker, setSendAsSticker] = useState(false);
 
@@ -446,29 +450,34 @@ export function ChatComposer({
               <ImageIcon className="w-5 h-5 text-muted-foreground" />
             </Button>
 
-            {/* Menu interativo */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setMenuDialogOpen(true)}
-              aria-label="Enviar menu interativo"
-              title="Menu interativo"
-              className="opacity-50 hover:opacity-100 transition-opacity"
-            >
-              <LayoutList className="w-4 h-4 text-muted-foreground" />
-            </Button>
+            {/* Menu + Pix — Uazapi-only (hidden for Meta/Evolution instances) */}
+            {caps.canUseUazapiActions && (
+              <>
+                {/* Menu interativo */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setMenuDialogOpen(true)}
+                  aria-label="Enviar menu interativo"
+                  title="Menu interativo"
+                  className="opacity-50 hover:opacity-100 transition-opacity"
+                >
+                  <LayoutList className="w-4 h-4 text-muted-foreground" />
+                </Button>
 
-            {/* Pix */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setPixDialogOpen(true)}
-              aria-label="Enviar botão Pix"
-              title="Enviar Pix"
-              className="opacity-50 hover:opacity-100 transition-opacity"
-            >
-              <QrCode className="w-4 h-4 text-muted-foreground" />
-            </Button>
+                {/* Pix */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setPixDialogOpen(true)}
+                  aria-label="Enviar botão Pix"
+                  title="Enviar Pix"
+                  className="opacity-50 hover:opacity-100 transition-opacity"
+                >
+                  <QrCode className="w-4 h-4 text-muted-foreground" />
+                </Button>
+              </>
+            )}
 
             {/* SlashCommandPopover para templates */}
             {showSlashPopover && templates && (
