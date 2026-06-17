@@ -35,18 +35,14 @@ interface DayAgendaViewProps {
 // Single-letter weekday headers (Sun→Sat), matching the compact mini-calendar.
 const MINI_DAY_NAMES = ["D", "S", "T", "Q", "Q", "S", "S"];
 
-// Literal mockup palette (kept verbatim so the day view matches the source mockup
-// 1:1 instead of drifting through the app's semantic tokens).
-const CREAM = "#f8f5e7";
-const MUTE = "#8a857a";
-const WARM = "#636156";
+// Accent used for the "has events" dot — reads on both light and dark backgrounds.
 const ORANGE = "#ed9326";
 
-// Frosted panel — exact rgba values from the mockup.
-const PANEL_STYLE: React.CSSProperties = {
-  background: "rgba(255,255,255,0.025)",
-  border: "1px solid rgba(255,255,255,0.05)",
-};
+// Frosted panel — theme-aware so it tints with the background instead of using a
+// fixed white wash (which vanished against the light theme's cream background).
+// `foreground/[0.02]` resolves to a faint light wash in dark mode and a faint dark
+// wash in light mode, matching the original mockup look in both.
+const PANEL_CLASS = "bg-foreground/[0.02] border border-border/50";
 
 /** Build a per-event subtitle from the richest detail available. */
 function eventSubtitle(event: UnifiedEvent): string {
@@ -89,25 +85,22 @@ export function DayAgendaView({
     <div className="flex-1 overflow-hidden px-5 py-4">
       <div className="grid h-full grid-cols-1 gap-3 lg:grid-cols-5">
         {/* ── Mini-calendar ──────────────────────────────────────────────── */}
-        <div className="rounded-xl p-3.5 lg:col-span-2" style={PANEL_STYLE}>
+        <div className={`rounded-xl p-3.5 lg:col-span-2 ${PANEL_CLASS}`}>
           <div className="mb-3 flex items-center justify-between">
-            <div
-              className="font-display text-[12px] font-semibold capitalize"
-              style={{ color: CREAM }}
-            >
+            <div className="font-display text-[12px] font-semibold capitalize text-foreground">
               {format(date, "MMMM yyyy", { locale: ptBR })}
             </div>
             <div className="flex items-center gap-0.5">
               <button
                 aria-label="Mês anterior"
-                className="flex h-5 w-5 items-center justify-center rounded text-[#8a857a] transition-colors hover:text-[#f8f5e7]"
+                className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground"
                 onClick={() => onSelectDate(addMonths(date, -1))}
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
               </button>
               <button
                 aria-label="Próximo mês"
-                className="flex h-5 w-5 items-center justify-center rounded text-[#8a857a] transition-colors hover:text-[#f8f5e7]"
+                className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground"
                 onClick={() => onSelectDate(addMonths(date, 1))}
               >
                 <ChevronRight className="h-3.5 w-3.5" />
@@ -116,10 +109,7 @@ export function DayAgendaView({
           </div>
 
           {/* Weekday header */}
-          <div
-            className="mb-1.5 grid grid-cols-7 gap-1 text-center text-[9px]"
-            style={{ color: MUTE }}
-          >
+          <div className="mb-1.5 grid grid-cols-7 gap-1 text-center text-[9px] text-muted-foreground">
             {MINI_DAY_NAMES.map((d, i) => (
               <div key={i}>{d}</div>
             ))}
@@ -137,7 +127,11 @@ export function DayAgendaView({
                   key={day.toISOString()}
                   onClick={() => onSelectDate(day)}
                   className={`relative flex aspect-square items-center justify-center rounded-full transition-colors ${
-                    selected ? "font-semibold" : "hover:bg-white/5"
+                    selected
+                      ? "font-semibold"
+                      : `hover:bg-foreground/5 ${
+                          inMonth ? "text-foreground" : "text-muted-foreground/40"
+                        }`
                   }`}
                   style={
                     selected
@@ -147,7 +141,7 @@ export function DayAgendaView({
                             "linear-gradient(135deg, #ed9326, #ffd400)",
                           boxShadow: "0 0 12px rgba(237,147,38,0.4)",
                         }
-                      : { color: inMonth ? CREAM : WARM }
+                      : undefined
                   }
                 >
                   {format(day, "d")}
@@ -165,18 +159,14 @@ export function DayAgendaView({
 
         {/* ── Day event list ─────────────────────────────────────────────── */}
         <div
-          className="flex min-h-0 flex-col rounded-xl p-3.5 lg:col-span-3"
-          style={PANEL_STYLE}
+          className={`flex min-h-0 flex-col rounded-xl p-3.5 lg:col-span-3 ${PANEL_CLASS}`}
         >
           <div className="mb-3 flex items-baseline justify-between">
-            <div
-              className="text-[10px] font-medium uppercase tracking-wider"
-              style={{ color: MUTE }}
-            >
+            <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               {listHeader}
             </div>
             {dayEvents.length > 0 && (
-              <div className="text-[10px]" style={{ color: MUTE }}>
+              <div className="text-[10px] text-muted-foreground">
                 {dayEvents.length}{" "}
                 {dayEvents.length === 1 ? "compromisso" : "compromissos"}
               </div>
@@ -185,8 +175,8 @@ export function DayAgendaView({
 
           {dayEvents.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center">
-              <CalendarOff className="h-6 w-6" style={{ color: WARM }} />
-              <p className="text-xs" style={{ color: MUTE }}>
+              <CalendarOff className="h-6 w-6 text-muted-foreground/50" />
+              <p className="text-xs text-muted-foreground">
                 Nenhum compromisso neste dia
               </p>
             </div>
@@ -200,10 +190,7 @@ export function DayAgendaView({
                   transition={{ duration: 0.15, delay: Math.min(i * 0.02, 0.2) }}
                   className="flex gap-3"
                 >
-                  <div
-                    className="w-10 shrink-0 pt-0.5 text-[10px] tabular-nums"
-                    style={{ color: MUTE }}
-                  >
+                  <div className="w-10 shrink-0 pt-0.5 text-[10px] tabular-nums text-muted-foreground">
                     {event.allDay ? "Dia" : format(event.start, "HH:mm")}
                   </div>
                   <button
@@ -216,13 +203,10 @@ export function DayAgendaView({
                       borderColor: event.color,
                     }}
                   >
-                    <div
-                      className="truncate text-[11px] font-medium"
-                      style={{ color: CREAM }}
-                    >
+                    <div className="truncate text-[11px] font-medium text-foreground">
                       {event.title}
                     </div>
-                    <div className="truncate text-[10px]" style={{ color: MUTE }}>
+                    <div className="truncate text-[10px] text-muted-foreground">
                       {eventSubtitle(event)}
                     </div>
                   </button>
