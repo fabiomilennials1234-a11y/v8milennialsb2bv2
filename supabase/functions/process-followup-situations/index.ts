@@ -92,7 +92,9 @@ async function resolveInstance(supabase: Supa, orgId: string): Promise<{ id: str
   const { data: insts } = await supabase
     .from("whatsapp_instances")
     .select("id, instance_name, status")
-    .eq("organization_id", orgId);
+    .eq("organization_id", orgId)
+    // Meta isolation (cert Rule 2): never auto-pick a Meta number for a legacy send.
+    .in("provider", ["uazapi", "evolution"]);
   if (!insts?.length) return { id: null, name: null };
   const live = insts.find((i: Record<string, string>) => i.status === "open" || i.status === "connected");
   const chosen = live ?? insts[0];

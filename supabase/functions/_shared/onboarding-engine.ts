@@ -32,9 +32,12 @@ export async function getOrgIdFromJwt(req: Request): Promise<{ orgId: string; us
 }
 
 export async function verifyWhatsAppConnected(supabase: SupabaseClient, orgId: string): Promise<boolean> {
+  // PROVIDER_SCOPE_EXEMPT: presence check, not a dispatch pick. Any connected
+  // provider — including a Meta Cloud number — counts as "WhatsApp connected"
+  // for onboarding completion, so this deliberately does NOT filter provider.
   const { data } = await supabase
     .from("whatsapp_instances")
-    .select("id")
+    .select("id") // PROVIDER_SCOPE_EXEMPT — presence check, any provider counts
     .eq("organization_id", orgId)
     .eq("status", "connected")
     .limit(1)

@@ -192,6 +192,8 @@ async function processBatch(
       .from("whatsapp_instances")
       .select("id, instance_name")
       .eq("organization_id", organizationId)
+      // Meta isolation (cert Rule 2): never auto-pick a Meta number for a legacy send.
+      .in("provider", ["uazapi", "evolution"])
       .or("status.eq.open,status.eq.connected")
       .limit(1);
     whatsappInstance = instList?.[0] ?? null;

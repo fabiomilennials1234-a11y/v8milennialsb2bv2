@@ -37,6 +37,7 @@ const WA_INSTANCE = {
   instance_name: "main",
   organization_id: "org-1",
   status: "connected",
+  provider: "uazapi",
 };
 
 const LEAD = {

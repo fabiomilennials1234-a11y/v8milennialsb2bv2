@@ -120,6 +120,8 @@ Deno.serve(withSentry("process-scheduled-user-messages", async (req) => {
             .from("whatsapp_instances")
             .select("*")
             .eq("organization_id", msg.organization_id)
+            // Meta isolation (cert Rule 2): never auto-pick a Meta number for a legacy send.
+            .in("provider", ["uazapi", "evolution"])
             .in("status", ["connected", "open"])
             .limit(1)
             .single();

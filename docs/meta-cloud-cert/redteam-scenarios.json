@@ -1,0 +1,143 @@
+[
+ {
+  "lens": "RED TEAM: Meta Cloud breaks Uazapi org",
+  "scenarios": [
+   {
+    "name": "Outbound resolves meta_cloud for Uazapi lead, factory throws",
+    "mechanism": "resolveInstance first org instance no provider filter (whatsapp-dispatch.ts:124-137); getWhatsAppProvider throws on meta_cloud (whatsapp-client.ts:275); outbound-sender/message-gateway reply dropped.",
+    "isReal": true,
+    "severity": "critical",
+    "guardNeeded": "MetaCloudProvider + channel-aware resolveInstance."
+   },
+   {
+    "name": "provider CHECK widen/order fails 23514",
+    "mechanism": "CHECK IN evolution,uazapi (20260422000100:51); bare drop fails Uazapi UPDATEs; insert pre-migration fails.",
+    "isReal": true,
+    "severity": "high",
+    "guardNeeded": "NOT VALID then VALIDATE; migration before edge fns."
+   },
+   {
+    "name": "Cloud inbound mis-wired to whatsapp-webhook",
+    "mechanism": "Editing Uazapi-tuned whatsapp-webhook regresses uazapi-payload-resolution.test.ts + 2026-05-14 drop; mis-routed events loop in whatsapp_webhook_dlq/dlq-replay.",
+    "isReal": true,
+    "severity": "high",
+    "guardNeeded": "Cloud only in meta-webhook + own DLQ; contract test gate."
+   },
+   {
+    "name": "Meta outbound in whatsapp_messages corrupts chat",
+    "mechanism": "message_id NOT NULL UNIQUE(message_id,instance_id) (20260127000000:10); RNG ids (message-gateway:475/webhook:706) miss later wamid status -> dup/stuck; null instance_id mis-merges.",
+    "isReal": true,
+    "severity": "high",
+    "guardNeeded": "Real wamid + non-null instance_id + status by wamid; or channel_messages."
+   },
+   {
+    "name": "Override/HMAC/frontend-first/24h/no-Meta-watchdog",
+    "mechanism": "override CHECK uazapi,evolution (20260423000200:14) forces meta_cloud down Uazapi branch; single-secret HMAC repoint 401s Messenger/IG; unfiltered composer -> Unknown provider 500 (isFeatureUnavailable:105 misses); outside-24h re-queued; crons .eq uazapi(130/140/127) skip Meta.",
+    "isReal": true,
+    "severity": "medium",
+    "guardNeeded": "Per-instance override; same Meta app/secret; gate Meta UI; terminal 24h error; Meta drift monitor."
+   }
+  ]
+ },
+ {
+  "lens": "RED TEAM build/deploy/type.",
+  "scenarios": [
+   {
+    "name": "Provider CHECK widening fails on unnamed inline constraint, reds DB jobs",
+    "mechanism": "20260422000100 L49-51 inline UNNAMED CHECK(provider IN evolution,uazapi). meta_cloud needs DROP+re-ADD; wrong name leaves it rejecting meta_cloud. integration/rls-invariants/e2e run supabase start over all migrations so an erroring migration reds all three.",
+    "isReal": true,
+    "severity": "high",
+    "guardNeeded": "Find name via pg_constraint, re-add NAMED CHECK incl meta_cloud; verify supabase db reset+INSERT; widen whatsapp_provider_override too."
+   },
+   {
+    "name": "New Meta-Cloud table without RLS reds rls-invariants pgTAP gate",
+    "mechanism": "Template table; rls_invariants.sql asserts zero violations. Missing RLS/WITH CHECK or inline team_members policy caught by detectors reds rls-invariants.",
+    "isReal": true,
+    "severity": "high",
+    "guardNeeded": "migrations/CLAUDE.md template: org_id FK CASCADE, ENABLE RLS, tenant_isolation_all WITH CHECK, SECURITY DEFINER helpers; add rls test."
+   },
+   {
+    "name": "WhatsApp-Cloud via Meta UI breaks typecheck:ratchet via closed MetaChannel",
+    "mechanism": "chat-meta/types.ts L8 MetaChannel=messenger|instagram closed; channel_type has whatsapp. channel=whatsapp into useMetaConversations L9 emits TS2322 under strict; absent from .tsc-baseline.json so ratchet reds.",
+    "isReal": true,
+    "severity": "medium",
+    "guardNeeded": "Widen MetaChannel to whatsapp + audit MetaChatHeader cast/MetaChatShell default, or own channel type; run typecheck:ratchet."
+   },
+   {
+    "name": "Edge provider type drift invisible to CI; missing branch 500s in prod",
+    "mechanism": "whatsapp-client.ts unions L31/L177/L200 + throw L275; proxy L216 uazapi|evolution. tsconfig src-only; deno --no-check. Forgotten meta_cloud branch keeps CI green, fails runtime 500. Proxy L260 cast launders meta_cloud.",
+    "isReal": true,
+    "severity": "high",
+    "guardNeeded": "Add deno check or drop --no-check; edge tests for meta_cloud+proxy; widen union sites+proxy L216; test throw branch."
+   }
+  ]
+ },
+ {
+  "lens": "RED TEAM — multi-tenant isolation, meta_access_token leakage, RLS/Realtime recursion, and cross-org channel_messages visibility for the planned Meta WhatsApp Cloud API third provider",
+  "scenarios": [
+   {
+    "name": "OAuth state forgery binds a victim org's WABA/Cloud number + system-user token to attacker (tenant-binding forgery)",
+    "mechanism": "meta-oauth-callback/index.ts:55-68 decodes `state` as plain base64 JSON `{userId, orgId, connectionType}` with NO HMAC/signature and NO server-side nonce/CSRF store. `orgId` is then used verbatim at lines 96/140 to upsert meta_connections / meta_pages via the SERVICE_ROLE client (lines 70-72), which bypasses all RLS. The Meta Embedded Signup plan reuses this exact callback shape to persist the WABA id + system-user/long-lived token. An attacker who completes signup with their own Meta assets but crafts `state` carrying a victim org's UUID writes a meta_pages/meta_connections row (and, by extension, a whatsapp_instances provider='meta_cloud' row) owned by the victim org. Because subsequent inbound (meta-webhook → channel_messages, organization_id from the meta_pages lookup) and outbound (send path resolves token by org) trust that org binding, the attacker's number now sends/receives under the victim tenant — or the victim's real number gets overwritten. No code path verifies that the authenticated session that initiated signup actually belongs to `orgId`.",
+    "isReal": true,
+    "severity": "critical",
+    "guardNeeded": "Sign `state` with an HMAC over {userId, orgId, nonce, exp} using a server secret, or store a one-time nonce row keyed to the authenticated user+org before redirect and validate+consume it in the callback. In the callback, re-derive orgId from the authenticated user's team_members membership (get_my_organization_ids equivalent) and assert decoded.orgId is in that set BEFORE any service_role write. Reject mismatches."
+   },
+   {
+    "name": "meta_access_token / WABA system-user token stored in a column readable by every authenticated org member (token leak via direct PostgREST select)",
+    "mechanism": "meta_pages.page_access_token and meta_connections.access_token are plain TEXT columns (migration 20260717000000 lines 103, 157) with org-scoped RLS only (`organization_id = get_user_organization_id()`, migration 20260726000000). There is NO column-level REVOKE on these columns, unlike uazapi_token which was deliberately moved to the deny-all whatsapp_instance_secrets table (20260422000101) precisely because Supabase table-level GRANT ALL to authenticated dominates column-level REVOKE. The Meta Cloud plan will add a long-lived WABA/system-user token (broader scope than a page token — can send messages, manage templates, read all conversations). If stored the same way (in meta_pages.page_access_token, a new meta_pages column, or whatsapp_instances.provider_config JSONB which is fully selectable by org members), ANY authenticated member of the org (including a low-privilege 'membro') can run `supabase.from('meta_pages').select('page_access_token')` or `.select('provider_config')` and exfiltrate the tenant's WhatsApp Cloud sending credential, then call Graph API directly outside Torque.",
+    "isReal": true,
+    "severity": "critical",
+    "guardNeeded": "Store the Meta Cloud system-user/WABA token in whatsapp_instance_secrets (or an equivalent RLS deny-all table) accessed only via a service_role SECURITY DEFINER RPC (mirror get/set_uazapi_credentials). Never place it in meta_pages.page_access_token, a selectable meta_* column, or whatsapp_instances.provider_config. Add a CI/RLS test asserting authenticated cannot SELECT the token column."
+   },
+   {
+    "name": "channel_messages cross-org / multi-org leak via get_user_organization_id() (singular) instead of get_my_organization_ids()",
+    "mechanism": "channel_messages RLS uses `organization_id = public.get_user_organization_id()` (migration 20260717000000 line 77 and 20260726000000 line 14). get_user_organization_id() (20260917000100 lines 39-52) returns ONE org — the earliest-created team_members row — for multi-org users. The newer Meta tables (meta_conversations 20261102000000) correctly use the plural `get_my_organization_ids()`. This asymmetry is the bug surface: when Meta WhatsApp Cloud starts writing whatsapp-channel rows into channel_messages (channel='whatsapp'), a user belonging to org A (older) and org B (newer) reading channel_messages gets only org A rows under RLS while the meta_conversations list (plural helper) surfaces org B conversations — so clicking a B conversation either shows empty or, worse, the equality predicate evaluates each row against the user's single resolved org, which for a user whose primary org differs from the row's org silently hides their own legitimate B data AND, combined with the conversation-aggregate join, can surface a preview/last_message from a conversation the user can't actually open. It is an inconsistent-isolation defect rather than a clean cross-tenant read, but it breaks the invariant that all channel_messages RLS use the same multi-org helper.",
+    "isReal": true,
+    "severity": "medium",
+    "guardNeeded": "Replace channel_messages_org_access `= get_user_organization_id()` with `organization_id IN (SELECT get_my_organization_ids())` in a new migration, matching every other publication/Meta table. Add an integration test: a user in orgs A+B sees channel_messages from both and none from org C."
+   },
+   {
+    "name": "Realtime recursion hang for ALL publication tables if Meta Cloud adds a channel_messages policy that inlines team_members or joins meta_pages",
+    "mechanism": "channel_messages is in the supabase_realtime publication (20260717000000 lines 85-88). Migration 20261020000000 documents that Realtime's apply_rls() evaluates every publication table's RLS, and any inline `SELECT ... FROM team_members` (or a subquery on another RLS-protected table whose own policy re-enters team_members) triggers team_members RLS → get_my_organization_ids → infinite recursion (PG 42P17) → 'Too many database timeouts' → Realtime crashes for EVERY table, not just channel_messages. The Meta Cloud feature is likely to add a channel_messages policy that scopes WhatsApp-Cloud rows by joining meta_pages or whatsapp_instances (e.g. 'org members who can see this instance/page'). If that policy inlines team_members, or subqueries meta_pages (itself RLS-protected via get_user_organization_id → no recursion) BUT also references whatsapp_instances whose insert/update policies inline team_members (20260917000100 lines 287-317), the realtime evaluator can re-enter team_members RLS and recurse. Result: chat realtime dies globally for all orgs.",
+    "isReal": true,
+    "severity": "high",
+    "guardNeeded": "Any new/modified policy on channel_messages (or any publication table) MUST use only SECURITY DEFINER helpers (get_my_organization_ids/get_my_admin_organization_ids/is_master_user) and must not inline team_members or subquery a table whose policies re-enter team_members. Add the existing CI guard scan to flag inline `FROM team_members` in publication-table policies; gate the Meta Cloud migration on it."
+   },
+   {
+    "name": "meta-webhook trusts payload-supplied page_id/phone_number_id to resolve org; a forged WABA id maps an attacker's inbound into a victim org",
+    "mechanism": "meta-webhook verifyWebhookSignature (meta-api.ts:455-490) uses a SINGLE global META_APP_SECRET — it proves the request came from Meta's app, NOT which tenant it belongs to. Org resolution is done purely by looking up entry.id / page_id against meta_pages (index.ts:218-229, 399-409). For WhatsApp Cloud the inbound entry is keyed by phone_number_id / WABA id. If the Meta Cloud extension resolves org by `meta_pages.page_id == phone_number_id` (or a new column) without binding that identifier to a verified, attacker-non-controllable provisioning record, then because of the OAuth-state forgery above (or simply because two tenants could end up with overlapping/guessable identifiers) a message can be attributed to the wrong organization_id and inserted into that org's channel_messages/whatsapp_messages, leaking the sender's PII (phone, message body) into a foreign tenant's inbox. The HMAC does not stop this because the same app secret signs all tenants.",
+    "isReal": true,
+    "severity": "high",
+    "guardNeeded": "Resolve org strictly from a provisioning-verified mapping (phone_number_id/WABA id → instance row created only by the signed-state OAuth flow), enforce UNIQUE on that external identifier across the whole table (not per-org), and reject inbound whose identifier has no active provisioned row. Keep WhatsApp Cloud inbound in meta-webhook (do not touch whatsapp-webhook) but add per-WABA validation, not just global HMAC."
+   },
+   {
+    "name": "channel='whatsapp' written by Meta Cloud lands in channel_messages but chat UI reads whatsapp_messages keyed by instance_id — split-brain inbox, not a leak",
+    "mechanism": "The chat UI query reads `whatsapp_messages` filtered by (organization_id, instance_id, phone_number) (useWhatsAppMessages.ts:40-46), and whatsapp-webhook persists Uazapi inbound into whatsapp_messages with onConflict 'message_id,instance_id' (whatsapp-webhook/index.ts:837-839). Meta Messenger/IG inbound goes to channel_messages only. If Meta WhatsApp Cloud inbound is written to channel_messages (channel='whatsapp') to reuse the meta_conversations machinery, those messages will NOT appear in the existing WhatsApp chat view (which reads whatsapp_messages), and conversely if written to whatsapp_messages it needs an instance_id and a 'message_id,instance_id' uniqueness that Cloud message ids must satisfy. This is a correctness/visibility hazard (messages vanish or duplicate), not a cross-tenant isolation break — both tables are org-scoped. Flagged because the certification goal is 'without breaking the rest of the system'.",
+    "isReal": true,
+    "severity": "medium",
+    "guardNeeded": "Decide one storage target for Cloud inbound and make the chat read path provider-aware. If using whatsapp_messages, ensure every Cloud instance has a whatsapp_instances row (provider='meta_cloud') so instance_id is non-null and the 'message_id,instance_id' unique key holds with Cloud wamid values. Add an integration test that a Cloud inbound message appears exactly once in the chat the user actually opens."
+   },
+   {
+    "name": "send-meta-message channel allowlist rejects 'whatsapp' — Cloud send path must NOT be bolted onto this function or it bypasses the org-match defense if widened carelessly",
+    "mechanism": "send-meta-message/index.ts:57-62 hard-rejects any channel other than 'messenger'/'instagram', and its org-match defense (lines 69-105) scopes meta_pages by auth.organizationId AND re-verifies page.organization_id === auth.organizationId. This function is currently safe. The risk is the Meta Cloud plan widening this allowlist to include 'whatsapp' (or cloning the function) and, in doing so, resolving the WABA/token by a client-supplied identifier (phone_number_id/wabaId from body) instead of re-deriving from auth.organizationId. If the new send path selects the sending token by body.phoneNumberId without the `.eq('organization_id', auth.organizationId)` filter that exists today, a member of org A could send using org B's Cloud number/token. The existing pattern is correct; the danger is a regression when extending it.",
+    "isReal": true,
+    "severity": "high",
+    "guardNeeded": "For the Cloud send path, always scope the instance/token lookup by auth.organizationId (eq filter) and re-assert row.organization_id === auth.organizationId before sending, exactly as send-meta-message does today. Route Cloud send through the existing whatsapp-api-proxy (JWT+tenant+rate-limit) and getWhatsAppProvider factory rather than a token-by-body lookup. Add a test that org A cannot send via org B's phone_number_id."
+   },
+   {
+    "name": "meta-webhook per-entry error swallowing + early 200 can mask cross-tenant misrouting and DLQ-less loss for Cloud events",
+    "mechanism": "meta-webhook (index.ts:68-90) wraps each entry in try/catch that only console.errors and continues, then always returns 200. Unlike whatsapp-webhook (which has whatsapp_webhook_dlq + timingSafeCompare secret-in-path), meta-webhook has no DLQ. For WhatsApp Cloud inbound this means: (a) a message attributed to the wrong/unknown org (page/WABA lookup .single() fails or matches a stale row) is silently dropped with only a log line; (b) any insert error into channel_messages (e.g. the new org-mismatch, a CHECK violation on a not-yet-widened channel enum, or a unique-conflict) is swallowed. There is no isolation breach by itself, but it removes the observability that would catch the misrouting scenarios above, so a cross-tenant attribution bug ships silently.",
+    "isReal": true,
+    "severity": "low",
+    "guardNeeded": "Add a dead-letter path (meta_webhook_dlq mirroring whatsapp_webhook_dlq) for Cloud entries that fail org resolution or insert, and emit a Sentry event (not just console.error) on page/WABA-not-found and org-mismatch so misrouting is detectable in prod."
+   },
+   {
+    "name": "is_master_user() master-ghost policies on meta tables are recursion-safe and correctly scoped",
+    "mechanism": "Checked as a potential recursion/over-broad-visibility vector: master_all_* policies on meta_connections/meta_pages/meta_leadgen_configs/channel_messages (20260726000001) use is_master_user(), defined (20260131200000:199-208) as SECURITY DEFINER STABLE querying master_users only — it never touches team_members, so it cannot cause the apply_rls recursion, and it correctly grants cross-org visibility only to actual master users. No defect; included to record that this specific path was examined and is sound for the Meta Cloud extension as long as new Meta tables follow the same is_master_user() pattern rather than inlining team_members.",
+    "isReal": false,
+    "severity": "none",
+    "guardNeeded": "None. Keep using is_master_user() (not inline master_users/team_members subqueries) on any new Meta Cloud tables added to the realtime publication."
+   }
+  ]
+ }
+]

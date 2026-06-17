@@ -29,7 +29,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 export type WhatsAppInstance = {
   id: string;
   organization_id: string;
-  provider: "evolution" | "uazapi";
+  provider: "evolution" | "uazapi" | "meta_cloud";
   instance_name: string;
   // Evolution-only fields
   evolution_api_key?: string | null;
@@ -177,7 +177,7 @@ export interface WhatsAppProvider {
   senderResume?(folderId: string): Promise<void>;
   senderStop?(folderId: string): Promise<void>;
 
-  readonly provider: "evolution" | "uazapi";
+  readonly provider: "evolution" | "uazapi" | "meta_cloud";
 }
 
 // ---------------------------------------------------------------------------
@@ -197,6 +197,20 @@ export async function getWhatsAppProvider(
   supabaseAdmin: SupabaseClient,
   options?: { bootstrap?: boolean }
 ): Promise<WhatsAppProvider> {
+  // Meta Cloud (cert Rules 3 & 5): resolve FIRST, before the legacy kill-switch.
+  // The org-wide `whatsapp_provider_override` only switches between the two
+  // legacy providers (Uazapi ⇄ Evolution); it must NEVER coerce a per-instance
+  // Meta number into a legacy code path. Returning here also narrows
+  // `instance.provider` to "uazapi"|"evolution" for the assignment below.
+  if (instance.provider === "meta_cloud") {
+    const { MetaCloudProvider } = await import("./whatsapp-providers/meta-cloud-provider.ts");
+    return new MetaCloudProvider({
+      instanceId: instance.id,
+      organizationId: instance.organization_id,
+      supabaseAdmin,
+    });
+  }
+
   // Sprint 3 S3.2 — kill-switch: organizations.whatsapp_provider_override
   // takes precedence over instance.provider. Used as panic button during
   // migration rollout if Uazapi has a platform-wide incident.

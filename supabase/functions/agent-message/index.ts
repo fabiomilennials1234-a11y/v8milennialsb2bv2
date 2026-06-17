@@ -424,6 +424,8 @@ async function sendTypingIndicator(
       .from("whatsapp_instances")
       .select("*")
       .eq("organization_id", organizationId)
+      // Meta isolation (cert Rule 2): typing indicator only for legacy senders.
+      .in("provider", ["uazapi", "evolution"])
       .in("status", ["open", "connected"])
       .limit(1)
       .maybeSingle();
