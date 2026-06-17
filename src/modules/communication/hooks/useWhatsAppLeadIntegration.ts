@@ -404,9 +404,10 @@ export function useLinkLeadToWhatsApp() {
         if (!teamMember?.id || !teamMember?.organization_id) {
           throw new Error("Usuário não está vinculado a uma organização");
         }
+        const firstStage = await getFirstStageKey(teamMember.organization_id, "whatsapp");
         const { error: pipeError } = await supabase.from("pipe_whatsapp").insert({
           lead_id: leadId,
-          status: "novo",
+          status: firstStage,
           responsible_id: teamMember.id,
           sdr_id: teamMember.id,
           organization_id: teamMember.organization_id,

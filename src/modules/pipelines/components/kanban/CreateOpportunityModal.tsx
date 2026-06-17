@@ -24,6 +24,7 @@ import { useLeads } from "@/modules/leads";
 import { useTeamMembers } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
 import { useCreatePipeWhatsapp, usePipeWhatsapp } from "@/modules/pipelines/hooks/legacy/usePipeWhatsapp";
+import { usePipelineStages } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -69,6 +70,7 @@ export function CreateOpportunityModal({
   const { organizationId } = useOrganization();
   const { data: leads = [], isLoading: leadsLoading } = useLeads();
   const { data: pipeData = [] } = usePipeWhatsapp();
+  const { data: whatsappStages = [] } = usePipelineStages("whatsapp");
   const { data: teamMembers = [] } = useTeamMembers();
   const createPipeWhatsapp = useCreatePipeWhatsapp();
 
@@ -139,9 +141,13 @@ export function CreateOpportunityModal({
         toast.error("Organização não disponível");
         return;
       }
+      // Ghost-stage guard: nunca criar em "novo" hardcoded — resolve a 1ª etapa
+      // ATIVA da org (whatsappStages já vem filtrado is_active + ordenado por
+      // position). Fallback "novo" só se a org não tiver nenhuma etapa.
+      const firstActiveStage = whatsappStages[0]?.stage_key ?? "novo";
       await createPipeWhatsapp.mutateAsync({
         lead_id: selectedLeadId,
-        status: "novo",
+        status: firstActiveStage,
         pre_sale_responsible_id: formData.pre_sale_responsible_id || null,
         sale_responsible_id: formData.sale_responsible_id || null,
         responsible_id: formData.pre_sale_responsible_id || null,
