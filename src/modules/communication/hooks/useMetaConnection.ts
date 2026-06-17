@@ -158,13 +158,18 @@ export function useConnectMeta() {
         throw new Error("Usuario ou organizacao nao encontrados");
       }
 
-      const state = btoa(
-        JSON.stringify({
-          userId: user.id,
-          orgId: organizationId,
-          connectionType: resolvedType,
-        })
+      // SECURITY: o `state` é emitido e HMAC-assinado pelo servidor
+      // (edge fn meta-oauth-start), com orgId derivado da membership validada.
+      // Nunca construir state no cliente — um state não-assinado permitia forjar
+      // orgId (tenant-binding forgery no callback que escreve via service_role).
+      const { data: stateData, error: stateError } = await supabase.functions.invoke(
+        "meta-oauth-start",
+        { body: { connectionType: resolvedType, organization_id: organizationId } },
       );
+      if (stateError || !stateData?.state) {
+        throw new Error(stateError?.message || "Falha ao iniciar conexão Meta");
+      }
+      const state = stateData.state as string;
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const redirectUri = `${supabaseUrl}/functions/v1/meta-oauth-callback`;

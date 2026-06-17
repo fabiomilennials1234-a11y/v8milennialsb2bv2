@@ -20,6 +20,7 @@ import {
   subscribePageWebhook,
   acceptLeadgenTos,
 } from "../_shared/meta-api.ts";
+import { verifyMetaState } from "../_shared/meta-oauth-state.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -47,23 +48,25 @@ Deno.serve(withSentry('meta-oauth-callback', async (req) => {
       return redirect({ meta: "error", reason: "codigo_ausente" });
     }
 
-    // -- Decodifica state (userId + orgId + connectionType) -----------------
+    // -- Verifica state HMAC-assinado (userId + orgId + connectionType) ------
+    // SECURITY (hotfix): o state é emitido por `meta-oauth-start` e assinado com
+    // META_APP_SECRET; orgId vem da membership validada, não de input do cliente.
+    // NUNCA confiar em state não-verificado — um state forjado com orgId de outra
+    // org era tenant-binding forgery (write via service_role abaixo).
     let userId: string | undefined;
     let orgId: string | undefined;
     let connectionType: "facebook" | "instagram" = "facebook";
 
-    if (state) {
-      try {
-        const decoded = JSON.parse(atob(state));
-        userId = decoded.userId;
-        orgId = decoded.orgId;
-        connectionType = decoded.connectionType || "facebook";
-      } catch {
-        console.warn("[meta-oauth-callback] Could not decode state:", state);
-      }
+    const stateSecret = Deno.env.get("META_APP_SECRET");
+    const verified = state && stateSecret ? await verifyMetaState(state, stateSecret) : null;
+    if (verified) {
+      userId = verified.userId;
+      orgId = verified.orgId;
+      connectionType = verified.connectionType === "instagram" ? "instagram" : "facebook";
     }
 
     if (!userId || !orgId) {
+      console.warn("[meta-oauth-callback] invalid/expired/unsigned state rejected");
       return redirect({ meta: "error", reason: "state_invalido" });
     }
 
