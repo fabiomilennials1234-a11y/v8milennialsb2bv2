@@ -2,6 +2,11 @@
 -- Migration: widen whatsapp_instances.provider CHECK → include 'meta_cloud'
 -- Date: 2026-11-25
 -- Branch: feat/meta-cloud-api
+-- NOTE: re-timestamped 20261125000001 → 20261217000001. The original version
+--   collided with an existing migration (20261125000001_metrics_rpcs_meeting_events)
+--   already applied, so `db push` SKIPPED this file. New version applies cleanly
+--   after the latest migration; the DO-block replaces the current provider CHECK
+--   regardless of position.
 -- Cert: docs/meta-cloud-cert/CERTIFICATION.md — Rule 15 (named DROP/ADD; APPLY
 --       only AFTER the meta_cloud-aware code is deployed in every edge bundle
 --       that calls getWhatsAppProvider).

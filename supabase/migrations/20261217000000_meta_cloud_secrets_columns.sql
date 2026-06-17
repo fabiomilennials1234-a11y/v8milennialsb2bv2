@@ -2,6 +2,10 @@
 -- Migration: Meta Cloud credential columns + RPCs
 -- Date: 2026-11-25
 -- Branch: feat/meta-cloud-api
+-- NOTE: re-timestamped 20261125000000 → 20261217000000. The original version
+--   collided with an existing migration (20261125000000_deleted_leads_log) that
+--   was already applied, so `db push` SKIPPED this file and the schema never
+--   landed in prod. New version sits after the latest migration to apply cleanly.
 -- Cert: docs/meta-cloud-cert/CERTIFICATION.md — Rule 9 (credentials fail-closed
 --       and isolated).
 -- Description:
