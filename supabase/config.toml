@@ -187,6 +187,10 @@ verify_jwt = false
 [functions.meta-webhook]
 verify_jwt = false
 
+# meta-oauth-start: emite o state HMAC-assinado do OAuth Meta; auth via JWT (requireAuth)
+[functions.meta-oauth-start]
+verify_jwt = false
+
 # meta-oauth-callback: redirect do Meta OAuth (sem JWT); valida code + state internamente
 [functions.meta-oauth-callback]
 verify_jwt = false
