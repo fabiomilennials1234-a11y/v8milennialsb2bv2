@@ -45,7 +45,7 @@ import {
   useLogoutInstance,
   WhatsAppInstance,
 } from "@/modules/communication/hooks/useWhatsAppInstances";
-import { WhatsAppProviderChooser, getProviderProfile } from "@/modules/communication";
+import { WhatsAppProviderChooser, getProviderProfile, useConnectWhatsAppCloud } from "@/modules/communication";
 import { useFeatureFlag } from "../../hooks/useFeatureFlag";
 import { useCanManageWhatsApp } from "@/modules/identity";
 import { useTeamMembers } from "@/modules/identity";
@@ -355,6 +355,10 @@ export function WhatsAppSettings() {
   // migrations are applied. Flag OFF → the connections UI is byte-identical to
   // today (direct Uazapi create dialog, no provider chip).
   const metaCloudFlag = useFeatureFlag("meta_cloud");
+  // Meta WhatsApp Cloud CONNECTION (Embedded Signup). INERT until Meta App
+  // Review + VITE_META_WA_CONFIG_ID — `connectWhatsAppCloud` toasts a graceful
+  // "configuração pendente" and aborts when unconfigured (no crash).
+  const { connectWhatsAppCloud } = useConnectWhatsAppCloud();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isChooserOpen, setIsChooserOpen] = useState(false);
   const [instanceName, setInstanceName] = useState("");
@@ -792,11 +796,9 @@ export function WhatsAppSettings() {
         open={isChooserOpen}
         onOpenChange={setIsChooserOpen}
         onChooseUazapi={() => setIsCreateDialogOpen(true)}
-        onChooseMeta={() =>
-          toast.info(
-            "WhatsApp Oficial (Meta): conexão via Embedded Signup em preparação — disponível após aprovação Meta.",
-          )
-        }
+        onChooseMeta={() => {
+          void connectWhatsAppCloud();
+        }}
       />
 
       {/* Create Dialog */}
