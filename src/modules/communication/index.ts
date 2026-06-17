@@ -164,6 +164,22 @@ export type {
   MetaPagesByChannel,
 } from "./hooks/chat-meta/types";
 
+// ── Hooks: Meta WhatsApp Cloud message templates (Slice 6, ADR-0009) ──────
+// INERT until the `meta_cloud` feature flag is enabled. Gate UI behind
+// useFeatureFlag("meta_cloud").
+export {
+  useMetaTemplates,
+  useCreateMetaTemplate,
+  useSyncMetaTemplates,
+} from "./hooks/useMetaTemplates";
+export type {
+  MetaMessageTemplate,
+  MetaTemplateStatus,
+  MetaTemplateCategory,
+  MetaTemplateComponent,
+  CreateMetaTemplateInput,
+} from "./hooks/useMetaTemplates";
+
 // ── Hooks: sessions, dead-state ───────────────────────────────────────────
 export { useDeadSessions } from "./hooks/useDeadSessions";
 
