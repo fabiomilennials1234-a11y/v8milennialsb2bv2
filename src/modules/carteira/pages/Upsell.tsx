@@ -105,7 +105,7 @@ export default function Upsell() {
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
-          <div>
+          <div className="min-w-0">
             <h1 className="text-2xl font-semibold tracking-tight">
               Carteira de Clientes
             </h1>
@@ -115,7 +115,7 @@ export default function Upsell() {
                 : "Health score, recompra e gestão de carteira"}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 [&>*]:shrink-0">
             <Button
               onClick={() => setDisparoOpen(true)}
               variant="outline"
@@ -343,16 +343,16 @@ export default function Upsell() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <TrendingUp className="w-7 h-7 text-primary" />
+            <TrendingUp className="w-7 h-7 text-primary shrink-0" />
             Carteira de Clientes Ativos
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             Gerencie sua carteira de clientes e classifique por perfil
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 [&>*]:shrink-0">
           <Button onClick={() => setImportOpen(true)} variant="outline" className="gap-2">
             <Upload className="w-4 h-4" />
             Importar Planilha

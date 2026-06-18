@@ -166,9 +166,9 @@ export default function Copilot() {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
+        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
-        <div>
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">
             Copilot — Agentes de IA
           </h1>
@@ -185,7 +185,7 @@ export default function Copilot() {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 [&>*]:shrink-0">
           {!copilotQuota.is_unlimited && (
             <Badge variant="outline" className="text-xs">
               {copilotQuota.current_usage} de {copilotQuota.effective_limit} agentes
