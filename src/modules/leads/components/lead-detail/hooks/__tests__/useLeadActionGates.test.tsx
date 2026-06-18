@@ -3,53 +3,63 @@ import { useLeadActionGates } from "../useLeadActionGates";
 
 // ─── Mocks ──────────────────────────────────────────────────────────
 
+// Role values mirror the real DB: team_members.role CHECK IN
+// ('admin','sdr','closer','member'). "membro" is NOT a legal value — the
+// original bug compared against it and denied every member. "master" is not
+// a team_members.role; it surfaces via isMaster.
 const roleState = vi.hoisted(() => ({
-  role: "membro" as "admin" | "membro" | "master" | null,
+  effectiveRole: "member" as "admin" | "member" | null,
   isLoading: false,
   isMaster: false,
 }));
 
-vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
-  useUserRole: () => ({
-    data: roleState.role ? { role: roleState.role } : null,
-    isLoading: roleState.isLoading,
-  }),
-}));
+// useLeadActionGates reads role exclusively from useIdentity().
+vi.mock("@/modules/identity", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/modules/identity")>();
+  return {
+    ...actual,
+    useIdentity: () => ({
+      userId: "user-1",
+      organizationId: "org-1",
+      teamMemberId: "tm-1",
+      effectiveRole: roleState.effectiveRole,
+      isMaster: roleState.isMaster,
+      isAdmin: roleState.isMaster || roleState.effectiveRole === "admin",
+      features: {},
+      isLoading: roleState.isLoading,
+      isReady: !roleState.isLoading,
+    }),
+    // Mirror useCanDo's behavior using only role state.
+    // Same fail-closed contract: during loading → { allowed: false, isLoading: true }.
+    useCanDo: (action: string) => {
+      if (roleState.isLoading) {
+        return { allowed: false, reason: "loading", isLoading: true };
+      }
+      if (roleState.isMaster) return { allowed: true, reason: "master", isLoading: false };
+      if (roleState.effectiveRole === "admin") return { allowed: true, reason: "admin", isLoading: false };
+      // member defaults
+      const memberDefaults: Record<string, boolean> = {
+        delete_lead: false,
+        move_pipe_record: true,
+        create_lead: true,
+        send_message: true,
+        view_lead: true,
+        reassign_lead: true,
+        remove_lead_from_pipe: true,
+      };
+      const allowed = memberDefaults[action] ?? false;
+      return { allowed, reason: allowed ? `feature:${action}` : `denied:${action}`, isLoading: false };
+    },
+  };
+});
 
-vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
-  useMasterAuth: () => ({
-    isMaster: roleState.isMaster,
-    isLoading: roleState.isLoading,
-  }),
-}));
-
-// Mirror useCanDo's behavior using only role state.
-// Same fail-closed contract: during loading return { allowed: false, isLoading: true }.
-vi.mock("@/modules/identity/permissions/hooks/useCanDo", () => ({
-  useCanDo: (action: string) => {
-    if (roleState.isLoading) {
-      return { allowed: false, isLoading: true };
-    }
-    if (roleState.isMaster) return { allowed: true, isLoading: false };
-    if (roleState.role === "admin") return { allowed: true, isLoading: false };
-    // membro defaults
-    const memberDefaults: Record<string, boolean> = {
-      delete_lead: false,
-      move_pipe_record: true,
-      create_lead: true,
-      send_message: true,
-      view_lead: true,
-      reassign_lead: true,
-      remove_lead_from_pipe: true,
-    };
-    return { allowed: memberDefaults[action] ?? false, isLoading: false };
-  },
-}));
-
-function setRole(role: "admin" | "membro" | "master" | null, opts?: { loading?: boolean }) {
-  roleState.role = role;
-  roleState.isLoading = opts?.loading ?? false;
+function setRole(
+  role: "admin" | "member" | "master" | null,
+  opts?: { loading?: boolean },
+) {
   roleState.isMaster = role === "master";
+  roleState.effectiveRole = role === "master" ? "admin" : (role as "admin" | "member" | null);
+  roleState.isLoading = opts?.loading ?? false;
 }
 
 describe("useLeadActionGates", () => {
@@ -83,10 +93,10 @@ describe("useLeadActionGates", () => {
     });
   });
 
-  describe("role: membro", () => {
-    beforeEach(() => setRole("membro"));
+  describe("role: member", () => {
+    beforeEach(() => setRole("member"));
 
-    it("allows cotidianos + reassign/remove (membro herda default=true das features)", () => {
+    it("allows cotidianos + reassign/remove (member herda default=true das features)", () => {
       const { result } = renderHook(() => useLeadActionGates("lead-1"));
       expect(result.current.canEditField.allowed).toBe(true);
       expect(result.current.canMoveMeeting.allowed).toBe(true);

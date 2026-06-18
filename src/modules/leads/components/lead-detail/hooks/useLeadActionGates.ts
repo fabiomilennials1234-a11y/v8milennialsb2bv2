@@ -17,7 +17,6 @@
  * `move_pipe_record` AppAction entries.
  */
 
-import { useUserRole } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";
 export interface Gate {
@@ -47,8 +46,7 @@ const deny = (reason: string, isLoading = false): Gate => ({
 const allow = (reason = "ok"): Gate => ({ allowed: true, reason, isLoading: false });
 
 export function useLeadActionGates(leadId: string | null | undefined): LeadActionGates {
-  const { data: userRole, isLoading: roleLoading } = useUserRole();
-  const { isMaster, isLoading: masterLoading } = useIdentity();
+  const identity = useIdentity();
 
   // Underlying AppAction checks — these encapsulate feature_permissions +
   // role matrix + master + admin cascade.
@@ -60,8 +58,7 @@ export function useLeadActionGates(leadId: string | null | undefined): LeadActio
   const removeFromPipeCheck = useCanDo("remove_lead_from_pipe");
 
   const anyLoading =
-    roleLoading ||
-    masterLoading ||
+    identity.isLoading ||
     deleteCheck.isLoading ||
     movePipeCheck.isLoading ||
     createLeadCheck.isLoading ||
@@ -103,9 +100,13 @@ export function useLeadActionGates(leadId: string | null | undefined): LeadActio
     };
   }
 
-  const role = userRole?.role ?? null;
-  const isAdmin = isMaster || role === "admin";
-  const isMember = role === "membro";
+  // Single canonical source: identity.effectiveRole already normalizes
+  // team_members.role (admin | sdr | closer | member) → "admin" | "member",
+  // and isMaster → admin. The typed union forbids a "membro" literal at
+  // compile time — the original bug was `role === "membro"`, which never
+  // matched the real DB value "member", silently denying every non-admin.
+  const isAdmin = identity.isAdmin;
+  const isMember = identity.effectiveRole === "member";
 
   // Destrutivos — route through existing AppAction gates.
   const canDelete: Gate = deleteCheck.allowed
