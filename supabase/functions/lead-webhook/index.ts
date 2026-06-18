@@ -16,9 +16,19 @@ import { isValidUUID, isValidISODate, validateArraySize, validateReferencedId } 
 import { successResponse, errorResponse } from "../_shared/response.ts";
 import { upsertPipeEntry, getPipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
 import type { PipeSlug } from "../_shared/pipeline-adapter.ts";
+import { fireTrigger, fireStageChangedTrigger } from "../_shared/workflow-trigger.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare, checkRateLimitPersistent, getClientIdentifier, checkRateLimit, rateLimitedResponse } from "../_shared/auth.ts";
+
+// Orgs habilitadas a disparar automações de workflow (lead_created / stage_changed) a partir
+// da ingestão. lead-webhook historicamente NÃO disparava nenhum trigger — leads ingeridos por
+// n8n/Make/Meta nunca iniciavam drips. Escopo deliberadamente restrito por org: disparar global
+// reativaria automações dormentes em massa (41 wf stage_changed / 18 orgs + 26 lead_created /
+// 24 orgs) → risco de envio em massa. Habilitar org-a-org após validação.
+const WORKFLOW_TRIGGER_ORG_ALLOWLIST = new Set<string>([
+  "d67ae17a-815d-476d-b3a9-287c7b267997", // DNA de Almas
+]);
 
 // Destino opcional: colocar o lead em um pipe (funil) em uma etapa específica
 interface PlaceInPipe {
@@ -690,6 +700,8 @@ serve(withSentry('lead-webhook', async (req) => {
     }
 
     // Colocar lead em um pipe (funil) em etapa específica (ex: n8n, campanha de ads)
+    // Captura mudança de stage para disparar stage_changed (fire-and-forget no fim).
+    let placedStage: { pipeType: PipeSlug; fromStage: string | null; toStage: string } | null = null;
     if (payload.place_in_pipe?.pipe && payload.place_in_pipe?.stage) {
       const { pipe, stage, meeting_date } = payload.place_in_pipe;
       const stageVal = stage as string;
@@ -805,6 +817,7 @@ serve(withSentry('lead-webhook', async (req) => {
           console.log(
             `[lead-webhook] Lead reconverteu em pipeline_entries(${pipeSlug}): "${existingEntry.stage_key}" → "${resolvedStageKey}".`
           );
+          placedStage = { pipeType: pipeSlug, fromStage: existingEntry.stage_key, toStage: resolvedStageKey };
         }
       } else {
         await upsertPipeEntry(supabase, {
@@ -816,6 +829,7 @@ serve(withSentry('lead-webhook', async (req) => {
         });
         await autoDistributePipe(pipeSlug);
         console.log(`[lead-webhook] Lead placed in pipeline_entries(${pipeSlug}) stage:`, resolvedStageKey);
+        placedStage = { pipeType: pipeSlug, fromStage: null, toStage: resolvedStageKey };
       }
     }
 
@@ -951,6 +965,45 @@ serve(withSentry('lead-webhook', async (req) => {
         },
       }).catch((e) => console.warn("[lead-webhook] Failed to enqueue webhooks:", e)),
     );
+
+    // Dispara automações de workflow a partir da ingestão (escopo allowlist por org).
+    // Sem isto, drips com trigger lead_created/stage_changed nunca iniciam via webhook.
+    if (WORKFLOW_TRIGGER_ORG_ALLOWLIST.has(organizationId)) {
+      if (isNewLead) {
+        backgroundTasks.push((async () => {
+          try {
+            const n = await fireTrigger({
+              supabase,
+              organizationId,
+              triggerType: "lead_created",
+              leadId,
+              context: { trigger: "lead_created", origin: payload.source },
+            });
+            console.log("[lead-webhook] lead_created workflows fired:", n);
+          } catch (e) {
+            console.warn("[lead-webhook] lead_created trigger failed:", e);
+          }
+        })());
+      }
+      if (placedStage) {
+        const ps = placedStage;
+        backgroundTasks.push((async () => {
+          try {
+            const n = await fireStageChangedTrigger({
+              supabase,
+              organizationId,
+              leadId,
+              pipeType: ps.pipeType,
+              fromStage: ps.fromStage ?? undefined,
+              toStage: ps.toStage,
+            });
+            console.log("[lead-webhook] stage_changed workflows fired:", n);
+          } catch (e) {
+            console.warn("[lead-webhook] stage_changed trigger failed:", e);
+          }
+        })());
+      }
+    }
 
     // Se é novo lead, verificar se existe agente outbound para disparar
     if (isNewLead) {
