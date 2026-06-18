@@ -95,7 +95,7 @@ function MainLayoutInner({ children }: MainLayoutProps) {
 
       {showChecklist && !isFullBleed && (
         <div
-          className="fixed top-[3.75rem] right-4 z-40"
+          className="fixed top-[3.75rem] right-4 z-40 hidden sm:block"
           aria-label="Onboarding"
         >
           <OnboardingChecklist />
