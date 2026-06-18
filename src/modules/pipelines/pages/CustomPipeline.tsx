@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,8 +36,11 @@ import {
   useCustomPipeEntries,
   useRemoveLeadFromCustomPipe,
   useDeleteCustomPipeline,
+  useMoveLeadInCustomPipe,
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { CustomPipelineKanban } from "@/modules/pipelines/components/custom/CustomPipelineKanban";
+import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";
+import { useViewport } from "@/shared/hooks/use-viewport";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { AddLeadToPipeModal } from "@/modules/pipelines/components/custom/AddLeadToPipeModal";
@@ -76,10 +79,48 @@ function CustomPipelinePageInner() {
 
   const removeLead = useRemoveLeadFromCustomPipe();
   const deletePipeline = useDeleteCustomPipeline();
+  const moveLead = useMoveLeadInCustomPipe();
   const { allowed: canDeletePipeline } = useFeaturePermission("pipeline.delete");
   const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
 
   const isLoading = loadingPipeline || loadingStages || loadingEntries;
+
+  // ── Mobile: lista por stage (PipelineListView) em vez do kanban drag-drop ──
+  // Custom pipes usam stage_id (uuid) como chave. id = entry id.
+  const { isMobile } = useViewport();
+  const mobileStages = useMemo(
+    () => stages.map((s) => ({ id: s.id, name: s.name, stage_key: s.id, color: s.color })),
+    [stages],
+  );
+  const mobileLeads = useMemo(
+    () =>
+      entries.map((e) => ({
+        id: e.id,
+        name: e.lead?.name || "Sem nome",
+        company: e.lead?.company || undefined,
+        phone: e.lead?.phone || undefined,
+        rating: e.lead?.rating || 0,
+        stage_key: e.stage_id,
+        created_at: e.created_at,
+      })),
+    [entries],
+  );
+  const handleMobileLeadClick = useCallback(
+    (entryId: string) => {
+      const entry = entries.find((e) => e.id === entryId);
+      if (entry) openLead(entry.lead_id, entry.id);
+    },
+    [entries, openLead],
+  );
+  const handleMobileMove = useCallback(
+    (entryId: string, stageId: string) => {
+      if (!pipeline) return;
+      moveLead.mutateAsync({ entry_id: entryId, pipeline_id: pipeline.id, stage_id: stageId }).catch(() => {
+        toast.error("Erro ao mover lead");
+      });
+    },
+    [pipeline, moveLead],
+  );
 
   const handleRemoveEntry = async () => {
     if (!removeEntryId || !pipeline) return;
@@ -128,23 +169,23 @@ function CustomPipelinePageInner() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
           <div
-            className="w-10 h-10 rounded-lg flex items-center justify-center"
+            className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
             style={{ backgroundColor: `${pipeline.color}20` }}
           >
             <PipeIcon className="w-5 h-5" style={{ color: pipeline.color }} />
           </div>
-          <div>
-            <h1 className="text-xl font-bold">{pipeline.name}</h1>
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold truncate">{pipeline.name}</h1>
             {pipeline.description && (
-              <p className="text-sm text-muted-foreground">{pipeline.description}</p>
+              <p className="text-sm text-muted-foreground truncate">{pipeline.description}</p>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 [&>*]:shrink-0">
           {stages.length > 0 && (
             <Button
               variant="outline"
@@ -189,16 +230,26 @@ function CustomPipelinePageInner() {
 
       {/* Kanban */}
       {stages.length > 0 ? (
-        <CustomPipelineKanban
-          pipeline={pipeline}
-          stages={stages}
-          entries={entries}
-          searchQuery={searchQuery}
-          onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
-          onClickEntry={(entry) => {
-            openLead(entry.lead_id, entry.id);
-          }}
-        />
+        isMobile ? (
+          <PipelineListView
+            stages={mobileStages}
+            leads={mobileLeads}
+            onLeadClick={handleMobileLeadClick}
+            onMoveLeadToStage={handleMobileMove}
+            isLoading={isLoading}
+          />
+        ) : (
+          <CustomPipelineKanban
+            pipeline={pipeline}
+            stages={stages}
+            entries={entries}
+            searchQuery={searchQuery}
+            onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
+            onClickEntry={(entry) => {
+              openLead(entry.lead_id, entry.id);
+            }}
+          />
+        )
       ) : (
         <div className="text-center py-16 text-muted-foreground">
           <Kanban className="w-12 h-12 mx-auto mb-4 opacity-50" />
