@@ -566,7 +566,7 @@ function PipeWhatsappInner() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 [&>*]:shrink-0">
           <PipeViewToggle
             value={viewMode}
             onChange={setViewMode}
