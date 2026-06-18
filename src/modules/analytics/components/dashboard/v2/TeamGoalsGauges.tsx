@@ -28,13 +28,16 @@ function MiniGauge({ pct, color }: { pct: number; color: string }) {
   const R = 38;
   const x = 46 + Math.cos(angle) * R;
   const y = 54 - Math.sin(angle) * R;
-  const large = clamped > 50 ? 1 : 0;
+  // Gauge é um semicírculo de 180°, então o arco de preenchimento nunca passa
+  // de meia-volta → large-arc-flag SEMPRE 0. Com flag 1 (acima de 50%) o SVG
+  // desenhava o arco maior, que desce abaixo da base e era cortado pela altura
+  // do svg, virando um segmento solto no topo.
   return (
     <svg width="92" height="58" viewBox="0 0 92 58" className="mx-auto mt-2 block">
       <path d="M 8 54 A 38 38 0 0 1 84 54" fill="none" stroke="hsl(var(--foreground) / .08)" strokeWidth={7} strokeLinecap="round" />
       {clamped > 1 && (
         <path
-          d={`M 8 54 A 38 38 0 ${large} 1 ${x.toFixed(1)} ${y.toFixed(1)}`}
+          d={`M 8 54 A 38 38 0 0 1 ${x.toFixed(1)} ${y.toFixed(1)}`}
           fill="none" stroke={color} strokeWidth={7} strokeLinecap="round"
           style={color.includes("primary") ? { filter: "drop-shadow(0 0 4px hsl(var(--primary) / .4))" } : undefined}
         />
