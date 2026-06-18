@@ -210,7 +210,7 @@ function extractMediaDirectiveBlocks(src: string): Array<{ start: number; end: n
 function stripToolCallBlocks(
   input: string,
 ): { cleaned: string; dropped: number; candidates: string[] } {
-  if (!input || !/<\/?(?:tool_call|vertical_tool_calls|no_tool_calls)\b/i.test(input)) {
+  if (!input || !/<\/?(?:tool_call|tool_code|vertical_tool_calls|no_tool_calls)\b/i.test(input)) {
     return { cleaned: input, dropped: 0, candidates: [] };
   }
 
@@ -225,9 +225,10 @@ function stripToolCallBlocks(
     return "";
   });
 
-  // 2. Blocos completos <tool_call ...>...</tool_call>
-  const COMPLETE = /<tool_call\b[^>]*>([\s\S]*?)<\/tool_call\s*>/gi;
-  text = text.replace(COMPLETE, (_m, inner: string) => {
+  // 2. Blocos completos <tool_call ...>...</tool_call> e <tool_code>...</tool_code>
+  //    (Gemini emite tool-calls no formato code-execution `<tool_code>` como TEXTO).
+  const COMPLETE = /<(tool_call|tool_code)\b[^>]*>([\s\S]*?)<\/\1\s*>/gi;
+  text = text.replace(COMPLETE, (_m, _tag: string, inner: string) => {
     dropped += 1;
     const candidate = extractFirstJsonObject(inner);
     if (candidate) candidates.push(candidate);
@@ -240,15 +241,15 @@ function stripToolCallBlocks(
     return "";
   });
 
-  // 4. Defensive: <tool_call> aberto sem fechamento — descarta tudo após
-  const openIdx = text.search(/<tool_call\b/i);
+  // 4. Defensive: <tool_call>/<tool_code> aberto sem fechamento — descarta tudo após
+  const openIdx = text.search(/<(?:tool_call|tool_code)\b/i);
   if (openIdx >= 0) {
     text = text.slice(0, openIdx);
     dropped += 1;
   }
 
-  // 5. Tag residual órfã </tool_call> ou <tool_call ... /> self-closing
-  text = text.replace(/<\/?tool_call\b[^>]*\/?\s*>/gi, "");
+  // 5. Tag residual órfã </tool_call|tool_code> ou self-closing
+  text = text.replace(/<\/?(?:tool_call|tool_code)\b[^>]*\/?\s*>/gi, "");
 
   return { cleaned: text, dropped, candidates };
 }
@@ -351,7 +352,7 @@ export function sanitizeAssistantMessage(
   // Defensive final: garantir zero vazamento de tags reasoning + tool_call residual
   text = text
     .replace(/<\/?(?:thinking|response)[^>]*>/gi, "")
-    .replace(/<\/?(?:tool_call|vertical_tool_calls|no_tool_calls)\b[^>]*\/?\s*>/gi, "")
+    .replace(/<\/?(?:tool_call|tool_code|vertical_tool_calls|no_tool_calls)\b[^>]*\/?\s*>/gi, "")
     .trim();
 
   return { text, droppedBlocks, recoveredAction, reasoning };
@@ -364,9 +365,11 @@ function tryRecoverFromString(jsonStr: string): RecoveredAction | null {
     //  - ReAct/legacy: { action, action_input }
     //  - OpenRouter universal: { tool_name, tool_arguments }
     //  - OpenAI-like: { name, arguments }
+    //  - Gemini code-exec (<tool_code>): { tool, parameters }
     const rawToolName =
       (typeof parsed?.action === "string" && parsed.action) ||
       (typeof parsed?.tool_name === "string" && parsed.tool_name) ||
+      (typeof parsed?.tool === "string" && parsed.tool) ||
       (typeof parsed?.name === "string" && parsed.name) ||
       "";
     const toolName = typeof rawToolName === "string" ? rawToolName.toLowerCase() : "";
@@ -377,6 +380,7 @@ function tryRecoverFromString(jsonStr: string): RecoveredAction | null {
       parsed.action_input ??
       parsed.tool_arguments ??
       parsed.arguments ??
+      parsed.parameters ??
       parsed.input ??
       parsed.params;
     let params: Record<string, unknown> = {};
