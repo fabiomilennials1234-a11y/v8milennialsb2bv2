@@ -244,34 +244,6 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
       sections.push("");
     }
 
-    // Time-Aware Behavior — janela ativa + comportamento contextual.
-    const tz = (availability as { timezone?: string })?.timezone || "America/Sao_Paulo";
-    const now = new Date();
-    const dayKey = getDayKeyInTimezone(now, tz);
-    const nowText = formatNowText(now, tz, dayKey);
-
-    const timeContext = resolveActiveWindow({
-      behavior_windows: capabilities.behavior_windows,
-      availability: availability as { timezone?: string },
-    }, now);
-
-    sections.push("# CONTEXTO TEMPORAL");
-    sections.push("");
-    sections.push(`- Agora: ${nowText}`);
-
-    if (timeContext) {
-      sections.push(
-        "IMPORTANTE: Adapte sua resposta ao momento atual e ao comportamento configurado para esta janela.",
-      );
-      sections.push("");
-      sections.push(`- Janela ativa: "${timeContext.window.name}"`);
-      const trimmedBehavior = (timeContext.window.behavior || "").trim();
-      if (trimmedBehavior) {
-        sections.push("- Comportamento esperado nesta janela:");
-        sections.push(trimmedBehavior);
-      }
-    }
-
     if (availability.mode) {
       if (availability.mode === "always") {
         sections.push("- Atendimento: 24 horas");
@@ -376,6 +348,41 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
         sections.push("");
       }
     }
+  }
+
+  // =====================================================
+  // 1.3 CONTEXTO TEMPORAL (SEMPRE — inclusive p/ agentes com system_prompt custom)
+  // Antes ficava só no ramo `else` (prompt gerado), então agentes de prompt
+  // custom NUNCA recebiam a hora atual e podiam oferecer atendimento "ainda hoje"
+  // fora do horário comercial. Causa raiz do incidente Promove/Marina (2026-06-18):
+  // a IA ofereceu slot "ainda hoje" às 22h porque não sabia que horas eram.
+  // =====================================================
+  {
+    const availabilityForTime = (capabilities.availability || {}) as { timezone?: string };
+    const tz = availabilityForTime.timezone || "America/Sao_Paulo";
+    const now = new Date();
+    const dayKey = getDayKeyInTimezone(now, tz);
+    const nowText = formatNowText(now, tz, dayKey);
+    const timeContext = resolveActiveWindow(
+      { behavior_windows: capabilities.behavior_windows, availability: availabilityForTime },
+      now,
+    );
+
+    sections.push("");
+    sections.push("# CONTEXTO TEMPORAL");
+    sections.push(`- Agora: ${nowText}`);
+    if (timeContext) {
+      sections.push(
+        "IMPORTANTE: Adapte sua resposta ao momento atual e ao comportamento configurado para esta janela.",
+      );
+      sections.push(`- Janela ativa: "${timeContext.window.name}"`);
+      const trimmedBehavior = (timeContext.window.behavior || "").trim();
+      if (trimmedBehavior) {
+        sections.push("- Comportamento esperado nesta janela:");
+        sections.push(trimmedBehavior);
+      }
+    }
+    sections.push("");
   }
 
   // =====================================================

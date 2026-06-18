@@ -82,3 +82,38 @@ describe("Prompt trim — seções boilerplate", () => {
     expect(result).not.toContain("1. O que o lead realmente quer?");
   });
 });
+
+describe("Contexto temporal — sempre presente (fix Promove/Marina 2026-06-18)", () => {
+  it("injects current time even when agent uses a custom system_prompt", async () => {
+    // Regressão: antes o bloco temporal só existia no ramo `else` (prompt gerado),
+    // então agentes de prompt custom não sabiam a hora e ofereciam slot "hoje" às 22h.
+    const result = await buildDynamicPrompt(baseParams);
+
+    expect(result).toContain("# CONTEXTO TEMPORAL");
+    expect(result).toContain("- Agora:");
+  });
+
+  it("includes the active behavior window when configured", async () => {
+    const params = {
+      ...baseParams,
+      capabilities: {
+        ...baseParams.capabilities,
+        availability: { timezone: "America/Sao_Paulo" },
+        behavior_windows: [
+          {
+            id: "w1",
+            name: "Sempre",
+            days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+            start: "00:00",
+            end: "23:59",
+            behavior: "Fora do horário comercial, avise que o atendimento é no próximo dia útil.",
+          },
+        ],
+      },
+    };
+    const result = await buildDynamicPrompt(params);
+
+    expect(result).toContain('Janela ativa: "Sempre"');
+    expect(result).toContain("próximo dia útil");
+  });
+});
