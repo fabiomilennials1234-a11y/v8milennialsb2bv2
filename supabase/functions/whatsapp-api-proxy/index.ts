@@ -25,9 +25,13 @@ import {
   type WhatsAppInstance,
 } from "../_shared/whatsapp-client.ts";
 
-// Force bundler to include provider modules (used via dynamic import in whatsapp-client)
+// Force bundler to include provider modules (used via dynamic import in
+// whatsapp-client). meta-cloud is force-imported too so the human composer can
+// send via a meta_cloud instance without a runtime dynamic-import miss in the
+// eszip (REALSC incident class — CERTIFICATION Rule 15).
 import "../_shared/whatsapp-providers/evolution-provider.ts";
 import "../_shared/whatsapp-providers/uazapi-provider.ts";
+import "../_shared/whatsapp-providers/meta-cloud-provider.ts";
 
 // ---------------------------------------------------------------------------
 // Rate limit state (in-memory, per org)
