@@ -225,27 +225,27 @@ function RevisaoInner() {
       </div>
 
       <Tabs defaultValue="all" className="w-full">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <TabsList>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <TabsList className="max-w-full justify-start overflow-x-auto scrollbar-hide">
             <TabsTrigger value="all">Tudo</TabsTrigger>
             <TabsTrigger value="messages">Mensagens</TabsTrigger>
             <TabsTrigger value="followups">Follow-ups</TabsTrigger>
           </TabsList>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-9 w-48"
+                className="pl-9 h-9 w-full sm:w-48"
               />
             </div>
 
             {isAdmin && (
               <Select value={assignedTo} onValueChange={setAssignedTo}>
-                <SelectTrigger className="h-9 w-40">
+                <SelectTrigger className="h-9 w-full sm:w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
