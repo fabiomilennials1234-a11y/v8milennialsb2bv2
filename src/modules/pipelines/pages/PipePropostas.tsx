@@ -28,6 +28,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, KanbanColumn } from "@/modules/pipelines/components/kanban/DraggableKanbanBoard";
+import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";
+import { useViewport } from "@/shared/hooks/use-viewport";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { useCanDo } from "@/modules/identity";
@@ -498,6 +500,41 @@ function PipePropostasInner() {
     if (!pipeData) return 0;
     return pipeData.filter(item => item.lead == null).length;
   }, [pipeData]);
+
+  // ── Mobile: lista por stage (PipelineListView) em vez do kanban drag-drop ──
+  // Deriva stages/leads do `columns` já montado. id = entry id (move direto via
+  // handleStatusChange); click mapeia entry → lead pra abrir o sheet.
+  const { isMobile } = useViewport();
+  const mobileStages = useMemo(
+    () => columns.map((c) => ({ id: c.id, name: c.title, stage_key: c.id, color: c.color })),
+    [columns],
+  );
+  const mobileLeads = useMemo(
+    () =>
+      columns.flatMap((c) =>
+        c.items.map((card) => ({
+          id: card.id,
+          name: card.name,
+          company: card.company || undefined,
+          phone: card.phone || undefined,
+          rating: card.rating || 0,
+          stage_key: c.id,
+          created_at: card.createdAt,
+          updated_at: card.stageEnteredAt,
+        })),
+      ),
+    [columns],
+  );
+  const handleMobileLeadClick = useCallback(
+    (entryId: string) => {
+      const item = pipeData?.find((p) => p.id === entryId);
+      if (item) openLead(item.lead_id || item.lead?.id, item.id);
+    },
+    [pipeData, openLead],
+  );
+  const handleMobileMove = (entryId: string, stageKey: string) => {
+    handleStatusChange(entryId, stageKey);
+  };
 
   // Calculate stats — use server-side counts for totals, loaded items for value aggregation
   const stats = useMemo(() => {
@@ -1017,7 +1054,7 @@ function PipePropostasInner() {
             {pipeData?.length || 0} propostas • Arraste para alterar status
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 [&>*]:shrink-0">
           <PipeViewToggle
             value={viewMode}
             onChange={setViewMode}
@@ -1165,7 +1202,16 @@ function PipePropostasInner() {
               />
             </div>
 
-            {/* Kanban Board with Drag-and-Drop */}
+            {/* Kanban Board with Drag-and-Drop (desktop) / List View (mobile) */}
+            {isMobile ? (
+              <PipelineListView
+                stages={mobileStages}
+                leads={mobileLeads}
+                onLeadClick={handleMobileLeadClick}
+                onMoveLeadToStage={handleMobileMove}
+                isLoading={isLoading}
+              />
+            ) : (
             <DraggableKanbanBoard
               columns={columns}
               onStatusChange={handleStatusChange}
@@ -1213,6 +1259,7 @@ function PipePropostasInner() {
               )}
               renderColumnFooter={renderColumnFooter}
             />
+            )}
           </motion.div>
         ) : (
           <motion.div
