@@ -114,15 +114,15 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
 
   if (isLoading) {
     return (
-      <div className="mt-3.5 grid grid-cols-12 gap-3.5">
-        <Skeleton className="col-span-4 row-span-3 h-[460px] rounded-2xl" />
+      <div className="mt-3.5 grid grid-cols-2 gap-3.5 md:grid-cols-12">
+        <Skeleton className="col-span-2 h-[200px] rounded-2xl md:col-span-4 md:row-span-3 md:h-[460px]" />
         {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="col-span-2 h-[100px] rounded-2xl" />
+          <Skeleton key={i} className="col-span-1 h-[100px] rounded-2xl md:col-span-2" />
         ))}
-        <Skeleton className="col-span-8 h-[210px] rounded-2xl" />
-        <Skeleton className="col-span-4 h-[340px] rounded-2xl" />
-        <Skeleton className="col-span-4 h-[340px] rounded-2xl" />
-        <Skeleton className="col-span-4 h-[340px] rounded-2xl" />
+        <Skeleton className="col-span-2 h-[210px] rounded-2xl md:col-span-8" />
+        <Skeleton className="col-span-2 h-[340px] rounded-2xl md:col-span-4" />
+        <Skeleton className="col-span-2 h-[340px] rounded-2xl md:col-span-4" />
+        <Skeleton className="col-span-2 h-[340px] rounded-2xl md:col-span-4" />
       </div>
     );
   }
@@ -140,10 +140,10 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
       : null;
 
   return (
-    <div className="mt-3.5 grid grid-cols-12 gap-3.5">
+    <div className="mt-3.5 grid grid-cols-2 gap-3.5 md:grid-cols-12">
       {/* Velocímetro da meta */}
       <div
-        className="cmd-cell cmd-rise col-span-4 row-span-3 flex flex-col p-5"
+        className="cmd-cell cmd-rise col-span-2 flex flex-col p-5 md:col-span-4 md:row-span-3"
         style={{
           animationDelay: ".1s",
           background: "radial-gradient(300px 300px at 50% 42%, hsl(var(--primary)/.06), transparent 70%), hsl(var(--card))",
@@ -185,7 +185,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
       </div>
 
       {/* KPIs compactos */}
-      <div className="col-span-2">
+      <div className="col-span-1 md:col-span-2">
         <KpiCardCompact
           label="Leads" value={m?.totalLeads ?? 0} format="int"
           delta={m && p ? deltaBadge(m.totalLeads, p.totalLeads) : undefined}
@@ -193,7 +193,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
           quickActionLabel="Ver leads do período →" quickActionTo="/leads" delay={0.14}
         />
       </div>
-      <div className="col-span-2">
+      <div className="col-span-1 md:col-span-2">
         <KpiCardCompact
           label="Reuniões" value={m?.reunioesMarcadas ?? 0} format="int"
           delta={m && p ? deltaBadge(m.reunioesMarcadas, p.reunioesMarcadas) : undefined}
@@ -201,7 +201,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
           quickActionLabel="Abrir agenda →" quickActionTo="/agenda" delay={0.18}
         />
       </div>
-      <div className="col-span-2">
+      <div className="col-span-1 md:col-span-2">
         <KpiCardCompact
           label="Propostas" value={m?.propostasEnviadas ?? 0} format="int"
           delta={m && p ? deltaBadge(m.propostasEnviadas, p.propostasEnviadas) : undefined}
@@ -209,7 +209,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
           quickActionLabel="Ver propostas →" quickActionTo="/pipe-propostas" delay={0.22}
         />
       </div>
-      <div className="col-span-2">
+      <div className="col-span-1 md:col-span-2">
         <KpiCardCompact
           label="Vendas" value={m?.novosClientes ?? 0} format="int"
           delta={m && p ? deltaBadge(m.novosClientes, p.novosClientes) : undefined}
@@ -217,7 +217,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
           quickActionLabel="Ver fechamentos →" quickActionTo="/pipe-propostas" delay={0.26}
         />
       </div>
-      <div className="col-span-2">
+      <div className="col-span-1 md:col-span-2">
         <KpiCardCompact
           label="Ticket" value={m?.ticketMedio ?? 0} format="currencyK"
           delta={m && p ? deltaBadge(m.ticketMedio, p.ticketMedio) : undefined}
@@ -225,7 +225,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
           quickActionLabel="Por produto →" quickActionTo="/produtos" delay={0.3}
         />
       </div>
-      <div className="col-span-2">
+      <div className="col-span-1 md:col-span-2">
         <KpiCardCompact
           label="Resposta" value={m?.tempoMedioResposta ?? 0} format="minutes"
           delta={m && p ? deltaBadge(m.tempoMedioResposta, p.tempoMedioResposta, true) : undefined}
@@ -233,7 +233,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
           quickActionLabel="Por vendedor →" quickActionTo="/performance" delay={0.34}
         />
       </div>
-      <div className="col-span-2">
+      <div className="col-span-1 md:col-span-2">
         <KpiCardCompact
           label="Conversão" value={m?.taxaConversao ?? 0} format="percent"
           delta={
@@ -245,7 +245,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
           quickActionLabel="Funil completo →" quickActionTo="/funis" delay={0.38}
         />
       </div>
-      <div className="col-span-2">
+      <div className="col-span-1 md:col-span-2">
         <KpiCardCompact
           label="Follow-ups" value={overdueCount} format="int"
           delta={overdueCount > 0 ? { label: String(overdueCount), tone: "down" } : undefined}
@@ -255,7 +255,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
       </div>
 
       {/* Receita acumulada */}
-      <div className="col-span-8">
+      <div className="col-span-2 md:col-span-8">
         <RevenueAccumulatedChart
           daily={m?.dailySales ?? []}
           prevDaily={p?.dailySales ?? []}
@@ -271,7 +271,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
       </div>
 
       {/* Funil + Oráculo + Feed */}
-      <div className="col-span-4">
+      <div className="col-span-2 md:col-span-4">
         <TrapezoidFunnel
           stages={[
             { label: "Leads", value: totalMetrics?.totalLeads ?? 0 },
@@ -283,10 +283,10 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
           prevLabel={range.prevLabel.replace("em ", "vs ")}
         />
       </div>
-      <div className="col-span-4">
+      <div className="col-span-2 md:col-span-4">
         <OraculoBriefing onAsk={onAskOraculo} />
       </div>
-      <div className="col-span-4">
+      <div className="col-span-2 md:col-span-4">
         <LiveOpsFeed />
       </div>
     </div>

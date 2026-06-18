@@ -45,7 +45,7 @@ function CommandHeaderBase({
     month === 12 ? onMonthChange(1, year + 1) : onMonthChange(month + 1, year);
 
   return (
-    <div className="cmd-rise flex items-center gap-[22px] border-b border-border/70 pb-3">
+    <div className="cmd-rise flex flex-col gap-3 border-b border-border/70 pb-3 md:flex-row md:items-center md:gap-[22px]">
       <div className="min-w-0">
         <h1 className="text-[19px] font-extrabold tracking-[-0.03em]">Comando</h1>
         <div className="group flex items-center gap-1 text-[12px] text-muted-foreground">
@@ -74,7 +74,7 @@ function CommandHeaderBase({
         </div>
       </div>
 
-      <TabsList className="ml-[18px] h-auto gap-1 bg-transparent p-0">
+      <TabsList className="ml-0 h-auto max-w-full justify-start gap-1 overflow-x-auto scrollbar-hide bg-transparent p-0 md:ml-[18px]">
         <TabsTrigger value="visao-geral" className={TAB_TRIGGER_CLASS}>Visão Geral</TabsTrigger>
         <TabsTrigger value="performance" className={TAB_TRIGGER_CLASS}>Performance</TabsTrigger>
         <TabsTrigger value="saude" className={TAB_TRIGGER_CLASS}>Saúde</TabsTrigger>
@@ -84,34 +84,36 @@ function CommandHeaderBase({
         )}
       </TabsList>
 
-      <div className="flex-1" />
+      <div className="hidden md:block md:flex-1" />
 
-      <div className="flex gap-[2px] rounded-[9px] border border-border bg-card p-[3px]">
-        {PERIODS.map((p) => (
-          <button
-            key={p.key}
-            type="button"
-            onClick={() => onPeriodChange(p.key)}
-            className={cn(
-              "rounded-md px-3 py-1.5 text-[12px] font-semibold transition-all",
-              period === p.key
-                ? "bg-background text-foreground shadow-[inset_0_0_0_1px_hsl(var(--border))]"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {p.label}
-          </button>
-        ))}
+      <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide [&>*]:shrink-0">
+        <div className="flex gap-[2px] rounded-[9px] border border-border bg-card p-[3px]">
+          {PERIODS.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => onPeriodChange(p.key)}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-[12px] font-semibold transition-all",
+                period === p.key
+                  ? "bg-background text-foreground shadow-[inset_0_0_0_1px_hsl(var(--border))]"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={onNewLead}
+          className="inline-flex items-center gap-[7px] rounded-[9px] bg-primary px-4 py-[9px] text-[13px] font-bold text-primary-foreground shadow-[inset_0_1px_0_hsl(47_100%_65%/.45),0_6px_18px_hsl(var(--primary)/.18)] transition-transform duration-150 hover:-translate-y-px"
+        >
+          <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+          Novo lead
+        </button>
       </div>
-
-      <button
-        type="button"
-        onClick={onNewLead}
-        className="inline-flex items-center gap-[7px] rounded-[9px] bg-primary px-4 py-[9px] text-[13px] font-bold text-primary-foreground shadow-[inset_0_1px_0_hsl(47_100%_65%/.45),0_6px_18px_hsl(var(--primary)/.18)] transition-transform duration-150 hover:-translate-y-px"
-      >
-        <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-        Novo lead
-      </button>
     </div>
   );
 }
