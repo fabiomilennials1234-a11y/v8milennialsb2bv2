@@ -91,6 +91,14 @@ export type SendResult = {
   timestamp: number;
 };
 
+export type SendTemplateOptions = {
+  number: string;
+  templateName: string;
+  language: string;
+  /** Graph template components (header/body/button params). Provider passes through. */
+  components?: unknown[];
+};
+
 export type SendMenuOptions = {
   number: string;
   type: "button" | "list" | "poll" | "carousel";
@@ -131,6 +139,30 @@ export class NotSupportedError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// MetaWindowClosedError
+// ---------------------------------------------------------------------------
+
+/**
+ * Thrown by MetaCloudProvider.sendText/sendMedia when the 24h customer-service
+ * window is CLOSED (no inbound from the contact within 24h). This is NOT a
+ * NotSupportedError — Meta DOES support the send, but only via a pre-approved
+ * TEMPLATE while the window is closed. Distinct error type so the caller can
+ * surface "send a template" instead of "feature unavailable", and so it never
+ * collides with the `isFeatureUnavailable()` "does not support" matcher.
+ */
+export class MetaWindowClosedError extends Error {
+  override readonly name = "MetaWindowClosedError";
+  /** Last inbound timestamp (ISO) when known — null when the contact never wrote. */
+  readonly lastInboundAt: string | null;
+  constructor(lastInboundAt: string | null = null) {
+    super(
+      "meta_cloud: 24h customer-service window is closed — a pre-approved template is required to message this contact",
+    );
+    this.lastInboundAt = lastInboundAt;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // WhatsAppProvider interface
 // ---------------------------------------------------------------------------
 
@@ -147,6 +179,10 @@ export interface WhatsAppProvider {
   sendMedia(opts: SendMediaOptions): Promise<SendResult>;
   setPresence(number: string, state: "composing" | "available"): Promise<void>;
   downloadMedia(messageId: string): Promise<{ base64: string; mimetype: string }>;
+
+  // Meta-only — send a pre-approved template (ignores the 24h window). Absent on
+  // Uazapi/Evolution (optional, like sendMenu). Callers feature-detect.
+  sendTemplate?(opts: SendTemplateOptions): Promise<SendResult>;
 
   // Uazapi-only (Evolution throws NotSupportedError)
   sendMenu?(opts: SendMenuOptions): Promise<SendResult>;
