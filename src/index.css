@@ -230,6 +230,18 @@
     @apply bg-background;
   }
 
+  /* Mobile overflow guard: nenhuma página deve causar scroll lateral.
+     Scrollers internos (kanban list, tabelas com overflow-x-auto) seguem
+     funcionando — são contextos de rolagem aninhados, independentes. */
+  @media (max-width: 767px) {
+    html,
+    body,
+    #root {
+      overflow-x: hidden;
+      max-width: 100vw;
+    }
+  }
+
   /* Durante a transição de tema, só o fundo principal fica transparente (sidebar mantém a cor) */
   body.theme-transitioning,
   body.theme-transitioning #root,
