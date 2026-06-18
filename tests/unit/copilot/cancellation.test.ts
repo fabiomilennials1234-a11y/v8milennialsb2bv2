@@ -136,4 +136,61 @@ describe("isCopilotCanceled", () => {
     expect(r.canceled).toBe(false);
     expect(r.source).toBe("phone_ai_preferences");
   });
+
+  // systemDisabled: distingue bulk do sistema (reativável no inbound) de
+  // desligamento manual / pausa humana (segue bloqueando).
+  describe("systemDisabled", () => {
+    it("pref ai_disabled=true com set_by NULL → systemDisabled=true (bulk sistema)", async () => {
+      const { sb, mockTable } = createMockSupabase();
+      mockTable("phone_ai_preferences", [
+        { organization_id: ORG, normalized_phone: NORMALIZED, ai_disabled: true, set_by: null },
+      ]);
+      const r = await isCopilotCanceled(sb, ORG, "+55 11 98765-4321");
+      expect(r.canceled).toBe(true);
+      expect(r.systemDisabled).toBe(true);
+    });
+
+    it("pref ai_disabled=true com set_by preenchido → systemDisabled=false (manual)", async () => {
+      const { sb, mockTable } = createMockSupabase();
+      mockTable("phone_ai_preferences", [
+        { organization_id: ORG, normalized_phone: NORMALIZED, ai_disabled: true, set_by: "user-123" },
+      ]);
+      const r = await isCopilotCanceled(sb, ORG, "+55 11 98765-4321");
+      expect(r.canceled).toBe(true);
+      expect(r.systemDisabled).toBe(false);
+    });
+
+    it("fallback leads ai_disabled=true sem ai_disabled_at → systemDisabled=true (bulk)", async () => {
+      const { sb, mockTable } = createMockSupabase();
+      mockTable("phone_ai_preferences", []);
+      mockTable("leads", [
+        { organization_id: ORG, normalized_phone: NORMALIZED, ai_disabled: true, ai_disabled_at: null, created_at: "2026-04-26T00:00:00Z" },
+      ]);
+      const r = await isCopilotCanceled(sb, ORG, "+5511987654321");
+      expect(r.canceled).toBe(true);
+      expect(r.systemDisabled).toBe(true);
+    });
+
+    it("fallback leads ai_disabled=true COM ai_disabled_at → systemDisabled=false (manual)", async () => {
+      const { sb, mockTable } = createMockSupabase();
+      mockTable("phone_ai_preferences", []);
+      mockTable("leads", [
+        { organization_id: ORG, normalized_phone: NORMALIZED, ai_disabled: true, ai_disabled_at: "2026-05-01T00:00:00Z", created_at: "2026-04-26T00:00:00Z" },
+      ]);
+      const r = await isCopilotCanceled(sb, ORG, "+5511987654321");
+      expect(r.canceled).toBe(true);
+      expect(r.systemDisabled).toBe(false);
+    });
+
+    it("pausa humana → systemDisabled=false (não reativa)", async () => {
+      const { sb, mockTable } = createMockSupabase();
+      const future = new Date(Date.now() + 30 * 60_000).toISOString();
+      mockTable("phone_ai_preferences", [
+        { organization_id: ORG, normalized_phone: NORMALIZED, ai_disabled: false, human_paused_until: future },
+      ]);
+      const r = await isCopilotCanceled(sb, ORG, "+55 11 98765-4321");
+      expect(r.source).toBe("human_pause");
+      expect(r.systemDisabled).toBe(false);
+    });
+  });
 });

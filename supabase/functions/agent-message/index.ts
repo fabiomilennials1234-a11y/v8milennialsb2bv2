@@ -8,7 +8,7 @@ import { getOrCreateLead, normalizePhoneForSearch } from "../_shared/lead-servic
 import { OpenRouterClient } from "./openrouter-client.ts";
 import { AgentEngine } from "./agent-engine.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
-import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
+import { isCopilotCanceled, logCopilotCancellation, reactivateSystemDisabledContact } from "../_shared/copilot/cancellation.ts";
 
 // Force bundler to include provider modules (used via dynamic import in whatsapp-client)
 import "../_shared/whatsapp-providers/evolution-provider.ts";
@@ -199,16 +199,27 @@ Deno.serve(withSentry('agent-message', async (req) => {
     // Antes lia só lead.ai_disabled (denormalizado) — drift se sync falhasse.
     const initialCancel = await isCopilotCanceled(supabase, organizationId, from);
     if (initialCancel.canceled) {
-      console.log('[agent-message] AI disabled for lead:', lead.id, 'source:', initialCancel.source);
-      return new Response(JSON.stringify({
-        skipped: true,
-        reason: "AI disabled for this lead",
-        lead_id: lead.id,
-        source: initialCancel.source,
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
+      // Reativação REATIVA: se o bloqueio veio do desligamento em massa do
+      // sistema (bulk SQL, sem usuário), a mensagem do lead religa SÓ este
+      // contato e o turno segue normalmente. Manual (Adriane) e pausa humana
+      // continuam bloqueando. Nada é religado proativamente — só quando o lead
+      // escreve. Ver reactivateSystemDisabledContact / systemDisabled.
+      if (initialCancel.systemDisabled) {
+        await reactivateSystemDisabledContact(supabase, organizationId, from, lead.id);
+        console.log('[agent-message] Reativado contato (bulk sistema) no inbound:', lead.id);
+        // não retorna — cai no fluxo normal e responde
+      } else {
+        console.log('[agent-message] AI disabled for lead:', lead.id, 'source:', initialCancel.source);
+        return new Response(JSON.stringify({
+          skipped: true,
+          reason: "AI disabled for this lead",
+          lead_id: lead.id,
+          source: initialCancel.source,
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
     }
 
     // 1.55. HUMAN PAUSE GATE — coberto pelo initialCancel acima (1.5).
