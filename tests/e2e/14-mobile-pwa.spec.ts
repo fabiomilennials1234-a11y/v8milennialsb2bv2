@@ -3,7 +3,7 @@
  *
  * Validates mobile-specific features built in issues #343–#353:
  *   - PWA manifest presence + content
- *   - MobileBottomNav (4 tabs: Chat, Pipeline, Leads, Mais)
+ *   - MobileBottomNav (5 tabs: Chat, Funis, Leads, Agenda, Mais)
  *   - Bottom tab navigation triggers URL changes
  *   - Pipeline list view on mobile (stage chips, not kanban)
  *   - Lead detail panel renders with tabs
@@ -106,12 +106,12 @@ test.describe('Mobile Bottom Navigation', () => {
     await page.waitForLoadState('networkidle');
   });
 
-  test('bottom nav visible on mobile viewport with 4 tab buttons', async ({ page }) => {
+  test('bottom nav visible on mobile viewport with 5 tab buttons', async ({ page }) => {
     const nav = page.locator('[data-testid="mobile-bottom-nav"]');
     await expect(nav).toBeVisible({ timeout: 10_000 });
 
-    // 4 tabs: Chat, Pipeline, Leads, Mais
-    for (const tabId of ['chat', 'pipeline', 'leads', 'mais']) {
+    // 5 tabs: Chat, Funis, Leads, Agenda, Mais
+    for (const tabId of ['chat', 'funis', 'leads', 'agenda', 'mais']) {
       const tab = page.locator(`[data-testid="tab-${tabId}"]`);
       await expect(tab).toBeVisible();
     }
@@ -119,8 +119,9 @@ test.describe('Mobile Bottom Navigation', () => {
 
   test('tab labels match expected text', async ({ page }) => {
     await expect(page.locator('[data-testid="tab-chat"]')).toContainText('Chat');
-    await expect(page.locator('[data-testid="tab-pipeline"]')).toContainText('Pipeline');
+    await expect(page.locator('[data-testid="tab-funis"]')).toContainText('Funis');
     await expect(page.locator('[data-testid="tab-leads"]')).toContainText('Leads');
+    await expect(page.locator('[data-testid="tab-agenda"]')).toContainText('Agenda');
     await expect(page.locator('[data-testid="tab-mais"]')).toContainText('Mais');
   });
 
@@ -130,10 +131,10 @@ test.describe('Mobile Bottom Navigation', () => {
     expect(page.url()).toContain('/chat-whatsapp');
   });
 
-  test('clicking Pipeline tab navigates to /pipe-whatsapp', async ({ page }) => {
-    await page.locator('[data-testid="tab-pipeline"]').click();
+  test('clicking Funis tab navigates to /funis', async ({ page }) => {
+    await page.locator('[data-testid="tab-funis"]').click();
     await page.waitForLoadState('networkidle');
-    expect(page.url()).toContain('/pipe-whatsapp');
+    expect(page.url()).toContain('/funis');
   });
 
   test('clicking Leads tab navigates to /leads', async ({ page }) => {
@@ -142,12 +143,11 @@ test.describe('Mobile Bottom Navigation', () => {
     expect(page.url()).toContain('/leads');
   });
 
-  test('clicking Mais tab opens secondary nav sheet', async ({ page }) => {
+  test('clicking Mais tab opens the full nav sheet', async ({ page }) => {
     await page.locator('[data-testid="tab-mais"]').click();
 
-    // The sheet should open with secondary items (Dashboard, Agenda, Configuracoes)
-    await expect(page.getByText('Dashboard')).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText('Agenda')).toBeVisible();
+    // Mais dispatches v8:open-mobile-nav → TopNavigation Sheet (nav full filtrada).
+    await expect(page.getByText('Comando')).toBeVisible({ timeout: 5_000 });
   });
 
   test('active tab shows gold accent color', async ({ page }) => {
@@ -159,8 +159,8 @@ test.describe('Mobile Bottom Navigation', () => {
     await expect(chatTab).toHaveAttribute('data-active', 'true');
 
     // Other tabs should not be active
-    const pipelineTab = page.locator('[data-testid="tab-pipeline"]');
-    await expect(pipelineTab).toHaveAttribute('data-active', 'false');
+    const funisTab = page.locator('[data-testid="tab-funis"]');
+    await expect(funisTab).toHaveAttribute('data-active', 'false');
   });
 });
 
@@ -443,23 +443,18 @@ test.describe('Mobile Layout — general', () => {
     expect(overflow.htmlOverflow).toBe(false);
   });
 
-  test('hamburger menu (Sheet) opens on mobile', async ({ page }) => {
+  test('full nav sheet opens via bottom-nav Mais on mobile', async ({ page }) => {
     await setViewport(page, MOBILE);
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    // The hamburger is a xl:hidden button with Menu icon inside the topnav
-    const hamburger = page.locator('[data-topnav] button').filter({ has: page.locator('svg') }).last();
-    const isVis = await hamburger.isVisible({ timeout: 5_000 }).catch(() => false);
+    // On phones (<768) the hamburger button is hidden; bottom-nav "Mais"
+    // dispatches v8:open-mobile-nav which opens the TopNavigation full Sheet.
+    await page.locator('[data-testid="tab-mais"]').click();
+    await page.waitForTimeout(300);
 
-    if (isVis) {
-      await hamburger.click();
-      // Sheet should open with navigation items
-      await page.waitForTimeout(300);
-      // Look for mobile nav items (e.g., "Comando")
-      const navItem = page.getByText('Comando');
-      await expect(navItem).toBeVisible({ timeout: 3_000 });
-    }
+    const navItem = page.getByText('Comando');
+    await expect(navItem).toBeVisible({ timeout: 3_000 });
   });
 });
 

@@ -105,18 +105,22 @@ function MainLayoutInner({ children }: MainLayoutProps) {
       <main
         className={cn(
           "flex-1 min-h-0",
-          isFullBleed ? "overflow-hidden" : "overflow-auto",
+          // Mobile guard: clip horizontal overflow no eixo X (mata scroll lateral
+          // da página inteira); desktop mantém overflow-x auto p/ kanban/tabelas largas.
+          isFullBleed
+            ? "overflow-hidden"
+            : "overflow-y-auto overflow-x-hidden md:overflow-x-auto",
           isMobile && !hideBottomNav && "pb-16",
         )}
       >
         <div
           className={cn(
-            "w-full flex flex-col",
+            "w-full flex flex-col min-w-0 max-w-full",
             isFullBleed
               ? "h-full px-0 py-0"
               : isWide
               ? "px-4 lg:px-6 py-5 lg:py-6 min-h-full"
-              : "px-6 lg:px-10 xl:px-12 py-6 lg:py-8 max-w-[1600px] mx-auto min-h-full",
+              : "px-4 sm:px-6 lg:px-10 xl:px-12 py-5 sm:py-6 lg:py-8 max-w-[1600px] mx-auto min-h-full",
           )}
         >
           {children}

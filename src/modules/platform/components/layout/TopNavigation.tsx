@@ -279,6 +279,13 @@ export function TopNavigation() {
     setMobileOpen(false);
   }, [location.pathname]);
 
+  // Bottom-nav (mobile) dispara este Sheet via "Mais" — fonte única de nav full.
+  useEffect(() => {
+    const open = () => setMobileOpen(true);
+    window.addEventListener("v8:open-mobile-nav", open);
+    return () => window.removeEventListener("v8:open-mobile-nav", open);
+  }, []);
+
   // ─── Permission Helpers ────────────────────────────────────
   const canViewRoute = (path: string): boolean => {
     if (isMaster || isAdmin) return true;
@@ -828,7 +835,7 @@ export function TopNavigation() {
           {/* Mobile hamburger */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="lg:hidden h-9 w-9">
+              <Button variant="ghost" size="icon" className="hidden md:inline-flex lg:hidden h-9 w-9">
                 <Menu className="w-5 h-5" />
               </Button>
             </SheetTrigger>
