@@ -193,8 +193,8 @@ export default function Automacoes() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">
             Automações
           </h1>
@@ -202,7 +202,7 @@ export default function Automacoes() {
             Crie e gerencie workflows visuais para automatizar ações no CRM
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 [&>*]:shrink-0">
           <Button variant="outline" onClick={openImport} disabled={!canCreateAutomation}>
             <Upload className="w-4 h-4 mr-2" />
             Importar
