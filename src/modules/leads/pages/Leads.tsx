@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
+import { useViewport } from "@/shared/hooks/use-viewport";
 import { motion } from "framer-motion";
 import {
   Fuel,
@@ -247,6 +248,7 @@ function LeadsInner() {
   const responsibleMembers = useResponsibleMembers();
   const bulk = useBulkSelection();
   const allLeadIds = useMemo(() => leads.map((l: Lead) => l.id), [leads]);
+  const { isMobile } = useViewport();
 
   // ── Pipe/funnel selection for new leads ──
   const {
@@ -545,8 +547,81 @@ function LeadsInner() {
         />
       </div>
 
-      {/* Table */}
-      <div className="border border-border rounded-lg overflow-hidden">
+      {/* Table (desktop) / Card list (mobile) */}
+      <div className={cn("rounded-lg overflow-hidden", !isMobile && "border border-border")}>
+        {isMobile ? (
+          <div className="space-y-2.5 py-0.5">
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-24 w-full rounded-xl" />
+              ))
+            ) : leads.length === 0 ? (
+              <div className="rounded-xl border border-border py-10 text-center text-sm text-muted-foreground">
+                Nenhum lead encontrado
+              </div>
+            ) : (
+              leads.map((lead: Lead) => (
+                <div
+                  key={lead.id}
+                  onClick={() => openLead(lead.id)}
+                  className={cn(
+                    "rounded-xl border border-border bg-card p-3.5 transition-colors active:bg-muted/50",
+                    bulk.isSelected(lead.id) && "border-primary/40 bg-primary/5",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">{lead.name}</p>
+                      {lead.company && (
+                        <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
+                          <Building className="h-3 w-3 shrink-0" />
+                          {lead.company}
+                        </p>
+                      )}
+                    </div>
+                    <StarRating rating={lead.rating || 0} readonly />
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <Badge variant="outline" className={originColors[lead.origin] || originColors.outro}>
+                      {originLabels[lead.origin] || lead.origin}
+                    </Badge>
+                    {lead.pre_sale_responsible?.name && (
+                      <Badge variant="outline" className="border-blue-500/30 text-xs text-blue-400">
+                        {lead.pre_sale_responsible.name}
+                      </Badge>
+                    )}
+                    {lead.sale_responsible?.name && (
+                      <Badge variant="outline" className="border-emerald-500/30 text-xs text-emerald-400">
+                        {lead.sale_responsible.name}
+                      </Badge>
+                    )}
+                  </div>
+                  {(lead.phone || lead.email) && (
+                    <div className="mt-2 flex flex-col gap-0.5">
+                      {lead.phone && (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Phone className="h-3 w-3 shrink-0" />
+                          {lead.phone}
+                        </span>
+                      )}
+                      {lead.email && (
+                        <span className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                          <Mail className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{lead.email}</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <div className="mt-2 border-t border-border/60 pt-2">
+                    <span className="text-[11px] text-muted-foreground">
+                      {format(new Date(lead.created_at), "dd/MM/yyyy", { locale: ptBR })}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
         <Table>
           <TableHeader>
             <TableRow>
@@ -677,6 +752,7 @@ function LeadsInner() {
             )}
           </TableBody>
         </Table>
+        )}
 
         {/* Paginação */}
         {totalPages > 1 && (
