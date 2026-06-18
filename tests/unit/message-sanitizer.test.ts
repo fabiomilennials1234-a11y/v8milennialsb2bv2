@@ -154,6 +154,53 @@ describe("sanitizeAssistantMessage", () => {
     });
   });
 
+  // ============================================================
+  // Regressão: leak <tool_code> (Itatex Têxtil 2026-06-17)
+  // Gemini emite o tool-call no formato code-execution
+  // `<tool_code>{"tool":"...","parameters":{...}}</tool_code>` como TEXTO.
+  // PDF chegou (tool nativa disparou) MAS o bloco cru vazou no WhatsApp.
+  // ============================================================
+
+  it("strips <tool_code> blocks with tool/parameters schema (native already fired)", () => {
+    const raw = [
+      "Com certeza, Gisely! Vou te enviar agora mesmo o nosso catálogo completo.",
+      "",
+      "<tool_code>",
+      "{",
+      '  "tool": "send_document",',
+      '  "parameters": {',
+      '    "document_url": "https://storage.googleapis.com/vapi-public/itatex/Catalago%20de%20Produtos_compressed.pdf",',
+      '    "caption": "Aqui está o nosso catálogo completo, Gisely! 🦋"',
+      "  }",
+      "}",
+      "</tool_code>",
+    ].join("\n");
+
+    const r = sanitizeAssistantMessage(raw, true);
+    expect(r.text).toBe(
+      "Com certeza, Gisely! Vou te enviar agora mesmo o nosso catálogo completo.",
+    );
+    expect(r.text).not.toMatch(/tool_code/i);
+    expect(r.text).not.toMatch(/send_document/i);
+    expect(r.text).not.toMatch(/document_url/i);
+    expect(r.droppedBlocks).toBeGreaterThanOrEqual(1);
+  });
+
+  it("recovers action from <tool_code> tool/parameters when native tool missed", () => {
+    const raw = [
+      "Segue o catálogo.",
+      "<tool_code>",
+      '{"tool": "send_document", "parameters": {"document_url": "https://x/y.pdf", "caption": "Catálogo"}}',
+      "</tool_code>",
+    ].join("\n");
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Segue o catálogo.");
+    expect(r.recoveredAction).toEqual({
+      action: "SEND_DOCUMENT",
+      params: { document_url: "https://x/y.pdf", caption: "Catálogo" },
+    });
+  });
+
   it("supports legacy <tool_call> schema name/arguments (OpenRouter universal)", () => {
     const raw = [
       "Buscando.",
