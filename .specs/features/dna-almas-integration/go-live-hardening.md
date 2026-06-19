@@ -9,6 +9,21 @@ múltiplos eventos** + move-pro-mesmo-stage = no-op de gatilho.
 
 Decisões com 🧑 = voz de produto (CTO decide copy/UX). 🔧 = mecânica (engenharia).
 
+## STATUS (2026-06-19 — hardening aplicado em prod)
+
+| Item | Estado | O que foi feito / falta |
+|---|---|---|
+| H1 | ✅ meu lado / 🟡 Zuvic | `checkout.upgrade`→`assinante` (não dispara F); workflow `DNA · Assinante` (tag `assinante`→assinante) p/ checkout.success-PLANO. **FALTA Zuvic**: taguear avulso `Cliente` ≠ plano `assinante` (pedido item 1a). |
+| H2 | ✅ DONE | `DNA · Downgrade` repontado p/ stage novo `plano_free` (sem winback "encerrado"). |
+| H3 | ✅ DONE | `DNA · Renovação` (tag `renovacao`→`assinante`) tira inadimplente da cobrança; guard da cobrança encerra. |
+| H4 | ✅ DONE | guard `in_stage:<stage>`→`end` antes de CADA send em E/B/C/D (apply_18 splicer; E:2, B:4, C:4, D:3 guards). Verificado executável. |
+| H5 | ⏳ defer | `frio`/G órfão — precisa cron de inatividade (design à parte). G fica dormente. |
+| H6 | 🟡 Zuvic | phone nos checkout.* (pedido item 2). |
+| H7 | 🟡 Zuvic | prefixo `sys:` nas tags (pedido item 3). |
+| H8 | ✅ DONE | resolvido via stages-por-evento (assinante/plano_free/cancelado distintos). |
+
+Stages novos: `assinante`(23), `plano_free`(24). Falsos (re-tag, preço 99,97) confirmados não-issue.
+
 ## 🔴 Bloqueantes de go-live (resolver ANTES de conectar instância)
 
 ### H1 — F (onboarding de mapa) dispara pra `checkout.upgrade` 🧑🔧
