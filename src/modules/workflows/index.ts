@@ -58,6 +58,10 @@ export {
   type WorkflowTemplate,
 } from "./hooks/useWorkflowTemplates";
 
+// Templates-base de sistema por funil (auto-gerados das pastas Funil A/ e Funil B/).
+// Consumidos por `identity` para semear automações ao criar uma org com modelo de funil.
+export { FUNIL_A_TEMPLATES, FUNIL_B_TEMPLATES } from "./lib/funnelTemplates";
+
 // ────────────────────────────────────────────────────────────────────────
 // Hooks — Stage <-> Workflow bindings (cross-module from pipelines/campaigns)
 // ────────────────────────────────────────────────────────────────────────

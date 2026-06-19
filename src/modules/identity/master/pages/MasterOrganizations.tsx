@@ -387,7 +387,7 @@ export default function MasterOrganizations() {
                 {newOrgFunnel === "none"
                   ? "A org começa com os kanbans padrão do sistema."
                   : FUNNEL_TEMPLATES[newOrgFunnel].description +
-                    " — os kanbans já vêm setados automaticamente."}
+                    " — kanbans e automações do funil já vêm setados (as automações são criadas inativas)."}
               </p>
             </div>
           </div>
