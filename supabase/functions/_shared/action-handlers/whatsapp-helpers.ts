@@ -50,6 +50,12 @@ export async function getWhatsAppInstance(
   }
 
   if (!resolved) {
+    // Org-default fallback. `status` is the raw provider-webhook signal and stays
+    // frozen at "connected" when WhatsApp is logged out from another device — the
+    // watchdog records the real verdict in `session_dead_since`. Excluding dead
+    // sessions here mirrors the frontend's deriveInstanceStatus() and stops sends
+    // from routing to a logged-out instance (Uazapi answers /send/text with 5xx).
+    // Prefer the most recently connected live instance when an org has several.
     const { data } = await supabase
       .from("whatsapp_instances")
       .select("*")
@@ -57,6 +63,8 @@ export async function getWhatsAppInstance(
       // Meta isolation (cert Rule 2): never auto-pick a Meta number for a legacy send.
       .in("provider", ["uazapi", "evolution"])
       .in("status", ["open", "connected"])
+      .is("session_dead_since", null)
+      .order("last_connection_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     resolved = data;

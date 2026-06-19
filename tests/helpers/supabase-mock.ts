@@ -71,7 +71,9 @@ export function createMockSupabase() {
         case 'gte': return (val as number) >= (f.value as number);
         case 'lt': return (val as number) < (f.value as number);
         case 'lte': return (val as number) <= (f.value as number);
-        case 'is': return val === f.value;
+        // Postgres `IS NULL` matches absent columns; a fixture that omits the
+        // field (undefined) must behave like a real NULL column.
+        case 'is': return f.value === null ? (val === null || val === undefined) : val === f.value;
         case 'ilike': return typeof val === 'string' && typeof f.value === 'string' &&
           val.toLowerCase() === f.value.toLowerCase();
         case 'contains': return Array.isArray(val) && Array.isArray(f.value) &&
@@ -164,6 +166,8 @@ export function createMockSupabase() {
         return chain;
       },
       limit: (n: number) => { limitCount = n; return chain; },
+      // `.returns<T>()` is a type-only helper on the real client; pass through.
+      returns: () => chain,
       insert: (rows: unknown) => {
         isInsert = true;
         insertData = rows;

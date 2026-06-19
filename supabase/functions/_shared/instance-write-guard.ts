@@ -189,7 +189,7 @@ export async function resolveLeadWriteInstance(
 
   const { data: inst, error: instErr } = await client
     .from("whatsapp_instances")
-    .select("status")
+    .select("status, session_dead_since")
     .eq("id", instanceId)
     .maybeSingle();
 
@@ -208,6 +208,20 @@ export async function resolveLeadWriteInstance(
       "[InstanceWriteGuard] resolve_lead leadId=%s outcome=fail error_code=INSTANCE_INACTIVE status=%s",
       leadId,
       status,
+    );
+    return { ok: false, errorCode: "INSTANCE_INACTIVE" };
+  }
+
+  // `status` is the raw provider-webhook signal and stays frozen at "connected"
+  // when WhatsApp is logged out from another device. The watchdog records the
+  // real verdict in `session_dead_since`; honour it so strict resolution never
+  // hands a caller a dead instance whose /send/text only answers 5xx.
+  const sessionDeadSince = (inst?.session_dead_since ?? null) as string | null;
+  if (sessionDeadSince !== null) {
+    console.log(
+      "[InstanceWriteGuard] resolve_lead leadId=%s outcome=fail error_code=INSTANCE_INACTIVE session_dead_since=%s",
+      leadId,
+      sessionDeadSince,
     );
     return { ok: false, errorCode: "INSTANCE_INACTIVE" };
   }

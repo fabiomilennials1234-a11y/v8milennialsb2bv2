@@ -126,11 +126,22 @@ Deno.serve(
       return new Response(JSON.stringify({ error: message }), { status: 502, headers });
     }
 
-    // Build a lookup from whatsapp_instances.id (uuid in adminField02) → Uazapi status.
-    const byInstanceId = new Map<string, UazapiInstance>();
+    // Build two independent lookups into the Uazapi /instance/all response:
+    //   1. byAdminField02 — keyed on our whatsapp_instances.id (uuid Uazapi echoes
+    //      back in adminField02). This is operator-set metadata and can be missing
+    //      or edited, which silently hides an instance from the watchdog.
+    //   2. byUazapiId — keyed on the canonical, immutable Uazapi instance id (r…).
+    //      Joining on this too means a dropped/dirty adminField02 no longer makes a
+    //      dead session invisible (the original blind spot behind a 5-day-stale
+    //      "connected" row that kept enrolling leads into a dead funnel).
+    const byAdminField02 = new Map<string, UazapiInstance>();
+    const byUazapiId = new Map<string, UazapiInstance>();
     for (const u of uazapiInstances) {
       if (u.adminField02 && /^[0-9a-f-]{36}$/i.test(u.adminField02)) {
-        byInstanceId.set(u.adminField02, u);
+        byAdminField02.set(u.adminField02, u);
+      }
+      if (u.id && u.id.trim().length > 0) {
+        byUazapiId.set(u.id, u);
       }
     }
 
@@ -144,6 +155,21 @@ Deno.serve(
       return new Response(JSON.stringify({ error: dbErr.message }), { status: 500, headers });
     }
 
+    // Secondary join key: map each whatsapp_instances.id → its canonical Uazapi
+    // instance id (r…) held in the deny-all secrets table.
+    const uazapiIdByInstance = new Map<string, string>();
+    const dbIds = (dbInstances ?? []).map((r) => r.id);
+    if (dbIds.length > 0) {
+      const { data: secrets } = await supabase
+        .from("whatsapp_instance_secrets")
+        .select("instance_id, uazapi_instance_id")
+        .in("instance_id", dbIds)
+        .returns<Array<{ instance_id: string; uazapi_instance_id: string | null }>>();
+      for (const s of secrets ?? []) {
+        if (s.uazapi_instance_id) uazapiIdByInstance.set(s.instance_id, s.uazapi_instance_id);
+      }
+    }
+
     let transitionedDead = 0;
     let transitionedHealthy = 0;
     let unchanged = 0;
@@ -152,9 +178,33 @@ Deno.serve(
     const dead: Array<{ id: string; org: string; reason: string }> = [];
 
     for (const row of dbInstances ?? []) {
-      const u = byInstanceId.get(row.id);
+      const uazapiId = uazapiIdByInstance.get(row.id);
+      const u = byAdminField02.get(row.id) ?? (uazapiId ? byUazapiId.get(uazapiId) : undefined);
       if (!u) {
+        // Ours (provider=uazapi) but resolvable by neither key. This is NOT the
+        // same as "not ours" — it may be an instance Uazapi dropped after a hard
+        // logout, which previously vanished silently. Surface it loudly so a dead
+        // funnel can't hide behind a stale "connected" row. We do not auto-stamp
+        // it dead here: /instance/all can return a partial list during a provider
+        // hiccup, and a recoverable false-positive on a presumed-healthy instance
+        // is worse than a logged alert the next run reconciles.
         untrackedOnUazapi += 1;
+        if (row.session_dead_since === null) {
+          console.error(
+            `[whatsapp-session-watchdog] unmapped instance ${row.instance_name} (${row.id}) — present in DB, absent from Uazapi /instance/all by both keys`,
+          );
+          await logRuntime({
+            module: "whatsapp",
+            action: "session_watchdog_instance_unmapped",
+            status: "error",
+            errorMessage: `${row.instance_name}: absent from Uazapi /instance/all`,
+            payloadSnapshot: {
+              instance_id: row.id,
+              organization_id: row.organization_id,
+              had_uazapi_instance_id: !!uazapiId,
+            },
+          });
+        }
         continue;
       }
       const nowDead = isDead(u.status);
