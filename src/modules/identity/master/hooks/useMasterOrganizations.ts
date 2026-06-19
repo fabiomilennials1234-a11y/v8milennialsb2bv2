@@ -8,6 +8,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
+import { FUNIL_A_TEMPLATES, FUNIL_B_TEMPLATES } from "@/modules/workflows";
 import { toast } from "sonner";
 
 /**
@@ -83,6 +84,55 @@ async function cloneFunnelStages(sourceOrgId: string, targetOrgId: string) {
   })) as TablesInsert<"pipeline_stages">[];
 
   const ins = await supabase.from("pipeline_stages").insert(rows);
+  if (ins.error) throw ins.error;
+}
+
+/**
+ * Automações-base de cada funil — os mesmos templates de sistema exibidos em
+ * Automações → Templates. Fonte única: `workflows/lib/funnelTemplates.ts`
+ * (auto-gerado das pastas `Funil A/` e `Funil B/`).
+ */
+const FUNNEL_WORKFLOW_TEMPLATES: Record<
+  FunnelTemplateKey,
+  { name: string; description: string | null; definition: Record<string, unknown> }[]
+> = {
+  funil_a: FUNIL_A_TEMPLATES,
+  funil_b: FUNIL_B_TEMPLATES,
+};
+
+/**
+ * Cria as automações-base do funil escolhido na org nova, TODAS **inativas**
+ * (`is_active=false`) — o Master/admin ativa quando quiser.
+ *
+ * O mapeamento template→workflow espelha `WorkflowTemplates.handleUseTemplate`:
+ * `trigger_type`/`trigger_config` saem do nó `trigger` da `definition`.
+ *
+ * Requer Master: a policy RLS `master_all_workflows` (FOR ALL USING
+ * is_master_user()) permite inserir workflows em qualquer org.
+ */
+async function seedFunnelWorkflows(
+  funnelTemplate: FunnelTemplateKey,
+  targetOrgId: string,
+) {
+  const templates = FUNNEL_WORKFLOW_TEMPLATES[funnelTemplate] ?? [];
+  if (templates.length === 0) return;
+
+  const rows = templates.map((tpl) => {
+    const nodes =
+      (tpl.definition as { nodes?: Record<string, any>[] }).nodes ?? [];
+    const triggerNode = nodes.find((n) => n?.type === "trigger");
+    return {
+      organization_id: targetOrgId,
+      name: tpl.name,
+      description: tpl.description ?? null,
+      trigger_type: triggerNode?.data?.triggerType ?? "lead_created",
+      trigger_config: triggerNode?.data?.config ?? {},
+      definition: tpl.definition,
+      is_active: false,
+    };
+  }) as TablesInsert<"workflows">[];
+
+  const ins = await supabase.from("workflows").insert(rows);
   if (ins.error) throw ins.error;
 }
 
@@ -255,7 +305,8 @@ export function useMasterCreateOrganization() {
         }
       }
 
-      // 3. Se um modelo de funil foi escolhido: clona os kanbans da org-base.
+      // 3. Se um modelo de funil foi escolhido: clona os kanbans da org-base
+      //    e já cria as automações-base do funil (todas inativas).
       if (data.funnelTemplate && FUNNEL_TEMPLATES[data.funnelTemplate]) {
         try {
           await cloneFunnelStages(
@@ -267,6 +318,17 @@ export function useMasterCreateOrganization() {
           // Não falha a criação da org — apenas avisa que o modelo não aplicou.
           toast.error(
             "Organização criada, mas houve falha ao aplicar o modelo de funil.",
+          );
+        }
+
+        // 4. Automações do funil já vêm criadas e INATIVAS — admin ativa depois.
+        //    Erro aqui não desfaz a org nem o clone dos kanbans.
+        try {
+          await seedFunnelWorkflows(data.funnelTemplate, org.id);
+        } catch (seedError) {
+          console.error("Error seeding funnel workflows:", seedError);
+          toast.error(
+            "Organização criada, mas houve falha ao criar as automações do funil.",
           );
         }
       }
