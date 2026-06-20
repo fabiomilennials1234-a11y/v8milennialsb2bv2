@@ -45,6 +45,10 @@ const BASE_CONFIG = {
   timeoutMs: 200,
 };
 
+// Circuit breaker key is now isolated per-credential (baseUrl + token),
+// not by token presence. See uazapi-client.ts request().
+const CB_KEY = `token:${BASE_CONFIG.baseUrl}:${BASE_CONFIG.token}`;
+
 // ---------------------------------------------------------------------------
 // Setup / teardown
 // ---------------------------------------------------------------------------
@@ -145,7 +149,7 @@ describe("sendText — success", () => {
 
     expect(result).toEqual(OK_MESSAGE);
 
-    const state = UazapiClient._circuitState().get("token:[present]");
+    const state = UazapiClient._circuitState().get(CB_KEY);
     expect(state?.failures ?? 0).toBe(0);
   });
 });
@@ -202,7 +206,7 @@ describe("sendText — 4xx error", () => {
       ).rejects.toMatchObject({ status: 401 });
     }
 
-    const state = UazapiClient._circuitState().get("token:[present]");
+    const state = UazapiClient._circuitState().get(CB_KEY);
     expect(state?.failures ?? 0).toBe(0);
     expect(state?.openUntil ?? 0).toBe(0);
   });
@@ -288,13 +292,13 @@ describe("timeout — AbortError handling", () => {
       withTimers(client.sendText({ number: "5511999999999", text: "Hi" }))
     ).rejects.toBeDefined();
 
-    const state = UazapiClient._circuitState().get("token:[present]");
+    const state = UazapiClient._circuitState().get(CB_KEY);
     expect(state?.openUntil).toBeGreaterThan(Date.now());
   });
 
   it("throws circuit_breaker_open immediately when breaker is open", async () => {
     // Force breaker open by setting state directly
-    UazapiClient._circuitState().set("token:[present]", {
+    UazapiClient._circuitState().set(CB_KEY, {
       failures: 0,
       openUntil: Date.now() + 120_000,
     });
@@ -309,6 +313,37 @@ describe("timeout — AbortError handling", () => {
 
     // Circuit is open — fetch must NOT be called at all
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  // Regression: shared breaker keyed by token-presence ("token:[present]")
+  // poisoned every tenant in the warm isolate. One org's 5xx/timeout failures
+  // must NOT open the breaker for another org's credential.
+  it("does NOT poison a different tenant's credential when one tenant's breaker opens", async () => {
+    // Tenant A (the failing org): force its breaker open directly.
+    const tenantA = new UazapiClient({ ...BASE_CONFIG, token: "tok-org-A" });
+    UazapiClient._circuitState().set(
+      `token:${BASE_CONFIG.baseUrl}:tok-org-A`,
+      { failures: 0, openUntil: Date.now() + 120_000 }
+    );
+
+    // Tenant A is blocked.
+    await expect(
+      tenantA.sendText({ number: "5511999999999", text: "Hi" })
+    ).rejects.toMatchObject<Partial<UazapiError>>({
+      provider_code: "circuit_breaker_open",
+    });
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+
+    // Tenant B (healthy org, different token) must still send normally.
+    vi.mocked(fetch).mockResolvedValueOnce(makeResponse(200, OK_MESSAGE));
+    const tenantB = new UazapiClient({ ...BASE_CONFIG, token: "tok-org-B" });
+    const result = await tenantB.sendText({
+      number: "5521988888888",
+      text: "Olá",
+    });
+
+    expect(result).toEqual(OK_MESSAGE);
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
 });
 

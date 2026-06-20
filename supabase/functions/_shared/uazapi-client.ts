@@ -376,9 +376,15 @@ export class UazapiClient {
     opts?: { useAdminToken?: boolean; timeoutMs?: number }
   ): Promise<T> {
     const useAdmin = opts?.useAdminToken ?? false;
+    // Circuit breaker key MUST isolate by credential (per-instance), not by
+    // token presence. A presence-only key ("token:[present]") is shared by
+    // every tenant in the warm isolate, so one org's 5xx/timeout failures open
+    // the breaker for ALL orgs — cross-tenant poisoning. Key by baseUrl+token
+    // (per-instance). cbKey is only ever used as an internal Map key, never
+    // logged, so the raw token here does not leak.
     const cbKey = useAdmin
-      ? `admin:${this.adminToken ? "[present]" : "[missing]"}`
-      : `token:${this.token ? "[present]" : "[missing]"}`;
+      ? `admin:${this.baseUrl}:${this.adminToken ?? "[missing]"}`
+      : `token:${this.baseUrl}:${this.token ?? "[missing]"}`;
 
     // ---- circuit breaker check ----
     const cb = circuitState.get(cbKey);
