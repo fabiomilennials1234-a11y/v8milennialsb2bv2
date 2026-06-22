@@ -38,7 +38,12 @@ Deno.test("formatLead — serializes the lead payload as text", () => {
 import { buildRestorePlan } from "./lead.ts";
 
 Deno.test("buildRestorePlan — summarizes the soft-deleted lead to restore", () => {
-  const plan = buildRestorePlan({ id: "lead-1", name: "Joao", organization_id: "org-1", deleted_at: "2026-06-20T00:00:00Z" });
+  const plan = buildRestorePlan({
+    id: "lead-1",
+    name: "Joao",
+    organization_id: "org-1",
+    deleted_at: "2026-06-20T00:00:00Z",
+  });
   assertEquals(plan, {
     action: "restore_lead",
     lead_id: "lead-1",

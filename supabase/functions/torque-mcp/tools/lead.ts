@@ -98,8 +98,7 @@ export function buildRestorePlan(lead: Record<string, unknown>) {
 
 export const leadRestoreTool: ToolDef = {
   name: "lead.restore",
-  description:
-    "Restore a soft-deleted lead (un-delete) within an org, RLS-scoped as master. " +
+  description: "Restore a soft-deleted lead (un-delete) within an org, RLS-scoped as master. " +
     "Dry-run shows the lead; pass confirm_token to apply. Does not re-add to pipes.",
   readonly: false,
   inputSchema: {
@@ -127,7 +126,15 @@ export const leadRestoreTool: ToolDef = {
         return buildRestorePlan(data as Record<string, unknown>);
       },
       audit: (_i, plan, token) =>
-        auditMcpAction(db, { tool: "lead.restore", org_id: org, target_type: "lead", target_id: leadId, params: args, plan, confirm_token: token }),
+        auditMcpAction(db, {
+          tool: "lead.restore",
+          org_id: org,
+          target_type: "lead",
+          target_id: leadId,
+          params: args,
+          plan,
+          confirm_token: token,
+        }),
       apply: async () => {
         const { error } = await db.rpc("restore_lead", { p_lead_id: leadId });
         if (error) throw new Error(error.message);

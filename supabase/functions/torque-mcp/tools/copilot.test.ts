@@ -29,7 +29,11 @@ import { buildPromptUpdate } from "./copilot.ts";
 
 Deno.test("buildPromptUpdate — only provided sections, prompt_hash nulled", () => {
   assertEquals(
-    buildPromptUpdate({ system_prompt: "NEW", dos: "be concise", promptSections: [{ id: "p", text: "x" }] }, { tone: "warm" }),
+    buildPromptUpdate({
+      system_prompt: "NEW",
+      dos: "be concise",
+      promptSections: [{ id: "p", text: "x" }],
+    }, { tone: "warm" }),
     {
       system_prompt: "NEW",
       custom_instructions: '{"dos":"be concise"}',

@@ -45,7 +45,9 @@ export async function auditMcpAction(db: SupabaseClient, ctx: AuditCtx): Promise
     .select("id")
     .eq("user_id", userId)
     .maybeSingle();
-  if (muErr || !mu) throw new Error(`audit: master_users row not found (${muErr?.message ?? "none"})`);
+  if (muErr || !mu) {
+    throw new Error(`audit: master_users row not found (${muErr?.message ?? "none"})`);
+  }
   const { error } = await db
     .from("master_audit_logs")
     .insert(buildAuditRow(mu.id as string, userId, ctx));

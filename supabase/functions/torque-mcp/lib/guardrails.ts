@@ -30,7 +30,9 @@ export async function runMutation<D, P, R>(
     return { dryRun: true, applied: false, plan, confirmToken };
   }
   if (input.confirm_token !== confirmToken) {
-    throw new Error("confirm_token mismatch — re-run the dry-run and pass the returned confirmToken");
+    throw new Error(
+      "confirm_token mismatch — re-run the dry-run and pass the returned confirmToken",
+    );
   }
   if (spec.audit) await spec.audit(input, plan, confirmToken); // audit-first
   const result = await spec.apply(input, plan);

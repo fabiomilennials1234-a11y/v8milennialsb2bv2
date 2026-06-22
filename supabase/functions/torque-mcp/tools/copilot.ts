@@ -55,7 +55,10 @@ export function buildPromptUpdate(
   if (sections.system_prompt !== undefined) upd.system_prompt = sections.system_prompt;
   if (sections.dos !== undefined) upd.custom_instructions = JSON.stringify({ dos: sections.dos });
   if (sections.promptSections !== undefined) {
-    upd.conversation_style = { ...(currentConversationStyle ?? {}), promptSections: sections.promptSections };
+    upd.conversation_style = {
+      ...(currentConversationStyle ?? {}),
+      promptSections: sections.promptSections,
+    };
   }
   return upd;
 }
@@ -72,7 +75,10 @@ export const copilotUpdatePromptTool: ToolDef = {
       agent_id: { type: "string", description: "Copilot agent UUID" },
       system_prompt: { type: "string", description: "New compiled system prompt (optional)" },
       dos: { type: "string", description: "New custom_instructions.dos (optional)" },
-      promptSections: { type: "array", description: "New conversation_style.promptSections (optional)" },
+      promptSections: {
+        type: "array",
+        description: "New conversation_style.promptSections (optional)",
+      },
       confirm_token: { type: "string" },
     },
     required: ["agent_id"],
@@ -86,8 +92,17 @@ export const copilotUpdatePromptTool: ToolDef = {
       dos: typeof args.dos === "string" ? args.dos : undefined,
       promptSections: Array.isArray(args.promptSections) ? args.promptSections : undefined,
     };
-    if (sections.system_prompt === undefined && sections.dos === undefined && sections.promptSections === undefined) {
-      return { content: [{ type: "text", text: "Provide at least one of system_prompt | dos | promptSections." }], isError: true };
+    if (
+      sections.system_prompt === undefined && sections.dos === undefined &&
+      sections.promptSections === undefined
+    ) {
+      return {
+        content: [{
+          type: "text",
+          text: "Provide at least one of system_prompt | dos | promptSections.",
+        }],
+        isError: true,
+      };
     }
 
     const res = await runMutation({
@@ -96,13 +111,32 @@ export const copilotUpdatePromptTool: ToolDef = {
           .select("id,organization_id,name,conversation_style").eq("id", agentId).maybeSingle();
         if (error) throw new Error(error.message);
         if (!data) throw new Error("No copilot agent found.");
-        const update = buildPromptUpdate(sections, (data.conversation_style as Record<string, unknown>) ?? null);
-        return { action: "update_prompt", agent_id: agentId, name: data.name, organization_id: data.organization_id, update };
+        const update = buildPromptUpdate(
+          sections,
+          (data.conversation_style as Record<string, unknown>) ?? null,
+        );
+        return {
+          action: "update_prompt",
+          agent_id: agentId,
+          name: data.name,
+          organization_id: data.organization_id,
+          update,
+        };
       },
       audit: (_i, plan, token) =>
-        auditMcpAction(db, { tool: "copilot.update_prompt", org_id: String(args.org_id ?? ""), target_type: "copilot_agent", target_id: agentId, params: args, plan, confirm_token: token }),
+        auditMcpAction(db, {
+          tool: "copilot.update_prompt",
+          org_id: String(args.org_id ?? ""),
+          target_type: "copilot_agent",
+          target_id: agentId,
+          params: args,
+          plan,
+          confirm_token: token,
+        }),
       apply: async (_i, plan) => {
-        const { error } = await db.from("copilot_agents").update((plan as { update: Record<string, unknown> }).update).eq("id", agentId);
+        const { error } = await db.from("copilot_agents").update(
+          (plan as { update: Record<string, unknown> }).update,
+        ).eq("id", agentId);
         if (error) throw new Error(error.message);
         return { updated: agentId };
       },

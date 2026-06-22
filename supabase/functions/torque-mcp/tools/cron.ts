@@ -26,7 +26,9 @@ export const cronToggleTool: ToolDef = {
   },
   handler: async (args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> => {
     const svc = ctx.serviceDb as SupabaseClient | undefined;
-    if (!svc) return { content: [{ type: "text", text: "service client unavailable" }], isError: true };
+    if (!svc) {
+      return { content: [{ type: "text", text: "service client unavailable" }], isError: true };
+    }
     const db = ctx.db as SupabaseClient;
     const jobname = String(args.job_name);
     const enabled = Boolean(args.enabled);
@@ -34,9 +36,20 @@ export const cronToggleTool: ToolDef = {
     const res = await runMutation({
       plan: () => buildCronPlan(jobname, enabled),
       audit: (_i, plan, token) =>
-        auditMcpAction(db, { tool: "cron.toggle", org_id: "", target_type: "cron_job", target_id: null, params: args, plan, confirm_token: token }),
+        auditMcpAction(db, {
+          tool: "cron.toggle",
+          org_id: "",
+          target_type: "cron_job",
+          target_id: null,
+          params: args,
+          plan,
+          confirm_token: token,
+        }),
       apply: async () => {
-        const { data, error } = await svc.rpc("toggle_cron_job", { p_jobname: jobname, p_enabled: enabled });
+        const { data, error } = await svc.rpc("toggle_cron_job", {
+          p_jobname: jobname,
+          p_enabled: enabled,
+        });
         if (error) throw new Error(error.message);
         return data;
       },
