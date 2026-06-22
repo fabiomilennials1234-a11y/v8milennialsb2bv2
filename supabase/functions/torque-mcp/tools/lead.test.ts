@@ -34,3 +34,17 @@ Deno.test("formatLead — serializes the lead payload as text", () => {
   assertEquals(res.content[0].text.includes('"name": "Joao"'), true);
   assertEquals(res.content[0].text.includes("lead-1"), true);
 });
+
+import { buildRestorePlan } from "./lead.ts";
+
+Deno.test("buildRestorePlan — summarizes the soft-deleted lead to restore", () => {
+  const plan = buildRestorePlan({ id: "lead-1", name: "Joao", organization_id: "org-1", deleted_at: "2026-06-20T00:00:00Z" });
+  assertEquals(plan, {
+    action: "restore_lead",
+    lead_id: "lead-1",
+    name: "Joao",
+    organization_id: "org-1",
+    deleted_at: "2026-06-20T00:00:00Z",
+    note: "Un-deletes only; does not re-add to pipes.",
+  });
+});
