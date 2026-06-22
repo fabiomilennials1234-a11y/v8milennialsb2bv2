@@ -26,3 +26,4 @@ owner: claude-agent
 - [[ADR-2026-05-22-tv-dashboard-period-rotation|ADR-2026-05-22-tv-dashboard-period-rotation]]
 - [[ADR-2026-05-25-meta-chat-canal-separado|ADR-2026-05-25-meta-chat-canal-separado]]
 - [[ADR-2026-05-26-modularizacao-monolito-modular|ADR-2026-05-26-modularizacao-monolito-modular]]
+- [[ADR-2026-06-22-torque-mcp-interno|ADR-2026-06-22 — MCP interno de ops/dev (RLS-herdado, não service_role)]]
