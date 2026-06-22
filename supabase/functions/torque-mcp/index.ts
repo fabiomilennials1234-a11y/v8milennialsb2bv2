@@ -1,3 +1,4 @@
+import { createClient } from "@supabase/supabase-js";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { loadConfig } from "./lib/config.ts";
 import { createCachedMasterClientProvider } from "./lib/auth.ts";
@@ -5,12 +6,13 @@ import { signInAsMaster } from "./lib/clients.ts";
 import { handleRpcPayload, secretMatches } from "./lib/http.ts";
 import type { DispatchContext } from "./lib/dispatch.ts";
 import type { JsonRpcRequest } from "./lib/types.ts";
-import { leadGetTool } from "./tools/lead.ts";
+import { leadGetTool, leadRestoreTool } from "./tools/lead.ts";
 import { leadTraceHistoryTool } from "./tools/trace.ts";
 import { conversationGetTool } from "./tools/conversation.ts";
 import { whatsappInstanceStatusTool } from "./tools/whatsapp.ts";
 import { blastStatusTool } from "./tools/blast.ts";
-import { copilotDumpPromptTool } from "./tools/copilot.ts";
+import { copilotDumpPromptTool, copilotUpdatePromptTool } from "./tools/copilot.ts";
+import { cronToggleTool } from "./tools/cron.ts";
 
 // Fail loud at boot if a required secret is missing (docs/adr/0011, REQ-M04).
 const config = loadConfig(Deno.env.toObject());
@@ -23,6 +25,9 @@ const TOOLS = [
   whatsappInstanceStatusTool,
   blastStatusTool,
   copilotDumpPromptTool,
+  leadRestoreTool,
+  copilotUpdatePromptTool,
+  cronToggleTool,
 ];
 
 // Isolate-scoped cache of the signed-in master session. The principal is fixed
@@ -31,6 +36,20 @@ const getMasterClient = createCachedMasterClientProvider({
   now: () => Date.now(),
   signIn: () => signInAsMaster(config),
 });
+
+// Lazy service-role client — only built when a requiresServiceRole tool is dispatched.
+// ALLOW_MUTATIONS must be true for serviceDb to be injected into toolContext.
+let _serviceDb: ReturnType<typeof createClient> | null = null;
+function getServiceDb(): ReturnType<typeof createClient> {
+  if (!_serviceDb) {
+    _serviceDb = createClient(
+      config.supabaseUrl,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { persistSession: false, autoRefreshToken: false } },
+    );
+  }
+  return _serviceDb;
+}
 
 function json(body: unknown, status: number, cors: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
@@ -73,7 +92,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       serverInfo: SERVER_INFO,
       tools: TOOLS,
       allowMutations: config.allowMutations,
-      toolContext: { db },
+      toolContext: { db, serviceDb: config.allowMutations ? getServiceDb() : undefined },
     };
     const result = await handleRpcPayload(payload, ctx);
     if (result === null) return new Response(null, { status: 202, headers: cors }); // notifications only
