@@ -79,7 +79,12 @@ function loadFacebookSdk(appId: string): Promise<void> {
     script.src = FB_SDK_SRC;
     script.async = true;
     script.defer = true;
-    script.crossOrigin = "anonymous";
+    // NOTE: do NOT set crossOrigin. Facebook's official SDK loader omits it. The
+    // connect.facebook.net response does not reliably satisfy a CORS-mode script
+    // load in every browser, so crossOrigin="anonymous" made the load fire `error`
+    // (→ "Falha ao carregar o SDK do Facebook") even though the script is
+    // reachable, CSP-allowed and returns Access-Control-Allow-Origin: *. A plain
+    // (no-cors) script tag loads and executes it fine.
     script.onerror = () => reject(new Error("Falha ao carregar o SDK do Facebook"));
     document.body.appendChild(script);
   });
