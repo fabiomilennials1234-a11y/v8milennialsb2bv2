@@ -96,6 +96,14 @@ export function buildRestorePlan(lead: Record<string, unknown>) {
   };
 }
 
+/** Find a soft-deleted lead by id within a get_trash_leads result. */
+export function findTrashLead(
+  rows: Array<Record<string, unknown>> | null,
+  leadId: string,
+): Record<string, unknown> | undefined {
+  return (rows ?? []).find((l) => l.id === leadId);
+}
+
 export const leadRestoreTool: ToolDef = {
   name: "lead.restore",
   description: "Restore a soft-deleted lead (un-delete) within an org, RLS-scoped as master. " +
@@ -118,12 +126,14 @@ export const leadRestoreTool: ToolDef = {
 
     const res = await runMutation({
       plan: async () => {
-        const { data, error } = await db.from("leads")
-          .select("id,name,organization_id,deleted_at")
-          .eq("organization_id", org).eq("id", leadId).not("deleted_at", "is", null).maybeSingle();
+        // master_all_leads RLS hides soft-deleted rows (its USING has `deleted_at IS NULL`),
+        // so the master JWT can't SELECT them directly. Read the trash via get_trash_leads
+        // (SECURITY DEFINER, master-scoped by p_org_id) instead.
+        const { data, error } = await db.rpc("get_trash_leads", { p_org_id: org });
         if (error) throw new Error(error.message);
-        if (!data) throw new Error("No soft-deleted lead found for that id/org.");
-        return buildRestorePlan(data as Record<string, unknown>);
+        const lead = findTrashLead(data as Array<Record<string, unknown>> | null, leadId);
+        if (!lead) throw new Error("No soft-deleted lead found for that id/org.");
+        return buildRestorePlan({ ...lead, organization_id: org });
       },
       audit: (_i, plan, token) =>
         auditMcpAction(db, {

@@ -53,3 +53,12 @@ Deno.test("buildRestorePlan — summarizes the soft-deleted lead to restore", ()
     note: "Un-deletes only; does not re-add to pipes.",
   });
 });
+
+import { findTrashLead } from "./lead.ts";
+
+Deno.test("findTrashLead — finds the soft-deleted lead by id (or undefined)", () => {
+  const rows = [{ id: "a", name: "X" }, { id: "b", name: "Y" }];
+  assertEquals(findTrashLead(rows, "b"), { id: "b", name: "Y" });
+  assertEquals(findTrashLead(rows, "z"), undefined);
+  assertEquals(findTrashLead(null, "a"), undefined);
+});
