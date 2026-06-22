@@ -1,12 +1,10 @@
 // @vitest-environment node
 /**
- * Unit tests for audio-transcription — OpenRouter-based media understanding.
+ * Unit tests for audio-transcription — media understanding.
  *
- * Verifies:
- * 1. Sends audio bytes to OpenRouter (google/gemini-2.5-flash) and returns transcription
- * 2. Returns null when OpenRouter returns empty/no text
- * 3. Handles API errors gracefully (returns null, does not throw)
- * 4. Sends correct mimeType and base64 as data URI
+ * Verifies the FIX (2026-06-22): audio is sent to OpenRouter via the correct
+ * `input_audio` content part (raw base64 + format), NOT `image_url`. Plus
+ * Gemini-direct fallback when OpenRouter fails, and graceful null on errors.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -14,12 +12,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const envStub: Record<string, string> = {
   OPENROUTER_API_KEY: "test-or-key",
   OPENROUTER_REFERER_URL: "https://torquecrm.com.br",
+  // GEMINI_API_KEY intentionally absent → fallback no-ops in most tests
 };
 
 vi.stubGlobal("Deno", {
-  env: {
-    get: (k: string) => envStub[k] ?? undefined,
-  },
+  env: { get: (k: string) => envStub[k] ?? undefined },
 });
 
 const mockFetch = vi.fn();
@@ -29,26 +26,25 @@ const { transcribeAudio } = await import(
   "../../supabase/functions/_shared/audio-transcription.ts"
 );
 
+const okResponse = (content: string) => ({
+  ok: true,
+  json: async () => ({ choices: [{ message: { content } }] }),
+});
+
 describe("transcribeAudio", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete envStub.GEMINI_API_KEY;
   });
 
   const fakeAudio = new Uint8Array([0x4f, 0x67, 0x67, 0x53]); // OGG magic bytes
 
-  it("sends audio to OpenRouter and returns transcription text", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        choices: [
-          { message: { content: "Olá, boa noite! Quero saber sobre os produtos." } },
-        ],
-      }),
-    });
+  it("sends audio to OpenRouter as input_audio (NOT image_url) and returns text", async () => {
+    mockFetch.mockResolvedValueOnce(okResponse("Olá, quero saber sobre os produtos."));
 
     const result = await transcribeAudio(fakeAudio, "audio/ogg");
 
-    expect(result).toBe("Olá, boa noite! Quero saber sobre os produtos.");
+    expect(result).toBe("Olá, quero saber sobre os produtos.");
     expect(mockFetch).toHaveBeenCalledOnce();
 
     const [url, opts] = mockFetch.mock.calls[0];
@@ -58,80 +54,71 @@ describe("transcribeAudio", () => {
     const body = JSON.parse(opts.body);
     expect(body.model).toBe("google/gemini-2.5-flash");
 
-    const userContent = body.messages[0].content;
-    expect(userContent).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: "image_url",
-          image_url: expect.objectContaining({
-            url: expect.stringContaining("data:audio/ogg;base64,"),
-          }),
-        }),
-        expect.objectContaining({ type: "text" }),
-      ]),
-    );
+    const content = body.messages[0].content;
+    const audioPart = content.find((p: any) => p.type === "input_audio");
+    expect(audioPart).toBeTruthy();
+    expect(audioPart.input_audio.format).toBe("ogg");
+    // data must be RAW base64, no data: URI prefix
+    expect(audioPart.input_audio.data).not.toContain("data:");
+    const decoded = Uint8Array.from(atob(audioPart.input_audio.data), (c) => c.charCodeAt(0));
+    expect(decoded).toEqual(fakeAudio);
+
+    // must NOT use image_url for audio (the historical bug)
+    expect(content.find((p: any) => p.type === "image_url")).toBeUndefined();
   });
 
-  it("returns null when OpenRouter returns no text", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        choices: [{ message: { content: "" } }],
-      }),
-    });
+  it("maps mp3 mime to format mp3", async () => {
+    mockFetch.mockResolvedValueOnce(okResponse("texto"));
+    await transcribeAudio(fakeAudio, "audio/mpeg");
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const audioPart = body.messages[0].content.find((p: any) => p.type === "input_audio");
+    expect(audioPart.input_audio.format).toBe("mp3");
+  });
 
+  it("falls back to Gemini direct when OpenRouter returns no text", async () => {
+    envStub.GEMINI_API_KEY = "test-gemini-key";
+    // 1st call: OpenRouter empty → 2nd call: Gemini direct returns text
+    mockFetch
+      .mockResolvedValueOnce(okResponse(""))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: "transcrição via gemini" }] } }],
+        }),
+      });
+
+    const result = await transcribeAudio(fakeAudio, "audio/ogg");
+    expect(result).toBe("transcrição via gemini");
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    const geminiUrl = mockFetch.mock.calls[1][0];
+    expect(geminiUrl).toContain("generativelanguage.googleapis.com");
+    const geminiBody = JSON.parse(mockFetch.mock.calls[1][1].body);
+    expect(geminiBody.contents[0].parts[0].inline_data.mime_type).toBe("audio/ogg");
+  });
+
+  it("returns null when both OpenRouter and Gemini fail (no gemini key)", async () => {
+    // OpenRouter empty, no GEMINI_API_KEY → fallback no-ops
+    mockFetch.mockResolvedValueOnce(okResponse(""));
     const result = await transcribeAudio(fakeAudio, "audio/ogg");
     expect(result).toBeNull();
   });
 
   it("returns null on API error without throwing", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      text: async () => "Internal Server Error",
-    });
-
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 500, text: async () => "boom" });
     const result = await transcribeAudio(fakeAudio, "audio/ogg");
     expect(result).toBeNull();
   });
 
   it("returns null on network failure without throwing", async () => {
-    mockFetch.mockRejectedValueOnce(new Error("network down"));
-
+    mockFetch.mockRejectedValue(new Error("network down"));
     const result = await transcribeAudio(fakeAudio, "audio/ogg");
     expect(result).toBeNull();
   });
 
-  it("encodes audio bytes as base64 data URI in request", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        choices: [{ message: { content: "test" } }],
-      }),
-    });
-
-    await transcribeAudio(fakeAudio, "audio/ogg");
-
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    const imageUrlPart = body.messages[0].content.find(
-      (p: any) => p.type === "image_url",
-    );
-    const dataUri = imageUrlPart.image_url.url;
-    const base64 = dataUri.split(",")[1];
-    const decoded = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-    expect(decoded).toEqual(fakeAudio);
-  });
-
   it("sends Authorization header with OpenRouter API key", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        choices: [{ message: { content: "test" } }],
-      }),
-    });
-
+    mockFetch.mockResolvedValueOnce(okResponse("test"));
     await transcribeAudio(fakeAudio, "audio/ogg");
-
     const headers = mockFetch.mock.calls[0][1].headers;
     expect(headers.Authorization).toBe("Bearer test-or-key");
   });
