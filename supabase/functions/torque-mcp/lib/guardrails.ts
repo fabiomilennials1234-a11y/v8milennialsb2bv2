@@ -1,39 +1,40 @@
-/** Input shape every mutating tool accepts — `confirm` gates the apply. */
+import { sha256hex, stableStringify } from "./crypto.ts";
+
+/** Mutating tool input: confirm_token echoes the dry-run plan hash to apply. */
 export interface ConfirmableInput {
-  confirm?: boolean;
+  confirm_token?: string;
 }
 
 export interface MutationResult<P, R> {
   dryRun: boolean;
   applied: boolean;
   plan: P;
+  confirmToken?: string;
   result?: R;
 }
 
 export interface MutationSpec<D, P, R> {
-  /** Compute what WOULD happen, without applying. Pure-ish; safe to run always. */
   plan: (input: D) => Promise<P> | P;
-  /** Apply the planned mutation. Only called when input.confirm === true. */
   apply: (input: D, plan: P) => Promise<R> | R;
-  /** Audit hook — called after a successful apply, before returning. */
-  audit?: (input: D, plan: P, result: R) => Promise<void> | void;
+  /** Audit-first: runs BEFORE apply; throwing aborts the mutation (nothing applied). */
+  audit?: (input: D, plan: P, confirmToken: string) => Promise<void> | void;
 }
 
-/**
- * Dry-run by default: a mutating tool returns its plan unless `confirm: true`.
- * Nothing is applied (and nothing is audited) without explicit confirmation.
- * `D` (domain input) is inferred from the spec; `confirm` is mixed in here so
- * generic inference stays clean for callers.
- */
 export async function runMutation<D, P, R>(
   spec: MutationSpec<D, P, R>,
   input: D & ConfirmableInput,
 ): Promise<MutationResult<P, R>> {
   const plan = await spec.plan(input);
-  if (!input.confirm) {
-    return { dryRun: true, applied: false, plan };
+  const confirmToken = await sha256hex(stableStringify(plan));
+  if (!input.confirm_token) {
+    return { dryRun: true, applied: false, plan, confirmToken };
   }
+  if (input.confirm_token !== confirmToken) {
+    throw new Error(
+      "confirm_token mismatch — re-run the dry-run and pass the returned confirmToken",
+    );
+  }
+  if (spec.audit) await spec.audit(input, plan, confirmToken); // audit-first
   const result = await spec.apply(input, plan);
-  if (spec.audit) await spec.audit(input, plan, result);
   return { dryRun: false, applied: true, plan, result };
 }

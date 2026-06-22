@@ -24,3 +24,28 @@ Deno.test("extractPromptSources — tolerates missing/unparseable fields", () =>
   assertEquals(out.promptSections, null);
   assertEquals(out.prompt_hash, null);
 });
+
+import { buildPromptUpdate } from "./copilot.ts";
+
+Deno.test("buildPromptUpdate — only provided sections, prompt_hash nulled", () => {
+  assertEquals(
+    buildPromptUpdate({
+      system_prompt: "NEW",
+      dos: "be concise",
+      promptSections: [{ id: "p", text: "x" }],
+    }, { tone: "warm" }),
+    {
+      system_prompt: "NEW",
+      custom_instructions: '{"dos":"be concise"}',
+      conversation_style: { tone: "warm", promptSections: [{ id: "p", text: "x" }] },
+      prompt_hash: null,
+    },
+  );
+});
+
+Deno.test("buildPromptUpdate — omitted sections are not touched", () => {
+  assertEquals(buildPromptUpdate({ system_prompt: "ONLY" }, { tone: "warm" }), {
+    system_prompt: "ONLY",
+    prompt_hash: null,
+  });
+});

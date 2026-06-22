@@ -81,3 +81,67 @@ export const leadGetTool: ToolDef = {
     return formatLead(data as Record<string, unknown> | null);
   },
 };
+
+import { runMutation } from "../lib/guardrails.ts";
+import { auditMcpAction } from "../lib/audit.ts";
+
+export function buildRestorePlan(lead: Record<string, unknown>) {
+  return {
+    action: "restore_lead",
+    lead_id: lead.id,
+    name: lead.name,
+    organization_id: lead.organization_id,
+    deleted_at: lead.deleted_at,
+    note: "Un-deletes only; does not re-add to pipes.",
+  };
+}
+
+export const leadRestoreTool: ToolDef = {
+  name: "lead.restore",
+  description: "Restore a soft-deleted lead (un-delete) within an org, RLS-scoped as master. " +
+    "Dry-run shows the lead; pass confirm_token to apply. Does not re-add to pipes.",
+  readonly: false,
+  inputSchema: {
+    type: "object",
+    properties: {
+      org_id: { type: "string", description: "Organization UUID" },
+      lead_id: { type: "string", description: "Lead UUID (soft-deleted)" },
+      confirm_token: { type: "string", description: "Echo the dry-run confirmToken to apply" },
+    },
+    required: ["org_id", "lead_id"],
+    additionalProperties: false,
+  },
+  handler: async (args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> => {
+    const db = ctx.db as SupabaseClient;
+    const org = String(args.org_id);
+    const leadId = String(args.lead_id);
+
+    const res = await runMutation({
+      plan: async () => {
+        const { data, error } = await db.from("leads")
+          .select("id,name,organization_id,deleted_at")
+          .eq("organization_id", org).eq("id", leadId).not("deleted_at", "is", null).maybeSingle();
+        if (error) throw new Error(error.message);
+        if (!data) throw new Error("No soft-deleted lead found for that id/org.");
+        return buildRestorePlan(data as Record<string, unknown>);
+      },
+      audit: (_i, plan, token) =>
+        auditMcpAction(db, {
+          tool: "lead.restore",
+          org_id: org,
+          target_type: "lead",
+          target_id: leadId,
+          params: args,
+          plan,
+          confirm_token: token,
+        }),
+      apply: async () => {
+        const { error } = await db.rpc("restore_lead", { p_lead_id: leadId });
+        if (error) throw new Error(error.message);
+        return { restored: leadId };
+      },
+    }, { confirm_token: typeof args.confirm_token === "string" ? args.confirm_token : undefined });
+
+    return { content: [{ type: "text", text: JSON.stringify(res, null, 2) }] };
+  },
+};

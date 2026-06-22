@@ -1,47 +1,64 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import { runMutation } from "./guardrails.ts";
+import { sha256hex, stableStringify } from "./crypto.ts";
 
-Deno.test("runMutation — without confirm returns dry-run plan and does NOT apply", async () => {
-  let applyCalled = false;
-  const res = await runMutation(
-    {
-      plan: (input: { id: string }) => ({ willDelete: input.id }),
-      apply: () => {
-        applyCalled = true;
-        return { deleted: true };
-      },
-    },
-    { id: "lead-1" }, // no confirm
-  );
+const spec = (calls: string[]) => ({
+  plan: (input: { id: string }) => ({ willDelete: input.id }),
+  apply: (_i: { id: string }, p: { willDelete: string }) => {
+    calls.push("apply");
+    return { deleted: p.willDelete };
+  },
+  audit: (_i: { id: string }, _p: unknown) => {
+    calls.push("audit");
+  },
+});
 
+Deno.test("runMutation — no token returns dry-run plan + confirmToken, applies nothing", async () => {
+  const calls: string[] = [];
+  const res = await runMutation(spec(calls), { id: "lead-1" });
   assertEquals(res.dryRun, true);
   assertEquals(res.applied, false);
   assertEquals(res.plan, { willDelete: "lead-1" });
-  assertEquals(applyCalled, false); // critical: nothing happened
-  assertEquals(res.result, undefined);
+  assertEquals(res.confirmToken, await sha256hex(stableStringify({ willDelete: "lead-1" })));
+  assertEquals(calls, []); // no apply, no audit
 });
 
-Deno.test("runMutation — with confirm applies and audits", async () => {
-  const auditCalls: Array<unknown[]> = [];
-  const res = await runMutation(
-    {
-      plan: (input: { id: string }) => ({ willDelete: input.id }),
-      apply: (_input, plan) => ({ deleted: plan.willDelete }),
-      audit: (input, plan, result) => {
-        auditCalls.push([input, plan, result]);
-      },
-    },
-    { id: "lead-1", confirm: true },
-  );
-
-  assertEquals(res.dryRun, false);
+Deno.test("runMutation — correct token audits THEN applies", async () => {
+  const calls: string[] = [];
+  const token = await sha256hex(stableStringify({ willDelete: "lead-1" }));
+  const res = await runMutation(spec(calls), { id: "lead-1", confirm_token: token });
   assertEquals(res.applied, true);
-  assertEquals(res.plan, { willDelete: "lead-1" });
   assertEquals(res.result, { deleted: "lead-1" });
-  assertEquals(auditCalls.length, 1);
-  assertEquals(auditCalls[0], [
-    { id: "lead-1", confirm: true },
-    { willDelete: "lead-1" },
-    { deleted: "lead-1" },
-  ]);
+  assertEquals(calls, ["audit", "apply"]); // audit-first
+});
+
+Deno.test("runMutation — wrong token rejects, applies nothing", async () => {
+  const calls: string[] = [];
+  await assertRejects(
+    () => runMutation(spec(calls), { id: "lead-1", confirm_token: "deadbeef" }),
+    Error,
+    "confirm_token",
+  );
+  assertEquals(calls, []);
+});
+
+Deno.test("runMutation — failed audit aborts before apply", async () => {
+  const calls: string[] = [];
+  const token = await sha256hex(stableStringify({ willDelete: "lead-1" }));
+  await assertRejects(
+    () =>
+      runMutation({
+        plan: (i: { id: string }) => ({ willDelete: i.id }),
+        apply: () => {
+          calls.push("apply");
+          return {};
+        },
+        audit: () => {
+          throw new Error("audit write failed");
+        },
+      }, { id: "lead-1", confirm_token: token }),
+    Error,
+    "audit write failed",
+  );
+  assertEquals(calls, []); // apply never ran
 });
