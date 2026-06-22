@@ -141,6 +141,19 @@ export function WhatsAppProviderChooser({
             }}
           />
         </div>
+
+        <p className="px-1 pb-1 text-center text-xs text-muted-foreground">
+          Ao conectar o WhatsApp Oficial (API da Meta), você concorda com a{" "}
+          <a
+            href="https://torquecrm.com.br/privacidade"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            Política de Privacidade
+          </a>
+          .
+        </p>
       </DialogContent>
     </Dialog>
   );
