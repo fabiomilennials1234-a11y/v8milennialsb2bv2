@@ -41,6 +41,12 @@ export interface GetOrCreateLeadParams {
   sdrId?: string | null;
   /** Se true, cria shadow lead (invisível nos pipes até ser promovido) */
   isShadow?: boolean;
+  /**
+   * Se true, NÃO semeia o lead no pipe whatsapp/novo ao criar.
+   * Usado por fontes que já entram em outro pipe (ex: Cal.com → confirmacao/reuniao_marcada).
+   * Evita que a reunião agendada apareça duplicada na coluna "Novo" do funil WhatsApp.
+   */
+  skipPipeSeed?: boolean;
 }
 
 /**
@@ -112,7 +118,7 @@ export async function getOrCreateLead(
   supabase: SupabaseClient,
   params: GetOrCreateLeadParams
 ): Promise<GetOrCreateLeadResult | null> {
-  const { organizationId, phone, email, name, pushName, origin, sdrId, isShadow } = params;
+  const { organizationId, phone, email, name, pushName, origin, sdrId, isShadow, skipPipeSeed } = params;
 
   // Validate required fields
   if (!organizationId) {
@@ -248,8 +254,9 @@ export async function getOrCreateLead(
     insertData.is_shadow = true;
   }
 
-  // Shadow leads não entram em nenhum pipe até serem promovidos
-  if (!isShadow) {
+  // Shadow leads não entram em nenhum pipe até serem promovidos.
+  // skipPipeSeed: fonte já coloca o lead em outro pipe (ex: Cal.com → confirmacao).
+  if (!isShadow && !skipPipeSeed) {
     insertData.pipe_whatsapp = "novo";
   }
 
@@ -320,9 +327,10 @@ export async function getOrCreateLead(
 
   console.log("[lead-service] New lead created:", newLead.id);
 
-  // Create pipeline entry for new leads
-  // Shadow leads não entram em pipe até serem promovidos
-  if (!isShadow) {
+  // Create pipeline entry for new leads.
+  // Shadow leads não entram em pipe até serem promovidos.
+  // skipPipeSeed: a fonte (ex: Cal.com) já posiciona o lead em outro pipe — não semear whatsapp.
+  if (!isShadow && !skipPipeSeed) {
     try {
       await upsertPipeEntry(supabase, {
         leadId: newLead.id,
@@ -336,7 +344,9 @@ export async function getOrCreateLead(
       console.warn("[lead-service] Error creating pipeline entry:", pipeError);
     }
   } else {
-    console.log("[lead-service] Shadow lead created, skipping pipeline entry");
+    console.log(
+      `[lead-service] Skipping whatsapp pipe seed for new lead ${newLead.id} (isShadow=${isShadow}, skipPipeSeed=${skipPipeSeed})`,
+    );
   }
 
   return { lead: newLead, created: true, source: "created" };

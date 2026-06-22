@@ -67,6 +67,12 @@ interface LeadWebhookPayload {
   // Atribuição opcional (ex.: round robin do n8n) — team_member_id para SDR/Closer
   assigned_user_id?: string;
 
+  // Closer fixo (responsável da VENDA) quando o lead entra em pipe confirmacao.
+  // Diferente de assigned_user_id (que trava os 5 papéis): aqui só o closer/sale é fixo,
+  // o SDR/pré-venda continua sendo distribuído via round robin do funil.
+  // Ex: Cal.com da Basic4u → venda sempre Bruna, pré-venda distribui.
+  sale_responsible_id?: string; // team_member_id (UUID)
+
   // Custom fields separados (Make.com envia fora de fields via toCollection)
   custom_fields?: Record<string, string>;
 }
@@ -247,6 +253,9 @@ serve(withSentry('lead-webhook', async (req) => {
     if (payload.assigned_user_id && !isValidUUID(payload.assigned_user_id)) {
       return errorResponse(400, "Validation failed: assigned_user_id não é um UUID válido", corsHeaders, { req });
     }
+    if (payload.sale_responsible_id && !isValidUUID(payload.sale_responsible_id)) {
+      return errorResponse(400, "Validation failed: sale_responsible_id não é um UUID válido", corsHeaders, { req });
+    }
     if (payload.place_in_campaign?.campaign_id && !isValidUUID(payload.place_in_campaign.campaign_id)) {
       return errorResponse(400, "Validation failed: place_in_campaign.campaign_id não é um UUID válido", corsHeaders, { req });
     }
@@ -375,6 +384,11 @@ serve(withSentry('lead-webhook', async (req) => {
     };
     const origin = originMap[payload.source.toLowerCase()] || "outro";
 
+    // Leads de Cal.com já entram em pipe_confirmacao (reunião agendada) — nunca devem
+    // ser semeados em whatsapp/novo. Sem isso o lead aparece duplicado na coluna "Novo"
+    // do funil WhatsApp (incomoda no fluxo cal.com, onde toda entrada é reunião marcada).
+    const skipWhatsappSeed = origin === "cal";
+
     // ── Cal.com bypass ──────────────────────────────────────────────────
     // Leads vindos do Cal.com já têm reunião agendada — pulam pipe_whatsapp
     // (qualificação) e entram direto em pipe_confirmacao/reuniao_marcada.
@@ -419,6 +433,7 @@ serve(withSentry('lead-webhook', async (req) => {
         email: email || null,
         name: name || "Lead sem nome",
         origin,
+        skipPipeSeed: skipWhatsappSeed,
       });
 
       if (!result) {
@@ -441,13 +456,17 @@ serve(withSentry('lead-webhook', async (req) => {
         email: email || null,
         origin,
         organization_id: organizationId,
-        pipe_whatsapp: "novo",
         utm_source: utmSource,
         utm_medium: utmMedium,
         utm_campaign: utmCampaign,
         utm_content: utmContent,
         utm_term: utmTerm,
       };
+      // Coluna legada pipe_whatsapp: só semeia se a fonte não posiciona o lead em outro pipe.
+      // Cal.com (skipWhatsappSeed) entra direto em confirmacao — não deve cair em whatsapp/novo.
+      if (!skipWhatsappSeed) {
+        insertData.pipe_whatsapp = "novo";
+      }
       if (payload.assigned_user_id) {
         insertData.sdr_id = payload.assigned_user_id;
         insertData.closer_id = payload.assigned_user_id;
@@ -474,17 +493,20 @@ serve(withSentry('lead-webhook', async (req) => {
         return errorResponse(500, "Failed to create lead", corsHeaders, { req, details: createError.message });
       }
 
-      try {
-        await upsertPipeEntry(supabase, {
-          leadId: newLead.id,
-          orgId: organizationId,
-          slug: "whatsapp",
-          stageKey: "novo",
-          metadata: { sdr_id: payload.assigned_user_id ?? null },
-          assignedTo: payload.assigned_user_id ?? null,
-        });
-      } catch (pipeError) {
-        console.warn("[lead-webhook] pipeline_entries whatsapp insert failed:", pipeError);
+      // Cal.com não semeia whatsapp — o lead é colocado em confirmacao pelo bloco place_in_pipe abaixo.
+      if (!skipWhatsappSeed) {
+        try {
+          await upsertPipeEntry(supabase, {
+            leadId: newLead.id,
+            orgId: organizationId,
+            slug: "whatsapp",
+            stageKey: "novo",
+            metadata: { sdr_id: payload.assigned_user_id ?? null },
+            assignedTo: payload.assigned_user_id ?? null,
+          });
+        } catch (pipeError) {
+          console.warn("[lead-webhook] pipeline_entries whatsapp insert failed:", pipeError);
+        }
       }
 
       result = { lead: newLead, created: true, source: "created" };
@@ -692,32 +714,58 @@ serve(withSentry('lead-webhook', async (req) => {
 
           let closerId: string | null = null;
           if (pipeSlug !== "whatsapp") {
-            const { data: cId } = await supabase.rpc("get_next_pipe_closer", {
-              p_pipe_type: pipeSlug,
-              p_organization_id: organizationId,
-            });
-            closerId = cId;
+            // Closer fixo (sale_responsible_id) tem prioridade sobre o round robin.
+            // Ex: Cal.com da Basic4u → venda sempre Bruna; SDR/pré-venda continua distribuindo.
+            if (payload.sale_responsible_id) {
+              closerId = payload.sale_responsible_id;
+            } else {
+              const { data: cId } = await supabase.rpc("get_next_pipe_closer", {
+                p_pipe_type: pipeSlug,
+                p_organization_id: organizationId,
+              });
+              closerId = cId;
+            }
             if (closerId) metadataUpdate.closer_id = closerId;
           }
 
+          // Closer fixo (ex: Cal.com → venda sempre Bruna). Nesse caso o DONO ATIVO do card
+          // de confirmação é o pré-venda distribuído (quem trabalha o follow-up), e o closer
+          // fica travado só como sale_responsible. Sem closer fixo, mantém o default histórico
+          // (closer||sdr como dono).
+          const fixedCloser = !!payload.sale_responsible_id;
+          const activeOwner = fixedCloser ? (sdrId ?? closerId) : (closerId || sdrId);
+
           if (Object.keys(metadataUpdate).length > 0) {
+            // Round-robin do pré-venda rastreia o último responsável gravado na entry
+            // (metadata.responsible_id → assigned_to). Com closer fixo gravamos o pré-venda
+            // como responsible pra rotação enxergá-lo e alternar — senão pegava sempre o 1º.
+            if (fixedCloser && activeOwner) metadataUpdate.responsible_id = activeOwner;
+
             const entry = await getPipeEntry(supabase, leadId, organizationId, pipeSlug);
             if (entry) {
               await updatePipeEntryById(supabase, entry.id, {
                 metadata: metadataUpdate,
-                assignedTo: (closerId || sdrId) ?? undefined,
+                assignedTo: activeOwner ?? undefined,
               });
             }
             console.log(`[lead-webhook] Auto-distributed in pipeline_entries(${pipeSlug}):`, metadataUpdate);
 
-            // Also update lead-level responsible_id (closer takes priority over sdr)
-            const responsibleId = closerId || sdrId;
-            if (responsibleId) {
-              const leadAssign: Record<string, unknown> = {
-                responsible_id: responsibleId,
-                pre_sale_responsible_id: sdrId || responsibleId,
-                sale_responsible_id: closerId || responsibleId,
-              };
+            if (activeOwner) {
+              const leadAssign: Record<string, unknown> = {};
+              if (fixedCloser) {
+                // Modelo atual do produto: o lead tem só DOIS responsáveis — pré-venda e venda.
+                // responsible_id genérico é legado (UI não usa, só pre_sale/sale) → não setar.
+                // Pré-venda = membro distribuído (null se não há pool, nunca cai no closer fixo).
+                leadAssign.pre_sale_responsible_id = sdrId ?? null;
+                leadAssign.sale_responsible_id = closerId; // closer fixo (ex: Bruna)
+              } else {
+                // Fluxo histórico (sem closer fixo): mantém responsible_id genérico = dono.
+                leadAssign.responsible_id = activeOwner;
+                leadAssign.pre_sale_responsible_id = sdrId || activeOwner;
+                leadAssign.sale_responsible_id = closerId || activeOwner;
+              }
+              // sdr_id/closer_id são espelhados pelo trigger fn_sync_canonical_assignment a partir
+              // de pre_sale/sale, mas setamos explícito por clareza quando disponíveis.
               if (sdrId) leadAssign.sdr_id = sdrId;
               if (closerId) leadAssign.closer_id = closerId;
               await supabase.from("leads").update(leadAssign).eq("id", leadId);
