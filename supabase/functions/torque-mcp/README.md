@@ -10,7 +10,11 @@ diagnose/recover CRM state through curated, audited tools. See
 - The function signs in as a **dedicated ops-master** (`signInWithPassword`) and runs every query
   with that JWT → **RLS ON**, master-ghost policies grant cross-org. It **never** uses
   `service_role` for data.
-- Tools never call `SECURITY DEFINER` RPCs (they bypass RLS) — each does a direct RLS-on `SELECT`.
+- Read tools never call `SECURITY DEFINER` RPCs (they bypass RLS) — each does a direct RLS-on `SELECT`. Mutating tools (S2) MAY reuse a `SECURITY DEFINER` RPC that does its own permission check (e.g. `restore_lead`) — safer than granting the master broad write.
+
+## Mutations (S2)
+
+Hidden unless `TORQUE_MCP_ALLOW_MUTATIONS=true`. Every mutation: **dry-run by default** (returns the `plan` + a `confirmToken` = sha256 of the canonical plan); applies only when the caller echoes `confirm_token` back (forces the plan to be seen — no blind confirm); **audit-first** (records to `master_audit_logs` actor=mcp BEFORE applying — a failed audit aborts). `cron.toggle` is the one privileged tool (`requiresServiceRole`, uses the `toggle_cron_job` SECURITY DEFINER RPC).
 
 ## Layout
 
@@ -22,10 +26,18 @@ lib/clients.ts      signInAsMaster → RLS-scoped client
 lib/dispatch.ts     MCP methods: initialize / tools/list (gated) / tools/call
 lib/http.ts         x-mcp-secret compare + single/batch payload handling
 lib/registry.ts     visibleTools (hides mutating tools when ALLOW_MUTATIONS off)
-lib/guardrails.ts   runMutation (dry-run/confirm/audit) — for the future mutating pack
+lib/guardrails.ts   runMutation — dry-run + echo-token confirm + audit-first
+lib/crypto.ts       stableStringify + sha256hex (echo-token hashing)
+lib/audit.ts        auditMcpAction → master_audit_logs (audit-first); re-exports redact
 lib/redact.ts       PII redaction for audit
-lib/types.ts        JSON-RPC + ToolDef types
-tools/lead.ts       lead.get (read pack tracer)
+lib/types.ts        JSON-RPC + ToolDef types (ToolContext: db + optional serviceDb)
+tools/lead.ts       lead.get + lead.restore
+tools/trace.ts      lead.trace_history
+tools/conversation.ts  conversation.get
+tools/whatsapp.ts   whatsapp.instance_status
+tools/blast.ts      blast.status
+tools/copilot.ts    copilot.dump_prompt + copilot.update_prompt
+tools/cron.ts       cron.toggle (requiresServiceRole)
 ```
 
 ## Secrets (Supabase function env)
@@ -40,8 +52,9 @@ supabase secrets set --project-ref bcfadphgsibjzivtbjvc \
 # optional: TORQUE_MCP_PROJECT=dev (default), TORQUE_MCP_ALLOW_MUTATIONS=false (default)
 ```
 
-Prereqs: create the `mcp-ops` user and mark it master (`master_users`); apply migration
-`20261222000000_torque_mcp_master_ghost_policies.sql`.
+Prereqs: create the `mcp-ops` user and mark it master (`master_users`); apply migrations
+`20261222000000_torque_mcp_master_ghost_policies.sql` (S1) and
+`20261223000000_torque_mcp_s2_policies.sql` (S2: copilot UPDATE policy + `toggle_cron_job` RPC).
 
 ## Deploy
 
