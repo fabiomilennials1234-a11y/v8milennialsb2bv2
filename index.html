@@ -21,12 +21,13 @@
     <!-- Content Security Policy - Ajuste os domínios conforme necessário -->
     <meta http-equiv="Content-Security-Policy" content="
       default-src 'self';
-      script-src 'self' 'unsafe-inline' 'unsafe-eval';
+      script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net;
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
       font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com;
       img-src 'self' data: https: blob:;
       media-src 'self' blob: https:;
-      connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.in;
+      connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://graph.facebook.com https://www.facebook.com;
+      frame-src 'self' https://www.facebook.com https://web.facebook.com https://staticxx.facebook.com https://connect.facebook.net;
       frame-ancestors 'none';
       base-uri 'self';
       form-action 'self';
