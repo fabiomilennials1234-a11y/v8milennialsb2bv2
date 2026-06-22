@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/modules/identity";
+import { useCurrentTeamMember, isVirtualTeamMember } from "@/modules/identity";
 import type { WhatsAppInstanceForUser } from "@/modules/communication/hooks/chat/types";
 
 const LS_KEY_PREFIX = "preferred_whatsapp_instance:";
@@ -35,6 +35,12 @@ const QUERY_KEY = "preferred_whatsapp_instance";
 export function usePreferredInstance(allowedInstances: WhatsAppInstanceForUser[]) {
   const { data: teamMember } = useCurrentTeamMember();
   const tmId = teamMember?.id ?? null;
+  // Master shadow users carry a synthetic `master-virtual-<uuid>` id that is NOT
+  // a real team_members row nor a valid UUID. Hitting team_members with it 400s
+  // (Postgres 22P02) and, combined with the invalidate→refetch effect below,
+  // spins an infinite retry storm. For virtual ids the preference is
+  // localStorage-only — never touch the DB.
+  const isVirtual = isVirtualTeamMember(tmId);
   const queryClient = useQueryClient();
 
   const localFallback = useMemo(() => readLocal(tmId), [tmId]);
@@ -53,7 +59,7 @@ export function usePreferredInstance(allowedInstances: WhatsAppInstanceForUser[]
       if (id) writeLocal(tmId, id);
       return id ?? null;
     },
-    enabled: !!tmId,
+    enabled: !!tmId && !isVirtual,
     staleTime: 10 * 60_000,
   });
 
@@ -69,6 +75,7 @@ export function usePreferredInstance(allowedInstances: WhatsAppInstanceForUser[]
   useEffect(() => {
     if (resolved && !isValid && !isLoading && tmId) {
       writeLocal(tmId, null);
+      if (isVirtual) return; // virtual id → localStorage-only, never PATCH team_members
       supabase
         .from("team_members")
         .update({ preferred_whatsapp_instance_id: null })
@@ -77,12 +84,13 @@ export function usePreferredInstance(allowedInstances: WhatsAppInstanceForUser[]
           queryClient.invalidateQueries({ queryKey: [QUERY_KEY, tmId] });
         });
     }
-  }, [resolved, isValid, isLoading, tmId, queryClient]);
+  }, [resolved, isValid, isLoading, tmId, isVirtual, queryClient]);
 
   const { mutate: setPreferred } = useMutation({
     mutationFn: async (instanceId: string | null) => {
       if (!tmId) return;
       writeLocal(tmId, instanceId);
+      if (isVirtual) return; // virtual id → localStorage-only, never PATCH team_members
       const { error } = await supabase
         .from("team_members")
         .update({ preferred_whatsapp_instance_id: instanceId })
