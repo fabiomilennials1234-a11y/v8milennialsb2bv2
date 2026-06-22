@@ -39,6 +39,8 @@ export interface ToolResult {
 export interface ToolContext {
   /** RLS-scoped Supabase client authenticated as the ops-master (JWT, RLS ON). */
   db: unknown;
+  /** service_role client — only for tools with requiresServiceRole. */
+  serviceDb?: unknown;
 }
 
 export interface ToolDef {
