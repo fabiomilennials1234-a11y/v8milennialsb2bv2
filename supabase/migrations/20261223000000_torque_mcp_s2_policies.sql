@@ -1,14 +1,14 @@
 -- 20261223000000_torque_mcp_s2_policies.sql
--- S2 mutating pack (docs/adr/0011): minimal write surface for the MCP master.
+-- S2 mutating pack (docs/adr/0011): privileged path for cron.toggle.
+--
+-- copilot.update_prompt needs NO new policy: copilot_agents already has
+-- "master_all_copilot_agents" FOR ALL USING (is_master_user()) from
+-- 20260131200001_master_rls_policies.sql, which already covers the master UPDATE.
+-- (Verified 2026-06-22 during S2 code review — avoids a redundant policy.)
+--
+-- cron.toggle: pg_cron is privileged (cron schema, no RLS). Wrap the active-flag
+-- flip in a SECURITY DEFINER RPC granted to service_role only. Toggles, never deletes.
 
--- 1) copilot.update_prompt writes copilot_agents directly via master JWT.
---    copilot_agents has master_select_all (SELECT) but no master UPDATE → add it.
-DROP POLICY IF EXISTS "master_update_all_copilot_agents" ON public.copilot_agents;
-CREATE POLICY "master_update_all_copilot_agents" ON public.copilot_agents
-  FOR UPDATE USING (public.is_master_user()) WITH CHECK (public.is_master_user());
-
--- 2) cron.toggle: pg_cron is privileged (cron schema, no RLS). Wrap the active-flag
---    flip in a SECURITY DEFINER RPC granted to service_role only. Toggles, never deletes.
 CREATE OR REPLACE FUNCTION public.toggle_cron_job(p_jobname text, p_enabled boolean)
 RETURNS jsonb
 LANGUAGE plpgsql
