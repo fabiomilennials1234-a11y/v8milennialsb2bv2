@@ -584,6 +584,40 @@ export async function triggerReactions(
   // 2. Copilot dispatch — queue for batching instead of direct call
   if (!context.shouldTriggerCopilot) return;
 
+  // Media → resolve to a FETCHABLE Storage URL before handing it to the copilot.
+  // The raw Uazapi/WhatsApp media URL (.enc) expires + needs auth, so the
+  // transcription step (resolveMediaContent) can't download it → it falls back
+  // to a placeholder and the IA goes mute. Persist on-demand (idempotent) and
+  // pass the copilot the Storage public URL instead. Graceful: on failure we
+  // keep the raw URL (transcription degrades to placeholder, never throws).
+  // Fix 2026-06-22: inbound audio/image understanding was broken platform-wide.
+  let copilotMediaUrl: string | null = persisted.media_url ?? null;
+  if (copilotMediaUrl && UAZAPI_BASE_URL && COPILOT_MEDIA_TYPES.has(persisted.message_type)) {
+    try {
+      const persistResult = await downloadAndPersistMedia(
+        supabase,
+        UAZAPI_BASE_URL,
+        {
+          instanceId: persisted.instance_id,
+          organizationId: persisted.organization_id,
+          messageId: persisted.message_id,
+          sourceUrl: copilotMediaUrl,
+          messageType: persisted.message_type,
+        },
+        { timeoutMs: 15_000 },
+      );
+      if (persistResult.ok && persistResult.publicUrl) {
+        copilotMediaUrl = persistResult.publicUrl;
+      } else {
+        console.warn(
+          `[whatsapp-webhook] copilot media persist failed (${persistResult.ok ? "no_public_url" : persistResult.error}) — using raw url for ${persisted.message_id}`,
+        );
+      }
+    } catch (e) {
+      console.warn(`[whatsapp-webhook] copilot media resolve threw: ${(e as Error).message}`);
+    }
+  }
+
   // Try queue INSERT first; fall back to direct agent-message on failure
   const { error: queueError } = await supabase
     .from("copilot_message_queue")
@@ -619,7 +653,7 @@ export async function triggerReactions(
     organization_id: persisted.organization_id,
     push_name: persisted.push_name,
     incoming_message_type: persisted.message_type,
-    media_url: (persisted as any).media_url ?? null,
+    media_url: copilotMediaUrl,
   };
 
   fetch(`${SUPABASE_URL}/functions/v1/agent-message`, {
