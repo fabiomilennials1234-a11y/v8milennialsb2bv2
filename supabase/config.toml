@@ -22,6 +22,11 @@ verify_jwt = false
 [functions.partner-webhook]
 verify_jwt = false
 
+# torque-mcp: internal MCP ops server (docs/adr/0011); auth via x-mcp-secret gate
+# inside fn, then signs in as ops-master → RLS-inherited (never service_role).
+[functions.torque-mcp]
+verify_jwt = false
+
 # meta: leadgen polling cron (ADR-0009); auth via x-cron-secret inside fn
 [functions.meta-leadgen-poll]
 verify_jwt = false

@@ -1,0 +1,36 @@
+# Torque MCP — servidor MCP interno de ops/dev como Edge Function (RLS-herdado)
+
+**Status:** accepted (2026-06-22)
+
+## Context
+
+A operação/diagnóstico do CRM é reativa e artesanal. O histórico de incidentes (memória de sessões + `scripts/recovery/*.sql`) mostra o mesmo padrão semanal: "lead sumiu do funil" → query manual cruzando `lead_history` + `audit_log` + pipes do zero; disparo travado em `queued` → cavar `uazapi_sender_jobs` na mão; WhatsApp dead session → ler log + tabela; prompt de Copilot dessincado em 3 lugares; migrations colididas em prod. Recovery vira script ad-hoc sob pressão — não-repetível, não-auditado, propenso a erro. Achado sistêmico: 64% dos leads sem trilha de auditoria; hard-delete deixa zero rastro.
+
+O CTO quer um **MCP interno** (cenário A) onde ele + os 3 subagentes Claude diagnosticam e recuperam estado do CRM por tools curadas e auditadas. O cenário B (customer-facing) fica adiado — amplifica a ferida multi-tenant aberta (vazamento anon ~60k registros; master-ghost recorrente em 5+ classes; RLS some em rebuild).
+
+Uma primeira tentativa (servidor Deno standalone, stdio local, TDD via Supabase local) esbarrou em dois blockers locais (Deno ausente; Docker/Supabase local down) e, mais importante, vivia **fora do sistema** — toolchain própria, sem reuso do `_shared`, sem o pipeline de deploy. Esta ADR substitui aquela abordagem (ver vault `ADR-2026-06-22-torque-mcp-interno`, revisada).
+
+## Decisões
+
+1. **Forma: Edge Function expondo MCP sobre Streamable HTTP (stateless).** Nova `supabase/functions/torque-mcp/`, padrão `Deno.serve(withSentry(...))`, reusa `_shared` (user-auth, cors, response), deploya pelo pipeline existente, sem toolchain nova, alcançável remotamente pelo Claude (MCP remoto via URL + headers). Cada POST é independente (sem sessão server-side) — fit natural do runtime efêmero do edge. **Rejeitado:** servidor Deno stdio standalone (toolchain própria, vive fora do sistema, exige Docker/Deno local). **Rejeitado:** pacote Node no monorepo (não reusa `_shared`, que é Deno; deploy/run separado).
+
+2. **Auth: gateway secret + master interno → RLS-herdado.** A fn roda com `verify_jwt=false` (padrão do repo) e é gateada por um header `x-mcp-secret` (espelha `x-cron-secret`). Internamente, a fn faz `signInWithPassword` com as creds de um **usuário master dedicado de ops** (guardadas como secrets da fn) pra obter o JWT do master, e usa esse JWT no client de dados — **RLS ON**, master-ghost policies dão a visão cross-org. O Claude nunca lida com JWT que expira. **Propriedade nuclear: o MCP não tem privilégio próprio de dado — tem o do master, enforçado pelo Postgres.** A sessão master é cacheada no escopo do isolate com expiry (não re-login por call). **Rejeitado:** JWT pass-through (Claude carrega o JWT do master — expira ~1h, UX ruim). **Rejeitado:** gateway secret + `service_role` no client de dados — bypassa RLS, scoping volta pro código TS = exatamente o anti-pattern que causou o vazamento anon.
+
+3. **Protocolo: hand-roll JSON-RPC 2.0, sem o transport do SDK.** A fn implementa à mão os 3 métodos (`initialize` / `tools/list` / `tools/call`) seguindo a spec MCP, validando args de tool com zod (esm.sh). **Rejeitado:** `@modelcontextprotocol/sdk` + `StreamableHTTPServerTransport` — arrasta express/node:http, risco de não carregar no Supabase Edge Runtime (que importa via esm.sh, não `npm:`), e exige subir HTTP pra testar. O hand-roll torna o handler uma função pura → unit-testável em Deno local sem Docker.
+
+4. **Anti-bypass explícito: tools nunca chamam RPC `SECURITY DEFINER` pelo master client.** RPCs `SECURITY DEFINER` (ex.: `api_get_lead`) bypassam RLS — usá-las destruiria o RLS-herdado e faria o teste-âncora passar falsamente. Regra: se a RPC é `SECURITY DEFINER`, a tool faz `.from(...).select(...)` direto via JWT master (RLS ON). Só RPC `SECURITY INVOKER` (roda com privilégio do chamador) pode ser chamada.
+
+5. **Testes: Deno unit local + RLS/integração no CI.** Lógica pura (dispatch JSON-RPC, gate do secret, guardrail dry-run/confirm, redact, gating de tools, validação de args) = `deno test` local, sem Docker (job `edge-function-tests` replica no CI). O teste-âncora RLS (master vê cross-org; não-master não vê) + integração das tools = job `integration-tests` do CI, que já sobe Supabase local com seed (master@test.com + Org A/Org B + leads). **Rejeitado:** subir Docker local (o blocker que o pivô elimina). **Rejeitado:** rodar tudo contra o dev remoto (suja ambiente).
+
+6. **Escopo S1: espinha + read pack + migration master-ghost.** Entrega: a espinha (gate + dispatch + auth master + client RLS-scoped) mais as tools de leitura `lead.get`, `lead.trace_history`, `conversation.get`, `whatsapp.instance_status`, `blast.status`, `copilot.dump_prompt`. Ordem de build vertical: espinha + `lead.get` como tracer-bullet (com o teste-âncora), depois cada tool em red-green incremental. O **mutating pack** (`blast.requeue`, `lead.restore`, `cron.toggle`, `copilot.update_prompt`) fica para depois, atrás de `TORQUE_MCP_ALLOW_MUTATIONS` + dry-run/confirm + audit.
+
+   **Pré-requisito de dado (S1):** um diagnose adversarial (2026-06-22) verificou os gaps de master-ghost contra as migrations. A maioria das tabelas do read pack **já tinha** master-ghost (leads, pipelines, pipeline_entries — 20260509010000; lead_history — 20260607000000; meetings — 20260985000000; copilot_agents — 20260131200001; copilot_agent_faqs — 20260607000000; audit_log/deleted_leads_log/conversations/whatsapp_messages/whatsapp_instances). Apenas **5** faltavam de verdade: `whatsapp_conversation_summary`, `uazapi_sender_jobs`, `blast_plans`, `blast_plan_recipients`, `blast_daily_usage`. S1 inclui a migration `20261222000000_torque_mcp_master_ghost_policies.sql` (SELECT-only via `is_master_user()`, idempotente, SECURITY DEFINER-safe) só para essas 5, aplicada em **dev** (prod com OK explícito). Regra anti-bypass reforçada: existem RPCs `SECURITY DEFINER` (`api_get_lead`, `api_lead_timeline`, `get_whatsapp_conversation_list`, `increment_blast_daily_usage`, …) que o master client **não pode** chamar — cada tool faz SELECT direto RLS-on.
+
+## Consequências
+
+- **Blast radius do `x-mcp-secret`:** quem tiver o secret ganha acesso master cross-org. Mitigação: secret service-role-only/rotacionável, gate único; IP allowlist é evolução futura.
+- **Creds do master de ops viram secrets da fn** (`MCP_MASTER_EMAIL`/`MCP_MASTER_PASSWORD` + `MCP_GATEWAY_SECRET`). Pré-requisito de deploy: criar o usuário master dedicado (`mcp-ops`) e setar os secrets. Default **dev**; prod só com pedido explícito.
+- **Depende de master-ghost policies existirem** nas tabelas tocadas — gap conhecido (somem em rebuild de RLS). A tool `rls.check_access` (fase diag) audita isso; quando uma policy falta, o master "some" e a tool retorna vazio honesto.
+- **Toda mutação (fase 2) grava em `audit_log` com `actor='mcp'`** — fecha o gap "hard-delete sem rastro".
+- **Cache de sessão no isolate** acelera, mas a fn precisa lidar com expiry/refresh do JWT master entre invocações no mesmo isolate.
+- **Supersede** a abordagem stdio do ADR vault `ADR-2026-06-22-torque-mcp-interno` (revisado para apontar aqui). Spec viva: `.specs/features/torque-mcp/`.
