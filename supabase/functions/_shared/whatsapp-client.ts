@@ -184,6 +184,13 @@ export interface WhatsAppProvider {
   // Uazapi/Evolution (optional, like sendMenu). Callers feature-detect.
   sendTemplate?(opts: SendTemplateOptions): Promise<SendResult>;
 
+  // Uazapi-only — pre-flight WhatsApp existence check (POST /chat/check).
+  // Absent on Evolution/Meta; callers feature-detect and skip gating when
+  // unavailable. Returns one verdict per input number.
+  checkNumbers?(
+    numbers: string[],
+  ): Promise<Array<{ number: string; isInWhatsapp: boolean }>>;
+
   // Uazapi-only (Evolution throws NotSupportedError)
   sendMenu?(opts: SendMenuOptions): Promise<SendResult>;
   sendPixButton?(opts: SendPixButtonOptions): Promise<SendResult>;

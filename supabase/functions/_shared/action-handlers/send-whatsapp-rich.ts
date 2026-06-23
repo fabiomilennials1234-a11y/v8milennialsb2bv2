@@ -11,6 +11,7 @@ import {
   enforceWhatsAppRateLimit,
   resolveVariables,
   buildTrackId,
+  recipientGate,
 } from "./whatsapp-helpers.ts";
 
 // ─── Template ──────────────────────────────────────────────────────────────
@@ -35,6 +36,9 @@ export async function sendWhatsAppTemplate(input: ActionInput): Promise<ActionRe
 
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
+
+  const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
+  if (recipientBlock) return recipientBlock;
 
   // Fetch template from DB
   const { data: tpl } = await supabase
@@ -97,6 +101,9 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
 
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
+
+  const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
+  if (recipientBlock) return recipientBlock;
 
   const menuType = (params.menuType as string) || "button";
   if (!["button", "list", "poll", "carousel"].includes(menuType)) {
@@ -202,6 +209,9 @@ export async function sendWhatsAppPixButton(input: ActionInput): Promise<ActionR
 
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
+
+  const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
+  if (recipientBlock) return recipientBlock;
 
   const pixkey = params.pixkey as string;
   const pixkeyType = params.pixkeyType as string;

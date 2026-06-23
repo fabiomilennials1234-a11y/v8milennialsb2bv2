@@ -398,6 +398,51 @@ describe("UazapiProvider.getStatus — status normalisation", () => {
 });
 
 // ---------------------------------------------------------------------------
+// checkNumbers — /chat/check verdict normalisation + safety
+// ---------------------------------------------------------------------------
+
+describe("UazapiProvider.checkNumbers", () => {
+  it("POSTs /chat/check and normalises the verdict to { number, isInWhatsapp }", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonRes(200, [
+        { query: "5511951674282", jid: "", isInWhatsapp: false },
+        { query: "5511999999999", jid: "5511999999999@s.whatsapp.net", isInWhatsapp: true },
+      ])
+    );
+
+    const provider = makeProvider();
+    const res = await provider.checkNumbers(["5511951674282", "5511999999999"]);
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("https://uazapi.test/chat/check");
+    expect(JSON.parse(init?.body as string)).toEqual({
+      numbers: ["5511951674282", "5511999999999"],
+    });
+    expect(res).toEqual([
+      { number: "5511951674282", isInWhatsapp: false },
+      { number: "5511999999999", isInWhatsapp: true },
+    ]);
+  });
+
+  it("treats a per-item error or missing verdict as reachable (never gates on ambiguity)", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonRes(200, [
+        { query: "5511111111111", isInWhatsapp: false, error: "could not resolve" },
+        { query: "5522222222222" }, // isInWhatsapp undefined
+      ])
+    );
+
+    const provider = makeProvider();
+    const res = await provider.checkNumbers(["5511111111111", "5522222222222"]);
+
+    expect(res).toEqual([
+      { number: "5511111111111", isInWhatsapp: true },
+      { number: "5522222222222", isInWhatsapp: true },
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Uazapi-only methods — route to UazapiClient correct endpoints
 // ---------------------------------------------------------------------------
 

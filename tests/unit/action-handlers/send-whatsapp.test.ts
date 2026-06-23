@@ -29,7 +29,17 @@ vi.mock("../../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
   getPipeEntry: vi.fn().mockResolvedValue(null),
 }));
 
+// Partial-mock whatsapp-helpers: keep the real resolvers, but control the
+// recipient reachability gate. Default (unset) → undefined → no gate.
+vi.mock("../../../supabase/functions/_shared/action-handlers/whatsapp-helpers.ts", async (orig) => ({
+  ...(await (orig as () => Promise<Record<string, unknown>>)()),
+  recipientGate: vi.fn(),
+}));
+
 import { sendWhatsApp } from "../../../supabase/functions/_shared/action-handlers/send-whatsapp";
+import { recipientGate } from "../../../supabase/functions/_shared/action-handlers/whatsapp-helpers";
+import { sendMessage } from "../../../supabase/functions/_shared/message-gateway";
+import { sendTextViaInstance } from "../../../supabase/functions/_shared/whatsapp-dispatch";
 
 const WA_INSTANCE = {
   id: "inst-1",
@@ -131,5 +141,23 @@ describe("sendWhatsApp action handler", () => {
     const result = await sendWhatsApp(input);
     expect(result.success).toBe(true);
     expect(result.message).toContain("text sent");
+  });
+
+  it("returns retryable:false and skips the send when recipient is not on WhatsApp", async () => {
+    vi.mocked(recipientGate).mockResolvedValueOnce({
+      success: false,
+      error: "Recipient number is not on WhatsApp",
+      retryable: false,
+    });
+
+    const { input } = makeInput();
+    const result = await sendWhatsApp(input);
+
+    expect(result.success).toBe(false);
+    expect(result.retryable).toBe(false);
+    expect(result.error).toContain("not on WhatsApp");
+    // The gate short-circuits before any send is attempted.
+    expect(vi.mocked(sendMessage)).not.toHaveBeenCalled();
+    expect(vi.mocked(sendTextViaInstance)).not.toHaveBeenCalled();
   });
 });

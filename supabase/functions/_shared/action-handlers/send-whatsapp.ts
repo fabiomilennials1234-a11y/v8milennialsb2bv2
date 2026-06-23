@@ -11,6 +11,7 @@ import {
   enforceWhatsAppRateLimit,
   resolveVariables,
   buildTrackId,
+  recipientGate,
 } from "./whatsapp-helpers.ts";
 
 export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
@@ -30,6 +31,12 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
 
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
+
+  // Pre-flight: a recipient not on WhatsApp fails permanently. Skip the send and
+  // mark non-retryable so the executor terminal-fails immediately instead of
+  // retrying an opaque Uazapi 500 three times over ~8 min.
+  const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
+  if (recipientBlock) return recipientBlock;
 
   const template = (params.messageTemplate as string) || "";
   const message = await resolveVariables(supabase, leadId, template, executionContext);

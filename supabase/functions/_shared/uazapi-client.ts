@@ -30,6 +30,7 @@ import type {
   UazapiSendMenuInput,
   UazapiSendPixButtonInput,
   UazapiSendTextInput,
+  UazapiNumberCheck,
 } from "./uazapi-types.ts";
 
 // ---------------------------------------------------------------------------
@@ -236,6 +237,22 @@ export class UazapiClient {
       "/send/pix-button",
       input
     );
+  }
+
+  // =========================================================================
+  // Chat
+  // =========================================================================
+
+  /**
+   * Check whether numbers are registered on WhatsApp (POST /chat/check).
+   * Returns one verdict per input number; `isInWhatsapp:false` is the
+   * authoritative "not on WhatsApp" signal. Uazapi answers 200 even for
+   * unregistered numbers — a 5xx here means the instance is disconnected
+   * (transient infra), not a per-number verdict, so callers must treat a
+   * thrown error as "unknown" and NOT as "not reachable".
+   */
+  async checkNumbers(numbers: string[]): Promise<UazapiNumberCheck[]> {
+    return this.request<UazapiNumberCheck[]>("POST", "/chat/check", { numbers });
   }
 
   // =========================================================================
@@ -542,11 +559,32 @@ export class UazapiClient {
           throw err;
         }
 
-        // 5xx — record failure, retry
+        // 5xx — record failure, retry. Capture the response body so the
+        // provider reason (e.g. "number is not on WhatsApp") survives instead
+        // of an opaque "server error 500". Uazapi returns 500 — not 4xx — for
+        // some permanent recipient conditions, so the body is the only signal
+        // that distinguishes bad-recipient from a genuine outage downstream.
         if (res.status >= 500) {
+          const errBody = await res.json().catch(() => ({}));
+          // Uazapi /send/text 500 body (per uazapiGO OpenAPI): rich object with
+          // { error, error_source, provider_code:int, error_key:string, ... }.
+          // error_key is the stable, human-readable marker; fall back to legacy
+          // code/error_code, then to the numeric provider_code as a last resort.
+          const providerMsg =
+            (errBody as any)?.error ?? (errBody as any)?.message ?? null;
+          const rawProviderCode =
+            (errBody as any)?.error_key ??
+            (errBody as any)?.code ??
+            (errBody as any)?.error_code ??
+            (errBody as any)?.provider_code;
           lastError = {
+            provider_code:
+              rawProviderCode != null ? String(rawProviderCode) : undefined,
             status: res.status,
-            message: `Uazapi server error ${res.status} on ${method} ${path}`,
+            message: providerMsg
+              ? `Uazapi server error ${res.status} on ${method} ${path}: ${providerMsg}`
+              : `Uazapi server error ${res.status} on ${method} ${path}`,
+            raw: errBody,
           } satisfies UazapiError;
           this.recordFailure(cbKey);
           await this.backoff(attempt);

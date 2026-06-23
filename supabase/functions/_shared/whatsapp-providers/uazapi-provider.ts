@@ -246,6 +246,22 @@ export class UazapiProvider implements WhatsAppProvider {
     };
   }
 
+  /**
+   * Pre-flight WhatsApp existence check (Uazapi /chat/check). Normalises the
+   * verdict so only an explicit `isInWhatsapp:false` (with no per-item error)
+   * is reported as not-on-WhatsApp; anything ambiguous is reported reachable so
+   * callers never gate a send on uncertain data.
+   */
+  async checkNumbers(
+    numbers: string[],
+  ): Promise<Array<{ number: string; isInWhatsapp: boolean }>> {
+    const res = await this.client.checkNumbers(numbers);
+    return res.map((r) => ({
+      number: r.query,
+      isInWhatsapp: r.error ? true : r.isInWhatsapp !== false,
+    }));
+  }
+
   // =========================================================================
   // Sender (mass send) — delegates to UazapiClient /sender/* (Uazapi-only)
   // =========================================================================

@@ -21,6 +21,7 @@ import {
   enforceWhatsAppRateLimit,
   resolveVariables,
   buildTrackId,
+  recipientGate,
 } from "./whatsapp-helpers.ts";
 
 export async function sendCampaignMessage(input: ActionInput): Promise<ActionResult> {
@@ -62,6 +63,9 @@ export async function sendCampaignMessage(input: ActionInput): Promise<ActionRes
   // Resolve phone
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
+
+  const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
+  if (recipientBlock) return recipientBlock;
 
   const isAudio = template.message_type === "audio" && template.audio_url;
   const trackId = buildTrackId(params);
