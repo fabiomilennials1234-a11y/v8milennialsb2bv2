@@ -31,7 +31,7 @@ import {
   TEST_LEAD_GAMMA_ID,
   TEST_LEAD_ORGB_1_ID,
 } from './setup';
-import { getOrgAAdmin, getOrgBAdmin, clearClients } from './rls-helpers';
+import { getOrgAAdmin, getOrgBAdmin, getOrgAMember1, getMaster, clearClients } from './rls-helpers';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 const shouldSkip =
@@ -158,5 +158,49 @@ describe.skipIf(shouldSkip)('get_stage_lead_ids RPC', () => {
     expect(idsA).not.toContain(TEST_LEAD_ORGB_1_ID);
     // Disjoint.
     for (const id of idsB) expect(idsA).not.toContain(id);
+  });
+
+  // ── Master-ghost (migration 20261228000000) ──────────────────────────────
+  // The master fixture is a team_member of org A but NOT org B. Before the fix,
+  // a master operating an org where they have no membership got an empty set
+  // (get_my_organization_ids excludes it) — the "Nenhum lead neste estágio" bug.
+  // p_organization_id destrava o ramo master server-side, escopado à org pedida.
+
+  it('(e) master WITHOUT p_organization_id does NOT see a non-member org stage (reproduces the ghost)', async () => {
+    const master = await getMaster();
+    const { data, error } = await master.rpc('get_stage_lead_ids', {
+      p_pipeline_type: 'whatsapp',
+      p_stage_key: STAGE,
+    });
+    expect(error).toBeNull();
+    // Master só é membro da org A → org B fica invisível sem a org pedida.
+    expect((data as string[]) ?? []).not.toContain(TEST_LEAD_ORGB_1_ID);
+  });
+
+  it('(f) master WITH p_organization_id sees the requested org B stage', async () => {
+    const master = await getMaster();
+    const { data, error } = await master.rpc('get_stage_lead_ids', {
+      p_pipeline_type: 'whatsapp',
+      p_stage_key: STAGE,
+      p_organization_id: TEST_ORG_B_ID,
+    });
+    expect(error).toBeNull();
+    const ids = (data as string[]) ?? [];
+    // Escopado à org pedida: vê o lead de B, e SÓ o de B (não agrega A).
+    expect(ids).toContain(TEST_LEAD_ORGB_1_ID);
+    expect(ids).not.toContain(TEST_LEAD_ALPHA_ID);
+    expect(ids).not.toContain(TEST_LEAD_GAMMA_ID);
+  });
+
+  it('(g) NON-master passing p_organization_id of another org gets nothing (no escalation)', async () => {
+    const member = await getOrgAMember1();
+    const { data, error } = await member.rpc('get_stage_lead_ids', {
+      p_pipeline_type: 'whatsapp',
+      p_stage_key: STAGE,
+      p_organization_id: TEST_ORG_B_ID,
+    });
+    expect(error).toBeNull();
+    // is_master_user() é false → ramo master inerte → só o helper (org A) vale.
+    expect((data as string[]) ?? []).not.toContain(TEST_LEAD_ORGB_1_ID);
   });
 });
