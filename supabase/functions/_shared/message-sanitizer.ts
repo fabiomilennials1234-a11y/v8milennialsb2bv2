@@ -67,10 +67,27 @@ export interface RecoveredAction {
   params: Record<string, unknown>;
 }
 
+/**
+ * Filename de mídia EXTRAÍDO de uma tag-de-chamada vazada cujo nome estava
+ * FORA da allowlist (incidente KomBag 2026-06-23). O sanitizer é PURO (sem
+ * DB), então só consegue extrair o nome do arquivo do argumento — a resolução
+ * file_name→document_id + dispatch de SEND_DOCUMENT acontece no ENGINE.
+ */
+export interface RecoveredMediaByName {
+  file_name: string;
+}
+
 export interface SanitizeResult {
   text: string;
   droppedBlocks: number;
   recoveredAction: RecoveredAction | null;
+  /**
+   * Candidato a mídia extraído de uma tag-de-chamada vazada (nome do arquivo
+   * sem prefixo `[imagem] `/`[video] ` e sem aspas). null quando nenhuma tag
+   * desse tipo foi vista ou nenhum filename foi reconhecido no argumento.
+   * Resolvido para document_id no engine (DB). Ver Parte B do incidente KomBag.
+   */
+  recoveredMediaByName: RecoveredMediaByName | null;
   /** Reasoning chain extraído de <thinking>...</thinking> antes da resposta. */
   reasoning?: string;
 }
@@ -322,11 +339,86 @@ function stripInlineToolTags(
   return { cleaned, dropped, candidates };
 }
 
+/**
+ * Tag angular cujo CONTEÚDO contém uma chamada-de-função `identificador(`.
+ * Cobre `<a:b(...)>`, `<b(...)>`, `<scope:tool(args='x')>`. A heurística é
+ * "abre `<`, em algum ponto tem `palavra(`, fecha `>`". Parênteses de call
+ * dentro de `<...>` são raríssimos em texto pt-BR legítimo pro cliente, então
+ * é seguro nukar independente de allowlist (incidente KomBag 2026-06-23, onde
+ * o nome `atendimento_vendas_b2b` estava FORA da allowlist e vazava).
+ *
+ * NÃO casa autolink `<https://x.com>` (sem `palavra(`) nem texto solto como
+ * "preço (promo)" (não está dentro de `<...>`).
+ */
+const FUNCTION_CALL_TAG_RE =
+  /<[^<>]*\b[a-zA-Z_][a-zA-Z0-9_]*\s*\([^<>]*>/g;
+
+/** Abertura órfã: `<...palavra(...` sem `>` de fechamento (defensivo). */
+const FUNCTION_CALL_TAG_ORPHAN_RE =
+  /<[^<>]*\b[a-zA-Z_][a-zA-Z0-9_]*\s*\([^<>]*$/;
+
+/**
+ * Reconhece um nome de arquivo de mídia dentro do argumento de uma tag-de-call.
+ * Aceita o arg no formato `chave='valor'` / `chave="valor"` (qualquer chave),
+ * remove prefixo `[imagem] ` / `[video] ` / `[audio] ` e aspas, e devolve o
+ * basename. Retorna null se não houver algo com cara de arquivo de mídia.
+ */
+const MEDIA_FILENAME_IN_ARG_RE =
+  /['"]?\s*(?:\[(?:imagem|image|video|vídeo|audio|áudio|foto|photo|documento|document|arquivo|file)\]\s*)?([^'"<>]*?\.(?:jpe?g|png|gif|webp|bmp|svg|mp4|mov|avi|mkv|webm|mp3|ogg|opus|wav|m4a|pdf|docx?|xlsx?|pptx?|csv|txt))\s*['"]?/i;
+
+function extractMediaFileNameFromTag(tagInner: string): string | null {
+  const m = tagInner.match(MEDIA_FILENAME_IN_ARG_RE);
+  if (!m) return null;
+  const name = m[1].trim();
+  return name.length > 0 ? name : null;
+}
+
+/**
+ * Strip de tags em forma de CHAMADA-DE-FUNÇÃO `<...palavra(args)>` — rede de
+ * segurança independente de allowlist (incidente KomBag 2026-06-23). Captura
+ * o filename de mídia do argumento (se houver) como candidato a recovery.
+ */
+function stripFunctionCallTags(
+  input: string,
+): { cleaned: string; dropped: number; mediaFileName: string | null } {
+  if (!input || input.indexOf("<") === -1) {
+    return { cleaned: input, dropped: 0, mediaFileName: null };
+  }
+  let dropped = 0;
+  let mediaFileName: string | null = null;
+
+  FUNCTION_CALL_TAG_RE.lastIndex = 0;
+  let cleaned = input.replace(FUNCTION_CALL_TAG_RE, (match) => {
+    dropped += 1;
+    if (!mediaFileName) {
+      const name = extractMediaFileNameFromTag(match);
+      if (name) mediaFileName = name;
+    }
+    return "";
+  });
+  FUNCTION_CALL_TAG_RE.lastIndex = 0;
+
+  // Defensivo: abertura órfã `<...palavra(...` sem fechar (LLM cortou a tag).
+  const orphan = cleaned.match(FUNCTION_CALL_TAG_ORPHAN_RE);
+  if (orphan) {
+    dropped += 1;
+    if (!mediaFileName) {
+      const name = extractMediaFileNameFromTag(orphan[0]);
+      if (name) mediaFileName = name;
+    }
+    cleaned = cleaned.slice(0, orphan.index).trimEnd();
+  }
+
+  return { cleaned, dropped, mediaFileName };
+}
+
 export function sanitizeAssistantMessage(
   raw: string,
   alreadyHasAction: boolean,
 ): SanitizeResult {
-  if (!raw) return { text: raw, droppedBlocks: 0, recoveredAction: null };
+  if (!raw) {
+    return { text: raw, droppedBlocks: 0, recoveredAction: null, recoveredMediaByName: null };
+  }
 
   // Passo 0: extrair reasoning chain (<thinking>...</thinking>) ANTES de tudo
   // Defensive: se LLM vazar <thinking> sem fechar, descartamos tudo após.
@@ -335,6 +427,7 @@ export function sanitizeAssistantMessage(
 
   let droppedBlocks = 0;
   let recoveredAction: RecoveredAction | null = null;
+  let recoveredMediaByName: RecoveredMediaByName | null = null;
 
   // Passo 1: tirar code-fences ```json ... ``` primeiro (simplifica lookup balanceado)
   let text = raw.replace(/```(?:json)?\s*([\s\S]*?)\s*```/gi, (_m, inner: string) => {
@@ -364,8 +457,23 @@ export function sanitizeAssistantMessage(
     }
   }
 
-  // Passo 1c: pseudo-tags inline `<tool_name: args>` emitidas como texto
-  // (incidente Barulhinho Bom 2026-06-02).
+  // Passo 1c: tags em forma de CHAMADA-DE-FUNÇÃO `<...palavra(args)>` — rede
+  // de segurança independente de allowlist (incidente KomBag 2026-06-23, onde
+  // `<atendimento_vendas_b2b:enviar_midia_vendas_b2b(arquivo_midia='[imagem]Tamanhos.jpeg')>`
+  // vazou porque o nome estava FORA da allowlist). Roda ANTES do strip inline
+  // por allowlist pra capturar o filename de mídia do argumento (resolvido no
+  // engine via DB) mesmo quando o nome do tool por acaso está na allowlist
+  // (ex: `<send_media(file='x.jpg')>`).
+  const fnCallStrip = stripFunctionCallTags(text);
+  text = fnCallStrip.cleaned;
+  droppedBlocks += fnCallStrip.dropped;
+  if (fnCallStrip.mediaFileName && !recoveredMediaByName) {
+    recoveredMediaByName = { file_name: fnCallStrip.mediaFileName };
+  }
+
+  // Passo 1d: pseudo-tags inline `<tool_name: args>` emitidas como texto
+  // (incidente Barulhinho Bom 2026-06-02). Forma SEM parênteses
+  // (`<send_video: Linha.mp4>`) — não casa 1c, gateada por allowlist aqui.
   const inlineStrip = stripInlineToolTags(text);
   text = inlineStrip.cleaned;
   droppedBlocks += inlineStrip.dropped;
@@ -420,16 +528,20 @@ export function sanitizeAssistantMessage(
   text = text.replace(/\n{3,}/g, "\n\n").trim();
 
   // Defensive final: garantir zero vazamento de tags reasoning + tool_call +
-  // pseudo-tags inline `<tool_name: args>` residuais.
+  // pseudo-tags inline `<tool_name: args>` + tags-de-chamada `<...palavra(args)>`
+  // residuais.
   INLINE_TOOL_TAG_RE.lastIndex = 0;
+  FUNCTION_CALL_TAG_RE.lastIndex = 0;
   text = text
     .replace(/<\/?(?:thinking|response)[^>]*>/gi, "")
     .replace(/<\/?(?:tool_call|tool_code|vertical_tool_calls|no_tool_calls)\b[^>]*\/?\s*>/gi, "")
     .replace(INLINE_TOOL_TAG_RE, "")
+    .replace(FUNCTION_CALL_TAG_RE, "")
     .trim();
   INLINE_TOOL_TAG_RE.lastIndex = 0;
+  FUNCTION_CALL_TAG_RE.lastIndex = 0;
 
-  return { text, droppedBlocks, recoveredAction, reasoning };
+  return { text, droppedBlocks, recoveredAction, recoveredMediaByName, reasoning };
 }
 
 function tryRecoverFromString(jsonStr: string): RecoveredAction | null {

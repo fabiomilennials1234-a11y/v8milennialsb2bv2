@@ -13,4 +13,8 @@ export {
   splitByDelimiter,
 } from "../message-sanitizer.ts";
 
-export type { SanitizeResult, RecoveredAction } from "../message-sanitizer.ts";
+export type {
+  SanitizeResult,
+  RecoveredAction,
+  RecoveredMediaByName,
+} from "../message-sanitizer.ts";

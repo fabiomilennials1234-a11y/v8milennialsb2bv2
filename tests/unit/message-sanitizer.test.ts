@@ -330,6 +330,90 @@ describe("sanitizeAssistantMessage", () => {
     expect(r.text).toContain('{"preco": "R$ 1.200", "parcelas": 12}');
     expect(r.droppedBlocks).toBe(0);
   });
+
+  // ============================================================
+  // Regressão: leak de tag em forma de CHAMADA-DE-FUNÇÃO com nome FORA
+  // da allowlist (incidente KomBag 2026-06-23). gemini-2.5-flash vazou
+  // `<atendimento_vendas_b2b:enviar_midia_vendas_b2b(arquivo_midia='[imagem]Tamanhos.jpeg')>`
+  // como TEXTO. O nome antes do `:` (atendimento_vendas_b2b) não está na
+  // allowlist → stripInlineToolTags preservava → vazava ao cliente.
+  // Sinal seguro: tag angular cujo conteúdo casa `identificador(`.
+  // ============================================================
+
+  it("strips the exact KomBag function-call tag leaked as text (out-of-allowlist name)", () => {
+    const raw =
+      "Vou te mandar os tamanhos:\n<atendimento_vendas_b2b:enviar_midia_vendas_b2b(arquivo_midia='[imagem]Tamanhos.jpeg')>";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Vou te mandar os tamanhos:");
+    expect(r.text).not.toContain("atendimento_vendas_b2b");
+    expect(r.text).not.toContain("enviar_midia");
+    expect(r.text).not.toContain("<");
+    expect(r.droppedBlocks).toBeGreaterThanOrEqual(1);
+  });
+
+  it("captures recoveredMediaByName from the leaked call tag (strips [imagem] prefix + quotes)", () => {
+    const raw =
+      "Segue:\n<atendimento_vendas_b2b:enviar_midia_vendas_b2b(arquivo_midia='[imagem]Tamanhos.jpeg')>";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.recoveredMediaByName).toEqual({ file_name: "Tamanhos.jpeg" });
+  });
+
+  it("strips a scope-less function-call tag <send_media(file='x.jpg')>", () => {
+    const raw = "Olha:\n<send_media(file='x.jpg')>";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Olha:");
+    expect(r.text).not.toContain("send_media");
+    expect(r.recoveredMediaByName).toEqual({ file_name: "x.jpg" });
+  });
+
+  it("strips a generic <a:b(c='d')> function-call tag even with no media filename", () => {
+    const raw = "Texto.\n<a:b(c='d')>";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Texto.");
+    expect(r.text).not.toContain("<");
+  });
+
+  it("strips an orphan function-call tag with no closing '>' (defensive)", () => {
+    const raw = "Vou enviar.\n<atendimento_vendas_b2b:enviar_midia(arquivo_midia='Tamanhos.jpeg'";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Vou enviar.");
+    expect(r.text).not.toContain("atendimento_vendas_b2b");
+    expect(r.text).not.toContain("enviar_midia");
+  });
+
+  it("does NOT strip legitimate text with parenthesis NOT inside a tag", () => {
+    const raw = "preço (promocional) hoje, custa R$ 5 (cinco)";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe(raw);
+    expect(r.droppedBlocks).toBe(0);
+    expect(r.recoveredMediaByName).toBeNull();
+  });
+
+  it("does NOT strip a markdown/autolink <https://site.com>", () => {
+    const raw = "Veja em <https://site.com> por favor";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe(raw);
+    expect(r.droppedBlocks).toBe(0);
+  });
+
+  it("still strips allowlisted <send_video: Linha.mp4> (no parens) as before", () => {
+    const raw = "Segue o vídeo.\n<send_video: Linha.mp4>";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Segue o vídeo.");
+    expect(r.text).not.toContain("send_video");
+  });
+
+  it("recoveredMediaByName is null when no media filename is present in the call tag", () => {
+    const raw = "Texto.\n<scope:tool(flag='on')>";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.recoveredMediaByName).toBeNull();
+  });
+
+  it("recoveredMediaByName normalizes [video] prefix too", () => {
+    const raw = "Segue:\n<scope:tool(arquivo_midia=\"[video] Linha de Produtos.mp4\")>";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.recoveredMediaByName).toEqual({ file_name: "Linha de Produtos.mp4" });
+  });
 });
 
 describe("splitByDelimiter", () => {

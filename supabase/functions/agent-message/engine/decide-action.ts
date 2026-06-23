@@ -101,6 +101,71 @@ export function processLLMResponse(
   return { nextState, actionToExecute, assistantMessage, extraToolCalls, finishReason };
 }
 
+/**
+ * Escapa metacaracteres do LIKE/ILIKE (`%` e `_`) num literal de filename, pra
+ * que o match parcial não vire wildcard acidental (ex: `100%.pdf`).
+ */
+function escapeIlikeLiteral(value: string): string {
+  return value.replace(/([%_\\])/g, "\\$1");
+}
+
+/**
+ * Recovery KomBag 2026-06-23 — resolve um filename de mídia vazado (capturado
+ * pelo sanitizer como `recoveredMediaByName` a partir de uma tag-de-chamada
+ * fora da allowlist) para uma ação SEND_DOCUMENT real.
+ *
+ * O sanitizer é PURO (sem DB) → só extrai o filename. A resolução
+ * filename→document_id acontece AQUI, buscando em copilot_agent_documents
+ * (agent_id atual, status='ready'). Match exato (case-insensitive) primeiro,
+ * depois ilike parcial. Sem doc → null (engine apenas suprime, comportamento
+ * atual antes deste fix).
+ *
+ * Multi-tenancy: gateado por agent_id + organization_id. agent_id ausente →
+ * null (não dá pra escopar o lookup com segurança).
+ */
+export async function resolveRecoveredMedia(
+  supabase: SupabaseClient,
+  agentId: string | null | undefined,
+  organizationId: string,
+  fileName: string,
+): Promise<{ action: string; params: Record<string, unknown>; tenant_id: string } | null> {
+  const name = (fileName ?? "").trim();
+  if (!name || !agentId) return null;
+
+  // 1. Match exato case-insensitive (ilike sem wildcard = igualdade tolerante a caixa).
+  const exact = await supabase
+    .from("copilot_agent_documents")
+    .select("id, file_name")
+    .eq("agent_id", agentId)
+    .eq("organization_id", organizationId)
+    .eq("status", "ready")
+    .ilike("file_name", escapeIlikeLiteral(name))
+    .limit(1);
+
+  let docId: string | null = exact.data?.[0]?.id ?? null;
+
+  // 2. Fallback: match parcial (filename contido no nome do doc, ou vice-versa).
+  if (!docId) {
+    const partial = await supabase
+      .from("copilot_agent_documents")
+      .select("id, file_name")
+      .eq("agent_id", agentId)
+      .eq("organization_id", organizationId)
+      .eq("status", "ready")
+      .ilike("file_name", `%${escapeIlikeLiteral(name)}%`)
+      .limit(1);
+    docId = partial.data?.[0]?.id ?? null;
+  }
+
+  if (!docId) return null;
+
+  return {
+    action: "SEND_DOCUMENT",
+    params: { document_id: docId },
+    tenant_id: organizationId,
+  };
+}
+
 const ACTION_TYPE_MAP: Record<string, string> = {
   SCHEDULE_MEETING: "schedule_meeting",
   CREATE_LEAD: "create_lead",
