@@ -26,6 +26,10 @@ export function useStageLeadIds(pipelineType: PipelineType, stageKey: string) {
       const { data, error } = await supabase.rpc("get_stage_lead_ids" as any, {
         p_pipeline_type: pipelineType,
         p_stage_key: stageKey,
+        // Master-ghost: master operando uma org sem membership não aparece em
+        // get_my_organization_ids(); a org corrente destrava o ramo master
+        // server-side (gateado por is_master_user). Ver migration 20261228000000.
+        p_organization_id: organizationId,
       });
       if (error) throw error;
       return (data ?? []) as string[];

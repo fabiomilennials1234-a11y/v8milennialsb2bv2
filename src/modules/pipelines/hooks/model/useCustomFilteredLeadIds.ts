@@ -96,6 +96,9 @@ export function useCustomFilteredLeadIds(
           p_qualification_tier: pQualificationTier,
           p_pre_qualification_tier: pPreQualificationTier,
           p_origin: pOrigin,
+          // Master-ghost: destrava o ramo master server-side p/ org sem
+          // membership (gateado por is_master_user). Ver migration 20261228000000.
+          p_organization_id: organizationId,
         },
       );
       if (error) throw error;
