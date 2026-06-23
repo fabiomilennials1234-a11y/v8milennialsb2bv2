@@ -1,4 +1,8 @@
--- 20261228000000_pin_trigger_search_path.sql
+-- 20261229000000_pin_trigger_search_path.sql
+--
+-- (Re-timestamped from 20261228000000 to resolve a version collision: a parallel
+--  migration 20261228000000_disparo_audience_rpcs_master_branch.sql took that version
+--  and was already applied to prod. Same content; new version so both register.)
 --
 -- Security/robustness hardening: pin search_path on every TRIGGER function in public
 -- that does not already pin it.
