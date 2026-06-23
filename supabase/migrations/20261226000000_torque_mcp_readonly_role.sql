@@ -123,4 +123,9 @@ $$;
 
 -- Owner = mcp_readonly so the SECURITY DEFINER body executes with that role's privileges
 -- (SELECT-only, secret tables revoked) without an in-function SET ROLE (which PG forbids there).
+-- Postgres requires the incoming owner to hold CREATE on the function's schema; grant it
+-- momentarily for the ownership transfer, then revoke so mcp_readonly stays read-only.
+-- (Hardened prod revokes CREATE on public from PUBLIC, so without this the ALTER fails 42501.)
+GRANT CREATE ON SCHEMA public TO mcp_readonly;
 ALTER FUNCTION public.mcp_exec_readonly_sql(text, integer) OWNER TO mcp_readonly;
+REVOKE CREATE ON SCHEMA public FROM mcp_readonly;
