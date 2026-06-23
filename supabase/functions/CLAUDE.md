@@ -144,13 +144,16 @@ Mass send (`mass-send-*`) listadas em communication — UI invoca via JWT, despa
 | `tinyerp-sync-products` | UI / pg_cron | JWT / x-cron-secret |
 | `tinyerp-webhook` | TinyERP externo | apikey |
 
-### engagement (3) — follow-ups, calendário, meetings
+### engagement (4) — follow-ups, calendário, meetings
 
 | Função | Trigger | Auth |
 |--------|---------|------|
 | `meeting-webhook` | API pública | Bearer (`tq_live_xxxx`) |
+| `meeting-calendar-sync` | trigger pg_net em `meetings` | x-cron-secret |
 | `process-followup-automations` | pg_cron | x-cron-secret |
 | `webhook-calcom` | Cal.com externo | apikey |
+
+> `meeting-calendar-sync` reflete meetings → Google Calendar do criador (sync Torque→Google). Reverso é overlay (ver `integrations` / `google-calendar-events`). Helpers em `_shared/google-calendar-events-api.ts`. Ativação: `cron_config.meeting_calendar_sync_url`.
 
 ### analytics (1) — meta ads metrics
 
