@@ -6,6 +6,8 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getTimeBasedVariables } from "../time-variables.ts";
 import { getPipeEntry } from "../pipeline-adapter.ts";
+import { getWhatsAppProvider } from "../whatsapp-client.ts";
+import type { ActionResult } from "./types.ts";
 
 // ─── WhatsApp instance resolution ──────────────────────────────────────────
 
@@ -86,6 +88,120 @@ export async function getLeadPhone(supabase: SupabaseClient, leadId: string): Pr
   let phone = String(data.phone).replace(/\D/g, "");
   if (!phone.startsWith("55")) phone = "55" + phone;
   return phone;
+}
+
+// ─── Recipient reachability (WhatsApp existence pre-flight) ─────────────────
+
+/**
+ * Verify a recipient number is on WhatsApp BEFORE an automated outbound send.
+ *
+ * Why: automation first-contact (e.g. Meta Ads lead-form leads) often carries
+ * mistyped / non-WhatsApp Brazilian mobiles. Uazapi answers /send/text with an
+ * opaque HTTP 500 for those, which the workflow executor then retries 3× over
+ * ~8 min before terminal-failing — a noisy "outage"-looking failure for what is
+ * really bad recipient data. A cheap /chat/check up front turns that into a
+ * clean, immediate, non-retryable skip.
+ *
+ * Safety contract (never drop a deliverable message):
+ *  - Numbers we have ANY prior WhatsApp history with are assumed valid (skip the
+ *    check entirely — fast path for established conversations).
+ *  - Providers without a check capability (Evolution / Meta Cloud) are never
+ *    gated.
+ *  - ANY failure of the check itself (instance disconnected 500, RPC/network
+ *    error) is treated as UNKNOWN → reachable, so the send still proceeds.
+ *  - Only an explicit `isInWhatsapp === false` gates the send.
+ */
+export async function assertRecipientReachable(
+  supabase: SupabaseClient,
+  instance: unknown,
+  phone: string,
+  organizationId?: string,
+): Promise<{ reachable: boolean; reason?: string }> {
+  try {
+    if (await hasPriorWhatsAppHistory(supabase, phone, organizationId)) {
+      return { reachable: true };
+    }
+    const provider = await getWhatsAppProvider(instance as never, supabase);
+    // await INSIDE the try so a checkNumbers rejection is caught by the guard.
+    return await reachabilityFromProvider(provider, phone);
+  } catch {
+    // Unknown — never "not reachable". Fall through to the send.
+    return { reachable: true };
+  }
+}
+
+/**
+ * Same as {@link assertRecipientReachable} but for callers that already hold a
+ * resolved provider (outbound-sender, followup-sender) — avoids a redundant
+ * provider/credential resolution.
+ */
+export async function assertRecipientReachableWithProvider(
+  supabase: SupabaseClient,
+  provider: { checkNumbers?: (n: string[]) => Promise<Array<{ number: string; isInWhatsapp: boolean }>> },
+  phone: string,
+  organizationId?: string,
+): Promise<{ reachable: boolean; reason?: string }> {
+  try {
+    if (await hasPriorWhatsAppHistory(supabase, phone, organizationId)) {
+      return { reachable: true };
+    }
+    return await reachabilityFromProvider(provider, phone);
+  } catch {
+    return { reachable: true };
+  }
+}
+
+/** Fast path: a number we've already exchanged messages with is known-valid. */
+async function hasPriorWhatsAppHistory(
+  supabase: SupabaseClient,
+  phone: string,
+  organizationId?: string,
+): Promise<boolean> {
+  let query = supabase
+    .from("whatsapp_messages")
+    .select("id")
+    .eq("phone_number", phone);
+  // Org-scope the lookup for index selectivity + defense-in-depth (RLS already
+  // isolates, but the explicit filter keeps the query tenant-pinned).
+  if (organizationId) query = query.eq("organization_id", organizationId);
+  const { data } = await query.limit(1).maybeSingle();
+  return Boolean(data);
+}
+
+function reachabilityFromProvider(
+  provider: { checkNumbers?: (n: string[]) => Promise<Array<{ number: string; isInWhatsapp: boolean }>> },
+  phone: string,
+): { reachable: boolean; reason?: string } | Promise<{ reachable: boolean; reason?: string }> {
+  if (!provider?.checkNumbers) return { reachable: true };
+  const digits = (s: string) => String(s).replace(/\D/g, "");
+  return provider.checkNumbers([phone]).then((results) => {
+    const verdict =
+      results.find((r) => digits(r.number) === digits(phone)) ?? results[0];
+    if (verdict && verdict.isInWhatsapp === false) {
+      return { reachable: false, reason: "Recipient number is not on WhatsApp" };
+    }
+    return { reachable: true };
+  });
+}
+
+/**
+ * Thin wrapper for action handlers: returns a terminal (non-retryable) failure
+ * ActionResult when the recipient is provably not on WhatsApp, or null to let
+ * the send proceed.
+ */
+export async function recipientGate(
+  supabase: SupabaseClient,
+  instance: unknown,
+  phone: string,
+  organizationId?: string,
+): Promise<ActionResult | null> {
+  const verdict = await assertRecipientReachable(supabase, instance, phone, organizationId);
+  if (verdict.reachable) return null;
+  return {
+    success: false,
+    error: verdict.reason ?? "Recipient is not on WhatsApp",
+    retryable: false,
+  };
 }
 
 // ─── Rate limit enforcement ────────────────────────────────────────────────

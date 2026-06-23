@@ -13,6 +13,7 @@ import {
   enforceWhatsAppRateLimit,
   resolveVariables,
   buildTrackId,
+  recipientGate,
 } from "./whatsapp-helpers.ts";
 
 // ─── Audio ─────────────────────────────────────────────────────────────────
@@ -37,6 +38,9 @@ export async function sendWhatsAppAudio(input: ActionInput): Promise<ActionResul
 
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
+
+  const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
+  if (recipientBlock) return recipientBlock;
 
   const trackId = buildTrackId(params);
 
@@ -118,6 +122,9 @@ export async function sendWhatsAppImage(input: ActionInput): Promise<ActionResul
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
+  const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
+  if (recipientBlock) return recipientBlock;
+
   const caption = (params.imageCaption as string) || "";
   const resolvedCaption = await resolveVariables(supabase, leadId, caption, executionContext);
   const trackId = buildTrackId(params);
@@ -179,6 +186,9 @@ export async function sendWhatsAppSticker(input: ActionInput): Promise<ActionRes
 
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
+
+  const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
+  if (recipientBlock) return recipientBlock;
 
   const trackId = buildTrackId(params);
 

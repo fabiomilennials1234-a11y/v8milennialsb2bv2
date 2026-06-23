@@ -13,6 +13,7 @@ import {
   resolveDispatchContext,
   DispatchResolutionError,
 } from "./whatsapp-dispatch.ts";
+import { assertRecipientReachableWithProvider } from "./action-handlers/whatsapp-helpers.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "./copilot/cancellation.ts";
 
 export async function sendFollowupMessage(
@@ -69,6 +70,14 @@ export async function sendFollowupMessage(
   }
 
   const { provider, instance, normalizedPhone } = ctx;
+
+  // Pre-flight: skip (non-retryably) when the recipient is not on WhatsApp.
+  // Established conversations short-circuit via the prior-history fast path, so
+  // this only costs an API call on genuinely new numbers.
+  const reach = await assertRecipientReachableWithProvider(supabase, provider, normalizedPhone, organizationId);
+  if (!reach.reachable) {
+    return { success: false, error: reach.reason };
+  }
 
   const humanizedContent = await humanizeMessage(messageContent);
   const { chunks, delays } = await smartSplitMessage(humanizedContent, {

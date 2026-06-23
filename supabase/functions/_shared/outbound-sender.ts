@@ -20,6 +20,7 @@ import {
   DispatchResolutionError,
 } from "./whatsapp-dispatch.ts";
 import type { WhatsAppProvider } from "./whatsapp-client.ts";
+import { assertRecipientReachableWithProvider } from "./action-handlers/whatsapp-helpers.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "./copilot/cancellation.ts";
 
 const AUDIO_DELAY_MS = 8000;
@@ -100,6 +101,18 @@ export async function sendOutboundDispatch(
     }
 
     const { provider, instance, normalizedPhone: phone } = ctx;
+
+    // Pre-flight: copilot prospectador first-contact often targets unverified
+    // Meta-Ads numbers. Skip (non-retryably) when the recipient is not on
+    // WhatsApp — avoids the opaque Uazapi 500 + retry storm.
+    const reach = await assertRecipientReachableWithProvider(supabase, provider, phone, organizationId);
+    if (!reach.reachable) {
+      await supabase
+        .from("outbound_dispatch_log")
+        .update({ status: "skipped", error_message: reach.reason })
+        .eq("id", dispatchId);
+      return { success: false, error: reach.reason };
+    }
 
     // Humanize
     const humanizedContent = await humanizeMessage(row.message_content);

@@ -169,6 +169,27 @@ export type UazapiMessageResponse = {
   track_id?: string;
 };
 
+/**
+ * One entry of the POST /chat/check ("Verificar Números no WhatsApp") response.
+ * Uazapi returns 200 with one object per queried number — `isInWhatsapp:false`
+ * is the authoritative, deterministic "not registered on WhatsApp" verdict
+ * (unlike /send/text which surfaces unreachable recipients as an opaque 500).
+ */
+export type UazapiNumberCheck = {
+  /** Echo of the queried input (the number string we sent) */
+  query: string;
+  /** Resolved WhatsApp JID, when registered */
+  jid?: string;
+  /** Resolved WhatsApp LID, when available */
+  lid?: string;
+  /** KEY field — false means the number is NOT on WhatsApp */
+  isInWhatsapp: boolean;
+  verifiedName?: string;
+  groupName?: string;
+  /** Per-item error, when Uazapi could not resolve this specific entry */
+  error?: string;
+};
+
 // ---------------------------------------------------------------------------
 // Sender (mass send)
 // ---------------------------------------------------------------------------

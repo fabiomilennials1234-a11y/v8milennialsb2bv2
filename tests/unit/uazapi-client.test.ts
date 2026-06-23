@@ -252,6 +252,85 @@ describe("sendText — 5xx retry", () => {
     expect(result).toEqual(OK_MESSAGE);
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
   });
+
+  it("surfaces the Uazapi 5xx response body (reason + code + raw)", async () => {
+    // Uazapi returns 500 for permanent recipient conditions (e.g. number not
+    // on WhatsApp) instead of a clean 4xx. The thrown error must carry the
+    // provider reason so the dispatch failure is diagnosable, not opaque.
+    const body = { code: "number_not_found", message: "number is not on WhatsApp" };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(makeResponse(500, body))
+      .mockResolvedValueOnce(makeResponse(500, body))
+      .mockResolvedValueOnce(makeResponse(500, body));
+
+    const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 100 });
+    let caught: UazapiError | undefined;
+    try {
+      await withTimers(client.sendText({ number: "5511999999999", text: "Hi" }));
+    } catch (e) {
+      caught = e as UazapiError;
+    }
+
+    expect(caught?.status).toBe(500);
+    expect(caught?.provider_code).toBe("number_not_found");
+    expect(caught?.message).toContain("number is not on WhatsApp");
+    expect(caught?.raw).toMatchObject(body);
+  });
+
+  it("captures the real Uazapi 500 shape (error_key + error string)", async () => {
+    // Authoritative /send/text 500 body per uazapiGO OpenAPI spec.
+    const body = {
+      error: "WhatsApp server error 463: temporary account restriction",
+      error_source: "whatsapp_server",
+      provider_code: 463,
+      error_key: "WHATSAPP_REACHOUT_TIMELOCK",
+    };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(makeResponse(500, body))
+      .mockResolvedValueOnce(makeResponse(500, body))
+      .mockResolvedValueOnce(makeResponse(500, body));
+
+    const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 100 });
+    let caught: UazapiError | undefined;
+    try {
+      await withTimers(client.sendText({ number: "5511999999999", text: "Hi" }));
+    } catch (e) {
+      caught = e as UazapiError;
+    }
+
+    expect(caught?.status).toBe(500);
+    // error_key is the stable provider marker; prefer it over numeric provider_code.
+    expect(caught?.provider_code).toBe("WHATSAPP_REACHOUT_TIMELOCK");
+    expect(caught?.message).toContain("temporary account restriction");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkNumbers — POST /chat/check (WhatsApp existence pre-flight)
+// ---------------------------------------------------------------------------
+
+describe("checkNumbers — /chat/check", () => {
+  it("POSTs to /chat/check with { numbers } and returns the verdict array", async () => {
+    const verdict = [
+      { query: "5511951674282", jid: "", isInWhatsapp: false },
+      { query: "5511999999999", jid: "5511999999999@s.whatsapp.net", isInWhatsapp: true, verifiedName: "Acme" },
+    ];
+    vi.mocked(fetch).mockResolvedValueOnce(makeResponse(200, verdict));
+
+    const client = new UazapiClient(BASE_CONFIG);
+    const res = await client.checkNumbers(["5511951674282", "5511999999999"]);
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("https://uazapi.example.com/chat/check");
+    expect(init?.method).toBe("POST");
+    const sentBody = JSON.parse(init?.body as string);
+    expect(sentBody).toEqual({ numbers: ["5511951674282", "5511999999999"] });
+    expect((init?.headers as Record<string, string>)["token"]).toBe("tok-instance-xyz");
+
+    expect(res).toEqual(verdict);
+    expect(res[0].isInWhatsapp).toBe(false);
+    expect(res[1].isInWhatsapp).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
