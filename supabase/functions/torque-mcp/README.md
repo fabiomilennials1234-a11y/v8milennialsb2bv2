@@ -34,6 +34,18 @@ only, no comments/DDL — mirrored on both edge and DB sides), the role has `SEL
 **revoked on secret/credential/token tables**, and the READ ONLY txn blocks writes at the engine
 level. Migration: `20261226000000_torque_mcp_readonly_role.sql`.
 
+## Diagnostic pack (S4)
+
+Curated read-only audits that run a fixed introspection query through `mcp_exec_readonly_sql` (no
+new migration). Each targets a recurring incident class:
+
+- **`rls.check_access`** — master-ghost RLS coverage. No arg: multi-tenant tables (organization_id,
+  RLS on) with no master-aware policy — _candidates_ to review (not all are bugs). With `table`:
+  precise RLS status for that table (high-signal during an incident).
+- **`schema.audit_definer`** — SECURITY DEFINER functions in public, flagging those that do **not**
+  pin `search_path` (privilege-escalation surface + the cause of the `42883` "unqualified call under
+  empty search_path" incidents). `include_safe` to also list the pinned ones.
+
 ## Hardening (S3)
 
 - When `TORQUE_MCP_ALLOW_MUTATIONS=true`, config is **strict**: `SUPABASE_SERVICE_ROLE_KEY` must be
@@ -72,6 +84,8 @@ tools/blast.ts      blast.status
 tools/copilot.ts    copilot.dump_prompt + copilot.update_prompt
 tools/cron.ts       cron.toggle (requiresServiceRole)
 tools/db.ts         db.read_sql (read-only role + READ ONLY txn, audited)
+tools/rls.ts        rls.check_access (master-ghost coverage audit)
+tools/schema.ts     schema.audit_definer (SECURITY DEFINER search_path audit)
 ```
 
 ## Secrets (Supabase function env)
