@@ -6,10 +6,20 @@ const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18"] as const;
 const LATEST_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[0];
 
 export interface DispatchContext {
-  serverInfo: { name: string; version: string };
+  serverInfo: { name: string; version: string; project?: string };
   tools: ToolDef[];
   allowMutations: boolean;
   toolContext: ToolContext;
+}
+
+/** Structured, PII-free one-line trace of a tool call (tool name + outcome + ms). */
+function logToolCall(name: string, startedAt: number, outcome: "ok" | "error"): void {
+  console.log(JSON.stringify({
+    at: "torque-mcp/tools.call",
+    tool: name,
+    outcome,
+    ms: Date.now() - startedAt,
+  }));
 }
 
 /**
@@ -60,10 +70,14 @@ export async function dispatch(
         return err(id, -32602, `Missing required argument(s): ${missing.join(", ")}`);
       }
 
+      const startedAt = Date.now();
       try {
         const result = await tool.handler(args, ctx.toolContext);
+        const isError = (result as { isError?: boolean })?.isError === true;
+        logToolCall(tool.name, startedAt, isError ? "error" : "ok");
         return ok(id, result);
       } catch (e) {
+        logToolCall(tool.name, startedAt, "error");
         const msg = e instanceof Error ? e.message : String(e);
         return ok(id, { content: [{ type: "text", text: `Error: ${msg}` }], isError: true });
       }

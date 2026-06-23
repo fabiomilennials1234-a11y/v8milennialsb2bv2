@@ -31,9 +31,11 @@ Deno.test("loadConfig — opt-in flags require exact values", () => {
     ...validEnv,
     TORQUE_MCP_PROJECT: "prod",
     TORQUE_MCP_ALLOW_MUTATIONS: "true",
+    SUPABASE_SERVICE_ROLE_KEY: "svc-key",
   });
   assertEquals(prodMutating.project, "prod");
   assertEquals(prodMutating.allowMutations, true);
+  assertEquals(prodMutating.serviceRoleKey, "svc-key");
 
   const fuzzy = loadConfig({
     ...validEnv,
@@ -42,4 +44,51 @@ Deno.test("loadConfig — opt-in flags require exact values", () => {
   });
   assertEquals(fuzzy.project, "dev");
   assertEquals(fuzzy.allowMutations, false);
+});
+
+Deno.test("loadConfig — mutations on without service_role key throws", () => {
+  assertThrows(
+    () =>
+      loadConfig({
+        ...validEnv,
+        TORQUE_MCP_PROJECT: "dev",
+        TORQUE_MCP_ALLOW_MUTATIONS: "true",
+      }),
+    Error,
+    "SUPABASE_SERVICE_ROLE_KEY",
+  );
+});
+
+Deno.test("loadConfig — mutations on with blank service_role key throws", () => {
+  assertThrows(
+    () =>
+      loadConfig({
+        ...validEnv,
+        TORQUE_MCP_PROJECT: "dev",
+        TORQUE_MCP_ALLOW_MUTATIONS: "true",
+        SUPABASE_SERVICE_ROLE_KEY: "   ",
+      }),
+    Error,
+    "SUPABASE_SERVICE_ROLE_KEY",
+  );
+});
+
+Deno.test("loadConfig — mutations on without explicit project throws", () => {
+  assertThrows(
+    () =>
+      loadConfig({
+        ...validEnv,
+        TORQUE_MCP_ALLOW_MUTATIONS: "true",
+        SUPABASE_SERVICE_ROLE_KEY: "svc-key",
+      }),
+    Error,
+    "TORQUE_MCP_PROJECT",
+  );
+});
+
+Deno.test("loadConfig — mutations off ignores missing service_role + project", () => {
+  const cfg = loadConfig(validEnv);
+  assertEquals(cfg.allowMutations, false);
+  assertEquals(cfg.serviceRoleKey, "");
+  assertEquals(cfg.project, "dev");
 });
