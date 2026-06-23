@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { captureError } from "../_shared/sentry.ts";
 import { loadConfig } from "./lib/config.ts";
 import { createCachedMasterClientProvider } from "./lib/auth.ts";
 import { signInAsMaster } from "./lib/clients.ts";
@@ -13,11 +14,13 @@ import { whatsappInstanceStatusTool } from "./tools/whatsapp.ts";
 import { blastStatusTool } from "./tools/blast.ts";
 import { copilotDumpPromptTool, copilotUpdatePromptTool } from "./tools/copilot.ts";
 import { cronToggleTool } from "./tools/cron.ts";
+import { dbReadSqlTool } from "./tools/db.ts";
 
 // Fail loud at boot if a required secret is missing (docs/adr/0011, REQ-M04).
 const config = loadConfig(Deno.env.toObject());
 
-const SERVER_INFO = { name: "torque-mcp", version: "0.1.0" };
+// project is surfaced in initialize so every caller sees which environment it hit.
+const SERVER_INFO = { name: "torque-mcp", version: "0.1.0", project: config.project };
 const TOOLS = [
   leadGetTool,
   leadTraceHistoryTool,
@@ -25,6 +28,7 @@ const TOOLS = [
   whatsappInstanceStatusTool,
   blastStatusTool,
   copilotDumpPromptTool,
+  dbReadSqlTool,
   leadRestoreTool,
   copilotUpdatePromptTool,
   cronToggleTool,
@@ -42,9 +46,10 @@ const getMasterClient = createCachedMasterClientProvider({
 let _serviceDb: ReturnType<typeof createClient> | null = null;
 function getServiceDb(): ReturnType<typeof createClient> {
   if (!_serviceDb) {
+    // config.serviceRoleKey is validated non-empty at boot when allowMutations is true.
     _serviceDb = createClient(
       config.supabaseUrl,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      config.serviceRoleKey,
       { auth: { persistSession: false, autoRefreshToken: false } },
     );
   }
@@ -99,6 +104,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json(result, 200, cors);
   } catch (e) {
     console.error("[torque-mcp] handler error:", e); // stderr
+    // Report to Sentry but keep the JSON-RPC envelope (MCP clients expect it).
+    await captureError(e, { functionName: "torque-mcp", extra: { method: req.method } });
     const message = e instanceof Error ? e.message : String(e);
     return json(
       { jsonrpc: "2.0", id: null, error: { code: -32603, message: `Internal error: ${message}` } },

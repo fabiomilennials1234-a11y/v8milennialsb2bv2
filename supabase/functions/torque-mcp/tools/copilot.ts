@@ -126,7 +126,8 @@ export const copilotUpdatePromptTool: ToolDef = {
       audit: (_i, plan, token) =>
         auditMcpAction(db, {
           tool: "copilot.update_prompt",
-          org_id: String(args.org_id ?? ""),
+          // Trust the agent's own org (resolved in plan), never an unverified caller arg.
+          org_id: String((plan as { organization_id?: unknown }).organization_id ?? ""),
           target_type: "copilot_agent",
           target_id: agentId,
           params: args,
