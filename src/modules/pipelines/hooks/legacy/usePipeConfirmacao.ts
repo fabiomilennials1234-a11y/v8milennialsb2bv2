@@ -47,6 +47,7 @@ export function useCreatePipeConfirmacao() {
         sdr_id, closer_id, responsible_id,
         pre_sale_responsible_id, sale_responsible_id,
         meeting_date, meet_link, is_confirmed, metrics_period_at,
+        notes,
         ...rest
       } = item;
 
@@ -71,6 +72,11 @@ export function useCreatePipeConfirmacao() {
         stageKey: status || "reuniao_marcada",
         assignedTo: assignedToValue,
         metadata,
+        // Observações da reunião (modal "Nova Reunião"). Persistidas em
+        // pipeline_entries.notes → expostas pela view pipe_confirmacao.notes,
+        // que o RPC get_agenda_events usa como descrição do evento na Agenda.
+        // Antes caíam em `...rest` e eram descartadas silenciosamente.
+        notes: notes ?? null,
       });
 
       // Fire automation only for new entries — if we returned an existing one,
