@@ -45,6 +45,9 @@ new migration). Each targets a recurring incident class:
 - **`schema.audit_definer`** — SECURITY DEFINER functions in public, flagging those that do **not**
   pin `search_path` (privilege-escalation surface + the cause of the `42883` "unqualified call under
   empty search_path" incidents). `include_safe` to also list the pinned ones.
+- **`schema.audit_triggers`** — trigger functions in public without a pinned `search_path` — the
+  latent `42883` bombs that `schema.audit_definer` misses (it only scans SECURITY DEFINER). Reports
+  `attached_triggers` so live ones stand out. `include_safe` to also list the pinned ones.
 
 ## Hardening (S3)
 
