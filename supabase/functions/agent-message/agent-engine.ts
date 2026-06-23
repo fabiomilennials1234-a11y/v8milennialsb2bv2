@@ -48,6 +48,7 @@ import {
   enqueueToolAction as enqueueToolActionExternal,
   enqueueAutomationActions as enqueueAutomationActionsExternal,
   enqueuePipelineStageUpdate as enqueuePipelineStageUpdateExternal,
+  resolveRecoveredMedia as resolveRecoveredMediaExternal,
 } from "./engine/decide-action.ts";
 import {
   createConversation as createConversationExternal,
@@ -526,6 +527,36 @@ export class AgentEngine {
         params: sanitized.recoveredAction.params,
         tenant_id: this.organizationId,
       };
+    }
+    // Recovery KomBag 2026-06-23 — o modelo vazou uma tag-de-chamada de mídia
+    // (fora da allowlist) em vez de chamar o tool nativo send_document. O
+    // sanitizer extraiu só o filename (puro, sem DB); aqui resolvemos para o
+    // document_id real e montamos SEND_DOCUMENT, injetando no MESMO caminho que
+    // uma recoveredAction nativa seguiria. Se não achar doc 'ready' → apenas
+    // suprime (a tag já saiu do texto), comportamento de antes do fix.
+    if (sanitized.recoveredMediaByName && !actionToExecute) {
+      try {
+        const recoveredMedia = await resolveRecoveredMediaExternal(
+          this.supabase,
+          capabilities.id as string,
+          this.organizationId,
+          sanitized.recoveredMediaByName.file_name,
+        );
+        if (recoveredMedia) {
+          console.warn(
+            '[AgentEngine] Recovered send_document from leaked media call-tag:',
+            { file_name: sanitized.recoveredMediaByName.file_name, document_id: recoveredMedia.params.document_id },
+          );
+          actionToExecute = recoveredMedia;
+        } else {
+          console.warn(
+            '[AgentEngine] Leaked media call-tag had no matching ready document — suppressed only:',
+            sanitized.recoveredMediaByName.file_name,
+          );
+        }
+      } catch (e) {
+        console.warn('[AgentEngine] resolveRecoveredMedia failed (non-fatal, suppressed):', e);
+      }
     }
     if (sanitized.droppedBlocks > 0) {
       console.warn('[AgentEngine] Stripped', sanitized.droppedBlocks, 'JSON action block(s) from LLM output');
