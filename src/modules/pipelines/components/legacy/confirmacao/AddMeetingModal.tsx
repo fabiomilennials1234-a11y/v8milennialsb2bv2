@@ -197,10 +197,16 @@ export function AddMeetingModal({
         status,
       });
 
+      const meetingWhen = format(meetingDateTime, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+      const trimmedNotes = notes.trim();
       logAction({
         leadId: selectedLeadId,
         action: "meeting_scheduled",
-        description: `Reunião agendada para ${format(meetingDateTime, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+        // Inclui as observações na timeline do lead — antes só a data ia pro
+        // histórico, então o que o vendedor digitava em "Observações" sumia.
+        description: trimmedNotes
+          ? `Reunião agendada para ${meetingWhen} — Obs: ${trimmedNotes}`
+          : `Reunião agendada para ${meetingWhen}`,
       });
 
       // ── Cria evento no Google Calendar ───────────────────────────────────
