@@ -128,6 +128,10 @@ verify_jwt = false
 [functions.google-calendar-sharing]
 verify_jwt = false
 
+# meeting-calendar-sync: disparada por trigger pg_net; auth via x-cron-secret
+[functions.meeting-calendar-sync]
+verify_jwt = false
+
 # tinyerp: JWT validado internamente em todas as funções
 [functions.tinyerp-sync-products]
 verify_jwt = false
