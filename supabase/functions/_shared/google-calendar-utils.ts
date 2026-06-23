@@ -12,8 +12,12 @@ export const GOOGLE_REDIRECT_URI  = Deno.env.get("GOOGLE_REDIRECT_URI")  ?? "";
 export const ENCRYPTION_KEY_HEX   = Deno.env.get("GOOGLE_CALENDAR_ENCRYPTION_KEY") ?? "";
 export const ENCRYPTION_KEY_ID    = "v1";
 
+// NOTE: usamos apenas `calendar.events` (escopo SENSÍVEL), não `calendar` (RESTRITO).
+// Todas as chamadas da API batem em /calendars/primary/events, events/watch e channels/stop
+// — nenhuma usa ACL/calendarList/freebusy. O "compartilhamento" é interno (tabela
+// google_calendar_sharing), não usa ACL nativo do Google. Manter escopo restrito exigiria
+// verificação + auditoria CASA do Google sem necessidade. Ver docs/GOOGLE_CALENDAR_OAUTH_PLAN.md.
 export const GOOGLE_SCOPES = [
-  "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/calendar.events",
   "email",
   "profile",
