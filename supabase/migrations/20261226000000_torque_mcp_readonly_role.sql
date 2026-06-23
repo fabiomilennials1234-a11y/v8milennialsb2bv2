@@ -86,8 +86,10 @@ BEGIN
     RAISE EXCEPTION 'only SELECT / WITH read-only queries are allowed';
   END IF;
 
-  -- 3+4+5. contained execution
-  SET LOCAL ROLE mcp_readonly;
+  -- 3+4+5. contained execution.
+  -- The function is OWNED BY mcp_readonly (see ALTER below) and SECURITY DEFINER, so the whole
+  -- body already runs AS mcp_readonly — no SET ROLE (which Postgres forbids inside a
+  -- security-definer function). The role's SELECT-only grants + secret-table revokes are the wall.
   SET LOCAL TRANSACTION READ ONLY;
   SET LOCAL statement_timeout = '5000';
 
@@ -105,5 +107,20 @@ $$;
 COMMENT ON FUNCTION public.mcp_exec_readonly_sql(text, integer) IS
   'Torque MCP db.read_sql — runs a single read-only SELECT as mcp_readonly in a READ ONLY txn. Master-only.';
 
+-- Set privileges while the migration runner still owns the function, then transfer ownership.
 REVOKE ALL ON FUNCTION public.mcp_exec_readonly_sql(text, integer) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.mcp_exec_readonly_sql(text, integer) TO authenticated, service_role;
+
+-- The migration runner needs SET-capable membership in mcp_readonly to reassign ownership to it
+-- (PG16). INHERIT FALSE so the runner does not silently absorb the role's BYPASSRLS.
+DO $$
+BEGIN
+  EXECUTE format('GRANT mcp_readonly TO %I WITH INHERIT FALSE, SET TRUE', current_user);
+EXCEPTION
+  WHEN OTHERS THEN NULL;  -- already a member, or grant not needed
+END
+$$;
+
+-- Owner = mcp_readonly so the SECURITY DEFINER body executes with that role's privileges
+-- (SELECT-only, secret tables revoked) without an in-function SET ROLE (which PG forbids there).
+ALTER FUNCTION public.mcp_exec_readonly_sql(text, integer) OWNER TO mcp_readonly;
