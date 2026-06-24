@@ -545,3 +545,73 @@ describe("UazapiProvider.provider identity", () => {
     expect(provider.provider).toBe("uazapi");
   });
 });
+
+// ---------------------------------------------------------------------------
+// readWebhook — read-back + shape normalisation (B2, incident 2026-06-24)
+// ---------------------------------------------------------------------------
+
+describe("UazapiProvider.readWebhook — webhook read-back", () => {
+  it("GETs /webhook with the per-instance token", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonRes(200, { url: "https://x/whatsapp-webhook/secret", enabled: true })
+    );
+
+    const provider = makeProvider();
+    await provider.readWebhook();
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("https://uazapi.test/webhook");
+    expect(init?.method).toBe("GET");
+    expect((init?.headers as Record<string, string>)?.token).toBe("tok-instance-abc");
+  });
+
+  it("normalises a flat {url, enabled} payload", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonRes(200, { url: "https://x/whatsapp-webhook/secret", enabled: true })
+    );
+
+    const provider = makeProvider();
+    const wh = await provider.readWebhook();
+    expect(wh.url).toBe("https://x/whatsapp-webhook/secret");
+    expect(wh.enabled).toBe(true);
+  });
+
+  it("normalises a nested {webhook:{...}} payload", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonRes(200, { webhook: { url: "https://x/wh", enabled: false } })
+    );
+
+    const provider = makeProvider();
+    const wh = await provider.readWebhook();
+    expect(wh.url).toBe("https://x/wh");
+    expect(wh.enabled).toBe(false);
+  });
+
+  it("normalises an array payload (first element)", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonRes(200, [{ url: "https://x/wh", enabled: true }])
+    );
+
+    const provider = makeProvider();
+    const wh = await provider.readWebhook();
+    expect(wh.url).toBe("https://x/wh");
+    expect(wh.enabled).toBe(true);
+  });
+
+  it("returns null url/enabled when absent (unknown, not disabled)", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonRes(200, { events: ["messages"] }));
+
+    const provider = makeProvider();
+    const wh = await provider.readWebhook();
+    expect(wh.url).toBeNull();
+    expect(wh.enabled).toBeNull();
+  });
+
+  it("treats an empty-string url as null", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonRes(200, { url: "   ", enabled: true }));
+
+    const provider = makeProvider();
+    const wh = await provider.readWebhook();
+    expect(wh.url).toBeNull();
+  });
+});

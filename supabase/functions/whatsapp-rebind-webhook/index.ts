@@ -93,6 +93,12 @@ interface Result {
   success: boolean;
   skipped_reason?: string;
   status_after?: { connected: boolean; state: string };
+  // Read-back verification of the webhook after reconfigure:
+  //   true  = Uazapi now stores our exact URL and is not disabled
+  //   false = reconfigure returned 200 but Uazapi did NOT apply it (silent no-op)
+  //   null  = could not read back (treat as unverified, not a hard failure)
+  verified?: boolean | null;
+  webhook_after?: { url: string | null; enabled: boolean | null };
   error?: string;
 }
 
@@ -189,11 +195,31 @@ async function rebindOne(
     const webhookUrl = `${webhookBaseUrl.replace(/\/$/, "")}/${webhookSecret}`;
     await provider.reconfigureWebhook(webhookUrl);
 
+    // Read back the webhook from Uazapi to VERIFY the reconfigure persisted.
+    // reconfigureWebhook (POST /webhook) returns 200 even when Uazapi silently
+    // no-ops, so a 200 alone is not proof the inbound webhook is bound. Incident
+    // 2026-06-24: ~40 "successful" rebinds/day with zero effect on delivery, and
+    // we had no way to tell. Read-back failure => verified=null (still attempted),
+    // never a hard failure.
+    let verified: boolean | null = null;
+    let webhookAfter: { url: string | null; enabled: boolean | null } | undefined;
+    try {
+      const wh = await provider.readWebhook();
+      webhookAfter = { url: wh.url, enabled: wh.enabled };
+      const want = webhookUrl.replace(/\/$/, "");
+      const got = (wh.url ?? "").replace(/\/$/, "");
+      verified = got.length > 0 && got === want && wh.enabled !== false;
+    } catch (_e) {
+      verified = null; // could not read back — leave as unverified
+    }
+
     // Confirm state — useful both as smoke test and to refresh DB cache.
     const status = await provider.getStatus();
     return {
       ...base,
       success: true,
+      verified,
+      webhook_after: webhookAfter,
       status_after: { connected: status.connected, state: status.state },
     };
   } catch (err) {
@@ -298,20 +324,31 @@ Deno.serve(
 
       const succeeded = results.filter((r) => r.success).length;
       const failed = results.filter((r) => !r.success && !r.skipped_reason).length;
+      // Verification breakdown (only meaningful for successful rebinds):
+      //   webhookNotApplied = reconfigure returned 200 but read-back proved Uazapi
+      //   did NOT store our URL — the real Bertin failure mode, now visible.
+      const verifiedOk = results.filter((r) => r.success && r.verified === true).length;
+      const webhookNotApplied = results.filter((r) => r.success && r.verified === false).length;
+      const unverified = results.filter((r) => r.success && r.verified === null).length;
+
+      const errorParts: string[] = [];
+      if (failed > 0) errorParts.push(`${failed}/${results.length} rebind failures`);
+      if (webhookNotApplied > 0) errorParts.push(`${webhookNotApplied} webhook_not_applied (200 but not persisted)`);
 
       await logRuntime({
         module: "whatsapp",
         action: "rebind_webhook_batch",
-        status: failed === 0 ? "success" : "error",
+        status: failed === 0 && webhookNotApplied === 0 ? "success" : "error",
         errorMessage:
-          failed === 0
-            ? undefined
-            : `${failed}/${results.length} rebind failures (scope=${scope})`,
+          errorParts.length === 0 ? undefined : `${errorParts.join("; ")} (scope=${scope})`,
         payloadSnapshot: {
           scope,
           selected: targets.length,
           succeeded,
           failed,
+          verified_ok: verifiedOk,
+          webhook_not_applied: webhookNotApplied,
+          unverified,
           dry_run: false,
         },
       });

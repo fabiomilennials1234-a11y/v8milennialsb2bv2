@@ -396,4 +396,21 @@ export class UazapiProvider implements WhatsAppProvider {
       addUrlTypesMessages: false,
     });
   }
+
+  /**
+   * Reads back the webhook config Uazapi has stored for this instance and
+   * normalises it to { url, enabled }. Tolerates the V2 shape variations we've
+   * seen (flat, nested under `webhook`/`value`/`data`, or an array). Returns
+   * nulls when a field is absent so callers can treat "unknown" distinctly from
+   * "disabled". Used to verify that reconfigureWebhook actually persisted.
+   */
+  async readWebhook(): Promise<{ url: string | null; enabled: boolean | null; raw: unknown }> {
+    const raw = await this.client.getWebhook();
+    const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, any>;
+    const nodeRaw = obj.webhook ?? obj.value ?? obj.data ?? obj;
+    const pick = Array.isArray(nodeRaw) ? (nodeRaw[0] ?? {}) : nodeRaw;
+    const url = typeof pick?.url === "string" && pick.url.trim().length > 0 ? pick.url : null;
+    const enabled = typeof pick?.enabled === "boolean" ? pick.enabled : null;
+    return { url, enabled, raw };
+  }
 }
