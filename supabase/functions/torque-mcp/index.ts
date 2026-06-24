@@ -17,6 +17,7 @@ import { cronToggleTool } from "./tools/cron.ts";
 import { dbReadSqlTool } from "./tools/db.ts";
 import { rlsCheckAccessTool } from "./tools/rls.ts";
 import { schemaAuditDefinerTool, schemaAuditTriggersTool } from "./tools/schema.ts";
+import { migrationDiffTool } from "./tools/migration.ts";
 
 // Fail loud at boot if a required secret is missing (docs/adr/0011, REQ-M04).
 const config = loadConfig(Deno.env.toObject());
@@ -34,6 +35,7 @@ const TOOLS = [
   rlsCheckAccessTool,
   schemaAuditDefinerTool,
   schemaAuditTriggersTool,
+  migrationDiffTool,
   leadRestoreTool,
   copilotUpdatePromptTool,
   cronToggleTool,
