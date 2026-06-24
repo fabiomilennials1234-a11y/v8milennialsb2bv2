@@ -618,32 +618,59 @@ export async function triggerReactions(
     }
   }
 
-  // Try queue INSERT first; fall back to direct agent-message on failure
-  const { error: queueError } = await supabase
-    .from("copilot_message_queue")
-    .insert({
-      organization_id: persisted.organization_id,
-      conversation_id: context.conversationId ?? null,
-      message_id: persisted.message_id,
-      phone: persisted.phone_number,
-    });
+  // Fila durável (copilot_message_queue) — rollout canário por org via env
+  // COPILOT_QUEUE_ENABLED_ORGS (csv de org_ids, ou "*" p/ todas). Fora da
+  // allowlist a entrega segue no caminho fallback abaixo (fetch + waitUntil,
+  // já provado). Quando habilitada: enfileira → trigger pg_net dispara o
+  // copilot-batch-processor, que gera+entrega+retry de forma durável.
+  // Vazia (default) = comportamento idêntico ao atual p/ todas as orgs.
+  const queueEnabledOrgs = (Deno.env.get("COPILOT_QUEUE_ENABLED_ORGS") ?? "")
+    .split(",").map((s) => s.trim()).filter(Boolean);
+  const queueEnabled = queueEnabledOrgs.includes("*")
+    || queueEnabledOrgs.includes(persisted.organization_id);
 
-  if (!queueError) {
-    void logRuntime({
-      organizationId: persisted.organization_id,
-      module: "webhook",
-      action: "copilot_queued",
-      status: "success",
-      payloadSnapshot: {
-        instance_id: persisted.instance_id,
-        message_id: persisted.message_id,
-        channel: "whatsapp",
-      },
-    });
-    return;
+  if (queueEnabled) {
+    // FK da fila → whatsapp_messages.id (uuid). persisted.message_id é o id
+    // externo do WhatsApp (text); resolve o uuid da linha entrante.
+    const { data: waRow } = await supabase
+      .from("whatsapp_messages")
+      .select("id")
+      .eq("message_id", persisted.message_id)
+      .eq("instance_id", persisted.instance_id)
+      .maybeSingle();
+
+    if (waRow?.id) {
+      // batch_key é coluna GERADA (phone || ':' || organization_id) — NÃO inserir.
+      const batchKey = `${persisted.phone_number}:${persisted.organization_id}`;
+      const { error: queueError } = await supabase
+        .from("copilot_message_queue")
+        .insert({
+          organization_id: persisted.organization_id,
+          conversation_id: context.conversationId ?? null,
+          message_id: waRow.id,
+          phone: persisted.phone_number,
+        });
+
+      if (!queueError) {
+        void logRuntime({
+          organizationId: persisted.organization_id,
+          module: "webhook",
+          action: "copilot_queued",
+          status: "success",
+          payloadSnapshot: {
+            instance_id: persisted.instance_id,
+            message_id: persisted.message_id,
+            batch_key: batchKey,
+            channel: "whatsapp",
+          },
+        });
+        return; // worker (trigger pg_net) entrega de forma durável
+      }
+      console.error("[whatsapp-webhook] Queue insert failed, falling back to direct call:", queueError.message);
+    } else {
+      console.warn("[whatsapp-webhook] Queue: whatsapp_messages.id não resolvido — fallback");
+    }
   }
-
-  console.error("[whatsapp-webhook] Queue insert failed, falling back to direct call:", queueError.message);
 
   // FALLBACK: call agent-message directly (existing code)
   const agentMessagePayload = {
@@ -656,7 +683,13 @@ export async function triggerReactions(
     media_url: copilotMediaUrl,
   };
 
-  fetch(`${SUPABASE_URL}/functions/v1/agent-message`, {
+  // A entrega da resposta da IA (fetch agent-message → enviar chunks) roda DEPOIS
+  // do 200 deste webhook. Sem EdgeRuntime.waitUntil o isolate do Supabase Edge
+  // pode ser reciclado antes do .then() rodar (agent-message leva 6–26s + sleeps
+  // por chunk) → a mensagem fica persistida em conversation_messages mas NUNCA é
+  // enviada ao WhatsApp ("IA parou de responder"). waitUntil mantém o isolate
+  // vivo até a entrega terminar, sem bloquear o 200. (RC 2026-06-24)
+  const aiDeliveryPromise = fetch(`${SUPABASE_URL}/functions/v1/agent-message`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${SERVICE_ROLE_KEY}`,
@@ -810,6 +843,11 @@ export async function triggerReactions(
         },
       });
     });
+
+  // Mantém o isolate vivo até a entrega terminar (ver comentário no fetch acima).
+  if (typeof (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil === "function") {
+    (globalThis as { EdgeRuntime: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime.waitUntil(aiDeliveryPromise);
+  }
 
   void logRuntime({
     organizationId: persisted.organization_id,

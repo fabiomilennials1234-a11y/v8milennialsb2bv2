@@ -1,302 +1,279 @@
 /**
- * copilot-batch-processor — Drains mature message batches from
- * `copilot_message_queue` and dispatches them to `agent-message`.
+ * copilot-batch-processor — Drena batches maduros de `copilot_message_queue`,
+ * gera a resposta da IA e ENTREGA ao WhatsApp, com retry durável.
  *
- * Triggered by INSERT trigger on `copilot_message_queue` (via pg_net).
- * Auth: x-cron-secret header (same as other cron-driven functions).
+ * Disparado por:
+ *   - trigger pg_net no INSERT da fila (latência baixa), e
+ *   - cron `copilot-queue-sweep` (1min) p/ retries/reclaim de batches presos.
+ * Auth: x-cron-secret.
  *
- * Batch maturity: idle_window (5s no new msgs) OR absolute_cap (15s since first).
- * See _shared/copilot-batch-maturity.ts for pure logic + tests.
+ * Fluxo (espelha o caminho provado de recover-stuck-conversations):
+ *   claim (claim_copilot_batch, retry/reclaim-aware) → resolve conteúdo de
+ *   whatsapp_messages → gate (IA off/humano) → gera via agent-message (normal
+ *   mode) → entrega chunks via sendTextViaInstance → aplica queue-policy
+ *   (delivered/gate→done, erro→retry com backoff, ≥MAX→failed).
  *
+ * NÃO chama agent-message em batch_mode nem depende de channel_messages (morto).
+ *
+ * @see _shared/copilot/queue-policy.ts (política pura, testada)
  * @see Issue #202
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withSentry, captureMessage } from "../_shared/sentry.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
+import { isCopilotCanceled } from "../_shared/copilot/cancellation.ts";
 import {
   checkBatchMaturity,
   type BatchInfo,
   BATCH_IDLE_WINDOW_MS,
 } from "../_shared/copilot-batch-maturity.ts";
-import { captureMessage } from "../_shared/sentry.ts";
+import {
+  reduceQueueItem,
+  type DeliveryOutcome,
+} from "../_shared/copilot/queue-policy.ts";
 
-const SLEEP_MS = BATCH_IDLE_WINDOW_MS; // 5s — wait for idle window before checking maturity
+const SLEEP_MS = BATCH_IDLE_WINDOW_MS; // 5s — janela idle antes de checar maturidade
+const LEASE_SECONDS = 120; // lease de claim; processing além disso é reclaimável
 
 Deno.serve(withSentry('copilot-batch-processor', async (req: Request): Promise<Response> => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   // --- Auth: x-cron-secret ---
   const cronSecret = Deno.env.get("CRON_SECRET");
   if (!cronSecret) {
     console.error("[copilot-batch-processor] CRON_SECRET env not set — denying all");
-    return new Response(
-      JSON.stringify({ error: "Server misconfiguration" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return json({ error: "Server misconfiguration" }, 500);
   }
-
   const headerSecret = req.headers.get("x-cron-secret");
   if (!headerSecret || !timingSafeCompare(headerSecret, cronSecret)) {
-    return new Response(
-      JSON.stringify({ error: "Unauthorized" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return json({ error: "Unauthorized" }, 401);
   }
 
   // --- Parse payload ---
   let batchKey: string;
+  let forceDrain = false; // sweep de retry pula a janela idle (rows já vencidas)
   try {
     const body = await req.json();
     batchKey = body.batch_key;
+    forceDrain = body.force_drain === true;
   } catch {
-    return new Response(
-      JSON.stringify({ error: "Invalid JSON body" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return json({ error: "Invalid JSON body" }, 400);
   }
-
   if (!batchKey || typeof batchKey !== "string") {
-    return new Response(
-      JSON.stringify({ error: "batch_key is required" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return json({ error: "batch_key is required" }, 400);
   }
 
-  console.log("[copilot-batch-processor] Received batch trigger:", { batchKey });
-
-  // --- Sleep: let messages accumulate (does NOT block DB) ---
-  await new Promise((r) => setTimeout(r, SLEEP_MS));
-
-  // --- Supabase client ---
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  // --- Check batch maturity ---
-  const { data: pendingRows, error: queryError } = await supabase
-    .from("copilot_message_queue")
-    .select("id, organization_id, conversation_id, message_id, phone, queued_at")
-    .eq("batch_key", batchKey)
-    .eq("status", "pending")
-    .order("queued_at", { ascending: true });
+  // --- Janela idle (só no caminho de trigger; sweep força drain) ---
+  if (!forceDrain) {
+    await new Promise((r) => setTimeout(r, SLEEP_MS));
 
-  if (queryError) {
-    console.error("[copilot-batch-processor] Query error:", queryError);
-    return new Response(
-      JSON.stringify({ error: "DB query failed", detail: queryError.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    const { data: pendingRows, error: queryError } = await supabase
+      .from("copilot_message_queue")
+      .select("queued_at")
+      .eq("batch_key", batchKey)
+      .eq("status", "pending")
+      .order("queued_at", { ascending: true });
+
+    if (queryError) return json({ error: "DB query failed", detail: queryError.message }, 500);
+    if (!pendingRows || pendingRows.length === 0) {
+      return json({ ok: true, skipped: true, reason: "no_pending_rows" });
+    }
+
+    const batchInfo: BatchInfo = {
+      batchKey,
+      oldestQueuedAt: new Date(pendingRows[0].queued_at),
+      newestQueuedAt: new Date(pendingRows[pendingRows.length - 1].queued_at),
+      messageCount: pendingRows.length,
+    };
+    const maturity = checkBatchMaturity(batchInfo, new Date());
+    if (!maturity.isMature) {
+      return json({ ok: true, skipped: true, reason: maturity.reason });
+    }
   }
 
-  if (!pendingRows || pendingRows.length === 0) {
-    console.log("[copilot-batch-processor] No pending rows for batch:", batchKey);
-    return new Response(
-      JSON.stringify({ ok: true, skipped: true, reason: "no_pending_rows" }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+  // --- Claim atômico (retry/reclaim-aware) ---
+  const { data: claimedRows, error: claimError } = await supabase
+    .rpc("claim_copilot_batch", { p_batch_key: batchKey, p_lease_seconds: LEASE_SECONDS });
+
+  if (claimError) return json({ error: "Claim RPC failed", detail: claimError.message }, 500);
+  if (!claimedRows || claimedRows.length === 0) {
+    return json({ ok: true, skipped: true, reason: "nothing_claimable" });
   }
 
-  const now = new Date();
-  const batchInfo: BatchInfo = {
-    batchKey,
-    oldestQueuedAt: new Date(pendingRows[0].queued_at),
-    newestQueuedAt: new Date(pendingRows[pendingRows.length - 1].queued_at),
-    messageCount: pendingRows.length,
+  const firstRow = claimedRows[0] as {
+    organization_id: string; phone: string; conversation_id: string | null;
+  };
+  const orgId = firstRow.organization_id;
+  const phone = firstRow.phone;
+
+  // Aplica o resultado da entrega a cada linha reivindicada via política pura.
+  const applyOutcome = async (outcome: DeliveryOutcome) => {
+    const now = new Date();
+    for (const row of claimedRows as { id: string; attempts: number | null }[]) {
+      const patch = reduceQueueItem(
+        { status: "processing", attempts: row.attempts ?? 0 },
+        outcome,
+        now,
+      );
+      await supabase.from("copilot_message_queue").update(patch).eq("id", row.id);
+    }
   };
 
-  const maturity = checkBatchMaturity(batchInfo, now);
-
-  if (!maturity.isMature) {
-    console.log("[copilot-batch-processor] Batch not mature yet:", {
-      batchKey,
-      reason: maturity.reason,
-      messageCount: batchInfo.messageCount,
-    });
-    return new Response(
-      JSON.stringify({ ok: true, skipped: true, reason: maturity.reason }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  }
-
-  console.log("[copilot-batch-processor] Batch mature:", {
-    batchKey,
-    reason: maturity.reason,
-    messageCount: batchInfo.messageCount,
-  });
-
-  // --- Claim rows atomically ---
-  const { data: claimedRows, error: claimError } = await supabase
-    .rpc("claim_copilot_batch", { p_batch_key: batchKey });
-
-  if (claimError) {
-    console.error("[copilot-batch-processor] claim_copilot_batch RPC error:", claimError);
-    return new Response(
-      JSON.stringify({ error: "Claim RPC failed", detail: claimError.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  }
-
-  if (!claimedRows || claimedRows.length === 0) {
-    console.log("[copilot-batch-processor] Another processor claimed batch:", batchKey);
-    return new Response(
-      JSON.stringify({ ok: true, skipped: true, reason: "already_claimed" }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  }
-
-  console.log("[copilot-batch-processor] Claimed rows:", {
-    batchKey,
-    count: claimedRows.length,
-  });
-
-  // --- Dispatch to agent-message ---
-  const firstRow = claimedRows[0];
-  const messageIds = claimedRows.map((r: { message_id: string }) => r.message_id);
-
   try {
+    // --- Resolve conteúdo entrante (whatsapp_messages, modelo atual) ---
+    const messageIds = (claimedRows as { message_id: string }[]).map((r) => r.message_id);
+    const { data: msgs } = await supabase
+      .from("whatsapp_messages")
+      .select("content, timestamp")
+      .in("id", messageIds)
+      .order("timestamp", { ascending: true });
+
+    // Concatena o conteúdo das mensagens entrantes do batch (ordem por timestamp).
+    const combinedContent = (msgs ?? [])
+      .map((m: { content: string | null }) => m.content)
+      .filter(Boolean)
+      .join("\n");
+    if (!combinedContent.trim()) {
+      await applyOutcome({ kind: "delivered" }); // nada a processar — não é falha
+      return json({ ok: true, reason: "empty_content", batch_key: batchKey });
+    }
+
+    // --- Gate: IA desligada / humano assumiu ---
+    const gate = await isCopilotCanceled(supabase, orgId, phone);
+    if (gate.canceled) {
+      await applyOutcome({ kind: "gate_blocked", source: gate.source ?? "gate" });
+      return json({ ok: true, reason: "gate_blocked", source: gate.source, batch_key: batchKey });
+    }
+
+    // --- Gera resposta via agent-message (normal mode) ---
     const agentMessageUrl = `${supabaseUrl}/functions/v1/agent-message`;
-    const response = await fetch(agentMessageUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${supabaseKey}`,
-      },
-      body: JSON.stringify({
-        message_ids: messageIds,
-        organization_id: firstRow.organization_id,
-        phone: firstRow.phone,
-        conversation_id: firstRow.conversation_id,
-        from: firstRow.phone,
-        batch_mode: true,
-      }),
-    });
-
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error("[copilot-batch-processor] agent-message dispatch failed:", {
-        status: response.status,
-        body: errBody,
-        batchKey,
+    let parts: string[] = [];
+    try {
+      const resp = await fetch(agentMessageUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
+        body: JSON.stringify({
+          from: phone,
+          message: combinedContent,
+          channel: "whatsapp",
+          organization_id: orgId,
+          incoming_message_type: "text",
+        }),
       });
-      // Mark rows as failed
-      await supabase
-        .from("copilot_message_queue")
-        .update({ status: "failed", processed_at: new Date().toISOString() })
-        .eq("batch_key", batchKey)
-        .eq("status", "processing");
-
-      return new Response(
-        JSON.stringify({ error: "agent-message dispatch failed", status: response.status }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      if (!resp.ok) {
+        await applyOutcome({ kind: "transient_error", error: `agent_message_${resp.status}` });
+        return json({ ok: false, reason: "agent_message_failed", status: resp.status }, 200);
+      }
+      const data = await resp.json().catch(() => null);
+      if (!data || data.skipped) {
+        // gate virou durante o turno → terminal sem retry
+        await applyOutcome({ kind: "gate_blocked", source: data?.reason ?? "agent_skipped" });
+        return json({ ok: true, reason: data?.reason ?? "agent_skipped", batch_key: batchKey });
+      }
+      parts = data.messages ?? (data.message ? [data.message] : []);
+    } catch (e) {
+      await applyOutcome({ kind: "transient_error", error: e instanceof Error ? e.message : String(e) });
+      return json({ ok: false, reason: "agent_message_exception" }, 200);
     }
 
-    const responseBody = await response.json().catch(() => ({}));
-
-    if (responseBody.skipped && responseBody.reason === "dedup_concurrent") {
-      console.warn("[copilot-batch-processor] Dedup lock hit — retrying after delay:", batchKey);
-
-      const MAX_DEDUP_RETRIES = 2;
-      const DEDUP_RETRY_DELAY_MS = 10_000;
-      let retrySuccess = false;
-
-      for (let retry = 0; retry < MAX_DEDUP_RETRIES; retry++) {
-        await new Promise((r) => setTimeout(r, DEDUP_RETRY_DELAY_MS));
-
-        const retryResp = await fetch(agentMessageUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${supabaseKey}`,
-          },
-          body: JSON.stringify({
-            message_ids: messageIds,
-            organization_id: firstRow.organization_id,
-            phone: firstRow.phone,
-            conversation_id: firstRow.conversation_id,
-            from: firstRow.phone,
-            batch_mode: true,
-          }),
-        });
-
-        const retryBody = await retryResp.json().catch(() => ({}));
-        if (!retryBody.skipped || retryBody.reason !== "dedup_concurrent") {
-          retrySuccess = true;
-          console.log("[copilot-batch-processor] Dedup retry succeeded on attempt", retry + 1);
-          break;
-        }
-        console.log("[copilot-batch-processor] Dedup retry", retry + 1, "still locked");
-      }
-
-      if (!retrySuccess) {
-        console.error("[copilot-batch-processor] Dedup retries exhausted — marking failed:", batchKey);
-        await supabase
-          .from("copilot_message_queue")
-          .update({ status: "failed", processed_at: new Date().toISOString() })
-          .eq("batch_key", batchKey)
-          .eq("status", "processing");
-
-        return new Response(
-          JSON.stringify({ ok: false, reason: "dedup_retries_exhausted", batch_key: batchKey }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
+    if (parts.length === 0) {
+      await applyOutcome({ kind: "delivered" }); // sem texto a enviar — não é falha
+      return json({ ok: true, reason: "empty_generation", batch_key: batchKey });
     }
 
-    // Mark rows as done
-    await supabase
-      .from("copilot_message_queue")
-      .update({ status: "done", processed_at: new Date().toISOString() })
-      .eq("batch_key", batchKey)
-      .eq("status", "processing");
+    // --- Entrega chunks (padrão recover-stuck-conversations) ---
+    const { data: instance } = await supabase
+      .from("whatsapp_instances")
+      .select("*")
+      .eq("organization_id", orgId)
+      .in("status", ["open", "connected"])
+      .limit(1)
+      .maybeSingle();
 
-    console.log("[copilot-batch-processor] Dispatch successful:", {
-      batchKey,
-      messageCount: messageIds.length,
+    if (!instance) {
+      await applyOutcome({ kind: "transient_error", error: "no_active_instance" });
+      return json({ ok: false, reason: "no_active_instance" }, 200);
+    }
+
+    const { sendTextViaInstance } = await import("../_shared/whatsapp-dispatch.ts");
+    let chunksSent = 0;
+    let sendFailed = false;
+    let canceledMid = false;
+
+    for (let i = 0; i < parts.length; i++) {
+      const text = parts[i]?.trim();
+      if (!text) continue;
+      if (i > 0) await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
+
+      const recheck = await isCopilotCanceled(supabase, orgId, phone);
+      if (recheck.canceled) { canceledMid = true; break; }
+
+      const sendResult = await sendTextViaInstance(supabase, instance, phone, text, { trackSource: "copilot" });
+      const msgId = sendResult.messageId
+        ?? `batch_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+      await supabase.from("whatsapp_messages").upsert({
+        organization_id: orgId,
+        instance_id: (instance as { id: string }).id,
+        message_id: msgId,
+        remote_jid: `${phone}@s.whatsapp.net`,
+        phone_number: phone,
+        direction: "outgoing",
+        message_type: "text",
+        content: text,
+        status: sendResult.success ? "sent" : "failed",
+        timestamp: new Date().toISOString(),
+        sent_by_ai: true,
+        sent_source: "copilot",
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
+
+      if (sendResult.success) chunksSent++;
+      else sendFailed = true;
+    }
+
+    // Decisão de outcome:
+    //  - nada enviado + cancelado no meio → gate (done, sem retry)
+    //  - nada enviado + falha de envio    → transient (retry)
+    //  - algo enviado (mesmo parcial)     → delivered (evita duplicar no retry)
+    let outcome: DeliveryOutcome;
+    if (chunksSent === 0 && canceledMid) outcome = { kind: "gate_blocked", source: "mid_delivery" };
+    else if (chunksSent === 0 && sendFailed) outcome = { kind: "transient_error", error: "send_failed" };
+    else outcome = { kind: "delivered" };
+    await applyOutcome(outcome);
+
+    if (outcome.kind === "delivered") {
+      captureMessage("copilot_batch_delivered", {
+        functionName: "copilot-batch-processor",
+        organizationId: orgId,
+        tags: {
+          "copilot.batch_size": claimedRows.length,
+          "copilot.chunks_sent": chunksSent,
+          "copilot.batch_key": batchKey,
+          "copilot.forced_drain": forceDrain,
+        },
+      }).catch(() => {});
+    }
+
+    return json({
+      ok: outcome.kind !== "transient_error",
+      outcome: outcome.kind,
+      chunks_sent: chunksSent,
+      batch_key: batchKey,
     });
-
-    const batchWaitMs = Date.now() - new Date(claimedRows[0].queued_at).getTime();
-    captureMessage("copilot_batch_dispatched", {
-      functionName: "copilot-batch-processor",
-      organizationId: firstRow.organization_id,
-      tags: {
-        "copilot.batch_size": claimedRows.length,
-        "copilot.batch_wait_ms": batchWaitMs,
-        "copilot.batch_key": batchKey,
-        "copilot.forced_drain": maturity.reason === "absolute_cap",
-      },
-    }).catch(() => {});
-
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        dispatched: true,
-        batch_key: batchKey,
-        message_count: messageIds.length,
-        reason: maturity.reason,
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
   } catch (err) {
-    console.error("[copilot-batch-processor] Dispatch error:", err);
-
-    // Mark rows as failed on network/fetch error
-    await supabase
-      .from("copilot_message_queue")
-      .update({ status: "failed", processed_at: new Date().toISOString() })
-      .eq("batch_key", batchKey)
-      .eq("status", "processing");
-
-    return new Response(
-      JSON.stringify({ error: "Dispatch exception", detail: String(err) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    // Erro inesperado → retry (não perde a mensagem).
+    await applyOutcome({ kind: "transient_error", error: err instanceof Error ? err.message : String(err) });
+    return json({ error: "Processing exception", detail: String(err) }, 500);
   }
 }));

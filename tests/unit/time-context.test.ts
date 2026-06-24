@@ -5,6 +5,7 @@ import {
   getHourMinutesInTimezone,
   buildDateInTimezone,
   computeNextWindowStart,
+  formatTemporalAnchor,
 } from '../../supabase/functions/_shared/copilot/time-context';
 
 const TZ_BR = 'America/Sao_Paulo';
@@ -295,5 +296,30 @@ describe('time-context — computeNextWindowStart (Onda 5 workflow)', () => {
     const next = computeNextWindowStart(winUTC, 'Test', 'UTC', from);
     expect(next).not.toBeNull();
     expect(next!.toISOString()).toMatch(/^2026-04-27T15:00/);
+  });
+});
+
+describe('time-context — formatTemporalAnchor (RC 2026-06-24 data errada)', () => {
+  it('caso Marcio: hoje quarta 24/06/2026 → amanhã quinta 25/06/2026, ano 2026', () => {
+    const out = formatTemporalAnchor(brDate('2026-06-24T09:47'), TZ_BR);
+    expect(out).toContain('Hoje é quarta-feira, 24/06/2026');
+    expect(out).toContain('Amanhã é quinta-feira, 25/06/2026');
+    expect(out).toContain('O ano atual é 2026');
+    // regressão dura: jamais a data alucinada do treino
+    expect(out).not.toContain('2024');
+    expect(out).not.toContain('26 de junho');
+  });
+
+  it('vira o ano: 31/12 → amanhã 01/01 do ano seguinte', () => {
+    const out = formatTemporalAnchor(brDate('2026-12-31T22:00'), TZ_BR);
+    expect(out).toContain('Hoje é quinta-feira, 31/12/2026');
+    expect(out).toContain('Amanhã é sexta-feira, 01/01/2027');
+  });
+
+  it('inclui instrução anti-memória + agora com fuso', () => {
+    const out = formatTemporalAnchor(brDate('2026-06-24T09:47'), TZ_BR);
+    expect(out).toMatch(/NUNCA invente uma data/);
+    expect(out).toContain('America/Sao_Paulo');
+    expect(out).toContain('- Agora: quarta-feira, 24/06/2026 09:47');
   });
 });
