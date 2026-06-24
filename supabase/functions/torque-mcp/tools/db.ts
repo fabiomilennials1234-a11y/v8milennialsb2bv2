@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ToolContext, ToolDef, ToolResult } from "../lib/types.ts";
+import type { ToolContext, ToolDef, ToolResult } from "../../_shared/mcp/types.ts";
 import { auditMcpAction } from "../lib/audit.ts";
 
 const MAX_ROWS_CAP = 5000;

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ToolContext, ToolDef, ToolResult } from "../lib/types.ts";
+import type { ToolContext, ToolDef, ToolResult } from "../../_shared/mcp/types.ts";
 
 export interface PromptSources {
   system_prompt: unknown;
@@ -37,7 +37,7 @@ export function extractPromptSources(agent: Record<string, unknown>): PromptSour
 const COLS =
   "id,organization_id,name,is_active,system_prompt,custom_instructions,conversation_style,prompt_hash";
 
-import { runMutation } from "../lib/guardrails.ts";
+import { runMutation } from "../../_shared/mcp/guardrails.ts";
 import { auditMcpAction } from "../lib/audit.ts";
 
 export interface PromptSectionsInput {
