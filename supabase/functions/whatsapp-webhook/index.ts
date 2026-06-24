@@ -553,11 +553,34 @@ export async function triggerReactions(
       });
     },
     enqueueV1: async () => {
+      // Fila durável — rollout canário por org via env COPILOT_QUEUE_ENABLED_ORGS
+      // (csv de org_ids, ou "*"). Fora da allowlist retornamos um "erro" sintético
+      // → o router cai no fallbackV1Direct (fetch + waitUntil, já provado).
+      // Vazia (default) = todas as orgs no fallback (comportamento atual).
+      const queueEnabledOrgs = (Deno.env.get("COPILOT_QUEUE_ENABLED_ORGS") ?? "")
+        .split(",").map((s) => s.trim()).filter(Boolean);
+      const queueEnabled = queueEnabledOrgs.includes("*")
+        || queueEnabledOrgs.includes(persisted.organization_id);
+      if (!queueEnabled) return { error: { message: "queue_disabled_for_org" } };
+
+      // FK da fila → whatsapp_messages.id (uuid). persisted.message_id é o id
+      // externo do WhatsApp (text); resolve o uuid da linha entrante.
+      const { data: waRow } = await supabase
+        .from("whatsapp_messages")
+        .select("id")
+        .eq("message_id", persisted.message_id)
+        .eq("instance_id", persisted.instance_id)
+        .maybeSingle();
+      if (!(waRow as { id?: string } | null)?.id) {
+        return { error: { message: "inbound_uuid_unresolved" } };
+      }
+
       const { error } = await supabase.from("copilot_message_queue").insert({
         organization_id: persisted.organization_id,
         conversation_id: context.conversationId ?? null,
-        message_id: persisted.message_id,
+        message_id: (waRow as { id: string }).id,
         phone: persisted.phone_number,
+        batch_key: `${persisted.phone_number}:${persisted.organization_id}`,
       });
       return { error };
     },
@@ -601,7 +624,11 @@ async function dispatchAgentMessageFallback(
     media_url: (persisted as any).media_url ?? null,
   };
 
-  fetch(`${SUPABASE_URL}/functions/v1/agent-message`, {
+  // A entrega roda DEPOIS do 200 deste webhook. Sem EdgeRuntime.waitUntil o
+  // isolate do Supabase Edge pode ser reciclado antes do .then() (agent-message
+  // 6-26s + sleeps por chunk) → mensagem persistida mas NUNCA enviada. waitUntil
+  // mantém o isolate vivo até a entrega terminar. (RC 2026-06-24)
+  const aiDeliveryPromise = fetch(`${SUPABASE_URL}/functions/v1/agent-message`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${SERVICE_ROLE_KEY}`,
@@ -755,6 +782,11 @@ async function dispatchAgentMessageFallback(
         },
       });
     });
+
+  // Mantém o isolate vivo até a entrega terminar (ver comentário no fetch acima).
+  if (typeof (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil === "function") {
+    (globalThis as { EdgeRuntime: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime.waitUntil(aiDeliveryPromise);
+  }
 
   void logRuntime({
     organizationId: persisted.organization_id,
