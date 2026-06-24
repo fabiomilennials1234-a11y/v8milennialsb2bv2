@@ -193,6 +193,22 @@ export class UazapiClient {
     );
   }
 
+  /**
+   * Reads the webhook config Uazapi currently has stored for this instance.
+   * Read-only (GET /webhook, per-instance token). Used to VERIFY that an
+   * updateWebhook actually persisted — a POST /webhook returns 200 even when
+   * Uazapi silently no-ops, so a 200 is not proof the webhook is bound
+   * (incident 2026-06-24). Returns the raw provider object; callers normalise.
+   */
+  async getWebhook(): Promise<unknown> {
+    return this.request<unknown>(
+      "GET",
+      "/webhook",
+      undefined,
+      { useAdminToken: false }
+    );
+  }
+
   async getMessageLimits(): Promise<{
     current: number;
     limit: number;
