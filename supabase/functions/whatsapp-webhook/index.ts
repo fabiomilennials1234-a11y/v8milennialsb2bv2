@@ -640,6 +640,7 @@ export async function triggerReactions(
       .maybeSingle();
 
     if (waRow?.id) {
+      // batch_key é coluna GERADA (phone || ':' || organization_id) — NÃO inserir.
       const batchKey = `${persisted.phone_number}:${persisted.organization_id}`;
       const { error: queueError } = await supabase
         .from("copilot_message_queue")
@@ -648,7 +649,6 @@ export async function triggerReactions(
           conversation_id: context.conversationId ?? null,
           message_id: waRow.id,
           phone: persisted.phone_number,
-          batch_key: batchKey,
         });
 
       if (!queueError) {
