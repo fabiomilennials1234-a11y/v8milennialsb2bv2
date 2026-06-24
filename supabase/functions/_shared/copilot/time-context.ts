@@ -114,6 +114,41 @@ export function formatNowText(now: Date, tz: string, dayKey: DayKey): string {
 }
 
 /**
+ * Bloco de ancoragem temporal FORTE pro system prompt do copilot.
+ *
+ * Injeta HOJE e AMANHÃ já calculados (data + dia da semana, no fuso), pra o
+ * modelo não precisar fazer aritmética de data nem cair na data do treino.
+ *
+ * RC 2026-06-24: copilot dizia "amanhã é quarta-feira, 26 de junho de 2024"
+ * (ano do treino) mesmo com a linha "- Agora:" no prompt — só "hoje" exigia que
+ * o modelo derivasse "amanhã"/weekday/ano sozinho, e modelo barato erra. Aqui
+ * entregamos tudo mastigado + instrução dura contra datas de memória.
+ *
+ * Brasil sem horário de verão desde 2019 → +24h é seguro pra "amanhã"; ainda
+ * assim o dayKey de amanhã é resolvido pelo fuso (robusto a qualquer mudança).
+ */
+export function formatTemporalAnchor(now: Date, tz: string): string {
+  const fmtDate = (d: Date) =>
+    new Intl.DateTimeFormat("pt-BR", {
+      timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric",
+    }).format(d);
+  const timeStr = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(now);
+  const year = new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric" }).format(now);
+
+  const todayKey = getDayKeyInTimezone(now, tz);
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const tomorrowKey = getDayKeyInTimezone(tomorrow, tz);
+
+  return [
+    `- Agora: ${DAY_LABEL[todayKey]}, ${fmtDate(now)} ${timeStr} (${tz})`,
+    `- Hoje é ${DAY_LABEL[todayKey]}, ${fmtDate(now)}. Amanhã é ${DAY_LABEL[tomorrowKey]}, ${fmtDate(tomorrow)}.`,
+    `- O ano atual é ${year}. Use SOMENTE estas datas para qualquer referência temporal (hoje, amanhã, "semana que vem", "dia tal"). NUNCA invente uma data nem use data de memória/treino; calcule sempre a partir de HOJE acima.`,
+  ].join("\n");
+}
+
+/**
  * Resolve janela ativa pra agente em momento `now`.
  *
  * @param agent objeto com behavior_windows + availability (pra timezone)
