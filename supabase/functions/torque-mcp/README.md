@@ -48,6 +48,15 @@ new migration). Each targets a recurring incident class:
 - **`schema.audit_triggers`** — trigger functions in public without a pinned `search_path` — the
   latent `42883` bombs that `schema.audit_definer` misses (it only scans SECURITY DEFINER). Reports
   `attached_triggers` so live ones stand out. `include_safe` to also list the pinned ones.
+- **`migration.diff`** (S6) — repo-vs-DB drift of the migration ledger, the most recurring incident
+  class (out-of-band-in-prod, repo-never-applied #824, duplicate version prefixes #822/#824). The
+  caller injects the repo truth via `repo_versions` (e.g.
+  `git ls-files supabase/migrations | grep -oE '[0-9]{14}'`, duplicates **preserved**); the tool
+  reads `supabase_migrations.schema_migrations` and returns `repo_not_applied` / `applied_not_in_repo`
+  / `repo_collisions` / `in_sync` (each maps 1:1 to a bug class). `include_applied` also returns the
+  full applied list. Needs the S6 grant migration `20261230000000` (read access to
+  `supabase_migrations`); complements the repo-vs-repo collision CI guard (#826), which is PR-time
+  only. Read-only.
 
 ## Hardening (S3)
 
@@ -88,7 +97,8 @@ tools/copilot.ts    copilot.dump_prompt + copilot.update_prompt
 tools/cron.ts       cron.toggle (requiresServiceRole)
 tools/db.ts         db.read_sql (read-only role + READ ONLY txn, audited)
 tools/rls.ts        rls.check_access (master-ghost coverage audit)
-tools/schema.ts     schema.audit_definer (SECURITY DEFINER search_path audit)
+tools/schema.ts     schema.audit_definer + schema.audit_triggers (search_path audits)
+tools/migration.ts  migration.diff (repo-vs-DB migration-ledger drift)
 ```
 
 ## Secrets (Supabase function env)
@@ -106,8 +116,10 @@ supabase secrets set --project-ref bcfadphgsibjzivtbjvc \
 
 Prereqs: create the `mcp-ops` user and mark it master (`master_users`); apply migrations
 `20261222000000_torque_mcp_master_ghost_policies.sql` (S1),
-`20261223000000_torque_mcp_s2_policies.sql` (S2: copilot UPDATE policy + `toggle_cron_job` RPC), and
-`20261226000000_torque_mcp_readonly_role.sql` (S3: `mcp_readonly` role + `mcp_exec_readonly_sql`).
+`20261223000000_torque_mcp_s2_policies.sql` (S2: copilot UPDATE policy + `toggle_cron_job` RPC),
+`20261226000000_torque_mcp_readonly_role.sql` (S3: `mcp_readonly` role + `mcp_exec_readonly_sql`), and
+`20261230000000_grant_mcp_readonly_schema_migrations.sql` (S6: read access to
+`supabase_migrations.schema_migrations` for `migration.diff`).
 
 ## Deploy
 

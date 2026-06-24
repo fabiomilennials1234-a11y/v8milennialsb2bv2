@@ -30,7 +30,22 @@ Design = Edge Function MCP / Streamable HTTP / RLS-herdado (ver ADR 0011). Build
 ## S2+ — mutating pack (depois, atrás de `TORQUE_MCP_ALLOW_MUTATIONS`)
 - [ ] `blast.requeue`, `lead.restore`, `cron.toggle`, `copilot.update_prompt` (3 lugares + prompt_hash=NULL) — dry-run/confirm/audit (runMutation já pronto)
 - [ ] `audit()` helper DB (grava `audit_log` actor=`mcp`, audit-first) + master-ghost FOR ALL onde a mutação exigir
-- [ ] `db.read_sql` (role read-only dedicada), `rls.check_access`, `migration.diff_prod`
+- [x] `db.read_sql` (role read-only dedicada) — S3
+- [x] `rls.check_access` — S4
+
+## S6 — `migration.diff` (read-only)
+
+### Feito ✅ (8 unit tests Deno verde no arquivo, lint 0, fmt 0; suíte torque-mcp 103/103)
+- [x] **`migration.diff`** — `diffMigrations` (pura, determinística: normaliza p/ 14 dígitos, set-diff repo↔DB, conta colisões antes do dedup) + `buildAppliedMigrationsQuery` (qualifica `supabase_migrations.schema_migrations`) + handler fino sobre `mcp_exec_readonly_sql` (`tools/migration.ts`)
+- [x] **Testes puros** (`tools/migration.test.ts`) — in_sync / repo_not_applied / applied_not_in_repo (drift) / repo_collisions / normalização (path + `_nome.sql` + lixo) / determinismo + contrato da tool + query
+- [x] **Registro** em `index.ts` (`TOOLS`, read-only — visível com mutations OFF)
+- [x] **Migration de grant** `20261230000000_grant_mcp_readonly_schema_migrations.sql` (USAGE schema + SELECT na ledger p/ `mcp_readonly`; idempotente, guarded; timestamp checado contra repo — pós `20261229000000`, sem colisão)
+- [x] **Docs** — README §"Diagnostic pack" + Layout + prereqs; este `tasks.md` (move `migration.diff_prod` p/ Feito)
+
+### Falta ⏳ (mão do CTO)
+- [ ] Aplicar grant `20261230000000` em **dev** + smoke (`tools/call migration.diff` retorna sem permission error)
+- [ ] **Dogfood prod** (autorização CTO): rodar contra prod + repo → relatório real do drift (esperado: expõe pendentes do #824 se não aplicados) → anexar no PR
+- [ ] PR `feat/torque-mcp/s6-migration-diff` → main (arquiteto commita/pusha)
 
 ## Fora de escopo
 Cenário B (customer-facing); HTTP remoto stateful; auto-gen de tools. Ver ADR 0011.
