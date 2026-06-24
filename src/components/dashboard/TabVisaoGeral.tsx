@@ -91,7 +91,7 @@ function TabVisaoGeralBase({ month, year, isAdmin }: TabVisaoGeralProps) {
   return (
     <div className="space-y-6">
       {/* Row 1: KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4" data-tour="dashboard-kpis">
         <KPICard
           title="Receita do Mês"
           value={displayMetrics?.vendaTotal || 0}
@@ -144,6 +144,7 @@ function TabVisaoGeralBase({ month, year, isAdmin }: TabVisaoGeralProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
           className="lg:col-span-3 bg-card border border-border rounded-lg p-6"
+          data-tour="dashboard-gauge"
         >
           <p className="stat-card-label mb-4">Meta do Mês</p>
           {faturamentoGoal ? (

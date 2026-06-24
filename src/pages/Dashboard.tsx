@@ -61,7 +61,7 @@ export default function Dashboard() {
       />
 
       <Tabs defaultValue="visao-geral" className="w-full">
-        <TabsList>
+        <TabsList data-tour="dashboard-tabs">
           <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="inteligencia">Inteligência</TabsTrigger>

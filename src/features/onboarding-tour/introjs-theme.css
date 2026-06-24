@@ -1,0 +1,125 @@
+/**
+ * Tema do intro.js com a identidade Torque (dark-aware).
+ * Usa as CSS vars do app (src/index.css), então adapta a light/dark automaticamente.
+ */
+@import "intro.js/introjs.css";
+
+.introjs-overlay {
+  background: hsl(var(--background) / 0.55) !important;
+}
+
+.introjs-helperLayer {
+  border-radius: var(--radius) !important;
+  box-shadow:
+    0 0 0 2px hsl(var(--primary) / 0.6),
+    0 0 0 9999px hsl(var(--background) / 0.72),
+    0 0 40px -2px hsl(var(--primary) / 0.3) !important;
+  transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+}
+
+.introjs-tooltip {
+  background: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: var(--radius) !important;
+  color: hsl(var(--foreground)) !important;
+  font-family: "Inter", system-ui, sans-serif !important;
+  max-width: 340px !important;
+  min-width: 300px !important;
+  box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.3)) !important;
+}
+
+.introjs-tooltip-header {
+  padding: 16px 18px 0 !important;
+}
+
+.introjs-tooltip-title {
+  font-family: "Space Grotesk", "Inter", sans-serif !important;
+  font-weight: 700 !important;
+  font-size: 16px !important;
+  letter-spacing: -0.02em !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.introjs-tooltiptext {
+  padding: 8px 18px 14px !important;
+  color: hsl(var(--muted-foreground)) !important;
+  font-size: 13.5px !important;
+  line-height: 1.55 !important;
+}
+.introjs-tooltiptext b {
+  color: hsl(var(--primary)) !important;
+  font-weight: 600;
+}
+
+.introjs-bullets {
+  padding: 0 18px 6px !important;
+}
+.introjs-bullets ul li a {
+  background: hsl(var(--muted-foreground) / 0.35) !important;
+}
+.introjs-bullets ul li a.active {
+  background: hsl(var(--primary)) !important;
+  width: 18px !important;
+  border-radius: 99px !important;
+}
+
+.introjs-progress {
+  background: hsl(var(--muted-foreground) / 0.18) !important;
+  border-radius: 99px !important;
+  height: 4px !important;
+  margin: 0 18px !important;
+}
+.introjs-progressbar {
+  background: var(--gradient-gold, hsl(var(--primary))) !important;
+  border-radius: 99px !important;
+}
+
+.introjs-tooltipbuttons {
+  border-top: 1px solid hsl(var(--border)) !important;
+  padding: 12px 16px !important;
+}
+.introjs-button {
+  font-family: "Space Grotesk", "Inter", sans-serif !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  border-radius: calc(var(--radius) - 4px) !important;
+  text-shadow: none !important;
+  border: 1px solid hsl(var(--border)) !important;
+  background: hsl(var(--secondary)) !important;
+  color: hsl(var(--foreground)) !important;
+  padding: 8px 16px !important;
+}
+.introjs-button:hover {
+  background: hsl(var(--accent) / 0.15) !important;
+  color: hsl(var(--foreground)) !important;
+  border-color: hsl(var(--muted-foreground)) !important;
+}
+.introjs-button:focus {
+  box-shadow: none !important;
+  outline: 2px solid hsl(var(--ring)) !important;
+  outline-offset: 1px;
+}
+.introjs-nextbutton {
+  background: var(--gradient-gold, hsl(var(--primary))) !important;
+  color: hsl(var(--accent-foreground, var(--primary-foreground))) !important;
+  border: none !important;
+}
+.introjs-nextbutton:hover {
+  filter: brightness(1.05);
+  color: hsl(var(--accent-foreground, var(--primary-foreground))) !important;
+}
+.introjs-disabled,
+.introjs-disabled:hover {
+  color: hsl(var(--muted-foreground)) !important;
+  background: hsl(var(--muted) / 0.4) !important;
+  opacity: 0.5;
+}
+.introjs-skipbutton {
+  color: hsl(var(--muted-foreground)) !important;
+  border: none !important;
+  background: none !important;
+  font-weight: 500 !important;
+}
+.introjs-skipbutton:hover {
+  color: hsl(var(--foreground)) !important;
+}

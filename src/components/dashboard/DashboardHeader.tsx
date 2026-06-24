@@ -57,7 +57,7 @@ function DashboardHeaderBase({ month, year, onMonthChange }: DashboardHeaderProp
         </p>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1" data-tour="dashboard-period">
         <Button
           variant="ghost"
           size="icon"

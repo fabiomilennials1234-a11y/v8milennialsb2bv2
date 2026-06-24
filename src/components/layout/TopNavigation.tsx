@@ -43,6 +43,7 @@ import {
   Copy,
   Trash2,
   Instagram,
+  Compass,
 } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueLogoDark from "@/assets/torque-logo-dark.png";
@@ -70,6 +71,7 @@ import { usePrefetchPipes } from "@/hooks/usePrefetchPipes";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { OrgSwitcher } from "./OrgSwitcher";
+import { TOUR_START_EVENT } from "@/features/onboarding-tour/ProductTour";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -89,6 +91,13 @@ import {
   SheetTrigger,
   SheetClose,
 } from "@/components/ui/sheet";
+
+// Anchors do product tour (intro.js): mapeia rota → id de [data-tour].
+// Só os itens da barra primária (sempre visíveis no desktop) servem de âncora.
+const NAV_TOUR_ANCHORS: Record<string, string | undefined> = {
+  "/dashboard": "nav-comando",
+  "/performance": "nav-ranking",
+};
 
 // ─── Nav Item Types ─────────────────────────────────────────
 interface NavItem {
@@ -543,6 +552,7 @@ export function TopNavigation() {
       <NavLink
         key={item.path}
         to={item.path}
+        data-tour={NAV_TOUR_ANCHORS[item.path]}
         className={cn("topnav-item", isActive(item.path) && "topnav-item-active")}
       >
         <span>{item.label}</span>
@@ -684,7 +694,7 @@ export function TopNavigation() {
           {(visibleMore.length > 0 || (role === "admin" && visibleAdminItems.length > 0) || visibleBottomItems.length > 0) && (
             <Popover>
               <PopoverTrigger asChild>
-                <button className={cn("topnav-item topnav-mais group/mais", isMoreActive && "topnav-item-active")}>
+                <button data-tour="nav-mais" className={cn("topnav-item topnav-mais group/mais", isMoreActive && "topnav-item-active")}>
                   <MoreHorizontal className="w-4 h-4 opacity-50" />
                   <span>Mais</span>
                 </button>
@@ -815,6 +825,13 @@ export function TopNavigation() {
               >
                 {isDark ? <Sun className="w-4 h-4 opacity-60" /> : <Moon className="w-4 h-4 opacity-60" />}
                 <span className="flex-1">{isDark ? "Tema Claro" : "Tema Escuro"}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => window.dispatchEvent(new CustomEvent(TOUR_START_EVENT))}
+                className="gap-2.5 px-3 py-2 cursor-pointer rounded-lg"
+              >
+                <Compass className="w-4 h-4 opacity-60" />
+                <span>Ver tour</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={signOut} className="gap-2.5 px-3 py-2 cursor-pointer rounded-lg text-destructive focus:text-destructive">

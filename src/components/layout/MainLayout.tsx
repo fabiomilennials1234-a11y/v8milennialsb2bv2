@@ -15,6 +15,7 @@ import { MobileChatProvider, useMobileChatContext } from "@/contexts/MobileChatC
 import { ChatBubble } from "@/components/chat/bubble";
 import { SessionDeadBanner } from "@/components/whatsapp/SessionDeadBanner";
 import { QuickBlastProgressPanel } from "@/components/bulk-actions/QuickBlastProgressPanel";
+import { ProductTour } from "@/features/onboarding-tour/ProductTour";
 
 // Rotas onde o checklist NÃO deve aparecer
 const CHECKLIST_HIDDEN_PATTERNS = [
@@ -132,6 +133,9 @@ function MainLayoutInner({ children }: MainLayoutProps) {
       {featureFlags.chatBubble && <ChatBubble />}
 
       <QuickBlastProgressPanel />
+
+      {/* Product tour (intro.js): auto-start no 1º acesso + reabrível via "Ver tour" */}
+      <ProductTour />
 
       <MobileBottomNav />
     </div>

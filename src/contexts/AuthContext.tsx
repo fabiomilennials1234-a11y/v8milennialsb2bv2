@@ -110,6 +110,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         `chat-last-read:${userId}:`,
         // B3 (Security): limpar recentes do command palette user-scoped
         `cmd-palette-recent-${userId}`,
+        // Product tour: flag local de "já viu" (espelha profiles.product_tour_completed_at)
+        `tour-intro-${userId}`,
       ];
       try {
         const keysToRemove: string[] = [];
