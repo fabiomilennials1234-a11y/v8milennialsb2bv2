@@ -79,10 +79,16 @@ export function ScheduleMessageModal({
       })()
     : null;
 
-  const isValid =
-    (message.trim() || mediaFile) &&
-    scheduledDateTime &&
-    isBefore(addMinutes(new Date(), 1), scheduledDateTime);
+  // Validação separada por razão — um único `isValid` mascarava a causa real
+  // (mensagem vazia culpava sempre a data). Cada flag alimenta seu próprio feedback.
+  const hasContent = !!(message.trim() || mediaFile);
+  const isDateInFuture =
+    !!scheduledDateTime && isBefore(addMinutes(new Date(), 1), scheduledDateTime);
+  // Em modo edição o anexo fica desabilitado e o textarea vazio significa "sem
+  // alteração" — não "sem conteúdo". Gatear por hasContent travaria o re-save de um
+  // agendamento só-mídia (o update nunca apaga a mídia persistida; mensagem vazia
+  // vira `undefined` no handleSubmit e a mutation a ignora).
+  const isValid = editingId ? isDateInFuture : hasContent && isDateInFuture;
 
   const handleSubmit = async () => {
     if (!scheduledDateTime || !isValid) return;
@@ -256,9 +262,21 @@ export function ScheduleMessageModal({
             </p>
           )}
 
-          {scheduledDateTime && !isValid && date && (
-            <p className="text-xs text-destructive">
+          {scheduledDateTime && !isDateInFuture && (
+            <p className="text-xs text-destructive" role="alert">
               A data precisa ser no futuro (minimo 1 minuto a partir de agora)
+            </p>
+          )}
+
+          {!editingId && isDateInFuture && !hasContent && (
+            <p className="text-xs text-muted-foreground" role="status">
+              Escreva uma mensagem ou anexe um arquivo para agendar.
+            </p>
+          )}
+
+          {!editingId && hasContent && !scheduledDateTime && (
+            <p className="text-xs text-muted-foreground" role="status">
+              Escolha uma data e hora para agendar.
             </p>
           )}
         </div>
