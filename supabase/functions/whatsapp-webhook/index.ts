@@ -575,12 +575,12 @@ export async function triggerReactions(
         return { error: { message: "inbound_uuid_unresolved" } };
       }
 
+      // batch_key é coluna GERADA (phone || ':' || organization_id) — NÃO inserir.
       const { error } = await supabase.from("copilot_message_queue").insert({
         organization_id: persisted.organization_id,
         conversation_id: context.conversationId ?? null,
         message_id: (waRow as { id: string }).id,
         phone: persisted.phone_number,
-        batch_key: `${persisted.phone_number}:${persisted.organization_id}`,
       });
       return { error };
     },
