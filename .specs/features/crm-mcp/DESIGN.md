@@ -1,6 +1,6 @@
 # Design: crm-mcp — servidor MCP customer-facing "bring-your-own-AI" (RLS-puro, per-user)
 
-**Status:** draft (2026-06-24) — aguardando revisão CTO. Endurecido após 3 reviews adversariais (lentes: multitenant, pat-forgery, rls-bypass).
+**Status:** accepted (2026-06-25) — decisões §10 (D1–D12) resolvidas nos defaults recomendados (delegação do CTO; sem vetos). Endurecido após 3 reviews adversariais (lentes: multitenant, pat-forgery, rls-bypass). **Correção pós-review:** o "ship-blocker" de search_path em `is_master_user` (lente multitenant) era leitura do CREATE imutável — a função já foi pinada pelo `20261227000000` (DO-block dinâmico, dev+prod, `schema.audit_definer` → `unpinned=0`); rebaixado de bloqueador a guard de re-verificação em prod na C2 (§7.2). A "H2" da lente pat-forgery (chave de assinatura ES256 dedicada vs legacy/service_role secret) é finding distinto, permanece e está incorporada.
 **Autor:** engenheiro (lead)
 **Relacionado:** `docs/adr/0011-torque-mcp-internal-ops-server.md` (cenário B, adiado lá → este doc), `.specs/features/torque-mcp/`, `supabase/functions/_shared/mcp/`
 
@@ -460,7 +460,7 @@ create trigger pat_immutable before update on public.personal_access_tokens
 
 Segue o CLAUDE.md: nunca `SELECT ... FROM team_members` inline (recursão sob Realtime); sempre os helpers `SECURITY DEFINER` `get_my_organization_ids()` / `get_my_admin_organization_ids()` / `is_master_user()`.
 
-> **PRÉ-REQUISITO DE SHIP (H2 — verificar em prod, não assumir).** O draft afirmava "todos os helpers definer pinados em search_path (lição 20261227000000)". **Verificado FALSO para `is_master_user`:** `20260131200000:208` é `LANGUAGE plpgsql SECURITY DEFINER STABLE` **sem** `SET search_path`. É a exata classe 42883/search-path que já quebrou o precedente citado (leads_uf, `20261224000000`), e fica no hot-path de avaliação de **toda** policy master-ghost de que este design depende — agora exercitada por um caller **não-confiável**. A MEMORY nota "drift de raiz pendente" e migrations puladas em colisão. **Slice task em C2:** confirmar via `schema.audit_definer` (torque-mcp) que `is_master_user` está pinada **em PROD**; se não estiver, pinar (`SET search_path = public, extensions`) **antes** do crm-mcp shippar. O doc não assere "tudo pinado" — assere "verificar em prod".
+> **`is_master_user` — search_path PINADO (não é mais ship-blocker; verificado 2026-06-25).** A review multitenant marcou isto como bloqueador lendo o CREATE imutável (`20260131200000:208` = `LANGUAGE plpgsql SECURITY DEFINER STABLE`, **sem** `SET search_path`) — mas o CREATE não reflete o estado vivo. A migration `20261227000000_pin_definer_search_path.sql` é um **DO-block dinâmico** que faz `ALTER FUNCTION ... SET search_path = public, extensions` em **toda** função `prosecdef=true` em `public` sem pin; `is_master_user` qualifica e **foi pinada**. Aplicada **dev+prod** (PR #867); `schema.audit_definer` reportou `unpinned=0`. **Confirmado** que nenhuma migration posterior faz `CREATE OR REPLACE is_master_user` (que zeraria o `proconfig`) — há uma única definição no repo (`20260131200000:199`). Logo o gating master/não-master de que este design depende roda com search_path fixo em dev+prod hoje. **Guard em C2 (barato, não bloqueador):** re-confirmar via `schema.audit_definer` que `is_master_user` (e os helpers `get_my_organization_ids`/`get_my_admin_organization_ids`) seguem `unpinned=0` em prod imediatamente antes do crm-mcp shippar — a lição é "verificar antes de confiar", não "está quebrado".
 
 ```sql
 alter table public.personal_access_tokens enable row level security;
@@ -606,7 +606,7 @@ As duas RPCs definer do sistema — `crm_mcp_resolve_token` (pré-identidade) e 
 - **Org claim NÃO mintada no JWT** (§4.4, H3b) — fecha o vetor "policy futura confia em `auth.jwt()->>'organization_id'`". CI guard grepa policies que leiam essa claim ou `auth.org_id()`.
 - **CI guard de isolamento cross-org** (§9, C2) — integração seedada com **membro não-admin** (HOLE 2): PAT da org A **não** lê rows da org B; arg `org_id` divergente é rejeitado; PAT de master é rejeitado; anon-sem-bearer lê zero. É o regression guard que a classe master-ghost **sempre** não teve.
 - **Hard-fail-closed no mint** (§4.4, H3a) — mint vazio/quebrado nunca degrada para `anon` silenciosamente.
-- **Helpers RLS pinados em `search_path`** — `crm_mcp_resolve_token`/`crm_mcp_rate_check` pinam; **e** verificar em prod que `is_master_user` está pinada (H2, §7.2) antes de shippar.
+- **Helpers RLS pinados em `search_path`** — `crm_mcp_resolve_token`/`crm_mcp_rate_check` pinam; `is_master_user` **já pinada** pelo `20261227000000` (dev+prod, `unpinned=0`); C2 re-confirma em prod como guard (§7.2), não como bloqueador.
 - **Secrets de ops assert-absent no boot** (§4.5, H3) — convenção de deploy vira invariante testada.
 
 ### 8.7 Risco: assinatura / migração de chaves + canary round-trip
@@ -634,7 +634,7 @@ Cada slice é independentemente shippable. **C1 (extração da espinha `_shared/
 O tracer-bullet vertical. Entrega ponta-a-ponta o caminho mais fino, **com todos os fixes HIGH embutidos** (não diferidos):
 - Migration: `personal_access_tokens` (tabela + índices + trigger imutável incl. `audience` + RLS §7.1/7.2) — aplicada em **dev** (prod com OK explícito).
 - RPC `crm_mcp_resolve_token(p_hash)` (definer, mínima, pinada, **revoke from anon/authenticated** §7.6).
-- **Verificar em prod (H2):** `is_master_user` pinada em `search_path`; pinar antes de shippar se não estiver.
+- **Guard prod (não bloqueador):** `is_master_user` já pinada em `search_path` pelo `20261227000000` (dev+prod, `unpinned=0`); C2 só re-confirma via `schema.audit_definer` imediatamente antes do ship (§7.2).
 - `lib/pat.ts`: `parsePat` (formato+CRC32) + `resolvePat` (lookup+checks + **master-reject H1** + **membership-assert M5**) + `mintUserJwt` (**ES256, role/aud literais, sem org claim** H2/H3b) + `assertWellFormedJwt` (**hard-fail H3a**).
 - `lib/phone.ts`: normalize em TS (**zero `.rpc` no user client** HOLE 1).
 - `lib/config.ts`: **assert-absent de `SERVICE_ROLE_KEY`/`MCP_MASTER_*`/`MCP_GATEWAY_SECRET`** no boot (H3).
@@ -672,9 +672,9 @@ O tracer-bullet vertical. Entrega ponta-a-ponta o caminho mais fino, **com todos
 
 ---
 
-## 10. Decisões (revisar com CTO)
+## 10. Decisões (RESOLVIDAS 2026-06-25)
 
-> Escolhas consequentes que tomei. Cada uma tem uma alternativa; o CTO pode vetar.
+> Escolhas consequentes. Resolvidas nos defaults recomendados por delegação do CTO ("resolva") — **nenhum veto levantado**. Cada uma mantém a alternativa registrada para reabrir se necessário. D1 (a de maior peso, com resíduo R1) e D5 são as que mais merecem um segundo olhar antes do ship da C2.
 
 - **D1 — Mint de JWT self-signed via callback `accessToken`, com chave de assinatura ES256 dedicada (não o legacy/`service_role` secret).** Alternativa: `generateLink`+`verifyOtp` (sessão GoTrue real, única forma de eliminar estruturalmente "forja qualquer user"). Escolhi self-mint ES256: sem efeitos colaterais, sem email, ≤60s TTL, e desacoplado do crown-jewel da plataforma. Consequência (R1): a chave de assinatura forja qualquer *usuário* (não `service_role`). **Veto possível:** se o CTO quiser zero capacidade de forja na fn customer-facing, vamos pra `generateLink`+`verifyOtp` (mais pesado).
 - **D2 — Hash do PAT = SHA-256 + pepper HMAC (`CRM_MCP_PAT_PEPPER`).** Alternativa: SHA-256 puro. Pepper é barato e defende leak de DB-sem-app-secret. **Veto:** dropar o pepper se preferir menos um secret.
@@ -718,7 +718,7 @@ O tracer-bullet vertical. Entrega ponta-a-ponta o caminho mais fino, **com todos
 - Mint master a substituir: `supabase/functions/torque-mcp/lib/clients.ts` (`signInAsMaster`).
 - Config a forkar (sem master/service-role; loader hoje requer `MCP_MASTER_*` e só opcionalmente lê service_role — **não** assere ausência): `supabase/functions/torque-mcp/lib/config.ts:36-67`.
 - Handler com `org_id` a endurecer + **`db.rpc("normalize_brazilian_phone")` a portar p/ TS (HOLE 1)**: `supabase/functions/torque-mcp/tools/lead.ts:56`.
-- Helpers RLS: `supabase/migrations/20260131200000_create_master_admin_tables.sql:199-208` (`is_master_user` por `auth.uid()`, **não pinado** — H2), `20260520000000_permission_tab_schema.sql` (`get_my_organization_ids`, filtro `is_active`), `20261020000000_fix_realtime_rls_recursion.sql:14-25`.
+- Helpers RLS: `supabase/migrations/20260131200000_create_master_admin_tables.sql:199-208` (`is_master_user` por `auth.uid()`; **sem pin no CREATE**, mas pinado depois pelo DO-block dinâmico `20261227000000` — §7.2), `20260520000000_permission_tab_schema.sql` (`get_my_organization_ids`, filtro `is_active`), `20261020000000_fix_realtime_rls_recursion.sql:14-25`.
 - Policy `leads` responsibility-scoped (HOLE 2): `supabase/migrations/20260818100000_fix_leads_rls_use_feature_permissions.sql:36`.
 - Landmine `auth.jwt()->>'organization_id'` / `auth.org_id()` (H3b): `20260504000001_create_meetings.sql:74-172`, depois `20260985000000_fix_meetings_rls.sql`.
 - Classe `is_team_member` (leak cross-org, varredura ativa): `20261119000018_rls_wrap_and_fix_is_team_member_leak.sql`, `20261218000002_security_fix_remaining_is_team_member_policies.sql`. Helper singular multi-org (R5): `20260917000100_fix_permissions_multi_org_deterministic.sql:39`.
