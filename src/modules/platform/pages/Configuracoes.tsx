@@ -658,7 +658,7 @@ export default function Configuracoes() {
           </TabsTrigger>
           <TabsTrigger value="tokens-ia" className="gap-2">
             <Sparkles className="w-4 h-4" />
-            Tokens IA
+            IA / MCP
           </TabsTrigger>
           <TabsTrigger value="sandbox" className="gap-2">
             <FlaskConical className="w-4 h-4" />
@@ -762,7 +762,7 @@ export default function Configuracoes() {
           </TabsContent>
 
           <TabsContent value="tokens-ia">
-            <Suspense fallback={<TabFallback label="Tokens IA" />}>
+            <Suspense fallback={<TabFallback label="IA / MCP" />}>
               <Card className="glass-card">
                 <CardContent className="pt-6">
                   <PersonalAccessTokensPanel />

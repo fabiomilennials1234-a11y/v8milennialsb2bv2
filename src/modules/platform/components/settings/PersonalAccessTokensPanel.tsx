@@ -12,6 +12,7 @@ import {
   Clock,
   Copy,
   Loader2,
+  Plug,
   Plus,
   ShieldAlert,
   Sparkles,
@@ -80,7 +81,7 @@ export function PersonalAccessTokensPanel() {
   const [createOpen, setCreateOpen] = useState(false);
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const [newPat, setNewPat] = useState<CreatedPat | null>(null);
-  const [copied, setCopied] = useState<"token" | "config" | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [expiryDays, setExpiryDays] = useState("90");
@@ -102,9 +103,9 @@ export function PersonalAccessTokensPanel() {
     }
   };
 
-  const copy = async (text: string, which: "token" | "config") => {
+  const copy = async (text: string, key: string) => {
     await navigator.clipboard.writeText(text);
-    setCopied(which);
+    setCopied(key);
     setTimeout(() => setCopied(null), 2000);
   };
 
@@ -144,6 +145,32 @@ export function PersonalAccessTokensPanel() {
           <Plus className="w-4 h-4" />
           Novo token
         </Button>
+      </div>
+
+      {/* Always-visible MCP info: what it is + the endpoint to point an MCP client at. */}
+      <div className="rounded-lg border border-border/60 bg-muted/30 p-4 space-y-3">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Plug className="w-4 h-4 text-primary" />
+          Servidor MCP do Torque
+        </div>
+        <p className="text-xs text-muted-foreground">
+          O Torque expõe um servidor <strong>MCP (Model Context Protocol)</strong>. Aponte o
+          Claude (ou outro cliente MCP) para o endpoint abaixo e autentique com um token pessoal
+          criado aqui. Funciona via <span className="font-mono">Authorization: Bearer &lt;token&gt;</span>.
+        </p>
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">Endpoint MCP</Label>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs font-mono bg-background border border-border/60 rounded px-2 py-1.5 break-all">
+              {MCP_ENDPOINT}
+            </code>
+            <Button variant="outline" size="icon" onClick={() => copy(MCP_ENDPOINT, "endpoint")}>
+              {copied === "endpoint"
+                ? <Check className="w-4 h-4 text-emerald-500" />
+                : <Copy className="w-4 h-4" />}
+            </Button>
+          </div>
+        </div>
       </div>
 
       {isAdmin && (
