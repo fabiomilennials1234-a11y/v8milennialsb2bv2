@@ -5,7 +5,7 @@
  * Type selector, the Texto sub-panel, and the Semi-automático toggle.
  */
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({
@@ -110,5 +110,12 @@ describe("ActionPanel — unified message node", () => {
   it("renders the PIX sub-panel when messageType is pix", () => {
     renderPanel(baseData({ messageType: "pix" }));
     expect(screen.getByText("Tipo de chave PIX")).toBeInTheDocument();
+  });
+
+  it("toggling Semi-automático calls onUpdate with semiAutomatic=true", () => {
+    const onUpdate = vi.fn();
+    renderPanel(baseData(), onUpdate);
+    fireEvent.click(screen.getByRole("switch"));
+    expect(onUpdate).toHaveBeenCalledWith({ semiAutomatic: true });
   });
 });

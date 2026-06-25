@@ -185,6 +185,28 @@ describe("send_whatsapp_message — dispatch by messageType", () => {
     expect(result.message).toContain("PIX");
   });
 
+  it("semiAutomatic toggle routes to SDR approval instead of auto-sending", async () => {
+    const { sendTextViaInstance } = await import("../../supabase/functions/_shared/whatsapp-dispatch");
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("leads", [LEAD]);
+    mockTable("whatsapp_instances", [WA_INSTANCE]);
+    mockTable("scheduled_pipe_messages", []);
+    mockTable("lead_history", []);
+
+    const result = await executeWorkflowAction({
+      supabase: sb, organizationId: "org-1", leadId: "lead-1",
+      nodeData: {
+        actionType: "send_whatsapp_message", messageType: "texto",
+        messageTemplate: "Olá {{nome}}", semiAutomatic: true,
+      },
+      executionContext: {},
+    });
+    expect(result.success).toBe(true);
+    expect((result.message ?? "").toLowerCase()).toContain("approval");
+    // Must NOT have auto-sent the message.
+    expect(vi.mocked(sendTextViaInstance)).not.toHaveBeenCalled();
+  });
+
   it("unknown messageType fails cleanly, non-retryable, without sending", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD]);

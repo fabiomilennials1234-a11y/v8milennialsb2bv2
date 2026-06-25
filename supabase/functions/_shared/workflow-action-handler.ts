@@ -310,6 +310,18 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
 
     // ── Unified "Enviar Mensagem" node — dispatch by messageType (ADR-0012) ──
     case "send_whatsapp_message": {
+      // Semi-automatic: route the whole message through SDR approval before send
+      // instead of auto-sending (ADR-0012).
+      if (ctx.nodeData.semiAutomatic) {
+        const semiInput = toActionInput(ctx);
+        semiInput.params.semiAutoMessage =
+          (ctx.nodeData.semiAutoMessage as string) ||
+          (ctx.nodeData.messageTemplate as string) ||
+          (ctx.nodeData.imageCaption as string) ||
+          "";
+        result = await sharedSendSemiAutomatic(semiInput);
+        break;
+      }
       const messageType = (ctx.nodeData.messageType as string) || "texto";
       switch (messageType) {
         case "texto": {
