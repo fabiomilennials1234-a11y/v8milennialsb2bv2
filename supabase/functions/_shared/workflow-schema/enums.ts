@@ -46,6 +46,7 @@ export const TRIGGER_TYPES = [
 
 export const ACTION_TYPES = [
   "send_whatsapp",
+  "send_whatsapp_message",
   "send_whatsapp_audio",
   "send_whatsapp_image",
   "send_whatsapp_sticker",

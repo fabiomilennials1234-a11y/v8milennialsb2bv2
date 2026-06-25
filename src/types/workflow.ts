@@ -43,8 +43,17 @@ export type WorkflowNodeType =
   | "wait_business_window"
   | "assign_responsible";
 
+export type MessageType =
+  | "texto"
+  | "imagem"
+  | "audio"
+  | "sticker"
+  | "menu"
+  | "pix";
+
 export type WorkflowActionType =
   // Comunicação
+  | "send_whatsapp_message" // node unificado (ADR-0012)
   | "send_whatsapp"
   | "send_whatsapp_audio"
   | "send_whatsapp_image"
@@ -259,11 +268,14 @@ export interface ActionNodeData {
   // WhatsApp instance (shared by all WhatsApp actions)
   whatsappInstanceId?: string;
   whatsappInstanceName?: string;
+  // Unified "Enviar Mensagem" node (ADR-0012) — discriminator + semi-auto toggle
+  messageType?: MessageType;
+  semiAutomatic?: boolean;
   // Send WhatsApp (texto)
   messageTemplate?: string;
   templateId?: string;
   useTemplate?: boolean;
-  templateMode?: "free" | "campaign_template" | "meta_template";
+  templateMode?: "free" | "campaign_template" | "meta_template" | "ai";
   templateSourceId?: string;
   // Send WhatsApp (áudio)
   audioId?: string;
@@ -666,6 +678,7 @@ export const NODE_LABELS: Record<WorkflowNodeType, string> = {
 
 export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   // Comunicação
+  send_whatsapp_message: "Enviar Mensagem",
   send_whatsapp: "Enviar WhatsApp (Texto)",
   send_whatsapp_audio: "Enviar WhatsApp (Áudio)",
   send_whatsapp_image: "Enviar WhatsApp (Imagem)",
@@ -827,6 +840,43 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
     actions: ["generate_ai_message", "summarize_conversation", "evaluate_conversation"],
   },
 ];
+
+/**
+ * Feature flag (organizations.feature_flags) que libera o node unificado
+ * "Enviar Mensagem" (ADR-0012). Rollout por org; fail-closed.
+ */
+export const UNIFIED_MESSAGE_NODE_FLAG = "unified_message_node";
+
+/** Os 6 envios WhatsApp colapsados pelo node unificado quando a flag está ON. */
+const LEGACY_WHATSAPP_SEND_ACTIONS: WorkflowActionType[] = [
+  "send_whatsapp",
+  "send_whatsapp_audio",
+  "send_whatsapp_image",
+  "send_whatsapp_sticker",
+  "send_whatsapp_menu",
+  "send_whatsapp_pix_button",
+];
+
+/**
+ * Categorias do picker conforme a flag do node unificado.
+ * - OFF (default / fail-closed): lista legada, exatamente como antes.
+ * - ON: os 6 envios viram a única entrada `send_whatsapp_message`.
+ * Os labels legados seguem em ACTION_LABELS para nós já salvos.
+ */
+export function getActionCategories(unifiedEnabled: boolean): ActionCategory[] {
+  if (!unifiedEnabled) return ACTION_CATEGORIES;
+  return ACTION_CATEGORIES.map((cat) =>
+    cat.label !== "Comunicação"
+      ? cat
+      : {
+          ...cat,
+          actions: [
+            "send_whatsapp_message",
+            ...cat.actions.filter((a) => !LEGACY_WHATSAPP_SEND_ACTIONS.includes(a)),
+          ],
+        },
+  );
+}
 
 // =====================================================
 // TRIGGER CATEGORIES (para UI de seleção agrupada)

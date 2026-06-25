@@ -9,6 +9,9 @@ import {
   cloneSelection,
   type WorkflowSelection,
 } from "@/modules/workflows/lib/clipboard";
+import { upgradeWorkflowNodes } from "@/modules/workflows/lib/upgradeLegacyMessageNode";
+import { UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
+import { useFeatureFlag } from "@/modules/platform";
 
 import { WorkflowCanvas } from "@/modules/workflows/components/WorkflowCanvas";
 import { WorkflowToolbar } from "@/modules/workflows/components/WorkflowToolbar";
@@ -139,6 +142,11 @@ export default function AutomacoesEditor() {
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNode>([DEFAULT_TRIGGER_NODE]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<WorkflowEdge>([]);
 
+  // Node unificado gateado por org (ADR-0012). Fail-closed: só converte os nós
+  // legados quando a flag está ON para a org corrente.
+  const { enabled: unifiedEnabled, isLoading: unifiedLoading } =
+    useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
+
   // In-memory clipboard for copy/paste of node subgraphs (same editor only).
   const clipboardRef = useRef<WorkflowSelection | null>(null);
 
@@ -183,11 +191,20 @@ export default function AutomacoesEditor() {
 
   // Load workflow data when editing
   useEffect(() => {
-    if (workflow && !initialized) {
+    // Aguarda a flag resolver antes de inicializar, para não migrar nós com o
+    // valor fail-closed (false) e depois "pular" para o convertido.
+    if (workflow && !initialized && !unifiedLoading) {
       setName(workflow.name);
       setIsActive(workflow.is_active);
       if (workflow.definition?.nodes?.length) {
-        setNodes(workflow.definition.nodes);
+        // Lazy migration (ADR-0012): legacy WhatsApp send nodes become the
+        // unified send_whatsapp_message node; persisted on next save. Gateado
+        // por org — orgs sem a flag mantêm os nós legados intactos.
+        setNodes(
+          unifiedEnabled
+            ? upgradeWorkflowNodes(workflow.definition.nodes)
+            : workflow.definition.nodes,
+        );
         setEdges(workflow.definition.edges || []);
         // Track max node id for counter
         const maxId = workflow.definition.nodes.reduce((max, n) => {
@@ -214,7 +231,7 @@ export default function AutomacoesEditor() {
       }
       setInitialized(true);
     }
-  }, [workflow, initialized, setNodes, setEdges]);
+  }, [workflow, initialized, setNodes, setEdges, unifiedEnabled, unifiedLoading]);
 
   // For new workflows, apply pre-configured trigger if present
   useEffect(() => {
