@@ -27,6 +27,12 @@ verify_jwt = false
 [functions.torque-mcp]
 verify_jwt = false
 
+# crm-mcp: customer-facing BYO-AI MCP (.specs/features/crm-mcp/DESIGN.md). The bearer is a
+# customer PAT (not a Supabase JWT), resolved + minted to a per-user RLS client inside the fn
+# — so platform JWT verification is off; auth is done in-function. Never service_role/master.
+[functions.crm-mcp]
+verify_jwt = false
+
 # meta: leadgen polling cron (ADR-0009); auth via x-cron-secret inside fn
 [functions.meta-leadgen-poll]
 verify_jwt = false
