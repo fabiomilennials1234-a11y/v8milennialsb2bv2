@@ -55,6 +55,8 @@ export interface DisparoDraft {
   media: DisparoMedia | null;
   /** Set by the Mensagem step when an attachment fails `validateBlastMedia`. */
   mediaError: string | null;
+  /** Anti-ban protection (word + timing variation). On by default (#907). */
+  antiBan: boolean;
   numbers: DisparoNumber[];
   /** User-set Number Daily Cap applied to every selected number (#908 slider). */
   capPerNumber: number;
@@ -137,6 +139,7 @@ export function createInitialState(
       message: "",
       media: null,
       mediaError: null,
+      antiBan: true,
       numbers,
       capPerNumber: CAP_RECOMMENDED,
       startDateIso,
