@@ -22,6 +22,14 @@ vi.mock("@/modules/workflows/components/VariableInserter", () => ({
   VariableInserter: () => null,
 }));
 
+// Only useOrganization (image upload) + useTeamMembers are reached in the
+// rendered subtree; VariableInserter (the useCurrentTeamMember consumer) is
+// stubbed above, so a thin barrel mock is safe here.
+vi.mock("@/modules/identity", () => ({
+  useOrganization: () => ({ organizationId: "org-1", isReady: true }),
+  useTeamMembers: () => ({ data: [] }),
+}));
+
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { storage: { from: () => ({}) } },
 }));
@@ -74,5 +82,18 @@ describe("ActionPanel — unified message node", () => {
     renderPanel(baseData({ messageType: "texto", templateMode: "ai", aiPrompt: "x" }));
     expect(screen.getByText("Prompt para a IA")).toBeInTheDocument();
     expect(screen.getByText("Salvar resultado em variável")).toBeInTheDocument();
+  });
+
+  it("renders the image sub-panel when messageType is imagem (no text-mode leak)", () => {
+    renderPanel(baseData({ messageType: "imagem", imageCaption: "leg" }));
+    expect(screen.getByText(/arraste uma imagem/i)).toBeInTheDocument();
+    // The Texto mode selector must NOT be present.
+    expect(screen.queryByText("Modo de mensagem")).not.toBeInTheDocument();
+  });
+
+  it("renders the audio sub-panel when messageType is audio", () => {
+    renderPanel(baseData({ messageType: "audio" }));
+    expect(screen.getByText("Gravar novo")).toBeInTheDocument();
+    expect(screen.getByText("Usar template de áudio")).toBeInTheDocument();
   });
 });

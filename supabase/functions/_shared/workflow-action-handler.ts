@@ -331,6 +331,12 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
           result = await sharedSendWhatsApp(toActionInput(ctx));
           break;
         }
+        case "imagem":
+          result = await sharedSendWhatsAppImage(toActionInput(ctx));
+          break;
+        case "audio":
+          result = await sharedSendWhatsAppAudio(toActionInput(ctx));
+          break;
         default:
           return { success: false, error: `Unknown message type: ${messageType}`, retryable: false };
       }
