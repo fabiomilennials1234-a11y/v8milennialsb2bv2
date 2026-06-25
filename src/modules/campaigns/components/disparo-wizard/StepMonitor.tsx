@@ -1,14 +1,15 @@
 /**
- * StepMonitor — "Acompanhar" (#910 UI).
+ * StepMonitor — "Acompanhar" (#910, real wiring).
  *
  * Post-release view: a live in-progress card (which daily lot is in flight,
- * sent/queued, next batch), pause/cancel controls, and a transparent report
- * (delivered, no-WhatsApp, skipped by recency, duplicates, + new Leads created).
- * Progress math is the pure `monitorSnapshot`. The real recipient feed,
- * pause/cancel mutations, and CRM-bell emission are backend — TODO(#910):
- * wire blast-plan controls + the live subscription; here they are mocked/no-op.
+ * sent/queued, next batch), pause/cancel controls, and a transparent report.
+ * Progress is REAL: `useBlastPlanProgress` reads blast_plan_recipients outcomes
+ * and a `useRealtimeSubscription` on blast_plans + blast_plan_recipients keeps
+ * it live; pause/cancel go through `useBlastPlanControl` (the service_role edge
+ * control plane). The batch math stays the pure `monitorSnapshot`. The plan's
+ * own row (status, lots) comes from `useBlastPlans`.
  */
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   CheckCircle2,
@@ -18,27 +19,43 @@ import {
   CalendarClock,
   Bell,
   Check,
-  PhoneOff,
-  History,
-  CopyX,
+  Clock3,
+  ListChecks,
   UserPlus,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { planBlast } from "@/modules/campaigns/lib/blast-planning";
+import {
+  useBlastPlans,
+  useBlastPlanProgress,
+  useBlastPlanControl,
+} from "@/modules/campaigns/hooks/useBlastPlans";
 import type { DisparoDraft } from "./wizard-machine";
 import { monitorSnapshot } from "./monitor-progress";
 
 interface StepMonitorProps {
   draft: DisparoDraft;
+  planId: string | null;
 }
 
-export function StepMonitor({ draft }: StepMonitorProps) {
-  const [paused, setPaused] = useState(false);
-  const [cancelled, setCancelled] = useState(false);
+export function StepMonitor({ draft, planId }: StepMonitorProps) {
+  // Live feed: a row change on either table re-pulls the plan + its progress.
+  useRealtimeSubscription("blast_plans", ["blast_plans", "blast_plan_recipients"]);
+  useRealtimeSubscription("blast_plan_recipients", ["blast_plan_recipients"]);
 
-  const plan = useMemo(
+  const { data: plans } = useBlastPlans();
+  const plan = useMemo(() => plans?.find((p) => p.id === planId) ?? null, [plans, planId]);
+  const { data: progress } = useBlastPlanProgress(planId);
+  const control = useBlastPlanControl();
+
+  // Pure plan math drives the batch/lot copy; the real sent count comes from the
+  // recipient outcomes (fall back to the local plan estimate before it loads).
+  const localPlan = useMemo(
     () =>
       planBlast({
         totalRecipients: draft.audienceCount,
@@ -48,15 +65,36 @@ export function StepMonitor({ draft }: StepMonitorProps) {
     [draft.audienceCount, draft.numbers, draft.startDateIso],
   );
 
-  // TODO(#910): real sent count from the live recipient feed. Mock = first lot.
-  const sentTotal = plan.lots[0]?.dayTotal ?? 0;
-  const snap = monitorSnapshot(plan, sentTotal);
+  const total = progress?.total ?? plan?.total_recipients ?? draft.audienceCount;
+  const sent = progress?.sent ?? 0;
+  const skipped = progress?.skipped ?? 0;
+  const pending = progress?.pending ?? Math.max(0, total - sent - skipped);
+  const snap = monitorSnapshot(localPlan, sent + skipped);
+  const pct = total > 0 ? Math.round(((sent + skipped) / total) * 100) : 0;
 
-  // TODO(#910): real report from blast_plan_recipients outcomes. Mock breakdown.
-  const noWhatsapp = Math.round(draft.audienceCount * 0.02);
-  const skippedRecency = Math.round(draft.audienceCount * 0.04);
-  const duplicates = Math.round(draft.audienceCount * 0.01);
-  const delivered = snap.sent;
+  const status = plan?.status ?? "active";
+  const paused = status === "paused";
+  const cancelled = status === "cancelled";
+  const completed = status === "completed";
+  const terminal = cancelled || completed;
+
+  const batchTotal = plan?.lots_total ?? snap.batchTotal;
+  const batchCurrent = plan ? Math.min(plan.lots_released, plan.lots_total) || 1 : snap.batchCurrent;
+
+  const runControl = async (action: "pause" | "resume" | "cancel") => {
+    if (!planId) return;
+    if (action === "cancel" && !window.confirm("Cancelar o restante do disparo? Já enviados permanecem.")) {
+      return;
+    }
+    try {
+      await control.mutateAsync({ plan_id: planId, action });
+      toast.success(
+        action === "pause" ? "Disparo pausado" : action === "resume" ? "Disparo retomado" : "Disparo cancelado",
+      );
+    } catch (e) {
+      toast.error((e as Error).message ?? "Não foi possível atualizar o disparo");
+    }
+  };
 
   return (
     <div className="mx-auto max-w-xl space-y-6 py-2">
@@ -70,46 +108,46 @@ export function StepMonitor({ draft }: StepMonitorProps) {
           <CheckCircle2 className="h-7 w-7" strokeWidth={2} />
         </motion.div>
         <h2 className="mt-5 text-2xl font-semibold tracking-tight text-foreground">
-          {cancelled ? "Disparo cancelado" : "Disparo em andamento"}
+          {cancelled ? "Disparo cancelado" : completed ? "Disparo concluído" : "Disparo em andamento"}
         </h2>
         <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
           {cancelled
             ? "Os contatos já enviados receberam a mensagem. O restante foi interrompido."
-            : "Sua mensagem está sendo enviada no ritmo escolhido. Pause quando quiser."}
+            : completed
+              ? "Todos os lotes foram enviados. Veja o relatório abaixo."
+              : "Sua mensagem está sendo enviada no ritmo escolhido. Pause quando quiser."}
         </p>
       </div>
 
       {/* In-progress card */}
-      {!cancelled && (
+      {!terminal && (
         <div className="rounded-2xl border border-border/70 bg-card p-5">
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-foreground">
-              Lote {snap.batchCurrent} de {snap.batchTotal}
+              Lote {batchCurrent} de {batchTotal}
             </p>
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                paused
-                  ? "bg-amber-500/10 text-amber-500"
-                  : "bg-emerald-500/10 text-emerald-500",
+                paused ? "bg-amber-500/10 text-amber-500" : "bg-emerald-500/10 text-emerald-500",
               )}
             >
               {paused ? "Pausado" : "Enviando"}
             </span>
           </div>
 
-          <Progress value={snap.pct} className="mt-3 h-2" />
+          <Progress value={pct} className="mt-3 h-2" />
 
           <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
             <span>
-              <span className="font-medium tabular-nums text-foreground">{snap.sent}</span> enviados
+              <span className="font-medium tabular-nums text-foreground">{sent.toLocaleString("pt-BR")}</span> enviados
             </span>
             <span>
-              <span className="font-medium tabular-nums text-foreground">{snap.queued}</span> na fila
+              <span className="font-medium tabular-nums text-foreground">{pending.toLocaleString("pt-BR")}</span> na fila
             </span>
           </div>
 
-          {snap.batchCurrent < snap.batchTotal && (
+          {batchCurrent < batchTotal && (
             <p className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <CalendarClock className="h-3.5 w-3.5" />
               Próximo lote amanhã, no horário escolhido.
@@ -121,28 +159,24 @@ export function StepMonitor({ draft }: StepMonitorProps) {
               variant="outline"
               size="sm"
               className="flex-1"
-              onClick={() => setPaused((p) => !p)}
+              disabled={control.isPending || !planId}
+              onClick={() => runControl(paused ? "resume" : "pause")}
             >
-              {paused ? (
-                <>
-                  <Play className="mr-1.5 h-3.5 w-3.5" /> Retomar
-                </>
+              {control.isPending ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : paused ? (
+                <Play className="mr-1.5 h-3.5 w-3.5" />
               ) : (
-                <>
-                  <Pause className="mr-1.5 h-3.5 w-3.5" /> Pausar
-                </>
+                <Pause className="mr-1.5 h-3.5 w-3.5" />
               )}
+              {paused ? "Retomar" : "Pausar"}
             </Button>
             <Button
               variant="ghost"
               size="sm"
               className="flex-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => {
-                // TODO(#910): real cancel mutation + confirmation dialog.
-                if (window.confirm("Cancelar o restante do disparo? Já enviados permanecem.")) {
-                  setCancelled(true);
-                }
-              }}
+              disabled={control.isPending || !planId}
+              onClick={() => runControl("cancel")}
             >
               <Ban className="mr-1.5 h-3.5 w-3.5" /> Cancelar
             </Button>
@@ -150,18 +184,15 @@ export function StepMonitor({ draft }: StepMonitorProps) {
         </div>
       )}
 
-      {/* Transparent report */}
+      {/* Transparent report — real recipient outcomes */}
       <div className="rounded-2xl border border-border/70 bg-card p-5">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Relatório
-        </p>
+        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Relatório</p>
         <ul className="mt-3 space-y-2.5 text-sm">
-          <ReportRow icon={Check} tone="ok" label="Enviados" value={delivered} />
-          <ReportRow icon={PhoneOff} tone="muted" label="Sem WhatsApp válido" value={noWhatsapp} />
-          <ReportRow icon={History} tone="muted" label="Ignorados (receberam há pouco)" value={skippedRecency} />
-          <ReportRow icon={CopyX} tone="muted" label="Duplicados" value={duplicates} />
+          <ReportRow icon={Check} tone="ok" label="Enviados" value={sent} />
+          <ReportRow icon={Clock3} tone="muted" label="Na fila" value={pending} />
+          <ReportRow icon={ListChecks} tone="muted" label="Ignorados" value={skipped} hint="sem WhatsApp / recência / duplicados" />
           <li className="border-t border-border/60 pt-2.5">
-            <ReportRow icon={UserPlus} tone="accent" label="Novos leads criados" value={0} hint="da planilha" />
+            <ReportRow icon={UserPlus} tone="accent" label="Total no público" value={total} />
           </li>
         </ul>
       </div>
@@ -193,8 +224,8 @@ function ReportRow({
     <div className="flex items-center gap-2.5">
       <Icon className={cn("h-4 w-4 shrink-0", toneClass)} />
       <span className="flex-1 text-foreground">{label}</span>
-      {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
-      <span className="font-semibold tabular-nums text-foreground">{value}</span>
+      {hint && <span className="hidden text-[11px] text-muted-foreground sm:inline">{hint}</span>}
+      <span className="font-semibold tabular-nums text-foreground">{value.toLocaleString("pt-BR")}</span>
     </div>
   );
 }

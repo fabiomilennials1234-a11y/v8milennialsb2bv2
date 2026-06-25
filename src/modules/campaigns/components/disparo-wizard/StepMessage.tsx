@@ -23,9 +23,11 @@ import {
   BLAST_MEDIA_LIMITS_MB,
   type BlastMediaType,
 } from "@/modules/communication";
+import { Loader2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 import { StepHeader } from "./StepHeader";
 import type { DisparoDraft } from "./wizard-machine";
 import { resolvePreview } from "./message-preview";
@@ -50,9 +52,10 @@ interface StepMessageProps {
 export function StepMessage({ draft, patch }: StepMessageProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [sampleIdx, setSampleIdx] = useState(0);
+  const [uploading, setUploading] = useState(false);
   const sample = MOCK_PREVIEW_SAMPLES[sampleIdx % MOCK_PREVIEW_SAMPLES.length];
 
-  const onPickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onPickFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (fileRef.current) fileRef.current.value = "";
     if (!file) return;
@@ -67,10 +70,34 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
       patch({ media: null, mediaError: result.error });
       return;
     }
-    patch({
-      media: { type, sizeBytes: file.size, name: file.name },
-      mediaError: null,
-    });
+
+    // The backend dispatch (blast-plan-create) sends an `image_url`, so images
+    // are uploaded to storage now and the public URL travels on the draft. Other
+    // media kinds keep their metadata (their transport lands with #901 backend).
+    if (type !== "image") {
+      patch({ media: { type, sizeBytes: file.size, name: file.name, url: null }, mediaError: null });
+      return;
+    }
+
+    setUploading(true);
+    patch({ media: { type, sizeBytes: file.size, name: file.name, url: null }, mediaError: null });
+    try {
+      const path = `disparo/${crypto.randomUUID()}-${file.name.replace(/[^\w.-]/g, "_")}`;
+      const { error } = await supabase.storage.from("media").upload(path, file, {
+        contentType: file.type,
+        upsert: false,
+      });
+      if (error) throw error;
+      const { data } = supabase.storage.from("media").getPublicUrl(path);
+      patch({
+        media: { type, sizeBytes: file.size, name: file.name, url: data.publicUrl },
+        mediaError: null,
+      });
+    } catch (err) {
+      patch({ media: null, mediaError: (err as Error).message ?? "Falha ao enviar a imagem." });
+    } finally {
+      setUploading(false);
+    }
   };
 
   const insertVar = (token: string) =>
@@ -131,8 +158,13 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">{draft.media.name}</p>
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
                     {draft.media.type} · {(draft.media.sizeBytes / (1024 * 1024)).toFixed(1)} MB
+                    {uploading && (
+                      <span className="flex items-center gap-1 normal-case text-primary">
+                        <Loader2 className="h-3 w-3 animate-spin" /> enviando…
+                      </span>
+                    )}
                   </p>
                 </div>
                 <button

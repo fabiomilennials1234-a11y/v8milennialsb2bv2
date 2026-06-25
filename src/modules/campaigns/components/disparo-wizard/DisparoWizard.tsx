@@ -1,17 +1,24 @@
 /**
- * DisparoWizard — the Wizard Linear shell (#904).
+ * DisparoWizard — the Wizard Linear shell (#904, real wiring #910).
  *
  * Promotes the winning "Variant A" prototype (calm Stripe/Linear, one decision
  * per screen, top step rail, Voltar/Continuar) to production. The shell owns
  * navigation chrome only; each step is its own component and all gating logic
- * lives in the pure `wizard-machine`. Steps that depend on backend not yet
- * landed (audience #902/#906, composer #907, numbers #908, dispatch #910) are
- * mock-structured and marked TODO at their source.
+ * lives in the pure `wizard-machine`.
+ *
+ * This file is a thin LOADER that resolves the org's connected WhatsApp numbers
+ * (#908) before mounting the inner wizard with them seeded; the inner shell
+ * wires RELEASE → `useCreateBlastPlan` (#910) and hands the new plan id to the
+ * monitor for the live feed.
  */
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Send, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, Send, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useWhatsAppInstances } from "@/modules/communication";
+import { useCreateBlastPlan } from "@/modules/campaigns/hooks/useBlastPlans";
 import { useDisparoWizard } from "./useDisparoWizard";
 import { WizardProgress } from "./WizardProgress";
 import { StepAudience } from "./StepAudience";
@@ -19,7 +26,8 @@ import { StepMessage } from "./StepMessage";
 import { StepSpeed } from "./StepSpeed";
 import { StepReview } from "./StepReview";
 import { StepMonitor } from "./StepMonitor";
-import { MOCK_NUMBERS } from "./mock-disparo-data";
+import { instancesToNumbers } from "./instances-to-numbers";
+import type { DisparoNumber } from "./wizard-machine";
 
 /** Today as a Sao Paulo calendar date (YYYY-MM-DD) — the plan's clock-free anchor. */
 function todayInSaoPaulo(): string {
@@ -36,8 +44,73 @@ interface DisparoWizardProps {
   onFinish: () => void;
 }
 
+/** Loader: resolve real numbers, then mount the inner wizard with them seeded. */
 export function DisparoWizard({ onClose, onFinish }: DisparoWizardProps) {
-  const wiz = useDisparoWizard(todayInSaoPaulo(), MOCK_NUMBERS);
+  const { data: instances = [], isLoading } = useWhatsAppInstances();
+  const numbers = useMemo(
+    () => instancesToNumbers(instances, Date.now()),
+    [instances],
+  );
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return <DisparoWizardInner numbers={numbers} onClose={onClose} onFinish={onFinish} />;
+}
+
+interface DisparoWizardInnerProps extends DisparoWizardProps {
+  numbers: DisparoNumber[];
+}
+
+function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerProps) {
+  const wiz = useDisparoWizard(todayInSaoPaulo(), numbers);
+  const createPlan = useCreateBlastPlan();
+  const [planId, setPlanId] = useState<string | null>(null);
+
+  // RELEASE — freeze the audience into a Blast Plan and fire lot 1 (#910). The
+  // pure machine still flips `released`/advances to the monitor; the real plan
+  // id is what powers the live feed there.
+  const handleRelease = async () => {
+    const draft = wiz.draft;
+    const selected = draft.numbers.filter((n) => n.selected);
+    if (selected.length === 0) {
+      toast.error("Selecione ao menos um número.");
+      return;
+    }
+    if (draft.leadIds.length === 0) {
+      toast.error("Nenhum contato no público selecionado.");
+      return;
+    }
+
+    // TODO(#901): multi-instância round-robin no backend. blast-plan-create
+    // aceita 1 instance_id hoje — usamos o primeiro número selecionado.
+    const instanceId = selected[0].id;
+    // Anti-ban widens the inter-send jitter; off keeps a tighter cadence.
+    const [delayMin, delayMax] = draft.antiBan ? [5000, 30000] : [1000, 4000];
+    const imageUrl =
+      draft.media?.type === "image" && draft.media.url ? draft.media.url : undefined;
+
+    try {
+      const res = await createPlan.mutateAsync({
+        instance_id: instanceId,
+        lead_ids: draft.leadIds,
+        message: draft.message.trim(),
+        delay_min_ms: delayMin,
+        delay_max_ms: delayMax,
+        image_url: imageUrl,
+        source: draft.audienceSource ?? undefined,
+      });
+      setPlanId(res.plan_id);
+      wiz.release();
+    } catch (e) {
+      toast.error((e as Error).message ?? "Falha ao iniciar o disparo.");
+    }
+  };
 
   const renderStep = () => {
     switch (wiz.stepId) {
@@ -50,7 +123,7 @@ export function DisparoWizard({ onClose, onFinish }: DisparoWizardProps) {
       case "review":
         return <StepReview draft={wiz.draft} />;
       case "monitor":
-        return <StepMonitor draft={wiz.draft} />;
+        return <StepMonitor draft={wiz.draft} planId={planId} />;
     }
   };
 
@@ -108,6 +181,7 @@ export function DisparoWizard({ onClose, onFinish }: DisparoWizardProps) {
               <Button
                 variant="ghost"
                 onClick={wiz.isFirst ? onClose : wiz.back}
+                disabled={createPlan.isPending}
                 className="gap-2 text-muted-foreground hover:text-foreground"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -121,9 +195,13 @@ export function DisparoWizard({ onClose, onFinish }: DisparoWizardProps) {
                   </span>
                 )}
                 {wiz.isReview ? (
-                  <Button onClick={wiz.release} className="gap-2">
-                    <Send className="h-4 w-4" />
-                    Enviar disparo
+                  <Button onClick={handleRelease} disabled={createPlan.isPending} className="gap-2">
+                    {createPlan.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                    {createPlan.isPending ? "Iniciando…" : "Enviar disparo"}
                   </Button>
                 ) : (
                   <Button

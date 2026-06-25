@@ -130,6 +130,38 @@ export function useBlastPlanProgress(planId: string | null) {
   });
 }
 
+export interface UpdateBlastPlanInput {
+  plan_id: string;
+  /** New frozen message template — reaches every not-yet-sent recipient. */
+  message?: string;
+  /** New daily release time-of-day (HH:MM). */
+  release_time?: string;
+}
+
+/**
+ * Edit a live Blast Plan's message / release_time (#911). The audience is
+ * immutable (ADR-0003) so it is never touched. Writes go through the
+ * service_role edge fn (blast_plans is SELECT-only for members) which validates
+ * the org, guards the tenant, and rejects terminal plans.
+ */
+export function useUpdateBlastPlan() {
+  const qc = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
+  return useMutation({
+    mutationFn: async (input: UpdateBlastPlanInput) => {
+      const { data, error } = await supabase.functions.invoke("blast-plan-edit", { body: input });
+      if (error) throw new Error(error.message);
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data as { ok: true };
+    },
+    onSuccess: () => {
+      if (teamMember?.organization_id) {
+        qc.invalidateQueries({ queryKey: ["blast_plans", teamMember.organization_id] });
+      }
+    },
+  });
+}
+
 export type BlastPlanAction = "pause" | "resume" | "cancel";
 
 /** Pause / resume / cancel a Blast Plan (writes go through the service_role edge fn). */

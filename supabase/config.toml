@@ -316,6 +316,11 @@ verify_jwt = false
 [functions.blast-plan-control]
 verify_jwt = false
 
+# blast-plan-edit: edita message / release_time de Blast Plan ativo/pausado (ADR-0003 / #911).
+# Audiência é imutável. JWT validado no handler (getUser); SEM role gate — qualquer membro da org.
+[functions.blast-plan-edit]
+verify_jwt = false
+
 # mass-send-status: polls status (JWT user OR x-cron-secret)
 [functions.mass-send-status]
 verify_jwt = false

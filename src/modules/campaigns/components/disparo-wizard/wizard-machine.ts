@@ -12,6 +12,7 @@
  * #910 — here it just flips `released` and advances to the monitor step).
  */
 import type { BlastMediaType } from "@/modules/communication";
+import { createDefaultSelection, type AudienceSelection } from "./audience-resolve";
 import { CAP_RECOMMENDED } from "./speed-safety";
 
 export type DisparoStepId =
@@ -45,12 +46,21 @@ export interface DisparoMedia {
   type: BlastMediaType;
   sizeBytes: number;
   name: string;
+  /** Public storage URL once uploaded (#910 dispatch); null while pending. */
+  url?: string | null;
 }
 
 export interface DisparoDraft {
-  audienceId: string | null;
+  /** Funnel/stage/conditions the audience is drawn from (#902). */
+  audience: AudienceSelection;
+  /** Human label for the chosen source, shown in Review. */
   audienceLabel: string;
+  /** Live resolved size — gates the step and drives the "X contatos" readouts. */
   audienceCount: number;
+  /** Frozen resolved lead ids — the dispatch payload (#910). */
+  leadIds: string[];
+  /** Audience provenance recorded on the Blast Plan (#910). */
+  audienceSource: Record<string, unknown> | null;
   message: string;
   media: DisparoMedia | null;
   /** Set by the Mensagem step when an attachment fails `validateBlastMedia`. */
@@ -133,9 +143,11 @@ export function createInitialState(
     index: 0,
     furthest: 0,
     draft: {
-      audienceId: null,
+      audience: createDefaultSelection(),
       audienceLabel: "",
       audienceCount: 0,
+      leadIds: [],
+      audienceSource: null,
       message: "",
       media: null,
       mediaError: null,

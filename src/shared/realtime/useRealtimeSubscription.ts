@@ -21,6 +21,9 @@ const TABLES_WITHOUT_ORG_ID = new Set([
   "master_users",
   "tags",
   "checklist_items",
+  // blast_plan_recipients carries no organization_id (tenancy via plan_id →
+  // blast_plans); subscribe without the org filter (#910 live blast feed).
+  "blast_plan_recipients",
 ]);
 
 export interface RealtimeHandlers<T = any> {

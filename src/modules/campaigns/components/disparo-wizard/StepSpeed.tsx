@@ -86,6 +86,13 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
         subtitle="Quanto mais números, mais rápido — sem queimar nenhuma linha. O envio se espalha pelos dias automaticamente."
       />
 
+      {draft.numbers.length === 0 && (
+        <div className="flex items-center gap-3 rounded-xl border border-dashed border-border/70 bg-card p-4 text-sm text-muted-foreground">
+          <Smartphone className="h-4 w-4 shrink-0" />
+          Nenhum número de WhatsApp conectado. Conecte um número em Configurações para disparar.
+        </div>
+      )}
+
       <div className="space-y-2.5">
         {draft.numbers.map((n) => (
           <button
