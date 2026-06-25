@@ -26,6 +26,7 @@ const NUMBERS: DisparoNumber[] = [
 
 function freshDraft(over: Partial<DisparoDraft> = {}): DisparoDraft {
   return {
+    audienceSourceType: "estagio",
     audience: createDefaultSelection(),
     audienceLabel: "",
     audienceCount: 0,

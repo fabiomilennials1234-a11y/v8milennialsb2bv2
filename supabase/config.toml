@@ -302,6 +302,12 @@ verify_jwt = false
 [functions.quick-blast-create]
 verify_jwt = false
 
+# disparo-planilha-create: fonte "Subir planilha" do disparo (ADR-0014 / #906).
+# Upsert keyed por telefone canônico; cria leads dos não-match no funil/etapa
+# escolhidos. JWT validado no handler (getUser); SEM role gate — qualquer membro.
+[functions.disparo-planilha-create]
+verify_jwt = false
+
 # blast-plan-create: cria Blast Plan auto-batched (ADR-0003 / #707). JWT validado
 # no handler (getUser); SEM role gate — qualquer membro da org, teto diário é a trava.
 [functions.blast-plan-create]

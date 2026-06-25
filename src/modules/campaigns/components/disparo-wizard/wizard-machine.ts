@@ -50,7 +50,12 @@ export interface DisparoMedia {
   url?: string | null;
 }
 
+/** Where the frozen audience came from. Defaults to "estagio" (the #902 picker). */
+export type AudienceSourceType = "estagio" | "planilha";
+
 export interface DisparoDraft {
+  /** Which audience source the user chose (#906 adds "planilha"). */
+  audienceSourceType: AudienceSourceType;
   /** Funnel/stage/conditions the audience is drawn from (#902). */
   audience: AudienceSelection;
   /** Human label for the chosen source, shown in Review. */
@@ -143,6 +148,7 @@ export function createInitialState(
     index: 0,
     furthest: 0,
     draft: {
+      audienceSourceType: "estagio",
       audience: createDefaultSelection(),
       audienceLabel: "",
       audienceCount: 0,
