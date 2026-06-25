@@ -12,6 +12,7 @@
  * #910 — here it just flips `released` and advances to the monitor step).
  */
 import type { BlastMediaType } from "@/modules/communication";
+import { CAP_RECOMMENDED } from "./speed-safety";
 
 export type DisparoStepId =
   | "audience"
@@ -33,9 +34,11 @@ export const LAST_STEP_INDEX = DISPARO_STEPS.length - 1;
 export interface DisparoNumber {
   id: string;
   label: string;
-  /** Number Daily Cap — max sends/day for this WhatsApp line. */
+  /** Effective Number Daily Cap — max sends/day (after the new-number clamp). */
   cap: number;
   selected: boolean;
+  /** A freshly connected number: auto-clamped below the slider (#908). */
+  isNew?: boolean;
 }
 
 export interface DisparoMedia {
@@ -53,6 +56,8 @@ export interface DisparoDraft {
   /** Set by the Mensagem step when an attachment fails `validateBlastMedia`. */
   mediaError: string | null;
   numbers: DisparoNumber[];
+  /** User-set Number Daily Cap applied to every selected number (#908 slider). */
+  capPerNumber: number;
   /** YYYY-MM-DD the plan starts (passed in — the machine is clock-free). */
   startDateIso: string;
   /** Flipped by RELEASE — the blast was "fired" (real dispatch is #910). */
@@ -133,6 +138,7 @@ export function createInitialState(
       media: null,
       mediaError: null,
       numbers,
+      capPerNumber: CAP_RECOMMENDED,
       startDateIso,
       released: false,
     },
