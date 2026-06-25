@@ -27,4 +27,31 @@ test.describe('Workflow básico', () => {
       }
     }
   });
+
+  test('node unificado "Enviar Mensagem" no picker, sem labels legados (ADR-0012)', async ({ page }) => {
+    await page.goto('/automacoes');
+    await page.waitForLoadState('networkidle');
+
+    const createBtn = page.getByRole('button', { name: /novo workflow|criar|new|adicionar/i });
+    if (!(await createBtn.isVisible({ timeout: 5_000 }).catch(() => false))) {
+      test.skip(true, 'Botão de criar workflow indisponível neste ambiente');
+      return;
+    }
+    await createBtn.click();
+    await page.waitForLoadState('networkidle');
+
+    // Adiciona um nó de ação para revelar o picker de tipo de ação.
+    const addActionBtn = page.getByRole('button', { name: /ação|adicionar nó|add node/i }).first();
+    if (await addActionBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await addActionBtn.click();
+    }
+
+    // A entrada unificada existe; os labels legados de envio foram colapsados
+    // (somem do picker, conforme ADR-0012).
+    await expect(
+      page.getByText('Enviar Mensagem', { exact: true }).first(),
+    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Enviar WhatsApp (Texto)')).toHaveCount(0);
+    await expect(page.getByText('Enviar WhatsApp (Áudio)')).toHaveCount(0);
+  });
 });
