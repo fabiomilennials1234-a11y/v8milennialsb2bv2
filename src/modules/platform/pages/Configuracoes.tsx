@@ -22,6 +22,7 @@ import {
   Code,
   Timer,
   Key,
+  Sparkles,
   FlaskConical,
   ClipboardList,
 } from "lucide-react";
@@ -109,6 +110,11 @@ const ChecklistTemplatesManager = lazy(() =>
 const ApiKeysPanel = lazy(() =>
   import("@/modules/platform/components/settings/ApiKeysPanel").then((m) => ({
     default: m.ApiKeysPanel,
+  }))
+);
+const PersonalAccessTokensPanel = lazy(() =>
+  import("@/modules/platform/components/settings/PersonalAccessTokensPanel").then((m) => ({
+    default: m.PersonalAccessTokensPanel,
   }))
 );
 const PermissionsSettings = lazy(() =>
@@ -650,6 +656,10 @@ export default function Configuracoes() {
             <Key className="w-4 h-4" />
             API Keys
           </TabsTrigger>
+          <TabsTrigger value="tokens-ia" className="gap-2">
+            <Sparkles className="w-4 h-4" />
+            Tokens IA
+          </TabsTrigger>
           <TabsTrigger value="sandbox" className="gap-2">
             <FlaskConical className="w-4 h-4" />
             Sandbox
@@ -746,6 +756,16 @@ export default function Configuracoes() {
               <Card className="glass-card">
                 <CardContent className="pt-6">
                   <ApiKeysPanel />
+                </CardContent>
+              </Card>
+            </Suspense>
+          </TabsContent>
+
+          <TabsContent value="tokens-ia">
+            <Suspense fallback={<TabFallback label="Tokens IA" />}>
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <PersonalAccessTokensPanel />
                 </CardContent>
               </Card>
             </Suspense>

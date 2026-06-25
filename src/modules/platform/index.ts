@@ -39,6 +39,7 @@ export * from "./hooks/useLogger";
 export * from "./hooks/useOnlineStatus";
 export * from "./hooks/useTrackView";
 export * from "./hooks/useApiKeys";
+export * from "./hooks/usePersonalAccessTokens";
 export * from "./hooks/useSlaConfigs";
 export * from "./hooks/useWebhooks";
 export * from "./hooks/useOnboarding";
