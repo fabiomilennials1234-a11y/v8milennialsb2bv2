@@ -18,9 +18,10 @@ import {
 } from "@/components/ui/select";
 import { Mic, MicOff, Upload, Trash2, Play, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ACTION_CATEGORIES, ACTION_LABELS } from "@/types/workflow";
+import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import type { ActionNodeData, WorkflowActionType, MessageType } from "@/types/workflow";
 import { MenuNodeConfig, PixButtonNodeConfig } from "@/modules/workflows/components/action-configs";
+import { useFeatureFlag } from "@/modules/platform";
 import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
 import { useOrganization } from "@/modules/identity";
 import { useCampaignTemplatesByType } from "@/modules/campaigns/hooks/useCampaignTemplates";
@@ -147,6 +148,10 @@ interface ActionPanelProps {
 
 export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
   const at = data.actionType;
+  // Node unificado gateado por org (ADR-0012). Fail-closed: enquanto carrega ou
+  // se a org não tem a flag, o picker mostra os envios legados, como antes.
+  const { enabled: unifiedEnabled } = useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
+  const actionCategories = getActionCategories(unifiedEnabled);
 
   return (
     <div className="space-y-4">
@@ -171,7 +176,7 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
             <SelectValue placeholder="Selecione a ação" />
           </SelectTrigger>
           <SelectContent className="max-h-80">
-            {ACTION_CATEGORIES.map((cat) => (
+            {actionCategories.map((cat) => (
               <SelectGroup key={cat.label}>
                 <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
                   {cat.label}

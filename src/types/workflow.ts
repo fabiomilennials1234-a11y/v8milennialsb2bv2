@@ -788,11 +788,13 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
   {
     label: "Comunicação",
     actions: [
-      // Node unificado (ADR-0012) — substitui os 6 envios WhatsApp separados.
-      // Legados (send_whatsapp/_audio/_image/_sticker/_menu/_pix_button) saem do
-      // picker mas seguem em ACTION_LABELS para nós já salvos.
-      "send_whatsapp_message",
+      "send_whatsapp",
+      "send_whatsapp_audio",
+      "send_whatsapp_image",
+      "send_whatsapp_sticker",
       "send_whatsapp_template",
+      "send_whatsapp_menu",
+      "send_whatsapp_pix_button",
       "send_meta_message",
       "send_semi_automatic",
     ],
@@ -838,6 +840,43 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
     actions: ["generate_ai_message", "summarize_conversation", "evaluate_conversation"],
   },
 ];
+
+/**
+ * Feature flag (organizations.feature_flags) que libera o node unificado
+ * "Enviar Mensagem" (ADR-0012). Rollout por org; fail-closed.
+ */
+export const UNIFIED_MESSAGE_NODE_FLAG = "unified_message_node";
+
+/** Os 6 envios WhatsApp colapsados pelo node unificado quando a flag está ON. */
+const LEGACY_WHATSAPP_SEND_ACTIONS: WorkflowActionType[] = [
+  "send_whatsapp",
+  "send_whatsapp_audio",
+  "send_whatsapp_image",
+  "send_whatsapp_sticker",
+  "send_whatsapp_menu",
+  "send_whatsapp_pix_button",
+];
+
+/**
+ * Categorias do picker conforme a flag do node unificado.
+ * - OFF (default / fail-closed): lista legada, exatamente como antes.
+ * - ON: os 6 envios viram a única entrada `send_whatsapp_message`.
+ * Os labels legados seguem em ACTION_LABELS para nós já salvos.
+ */
+export function getActionCategories(unifiedEnabled: boolean): ActionCategory[] {
+  if (!unifiedEnabled) return ACTION_CATEGORIES;
+  return ACTION_CATEGORIES.map((cat) =>
+    cat.label !== "Comunicação"
+      ? cat
+      : {
+          ...cat,
+          actions: [
+            "send_whatsapp_message",
+            ...cat.actions.filter((a) => !LEGACY_WHATSAPP_SEND_ACTIONS.includes(a)),
+          ],
+        },
+  );
+}
 
 // =====================================================
 // TRIGGER CATEGORIES (para UI de seleção agrupada)

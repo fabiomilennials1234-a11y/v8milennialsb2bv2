@@ -28,7 +28,7 @@ test.describe('Workflow básico', () => {
     }
   });
 
-  test('node unificado "Enviar Mensagem" no picker, sem labels legados (ADR-0012)', async ({ page }) => {
+  test('picker de envio: regime unificado e legado são mutuamente exclusivos (ADR-0012)', async ({ page }) => {
     await page.goto('/automacoes');
     await page.waitForLoadState('networkidle');
 
@@ -46,12 +46,10 @@ test.describe('Workflow básico', () => {
       await addActionBtn.click();
     }
 
-    // A entrada unificada existe; os labels legados de envio foram colapsados
-    // (somem do picker, conforme ADR-0012).
-    await expect(
-      page.getByText('Enviar Mensagem', { exact: true }).first(),
-    ).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText('Enviar WhatsApp (Texto)')).toHaveCount(0);
-    await expect(page.getByText('Enviar WhatsApp (Áudio)')).toHaveCount(0);
+    // O node unificado é gateado por org (feature flag unified_message_node).
+    // Independente da org: nunca os dois regimes ao mesmo tempo.
+    const unifiedCount = await page.getByText('Enviar Mensagem', { exact: true }).count();
+    const legacyCount = await page.getByText('Enviar WhatsApp (Texto)').count();
+    expect(unifiedCount > 0 && legacyCount > 0).toBeFalsy();
   });
 });

@@ -34,6 +34,11 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: { storage: { from: () => ({}) } },
 }));
 
+// Unified node gated by org flag — enable it for these render tests.
+vi.mock("@/modules/platform", () => ({
+  useFeatureFlag: () => ({ enabled: true, isLoading: false }),
+}));
+
 import { ActionPanel } from "@/modules/workflows/components/sidebar-panels/ActionPanel";
 import type { ActionNodeData } from "@/types/workflow";
 

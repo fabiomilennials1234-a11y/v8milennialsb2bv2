@@ -40,6 +40,8 @@ Durante o grill, descartada a leitura "composer" (um node empilha texto+imagem+�
 
 8. **Front/UI sem redesign.** A superfície de edição continua a **sidebar (`ActionPanel`)** de hoje; o `ActionPanel` passa a renderizar o seletor de tipo + o config do tipo selecionado. Avaliado um redesign (node expandindo inline / modal com preview) e **descartado nesta entrega** — escopo cirúrgico, sem mexer no visual.
 
+9. **Rollout gateado por org (feature flag `unified_message_node`).** O node unificado só aparece no picker, e o auto-upgrade lazy só roda, para orgs com a flag `unified_message_node = true` em `organizations.feature_flags` (lido via `useFeatureFlag`, **fail-closed**). Orgs sem a flag veem **exatamente o picker legado** (os 6 envios separados) e seus nós **não são convertidos** — continuam como antes. O **backend não é gateado**: o `case send_whatsapp_message` funciona para qualquer org (seguro — um nó unificado criado no piloto roda mesmo se a flag for desligada depois). Piloto inicial: org **Improving** (`5595bbe2-6bd0-4647-9c22-dc86346aab36`). Toggle por SQL: `UPDATE organizations SET feature_flags = feature_flags || '{"unified_message_node": true}'::jsonb WHERE id = '<org>'`.
+
 ## Consequências
 
 - **Picker, não composer.** Mandar texto + imagem continua sendo 2 nodes. Aceito — é o modelo pedido.
