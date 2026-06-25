@@ -42,7 +42,7 @@ Canonical terms used across the system. No implementation details here — this 
 
 - **Human Pause**: A time-bound suspension of a Copilot Agent's responses for a specific Conversation, triggered automatically when a human team member sends a message. The pause resets on each subsequent human message and expires after a configurable duration (default 60 minutes). Distinct from AI Disabled (permanent toggle) and Transfer to Human (agent-initiated state change).
 
-- **Workflow**: A directed acyclic graph (DAG) of automated actions. Triggered by domain events (lead_created, stage_changed, tag_added, cron). Node types: trigger, action, condition, delay, wait_response, split_ab, copilot, webhook_call, wait_business_window.
+- **Workflow**: A directed graph of automated steps — **may contain cycles**, bounded per-node by `loop_limit` (executor hard cap 500 steps); it is NOT strictly acyclic (e.g. the "Nutrição Infinita" template loops through a wait node). Has exactly one **trigger** node (the entry, no incoming edges). Triggered by domain events (lead_created, stage_changed, tag_added, cron, …). Node types: trigger, action, condition, delay, wait_response, split_ab, copilot, webhook_call, wait_business_window, goto, assign_responsible, end.
 
 - **Campaign**: A time-bound sales initiative parallel to pipelines. Has objective, deadline, AI agent, goals, round robin assignment, and message sequences. A Lead can be enrolled in multiple campaigns.
 

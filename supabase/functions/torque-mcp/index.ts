@@ -18,6 +18,12 @@ import { dbReadSqlTool } from "./tools/db.ts";
 import { rlsCheckAccessTool } from "./tools/rls.ts";
 import { schemaAuditDefinerTool, schemaAuditTriggersTool } from "./tools/schema.ts";
 import { migrationDiffTool } from "./tools/migration.ts";
+import {
+  workflowBuildTool,
+  workflowGetTool,
+  workflowSetActiveTool,
+  workflowValidateTool,
+} from "./tools/workflow.ts";
 
 // Fail loud at boot if a required secret is missing (docs/adr/0011, REQ-M04).
 const config = loadConfig(Deno.env.toObject());
@@ -36,9 +42,13 @@ const TOOLS = [
   schemaAuditDefinerTool,
   schemaAuditTriggersTool,
   migrationDiffTool,
+  workflowGetTool,
+  workflowValidateTool,
   leadRestoreTool,
   copilotUpdatePromptTool,
   cronToggleTool,
+  workflowBuildTool,
+  workflowSetActiveTool,
 ];
 
 // Isolate-scoped cache of the signed-in master session. The principal is fixed
