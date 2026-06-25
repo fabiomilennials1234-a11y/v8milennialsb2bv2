@@ -308,6 +308,19 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       result = await sharedSendSemiAutomatic(toActionInput(ctx));
       break;
 
+    // ── Unified "Enviar Mensagem" node — dispatch by messageType (ADR-0012) ──
+    case "send_whatsapp_message": {
+      const messageType = (ctx.nodeData.messageType as string) || "texto";
+      switch (messageType) {
+        case "texto":
+          result = await sharedSendWhatsApp(toActionInput(ctx));
+          break;
+        default:
+          return { success: false, error: `Unknown message type: ${messageType}`, retryable: false };
+      }
+      break;
+    }
+
     // ── Uazapi-only interactive messages (delegated to action-handlers/) ──
     case "send_whatsapp_menu":
       result = await sharedSendWhatsAppMenu(toActionInput(ctx));

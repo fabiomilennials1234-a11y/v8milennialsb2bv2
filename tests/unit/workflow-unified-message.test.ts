@@ -1,0 +1,83 @@
+/**
+ * Tests for the unified "Enviar Mensagem" workflow node (send_whatsapp_message).
+ *
+ * The node carries a `messageType` discriminator and dispatches to the existing
+ * per-type WhatsApp handlers — see ADR-0012. These tests exercise external
+ * behavior through executeWorkflowAction (the public dispatch entry point).
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import "../../tests/helpers/deno-mock";
+import { setDenoEnv, clearDenoEnv } from "../../tests/helpers/deno-mock";
+import { createMockSupabase } from "../helpers/supabase-mock";
+
+vi.mock("../../supabase/functions/_shared/whatsapp-dispatch.ts", () => ({
+  sendTextViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-text-id" }),
+  sendMediaViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-media-id" }),
+  sendMenuViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-menu-id" }),
+  sendPixButtonViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-pix-id" }),
+  sendAudioViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-audio-id" }),
+}));
+
+vi.mock("../../supabase/functions/_shared/audio-sender.ts", () => ({
+  sendWhatsAppAudio: vi.fn().mockResolvedValue({ success: true, messageId: "mock-audio-direct-id" }),
+  sendAudioViaProvider: vi.fn().mockResolvedValue({ success: true, messageId: "mock-audio-provider-id" }),
+}));
+
+vi.mock("../../supabase/functions/_shared/message-gateway.ts", () => ({
+  sendMessage: vi.fn().mockResolvedValue({ delegated: false, success: true }),
+}));
+
+vi.mock("../../supabase/functions/_shared/instance-write-guard.ts", () => ({
+  resolveStrictInstanceForCaller: vi.fn().mockResolvedValue(null),
+  StrictWriteResolutionError: class extends Error { errorCode = "test"; },
+}));
+
+vi.mock("../../supabase/functions/_shared/whatsapp-client.ts", () => ({
+  getWhatsAppProvider: vi.fn().mockResolvedValue({ sendAudio: vi.fn() }),
+}));
+
+const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}), text: () => Promise.resolve("") });
+global.fetch = mockFetch as any;
+
+beforeEach(() => { clearDenoEnv(); vi.clearAllMocks(); });
+
+import { executeWorkflowAction } from "../../supabase/functions/_shared/workflow-action-handler";
+
+const LEAD = {
+  id: "lead-1", name: "Test Lead", phone: "5511999999999", company: "Acme",
+  organization_id: "org-1", pipe_whatsapp: "novo", rating: 5,
+};
+const WA_INSTANCE = { id: "wi-1", organization_id: "org-1", instance_name: "MainInstance", status: "open", is_active: true };
+
+describe("send_whatsapp_message — dispatch by messageType", () => {
+  it("messageType 'texto' sends a WhatsApp text via the existing handler", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("leads", [LEAD]);
+    mockTable("whatsapp_instances", [WA_INSTANCE]);
+    mockTable("whatsapp_messages", []);
+    mockTable("lead_history", []);
+
+    const result = await executeWorkflowAction({
+      supabase: sb, organizationId: "org-1", leadId: "lead-1",
+      nodeData: { actionType: "send_whatsapp_message", messageType: "texto", messageTemplate: "Olá {{nome}}, tudo bem?" },
+      executionContext: {},
+    });
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("WhatsApp");
+  });
+
+  it("unknown messageType fails cleanly, non-retryable, without sending", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("leads", [LEAD]);
+    mockTable("whatsapp_instances", [WA_INSTANCE]);
+
+    const result = await executeWorkflowAction({
+      supabase: sb, organizationId: "org-1", leadId: "lead-1",
+      nodeData: { actionType: "send_whatsapp_message", messageType: "bogus" },
+      executionContext: {},
+    });
+    expect(result.success).toBe(false);
+    expect(result.retryable).toBe(false);
+    expect((result.error ?? "").toLowerCase()).toContain("message type");
+  });
+});

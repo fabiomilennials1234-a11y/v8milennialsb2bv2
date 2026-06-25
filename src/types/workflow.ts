@@ -43,8 +43,17 @@ export type WorkflowNodeType =
   | "wait_business_window"
   | "assign_responsible";
 
+export type MessageType =
+  | "texto"
+  | "imagem"
+  | "audio"
+  | "sticker"
+  | "menu"
+  | "pix";
+
 export type WorkflowActionType =
   // Comunicação
+  | "send_whatsapp_message" // node unificado (ADR-0012)
   | "send_whatsapp"
   | "send_whatsapp_audio"
   | "send_whatsapp_image"
@@ -259,6 +268,9 @@ export interface ActionNodeData {
   // WhatsApp instance (shared by all WhatsApp actions)
   whatsappInstanceId?: string;
   whatsappInstanceName?: string;
+  // Unified "Enviar Mensagem" node (ADR-0012) — discriminator + semi-auto toggle
+  messageType?: MessageType;
+  semiAutomatic?: boolean;
   // Send WhatsApp (texto)
   messageTemplate?: string;
   templateId?: string;
@@ -666,6 +678,7 @@ export const NODE_LABELS: Record<WorkflowNodeType, string> = {
 
 export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   // Comunicação
+  send_whatsapp_message: "Enviar Mensagem",
   send_whatsapp: "Enviar WhatsApp (Texto)",
   send_whatsapp_audio: "Enviar WhatsApp (Áudio)",
   send_whatsapp_image: "Enviar WhatsApp (Imagem)",
@@ -775,13 +788,11 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
   {
     label: "Comunicação",
     actions: [
-      "send_whatsapp",
-      "send_whatsapp_audio",
-      "send_whatsapp_image",
-      "send_whatsapp_sticker",
+      // Node unificado (ADR-0012) — substitui os 6 envios WhatsApp separados.
+      // Legados (send_whatsapp/_audio/_image/_sticker/_menu/_pix_button) saem do
+      // picker mas seguem em ACTION_LABELS para nós já salvos.
+      "send_whatsapp_message",
       "send_whatsapp_template",
-      "send_whatsapp_menu",
-      "send_whatsapp_pix_button",
       "send_meta_message",
       "send_semi_automatic",
     ],
@@ -877,8 +888,8 @@ export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   { key: "{{ai_sentimento}}",    label: "Sentimento (positive/neutral/negative)", category: "I.A." },
   { key: "{{ai_temperatura}}",   label: "Temperatura do lead (cold/warm/hot)",    category: "I.A." },
   { key: "{{ai_proxima_acao}}",  label: "Próxima ação sugerida (I.A.)",    category: "I.A." },
-  // Personalizado
-  { key: "{{custom.campo}}",  label: "Campo personalizado (ex: {{custom.cnpj}})", category: "Personalizado" },
+  // Personalizado + Tags: injetados dinamicamente em VariableInserter via
+  // useLeadCustomFields() / useTags() (categorias "Campos Personalizados" e "Tags").
   // Sistema
   { key: "{{saudacao}}",          label: "Saudação (Bom dia/Boa tarde/Boa noite)", category: "Sistema" },
   { key: "{{data_hoje}}",         label: "Data de hoje",           category: "Sistema" },
