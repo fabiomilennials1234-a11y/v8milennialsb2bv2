@@ -96,4 +96,19 @@ describe("ActionPanel — unified message node", () => {
     expect(screen.getByText("Gravar novo")).toBeInTheDocument();
     expect(screen.getByText("Usar template de áudio")).toBeInTheDocument();
   });
+
+  it("renders the sticker sub-panel when messageType is sticker", () => {
+    renderPanel(baseData({ messageType: "sticker" }));
+    expect(screen.getByText("URL da Figurinha")).toBeInTheDocument();
+  });
+
+  it("renders the menu sub-panel when messageType is menu", () => {
+    renderPanel(baseData({ messageType: "menu" }));
+    expect(screen.getByText("Tipo de menu")).toBeInTheDocument();
+  });
+
+  it("renders the PIX sub-panel when messageType is pix", () => {
+    renderPanel(baseData({ messageType: "pix" }));
+    expect(screen.getByText("Tipo de chave PIX")).toBeInTheDocument();
+  });
 });

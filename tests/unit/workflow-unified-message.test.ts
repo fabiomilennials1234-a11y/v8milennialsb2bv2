@@ -131,6 +131,60 @@ describe("send_whatsapp_message — dispatch by messageType", () => {
     expect(result.message).toContain("audio");
   });
 
+  it("messageType 'sticker' sends a WhatsApp sticker via the existing handler", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("leads", [LEAD]);
+    mockTable("whatsapp_instances", [WA_INSTANCE]);
+    mockTable("whatsapp_messages", []);
+    mockTable("lead_history", []);
+
+    const result = await executeWorkflowAction({
+      supabase: sb, organizationId: "org-1", leadId: "lead-1",
+      nodeData: { actionType: "send_whatsapp_message", messageType: "sticker", stickerUrl: "https://cdn.test/s.webp" },
+      executionContext: {},
+    });
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("sticker");
+  });
+
+  it("messageType 'menu' sends a WhatsApp interactive menu via the existing handler", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("leads", [LEAD]);
+    mockTable("whatsapp_instances", [WA_INSTANCE]);
+    mockTable("whatsapp_messages", []);
+    mockTable("lead_history", []);
+
+    const result = await executeWorkflowAction({
+      supabase: sb, organizationId: "org-1", leadId: "lead-1",
+      nodeData: {
+        actionType: "send_whatsapp_message", messageType: "menu",
+        menuType: "button", menuText: "Escolha:", menuChoices: ["A", "B"],
+      },
+      executionContext: {},
+    });
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("menu");
+  });
+
+  it("messageType 'pix' sends a WhatsApp PIX button via the existing handler", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("leads", [LEAD]);
+    mockTable("whatsapp_instances", [WA_INSTANCE]);
+    mockTable("whatsapp_messages", []);
+    mockTable("lead_history", []);
+
+    const result = await executeWorkflowAction({
+      supabase: sb, organizationId: "org-1", leadId: "lead-1",
+      nodeData: {
+        actionType: "send_whatsapp_message", messageType: "pix",
+        pixkey: "11999", pixkeyType: "phone", pixAmount: 100, pixMerchantName: "Acme",
+      },
+      executionContext: {},
+    });
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("PIX");
+  });
+
   it("unknown messageType fails cleanly, non-retryable, without sending", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD]);
