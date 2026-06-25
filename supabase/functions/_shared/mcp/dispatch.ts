@@ -9,13 +9,25 @@ export interface DispatchContext {
   serverInfo: { name: string; version: string; project?: string };
   tools: ToolDef[];
   allowMutations: boolean;
+  /**
+   * Optional positive allowlist applied on top of the mutations gate (see visibleTools).
+   * crm-mcp passes `(t) => t.readonly && t.customerExposed`; torque-mcp omits it
+   * (unchanged behavior). A tool hidden by this filter is "unavailable" — not listable,
+   * not callable.
+   */
+  toolFilter?: (t: ToolDef) => boolean;
   toolContext: ToolContext;
 }
 
-/** Structured, PII-free one-line trace of a tool call (tool name + outcome + ms). */
-function logToolCall(name: string, startedAt: number, outcome: "ok" | "error"): void {
+/** Structured, PII-free one-line trace of a tool call (server + tool name + outcome + ms). */
+function logToolCall(
+  server: string,
+  name: string,
+  startedAt: number,
+  outcome: "ok" | "error",
+): void {
   console.log(JSON.stringify({
-    at: "torque-mcp/tools.call",
+    at: `${server}/tools.call`,
     tool: name,
     outcome,
     ms: Date.now() - startedAt,
@@ -50,7 +62,10 @@ export async function dispatch(
       });
     }
     case "tools/list": {
-      const tools = visibleTools(ctx.tools, { allowMutations: ctx.allowMutations }).map((t) => ({
+      const tools = visibleTools(ctx.tools, {
+        allowMutations: ctx.allowMutations,
+        toolFilter: ctx.toolFilter,
+      }).map((t) => ({
         name: t.name,
         description: t.description,
         inputSchema: t.inputSchema,
@@ -60,9 +75,12 @@ export async function dispatch(
     case "tools/call": {
       const name = params?.name as string | undefined;
       const args = (params?.arguments as Record<string, unknown>) ?? {};
-      // Only visible tools are callable — a hidden mutating tool is "unavailable".
-      const tool = visibleTools(ctx.tools, { allowMutations: ctx.allowMutations })
-        .find((t) => t.name === name);
+      // Only visible tools are callable — a tool hidden by the mutations gate or the
+      // caller filter is "unavailable" (indistinguishable from non-existent).
+      const tool = visibleTools(ctx.tools, {
+        allowMutations: ctx.allowMutations,
+        toolFilter: ctx.toolFilter,
+      }).find((t) => t.name === name);
       if (!tool) return err(id, -32602, `Unknown or unavailable tool: ${name}`);
 
       const missing = (tool.inputSchema.required ?? []).filter((k) => args[k] === undefined);
@@ -74,10 +92,10 @@ export async function dispatch(
       try {
         const result = await tool.handler(args, ctx.toolContext);
         const isError = (result as { isError?: boolean })?.isError === true;
-        logToolCall(tool.name, startedAt, isError ? "error" : "ok");
+        logToolCall(ctx.serverInfo.name, tool.name, startedAt, isError ? "error" : "ok");
         return ok(id, result);
       } catch (e) {
-        logToolCall(tool.name, startedAt, "error");
+        logToolCall(ctx.serverInfo.name, tool.name, startedAt, "error");
         const msg = e instanceof Error ? e.message : String(e);
         return ok(id, { content: [{ type: "text", text: `Error: ${msg}` }], isError: true });
       }

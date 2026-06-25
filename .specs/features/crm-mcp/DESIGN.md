@@ -536,25 +536,32 @@ Tela "Tokens de acesso" (settings do usuário): criar (nome + escopo + expiry, *
 
 Todo o argumento de pureza-RLS repousa nesta RPC devolver **só** os campos de identidade da row casada — nunca `SELECT *`, nunca um oráculo de enumeração.
 
+**Resolução do dilema do role (implementado na C2 — `20270101000000`).** Esta RPC roda **antes** de existir qualquer JWT de usuário, via o client anon-key da fn (request chega como role `anon`). Logo "revoke from anon" e "ter um caminho pré-auth" são incompatíveis: `anon` é o único role disponível pré-sessão. Resolvido a favor de **executável por anon + hermético** — o contrato hermético é a parede, não a ACL. Para a fn decidir elegibilidade (master-reject H1, org-drift M5) em **um** round-trip, a RPC **dobra** `is_master(user_id)` + `current_org_ids` (orgs ativas do usuário) na mesma resposta; as decisões ficam em TS puro (`classifyTokenRow`/`assertEligiblePrincipal`, unit-testadas).
+
 ```sql
 create or replace function public.crm_mcp_resolve_token(p_hash char(64))
 returns table (id uuid, user_id uuid, organization_id uuid,
-               scopes text[], expires_at timestamptz, revoked_at timestamptz, audience text)
+               scopes text[], expires_at timestamptz, revoked_at timestamptz, audience text,
+               is_master boolean, current_org_ids uuid[])
 language sql security definer set search_path = public, extensions as $$
-  select id, user_id, organization_id, scopes, expires_at, revoked_at, audience
-    from public.personal_access_tokens
-   where token_hash = p_hash
+  select t.id, t.user_id, t.organization_id, t.scopes, t.expires_at, t.revoked_at, t.audience,
+         public.is_master_user(t.user_id),
+         coalesce((select array_agg(tm.organization_id) from public.team_members tm
+                    where tm.user_id = t.user_id and tm.is_active = true), '{}'::uuid[])
+    from public.personal_access_tokens t
+   where t.token_hash = p_hash
    limit 1;
 $$;
 
-revoke execute on function public.crm_mcp_resolve_token(char) from anon, authenticated;
-grant  execute on function public.crm_mcp_resolve_token(char) to   <role_que_a_fn_usa>;
+revoke all     on function public.crm_mcp_resolve_token(char) from public;
+grant  execute on function public.crm_mcp_resolve_token(char) to   anon, authenticated;
 ```
 
 Pontos não-negociáveis:
-- **`revoke execute ... from anon, authenticated`** — sem isto, o JWT mintado (que é `authenticated`) poderia chamar `crm_mcp_resolve_token(hash)` direto via `/rest/v1/rpc/` e transformá-la em oráculo de existência/identidade de token. Esta é a regra também aplicada a `crm_mcp_rate_check` (§7.3).
-- **Qual role executa o resolve, dado que não há JWT ainda nesse ponto?** O resolve roda **antes** de mintar a sessão do usuário, então não pode usar o user client. Roda via um **handle separado** (jamais `ctx.db`): o client da função com a anon key, cuja request chega ao PostgREST como role `anon`. Por isso o `grant execute` precisa contemplar o role efetivo desse caminho (`anon`) **e mesmo assim** a função é hermética: devolve só identidade da row exata, sem SELECT arbitrário, sem diferenciar "not found" de "revoked" (retorna row vazia em ambos), sem mensagem de erro que vaze existência. É a única exceção definer pré-identidade, e é mínima por construção.
+- **Hermética por construção:** devolve só identidade da row exata, sem `SELECT *`, sem diferenciar "not found" de "revoked" (row vazia em ambos), sem mensagem que vaze existência. Com 178 bits de entropia o hash é inquebrável; quem tem o token já o tem. Por isso anon-callable é seguro — não é oráculo prático.
+- **Única exceção definer pré-identidade**, e é mínima. NUNCA chamada via `ctx.db` (o user client); roda só pelo handle anon pré-auth.
 - Pinada em `search_path = public, extensions` (lição 20261227000000).
+- `crm_mcp_rate_check` (§7.3, C4) NÃO segue esta regra — aquela é server-only com chaves 100% derivadas do servidor e fica revogada de `anon`/`authenticated`.
 
 ---
 
@@ -630,15 +637,15 @@ Hoje o ecossistema aceita HS256 (legacy secret) e ES256 (signing keys, GA out/20
 
 Cada slice é independentemente shippable. **C1 (extração da espinha `_shared/mcp/`) está DONE** — é o que o `torque-mcp` já consome.
 
-### C2 — PAT infra + cliente RLS-scoped per-user + tracer tool + gate de allowlist runtime ⭐
-O tracer-bullet vertical. Entrega ponta-a-ponta o caminho mais fino, **com todos os fixes HIGH embutidos** (não diferidos):
-- Migration: `personal_access_tokens` (tabela + índices + trigger imutável incl. `audience` + RLS §7.1/7.2) — aplicada em **dev** (prod com OK explícito).
-- RPC `crm_mcp_resolve_token(p_hash)` (definer, mínima, pinada, **revoke from anon/authenticated** §7.6).
-- **Verificar em prod (H2):** `is_master_user` pinada em `search_path`; pinar antes de shippar se não estiver.
+### C2 — PAT infra + cliente RLS-scoped per-user + tracer tool + gate de allowlist runtime ⭐ (BACKEND ENTREGUE 2026-06-25)
+O tracer-bullet vertical. Entrega ponta-a-ponta o caminho mais fino, **com todos os fixes HIGH embutidos** (não diferidos). **Backend implementado** na branch `feat/crm-mcp/c2-pat-infra` (migration `20270101000000` + `supabase/functions/crm-mcp/` + espinha estendida + tracer + unit/anchor; 129+ unit verdes, lint/fmt/type-check limpos). **Resta na C2:** UI de PAT (criar/listar/revogar, display-once, aviso role-aware) + migration aplicada em dev + secrets/JWKS de deploy + canary round-trip em deploy.
+- Migration: `personal_access_tokens` (tabela + índices + trigger imutável incl. `audience` + RLS §7.1/7.2) — ✅ `20270101000000`; aplicar em **dev** (prod com OK explícito).
+- RPC `crm_mcp_resolve_token(p_hash)` (definer, hermética, pinada; dobra `is_master`+`current_org_ids`; **executável por anon**, ver §7.6) — ✅.
+- **Guard prod (H2):** `is_master_user` já pinada (`20261227000000`); C2 só re-confirma `unpinned=0` em prod antes do ship.
 - `lib/pat.ts`: `parsePat` (formato+CRC32) + `resolvePat` (lookup+checks + **master-reject H1** + **membership-assert M5**) + `mintUserJwt` (**ES256, role/aud literais, sem org claim** H2/H3b) + `assertWellFormedJwt` (**hard-fail H3a**).
 - `lib/phone.ts`: normalize em TS (**zero `.rpc` no user client** HOLE 1).
 - `lib/config.ts`: **assert-absent de `SERVICE_ROLE_KEY`/`MCP_MASTER_*`/`MCP_GATEWAY_SECRET`** no boot (H3).
-- `crm-mcp/index.ts`: L1+L2 wiring, `allowMutations=false` hard-pinned, **`toolFilter` runtime fail-closed** (H4), `serverInfo` sem project, **canary de boot ROUND-TRIP** (HOLE 3).
+- `crm-mcp/index.ts`: L1+L2 wiring, `allowMutations=false` hard-pinned, **`toolFilter` runtime fail-closed** (H4), `serverInfo` sem project, **`assertWellFormedJwt` por-request** (H3a) ✅. O **canary de boot ROUND-TRIP** (HOLE 3) é gate de **deploy** (precisa do JWKS confiar na chave ES256 + user seed) — não roda em unit local.
 - Espinha: `DispatchContext.toolFilter?` + `ToolDef.customerExposed?` (não-breaking p/ torque-mcp).
 - **Tracer tool:** `lead.get` customer-scoped (assert org + `.eq` explícito).
 - **Teste-âncora (o guard da classe), seedado com MEMBRO NÃO-ADMIN na org A (HOLE 2):** integração — PAT do membro lê só os leads dele na org A; **não** lê org B; arg `org_id` divergente → 403; **PAT de master → 403 e zero rows cross-org** (H1); **anon-sem-bearer → zero rows** (H3a). Unit: parse/CRC32, mint→decode `role:authenticated`, `exp-iat<=60` (H6), allowlist fail-closed (`db.read_sql` ausente de `tools/list`, H4), config boot-fail com secret de ops (H3).
