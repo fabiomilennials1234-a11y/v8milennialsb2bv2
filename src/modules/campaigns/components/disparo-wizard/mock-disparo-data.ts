@@ -1,0 +1,55 @@
+/**
+ * mock-disparo-data — placeholder structured data for the Wizard Linear shell (#904).
+ *
+ * The #904 deliverable is the *navigable shell*. The real data sources land in
+ * sibling slices:
+ *   - audiences (segments/funnel stages/tags)  → TODO(#902) audience builder
+ *                                                 TODO(#906) saved segments
+ *   - WhatsApp numbers + per-number daily caps  → TODO(#908) real instances
+ *
+ * Shapes here mirror the real domain types so the steps and the pure
+ * `wizard-machine` need no change when the real sources are wired — only the
+ * provider swaps. Realistic B2B values so the flow reads true end-to-end.
+ */
+import type { DisparoNumber } from "./wizard-machine";
+
+export interface MockAudience {
+  id: string;
+  label: string;
+  detail: string;
+  count: number;
+}
+
+/** TODO(#902/#906): replace with the real audience builder + saved segments. */
+export const MOCK_AUDIENCES: MockAudience[] = [
+  {
+    id: "funnel-novo",
+    label: "Funil WhatsApp · Novo lead",
+    detail: "Contatos parados no primeiro estágio",
+    count: 1240,
+  },
+  {
+    id: "funnel-sem-resposta",
+    label: "Funil WhatsApp · Sem resposta há 7 dias",
+    detail: "Leads abordados que não responderam",
+    count: 486,
+  },
+  {
+    id: "tag-ouro",
+    label: "Tag: Ouro",
+    detail: "Contas de maior faturamento",
+    count: 96,
+  },
+  {
+    id: "carteira-frio",
+    label: "Carteira · Sem compra há 60 dias",
+    detail: "Clientes em risco de churn",
+    count: 312,
+  },
+];
+
+/** TODO(#908): replace with real WhatsApp instances + their Number Daily Cap. */
+export const MOCK_NUMBERS: DisparoNumber[] = [
+  { id: "inst-comercial", label: "Comercial", cap: 80, selected: true },
+  { id: "inst-suporte", label: "Suporte", cap: 60, selected: false },
+];

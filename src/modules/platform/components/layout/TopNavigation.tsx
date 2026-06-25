@@ -129,20 +129,22 @@ const turboSubItems: NavItem[] = [
 const primaryNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/dashboard" },
   { label: "Chat", icon: Zap, path: "/chat" },
+  // Disparos — porta canônica, sempre visível perto do Chat (#904)
+  { label: "Disparos", icon: Send, path: "/disparos" },
   // { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
   { label: "Carteira", icon: Wallet, path: "/upsell" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Ranking", icon: Trophy, path: "/performance" },
-  { label: "Comissões", icon: DollarSign, path: "/comissoes" },
 ];
 
 // Secondary items — go inside "Mais" overflow menu
 const moreNavItems: NavItemWithChildren[] = [
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Combustível", icon: Fuel, path: "/leads" },
-  { label: "Disparos", icon: Send, path: "/disparos" },
+  // Comissões desceu pro "Mais" — Disparos tomou seu lugar na top bar (#904)
+  { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Checklists", icon: ListChecks, path: "/checklists" },
   { label: "Templates", icon: FileText, path: "/templates" },
   { label: "Duplicatas", icon: Copy, path: "/duplicatas" },
@@ -155,6 +157,8 @@ const allNavItems: NavItemWithChildren[] = [
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Chat", icon: Zap, path: "/chat" },
+  // Disparos perto do Chat também no mobile (#904)
+  { label: "Disparos", icon: Send, path: "/disparos" },
   // { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
   { label: "Carteira", icon: Wallet, path: "/upsell" },
@@ -162,7 +166,6 @@ const allNavItems: NavItemWithChildren[] = [
   { label: "Ranking", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
-  { label: "Disparos", icon: Send, path: "/disparos" },
   { label: "Checklists", icon: ListChecks, path: "/checklists" },
   { label: "Templates", icon: FileText, path: "/templates" },
   { label: "Duplicatas", icon: Copy, path: "/duplicatas" },
@@ -206,7 +209,7 @@ const CUSTOM_PIPE_ICON_MAP: Record<string, React.ElementType> = {
 
 const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/campanhas": "campaigns.view",
-  "/disparos": "campaigns.view",
+  // /disparos — porta canônica aberta a qualquer membro (#904): sem gate de view
   "/marketing": "marketing.view",
   "/chat": "whatsapp.view",
   "/pipe-whatsapp": "pipeline.view",
