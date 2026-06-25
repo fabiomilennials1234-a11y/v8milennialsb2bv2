@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ToolContext, ToolDef, ToolResult } from "../lib/types.ts";
+import type { ToolContext, ToolDef, ToolResult } from "../../_shared/mcp/types.ts";
 
 /**
  * Every SECURITY DEFINER function in public and whether it pins `search_path`. A definer

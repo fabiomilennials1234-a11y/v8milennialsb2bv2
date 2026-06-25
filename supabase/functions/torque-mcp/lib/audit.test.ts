@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { redact } from "./redact.ts";
+import { redact } from "../../_shared/mcp/redact.ts";
 import { buildAuditRow } from "./audit.ts";
 
 Deno.test("redact — masks phone-like keys, keeps non-PII untouched", () => {

@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Config } from "./config.ts";
-import type { SignInResult } from "./auth.ts";
+import type { SignInResult } from "../../_shared/mcp/auth.ts";
 
 /**
  * Sign in as the dedicated ops-master and return an RLS-scoped client.
