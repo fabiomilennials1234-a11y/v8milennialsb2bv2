@@ -48,8 +48,13 @@ export const MOCK_AUDIENCES: MockAudience[] = [
   },
 ];
 
-/** TODO(#908): replace with real WhatsApp instances + their Number Daily Cap. */
+/**
+ * Mock instances. The per-number cap starts at the recommended value and is
+ * re-derived by the Velocidade slider; a `new` number is auto-clamped.
+ * TODO(#910): replace with the org's real connected WhatsApp instances.
+ */
 export const MOCK_NUMBERS: DisparoNumber[] = [
-  { id: "inst-comercial", label: "Comercial", cap: 80, selected: true },
-  { id: "inst-suporte", label: "Suporte", cap: 60, selected: false },
+  { id: "inst-comercial-1", label: "Comercial 1", cap: 80, selected: true },
+  { id: "inst-comercial-2", label: "Comercial 2", cap: 80, selected: true },
+  { id: "inst-novo-sdr", label: "Novo SDR", cap: 20, selected: false, isNew: true },
 ];
