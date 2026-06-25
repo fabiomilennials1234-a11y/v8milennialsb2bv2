@@ -12,6 +12,7 @@
  * provider swaps. Realistic B2B values so the flow reads true end-to-end.
  */
 import type { DisparoNumber } from "./wizard-machine";
+import type { PreviewSample } from "./message-preview";
 
 export interface MockAudience {
   id: string;
@@ -46,6 +47,17 @@ export const MOCK_AUDIENCES: MockAudience[] = [
     detail: "Clientes em risco de churn",
     count: 312,
   },
+];
+
+/**
+ * Sample Leads for the message preview (#907) — the operator cycles through
+ * these to see the message as different real contacts will receive it.
+ * TODO(#902): draw real samples from the resolved audience.
+ */
+export const MOCK_PREVIEW_SAMPLES: PreviewSample[] = [
+  { nome: "João da Silva", empresa: "Petshop Amigo Fiel", segmento: "Petshop" },
+  { nome: "Marina Costa", empresa: "Distribuidora Norte", segmento: "Atacado" },
+  { nome: "Roberto Lima", empresa: "AgroForte Insumos", segmento: "Agro" },
 ];
 
 /**
