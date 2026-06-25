@@ -9,6 +9,7 @@ import {
   cloneSelection,
   type WorkflowSelection,
 } from "@/modules/workflows/lib/clipboard";
+import { upgradeWorkflowNodes } from "@/modules/workflows/lib/upgradeLegacyMessageNode";
 
 import { WorkflowCanvas } from "@/modules/workflows/components/WorkflowCanvas";
 import { WorkflowToolbar } from "@/modules/workflows/components/WorkflowToolbar";
@@ -151,7 +152,9 @@ export default function AutomacoesEditor() {
       setName(workflow.name);
       setIsActive(workflow.is_active);
       if (workflow.definition?.nodes?.length) {
-        setNodes(workflow.definition.nodes);
+        // Lazy migration (ADR-0012): legacy WhatsApp send nodes become the
+        // unified send_whatsapp_message node; persisted on next save.
+        setNodes(upgradeWorkflowNodes(workflow.definition.nodes));
         setEdges(workflow.definition.edges || []);
         // Track max node id for counter
         const maxId = workflow.definition.nodes.reduce((max, n) => {
