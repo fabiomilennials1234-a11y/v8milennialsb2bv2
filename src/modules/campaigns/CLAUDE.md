@@ -63,8 +63,11 @@ src/modules/campaigns/
 ├── pages/
 │   ├── Campanhas.tsx              # Lista de campanhas
 │   ├── CampanhaDetail.tsx         # Detalhe (Kanban + analytics + dispatch + viewers + stages)
-│   └── MassSend.tsx               # UI de mass send (não roteada atualmente — órfã, mantida pra futuro)
-├── lib/                           # vazio — utils internos quando necessário
+│   ├── DisparosPanel.tsx          # /disparos — porta canônica (empty guiado + histórico) #904
+│   └── NovoDisparo.tsx            # /disparos/novo — wrapper do Wizard Linear #904
+├── components/disparo-wizard/     # Wizard Linear (#904): shell + 5 passos + state machine pura
+├── lib/
+│   └── blast-planning.ts          # Twin frontend do core puro Deno (planBlast/nextValidSendTime) #904
 ├── index.ts                       # API pública
 └── CLAUDE.md                      # este arquivo
 ```
@@ -96,7 +99,8 @@ Internals (não re-exportados — usados apenas via Pages do próprio módulo e 
 NÃO re-exportadas — App.tsx faz deep-import via React.lazy:
 - `@/modules/campaigns/pages/Campanhas`
 - `@/modules/campaigns/pages/CampanhaDetail`
-- `@/modules/campaigns/pages/MassSend` (órfã — não roteada hoje, preservada)
+- `@/modules/campaigns/pages/DisparosPanel` (rota `/disparos` — porta canônica #904)
+- `@/modules/campaigns/pages/NovoDisparo` (rota `/disparos/novo` — Wizard Linear #904)
 
 ### Types
 
@@ -142,7 +146,7 @@ Frontend (✅ migrado pra cá):
 - ~~`src/hooks/useDispatchQueueItems.ts`~~ → `./hooks/useDispatchQueueItems.ts`
 - ~~`src/pages/Campanhas.tsx`~~ → `./pages/Campanhas.tsx`
 - ~~`src/pages/CampanhaDetail.tsx`~~ → `./pages/CampanhaDetail.tsx`
-- ~~`src/pages/campaigns/MassSend.tsx`~~ → `./pages/MassSend.tsx`
+- ~~`src/pages/campaigns/MassSend.tsx`~~ → `./pages/MassSend.tsx` (removida em #904 — órfã sem rota, substituída pela porta `/disparos`)
 
 Backend (próximas slices):
 - `supabase/functions/campaign-rule-dispatch/` (slice 15)

@@ -1,0 +1,145 @@
+/**
+ * DisparoWizard — the Wizard Linear shell (#904).
+ *
+ * Promotes the winning "Variant A" prototype (calm Stripe/Linear, one decision
+ * per screen, top step rail, Voltar/Continuar) to production. The shell owns
+ * navigation chrome only; each step is its own component and all gating logic
+ * lives in the pure `wizard-machine`. Steps that depend on backend not yet
+ * landed (audience #902/#906, composer #907, numbers #908, dispatch #910) are
+ * mock-structured and marked TODO at their source.
+ */
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowLeft, ArrowRight, Send, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { useDisparoWizard } from "./useDisparoWizard";
+import { WizardProgress } from "./WizardProgress";
+import { StepAudience } from "./StepAudience";
+import { StepMessage } from "./StepMessage";
+import { StepSpeed } from "./StepSpeed";
+import { StepReview } from "./StepReview";
+import { StepMonitor } from "./StepMonitor";
+import { MOCK_NUMBERS } from "./mock-disparo-data";
+
+/** Today as a Sao Paulo calendar date (YYYY-MM-DD) — the plan's clock-free anchor. */
+function todayInSaoPaulo(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+interface DisparoWizardProps {
+  onClose: () => void;
+  onFinish: () => void;
+}
+
+export function DisparoWizard({ onClose, onFinish }: DisparoWizardProps) {
+  const wiz = useDisparoWizard(todayInSaoPaulo(), MOCK_NUMBERS);
+
+  const renderStep = () => {
+    switch (wiz.stepId) {
+      case "audience":
+        return <StepAudience draft={wiz.draft} patch={wiz.patch} />;
+      case "message":
+        return <StepMessage draft={wiz.draft} patch={wiz.patch} />;
+      case "speed":
+        return <StepSpeed draft={wiz.draft} patch={wiz.patch} />;
+      case "review":
+        return <StepReview draft={wiz.draft} />;
+      case "monitor":
+        return <StepMonitor draft={wiz.draft} />;
+    }
+  };
+
+  return (
+    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col">
+      {/* Header: title + progress + close */}
+      <div className="border-b border-border/40 bg-background/80 backdrop-blur-sm">
+        <div className="mx-auto w-full max-w-2xl px-5 pt-5">
+          <div className="flex items-center justify-between">
+            <h1 className="text-sm font-semibold tracking-tight text-foreground">Novo disparo</h1>
+            {!wiz.isMonitor && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Fechar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <div className="pb-5 pt-5">
+            <WizardProgress index={wiz.index} furthest={wiz.furthest} onJump={wiz.goTo} />
+          </div>
+        </div>
+      </div>
+
+      {/* Step content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-2xl px-5 py-9">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={wiz.stepId}
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -12 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {renderStep()}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Footer: Voltar / Continuar — sticky, calm */}
+      <div className="sticky bottom-0 border-t border-border/40 bg-background/90 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-4 px-5 py-4">
+          {wiz.isMonitor ? (
+            <Button onClick={onFinish} className="ml-auto gap-2">
+              Acompanhar disparos
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                onClick={wiz.isFirst ? onClose : wiz.back}
+                className="gap-2 text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                {wiz.isFirst ? "Cancelar" : "Voltar"}
+              </Button>
+
+              <div className="flex items-center gap-3">
+                {wiz.blockReason && (
+                  <span className="hidden text-xs text-muted-foreground sm:inline">
+                    {wiz.blockReason}
+                  </span>
+                )}
+                {wiz.isReview ? (
+                  <Button onClick={wiz.release} className="gap-2">
+                    <Send className="h-4 w-4" />
+                    Enviar disparo
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={wiz.next}
+                    disabled={!wiz.canAdvance}
+                    className={cn("gap-2", !wiz.canAdvance && "opacity-60")}
+                  >
+                    Continuar
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
