@@ -256,6 +256,15 @@ export type {
   DisparoSource,
   SystemPipelineType,
 } from "./components/disparo";
+// Audience CONDITIONS controls (tags / qualification / origin) — shared with the
+// standalone Disparos wizard in `campaigns` (#902). Pure-ish UI + option dicts.
+export {
+  AudienceConditionsControls,
+  EMPTY_CONDITIONS,
+  TIER_OPTIONS,
+  ORIGIN_OPTIONS,
+} from "./components/disparo";
+export type { AudienceConditions } from "./components/disparo";
 
 // ── Components: legacy (confirmacao standalone — pre-modelo-novo) ─────────
 export {

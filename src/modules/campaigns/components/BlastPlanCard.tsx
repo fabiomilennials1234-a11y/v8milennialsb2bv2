@@ -12,9 +12,13 @@ import { useMemo, useState } from "react";
 import {
   useBlastPlanProgress,
   useBlastPlanControl,
+  useUpdateBlastPlan,
   type BlastPlan,
 } from "@/modules/campaigns/hooks/useBlastPlans";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,7 +29,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pause, Play, X, Loader2, Users, Layers, CalendarClock } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Pause, Play, X, Loader2, Users, Layers, CalendarClock, Pencil } from "lucide-react";
 import { format, isToday, isTomorrow, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -86,7 +98,11 @@ interface BlastPlanCardProps {
 export function BlastPlanCard({ plan }: BlastPlanCardProps) {
   const { data: progress } = useBlastPlanProgress(plan.id);
   const control = useBlastPlanControl();
+  const update = useUpdateBlastPlan();
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editMessage, setEditMessage] = useState(plan.message);
+  const [editTime, setEditTime] = useState((plan.release_time ?? "09:00").slice(0, 5));
 
   const status = STATUS_META[plan.status];
   const isActive = plan.status === "active";
@@ -118,6 +134,28 @@ export function BlastPlanCard({ plan }: BlastPlanCardProps) {
       );
     } catch (e) {
       toast.error((e as Error).message || "Não foi possível atualizar o disparo");
+    }
+  };
+
+  const openEdit = () => {
+    // Seed the form from the plan's current values each time it opens.
+    setEditMessage(plan.message);
+    setEditTime((plan.release_time ?? "09:00").slice(0, 5));
+    setEditOpen(true);
+  };
+
+  const saveEdit = async () => {
+    const message = editMessage.trim();
+    if (!message) {
+      toast.error("A mensagem não pode ficar vazia");
+      return;
+    }
+    try {
+      await update.mutateAsync({ plan_id: plan.id, message, release_time: editTime });
+      toast.success("Disparo atualizado");
+      setEditOpen(false);
+    } catch (e) {
+      toast.error((e as Error).message || "Não foi possível editar o disparo");
     }
   };
 
@@ -208,6 +246,18 @@ export function BlastPlanCard({ plan }: BlastPlanCardProps) {
             <Button
               size="sm"
               variant="ghost"
+              className="h-8 text-muted-foreground hover:text-foreground"
+              disabled={control.isPending}
+              onClick={openEdit}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              <span className="ml-1.5 hidden sm:inline">Editar</span>
+            </Button>
+          )}
+          {!isTerminal && (
+            <Button
+              size="sm"
+              variant="ghost"
               className="h-8 text-muted-foreground hover:text-destructive"
               disabled={control.isPending}
               onClick={() => setConfirmCancel(true)}
@@ -240,6 +290,54 @@ export function BlastPlanCard({ plan }: BlastPlanCardProps) {
           <span>{pct}%</span>
         </div>
       </div>
+
+      {/* Edit — message + release time only. The audience is immutable (ADR-0003). */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar disparo</DialogTitle>
+            <DialogDescription>
+              Altere a mensagem ou o horário de envio. O público é fixo e não pode ser alterado.
+              A nova mensagem vale para os contatos que ainda não receberam.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor={`edit-msg-${plan.id}`} className="text-sm">
+                Mensagem
+              </Label>
+              <Textarea
+                id={`edit-msg-${plan.id}`}
+                value={editMessage}
+                onChange={(e) => setEditMessage(e.target.value)}
+                rows={5}
+                className="resize-none"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`edit-time-${plan.id}`} className="text-sm">
+                Horário do envio diário
+              </Label>
+              <Input
+                id={`edit-time-${plan.id}`}
+                type="time"
+                value={editTime}
+                onChange={(e) => setEditTime(e.target.value)}
+                className="w-36"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditOpen(false)} disabled={update.isPending}>
+              Cancelar
+            </Button>
+            <Button onClick={saveEdit} disabled={update.isPending} className="gap-2">
+              {update.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Cancel confirmation — irreversible action gets a deliberate stop */}
       <AlertDialog open={confirmCancel} onOpenChange={setConfirmCancel}>

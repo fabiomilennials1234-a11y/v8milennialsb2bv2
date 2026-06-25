@@ -17,6 +17,7 @@ import {
   type DisparoDraft,
   type DisparoNumber,
 } from "@/modules/campaigns/components/disparo-wizard/wizard-machine";
+import { createDefaultSelection } from "@/modules/campaigns/components/disparo-wizard/audience-resolve";
 
 const NUMBERS: DisparoNumber[] = [
   { id: "a", label: "Comercial", cap: 80, selected: true },
@@ -25,13 +26,17 @@ const NUMBERS: DisparoNumber[] = [
 
 function freshDraft(over: Partial<DisparoDraft> = {}): DisparoDraft {
   return {
-    audienceId: null,
+    audience: createDefaultSelection(),
     audienceLabel: "",
     audienceCount: 0,
+    leadIds: [],
+    audienceSource: null,
     message: "",
     media: null,
     mediaError: null,
+    antiBan: true,
     numbers: NUMBERS,
+    capPerNumber: 80,
     startDateIso: "2026-06-25",
     released: false,
     ...over,
