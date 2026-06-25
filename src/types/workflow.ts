@@ -26,7 +26,8 @@ export type WorkflowTriggerType =
   | "campaign_lead_replied"
   | "campaign_lead_no_reply"
   | "campaign_completed"
-  | "field_changed";
+  | "field_changed"
+  | "scheduled_date";
 
 export type WorkflowNodeType =
   | "trigger"
@@ -233,6 +234,39 @@ export interface TriggerConfigFieldChanged {
   new_value?: string;
 }
 
+/**
+ * Trigger "Antes de uma data" (scheduled_date).
+ *
+ * Alvo = data da reunião marcada de cada lead (`pipeline_entries.metadata->>'meeting_date'`),
+ * por-lead (não uma data global fixa). Audiência = 1 pipe + etapa(s) + origem opcional.
+ * Cada item de `dispatches` dispara uma vez por lead por reunião; remarcar re-arma todos os itens.
+ */
+export type ScheduledDispatchUnit = "days" | "hours" | "minutes";
+
+/** Dispara assim que a reunião é marcada (Fatia 2). Repete a cada remarcação. */
+export interface ScheduledDispatchOnBook {
+  anchor: "ao_marcar";
+  send_time?: string;       // "HH:MM" — opcional
+}
+
+/** Dispara `value` `unit` antes da reunião, no horário `send_time` (fuso da org). */
+export interface ScheduledDispatchBefore {
+  anchor: "antes_da_reuniao";
+  value: number;
+  unit: ScheduledDispatchUnit;
+  send_time?: string;       // "HH:MM" — default "09:00"
+}
+
+export type ScheduledDispatchItem = ScheduledDispatchOnBook | ScheduledDispatchBefore;
+
+export interface TriggerConfigScheduledDate {
+  pipe_type?: string;       // slug do pipe de sistema: "whatsapp" | "confirmacao" | "propostas"
+  pipeline_id?: string;     // UUID para funis custom (alternativa a pipe_type)
+  stages?: string[];        // etapa(s) selecionada(s); vazio = qualquer etapa do pipe
+  filter_origin?: string;   // origem opcional
+  dispatches: ScheduledDispatchItem[];
+}
+
 export type TriggerConfig =
   | TriggerConfigLeadCreated
   | TriggerConfigStageChanged
@@ -247,7 +281,8 @@ export type TriggerConfig =
   | TriggerConfigWebhookReceived
   | TriggerConfigLeadAssigned
   | TriggerConfigCampaignStatus
-  | TriggerConfigFieldChanged;
+  | TriggerConfigFieldChanged
+  | TriggerConfigScheduledDate;
 
 // =====================================================
 // NODE DATA
@@ -749,6 +784,7 @@ export const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
   campaign_lead_no_reply: "Lead Não Respondeu na Campanha",
   campaign_completed: "Lead Concluiu a Campanha",
   field_changed: "Campo do Lead Alterado",
+  scheduled_date: "Antes de uma data",
 };
 
 export const CONDITION_OPERATOR_LABELS: Record<ConditionOperator, string> = {
@@ -947,7 +983,7 @@ export const TRIGGER_CATEGORIES: TriggerCategory[] = [
   },
   {
     label: "Pipeline",
-    triggers: ["stage_changed", "meeting_confirmed", "meeting_not_confirmed", "proposal_accepted", "proposal_lost"],
+    triggers: ["stage_changed", "meeting_confirmed", "meeting_not_confirmed", "scheduled_date", "proposal_accepted", "proposal_lost"],
   },
   {
     label: "Campanhas",

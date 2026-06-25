@@ -1,6 +1,8 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Plus, Trash2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -11,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TRIGGER_CATEGORIES } from "@/types/workflow";
-import type { TriggerNodeData, WorkflowTriggerType } from "@/types/workflow";
+import type { TriggerNodeData, WorkflowTriggerType, ScheduledDispatchItem } from "@/types/workflow";
 import { usePipelineStages, getPipelineTypeName, type PipelineType, useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines";
 import { useCampanhas, useCampanhaStages } from "@/modules/campaigns/hooks/useCampanhas";
 import { CampaignSelectorField } from "./CampaignSelectorField";
@@ -80,6 +82,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
                      t === "campaign_lead_no_reply" ? "Lead Não Respondeu na Campanha" :
                      t === "campaign_completed" ? "Lead Concluiu a Campanha" :
                      t === "field_changed" ? "Campo do Lead Alterado" :
+                     t === "scheduled_date" ? "Antes de uma data" :
                      t}
                   </SelectItem>
                 ))}
@@ -339,6 +342,11 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
             {data.triggerType === "campaign_completed" && "Dispara quando o lead chega no último estágio da campanha."}
           </p>
         </>
+      )}
+
+      {/* ── scheduled_date ── */}
+      {data.triggerType === "scheduled_date" && (
+        <ScheduledDateConfig cfg={cfg} updateConfig={updateConfig} />
       )}
 
       {/* ── field_changed ── */}
@@ -626,6 +634,188 @@ function StageChangedConfig({
 
       <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
         Este workflow será disparado quando um lead entrar nas etapas selecionadas deste pipe.
+      </div>
+    </>
+  );
+}
+
+// ── Sub-componente para scheduled_date ("Antes de uma data") ──
+// Alvo = data da reunião marcada de cada lead. Audiência = 1 pipe + etapa(s) + lista de disparos.
+
+const SCHEDULED_PIPES: { value: string; label: string }[] = [
+  { value: "confirmacao", label: "Confirmação" },
+  { value: "whatsapp", label: "Qualificação" },
+  { value: "propostas", label: "Propostas" },
+];
+
+function ScheduledDateConfig({
+  cfg,
+  updateConfig,
+}: {
+  cfg: Record<string, unknown>;
+  updateConfig: (updates: Record<string, unknown>) => void;
+}) {
+  const pipeType = (cfg.pipe_type as string) || "";
+  const pipelineId = (cfg.pipeline_id as string) || "";
+  const selectedStages = (cfg.stages as string[]) || [];
+  const dispatches = (cfg.dispatches as ScheduledDispatchItem[]) || [];
+  const isCustom = !!pipelineId;
+
+  const { data: customPipelines } = useCustomPipelines();
+
+  const isStandardPipe = SCHEDULED_PIPES.some((p) => p.value === pipeType);
+  const { data: standardStages } = usePipelineStages(
+    isStandardPipe ? (pipeType as PipelineType) : "confirmacao"
+  );
+  const { data: customStages } = useCustomPipelineStages(isCustom ? pipelineId : undefined);
+
+  const stages = isCustom
+    ? (customStages || []).map((s) => ({ key: s.stage_key || s.id, name: s.name }))
+    : isStandardPipe
+    ? (standardStages || []).map((s) => ({ key: "stage_key" in s ? s.stage_key : s.id, name: s.name }))
+    : [];
+
+  const handlePipeChange = (value: string) => {
+    if (customPipelines?.some((p) => p.id === value)) {
+      updateConfig({ pipe_type: "", pipeline_id: value, stages: [] });
+    } else {
+      updateConfig({ pipe_type: value, pipeline_id: "", stages: [] });
+    }
+  };
+
+  const handleStageToggle = (stageKey: string, checked: boolean) => {
+    const current = [...selectedStages];
+    if (checked) {
+      current.push(stageKey);
+    } else {
+      const idx = current.indexOf(stageKey);
+      if (idx >= 0) current.splice(idx, 1);
+    }
+    updateConfig({ stages: current });
+  };
+
+  const updateDispatch = (index: number, patch: Partial<ScheduledDispatchItem>) => {
+    const next = dispatches.map((d, i) => (i === index ? { ...d, ...patch } : d));
+    updateConfig({ dispatches: next });
+  };
+
+  const addDispatch = () => {
+    const next: ScheduledDispatchItem[] = [
+      ...dispatches,
+      { anchor: "antes_da_reuniao", value: 1, unit: "days", send_time: "09:00" },
+    ];
+    updateConfig({ dispatches: next });
+  };
+
+  const removeDispatch = (index: number) => {
+    updateConfig({ dispatches: dispatches.filter((_, i) => i !== index) });
+  };
+
+  const currentPipeValue = isCustom ? pipelineId : pipeType || "__none__";
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Pipeline</Label>
+        <Select value={currentPipeValue} onValueChange={handlePipeChange}>
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione o pipe" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
+                Pipes Padrão
+              </SelectLabel>
+              {SCHEDULED_PIPES.map((p) => (
+                <SelectItem key={p.value} value={p.value}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+            {customPipelines && customPipelines.length > 0 && (
+              <SelectGroup>
+                <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
+                  Pipes Custom
+                </SelectLabel>
+                {customPipelines.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {stages.length > 0 && (
+        <div className="space-y-2">
+          <Label>Etapas (selecione uma ou mais)</Label>
+          <p className="text-xs text-muted-foreground">
+            Só leads nessas etapas, com reunião marcada, recebem. Vazio = qualquer etapa.
+          </p>
+          <div className="space-y-2 max-h-48 overflow-y-auto rounded-md border p-3">
+            {stages.map((s) => (
+              <label
+                key={s.key}
+                className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
+              >
+                <Checkbox
+                  checked={selectedStages.includes(s.key)}
+                  onCheckedChange={(checked) => handleStageToggle(s.key, checked === true)}
+                />
+                {s.name}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label>Disparos</Label>
+        <p className="text-xs text-muted-foreground">
+          Cada disparo envia uma vez por lead, antes da reunião marcada dele.
+        </p>
+        <div className="space-y-2">
+          {dispatches.map((d, i) => (
+            <div key={i} className="flex items-end gap-2 rounded-md border p-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Dias antes</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  className="w-20"
+                  value={d.anchor === "antes_da_reuniao" ? (d.value ?? "") : ""}
+                  onChange={(e) =>
+                    updateDispatch(i, { value: Number(e.target.value), unit: "days" })
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Às</Label>
+                <Input
+                  type="time"
+                  className="w-28"
+                  value={d.send_time || "09:00"}
+                  onChange={(e) => updateDispatch(i, { send_time: e.target.value })}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="ml-auto text-muted-foreground hover:text-destructive"
+                onClick={() => removeDispatch(i)}
+                aria-label="Remover disparo"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={addDispatch} className="w-full">
+          <Plus className="h-4 w-4 mr-1" /> Adicionar disparo
+        </Button>
       </div>
     </>
   );
