@@ -312,9 +312,25 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
     case "send_whatsapp_message": {
       const messageType = (ctx.nodeData.messageType as string) || "texto";
       switch (messageType) {
-        case "texto":
+        case "texto": {
+          // "Gerar com IA" mode: generate into a variable first, then send the
+          // resolved text in the same node (ADR-0012). Mirrors generate_ai_message.
+          if ((ctx.nodeData.templateMode as string) === "ai") {
+            const aiInput = toActionInput(ctx);
+            const aiPromptRaw = (ctx.nodeData.aiPrompt as string) || "";
+            if (aiPromptRaw && ctx.leadId) {
+              aiInput.params.aiPrompt = await resolveVariables(ctx.supabase, ctx.leadId, aiPromptRaw, ctx.executionContext);
+            }
+            const aiResult = await sharedGenerateAiMessage(aiInput);
+            if (!aiResult.success) { result = aiResult; break; }
+            const outputVar = (ctx.nodeData.aiOutputVariable as string) || "ai_message";
+            if (aiResult.data && aiResult.data[outputVar] != null) {
+              ctx.executionContext[outputVar] = aiResult.data[outputVar];
+            }
+          }
           result = await sharedSendWhatsApp(toActionInput(ctx));
           break;
+        }
         default:
           return { success: false, error: `Unknown message type: ${messageType}`, retryable: false };
       }

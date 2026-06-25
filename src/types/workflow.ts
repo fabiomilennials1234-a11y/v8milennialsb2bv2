@@ -275,7 +275,7 @@ export interface ActionNodeData {
   messageTemplate?: string;
   templateId?: string;
   useTemplate?: boolean;
-  templateMode?: "free" | "campaign_template" | "meta_template";
+  templateMode?: "free" | "campaign_template" | "meta_template" | "ai";
   templateSourceId?: string;
   // Send WhatsApp (áudio)
   audioId?: string;

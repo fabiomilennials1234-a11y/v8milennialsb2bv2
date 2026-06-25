@@ -988,7 +988,7 @@ function UnifiedMessagePanel({
         </Select>
       </div>
 
-      {mt === "texto" && <WhatsAppTextPanel data={data} onUpdate={onUpdate} />}
+      {mt === "texto" && <WhatsAppTextPanel data={data} onUpdate={onUpdate} aiMode />}
       {mt === "imagem" && <WhatsAppImagePanel data={data} onUpdate={onUpdate} />}
       {mt === "audio" && <WhatsAppAudioPanel data={data} onUpdate={onUpdate} />}
       {mt === "sticker" && (
@@ -1027,9 +1027,12 @@ function UnifiedMessagePanel({
 function WhatsAppTextPanel({
   data,
   onUpdate,
+  aiMode = false,
 }: {
   data: ActionNodeData;
   onUpdate: (updates: Partial<ActionNodeData>) => void;
+  /** Unified node (ADR-0012): replaces "Template Meta" mode with "Gerar com IA". */
+  aiMode?: boolean;
 }) {
   const taRef = useRef<TemplateTextareaHandle>(null);
 
@@ -1048,7 +1051,7 @@ function WhatsAppTextPanel({
       t.name.toLowerCase().includes(templateSearch.toLowerCase()),
   );
 
-  const handleModeChange = (mode: "free" | "campaign_template" | "meta_template") => {
+  const handleModeChange = (mode: "free" | "campaign_template" | "meta_template" | "ai") => {
     onUpdate({ templateMode: mode, useTemplate: mode === "meta_template" });
   };
 
@@ -1068,11 +1071,17 @@ function WhatsAppTextPanel({
         <Label>Modo de mensagem</Label>
         <div className="flex gap-1 rounded-lg border p-1 bg-muted/30">
           {(
-            [
-              { mode: "free", label: "Escrever" },
-              { mode: "campaign_template", label: "Template" },
-              { mode: "meta_template", label: "Template Meta" },
-            ] as const
+            aiMode
+              ? ([
+                  { mode: "free", label: "Escrever" },
+                  { mode: "campaign_template", label: "Template" },
+                  { mode: "ai", label: "Gerar com IA" },
+                ] as const)
+              : ([
+                  { mode: "free", label: "Escrever" },
+                  { mode: "campaign_template", label: "Template" },
+                  { mode: "meta_template", label: "Template Meta" },
+                ] as const)
           ).map(({ mode, label }) => (
             <Button
               key={mode}
@@ -1099,6 +1108,28 @@ function WhatsAppTextPanel({
           />
           <p className="text-xs text-muted-foreground">
             Templates aprovados pela Meta para envio em massa.
+          </p>
+        </div>
+      )}
+
+      {/* Gerar com IA mode (ADR-0012) — prompt gera em variável, node envia */}
+      {templateMode === "ai" && (
+        <div className="space-y-2">
+          <Label>Prompt para a IA</Label>
+          <Textarea
+            value={data.aiPrompt || ""}
+            onChange={(e) => onUpdate({ aiPrompt: e.target.value })}
+            placeholder="Gere uma mensagem de follow-up para {{nome}} da {{empresa}} considerando que..."
+            rows={3}
+          />
+          <Label>Salvar resultado em variável</Label>
+          <Input
+            value={data.aiOutputVariable || "ai_message"}
+            onChange={(e) => onUpdate({ aiOutputVariable: e.target.value })}
+            placeholder="ai_message"
+          />
+          <p className="text-xs text-muted-foreground">
+            Use {"{{ai_message}}"} na mensagem abaixo para inserir o texto gerado.
           </p>
         </div>
       )}

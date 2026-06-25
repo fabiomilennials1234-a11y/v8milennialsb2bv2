@@ -64,4 +64,15 @@ describe("ActionPanel — unified message node", () => {
     renderPanel(baseData());
     expect(screen.getByText("Semi-automático")).toBeInTheDocument();
   });
+
+  it("offers a 'Gerar com IA' text mode for the unified node", () => {
+    renderPanel(baseData({ messageType: "texto" }));
+    expect(screen.getByText("Gerar com IA")).toBeInTheDocument();
+  });
+
+  it("shows the AI prompt field when texto mode is 'ai'", () => {
+    renderPanel(baseData({ messageType: "texto", templateMode: "ai", aiPrompt: "x" }));
+    expect(screen.getByText("Prompt para a IA")).toBeInTheDocument();
+    expect(screen.getByText("Salvar resultado em variável")).toBeInTheDocument();
+  });
 });

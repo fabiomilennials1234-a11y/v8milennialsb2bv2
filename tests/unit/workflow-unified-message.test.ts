@@ -36,6 +36,14 @@ vi.mock("../../supabase/functions/_shared/whatsapp-client.ts", () => ({
   getWhatsAppProvider: vi.fn().mockResolvedValue({ sendAudio: vi.fn() }),
 }));
 
+// AI generation — stub so the "Gerar com IA" text mode is deterministic.
+vi.mock("../../supabase/functions/_shared/action-handlers/ai-operations.ts", () => ({
+  generateAiMessage: vi.fn().mockResolvedValue({ success: true, data: { ai_message: "TEXTO GERADO PELA IA" } }),
+  summarizeConversation: vi.fn().mockResolvedValue({ success: true, data: {} }),
+  evaluateConversation: vi.fn().mockResolvedValue({ success: true, data: {} }),
+  queueScheduleMeeting: vi.fn().mockResolvedValue({ success: true, data: {} }),
+}));
+
 const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}), text: () => Promise.resolve("") });
 global.fetch = mockFetch as any;
 
@@ -64,6 +72,31 @@ describe("send_whatsapp_message — dispatch by messageType", () => {
     });
     expect(result.success).toBe(true);
     expect(result.message).toContain("WhatsApp");
+  });
+
+  it("texto 'Gerar com IA' mode generates into a variable then sends the resolved text", async () => {
+    const { sendTextViaInstance } = await import("../../supabase/functions/_shared/whatsapp-dispatch");
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("leads", [LEAD]);
+    mockTable("whatsapp_instances", [WA_INSTANCE]);
+    mockTable("whatsapp_messages", []);
+    mockTable("lead_history", []);
+
+    const result = await executeWorkflowAction({
+      supabase: sb, organizationId: "org-1", leadId: "lead-1",
+      nodeData: {
+        actionType: "send_whatsapp_message",
+        messageType: "texto",
+        templateMode: "ai",
+        aiPrompt: "Gere uma saudação para {{nome}}",
+        messageTemplate: "Resposta: {{ai_message}}",
+      },
+      executionContext: {},
+    });
+    expect(result.success).toBe(true);
+    // The generated text must reach the WhatsApp dispatch (resolved {{ai_message}}).
+    const sentText = JSON.stringify(vi.mocked(sendTextViaInstance).mock.calls);
+    expect(sentText).toContain("TEXTO GERADO PELA IA");
   });
 
   it("unknown messageType fails cleanly, non-retryable, without sending", async () => {
