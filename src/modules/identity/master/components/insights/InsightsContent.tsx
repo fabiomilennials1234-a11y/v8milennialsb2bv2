@@ -44,6 +44,9 @@ function seedForm(
 ): ExpenseForm {
   return {
     anuncios: data?.anuncios ?? 0,
+    custo_por_produto: data?.custo_por_produto ?? 0,
+    despesas_mode: data?.despesas_mode ?? "detalhado",
+    margem_contribuicao_pct: data?.margem_contribuicao_pct ?? 0,
     embalagem: data?.embalagem ?? 0,
     frete: data?.frete ?? 0,
     imposto_pct: data?.imposto_pct ?? 0,
@@ -149,6 +152,9 @@ function InsightsLoaded({
           organization_id: orgId,
           scenario: "dados",
           anuncios: f.anuncios,
+          custo_por_produto: f.custo_por_produto,
+          despesas_mode: f.despesas_mode,
+          margem_contribuicao_pct: f.margem_contribuicao_pct,
           embalagem: f.embalagem,
           frete: f.frete,
           imposto_pct: f.imposto_pct,
@@ -172,6 +178,9 @@ function InsightsLoaded({
           organization_id: orgId,
           scenario: "projecao",
           anuncios: f.anuncios,
+          custo_por_produto: f.custo_por_produto,
+          despesas_mode: f.despesas_mode,
+          margem_contribuicao_pct: f.margem_contribuicao_pct,
           embalagem: f.embalagem,
           frete: f.frete,
           imposto_pct: f.imposto_pct,
@@ -197,6 +206,9 @@ function InsightsLoaded({
       ticketMedio: ticketReal,
       numVendas: numVendasReal,
       anuncios: dadosForm.anuncios,
+      custoProdutoUnit: dadosForm.custo_por_produto,
+      despesasMode: dadosForm.despesas_mode,
+      margemContribuicaoPct: dadosForm.margem_contribuicao_pct,
       embalagem: dadosForm.embalagem,
       frete: dadosForm.frete,
       impostoPct: dadosForm.imposto_pct,
@@ -212,6 +224,9 @@ function InsightsLoaded({
       ticketMedio: projForm.meta_ticket_medio,
       numVendas: projForm.meta_num_vendas,
       anuncios: projForm.anuncios,
+      custoProdutoUnit: projForm.custo_por_produto,
+      despesasMode: projForm.despesas_mode,
+      margemContribuicaoPct: projForm.margem_contribuicao_pct,
       embalagem: projForm.embalagem,
       frete: projForm.frete,
       impostoPct: projForm.imposto_pct,
@@ -260,6 +275,8 @@ function InsightsLoaded({
 
   const realRefs: ExpenseRealRefs = {
     anuncios: dadosForm.anuncios,
+    custo_por_produto: dadosForm.custo_por_produto,
+    margem_contribuicao_pct: dadosForm.margem_contribuicao_pct,
     embalagem: dadosForm.embalagem,
     frete: dadosForm.frete,
     imposto_pct: dadosForm.imposto_pct,
@@ -308,6 +325,7 @@ function InsightsLoaded({
                   status={projStatus}
                   onRetry={() => projSave.flush()}
                   realRefs={realRefs}
+                  mcEfetivaPct={econ.cac.margemContribuicaoEfetivaPct}
                 />
               ) : (
                 <ExpenseInputsPanel
@@ -320,6 +338,7 @@ function InsightsLoaded({
                   }}
                   status={dadosStatus}
                   onRetry={() => dadosSave.flush()}
+                  mcEfetivaPct={econ.cac.margemContribuicaoEfetivaPct}
                 />
               )}
             </div>
