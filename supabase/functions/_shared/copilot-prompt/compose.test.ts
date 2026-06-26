@@ -83,3 +83,42 @@ Deno.test("compose: @mention de tool enabled vira instrução", () => {
   });
   assertStringIncludes(out, 'Faca [usar ferramenta "Qualificar Lead"] agora');
 });
+
+Deno.test("compose: @mention de tool disabled vira nome plano", () => {
+  const out = composeSystemPrompt({
+    ...base,
+    promptSections: { ...base.promptSections, flow: "Use @QUALIFICAR_LEAD se precisar" },
+    tools: [{ id: "QUALIFICAR_LEAD", enabled: false, instruction: "" }],
+  });
+  assertStringIncludes(out, "Use Qualificar Lead se precisar");
+});
+
+Deno.test("compose: @link mention resolve para alias e url", () => {
+  const out = composeSystemPrompt({
+    ...base,
+    promptSections: { ...base.promptSections, flow: "Acesse @link-abc" },
+    links: [{ id: "link-abc", alias: "Site", url: "https://exemplo.com" }],
+  });
+  assertStringIncludes(out, "Acesse Site (https://exemplo.com)");
+});
+
+Deno.test("compose: @doc mention resolve para nome do documento", () => {
+  const out = composeSystemPrompt({
+    ...base,
+    promptSections: { ...base.promptSections, instructions: "Veja @doc-xyz" },
+    documents: [{ id: "doc-xyz", name: "Catalogo.pdf", fileType: "document" }],
+  });
+  assertStringIncludes(out, "Veja [documento: Catalogo.pdf]");
+});
+
+Deno.test("compose: links section usa ## e inclui aviso", () => {
+  const out = composeSystemPrompt({
+    ...base,
+    links: [{ id: "l1", alias: "Loja", url: "https://loja.com" }],
+  });
+  assertStringIncludes(
+    out,
+    "## Links disponiveis para enviar ao lead:\n- Loja: https://loja.com\n",
+  );
+  assertStringIncludes(out, "IMPORTANTE: Quando relevante, envie o link completo");
+});
