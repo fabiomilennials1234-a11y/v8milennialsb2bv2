@@ -3,9 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Resumo de vendas reais de uma org (master-scoped), via RPC
- * `master_get_org_sales_summary`. Fonte canônica = pipe_propostas/status=vendido,
- * idêntica ao get_dashboard_metrics. O gate de segurança vive no RPC
- * (is_master_user()): chamadas de não-master são rejeitadas pelo banco.
+ * `master_get_org_sales_summary`. Métrica = COORTE: leads CRIADOS no período
+ * (anchor created_at, não-deletados) que viraram venda no pipe system
+ * 'propostas' — espelha get_funnel_health.stages.compraram (aba Saúde). `start`
+ * e `end` são as bordas do período-calendário corrente. O gate de segurança vive
+ * no RPC (is_master_user()): chamadas de não-master são rejeitadas pelo banco.
  */
 export interface OrgSalesSummary {
   num_vendas: number;

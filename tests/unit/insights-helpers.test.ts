@@ -8,6 +8,7 @@ import {
   formatMes,
   horizonteRange,
   horizonteMeta,
+  formatPeriodRange,
   HORIZONTES,
 } from "@/modules/identity/master/components/insights/lib/format";
 import {
@@ -48,13 +49,40 @@ describe("insights format helpers", () => {
     expect(formatPercent(Number.POSITIVE_INFINITY)).toBe("0 %");
   });
 
-  it("maps horizonte → trailing window + curve months", () => {
+  it("maps horizonte → calendar-period window (current month/quarter/year to date)", () => {
     expect(HORIZONTES).toHaveLength(3);
     expect(horizonteMeta("trimestral").curveMeses).toBe(18);
+
+    // ref fixo no meio do ano (26/06/2026) p/ determinismo.
+    const ref = new Date(2026, 5, 26); // mês 0-indexado: 5 = junho
+
+    expect(horizonteRange("mensal", ref)).toEqual({
+      start: "2026-06-01",
+      end: "2026-06-26",
+    });
+    expect(horizonteRange("trimestral", ref)).toEqual({
+      start: "2026-04-01", // Q2 começa em abril
+      end: "2026-06-26",
+    });
+    expect(horizonteRange("anual", ref)).toEqual({
+      start: "2026-01-01",
+      end: "2026-06-26",
+    });
+  });
+
+  it("defaults horizonteRange ref to today and yields ISO dates with start <= end", () => {
     const { start, end } = horizonteRange("mensal");
     expect(start).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(end).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(start < end).toBe(true);
+    expect(start <= end).toBe(true); // no 1º dia do mês start === end
+  });
+
+  it("formats the observed period as an explicit pt-BR range", () => {
+    expect(formatPeriodRange("2026-06-01", "2026-06-26")).toBe("01/06 – 26/06/2026");
+    // ano diferente → ambas as datas mostram o ano
+    expect(formatPeriodRange("2025-12-15", "2026-01-03")).toBe(
+      "15/12/2025 – 03/01/2026",
+    );
   });
 });
 

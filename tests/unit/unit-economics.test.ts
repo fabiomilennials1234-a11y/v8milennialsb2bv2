@@ -13,9 +13,11 @@ import {
 //   faturamento    = 100 * 10 = 1000
 //   impostoValor   = 0.10 * 1000 = 100
 //   adminValor     = 0.05 * 1000 = 50
-//   despesasTotais = 200 + 50 + 50 + 100 + 50 = 450
-//   cacMaximo      = 450 / 10 = 45
-//   margemPorVenda = 100 - 45 = 55
+//   comissaoValor  = 0.00 * 1000 = 0         (comissaoPct = 0 → neutro no base)
+//   despesasTotais = 200 + 50 + 50 + 100 + 50 + 0 = 450
+//   cacAtual       = 450 / 10 = 45          (CAC REAL — a agulha)
+//   bandas (ticket): cacMaximo = 100, cacIdeal = 50, cacMinimo = 25  (break-even)
+//   margemPorVenda = 100 - 45 = 55           (SEPARADO do cacMaximo; payback sobre cacAtual)
 //   ltv            = 100 * 3 = 300
 //   margemComLtv   = 300 - 45 = 255
 function makeInput(overrides: Partial<UnitEconomicsInputs> = {}): UnitEconomicsInputs {
@@ -27,6 +29,7 @@ function makeInput(overrides: Partial<UnitEconomicsInputs> = {}): UnitEconomicsI
     frete: 50,
     impostoPct: 10,
     adminPct: 5,
+    comissaoPct: 0,
     recompras: 3,
     horizonteMeses: 12,
     ...overrides,
@@ -34,54 +37,105 @@ function makeInput(overrides: Partial<UnitEconomicsInputs> = {}): UnitEconomicsI
 }
 
 describe("computeCac", () => {
-  it("computa faturamento, impostos, admin, despesas e CAC máximo", () => {
+  it("computa faturamento, impostos, admin, despesas e CAC atual (real)", () => {
     const r = computeCac(makeInput());
     expect(r.faturamento).toBe(1000);
     expect(r.impostoValor).toBe(100);
     expect(r.adminValor).toBe(50);
+    expect(r.comissaoValor).toBe(0); // comissaoPct = 0 (default base) → termo neutro
     expect(r.despesasTotais).toBe(450);
-    expect(r.cacMaximo).toBe(45);
+    expect(r.cacAtual).toBe(45);
   });
 
-  it("numVendas = 0 → CAC indefinido (null, não NaN/Infinity)", () => {
+  it("comissaoPct > 0 entra na soma do CAC (comissaoValor = comissaoPct% do faturamento)", () => {
+    // comissaoPct 10 → comissaoValor = 0.10 * 1000 = 100
+    // despesasTotais = 200 + 50 + 50 + 100(imposto) + 50(admin) + 100(comissao) = 550
+    // cacAtual = 550 / 10 = 55
+    const r = computeCac(makeInput({ comissaoPct: 10 }));
+    expect(r.comissaoValor).toBe(100);
+    expect(r.despesasTotais).toBe(550);
+    expect(r.cacAtual).toBe(55);
+  });
+
+  it("comissaoPct = 0 é neutro (não altera despesas vs. ausência da comissão)", () => {
+    const semComissao = computeCac(makeInput({ comissaoPct: 0 }));
+    expect(semComissao.comissaoValor).toBe(0);
+    expect(semComissao.despesasTotais).toBe(450);
+    expect(semComissao.cacAtual).toBe(45);
+  });
+
+  it("numVendas = 0 → CAC atual indefinido (null, não NaN/Infinity)", () => {
     const r = computeCac(makeInput({ numVendas: 0 }));
     expect(r.faturamento).toBe(0);
     expect(r.despesasTotais).toBe(300); // 200+50+50, impostos/admin = 0
-    expect(r.cacMaximo).toBeNull();
+    expect(r.cacAtual).toBeNull();
   });
 
-  it("numVendas negativo → CAC indefinido (null)", () => {
+  it("numVendas negativo → CAC atual indefinido (null)", () => {
     const r = computeCac(makeInput({ numVendas: -5 }));
-    expect(r.cacMaximo).toBeNull();
+    expect(r.cacAtual).toBeNull();
   });
 
   it("inputs não-finitos são coeridos a 0 (sem NaN)", () => {
     const r = computeCac(
-      makeInput({ anuncios: NaN as unknown as number, frete: Infinity as unknown as number }),
+      makeInput({
+        anuncios: NaN as unknown as number,
+        frete: Infinity as unknown as number,
+        comissaoPct: NaN as unknown as number,
+      }),
     );
     expect(Number.isFinite(r.despesasTotais)).toBe(true);
-    expect(Number.isFinite(r.cacMaximo as number)).toBe(true);
+    expect(Number.isFinite(r.cacAtual as number)).toBe(true);
+    expect(r.comissaoValor).toBe(0); // comissaoPct não-finito → coerido a 0
   });
 
   it("valores negativos fluem mas mantêm finitude", () => {
     const r = computeCac(makeInput({ anuncios: -1000 }));
     expect(Number.isFinite(r.despesasTotais)).toBe(true);
     expect(r.despesasTotais).toBe(-750); // -1000+50+50+100+50
-    expect(r.cacMaximo).toBe(-75);
+    expect(r.cacAtual).toBe(-75);
+  });
+
+  it("CAC atual PODE ultrapassar o teto (ticket médio) → zona vermelha (prejuízo)", () => {
+    // anuncios 900 → despesas 1150 → cacAtual 115. Teto = ticket 100.
+    // cacAtual 115 > cacMaximo 100 → agulha na zona vermelha (custo/venda > ticket).
+    const r = computeCac(makeInput({ anuncios: 900 }));
+    expect(r.despesasTotais).toBe(1150);
+    expect(r.cacAtual).toBe(115);
+    const b = cacBands(100);
+    expect(b.cacMaximo).toBe(100); // teto = ticket médio
+    expect(r.cacAtual! > (b.cacMaximo as number)).toBe(true);
   });
 });
 
-describe("cacBands", () => {
-  it("cacIdeal = max/2, cacMinimo = ideal/2", () => {
-    const b = cacBands(45);
-    expect(b.cacMaximo).toBe(45);
-    expect(b.cacIdeal).toBe(22.5);
-    expect(b.cacMinimo).toBe(11.25);
+describe("cacBands (ticket-based, break-even)", () => {
+  it("máx = ticket médio; ideal = máx/2; mínimo = máx/4 (= ideal/2)", () => {
+    const b = cacBands(100);
+    expect(b.cacMaximo).toBe(100); // teto break-even = ticket
+    expect(b.cacIdeal).toBe(50);
+    expect(b.cacMinimo).toBe(25);
+    // relação mín = ideal/2 preservada
+    expect(b.cacMinimo).toBe((b.cacIdeal as number) / 2);
   });
 
-  it("propaga null quando CAC é indefinido", () => {
-    const b = cacBands(null);
-    expect(b).toEqual({ cacMaximo: null, cacIdeal: null, cacMinimo: null });
+  it("caso canônico do CTO: ticket 5153,75 → máx/ideal/mín", () => {
+    const b = cacBands(5153.75);
+    expect(b.cacMaximo).toBeCloseTo(5153.75, 10);
+    expect(b.cacIdeal).toBeCloseTo(2576.875, 10);
+    expect(b.cacMinimo).toBeCloseTo(1288.4375, 10);
+  });
+
+  it("ticket <= 0 → bandas indefinidas (null), sem clamp negativo", () => {
+    expect(cacBands(0)).toEqual({ cacMaximo: null, cacIdeal: null, cacMinimo: null });
+    expect(cacBands(-100)).toEqual({ cacMaximo: null, cacIdeal: null, cacMinimo: null });
+  });
+
+  it("ticket não-finito → bandas indefinidas (coerção defensiva → null)", () => {
+    expect(cacBands(NaN as unknown as number)).toEqual({
+      cacMaximo: null,
+      cacIdeal: null,
+      cacMinimo: null,
+    });
   });
 });
 
@@ -109,7 +163,7 @@ describe("computePaybacks", () => {
 
   it("margemPorVenda <= 0 → payback1 impossível (null + flag)", () => {
     // ticket 20: faturamento 200 → imposto 20 + admin 10 → despesas 330 →
-    // cacMaximo 33 → margem 20-33 = -13 (imposto/admin escalam com faturamento)
+    // cacAtual 33 → margem 20-33 = -13 (imposto/admin escalam com faturamento)
     const p = computePaybacks(makeInput({ ticketMedio: 20 }));
     expect(p.margemPorVenda).toBe(-13);
     expect(p.payback1).toBeNull();
@@ -117,14 +171,14 @@ describe("computePaybacks", () => {
   });
 
   it("margemComLtv <= 0 → payback2 impossível (null + flag)", () => {
-    // ticket 20, recompras 1 → ltv 20, cacMaximo 33 → margemComLtv 20-33 = -13
+    // ticket 20, recompras 1 → ltv 20, cacAtual 33 → margemComLtv 20-33 = -13
     const p = computePaybacks(makeInput({ ticketMedio: 20, recompras: 1 }));
     expect(p.margemComLtv).toBe(-13);
     expect(p.payback2).toBeNull();
     expect(p.payback2Possivel).toBe(false);
   });
 
-  it("recompras = 0 → ltv 0, margemComLtv = -cac, payback2 impossível", () => {
+  it("recompras = 0 → ltv 0, margemComLtv = -cacAtual, payback2 impossível", () => {
     const p = computePaybacks(makeInput({ recompras: 0 }));
     expect(p.ltv).toBe(0);
     expect(p.margemComLtv).toBe(-45);
@@ -140,6 +194,17 @@ describe("computePaybacks", () => {
     expect(p.payback1).toBeNull();
     expect(p.margemComLtv).toBeNull();
     expect(p.payback2).toBeNull();
+  });
+
+  it("payback é ancorado no CAC ATUAL (real), não no teto — valor inalterado", () => {
+    // Source/semântica: payback usa cacAtual (== antiga fórmula despesas/vendas).
+    // Os números NÃO regridem mesmo com o rebase do teto p/ ticket.
+    const input = makeInput();
+    const { cacAtual } = computeCac(input);
+    const p = computePaybacks(input);
+    expect(cacAtual).toBe(45);
+    expect(p.payback1).toBeCloseTo((cacAtual as number) / (p.margemPorVenda as number), 10);
+    expect(p.payback2).toBeCloseTo((cacAtual as number) / (p.margemComLtv as number), 10);
   });
 });
 
@@ -254,18 +319,61 @@ describe("computePaybackCurve — edge cases", () => {
 describe("computeUnitEconomics — agregador", () => {
   it("encadeia cac → bands → paybacks → curve coerentemente", () => {
     const all = computeUnitEconomics(makeInput());
-    expect(all.cac.cacMaximo).toBe(45);
-    expect(all.bands.cacIdeal).toBe(22.5);
-    expect(all.bands.cacMinimo).toBe(11.25);
-    expect(all.paybacks.margemPorVenda).toBe(55);
+    expect(all.cac.cacAtual).toBe(45); // CAC real (agulha)
+    expect(all.bands.cacMaximo).toBe(100); // máx = ticket médio (break-even)
+    expect(all.bands.cacIdeal).toBe(50); // ticket/2
+    expect(all.bands.cacMinimo).toBe(25); // ticket/4
+    expect(all.paybacks.margemPorVenda).toBe(55); // ticket − cacAtual (separado do teto)
+    // cacMaximo (ticket) ≠ margemPorVenda (ticket − cacAtual) — separados de novo
+    expect(all.bands.cacMaximo).not.toBe(all.paybacks.margemPorVenda);
     expect(all.curve.defined).toBe(true);
   });
 
-  it("propaga indefinição quando numVendas = 0", () => {
+  it("caso canônico do CTO (ticket 5153,75 / 8 vendas; CAC atual entre ideal e máx)", () => {
+    // anuncios=15000 + imposto 10% + admin 20% → despesas 27369; faturamento 41230.
+    //   cacAtual = 27369 / 8 = 3421,125 (entre ideal 2576,875 e máx 5153,75)
+    const all = computeUnitEconomics(
+      makeInput({
+        ticketMedio: 5153.75,
+        numVendas: 8,
+        anuncios: 15000,
+        embalagem: 0,
+        frete: 0,
+        impostoPct: 10,
+        adminPct: 20,
+        comissaoPct: 0,
+      }),
+    );
+    expect(all.cac.faturamento).toBeCloseTo(41230, 10);
+    expect(all.cac.despesasTotais).toBeCloseTo(27369, 10);
+    expect(all.cac.cacAtual).toBeCloseTo(3421.125, 10);
+    expect(all.bands.cacMaximo).toBeCloseTo(5153.75, 10); // teto = ticket
+    expect(all.bands.cacIdeal).toBeCloseTo(2576.875, 10); // ticket/2
+    expect(all.bands.cacMinimo).toBeCloseTo(1288.4375, 10); // ticket/4
+    // CAC atual cai na faixa de atenção: ideal < atual < máximo
+    expect(all.cac.cacAtual! > (all.bands.cacIdeal as number)).toBe(true);
+    expect(all.cac.cacAtual! < (all.bands.cacMaximo as number)).toBe(true);
+  });
+
+  it("numVendas = 0 → CAC atual indefinido, mas bandas seguem do ticket (independentes do CAC)", () => {
     const all = computeUnitEconomics(makeInput({ numVendas: 0 }));
-    expect(all.cac.cacMaximo).toBeNull();
-    expect(all.bands.cacMaximo).toBeNull();
+    expect(all.cac.cacAtual).toBeNull();
+    // bandas dependem só do ticket (> 0) → seguem definidas (teto break-even)
+    expect(all.bands.cacMaximo).toBe(100);
+    expect(all.bands.cacIdeal).toBe(50);
+    expect(all.bands.cacMinimo).toBe(25);
     expect(all.paybacks.payback1).toBeNull();
     expect(all.curve.defined).toBe(false);
+  });
+
+  it("ticket = 0 → CAC atual calculável, mas bandas indefinidas (ticket <= 0 → null)", () => {
+    // ticket 0 → faturamento/impostos/admin 0 → despesas 300 → cacAtual 30
+    const all = computeUnitEconomics(makeInput({ ticketMedio: 0 }));
+    expect(all.cac.cacAtual).toBe(30);
+    expect(all.bands.cacMaximo).toBeNull();
+    expect(all.bands.cacIdeal).toBeNull();
+    expect(all.bands.cacMinimo).toBeNull();
+    // margem por venda segue separada (negativa aqui), ancorando o payback
+    expect(all.paybacks.margemPorVenda).toBe(-30);
   });
 });

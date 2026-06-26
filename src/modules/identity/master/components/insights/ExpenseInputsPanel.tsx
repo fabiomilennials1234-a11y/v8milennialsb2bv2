@@ -11,6 +11,7 @@ export interface ExpenseForm {
   frete: number;
   imposto_pct: number;
   admin_pct: number;
+  comissao_pct: number;
   recompras: number;
   meta_num_vendas: number;
   meta_ticket_medio: number;
@@ -22,6 +23,7 @@ export interface ExpenseRealRefs {
   frete: number;
   imposto_pct: number;
   admin_pct: number;
+  comissao_pct: number;
   recompras: number;
   num_vendas: number;
   ticket_medio: number;
@@ -234,6 +236,14 @@ export function ExpenseInputsPanel({
             onChange={(n) => set({ admin_pct: n })}
             dashed={projection}
             realLine={realLine(realRefs?.admin_pct ?? 0, { pct: true })}
+          />
+          <NumberField
+            label="Comissão (%)"
+            adorn="%"
+            value={value.comissao_pct}
+            onChange={(n) => set({ comissao_pct: n })}
+            dashed={projection}
+            realLine={realLine(realRefs?.comissao_pct ?? 0, { pct: true })}
           />
           <NumberField
             label="Recompras (nº)"

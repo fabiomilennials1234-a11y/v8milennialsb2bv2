@@ -19,6 +19,7 @@ export interface OrgEconomicsInputs {
   frete: number;
   imposto_pct: number;
   admin_pct: number;
+  comissao_pct: number;
   recompras: number;
   meta_num_vendas: number | null;
   meta_ticket_medio: number | null;
@@ -39,6 +40,7 @@ export type OrgEconomicsInputsUpsert = {
     | "frete"
     | "imposto_pct"
     | "admin_pct"
+    | "comissao_pct"
     | "recompras"
     | "meta_num_vendas"
     | "meta_ticket_medio"

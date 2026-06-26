@@ -3,43 +3,83 @@
  * Currency/percent sempre pt-BR. Tudo puro (sem I/O), unit-testável.
  */
 
+import {
+  startOfMonth,
+  startOfQuarter,
+  startOfYear,
+  format,
+  parseISO,
+} from "date-fns";
+import { ptBR } from "date-fns/locale";
+
 export type Horizonte = "mensal" | "trimestral" | "anual";
 
 export interface HorizonteMeta {
   key: Horizonte;
   label: string;
-  /** Janela de agregação de vendas (dias, trailing a partir de hoje). */
-  windowDays: number;
-  /** Horizonte da curva de payback (meses) — escala com a janela observada. */
+  /** Horizonte da curva de payback (meses) — projeção, desacoplada da janela de dados. */
   curveMeses: number;
 }
 
 /**
  * O seletor de horizonte controla DUAS coisas (DESIGN §7):
- *  1. a janela de datas passada ao `useOrgSalesSummary` (trailing window);
- *  2. o `horizonteMeses` da curva (quanto mais longa a observação, mais longe
- *     projetamos a recuperação — a calc clampa a [3,120]).
+ *  1. a janela de datas (período-CALENDÁRIO corrente) passada ao
+ *     `useOrgSalesSummary` — alinha a coorte do Insights à aba Saúde (decisão CTO);
+ *  2. o `curveMeses` da curva J (projeção da recuperação; a calc clampa a [3,120]).
+ *     A curva é desacoplada da janela de dados — projeta, não observa.
  */
 export const HORIZONTES: HorizonteMeta[] = [
-  { key: "mensal", label: "Mensal", windowDays: 30, curveMeses: 12 },
-  { key: "trimestral", label: "Trimestral", windowDays: 90, curveMeses: 18 },
-  { key: "anual", label: "Anual", windowDays: 365, curveMeses: 24 },
+  { key: "mensal", label: "Mensal", curveMeses: 12 },
+  { key: "trimestral", label: "Trimestral", curveMeses: 18 },
+  { key: "anual", label: "Anual", curveMeses: 24 },
 ];
 
 export function horizonteMeta(h: Horizonte): HorizonteMeta {
   return HORIZONTES.find((x) => x.key === h) ?? HORIZONTES[0];
 }
 
-function toISODate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+/** Início do período-calendário corrente para o horizonte (mês / trimestre / ano). */
+function periodStart(h: Horizonte, ref: Date): Date {
+  switch (h) {
+    case "trimestral":
+      return startOfQuarter(ref);
+    case "anual":
+      return startOfYear(ref);
+    case "mensal":
+    default:
+      return startOfMonth(ref);
+  }
 }
 
-/** Janela [start, end] (YYYY-MM-DD), end = hoje, start = hoje − windowDays. */
-export function horizonteRange(h: Horizonte): { start: string; end: string } {
-  const end = new Date();
-  const start = new Date(end);
-  start.setDate(start.getDate() - horizonteMeta(h).windowDays);
-  return { start: toISODate(start), end: toISODate(end) };
+/**
+ * Janela [start, end] (YYYY-MM-DD) do período-CALENDÁRIO corrente, não trailing:
+ *  - mensal → [1º dia do mês, hoje]
+ *  - trimestral → [1º dia do trimestre, hoje]
+ *  - anual → [1º dia do ano, hoje]
+ * Alinha a coorte (created_at) do Insights à aba Saúde do funil (decisão CTO).
+ * `ref` é injetável p/ testes determinísticos.
+ */
+export function horizonteRange(
+  h: Horizonte,
+  ref: Date = new Date(),
+): { start: string; end: string } {
+  return {
+    start: format(periodStart(h, ref), "yyyy-MM-dd"),
+    end: format(ref, "yyyy-MM-dd"),
+  };
+}
+
+/**
+ * Rótulo pt-BR explícito do período observado, p/ exibir perto dos KPIs.
+ * Ex.: "01/06 – 26/06/2026" (ano único) ou "15/12/2025 – 03/01/2026".
+ */
+export function formatPeriodRange(start: string, end: string): string {
+  const s = parseISO(start);
+  const e = parseISO(end);
+  const sameYear = s.getFullYear() === e.getFullYear();
+  const left = format(s, sameYear ? "dd/MM" : "dd/MM/yyyy", { locale: ptBR });
+  const right = format(e, "dd/MM/yyyy", { locale: ptBR });
+  return `${left} – ${right}`;
 }
 
 const brl0 = new Intl.NumberFormat("pt-BR", {
@@ -77,6 +117,17 @@ const pctFmt = new Intl.NumberFormat("pt-BR", {
 export function formatPercent(value: number): string {
   const v = Number.isFinite(value) ? value : 0;
   return `${pctFmt.format(v)} %`;
+}
+
+const pct0Fmt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+
+/** ROI pt-BR com sinal explícito: `150` → "+150 %", `-100` → "−100 %", `0` → "0 %". */
+export function formatSignedPercent(value: number): string {
+  const v = Number.isFinite(value) ? value : 0;
+  const rounded = Math.round(v);
+  if (rounded > 0) return `+${pct0Fmt.format(rounded)} %`;
+  if (rounded < 0) return `−${pct0Fmt.format(Math.abs(rounded))} %`;
+  return "0 %";
 }
 
 const numFmt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });

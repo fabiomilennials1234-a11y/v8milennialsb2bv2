@@ -14,7 +14,13 @@ import {
   computeUnitEconomics,
   type UnitEconomicsInputs,
 } from "../../lib/unit-economics";
-import { horizonteMeta, horizonteRange, type Horizonte } from "./lib/format";
+import { computeEconomicsTimeline } from "../../lib/economics-timeline";
+import {
+  horizonteMeta,
+  horizonteRange,
+  formatPeriodRange,
+  type Horizonte,
+} from "./lib/format";
 import type { InsightsMode } from "./InsightsModeTabs";
 import type { AutosaveStatus } from "./AutosaveIndicator";
 import {
@@ -25,7 +31,7 @@ import {
 import { MetricStatRow } from "./MetricStatRow";
 import { CacBandGauge } from "./CacBandGauge";
 import { PaybackCard } from "./PaybackCard";
-import { JCurveChart } from "./JCurveChart";
+import { UnitEconomicsJourneyChart } from "./UnitEconomicsJourneyChart";
 import {
   InsightsSkeleton,
   InsightsErrorState,
@@ -42,6 +48,7 @@ function seedForm(
     frete: data?.frete ?? 0,
     imposto_pct: data?.imposto_pct ?? 0,
     admin_pct: data?.admin_pct ?? 0,
+    comissao_pct: data?.comissao_pct ?? 0,
     recompras: data?.recompras ?? 0,
     meta_num_vendas: data?.meta_num_vendas ?? sales?.num_vendas ?? 0,
     meta_ticket_medio: data?.meta_ticket_medio ?? sales?.ticket_medio ?? 0,
@@ -90,6 +97,7 @@ export function InsightsContent({ orgId, mode, setMode, horizonte }: InsightsCon
       mode={mode}
       setMode={setMode}
       horizonte={horizonte}
+      periodLabel={formatPeriodRange(start, end)}
       sales={salesQuery.data}
       dadosData={dadosQuery.data ?? null}
       projData={projQuery.data ?? null}
@@ -102,6 +110,7 @@ interface InsightsLoadedProps {
   mode: InsightsMode;
   setMode: (m: InsightsMode) => void;
   horizonte: Horizonte;
+  periodLabel: string;
   sales: OrgSalesSummary | undefined;
   dadosData: OrgEconomicsInputs | null;
   projData: OrgEconomicsInputs | null;
@@ -112,6 +121,7 @@ function InsightsLoaded({
   mode,
   setMode,
   horizonte,
+  periodLabel,
   sales,
   dadosData,
   projData,
@@ -143,6 +153,7 @@ function InsightsLoaded({
           frete: f.frete,
           imposto_pct: f.imposto_pct,
           admin_pct: f.admin_pct,
+          comissao_pct: f.comissao_pct,
           recompras: f.recompras,
         });
       } finally {
@@ -165,6 +176,7 @@ function InsightsLoaded({
           frete: f.frete,
           imposto_pct: f.imposto_pct,
           admin_pct: f.admin_pct,
+          comissao_pct: f.comissao_pct,
           recompras: f.recompras,
           meta_num_vendas: Math.round(f.meta_num_vendas),
           meta_ticket_medio: f.meta_ticket_medio,
@@ -189,6 +201,7 @@ function InsightsLoaded({
       frete: dadosForm.frete,
       impostoPct: dadosForm.imposto_pct,
       adminPct: dadosForm.admin_pct,
+      comissaoPct: dadosForm.comissao_pct,
       recompras: dadosForm.recompras,
       horizonteMeses: curveMeses,
     }),
@@ -203,6 +216,7 @@ function InsightsLoaded({
       frete: projForm.frete,
       impostoPct: projForm.imposto_pct,
       adminPct: projForm.admin_pct,
+      comissaoPct: projForm.comissao_pct,
       recompras: projForm.recompras,
       horizonteMeses: curveMeses,
     }),
@@ -211,6 +225,15 @@ function InsightsLoaded({
 
   const dadosEcon = useMemo(() => computeUnitEconomics(dadosInputs), [dadosInputs]);
   const projEcon = useMemo(() => computeUnitEconomics(projInputs), [projInputs]);
+
+  const dadosTimeline = useMemo(
+    () => computeEconomicsTimeline(dadosInputs),
+    [dadosInputs],
+  );
+  const projTimeline = useMemo(
+    () => computeEconomicsTimeline(projInputs),
+    [projInputs],
+  );
 
   const isProjection = mode === "projecao";
   const econ = isProjection ? projEcon : dadosEcon;
@@ -240,6 +263,7 @@ function InsightsLoaded({
     frete: dadosForm.frete,
     imposto_pct: dadosForm.imposto_pct,
     admin_pct: dadosForm.admin_pct,
+    comissao_pct: dadosForm.comissao_pct,
     recompras: dadosForm.recompras,
     num_vendas: numVendasReal,
     ticket_medio: ticketReal,
@@ -307,10 +331,11 @@ function InsightsLoaded({
               numVendas={numVendas}
               faturamento={econ.cac.faturamento}
               mode={mode}
+              periodLabel={periodLabel}
             />
 
             <CacBandGauge
-              cacAtual={econ.cac.cacMaximo}
+              cacAtual={econ.cac.cacAtual}
               cacMinimo={econ.bands.cacMinimo}
               cacIdeal={econ.bands.cacIdeal}
               cacMaximo={econ.bands.cacMaximo}
@@ -323,7 +348,7 @@ function InsightsLoaded({
                 eyebrow="Payback 1 · primeira compra"
                 payback={econ.paybacks.payback1}
                 conceptFormula="P1 = CAC ÷ margem por venda"
-                cac={econ.cac.cacMaximo}
+                cac={econ.cac.cacAtual}
                 denomLabel="margem por venda"
                 denomValue={econ.paybacks.margemPorVenda}
                 impossibleNote="Margem por venda não-positiva — cada venda não cobre o CAC."
@@ -332,7 +357,7 @@ function InsightsLoaded({
                 eyebrow="Payback 2 · com recompra"
                 payback={econ.paybacks.payback2}
                 conceptFormula="P2 = CAC ÷ margem com LTV"
-                cac={econ.cac.cacMaximo}
+                cac={econ.cac.cacAtual}
                 denomLabel="margem com LTV"
                 denomValue={econ.paybacks.margemComLtv}
                 impossibleNote="LTV não cobre o CAC — sem payback com recompra."
@@ -340,11 +365,11 @@ function InsightsLoaded({
             </div>
           </div>
 
-          {/* Curva J (full-width) */}
+          {/* Jornada de unit economics (full-width) */}
           <div className="lg:col-span-12">
-            <JCurveChart
-              curve={econ.curve}
-              ghostCurve={isProjection ? dadosEcon.curve : null}
+            <UnitEconomicsJourneyChart
+              timeline={isProjection ? projTimeline : dadosTimeline}
+              ghostCaixa={isProjection ? dadosTimeline.caixa : null}
               mode={mode}
             />
           </div>
