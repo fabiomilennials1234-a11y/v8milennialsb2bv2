@@ -64,11 +64,12 @@ import { buildSetSectionsUpdate, copilotSetSectionsTool } from "./copilot.ts";
 function makeStub(opts: {
   agent: Record<string, unknown> | null;
   docs?: unknown[];
+  docsError?: { message: string };
   onUpdate?: (table: string, payload: Record<string, unknown>) => void;
   authUserId?: string;
   masterUserId?: string;
 }) {
-  const { agent, docs = [], onUpdate } = opts;
+  const { agent, docs = [], docsError, onUpdate } = opts;
   const authUserId = opts.authUserId ?? "user-1";
   const masterUserId = opts.masterUserId ?? "master-1";
 
@@ -83,7 +84,9 @@ function makeStub(opts: {
         }
         return { data: agent, error: null };
       }
-      if (table === "copilot_agent_documents") return { data: docs, error: null };
+      if (table === "copilot_agent_documents") {
+        return docsError ? { data: null, error: docsError } : { data: docs, error: null };
+      }
       if (table === "master_users") return { data: { id: masterUserId }, error: null };
       if (table === "master_audit_logs") return { data: null, error: null };
       return { data: null, error: null };
@@ -183,6 +186,26 @@ Deno.test("buildSetSectionsUpdate — empty string clears a section", () => {
   assertEquals(String(update.system_prompt).includes("# FLUXO DE ATENDIMENTO"), false);
 });
 
+Deno.test("buildSetSectionsUpdate — faithful recompile keeps enabled tool blocks", () => {
+  // Locks the invariant that the recompile reflects live can_* flags + tool catalog,
+  // not just the edited section. can_qualify_lead → the QUALIFICAR_LEAD block must appear.
+  const agentRow = {
+    id: "a1",
+    organization_id: "o1",
+    name: "Bia",
+    can_qualify_lead: true,
+    conversation_style: { promptSections: { personality: "Sou a Bia." } },
+  };
+  const update = buildSetSectionsUpdate(
+    { flow: "Cumprimentar e qualificar." },
+    agentRow.conversation_style as Record<string, unknown>,
+    [],
+    agentRow,
+  );
+  assertStringIncludes(String(update.system_prompt), "# FERRAMENTAS DISPONÍVEIS");
+  assertStringIncludes(String(update.system_prompt), "## Qualificar Lead");
+});
+
 Deno.test("copilot.set_sections — dry-run returns confirmToken and does NOT write", async () => {
   let writes = 0;
   const db = makeStub({
@@ -232,6 +255,32 @@ Deno.test("copilot.set_sections — agent not found → throws", async () => {
     Error,
     "No copilot agent found.",
   );
+});
+
+Deno.test("copilot.set_sections — docs read error aborts (no degraded recompile)", async () => {
+  let writes = 0;
+  const db = makeStub({
+    agent: {
+      id: "a1",
+      organization_id: "o1",
+      name: "Bia",
+      conversation_style: { promptSections: { personality: "Sou a Bia." } },
+    },
+    docsError: { message: "boom" },
+    onUpdate: () => {
+      writes++;
+    },
+  });
+  await assertRejects(
+    () =>
+      copilotSetSectionsTool.handler(
+        { agent_id: "a1", sections: { flow: "x" } },
+        ctxOf(db),
+      ),
+    Error,
+    "boom",
+  );
+  assertEquals(writes, 0); // fail-closed: nothing applied
 });
 
 Deno.test("copilot.set_sections — apply round-trip writes recompiled prompt once", async () => {

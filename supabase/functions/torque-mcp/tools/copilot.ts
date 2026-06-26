@@ -273,8 +273,11 @@ export const copilotSetSectionsTool: ToolDef = {
         const agent = data as unknown as
           & Parameters<typeof agentRowToComposeInput>[0]
           & { id: string; name: string; organization_id: string };
-        const { data: docsData } = await db.from("copilot_agent_documents")
+        const { data: docsData, error: docsErr } = await db.from("copilot_agent_documents")
           .select("id,file_name,file_type,description,send_when").eq("agent_id", agentId);
+        // Fail closed: a swallowed docs error would drop the MÍDIA block from the recompile and
+        // persist a degraded system_prompt. Throwing in plan() aborts before any token/write.
+        if (docsErr) throw new Error(docsErr.message);
         const docs = (docsData ?? []) as Parameters<typeof agentRowToComposeInput>[1];
         const cur =
           (agent.conversation_style as { promptSections?: Partial<ComposePromptSections> }) ?? {};
