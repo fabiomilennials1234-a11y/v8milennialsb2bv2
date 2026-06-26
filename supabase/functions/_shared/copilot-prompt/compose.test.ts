@@ -1,5 +1,6 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { type ComposeInput, composeSystemPrompt } from "./compose.ts";
+import goldens from "./fixtures/compose-goldens.json" with { type: "json" };
 
 const base: ComposeInput = {
   promptSections: {
@@ -121,4 +122,10 @@ Deno.test("compose: links section usa ## e inclui aviso", () => {
     "## Links disponiveis para enviar ao lead:\n- Loja: https://loja.com\n",
   );
   assertStringIncludes(out, "IMPORTANTE: Quando relevante, envie o link completo");
+});
+
+Deno.test("compose: golden fixtures (parity contract)", () => {
+  for (const g of goldens as Array<{ name: string; input: ComposeInput; expected: string }>) {
+    assertEquals(composeSystemPrompt(g.input), g.expected, `golden mismatch: ${g.name}`);
+  }
 });
