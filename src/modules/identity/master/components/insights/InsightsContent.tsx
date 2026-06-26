@@ -239,6 +239,7 @@ function InsightsLoaded({
   const econ = isProjection ? projEcon : dadosEcon;
   const ticketMedio = isProjection ? projForm.meta_ticket_medio : ticketReal;
   const numVendas = isProjection ? projForm.meta_num_vendas : numVendasReal;
+  const anuncios = isProjection ? projInputs.anuncios : dadosInputs.anuncios;
 
   const dadosStatus: AutosaveStatus =
     dadosPending || dadosSave.isSaving
@@ -339,7 +340,7 @@ function InsightsLoaded({
               cacMinimo={econ.bands.cacMinimo}
               cacIdeal={econ.bands.cacIdeal}
               cacMaximo={econ.bands.cacMaximo}
-              despesasTotais={econ.cac.despesasTotais}
+              anuncios={anuncios}
               numVendas={numVendas}
             />
 

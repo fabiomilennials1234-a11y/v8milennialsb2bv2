@@ -251,7 +251,7 @@ export function computeEconomicsTimeline(
   const anuncios = num(inputs.anuncios);
 
   const { faturamento, despesasTotais, cacAtual } = computeCac(inputs);
-  const bands = cacBands(inputs.ticketMedio);
+  const bands = cacBands(inputs);
 
   const marginMensal = faturamento - despesasTotais;
   const investMensal = Math.max(anuncios, 0);
