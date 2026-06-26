@@ -1,6 +1,8 @@
 import { memo } from "react";
 import { motion } from "framer-motion";
 import { BarChart3, Activity } from "lucide-react";
+import { useTeamMembers } from "@/modules/identity";
+import { ProductivityBlock } from "@/modules/analytics/components/performance/ProductivityBlock";
 import { RankingTable } from "./RankingTable";
 import { SellerActivityCard } from "./SellerActivityCard";
 import { ProductRanking } from "./ProductRanking";
@@ -17,8 +19,19 @@ interface TabPerformanceProps {
 }
 
 function TabPerformanceBase({ month, year }: TabPerformanceProps) {
+  const { data: teamMembers = [] } = useTeamMembers();
+
   return (
     <div className="space-y-6">
+      {/* Row 0: Produtividade (atividade no período, keyed pela data-da-ação) */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+      >
+        <ProductivityBlock teamMembers={teamMembers} />
+      </motion.div>
+
       {/* Row 1: Ranking completo */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
