@@ -419,3 +419,83 @@ describe("computeUnitEconomics — agregador", () => {
     expect(all.paybacks.margemPorVenda).toBe(-20);
   });
 });
+
+describe("custo por produto + modo margem de contribuição (MC)", () => {
+  it("custo por produto (R$/un) entra no custo não-aquisição (modo detalhado)", () => {
+    // base + custoProdutoUnit 30 → custoProdutoTotal = 30×10 = 300
+    // custoNaoAquisicao = 300 + embalagem 50 + frete 50 + imposto 100 + admin 50 + 0 = 550
+    // despesasTotais = anúncios 200 + 550 = 750; cacMaximo = 550/10 = 55
+    const input = makeInput({ custoProdutoUnit: 30 });
+    const r = computeCac(input);
+    expect(r.custoProdutoTotal).toBe(300);
+    expect(r.custoNaoAquisicaoTotal).toBe(550);
+    expect(r.despesasTotais).toBe(750);
+    const b = cacBands(input);
+    expect(b.cacMaximo).toBe(55);
+    expect(b.cacIdeal).toBe(27.5);
+  });
+
+  it("modo 'mc': cacMaximo = ticket × (1 − MC%/100)", () => {
+    // ticket 100, vendas 10, MC 40% → custoNaoAquisicao = faturamento 1000 × 0,6 = 600
+    // cacMaximo = 600/10 = 60 = ticket × 0,6
+    const input = makeInput({ despesasMode: "mc", margemContribuicaoPct: 40 });
+    const r = computeCac(input);
+    expect(r.custoNaoAquisicaoTotal).toBe(600);
+    expect(r.despesasTotais).toBe(800); // anúncios 200 + 600
+    const b = cacBands(input);
+    expect(b.cacMaximo).toBe(60); // ticket 100 × (1 − 0,4)
+    expect(b.cacIdeal).toBe(30);
+    expect(b.cacMinimo).toBe(20);
+  });
+
+  it("modo 'mc' IGNORA os itens detalhados (custo produto / embalagem / frete / taxas)", () => {
+    const base = computeCac(makeInput({ despesasMode: "mc", margemContribuicaoPct: 40 }));
+    const comItens = computeCac(
+      makeInput({
+        despesasMode: "mc",
+        margemContribuicaoPct: 40,
+        custoProdutoUnit: 9999,
+        embalagem: 9999,
+        frete: 9999,
+        impostoPct: 50,
+        adminPct: 50,
+        comissaoPct: 50,
+      }),
+    );
+    expect(comItens.custoNaoAquisicaoTotal).toBe(base.custoNaoAquisicaoTotal);
+    expect(comItens.despesasTotais).toBe(base.despesasTotais);
+  });
+
+  it("margemContribuicaoEfetivaPct: round-trip no modo 'mc'; derivada no detalhado", () => {
+    const mc = computeCac(makeInput({ despesasMode: "mc", margemContribuicaoPct: 40 }));
+    expect(mc.margemContribuicaoEfetivaPct).toBeCloseTo(40, 10);
+    // detalhado base: custoNaoAquisicao 250 / faturamento 1000 → MC efetiva = (1000−250)/1000×100 = 75
+    const det = computeCac(makeInput());
+    expect(det.margemContribuicaoEfetivaPct).toBeCloseTo(75, 10);
+  });
+
+  it("faturamento <= 0 → margemContribuicaoEfetivaPct null", () => {
+    expect(computeCac(makeInput({ numVendas: 0 })).margemContribuicaoEfetivaPct).toBeNull();
+  });
+
+  it("default (sem despesasMode) = 'detalhado' — retrocompatível", () => {
+    const semMode = computeCac(makeInput());
+    const detalhado = computeCac(makeInput({ despesasMode: "detalhado" }));
+    expect(semMode.despesasTotais).toBe(detalhado.despesasTotais);
+    expect(semMode.custoNaoAquisicaoTotal).toBe(detalhado.custoNaoAquisicaoTotal);
+  });
+
+  it("GOLDEN planilha no modo 'mc' (ticket 2.000, MC 40%) = mesmo teto que detalhado", () => {
+    const mcInput: UnitEconomicsInputs = {
+      ...planilhaInput(),
+      despesasMode: "mc",
+      margemContribuicaoPct: 40,
+    };
+    const b = cacBands(mcInput);
+    expect(b.cacMaximo).toBe(1200); // ticket 2000 × (1 − 0,4)
+    expect(b.cacIdeal).toBe(600);
+    expect(b.cacMinimo).toBe(400);
+    // bate com o modo detalhado da mesma planilha
+    expect(b.cacMaximo).toBe(cacBands(planilhaInput()).cacMaximo);
+  });
+});

@@ -4,9 +4,17 @@ import { Label } from "@/components/ui/label";
 import { AutosaveIndicator, type AutosaveStatus } from "./AutosaveIndicator";
 import { formatBRL, formatInt } from "./lib/format";
 
+export type DespesasMode = "detalhado" | "mc";
+
 /** Forma editável dos pressupostos (números puros). */
 export interface ExpenseForm {
   anuncios: number;
+  /** Custo do produto por unidade (R$). */
+  custo_por_produto: number;
+  /** 'detalhado' (itens) ou 'mc' (margem de contribuição %). */
+  despesas_mode: DespesasMode;
+  /** Margem de contribuição (% do ticket) — modo 'mc'. */
+  margem_contribuicao_pct: number;
   embalagem: number;
   frete: number;
   imposto_pct: number;
@@ -19,6 +27,8 @@ export interface ExpenseForm {
 
 export interface ExpenseRealRefs {
   anuncios: number;
+  custo_por_produto: number;
+  margem_contribuicao_pct: number;
   embalagem: number;
   frete: number;
   imposto_pct: number;
@@ -36,6 +46,8 @@ interface ExpenseInputsPanelProps {
   status: AutosaveStatus;
   onRetry?: () => void;
   realRefs?: ExpenseRealRefs;
+  /** Margem de contribuição efetiva (% do faturamento) — derivada da engine, p/ exibir no modo detalhado. */
+  mcEfetivaPct?: number | null;
 }
 
 /** Parser leniente pt-BR: aceita "1.500,50" e "1500.5". */
@@ -146,9 +158,11 @@ export function ExpenseInputsPanel({
   status,
   onRetry,
   realRefs,
+  mcEfetivaPct,
 }: ExpenseInputsPanelProps) {
   const projection = mode === "projection";
   const set = (patch: Partial<ExpenseForm>) => onChange({ ...value, ...patch });
+  const mc = value.despesas_mode === "mc";
 
   const realLine = (n: number, opts?: { pct?: boolean; count?: boolean }) => {
     if (!projection || !realRefs) return undefined;
@@ -200,51 +214,116 @@ export function ExpenseInputsPanel({
         </div>
 
         <div className="space-y-3">
-          <SectionLabel>Custos variáveis</SectionLabel>
-          <NumberField
-            label="Embalagem (R$)"
-            adorn="R$"
-            value={value.embalagem}
-            onChange={(n) => set({ embalagem: n })}
-            dashed={projection}
-            realLine={realLine(realRefs?.embalagem ?? 0)}
-          />
-          <NumberField
-            label="Frete (R$)"
-            adorn="R$"
-            value={value.frete}
-            onChange={(n) => set({ frete: n })}
-            dashed={projection}
-            realLine={realLine(realRefs?.frete ?? 0)}
-          />
-          <NumberField
-            label="Impostos (%)"
-            adorn="%"
-            value={value.imposto_pct}
-            onChange={(n) => set({ imposto_pct: n })}
-            dashed={projection}
-            realLine={realLine(realRefs?.imposto_pct ?? 0, { pct: true })}
-          />
+          <div className="flex items-center justify-between gap-2">
+            <SectionLabel>Despesas</SectionLabel>
+            <div className="inline-flex rounded-lg border border-border bg-background p-0.5">
+              <button
+                type="button"
+                onClick={() => set({ despesas_mode: "mc" })}
+                aria-pressed={mc}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  mc
+                    ? "bg-insights/15 text-insights"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Margem de contrib.
+              </button>
+              <button
+                type="button"
+                onClick={() => set({ despesas_mode: "detalhado" })}
+                aria-pressed={!mc}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  !mc
+                    ? "bg-insights/15 text-insights"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Detalhar
+              </button>
+            </div>
+          </div>
+
+          {mc ? (
+            <>
+              <NumberField
+                key="despesa-mc"
+                label="Margem de contribuição (%)"
+                adorn="%"
+                value={value.margem_contribuicao_pct}
+                onChange={(n) => set({ margem_contribuicao_pct: n })}
+                dashed={projection}
+                realLine={realLine(realRefs?.margem_contribuicao_pct ?? 0, { pct: true })}
+              />
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                MC = o que sobra do ticket depois de todos os custos (fora aquisição). Sem
+                esse número? Toque <span className="text-foreground/80">Detalhar</span>.
+              </p>
+            </>
+          ) : (
+            <>
+              <NumberField
+                key="despesa-custo-produto"
+                label="Custo por produto (R$ / unidade)"
+                adorn="R$"
+                value={value.custo_por_produto}
+                onChange={(n) => set({ custo_por_produto: n })}
+                dashed={projection}
+                realLine={realLine(realRefs?.custo_por_produto ?? 0)}
+              />
+              <NumberField
+                label="Embalagem (R$)"
+                adorn="R$"
+                value={value.embalagem}
+                onChange={(n) => set({ embalagem: n })}
+                dashed={projection}
+                realLine={realLine(realRefs?.embalagem ?? 0)}
+              />
+              <NumberField
+                label="Frete (R$)"
+                adorn="R$"
+                value={value.frete}
+                onChange={(n) => set({ frete: n })}
+                dashed={projection}
+                realLine={realLine(realRefs?.frete ?? 0)}
+              />
+              <NumberField
+                label="Impostos (%)"
+                adorn="%"
+                value={value.imposto_pct}
+                onChange={(n) => set({ imposto_pct: n })}
+                dashed={projection}
+                realLine={realLine(realRefs?.imposto_pct ?? 0, { pct: true })}
+              />
+              <NumberField
+                label="Despesas administrativas (%)"
+                adorn="%"
+                value={value.admin_pct}
+                onChange={(n) => set({ admin_pct: n })}
+                dashed={projection}
+                realLine={realLine(realRefs?.admin_pct ?? 0, { pct: true })}
+              />
+              <NumberField
+                label="Comissão (%)"
+                adorn="%"
+                value={value.comissao_pct}
+                onChange={(n) => set({ comissao_pct: n })}
+                dashed={projection}
+                realLine={realLine(realRefs?.comissao_pct ?? 0, { pct: true })}
+              />
+              {mcEfetivaPct != null && Number.isFinite(mcEfetivaPct) && (
+                <p className="text-[11px] tabular-nums text-muted-foreground">
+                  Margem de contribuição ≈ {formatInt(mcEfetivaPct)} %
+                </p>
+              )}
+            </>
+          )}
         </div>
 
         <div className="space-y-3">
           <SectionLabel>Operação</SectionLabel>
-          <NumberField
-            label="Despesas administrativas (%)"
-            adorn="%"
-            value={value.admin_pct}
-            onChange={(n) => set({ admin_pct: n })}
-            dashed={projection}
-            realLine={realLine(realRefs?.admin_pct ?? 0, { pct: true })}
-          />
-          <NumberField
-            label="Comissão (%)"
-            adorn="%"
-            value={value.comissao_pct}
-            onChange={(n) => set({ comissao_pct: n })}
-            dashed={projection}
-            realLine={realLine(realRefs?.comissao_pct ?? 0, { pct: true })}
-          />
           <NumberField
             label="Recompras (nº)"
             adorn="nº"

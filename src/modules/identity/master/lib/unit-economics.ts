@@ -10,8 +10,10 @@
  *   impostoValor      = (impostoPct/100) * faturamento
  *   adminValor        = (adminPct/100) * faturamento
  *   comissaoValor     = (comissaoPct/100) * faturamento
- *   despesasTotais    = anuncios + embalagem + frete + impostoValor + adminValor + comissaoValor
- *   custoNaoAquisicao = despesasTotais - anuncios        // produto + operação (tudo menos anúncios)
+ *   custoProdutoTotal = custoProdutoUnit * numVendas
+ *   custoNaoAquisicao = MODO 'detalhado': custoProdutoTotal + embalagem + frete + impostoValor + adminValor + comissaoValor
+ *                       MODO 'mc':        faturamento * (1 - margemContribuicaoPct/100)   // MC = o que SOBRA
+ *   despesasTotais    = anuncios + custoNaoAquisicao
  *   cacAtual          = anuncios / numVendas             // CAC REAL = investimento em aquisição/venda (agulha)
  *   lucroLiquido      = ticketMedio - custoNaoAquisicao/numVendas
  *   cacMaximo         = ticketMedio - lucroLiquido = custoNaoAquisicao/numVendas   // teto-alvo
@@ -47,17 +49,33 @@ export interface UnitEconomicsInputs {
   ticketMedio: number;
   /** Número de vendas no período. CAC é indefinido quando <= 0. */
   numVendas: number;
-  /** Investimento em anúncios (R$). */
+  /** Investimento em anúncios (R$). É o CAC (aquisição), NÃO entra no custo não-aquisição. */
   anuncios: number;
-  /** Custo de embalagem (R$). */
+  /**
+   * Custo do produto por UNIDADE (R$). Total = custoProdutoUnit * numVendas.
+   * Componente do custo não-aquisição (modo 'detalhado'). Default 0.
+   */
+  custoProdutoUnit?: number;
+  /**
+   * Modo do custo não-aquisição:
+   *  - 'detalhado' (default): custoProduto + embalagem + frete + impostos/admin/comissão.
+   *  - 'mc': informa a Margem de Contribuição (%) e os itens detalhados são ignorados.
+   */
+  despesasMode?: "detalhado" | "mc";
+  /**
+   * Margem de contribuição (% do ticket) — só no modo 'mc'. É O QUE SOBRA do ticket
+   * depois de TODOS os custos não-aquisição. cacMaximo = ticket * (1 - MC%/100). Default 0.
+   */
+  margemContribuicaoPct?: number;
+  /** Custo de embalagem (R$) — modo 'detalhado'. */
   embalagem: number;
-  /** Custo de frete (R$). */
+  /** Custo de frete (R$) — modo 'detalhado'. */
   frete: number;
-  /** Imposto como % do faturamento (ex.: 10 = 10%). */
+  /** Imposto como % do faturamento (ex.: 10 = 10%) — modo 'detalhado'. */
   impostoPct: number;
-  /** Custo administrativo como % do faturamento (ex.: 5 = 5%). */
+  /** Custo administrativo como % do faturamento (ex.: 5 = 5%) — modo 'detalhado'. */
   adminPct: number;
-  /** Comissão do vendedor como % do faturamento (ex.: 5 = 5%). Entra na soma do CAC. */
+  /** Comissão do vendedor como % do faturamento (ex.: 5 = 5%) — modo 'detalhado'. */
   comissaoPct: number;
   /** Nº médio de recompras por cliente (alimenta LTV). */
   recompras: number;
@@ -71,7 +89,22 @@ export interface CacResult {
   adminValor: number;
   /** Comissão do vendedor = (comissaoPct/100) * faturamento. Componente auditável do CAC. */
   comissaoValor: number;
+  /** Custo do produto no período = custoProdutoUnit * numVendas (modo 'detalhado'). */
+  custoProdutoTotal: number;
+  /**
+   * Custo NÃO-aquisição total (produto + operação) — a base do teto do CAC.
+   * Modo 'detalhado': custoProdutoTotal + embalagem + frete + impostos/admin/comissão.
+   * Modo 'mc': faturamento * (1 - MC%/100). `cacMaximo = custoNaoAquisicaoTotal / numVendas`.
+   */
+  custoNaoAquisicaoTotal: number;
+  /** despesasTotais = anuncios + custoNaoAquisicaoTotal (CAC + demais custos). */
   despesasTotais: number;
+  /**
+   * Margem de contribuição EFETIVA (% do faturamento) = o que sobra após o custo
+   * não-aquisição. = (faturamento - custoNaoAquisicaoTotal)/faturamento * 100.
+   * No modo 'mc' faz round-trip com o input. `null` quando faturamento <= 0.
+   */
+  margemContribuicaoEfetivaPct: number | null;
   /**
    * CAC REAL = anuncios / numVendas (investimento em aquisição rateado por venda).
    * A agulha do gauge. `null` quando numVendas <= 0 (CAC indefinido). PODE exceder
@@ -176,23 +209,55 @@ export function computeCac(inputs: UnitEconomicsInputs): CacResult {
   const ticketMedio = num(inputs.ticketMedio);
   const numVendas = num(inputs.numVendas);
   const anuncios = num(inputs.anuncios);
+  const custoProdutoUnit = num(inputs.custoProdutoUnit);
   const embalagem = num(inputs.embalagem);
   const frete = num(inputs.frete);
   const impostoPct = num(inputs.impostoPct);
   const adminPct = num(inputs.adminPct);
   const comissaoPct = num(inputs.comissaoPct);
+  const margemContribuicaoPct = num(inputs.margemContribuicaoPct);
+  const mode = inputs.despesasMode === "mc" ? "mc" : "detalhado";
 
   const faturamento = ticketMedio * numVendas;
   const impostoValor = (impostoPct / 100) * faturamento;
   const adminValor = (adminPct / 100) * faturamento;
   const comissaoValor = (comissaoPct / 100) * faturamento;
-  const despesasTotais =
-    anuncios + embalagem + frete + impostoValor + adminValor + comissaoValor;
+  const custoProdutoTotal = custoProdutoUnit * numVendas;
+
+  // Custo NÃO-aquisição (produto + operação) — base do teto do CAC. Dois modos:
+  //  - 'mc': a Margem de Contribuição (% que SOBRA do ticket após TODOS os custos
+  //          não-aquisição) define o custo direto → faturamento * (1 - MC%/100).
+  //          Os itens detalhados (produto/embalagem/frete/taxas) são ignorados.
+  //  - 'detalhado': soma produto + embalagem + frete + impostos/admin/comissão.
+  const custoNaoAquisicaoTotal =
+    mode === "mc"
+      ? faturamento * (1 - margemContribuicaoPct / 100)
+      : custoProdutoTotal + embalagem + frete + impostoValor + adminValor + comissaoValor;
+
+  // despesasTotais = CAC (anúncios) + demais custos. Preserva o contrato anterior:
+  // cacMaximo = (despesasTotais - anuncios)/numVendas = custoNaoAquisicaoTotal/numVendas.
+  const despesasTotais = anuncios + custoNaoAquisicaoTotal;
+
+  // Margem de contribuição efetiva (% do faturamento) — round-trip do input no modo 'mc'.
+  const margemContribuicaoEfetivaPct =
+    faturamento > 0
+      ? ((faturamento - custoNaoAquisicaoTotal) / faturamento) * 100
+      : null;
 
   // CAC REAL: investimento em aquisição (anúncios) rateado por venda. Pode ultrapassar o teto.
   const cacAtual = numVendas > 0 ? safeDiv(anuncios, numVendas) : null;
 
-  return { faturamento, impostoValor, adminValor, comissaoValor, despesasTotais, cacAtual };
+  return {
+    faturamento,
+    impostoValor,
+    adminValor,
+    comissaoValor,
+    custoProdutoTotal,
+    custoNaoAquisicaoTotal,
+    despesasTotais,
+    margemContribuicaoEfetivaPct,
+    cacAtual,
+  };
 }
 
 /**
