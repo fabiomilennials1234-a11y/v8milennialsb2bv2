@@ -46,6 +46,10 @@ export default {
           DEFAULT: "hsl(var(--silver))",
           foreground: "hsl(var(--silver-foreground))",
         },
+        insights: {
+          DEFAULT: "hsl(var(--insights))",
+          foreground: "hsl(var(--insights-foreground))",
+        },
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
