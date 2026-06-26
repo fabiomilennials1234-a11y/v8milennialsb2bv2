@@ -5,32 +5,33 @@
  * ZERO React, 100% determinístico e unit-testável. A UI (outro agente) consome
  * cada sub-cálculo para exibir os termos intermediários auditáveis.
  *
- * Fórmulas canônicas (confirmadas pelo CTO):
- *   faturamento     = ticketMedio * numVendas
- *   impostoValor    = (impostoPct/100) * faturamento
- *   adminValor      = (adminPct/100) * faturamento
- *   comissaoValor   = (comissaoPct/100) * faturamento
- *   despesasTotais  = anuncios + embalagem + frete + impostoValor + adminValor + comissaoValor
- *   cacAtual        = despesasTotais / numVendas      // CAC REAL (a agulha do gauge)
- *   cacMaximo       = ticketMedio                     // teto break-even (lucro/cliente = 0)
- *   cacIdeal        = cacMaximo / 2                   // = ticketMedio / 2
- *   cacMinimo       = cacMaximo / 4                   // = ticketMedio / 4 (mín = ideal/2)
- *   margemPorVenda  = ticketMedio - cacAtual           // SEPARADO do cacMaximo (≠ agora)
- *   payback1        = cacAtual / margemPorVenda        // nº de compras p/ recuperar CAC
- *   ltv             = ticketMedio * recompras
- *   margemComLtv    = ltv - cacAtual
- *   payback2        = cacAtual / margemComLtv           // nº de compras (com LTV)
+ * Fórmulas canônicas (confirmadas pelo CTO — modelo da planilha):
+ *   faturamento       = ticketMedio * numVendas
+ *   impostoValor      = (impostoPct/100) * faturamento
+ *   adminValor        = (adminPct/100) * faturamento
+ *   comissaoValor     = (comissaoPct/100) * faturamento
+ *   despesasTotais    = anuncios + embalagem + frete + impostoValor + adminValor + comissaoValor
+ *   custoNaoAquisicao = despesasTotais - anuncios        // produto + operação (tudo menos anúncios)
+ *   cacAtual          = anuncios / numVendas             // CAC REAL = investimento em aquisição/venda (agulha)
+ *   lucroLiquido      = ticketMedio - custoNaoAquisicao/numVendas
+ *   cacMaximo         = ticketMedio - lucroLiquido = custoNaoAquisicao/numVendas   // teto-alvo
+ *   cacIdeal (Bom)    = cacMaximo / 2
+ *   cacMinimo (Escala)= cacMaximo / 3
+ *   margemPorVenda    = ticketMedio - cacAtual
+ *   payback1          = cacAtual / margemPorVenda        // nº de compras p/ recuperar CAC
+ *   ltv               = ticketMedio * recompras
+ *   margemComLtv      = ltv - cacAtual
+ *   payback2          = cacAtual / margemComLtv           // nº de compras (com LTV)
  *
- * Modelo de bandas (REVERT — CTO): o CAC real (`cacAtual`) é o que de fato se paga
- * por aquisição (despesas rateadas por venda) e é a AGULHA. O teto-alvo (`cacMaximo`)
- * é o TICKET MÉDIO — o ponto de BREAK-EVEN onde Σcustos = faturamento, ou seja, o CAC
- * máximo em que o lucro por cliente = 0 (faturamento/clientes = ticket). Acima dele
- * cada venda dá prejuízo. Ideal/mínimo derivam do ticket (ticket/2, ticket/4).
- * `cacMaximo` é `null` só quando ticket <= 0 (sem dado para ancorar). A calc retorna
- * o valor REAL (não clampa); `cacAtual` PODE ultrapassar `cacMaximo` (custo por venda
- * > ticket) — a agulha cai na zona vermelha (prejuízo). NOTA: `margemPorVenda`
- * (`ticketMedio - cacAtual`) é SEPARADA de `cacMaximo` — NÃO são iguais (eram na
- * versão margem-based); o payback ancora em `margemPorVenda`/`cacAtual`, nunca no teto.
+ * Modelo de bandas (planilha do CTO): o CAC real (`cacAtual`) é o investimento em
+ * AQUISIÇÃO (anúncios) rateado por venda — a AGULHA. O teto-alvo (`cacMaximo`) é
+ * `Ticket − Lucro Líquido`, onde o Lucro Líquido desconta TODOS os custos exceto
+ * aquisição (= produto + operação por venda). Logo `cacMaximo = custoNaoAquisicao /
+ * numVendas`: o quanto sobra do ticket, depois dos demais custos, para gastar em
+ * aquisição. `Bom = máx/2`, `Escala = máx/3`. `cacMaximo` é `null` quando ticket <= 0
+ * ou numVendas <= 0 (sem dado para ancorar). A calc retorna o valor REAL (não clampa);
+ * `cacAtual` PODE ultrapassar `cacMaximo` — a agulha cai na zona vermelha. NOTA:
+ * `margemPorVenda` (`ticketMedio - cacAtual`) ancora o payback, SEPARADA do teto.
  *
  * Contrato defensivo: divisões guardadas (retornam `null`, nunca `NaN`/`Infinity`);
  * inputs não-finitos são coeridos a 0; cenários impossíveis (numVendas=0,
@@ -72,24 +73,25 @@ export interface CacResult {
   comissaoValor: number;
   despesasTotais: number;
   /**
-   * CAC REAL = despesasTotais / numVendas. A agulha do gauge. `null` quando
-   * numVendas <= 0 (CAC indefinido). PODE exceder `cacMaximo` (= ticket médio)
-   * — quando isso ocorre o custo de aquisição passou do ticket (prejuízo).
+   * CAC REAL = anuncios / numVendas (investimento em aquisição rateado por venda).
+   * A agulha do gauge. `null` quando numVendas <= 0 (CAC indefinido). PODE exceder
+   * `cacMaximo` — quando isso ocorre o gasto de aquisição passou do que a venda
+   * comporta (depois dos demais custos) → zona vermelha.
    */
   cacAtual: number | null;
 }
 
-/** Bandas-alvo derivadas do TICKET MÉDIO (teto break-even). */
+/** Bandas-alvo do CAC, derivadas de `Ticket − Lucro Líquido` (planilha do CTO). */
 export interface CacBands {
   /**
-   * Teto-alvo = ticketMedio (break-even: Σcustos = faturamento → lucro/cliente = 0).
-   * `null` quando ticket <= 0 (sem dado para ancorar). `cacAtual` PODE ultrapassá-lo
-   * (custo por venda > ticket → prejuízo) — a agulha cai na zona vermelha.
+   * Teto-alvo = `Ticket − Lucro Líquido` = custos não-aquisição por venda
+   * (produto + operação). `null` quando ticket <= 0 ou numVendas <= 0 (sem dado).
+   * `cacAtual` PODE ultrapassá-lo → zona vermelha.
    */
   cacMaximo: number | null;
-  /** ticketMedio / 2. `null` quando ticket <= 0. */
+  /** Bom = cacMaximo / 2. `null` quando o teto é indefinido. */
   cacIdeal: number | null;
-  /** ticketMedio / 4 (mín = ideal/2). `null` quando ticket <= 0. */
+  /** Escala = cacMaximo / 3. `null` quando o teto é indefinido. */
   cacMinimo: number | null;
 }
 
@@ -187,28 +189,40 @@ export function computeCac(inputs: UnitEconomicsInputs): CacResult {
   const despesasTotais =
     anuncios + embalagem + frete + impostoValor + adminValor + comissaoValor;
 
-  // CAC REAL: despesas totais rateadas por venda. Pode ultrapassar o teto (ticket).
-  const cacAtual = numVendas > 0 ? safeDiv(despesasTotais, numVendas) : null;
+  // CAC REAL: investimento em aquisição (anúncios) rateado por venda. Pode ultrapassar o teto.
+  const cacAtual = numVendas > 0 ? safeDiv(anuncios, numVendas) : null;
 
   return { faturamento, impostoValor, adminValor, comissaoValor, despesasTotais, cacAtual };
 }
 
 /**
- * Bandas-alvo derivadas do TICKET MÉDIO (teto break-even).
- *   cacMaximo = ticketMedio              (= teto onde lucro/cliente = 0)
- *   cacIdeal  = cacMaximo / 2            (= ticketMedio / 2)
- *   cacMinimo = cacMaximo / 4            (mantém mín = ideal/2)
+ * Bandas-alvo do CAC (planilha do CTO): teto = `Ticket − Lucro Líquido`.
+ *   custoNaoAquisicao = despesasTotais − anuncios          (produto + operação)
+ *   lucroLiquido      = ticketMedio − custoNaoAquisicao/numVendas
+ *   cacMaximo (teto)  = ticketMedio − lucroLiquido = custoNaoAquisicao/numVendas
+ *   cacIdeal  (Bom)   = cacMaximo / 2
+ *   cacMinimo (Escala)= cacMaximo / 3
  *
- * `null` quando ticket <= 0 (sem dado para ancorar — também coere não-finito a 0).
- * A agulha (`cacAtual`) é independente e PODE ultrapassar o teto (custo por venda >
- * ticket → prejuízo); quem renderiza (gauge) trata a zona vermelha.
+ * `null` quando ticket <= 0 ou numVendas <= 0 (sem dado para ancorar — coere
+ * não-finito a 0). A agulha (`cacAtual`) é independente e PODE ultrapassar o teto
+ * → zona vermelha (tratada pelo gauge).
  */
-export function cacBands(ticketMedio: number): CacBands {
-  const cacMaximo = num(ticketMedio) > 0 ? num(ticketMedio) : null;
+export function cacBands(inputs: UnitEconomicsInputs): CacBands {
+  const ticketMedio = num(inputs.ticketMedio);
+  const numVendas = num(inputs.numVendas);
+  const anuncios = num(inputs.anuncios);
+  const { despesasTotais } = computeCac(inputs);
+
+  // Teto = custos não-aquisição por venda (= Ticket − Lucro Líquido). Tudo menos anúncios.
+  const cacMaximo =
+    ticketMedio > 0 && numVendas > 0
+      ? safeDiv(despesasTotais - anuncios, numVendas)
+      : null;
+
   return {
     cacMaximo,
     cacIdeal: cacMaximo !== null ? cacMaximo / 2 : null,
-    cacMinimo: cacMaximo !== null ? cacMaximo / 4 : null,
+    cacMinimo: cacMaximo !== null ? cacMaximo / 3 : null,
   };
 }
 
@@ -422,8 +436,9 @@ export function computeUnitEconomics(inputs: UnitEconomicsInputs): UnitEconomics
   const cac = computeCac(inputs);
   return {
     cac,
-    // Bandas-alvo = ticket médio (teto break-even). Indefinidas quando ticket <= 0.
-    bands: cacBands(inputs.ticketMedio),
+    // Bandas-alvo = Ticket − Lucro Líquido (teto de aquisição). Indefinidas quando
+    // ticket <= 0 ou numVendas <= 0.
+    bands: cacBands(inputs),
     paybacks: computePaybacks(inputs),
     curve: computePaybackCurve(inputs),
   };
