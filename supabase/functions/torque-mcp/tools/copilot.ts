@@ -83,8 +83,9 @@ export const copilotUpdatePromptTool: ToolDef = {
       system_prompt: { type: "string", description: "New compiled system prompt (optional)" },
       dos: { type: "string", description: "New custom_instructions.dos (optional)" },
       promptSections: {
-        type: "array",
-        description: "New conversation_style.promptSections (optional)",
+        type: "object",
+        description:
+          "New conversation_style.promptSections (object: personality|objective|flow|products|instructions)",
       },
       confirm_token: { type: "string" },
     },
@@ -97,7 +98,10 @@ export const copilotUpdatePromptTool: ToolDef = {
     const sections: PromptSectionsInput = {
       system_prompt: typeof args.system_prompt === "string" ? args.system_prompt : undefined,
       dos: typeof args.dos === "string" ? args.dos : undefined,
-      promptSections: Array.isArray(args.promptSections) ? args.promptSections : undefined,
+      promptSections: args.promptSections && typeof args.promptSections === "object" &&
+          !Array.isArray(args.promptSections)
+        ? args.promptSections
+        : undefined,
     };
     if (
       sections.system_prompt === undefined && sections.dos === undefined &&

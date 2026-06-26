@@ -52,7 +52,11 @@ Deno.test("buildPromptUpdate — omitted sections are not touched", () => {
 });
 
 // ── copilot.set_sections ─────────────────────────────────────────────────────
-import { buildSetSectionsUpdate, copilotSetSectionsTool } from "./copilot.ts";
+import {
+  buildSetSectionsUpdate,
+  copilotSetSectionsTool,
+  copilotUpdatePromptTool,
+} from "./copilot.ts";
 
 /**
  * Minimal chainable Supabase stub. Supports the calls set_sections makes:
@@ -319,4 +323,39 @@ Deno.test("copilot.set_sections — apply round-trip writes recompiled prompt on
   assertStringIncludes(String(update.system_prompt), "novo fluxo de atendimento");
   assertEquals(update.custom_instructions, update.system_prompt);
   assertEquals(update.prompt_hash, null);
+});
+
+// ── copilot.update_prompt (handler-level) ────────────────────────────────────
+Deno.test("update_prompt: object promptSections is written (was dropped by array gate)", async () => {
+  const agent = {
+    id: "a1",
+    organization_id: "o1",
+    name: "Bia",
+    conversation_style: { tone: "warm" },
+  };
+  const db = makeStub({ agent });
+  const dry = JSON.parse(
+    (await copilotUpdatePromptTool.handler(
+      {
+        agent_id: "a1",
+        promptSections: {
+          personality: "X",
+          objective: "",
+          flow: "",
+          products: "",
+          instructions: "",
+        },
+      },
+      ctxOf(db),
+    )).content[0].text,
+  );
+  // The planned update must carry conversation_style.promptSections (not dropped)
+  const planUpd = dry.plan.update;
+  assertEquals(
+    (planUpd.conversation_style as { promptSections?: { personality?: string } })
+      .promptSections?.personality,
+    "X",
+  );
+  // other conversation_style keys preserved by the spread in buildPromptUpdate
+  assertEquals((planUpd.conversation_style as { tone?: string }).tone, "warm");
 });
