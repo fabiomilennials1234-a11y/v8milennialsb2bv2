@@ -55,7 +55,7 @@ export function blastPlanStore(supabaseAdmin: Admin): BlastPlanStore {
     async getLotRecipients(planId: string, lotIndex: number): Promise<PlanRecipientRow[]> {
       const { data } = await supabaseAdmin
         .from("blast_plan_recipients")
-        .select("plan_id, lead_id, phone, variable_snapshot, lot_index, status, reason")
+        .select("plan_id, lead_id, phone, variable_snapshot, lot_index, instance_id, status, reason")
         .eq("plan_id", planId)
         .eq("lot_index", lotIndex);
       return (data ?? []) as PlanRecipientRow[];

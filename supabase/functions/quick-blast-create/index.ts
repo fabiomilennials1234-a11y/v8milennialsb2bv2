@@ -107,6 +107,12 @@ Deno.serve(
       onlyNonResponders: only_non_responders === true,
     };
 
+    // TODO(#901): multi-number round-robin for the immediate Quick Blast path
+    // (ADR-0015). The auto-batched Blast Plan path (blast-plan-create) already
+    // distributes across numbers + enforces the per-number ledger; Quick Blast
+    // stays single-number for now — it is the small, one-shot kanban send and a
+    // multi-number split there is lower value and higher risk. Left intentionally
+    // unchanged so this immediate path keeps working as-is.
     if (!instance_id || !Array.isArray(lead_ids) || lead_ids.length === 0 || (!message && dry_run !== true)) {
       return jsonResponse(400, { error: "Missing instance_id, lead_ids or message" }, corsHeaders);
     }

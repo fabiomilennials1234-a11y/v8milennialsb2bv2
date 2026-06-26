@@ -34,6 +34,10 @@ import {
 } from "./refinements.ts";
 import { saoPauloUsageDate, computeDailyClamp, type BlastUsageSource } from "./daily-budget.ts";
 import { planLotCount, selectLotSlice, addDaysIso } from "./plan-slicing.ts";
+import { planBlast } from "./blast-planner.ts";
+import { assignRecipientsToNumbers } from "./blast-plan-distribution.ts";
+import { resolveInstanceCap, type InstanceUsageSource } from "./instance-budget.ts";
+import { nextValidSendTime, type QuietWindow } from "./quiet-hours.ts";
 
 // ── Frozen per-recipient snapshot ────────────────────────────────────────────
 
@@ -46,6 +50,10 @@ export interface PlanRecipientRow {
   variable_snapshot: Record<string, unknown>;
   /** Which day's lot this recipient belongs to (0-based). */
   lot_index: number;
+  /** The WhatsApp number assigned to send this recipient (ADR-0015 multi-number).
+   *  Null/undefined for legacy single-number plans — the releaser then falls back
+   *  to the plan's own instance_id. */
+  instance_id?: string | null;
   /** pending | sent | skipped. */
   status: string;
   reason: string | null;
@@ -69,6 +77,11 @@ export interface PlanRow {
   lots_released: number;
   release_time?: string;
   next_release_date: string | null;
+  /** Per-leva send window (ADR-0015 / #909). NULL columns = no window (legacy) —
+   *  the releaser only defers a lot out of the window when window_days is set. */
+  window_days?: number[] | null;
+  window_from_minutes?: number | null;
+  window_to_minutes?: number | null;
   /** The instance row, needed by the releaser to dispatch. Persisted as a column
    *  in production via the FK + a read; carried inline here for the store seam. */
   instance?: { id: string; organization_id: string; provider?: string };
@@ -110,18 +123,41 @@ export interface BlastPlanDeps {
   /** #704 activity source — only consulted when an activity-based refinement is
    *  requested. Injected so the releaser is testable without a live DB. */
   activitySource?: BlastActivitySource;
+  /** Per-number daily ledger (ADR-0015). Required for multi-number plans (the
+   *  edge fn always injects it); absent for legacy single-number plans/tests. */
+  instanceUsageSource?: InstanceUsageSource;
   /** Resolves the full whatsapp_instances row by id for the releaser, which only
    *  has the persisted instance_id (the in-memory `instance` is not a column).
-   *  Tests inject `plan.instance` inline so they need not provide this. */
-  instanceResolver?: (instanceId: string) => Promise<{ id: string; organization_id: string; provider?: string } | null>;
+   *  Tests inject `plan.instance` inline so they need not provide this. Returns
+   *  the row including daily_blast_cap so the per-number cap can be enforced. */
+  instanceResolver?: (
+    instanceId: string,
+  ) => Promise<{ id: string; organization_id: string; provider?: string; daily_blast_cap?: number | null } | null>;
 }
 
 // ── createBlastPlan ──────────────────────────────────────────────────────────
 
+/** A selected WhatsApp number + its per-number daily cap (ADR-0015). */
+export interface BlastPlanNumber {
+  instance: { id: string; organization_id: string; provider?: string };
+  /** That number's Number Daily Cap (whatsapp_instances.daily_blast_cap). */
+  cap: number;
+}
+
 export interface CreateBlastPlanParams {
   orgId: string;
   userId: string;
-  instance: { id: string; organization_id: string; provider?: string };
+  /** The single sending number (legacy single-number path, ADR-0003). Optional
+   *  when `numbers` is supplied for the multi-number path. */
+  instance?: { id: string; organization_id: string; provider?: string };
+  /** Selected numbers + per-number caps (ADR-0015). When present (length >= 1),
+   *  the audience is distributed across them via planBlast and each recipient is
+   *  stamped with its sending instance_id; the per-number ledger is enforced.
+   *  Absent → the legacy single-number, org-budget path runs unchanged. */
+  numbers?: BlastPlanNumber[];
+  /** Per-leva send window (ADR-0015 / #909). Stored on the plan; the releaser
+   *  defers a lot whose day falls outside it. Default applied by the caller. */
+  window?: QuietWindow;
   /** The RESOLVED audience (org-scoped by the caller). Frozen here. */
   leads: BlastLead[];
   message: string;
@@ -157,9 +193,26 @@ export async function createBlastPlan(
 ): Promise<CreateBlastPlanResult> {
   const empty = { ok: false, totalRecipients: 0, lotsTotal: 0, breakdown: [] as any[] };
 
-  if (params.instance.organization_id !== params.orgId) {
-    return { ...empty, error: "instance_org_mismatch" };
+  const numbersMode = Array.isArray(params.numbers) && params.numbers.length > 0;
+
+  if (numbersMode) {
+    // Multi-number tenant + cap guard: every selected number must be in-org and
+    // carry a positive cap (fail-closed — a zero/negative cap is rejected, never
+    // treated as unlimited).
+    for (const n of params.numbers!) {
+      if (n.instance.organization_id !== params.orgId) {
+        return { ...empty, error: "instance_org_mismatch" };
+      }
+      if (!(Number.isFinite(n.cap) && n.cap > 0)) {
+        return { ...empty, error: "invalid_cap" };
+      }
+    }
+  } else {
+    if (!params.instance || params.instance.organization_id !== params.orgId) {
+      return { ...empty, error: "instance_org_mismatch" };
+    }
   }
+
   if (!Array.isArray(params.leads) || params.leads.length === 0) {
     return { ...empty, error: "no_audience" };
   }
@@ -169,7 +222,17 @@ export async function createBlastPlan(
 
   const now = params.now ?? new Date();
   const todayDate = saoPauloUsageDate(now);
+
+  // ADR-0015 multi-number path: distribute the frozen audience across the selected
+  // numbers via planBlast, stamp each recipient's sending number, enforce the
+  // per-number ledger on lot 1. Kept as a dedicated branch so the legacy
+  // single-number, org-budget path below is byte-for-byte unchanged.
+  if (numbersMode) {
+    return createMultiNumberBlastPlan(deps, params, now, todayDate);
+  }
+
   const dailyBudget = params.dailyBudget;
+  const singleInstance = params.instance!;
 
   // Slice the FROZEN audience into daily lots of dailyBudget each. Membership is
   // captured here and never re-queried — new Stage entrants are excluded.
@@ -180,7 +243,7 @@ export async function createBlastPlan(
   // is today's; subsequent lots are future days.
   const planRow: Omit<PlanRow, "id"> = {
     organization_id: params.orgId,
-    instance_id: params.instance.id,
+    instance_id: singleInstance.id,
     created_by: params.userId,
     status: "active",
     source: params.source ?? null,
@@ -194,7 +257,7 @@ export async function createBlastPlan(
     lots_released: 0,
     release_time: params.releaseTime ?? "09:00",
     next_release_date: todayDate,
-    instance: params.instance,
+    instance: singleInstance,
   };
   const planId = await deps.store.insertPlan(planRow);
 
@@ -238,7 +301,7 @@ export async function createBlastPlan(
   if (slice.toSend > 0) {
     const toSendRows = lot0.slice(0, slice.toSend);
     const recipients = buildPlanRecipients(toSendRows, params.message, params.imageUrl);
-    await deps.dispatch(params.instance, {
+    await deps.dispatch(singleInstance, {
       recipients,
       delayMin: params.delayMinMs,
       delayMax: params.delayMaxMs,
@@ -267,6 +330,141 @@ export async function createBlastPlan(
     status: drainedEntirely ? "completed" : "active",
     next_release_date: drainedEntirely ? null : addDaysIso(todayDate, 1),
   };
+  await deps.store.updatePlan(planId, patch);
+
+  return { ok: true, planId, totalRecipients: total, lotsTotal, breakdown };
+}
+
+// ── createMultiNumberBlastPlan (ADR-0015) ────────────────────────────────────
+
+/**
+ * Multi-number Blast Plan creation. The frozen audience is distributed across the
+ * selected numbers via planBlast (round-robin per number per day, each capped at
+ * its Number Daily Cap); every recipient is stamped with the number that will
+ * send it. Lot 1 (today) fires per-number, bounded by each number's remaining
+ * daily ledger headroom; the budget-pressured remainder defers forward. The
+ * org-wide #706 ledger is still incremented (cross-blast visibility), but the
+ * binding control here is the per-number cap.
+ */
+async function createMultiNumberBlastPlan(
+  deps: BlastPlanDeps,
+  params: CreateBlastPlanParams,
+  _now: Date,
+  todayDate: string,
+): Promise<CreateBlastPlanResult> {
+  const numbers = params.numbers!;
+  const total = params.leads.length;
+
+  // planBlast decides per-day counts per number; assign turns counts into a
+  // concrete per-recipient (lot_index, instance_id) over the ordered audience.
+  const planResult = planBlast({
+    totalRecipients: total,
+    numbers: numbers.map((n) => ({ id: n.instance.id, cap: n.cap })),
+    startDateIso: todayDate,
+  });
+  const lotsTotal = planResult.dayCount;
+  const assignments = assignRecipientsToNumbers(params.leads, planResult);
+
+  // The plan row keeps ONE instance_id (NOT NULL column) — the first number, used
+  // only as the legacy fallback; the real per-recipient routing lives on each
+  // blast_plan_recipients.instance_id.
+  const primary = numbers[0].instance;
+  const planRow: Omit<PlanRow, "id"> = {
+    organization_id: params.orgId,
+    instance_id: primary.id,
+    created_by: params.userId,
+    status: "active",
+    source: params.source ?? null,
+    message: params.message,
+    refinements: (params.refinements as Record<string, unknown>) ?? null,
+    image_url: params.imageUrl ?? null,
+    delay_min_ms: params.delayMinMs ?? null,
+    delay_max_ms: params.delayMaxMs ?? null,
+    total_recipients: total,
+    lots_total: lotsTotal,
+    lots_released: 0,
+    release_time: params.releaseTime ?? "09:00",
+    next_release_date: todayDate,
+    window_days: params.window?.days ?? null,
+    window_from_minutes: params.window?.fromMinutes ?? null,
+    window_to_minutes: params.window?.toMinutes ?? null,
+    instance: primary,
+  };
+  const planId = await deps.store.insertPlan(planRow);
+
+  const recipientRows: PlanRecipientRow[] = assignments.map((a) => ({
+    plan_id: planId,
+    lead_id: a.lead.id,
+    phone: a.lead.phone ?? null,
+    variable_snapshot: snapshotVars(a.lead),
+    lot_index: a.lotIndex,
+    instance_id: a.instanceId,
+    status: "pending",
+    reason: null,
+  }));
+  const breakdown: Array<{ lotIndex: number; date: string; count: number }> = [];
+  for (let lot = 0; lot < lotsTotal; lot++) {
+    breakdown.push({
+      lotIndex: lot,
+      date: addDaysIso(todayDate, lot),
+      count: recipientRows.filter((r) => r.lot_index === lot).length,
+    });
+  }
+  await deps.store.insertRecipients(recipientRows);
+
+  // Dispatch lot 0 TODAY, per number, each bounded by that number's remaining cap.
+  const lot0 = recipientRows.filter((r) => r.lot_index === 0);
+  const byInstance = groupByInstance(lot0, primary.id);
+
+  let totalSent = 0;
+  const deferredRows: PlanRecipientRow[] = [];
+  for (const n of numbers) {
+    const rows = byInstance.get(n.instance.id) ?? [];
+    if (rows.length === 0) continue;
+
+    let allowed = rows.length;
+    if (deps.instanceUsageSource) {
+      const used = await deps.instanceUsageSource.getUsedToday(n.instance.id, todayDate, n.cap);
+      allowed = Math.max(0, Math.min(rows.length, n.cap - used));
+    }
+    const toSendRows = rows.slice(0, allowed);
+    deferredRows.push(...rows.slice(allowed));
+
+    if (toSendRows.length > 0) {
+      const recipients = buildPlanRecipients(toSendRows, params.message, params.imageUrl);
+      await deps.dispatch(n.instance, {
+        recipients,
+        delayMin: params.delayMinMs,
+        delayMax: params.delayMaxMs,
+        triggeredByUserId: params.userId,
+        triggeredVia: "ui",
+        trackSource: "blast-plan",
+      });
+      await deps.store.markRecipients(planId, toSendRows.map((r) => r.lead_id), "sent", null);
+      if (deps.instanceUsageSource) {
+        await deps.instanceUsageSource.increment(n.instance.id, todayDate, toSendRows.length);
+      }
+      totalSent += toSendRows.length;
+    }
+  }
+  // Org-wide ledger records the day's total (defense in depth; keeps single-number
+  // Quick Blasts later today aware of what these numbers already consumed).
+  if (totalSent > 0) {
+    await deps.usageSource.increment(params.orgId, todayDate, totalSent);
+  }
+
+  const lotsReleased = totalSent > 0 ? 1 : 0;
+  // Where the budget-pressured remainder retries: the next lot the releaser will
+  // read is `lots_released`. When lot 1 fired (lotsReleased=1) the leftovers join
+  // lot 1; when nothing fired today (lotsReleased=0) they stay at lot 0.
+  const patch: Partial<PlanRow> = { lots_released: lotsReleased };
+  if (deferredRows.length > 0 && lotsReleased >= 1) {
+    await deps.store.moveRecipientsToLot(planId, deferredRows.map((r) => r.lead_id), lotsReleased);
+    patch.lots_total = Math.max(lotsTotal, lotsReleased + 1);
+  }
+  const drainedEntirely = lotsReleased >= 1 && lotsTotal <= 1 && deferredRows.length === 0;
+  patch.status = drainedEntirely ? "completed" : "active";
+  patch.next_release_date = drainedEntirely ? null : addDaysIso(todayDate, 1);
   await deps.store.updatePlan(planId, patch);
 
   return { ok: true, planId, totalRecipients: total, lotsTotal, breakdown };
@@ -324,6 +522,22 @@ export async function releaseBlastPlanLot(
   // Tenant guard: the resolved instance must belong to the plan's org.
   if (instance.organization_id !== orgId) return { ...empty, error: "instance_org_mismatch" };
 
+  // ADR-0015 / #909: honour the plan's send window. When today (BRT) falls outside
+  // the allowed days, defer the WHOLE release to the next valid day without
+  // dispatching. Only engages when window_days is populated (legacy plans skip).
+  if (plan.window_days && plan.window_days.length > 0) {
+    const win: QuietWindow = {
+      days: plan.window_days,
+      fromMinutes: plan.window_from_minutes ?? 0,
+      toMinutes: plan.window_to_minutes ?? 24 * 60,
+    };
+    const validDate = nextValidSendTime(win, `${todayDate}T00:00`).split("T")[0];
+    if (validDate > todayDate) {
+      await deps.store.updatePlan(params.planId, { next_release_date: validDate });
+      return { ok: true, sent: 0, deferred: 0, skippedRecency: 0, skippedReplied: 0, completed: false };
+    }
+  }
+
   // The plan's own frozen recipients for this lot still pending. NO re-query of
   // the source Stage — frozen membership only (ADR-0003 §4).
   const lot = (await deps.store.getLotRecipients(params.planId, lotIndex)).filter(
@@ -360,31 +574,68 @@ export async function releaseBlastPlanLot(
     }
   }
 
-  // Budget-bound the release against the shared ledger for today.
-  const usedToday = await deps.usageSource.getUsedToday(orgId, todayDate, params.dailyBudget);
-  const { remaining } = computeDailyClamp({ dailyBudget: params.dailyBudget, usedToday });
-  const slice = selectLotSlice({ pendingCount: kept.length, remainingBudget: remaining });
+  // Two dispatch modes share the remainder/defer/complete tail below:
+  //   - multi-number (ADR-0015): each frozen recipient carries its sending number;
+  //     group by number and bound each group by that number's own daily cap.
+  //   - legacy single-number (ADR-0003): one number, bounded by the org-wide
+  //     #706 ledger. Unchanged.
+  const dispatchOpts = {
+    delayMin: plan.delay_min_ms ?? undefined,
+    delayMax: plan.delay_max_ms ?? undefined,
+    triggeredByUserId: plan.created_by ?? null,
+    triggeredVia: "cron" as const,
+    trackSource: "blast-plan",
+  };
 
   let sent = 0;
-  if (slice.toSend > 0) {
-    const toSendRows = kept.slice(0, slice.toSend);
-    const recipients = buildPlanRecipients(toSendRows, plan.message, plan.image_url ?? undefined);
-    await deps.dispatch(instance, {
-      recipients,
-      delayMin: plan.delay_min_ms ?? undefined,
-      delayMax: plan.delay_max_ms ?? undefined,
-      triggeredByUserId: plan.created_by ?? null,
-      triggeredVia: "cron",
-      trackSource: "blast-plan",
-    });
-    await deps.store.markRecipients(params.planId, toSendRows.map((r) => r.lead_id), "sent", null);
-    await deps.usageSource.increment(orgId, todayDate, slice.toSend);
-    sent = slice.toSend;
+  let deferredRows: PlanRecipientRow[] = [];
+
+  const multiNumber = !!deps.instanceUsageSource && kept.some((r) => r.instance_id);
+  if (multiNumber) {
+    const groups = groupByInstance(kept, instance.id);
+    for (const [instanceId, rows] of groups) {
+      // Resolve the sending number's row (provider + cap). Reuse the primary when
+      // the stamp matches it; otherwise fetch via the resolver.
+      let inst = instanceId === instance.id ? instance : null;
+      if (!inst && deps.instanceResolver) inst = await deps.instanceResolver(instanceId);
+      if (!inst || inst.organization_id !== orgId) {
+        // Unresolvable / foreign number → defer the whole group, never send.
+        deferredRows.push(...rows);
+        continue;
+      }
+      const cap = resolveInstanceCap((inst as { daily_blast_cap?: number | null }).daily_blast_cap);
+      const used = await deps.instanceUsageSource!.getUsedToday(instanceId, todayDate, cap);
+      const allowed = Math.max(0, Math.min(rows.length, cap - used));
+      const toSendRows = rows.slice(0, allowed);
+      deferredRows.push(...rows.slice(allowed));
+      if (toSendRows.length > 0) {
+        const recipients = buildPlanRecipients(toSendRows, plan.message, plan.image_url ?? undefined);
+        await deps.dispatch(inst, { recipients, ...dispatchOpts });
+        await deps.store.markRecipients(params.planId, toSendRows.map((r) => r.lead_id), "sent", null);
+        await deps.instanceUsageSource!.increment(instanceId, todayDate, toSendRows.length);
+        sent += toSendRows.length;
+      }
+    }
+    // Org-wide ledger records the day's total (cross-blast visibility).
+    if (sent > 0) await deps.usageSource.increment(orgId, todayDate, sent);
+  } else {
+    // Budget-bound the release against the shared ledger for today.
+    const usedToday = await deps.usageSource.getUsedToday(orgId, todayDate, params.dailyBudget);
+    const { remaining } = computeDailyClamp({ dailyBudget: params.dailyBudget, usedToday });
+    const slice = selectLotSlice({ pendingCount: kept.length, remainingBudget: remaining });
+    if (slice.toSend > 0) {
+      const toSendRows = kept.slice(0, slice.toSend);
+      const recipients = buildPlanRecipients(toSendRows, plan.message, plan.image_url ?? undefined);
+      await deps.dispatch(instance, { recipients, ...dispatchOpts });
+      await deps.store.markRecipients(params.planId, toSendRows.map((r) => r.lead_id), "sent", null);
+      await deps.usageSource.increment(orgId, todayDate, slice.toSend);
+      sent = slice.toSend;
+    }
+    deferredRows = kept.slice(slice.toSend);
   }
 
   // Defer the budget-pressured remainder forward to the next lot index so it is
   // retried tomorrow (elastic duration).
-  const deferredRows = kept.slice(slice.toSend);
   const deferred = deferredRows.length;
   if (deferred > 0) {
     await deps.store.moveRecipientsToLot(params.planId, deferredRows.map((r) => r.lead_id), lotIndex + 1);
@@ -407,6 +658,26 @@ export async function releaseBlastPlanLot(
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+/** Group recipient rows by their sending number, preserving first-seen order. A
+ *  row without an instance_id (legacy) falls back to `fallbackId` (the plan's own
+ *  number). */
+function groupByInstance(
+  rows: PlanRecipientRow[],
+  fallbackId: string,
+): Map<string, PlanRecipientRow[]> {
+  const map = new Map<string, PlanRecipientRow[]>();
+  for (const r of rows) {
+    const key = r.instance_id ?? fallbackId;
+    let arr = map.get(key);
+    if (!arr) {
+      arr = [];
+      map.set(key, arr);
+    }
+    arr.push(r);
+  }
+  return map;
+}
 
 /** Per-lead frozen template variables, resolved at creation time (same shape as
  *  buildRecipients' leadVars; carried here so the wizard preview matches what the

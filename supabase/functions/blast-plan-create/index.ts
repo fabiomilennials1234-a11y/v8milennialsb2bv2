@@ -22,7 +22,9 @@ import { runUazapiSenderJob } from "../_shared/dispatch-router.ts";
 import { getDailyBlastBudget, blastDailyUsageSource } from "../_shared/quick-blast/daily-budget.ts";
 import { channelMessagesActivitySource } from "../_shared/quick-blast/refinements.ts";
 import { blastPlanStore } from "../_shared/quick-blast/blast-plan-store.ts";
-import { createBlastPlan } from "../_shared/quick-blast/blast-plan.ts";
+import { createBlastPlan, type BlastPlanNumber } from "../_shared/quick-blast/blast-plan.ts";
+import { instanceDailyUsageSource, resolveInstanceCap } from "../_shared/quick-blast/instance-budget.ts";
+import { resolveBlastWindow } from "../_shared/quick-blast/blast-plan-distribution.ts";
 import type { BlastLead } from "../_shared/quick-blast/recipients.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -76,6 +78,9 @@ Deno.serve(
 
     const {
       instance_id,
+      instance_ids,
+      caps,
+      window: windowRaw,
       lead_ids,
       message,
       delay_min_ms,
@@ -87,6 +92,13 @@ Deno.serve(
       source,
     } = body as {
       instance_id?: string;
+      /** ADR-0015 multi-number: all selected numbers. Falls back to [instance_id]. */
+      instance_ids?: string[];
+      /** Optional per-number cap override, keyed by instance id. Default: the
+       *  number's whatsapp_instances.daily_blast_cap. */
+      caps?: Record<string, number>;
+      /** Optional per-leva send window (ADR-0015 / #909). Default Mon–Sat 08–20. */
+      window?: { days?: number[]; from_minutes?: number; to_minutes?: number };
       lead_ids?: string[];
       message?: string;
       delay_min_ms?: number;
@@ -98,8 +110,17 @@ Deno.serve(
       source?: Record<string, unknown>;
     };
 
-    if (!instance_id || !Array.isArray(lead_ids) || lead_ids.length === 0 || !message) {
-      return jsonResponse(400, { error: "Missing instance_id, lead_ids or message" }, corsHeaders);
+    // Multi-number when instance_ids[] is supplied; otherwise the legacy single
+    // instance_id path (retrocompat — any existing caller keeps working).
+    const multiNumber = Array.isArray(instance_ids) && instance_ids.length > 0;
+    const idList = multiNumber
+      ? Array.from(new Set(instance_ids!.filter((s) => typeof s === "string" && s.length > 0)))
+      : instance_id
+        ? [instance_id]
+        : [];
+
+    if (idList.length === 0 || !Array.isArray(lead_ids) || lead_ids.length === 0 || !message) {
+      return jsonResponse(400, { error: "Missing instance_id(s), lead_ids or message" }, corsHeaders);
     }
 
     // Frozen refinements (#704) — re-applied at each future lot release. A
@@ -112,16 +133,40 @@ Deno.serve(
       onlyNonResponders: only_non_responders === true,
     };
 
-    // Instance must belong to the caller's org (tenant guard also enforced in core).
-    const { data: instance } = await supabaseAdmin
+    // Every selected number must exist and belong to the caller's org (tenant
+    // guard also re-enforced in the core).
+    const { data: instanceRows } = await supabaseAdmin
       .from("whatsapp_instances")
       .select("*")
-      .eq("id", instance_id)
-      .maybeSingle();
-    if (!instance) return jsonResponse(404, { error: "Instance not found" }, corsHeaders);
-    if ((instance as any).organization_id !== orgId) {
-      return jsonResponse(403, { error: "instance_org_mismatch" }, corsHeaders);
+      .in("id", idList);
+    const instances = (instanceRows ?? []) as any[];
+    if (instances.length !== idList.length) {
+      return jsonResponse(404, { error: "Instance not found" }, corsHeaders);
     }
+    for (const inst of instances) {
+      if (inst.organization_id !== orgId) {
+        return jsonResponse(403, { error: "instance_org_mismatch" }, corsHeaders);
+      }
+    }
+    const instanceById = new Map(instances.map((i) => [i.id as string, i]));
+
+    // ADR-0015 multi-number distribution params: one BlastPlanNumber per selected
+    // line, each carrying its effective Number Daily Cap (payload override → the
+    // line's stored daily_blast_cap → fail-closed default).
+    const numbers: BlastPlanNumber[] | undefined = multiNumber
+      ? idList.map((id) => {
+          const inst = instanceById.get(id)!;
+          const capRaw = caps && typeof caps[id] === "number" ? caps[id] : inst.daily_blast_cap;
+          return { instance: inst, cap: resolveInstanceCap(capRaw) };
+        })
+      : undefined;
+    const window = multiNumber ? resolveBlastWindow(
+      windowRaw
+        ? { days: windowRaw.days, fromMinutes: windowRaw.from_minutes, toMinutes: windowRaw.to_minutes }
+        : null,
+    ) : undefined;
+    // Legacy single-number path still passes a bare instance row.
+    const instance = multiNumber ? undefined : instanceById.get(idList[0]);
 
     // Freeze the audience: org-scoped lead fetch — foreign-org ids drop out here.
     const { data: leadRows } = await supabaseAdmin
@@ -138,6 +183,7 @@ Deno.serve(
         {
           store: blastPlanStore(supabaseAdmin),
           usageSource: blastDailyUsageSource(supabaseAdmin as any),
+          instanceUsageSource: instanceDailyUsageSource(supabaseAdmin as any),
           activitySource: channelMessagesActivitySource(supabaseAdmin),
           dispatch: (inst, input) =>
             runUazapiSenderJob(supabaseAdmin, inst as any, {
@@ -150,6 +196,8 @@ Deno.serve(
           orgId,
           userId: user.id,
           instance: instance as any,
+          numbers,
+          window,
           leads,
           message,
           refinements,
