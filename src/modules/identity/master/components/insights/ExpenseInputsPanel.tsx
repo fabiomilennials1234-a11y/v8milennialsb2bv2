@@ -214,18 +214,6 @@ export function ExpenseInputsPanel({
         </div>
 
         <div className="space-y-3">
-          <SectionLabel>Custo do produto</SectionLabel>
-          <NumberField
-            label="Custo por produto (R$ / unidade)"
-            adorn="R$"
-            value={value.custo_por_produto}
-            onChange={(n) => set({ custo_por_produto: n })}
-            dashed={projection}
-            realLine={realLine(realRefs?.custo_por_produto ?? 0)}
-          />
-        </div>
-
-        <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <SectionLabel>Despesas</SectionLabel>
             <div className="inline-flex rounded-lg border border-border bg-background p-0.5">
@@ -261,6 +249,7 @@ export function ExpenseInputsPanel({
           {mc ? (
             <>
               <NumberField
+                key="despesa-mc"
                 label="Margem de contribuição (%)"
                 adorn="%"
                 value={value.margem_contribuicao_pct}
@@ -275,6 +264,15 @@ export function ExpenseInputsPanel({
             </>
           ) : (
             <>
+              <NumberField
+                key="despesa-custo-produto"
+                label="Custo por produto (R$ / unidade)"
+                adorn="R$"
+                value={value.custo_por_produto}
+                onChange={(n) => set({ custo_por_produto: n })}
+                dashed={projection}
+                realLine={realLine(realRefs?.custo_por_produto ?? 0)}
+              />
               <NumberField
                 label="Embalagem (R$)"
                 adorn="R$"

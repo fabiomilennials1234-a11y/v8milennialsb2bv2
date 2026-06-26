@@ -276,7 +276,9 @@ function InsightsLoaded({
   const realRefs: ExpenseRealRefs = {
     anuncios: dadosForm.anuncios,
     custo_por_produto: dadosForm.custo_por_produto,
-    margem_contribuicao_pct: dadosForm.margem_contribuicao_pct,
+    // Ghost da MC = MC EFETIVA do cenário real (não o campo cru, que é 0 quando o
+    // real está em modo 'detalhado'). Reflete a margem real p/ comparar na projeção.
+    margem_contribuicao_pct: dadosEcon.cac.margemContribuicaoEfetivaPct ?? 0,
     embalagem: dadosForm.embalagem,
     frete: dadosForm.frete,
     imposto_pct: dadosForm.imposto_pct,
