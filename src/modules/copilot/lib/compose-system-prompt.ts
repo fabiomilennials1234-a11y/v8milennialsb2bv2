@@ -1,7 +1,7 @@
 // Reusable port of CopilotPlayground.tsx buildSystemPrompt + resolveMentions.
-// Guard: compose-system-prompt.test.ts runs the SAME goldens as the Deno port
-// (supabase/functions/_shared/copilot-prompt). If the frontend ever diverges
-// from the Deno port, that golden test fails.
+// Guard: tests/unit/copilot-compose-parity.test.ts runs the SAME goldens as the
+// Deno port (supabase/functions/_shared/copilot-prompt). If the frontend ever
+// diverges from the Deno port, that golden test fails.
 // NÃO altere o formato de saída — fidelidade byte-a-byte é o requisito.
 import { PLAYGROUND_TOOLS } from "../components/playground/types";
 

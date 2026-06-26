@@ -67,7 +67,7 @@ import {
   type PlaygroundData,
   type PromptSections,
 } from "./types";
-import { composeSystemPrompt, type ComposeInput } from "../../lib/compose-system-prompt";
+import { composeSystemPrompt, type ComposeInput } from "@/modules/copilot/lib/compose-system-prompt";
 
 import {
   useCreateCopilotAgent,
