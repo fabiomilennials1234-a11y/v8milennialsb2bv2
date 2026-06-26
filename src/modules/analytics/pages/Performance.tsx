@@ -9,7 +9,6 @@ import { useActiveCompetition, useCompetitionParticipants, useCompetitionPrizes,
 import { CompetitionPodiumV2 } from "@/modules/analytics/components/performance/CompetitionPodiumV2";
 import { CompetitionRankingListV2 } from "@/modules/analytics/components/performance/CompetitionRankingListV2";
 import { CreateCompetitionModal } from "@/modules/analytics/components/performance/CreateCompetitionModal";
-import { ProductivityBlock } from "@/modules/analytics/components/performance/ProductivityBlock";
 import { useRankingTransitions } from "@/modules/engagement/hooks/useRankingTransitions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserAvatar } from "@/components/ui/user-avatar";
@@ -1134,9 +1133,6 @@ export default function Performance() {
 
         {/* ========== RANKING VENDAS TAB ========== */}
         <TabsContent value="ranking_vendas" className="space-y-6">
-          {/* Produtividade — atividade-no-período (conta pela data-da-ação, ADR-0013) */}
-          <ProductivityBlock teamMembers={teamMembers} />
-
           {activeCompetition ? (
             <>
               <CompetitionHeader
