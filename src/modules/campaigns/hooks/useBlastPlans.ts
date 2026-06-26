@@ -39,7 +39,16 @@ export interface BlastPlanLotBreakdown {
 }
 
 export interface CreateBlastPlanInput {
-  instance_id: string;
+  /** Legacy single-number path (still accepted by the backend for retrocompat). */
+  instance_id?: string;
+  /** ADR-0015 multi-number: every selected number. Distributed round-robin per
+   *  number per day, each bounded by its own Number Daily Cap. */
+  instance_ids?: string[];
+  /** Per-number cap override, keyed by instance id. Default: the number's stored
+   *  daily_blast_cap. */
+  caps?: Record<string, number>;
+  /** Per-leva send window (ADR-0015 / #909). Default server-side: Mon–Sat 08–20. */
+  window?: { days?: number[]; from_minutes?: number; to_minutes?: number };
   lead_ids: string[];
   message: string;
   delay_min_ms?: number;

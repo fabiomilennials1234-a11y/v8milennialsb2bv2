@@ -87,9 +87,12 @@ function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerPr
       return;
     }
 
-    // TODO(#901): multi-instância round-robin no backend. blast-plan-create
-    // aceita 1 instance_id hoje — usamos o primeiro número selecionado.
-    const instanceId = selected[0].id;
+    // ADR-0015 #901: send EVERY selected number + its effective Number Daily Cap.
+    // The backend distributes the audience round-robin across them via planBlast,
+    // each number bounded by its own cap.
+    const instanceIds = selected.map((n) => n.id);
+    const caps: Record<string, number> = {};
+    for (const n of selected) caps[n.id] = Math.max(0, Math.floor(n.cap));
     // Anti-ban widens the inter-send jitter; off keeps a tighter cadence.
     const [delayMin, delayMax] = draft.antiBan ? [5000, 30000] : [1000, 4000];
     const imageUrl =
@@ -97,7 +100,10 @@ function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerPr
 
     try {
       const res = await createPlan.mutateAsync({
-        instance_id: instanceId,
+        instance_ids: instanceIds,
+        caps,
+        // Send window left to the server default (Mon–Sat 08–20) for now — the
+        // wizard does not yet expose a window picker.
         lead_ids: draft.leadIds,
         message: draft.message.trim(),
         delay_min_ms: delayMin,
