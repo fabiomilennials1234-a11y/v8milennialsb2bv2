@@ -53,8 +53,6 @@ const Leads = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Leads")))
 const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash")));
 const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
 const Configuracoes = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Configuracoes")));
-const OnboardingHubPage = lazy(() => lazyRetry(() => import("@/modules/platform/pages/OnboardingHub")));
-const OnboardingHubPreview = lazy(() => lazyRetry(() => import("@/modules/platform/pages/OnboardingHubPreview")));
 const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
 const Campanhas = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/Campanhas")));
 const CampanhaDetail = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/CampanhaDetail")));
@@ -213,10 +211,6 @@ function AppRoutes() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/signup" element={<Navigate to="/auth" replace />} />
       <Route path="/privacidade" element={<Privacidade />} />
-      {/* DEV-only: preview do onboarding sem auth/backend (co-design de UI) */}
-      {import.meta.env.DEV && (
-        <Route path="/onboarding-preview" element={<OnboardingHubPreview />} />
-      )}
       {/* Old onboarding/checkout routes removed — OnboardingGate handles inline */}
       <Route path="/" element={<RootRedirect />} />
       <Route path="/pricing" element={<Navigate to="/#pricing" replace />} />
@@ -441,16 +435,6 @@ function AppRoutes() {
               <PermissionProtectedRoute featureKey="settings.view">
                 <Configuracoes />
               </PermissionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/onboarding"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <OnboardingHubPage />
             </LayoutWrapper>
           </ProtectedRoute>
         }
