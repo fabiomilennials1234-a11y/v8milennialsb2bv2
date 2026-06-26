@@ -39,6 +39,13 @@ const COLS =
 
 import { runMutation } from "../../_shared/mcp/guardrails.ts";
 import { auditMcpAction } from "../lib/audit.ts";
+import {
+  agentRowToComposeInput,
+  type ComposePromptSections,
+  composeSystemPrompt,
+  DEFAULT_PROMPT_SECTIONS,
+  mergeSections,
+} from "../../_shared/copilot-prompt/index.ts";
 
 export interface PromptSectionsInput {
   system_prompt?: string;
@@ -76,8 +83,9 @@ export const copilotUpdatePromptTool: ToolDef = {
       system_prompt: { type: "string", description: "New compiled system prompt (optional)" },
       dos: { type: "string", description: "New custom_instructions.dos (optional)" },
       promptSections: {
-        type: "array",
-        description: "New conversation_style.promptSections (optional)",
+        type: "object",
+        description:
+          "New conversation_style.promptSections (object: personality|objective|flow|products|instructions)",
       },
       confirm_token: { type: "string" },
     },
@@ -90,7 +98,10 @@ export const copilotUpdatePromptTool: ToolDef = {
     const sections: PromptSectionsInput = {
       system_prompt: typeof args.system_prompt === "string" ? args.system_prompt : undefined,
       dos: typeof args.dos === "string" ? args.dos : undefined,
-      promptSections: Array.isArray(args.promptSections) ? args.promptSections : undefined,
+      promptSections: args.promptSections && typeof args.promptSections === "object" &&
+          !Array.isArray(args.promptSections)
+        ? args.promptSections
+        : undefined,
     };
     if (
       sections.system_prompt === undefined && sections.dos === undefined &&
@@ -176,5 +187,141 @@ export const copilotDumpPromptTool: ToolDef = {
       sources: extractPromptSources(data),
     };
     return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
+  },
+};
+
+// ── copilot.set_sections — edit the 5 UI prompt sections + faithful recompile ──
+const SECTION_KEYS = [
+  "personality",
+  "objective",
+  "flow",
+  "products",
+  "instructions",
+] as const;
+
+const SET_SECTIONS_COLS =
+  "id,organization_id,name,conversation_style,can_qualify_lead,can_schedule_meeting,can_move_cards," +
+  "can_transfer_human,can_create_lead,can_update_lead,can_send_document,can_transfer_sz_chat,human_pause_enabled";
+
+/** Recompila system_prompt fiel + monta update dos 3 lugares + prompt_hash null. */
+export function buildSetSectionsUpdate(
+  patch: Partial<ComposePromptSections>,
+  currentStyle: Record<string, unknown> | null,
+  docs: Parameters<typeof agentRowToComposeInput>[1],
+  agentRow: Parameters<typeof agentRowToComposeInput>[0],
+): Record<string, unknown> {
+  const cs = (currentStyle ?? {}) as { promptSections?: Partial<ComposePromptSections> };
+  const merged = mergeSections(
+    { ...DEFAULT_PROMPT_SECTIONS, ...(cs.promptSections ?? {}) },
+    patch,
+  );
+  const input = agentRowToComposeInput(
+    { ...agentRow, conversation_style: { ...cs, promptSections: merged } },
+    docs,
+  );
+  const systemPrompt = composeSystemPrompt(input);
+  return {
+    system_prompt: systemPrompt,
+    custom_instructions: systemPrompt, // = sectionsToFlatText (paridade Playground)
+    conversation_style: { ...(currentStyle ?? {}), promptSections: merged },
+    prompt_hash: null,
+  };
+}
+
+export const copilotSetSectionsTool: ToolDef = {
+  name: "copilot.set_sections",
+  description:
+    "Edit any of a Copilot agent's 5 UI prompt sections (personality|objective|flow|products|" +
+    "instructions), recompile system_prompt faithfully (tools+media), write all 3 storage places + " +
+    "null prompt_hash so it takes effect at runtime. Partial merge; empty string clears a section. " +
+    "Dry-run shows diff + confirm_token; re-call with confirm_token to apply.",
+  readonly: false,
+  inputSchema: {
+    type: "object",
+    properties: {
+      agent_id: { type: "string", description: "Copilot agent UUID" },
+      sections: {
+        type: "object",
+        description: "Partial: any of personality|objective|flow|products|instructions (string).",
+        properties: Object.fromEntries(SECTION_KEYS.map((k) => [k, { type: "string" }])),
+        additionalProperties: false,
+      },
+      confirm_token: { type: "string" },
+    },
+    required: ["agent_id", "sections"],
+    additionalProperties: false,
+  },
+  handler: async (args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> => {
+    const db = ctx.db as SupabaseClient;
+    const agentId = String(args.agent_id);
+    const raw = (args.sections ?? {}) as Record<string, unknown>;
+    const patch: Partial<ComposePromptSections> = {};
+    for (const k of SECTION_KEYS) {
+      if (typeof raw[k] === "string") (patch as Record<string, string>)[k] = raw[k] as string;
+    }
+    if (Object.keys(patch).length === 0) {
+      return {
+        content: [{ type: "text", text: "Provide at least one of: " + SECTION_KEYS.join(", ") }],
+        isError: true,
+      };
+    }
+
+    const res = await runMutation({
+      plan: async () => {
+        const { data, error } = await db.from("copilot_agents").select(SET_SECTIONS_COLS)
+          .eq("id", agentId).maybeSingle();
+        if (error) throw new Error(error.message);
+        if (!data) throw new Error("No copilot agent found.");
+        // The long select string overflows supabase-js's type-level parser (→ GenericStringError);
+        // cast to the actual row shape (Parameters trick avoids importing AgentRow directly).
+        const agent = data as unknown as
+          & Parameters<typeof agentRowToComposeInput>[0]
+          & { id: string; name: string; organization_id: string };
+        const { data: docsData, error: docsErr } = await db.from("copilot_agent_documents")
+          .select("id,file_name,file_type,description,send_when").eq("agent_id", agentId);
+        // Fail closed: a swallowed docs error would drop the MÍDIA block from the recompile and
+        // persist a degraded system_prompt. Throwing in plan() aborts before any token/write.
+        if (docsErr) throw new Error(docsErr.message);
+        const docs = (docsData ?? []) as Parameters<typeof agentRowToComposeInput>[1];
+        const cur =
+          (agent.conversation_style as { promptSections?: Partial<ComposePromptSections> }) ?? {};
+        const update = buildSetSectionsUpdate(
+          patch,
+          agent.conversation_style as Record<string, unknown>,
+          docs,
+          agent,
+        );
+        return {
+          action: "set_sections",
+          agent_id: agentId,
+          name: agent.name,
+          organization_id: agent.organization_id,
+          changed: Object.keys(patch),
+          sections_before: { ...DEFAULT_PROMPT_SECTIONS, ...(cur.promptSections ?? {}) },
+          sections_after: (update.conversation_style as { promptSections: unknown }).promptSections,
+          system_prompt_preview: String(update.system_prompt).slice(0, 1200),
+          update,
+        };
+      },
+      audit: (_i, plan, token) =>
+        auditMcpAction(db, {
+          tool: "copilot.set_sections",
+          // Trust the agent's own org (resolved in plan), never an unverified caller arg.
+          org_id: String((plan as { organization_id?: unknown }).organization_id ?? ""),
+          target_type: "copilot_agent",
+          target_id: agentId,
+          params: args,
+          plan,
+          confirm_token: token,
+        }),
+      apply: async (_i, plan) => {
+        const { error } = await db.from("copilot_agents")
+          .update((plan as { update: Record<string, unknown> }).update).eq("id", agentId);
+        if (error) throw new Error(error.message);
+        return { updated: agentId };
+      },
+    }, { confirm_token: typeof args.confirm_token === "string" ? args.confirm_token : undefined });
+
+    return { content: [{ type: "text", text: JSON.stringify(res, null, 2) }] };
   },
 };
