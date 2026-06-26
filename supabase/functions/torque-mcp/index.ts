@@ -12,7 +12,11 @@ import { leadTraceHistoryTool } from "./tools/trace.ts";
 import { conversationGetTool } from "./tools/conversation.ts";
 import { whatsappInstanceStatusTool } from "./tools/whatsapp.ts";
 import { blastStatusTool } from "./tools/blast.ts";
-import { copilotDumpPromptTool, copilotUpdatePromptTool } from "./tools/copilot.ts";
+import {
+  copilotDumpPromptTool,
+  copilotSetSectionsTool,
+  copilotUpdatePromptTool,
+} from "./tools/copilot.ts";
 import { cronToggleTool } from "./tools/cron.ts";
 import { dbReadSqlTool } from "./tools/db.ts";
 import { rlsCheckAccessTool } from "./tools/rls.ts";
@@ -46,6 +50,7 @@ const TOOLS = [
   workflowValidateTool,
   leadRestoreTool,
   copilotUpdatePromptTool,
+  copilotSetSectionsTool,
   cronToggleTool,
   workflowBuildTool,
   workflowSetActiveTool,
