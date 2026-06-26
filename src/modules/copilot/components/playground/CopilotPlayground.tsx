@@ -67,6 +67,7 @@ import {
   type PlaygroundData,
   type PromptSections,
 } from "./types";
+import { composeSystemPrompt, type ComposeInput } from "../../lib/compose-system-prompt";
 
 import {
   useCreateCopilotAgent,
@@ -86,101 +87,34 @@ import { hasFullBehaviorCoverage } from "@/modules/copilot/components/BehaviorWi
 // =============================================================
 
 /**
- * Resolve @menções em texto, substituindo por instruções que o LLM entende.
+ * Adapta o estado do Playground para o contrato do composer reutilizável.
  */
-function resolveMentions(text: string, data: PlaygroundData): string {
-  let resolved = text;
-
-  for (const toolDef of PLAYGROUND_TOOLS) {
-    const state = data.tools[toolDef.id];
-    const mentionRegex = new RegExp(`@${toolDef.id}`, "g");
-    if (state?.enabled) {
-      resolved = resolved.replace(mentionRegex, `[usar ferramenta "${toolDef.name}"]`);
-    } else {
-      resolved = resolved.replace(mentionRegex, toolDef.name);
-    }
-  }
-
-  for (const link of data.links) {
-    const linkMentionRegex = new RegExp(`@${link.id}`, "g");
-    resolved = resolved.replace(linkMentionRegex, `${link.alias} (${link.url})`);
-  }
-
-  for (const doc of data.documents) {
-    const docMentionRegex = new RegExp(`@${doc.id}`, "g");
-    resolved = resolved.replace(docMentionRegex, `[documento: ${doc.name}]`);
-  }
-
-  return resolved;
+function playgroundDataToComposeInput(data: PlaygroundData): ComposeInput {
+  return {
+    promptSections: data.promptSections,
+    tools: PLAYGROUND_TOOLS.map((d) => ({
+      id: d.id,
+      enabled: data.tools[d.id]?.enabled ?? false,
+      instruction: data.tools[d.id]?.instruction ?? "",
+    })),
+    documents: data.documents.map((d) => ({
+      id: d.id,
+      name: d.name,
+      fileType: d.fileType,
+      description: d.description,
+      sendWhen: d.sendWhen,
+    })),
+    links: data.links,
+  };
 }
 
 /**
  * Monta o system prompt final a partir das seções estruturadas + tool instructions.
- *
- * Ordem: Personalidade → Objetivo → Fluxo → Ferramentas → Instruções → Links
+ * Lógica vive em @/modules/copilot/lib/compose-system-prompt (port espelhado no Deno,
+ * guardado por goldens de paridade). Assinatura mantida para não tocar callers.
  */
 function buildSystemPrompt(data: PlaygroundData): string {
-  const parts: string[] = [];
-  const s = data.promptSections;
-
-  if (s.personality.trim()) {
-    parts.push(`# PERSONALIDADE\n\n${resolveMentions(s.personality.trim(), data)}`);
-  }
-
-  if (s.objective.trim()) {
-    parts.push(`# OBJETIVO\n\n${resolveMentions(s.objective.trim(), data)}`);
-  }
-
-  if (s.flow.trim()) {
-    parts.push(`# FLUXO DE ATENDIMENTO\n\n${resolveMentions(s.flow.trim(), data)}`);
-  }
-
-  if (s.products?.trim()) {
-    parts.push(`# PRODUTOS E SERVICOS\n\n${resolveMentions(s.products.trim(), data)}`);
-  }
-
-  // Tool instructions — only enabled tools
-  const toolSections: string[] = [];
-  for (const toolDef of PLAYGROUND_TOOLS) {
-    const state = data.tools[toolDef.id];
-    if (!state?.enabled) continue;
-    const instruction = state.instruction?.trim() || toolDef.defaultInstruction;
-    toolSections.push(`## ${toolDef.name}\n${resolveMentions(instruction, data)}`);
-  }
-  if (toolSections.length > 0) {
-    parts.push(`# FERRAMENTAS DISPONÍVEIS\n\n${toolSections.join("\n\n")}`);
-  }
-
-  // Media available for sending
-  const mediaDocs = data.documents.filter(
-    (d) => (d.fileType === "image" || d.fileType === "video") && (d.description || d.sendWhen)
-  );
-  if (mediaDocs.length > 0) {
-    const mediaSections = mediaDocs.map((d) => {
-      const typeLabel = d.fileType === "image" ? "imagem" : "video";
-      let section = `## [${typeLabel}] ${d.name}`;
-      if (d.description) section += `\nDescricao: ${d.description}`;
-      if (d.sendWhen) section += `\nQuando enviar: ${d.sendWhen}`;
-      return section;
-    });
-    parts.push(`# MÍDIA DISPONÍVEL PARA ENVIAR\n\n${mediaSections.join("\n\n")}`);
-  }
-
-  if (s.instructions.trim()) {
-    parts.push(`# INSTRUÇÕES\n\n${resolveMentions(s.instructions.trim(), data)}`);
-  }
-
-  // Links
-  if (data.links.length > 0) {
-    let linkSection = "## Links disponiveis para enviar ao lead:\n";
-    for (const link of data.links) {
-      linkSection += `- ${link.alias}: ${link.url}\n`;
-    }
-    linkSection += "\nIMPORTANTE: Quando relevante, envie o link completo na mensagem para o lead poder clicar.";
-    parts.push(linkSection);
-  }
-
-  return parts.join("\n\n");
+  return composeSystemPrompt(playgroundDataToComposeInput(data));
 }
 
 /**
