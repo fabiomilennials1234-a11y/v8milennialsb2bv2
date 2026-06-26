@@ -1,4 +1,4 @@
-import { Building2, ChevronDown, Check, Loader2, Shield, FlaskConical } from "lucide-react";
+import { Building2, ChevronDown, Check, Loader2, Shield, FlaskConical, LineChart } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -103,6 +103,18 @@ export function OrgSwitcher() {
           <span className="text-xs font-medium">
             {isOutbounder ? "Painel Outbound" : "Master"}
           </span>
+        </Button>
+      )}
+
+      {isMaster && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 border-insights/30 text-insights hover:bg-insights/10 hover:text-insights focus-visible:ring-2 focus-visible:ring-insights focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          onClick={() => navigate("/insights")}
+        >
+          <LineChart className="w-3.5 h-3.5" />
+          <span className="text-xs font-medium">Insights</span>
         </Button>
       )}
     </div>

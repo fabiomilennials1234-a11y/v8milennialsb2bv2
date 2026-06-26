@@ -76,3 +76,34 @@ export {
   useMasterAuditStats,
 } from "./hooks/useMasterAuditLogs";
 export type { AuditLog, AuditLogFilters } from "./hooks/useMasterAuditLogs";
+
+// ── Unit economics (CAC / Payback) ──────────────────────────────────────────
+export { useOrgSalesSummary } from "./hooks/useOrgSalesSummary";
+export type { OrgSalesSummary } from "./hooks/useOrgSalesSummary";
+export {
+  useOrgEconomicsInputs,
+  useSaveOrgEconomicsInputs,
+} from "./hooks/useOrgEconomicsInputs";
+export type {
+  EconomicsScenario,
+  OrgEconomicsInputs,
+  OrgEconomicsInputsUpsert,
+} from "./hooks/useOrgEconomicsInputs";
+export {
+  computeCac,
+  cacBands,
+  computeLtv,
+  computePaybacks,
+  computePaybackCurve,
+  computeUnitEconomics,
+} from "./lib/unit-economics";
+export type {
+  UnitEconomicsInputs,
+  UnitEconomics,
+  CacResult,
+  CacBands,
+  PaybackResult,
+  PaybackCurveResult,
+  PaybackCurveMarks,
+  PaybackCurvePoint,
+} from "./lib/unit-economics";

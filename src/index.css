@@ -61,6 +61,12 @@
     --silver: 220 9% 55%;
     --silver-foreground: 0 0% 100%;
 
+    /* Insights — área master de unit economics (azul semântico, ancorado em
+       --chart-5, hue 205 distinto de destructive 0° / success 142° / gold 47°).
+       Light: azure forte AA ~5:1 sobre cream L96. */
+    --insights: 205 90% 40%;
+    --insights-foreground: 210 40% 98%;
+
     --border: 40 15% 88%;
     --input: 40 15% 88%;
     --ring: 47 100% 50%;
@@ -172,6 +178,10 @@
 
     --silver: 220 9% 70%;
     --silver-foreground: 30 18% 10%;
+
+    /* Insights (dark) — azul mais claro p/ vibrar sobre warm-dark, AA ~6:1. */
+    --insights: 205 90% 60%;
+    --insights-foreground: 36 11% 9%;
 
     --border: 35 8% 19%;
     --input: 35 8% 19%;

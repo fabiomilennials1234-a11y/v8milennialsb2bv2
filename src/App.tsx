@@ -53,6 +53,8 @@ const Leads = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Leads")))
 const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash")));
 const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
 const Configuracoes = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Configuracoes")));
+const OnboardingHubPage = lazy(() => lazyRetry(() => import("@/modules/platform/pages/OnboardingHub")));
+const OnboardingHubPreview = lazy(() => lazyRetry(() => import("@/modules/platform/pages/OnboardingHubPreview")));
 const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
 const Campanhas = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/Campanhas")));
 const CampanhaDetail = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/CampanhaDetail")));
@@ -100,6 +102,8 @@ const CopilotReasoning = lazy(() => lazyRetry(() => import("@/modules/identity/m
 const CopilotToggleAudit = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/CopilotToggleAudit")));
 const MasterOnboarding = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOnboarding")));
 const MasterMetaAssets = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterMetaAssets")));
+// Insights — área master azul de unit economics (chrome próprio, fora do MasterLayout)
+const MasterInsights = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterInsights")));
 // Master route/layout — carregam sob demanda quando acessar /master
 import { MasterRoute } from "@/modules/identity/master/components/MasterRoute";
 import { MasterLayout } from "@/modules/identity/master/components/MasterLayout";
@@ -208,6 +212,10 @@ function AppRoutes() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/signup" element={<Navigate to="/auth" replace />} />
       <Route path="/privacidade" element={<Privacidade />} />
+      {/* DEV-only: preview do onboarding sem auth/backend (co-design de UI) */}
+      {import.meta.env.DEV && (
+        <Route path="/onboarding-preview" element={<OnboardingHubPreview />} />
+      )}
       {/* Old onboarding/checkout routes removed — OnboardingGate handles inline */}
       <Route path="/" element={<RootRedirect />} />
       <Route path="/pricing" element={<Navigate to="/#pricing" replace />} />
@@ -423,6 +431,16 @@ function AppRoutes() {
               <PermissionProtectedRoute featureKey="settings.view">
                 <Configuracoes />
               </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/onboarding"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <OnboardingHubPage />
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -674,6 +692,18 @@ function AppRoutes() {
         <Route path="onboarding" element={<MasterOnboarding />} />
         <Route path="meta-assets" element={<MasterMetaAssets />} />
       </Route>
+
+      {/* Insights — área master azul (top-level, chrome próprio, sem MasterLayout) */}
+      <Route
+        path="/insights"
+        element={
+          <ProtectedRoute>
+            <MasterRoute>
+              <MasterInsights />
+            </MasterRoute>
+          </ProtectedRoute>
+        }
+      />
 
       <Route path="*" element={<NotFound />} />
     </Routes>
