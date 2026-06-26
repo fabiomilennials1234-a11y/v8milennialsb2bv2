@@ -25,9 +25,9 @@ export interface AudienceSelection {
 
 /** Canonical system funnels offered by the standalone wizard. */
 export const SYSTEM_FUNNELS: { value: SystemPipelineType; label: string }[] = [
-  { value: "whatsapp", label: "Funil WhatsApp" },
-  { value: "confirmacao", label: "Funil Confirmação" },
-  { value: "propostas", label: "Funil Propostas" },
+  { value: "whatsapp", label: "Oportunidades" },
+  { value: "confirmacao", label: "Agendamentos" },
+  { value: "propostas", label: "Orçamentos" },
 ];
 
 /** Empty conditions literal — read-only reference; never mutate (use `emptyConditions`). */
