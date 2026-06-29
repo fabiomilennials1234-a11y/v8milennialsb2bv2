@@ -139,7 +139,22 @@ Deno.serve(withSentry('partner-webhook', async (req) => {
   if (body.custom_fields) leadPayload.custom_fields = body.custom_fields;
   if (body.assigned_user_id) leadPayload.assigned_user_id = body.assigned_user_id;
 
-  if (body.pipe || body.stage) {
+  // Tag-driven routing: quando o caller manda tags geridas pela plataforma (prefixo `sys:`),
+  // a posição do lead no funil é decidida pelos workflows nativos tag→stage do Torque.
+  // Ignoramos qualquer pipe/stage do caller nesse caso — ex.: a plataforma DNA/Zuvic roteia
+  // checkout.success → confirmacao/ganho, um stage que pode não existir na org ou pertencer
+  // ao funil errado (reunião), o que jogaria um assinante pago em lembretes de reunião.
+  // A própria tag `sys:*` posiciona o lead via workflow.
+  const incomingTags = Array.isArray(body.tags)
+    ? body.tags
+    : typeof body.tags === "string"
+      ? [body.tags]
+      : [];
+  const hasPlatformTag = incomingTags.some(
+    (t) => typeof t === "string" && t.trim().toLowerCase().startsWith("sys:"),
+  );
+
+  if ((body.pipe || body.stage) && !hasPlatformTag) {
     leadPayload.place_in_pipe = {
       pipe: body.pipe ?? "whatsapp",
       stage: body.stage ?? "novo",
