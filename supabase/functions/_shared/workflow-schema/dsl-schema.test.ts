@@ -34,6 +34,57 @@ Deno.test("safeParseSpec — tiered: send_whatsapp without message/template is r
   if (!r.ok) assertEquals(r.errors.some((e) => e.includes("send_whatsapp requires")), true);
 });
 
+Deno.test("safeParseSpec — tiered: send_to_number with phones + template is accepted", () => {
+  const r = safeParseSpec({
+    ...valid,
+    steps: [{
+      kind: "action",
+      actionType: "send_to_number",
+      config: { notifyPhones: ["5511999998888"], messageTemplate: "Lead {{nome}}" },
+    }],
+  });
+  assertEquals(r.ok, true);
+});
+
+Deno.test("safeParseSpec — tiered: send_to_number without notifyPhones is rejected", () => {
+  const r = safeParseSpec({
+    ...valid,
+    steps: [{
+      kind: "action",
+      actionType: "send_to_number",
+      config: { messageTemplate: "Lead {{nome}}" },
+    }],
+  });
+  assertEquals(r.ok, false);
+  if (!r.ok) assertEquals(r.errors.some((e) => e.includes("notifyPhones")), true);
+});
+
+Deno.test("safeParseSpec — tiered: send_to_number with only blank phones is rejected", () => {
+  const r = safeParseSpec({
+    ...valid,
+    steps: [{
+      kind: "action",
+      actionType: "send_to_number",
+      config: { notifyPhones: ["", "   "], messageTemplate: "oi" },
+    }],
+  });
+  assertEquals(r.ok, false);
+  if (!r.ok) assertEquals(r.errors.some((e) => e.includes("notifyPhones")), true);
+});
+
+Deno.test("safeParseSpec — tiered: send_to_number without messageTemplate is rejected", () => {
+  const r = safeParseSpec({
+    ...valid,
+    steps: [{
+      kind: "action",
+      actionType: "send_to_number",
+      config: { notifyPhones: ["5511999998888"] },
+    }],
+  });
+  assertEquals(r.ok, false);
+  if (!r.ok) assertEquals(r.errors.some((e) => e.includes("send_to_number requires messageTemplate")), true);
+});
+
 Deno.test("safeParseSpec — tiered: long-tail action with arbitrary config passes (passthrough)", () => {
   const r = safeParseSpec({
     ...valid,

@@ -102,7 +102,9 @@
     "https://esm.sh/jose@5.9.6/denonext/key/generate/keypair.mjs": "9c5a4af038be9fadecb48c4532932f4c13f909abbbe7d594d07723f091ab501f",
     "https://esm.sh/jose@5.9.6/denonext/key/generate/secret.mjs": "33adb6ed0cc5c6c13a82b040d69da17546b49ca51e5708fac6d3e15c6a3b8f31",
     "https://esm.sh/jose@5.9.6/denonext/key/import.mjs": "048bd8c1d193193e2f90f059a3815b0a31348bd295fb075779cf3b90bf51e641",
-    "https://esm.sh/tslib@2.8.1/denonext/tslib.mjs": "c38da5dd6da6281964435002ce204cd586634fe3bdfb24a0ee116f48cf3292e9"
+    "https://esm.sh/tslib@2.8.1/denonext/tslib.mjs": "c38da5dd6da6281964435002ce204cd586634fe3bdfb24a0ee116f48cf3292e9",
+    "https://esm.sh/zod@3.23.8": "15e60c792ac21d4818f181671c7c74bf33bf7526d487dc524911e42785d8b5c2",
+    "https://esm.sh/zod@3.23.8/denonext/zod.mjs": "6ee0474ec5a765b112eca12525d7e30c8e77eedbe2f2ac5e19f2af468b759517"
   },
   "workspace": {
     "dependencies": [

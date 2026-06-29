@@ -64,6 +64,7 @@ export type WorkflowActionType =
   | "send_whatsapp_pix_button"
   | "send_meta_message"
   | "send_semi_automatic"
+  | "send_to_number"
   // Lead Management
   | "move_stage"
   | "add_tag"
@@ -341,6 +342,10 @@ export interface ActionNodeData {
   // Semi-automático
   semiAutoMessage?: string;
   semiAutoApprover?: string;
+  // Enviar para número fixo (send_to_number) — destinos fixos, NÃO o número do lead.
+  // messageTemplate (acima) carrega o texto; reusa o mesmo resolvedor de variáveis.
+  notifyPhones?: string[];
+  includeConversationSummary?: boolean;
   // Move stage
   pipeType?: string;
   targetStage?: string;
@@ -723,6 +728,7 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   send_whatsapp_pix_button: "Enviar Botão PIX (Uazapi)",
   send_meta_message: "Enviar Mensagem Meta",
   send_semi_automatic: "Envio Semi-Automático",
+  send_to_number: "Enviar p/ número fixo",
   // Lead Management
   move_stage: "Mover Estágio",
   add_tag: "Adicionar Tag",
@@ -833,6 +839,7 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
       "send_whatsapp_pix_button",
       "send_meta_message",
       "send_semi_automatic",
+      "send_to_number",
     ],
   },
   {

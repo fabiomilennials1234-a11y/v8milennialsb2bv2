@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mic, MicOff, Upload, Trash2, Play, Square } from "lucide-react";
+import { Mic, MicOff, Upload, Trash2, Play, Square, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import type { ActionNodeData, WorkflowActionType, MessageType } from "@/types/workflow";
@@ -141,6 +141,104 @@ function ApplyChecklistConfig({
   );
 }
 
+function SendToNumberConfig({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const taRef = useRef<TemplateTextareaHandle>(null);
+  // Always render at least one input row so the operator has somewhere to type.
+  const phones = (data.notifyPhones && data.notifyPhones.length > 0)
+    ? data.notifyPhones
+    : [""];
+
+  const updatePhone = (index: number, value: string) => {
+    const next = [...phones];
+    next[index] = value;
+    onUpdate({ notifyPhones: next });
+  };
+
+  const addPhone = () => onUpdate({ notifyPhones: [...phones, ""] });
+
+  const removePhone = (index: number) => {
+    const next = phones.filter((_, i) => i !== index);
+    onUpdate({ notifyPhones: next.length > 0 ? next : [""] });
+  };
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Números de destino</Label>
+        <div className="space-y-2">
+          {phones.map((phone, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <Input
+                value={phone}
+                onChange={(e) => updatePhone(index, e.target.value)}
+                placeholder="Ex: 5511999998888"
+                inputMode="tel"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0 text-muted-foreground hover:text-destructive"
+                onClick={() => removePhone(index)}
+                disabled={phones.length === 1 && !phone}
+                title="Remover número"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={addPhone}
+          className="w-full"
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          Adicionar número
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          A mensagem é enviada para cada número (com DDI/DDD, ex: 55 + DDD +
+          número). Não é o número do lead — use para avisar um vendedor.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Mensagem</Label>
+        <VariableInserter onInsert={(v) => taRef.current?.insertAtCursor(v)} />
+        <TemplateTextarea
+          ref={taRef}
+          value={data.messageTemplate || ""}
+          onChange={(v) => onUpdate({ messageTemplate: v })}
+          placeholder="Lead {{nome}} ({{empresa}}) respondeu. Assuma a conversa."
+          rows={4}
+        />
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg border p-3">
+        <div className="space-y-0.5 pr-2">
+          <Label className="text-sm">Resumir conversa do lead ao enviar</Label>
+          <p className="text-xs text-muted-foreground">
+            Anexa um resumo da conversa (IA) + o telefone do lead à mensagem,
+            para o vendedor ter contexto.
+          </p>
+        </div>
+        <Switch
+          checked={!!data.includeConversationSummary}
+          onCheckedChange={(v) => onUpdate({ includeConversationSummary: v })}
+        />
+      </div>
+    </>
+  );
+}
+
 interface ActionPanelProps {
   data: ActionNodeData;
   onUpdate: (updates: Partial<ActionNodeData>) => void;
@@ -200,7 +298,8 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
         at === "send_whatsapp_audio" ||
         at === "send_whatsapp_image" ||
         at === "send_whatsapp_sticker" ||
-        at === "send_whatsapp_template") && (
+        at === "send_whatsapp_template" ||
+        at === "send_to_number") && (
         <WhatsAppInstanceSelector
           instanceId={data.whatsappInstanceId}
           onSelect={(id, name) =>
@@ -308,6 +407,11 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
             </p>
           </div>
         </>
+      )}
+
+      {/* Send to fixed number(s) */}
+      {at === "send_to_number" && (
+        <SendToNumberConfig data={data} onUpdate={onUpdate} />
       )}
 
       {/* ═══════ LEAD MANAGEMENT ═══════ */}
