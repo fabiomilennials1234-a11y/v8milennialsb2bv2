@@ -42,6 +42,7 @@ export const TRIGGER_TYPES = [
   "campaign_lead_no_reply",
   "campaign_completed",
   "field_changed",
+  "scheduled_date",
 ] as const;
 
 export const ACTION_TYPES = [
@@ -55,6 +56,7 @@ export const ACTION_TYPES = [
   "send_whatsapp_pix_button",
   "send_meta_message",
   "send_semi_automatic",
+  "send_to_number",
   "move_stage",
   "add_tag",
   "remove_tag",

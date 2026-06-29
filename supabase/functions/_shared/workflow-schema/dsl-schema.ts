@@ -23,6 +23,14 @@ const CURATED_ACTION_CHECK: Record<string, (c: Record<string, unknown>) => strin
   send_whatsapp_template: (
     c,
   ) => (c.templateId ? null : "send_whatsapp_template requires templateId"),
+  send_to_number: (c) => {
+    const phones = Array.isArray(c.notifyPhones)
+      ? c.notifyPhones.filter((p) => typeof p === "string" && p.trim())
+      : [];
+    if (phones.length === 0) return "send_to_number requires at least one notifyPhones entry";
+    if (!c.messageTemplate) return "send_to_number requires messageTemplate";
+    return null;
+  },
   move_stage: (c) => (c.targetStage ? null : "move_stage requires targetStage"),
   add_tag: (c) => (c.tagId || c.tagName ? null : "add_tag requires tagId or tagName"),
   remove_tag: (c) => (c.tagId || c.tagName ? null : "remove_tag requires tagId or tagName"),

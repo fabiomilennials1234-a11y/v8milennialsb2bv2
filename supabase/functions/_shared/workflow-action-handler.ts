@@ -17,6 +17,7 @@ import { sendWhatsApp as sharedSendWhatsApp } from "./action-handlers/send-whats
 import { sendWhatsAppAudio as sharedSendWhatsAppAudio, sendWhatsAppImage as sharedSendWhatsAppImage, sendWhatsAppSticker as sharedSendWhatsAppSticker } from "./action-handlers/send-whatsapp-media.ts";
 import { sendWhatsAppTemplate as sharedSendWhatsAppTemplate, sendWhatsAppMenu as sharedSendWhatsAppMenu, sendWhatsAppPixButton as sharedSendWhatsAppPixButton } from "./action-handlers/send-whatsapp-rich.ts";
 import { sendMetaMessage as sharedSendMetaMessage, sendSemiAutomatic as sharedSendSemiAutomatic } from "./action-handlers/send-meta.ts";
+import { sendToNumber as sharedSendToNumber } from "./action-handlers/send-to-number.ts";
 import { addToCampaign as sharedAddToCampaign, removeFromCampaign as sharedRemoveFromCampaign, moveCampaignStage as sharedMoveCampaignStage, pauseCampaignSequence as sharedPauseCampaignSequence, resumeCampaignSequence as sharedResumeCampaignSequence } from "./action-handlers/campaign-operations.ts";
 import { createCalendarEvent as sharedCreateCalendarEvent } from "./action-handlers/calendar-operations.ts";
 import { createTinyerpOrder as sharedCreateTinyerpOrder, createTinyerpUpsellOrder as sharedCreateTinyerpUpsellOrder } from "./action-handlers/tinyerp-operations.ts";
@@ -306,6 +307,9 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       break;
     case "send_semi_automatic":
       result = await sharedSendSemiAutomatic(toActionInput(ctx));
+      break;
+    case "send_to_number":
+      result = await sharedSendToNumber(toActionInput(ctx));
       break;
 
     // ── Unified "Enviar Mensagem" node — dispatch by messageType (ADR-0012) ──
