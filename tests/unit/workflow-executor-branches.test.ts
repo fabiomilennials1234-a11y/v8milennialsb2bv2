@@ -20,6 +20,7 @@ import "../../tests/helpers/deno-mock";
 
 vi.mock("../../supabase/functions/_shared/workflow-condition-evaluator.ts", () => ({
   evaluateCondition: vi.fn().mockResolvedValue(true),
+  getLeadTags: vi.fn().mockResolvedValue(""),
 }));
 
 const mockAction = vi.hoisted(() =>

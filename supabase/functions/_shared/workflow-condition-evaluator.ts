@@ -221,7 +221,7 @@ async function getCustomFieldValue(
   return val?.value || "";
 }
 
-async function getLeadTags(
+export async function getLeadTags(
   supabase: SupabaseClient,
   leadId: string,
 ): Promise<string> {

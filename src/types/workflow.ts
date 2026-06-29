@@ -456,6 +456,13 @@ export interface SplitVariant {
   id: string;
   label: string;
   percentage: number;
+  /**
+   * Optional tag names (case-insensitive) that force a lead into this path.
+   * Stored by NAME (not id) so they travel through export/import in the
+   * definition jsonb and degrade safely if the destination org lacks the tag.
+   * Tag match has PRIORITY over the weighted random roll.
+   */
+  tags?: string[];
 }
 
 export interface SplitAbNodeData {
