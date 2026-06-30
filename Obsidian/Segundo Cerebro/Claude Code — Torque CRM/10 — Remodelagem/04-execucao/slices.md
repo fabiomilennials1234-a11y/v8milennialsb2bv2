@@ -1,10 +1,11 @@
 ---
 type: reference
 title: Execução — Slices
-status: active
+status: concluido
 created: 2026-05-26
+updated: 2026-05-28
 tags: [remodelagem, execucao, slices]
-related: ["[[estrutura-final]]", "[[criterios-sucesso]]"]
+related: ["[[estrutura-final]]", "[[criterios-sucesso]]", "[[ADR-2026-05-28-modularizacao-conclusao]]"]
 ---
 
 # Execução — Slices

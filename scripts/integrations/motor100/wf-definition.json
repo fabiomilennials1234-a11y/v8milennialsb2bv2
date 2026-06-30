@@ -1,0 +1,471 @@
+{
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "trigger",
+      "position": {
+        "x": 400,
+        "y": 0
+      },
+      "data": {
+        "type": "trigger",
+        "label": "Trigger",
+        "triggerType": "stage_changed",
+        "config": {}
+      }
+    },
+    {
+      "id": "move-respondeu",
+      "type": "action",
+      "position": {
+        "x": 820,
+        "y": 1400
+      },
+      "data": {
+        "type": "action",
+        "label": "Ação",
+        "actionType": "move_stage",
+        "targetStage": "respondeu",
+        "pipeType": "whatsapp"
+      }
+    },
+    {
+      "id": "move-naoresp",
+      "type": "action",
+      "position": {
+        "x": 120,
+        "y": 1500
+      },
+      "data": {
+        "type": "action",
+        "label": "Ação",
+        "actionType": "move_stage",
+        "targetStage": "nao_respondeu",
+        "pipeType": "whatsapp"
+      }
+    },
+    {
+      "id": "bw1",
+      "type": "wait_business_window",
+      "position": {
+        "x": 400,
+        "y": 120
+      },
+      "data": {
+        "type": "wait_business_window",
+        "label": "Janela | Seg-estilo 09:30–10:30",
+        "mode": "hold",
+        "timezone": "America/Sao_Paulo",
+        "days": [
+          "seg",
+          "ter",
+          "qua",
+          "qui",
+          "sex"
+        ],
+        "startTime": "09:30",
+        "endTime": "10:30",
+        "windows": [
+          {
+            "id": "win-0930",
+            "name": "Comercial",
+            "days": [
+              "mon",
+              "tue",
+              "wed",
+              "thu",
+              "fri"
+            ],
+            "start": "09:30",
+            "end": "10:30",
+            "action": "pass"
+          }
+        ]
+      }
+    },
+    {
+      "id": "s1",
+      "type": "action",
+      "position": {
+        "x": 400,
+        "y": 240
+      },
+      "data": {
+        "type": "action",
+        "label": "Ação",
+        "actionType": "send_whatsapp",
+        "messageTemplate": "Olá, {{nome}}! 👋\nSentimos sua falta por aqui e por isso temos um presente exclusivo para você voltar a comprar com a Motor 100.\n🎁 Faça um pedido mínimo de R$200 até sexta-feira e ganhe 3 aditivos para radiador AutoSecurity grátis junto do seu pedido.\nÉ simples: comprou, ganhou! 😉\nSe quiser aproveitar, é só responder esta mensagem que nosso time comercial já te atende."
+      }
+    },
+    {
+      "id": "mr1",
+      "type": "action",
+      "position": {
+        "x": 400,
+        "y": 360
+      },
+      "data": {
+        "type": "action",
+        "label": "Ação",
+        "actionType": "move_stage",
+        "targetStage": "recebeu_disparo",
+        "pipeType": "whatsapp"
+      }
+    },
+    {
+      "id": "w1",
+      "type": "wait_response",
+      "position": {
+        "x": 400,
+        "y": 480
+      },
+      "data": {
+        "type": "wait_response",
+        "label": "Esperar Resposta",
+        "channel": "any",
+        "timeoutHours": 72,
+        "timeoutMinutes": 0
+      }
+    },
+    {
+      "id": "bw2",
+      "type": "wait_business_window",
+      "position": {
+        "x": 400,
+        "y": 600
+      },
+      "data": {
+        "type": "wait_business_window",
+        "label": "Janela | 14:00–15:00",
+        "mode": "hold",
+        "timezone": "America/Sao_Paulo",
+        "days": [
+          "seg",
+          "ter",
+          "qua",
+          "qui",
+          "sex"
+        ],
+        "startTime": "14:00",
+        "endTime": "15:00",
+        "windows": [
+          {
+            "id": "win-1400",
+            "name": "Comercial",
+            "days": [
+              "mon",
+              "tue",
+              "wed",
+              "thu",
+              "fri"
+            ],
+            "start": "14:00",
+            "end": "15:00",
+            "action": "pass"
+          }
+        ]
+      }
+    },
+    {
+      "id": "s2",
+      "type": "action",
+      "position": {
+        "x": 400,
+        "y": 720
+      },
+      "data": {
+        "type": "action",
+        "label": "Ação",
+        "actionType": "send_whatsapp",
+        "messageTemplate": "{{nome}}, já conferiu o que está faltando no seu estoque? 👀\nEssa pode ser a hora ideal para repor peças e ainda garantir um bônus extra:\n🎁 3 aditivos AutoSecurity grátis em pedidos acima de R$200, válidos até amanhã.\nFala com a gente aqui no WhatsApp e aproveite a condição especial."
+      }
+    },
+    {
+      "id": "w2",
+      "type": "wait_response",
+      "position": {
+        "x": 400,
+        "y": 840
+      },
+      "data": {
+        "type": "wait_response",
+        "label": "Esperar Resposta",
+        "channel": "any",
+        "timeoutHours": 72,
+        "timeoutMinutes": 0
+      }
+    },
+    {
+      "id": "bw3",
+      "type": "wait_business_window",
+      "position": {
+        "x": 400,
+        "y": 960
+      },
+      "data": {
+        "type": "wait_business_window",
+        "label": "Janela | 09:00–10:00",
+        "mode": "hold",
+        "timezone": "America/Sao_Paulo",
+        "days": [
+          "seg",
+          "ter",
+          "qua",
+          "qui",
+          "sex"
+        ],
+        "startTime": "09:00",
+        "endTime": "10:00",
+        "windows": [
+          {
+            "id": "win-0900",
+            "name": "Comercial",
+            "days": [
+              "mon",
+              "tue",
+              "wed",
+              "thu",
+              "fri"
+            ],
+            "start": "09:00",
+            "end": "10:00",
+            "action": "pass"
+          }
+        ]
+      }
+    },
+    {
+      "id": "s3",
+      "type": "action",
+      "position": {
+        "x": 400,
+        "y": 1080
+      },
+      "data": {
+        "type": "action",
+        "label": "Ação",
+        "actionType": "send_whatsapp",
+        "messageTemplate": "🚨 Última chance, {{nome}}!\nHoje é o último dia para garantir 3 aditivos AutoSecurity grátis na sua compra.\n🛒 Pedido mínimo de R$200\n📅 Válido somente até amanhã!\nSe quiser aproveitar, responde agora esta mensagem que nosso time comercial já finaliza seu pedido."
+      }
+    },
+    {
+      "id": "w3",
+      "type": "wait_response",
+      "position": {
+        "x": 400,
+        "y": 1200
+      },
+      "data": {
+        "type": "wait_response",
+        "label": "Esperar Resposta",
+        "channel": "any",
+        "timeoutHours": 72,
+        "timeoutMinutes": 0
+      }
+    },
+    {
+      "id": "bw4",
+      "type": "wait_business_window",
+      "position": {
+        "x": 400,
+        "y": 1320
+      },
+      "data": {
+        "type": "wait_business_window",
+        "label": "Janela | 15:00–16:00",
+        "mode": "hold",
+        "timezone": "America/Sao_Paulo",
+        "days": [
+          "seg",
+          "ter",
+          "qua",
+          "qui",
+          "sex"
+        ],
+        "startTime": "15:00",
+        "endTime": "16:00",
+        "windows": [
+          {
+            "id": "win-1500",
+            "name": "Comercial",
+            "days": [
+              "mon",
+              "tue",
+              "wed",
+              "thu",
+              "fri"
+            ],
+            "start": "15:00",
+            "end": "16:00",
+            "action": "pass"
+          }
+        ]
+      }
+    },
+    {
+      "id": "s4",
+      "type": "action",
+      "position": {
+        "x": 400,
+        "y": 1440
+      },
+      "data": {
+        "type": "action",
+        "label": "Ação",
+        "actionType": "send_whatsapp",
+        "messageTemplate": "Olá, {{nome}}! 👋\nPercebemos que faz um tempinho que você não compra com a Motor 100, e gostaríamos de entender melhor como podemos te ajudar.\nTem faltado algum produto específico? Mudou sua demanda? Ou existe algo que possamos melhorar no atendimento?\nSua opinião é muito importante para nós. Se puder, responde esta mensagem com um \"oi\" que nosso time conversa com você sem compromisso. 🤝"
+      }
+    },
+    {
+      "id": "w4",
+      "type": "wait_response",
+      "position": {
+        "x": 400,
+        "y": 1560
+      },
+      "data": {
+        "type": "wait_response",
+        "label": "Esperar Resposta",
+        "channel": "any",
+        "timeoutHours": 72,
+        "timeoutMinutes": 0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-trigger-bw1",
+      "type": "animated",
+      "source": "trigger",
+      "target": "bw1",
+      "animated": true
+    },
+    {
+      "id": "e-bw1-s1",
+      "type": "animated",
+      "source": "bw1",
+      "target": "s1",
+      "animated": true
+    },
+    {
+      "id": "e-s1-mr1",
+      "type": "animated",
+      "source": "s1",
+      "target": "mr1",
+      "animated": true
+    },
+    {
+      "id": "e-mr1-w1",
+      "type": "animated",
+      "source": "mr1",
+      "target": "w1",
+      "animated": true
+    },
+    {
+      "id": "e-w1-move-respondeu-replied",
+      "type": "animated",
+      "source": "w1",
+      "target": "move-respondeu",
+      "animated": true,
+      "sourceHandle": "replied"
+    },
+    {
+      "id": "e-w1-bw2-timeout",
+      "type": "animated",
+      "source": "w1",
+      "target": "bw2",
+      "animated": true,
+      "sourceHandle": "timeout"
+    },
+    {
+      "id": "e-bw2-s2",
+      "type": "animated",
+      "source": "bw2",
+      "target": "s2",
+      "animated": true
+    },
+    {
+      "id": "e-s2-w2",
+      "type": "animated",
+      "source": "s2",
+      "target": "w2",
+      "animated": true
+    },
+    {
+      "id": "e-w2-move-respondeu-replied",
+      "type": "animated",
+      "source": "w2",
+      "target": "move-respondeu",
+      "animated": true,
+      "sourceHandle": "replied"
+    },
+    {
+      "id": "e-w2-bw3-timeout",
+      "type": "animated",
+      "source": "w2",
+      "target": "bw3",
+      "animated": true,
+      "sourceHandle": "timeout"
+    },
+    {
+      "id": "e-bw3-s3",
+      "type": "animated",
+      "source": "bw3",
+      "target": "s3",
+      "animated": true
+    },
+    {
+      "id": "e-s3-w3",
+      "type": "animated",
+      "source": "s3",
+      "target": "w3",
+      "animated": true
+    },
+    {
+      "id": "e-w3-move-respondeu-replied",
+      "type": "animated",
+      "source": "w3",
+      "target": "move-respondeu",
+      "animated": true,
+      "sourceHandle": "replied"
+    },
+    {
+      "id": "e-w3-bw4-timeout",
+      "type": "animated",
+      "source": "w3",
+      "target": "bw4",
+      "animated": true,
+      "sourceHandle": "timeout"
+    },
+    {
+      "id": "e-bw4-s4",
+      "type": "animated",
+      "source": "bw4",
+      "target": "s4",
+      "animated": true
+    },
+    {
+      "id": "e-s4-w4",
+      "type": "animated",
+      "source": "s4",
+      "target": "w4",
+      "animated": true
+    },
+    {
+      "id": "e-w4-move-respondeu-replied",
+      "type": "animated",
+      "source": "w4",
+      "target": "move-respondeu",
+      "animated": true,
+      "sourceHandle": "replied"
+    },
+    {
+      "id": "e-w4-move-naoresp-timeout",
+      "type": "animated",
+      "source": "w4",
+      "target": "move-naoresp",
+      "animated": true,
+      "sourceHandle": "timeout"
+    }
+  ]
+}

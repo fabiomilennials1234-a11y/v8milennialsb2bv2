@@ -1,64 +1,46 @@
 ---
 type: identity
-title: Remodelagem — MOC
+title: 10 — Remodelagem — Map of Content
 status: active
-created: 2026-05-26
-updated: 2026-05-26
-tags: [remodelagem, modularizacao, arquitetura, claude-code, torque-crm]
-related:
-  - "[[ADR-2026-05-26-modularizacao-monolito-modular]]"
-  - "[[auditoria-duplicatas]]"
-  - "[[event-bus-plano]]"
-owner: gabriel
+created: 2026-05-15
+updated: 2026-05-28
+tags: [moc, auto-regenerated]
+related: []
+owner: claude-agent
 ---
 
-# 10 — Remodelagem
+# 10 — Remodelagem — Map of Content
 
-Projeto **Modularização do Torque CRM**. Codebase saiu do estágio "MVP single-dev" e está entrando em "empresa média". Reorganização por **bounded context** (DDD) com fronteiras enforced via tooling + comunicação inter-módulo via **eventos de domínio**.
+> Auto-gerado por `scripts/vault-regen-indexes.mjs`.
+> Seções marcadas `<!-- manual -->` são preservadas.
 
-Fundamentação: clipping [Augusto Galego — "Acabou o hype de microsserviços. Voltamos pra 2010"](../../Clippings/(1197)%20Acabou%20o%20hype%20de%20microsserviços.%20Voltamos%20pra%202010.md). Não é microsserviços. É monolito modular.
+## 01-as-is
 
-## Estrutura desta área
+- [[duplicatas-mapeadas|As-Is — Duplicatas Mapeadas]]
+- [[panorama-atual|As-Is — Panorama Atual]]
+- [[problemas-criticos|As-Is — Problemas Críticos]]
 
-### 01 — As-Is (problemas atuais)
-- [[panorama-atual]] — Números crus do codebase hoje (223 hooks, 97 edge functions, 62 pastas components, 63 módulos `_shared/`)
-- [[problemas-criticos]] — Top dores: blast radius, AI agents perdidos, duplicatas, acoplamento síncrono
-- [[duplicatas-mapeadas]] — Lista concreta de funções/hooks/components/edges duplicados ou sobrepostos
+## 02-solucao
 
-### 02 — Solução (decisões arquiteturais)
-- [[monolito-modular]] — Por que monolito modular (não microsserviços, não status quo)
-- [[event-bus]] — Como módulos conversam: `domain_events` + dispatcher cron
-- [[boundary-enforcement]] — ESLint `boundaries` + `dependency-cruiser` + CI gate
-- [[bounded-contexts]] — 14 BCs derivados do CONTEXT.md (identity, leads, pipelines, communication, copilot, workflows, campaigns, carteira, engagement, analytics, billing, marketing, integrations, platform)
+- [[boundary-enforcement|Solução — Boundary Enforcement]] (concluido)
+- [[bounded-contexts|Solução — Bounded Contexts]] (concluido)
+- [[event-bus|Solução — Event-Bus]] (concluido)
+- [[monolito-modular|Solução — Monolito Modular]] (concluido)
 
-### 03 — To-Be (goal do projeto)
-- [[estrutura-final]] — Layout `src/modules/<bc>/` e `supabase/functions/<bc>/<fn>/`
-- [[principios-modulo]] — Regras: API pública via `index.ts`, cross-import proibido, sub-CLAUDE.md obrigatório
-- [[criterios-sucesso]] — Checklist objetivo de conclusão
+## 03-to-be
 
-### 04 — Execução
-- [[slices]] — 19 slices vertical thin, mergeáveis em develop
-- [[decisoes-pendentes]] — Bloqueios aguardando CTO
-- [[riscos-mitigacoes]] — Codemod, hotfix protocol, deploy edge fn
+- [[criterios-sucesso|To-Be — Critérios de Sucesso]] (concluido)
+- [[estrutura-final|To-Be — Estrutura Final]] (concluido)
+- [[principios-modulo|To-Be — Princípios do Módulo]] (concluido)
 
-## Documentos vinculados (existentes)
+## 04-execucao
 
-- ADR: [[ADR-2026-05-26-modularizacao-monolito-modular]] (04 — Decisões)
-- SPEC: [`.specs/features/modularizacao/SPEC.md`](../../../.specs/features/modularizacao/SPEC.md)
-- Auditoria detalhada: [[auditoria-duplicatas]] (06 — Features/modularizacao)
-- Event-bus detalhado: [[event-bus-plano]] (06 — Features/modularizacao)
-
-## Estado
-
-| Fase | Status |
-|------|--------|
-| Diagnóstico (As-Is) | ✅ Concluído |
-| ADR + SPEC | ✅ Concluído (aguarda aprovação CTO) |
-| Auditoria duplicatas | ✅ Concluído |
-| Event-bus plano | ✅ Concluído |
-| Slice 1 (tooling) | ⏳ Bloqueado por aprovação |
-| Slices 2-20 | ⏳ Sequencial pós-aprovação |
-
-## Branch atual
-
-`feat/modularizacao/planejamento` — contém ADR + SPEC + auditoria + event-bus plano + esta área.
+- [[analise-pos-modularizacao|analise-pos-modularizacao]]
+- [[decisoes-pendentes|Execução — Decisões Pendentes]] (concluido)
+- [[event-bus-dev-validation|event-bus-dev-validation]]
+- [[mapa-as-is-to-be-real|mapa-as-is-to-be-real]] (ativo)
+- [[reducao-deep-imports|reducao-deep-imports]] (ativo)
+- [[riscos-mitigacoes|Execução — Riscos e Mitigações]]
+- [[slices|Execução — Slices]] (concluido)
+- [[smoke-pre-develop-to-main|Smoke checklist — pre PR develop → main (modularização)]]
+- [[smoke-roteiro-sem-whatsapp|smoke-roteiro-sem-whatsapp]] (ativo)

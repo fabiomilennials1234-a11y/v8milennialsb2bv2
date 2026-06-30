@@ -31,6 +31,7 @@ owner: claude-agent
 
 ## IA
 
+- [[Copilot v2 — Rebuild|Copilot v2 — Rebuild]] (design)
 - [[Copilot|Copilot]]
 
 ## Infra
@@ -50,7 +51,13 @@ owner: claude-agent
 
 ## automacoes
 
+- [[copy-paste-nodes|Automações — Copiar/Colar Nós]]
 - [[rpc-consolidation|Automações — RPC Consolidation + Health Check]]
+
+## modularizacao
+
+- [[auditoria-duplicatas|Modularização — Auditoria de Duplicatas]] (concluido)
+- [[event-bus-plano|Modularização — Plano de Event-Bus]] (concluido)
 
 ## whatsapp-write-instance
 
