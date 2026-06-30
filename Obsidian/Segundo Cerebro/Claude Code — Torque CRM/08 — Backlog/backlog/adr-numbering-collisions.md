@@ -1,7 +1,7 @@
 ---
 type: backlog
 title: "Resolver colisões de numeração nos ADRs do repo (docs/adr)"
-status: aberto
+status: backlog
 priority: medium
 created: 2026-06-30
 updated: 2026-06-30

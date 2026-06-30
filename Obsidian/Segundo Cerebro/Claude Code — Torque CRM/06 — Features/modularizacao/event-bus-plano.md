@@ -1,7 +1,7 @@
 ---
 type: reference
 title: Modularização — Plano de Event-Bus
-status: concluido
+status: archived
 created: 2026-05-26
 updated: 2026-05-28
 tags: [modularizacao, event-bus, arquitetura]

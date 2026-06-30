@@ -1,7 +1,10 @@
 ---
 date: 2026-06-29
-type: fix
+type: changelog
+title: "Fix/Ops — DNA de Almas: contrato Zuvic vira tag-driven (sys:*) + ghost-stage guard"
 status: shipped
+created: 2026-06-29
+updated: 2026-06-29
 branch: fix/lead-webhook-ghost-stage-active-resolve
 target: main + prod (jsjsmuncfkbsbzqzqhfq)
 modules: [communication, leads, pipelines, workflows]
