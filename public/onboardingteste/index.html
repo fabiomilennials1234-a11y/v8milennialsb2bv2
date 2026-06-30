@@ -1,0 +1,1583 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta name="robots" content="noindex,nofollow">
+<!-- Página de teste interna — Torque CRM onboarding wizard. Caminho oculto, sem link público. -->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Torque CRM — Apresentação da Plataforma</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0E1115;          /* deepest graphite */
+    --steel-900:#15191F;    /* slide base */
+    --steel-800:#1B212A;    /* panel */
+    --steel-700:#232C37;    /* raised panel */
+    --steel-600:#2E3A47;    /* hairline strong */
+    --line:rgba(140,160,180,.14);
+    --line-2:rgba(140,160,180,.28);
+    --orange:#EE6C1A;       /* torque signature */
+    --orange-2:#FF8A3D;     /* highlight */
+    --orange-deep:#C9540F;
+    --steelblue:#6E93B5;    /* cool secondary */
+    --green:#25D366;        /* whatsapp functional */
+    --txt:#EEF1F5;
+    --txt-2:#AEB9C5;
+    --txt-3:#7C8895;
+    --display:'Archivo',sans-serif;
+    --body:'IBM Plex Sans',sans-serif;
+    --mono:'IBM Plex Mono',monospace;
+  }
+
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    background:var(--ink);
+    color:var(--txt);
+    font-family:var(--body);
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- DECK SHELL ---------- */
+  .deck{position:fixed;inset:0;}
+  .slide{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;
+    padding:clamp(28px,5.2vw,84px) clamp(28px,6vw,110px);
+    background:
+      radial-gradient(120% 90% at 88% 8%, rgba(238,108,26,.10), transparent 55%),
+      radial-gradient(90% 80% at 6% 96%, rgba(110,147,181,.10), transparent 55%),
+      var(--steel-900);
+    opacity:0;visibility:hidden;
+    transform:scale(.992);
+    transition:opacity .5s ease, transform .5s ease, visibility .5s;
+    overflow:hidden;
+  }
+  .slide.active{opacity:1;visibility:visible;transform:scale(1);z-index:2;}
+  .slide.active .reveal{animation:rise .62s cubic-bezier(.2,.7,.2,1) backwards;}
+  .slide.active .reveal:nth-child(1){animation-delay:.05s}
+  .slide.active .reveal:nth-child(2){animation-delay:.13s}
+  .slide.active .reveal:nth-child(3){animation-delay:.21s}
+  .slide.active .reveal:nth-child(4){animation-delay:.29s}
+  .slide.active .reveal:nth-child(5){animation-delay:.37s}
+  .slide.active .reveal:nth-child(6){animation-delay:.45s}
+  .slide.active .reveal:nth-child(7){animation-delay:.53s}
+  @keyframes rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+
+  /* faint hex grid texture */
+  .slide::before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),
+                     linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:64px 64px;
+    opacity:.35;
+    mask-image:radial-gradient(120% 120% at 100% 0%, #000 0%, transparent 70%);
+    -webkit-mask-image:radial-gradient(120% 120% at 100% 0%, #000 0%, transparent 70%);
+  }
+  .slide>*{position:relative;z-index:1}
+
+  /* ---------- TYPE SYSTEM ---------- */
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:clamp(11px,1vw,13px);
+    letter-spacing:.32em;text-transform:uppercase;
+    color:var(--orange);
+    display:flex;align-items:center;gap:14px;
+    margin-bottom:clamp(18px,2.4vw,30px);
+  }
+  .eyebrow::before{content:"";width:34px;height:2px;background:var(--orange);display:block}
+  .eyebrow .muted{color:var(--txt-3);letter-spacing:.28em}
+
+  h1.title{
+    font-family:var(--display);
+    font-weight:900;
+    font-stretch:112%;
+    line-height:.98;
+    letter-spacing:-.018em;
+    font-size:clamp(34px,5.6vw,76px);
+  }
+  h2.title{
+    font-family:var(--display);
+    font-weight:800;
+    font-stretch:108%;
+    line-height:1.0;
+    letter-spacing:-.012em;
+    font-size:clamp(28px,3.9vw,54px);
+    max-width:18ch;
+  }
+  .lead{
+    font-size:clamp(15px,1.45vw,21px);
+    color:var(--txt-2);
+    line-height:1.5;
+    max-width:60ch;
+    margin-top:clamp(14px,1.6vw,22px);
+  }
+  .accent{color:var(--orange)}
+  .accent-2{color:var(--steelblue)}
+  em{color:var(--txt);font-style:normal;font-weight:600}
+
+  /* ---------- HEX EMBLEM ---------- */
+  .hex{display:inline-block;line-height:0}
+  .hex svg{display:block}
+
+  /* ---------- COVER ---------- */
+  .cover{justify-content:center}
+  .cover .emblem{margin-bottom:clamp(26px,3.6vw,44px)}
+  .cover h1{font-size:clamp(46px,9vw,128px);margin-top:6px}
+  .cover .sub{
+    font-size:clamp(16px,1.7vw,24px);color:var(--txt-2);
+    max-width:48ch;margin-top:clamp(16px,2vw,26px);line-height:1.45;
+  }
+  .cover .sig{
+    margin-top:clamp(26px,3.6vw,46px);
+    font-family:var(--mono);font-size:13px;letter-spacing:.12em;color:var(--txt-3);
+  }
+  .cover .sig b{color:var(--txt)}
+  .cover .meta{
+    margin-top:clamp(28px,3.4vw,40px);
+    display:flex;gap:clamp(24px,4vw,64px);flex-wrap:wrap;
+    border-top:1px solid var(--line);padding-top:22px;
+  }
+  .cover .meta .field{min-width:170px}
+  .cover .meta .k{font-family:var(--mono);font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--orange);margin-bottom:8px}
+  /* editable cover fields */
+  .cover .meta .v-input{
+    background:transparent;border:none;border-bottom:1px dashed var(--line-2);
+    height:30px;min-width:170px;width:100%;color:var(--txt);
+    font-family:var(--body);font-size:15px;padding:0 0 4px;outline:none;
+    transition:border-color .2s;
+  }
+  .cover .meta .v-input::placeholder{color:var(--txt-3);opacity:.6}
+  .cover .meta .v-input:focus{border-bottom-color:var(--orange)}
+
+  /* ---------- BODY LAYOUT BLOCKS ---------- */
+  .body{flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0}
+  .head{margin-bottom:clamp(22px,3vw,40px)}
+
+  .grid{display:grid;gap:clamp(12px,1.4vw,20px)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .g5{grid-template-columns:repeat(5,1fr)}
+
+  .card{
+    background:linear-gradient(180deg,var(--steel-800),var(--steel-900));
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:clamp(16px,1.7vw,26px);
+    position:relative;
+    transition:border-color .25s ease, transform .25s ease, background .25s ease;
+  }
+  .card:hover{border-color:var(--line-2);transform:translateY(-3px)}
+  .card .ic{
+    width:38px;height:38px;border-radius:9px;
+    display:grid;place-items:center;margin-bottom:14px;
+    background:rgba(238,108,26,.12);border:1px solid rgba(238,108,26,.28);
+  }
+  .card h3{
+    font-family:var(--display);font-weight:700;font-size:clamp(16px,1.5vw,21px);
+    letter-spacing:-.01em;margin-bottom:8px;
+  }
+  .card p{font-size:clamp(13px,1.05vw,15.5px);color:var(--txt-2);line-height:1.5}
+  .card .num{
+    position:absolute;top:16px;right:18px;
+    font-family:var(--mono);font-size:12px;color:var(--txt-3);letter-spacing:.1em;
+  }
+
+  /* feature list (two-col content slide) */
+  .split{display:grid;grid-template-columns:.92fr 1.08fr;gap:clamp(28px,4vw,72px);align-items:center;flex:1;min-height:0}
+  @media(max-width:880px){.split{grid-template-columns:1fr;gap:24px;align-items:start}}
+  .feat-list{display:flex;flex-direction:column;gap:clamp(10px,1.2vw,16px)}
+  .feat{
+    display:flex;gap:16px;align-items:flex-start;
+    padding:clamp(12px,1.3vw,17px) clamp(14px,1.4vw,20px);
+    background:var(--steel-800);border:1px solid var(--line);border-radius:12px;
+    transition:border-color .25s, transform .25s;
+  }
+  .feat:hover{border-color:rgba(238,108,26,.4);transform:translateX(4px)}
+  .feat .bullet{
+    flex:none;margin-top:2px;color:var(--orange);
+  }
+  .feat .t{font-family:var(--display);font-weight:600;font-size:clamp(14px,1.2vw,17px);margin-bottom:3px}
+  .feat .d{font-size:clamp(12px,1vw,14.5px);color:var(--txt-2);line-height:1.45}
+
+  /* big visual side */
+  .visual{
+    aspect-ratio:1/1;width:100%;max-width:440px;justify-self:center;
+    border:1px solid var(--line);border-radius:20px;
+    background:radial-gradient(120% 120% at 30% 20%, rgba(238,108,26,.16), transparent 60%),var(--steel-800);
+    display:grid;place-items:center;position:relative;overflow:hidden;
+  }
+  .visual .ring{position:absolute;border:1px solid var(--line-2);border-radius:50%}
+
+  /* comparison (problem -> solution) */
+  .compare{display:flex;flex-direction:column;gap:10px;flex:1;justify-content:center;min-height:0}
+  .crow{
+    display:grid;grid-template-columns:1fr 44px 1fr;align-items:center;gap:8px;
+    padding:clamp(11px,1.2vw,15px) clamp(14px,1.5vw,22px);
+    background:var(--steel-800);border:1px solid var(--line);border-radius:12px;
+  }
+  .crow .pain{color:var(--txt-2);font-size:clamp(13px,1.05vw,15.5px)}
+  .crow .sol{color:var(--txt);font-size:clamp(13px,1.05vw,15.5px);font-weight:500}
+  .crow .arrow{display:grid;place-items:center;color:var(--orange)}
+  .crow .pain::before{content:"";display:inline-block;width:7px;height:7px;border-radius:2px;background:var(--steelblue);margin-right:10px;vertical-align:middle;opacity:.7}
+
+  /* journey */
+  .journey{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;flex:1;align-content:center}
+  .stepc{
+    background:linear-gradient(180deg,var(--steel-800),var(--steel-900));
+    border:1px solid var(--line);border-radius:16px;padding:clamp(18px,2vw,28px);
+    position:relative;display:flex;flex-direction:column;
+  }
+  .stepc::after{content:"";position:absolute;left:0;top:0;height:3px;width:100%;border-radius:16px 16px 0 0;
+    background:linear-gradient(90deg,var(--orange),var(--orange-2))}
+  .stepc .sn{font-family:var(--mono);color:var(--orange);font-size:13px;letter-spacing:.2em;margin-bottom:14px}
+  .stepc h3{font-family:var(--display);font-weight:800;font-size:clamp(18px,1.7vw,24px);margin-bottom:10px}
+  .stepc p{font-size:clamp(12.5px,1vw,15px);color:var(--txt-2);line-height:1.5}
+  .stepc .tag{margin-top:auto;font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--txt-3);padding-top:14px}
+  @media(max-width:880px){.journey{grid-template-columns:repeat(2,1fr)}}
+
+  /* pillar row */
+  .pillars{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;flex:1;align-content:center}
+  .pill{
+    background:var(--steel-800);border:1px solid var(--line);border-radius:14px;
+    padding:clamp(16px,1.7vw,24px);display:flex;flex-direction:column;gap:12px;
+    transition:transform .25s,border-color .25s;
+  }
+  .pill:hover{transform:translateY(-4px);border-color:var(--line-2)}
+  .pill .pn{font-family:var(--mono);font-size:11px;color:var(--txt-3);letter-spacing:.18em}
+  .pill h3{font-family:var(--display);font-weight:700;font-size:clamp(15px,1.3vw,19px);line-height:1.1}
+  .pill p{font-size:clamp(12px,.98vw,14px);color:var(--txt-2);line-height:1.45}
+  @media(max-width:880px){.pillars{grid-template-columns:repeat(2,1fr)}.g4,.g5,.g3{grid-template-columns:repeat(2,1fr)}}
+
+  /* stat band */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(12px,1.5vw,22px);margin-top:clamp(22px,2.6vw,34px)}
+  .stat .v{font-family:var(--display);font-weight:900;font-stretch:108%;font-size:clamp(26px,3.2vw,46px);color:var(--orange);line-height:1;letter-spacing:-.02em}
+  .stat .l{font-size:clamp(12px,1vw,14.5px);color:var(--txt-2);margin-top:10px;line-height:1.4;max-width:24ch}
+
+  /* integration tags */
+  .tags{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px}
+  .tag-chip{
+    display:flex;align-items:center;gap:12px;
+    padding:13px 18px;background:var(--steel-800);
+    border:1px solid var(--line);border-radius:11px;
+    font-size:clamp(13px,1.05vw,15px);transition:border-color .25s,transform .25s;
+  }
+  .tag-chip:hover{border-color:var(--line-2);transform:translateY(-2px)}
+  .tag-chip .dot{width:9px;height:9px;border-radius:50%;background:var(--orange)}
+  .tag-chip .dot.green{background:var(--green)}
+  .tag-chip .dot.blue{background:var(--steelblue)}
+  .tag-chip b{font-weight:600}
+  .tag-chip span{color:var(--txt-3);font-size:.85em}
+
+  /* plans */
+  .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(14px,1.6vw,24px);flex:1;align-content:center}
+  .plan{
+    background:linear-gradient(180deg,var(--steel-800),var(--steel-900));
+    border:1px solid var(--line);border-radius:18px;padding:clamp(22px,2.4vw,34px);
+    display:flex;flex-direction:column;
+  }
+  .plan.featured{border-color:rgba(238,108,26,.55);background:linear-gradient(180deg,rgba(238,108,26,.1),var(--steel-900))}
+  .plan .pn{font-family:var(--display);font-weight:800;font-size:clamp(22px,2.2vw,32px);margin-bottom:6px}
+  .plan .badge{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--orange);text-transform:uppercase;margin-bottom:14px;height:14px}
+  .plan p{color:var(--txt-2);font-size:clamp(13px,1.1vw,16px);line-height:1.55}
+
+  /* closing */
+  .closing{justify-content:center;text-align:left}
+  .closing h1{font-size:clamp(40px,6.4vw,92px);max-width:16ch}
+  .closing .cta{
+    margin-top:clamp(24px,3vw,40px);display:inline-flex;align-items:center;gap:14px;
+    font-family:var(--mono);font-size:14px;letter-spacing:.06em;color:var(--txt);
+    padding:16px 26px;border:1px solid var(--orange);border-radius:12px;
+    background:rgba(238,108,26,.1);cursor:pointer;transition:background .2s,transform .15s;
+  }
+  .closing .cta:hover{background:rgba(238,108,26,.2);transform:translateY(-2px)}
+  .closing .cta:active{transform:scale(.98)}
+  .closing .cta .accent{font-weight:600}
+
+  /* ---------- CHROME (nav/progress) ---------- */
+  .progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--orange),var(--orange-2));width:0;z-index:50;transition:width .45s ease;box-shadow:0 0 14px rgba(238,108,26,.5)}
+  .chrome{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:space-between;align-items:center;
+    padding:clamp(14px,1.8vw,22px) clamp(24px,4vw,56px);pointer-events:none;}
+  .brand{display:flex;align-items:center;gap:12px;pointer-events:auto;font-family:var(--mono);font-size:12px;letter-spacing:.12em;color:var(--txt-3)}
+  .brand b{color:var(--txt);font-weight:500}
+  .nav{display:flex;align-items:center;gap:14px;pointer-events:auto}
+  .counter{font-family:var(--mono);font-size:13px;color:var(--txt-3);letter-spacing:.1em;min-width:58px;text-align:right}
+  .counter b{color:var(--orange)}
+  .btn{
+    width:44px;height:44px;border-radius:11px;border:1px solid var(--line-2);
+    background:var(--steel-800);color:var(--txt);cursor:pointer;display:grid;place-items:center;
+    transition:background .2s,border-color .2s,transform .15s;
+  }
+  .btn:hover{background:var(--steel-700);border-color:var(--orange)}
+  .btn:active{transform:scale(.94)}
+  .btn:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+  .btn svg{width:18px;height:18px}
+  .menu-btn{margin-right:auto}
+
+  /* overview overlay */
+  .overview{
+    position:fixed;inset:0;z-index:60;background:rgba(10,13,16,.94);backdrop-filter:blur(8px);
+    padding:clamp(40px,6vw,80px);display:none;overflow:auto;
+  }
+  .overview.open{display:block}
+  .overview h4{font-family:var(--mono);letter-spacing:.24em;font-size:12px;color:var(--orange);text-transform:uppercase;margin-bottom:26px}
+  .ov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+  .ov-item{
+    text-align:left;background:var(--steel-800);border:1px solid var(--line);border-radius:11px;
+    padding:16px 18px;cursor:pointer;color:var(--txt-2);font-family:var(--body);font-size:14px;
+    display:flex;gap:12px;align-items:center;transition:border-color .2s,color .2s,transform .2s;
+  }
+  .ov-item:hover{border-color:var(--orange);color:var(--txt);transform:translateY(-2px)}
+  .ov-item .n{font-family:var(--mono);font-size:12px;color:var(--orange)}
+  .ov-close{position:fixed;top:26px;right:32px}
+
+  .hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:30;
+    font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--txt-3);
+    pointer-events:none;opacity:.65;transition:opacity .6s}
+  .hint.gone{opacity:0}
+
+  @media (max-width:880px){
+    .g2{grid-template-columns:1fr}
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .compare .crow{grid-template-columns:1fr}
+    .crow .arrow{display:none}
+    .plans{grid-template-columns:1fr}
+    h2.title{max-width:100%}
+    .brand span.full{display:none}
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none!important;transition:opacity .2s ease!important}
+    .slide{transition:opacity .2s ease,visibility .2s!important;transform:none!important}
+  }
+
+  /* ============================================================
+     WIZARD — "Criar organização no Torque"
+     ============================================================ */
+  .wz-overlay{position:fixed;inset:0;z-index:90;background:rgba(8,11,14,.86);
+    backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;
+    padding:clamp(8px,2vw,28px);}
+  .wz-overlay.open{display:flex;animation:wzfade .25s ease}
+  @keyframes wzfade{from{opacity:0}to{opacity:1}}
+  .wz-shell{
+    width:min(1080px,100%);height:min(92vh,920px);
+    background:linear-gradient(180deg,var(--steel-800),var(--steel-900));
+    border:1px solid var(--line-2);border-radius:20px;display:flex;flex-direction:column;
+    overflow:hidden;box-shadow:0 40px 120px rgba(0,0,0,.6);
+  }
+  .wz-head{display:flex;align-items:center;gap:14px;padding:18px clamp(18px,2.4vw,30px);
+    border-bottom:1px solid var(--line);}
+  .wz-head .wz-ttl{font-family:var(--display);font-weight:800;font-size:clamp(16px,1.6vw,21px);}
+  .wz-head .wz-ttl span{color:var(--orange)}
+  .wz-head .wz-sub{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--txt-3);text-transform:uppercase;margin-top:3px}
+  .wz-head .grow{flex:1}
+  .wz-steps{display:flex;gap:6px;padding:14px clamp(18px,2.4vw,30px);border-bottom:1px solid var(--line);
+    overflow-x:auto;}
+  .wz-pip{display:flex;align-items:center;gap:9px;padding:7px 12px;border-radius:9px;border:1px solid transparent;
+    font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--txt-3);white-space:nowrap;
+    cursor:pointer;transition:.2s}
+  .wz-pip .n{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;background:var(--steel-700);color:var(--txt-2);font-size:11px}
+  .wz-pip.active{background:rgba(238,108,26,.12);border-color:rgba(238,108,26,.4);color:var(--txt)}
+  .wz-pip.active .n{background:var(--orange);color:#1a1206}
+  .wz-pip.done .n{background:rgba(37,211,102,.2);color:var(--green)}
+  .wz-body{flex:1;overflow-y:auto;padding:clamp(20px,2.6vw,34px) clamp(18px,2.6vw,34px);}
+  .wz-step{display:none;animation:rise .4s ease}
+  .wz-step.active{display:block}
+  .wz-step h3.s-ttl{font-family:var(--display);font-weight:800;font-size:clamp(20px,2.3vw,30px);margin-bottom:6px}
+  .wz-step .s-desc{color:var(--txt-2);font-size:clamp(13px,1.1vw,15.5px);line-height:1.5;margin-bottom:22px;max-width:64ch}
+
+  .wz-grid{display:grid;gap:16px}
+  .wz-2{grid-template-columns:1fr 1fr}
+  .wz-3{grid-template-columns:1fr 1fr 1fr}
+  @media(max-width:720px){.wz-2,.wz-3{grid-template-columns:1fr}}
+
+  .fld{display:flex;flex-direction:column;gap:7px}
+  .fld label{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--txt-3)}
+  .fld label .req{color:var(--orange)}
+  .fld .hlp{font-size:11.5px;color:var(--txt-3);line-height:1.4}
+  .inp,.sel,textarea.inp{
+    background:var(--steel-900);border:1px solid var(--line-2);border-radius:10px;color:var(--txt);
+    font-family:var(--body);font-size:14.5px;padding:11px 13px;outline:none;width:100%;transition:border-color .2s}
+  .inp:focus,.sel:focus,textarea.inp:focus{border-color:var(--orange)}
+  .inp::placeholder{color:var(--txt-3);opacity:.6}
+  .sel{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237C8895' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px;cursor:pointer}
+  .inp.bad,.sel.bad{border-color:#e0533a}
+
+  /* choice cards (radio) */
+  .choices{display:grid;gap:11px}
+  .choices.c2{grid-template-columns:1fr 1fr}
+  .choices.c3{grid-template-columns:1fr 1fr 1fr}
+  @media(max-width:720px){.choices.c2,.choices.c3{grid-template-columns:1fr}}
+  .choice{
+    text-align:left;background:var(--steel-900);border:1px solid var(--line-2);border-radius:12px;
+    padding:15px 16px;cursor:pointer;transition:.18s;display:flex;flex-direction:column;gap:5px;color:var(--txt-2)}
+  .choice:hover{border-color:var(--line-2);transform:translateY(-2px)}
+  .choice .ct{font-family:var(--display);font-weight:600;font-size:15px;color:var(--txt)}
+  .choice .cd{font-size:12.5px;line-height:1.4;color:var(--txt-3)}
+  .choice.sel{border-color:var(--orange);background:rgba(238,108,26,.1)}
+  .choice.sel .cd{color:var(--txt-2)}
+
+  /* user rows */
+  .urow{background:var(--steel-900);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px;position:relative}
+  .urow .uhead{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .urow .ubadge{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--orange)}
+  .urow .uadm{font-family:var(--mono);font-size:10px;letter-spacing:.1em;padding:3px 9px;border-radius:20px;background:rgba(238,108,26,.14);color:var(--orange);text-transform:uppercase}
+  .urow .uadm.member{background:var(--steel-700);color:var(--txt-3)}
+  .urow .urm{margin-left:auto;background:transparent;border:1px solid var(--line-2);color:var(--txt-3);border-radius:8px;padding:5px 10px;cursor:pointer;font-size:12px;transition:.2s}
+  .urow .urm:hover{border-color:#e0533a;color:#e0533a}
+  .ugrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:720px){.ugrid{grid-template-columns:1fr}}
+  .pw-wrap{display:flex;gap:8px}
+  .pw-wrap .inp{flex:1}
+  .mini-btn{background:var(--steel-700);border:1px solid var(--line-2);color:var(--txt-2);border-radius:9px;
+    padding:0 13px;font-size:12px;font-family:var(--mono);cursor:pointer;white-space:nowrap;transition:.2s}
+  .mini-btn:hover{border-color:var(--orange);color:var(--txt)}
+  .add-btn{width:100%;background:transparent;border:1px dashed var(--line-2);color:var(--txt-2);
+    border-radius:12px;padding:14px;cursor:pointer;font-family:var(--body);font-size:14px;transition:.2s;display:flex;align-items:center;justify-content:center;gap:8px}
+  .add-btn:hover{border-color:var(--orange);color:var(--txt)}
+
+  .note{display:flex;gap:11px;align-items:flex-start;background:rgba(110,147,181,.08);
+    border:1px solid rgba(110,147,181,.25);border-radius:11px;padding:13px 15px;margin-top:14px;
+    font-size:13px;line-height:1.5;color:var(--txt-2)}
+  .note.warn{background:rgba(238,108,26,.08);border-color:rgba(238,108,26,.3)}
+  .note.ok{background:rgba(37,211,102,.07);border-color:rgba(37,211,102,.28)}
+  .note b{color:var(--txt)}
+  .note .ni{flex:none;margin-top:1px}
+
+  .reco{background:linear-gradient(135deg,rgba(238,108,26,.14),var(--steel-900));
+    border:1px solid rgba(238,108,26,.4);border-radius:16px;padding:20px 22px;margin-bottom:18px}
+  .reco .rk{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--orange);margin-bottom:8px}
+  .reco .rn{font-family:var(--display);font-weight:800;font-size:clamp(18px,2vw,26px);margin-bottom:6px}
+  .reco .rd{font-size:13.5px;color:var(--txt-2);line-height:1.5}
+
+  .toggle{display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none}
+  .toggle .tk{width:44px;height:26px;border-radius:20px;background:var(--steel-700);position:relative;transition:.2s;flex:none;border:1px solid var(--line-2)}
+  .toggle .tk::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--txt-3);transition:.2s}
+  .toggle.on .tk{background:rgba(238,108,26,.3);border-color:var(--orange)}
+  .toggle.on .tk::after{transform:translateX(18px);background:var(--orange)}
+  .toggle .tl{font-size:13.5px;color:var(--txt-2);line-height:1.4}
+  .toggle .tl b{color:var(--txt)}
+
+  /* review */
+  .rev-sec{border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:14px;background:var(--steel-900)}
+  .rev-sec h4{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--orange);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .rev-kv{display:grid;grid-template-columns:200px 1fr;gap:6px 18px;font-size:13.5px}
+  @media(max-width:720px){.rev-kv{grid-template-columns:1fr}}
+  .rev-kv .rk{color:var(--txt-3)}
+  .rev-kv .rv{color:var(--txt)}
+  .rev-chip{display:inline-block;font-size:12px;background:var(--steel-700);border:1px solid var(--line);border-radius:7px;padding:4px 9px;margin:3px 5px 0 0;color:var(--txt-2)}
+  .rev-chip.auto{border-color:rgba(37,211,102,.35);color:#8fe6b0}
+  .rev-chip.off{border-color:rgba(238,108,26,.35);color:var(--orange-2)}
+  .cred-line{font-family:var(--mono);font-size:12.5px;color:var(--txt-2);padding:5px 0;border-bottom:1px dashed var(--line)}
+  .cred-line b{color:var(--txt)}
+
+  .wz-foot{display:flex;align-items:center;gap:14px;padding:16px clamp(18px,2.4vw,30px);border-top:1px solid var(--line)}
+  .wz-foot .fp{font-family:var(--mono);font-size:12px;color:var(--txt-3);letter-spacing:.08em}
+  .wz-foot .grow{flex:1}
+  .wbtn{font-family:var(--body);font-size:14px;border-radius:11px;padding:11px 22px;cursor:pointer;border:1px solid var(--line-2);background:var(--steel-800);color:var(--txt);transition:.2s}
+  .wbtn:hover{border-color:var(--orange)}
+  .wbtn.primary{background:var(--orange);border-color:var(--orange);color:#1a1206;font-weight:600}
+  .wbtn.primary:hover{background:var(--orange-2)}
+  .wbtn.ghost{background:transparent}
+  .wbtn:disabled{opacity:.4;cursor:not-allowed}
+  .wz-err{color:#e0805f;font-size:12.5px;font-family:var(--mono)}
+
+  .exrow{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:120;
+    background:var(--steel-700);border:1px solid var(--orange);color:var(--txt);
+    padding:12px 20px;border-radius:11px;font-size:13.5px;opacity:0;pointer-events:none;transition:.3s;font-family:var(--mono)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+<div class="deck" id="deck">
+
+  <!-- 01 COVER -->
+  <section class="slide cover active">
+    <div class="emblem reveal hex">
+      <svg width="86" height="96" viewBox="0 0 86 96" fill="none">
+        <path d="M43 3 79 24v48L43 93 7 72V24L43 3Z" stroke="url(#g1)" stroke-width="3"/>
+        <path d="M43 22 62 33v22L43 66 24 55V33L43 22Z" fill="url(#g1)" opacity=".18"/>
+        <circle cx="43" cy="48" r="11" fill="url(#g1)"/>
+        <defs><linearGradient id="g1" x1="7" y1="3" x2="79" y2="93" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#FF8A3D"/><stop offset="1" stop-color="#C9540F"/></linearGradient></defs>
+      </svg>
+    </div>
+    <div class="reveal eyebrow">Plataforma de vendas B2B <span class="muted">· Indústria · Fábrica · Distribuidora</span></div>
+    <h1 class="title reveal">TORQUE<span class="accent">.</span></h1>
+    <p class="sub reveal">CRM, atendimento por WhatsApp, automação e Inteligência Artificial unidos em uma só plataforma — do primeiro contato à recompra.</p>
+    <div class="sig reveal">Uma solução <b>Milennials</b> &nbsp;·&nbsp; torquecrm.com.br</div>
+    <div class="meta reveal">
+      <div class="field"><div class="k">Cliente</div><input class="v-input" id="cvCliente" placeholder="Nome do cliente"></div>
+      <div class="field"><div class="k">Responsável comercial</div><input class="v-input" id="cvResp" placeholder="Seu nome"></div>
+      <div class="field"><div class="k">Data</div><input class="v-input" id="cvData" type="date"></div>
+    </div>
+  </section>
+
+  <!-- 02 RESUMO -->
+  <section class="slide">
+    <div class="body">
+      <div class="head">
+        <div class="reveal eyebrow">Resumo executivo</div>
+        <h2 class="title reveal">A operação comercial inteira em <span class="accent">um só lugar</span></h2>
+        <p class="lead reveal">O Torque substitui as três ou quatro ferramentas que sua equipe usa hoje. Ele acompanha cada cliente do primeiro contato até a recompra — e continua vendendo mesmo quando o vendedor está dormindo.</p>
+      </div>
+      <div class="stats reveal">
+        <div class="stat"><div class="v">24h</div><div class="l">A IA atende e qualifica leads sem parar, todos os dias</div></div>
+        <div class="stat"><div class="v">0</div><div class="l">Oportunidades esquecidas — nada se perde na conversa</div></div>
+        <div class="stat"><div class="v">1</div><div class="l">Número de WhatsApp para toda a equipe, com registro</div></div>
+        <div class="stat"><div class="v">Tempo real</div><div class="l">Você enxerga onde está o dinheiro e os gargalos</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 PROBLEMA -->
+  <section class="slide">
+    <div class="body">
+      <div class="head">
+        <div class="reveal eyebrow">O problema que o Torque resolve</div>
+        <h2 class="title reveal">As dores que travam a operação B2B</h2>
+      </div>
+      <div class="compare reveal">
+        <div class="crow"><div class="pain">Leads chegam pelo WhatsApp e se perdem na conversa</div><div class="arrow">→</div><div class="sol">Todo lead vira um card no funil, com histórico completo</div></div>
+        <div class="crow"><div class="pain">Demora para responder o primeiro contato</div><div class="arrow">→</div><div class="sol">O Copilot responde na hora, qualifica e agenda</div></div>
+        <div class="crow"><div class="pain">Vendedor esquece de fazer o follow-up</div><div class="arrow">→</div><div class="sol">Automações disparam lembretes e mensagens sozinhas</div></div>
+        <div class="crow"><div class="pain">Não se sabe quem vendeu o quê, nem por quê</div><div class="arrow">→</div><div class="sol">Relatórios por vendedor, origem e produto, ao vivo</div></div>
+        <div class="crow"><div class="pain">Cliente compra uma vez e some</div><div class="arrow">→</div><div class="sol">A carteira identifica recompra, churn e upsell</div></div>
+        <div class="crow"><div class="pain">Vários números de WhatsApp, nenhum controle</div><div class="arrow">→</div><div class="sol">Toda a equipe no mesmo número, tudo registrado</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 SOLUÇÃO UNIFICADA -->
+  <section class="slide">
+    <div class="body">
+      <div class="head">
+        <div class="reveal eyebrow">A solução</div>
+        <h2 class="title reveal">Cinco ferramentas. <span class="accent">Um sistema.</span></h2>
+      </div>
+      <div class="pillars reveal">
+        <div class="pill"><div class="pn">01</div><h3>CRM</h3><p>Leads e oportunidades organizados em funis visuais.</p></div>
+        <div class="pill"><div class="pn">02</div><h3>WhatsApp</h3><p>Atendimento profissional, toda a equipe no mesmo número.</p></div>
+        <div class="pill"><div class="pn">03</div><h3>Copilot IA</h3><p>Vendedor de IA que responde, qualifica e agenda 24h.</p></div>
+        <div class="pill"><div class="pn">04</div><h3>Automações</h3><p>Cobranças, lembretes e cadências sem ninguém lembrar.</p></div>
+        <div class="pill"><div class="pn">05</div><h3>Relatórios</h3><p>Indicadores em tempo real do que vende e do que trava.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 JORNADA -->
+  <section class="slide">
+    <div class="body">
+      <div class="head">
+        <div class="reveal eyebrow">Como funciona na prática</div>
+        <h2 class="title reveal">A jornada do lead, em 4 momentos</h2>
+      </div>
+      <div class="journey reveal">
+        <div class="stepc"><div class="sn">01</div><h3>Captação</h3><p>O lead chega de anúncio, site, formulário ou indicação e entra no sistema automaticamente, com a origem identificada.</p><div class="tag">→ entra organizado</div></div>
+        <div class="stepc"><div class="sn">02</div><h3>Atendimento</h3><p>O Copilot responde na hora pelo WhatsApp, entende a necessidade, qualifica e agenda — ou chama o vendedor.</p><div class="tag">→ resposta imediata</div></div>
+        <div class="stepc"><div class="sn">03</div><h3>Fechamento</h3><p>O vendedor assume com todo o histórico na mão, envia proposta, confirma reunião e registra a venda.</p><div class="tag">→ contexto completo</div></div>
+        <div class="stepc"><div class="sn">04</div><h3>Pós-venda</h3><p>O cliente entra na carteira. O sistema aponta a recompra, sugere upsell e avisa o risco de perda.</p><div class="tag">→ a base vende sozinha</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 CAPTAÇÃO -->
+  <section class="slide">
+    <div class="body">
+      <div class="head">
+        <div class="reveal eyebrow">Funcionalidade · Captação</div>
+        <h2 class="title reveal">Várias portas de entrada, todas automáticas</h2>
+      </div>
+      <div class="grid g2 reveal">
+        <div class="card"><div class="ic">🎯</div><h3>Anúncios &amp; landing pages</h3><p>Leads de Meta Ads, Google e formulários entram direto no funil, já com a origem (UTM) registrada — você sabe qual anúncio gerou cada venda.</p></div>
+        <div class="card"><div class="ic">🔌</div><h3>Webhook público</h3><p>Qualquer site, ERP ou ferramenta (n8n, Zapier) empurra leads para o Torque em tempo real.</p></div>
+        <div class="card"><div class="ic">📥</div><h3>Importação em massa</h3><p>Suba uma planilha: o sistema reconhece as colunas, elimina duplicados e gera relatório do que foi importado.</p></div>
+        <div class="card"><div class="ic">✓</div><h3>Sem duplicidade</h3><p>Cada lead chega com origem identificada, sem repetição de telefone/e-mail e já na etapa certa do funil.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 07 GESTÃO -->
+  <section class="slide">
+    <div class="split">
+      <div>
+        <div class="reveal eyebrow">Funcionalidade · Gestão</div>
+        <h2 class="title reveal">O coração do CRM: a ficha viva do lead</h2>
+        <p class="lead reveal">Cada lead é uma ficha completa que registra tudo — e nunca deixa nada se perder.</p>
+      </div>
+      <div class="feat-list reveal">
+        <div class="feat"><span class="bullet">◆</span><div><div class="t">Ficha completa &amp; campos personalizados</div><div class="d">Faturamento, segmento, produto de interesse e quantos campos sua operação precisar.</div></div></div>
+        <div class="feat"><span class="bullet">◆</span><div><div class="t">Qualificação por estrela e score de IA</div><div class="d">Nota de 1 a 5 manual e/ou score de 0 a 100 calculado pela IA, para priorizar quem está quente.</div></div></div>
+        <div class="feat"><span class="bullet">◆</span><div><div class="t">Timeline &amp; histórico completo</div><div class="d">Mensagens, mudanças de etapa e atividades em ordem. Nada se perde.</div></div></div>
+        <div class="feat"><span class="bullet">◆</span><div><div class="t">Etiquetas, ações em lote e lixeira</div><div class="d">Classifique, mova vários leads de uma vez e recupere o que foi excluído.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 08 FUNIS -->
+  <section class="slide">
+    <div class="body">
+      <div class="head">
+        <div class="reveal eyebrow">Funcionalidade · Funis</div>
+        <h2 class="title reveal">O quadro visual onde a venda acontece</h2>
+        <p class="lead reveal">Três funis prontos desde o primeiro dia — e quantos mais você quiser criar, com Kanban de arrastar e soltar.</p>
+      </div>
+      <div class="grid g3 reveal">
+        <div class="card"><span class="num">01</span><div class="ic">🟢</div><h3>Qualificação</h3><p>Do "novo lead" até "agendado" — onde o primeiro atendimento por WhatsApp acontece.</p></div>
+        <div class="card"><span class="num">02</span><div class="ic">📅</div><h3>Confirmação de reuniões</h3><p>Contagem regressiva D-5 / D-3 / D-1 e confirmação automática, reduzindo o no-show.</p></div>
+        <div class="card"><span class="num">03</span><div class="ic">🤝</div><h3>Propostas &amp; fechamento</h3><p>Da "proposta enviada" a "vendido" — com valor da venda, motivos de perda e ranking ao vivo.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 09 WHATSAPP -->
+  <section class="slide">
+    <div class="split">
+      <div>
+        <div class="reveal eyebrow">Funcionalidade · WhatsApp</div>
+        <h2 class="title reveal">Seu WhatsApp vira uma central profissional</h2>
+        <p class="lead reveal">Toda a equipe no <em>mesmo número</em>, com tudo registrado. Conecta por QR Code ou pela API oficial da Meta — sem trocar de número.</p>
+        <div class="tags reveal" style="margin-top:24px">
+          <div class="tag-chip"><span class="dot green"></span><b>WhatsApp</b></div>
+          <div class="tag-chip"><span class="dot blue"></span><b>Instagram &amp; Messenger</b></div>
+          <div class="tag-chip"><span class="dot"></span><b>E-mail &amp; SMS</b></div>
+        </div>
+      </div>
+      <div class="feat-list reveal">
+        <div class="feat"><span class="bullet">◆</span><div><div class="t">Inbox completo</div><div class="d">Conversas, histórico e os dados do lead na mesma tela.</div></div></div>
+        <div class="feat"><span class="bullet">◆</span><div><div class="t">Envie tudo</div><div class="d">Texto, áudio, vídeo, documentos, menus de botões e PIX na conversa.</div></div></div>
+        <div class="feat"><span class="bullet">◆</span><div><div class="t">Templates &amp; mensagens agendadas</div><div class="d">Respostas prontas com variáveis e mensagens que saem na hora certa.</div></div></div>
+        <div class="feat"><span class="bullet">◆</span><div><div class="t">Notas internas &amp; importação de histórico</div><div class="d">Anote o que só a equipe vê e traga suas conversas antigas ao conectar.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 COPILOT -->
+  <section class="slide">
+    <div class="body">
+      <div class="head">
+        <div class="reveal eyebrow">Funcionalidade · Copilot IA <span class="muted" style="color:var(--orange);opacity:.6">· o grande diferencial</span></div>
+        <h2 class="title reveal">Um vendedor de IA que nunca dorme</h2>
+        <p class="lead reveal">Um agente que conversa com seus leads pelo WhatsApp de forma autônoma, em português, 24 horas por dia — e só chama o vendedor quando a oportunidade está madura.</p>
+      </div>
+      <div class="grid g4 reveal">
+        <div class="card"><h3>Responde na hora</h3><p>Entende a mensagem e responde em segundos, em linguagem natural.</p></div>
+        <div class="card"><h3>Qualifica &amp; agenda</h3><p>Faz as perguntas certas, classifica o lead e marca a reunião na conversa.</p></div>
+        <div class="card"><h3>Responde com áudio</h3><p>Recebeu áudio? A IA pode responder por voz natural e enviar materiais.</p></div>
+        <div class="card"><h3>Você no controle</h3><p>Liga/desliga por lead, nunca inventa preço e tudo fica auditável.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11 AUTOMAÇÕES -->
+  <section class="slide">
+    <div class="split">
+      <div>
+        <div class="reveal eyebrow">Funcionalidade · Automações</div>
+        <h2 class="title reveal">O piloto automático da sua operação</h2>
+        <p class="lead reveal">Em um editor de arrastar e soltar, você monta sequências que o sistema executa sozinho. Toda automação começa com um <em>gatilho</em> e segue por ações e decisões.</p>
+      </div>
+      <div class="feat-list reveal">
+        <div class="feat"><span class="bullet">▸</span><div><div class="t">Boas-vindas</div><div class="d">Lead novo recebe a primeira mensagem automaticamente.</div></div></div>
+        <div class="feat"><span class="bullet">▸</span><div><div class="t">Recuperação de leads frios</div><div class="d">Quem não responde em X tempo recebe uma nova abordagem.</div></div></div>
+        <div class="feat"><span class="bullet">▸</span><div><div class="t">Condições (se/então) &amp; teste A/B</div><div class="d">Caminhos diferentes por perfil — e teste qual abordagem converte mais.</div></div></div>
+        <div class="feat"><span class="bullet">▸</span><div><div class="t">NPS, reativação e cobrança de etapa</div><div class="d">Pesquisa de satisfação, reativação semanal e alerta de etapa atrasada.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12 CAMPANHAS -->
+  <section class="slide">
+    <div class="body">
+      <div class="head">
+        <div class="reveal eyebrow">Funcionalidade · Campanhas</div>
+        <h2 class="title reveal">Esforços com prazo e meta, em paralelo aos funis</h2>
+      </div>
+      <div class="grid g3 reveal">
+        <div class="card"><div class="ic">🎯</div><h3>Objetivo &amp; metas</h3><p>Crie a campanha com prazo, metas de equipe e por vendedor, com mini-funil dedicado.</p></div>
+        <div class="card"><div class="ic">📣</div><h3>Disparo em massa</h3><p>Envie em lotes ao longo de dias, com pausar, retomar e cancelar — sem queimar a operação.</p></div>
+        <div class="card"><div class="ic">📊</div><h3>Resultado ao vivo</h3><p>Progresso vs. meta, conversão, quantos foram enviados e taxa de erro, em tempo real.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13 CARTEIRA -->
+  <section class="slide">
+    <div class="body">
+      <div class="head">
+        <div class="reveal eyebrow">Funcionalidade · Pós-venda &amp; Carteira</div>
+        <h2 class="title reveal">A venda não termina no fechamento</h2>
+        <p class="lead reveal">O módulo de carteira transforma a sua base de clientes em uma nova fonte de receita.</p>
+      </div>
+      <div class="grid g4 reveal">
+        <div class="card"><h3>Segmentação</h3><p>Clientes classificados em Ouro, Prata, Novo, Resgate e Dormindo.</p></div>
+        <div class="card"><h3>Alerta de churn</h3><p>O sistema avisa quando um cliente está prestes a ser perdido.</p></div>
+        <div class="card"><h3>Retenção com IA</h3><p>A IA recomenda a próxima ação para reter ou reativar cada cliente.</p></div>
+        <div class="card"><h3>Upsell &amp; recompra</h3><p>Campanhas de resgate e previsão das próximas compras.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 14 PRODUTIVIDADE -->
+  <section class="slide">
+    <div class="split">
+      <div>
+        <div class="reveal eyebrow">Funcionalidade · Produtividade</div>
+        <h2 class="title reveal">O dia da equipe, organizado em um só lugar</h2>
+        <p class="lead reveal">Agenda unificada que reúne reuniões, follow-ups e confirmações — sincronizada com o Google Agenda.</p>
+      </div>
+      <div class="feat-list reveal">
+        <div class="feat"><span class="bullet">◆</span><div><div class="t">Confirmação automática de reuniões</div><div class="d">Contagem regressiva e lembretes para reduzir o não comparecimento.</div></div></div>
+        <div class="feat"><span class="bullet">◆</span><div><div class="t">Ações do Dia</div><div class="d">Lista priorizada com as próximas melhores ações sugeridas pela IA.</div></div></div>
+        <div class="feat"><span class="bullet">◆</span><div><div class="t">Follow-ups &amp; checklists</div><div class="d">Retornos com prioridade e roteiros padronizados aplicados a cada lead.</div></div></div>
+        <div class="feat"><span class="bullet">◆</span><div><div class="t">Coaching com IA em tempo real</div><div class="d">Sugestões sobre como conduzir cada conversa, na hora.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 15 GAMIFICAÇÃO -->
+  <section class="slide">
+    <div class="body">
+      <div class="head">
+        <div class="reveal eyebrow">Funcionalidade · Gamificação &amp; Metas</div>
+        <h2 class="title reveal">Para engajar a equipe e cobrar resultado</h2>
+      </div>
+      <div class="grid g3 reveal">
+        <div class="card"><div class="ic">🏆</div><h3>Metas &amp; ranking</h3><p>Metas individuais e de equipe com progresso ao vivo e placar por métrica e período.</p></div>
+        <div class="card"><div class="ic">🎮</div><h3>Competições &amp; badges</h3><p>Disputas internas com prêmios, pódio ao vivo e conquistas automáticas por desempenho.</p></div>
+        <div class="card"><div class="ic">🔮</div><h3>Oráculo Comercial</h3><p>Uma IA de coaching de gestão que olha a meta e diz o que está travando — e o que fazer hoje.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 16 RELATÓRIOS -->
+  <section class="slide">
+    <div class="split">
+      <div>
+        <div class="reveal eyebrow">Funcionalidade · Relatórios</div>
+        <h2 class="title reveal">Decisões baseadas em dados, em tempo real</h2>
+        <p class="lead reveal">Do dashboard do dia até a análise de safra (cohort) e a economia por unidade — CAC, CLTV e payback.</p>
+      </div>
+      <div class="feat-list reveal">
+        <div class="feat"><span class="bullet">◆</span><div><div class="t">Dashboard principal</div><div class="d">Leads novos, conversão, ticket médio e faturamento (recorrente vs. projeto).</div></div></div>
+        <div class="feat"><span class="bullet">◆</span><div><div class="t">Análise de origem (UTM)</div><div class="d">Retorno de cada anúncio com custo por lead e por venda.</div></div></div>
+        <div class="feat"><span class="bullet">◆</span><div><div class="t">Painel de TV</div><div class="d">Uma tela para pendurar no comercial que gira sozinha mostrando funil, metas e pódio.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 17 INTEGRAÇÕES -->
+  <section class="slide">
+    <div class="body">
+      <div class="head">
+        <div class="reveal eyebrow">Integrações</div>
+        <h2 class="title reveal">O Torque conversa com o que você já usa</h2>
+      </div>
+      <div class="tags reveal">
+        <div class="tag-chip"><span class="dot green"></span><b>WhatsApp</b><span>número próprio</span></div>
+        <div class="tag-chip"><span class="dot blue"></span><b>Meta</b><span>Instagram · Messenger · Ads</span></div>
+        <div class="tag-chip"><span class="dot"></span><b>Google Agenda</b><span>reuniões nos 2 sentidos</span></div>
+        <div class="tag-chip"><span class="dot"></span><b>Google</b><span>e-mail · planilhas</span></div>
+        <div class="tag-chip"><span class="dot"></span><b>TinyERP</b><span>produtos · pedidos · NF</span></div>
+        <div class="tag-chip"><span class="dot"></span><b>Asaas</b><span>PIX · cartão · assinaturas</span></div>
+        <div class="tag-chip"><span class="dot"></span><b>n8n · Zapier · Webhooks</b><span>leads de qualquer sistema</span></div>
+        <div class="tag-chip"><span class="dot"></span><b>IA &amp; Voz (TTS)</b><span>Copilot e respostas em áudio</span></div>
+      </div>
+      <p class="lead reveal" style="margin-top:26px">Além disso, o Torque oferece <em>API e webhooks</em> para conexões personalizadas com os sistemas próprios da sua empresa.</p>
+    </div>
+  </section>
+
+  <!-- 18 IA -->
+  <section class="slide">
+    <div class="body">
+      <div class="head">
+        <div class="reveal eyebrow">Inteligência Artificial</div>
+        <h2 class="title reveal">A IA está em vários pontos da operação</h2>
+        <p class="lead reveal">Não é enfeite — e está sempre sob controle humano. Você define o que a IA pode fazer e assume qualquer conversa a qualquer momento.</p>
+      </div>
+      <div class="grid g4 reveal">
+        <div class="card"><h3>Copilot</h3><p>Conversa, qualifica, agenda e atende leads automaticamente.</p></div>
+        <div class="card"><h3>Score automático</h3><p>Calcula a temperatura do lead de 0 a 100.</p></div>
+        <div class="card"><h3>Base de conhecimento (RAG)</h3><p>A IA aprende com seus documentos e responde com base neles.</p></div>
+        <div class="card"><h3>Oráculo &amp; resumos</h3><p>Diagnostica a meta, orienta o vendedor e condensa conversas longas.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 19 SEGURANÇA -->
+  <section class="slide">
+    <div class="body">
+      <div class="head">
+        <div class="reveal eyebrow">Segurança &amp; Privacidade</div>
+        <h2 class="title reveal">Conformidade com a <span class="accent">LGPD</span> como pilar</h2>
+      </div>
+      <div class="grid g3 reveal">
+        <div class="card"><div class="ic">🔒</div><h3>Isolamento total (multi-tenant)</h3><p>Os dados da sua empresa ficam completamente isolados e privados. Ninguém de fora acessa.</p></div>
+        <div class="card"><div class="ic">⚖️</div><h3>Conformidade LGPD</h3><p>Recursos de consentimento, exportação e exclusão de dados de titulares.</p></div>
+        <div class="card"><div class="ic">👤</div><h3>Controle de acesso por perfil</h3><p>Permissões granulares: cada pessoa vê e faz apenas o que o seu perfil permite.</p></div>
+        <div class="card"><div class="ic">☁️</div><h3>Nuvem com backups</h3><p>Hospedagem com backups e monitoramento de erros em tempo real.</p></div>
+        <div class="card"><div class="ic">🗝️</div><h3>Credenciais protegidas</h3><p>Chaves de integração e dados sensíveis criptografados e com acesso restrito.</p></div>
+        <div class="card"><div class="ic">📋</div><h3>Registro de auditoria</h3><p>Ações importantes ficam registradas para rastreabilidade.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 20 PLANOS -->
+  <section class="slide">
+    <div class="body">
+      <div class="head">
+        <div class="reveal eyebrow">Planos</div>
+        <h2 class="title reveal">Um plano para cada estágio da sua operação</h2>
+      </div>
+      <div class="plans reveal">
+        <div class="plan"><div class="badge"></div><div class="pn">Starter</div><p>CRM, funis e atendimento por WhatsApp para operações enxutas que estão começando a organizar o comercial.</p></div>
+        <div class="plan featured"><div class="badge">Mais escolhido</div><div class="pn">Pro</div><p>Tudo do Starter + automações de funil ativas, painel de indicadores e mais assentos — para times em crescimento.</p></div>
+        <div class="plan"><div class="badge"></div><div class="pn">Enterprise</div><p>Tudo do Pro + Copilot (IA), funis personalizados ilimitados e disparos em massa, para operações de alto volume.</p></div>
+      </div>
+      <p class="lead reveal" style="margin-top:24px">Valores e limites de cada plano são apresentados na proposta comercial, ajustados à realidade da sua operação.</p>
+    </div>
+  </section>
+
+  <!-- 21 IMPLANTAÇÃO -->
+  <section class="slide">
+    <div class="body">
+      <div class="head">
+        <div class="reveal eyebrow">Implantação &amp; Onboarding</div>
+        <h2 class="title reveal">A entrada no Torque é guiada e rápida</h2>
+        <p class="lead reveal">Você não começa do zero: o sistema já sobe funis e automações modelo, prontos para ajustar.</p>
+      </div>
+      <div class="grid g3 reveal">
+        <div class="card"><span class="num">01</span><h3>Configuração assistida</h3><p>Um passo a passo configura a organização e a estrutura comercial.</p></div>
+        <div class="card"><span class="num">02</span><h3>WhatsApp em minutos</h3><p>Conexão pelo QR Code e Copilot treinado com os documentos do seu negócio.</p></div>
+        <div class="card"><span class="num">03</span><h3>Equipe &amp; primeiro lead</h3><p>Cadastro de vendedores, permissões e acompanhamento até o primeiro lead rodando.</p></div>
+      </div>
+      <p class="lead reveal" style="margin-top:22px">Suporte da equipe Milennials, central de ajuda no próprio sistema e acompanhamento contínuo.</p>
+    </div>
+  </section>
+
+  <!-- 22 CLOSING -->
+  <section class="slide closing">
+    <div class="reveal hex" style="margin-bottom:28px">
+      <svg width="58" height="64" viewBox="0 0 86 96" fill="none">
+        <path d="M43 3 79 24v48L43 93 7 72V24L43 3Z" stroke="url(#g2)" stroke-width="3"/>
+        <circle cx="43" cy="48" r="11" fill="url(#g2)"/>
+        <defs><linearGradient id="g2" x1="7" y1="3" x2="79" y2="93" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#FF8A3D"/><stop offset="1" stop-color="#C9540F"/></linearGradient></defs>
+      </svg>
+    </div>
+    <div class="reveal eyebrow">Torque CRM</div>
+    <h1 class="title reveal">Organize, automatize<br>e <span class="accent">venda mais.</span></h1>
+    <button class="reveal cta" id="startWizard" type="button">
+      <span>Vamos configurar para a sua organização</span>
+      <span class="accent">→</span>
+    </button>
+    <div class="sig reveal" style="margin-top:30px">Uma solução <b>Milennials</b> &nbsp;·&nbsp; torquecrm.com.br</div>
+  </section>
+
+</div>
+
+<!-- OVERVIEW -->
+<div class="overview" id="overview">
+  <button class="btn ov-close" id="ovClose" aria-label="Fechar índice">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  </button>
+  <h4>Índice da apresentação</h4>
+  <div class="ov-grid" id="ovGrid"></div>
+</div>
+
+<!-- ============================ WIZARD ============================ -->
+<div class="wz-overlay" id="wzOverlay" role="dialog" aria-modal="true">
+  <div class="wz-shell">
+    <div class="wz-head">
+      <span class="hex"><svg width="26" height="29" viewBox="0 0 86 96" fill="none"><path d="M43 3 79 24v48L43 93 7 72V24L43 3Z" stroke="#EE6C1A" stroke-width="5"/><circle cx="43" cy="48" r="13" fill="#EE6C1A"/></svg></span>
+      <div>
+        <div class="wz-ttl">Criar organização no <span>Torque</span></div>
+        <div class="wz-sub">Configuração da conta do cliente</div>
+      </div>
+      <div class="grow"></div>
+      <button class="btn" id="wzClose" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="wz-steps" id="wzSteps"></div>
+
+    <div class="wz-body" id="wzBody">
+
+      <!-- STEP 0 — ORG -->
+      <section class="wz-step active" data-step="0">
+        <h3 class="s-ttl">Dados da empresa</h3>
+        <p class="s-desc">Identificação da organização que será criada no Torque. O nome é o único dado obrigatório — o resto ajuda a personalizar a conta.</p>
+        <div class="wz-grid wz-2">
+          <div class="fld"><label>Nome da empresa <span class="req">*</span></label><input class="inp" id="oName" placeholder="Ex: Indústria Alfa Ltda"></div>
+          <div class="fld"><label>Endereço da conta (slug)</label><input class="inp" id="oSlug" placeholder="industria-alfa"><div class="hlp">Gerado a partir do nome; será o identificador único da conta.</div></div>
+          <div class="fld"><label>Tipo de operação <span class="req">*</span></label>
+            <select class="sel" id="oType"><option value="crm">CRM (vendas internas)</option><option value="outbound">Outbound / Agência</option></select>
+            <div class="hlp">Muda os rótulos dos papéis exibidos (Admin/SDR/Closer vs Agência/BDR/Cliente).</div></div>
+          <div class="fld"><label>Segmento</label>
+            <select class="sel" id="oSegment">
+              <option value="">Selecione…</option>
+              <option value="industria">Indústria</option>
+              <option value="distribuidora">Distribuição</option>
+              <option value="representante">Representante Comercial</option>
+              <option value="saas">SaaS / Tecnologia</option>
+              <option value="consultoria">Consultoria / Serviços</option>
+              <option value="agencia">Agência</option>
+              <option value="educacao">Educação / Infoprodutos</option>
+              <option value="outro">Outro</option>
+            </select>
+            <div class="hlp">"Outro" sugere um funil personalizado.</div></div>
+          <div class="fld"><label>CNPJ / Documento</label><input class="inp" id="oDoc" placeholder="00.000.000/0001-00"></div>
+          <div class="fld"><label>Telefone da empresa</label><input class="inp" id="oPhone" placeholder="(00) 0000-0000"></div>
+          <div class="fld"><label>Fuso horário <span class="req">*</span></label>
+            <select class="sel" id="oTz">
+              <option value="America/Sao_Paulo">Brasília (America/Sao_Paulo)</option>
+              <option value="America/Bahia">Bahia / Nordeste</option>
+              <option value="America/Fortaleza">Fortaleza</option>
+              <option value="America/Recife">Recife</option>
+              <option value="America/Belem">Belém</option>
+              <option value="America/Manaus">Manaus (-1h)</option>
+              <option value="America/Cuiaba">Cuiabá (-1h)</option>
+              <option value="America/Rio_Branco">Acre (-2h)</option>
+            </select>
+            <div class="hlp">Garante saudação ("bom dia/tarde") e horários de disparo corretos.</div></div>
+          <div class="fld"><label>Plano contratado</label>
+            <select class="sel" id="oPlan">
+              <option value="starter">Starter — CRM + funis (automações desligadas)</option>
+              <option value="pro" selected>Pro — automações de funil ativas + indicadores</option>
+              <option value="enterprise">Enterprise — + Copilot IA + funis ilimitados</option>
+            </select>
+            <div class="hlp">Define quais automações já nascem ativas e o limite de usuários.</div></div>
+        </div>
+      </section>
+
+      <!-- STEP 1 — EQUIPE -->
+      <section class="wz-step" data-step="1">
+        <h3 class="s-ttl">Equipe &amp; acessos</h3>
+        <p class="s-desc">Cada pessoa entra com <b>e-mail + senha</b> definidos aqui. É obrigatório ao menos um <b>Admin</b> (quem configura o sistema). Marque a função operacional — ela é usada na distribuição automática de leads.</p>
+        <div id="usersWrap"></div>
+        <button class="add-btn" id="addUser">＋ Adicionar usuário</button>
+        <div class="note" id="seatNote"><span class="ni">ℹ️</span><div>Confirme se o plano contratado comporta a quantidade de usuários adicionados. A senha é entregue manualmente pelo admin (não há e-mail de convite). Use "Gerar" para uma senha forte.</div></div>
+        <div class="note warn" id="adminNote" style="display:none"><span class="ni">⚠️</span><div>É necessário pelo menos <b>um usuário com papel Admin</b>.</div></div>
+      </section>
+
+      <!-- STEP 2 — PERFIL -->
+      <section class="wz-step" data-step="2">
+        <h3 class="s-ttl">Perfil comercial</h3>
+        <p class="s-desc">Três perguntas que definem automaticamente o melhor modelo de funil e as automações que virão prontas. Todas são obrigatórias.</p>
+
+        <div class="fld" style="margin-bottom:22px">
+          <label>1 · O que você vende? <span class="req">*</span></label>
+          <div class="choices c3" data-q="sells">
+            <button class="choice" data-v="produto"><span class="ct">Produto</span><span class="cd">Produtos físicos ou digitais.</span></button>
+            <button class="choice" data-v="servico"><span class="ct">Serviço</span><span class="cd">Prestação de serviços ou consultoria.</span></button>
+            <button class="choice" data-v="ambos"><span class="ct">Ambos</span><span class="cd">Produtos e serviços.</span></button>
+          </div>
+        </div>
+
+        <div class="fld" style="margin-bottom:22px">
+          <label>2 · Como é o seu time comercial? <span class="req">*</span></label>
+          <div class="choices c3" data-q="estrutura">
+            <button class="choice" data-v="solo"><span class="ct">Eu sozinho</span><span class="cd">Operação solo.</span></button>
+            <button class="choice" data-v="team_no_sdr"><span class="ct">Time sem SDR</span><span class="cd">Vendedores prospectam e fecham.</span></button>
+            <button class="choice" data-v="team_sdr_closer"><span class="ct">SDR + Closer</span><span class="cd">SDR qualifica, Closer fecha.</span></button>
+          </div>
+        </div>
+
+        <div class="fld">
+          <label>3 · Como funciona a sua venda? <span class="req">*</span></label>
+          <div class="choices c3" data-q="processo">
+            <button class="choice" data-v="meetings_proposals"><span class="ct">Reuniões + Propostas</span><span class="cd">Agenda reunião e envia proposta formal.</span></button>
+            <button class="choice" data-v="meetings_only"><span class="ct">Só reuniões</span><span class="cd">Agenda reunião e fecha no WhatsApp.</span></button>
+            <button class="choice" data-v="direct"><span class="ct">Direto pelo WhatsApp</span><span class="cd">Negocia e fecha por mensagem/telefone.</span></button>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 3 — FUNIL -->
+      <section class="wz-step" data-step="3">
+        <h3 class="s-ttl">Modelo de funil</h3>
+        <p class="s-desc">Com base nas suas respostas, recomendamos o funil abaixo — já com as etapas e automações prontas. Você pode trocar ou montar um funil personalizado.</p>
+
+        <div class="reco" id="recoBox">
+          <div class="rk">Recomendado para você</div>
+          <div class="rn" id="recoName">—</div>
+          <div class="rd" id="recoWhy">—</div>
+        </div>
+
+        <div class="fld" style="margin-bottom:18px">
+          <label>Confirmar modelo</label>
+          <div class="choices c3" data-q="chosen">
+            <button class="choice" data-v="funil_a"><span class="ct">Funil A</span><span class="cd">Reunião / apresentação antes de fechar.</span></button>
+            <button class="choice" data-v="funil_b"><span class="ct">Funil B</span><span class="cd">Venda direta / proposta no WhatsApp.</span></button>
+            <button class="choice" data-v="custom"><span class="ct">Personalizado</span><span class="cd">Eu defino as etapas e automações.</span></button>
+          </div>
+        </div>
+
+        <!-- video question (Funil A or B) -->
+        <div id="videoBlock" style="display:none">
+          <div class="fld" style="margin-bottom:14px">
+            <label>Você tem um vídeo de prova social (depoimento) pronto?</label>
+            <div class="choices c2" data-q="video">
+              <button class="choice" data-v="sim"><span class="ct">Tenho vídeo</span><span class="cd">A nutrição envia seu depoimento e cobra "conseguiu ver?".</span></button>
+              <button class="choice" data-v="nao"><span class="ct">Não tenho</span><span class="cd">A nutrição roda sem o passo de vídeo.</span></button>
+            </div>
+          </div>
+          <div class="fld" id="videoUrlBlock" style="display:none">
+            <label>Link do seu vídeo (Google Drive / YouTube)</label>
+            <input class="inp" id="videoUrl" placeholder="https://…">
+            <div class="hlp">Substitui o vídeo modelo — para a IA enviar o SEU depoimento, não um genérico.</div>
+          </div>
+        </div>
+
+        <!-- custom stages -->
+        <div id="customBlock" style="display:none">
+          <div class="fld">
+            <label>Etapas do seu funil</label>
+            <div id="stagesWrap"></div>
+            <button class="add-btn" id="addStage" style="margin-top:6px">＋ Adicionar etapa</button>
+            <div class="hlp" style="margin-top:8px">Defina nome e cor de cada etapa, na ordem da sua venda.</div>
+          </div>
+          <div class="fld" style="margin-top:14px">
+            <label>Automações iniciais</label>
+            <select class="sel" id="customClone">
+              <option value="none">Só as universais (Boas-vindas + Follow-up 24h)</option>
+              <option value="funil_a">Clonar do Funil A e adaptar depois</option>
+              <option value="funil_b">Clonar do Funil B e adaptar depois</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="funnelAutoList" style="margin-top:18px"></div>
+        <div class="note warn" id="sdrWarn" style="display:none"><span class="ni">⚠️</span><div>O Funil A faz <b>atribuição automática para o SDR</b>, mas nenhum usuário foi marcado como <b>SDR (pré-vendas)</b>. Volte ao passo "Equipe" e marque um SDR, ou a etapa de qualificação ficará sem dono.</div></div>
+      </section>
+
+      <!-- STEP 4 — WHATSAPP -->
+      <section class="wz-step" data-step="4">
+        <h3 class="s-ttl">WhatsApp, disparo &amp; leads</h3>
+        <p class="s-desc">As automações enviam mensagens por WhatsApp — então a conta precisa de um número conectado e de uma fonte de leads. Estes dados orientam a conexão e respeitam o horário comercial.</p>
+        <div class="wz-grid wz-2">
+          <div class="fld"><label>Número de WhatsApp da operação</label><input class="inp" id="wNumber" placeholder="(00) 00000-0000"><div class="hlp">A conexão é feita lendo o QR Code na implantação. As automações só são ligadas após o número conectar.</div></div>
+          <div class="fld"><label>De onde virão os leads?</label>
+            <select class="sel" id="wSource">
+              <option value="">Selecione…</option>
+              <option value="meta_ads">Meta Lead Ads (Facebook/Instagram)</option>
+              <option value="lead_webhook">Site / n8n / Zapier (webhook)</option>
+              <option value="import">Importação de planilha</option>
+              <option value="whatsapp_manual">Cadastro manual no WhatsApp</option>
+              <option value="outro">Outro</option>
+            </select>
+            <div class="hlp">Sem uma fonte de leads, a automação de boas-vindas não dispara.</div></div>
+          <div class="fld"><label>Horário comercial — início</label><input class="inp" id="wStart" type="time" value="09:00"></div>
+          <div class="fld"><label>Horário comercial — fim</label><input class="inp" id="wEnd" type="time" value="18:00"></div>
+        </div>
+        <div class="toggle on" id="respectHours" style="margin-top:18px"><span class="tk"></span><span class="tl"><b>Respeitar horário comercial</b> — não disparar mensagens de madrugada.</span></div>
+        <div class="toggle" id="optin" style="margin-top:14px"><span class="tk"></span><span class="tl"><b>Confirmo que a base de contatos tem opt-in</b> (autorização para receber mensagens). <span style="color:var(--orange)">Obrigatório</span> para os disparos.</span></div>
+      </section>
+
+      <!-- STEP 5 — REVISÃO -->
+      <section class="wz-step" data-step="5">
+        <h3 class="s-ttl">Revisão &amp; geração da ficha</h3>
+        <p class="s-desc">Confira tudo antes de gerar a ficha de criação da organização. Esta ficha é entregue ao time Milennials para provisionar a conta exatamente como configurada.</p>
+        <div id="reviewWrap"></div>
+        <div class="exrow">
+          <button class="wbtn primary" id="exJson">⬇ Baixar ficha (.json)</button>
+          <button class="wbtn" id="exResumo">📋 Copiar resumo</button>
+          <button class="wbtn" id="exCred">🔑 Copiar credenciais</button>
+        </div>
+      </section>
+
+    </div>
+
+    <div class="wz-foot">
+      <button class="wbtn ghost" id="wzPrev">← Voltar</button>
+      <span class="wz-err" id="wzErr"></span>
+      <div class="grow"></div>
+      <span class="fp" id="wzFp">Passo 1 de 6</span>
+      <button class="wbtn primary" id="wzNext">Avançar →</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- CHROME -->
+<div class="chrome">
+  <div class="brand">
+    <span class="hex"><svg width="22" height="24" viewBox="0 0 86 96" fill="none"><path d="M43 3 79 24v48L43 93 7 72V24L43 3Z" stroke="#EE6C1A" stroke-width="5"/><circle cx="43" cy="48" r="13" fill="#EE6C1A"/></svg></span>
+    <b>Torque CRM</b><span class="full">· Milennials</span>
+  </div>
+  <div class="nav">
+    <button class="btn menu-btn" id="menuBtn" aria-label="Abrir índice">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <button class="btn" id="prevBtn" aria-label="Slide anterior">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <div class="counter"><b id="cur">01</b> / <span id="total">22</span></div>
+    <button class="btn" id="nextBtn" aria-label="Próximo slide">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+    </button>
+  </div>
+</div>
+
+<div class="hint" id="hint">← →  navegar  ·  ESC  índice</div>
+
+<script>
+/* =================== DECK NAV =================== */
+(function(){
+  const slides=[...document.querySelectorAll('.slide')];
+  const total=slides.length;
+  let i=0;
+  const progress=document.getElementById('progress');
+  const cur=document.getElementById('cur');
+  const hint=document.getElementById('hint');
+  document.getElementById('total').textContent=String(total).padStart(2,'0');
+
+  const titles=['Capa','Resumo executivo','O problema','A solução unificada','A jornada do lead',
+    'Captação de leads','Gestão de leads','Funis de venda','Atendimento WhatsApp','Copilot IA',
+    'Automações','Campanhas','Pós-venda & Carteira','Produtividade','Gamificação','Relatórios',
+    'Integrações','Inteligência Artificial','Segurança & LGPD','Planos','Implantação','Encerramento'];
+
+  function show(n){
+    i=Math.max(0,Math.min(total-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    progress.style.width=((i+1)/total*100)+'%';
+    cur.textContent=String(i+1).padStart(2,'0');
+  }
+  function next(){show(i+1)} function prev(){show(i-1)}
+
+  const overview=document.getElementById('overview');
+  const ovGrid=document.getElementById('ovGrid');
+  titles.forEach((t,k)=>{
+    const b=document.createElement('button');
+    b.className='ov-item';
+    b.innerHTML='<span class="n">'+String(k+1).padStart(2,'0')+'</span>'+t;
+    b.onclick=()=>{show(k);closeOv()};
+    ovGrid.appendChild(b);
+  });
+  function openOv(){overview.classList.add('open')}
+  function closeOv(){overview.classList.remove('open')}
+
+  document.getElementById('nextBtn').onclick=next;
+  document.getElementById('prevBtn').onclick=prev;
+  document.getElementById('menuBtn').onclick=openOv;
+  document.getElementById('ovClose').onclick=closeOv;
+
+  document.addEventListener('keydown',e=>{
+    if(document.body.classList.contains('wz-active'))return;          // wizard tem prioridade
+    const tag=(e.target.tagName||'').toLowerCase();
+    if(tag==='input'||tag==='textarea'||tag==='select'||e.target.isContentEditable)return;
+    if(overview.classList.contains('open')){ if(e.key==='Escape')closeOv(); return; }
+    switch(e.key){
+      case'ArrowRight':case'PageDown':case' ':e.preventDefault();next();break;
+      case'ArrowLeft':case'PageUp':prev();break;
+      case'Home':show(0);break;
+      case'End':show(total-1);break;
+      case'Escape':openOv();break;
+    }
+  });
+
+  let sx=0;
+  document.addEventListener('touchstart',e=>sx=e.touches[0].clientX,{passive:true});
+  document.addEventListener('touchend',e=>{
+    if(document.body.classList.contains('wz-active'))return;
+    const dx=e.changedTouches[0].clientX-sx;
+    if(Math.abs(dx)>55){dx<0?next():prev()}
+  },{passive:true});
+
+  setTimeout(()=>hint.classList.add('gone'),4200);
+  show(0);
+})();
+
+/* =================== COVER (campos editáveis) =================== */
+(function(){
+  const ids=['cvCliente','cvResp','cvData'];
+  try{
+    const saved=JSON.parse(localStorage.getItem('torque_cover')||'{}');
+    ids.forEach(id=>{ if(saved[id]!=null) document.getElementById(id).value=saved[id]; });
+  }catch(e){}
+  function save(){
+    const o={}; ids.forEach(id=>o[id]=document.getElementById(id).value);
+    try{localStorage.setItem('torque_cover',JSON.stringify(o));}catch(e){}
+  }
+  ids.forEach(id=>document.getElementById(id).addEventListener('input',save));
+})();
+
+/* =================== WIZARD =================== */
+(function(){
+  const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+  const overlay=$('#wzOverlay');
+  const STEPS=['Empresa','Equipe','Perfil','Funil','WhatsApp','Revisão'];
+
+  const FUNNELS={
+    funil_a:{ name:'Funil A — Reunião / Apresentação',
+      why:'Sua venda passa por uma reunião ou apresentação antes do fechamento.',
+      stages:['Lead / Novo Lead','Pré-Qualificar','Cadência','Nutrição Infinita','Respondeu','Apresentação Marcada','Apresentação Realizada','Vendido','Sem Resposta / Perdido'],
+      autos:['Disparo Qualificado (atribui SDR + saudação)','Disparo Automático A (cadência ~5 dias)','Nutrição Infinita (com vídeo de prova social)'] },
+    funil_b:{ name:'Funil B — Venda Direta / Proposta',
+      why:'Você fecha direto no WhatsApp/telefone, via proposta e primeiro pedido.',
+      stages:['Lead','Pré-Qualificar','Cadência','Nutrição Infinita','Respondeu','Proposta Enviada','Vendido','Sem Resposta / Perdido'],
+      autos:['Disparo Pré-Qualificado (saudação)','Disparo Automático B (cadência ~12 dias)','Nutrição Infinita (com/sem vídeo)'] },
+    custom:{ name:'Funil Personalizado',
+      why:'Seu processo tem etapas próprias — você define o funil do seu jeito.',
+      stages:['(definidas por você)'],
+      autos:['(montadas no editor ou clonadas do Funil A/B)'] }
+  };
+  const UNIVERSAL=['Boas-vindas Novo Lead (ao criar o lead)','Follow-up 24h (sem resposta em 24h)'];
+
+  // ----- estado -----
+  let st;
+  function fresh(){ return {
+    step:0,
+    org:{name:'',slug:'',org_type:'crm',segment:'',document:'',phone:'',timezone:'America/Sao_Paulo',plan:'pro'},
+    users:[ {name:'',email:'',phone:'',password:'',role:'admin',func:'closer',job_title:''} ],
+    profile:{sells:'',estrutura:'',processo:''},
+    funnel:{chosen:'',touched:false,video:'',video_url:'',custom_stages:[{name:'',color:'#EE6C1A'}],custom_clone:'none'},
+    whats:{number:'',source:'',start:'09:00',end:'18:00',respect:true,optin:false}
+  };}
+  function load(){ try{ st=JSON.parse(localStorage.getItem('torque_wizard')); }catch(e){} if(!st||!st.org) st=fresh(); }
+  function persist(){ try{ localStorage.setItem('torque_wizard',JSON.stringify(st)); }catch(e){} }
+
+  // ----- helpers -----
+  function genPwd(){
+    const U='ABCDEFGHJKLMNPQRSTUVWXYZ',L='abcdefghijkmnpqrstuvwxyz',N='23456789',S='!@#$%&*?';
+    const all=U+L+N+S; let p=[pick(U),pick(L),pick(N),pick(S)];
+    for(let k=0;k<10;k++)p.push(pick(all));
+    return shuffle(p).join('');
+    function pick(s){const a=new Uint32Array(1);crypto.getRandomValues(a);return s[a[0]%s.length];}
+    function shuffle(a){for(let k=a.length-1;k>0;k--){const r=new Uint32Array(1);crypto.getRandomValues(r);const j=r[0]%(k+1);[a[k],a[j]]=[a[j],a[k]];}return a;}
+  }
+  const emailOk=e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  function decide(){
+    const {chosen}=st.funnel, p=st.profile, seg=st.org.segment;
+    if(st.funnel.touched && chosen) return {id:chosen, why:FUNNELS[chosen].why, forced:true};
+    if(seg==='outro') return {id:'custom', why:'Segmento "Outro": recomendamos um funil personalizado.'};
+    if(p.processo==='direct' && p.estrutura==='team_sdr_closer') return {id:'custom', why:'Respostas híbridas (venda direta + time SDR/Closer): vale personalizar.'};
+    if(p.processo==='meetings_proposals'||p.processo==='meetings_only') return {id:'funil_a', why:FUNNELS.funil_a.why};
+    if(p.processo==='direct') return {id:'funil_b', why:FUNNELS.funil_b.why};
+    return {id:'funil_a', why:'Configuração padrão consultiva.'};
+  }
+  function planActive(){ return st.org.plan!=='starter'; }
+  function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1900); }
+
+  // ----- render: steps pips -----
+  function renderPips(){
+    $('#wzSteps').innerHTML=STEPS.map((s,k)=>
+      `<div class="wz-pip ${k===st.step?'active':''} ${k<st.step?'done':''}" data-go="${k}"><span class="n">${k+1}</span>${s}</div>`).join('');
+    $('#wzFp').textContent=`Passo ${st.step+1} de ${STEPS.length}`;
+    $('#wzPrev').style.visibility = st.step===0?'hidden':'visible';
+    $('#wzNext').textContent = st.step===STEPS.length-1 ? 'Concluir ✓' : 'Avançar →';
+  }
+
+  // ----- render: users -----
+  function userRow(u,idx){
+    const isAdmin=u.role==='admin';
+    return `<div class="urow" data-u="${idx}">
+      <div class="uhead"><span class="ubadge">Usuário ${idx+1}</span>
+        <span class="uadm ${isAdmin?'':'member'}">${isAdmin?'Admin':'Membro'}</span>
+        ${st.users.length>1?`<button class="urm" data-rm="${idx}">remover</button>`:''}
+      </div>
+      <div class="ugrid">
+        <div class="fld"><label>Nome completo <span class="req">*</span></label><input class="inp" data-f="name" value="${esc(u.name)}" placeholder="Nome do usuário"></div>
+        <div class="fld"><label>E-mail (login) <span class="req">*</span></label><input class="inp" data-f="email" value="${esc(u.email)}" placeholder="email@empresa.com"></div>
+        <div class="fld"><label>Senha <span class="req">*</span></label>
+          <div class="pw-wrap"><input class="inp" data-f="password" value="${esc(u.password)}" placeholder="mín. 8 caracteres"><button class="mini-btn" data-gen="${idx}">Gerar</button></div>
+          <div class="hlp">Entregue ao usuário pelo admin. Recomendado 12+ com letras, números e símbolo.</div></div>
+        <div class="fld"><label>Telefone</label><input class="inp" data-f="phone" value="${esc(u.phone)}" placeholder="(00) 00000-0000"></div>
+        <div class="fld"><label>Papel <span class="req">*</span></label>
+          <select class="sel" data-f="role"><option value="admin" ${isAdmin?'selected':''}>Admin (configura tudo)</option><option value="member" ${!isAdmin?'selected':''}>Membro (vendedor)</option></select></div>
+        <div class="fld"><label>Função operacional</label>
+          <select class="sel" data-f="func">
+            <option value="closer" ${u.func==='closer'?'selected':''}>Closer / Vendedor (mede vendas)</option>
+            <option value="sdr" ${u.func==='sdr'?'selected':''}>SDR / Pré-vendas (mede reuniões)</option>
+            <option value="gestor" ${u.func==='gestor'?'selected':''}>Gestor / Outro</option>
+          </select></div>
+        <div class="fld" style="grid-column:1/-1"><label>Cargo (descritivo)</label><input class="inp" data-f="job_title" value="${esc(u.job_title)}" placeholder="Ex: Vendedor, Representante"></div>
+      </div>
+    </div>`;
+  }
+  function renderUsers(){
+    $('#usersWrap').innerHTML=st.users.map(userRow).join('');
+    const hasAdmin=st.users.some(u=>u.role==='admin');
+    $('#adminNote').style.display=hasAdmin?'none':'flex';
+  }
+
+  // ----- render: stages (custom) -----
+  function renderStages(){
+    $('#stagesWrap').innerHTML=st.funnel.custom_stages.map((s,k)=>
+      `<div class="pw-wrap" data-st="${k}" style="margin-bottom:8px">
+        <input class="inp" data-sf="name" value="${esc(s.name)}" placeholder="Etapa ${k+1} (ex: Novo lead)">
+        <input type="color" class="inp" data-sf="color" value="${s.color}" style="width:52px;padding:4px">
+        ${st.funnel.custom_stages.length>1?`<button class="mini-btn" data-rmst="${k}">✕</button>`:''}
+      </div>`).join('');
+  }
+
+  // ----- render: funnel step -----
+  function renderFunnel(){
+    const d=decide();
+    if(!st.funnel.touched) st.funnel.chosen=d.id;
+    $('#recoName').textContent=FUNNELS[d.id].name;
+    $('#recoWhy').textContent=d.why;
+    $$('#wzBody .choices[data-q="chosen"] .choice').forEach(b=>b.classList.toggle('sel',b.dataset.v===st.funnel.chosen));
+    const ch=st.funnel.chosen;
+    // video block: A or B
+    const showVideo=(ch==='funil_a'||ch==='funil_b');
+    $('#videoBlock').style.display=showVideo?'block':'none';
+    $$('#videoBlock .choices[data-q="video"] .choice').forEach(b=>b.classList.toggle('sel',b.dataset.v===st.funnel.video));
+    $('#videoUrlBlock').style.display=(showVideo&&st.funnel.video==='sim')?'flex':'none';
+    $('#videoUrl').value=st.funnel.video_url||'';
+    // custom block
+    $('#customBlock').style.display=ch==='custom'?'block':'none';
+    if(ch==='custom') renderStages();
+    $('#customClone').value=st.funnel.custom_clone;
+    // automations preview
+    const f=FUNNELS[ch];
+    const actLabel=planActive()?'<span class="rev-chip auto">ativa</span>':'<span class="rev-chip off">desligada (plano Starter)</span>';
+    let autos=[...f.autos];
+    if(ch==='funil_a'||ch==='funil_b'||ch==='custom') autos=autos.concat(UNIVERSAL);
+    if(st.profile.processo!=='direct') autos.push('Confirmação de Reunião (D-5/D-3/D-1)');
+    $('#funnelAutoList').innerHTML=`<div class="rev-sec"><h4>Automações que virão com este funil ${actLabel}</h4>`+
+      autos.map(a=>`<span class="rev-chip">${a}</span>`).join('')+`</div>`;
+    // sdr warning
+    const needSdr=(ch==='funil_a');
+    const hasSdr=st.users.some(u=>u.func==='sdr');
+    $('#sdrWarn').style.display=(needSdr&&!hasSdr)?'flex':'none';
+  }
+
+  // ----- render: review -----
+  function renderReview(){
+    const o=st.org,d=decide(),f=FUNNELS[st.funnel.chosen];
+    const planName={starter:'Starter',pro:'Pro',enterprise:'Enterprise'}[o.plan];
+    const segName=document.querySelector(`#oSegment option[value="${o.segment}"]`);
+    let autos=[...f.autos]; if(['funil_a','funil_b','custom'].includes(st.funnel.chosen)) autos=autos.concat(UNIVERSAL);
+    if(st.profile.processo!=='direct'&&st.funnel.chosen!=='funil_b') autos.push('Confirmação de Reunião (D-5/D-3/D-1)');
+    const actTxt=planActive()?'serão ATIVADAS':'criadas DESLIGADAS (plano Starter)';
+    const html=`
+    <div class="rev-sec"><h4>🏢 Organização</h4>
+      <div class="rev-kv">
+        <div class="rk">Empresa</div><div class="rv">${esc(o.name)||'—'}</div>
+        <div class="rk">Conta (slug)</div><div class="rv">${esc(o.slug)||'—'}</div>
+        <div class="rk">Tipo</div><div class="rv">${o.org_type==='crm'?'CRM':'Outbound/Agência'}</div>
+        <div class="rk">Segmento</div><div class="rv">${segName?segName.textContent:'—'}</div>
+        <div class="rk">CNPJ</div><div class="rv">${esc(o.document)||'—'}</div>
+        <div class="rk">Telefone</div><div class="rv">${esc(o.phone)||'—'}</div>
+        <div class="rk">Fuso horário</div><div class="rv">${o.timezone}</div>
+        <div class="rk">Plano</div><div class="rv">${planName}</div>
+      </div></div>
+    <div class="rev-sec"><h4>👥 Equipe (${st.users.length})</h4>
+      ${st.users.map(u=>`<div class="cred-line"><b>${esc(u.name)||'(sem nome)'}</b> · ${esc(u.email)} · ${u.role==='admin'?'Admin':'Membro'} · ${({closer:'Closer',sdr:'SDR',gestor:'Gestor'})[u.func]}</div>`).join('')}
+    </div>
+    <div class="rev-sec"><h4>🎯 Funil &amp; automações</h4>
+      <div class="rev-kv">
+        <div class="rk">Modelo escolhido</div><div class="rv">${f.name}</div>
+        <div class="rk">Etapas</div><div class="rv">${(st.funnel.chosen==='custom'?st.funnel.custom_stages.map(s=>s.name).filter(Boolean):f.stages).join(' → ')||'—'}</div>
+        <div class="rk">Vídeo de prova social</div><div class="rv">${st.funnel.video==='sim'?('Sim — '+(st.funnel.video_url||'link pendente')):(st.funnel.video==='nao'?'Não':'—')}</div>
+      </div>
+      <div style="margin-top:10px;color:var(--txt-3);font-size:12px">As automações abaixo ${actTxt}:</div>
+      ${autos.map(a=>`<span class="rev-chip ${planActive()?'auto':'off'}">${a}</span>`).join('')}
+    </div>
+    <div class="rev-sec"><h4>📱 WhatsApp &amp; leads</h4>
+      <div class="rev-kv">
+        <div class="rk">Número</div><div class="rv">${esc(st.whats.number)||'(conectar na implantação)'}</div>
+        <div class="rk">Fonte de leads</div><div class="rv">${st.whats.source||'—'}</div>
+        <div class="rk">Horário comercial</div><div class="rv">${st.whats.start}–${st.whats.end} ${st.whats.respect?'(respeitado)':'(sem restrição)'}</div>
+        <div class="rk">Opt-in confirmado</div><div class="rv">${st.whats.optin?'Sim':'Não'}</div>
+      </div></div>`;
+    $('#reviewWrap').innerHTML=html;
+  }
+
+  function renderStep(){
+    renderPips();
+    $$('#wzBody .wz-step').forEach(s=>s.classList.toggle('active',+s.dataset.step===st.step));
+    if(st.step===1) renderUsers();
+    if(st.step===2) syncChoices();
+    if(st.step===3) renderFunnel();
+    if(st.step===5) renderReview();
+    $('#wzErr').textContent='';
+    $('#wzBody').scrollTop=0;
+  }
+
+  function syncChoices(){
+    // reflect selected profile/funnel choices
+    $$('#wzBody .choices').forEach(group=>{
+      const q=group.dataset.q;
+      let val='';
+      if(['sells','estrutura','processo'].includes(q)) val=st.profile[q];
+      if(q==='chosen') val=st.funnel.chosen;
+      if(q==='video') val=st.funnel.video;
+      group.querySelectorAll('.choice').forEach(b=>b.classList.toggle('sel',b.dataset.v===val));
+    });
+  }
+
+  // ----- validation -----
+  function validate(){
+    const s=st.step;
+    if(s===0){ if(!st.org.name.trim()) return 'Informe o nome da empresa.'; }
+    if(s===1){
+      if(!st.users.some(u=>u.role==='admin')) return 'É preciso pelo menos um usuário Admin.';
+      for(const u of st.users){
+        if(!u.name.trim()||!u.email.trim()||!u.password) return 'Preencha nome, e-mail e senha de todos os usuários.';
+        if(!emailOk(u.email)) return 'E-mail inválido: '+u.email;
+        if(u.password.length<8) return 'Senha muito curta (mín. 8): '+u.email;
+      }
+      const emails=st.users.map(u=>u.email.toLowerCase());
+      if(new Set(emails).size!==emails.length) return 'Há e-mails repetidos.';
+    }
+    if(s===2){ if(!st.profile.sells||!st.profile.estrutura||!st.profile.processo) return 'Responda as três perguntas.'; }
+    if(s===3){
+      if(!st.funnel.chosen) return 'Escolha um modelo de funil.';
+      if(st.funnel.chosen==='funil_b'&&!st.funnel.video) return 'Informe se você tem vídeo de prova social.';
+      if(st.funnel.video==='sim'&&!st.funnel.video_url.trim()) return 'Cole o link do seu vídeo.';
+      if(st.funnel.chosen==='custom'&&!st.funnel.custom_stages.some(x=>x.name.trim())) return 'Defina ao menos uma etapa do funil personalizado.';
+    }
+    if(s===4){ if(!st.whats.optin) return 'Confirme o opt-in da base para prosseguir.'; }
+    return '';
+  }
+
+  function go(n){
+    if(n>st.step){ const err=validate(); if(err){ $('#wzErr').textContent=err; toast(err); return; } }
+    st.step=Math.max(0,Math.min(STEPS.length-1,n)); persist(); renderStep();
+  }
+
+  // ----- export -----
+  function buildPayload(){
+    const d=decide(),f=st.funnel.chosen;
+    let autos=[...FUNNELS[f].autos]; if(['funil_a','funil_b','custom'].includes(f)) autos=autos.concat(UNIVERSAL);
+    if(st.profile.processo!=='direct'&&f!=='funil_b') autos.push('Confirmação de Reunião (D-5/D-3/D-1)');
+    return {
+      _meta:{ documento:'Ficha de criação de organização — Torque CRM', gerado_por:'Apresentação comercial', versao:1 },
+      organizacao:{
+        nome:st.org.name, slug:st.org.slug||slugify(st.org.name), org_type:st.org.org_type,
+        plano:st.org.plan, onboarding_answers:{ documento:st.org.document, telefone:st.org.phone, segmento:st.org.segment, timezone:st.org.timezone,
+          perfil:{ sells:st.profile.sells, estrutura:st.profile.estrutura, processo:st.profile.processo } }
+      },
+      usuarios:st.users.map(u=>({
+        name:u.name, email:u.email.toLowerCase(), password:u.password,
+        role:u.role, metric_type:u.func==='sdr'?'meetings':'sales',
+        funcao:u.func, job_title:u.job_title
+      })),
+      funil:{ modelo:f, nome:FUNNELS[f].name,
+        etapas:(f==='custom'?st.funnel.custom_stages.filter(s=>s.name.trim()):FUNNELS[f].stages.map(n=>({name:n}))),
+        clonar_de:(f==='custom'?st.funnel.custom_clone:null),
+        video_prova_social:{ tem:st.funnel.video==='sim', url:st.funnel.video_url||null } },
+      automacoes:{ ativar:planActive(), lista:autos },
+      whatsapp:{ numero:st.whats.number||null, fonte_leads:st.whats.source||null,
+        horario_comercial:{inicio:st.whats.start,fim:st.whats.end,respeitar:st.whats.respect}, optin_confirmado:st.whats.optin },
+      _notas_internas_provisionamento:[
+        'Org mínima: name + slug (únicos sem default). document/telefone/segmento/timezone vão para organizations.onboarding_answers (jsonb).',
+        'Sequência: criar org → (se plano>=Pro) master_override_billing(plano) ANTES de criar usuários → criar usuários (create-org-user, respeitar subscription_plans.limits.users) → clonar funil → ativar automações só se plano>=Pro (senão is_active:false).',
+        'Papéis reais: admin/master/membro. metric_type: SDR=meetings, Closer/Vendedor=sales.',
+        'Senha: create-org-user exige >=6; recomendado 12+ forte. createUser usa email_confirm=true (sem e-mail de convite) — entregar credenciais manualmente.',
+        'Funil A faz assign_responsible para SDR: garantir que exista usuário func=sdr; com estrutura solo, remover o nó de atribuição.',
+        'Funil B "Nutrição Infinita (sem vídeo)": corrigir o nó "respondeu" (move_stage sem targetStage) antes de ativar.',
+        'Automações só disparam com número de WhatsApp conectado e fonte de leads ativa; respeitar horário comercial / opt-in.'
+      ]
+    };
+  }
+  function slugify(s){return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
+  function download(name,text,type){ const b=new Blob([text],{type:type||'text/plain;charset=utf-8'}); const u=URL.createObjectURL(b);
+    const a=document.createElement('a'); a.href=u; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(u),2000); }
+  function copy(t){ navigator.clipboard.writeText(t).then(()=>toast('Copiado!')); }
+
+  function resumoText(){
+    const p=buildPayload();
+    return `FICHA DE CRIAÇÃO — TORQUE CRM
+Empresa: ${p.organizacao.nome}  (conta: ${p.organizacao.slug})
+Plano: ${p.organizacao.plano}  ·  Segmento: ${p.organizacao.onboarding_answers.segmento||'-'}  ·  Fuso: ${p.organizacao.onboarding_answers.timezone}
+Funil: ${p.funil.nome}
+Automações (${p.automacoes.ativar?'ativas':'desligadas/Starter'}): ${p.automacoes.lista.join('; ')}
+WhatsApp: ${p.whatsapp.numero||'(conectar)'}  ·  Leads: ${p.whatsapp.fonte_leads||'-'}  ·  Horário: ${p.whatsapp.horario_comercial.inicio}-${p.whatsapp.horario_comercial.fim}
+Usuários:
+${p.usuarios.map(u=>` - ${u.name} | ${u.email} | ${u.role} | ${u.funcao}`).join('\n')}`;
+  }
+  function credText(){
+    const p=buildPayload();
+    return `CREDENCIAIS — ${p.organizacao.nome} (Torque CRM)\nAcesso: torquecrm.com.br\n\n`+
+      p.usuarios.map(u=>`${u.name} (${u.role==='admin'?'Admin':'Membro'})\n  Login: ${u.email}\n  Senha: ${u.password}`).join('\n\n')+
+      `\n\n⚠️ Entregue cada credencial com segurança e oriente trocar a senha no 1º acesso.`;
+  }
+
+  // =================== EVENTS ===================
+  function open(){ load(); document.body.classList.add('wz-active'); overlay.classList.add('open'); bindOrg(); renderStep(); }
+  function close(){ document.body.classList.remove('wz-active'); overlay.classList.remove('open'); }
+
+  $('#startWizard').addEventListener('click',open);
+  $('#wzClose').addEventListener('click',close);
+  $('#wzPrev').addEventListener('click',()=>go(st.step-1));
+  $('#wzNext').addEventListener('click',()=>{ if(st.step===STEPS.length-1){ toast('Ficha pronta — use os botões de exportar.'); } else go(st.step+1); });
+  overlay.addEventListener('mousedown',e=>{ if(e.target===overlay) close(); });
+  document.addEventListener('keydown',e=>{ if(document.body.classList.contains('wz-active')&&e.key==='Escape'){e.stopPropagation();close();} },true);
+
+  // pips
+  $('#wzSteps').addEventListener('click',e=>{ const p=e.target.closest('[data-go]'); if(p) go(+p.dataset.go); });
+
+  // org fields
+  function bindOrg(){
+    const map={oName:'name',oSlug:'slug',oType:'org_type',oSegment:'segment',oDoc:'document',oPhone:'phone',oTz:'timezone',oPlan:'plan'};
+    Object.entries(map).forEach(([id,k])=>{ const el=document.getElementById(id); if(!el)return; el.value=st.org[k]; });
+    document.getElementById('oName').oninput=e=>{ st.org.name=e.target.value; if(!st.org._slugTouched) { st.org.slug=slugify(e.target.value); document.getElementById('oSlug').value=st.org.slug; } persist(); };
+    document.getElementById('oSlug').oninput=e=>{ st.org.slug=e.target.value; st.org._slugTouched=true; persist(); };
+    ['oType','oSegment','oDoc','oPhone','oTz','oPlan'].forEach(id=>{ document.getElementById(id).onchange=document.getElementById(id).oninput=e=>{ st.org[map[id]]=e.target.value; persist(); }; });
+  }
+
+  // users delegation
+  $('#usersWrap').addEventListener('input',e=>{ const row=e.target.closest('[data-u]'); if(!row)return; const i=+row.dataset.u; const f=e.target.dataset.f; if(f){ st.users[i][f]=e.target.value; persist(); if(f==='role'){renderUsers();} } });
+  $('#usersWrap').addEventListener('change',e=>{ const row=e.target.closest('[data-u]'); if(!row)return; const i=+row.dataset.u; const f=e.target.dataset.f; if(f==='role'||f==='func'){ st.users[i][f]=e.target.value; persist(); renderUsers(); } });
+  $('#usersWrap').addEventListener('click',e=>{
+    const rm=e.target.closest('[data-rm]'); if(rm){ st.users.splice(+rm.dataset.rm,1); persist(); renderUsers(); return; }
+    const g=e.target.closest('[data-gen]'); if(g){ const i=+g.dataset.gen; st.users[i].password=genPwd(); persist(); renderUsers(); toast('Senha forte gerada'); }
+  });
+  $('#addUser').addEventListener('click',()=>{ st.users.push({name:'',email:'',phone:'',password:'',role:'member',func:'closer',job_title:''}); persist(); renderUsers(); });
+
+  // profile + funnel + video choices
+  $('#wzBody').addEventListener('click',e=>{
+    const c=e.target.closest('.choice'); if(!c)return;
+    const q=c.closest('.choices').dataset.q, v=c.dataset.v;
+    if(['sells','estrutura','processo'].includes(q)){ st.profile[q]=v; persist(); syncChoices(); }
+    else if(q==='chosen'){ st.funnel.chosen=v; st.funnel.touched=true; persist(); renderFunnel(); }
+    else if(q==='video'){ st.funnel.video=v; persist(); renderFunnel(); }
+  });
+  $('#videoUrl').addEventListener('input',e=>{ st.funnel.video_url=e.target.value; persist(); });
+  $('#customClone').addEventListener('change',e=>{ st.funnel.custom_clone=e.target.value; persist(); });
+
+  // custom stages
+  $('#stagesWrap').addEventListener('input',e=>{ const r=e.target.closest('[data-st]'); if(!r)return; const i=+r.dataset.st; const sf=e.target.dataset.sf; st.funnel.custom_stages[i][sf]=e.target.value; persist(); });
+  $('#stagesWrap').addEventListener('click',e=>{ const rm=e.target.closest('[data-rmst]'); if(rm){ st.funnel.custom_stages.splice(+rm.dataset.rmst,1); persist(); renderStages(); } });
+  $('#addStage').addEventListener('click',()=>{ st.funnel.custom_stages.push({name:'',color:'#EE6C1A'}); persist(); renderStages(); });
+
+  // whatsapp
+  const wmap={wNumber:'number',wSource:'source',wStart:'start',wEnd:'end'};
+  ['wNumber','wSource','wStart','wEnd'].forEach(id=>{ const el=document.getElementById(id); el.addEventListener('input',e=>{ st.whats[wmap[id]]=e.target.value; persist(); }); el.addEventListener('change',e=>{ st.whats[wmap[id]]=e.target.value; persist(); }); });
+  $('#respectHours').addEventListener('click',function(){ st.whats.respect=!st.whats.respect; this.classList.toggle('on',st.whats.respect); persist(); });
+  $('#optin').addEventListener('click',function(){ st.whats.optin=!st.whats.optin; this.classList.toggle('on',st.whats.optin); persist(); });
+
+  // sync whatsapp UI when entering step
+  const origRenderStep=renderStep;
+
+  // export buttons
+  $('#exJson').addEventListener('click',()=>{ const err=fullValidate(); if(err){toast(err);return;} download((slugify(st.org.name)||'organizacao')+'-torque.json',JSON.stringify(buildPayload(),null,2),'application/json'); toast('Ficha .json baixada'); });
+  $('#exResumo').addEventListener('click',()=>copy(resumoText()));
+  $('#exCred').addEventListener('click',()=>copy(credText()));
+
+  function fullValidate(){ for(let k=0;k<=4;k++){ const cur=st.step; st.step=k; const e=validate(); st.step=cur; if(e) return 'Revise o passo '+(k+1)+': '+e; } return ''; }
+
+  function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  // when wizard step changes to whatsapp, reflect toggles
+  const _render=renderStep;
+  window.__wzSyncWhats=function(){ $('#respectHours').classList.toggle('on',st.whats.respect); $('#optin').classList.toggle('on',st.whats.optin);
+    document.getElementById('wNumber').value=st.whats.number; document.getElementById('wSource').value=st.whats.source;
+    document.getElementById('wStart').value=st.whats.start; document.getElementById('wEnd').value=st.whats.end; };
+  const wrappedRender=function(){ _render(); if(st.step===4) window.__wzSyncWhats(); };
+  renderStep=wrappedRender;
+})();
+</script>
+</body>
+</html>
