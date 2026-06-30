@@ -54,7 +54,6 @@ import * as Sentry from "@sentry/react";
 import { getErrorMessage } from "@/shared/errors";
 import { useOrganization } from "@/modules/identity";
 import { track, trackModuleVisit } from "@/lib/analytics";
-import { useLeadsWithScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
 import { useBatchedLeadMetrics } from "@/modules/leads";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
@@ -138,7 +137,6 @@ function PipeWhatsappInner() {
     setActiveViewId(viewId);
     setSearchParams(viewId ? { view: viewId } : {}, { replace: true });
   }, [setSearchParams]);
-  const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
   const [isCreateLeadModalOpen, setIsCreateLeadModalOpen] = useState(false);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -166,6 +164,7 @@ function PipeWhatsappInner() {
   useEffect(() => { trackModuleVisit("pipe_whatsapp", organizationId); }, []);
 
   const { data: pipelineStages = [], isLoading: loadingStages } = usePipelineStages("whatsapp");
+  const metricsRange = useMemo(() => getDateRange(periodState), [periodState]);
   const { stageData, allItems: pipeData, isLoading, organizationId: paginatedOrgId } = usePaginatedPipeline(
     "whatsapp",
     pipelineStages,
@@ -173,6 +172,12 @@ function PipeWhatsappInner() {
       search: searchTerm,
       responsibleId: filterResponsible,
       tagIds: filterTags,
+      // Client-only dimensions, now resolved server-side so the column count
+      // matches the filtered cards (origin / scheduled / period).
+      origins: filterOrigin !== "all" ? [filterOrigin] : undefined,
+      scheduled: filterScheduled || undefined,
+      periodAfter: metricsRange?.startStr ?? undefined,
+      periodBefore: metricsRange?.endStr ?? undefined,
     }
   );
   const isError = false;
@@ -182,7 +187,6 @@ function PipeWhatsappInner() {
     queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts", "whatsapp"] });
   }, [queryClient]);
   const { data: workflowCounts = {} } = useStageWorkflowCounts("whatsapp");
-  const metricsRange = useMemo(() => getDateRange(periodState), [periodState]);
   // Janela da coorte do Funil de Saúde (aba Analytics): segue o período
   // selecionado; "Geral" (sem range) = janela ampla = todos os leads.
   const healthRange = useMemo(() => {
@@ -319,21 +323,6 @@ function PipeWhatsappInner() {
     };
   };
 
-  // Client-side filters that can't be server-side (origin, scheduled, date range)
-  const filterItemsLocal = (item: any) => {
-    const lead = item.lead;
-    if (!lead) return false;
-
-    if (metricsRange) {
-      if (!item.created_at) return false;
-      if (item.created_at < metricsRange.startStr || item.created_at > metricsRange.endStr) return false;
-    }
-
-    const matchesOrigin = filterOrigin === "all" || lead?.origin === filterOrigin;
-    const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
-    return matchesOrigin && matchesScheduled;
-  };
-
   // Converte etapas do banco para o formato do Kanban (com fallback)
   const statusColumns = useMemo(() => {
     if (pipelineStages.length === 0) {
@@ -359,9 +348,9 @@ function PipeWhatsappInner() {
   const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
     return statusColumns.map(col => {
       const sd = stageData[col.id];
-      const items = sd
-        ? sd.items.filter(filterItemsLocal).map(transformToCard)
-        : [];
+      // Filtering is fully server-side now (usePaginatedPipeline) — items and
+      // totalCount come from the same filtered query, so the badge matches.
+      const items = sd ? sd.items.map(transformToCard) : [];
       return {
         ...col,
         items,
@@ -371,7 +360,7 @@ function PipeWhatsappInner() {
         onLoadMore: sd?.fetchMore,
       };
     });
-  }, [stageData, statusColumns, filterOrigin, filterScheduled, leadsWithSchedule, metricsRange, metricsMap]);
+  }, [stageData, statusColumns, metricsMap]);
 
   // ---------------------------------------------------------------------------
   // Mobile list view — derive stages + flat lead list from existing columns
@@ -384,7 +373,6 @@ function PipeWhatsappInner() {
   const mobileLeads = useMemo(() => {
     if (!pipeData) return [];
     return pipeData
-      .filter(filterItemsLocal)
       .map((item) => {
         const lead = item.lead;
         return {
@@ -399,7 +387,7 @@ function PipeWhatsappInner() {
           updated_at: item.stage_entered_at || item.updated_at,
         };
       });
-  }, [pipeData, filterOrigin, filterScheduled, leadsWithSchedule, metricsRange]);
+  }, [pipeData]);
 
   const handleMobileLeadClick = useCallback((leadId: string) => {
     const item = pipeData?.find((p) => p.lead_id === leadId);

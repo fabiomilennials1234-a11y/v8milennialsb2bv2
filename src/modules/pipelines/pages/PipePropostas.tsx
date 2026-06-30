@@ -69,7 +69,7 @@ import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
 import { useCadastroExternoEnabled } from "@/modules/marketing/hooks/useCadastroExterno";
 import { CadastroExternoConfirmDialog } from "@/modules/carteira/components/proposal/CadastroExternoConfirmDialog";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
-import { useLeadsWithScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
+import { priorityBandToRating, calorBandToBounds, PROPOSTAS_CLOSED_STATUS_KEYS } from "@/modules/pipelines/lib/kanbanFilterParams";
 import { supabase } from "@/integrations/supabase/client";
 import { ProductAnalyticsChart } from "@/modules/carteira/components/proposal/ProductAnalyticsChart";
 import { format } from "date-fns";
@@ -194,7 +194,6 @@ function PipePropostasInner() {
     setActiveViewId(viewId);
     setSearchParams(viewId ? { view: viewId } : {}, { replace: true });
   }, [setSearchParams]);
-  const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
 
   const handleClearAllFilters = useCallback(() => {
     setFilterState((f) => ({
@@ -286,6 +285,7 @@ function PipePropostasInner() {
   useEffect(() => { trackModuleVisit("pipe_propostas", organizationId); }, []);
 
   const { data: pipelineStages = [] } = usePipelineStages("propostas");
+  const periodRange = useMemo(() => getDateRange(periodState), [periodState]);
   const { stageData, allItems: pipeData, isLoading } = usePaginatedPipeline(
     "propostas",
     pipelineStages,
@@ -293,6 +293,18 @@ function PipePropostasInner() {
       search: searchTerm,
       responsibleId: filterResponsible,
       tagIds: filterTags,
+      // Client-only dimensions, now resolved server-side so the column count
+      // matches the filtered cards (origin / product / priority / calor /
+      // scheduled / period). Period uses the status-dependent ref date via
+      // closedStatusKeys (mirrors isPropostaInPeriod).
+      origins: filterOrigin.length ? filterOrigin : undefined,
+      productType: filterProductType !== "all" ? filterProductType : undefined,
+      ...priorityBandToRating(filterPriority),
+      ...calorBandToBounds(filterCalor),
+      scheduled: filterScheduled || undefined,
+      periodAfter: periodRange?.startStr ?? undefined,
+      periodBefore: periodRange?.endStr ?? undefined,
+      closedStatusKeys: periodRange ? [...PROPOSTAS_CLOSED_STATUS_KEYS] : undefined,
     }
   );
   const refetch = useCallback(() => {}, []);
@@ -308,7 +320,6 @@ function PipePropostasInner() {
   const logAction = useLogLeadAction();
   const createAcaoDoDia = useCreateAcaoDoDia();
   const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
-  const periodRange = useMemo(() => getDateRange(periodState), [periodState]);
   const { data: metricsByPeriod } = usePipePropostasMetrics(periodRange);
 
   const responsibleMembers = useResponsibleMembers();
@@ -443,49 +454,14 @@ function PipePropostasInner() {
     return stagesToColumns(pipelineStages);
   }, [pipelineStages]);
 
-  // Client-side filters that can't be server-side (date range, origin, product type, priority, calor, scheduled)
-  // Search, responsible, and tags are already handled server-side by usePaginatedPipeline.
-  const filterItemsLocal = (item: any) => {
-    if (periodRange && !isPropostaInPeriod(item, periodRange.startStr, periodRange.endStr)) return false;
-
-    const lead = item.lead;
-    if (!lead) return false;
-
-    let matchesType = filterProductType === "all";
-    if (!matchesType) {
-      const items = item.items || [];
-      if (items.length > 0) {
-        matchesType = items.some((it: any) => it.product?.type === filterProductType);
-      } else {
-        matchesType = item.product_type === filterProductType || item.product?.type === filterProductType;
-      }
-    }
-
-    const rating = lead?.rating || 0;
-    let matchesPriority = true;
-    if (filterPriority === "high") matchesPriority = rating >= 8;
-    else if (filterPriority === "medium") matchesPriority = rating >= 5 && rating < 8;
-    else if (filterPriority === "low") matchesPriority = rating < 5;
-
-    const calor = item.calor ?? 5;
-    let matchesCalor = true;
-    if (filterCalor === "hot") matchesCalor = calor >= 7;
-    else if (filterCalor === "warm") matchesCalor = calor >= 4 && calor < 7;
-    else if (filterCalor === "cold") matchesCalor = calor < 4;
-
-    const matchesOrigin = filterOrigin.length === 0 || filterOrigin.includes(lead?.origin || "");
-    const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
-
-    return matchesType && matchesPriority && matchesCalor && matchesOrigin && matchesScheduled;
-  };
-
-  // Build columns from server-paginated stageData
+  // Build columns from server-paginated stageData. All board filters
+  // (origin / product / priority / calor / scheduled / period) are now applied
+  // server-side by usePaginatedPipeline, so items and totalCount come from the
+  // same filtered query and the column badge matches the cards.
   const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
     return statusColumns.map(col => {
       const sd = stageData[col.id];
-      const items = sd
-        ? sd.items.filter(filterItemsLocal).map(transformToCard)
-        : [];
+      const items = sd ? sd.items.map(transformToCard) : [];
       return {
         ...col,
         items,
@@ -495,7 +471,7 @@ function PipePropostasInner() {
         onLoadMore: sd?.fetchMore,
       };
     });
-  }, [stageData, statusColumns, filterProductType, filterPriority, filterCalor, filterOrigin, filterScheduled, leadsWithSchedule, periodRange]);
+  }, [stageData, statusColumns]);
 
   // Count ghost leads — rows visíveis no pipe cujo join com leads é null.
   // Indica divergência entre RLS do pipe e de leads (ver GhostLeadsBanner).
