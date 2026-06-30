@@ -46,7 +46,7 @@ def main():
         print("   2. Copie a 'Connection string' (URI mode)")
         print("   3. Adicione no .env: DATABASE_URL='postgresql://...'")
         print("\n   OU execute manualmente no Supabase SQL Editor:")
-        print(f"   Arquivo: {root_dir}/ADD_USER_SEPARATION.sql")
+        print(f"   Arquivo: {root_dir}/docs/archive/sql/ADD_USER_SEPARATION.sql")
         print(f"   URL: https://supabase.com/dashboard/project/twoghutcvlfgemadaeez/sql/new")
         sys.exit(1)
     
