@@ -16,10 +16,10 @@ Engajamento dos vendedores com o sistema. Inclui:
 - **Meetings** — reuniões via dialog + participants + status
 - **Call Logs** — registro de ligações (manual ou via API telefonia)
 - **Gamification** — badges, awards, competitions, levels, streak, celebration effects
-- **Ranking** — vendedor ranking + history/transitions
-- **Premiações** — UI de prêmios (`Premiacoes.tsx`)
+- **Ranking** — vendedor ranking + history/transitions (`useVendedorRanking`/`useRankingTransitions`; UI consolidada em `analytics/pages/Performance.tsx` — aba Ranking)
+- **Premiações** — prêmios/awards (`useAwards`; UI consolidada em `analytics/pages/Performance.tsx` — awards)
 - **Comissões** — financial perf do vendedor (`Comissoes.tsx`, `useCommissions`)
-- **Goals** — vendedor + team goals + gestão de metas (`Metas.tsx`, `GestaoMetas.tsx`)
+- **Goals** — vendedor + team goals (`useGoals`/`useTeamGoals`; gestão de metas consolidada em `analytics/pages/Performance.tsx` — aba Gestão)
 - **Daily Priorities** — fila do dia ("ações do dia")
 - **Coaching Suggestions** — IA sugere áreas de melhoria por conversa
 - **Performance** — KPIs por vendedor (closer + SDR perspective)
@@ -55,11 +55,9 @@ src/modules/engagement/
 │   ├── Agenda.tsx         # /agenda
 │   ├── ChecklistPage.tsx  # /checklist
 │   ├── Comissoes.tsx      # /comissoes
-│   ├── Premiacoes.tsx     # rota órfã (sem registro em App.tsx — mantido por idempotência)
-│   ├── Ranking.tsx        # rota órfã (sem registro em App.tsx — mantido por idempotência)
-│   ├── Revisao.tsx        # /revisao
-│   ├── Metas.tsx          # rota órfã (sem registro em App.tsx — mantido por idempotência)
-│   └── GestaoMetas.tsx    # rota órfã (sem registro em App.tsx — mantido por idempotência)
+│   └── Revisao.tsx        # /revisao
+│                          # Ranking/Premiacoes/Metas/GestaoMetas DELETADAS (órfãs) —
+│                          # features consolidadas em analytics/pages/Performance.tsx (abas Ranking/Gestão + awards)
 ├── index.ts            # API pública
 └── CLAUDE.md           # este arquivo
 ```
@@ -102,10 +100,8 @@ NÃO re-exportadas — App.tsx faz deep-import via React.lazy (padrão dos slice
 - `@/modules/engagement/pages/ChecklistPage` (rota `/checklist`)
 - `@/modules/engagement/pages/Comissoes` (rota `/comissoes`)
 - `@/modules/engagement/pages/Revisao` (rota `/revisao`)
-- `@/modules/engagement/pages/Premiacoes` (sem rota — órfão)
-- `@/modules/engagement/pages/Ranking` (sem rota — órfão)
-- `@/modules/engagement/pages/Metas` (sem rota — órfão)
-- `@/modules/engagement/pages/GestaoMetas` (sem rota — órfão)
+
+> `Premiacoes`, `Ranking`, `Metas`, `GestaoMetas` foram **deletadas** (órfãs sem rota). Features migraram para `analytics/pages/Performance.tsx` (abas Ranking/Gestão + awards). Hooks subjacentes (`useGoals`, `useAwards`, `useVendedorRanking`, `useDashboardMetrics`) seguem vivos.
 
 ### Types
 
@@ -129,7 +125,7 @@ Tipos públicos re-exportados via barrel: `Activity`, `ActivityWithNames`, `Acti
 
 🟠 **Approval flow** — `usePendingApprovals` + `useRequestApproval` + `useDecideApproval`. Gates de permissão importam — teste com admin/membro/master separado se mudar lógica.
 
-🟠 **Goal calculation** — `useGoals` calcula progresso baseado em metrics. `Metas.tsx` mostra. `GestaoMetas.tsx` CRUD. Os 2 paths consomem `useDashboardMetrics` (analytics) — cross-module.
+🟠 **Goal calculation** — `useGoals` calcula progresso baseado em metrics; consome `useDashboardMetrics` (analytics) — cross-module. UI (display + CRUD de metas) consolidada em `analytics/pages/Performance.tsx` (aba Gestão).
 
 ## Dependências cross-module
 
@@ -143,7 +139,7 @@ Tipos públicos re-exportados via barrel: `Activity`, `ActivityWithNames`, `Acti
 ### Consumidores cross-module (importam de `@/modules/engagement`)
 
 - `@/modules/leads` — `LeadDetailHeader`, `LeadModalChecklist`, `LeadModalToolbar`, `LeadChecklistSection`, `LeadModal`, `gates-applied.test.tsx` — consomem `ActivityTimeline`, `useChecklists`, `useActivities`, `ScheduleFollowUpButton`
-- `@/modules/pipelines` — `CustomPipelineKanban`, `CustomPipeSettingsDialog`, `QuickAddDailyAction`, `ManagePipelineStagesModal`, `PipeConfirmacao`, `PipeFollowUps`, `PipePropostas`, `PipeWhatsapp` — consomem `useFollowUps`, `useAcoesDoDia`, `useApprovals`, `useChecklists`, `useAgendaEvents`
+- `@/modules/pipelines` — `CustomPipelineKanban`, `CustomPipeSettingsDialog`, `QuickAddDailyAction`, `ManagePipelineStagesModal`, `PipeConfirmacao`, `PipePropostas`, `PipeWhatsapp` — consomem `useFollowUps`, `useAcoesDoDia`, `useApprovals`, `useChecklists`, `useAgendaEvents`
 - `@/modules/workflows` — `ActionPanel` — consume `useApprovals`
 - `src/pages/Configuracoes.tsx`, `src/pages/Performance.tsx`, `src/pages/DashboardOutbound.tsx`, `src/pages/TVDashboard.tsx` — consomem assorted engagement hooks (assets serão absorvidos por seus módulos respectivos em slices 12-14)
 
@@ -183,7 +179,7 @@ Backend (próximas slices):
 - 🟠 **Cross-module deep-imports residuais** — `src/components/dashboard/ActivityFeed.tsx`, `src/components/settings/*`, `src/pages/DashboardOutbound.tsx`, `src/pages/Performance.tsx`, `src/pages/TVDashboard.tsx`, `src/pages/Configuracoes.tsx` ainda fazem deep-import de `@/modules/engagement/hooks/*` em vez de via barrel. Em slice 12+ (quando absorvidos em seus BCs respectivos), deve trocar pro barrel.
 - 🟠 **`tests/unit/revision-item.test.tsx` falha no baseline** — pré-existente (não causado pela slice). Imports atualizados pelo codemod. Reportar como dívida da slice 12+ ou de feature owner do RevisionItem.
 - 🟠 **`useCoachingSuggestions`/`useNextBestActions` cross-domain** — pertencem a engagement por consumidores, mas a IA propriamente é copilot. Auditar slice 15 (refactor cross-module).
-- 🟠 **Pages órfãs** — `Premiacoes`, `Ranking`, `Metas`, `GestaoMetas` não estão registradas em `App.tsx`. Decidir slice 17+: (a) reativar rotas, (b) deletar (`[vault-delete-ok]`).
+- ✅ **Pages órfãs** — `Premiacoes`, `Ranking`, `Metas`, `GestaoMetas` foram **deletadas** (eram órfãs sem rota). Features consolidadas em `analytics/pages/Performance.tsx` (abas Ranking/Gestão + awards); hooks subjacentes seguem vivos.
 
 ## Slice de migração
 

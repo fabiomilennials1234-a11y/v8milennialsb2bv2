@@ -31,18 +31,6 @@ test.describe("Uazapi features — smoke", () => {
     }
   });
 
-  test("mass-send page is reachable and renders form", async ({ page }) => {
-    await page.goto("/campaigns/mass-send");
-    await expect(page.getByText(/Envio em massa/i)).toBeVisible();
-    await expect(page.getByText(/Novo blast/i)).toBeVisible();
-  });
-
-  test("master migration dashboard lists orgs", async ({ page }) => {
-    await page.goto("/master/whatsapp-migration");
-    await expect(page.getByText(/Migração WhatsApp/i)).toBeVisible();
-    await expect(page.getByText(/Organizações/i)).toBeVisible();
-  });
-
   test("workflow action panel includes menu + pix types", async ({ page }) => {
     await page.goto("/automacoes");
     const newBtn = page.getByRole("button", { name: /Novo/i });

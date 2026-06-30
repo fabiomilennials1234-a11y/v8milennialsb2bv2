@@ -29,11 +29,7 @@
  *   @/modules/engagement/pages/Agenda
  *   @/modules/engagement/pages/ChecklistPage
  *   @/modules/engagement/pages/Comissoes
- *   @/modules/engagement/pages/Premiacoes
- *   @/modules/engagement/pages/Ranking
  *   @/modules/engagement/pages/Revisao
- *   @/modules/engagement/pages/Metas
- *   @/modules/engagement/pages/GestaoMetas
  */
 
 // ────────────────────────────────────────────────────────────────────────

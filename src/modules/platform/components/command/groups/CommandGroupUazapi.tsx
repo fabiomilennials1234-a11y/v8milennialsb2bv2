@@ -110,7 +110,7 @@ export function CommandGroupUazapi({ onClose }: CommandGroupUazapiProps) {
           value="uazapi-campanha-massa disparar campanha massa envio bulk whatsapp"
           onSelect={() =>
             handleSelect("uazapi-campanha-massa", () => {
-              navigate("/campanhas");
+              navigate("/disparos");
               onClose();
             })
           }

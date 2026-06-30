@@ -43,7 +43,6 @@ const Dashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/D
 const PipeConfirmacao = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeConfirmacao")));
 const PipePropostas = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipePropostas")));
 const PipeWhatsapp = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeWhatsapp")));
-const PipeFollowUps = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeFollowUps")));
 const Revisao = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Revisao")));
 const Performance = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Performance")));
 const Equipe = lazy(() => lazyRetry(() => import("@/modules/identity/org-team/pages/Equipe")));
@@ -54,8 +53,6 @@ const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash
 const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
 const Configuracoes = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Configuracoes")));
 const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
-const Campanhas = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/Campanhas")));
-const CampanhaDetail = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/CampanhaDetail")));
 const DisparosPanel = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/DisparosPanel")));
 const NovoDisparo = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/NovoDisparo")));
 const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));
@@ -209,7 +206,8 @@ function AppRoutes() {
       <Route path="/landing" element={<Landing />} />
       <Route path="/auth" element={<AuthRoute />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/signup" element={<Navigate to="/auth" replace />} />
+      {/* Signup dedicado — renderiza a página (honra ?plan vindo do pricing) em vez de redirecionar p/ /auth e perder o plano */}
+      <Route path="/signup" element={<Signup />} />
       <Route path="/privacidade" element={<Privacidade />} />
       {/* Old onboarding/checkout routes removed — OnboardingGate handles inline */}
       <Route path="/" element={<RootRedirect />} />
@@ -236,6 +234,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      {/* /campanhas — Kanban de campanhas legado RETIRADO; redireciona pros funis (links antigos) */}
       <Route
         path="/campanhas"
         element={<Navigate to="/funis" replace />}
@@ -257,18 +256,6 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <NovoDisparo />
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/campanhas/:id"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="campaigns.view">
-                <CampanhaDetail />
-              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -398,10 +385,6 @@ function AppRoutes() {
             </LayoutWrapper>
           </ProtectedRoute>
         }
-      />
-      <Route
-        path="/premiacoes"
-        element={<Navigate to="/performance" replace />}
       />
       <Route
         path="/comissoes"
