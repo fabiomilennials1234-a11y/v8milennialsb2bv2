@@ -29,7 +29,7 @@ export function useGlobalShortcuts({ onShowHelp }: { onShowHelp: () => void }) {
     { key: "g w", label: "Funil WhatsApp", group: "Navegacao", action: () => navigate("/qualificacao"), seq: true },
     { key: "g c", label: "Confirmacao", group: "Navegacao", action: () => navigate("/confirmacao"), seq: true },
     { key: "g p", label: "Propostas", group: "Navegacao", action: () => navigate("/propostas"), seq: true },
-    { key: "g m", label: "Chat", group: "Navegacao", action: () => navigate("/chat"), seq: true },
+    { key: "g m", label: "Chat", group: "Navegacao", action: () => navigate("/chat-whatsapp"), seq: true },
     { key: "?", label: "Atalhos", group: "Geral", action: onShowHelp },
   ];
 

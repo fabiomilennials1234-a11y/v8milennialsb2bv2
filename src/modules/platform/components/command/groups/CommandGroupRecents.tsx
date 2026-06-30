@@ -39,7 +39,7 @@ type RecoverableItem = {
 const ITEM_MAP: Record<string, RecoverableItem> = {
   "nav-dashboard":      { label: "Dashboard",       Icon: LayoutDashboard, type: "navigate", payload: "/dashboard" },
   "nav-leads":          { label: "Leads",            Icon: Users,           type: "navigate", payload: "/leads" },
-  "nav-chat":           { label: "Chat WhatsApp",    Icon: MessageSquare,   type: "navigate", payload: "/chat" },
+  "nav-chat":           { label: "Chat WhatsApp",    Icon: MessageSquare,   type: "navigate", payload: "/chat-whatsapp" },
   "nav-copilot":        { label: "Copilot IA",       Icon: Bot,             type: "navigate", payload: "/copilot" },
   "nav-agenda":         { label: "Agenda",           Icon: CalendarDays,    type: "navigate", payload: "/agenda" },
   "nav-analytics":      { label: "Analytics",        Icon: BarChart3,       type: "navigate", payload: "/analytics" },
