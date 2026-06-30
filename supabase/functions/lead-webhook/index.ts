@@ -422,17 +422,24 @@ serve(withSentry('lead-webhook', async (req) => {
 
     let result: Awaited<ReturnType<typeof getOrCreateLead>>;
 
-    // ── Meta dummy/test lead — nunca deduplica ───────────────────────────
+    // ── Meta dummy/test lead — DESCARTAR (não persistir) ─────────────────
     // A "Testing Tool" do Meta Lead Ads envia leads com email test@meta.com e
-    // valores literais "<test lead: dummy data for {campo}>". Com
-    // update_existing_if_match esses casam um registro de teste já existente
-    // (até soft-deletado) e o atualizam silenciosamente — o envio "dá sucesso"
-    // mas nada novo aparece. Dummy = sempre criar, jamais deduplicar.
+    // valores literais "<test lead: dummy data for {campo}>". Não são leads
+    // reais — só validam o webhook. Antes a função CRIAVA esses leads: o lixo
+    // acumulava (28 orgs poluídas) e os antigos caíam na etapa "novo"
+    // (desativada em várias orgs) → invisíveis no kanban mas contados =
+    // "leads fantasmas" (incidente HGE Iluminação 2026-06-30). O Meta só
+    // precisa de um 200 — reconhecemos sem gravar nada. Ver [[ghost-stage]].
     const isDummyTestLead = [email, name, phone, company, ...Object.values(customFields)]
       .some((v) => typeof v === "string" &&
         (v.trim().toLowerCase() === "test@meta.com" || /^<test lead: dummy data for\b/i.test(v.trim())));
     if (isDummyTestLead) {
-      console.log("[lead-webhook] Meta dummy/test lead detectado — pulando dedup (sempre cria):", { email });
+      console.log("[lead-webhook] Meta dummy/test lead detectado — descartando (ack 200, sem criar):", { email });
+      return successResponse(
+        { success: true, dummy_test_lead: true, message: "Lead de teste do Meta reconhecido (não persistido)" },
+        corsHeaders,
+        { req },
+      );
     }
 
     // Padrão: sempre criar novo lead. Só busca por telefone/email quando o cliente envia update_existing_if_match = true.
