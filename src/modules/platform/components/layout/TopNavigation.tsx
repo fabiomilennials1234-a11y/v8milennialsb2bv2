@@ -128,7 +128,7 @@ const turboSubItems: NavItem[] = [
 // Primary items — always visible in the top bar
 const primaryNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/dashboard" },
-  { label: "Chat", icon: Zap, path: "/chat" },
+  { label: "Chat", icon: Zap, path: "/chat-whatsapp" },
   // Disparos — porta canônica, sempre visível perto do Chat (#904)
   { label: "Disparos", icon: Send, path: "/disparos" },
   // { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
@@ -156,7 +156,7 @@ const allNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/dashboard" },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
-  { label: "Chat", icon: Zap, path: "/chat" },
+  { label: "Chat", icon: Zap, path: "/chat-whatsapp" },
   // Disparos perto do Chat também no mobile (#904)
   { label: "Disparos", icon: Send, path: "/disparos" },
   // { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },

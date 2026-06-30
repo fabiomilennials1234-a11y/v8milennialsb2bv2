@@ -476,20 +476,8 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/chat"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="whatsapp.view">
-                <Suspense fallback={<ChatSkeleton />}>
-                  <ChatWhatsApp />
-                </Suspense>
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
+      {/* /chat — alias legado consolidado em /chat-whatsapp (canônico: deep-links ?phone/?instance, sidebar, prefetch/skeleton) */}
+      <Route path="/chat" element={<Navigate to="/chat-whatsapp" replace />} />
       <Route
         path="/chat-whatsapp"
         element={
@@ -509,9 +497,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Suspense fallback={<ChatSkeleton />}>
-                <AtendimentoMeta />
-              </Suspense>
+              <PermissionProtectedRoute featureKey="whatsapp.view">
+                <Suspense fallback={<ChatSkeleton />}>
+                  <AtendimentoMeta />
+                </Suspense>
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }

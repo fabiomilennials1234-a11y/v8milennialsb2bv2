@@ -1,7 +1,7 @@
 ---
 type: reference
 title: Solução — Boundary Enforcement
-status: concluido
+status: archived
 created: 2026-05-26
 updated: 2026-05-28
 tags: [remodelagem, solucao, tooling, eslint]

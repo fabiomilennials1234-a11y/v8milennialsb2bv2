@@ -1,7 +1,7 @@
 ---
 type: changelog
 title: "crm-mcp C2 — PAT infra + client RLS-scoped per-user + tracer lead.get"
-status: partial
+status: in-progress
 created: 2026-06-25
 updated: 2026-06-25
 tags: [crm-mcp, mcp, pat, security, rls, multi-tenancy, edge-function, identity]
@@ -17,7 +17,7 @@ owner: engenheiro
 
 > **Backend #889** (`d9487b3a`) **mergeado em `main`**. **UI #890** (`24f9c166`) **NÃO está
 > em `main`** — vive na branch `feat/crm-mcp/c2-ui-pat` (stacked sobre `c2-pat-infra`).
-> Nada aplicado nem deployado (default dev) — ver Follow-ups. Por isso `status: partial`.
+> Nada aplicado nem deployado (default dev) — ver Follow-ups. Por isso `status: in-progress` (backend em main, UI não).
 
 ## Contexto
 

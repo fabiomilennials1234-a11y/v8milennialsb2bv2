@@ -63,7 +63,7 @@ export function useIncomingMessageToast() {
             action: {
               label: "Ver conversa",
               onClick: () => {
-                navigateRef.current("/chat");
+                navigateRef.current("/chat-whatsapp");
               },
             },
           });
