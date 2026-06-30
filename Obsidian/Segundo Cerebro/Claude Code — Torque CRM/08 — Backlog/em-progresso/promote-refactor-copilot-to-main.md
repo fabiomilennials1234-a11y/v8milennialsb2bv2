@@ -1,19 +1,23 @@
 ---
 type: backlog
 title: Promote refactor copilot → main
-status: in-progress
-created: 2026-04-12
-updated: 2026-04-12
-tags: [uncategorized]
-related: []
+status: shipped
+created: 2026-04-27
+updated: 2026-04-28
+tags: [copilot, refactor, agent-engine, deploy]
+related:
+  - "[[ADR-2026-04-27-refactor-agent-engine-modular]]"
 owner: gabriel
 ---
 
 # Promote refactor copilot → main
 
-**Status**: Aguardando autorização CTO
+> [!success] RESOLVIDO — promovido a `main`
+> O gate foi destravado: o commit final do refactor `fc2c2c9` é **ancestral de `main`** (confirmado via `git merge-base --is-ancestor`), promovido via merges `develop → main` em 2026-04-28 (`4fe03ee3`, `1a2a09be`, `77ff7386`). O módulo `supabase/functions/agent-message/engine/` está vivo em `main` e recebeu ~6 meses de trabalho subsequente em cima (ex.: #865, #837, #714). Os bloqueadores abaixo (schema dev + smoke E2E) ficam como registro histórico do plano original. **Nota:** este card estava marcado como CTO-gated, mas a evidência de git mostra a promoção concluída — drift corrigido.
+
+**Status**: ✅ Promovido a `main` (refactor live; ver banner acima)
 **Aberto em**: 2026-04-27
-**Branch**: `develop` (commit final `fc2c2c9`)
+**Branch**: `develop` (commit final `fc2c2c9`) → mergeado em `main`
 **Risco**: Médio (mexe no coração do copilot, mas comportamento byte-a-byte preservado e validado)
 
 ## Contexto

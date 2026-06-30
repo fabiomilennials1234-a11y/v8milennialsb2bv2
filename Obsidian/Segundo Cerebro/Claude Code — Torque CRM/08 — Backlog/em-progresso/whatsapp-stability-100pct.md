@@ -3,8 +3,8 @@ type: backlog
 title: WhatsApp stability — fechar 100%
 status: in-progress
 created: 2026-04-12
-updated: 2026-04-12
-tags: [uncategorized]
+updated: 2026-06-30
+tags: [whatsapp, uazapi, estabilidade, backlog]
 related: []
 owner: gabriel
 ---
@@ -12,6 +12,11 @@ owner: gabriel
 # WhatsApp stability — fechar 100%
 
 Backlog dos gaps remanescentes após Fase 1-6 deployed. Estado atual ~82% funcional. Total ~16h trabalho pra ~99% (100% absoluto é ilusão — Uazapi pode mudar schema amanhã).
+
+> [!note] Progresso real — atualizado 2026-06-30
+> Fechados desde 2026-05-15: **BL-WA-01 / 03 / 04 / 05** (batch `13469772` "stability batch — fallback polling, dead-session banner, media DLQ, group capture") e **BL-WA-12** (a função `reconfigure-uazapi-webhooks` foi removida — não existe mais em `main`).
+> Trabalho relacionado que pousou em `main` mas **não fecha 1:1** um item deste backlog: roteamento que nunca manda send pra sessão morta + hardening do watchdog (#842, `d0732fa3`/`b3a515b6`); restauração da observabilidade de inbound + verificação de rebind (#876, `f058cc83`/`83133cb9`).
+> **Ainda abertos (sem evidência de merge):** BL-WA-02, 06, 07, 08, 09, 10, 11, 13, 14.
 
 Cada item abaixo é auto-contido: descrição, arquivos afetados, critério de aceite, esforço, dependências.
 
@@ -28,7 +33,7 @@ Cada item abaixo é auto-contido: descrição, arquivos afetados, critério de a
 - [ ] BL-WA-09 — Sentry tags estruturadas
 - [ ] BL-WA-10 — Outbound monitoring dashboard
 - [ ] BL-WA-11 — E2E test webhook → DB
-- [ ] BL-WA-12 — Cleanup `reconfigure-uazapi-webhooks` legado
+- [x] BL-WA-12 — Cleanup `reconfigure-uazapi-webhooks` legado ✓ função removida de `main`
 - [ ] BL-WA-13 — Refactor reconnect mechanism (remover hack do `dispatchEvent`)
 - [ ] BL-WA-14 — Test realtime reconnect com fake timers
 

@@ -1,13 +1,17 @@
 ---
 type: reference
 title: Execução — Decisões Pendentes
-status: active
+status: concluido
 created: 2026-05-26
+updated: 2026-05-28
 tags: [remodelagem, execucao, decisoes-pendentes]
-related: ["[[slices]]"]
+related: ["[[slices]]", "[[ADR-2026-05-28-modularizacao-conclusao]]"]
 ---
-	
+
 # Execução — Decisões Pendentes (CTO)
+
+> [!check] RESOLVIDAS — 2026-05-28
+> Todas as decisões abaixo foram resolvidas ao longo da execução (slices 0–19 merged). #1 (ADR) aprovado; #2–#9 decididos slice a slice — ver [[slices]] e [[ADR-2026-05-28-modularizacao-conclusao]]. Notar: slice 14 (edge functions) foi **descartada como reorg física** e substituída por mapping doc-only em `supabase/functions/CLAUDE.md`, então os itens #4 (webhooks ambíguos) ficaram para auditoria doc-only fora do escopo da modularização. Doc mantido como registro histórico do raciocínio.
 
 Bloqueios aguardando decisão. Cada item trava 1 slice específica.
 

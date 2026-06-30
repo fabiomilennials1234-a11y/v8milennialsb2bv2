@@ -18,10 +18,10 @@ owner: claude-agent
 
 - [[Cron Jobs|Cron Jobs (pg_cron)]]
 - [[Edge Functions|Edge Functions]]
-- [[Env Vars|Variáveis de Ambiente]] 🟡 draft
+- [[Env Vars|Variáveis de Ambiente]]
 - [[Message Logs Schema Audit|Message Logs Schema Audit]] (complete (no migration needed))
 - [[RLS Policies|RLS Policies]] 🟡 draft
 - [[RLS Realtime Audit|RLS Realtime Audit]] (1 RED → fix em migration 20261030000003)
-- [[RPCs|RPCs (Postgres Functions)]] 🟡 draft
+- [[RPCs|RPCs (Postgres Functions)]]
 - [[Schema|Schema — Tabelas Principais]] 🟡 draft
 - [[Webhooks Outbound|Webhooks Outbound]] 🟡 draft

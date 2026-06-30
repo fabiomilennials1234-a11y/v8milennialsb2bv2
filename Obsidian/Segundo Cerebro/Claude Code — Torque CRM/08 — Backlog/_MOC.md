@@ -16,7 +16,9 @@ owner: claude-agent
 
 ## backlog
 
+- [[adr-numbering-collisions|Resolver colisões de numeração nos ADRs do repo (docs/adr)]] (aberto)
 - [[consolidate-permissions-storage|consolidate-permissions-storage]] (backlog)
+- [[fix-circular-deps-chat-module|Fix ciclos de dependência no domínio chat (13 ciclos pré-existentes)]] (backlog)
 - [[microcopy-reschedule-modal|Microcopy do RescheduleModal]] (backlog)
 - [[move-pipe-record-server-side|move_pipe_record server-side]] (backlog)
 - [[permissions-fallback-fail-closed|Permissions fallback — converter `allowed: true` para fail-closed]] (backlog)
@@ -27,7 +29,7 @@ owner: claude-agent
 
 ## em-progresso
 
-- [[lead-detail-modal-redesign|Lead Detail Modal — Redesign (Trello-inspired)]] 🔵 wip
-- [[meta-chat-fase-0|meta-chat-fase-0]]
-- [[promote-refactor-copilot-to-main|Promote refactor copilot → main]] 🔵 wip
+- [[lead-detail-modal-redesign|Lead Detail Modal — Redesign (Trello-inspired)]]
+- [[meta-chat-fase-0|Meta Chat — FASE 0]]
+- [[promote-refactor-copilot-to-main|Promote refactor copilot → main]]
 - [[whatsapp-stability-100pct|WhatsApp stability — fechar 100%]] 🔵 wip

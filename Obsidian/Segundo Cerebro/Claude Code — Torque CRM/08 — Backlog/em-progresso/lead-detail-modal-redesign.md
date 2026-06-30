@@ -1,15 +1,21 @@
 ---
 title: Lead Detail Modal — Redesign (Trello-inspired)
 type: backlog
-status: in-progress
+status: shipped
 created: 2026-05-17
 updated: 2026-05-17
+tags: [leads, lead-detail, modal, ui-redesign]
+related:
+  - "[[ADR-2026-05-17-lead-detail-modal-redesign]]"
 owner: CTO
 ---
 
 # Lead Detail Modal — Redesign
 
-> **Status:** Spec aguardando autorização CTO. Sem implementação, sem commit.
+> [!success] IMPLEMENTADO — 2026-05-17 (merged `main` via #149)
+> O redesign foi **implementado e mergeado em `main`** no mesmo dia da spec (PR #149, commit `7b6a73b7` — "feat(leads): redesenha modal e card do lead — Trello-style"). Entregou `LeadDetailDialog` (shadcn Dialog centralizado 1440×940, Sheet bottom em mobile), `LeadPanelLayout` virou no-op wrapper, `LeadCard` orchestrator, activity feed + comentários + info blocks. Vivo hoje em `src/modules/leads/components/lead-detail/modal/` (já com iterações V1/V2). Ver [[ADR-2026-05-17-lead-detail-modal-redesign]]. **Nota:** o texto original do card dizia "sem implementação, sem commit" — drift corrigido; o doc foi commitado JUNTO da implementação no mesmo PR.
+
+> **Status original (histórico):** Spec aguardando autorização CTO. Sem implementação, sem commit.
 
 ## 1. Contexto
 

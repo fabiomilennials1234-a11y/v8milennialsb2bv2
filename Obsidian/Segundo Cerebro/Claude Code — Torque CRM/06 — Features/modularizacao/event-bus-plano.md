@@ -1,21 +1,25 @@
 ---
 type: reference
 title: Modularização — Plano de Event-Bus
-status: active
+status: concluido
 created: 2026-05-26
-updated: 2026-05-26
+updated: 2026-05-28
 tags: [modularizacao, event-bus, arquitetura]
 related:
   - "[[ADR-2026-05-26-modularizacao-monolito-modular]]"
+  - "[[ADR-2026-05-28-modularizacao-conclusao]]"
   - "[[auditoria-duplicatas]]"
 owner: gabriel
 ---
 
 # Modularização — Plano de Event-Bus
 
+> [!success] COMPLETED — 2026-05-28
+> Plano **executado como piloto** no slice 19: `domain_events` + `_shared/events/` + edge `event-dispatcher` + cron, com `lead.stage_changed` migrado para o padrão de evento. A expansão pros demais eventos (lead.created, conversation.message_received, workflow.executed, …) ficou em backlog separado fora do escopo da modularização. Ver [[ADR-2026-05-28-modularizacao-conclusao]].
+
 **Created:** 2026-05-26
 **Owner:** arquiteto
-**Status:** Proposta (dependente de decisão CTO)
+**Status:** ✅ Concluído 2026-05-28 (piloto `lead.stage_changed` no slice 19)
 **SPEC:** [`.specs/features/modularizacao/SPEC.md`](../../../../../.specs/features/modularizacao/SPEC.md)
 
 Modularização física resolve **onde mora o código**. Event-bus resolve **como módulos conversam**.

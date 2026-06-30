@@ -1,13 +1,17 @@
 ---
 type: reference
 title: To-Be — Estrutura Final
-status: active
+status: concluido
 created: 2026-05-26
+updated: 2026-05-28
 tags: [remodelagem, to-be, estrutura]
-related: ["[[principios-modulo]]", "[[bounded-contexts]]"]
+related: ["[[principios-modulo]]", "[[bounded-contexts]]", "[[ADR-2026-05-28-modularizacao-conclusao]]"]
 ---
 
 # To-Be — Estrutura Final
+
+> [!success] ALCANÇADO — 2026-05-28
+> Layout abaixo é a estrutura **real** após as 19 slices: `src/modules/<bc>/` populado, `src/components/` só `ui/`, `src/hooks/` só `use-toast.ts`, `src/pages/` eliminada. Edge functions em flat layout (restrição Supabase CLI) com mapping doc-only por BC. Ver [[ADR-2026-05-28-modularizacao-conclusao]].
 
 Layout físico target após conclusão das 19 slices.
 

@@ -21,7 +21,7 @@ owner: claude-agent
 - [[Funcionalidades — Mapa Atual|Funcionalidades — Mapa Atual + Interações]]
 - [[Funcionalidades — Mapa To-Be|Funcionalidades — Mapa To-Be (norte)]]
 - [[Integracoes|Integrações Externas]] 🟡 draft
-- [[Modulos|Módulos — Mapa do Código]] 🟡 draft
+- [[Modulos|Módulos — Mapa do Código]]
 - [[Multi-tenancy|Multi-tenancy]]
 - [[Roadmap|Roadmap — visão estratégica]]
 - [[Visao Geral|Visão Geral — Arquitetura Torque CRM]]
