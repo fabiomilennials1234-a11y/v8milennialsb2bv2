@@ -1,13 +1,17 @@
 ---
 type: reference
 title: Solução — Bounded Contexts
-status: active
+status: concluido
 created: 2026-05-26
+updated: 2026-05-28
 tags: [remodelagem, solucao, ddd, bounded-context]
-related: ["[[monolito-modular]]", "[[estrutura-final]]"]
+related: ["[[monolito-modular]]", "[[estrutura-final]]", "[[ADR-2026-05-28-modularizacao-conclusao]]"]
 ---
 
 # Solução — Bounded Contexts
+
+> [!success] IMPLEMENTADO — 2026-05-28
+> Os 14 BCs estão populados em `src/modules/<bc>/`, cada um com `index.ts` (API pública) + sub-CLAUDE.md. Ver [[ADR-2026-05-28-modularizacao-conclusao]].
 
 14 BCs derivados do CONTEXT.md raiz. Cada um vira módulo físico.
 

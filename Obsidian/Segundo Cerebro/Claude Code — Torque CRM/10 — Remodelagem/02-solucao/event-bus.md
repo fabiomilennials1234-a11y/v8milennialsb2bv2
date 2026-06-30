@@ -1,15 +1,20 @@
 ---
 type: reference
 title: Solução — Event-Bus
-status: active
+status: concluido
 created: 2026-05-26
+updated: 2026-05-28
 tags: [remodelagem, solucao, event-bus]
 related:
   - "[[event-bus-plano]]"
   - "[[monolito-modular]]"
+  - "[[ADR-2026-05-28-modularizacao-conclusao]]"
 ---
 
 # Solução — Event-Bus
+
+> [!success] PILOTO IMPLEMENTADO — 2026-05-28
+> Slice 19 entregou o piloto: tabela `domain_events` + `_shared/events/` + edge `event-dispatcher` + cron, com `lead.stage_changed` migrado. Demais eventos ficam em backlog separado. Ver [[ADR-2026-05-28-modularizacao-conclusao]].
 
 Modularização física resolve **onde mora o código**. Event-bus resolve **como módulos conversam**.
 
