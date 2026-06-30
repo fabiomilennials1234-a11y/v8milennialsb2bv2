@@ -43,7 +43,6 @@ const Dashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/D
 const PipeConfirmacao = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeConfirmacao")));
 const PipePropostas = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipePropostas")));
 const PipeWhatsapp = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeWhatsapp")));
-const PipeFollowUps = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeFollowUps")));
 const Revisao = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Revisao")));
 const Performance = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Performance")));
 const Equipe = lazy(() => lazyRetry(() => import("@/modules/identity/org-team/pages/Equipe")));
@@ -207,7 +206,8 @@ function AppRoutes() {
       <Route path="/landing" element={<Landing />} />
       <Route path="/auth" element={<AuthRoute />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/signup" element={<Navigate to="/auth" replace />} />
+      {/* Signup dedicado — renderiza a página (honra ?plan vindo do pricing) em vez de redirecionar p/ /auth e perder o plano */}
+      <Route path="/signup" element={<Signup />} />
       <Route path="/privacidade" element={<Privacidade />} />
       {/* Old onboarding/checkout routes removed — OnboardingGate handles inline */}
       <Route path="/" element={<RootRedirect />} />
@@ -396,10 +396,6 @@ function AppRoutes() {
             </LayoutWrapper>
           </ProtectedRoute>
         }
-      />
-      <Route
-        path="/premiacoes"
-        element={<Navigate to="/performance" replace />}
       />
       <Route
         path="/comissoes"

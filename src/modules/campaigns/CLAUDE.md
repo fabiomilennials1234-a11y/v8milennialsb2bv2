@@ -146,7 +146,7 @@ Frontend (✅ migrado pra cá):
 - ~~`src/hooks/useDispatchQueueItems.ts`~~ → `./hooks/useDispatchQueueItems.ts`
 - ~~`src/pages/Campanhas.tsx`~~ → `./pages/Campanhas.tsx`
 - ~~`src/pages/CampanhaDetail.tsx`~~ → `./pages/CampanhaDetail.tsx`
-- ~~`src/pages/campaigns/MassSend.tsx`~~ → `./pages/MassSend.tsx` (removida em #904 — órfã sem rota, substituída pela porta `/disparos`)
+- ~~`src/pages/campaigns/MassSend.tsx`~~ → ~~`./pages/MassSend.tsx`~~ **deletada** (#904 — órfã sem rota, substituída pela porta `/disparos`). Hooks `useMassSendJobs`/`useCreateMassSend`/`useControlMassSend`/`useRefreshMassSendStatus` seguem vivos (Quick Blast / Disparos).
 
 Backend (próximas slices):
 - `supabase/functions/campaign-rule-dispatch/` (slice 15)
