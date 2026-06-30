@@ -45,6 +45,7 @@ import {
   Trash2,
   Instagram,
   Send,
+  HelpCircle,
 } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueLogoDark from "@/assets/torque-logo-dark.png";
@@ -796,6 +797,19 @@ export function TopNavigation() {
             <OrgSwitcher />
           </div>
 
+          {/* FAQ — Central de Ajuda (acesso para todos) */}
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="hidden sm:inline-flex gap-1.5 border-yellow-500/40 text-yellow-600 hover:bg-yellow-500/10 hover:text-yellow-700 dark:text-yellow-400 dark:hover:text-yellow-300"
+          >
+            <NavLink to="/faq" title="Central de Ajuda">
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span className="text-xs font-medium">FAQ</span>
+            </NavLink>
+          </Button>
+
           <AlertsDropdown />
 
           {/* User avatar + dropdown */}
@@ -867,6 +881,15 @@ export function TopNavigation() {
                 {/* Mobile nav */}
                 <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
                   {visibleAll.map(renderMobileNavItem)}
+
+                  <NavLink
+                    to="/faq"
+                    onClick={() => setMobileOpen(false)}
+                    className={cn("mobile-nav-item", isActive("/faq") && "mobile-nav-item-active")}
+                  >
+                    <HelpCircle className="w-5 h-5 flex-shrink-0 text-yellow-500" />
+                    <span className="flex-1">FAQ</span>
+                  </NavLink>
 
                   {role === "admin" && visibleAdminItems.length > 0 && (
                     <>

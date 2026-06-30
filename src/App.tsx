@@ -74,6 +74,7 @@ const ClienteDetail = lazy(() => lazyRetry(() => import("@/modules/carteira/comp
 const CustomPipeline = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/CustomPipeline")));
 const Agenda = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Agenda")));
 const Privacidade = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Privacidade")));
+const Faq = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Faq")));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/modules/copilot/components/playground").then(m => ({ default: m.CopilotPlayground }))));
 const ChecklistPage = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/ChecklistPage")));
 const MessageTemplates = lazy(() => lazyRetry(() => import("@/modules/communication/pages/MessageTemplates")));
@@ -335,6 +336,16 @@ function AppRoutes() {
               <PermissionProtectedRoute featureKey="pipeline.view">
                 <PipeWhatsapp />
               </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/faq"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <Faq />
             </LayoutWrapper>
           </ProtectedRoute>
         }
