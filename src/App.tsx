@@ -53,8 +53,6 @@ const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash
 const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
 const Configuracoes = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Configuracoes")));
 const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
-const Campanhas = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/Campanhas")));
-const CampanhaDetail = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/CampanhaDetail")));
 const DisparosPanel = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/DisparosPanel")));
 const NovoDisparo = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/NovoDisparo")));
 const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));
@@ -234,6 +232,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      {/* /campanhas — Kanban de campanhas legado RETIRADO; redireciona pros funis (links antigos) */}
       <Route
         path="/campanhas"
         element={<Navigate to="/funis" replace />}
@@ -255,18 +254,6 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <NovoDisparo />
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/campanhas/:id"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="campaigns.view">
-                <CampanhaDetail />
-              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }

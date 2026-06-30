@@ -48,7 +48,7 @@ src/modules/identity/
 ├── master/                           # sub-conceito master (slice 9.4 arch-deepening) — API interna privada; barrel raiz re-exporta SÓ useMasterAuth/useCanAccessMaster, resto fica aqui
 │   ├── hooks/                        # 6 master hooks: useMasterAuth, useMasterOperations, useMasterOrganizations, useMasterPlans, useMasterUsers, useMasterAuditLogs (mvd de hooks/ em 9.4)
 │   ├── components/                   # Master ops UI (ApiStatusTab, BillingOverrideModal, MasterLayout, MasterRoute, MasterSidebar, PlanEditor, PlanFeatureCard, QuotaManagementPanel, onboarding/)
-│   ├── pages/                        # Master route components (MasterDashboard, MasterOrganizations, MasterUsers, MasterPlans, MasterFeatures, MasterAuditLogs, MasterOperations, MasterAutomationHealth, MasterWhatsAppHealth, CopilotReasoning, CopilotToggleAudit, MasterOnboarding, WhatsAppMigration) — deep-import via App.tsx p/ lazy chunk
+│   ├── pages/                        # Master route components (MasterDashboard, MasterOrganizations, MasterUsers, MasterPlans, MasterFeatures, MasterAuditLogs, MasterOperations, MasterAutomationHealth, MasterWhatsAppHealth, CopilotReasoning, CopilotToggleAudit, MasterOnboarding) — deep-import via App.tsx p/ lazy chunk
 │   └── index.ts                      # sub-barrel privado (master ops completo)
 ├── org-team/                         # sub-conceito org-team (slice 9.4b arch-deepening) — API interna privada, re-exportada pelo barrel raiz (superfície PÚBLICA)
 │   ├── hooks/                        # 8 hooks: useOrganization (org_id raiz de TODA query — multi-tenancy), useOrganizationSettings, useOrgQuotas, useOrgSwitcher, useSeatUsage, useTeamMembers, useCurrentTeamMember, useProfiles
