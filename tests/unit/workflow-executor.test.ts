@@ -4,6 +4,7 @@ import "../../tests/helpers/deno-mock";
 // Mock the heavy dependencies before importing
 vi.mock("../../supabase/functions/_shared/workflow-condition-evaluator.ts", () => ({
   evaluateCondition: vi.fn().mockResolvedValue(true),
+  getLeadTags: vi.fn().mockResolvedValue(""),
 }));
 
 vi.mock("../../supabase/functions/_shared/workflow-action-handler.ts", () => ({

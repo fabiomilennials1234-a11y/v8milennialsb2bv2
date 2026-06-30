@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect } from "react";
 import type { NodeProps } from "@xyflow/react";
 import { Handle, Position, useReactFlow, useUpdateNodeInternals } from "@xyflow/react";
-import { Split, X } from "lucide-react";
+import { Split, X, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NODE_COLORS, migrateSplitAbData } from "@/types/workflow";
 import type { SplitAbNodeData } from "@/types/workflow";
@@ -85,9 +85,16 @@ function SplitAbNodeComponent({ id, data, selected }: NodeProps) {
       <div className="flex justify-between px-4 pb-2 gap-2">
         {variants.map((variant, index) => {
           const colorSet = VARIANT_COLORS[index % VARIANT_COLORS.length];
+          const hasTags = (variant.tags?.length ?? 0) > 0;
           return (
             <div key={variant.id} className="relative text-center flex-1">
-              <span className={cn("text-[10px] font-medium", colorSet.text)}>
+              <span className={cn("inline-flex items-center justify-center gap-0.5 text-[10px] font-medium", colorSet.text)}>
+                {hasTags && (
+                  <Tag
+                    className="w-2.5 h-2.5 shrink-0"
+                    aria-label={`Tags vinculadas: ${variant.tags!.join(", ")}`}
+                  />
+                )}
                 {variant.label || `${index + 1}`} ({variant.percentage}%)
               </span>
               <Handle
