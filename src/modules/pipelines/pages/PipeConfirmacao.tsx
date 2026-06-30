@@ -43,15 +43,14 @@ import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modu
 import { MeetingTimeline } from "@/modules/pipelines/components/legacy/confirmacao/MeetingTimeline";
 import { CompareceuModal } from "@/modules/leads";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
-import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/modules/identity";
-import { format, isToday, startOfWeek, endOfWeek, isWithinInterval, isTomorrow, isPast, startOfDay, differenceInCalendarDays } from "date-fns";
+import { useConfirmacaoOverdueDays } from "@/modules/identity";
+import { format, isToday, startOfWeek, endOfWeek, isPast, startOfDay, endOfDay, addDays, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useLogLeadAction } from "@/modules/leads";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/modules/identity";
-import { useLeadsWithScheduledMessages } from "@/modules/communication/hooks/useScheduledMessages";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
@@ -62,7 +61,7 @@ import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/Sa
 import { DisparoWizard, type DisparoBoardFilter, type DisparoSource } from "@/modules/pipelines/components/disparo";
 import { useSearchParams, Navigate } from "react-router-dom";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
-import { matchesResponsibleFilter } from "@/lib/kanban-filters";
+import { CONFIRMACAO_OVERDUE_EXCLUDE_STATUS_KEYS } from "@/modules/pipelines/lib/kanbanFilterParams";
 
 // Filter type aliases (previously from ConfirmacaoFilters)
 type OriginFilter = "all" | "whatsapp" | "meta_ads" | "instagram" | "tiktok" | "google_ads" | "site" | "landing_page" | "remarketing" | "indicacao" | "evento" | "prospeccao_ativa" | "cal" | "outro";
@@ -233,7 +232,6 @@ function PipeConfirmacaoInner() {
     setActiveViewId(viewId);
     setSearchParams(viewId ? { view: viewId } : {}, { replace: true });
   }, [setSearchParams]);
-  const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
   const [filterScheduled, setFilterScheduled] = useState(false);
 
   // Filtro defensivo: membros começam vendo só os próprios leads. Admin/Master veem tudo.
@@ -278,6 +276,35 @@ function PipeConfirmacaoInner() {
 
   const overdueDays = useConfirmacaoOverdueDays();
   const { data: pipelineStages = [] } = usePipelineStages("confirmacao");
+  const metricsRange = useMemo(() => getDateRange(periodState), [periodState]);
+  // Time bucket → generic server params (meeting-date range, or overdue =
+  // stale updated_at excluding compareceu/perdido). Mirrors the legacy client
+  // logic; timezone math stays here so the RPC only does range comparisons.
+  const timeParams = useMemo(() => {
+    const now = new Date();
+    if (timeFilter === "today") {
+      return { meetingAfter: startOfDay(now).toISOString(), meetingBefore: endOfDay(now).toISOString() };
+    }
+    if (timeFilter === "tomorrow") {
+      const t = addDays(now, 1);
+      return { meetingAfter: startOfDay(t).toISOString(), meetingBefore: endOfDay(t).toISOString() };
+    }
+    if (timeFilter === "week") {
+      return {
+        meetingAfter: startOfWeek(now, { locale: ptBR }).toISOString(),
+        meetingBefore: endOfWeek(now, { locale: ptBR }).toISOString(),
+      };
+    }
+    if (timeFilter === "overdue") {
+      const limit = new Date();
+      limit.setDate(limit.getDate() - overdueDays);
+      return {
+        updatedBefore: limit.toISOString(),
+        overdueExcludeStatusKeys: [...CONFIRMACAO_OVERDUE_EXCLUDE_STATUS_KEYS],
+      };
+    }
+    return {};
+  }, [timeFilter, overdueDays]);
   const { stageData, allItems: pipeData, isLoading } = usePaginatedPipeline(
     "confirmacao",
     pipelineStages,
@@ -285,6 +312,16 @@ function PipeConfirmacaoInner() {
       search: searchQuery,
       responsibleId: selectedResponsibleId,
       tagIds: selectedTags,
+      // Client-only dimensions, now resolved server-side so the column count
+      // matches the filtered cards (origin / urgency / status / scheduled /
+      // period / time bucket).
+      origins: originFilter !== "all" ? [originFilter] : undefined,
+      urgency: urgencyFilter !== "all" ? urgencyFilter : undefined,
+      statusKeys: selectedStatuses.length ? selectedStatuses : undefined,
+      scheduled: filterScheduled || undefined,
+      periodAfter: metricsRange?.startStr ?? undefined,
+      periodBefore: metricsRange?.endStr ?? undefined,
+      ...timeParams,
     }
   );
   const refetch = useCallback(() => {}, []);
@@ -429,7 +466,6 @@ function PipeConfirmacaoInner() {
   }, [pipeData?.length]); // Only run when data length changes to avoid infinite loops
 
   // Dados para ConfirmacaoStats: "Geral" = todo o pipe; outros modos = filtrado por período em UTC
-  const metricsRange = useMemo(() => getDateRange(periodState), [periodState]);
   const statsData = useMemo(() => {
     if (!pipeData) return [];
     if (!metricsRange) return pipeData;
@@ -476,49 +512,14 @@ function PipeConfirmacaoInner() {
     };
   };
 
-  // Client-side filters that can't be server-side (ghost lead, date range, origin, urgency, time, status, scheduled)
-  const filterItemsLocal = (item: any) => {
-    const lead = item.lead;
-    if (!lead) return false;
-
-    if (metricsRange) {
-      if (!item.created_at) return false;
-      if (item.created_at < metricsRange.startStr || item.created_at > metricsRange.endStr) return false;
-    }
-
-    const matchesOrigin = originFilter === "all" || lead?.origin === originFilter;
-    const matchesUrgency = urgencyFilter === "all" || lead?.urgency === urgencyFilter;
-
-    let matchesTime = true;
-    const now = new Date();
-    if (timeFilter === "today" && item.meeting_date) {
-      matchesTime = isToday(new Date(item.meeting_date));
-    } else if (timeFilter === "tomorrow" && item.meeting_date) {
-      matchesTime = isTomorrow(new Date(item.meeting_date));
-    } else if (timeFilter === "week" && item.meeting_date) {
-      const weekStart = startOfWeek(now, { locale: ptBR });
-      const weekEnd = endOfWeek(now, { locale: ptBR });
-      matchesTime = isWithinInterval(new Date(item.meeting_date), { start: weekStart, end: weekEnd });
-    } else if (timeFilter === "overdue") {
-      matchesTime = isConfirmacaoOverdue(item.status, item.updated_at, overdueDays);
-    }
-
-    const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
-    // Shared helper covers all 9 responsibility fields (entry + lead),
-    // including pre_sale_responsible_id / sale_responsible_id.
-    const matchesResponsible = matchesResponsibleFilter(item, selectedResponsibleId);
-    const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
-
-    return matchesOrigin && matchesUrgency && matchesTime && matchesStatus && matchesResponsible && matchesScheduled;
-  };
-
-  // Build columns from server-paginated stageData
+  // Build columns from server-paginated stageData. All board filters
+  // (origin / urgency / status / scheduled / period / time bucket) are now
+  // applied server-side by usePaginatedPipeline, so items and totalCount come
+  // from the same filtered query and the column badge matches the cards.
   const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
     return statusColumns.map(col => {
       const sd = stageData[col.id];
-      const items = sd
-        ? sd.items.filter(filterItemsLocal).map(transformToCard)
-        : [];
+      const items = sd ? sd.items.map(transformToCard) : [];
       return {
         ...col,
         items,
@@ -528,7 +529,7 @@ function PipeConfirmacaoInner() {
         onLoadMore: sd?.fetchMore,
       };
     });
-  }, [stageData, statusColumns, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedResponsibleId, overdueDays, filterScheduled, leadsWithSchedule, metricsRange]);
+  }, [stageData, statusColumns]);
 
   // Count ghost leads — rows visíveis no pipe cujo join com leads é null.
   // Indica divergência entre RLS do pipe e de leads (ver GhostLeadsBanner).

@@ -10,10 +10,52 @@ const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
 const MAX_STAGES = 20;
 
+/**
+ * Filters applied to a paginated board. `search`, `responsibleId` and `tagIds`
+ * were the original server-side dimensions; everything below is the generic
+ * filter surface added so the column-count badge and the paginated cards stay
+ * consistent (the count used to ignore client-only filters → e.g. Perdido kept
+ * showing 21 after filtering origin=site to 10). Each board maps its own UI
+ * (origin single/multi, priority/calor bands, time buckets, period, overdue)
+ * into these generic params; the RPCs (get_pipeline_page /
+ * get_pipeline_stage_counts) apply them as plain SQL predicates. A null/empty
+ * value means "filter disabled".
+ */
 export interface PaginatedFilters {
   search?: string;
   responsibleId?: string | null;
   tagIds?: string[];
+  /** leads.origin ∈ origins (empty/undefined = no filter) */
+  origins?: string[];
+  /** COALESCE(leads.rating, 0) bounds — priority bands map here */
+  ratingMin?: number | null;
+  ratingMax?: number | null;
+  /** COALESCE(metadata.calor, 5) bounds — calor bands map here */
+  calorMin?: number | null;
+  calorMax?: number | null;
+  /** leads.urgency = urgency */
+  urgency?: string | null;
+  /** metadata.product_type = productType */
+  productType?: string | null;
+  /** metadata.meeting_date range (ISO) — confirmação time buckets */
+  meetingAfter?: string | null;
+  meetingBefore?: string | null;
+  /**
+   * Period range (ISO). For entries whose stage_key ∈ closedStatusKeys the ref
+   * date is metadata.metrics_period_at (fallback updated_at); otherwise
+   * created_at. closedStatusKeys null → always created_at (whatsapp /
+   * confirmação period selector).
+   */
+  periodAfter?: string | null;
+  periodBefore?: string | null;
+  closedStatusKeys?: string[] | null;
+  /** Overdue bucket: updated_at <= updatedBefore AND stage_key ∉ exclude set */
+  updatedBefore?: string | null;
+  overdueExcludeStatusKeys?: string[] | null;
+  /** stage_key ∈ statusKeys (confirmação status multi-select) */
+  statusKeys?: string[] | null;
+  /** true → only leads with a 'scheduled' scheduled_user_message */
+  scheduled?: boolean | null;
 }
 
 export interface StageData {
@@ -30,7 +72,15 @@ function flattenRpcEntry(row: any) {
   return flattenMetadata({ ...row, lead });
 }
 
-function rpcParams(
+const nonEmpty = (a?: string[] | null) => (a && a.length ? a : null);
+const orNull = <T,>(v: T | null | undefined) => (v === undefined || v === null ? null : v);
+
+/**
+ * Shared param block sent to BOTH RPCs. Stage/cursor/page-size are appended by
+ * the per-stage query. Empty arrays and "all" sentinels collapse to null so an
+ * inactive filter short-circuits server-side.
+ */
+function sharedRpcParams(
   slug: PipelineType,
   orgId: string,
   search: string,
@@ -41,34 +91,46 @@ function rpcParams(
     p_org_id: orgId,
     p_search: search || null,
     p_responsible_id:
-      filters.responsibleId === "all"
-        ? null
-        : filters.responsibleId || null,
-    p_tag_ids: filters.tagIds?.length ? filters.tagIds : null,
+      filters.responsibleId === "all" ? null : filters.responsibleId || null,
+    p_tag_ids: nonEmpty(filters.tagIds),
+    p_origins: nonEmpty(filters.origins),
+    p_rating_min: orNull(filters.ratingMin),
+    p_rating_max: orNull(filters.ratingMax),
+    p_calor_min: orNull(filters.calorMin),
+    p_calor_max: orNull(filters.calorMax),
+    p_urgency: filters.urgency && filters.urgency !== "all" ? filters.urgency : null,
+    p_product_type:
+      filters.productType && filters.productType !== "all" ? filters.productType : null,
+    p_meeting_after: filters.meetingAfter || null,
+    p_meeting_before: filters.meetingBefore || null,
+    p_period_after: filters.periodAfter || null,
+    p_period_before: filters.periodBefore || null,
+    p_closed_status_keys: nonEmpty(filters.closedStatusKeys),
+    p_updated_before: filters.updatedBefore || null,
+    p_overdue_exclude_status_keys: nonEmpty(filters.overdueExcludeStatusKeys),
+    p_status_keys: nonEmpty(filters.statusKeys),
+    p_scheduled: filters.scheduled ? true : null,
   };
 }
 
 function useStageSlot(
-  slug: PipelineType,
+  sharedParams: ReturnType<typeof sharedRpcParams>,
   stageKey: string | undefined,
+  filtersKey: string,
   organizationId: string | undefined,
-  search: string,
-  filters: PaginatedFilters,
   enabled: boolean
 ) {
   const query = useInfiniteQuery({
     queryKey: [
       "pipeline-page",
-      slug,
+      sharedParams.p_pipeline_slug,
       stageKey ?? "__empty__",
       organizationId,
-      search,
-      filters.responsibleId,
-      filters.tagIds,
+      filtersKey,
     ],
     queryFn: async ({ pageParam }) => {
       const { data, error } = await supabase.rpc("get_pipeline_page", {
-        ...rpcParams(slug, organizationId!, search, filters),
+        ...sharedParams,
         p_stage_id: stageKey!,
         p_page_size: PAGE_SIZE,
         p_cursor: pageParam ?? null,
@@ -112,20 +174,47 @@ export function usePaginatedPipeline(
     organizationId,
   ]);
 
-  const countsQuery = useQuery({
-    queryKey: [
-      "pipeline-stage-counts",
+  // Single source of truth for every server-side filter dimension. Computed
+  // once and shared by the counts query + all stage queries so the column
+  // badge (count) and the rendered cards (pages) can never diverge.
+  const sharedParams = useMemo(
+    () => sharedRpcParams(slug, organizationId ?? "", debouncedSearch, filters),
+    [
       slug,
       organizationId,
       debouncedSearch,
       filters.responsibleId,
       filters.tagIds,
-    ],
+      filters.origins,
+      filters.ratingMin,
+      filters.ratingMax,
+      filters.calorMin,
+      filters.calorMax,
+      filters.urgency,
+      filters.productType,
+      filters.meetingAfter,
+      filters.meetingBefore,
+      filters.periodAfter,
+      filters.periodBefore,
+      filters.closedStatusKeys,
+      filters.updatedBefore,
+      filters.overdueExcludeStatusKeys,
+      filters.statusKeys,
+      filters.scheduled,
+    ]
+  );
+
+  // Stable cache key for the whole filter set (drives refetch of counts + pages
+  // whenever ANY dimension changes — origin, calor band, time bucket, etc.).
+  const filtersKey = useMemo(() => JSON.stringify(sharedParams), [sharedParams]);
+
+  const countsQuery = useQuery({
+    queryKey: ["pipeline-stage-counts", slug, organizationId, filtersKey],
     queryFn: async () => {
       if (!organizationId) return {};
       const { data, error } = await supabase.rpc(
         "get_pipeline_stage_counts",
-        rpcParams(slug, organizationId, debouncedSearch, filters)
+        sharedParams
       );
       if (error) throw error;
       const map: Record<string, number> = {};
@@ -152,11 +241,10 @@ export function usePaginatedPipeline(
     const key = stageKeys[i];
     stageQueries.push(
       useStageSlot(
-        slug,
+        sharedParams,
         key,
+        filtersKey,
         organizationId,
-        debouncedSearch,
-        filters,
         isReady && !!organizationId && i < stageKeys.length
       )
     );
