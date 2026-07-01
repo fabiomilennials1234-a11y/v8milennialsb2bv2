@@ -24,6 +24,7 @@ import {
   runUazapiSenderJob,
 } from "../_shared/dispatch-router.ts";
 import { assertPermission, permissionDeniedResponse } from "../_shared/assert-permission.ts";
+import { assertOrgFeature, FeatureLockedError } from "../_shared/assert-org-feature.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -81,6 +82,16 @@ Deno.serve(
     const permission = await assertPermission(supabaseAdmin, user.id, orgId, "mass_send");
     if (!permission.allowed) {
       return permissionDeniedResponse(permission.reason, corsHeaders);
+    }
+
+    // Feature gate — org must have whatsapp_bulk on their plan
+    try {
+      await assertOrgFeature(supabaseAdmin, orgId, "whatsapp_bulk");
+    } catch (e) {
+      if (e instanceof FeatureLockedError) {
+        return jsonResponse(403, { error: "feature_locked", feature: "whatsapp_bulk" }, corsHeaders);
+      }
+      throw e;
     }
 
     const body = await req.json().catch(() => null);

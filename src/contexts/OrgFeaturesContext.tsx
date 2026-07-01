@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import type { FeatureKey, LimitKey } from "@/modules/platform/lib/feature-registry";
+import { computeFeatureUnlockPlan, type FeatureUnlockMap, type ActivePlan } from "@/modules/platform/lib/feature-unlock";
 
 // ─── Types ─────────────────────────────────────────────────────
 interface FeaturesAndLimits {
@@ -34,6 +35,8 @@ interface OrgFeaturesContextType {
   allFeatures: Record<string, boolean>;
   /** Todos os limites */
   allLimits: Record<string, number>;
+  /** Mapa feature → plano mínimo que a desbloqueia (para o UpgradeModal) */
+  featureUnlockPlan: FeatureUnlockMap;
   /** Loading state */
   isLoading: boolean;
   /** Se o contexto está pronto (org carregada + dados retornados) */
@@ -67,12 +70,28 @@ export function OrgFeaturesProvider({ children }: { children: ReactNode }) {
     gcTime: 10 * 60 * 1000,
   });
 
+  const { data: activePlans } = useQuery<ActivePlan[]>({
+    queryKey: ["active-plans"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subscription_plans")
+        .select("name, display_name, position, features")
+        .eq("is_active", true)
+        .order("position");
+      if (error) throw error;
+      return (data ?? []) as unknown as ActivePlan[];
+    },
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+  });
+
   const value = useMemo<OrgFeaturesContextType>(() => {
     const features = data?.features ?? {};
     const limits = data?.limits ?? {};
     const planName = data?.plan_name ?? "free";
     const isLoading = orgLoading || queryLoading;
     const isReady = !isLoading && !!data;
+    const featureUnlockPlan = computeFeatureUnlockPlan(activePlans ?? []);
 
     return {
       hasFeature: (key: FeatureKey) => {
@@ -92,10 +111,11 @@ export function OrgFeaturesProvider({ children }: { children: ReactNode }) {
       planName,
       allFeatures: features,
       allLimits: limits,
+      featureUnlockPlan,
       isLoading,
       isReady,
     };
-  }, [data, orgLoading, queryLoading]);
+  }, [data, orgLoading, queryLoading, activePlans]);
 
   return (
     <OrgFeaturesContext.Provider value={value}>

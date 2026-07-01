@@ -14,6 +14,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { withSentry } from "../_shared/sentry.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { assertOrgFeature, FeatureLockedError } from "../_shared/assert-org-feature.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -109,6 +110,25 @@ Deno.serve(
       const apiUrl = Deno.env.get("CADASTRO_EXTERNO_URL");
       if (!apiKey || !apiUrl) {
         return respond({ error: "Integração não configurada (env vars ausentes)" });
+      }
+
+      // Feature gate — org must have external_cadastro on their plan
+      if (!organizationId) {
+        return new Response(
+          JSON.stringify({ error: "feature_locked", feature: "external_cadastro" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      try {
+        await assertOrgFeature(supabaseAdmin, organizationId, "external_cadastro");
+      } catch (e) {
+        if (e instanceof FeatureLockedError) {
+          return new Response(
+            JSON.stringify({ error: "feature_locked", feature: "external_cadastro" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        throw e;
       }
 
       // ── Parse body ────────────────────────────────────────

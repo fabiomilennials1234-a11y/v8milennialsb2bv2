@@ -12,6 +12,7 @@ const {
   mockPermissionDeniedResponse,
   mockGetUser,
   mockFrom,
+  mockRpc,
   mockCreateClient,
   getHandler,
 } = vi.hoisted(() => {
@@ -19,6 +20,7 @@ const {
   const mockPermissionDeniedResponse = vi.fn();
   const mockGetUser = vi.fn();
   const mockFrom = vi.fn();
+  const mockRpc = vi.fn();
   const mockCreateClient = vi.fn();
   let _handler: any = null;
 
@@ -46,6 +48,7 @@ const {
     mockPermissionDeniedResponse,
     mockGetUser,
     mockFrom,
+    mockRpc,
     mockCreateClient,
     getHandler: () => _handler as (req: Request) => Promise<Response>,
   };
@@ -128,11 +131,14 @@ function setupAuthMocks(role: "admin" | "master" | "membro" = "admin") {
     return teamChain;
   });
 
+  // org_has_feature guard (assertOrgFeature) — allow by default
+  mockRpc.mockResolvedValue({ data: true, error: null });
+
   mockCreateClient.mockImplementation((_url: string, key: string) => {
     if (key === "anon-key") {
       return { auth: { getUser: mockGetUser } };
     }
-    return { from: mockFrom };
+    return { from: mockFrom, rpc: mockRpc };
   });
 }
 

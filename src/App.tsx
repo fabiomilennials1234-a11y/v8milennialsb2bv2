@@ -18,6 +18,7 @@ import { useAutoAdminAssignment } from "@/modules/identity/hooks/useAutoAdminAss
 import { SubscriptionProtectedRoute } from "@/modules/identity/components/SubscriptionProtectedRoute";
 import { GlobalErrorBoundary } from "@/modules/platform/components/GlobalErrorBoundary";
 import { OnboardingGate } from "@/modules/platform/components/onboarding/OnboardingGate";
+import { FeatureRoute } from "@/modules/platform";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { ServiceWorkerUpdater } from "@/modules/platform/components/ServiceWorkerUpdater";
 import { PushPermissionPrompt } from "@/modules/platform/components/PushPermissionPrompt";
@@ -229,7 +230,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="pipeline.view">
-                <FunisHub />
+                <FeatureRoute feature="funnels"><FunisHub /></FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
@@ -269,7 +270,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="pipeline.view">
-                <PipeConfirmacao />
+                <FeatureRoute feature="funnels"><PipeConfirmacao /></FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
@@ -281,7 +282,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="pipeline.view">
-                <PipePropostas />
+                <FeatureRoute feature="funnels"><PipePropostas /></FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
@@ -293,7 +294,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="performance.view">
-                <Performance />
+                <FeatureRoute feature="performance"><Performance /></FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
@@ -321,7 +322,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="pipeline.view">
-                <PipeWhatsapp />
+                <FeatureRoute feature="funnels"><PipeWhatsapp /></FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
@@ -343,7 +344,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="followups.view">
-                <Revisao />
+                <FeatureRoute feature="review"><Revisao /></FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
@@ -367,7 +368,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="leads.view">
-                <Leads />
+                <FeatureRoute feature="leads"><Leads /></FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
@@ -403,7 +404,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="commissions.view">
-                <Comissoes />
+                <FeatureRoute feature="commissions"><Comissoes /></FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
@@ -437,7 +438,7 @@ function AppRoutes() {
         path="/tv"
         element={
           <ProtectedRoute>
-            <TVDashboard />
+            <FeatureRoute feature="tv_dashboard"><TVDashboard /></FeatureRoute>
           </ProtectedRoute>
         }
       />
@@ -446,7 +447,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Negocios />
+              <FeatureRoute feature="deals"><Negocios /></FeatureRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -457,7 +458,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="products.view">
-                <Produtos />
+                <FeatureRoute feature="products"><Produtos /></FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
@@ -469,7 +470,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="copilot.view">
-                <Copilot />
+                <FeatureRoute feature="copilot"><Copilot /></FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
@@ -495,9 +496,11 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="whatsapp.view">
-                <Suspense fallback={<ChatSkeleton />}>
-                  <ChatWhatsApp />
-                </Suspense>
+                <FeatureRoute feature="chat">
+                  <Suspense fallback={<ChatSkeleton />}>
+                    <ChatWhatsApp />
+                  </Suspense>
+                </FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
@@ -523,7 +526,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="upsell.view">
-                <Upsell />
+                <FeatureRoute feature="carteira"><Upsell /></FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
@@ -640,7 +643,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <MessageTemplates />
+              <FeatureRoute feature="message_templates"><MessageTemplates /></FeatureRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
