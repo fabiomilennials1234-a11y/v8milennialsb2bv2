@@ -3,14 +3,25 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-// ─── Mock Supabase RPC ──────────────────────────────────
+// ─── Mock Supabase RPC + from ───────────────────────────
 const mockRpc = vi.fn();
+const mockFrom = vi.fn();
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     rpc: (...args: unknown[]) => mockRpc(...args),
+    from: (...args: unknown[]) => mockFrom(...args),
   },
 }));
+
+// Query builder chainável que resolve na lista de planos ativos
+function makeActivePlansQuery(plans: unknown[]) {
+  const builder: Record<string, unknown> = {};
+  builder.select = () => builder;
+  builder.eq = () => builder;
+  builder.order = () => Promise.resolve({ data: plans, error: null });
+  return builder;
+}
 
 // ─── Mock useOrganization ───────────────────────────────
 let mockOrgReturn = {
@@ -64,6 +75,12 @@ describe("OrgFeaturesContext", () => {
     vi.clearAllMocks();
     mockOrgReturn = { organizationId: "org-123", isLoading: false };
     mockRpc.mockResolvedValue({ data: makeFeaturesAndLimits(), error: null });
+    mockFrom.mockReturnValue(
+      makeActivePlansQuery([
+        { name: "torque-2.0", display_name: "Torque Automation", position: 20, features: { chat: true } },
+        { name: "torque-v8", display_name: "Torque Copilot", position: 30, features: { chat: true, copilot: true } },
+      ])
+    );
   });
 
   // ── 1: Hook outside provider throws ───────────────────
@@ -215,6 +232,18 @@ describe("OrgFeaturesContext", () => {
 
     expect(result.current.isLoading).toBe(true);
     expect(result.current.isReady).toBe(false);
+  });
+
+  // ── 12: featureUnlockPlan derived from active plans ───
+  it("exposes featureUnlockPlan derived from active plans", async () => {
+    const qc = createQueryClient();
+    const { result } = renderHook(() => useOrgFeatures(), { wrapper: createWrapper(qc) });
+
+    await waitFor(() => expect(result.current.isReady).toBe(true));
+    await waitFor(() =>
+      expect(result.current.featureUnlockPlan.chat).toEqual({ name: "torque-2.0", display_name: "Torque Automation" })
+    );
+    expect(result.current.featureUnlockPlan.copilot).toEqual({ name: "torque-v8", display_name: "Torque Copilot" });
   });
 
   // ── 11: RPC error causes query to fail gracefully ─────
