@@ -187,6 +187,43 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
           "sincronização",
           "conversas"
         ]
+      },
+      {
+        "question": "Meu número foi banido ou bloqueado pelo WhatsApp. O que eu faço?",
+        "answer": "Primeiro, entenda o motivo: quase sempre o bloqueio vem de disparo em massa sem cuidado, de muitas denúncias de clientes ou do uso de um número novo e \"frio\" para muito volume. Para voltar a operar rápido, troque a conexão para um número reserva que você já mantém aquecido — assim o atendimento não para. Em paralelo, tente recuperar o número banido pelo próprio WhatsApp (no app, em Ajuda, peça a revisão): isso pode levar de horas a dias e nem sempre é aceito. Se os banimentos se repetem por causa de volume, a solução definitiva é migrar para a API Oficial do Meta.",
+        "keywords": [
+          "banido",
+          "bloqueado",
+          "número banido",
+          "recuperar número",
+          "número reserva",
+          "aquecido",
+          "API oficial"
+        ]
+      },
+      {
+        "question": "Como evito que meu número de WhatsApp seja banido?",
+        "answer": "Aqueça números novos: comece com pouco volume e aumente aos poucos, tendo conversas de verdade antes de sair disparando. Nos disparos, use o plano de lote em vez de mandar tudo de uma vez, personalize as mensagens (evite texto idêntico em massa) e fale só com quem tem relação com você ou pediu contato — listas frias e compradas são o caminho mais rápido para a denúncia. Responder às conversas também ajuda: número que só dispara e nunca recebe resposta chama atenção. E mantenha sempre um número reserva aquecido de prontidão para assumir se o principal cair.",
+        "keywords": [
+          "evitar banimento",
+          "aquecer número",
+          "prevenção",
+          "plano de lote",
+          "não ser bloqueado"
+        ]
+      },
+      {
+        "question": "Qual a diferença entre conectar por QR code e usar a API Oficial do Meta?",
+        "answer": "A conexão por QR code é a padrão do Torque: gratuita, rápida e usa o seu número como no WhatsApp Web. É ótima para atendimento e volume moderado, mas fica sujeita a bloqueio se você exagerar nos disparos. A API Oficial do Meta (WhatsApp Business Platform) é paga — o Meta cobra por conversa — e em troca oferece um número verificado, muito mais estável para alto volume, com selo de conta oficial e risco de banimento bem menor; ela exige aprovação e o uso de modelos de mensagem aprovados pelo Meta. Se você depende de disparos grandes e constantes, vale considerar a API Oficial: fale com o suporte para habilitar.",
+        "keywords": [
+          "QR code",
+          "API oficial",
+          "Meta",
+          "WhatsApp Business",
+          "pago",
+          "número verificado",
+          "diferença"
+        ]
       }
     ]
   },
@@ -598,68 +635,57 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
     ]
   },
   {
-    "id": "campanhas",
-    "title": "Campanhas e disparo em massa",
-    "description": "Como criar campanhas temporárias e disparar mensagens para muitos leads de uma vez.",
+    "id": "disparos",
+    "title": "Disparos em massa",
+    "description": "Como enviar a mesma mensagem para vários leads de uma vez, com segurança para o seu número.",
     "icon": "Megaphone",
     "items": [
       {
-        "question": "Como crio uma campanha?",
-        "answer": "Vá em Campanhas e clique em criar. Defina nome, objetivo, prazo final, tipo (automática, semiautomática ou manual), investimento e metas de time ou individuais. A campanha nasce como rascunho e você a ativa quando quiser. Ela funciona em paralelo aos seus funis, com etapas e leads próprios.",
-        "keywords": [
-          "criar campanha",
-          "nova campanha",
-          "rascunho",
-          "prazo",
-          "metas"
-        ]
-      },
-      {
         "question": "Como faço um disparo em massa para vários leads de uma vez?",
-        "answer": "Dentro da campanha há duas opções. O Disparo em Massa envia tudo de uma vez só. Os planos de lote quebram o envio em etapas ao longo de dias, com a possibilidade de pausar, retomar e cancelar. Para envios grandes, prefira o plano de lote: ele protege seu número de WhatsApp distribuindo melhor as mensagens.",
+        "answer": "Na tela de Leads, filtre ou selecione os contatos que vão receber, escolha a ação de disparo e monte a mensagem (texto, áudio, imagem ou um template pronto). Depois é só escolher entre enviar tudo de uma vez (disparo imediato) ou distribuir o envio em etapas ao longo dos dias (plano de lote). Para listas grandes, prefira o plano de lote: ele protege o seu número de WhatsApp.",
         "keywords": [
           "disparo em massa",
-          "lotes",
-          "envio em massa",
+          "enviar para vários",
+          "disparo rápido",
+          "plano de lote",
           "WhatsApp"
         ]
       },
       {
-        "question": "Como adiciono leads a uma campanha?",
-        "answer": "Dentro da campanha você adiciona leads manualmente, importa por CSV ou os traz pelas regras de disparo. Também dá para distribuir os leads entre os membros por rodízio. Depois de adicionados, eles aparecem no Kanban da campanha e você acompanha cada um.",
+        "question": "Qual a diferença entre disparo imediato e plano de lote?",
+        "answer": "O disparo imediato manda a mensagem para toda a lista de uma vez só — ideal para volumes pequenos e avisos urgentes. O plano de lote quebra a mesma lista em partes, enviadas aos poucos ao longo de horas ou dias, e você pode pausar, retomar ou cancelar no meio do caminho. Espalhar o envio no tempo reduz bastante o risco de bloqueio do número.",
         "keywords": [
-          "adicionar leads",
-          "CSV",
-          "importar",
-          "rodízio",
-          "membros"
-        ]
-      },
-      {
-        "question": "Qual a diferença entre campanha e funil?",
-        "answer": "O funil é o seu fluxo permanente de vendas. A campanha é um esforço temporário e paralelo, com prazo, metas e etapas próprias, usada para ações pontuais como uma promoção ou um disparo. Um lead pode estar no funil e na campanha ao mesmo tempo, e você pode levá-lo da campanha de volta para um funil quando ele avançar.",
-        "keywords": [
-          "diferença",
-          "campanha",
-          "funil",
-          "temporário",
-          "paralelo"
-        ]
-      },
-      {
-        "question": "Como funcionam os lotes e por que usar?",
-        "answer": "O plano de lote divide sua lista em partes enviadas ao longo de dias, em vez de mandar tudo de uma vez. Isso espalha os envios no tempo e reduz o risco de bloqueio do seu número por volume excessivo. Você acompanha o andamento e pode pausar, retomar ou cancelar quando quiser.",
-        "keywords": [
+          "disparo imediato",
+          "plano de lote",
           "lotes",
-          "blast plan",
-          "bloqueio WhatsApp",
-          "volume",
+          "aos poucos",
           "pausar"
         ]
       },
       {
+        "question": "Como escolho quem vai receber o disparo?",
+        "answer": "O público sai dos seus leads: use as tags e os filtros (origem, etapa do funil, responsável) para montar a lista certa antes de disparar. Você pode selecionar vários leads na tela de Leads ou aplicar o disparo a uma etapa inteira do funil. Confira a lista antes de enviar para não incluir quem não deveria.",
+        "keywords": [
+          "público",
+          "segmentar",
+          "tags",
+          "filtro",
+          "selecionar leads"
+        ]
+      },
+      {
+        "question": "Como uso o nome do lead e outros dados na mensagem do disparo?",
+        "answer": "Use variáveis entre chaves duplas e o sistema troca pelo valor real de cada lead no envio: {{nome}}, {{empresa}}, {{saudacao}} (que vira Bom dia ou Boa tarde) e campos personalizados com {{custom.nome_do_campo}}. Personalizar a mensagem, em vez de mandar um texto idêntico para todo mundo, deixa o disparo mais natural e ajuda a proteger o seu número.",
+        "keywords": [
+          "variável",
+          "personalizar",
+          "nome do lead",
+          "saudação"
+        ]
+      },
+      {
         "question": "Por que aparece uma taxa de erro nos meus disparos?",
-        "answer": "A taxa de erro aparece nos resultados da campanha e mostra quantas mensagens não foram entregues. Os motivos mais comuns são número inválido, lead sem WhatsApp ou queda momentânea da conexão. Antes de disparar, confira se os números estão corretos e se seu número de WhatsApp está online.",
+        "answer": "A taxa de erro mostra quantas mensagens não foram entregues. Os motivos mais comuns são número inválido, lead sem WhatsApp ou queda momentânea da conexão. Antes de disparar, confira se os telefones estão corretos e se o seu número de WhatsApp está online.",
         "keywords": [
           "taxa de erro",
           "não entregue",
@@ -668,14 +694,25 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         ]
       },
       {
-        "question": "Como acompanho se a campanha está dando resultado?",
-        "answer": "Abra os resultados da campanha. Lá você vê o progresso em relação às metas, a taxa de conversão, o total de mensagens enviadas e a taxa de erro. Use esses números para ajustar a mensagem ou o público antes de novos disparos.",
+        "question": "Como acompanho o resultado de um disparo?",
+        "answer": "Depois do envio você acompanha quantas mensagens foram enviadas, quantas foram entregues, quantas deram erro e quantos leads responderam. Use esses números para ajustar a mensagem ou o público antes do próximo disparo.",
         "keywords": [
           "resultado",
-          "analytics",
-          "metas",
-          "conversão",
-          "disparos enviados"
+          "enviadas",
+          "entregues",
+          "respostas",
+          "acompanhar"
+        ]
+      },
+      {
+        "question": "Disparo em massa pode derrubar ou banir o meu número?",
+        "answer": "Pode, sim — enviar muita mensagem de uma vez, para contatos que não esperam o seu contato, é o que mais causa bloqueio de número no WhatsApp. Para se proteger, use o plano de lote, personalize as mensagens, fale só com quem tem relação com você e mantenha um número reserva já aquecido. Se você precisa de alto volume com segurança, o caminho é a API Oficial do Meta — veja os detalhes na seção de WhatsApp.",
+        "keywords": [
+          "banir",
+          "bloqueio",
+          "segurança",
+          "número reserva",
+          "API oficial"
         ]
       }
     ]
@@ -752,8 +789,8 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         ]
       },
       {
-        "question": "Dá para fazer upsell e campanhas de reativação na base de clientes?",
-        "answer": "Sim. Na área de Upsell você vê sua base de clientes em Kanban ou lista e cria campanhas de recompra, resgate e reativação de quem está dormindo. O sistema reposiciona os clientes conforme regras e mostra métricas como percentual de recompra e quais são as próximas recompras esperadas.",
+        "question": "Dá para fazer upsell e reativação na base de clientes?",
+        "answer": "Sim. Na área de Upsell você vê sua base de clientes em Kanban ou lista e cria fluxos de recompra, resgate e reativação de quem está dormindo. O sistema reposiciona os clientes conforme regras e mostra métricas como percentual de recompra e quais são as próximas recompras esperadas.",
         "keywords": [
           "upsell",
           "recompra",
@@ -913,7 +950,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
     "items": [
       {
         "question": "Quais planos o Torque oferece e qual a diferença entre eles?",
-        "answer": "São três planos: Starter, Pro e Enterprise. A diferença principal está nos limites de uso (quantos leads, usuários, campanhas, agentes de IA, números de WhatsApp e funis você pode ter) e em quais recursos ficam liberados. Quanto maior o plano, maiores os limites. Para escolher o ideal, fale com o time comercial.",
+        "answer": "São três planos: Starter, Pro e Enterprise. A diferença principal está nos limites de uso (quantos leads, usuários, agentes de IA, números de WhatsApp e funis você pode ter) e em quais recursos ficam liberados. Quanto maior o plano, maiores os limites. Para escolher o ideal, fale com o time comercial.",
         "keywords": [
           "planos",
           "Starter",
@@ -967,7 +1004,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         "question": "Quais são os limites do meu plano e onde vejo isso?",
-        "answer": "Cada plano define limites para itens como número de leads, usuários, campanhas, agentes de IA, números de WhatsApp e funis personalizados. Esses limites valem para toda a organização e são aplicados automaticamente. Ao tentar passar de um limite, o Torque avisa; se isso atrapalha sua operação, pode ser hora de subir de plano.",
+        "answer": "Cada plano define limites para itens como número de leads, usuários, agentes de IA, números de WhatsApp e funis personalizados. Esses limites valem para toda a organização e são aplicados automaticamente. Ao tentar passar de um limite, o Torque avisa; se isso atrapalha sua operação, pode ser hora de subir de plano.",
         "keywords": [
           "limites",
           "leads",
