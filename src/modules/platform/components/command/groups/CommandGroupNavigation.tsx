@@ -17,10 +17,13 @@ import {
   Settings,
   ShoppingBag,
   Trophy,
+  Lock,
 } from "lucide-react";
 import { CommandGroup, CommandItem } from "cmdk";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/modules/identity";
+import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
+import { SIDEBAR_FEATURE_MAP } from "@/modules/platform/lib/feature-registry";
 import { pushRecent } from "../recentCommands";
 
 interface CommandGroupNavigationProps {
@@ -44,9 +47,18 @@ const NAV_ITEMS = [
 export function CommandGroupNavigation({ onClose }: CommandGroupNavigationProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const orgFeatures = useOrgFeaturesOptional();
 
-  const handleSelect = (id: string, path: string) => {
-    if (user?.id) pushRecent(user.id, id);
+  // Plan gating — item bloqueado mostra cadeado e navega pro estado
+  // bloqueado da rota (PlanFeatureProtectedRoute), sem entrar nos recentes.
+  const isItemLocked = (path: string): boolean => {
+    if (!orgFeatures) return false;
+    const featureKey = SIDEBAR_FEATURE_MAP[path];
+    return featureKey ? !orgFeatures.hasFeature(featureKey) : false;
+  };
+
+  const handleSelect = (id: string, path: string, locked: boolean) => {
+    if (user?.id && !locked) pushRecent(user.id, id);
     navigate(path);
     onClose();
   };
@@ -56,25 +68,30 @@ export function CommandGroupNavigation({ onClose }: CommandGroupNavigationProps)
       heading="Navegação"
       className="[&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5"
     >
-      {NAV_ITEMS.map(({ id, label, path, Icon }) => (
-        <CommandItem
-          key={id}
-          value={`${id} ${label}`}
-          onSelect={() => handleSelect(id, path)}
-          className={cn(
-            "flex items-center gap-3 px-3 py-2.5 rounded-md mx-1",
-            "cursor-default select-none",
-            "aria-selected:bg-muted/60",
-            "hover:bg-muted/40",
-            "transition-colors duration-75"
-          )}
-        >
-          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="text-sm font-medium leading-tight truncate text-foreground">
-            {label}
-          </span>
-        </CommandItem>
-      ))}
+      {NAV_ITEMS.map(({ id, label, path, Icon }) => {
+        const locked = isItemLocked(path);
+        return (
+          <CommandItem
+            key={id}
+            value={`${id} ${label}`}
+            onSelect={() => handleSelect(id, path, locked)}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-md mx-1",
+              "cursor-default select-none",
+              "aria-selected:bg-muted/60",
+              "hover:bg-muted/40",
+              "transition-colors duration-75",
+              locked && "opacity-60"
+            )}
+          >
+            <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="text-sm font-medium leading-tight truncate text-foreground">
+              {label}
+            </span>
+            {locked && <Lock className="ml-auto h-3 w-3 shrink-0 text-amber-500/70" aria-hidden />}
+          </CommandItem>
+        );
+      })}
     </CommandGroup>
   );
 }

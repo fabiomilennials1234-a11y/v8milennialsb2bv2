@@ -18,6 +18,7 @@ import { useAutoAdminAssignment } from "@/modules/identity/hooks/useAutoAdminAss
 import { SubscriptionProtectedRoute } from "@/modules/identity/components/SubscriptionProtectedRoute";
 import { GlobalErrorBoundary } from "@/modules/platform/components/GlobalErrorBoundary";
 import { OnboardingGate } from "@/modules/platform/components/onboarding/OnboardingGate";
+import { PlanFeatureProtectedRoute } from "@/modules/platform/components/PlanFeatureProtectedRoute";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { ServiceWorkerUpdater } from "@/modules/platform/components/ServiceWorkerUpdater";
 import { PushPermissionPrompt } from "@/modules/platform/components/PushPermissionPrompt";
@@ -250,9 +251,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="campaigns.view">
-                <DisparosPanel />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="whatsapp_bulk" featureLabel="Disparos">
+                <PermissionProtectedRoute featureKey="campaigns.view">
+                  <DisparosPanel />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -480,9 +483,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="copilot.view">
-                <Copilot />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="copilot" featureLabel="Copilot">
+                <PermissionProtectedRoute featureKey="copilot.view">
+                  <Copilot />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -492,9 +497,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="copilot.view">
-                <CopilotMetrics />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="copilot" featureLabel="Copilot">
+                <PermissionProtectedRoute featureKey="copilot.view">
+                  <CopilotMetrics />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -504,11 +511,13 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="whatsapp.view">
-                <Suspense fallback={<ChatSkeleton />}>
-                  <ChatWhatsApp />
-                </Suspense>
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="chat" featureLabel="Chat">
+                <PermissionProtectedRoute featureKey="whatsapp.view">
+                  <Suspense fallback={<ChatSkeleton />}>
+                    <ChatWhatsApp />
+                  </Suspense>
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -518,11 +527,13 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="whatsapp.view">
-                <Suspense fallback={<ChatSkeleton />}>
-                  <ChatWhatsApp />
-                </Suspense>
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="chat" featureLabel="Chat">
+                <PermissionProtectedRoute featureKey="whatsapp.view">
+                  <Suspense fallback={<ChatSkeleton />}>
+                    <ChatWhatsApp />
+                  </Suspense>
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -532,9 +543,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Suspense fallback={<ChatSkeleton />}>
-                <AtendimentoMeta />
-              </Suspense>
+              <PlanFeatureProtectedRoute feature="chat" featureLabel="Mensagens Meta">
+                <Suspense fallback={<ChatSkeleton />}>
+                  <AtendimentoMeta />
+                </Suspense>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -544,9 +557,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="upsell.view">
-                <Upsell />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="carteira" featureLabel="Carteira">
+                <PermissionProtectedRoute featureKey="upsell.view">
+                  <Upsell />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -556,7 +571,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <ClienteDetail />
+              <PlanFeatureProtectedRoute feature="carteira" featureLabel="Carteira">
+                <ClienteDetail />
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -590,9 +607,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <SubscriptionProtectedRoute requireActive>
-                <CopilotPlayground />
-              </SubscriptionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="copilot" featureLabel="Copilot">
+                <SubscriptionProtectedRoute requireActive>
+                  <CopilotPlayground />
+                </SubscriptionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -602,9 +621,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <SubscriptionProtectedRoute requireActive>
-                <CopilotPlayground />
-              </SubscriptionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="copilot" featureLabel="Copilot">
+                <SubscriptionProtectedRoute requireActive>
+                  <CopilotPlayground />
+                </SubscriptionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -614,9 +635,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="workflows.view">
-                <Automacoes />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="automations" featureLabel="Automações">
+                <PermissionProtectedRoute featureKey="workflows.view">
+                  <Automacoes />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -626,9 +649,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="workflows.view">
-                <AutomacoesEditor />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="automations" featureLabel="Automações">
+                <PermissionProtectedRoute featureKey="workflows.view">
+                  <AutomacoesEditor />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -638,9 +663,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="workflows.view">
-                <AutomacoesEditor />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="automations" featureLabel="Automações">
+                <PermissionProtectedRoute featureKey="workflows.view">
+                  <AutomacoesEditor />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -650,9 +677,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="workflows.view">
-                <AutomacoesExecucoes />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="automations" featureLabel="Automações">
+                <PermissionProtectedRoute featureKey="workflows.view">
+                  <AutomacoesExecucoes />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -662,7 +691,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <MessageTemplates />
+              <PlanFeatureProtectedRoute feature="message_templates" featureLabel="Templates">
+                <MessageTemplates />
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -733,7 +764,12 @@ const App = () => {
                       <CommandPaletteProvider>
                         <GlobalShortcutsProvider>
                           <AppRoutes />
-                          <CommandPaletteComponent />
+                          {/* Palette monta fora do LayoutWrapper — precisa do próprio
+                              OrgFeaturesProvider pro cadeado de plano (query deduplicada
+                              pela queryKey ["org-features", orgId]). */}
+                          <OrgFeaturesProvider>
+                            <CommandPaletteComponent />
+                          </OrgFeaturesProvider>
                         </GlobalShortcutsProvider>
                       </CommandPaletteProvider>
                     </GlobalErrorBoundary>

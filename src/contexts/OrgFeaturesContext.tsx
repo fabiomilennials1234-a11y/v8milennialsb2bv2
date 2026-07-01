@@ -78,6 +78,10 @@ export function OrgFeaturesProvider({ children }: { children: ReactNode }) {
       hasFeature: (key: FeatureKey) => {
         // Se ainda carregando, libera tudo para evitar flash de lock
         if (!isReady) return true;
+        // Master nunca vê lock — a RPC monta o mapa do master a partir de
+        // feature_flags e keys sem row ficariam false (classe master-ghost).
+        // plan_name "master" só é retornado pelo branch is_master_user().
+        if (planName === "master") return true;
         return features[key] === true;
       },
       checkLimit: (key: LimitKey) => {
@@ -111,4 +115,13 @@ export function useOrgFeatures(): OrgFeaturesContextType {
     throw new Error("useOrgFeatures must be used within an OrgFeaturesProvider");
   }
   return ctx;
+}
+
+/**
+ * Variante fail-open para componentes que podem montar fora do provider
+ * (ex.: chrome global). Sem provider → undefined; chamador trata como
+ * "tudo liberado" (mesma convenção do estado loading de hasFeature).
+ */
+export function useOrgFeaturesOptional(): OrgFeaturesContextType | undefined {
+  return useContext(OrgFeaturesContext);
 }

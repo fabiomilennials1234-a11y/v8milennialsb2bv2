@@ -7,6 +7,7 @@
  *   3. Tap navigates to correct route
  *   4. Does NOT render on desktop
  *   5. "Mais" dispatches v8:open-mobile-nav (abre Sheet full do TopNavigation)
+ *   6. Plan gating: tab bloqueada mostra cadeado e abre UpgradeModal em vez de navegar
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
@@ -30,6 +31,17 @@ vi.mock("@/shared/hooks/use-viewport", () => ({
   useViewport: () => mockViewport(),
 }));
 
+// Plan gating — default: sem provider (undefined) = fail-open, tudo liberado.
+const mockOrgFeatures = vi.fn<() => { hasFeature: (k: string) => boolean } | undefined>(
+  () => undefined,
+);
+
+vi.mock("@/contexts/OrgFeaturesContext", () => ({
+  useOrgFeaturesOptional: () => mockOrgFeatures(),
+  // UpgradeModal (renderizado pelo nav) usa a variante estrita — só lê planName.
+  useOrgFeatures: () => ({ planName: "torque-1.0" }),
+}));
+
 import { MobileBottomNav } from "@/modules/platform/components/layout/MobileBottomNav";
 
 function renderNav(initialPath = "/") {
@@ -45,6 +57,7 @@ describe("MobileBottomNav", () => {
   beforeEach(() => {
     mockNavigate.mockReset();
     mockViewport.mockReturnValue({ isMobile: true, isDesktop: false, width: 375 });
+    mockOrgFeatures.mockReturnValue(undefined);
   });
 
   it("renders 5 tabs: Chat, Funis, Leads, Agenda, Mais", () => {
@@ -125,5 +138,29 @@ describe("MobileBottomNav", () => {
 
     expect(listener).toHaveBeenCalledTimes(1);
     window.removeEventListener("v8:open-mobile-nav", listener);
+  });
+
+  // ─── Cycle 6: Plan gating ──────────────────────────────────
+  it("marks Chat tab as locked when plan lacks the chat feature", () => {
+    mockOrgFeatures.mockReturnValue({ hasFeature: (k: string) => k !== "chat" });
+    renderNav();
+    expect(screen.getByTestId("tab-chat")).toHaveAttribute("data-locked", "true");
+    expect(screen.getByTestId("tab-funis")).toHaveAttribute("data-locked", "false");
+  });
+
+  it("locked tab opens UpgradeModal instead of navigating", () => {
+    mockOrgFeatures.mockReturnValue({ hasFeature: (k: string) => k !== "chat" });
+    renderNav();
+    fireEvent.click(screen.getByTestId("tab-chat"));
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(screen.getByText(/Desbloqueie Chat/)).toBeInTheDocument();
+  });
+
+  it("plan with all features keeps tabs unlocked and navigable", () => {
+    mockOrgFeatures.mockReturnValue({ hasFeature: () => true });
+    renderNav();
+    expect(screen.getByTestId("tab-chat")).toHaveAttribute("data-locked", "false");
+    fireEvent.click(screen.getByTestId("tab-chat"));
+    expect(mockNavigate).toHaveBeenCalledWith("/chat-whatsapp");
   });
 });

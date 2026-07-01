@@ -1,7 +1,11 @@
+import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { MessageSquare, GitBranch, Users, CalendarDays, MoreHorizontal } from "lucide-react";
+import { MessageSquare, GitBranch, Users, CalendarDays, MoreHorizontal, Lock } from "lucide-react";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { useMobileChatContext } from "@/contexts/MobileChatContext";
+import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
+import { SIDEBAR_FEATURE_MAP } from "@/modules/platform/lib/feature-registry";
+import { UpgradeModal } from "@/shared/components/UpgradeModal";
 import { cn } from "@/lib/utils";
 
 // ─── Tab definitions ────────────────────────────────────────
@@ -38,8 +42,18 @@ export function MobileBottomNav() {
   const { isMobile } = useViewport();
   const location = useLocation();
   const navigate = useNavigate();
+  const orgFeatures = useOrgFeaturesOptional();
+  const [upgradeModal, setUpgradeModal] = useState<{ open: boolean; label: string }>({ open: false, label: "" });
 
   const { isChatThreadOpen } = useMobileChatContext();
+
+  // Plan gating — mesma semântica do TopNavigation.isLocked (master recebe
+  // todas as features true da RPC, então hasFeature basta).
+  const isTabLocked = (tab: Tab): boolean => {
+    if (!orgFeatures) return false;
+    const featureKey = SIDEBAR_FEATURE_MAP[tab.path];
+    return featureKey ? !orgFeatures.hasFeature(featureKey) : false;
+  };
 
   if (!isMobile) return null;
   if (isChatThreadOpen) return null;
@@ -66,20 +80,32 @@ export function MobileBottomNav() {
       <div className="flex items-center justify-around h-14">
         {TABS.map((tab) => {
           const active = isTabActive(tab, location.pathname);
+          const locked = isTabLocked(tab);
           return (
             <button
               key={tab.id}
               data-testid={`tab-${tab.id}`}
               data-active={active}
-              onClick={() => navigate(tab.path)}
+              data-locked={locked}
+              onClick={() =>
+                locked
+                  ? setUpgradeModal({ open: true, label: tab.label })
+                  : navigate(tab.path)
+              }
               className={cn(
                 "flex flex-col items-center justify-center gap-0.5 flex-1 h-full",
                 "transition-colors duration-150",
                 "text-muted-foreground",
-                active && "text-[hsl(47_100%_50%)]",
+                active && !locked && "text-[hsl(47_100%_50%)]",
+                locked && "opacity-50",
               )}
             >
-              <tab.icon className="w-5 h-5" />
+              <span className="relative">
+                <tab.icon className="w-5 h-5" />
+                {locked && (
+                  <Lock className="absolute -top-1 -right-1.5 w-3 h-3 text-amber-500" />
+                )}
+              </span>
               <span className="text-[10px] font-medium leading-tight">{tab.label}</span>
             </button>
           );
@@ -101,6 +127,13 @@ export function MobileBottomNav() {
           <span className="text-[10px] font-medium leading-tight">Mais</span>
         </button>
       </div>
+
+      <UpgradeModal
+        open={upgradeModal.open}
+        onOpenChange={(v) => setUpgradeModal((prev) => ({ ...prev, open: v }))}
+        featureLabel={upgradeModal.label}
+        featureDescription={`O módulo "${upgradeModal.label}" não está disponível no seu plano atual.`}
+      />
     </nav>
   );
 }

@@ -12,6 +12,7 @@ import { TabSaude } from "@/modules/analytics/components/dashboard/TabSaude";
 import { TabMapa } from "@/modules/analytics/components/dashboard/v2/TabMapa";
 import { OraculoChat } from "@/modules/analytics/components/dashboard/OraculoChat";
 import { useOraculoChat } from "@/modules/copilot/hooks/useOraculoChat";
+import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
 import {
   computePeriodRange,
   type CommandPeriod,
@@ -53,8 +54,13 @@ export default function Dashboard() {
   const setOraculoOpen = oraculo.setIsOpen;
   const openOraculo = useCallback(() => setOraculoOpen(true), [setOraculoOpen]);
 
+  // Plan gate — Oráculo é feature de plano (só Torque Copilot).
+  const orgFeatures = useOrgFeaturesOptional();
+  const oraculoEnabled = orgFeatures ? orgFeatures.hasFeature("oraculo") : true;
+
   // ⌘J / Ctrl+J abre o Oráculo de qualquer lugar da página
   useEffect(() => {
+    if (!oraculoEnabled) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
         e.preventDefault();
@@ -63,7 +69,7 @@ export default function Dashboard() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [setOraculoOpen]);
+  }, [setOraculoOpen, oraculoEnabled]);
 
   const range = useMemo(
     () => computePeriodRange(period, selectedMonth, selectedYear),
@@ -176,7 +182,7 @@ export default function Dashboard() {
       <LeadModal open={leadModalOpen} onOpenChange={setLeadModalOpen} />
 
       <AnimatePresence>
-        {oraculo.isOpen && (
+        {oraculoEnabled && oraculo.isOpen && (
           <OraculoChat
             messages={oraculo.messages}
             isLoading={oraculo.isLoading}

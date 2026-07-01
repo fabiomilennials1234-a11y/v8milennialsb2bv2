@@ -299,8 +299,10 @@ export function TopNavigation() {
     return featurePerms?.[permKey] !== false;
   };
 
+  // Plan gating: aplica à org inteira (admin incluso) — só master bypassa.
+  // Camada independente de canViewRoute (role/permission).
   const isLocked = (path: string): boolean => {
-    if (isMaster || isAdmin) return false;
+    if (isMaster) return false;
     if (path === "/turbo") {
       return turboSubItems.every((child) => {
         const featureKey = SIDEBAR_FEATURE_MAP[child.path];

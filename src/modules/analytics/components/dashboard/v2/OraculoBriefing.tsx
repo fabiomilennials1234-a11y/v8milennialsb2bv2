@@ -2,6 +2,7 @@ import { memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { X } from "lucide-react";
 import { useNextBestActions, useDismissAction } from "@/modules/engagement";
+import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const PRIORITY_STYLE = (priority: number) => {
@@ -23,6 +24,10 @@ function OraculoBriefingBase({ onAsk }: OraculoBriefingProps) {
   const { data: actions, isLoading } = useNextBestActions(5);
   const dismiss = useDismissAction();
   const navigate = useNavigate();
+  const orgFeatures = useOrgFeaturesOptional();
+
+  // Plan gate — Oráculo é exclusivo do plano Torque Copilot.
+  if (orgFeatures && !orgFeatures.hasFeature("oraculo")) return null;
 
   if (isLoading) {
     return <Skeleton className="h-[300px] rounded-2xl" />;

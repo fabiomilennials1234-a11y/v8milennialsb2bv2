@@ -22,12 +22,21 @@ interface UpgradeModalProps {
   featureDescription?: string;
 }
 
-const PLAN_LABELS: Record<string, string> = {
+export const PLAN_LABELS: Record<string, string> = {
+  "torque-1.0": "Torque Base",
+  "torque-2.0": "Torque Automation",
+  "torque-v8": "Torque Copilot",
+  // Planos legados desativados — orgs antigas ainda podem referenciar
+  basic: "Basic",
   free: "Free",
   starter: "Starter",
   pro: "Pro",
   enterprise: "Enterprise",
 };
+
+/** CTA único de upgrade — usado pelo modal e pelo guard de rota. */
+export const UPGRADE_CONTACT_URL =
+  "https://wa.me/5511999999999?text=Ol%C3%A1%2C%20gostaria%20de%20fazer%20upgrade%20do%20meu%20plano!";
 
 export function UpgradeModal({
   open,
@@ -76,10 +85,7 @@ export function UpgradeModal({
           <Button
             className="gradient-primary gradient-primary-hover text-white font-semibold border-0"
             onClick={() => {
-              window.open(
-                "https://wa.me/5511999999999?text=Ol%C3%A1%2C%20gostaria%20de%20fazer%20upgrade%20do%20meu%20plano!",
-                "_blank"
-              );
+              window.open(UPGRADE_CONTACT_URL, "_blank");
             }}
           >
             <Sparkles className="w-4 h-4 mr-2" />

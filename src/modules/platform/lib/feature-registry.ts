@@ -14,6 +14,7 @@ export type FeatureKey =
   | "review"
   | "leads"
   | "copilot"
+  | "automations"
   | "commissions"
   | "performance"
   | "marketing"
@@ -27,6 +28,8 @@ export type FeatureKey =
   | "campaigns_auto"
   // Advanced
   | "copilot_advanced"
+  | "oraculo"
+  | "scheduled_messages"
   | "whatsapp_bulk"
   | "api_access"
   | "white_label"
@@ -79,7 +82,7 @@ export interface LimitMeta {
 // ─── Feature Catalog ───────────────────────────────────────────
 export const FEATURES: FeatureMeta[] = [
   // Modules
-  { key: "chat", label: "Chat", description: "Chat e mensagens WhatsApp", icon: "Zap", category: "modules", sidebarPath: "/chat-whatsapp" },
+  { key: "chat", label: "Chat", description: "Chat e mensagens WhatsApp", icon: "Zap", category: "modules", sidebarPath: "/chat" },
   { key: "funnels", label: "Funis", description: "Pipelines de qualificação, confirmação e propostas", icon: "GitBranch", category: "modules", sidebarPath: "/funis" },
   { key: "review", label: "Revisão", description: "Revisão e follow-ups", icon: "Wrench", category: "modules", sidebarPath: "/follow-ups" },
   { key: "leads", label: "Combustível", description: "Gestão de leads e contatos", icon: "Fuel", category: "modules", sidebarPath: "/leads" },
@@ -98,13 +101,16 @@ export const FEATURES: FeatureMeta[] = [
   { key: "deals", label: "Negócios", description: "Gestão de negócios com produtos, probabilidade e forecast", icon: "Briefcase", category: "modules", sidebarPath: "/negocios" },
   { key: "tv_dashboard", label: "TV Dashboard", description: "Dashboard para exibição em TV", icon: "Tv", category: "modules", sidebarPath: "/tv" },
   { key: "copilot", label: "Copilot", description: "Agente de IA conversacional", icon: "Bot", category: "modules", sidebarPath: "/copilot" },
+  { key: "automations", label: "Automações", description: "Workflows de automação com triggers, condições e ações", icon: "Workflow", category: "modules", sidebarPath: "/automacoes" },
   // Campaigns
   { key: "campaigns_manual", label: "Campanhas Manuais", description: "Campanhas via Kanban tradicional", icon: "MousePointer", category: "campaigns" },
   { key: "campaigns_semi", label: "Campanhas Semi-Auto", description: "Disparo de templates em lote", icon: "Zap", category: "campaigns" },
   { key: "campaigns_auto", label: "Campanhas Automáticas", description: "Campanhas com IA conversacional", icon: "Bot", category: "campaigns" },
   // Advanced
   { key: "copilot_advanced", label: "Copilot Avançado", description: "Follow-up automático, qualificação avançada", icon: "Sparkles", category: "advanced" },
-  { key: "whatsapp_bulk", label: "Disparo em Massa", description: "Envio de mensagens em lote", icon: "Send", category: "advanced" },
+  { key: "oraculo", label: "Oráculo", description: "Inteligência comercial por IA sobre conversas e pipeline", icon: "Sparkles", category: "advanced" },
+  { key: "scheduled_messages", label: "Mensagens Agendadas", description: "Agendamento de mensagens no chat", icon: "Clock", category: "advanced" },
+  { key: "whatsapp_bulk", label: "Disparo em Massa", description: "Envio de mensagens em lote", icon: "Send", category: "advanced", sidebarPath: "/disparos" },
   { key: "api_access", label: "Acesso API", description: "Acesso à API pública", icon: "Code", category: "advanced" },
   { key: "white_label", label: "White Label", description: "Personalização completa de marca", icon: "Palette", category: "advanced" },
   { key: "external_cadastro", label: "Cadastro Externo", description: "Cadastro automático de clientes no sistema externo", icon: "UserPlus", category: "advanced" },
@@ -152,6 +158,8 @@ SIDEBAR_FEATURE_MAP["/pipe-confirmacao"] = "funnels";
 SIDEBAR_FEATURE_MAP["/pipe-propostas"] = "funnels";
 SIDEBAR_FEATURE_MAP["/upsell"] = "carteira";
 SIDEBAR_FEATURE_MAP["/templates"] = "message_templates";
+// Rota legada do chat — mesma feature key da rota atual
+SIDEBAR_FEATURE_MAP["/chat-whatsapp"] = "chat";
 
 // ─── Campaign Type → Feature Key Map (legacy) ────────────────
 export const CAMPAIGN_TYPE_FEATURE_MAP: Record<string, FeatureKey> = {
