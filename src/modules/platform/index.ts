@@ -83,6 +83,13 @@ export { OnboardingWizard } from "./components/onboarding/OnboardingWizard";
 export { AlertsDropdown } from "./components/notifications/AlertsDropdown";
 export { AlertsBanner } from "./components/system-alerts/AlertsBanner";
 
+// Components — Feature Lock / Feature Route
+export { FeatureLock, FeatureRoute, FeatureLockedScreen } from "./components/feature-lock";
+
+// Lib — Feature Unlock
+export { computeFeatureUnlockPlan } from "./lib/feature-unlock";
+export type { FeatureUnlockMap, UnlockPlan, ActivePlan } from "./lib/feature-unlock";
+
 // Components — Settings panels NÃO são re-exportados aqui. Consumidores
 // internos (Configuracoes.tsx) fazem lazy via deep-import — chunking por aba.
 // Re-exportar `export *` desses panels infla o bundle.
