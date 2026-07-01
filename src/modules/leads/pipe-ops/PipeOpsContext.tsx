@@ -34,3 +34,14 @@ export function usePipeOps(): PipeOpsPort {
   }
   return ctx;
 }
+
+/**
+ * Variante resiliente: retorna `null` (em vez de lançar) quando não há
+ * `PipeOpsProvider` acima na árvore. Usado por consumidores que devem
+ * degradar graciosamente fora do provider — ex.: o item de menu opcional
+ * "Adicionar a funil" no LeadCard, que só ativa sob o provider e some caso
+ * o card seja montado fora dele (nunca quebra a árvore).
+ */
+export function usePipeOpsOptional(): PipeOpsPort | null {
+  return useContext(PipeOpsContext);
+}
