@@ -104,9 +104,9 @@ export function PricingSection() {
         {/* Plan Cards — 3 cards */}
         <div className="price-cards" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
 
-          {/* Card 1: Torque 1.0 */}
+          {/* Card 1: Torque Base */}
           <div className="price-card">
-            <h3>Torque 1.0</h3>
+            <h3>Torque Base</h3>
             <p className="desc">Para quem quer métricas e gestão manual</p>
             <div className="amount">
               R$ <span className="pv">{formatPrice(297, cycle)}</span>
@@ -127,10 +127,10 @@ export function PricingSection() {
             </Link>
           </div>
 
-          {/* Card 2: Torque 2.0 — featured */}
+          {/* Card 2: Torque Automation — featured */}
           <div className="price-card featured">
             <div className="price-badge">Mais popular</div>
-            <h3>Torque 2.0</h3>
+            <h3>Torque Automation</h3>
             <p className="desc">CRM completo com chat, automações e carteira</p>
             <div className="amount">
               R$ <span className="pv">{formatPrice(697, cycle)}</span>
@@ -139,7 +139,7 @@ export function PricingSection() {
             <p className="note">{formatPriceNote(cycle)}</p>
             <p className="min">Mínimo 3 usuários</p>
             <ul className="price-feats">
-              <li>{CHECK} Tudo do 1.0 +</li>
+              <li>{CHECK} Tudo do Base +</li>
               <li>{CHECK} Chat WhatsApp</li>
               <li>{CHECK} Gestão de carteira</li>
               <li>{CHECK} Mensagens agendadas</li>
@@ -151,9 +151,9 @@ export function PricingSection() {
             </Link>
           </div>
 
-          {/* Card 3: Torque V8 */}
+          {/* Card 3: Torque Copilot */}
           <div className="price-card">
-            <h3>Torque V8</h3>
+            <h3>Torque Copilot</h3>
             <p className="desc">Tudo incluso: CRM, automações, IA e Copilot</p>
             <div className="amount">
               R$ <span className="pv">{formatPrice(1997, cycle)}</span>
@@ -162,7 +162,7 @@ export function PricingSection() {
             <p className="note">{formatPriceNote(cycle)}</p>
             <p className="min">3 usuários + 1 copilot inclusos | R$120/usuário extra</p>
             <ul className="price-feats">
-              <li>{CHECK} Tudo do 2.0 +</li>
+              <li>{CHECK} Tudo do Automation +</li>
               <li>{CHECK} Copilot (agentes IA)</li>
               <li>{CHECK} Oráculo Comercial</li>
             </ul>
@@ -177,9 +177,9 @@ export function PricingSection() {
           <thead>
             <tr>
               <th>Recursos</th>
-              <th>1.0</th>
-              <th>2.0</th>
-              <th>V8</th>
+              <th>Base</th>
+              <th>Automation</th>
+              <th>Copilot</th>
             </tr>
           </thead>
           <tbody>
