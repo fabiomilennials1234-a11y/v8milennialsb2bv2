@@ -58,7 +58,7 @@ import { useIdentity } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { useMetaPages } from "@/modules/communication/hooks/chat-meta/useMetaPages";
-import { SIDEBAR_FEATURE_MAP } from "@/modules/platform/lib/feature-registry";
+import { SIDEBAR_FEATURE_MAP, type FeatureKey } from "@/modules/platform/lib/feature-registry";
 import { UpgradeModal } from "@/shared/components/UpgradeModal";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -236,7 +236,7 @@ const NAV_VIEW_PERMISSIONS: Record<string, string> = {
 
 // ─── Component ──────────────────────────────────────────────
 export function TopNavigation() {
-  const [upgradeModal, setUpgradeModal] = useState<{ open: boolean; label: string; description?: string }>({ open: false, label: "" });
+  const [upgradeFeature, setUpgradeFeature] = useState<FeatureKey | null>(null);
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -316,10 +316,11 @@ export function TopNavigation() {
     return !hasFeature(featureKey);
   };
 
-  const handleLockedClick = (e: React.MouseEvent, label: string) => {
+  const handleLockedClick = (e: React.MouseEvent, path: string) => {
     e.preventDefault();
     e.stopPropagation();
-    setUpgradeModal({ open: true, label, description: `O módulo "${label}" não está disponível no seu plano atual.` });
+    const key = SIDEBAR_FEATURE_MAP[path];
+    if (key) setUpgradeFeature(key);
   };
 
   const isActive = (path: string) => {
@@ -427,7 +428,7 @@ export function TopNavigation() {
       return (
         <button
           key={item.path}
-          onClick={(e) => handleLockedClick(e, item.label)}
+          onClick={(e) => handleLockedClick(e, item.path)}
           className="topnav-item topnav-item-locked"
         >
           <span>{item.label}</span>
@@ -459,7 +460,7 @@ export function TopNavigation() {
               return (
                 <button
                   key={child.path}
-                  onClick={(e) => handleLockedClick(e, child.label)}
+                  onClick={(e) => handleLockedClick(e, child.path)}
                   className="topnav-dropdown-item topnav-dropdown-locked"
                 >
                   <child.icon className="w-4 h-4 flex-shrink-0 opacity-50" />
@@ -547,7 +548,7 @@ export function TopNavigation() {
       return (
         <button
           key={item.path}
-          onClick={(e) => handleLockedClick(e, item.label)}
+          onClick={(e) => handleLockedClick(e, item.path)}
           className="topnav-item topnav-item-locked"
         >
           <span>{item.label}</span>
@@ -586,7 +587,7 @@ export function TopNavigation() {
         return (
           <button
             key={item.path}
-            onClick={(e) => handleLockedClick(e, item.label)}
+            onClick={(e) => handleLockedClick(e, item.path)}
             className="mobile-nav-item opacity-40 cursor-not-allowed"
           >
             <item.icon className="w-5 h-5 flex-shrink-0" />
@@ -613,7 +614,7 @@ export function TopNavigation() {
                 return (
                   <button
                     key={child.path}
-                    onClick={(e) => handleLockedClick(e, child.label)}
+                    onClick={(e) => handleLockedClick(e, child.path)}
                     className="mobile-nav-item opacity-40 cursor-not-allowed text-sm"
                   >
                     <child.icon className="w-4 h-4 flex-shrink-0" />
@@ -660,7 +661,7 @@ export function TopNavigation() {
       return (
         <button
           key={item.path}
-          onClick={(e) => handleLockedClick(e, item.label)}
+          onClick={(e) => handleLockedClick(e, item.path)}
           className="mobile-nav-item opacity-40 cursor-not-allowed"
         >
           <item.icon className="w-5 h-5 flex-shrink-0" />
@@ -713,7 +714,7 @@ export function TopNavigation() {
                     return (
                       <button
                         key={item.path}
-                        onClick={(e) => handleLockedClick(e, item.label)}
+                        onClick={(e) => handleLockedClick(e, item.path)}
                         className="topnav-dropdown-item topnav-dropdown-locked"
                       >
                         <item.icon className="w-4 h-4 flex-shrink-0 opacity-50" />
@@ -747,7 +748,7 @@ export function TopNavigation() {
                         return (
                           <button
                             key={item.path}
-                            onClick={(e) => handleLockedClick(e, item.label)}
+                            onClick={(e) => handleLockedClick(e, item.path)}
                             className="topnav-dropdown-item topnav-dropdown-locked"
                           >
                             <item.icon className="w-4 h-4 flex-shrink-0 opacity-50" />
@@ -902,7 +903,7 @@ export function TopNavigation() {
                           return (
                             <button
                               key={item.path}
-                              onClick={(e) => handleLockedClick(e, item.label)}
+                              onClick={(e) => handleLockedClick(e, item.path)}
                               className="mobile-nav-item opacity-40 cursor-not-allowed"
                             >
                               <item.icon className="w-5 h-5 flex-shrink-0" />
@@ -1012,12 +1013,13 @@ export function TopNavigation() {
         </DialogContent>
       </Dialog>
 
-      <UpgradeModal
-        open={upgradeModal.open}
-        onOpenChange={(v) => setUpgradeModal((prev) => ({ ...prev, open: v }))}
-        featureLabel={upgradeModal.label}
-        featureDescription={upgradeModal.description}
-      />
+      {upgradeFeature && (
+        <UpgradeModal
+          open={!!upgradeFeature}
+          onOpenChange={(v) => { if (!v) setUpgradeFeature(null); }}
+          featureKey={upgradeFeature}
+        />
+      )}
 
       <CreateFunilOuCampanhaModal open={showCreatePipeline} onOpenChange={setShowCreatePipeline} />
     </>
