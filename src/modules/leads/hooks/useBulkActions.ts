@@ -24,6 +24,34 @@ export function useBulkMoveStage() {
   });
 }
 
+export function useBulkMoveToCustomPipe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      lead_ids,
+      pipeline_id,
+      stage_id,
+    }: {
+      lead_ids: string[];
+      pipeline_id: string;
+      stage_id: string;
+    }) => {
+      const { data, error } = await supabase.rpc("bulk_add_to_custom_pipe" as any, {
+        p_lead_ids: lead_ids,
+        p_pipeline_id: pipeline_id,
+        p_stage_id: stage_id,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
+      qc.invalidateQueries({ queryKey: ["pipeline_entries"] });
+      qc.invalidateQueries({ queryKey: ["leads"] });
+    },
+  });
+}
+
 export function useBulkAssign() {
   const qc = useQueryClient();
   return useMutation({

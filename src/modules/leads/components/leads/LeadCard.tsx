@@ -21,6 +21,8 @@ import { LeadCardLabels } from "./card/LeadCardLabels";
 import { LeadCardMetrics } from "./card/LeadCardMetrics";
 import { LeadCardCalor } from "./card/LeadCardCalor";
 import { formatFaturamento } from "@/lib/format/faturamento";
+import { usePipeOpsOptional } from "../../pipe-ops";
+import { AddToFunilMenuItem, AddToFunilDialog } from "./AddToFunilDialog";
 
 // ─── Origin Colors (unified across all funnels) ──────────
 
@@ -257,6 +259,10 @@ export const LeadCard = memo(function LeadCard({
   onCalorChange, onQuickAction, onInlineEdit, extraActions, ...overrides
 }: LeadCardProps) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [addFunilOpen, setAddFunilOpen] = useState(false);
+  // Resiliente: `null` quando o card monta fora de um PipeOpsProvider — nesse
+  // caso o item "Adicionar a funil" e o dialog simplesmente não aparecem.
+  const pipeOps = usePipeOpsOptional();
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const editRef = useRef<HTMLInputElement>(null);
@@ -428,6 +434,12 @@ export const LeadCard = memo(function LeadCard({
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScheduleOpen(true); }}>
                     <Clock className="w-4 h-4 mr-2" /> Agendar mensagem
                   </DropdownMenuItem>
+                  {pipeOps && (
+                    <AddToFunilMenuItem
+                      pipeOps={pipeOps}
+                      onSelect={() => setAddFunilOpen(true)}
+                    />
+                  )}
                   {onRemove && (
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
@@ -622,6 +634,15 @@ export const LeadCard = memo(function LeadCard({
           leadId={lead.leadId || ""}
           leadName={lead.name}
           phoneNumber={lead.phone || ""}
+        />
+      )}
+
+      {pipeOps && addFunilOpen && (
+        <AddToFunilDialog
+          pipeOps={pipeOps}
+          leadId={lead.id}
+          open={addFunilOpen}
+          onOpenChange={setAddFunilOpen}
         />
       )}
     </>

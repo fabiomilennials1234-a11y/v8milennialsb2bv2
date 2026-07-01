@@ -5,4 +5,4 @@
  * implementar e injetar. leads consome via `usePipeOps()`.
  */
 export type { PipeOpsPort, RescheduleModalSlotProps, MergedMeetingEditorSlotProps } from "./PipeOpsPort";
-export { PipeOpsContextProvider, usePipeOps } from "./PipeOpsContext";
+export { PipeOpsContextProvider, usePipeOps, usePipeOpsOptional } from "./PipeOpsContext";
