@@ -57,7 +57,6 @@ const Configuracoes = lazy(() => lazyRetry(() => import("@/modules/platform/page
 const OnboardingHubPage = lazy(() => lazyRetry(() => import("@/modules/platform/pages/OnboardingHub")));
 const OnboardingHubPreview = lazy(() => lazyRetry(() => import("@/modules/platform/pages/OnboardingHubPreview")));
 const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
-const Campanhas = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/Campanhas")));
 const CampanhaDetail = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/CampanhaDetail")));
 const DisparosPanel = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/DisparosPanel")));
 const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));
