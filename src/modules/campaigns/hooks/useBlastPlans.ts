@@ -97,9 +97,13 @@ export function useBlastPlans() {
     queryKey: ["blast_plans", orgId],
     queryFn: async (): Promise<BlastPlan[]> => {
       if (!orgId) return [];
+      // Filtro explícito de org: master tem policy SELECT cross-org
+      // (master_select_all_blast_plans, torque-mcp) — sem o eq, o painel
+      // Disparos mostraria os plans de todas as orgs pra usuário master.
       const { data, error } = await supabase
         .from("blast_plans" as any)
         .select("*")
+        .eq("organization_id", orgId)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as unknown as BlastPlan[];
