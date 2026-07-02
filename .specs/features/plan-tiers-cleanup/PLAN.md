@@ -358,10 +358,14 @@ export async function assertPlanFeature(
 
 ### Task 16: Gate final + PR
 
-- [ ] **Step 1:** Suite completa: `npm run lint && npx tsc --noEmit && npm run test:unit && npm run build`. Reportar OUTPUT LITERAL do runner (counts numéricos — memória `feedback_qa_raw_output`).
-- [ ] **Step 2:** Auto-QA manual em dev (npm run dev): login org Base → confirmar cadeados; tentativa de 6º usuário → erro claro na UI.
-- [ ] **Step 3:** Push branch `feat/plan-tiers-cleanup` + PR para `feat/plan-feature-gating` (stacked) OU para `main` se a base já tiver mergeado — checar `gh pr list` antes.
-- [ ] **Step 4:** Corpo do PR: matriz, lista do que foi deletado (com evidência), furos fechados, lista de orgs >5 users (grandfathered), pendências prod (migration + deploy edges = aguardando ordem do CTO).
+- [x] **Step 1:** Suite completa (output literal):
+  - lint: exit 0 — `✖ 2746 problems (0 errors, 2746 warnings)` (pilha de warnings pré-existente)
+  - tsc: exit 0, zero erros
+  - test:unit: exit 1 — `Test Files  30 failed | 375 passed | 3 skipped (408)` / `Tests  70 failed | 4888 passed | 150 skipped (5108)` — **diff vs baseline VAZIO** (mesmos 30 arquivos vermelhos de antes do branch; memória `project_ci_baseline_red`); +3 arquivos de teste novos passando (+20 testes)
+  - build: exit 0 — `dist/sw.js` gerado
+- [ ] **Step 2:** Auto-QA manual logado — **BLOQUEADO**: dev Supabase segue 402 exceed_db_size_quota p/ auth (memória `project_dev_supabase_quota_restricted`) + sem credencial de org dev na sessão. Verificação data-level feita (Tasks 11/14). Pendência do CTO junto com o deploy dev.
+- [x] **Step 3:** `gh pr list` → base `feat/plan-feature-gating` SEM PR e não mergeada → PR stacked pra ela. ⚠️ squash: rebase + retarget pra main antes (memória `feedback_squash_stacked_prs`).
+- [x] **Step 4:** Corpo do PR com matriz, deleções (evidência), furos fechados, grandfathering, pendências CTO.
 
 ---
 
