@@ -32,6 +32,7 @@ import { channelMessagesActivitySource } from "../_shared/quick-blast/refinement
 import { blastPlanStore } from "../_shared/quick-blast/blast-plan-store.ts";
 import { releaseBlastPlanLot } from "../_shared/quick-blast/blast-plan.ts";
 import { instanceDailyUsageSource } from "../_shared/quick-blast/instance-budget.ts";
+import { buildPostSendMover } from "../_shared/quick-blast/post-send-target.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -100,8 +101,14 @@ Deno.serve(
     for (const plan of plans) {
       try {
         const dailyBudget = await dailyBudgetFor(plan.organization_id);
+        // Post-send move (wizard "Destino"): rebuild the per-lead mover from the
+        // plan's own persisted target + org (never from any payload). Best-effort
+        // — the core try/catches every call; a move failure never fails the send.
+        const onRecipientsSent = plan.post_send_target
+          ? buildPostSendMover(supabase, plan.organization_id, plan.post_send_target)
+          : undefined;
         const result = await releaseBlastPlanLot(
-          { store, usageSource, instanceUsageSource, dispatch: dispatchFor(supabase), activitySource, instanceResolver },
+          { store, usageSource, instanceUsageSource, dispatch: dispatchFor(supabase), activitySource, instanceResolver, onRecipientsSent },
           { planId: plan.id!, dailyBudget, now },
         );
         if (!result.ok) {

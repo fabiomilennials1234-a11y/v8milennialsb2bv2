@@ -81,7 +81,7 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
   return (
     <div className="space-y-7">
       <StepHeader
-        kicker="Passo 3 de 5"
+        kicker="Passo 4 de 6"
         title="Em que ritmo?"
         subtitle="Quanto mais números, mais rápido — sem queimar nenhuma linha. O envio se espalha pelos dias automaticamente."
       />

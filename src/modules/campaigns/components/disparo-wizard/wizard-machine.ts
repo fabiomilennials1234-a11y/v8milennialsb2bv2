@@ -2,9 +2,10 @@
  * wizard-machine — pure state core for the Disparos "Wizard Linear" (#904).
  *
  * The Disparos creation flow is a linear, one-decision-per-screen wizard
- * (Pra quem · Mensagem · Velocidade · Revisão · Acompanhar). All navigation and
- * gating logic lives here as pure functions so it can be unit-tested without
- * React; `useDisparoWizard` is the thin `useReducer` shell over it.
+ * (Pra quem · Mensagem · Destino · Velocidade · Revisão · Acompanhar). All
+ * navigation and gating logic lives here as pure functions so it can be
+ * unit-tested without React; `useDisparoWizard` is the thin `useReducer` shell
+ * over it.
  *
  * Gating rule: you can always step back to any reached step, and forward only
  * through a step whose own data is valid (`validateStep`). The Revisão →
@@ -12,12 +13,18 @@
  * #910 — here it just flips `released` and advances to the monitor step).
  */
 import type { BlastMediaType } from "@/modules/communication";
-import { createDefaultSelection, type AudienceSelection } from "./audience-resolve";
+import type { SystemPipelineType } from "@/modules/pipelines";
+import {
+  createDefaultSelection,
+  type AudienceSelection,
+  type FunnelKind,
+} from "./audience-resolve";
 import { CAP_RECOMMENDED } from "./speed-safety";
 
 export type DisparoStepId =
   | "audience"
   | "message"
+  | "postsend"
   | "speed"
   | "review"
   | "monitor";
@@ -25,6 +32,7 @@ export type DisparoStepId =
 export const DISPARO_STEPS: { id: DisparoStepId; label: string }[] = [
   { id: "audience", label: "Pra quem" },
   { id: "message", label: "Mensagem" },
+  { id: "postsend", label: "Destino" },
   { id: "speed", label: "Velocidade" },
   { id: "review", label: "Revisão" },
   { id: "monitor", label: "Acompanhar" },
@@ -72,6 +80,19 @@ export interface DisparoDraft {
   mediaError: string | null;
   /** Anti-ban protection (word + timing variation). On by default (#907). */
   antiBan: boolean;
+  /** Post-send destination: move each lead when ITS message goes out. Default
+   *  "none" — the step is optional and passes untouched. */
+  postSendMode: "none" | "move";
+  /** Destination funnel kind when moving (mirrors AudienceSelection encoding). */
+  postSendFunnelKind: FunnelKind;
+  /** Destination system pipe when funnelKind === "system"; null = not chosen. */
+  postSendPipelineType: SystemPipelineType | null;
+  /** Destination custom pipeline id when funnelKind === "custom" (else null). */
+  postSendPipelineId: string | null;
+  /** system: stage_key slug; custom: stage_id uuid. "" = nothing chosen yet. */
+  postSendStageKey: string;
+  /** Human label, e.g. "Oportunidades · Em negociação" (Review/Monitor copy). */
+  postSendLabel: string;
   numbers: DisparoNumber[];
   /** User-set Number Daily Cap applied to every selected number (#908 slider). */
   capPerNumber: number;
@@ -123,6 +144,12 @@ export function validateStep(
       if (draft.mediaError)
         return { ok: false, reason: draft.mediaError };
       return { ok: true, reason: null };
+    case "postsend":
+      // Optional step: "manter onde estão" always passes; moving requires a
+      // chosen destination stage.
+      if (draft.postSendMode === "move" && !draft.postSendStageKey)
+        return { ok: false, reason: "Escolha a etapa de destino." };
+      return { ok: true, reason: null };
     case "speed":
       return selectedDailyCapacity(draft) > 0
         ? { ok: true, reason: null }
@@ -158,6 +185,12 @@ export function createInitialState(
       media: null,
       mediaError: null,
       antiBan: true,
+      postSendMode: "none",
+      postSendFunnelKind: "system",
+      postSendPipelineType: null,
+      postSendPipelineId: null,
+      postSendStageKey: "",
+      postSendLabel: "",
       numbers,
       capPerNumber: CAP_RECOMMENDED,
       startDateIso,

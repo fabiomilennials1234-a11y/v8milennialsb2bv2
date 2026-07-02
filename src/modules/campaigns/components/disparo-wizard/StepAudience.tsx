@@ -47,7 +47,7 @@ export function StepAudience({ draft, patch }: StepAudienceProps) {
   return (
     <div className="space-y-7">
       <StepHeader
-        kicker="Passo 1 de 5"
+        kicker="Passo 1 de 6"
         title="Pra quem você vai enviar?"
         subtitle="Escolha por etapa do funil ou suba uma planilha. O grupo é congelado agora — quem entrar depois não recebe este disparo."
       />

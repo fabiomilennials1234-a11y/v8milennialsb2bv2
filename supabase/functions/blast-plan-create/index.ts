@@ -23,6 +23,7 @@ import { getDailyBlastBudget, blastDailyUsageSource } from "../_shared/quick-bla
 import { channelMessagesActivitySource } from "../_shared/quick-blast/refinements.ts";
 import { blastPlanStore } from "../_shared/quick-blast/blast-plan-store.ts";
 import { createBlastPlan, type BlastPlanNumber } from "../_shared/quick-blast/blast-plan.ts";
+import { validatePostSendTarget, buildPostSendMover } from "../_shared/quick-blast/post-send-target.ts";
 import { instanceDailyUsageSource, resolveInstanceCap } from "../_shared/quick-blast/instance-budget.ts";
 import { resolveBlastWindow } from "../_shared/quick-blast/blast-plan-distribution.ts";
 import type { BlastLead } from "../_shared/quick-blast/recipients.ts";
@@ -90,6 +91,7 @@ Deno.serve(
       only_non_responders,
       release_time,
       source,
+      post_send_target,
     } = body as {
       instance_id?: string;
       /** ADR-0015 multi-number: all selected numbers. Falls back to [instance_id]. */
@@ -108,6 +110,9 @@ Deno.serve(
       only_non_responders?: boolean;
       release_time?: string;
       source?: Record<string, unknown>;
+      /** Optional post-send move (wizard "Destino"): each lead is moved to this
+       *  funnel stage when its message is sent. Validated FAIL-CLOSED below. */
+      post_send_target?: Record<string, unknown>;
     };
 
     // Multi-number when instance_ids[] is supplied; otherwise the legacy single
@@ -121,6 +126,19 @@ Deno.serve(
 
     if (idList.length === 0 || !Array.isArray(lead_ids) || lead_ids.length === 0 || !message) {
       return jsonResponse(400, { error: "Missing instance_id(s), lead_ids or message" }, corsHeaders);
+    }
+
+    // Post-send destination — FAIL-CLOSED: an invalid/foreign-org target is a
+    // 400 here; a plan is NEVER persisted pointing at a broken destination.
+    // The org used for validation (and for every later move) is the CALLER's
+    // resolved org — never anything from the payload.
+    let postSendTarget: Record<string, unknown> | null = null;
+    if (post_send_target != null) {
+      const validated = await validatePostSendTarget(supabaseAdmin, orgId, post_send_target);
+      if (!validated.ok) {
+        return jsonResponse(400, { error: validated.error }, corsHeaders);
+      }
+      postSendTarget = validated.target as unknown as Record<string, unknown>;
     }
 
     // Frozen refinements (#704) — re-applied at each future lot release. A
@@ -191,6 +209,11 @@ Deno.serve(
               triggeredVia: "ui",
               trackSource: "blast-plan",
             }),
+          // Post-send move for lot 0 (today's dispatch). Best-effort: the core
+          // try/catches every call — a move failure never fails the send.
+          onRecipientsSent: postSendTarget
+            ? buildPostSendMover(supabaseAdmin, orgId, postSendTarget)
+            : undefined,
         },
         {
           orgId,
@@ -207,6 +230,7 @@ Deno.serve(
           dailyBudget,
           releaseTime: release_time,
           source: source ?? null,
+          postSendTarget,
         },
       );
 
