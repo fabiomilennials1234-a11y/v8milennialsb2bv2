@@ -42,18 +42,25 @@ Frontend is **optimistic** — hides UI but does not prevent bypass via direct A
 | mass-send-create | `mass_send` | `mass-send-create/index.ts` | #189 |
 | leads DELETE (RLS) | `can_delete_leads` | `leads_delete_admin_or_permission` policy | 2026-05-20 |
 
-## Permission Tab (Pitstop) — 2026-05-20
+## Permission Tab (Pitstop) — REMOVIDA (2026-07-02)
 
-The Pitstop > Permissões tab is the canonical UI to manage the 12 toggles that control what `role='member'` can do per org. Decisions live in [ADR-2026-05-20-permission-tab-storage-split](../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/04%20—%20Decisões/ADR-2026-05-20-permission-tab-storage-split.md).
-
-### Storage split
-
-| Storage table | Keys | Mutation destination |
-|---|---|---|
-| `organization_role_permissions` (role='member') | `see_unassigned_cards`, `see_subordinates_cards`, `see_general_info`, `see_all_leads`, `can_delete_leads`, `can_create_leads`, `can_export_leads`, `can_move_pipe_records`, `can_manage_campaigns` | UPSERT |
-| `feature_permissions.default_value` | `can_manage_workflows` → `workflows.create`; `can_manage_team` → `team.view`; `can_manage_copilot` → `copilot.create` | UPDATE |
-
-UI is unaware — `useUpdateRolePermission` reads `src/lib/permission-catalog.ts` and routes the write.
+> **Histórico:** a aba Pitstop > Permissões (12 toggles org-wide para `role='member'`,
+> ADR-2026-05-20-permission-tab-storage-split) foi **removida em 2026-07-02**. A
+> consolidação de permissões (PRD #408, migration `20261032000002`) DROPOU as
+> tabelas `organization_role_permissions` e `team_member_org_permissions` — a aba
+> quebrava em runtime desde então (query em tabela inexistente) e o conceito
+> "toggle org-wide por role" deixou de existir no modelo.
+>
+> **Modelo consolidado (atual):** `feature_permissions` (catálogo GLOBAL: key,
+> `is_admin_only`, `default_value`) + `member_feature_permissions` (override POR
+> MEMBRO). Resolução server-side: `has_feature_permission(key, org)` — master →
+> true; admin da org → true; admin_only → false; senão override individual ??
+> default global. **Superfície de UI viva:** Equipe > `MemberPermissions`.
+>
+> Removidos junto: `PermissionsTab`, `useOrgRolePermissions`, `useUpdateRolePermission`,
+> `useResetOrgRolePermissions`, `useOrganizationRolePermissions`,
+> `useTeamMemberOrgPermissions`, `useSaveTeamMemberOrgPermissions`,
+> `src/lib/permission-catalog.ts`.
 
 ### Fase 1 server-side enforcement (delivered 2026-05-20)
 

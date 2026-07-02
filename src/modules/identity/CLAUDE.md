@@ -38,12 +38,10 @@ src/modules/identity/
 │   ├── lib/permissions.ts            # resolveAction, usePermission, assertPermissionClient, assertPermission
 │   ├── hooks/useUserRole.ts          # useUserRole + role/feature hooks (useIsAdmin, useFeaturePermission(s), useCanManage*, ...)
 │   ├── hooks/useCanDo.ts             # useCanDo
-│   ├── hooks/usePermissions.ts       # useHasPermission, useMyPermissions, useOrganizationRolePermissions, ..., PERMISSION_LABELS
-│   ├── hooks/useOrgRolePermissions.ts        # mapa agregado das 12 toggles (Pitstop > Permissões)
-│   ├── hooks/useUpdateRolePermission.ts      # mutation de toggle (storage split)
-│   ├── hooks/useResetOrgRolePermissions.ts   # reset bulk pro padrão
+│   ├── hooks/usePermissions.ts       # useHasPermission, useMyPermissions, PERMISSION_LABELS
+│   │                                 # (hooks org-wide do Pitstop removidos 2026-07-02 — tabelas dropadas na consolidação #408;
+│   │                                 #  superfície viva do modelo consolidado: Equipe > MemberPermissions)
 │   ├── components/PermissionProtectedRoute.tsx
-│   ├── components/PermissionsTab.tsx  # Pitstop > Permissões (deep-import direto via Configuracoes p/ lazy chunk — NÃO no sub-barrel)
 │   └── index.ts                      # sub-barrel privado
 ├── master/                           # sub-conceito master (slice 9.4 arch-deepening) — API interna privada; barrel raiz re-exporta SÓ useMasterAuth/useCanAccessMaster, resto fica aqui
 │   ├── hooks/                        # 6 master hooks: useMasterAuth, useMasterOperations, useMasterOrganizations, useMasterPlans, useMasterUsers, useMasterAuditLogs (mvd de hooks/ em 9.4)
@@ -75,9 +73,9 @@ src/modules/identity/
 - **Org + team:** `useOrganization`, `useOrganizationSettings`, `useConfirmacaoOverdueDays`, `isConfirmacaoOverdue`, `useOrgQuotas`, `useOrgSwitcher`, `useTeamMembers`, `useCurrentTeamMember`, `useResponsibleMembers`, `useCreateTeamMember`, `isVirtualTeamMember`, type `TeamMember`.
 - **Guard:** `<SubscriptionProtectedRoute>`.
 
-**Demovidos pros sub-barris (PRIV — não no barrel raiz, 9.5):** resolver internals (`resolveAction`/`usePermission`/`assertPermissionClient`), role internos (`useHasRole`/`useIsAdmin`/`useMetricType`), `useCanAccessMaster`, granular perms (`usePermissions`/`useOrgRolePermissions`/`useUpdateRolePermission`/`useResetOrgRolePermissions`/`useMyPermissions`/`PERMISSION_LABELS`/etc), org/team internos (`useRequiredOrganization`/`useSeatUsage`/`useTeamMember`/`useUpdateTeamMember`/`useDeleteTeamMember`/`get/setSelectedOrgId`/`useProfile`/`useProfiles`) + ~20 types órfãos. Consumo interno via relativo ou sub-barril.
+**Demovidos pros sub-barris (PRIV — não no barrel raiz, 9.5):** resolver internals (`resolveAction`/`usePermission`/`assertPermissionClient`), role internos (`useHasRole`/`useIsAdmin`/`useMetricType`), `useCanAccessMaster`, granular perms (`usePermissions`/`useMyPermissions`/`PERMISSION_LABELS`/etc), org/team internos (`useRequiredOrganization`/`useSeatUsage`/`useTeamMember`/`useUpdateTeamMember`/`useDeleteTeamMember`/`get/setSelectedOrgId`/`useProfile`/`useProfiles`) + ~20 types órfãos. Consumo interno via relativo ou sub-barril.
 
-**Components internos (deep-import via pages, NÃO no barrel):** `<PermissionsTab>`, `<ProfileSettings>` (org-team/), `<MemberPermissions>`/`<SeatUsageBar>`/`<TeamMemberCard>`/`<TeamStats>` (org-team/components/team/), master/components/*.
+**Components internos (deep-import via pages, NÃO no barrel):** `<ProfileSettings>` (org-team/), `<MemberPermissions>`/`<SeatUsageBar>`/`<TeamMemberCard>`/`<TeamStats>` (org-team/components/team/), master/components/*. (`<PermissionsTab>` removida 2026-07-02 — quebrada desde a consolidação #408.)
 
 **Hooks que ficam em `hooks/` (não org-team):** `useAvatarMap`, `useAutoAdminAssignment`.
 
