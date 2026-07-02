@@ -17,6 +17,7 @@ import "../_shared/whatsapp-providers/uazapi-provider.ts";
 import { buildBatchContent, absorbPendingMessages } from "./batch-helpers.ts";
 import { checkAudienceGate } from "./audience-gate.ts";
 import { resolveMediaContent } from "../_shared/audio-transcription.ts";
+import { assertPlanFeature, PlanFeatureDeniedError } from "../_shared/plan-gate.ts";
 
 /**
  * Webhook receptor de mensagens de leads
@@ -113,6 +114,31 @@ Deno.serve(withSentry('agent-message', async (req) => {
         JSON.stringify({ error: "Invalid phone number in 'from' field", code: "INVALID_PHONE" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
+    }
+
+    // 0.85. PLAN GATE — org sem copilot no plano (addon turbo entra via
+    // organization_features, coberto pela RPC). Roda ANTES de qualquer
+    // side-effect (lock, lead, conversa). Denial = 200 skipped (não 403):
+    // caller é hop interno (whatsapp-webhook/pg_net) — 4xx viraria retry/DLQ
+    // storm pra org que simplesmente não tem a feature. Erro de resolução
+    // propaga (500) — transiente, retry do caller é o comportamento certo.
+    try {
+      await assertPlanFeature(supabase, organization_id, "copilot");
+    } catch (e) {
+      if (e instanceof PlanFeatureDeniedError) {
+        console.log('[agent-message] Plan gate — org sem copilot:', { organization_id, plan: e.planName });
+        return new Response(
+          JSON.stringify({
+            skipped: true,
+            reason: "plan_denied",
+            feature: "copilot",
+            plan: e.planName,
+            organization_id,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      throw e;
     }
 
     // 0.9. DEDUP GATE — DB-level lock, cross-isolate safe (replaces in-memory inFlightMap)
