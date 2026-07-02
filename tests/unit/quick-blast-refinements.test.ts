@@ -193,6 +193,29 @@ describe("refineBlastAudience — composition + determinism", () => {
     expect(out.skipped).toEqual({ noPhone: 1, alreadyContactedWithinWindow: 1, replied: 1 });
   });
 
+  it("expõe os lead_ids cortados por motivo, consistentes com os agregados (ADR-0016 §5)", async () => {
+    // Mesmo cenário composto acima — os SETS por motivo devem espelhar os counts.
+    const out = await refineBlastAudience({
+      orgId: "org-1",
+      candidates: [cand("a", null), cand("b"), cand("c"), cand("d")],
+      options: { excludeNoPhone: true, excludeBlastedWithinDays: 7, onlyNonResponders: true },
+      source: source({
+        b: { lastOutgoingAt: "2026-06-04T12:00:00.000Z", lastIncomingAt: null },
+        c: { lastOutgoingAt: "2026-05-01T10:00:00.000Z", lastIncomingAt: "2026-05-01T11:00:00.000Z" },
+        d: { lastOutgoingAt: "2026-05-01T10:00:00.000Z", lastIncomingAt: null },
+      }),
+      now: NOW,
+    });
+    expect(out.skippedLeadIds).toEqual({
+      noPhone: ["a"],
+      alreadyContactedWithinWindow: ["b"],
+      replied: ["c"],
+    });
+    expect(out.skippedLeadIds.noPhone).toHaveLength(out.skipped.noPhone);
+    expect(out.skippedLeadIds.alreadyContactedWithinWindow).toHaveLength(out.skipped.alreadyContactedWithinWindow);
+    expect(out.skippedLeadIds.replied).toHaveLength(out.skipped.replied);
+  });
+
   it("counts recency before reply status (a recently-blasted non-responder is a recency skip)", async () => {
     const out = await refineBlastAudience({
       orgId: "org-1",

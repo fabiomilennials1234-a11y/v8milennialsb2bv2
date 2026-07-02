@@ -67,9 +67,19 @@ export interface BlastRefinementSkips {
   noPhone: number;
 }
 
+/** Lead ids cortados, por motivo — mesma precedência dos agregados. Permite ao
+ *  chamador (releaser, ADR-0016 §5) gravar a razão granular por recipient. */
+export interface BlastRefinementSkippedLeadIds {
+  alreadyContactedWithinWindow: string[];
+  replied: string[];
+  noPhone: string[];
+}
+
 export interface BlastRefinementResult {
   keptLeadIds: string[];
   skipped: BlastRefinementSkips;
+  /** Sempre consistente com `skipped` (counts == lengths). */
+  skippedLeadIds: BlastRefinementSkippedLeadIds;
 }
 
 export interface RefineBlastAudienceArgs {
@@ -103,9 +113,14 @@ export async function refineBlastAudience(
     replied: 0,
     noPhone: 0,
   };
+  const skippedLeadIds: BlastRefinementSkippedLeadIds = {
+    alreadyContactedWithinWindow: [],
+    replied: [],
+    noPhone: [],
+  };
 
   if (candidates.length === 0) {
-    return { keptLeadIds: [], skipped };
+    return { keptLeadIds: [], skipped, skippedLeadIds };
   }
 
   const recencyDays =
@@ -136,6 +151,7 @@ export async function refineBlastAudience(
   for (const c of candidates) {
     if (noPhoneEnabled && !hasPhone(c.phone)) {
       skipped.noPhone += 1;
+      skippedLeadIds.noPhone.push(c.leadId);
       continue;
     }
 
@@ -147,6 +163,7 @@ export async function refineBlastAudience(
     // boundary instant) excludes the lead. Never-contacted → kept.
     if (recencyEnabled && lastOutgoingAt !== null && lastOutgoingAt.getTime() >= windowStart!.getTime()) {
       skipped.alreadyContactedWithinWindow += 1;
+      skippedLeadIds.alreadyContactedWithinWindow.push(c.leadId);
       continue;
     }
 
@@ -158,6 +175,7 @@ export async function refineBlastAudience(
         lastIncomingAt !== null && lastIncomingAt.getTime() > lastOutgoingAt.getTime();
       if (repliedSinceLastSend) {
         skipped.replied += 1;
+        skippedLeadIds.replied.push(c.leadId);
         continue;
       }
     }
@@ -165,7 +183,7 @@ export async function refineBlastAudience(
     keptLeadIds.push(c.leadId);
   }
 
-  return { keptLeadIds, skipped };
+  return { keptLeadIds, skipped, skippedLeadIds };
 }
 
 /**

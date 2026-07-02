@@ -446,6 +446,145 @@ describe("releaseBlastPlanLot — daily releaser", () => {
     expect(out.error).toBe("not_releasable");
   });
 
+  // ── Skip reasons granulares (ADR-0016 §5, #946) ──────────────────────────
+  // O releaser já distingue replied vs recency no refinement; a razão gravada
+  // por recipient deve ser granular ("replied" / "recency"), não "refined".
+
+  it("grava reason granular por recipient: replied pra quem respondeu, recency pra contato recente", async () => {
+    const { store, state } = planStore();
+    const usage = usageStub(0);
+    const dispatch = okDispatch();
+    const lot1 = leads(3); // ids 0,1,2
+    const planId = await seedPlan(store, { lot1, nextDate: "2026-06-06", lotsTotal: 2 });
+
+    const act = activity({
+      "1": { out: "2026-04-04T10:00:00Z", in: "2026-04-04T11:00:00Z" }, // respondeu (fora da janela)
+      "2": { out: "2026-06-06T08:00:00Z" }, // contato dentro da janela de 7d
+    });
+
+    const out = await releaseBlastPlanLot(
+      { store, usageSource: usage.source, dispatch, activitySource: act },
+      { planId, now: new Date("2026-06-06T12:00:00Z"), dailyBudget: 200 },
+    );
+
+    expect(out.ok).toBe(true);
+    const byLead = (id: string) => state.recipients.find((r) => r.lead_id === id);
+    expect(byLead("1")).toMatchObject({ status: "skipped", reason: "replied" });
+    expect(byLead("2")).toMatchObject({ status: "skipped", reason: "recency" });
+    expect(byLead("0")).toMatchObject({ status: "sent" });
+  });
+
+  it("só replied: uma chamada skipped/replied, nenhuma recency", async () => {
+    const { store, state } = planStore();
+    const markCalls: Array<[string, string[], string, string | null]> = [];
+    const origMark = store.markRecipients.bind(store);
+    store.markRecipients = async (planId: string, ids: string[], status: string, reason: string | null) => {
+      markCalls.push([planId, ids, status, reason]);
+      return origMark(planId, ids, status, reason);
+    };
+    const lot1 = leads(3); // ids 0,1,2
+    const planId = await seedPlan(store, { lot1, nextDate: "2026-06-06", lotsTotal: 2 });
+
+    // leads 1 e 2 responderam depois do último envio (fora da janela de 7d).
+    const act = activity({
+      "1": { out: "2026-04-04T10:00:00Z", in: "2026-04-04T11:00:00Z" },
+      "2": { out: "2026-04-04T10:00:00Z", in: "2026-04-05T11:00:00Z" },
+    });
+
+    const out = await releaseBlastPlanLot(
+      { store, usageSource: usageStub(0).source, dispatch: okDispatch(), activitySource: act },
+      { planId, now: new Date("2026-06-06T12:00:00Z"), dailyBudget: 200 },
+    );
+
+    expect(out.skippedReplied).toBe(2);
+    expect(out.skippedRecency).toBe(0);
+    const skippedCalls = markCalls.filter(([, , status]) => status === "skipped");
+    expect(skippedCalls).toHaveLength(1);
+    expect(skippedCalls[0][3]).toBe("replied");
+    expect(new Set(skippedCalls[0][1])).toEqual(new Set(["1", "2"]));
+    expect(state.recipients.filter((r) => r.reason === "recency")).toHaveLength(0);
+  });
+
+  it("só recency: uma chamada skipped/recency, nenhuma replied", async () => {
+    const { store, state } = planStore();
+    const markCalls: Array<[string, string[], string, string | null]> = [];
+    const origMark = store.markRecipients.bind(store);
+    store.markRecipients = async (planId: string, ids: string[], status: string, reason: string | null) => {
+      markCalls.push([planId, ids, status, reason]);
+      return origMark(planId, ids, status, reason);
+    };
+    const lot1 = leads(3); // ids 0,1,2
+    const planId = await seedPlan(store, { lot1, nextDate: "2026-06-06", lotsTotal: 2 });
+
+    // leads 0 e 2 receberam blast dentro da janela de 7d, sem resposta.
+    const act = activity({
+      "0": { out: "2026-06-05T08:00:00Z" },
+      "2": { out: "2026-06-06T08:00:00Z" },
+    });
+
+    const out = await releaseBlastPlanLot(
+      { store, usageSource: usageStub(0).source, dispatch: okDispatch(), activitySource: act },
+      { planId, now: new Date("2026-06-06T12:00:00Z"), dailyBudget: 200 },
+    );
+
+    expect(out.skippedRecency).toBe(2);
+    expect(out.skippedReplied).toBe(0);
+    const skippedCalls = markCalls.filter(([, , status]) => status === "skipped");
+    expect(skippedCalls).toHaveLength(1);
+    expect(skippedCalls[0][3]).toBe("recency");
+    expect(new Set(skippedCalls[0][1])).toEqual(new Set(["0", "2"]));
+    expect(state.recipients.filter((r) => r.reason === "replied")).toHaveLength(0);
+  });
+
+  it("nenhum corte: zero chamadas markRecipients com status skipped", async () => {
+    const { store, state } = planStore();
+    const markCalls: Array<[string, string[], string, string | null]> = [];
+    const origMark = store.markRecipients.bind(store);
+    store.markRecipients = async (planId: string, ids: string[], status: string, reason: string | null) => {
+      markCalls.push([planId, ids, status, reason]);
+      return origMark(planId, ids, status, reason);
+    };
+    const planId = await seedPlan(store, { lot1: leads(3), nextDate: "2026-06-06", lotsTotal: 2 });
+
+    const out = await releaseBlastPlanLot(
+      { store, usageSource: usageStub(0).source, dispatch: okDispatch(), activitySource: activity() },
+      { planId, now: new Date("2026-06-06T12:00:00Z"), dailyBudget: 200 },
+    );
+
+    expect(out.sent).toBe(3);
+    expect(markCalls.filter(([, , status]) => status === "skipped")).toHaveLength(0);
+    expect(state.recipients.filter((r) => r.status === "skipped")).toHaveLength(0);
+  });
+
+  it("mistura com deferidos: deferido fica pending sem reason — NUNCA skipped", async () => {
+    const { store, state } = planStore();
+    const usage = usageStub(0);
+    usage.state.byDate.set("2026-06-06", 199); // só 1 de budget hoje
+    const lot1 = leads(4); // ids 0,1,2,3
+    const planId = await seedPlan(store, { lot1, nextDate: "2026-06-06", lotsTotal: 2 });
+
+    // lead 1 respondeu; lead 2 contato recente; 0 e 3 sobrevivem ao refinement,
+    // mas o budget só deixa 1 sair → o outro deferido (pending, sem reason).
+    const act = activity({
+      "1": { out: "2026-04-04T10:00:00Z", in: "2026-04-04T11:00:00Z" },
+      "2": { out: "2026-06-06T08:00:00Z" },
+    });
+
+    const out = await releaseBlastPlanLot(
+      { store, usageSource: usage.source, dispatch: okDispatch(), activitySource: act },
+      { planId, now: new Date("2026-06-06T12:00:00Z"), dailyBudget: 200 },
+    );
+
+    expect(out.sent).toBe(1);
+    expect(out.deferred).toBe(1);
+    const byLead = (id: string) => state.recipients.find((r) => r.lead_id === id);
+    expect(byLead("1")).toMatchObject({ status: "skipped", reason: "replied" });
+    expect(byLead("2")).toMatchObject({ status: "skipped", reason: "recency" });
+    expect(byLead("0")).toMatchObject({ status: "sent" });
+    // o deferido segue pendente, sem reason, movido pro próximo lote.
+    expect(byLead("3")).toMatchObject({ status: "pending", reason: null, lot_index: 2 });
+  });
+
   it("completes a plan whose entire final lot was refined away (no recipients survive)", async () => {
     const { store, state } = planStore();
     const usage = usageStub(0);
