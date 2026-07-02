@@ -339,9 +339,9 @@ export async function assertPlanFeature(
 **Files:**
 - Verify: nav (`TopNavigation.tsx`), `SIDEBAR_FEATURE_MAP`, gates in-place de carteira (`Upsell.tsx:54`, `ImportUpsellClientsContent.tsx:176`, `PlaygroundConexao.tsx:166`)
 
-- [ ] **Step 1:** Com org dev em torque-1.0: Carteira agora acessível (matriz nova); Chat/Turbo/Disparos com cadeado; clique → UpgradeModal com plano correto sugerido.
-- [ ] **Step 2:** Repetir com org torque-2.0 (Copilot com cadeado, resto aberto) e torque-v8 (tudo aberto). Checar as 5 superfícies: top nav, mobile sheet, bottom nav, command palette, URL direta.
-- [ ] **Step 3:** Corrigir divergências achadas. Commit: `fix(plans): consistência de superfícies por plano`
+- [x] **Step 1:** Verificação DATA-LEVEL no dev (não há org dev em torque-1.0/2.0 — as 22 são torque-v8; auth dev segue 402 p/ login manual): payload de features por plano validado via SQL — torque-1.0: carteira/portfolio ✅, chat/copilot/oraculo/automations/bulk/templates/sched ❌. In-place gates de carteira (Upsell.tsx:54, ImportUpsellClientsContent.tsx:176, PlaygroundConexao.tsx:166) leem `customer_portfolio` — agora seedado true nos 3.
+- [x] **Step 2:** As 5 superfícies derivam da MESMA fonte (SIDEBAR_FEATURE_MAP + hasFeature via RPC): TopNavigation:308-314 (top nav + mobile sheet), MobileBottomNav:54-55, CommandGroupNavigation:56-57, PlanFeatureProtectedRoute (URL direta, agora estrito) — consistência por construção. QA visual logado fica pendente (auth dev 402 + sem credencial) → listado no PR pro CTO.
+- [x] **Step 3:** 🔴 DIVERGÊNCIA ACHADA E CORRIGIDA: `deals` nunca foi seedado em plano NENHUM e não tinha row em feature_flags → `hasFeature('deals')=false` universal → "Negócios" com cadeado na nav pra TODAS as orgs desde o plan-feature-gating (e a rota nova bloquearia junto). Fix: migration `20270105000001_seed_deals_feature_key.sql` (flag row default_enabled=true + deals/review explícitos nos 3 planos) — APLICADA dev + registrada + validada. Commit: `fix(plans): consistência de superfícies por plano — seed da key deals`
 
 ---
 
