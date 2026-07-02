@@ -330,9 +330,9 @@ export async function assertPlanFeature(
 - Modify: `src/modules/platform/components/PlanFeatureProtectedRoute.tsx`
 - Test: `tests/unit/plan-feature-protected-route.test.tsx` (se não existir, criar)
 
-- [ ] **Step 1:** Teste: com `isReady=false` → renderiza skeleton/spinner (NÃO o conteúdo); `isReady=true && !hasFeature` → cadeado; `isReady && hasFeature` → children.
-- [ ] **Step 2:** Implementar: guard espera `isReady` (skeleton neutro), decide depois. `hasFeature` do contexto CONTINUA fail-open (evita flash de cadeado no chrome/nav) — só o guard de rota fica estrito.
-- [ ] **Step 3:** Verde. Commit: `fix(plans): guard de rota espera resolução do plano (era fail-open no loading)`
+- [x] **Step 1:** Teste: arquivo JÁ EXISTIA (6 cenários do plan-feature-gating) — estendido: mocks ganharam `isReady: true` + caso novo `isReady=false → nem children nem cadeado`. RED confirmado (1 failed | 6 passed).
+- [x] **Step 2:** Implementado: guard espera `isReady` → `<TorqueLoader variant="inline" />` (mesmo loader do PageLoader das rotas lazy). `hasFeature` do contexto continua fail-open.
+- [x] **Step 3:** Verde (7/7) + tsc ✅. Commit: `fix(plans): guard de rota espera resolução do plano (era fail-open no loading)`
 
 ### Task 14: Superfície Carteira no Base + varredura visual
 
