@@ -259,7 +259,7 @@ export function LivePreviewChat({
           },
           body: JSON.stringify({
             systemPrompt,
-            messages: currentMessages.slice(-10).map(({ role, content }) => ({ role, content })),
+            messages: currentMessages.slice(-20).map(({ role, content }) => ({ role, content })),
             userMessage: userMsg,
             generateFirstMessage: generateFirst,
             ...(generateFirst && firstMessageTemplate ? { firstMessageTemplate } : {}),

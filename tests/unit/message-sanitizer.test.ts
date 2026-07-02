@@ -414,6 +414,58 @@ describe("sanitizeAssistantMessage", () => {
     const r = sanitizeAssistantMessage(raw, false);
     expect(r.recoveredMediaByName).toEqual({ file_name: "Linha de Produtos.mp4" });
   });
+
+  // --- Namespaced tool-calls vazados como texto (Bia 2026-06-30 / 2026-07-02) ---
+
+  it("strips declaration:default_api:update_lead{...} com args sem aspas (Bia 2026-07-02)", () => {
+    const raw =
+      "declaration:default_api:update_lead{updates:{pedido:1x Kit Reconstrutor FB Cosméticos,produto_interesse:Kit Reconstrutor}}";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("");
+    expect(r.droppedBlocks).toBeGreaterThanOrEqual(1);
+  });
+
+  it("strips deffn:default_api:update_lead{...} (Bia 2026-06-30)", () => {
+    const raw = "deffn:default_api:update_lead{updates:{address:askabhan,cep:66609621}}";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("");
+    expect(r.droppedBlocks).toBeGreaterThanOrEqual(1);
+  });
+
+  it("keeps the human text and strips only the leaked namespaced call", () => {
+    const raw =
+      "Perfeito, Maria! Já anotei seu pedido.\ndeclaration:default_api:update_lead{updates:{pedido:1x Kit}}";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Perfeito, Maria! Já anotei seu pedido.");
+    expect(r.droppedBlocks).toBeGreaterThanOrEqual(1);
+  });
+
+  it("strips known tool glued to brace without namespace (update_lead{...})", () => {
+    const raw = "Anotado.\nupdate_lead{updates:{nome:Maria}}";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Anotado.");
+    expect(r.droppedBlocks).toBeGreaterThanOrEqual(1);
+  });
+
+  it("strips namespaced call in paren form default_api:tool(args)", () => {
+    const raw = "Ok!\nns:default_api:qualify_lead(score=80, motivo=quente)";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Ok!");
+    expect(r.droppedBlocks).toBeGreaterThanOrEqual(1);
+  });
+
+  it("strips orphan head default_api:tool sem grupo balanceado (LLM cortou)", () => {
+    const raw = "Fechado.\ndeclaration:default_api:update_lead{updates:{pedido:1x Kit";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Fechado.");
+  });
+
+  it("does NOT touch legit text that merely mentions a colon or braces", () => {
+    const raw = "Horário: 9h às 18h. Uso: aplicar e enxaguar.";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Horário: 9h às 18h. Uso: aplicar e enxaguar.");
+    expect(r.droppedBlocks).toBe(0);
+  });
 });
 
 describe("splitByDelimiter", () => {

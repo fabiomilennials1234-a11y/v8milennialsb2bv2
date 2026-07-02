@@ -412,6 +412,116 @@ function stripFunctionCallTags(
   return { cleaned, dropped, mediaFileName };
 }
 
+/** Alternância de nomes de tool conhecidos (para regex). */
+const KNOWN_TOOL_NAMES_ALT = Object.keys(TOOL_NAME_TO_ACTION).join("|");
+
+/**
+ * Chamadas de função "namespaced" que alguns modelos (Gemini via OpenRouter)
+ * vazam como TEXTO no content em vez de emitir tool_calls nativo. Formato:
+ * `[prefixo:]default_api:tool_name{args}` (ou `...(args)`), com args
+ * FREQUENTEMENTE SEM aspas (não-JSON) — por isso escapa de tudo que depende de
+ * JSON.parse / chave `"action"` / tag angular `<...>`.
+ *
+ * Incidentes Forever Bella/Bia:
+ *  - `deffn:default_api:update_lead{updates:{address:...,cep:...}}` (2026-06-30)
+ *  - `declaration:default_api:update_lead{updates:{pedido:1x Kit ...}}` (2026-07-02)
+ *
+ * O prefixo antes de `default_api:` varia (deffn, declaration, ...), então
+ * casamos qualquer sequência de segmentos `palavra:`.
+ */
+const NAMESPACED_TOOLCALL_RE =
+  /(?:[A-Za-z_][A-Za-z0-9_]*\s*:\s*)*default_api\s*:\s*[A-Za-z_][A-Za-z0-9_]*\s*[({]/g;
+
+/** Tool conhecido colado direto num `{`/`(` sem namespace (ex: `update_lead{...}`). */
+const KNOWN_TOOL_GLUED_RE = new RegExp(`\\b(?:${KNOWN_TOOL_NAMES_ALT})\\s*[({]`, "g");
+const KNOWN_TOOL_GLUED_TEST_RE = new RegExp(`\\b(?:${KNOWN_TOOL_NAMES_ALT})\\s*[({]`);
+
+/** Head órfão `[prefixo:]default_api:tool` sem grupo balanceado (LLM cortou). */
+const NAMESPACED_HEAD_RE =
+  /(?:[A-Za-z_][A-Za-z0-9_]*\s*:\s*)*default_api\s*:\s*[A-Za-z_][A-Za-z0-9_]*/gi;
+
+/**
+ * Encontra grupo balanceado a partir de `start` (posição de `{`, `(` ou `[`).
+ * Diferente de findBalancedJson: aceita `()`/`[]` além de `{}`, e NÃO exige
+ * JSON válido (os args vazados costumam vir sem aspas). Respeita strings
+ * (aspas simples e duplas) e escapes.
+ */
+function findBalancedGroup(src: string, start: number): { end: number } | null {
+  const OPENERS: Record<string, string> = { "{": "}", "(": ")", "[": "]" };
+  if (!OPENERS[src[start]]) return null;
+  const stack: string[] = [];
+  let inString: string | null = null;
+  let escape = false;
+  for (let i = start; i < src.length; i++) {
+    const ch = src[i];
+    if (inString) {
+      if (escape) escape = false;
+      else if (ch === "\\") escape = true;
+      else if (ch === inString) inString = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { inString = ch; continue; }
+    if (OPENERS[ch]) { stack.push(OPENERS[ch]); continue; }
+    if (ch === "}" || ch === ")" || ch === "]") {
+      if (stack.length === 0) return null;
+      stack.pop();
+      if (stack.length === 0) return { end: i };
+    }
+  }
+  return null;
+}
+
+/**
+ * Strip de chamadas de função "namespaced" vazadas como texto
+ * (`[prefixo:]default_api:tool{args}` e `tool{args}` de tool conhecido). Rede
+ * de segurança independente de JSON válido / tag angular. Ver
+ * NAMESPACED_TOOLCALL_RE. Não recupera a ação (args sem aspas não são
+ * parseáveis com segurança) — o canal confiável é o tool_call nativo.
+ */
+function stripNamespacedToolCalls(
+  input: string,
+): { cleaned: string; dropped: number } {
+  if (!input || (!input.includes("default_api") && !KNOWN_TOOL_GLUED_TEST_RE.test(input))) {
+    return { cleaned: input, dropped: 0 };
+  }
+  const ranges: Array<{ start: number; end: number }> = [];
+  const collect = (re: RegExp) => {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(input)) !== null) {
+      const bracketPos = m.index + m[0].length - 1; // último char do match = `{`/`(`
+      const grp = findBalancedGroup(input, bracketPos);
+      if (grp) {
+        ranges.push({ start: m.index, end: grp.end });
+        re.lastIndex = grp.end + 1; // não re-scanear dentro do grupo removido
+      } else {
+        // grupo não fecha (LLM truncou a call) — tudo daqui até o fim é lixo.
+        ranges.push({ start: m.index, end: input.length - 1 });
+        break;
+      }
+    }
+  };
+  collect(NAMESPACED_TOOLCALL_RE);
+  collect(KNOWN_TOOL_GLUED_RE);
+  if (ranges.length === 0) return { cleaned: input, dropped: 0 };
+
+  ranges.sort((a, b) => a.start - b.start);
+  const merged: Array<{ start: number; end: number }> = [];
+  for (const r of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && r.start <= last.end + 1) last.end = Math.max(last.end, r.end);
+    else merged.push({ ...r });
+  }
+  let cleaned = input;
+  let dropped = 0;
+  for (let i = merged.length - 1; i >= 0; i--) {
+    const { start, end } = merged[i];
+    cleaned = cleaned.slice(0, start) + cleaned.slice(end + 1);
+    dropped += 1;
+  }
+  return { cleaned, dropped };
+}
+
 export function sanitizeAssistantMessage(
   raw: string,
   alreadyHasAction: boolean,
@@ -487,6 +597,14 @@ export function sanitizeAssistantMessage(
     }
   }
 
+  // Passo 1e: chamadas "namespaced" vazadas como texto
+  // (`declaration:default_api:update_lead{...}` / `deffn:default_api:...` /
+  // `update_lead{...}`). Sem `<...>`, sem `"action"`, args sem aspas → escapa
+  // de todos os passos acima. Incidentes Bia 2026-06-30 e 2026-07-02.
+  const nsStrip = stripNamespacedToolCalls(text);
+  text = nsStrip.cleaned;
+  droppedBlocks += nsStrip.dropped;
+
   // Passo 2: objetos JSON soltos contendo "action":"..."
   const blocks = extractActionJsonBlocks(text);
   if (blocks.length > 0) {
@@ -532,14 +650,18 @@ export function sanitizeAssistantMessage(
   // residuais.
   INLINE_TOOL_TAG_RE.lastIndex = 0;
   FUNCTION_CALL_TAG_RE.lastIndex = 0;
+  NAMESPACED_HEAD_RE.lastIndex = 0;
   text = text
     .replace(/<\/?(?:thinking|response)[^>]*>/gi, "")
     .replace(/<\/?(?:tool_call|tool_code|vertical_tool_calls|no_tool_calls)\b[^>]*\/?\s*>/gi, "")
     .replace(INLINE_TOOL_TAG_RE, "")
     .replace(FUNCTION_CALL_TAG_RE, "")
+    // head órfão `[prefixo:]default_api:tool` sem grupo balanceado (LLM cortou)
+    .replace(NAMESPACED_HEAD_RE, "")
     .trim();
   INLINE_TOOL_TAG_RE.lastIndex = 0;
   FUNCTION_CALL_TAG_RE.lastIndex = 0;
+  NAMESPACED_HEAD_RE.lastIndex = 0;
 
   return { text, droppedBlocks, recoveredAction, recoveredMediaByName, reasoning };
 }

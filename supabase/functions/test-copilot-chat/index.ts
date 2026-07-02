@@ -411,9 +411,42 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
     }
 
     const sanitizedContent = sanitizeAssistantMessage(finalContent, false).text;
-    const messageParts = splitByDelimiter(sanitizedContent);
+    let messageParts = splitByDelimiter(sanitizedContent);
+    let cleanMessage = messageParts.join(" ");
 
-    const cleanMessage = messageParts.join(" ");
+    // Guard anti-balão-vazio: se o modelo só devolveu tool_calls e nenhum texto
+    // (mesmo após o follow-up), força uma última geração em português pedindo a
+    // mensagem ao cliente. Se ainda assim vier vazio, usa um fallback neutro —
+    // nunca retorna uma bolha em branco (bug visto no preview: cliente diz
+    // "me interessei pelo produto" e recebe mensagem vazia).
+    if (cleanMessage.trim().length === 0) {
+      try {
+        const forced = await callOpenRouter(
+          OPENROUTER_API_KEY,
+          model,
+          [
+            { role: "system", content: systemPrompt },
+            ...recentHistory,
+            { role: "user", content: userContent },
+            { role: "user", content: "[SISTEMA] Escreva AGORA, em português e de forma natural, a mensagem que você enviaria ao cliente neste ponto da conversa. Responda SOMENTE com a mensagem ao cliente, sem chamar ferramentas e sem explicações." },
+          ],
+          400,
+          temperature,
+        );
+        const forcedText = sanitizeAssistantMessage((forced as any).choices?.[0]?.message?.content || "", false).text;
+        const forcedParts = splitByDelimiter(forcedText);
+        if (forcedParts.length > 0) {
+          messageParts = forcedParts;
+          cleanMessage = forcedParts.join(" ");
+        }
+      } catch (forcedErr) {
+        console.warn("[test-copilot-chat] Forced text regen after empty content failed:", forcedErr);
+      }
+    }
+    if (cleanMessage.trim().length === 0) {
+      cleanMessage = "Perfeito, já anotei aqui! Como posso seguir te ajudando?";
+      messageParts = [cleanMessage];
+    }
 
     await logRuntime({
       module: "copilot",
