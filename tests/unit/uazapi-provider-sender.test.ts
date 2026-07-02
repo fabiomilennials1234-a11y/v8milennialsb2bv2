@@ -105,4 +105,19 @@ describe("UazapiProvider sender delegation — real contract", () => {
       expect(spy).toHaveBeenCalledWith("fld-abc-123");
     },
   );
+
+  it("senderListMessages forwards folder id + status filter and returns the raw rows (#948)", async () => {
+    const rows = [
+      { chatid: "5511987654321@s.whatsapp.net", status: "Failed", error: "invalid jid" },
+    ];
+    const spy = vi
+      .spyOn(UazapiClient.prototype, "senderListMessages")
+      .mockResolvedValue(rows as any);
+    const provider = makeProvider();
+
+    const res = await provider.senderListMessages("fld-abc-123", { messageStatus: "Failed" });
+
+    expect(spy).toHaveBeenCalledWith("fld-abc-123", { messageStatus: "Failed" });
+    expect(res).toEqual(rows);
+  });
 });

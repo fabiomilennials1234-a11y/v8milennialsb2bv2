@@ -4,9 +4,15 @@
  * aba Saúde (FunnelStageLeadsSheet): sheet lateral, busca client-side, clique
  * no lead fecha o sheet e abre o LeadDetailSheet via LeadPanelProvider.
  *
- * Tabs = Blast Recipient Status desta slice: Enviados (`sent`) / Pulados
- * (`skipped`, motivo por lead) / Aguardando (`pending`, "Lote N · previsto
- * DD/MM"). Falha na entrega NÃO entra aqui (#948, integração do sync).
+ * Tabs = Blast Recipient Status: Enviados (`sent`) / Falha na entrega
+ * (`failed`, motivo por lead — ADR-0016/#948) / Pulados (`skipped`, motivo por
+ * lead) / Aguardando (`pending`, "Lote N · previsto DD/MM"). Grupos mutuamente
+ * exclusivos: o sync do poll reclassifica sent → failed, então um lead migra
+ * de Enviados pra Falha entre refreshes ("Enviado" = aceito pela fila).
+ *
+ * A tab Falha só é renderizada quando o plano tem ≥1 `failed`: plano antigo
+ * (sem provenance, ADR-0016) ou plano saudável não ganha um grupo vazio que
+ * insinua tracking que não existe(ia) — decisão documentada na feature note.
  *
  * Lead excluído do CRM (lead_id null, FK SET NULL): telefone + "Lead excluído",
  * não-clicável — o histórico do disparo continua íntegro e auditável.
@@ -28,6 +34,7 @@ import {
 } from "@/modules/campaigns/hooks/useBlastPlanRecipients";
 import {
   awaitingLotLabel,
+  failureReasonLabel,
   recipientMatchesQuery,
   skipReasonLabel,
 } from "@/modules/campaigns/lib/blast-recipient-view";
@@ -36,6 +43,9 @@ const PAGE_SIZE = 50;
 
 const TABS: { key: BlastRecipientStatus; label: string }[] = [
   { key: "sent", label: "Enviados" },
+  // "Falha na entrega" logo após Enviados: é de lá que o lead migra quando o
+  // sync reclassifica (ADR-0016). Renderizada só com count > 0.
+  { key: "failed", label: "Falha na entrega" },
   { key: "skipped", label: "Pulados" },
   { key: "pending", label: "Aguardando" },
 ];
@@ -57,6 +67,7 @@ function initialsOf(name: string): string {
 /** Coluna direita da linha, por tab. */
 function recipientDetail(r: BlastPlanRecipient, plan: BlastPlan): string {
   if (r.status === "skipped") return skipReasonLabel(r.reason);
+  if (r.status === "failed") return failureReasonLabel(r.reason);
   if (r.status === "pending") {
     return awaitingLotLabel({
       lotIndex: r.lot_index,
@@ -90,10 +101,19 @@ export function BlastPlanRecipientsSheet({ plan, onClose, onOpenLead }: BlastPla
   }, [plan?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const counts = useMemo(() => {
-    const c: Record<BlastRecipientStatus, number> = { sent: 0, skipped: 0, pending: 0 };
+    const c: Record<BlastRecipientStatus, number> = { sent: 0, failed: 0, skipped: 0, pending: 0 };
     for (const r of recipients ?? []) c[r.status] += 1;
     return c;
   }, [recipients]);
+
+  // Plano sem nenhum failed (antigo sem provenance, ou simplesmente saudável)
+  // não mostra o grupo Falha — um zero permanente insinuaria tracking que não
+  // existe pra planos pré-ADR-0016. `failed` nunca regride, então a tab nunca
+  // some debaixo do usuário (só pode aparecer, via refetch do sync).
+  const visibleTabs = useMemo(
+    () => TABS.filter((t) => t.key !== "failed" || counts.failed > 0),
+    [counts.failed],
+  );
 
   const filtered = useMemo(
     () => (recipients ?? []).filter((r) => r.status === tab && recipientMatchesQuery(r, query)),
@@ -120,9 +140,9 @@ export function BlastPlanRecipientsSheet({ plan, onClose, onOpenLead }: BlastPla
           </SheetDescription>
         </SheetHeader>
 
-        {/* Tabs com contadores */}
-        <div className="flex items-center gap-1.5 border-b border-border px-6 py-3">
-          {TABS.map((t) => (
+        {/* Tabs com contadores — flex-wrap: com Falha visível são 4 pills */}
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-6 py-3">
+          {visibleTabs.map((t) => (
             <button
               key={t.key}
               type="button"
@@ -132,11 +152,21 @@ export function BlastPlanRecipientsSheet({ plan, onClose, onOpenLead }: BlastPla
               }}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-muted-foreground transition-colors",
-                tab === t.key && "border-primary/50 bg-primary/10 text-foreground",
+                tab === t.key &&
+                  (t.key === "failed"
+                    ? "border-destructive/50 bg-destructive/10 text-foreground"
+                    : "border-primary/50 bg-primary/10 text-foreground"),
               )}
             >
               {t.label}
-              <span className="tabular-nums text-primary">{counts[t.key]}</span>
+              <span
+                className={cn(
+                  "tabular-nums",
+                  t.key === "failed" ? "text-destructive" : "text-primary",
+                )}
+              >
+                {counts[t.key]}
+              </span>
             </button>
           ))}
         </div>
@@ -199,7 +229,11 @@ export function BlastPlanRecipientsSheet({ plan, onClose, onOpenLead }: BlastPla
                   <span
                     className={cn(
                       "flex-none text-right text-[11.5px] font-medium",
-                      r.status === "skipped" ? "text-orange-400" : "text-muted-foreground",
+                      r.status === "skipped"
+                        ? "text-orange-400"
+                        : r.status === "failed"
+                          ? "text-destructive"
+                          : "text-muted-foreground",
                       !deleted && "group-hover:hidden",
                     )}
                   >

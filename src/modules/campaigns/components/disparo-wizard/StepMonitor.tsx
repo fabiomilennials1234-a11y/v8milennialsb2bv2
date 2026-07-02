@@ -68,9 +68,13 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
   const total = progress?.total ?? plan?.total_recipients ?? draft.audienceCount;
   const sent = progress?.sent ?? 0;
   const skipped = progress?.skipped ?? 0;
-  const pending = progress?.pending ?? Math.max(0, total - sent - skipped);
-  const snap = monitorSnapshot(localPlan, sent + skipped);
-  const pct = total > 0 ? Math.round(((sent + skipped) / total) * 100) : 0;
+  // sent → failed reclassificado pelo sync (ADR-0016/#948) segue processado:
+  // o monitor não pode "andar pra trás" quando uma entrega falha.
+  const failed = progress?.failed ?? 0;
+  const processed = sent + skipped + failed;
+  const pending = progress?.pending ?? Math.max(0, total - processed);
+  const snap = monitorSnapshot(localPlan, processed);
+  const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
 
   const status = plan?.status ?? "active";
   const paused = status === "paused";

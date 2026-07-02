@@ -64,6 +64,27 @@ export function skipReasonLabel(reason: string | null): string {
   }
 }
 
+/**
+ * Motivo humano de um recipient `failed` (ADR-0016, #948). O sync do poll
+ * (failure-sync, mass-send-status) grava o reason canônico em
+ * blast_plan_recipients.reason ao reclassificar sent → failed:
+ * invalid_number | instance_disconnected | provider_rejected | provider_error.
+ * Desconhecido/null cai no genérico — nunca vaza código cru pra UI.
+ */
+export function failureReasonLabel(reason: string | null): string {
+  switch (reason) {
+    case "invalid_number":
+      return "Número inválido";
+    case "instance_disconnected":
+      return "Número desconectado";
+    case "provider_rejected":
+      return "Rejeitado pelo WhatsApp";
+    default:
+      // provider_error e qualquer código futuro.
+      return "Erro no envio";
+  }
+}
+
 /** Rótulo da tab Aguardando: "Lote N · previsto DD/MM" (só "Lote N" sem data). */
 export function awaitingLotLabel(input: AwaitingLotInput): string {
   const { lotNumber, expectedDate } = deriveAwaitingLot(input);

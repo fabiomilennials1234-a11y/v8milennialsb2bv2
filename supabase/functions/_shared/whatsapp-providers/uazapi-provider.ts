@@ -25,6 +25,7 @@ import type {
 import type {
   UazapiSenderAdvancedInput,
   UazapiSenderCreateResponse,
+  UazapiSenderMessage,
   UazapiSenderResponse,
 } from "../uazapi-types.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -274,6 +275,14 @@ export class UazapiProvider implements WhatsAppProvider {
 
   async senderGet(folderId: string): Promise<UazapiSenderResponse> {
     return this.client.senderGet(folderId);
+  }
+
+  /** Per-message folder statuses (spike #943 / ADR-0016) — raw rows, fully paginated. */
+  async senderListMessages(
+    folderId: string,
+    opts?: { messageStatus?: "Scheduled" | "Sent" | "Failed" }
+  ): Promise<UazapiSenderMessage[]> {
+    return this.client.senderListMessages(folderId, opts);
   }
 
   async senderPause(folderId: string): Promise<void> {

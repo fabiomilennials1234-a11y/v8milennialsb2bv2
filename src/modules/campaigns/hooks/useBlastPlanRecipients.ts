@@ -26,7 +26,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import type { BlastPlan } from "@/modules/campaigns/hooks/useBlastPlans";
 
-export type BlastRecipientStatus = "pending" | "sent" | "skipped";
+/**
+ * `sent` é otimista ("aceito pela fila", ADR-0016): o poll do mass-send-status
+ * pode reclassificar pra `failed` minutos depois, com `reason` = código
+ * canônico de falha. Grupos mutuamente exclusivos — um lead nunca aparece em
+ * Enviados e Falha ao mesmo tempo.
+ */
+export type BlastRecipientStatus = "pending" | "sent" | "skipped" | "failed";
 
 export interface BlastPlanRecipient {
   id: string;
@@ -85,5 +91,13 @@ export function useBlastPlanRecipients(plan: BlastPlan | null) {
       return rows;
     },
     enabled: planBelongsToOrg,
+    // Semântica assíncrona sent → failed (ADR-0016): o cron sincroniza falhas
+    // a cada minuto; com o sheet aberto, o refetch no mesmo cadence garante que
+    // o lead migra de Enviados pra Falha no refresh seguinte ao sync — sem
+    // realtime (blast_plan_recipients não tem organization_id pro filtro do
+    // canal padrão). staleTime curto pra reabertura do sheet não servir cache
+    // de 5min do default global.
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 }
