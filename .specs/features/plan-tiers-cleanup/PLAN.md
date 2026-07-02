@@ -142,9 +142,9 @@ Expected: zero consumidores. Se `MassSend.tsx` tiver consumidor (provável embed
 
 ⚠️ Untracked = irrecuperável se apagado errado (memória `feedback_git_clean_safety`). NÃO usar `git clean`.
 
-- [ ] **Step 1:** Mover a pasta INTEIRA para fora do repo: `Move-Item scripts\recovery "$env:USERPROFILE\Desktop\torque-ops-archive-recovery"` (arquivo morto de ops preservado, fora do source tree).
-- [ ] **Step 2:** Adicionar `scripts/recovery/` ao `.gitignore` (linha nova) — futuros scripts one-off não poluem `git status`.
-- [ ] **Step 3:** Commit: `chore(repo): ignora scripts/recovery (ops one-off arquivados fora do repo)`
+- [x] **Step 1:** Mover a pasta INTEIRA para fora do repo: `Move-Item scripts\recovery "$env:USERPROFILE\Desktop\torque-ops-archive-recovery"` (arquivo morto de ops preservado, fora do source tree). → 102 arquivos movidos, pasta fora do repo.
+- [x] **Step 2:** Adicionar `scripts/recovery/` ao `.gitignore` (linha nova) — futuros scripts one-off não poluem `git status`.
+- [x] **Step 3:** Commit: `chore(repo): ignora scripts/recovery (ops one-off arquivados fora do repo)`
 
 ### Task 5: Documentar intencionais que parecem mortos
 
