@@ -22,6 +22,7 @@ import { executeWorkflow } from "../_shared/workflow-executor.ts";
 import { fireTrigger, processCronTriggers, matchesTriggerConfig } from "../_shared/workflow-trigger.ts";
 import { resolvePipelineId } from "../_shared/pipeline-adapter.ts";
 import { requireCronAuth } from "../_shared/auth.ts";
+import { assertPlanFeature, PlanFeatureDeniedError } from "../_shared/plan-gate.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -93,7 +94,7 @@ Deno.serve(
       }
 
       // ── Mode: default — process pending executions ──
-      const stats = { claimed: 0, completed: 0, failed: 0, paused: 0 };
+      const stats = { claimed: 0, completed: 0, failed: 0, paused: 0, skipped_plan: 0 };
 
       // 1. Claim batch
       const { data: executions, error: claimError } = await supabase.rpc("claim_workflow_executions", {
@@ -121,9 +122,10 @@ Deno.serve(
       stats.claimed = executions.length;
       console.log(`[process-workflow-executions] Claimed ${executions.length} executions`);
 
-      // 2. Process each execution
+      // 2. Process each execution (plan gate cacheado por org dentro do batch)
+      const planGateCache = new Map<string, boolean>();
       for (const execution of executions) {
-        await processExecution(supabase, execution, stats);
+        await processExecution(supabase, execution, stats, planGateCache);
       }
 
       console.log("[process-workflow-executions] Batch complete:", stats);
@@ -148,10 +150,42 @@ Deno.serve(
   }),
 );
 
+/**
+ * Plan gate por org, cacheado por batch. Isola a decisão POR EXECUÇÃO —
+ * uma org sem plano não derruba o batch inteiro. Fail-open em erro de
+ * resolução (RPC): marcar skipped_plan por erro transiente perderia a
+ * execução pra sempre (o catch abaixo marca failed terminal). A negação
+ * só acontece com features.automations !== true explícito.
+ */
+async function orgAutomationsAllowed(
+  supabase: ReturnType<typeof createClient>,
+  organizationId: string,
+  cache: Map<string, boolean>,
+): Promise<boolean> {
+  const cached = cache.get(organizationId);
+  if (cached !== undefined) return cached;
+  let allowed = true;
+  try {
+    await assertPlanFeature(supabase, organizationId, "automations");
+  } catch (err) {
+    if (err instanceof PlanFeatureDeniedError) {
+      allowed = false;
+    } else {
+      console.error(
+        `[process-workflow-executions] plan-gate falhou pra org ${organizationId}, seguindo fail-open:`,
+        err,
+      );
+    }
+  }
+  cache.set(organizationId, allowed);
+  return allowed;
+}
+
 async function processExecution(
   supabase: ReturnType<typeof createClient>,
   execution: Record<string, unknown>,
-  stats: { claimed: number; completed: number; failed: number; paused: number },
+  stats: { claimed: number; completed: number; failed: number; paused: number; skipped_plan: number },
+  planGateCache: Map<string, boolean>,
 ): Promise<void> {
   const executionId = execution.id as string;
   const workflowId = execution.workflow_id as string;
@@ -164,6 +198,17 @@ async function processExecution(
   let jobId: string | null = null;
 
   try {
+    // Plan gate — org sem automations no plano: marca skipped_plan e segue o batch
+    if (!(await orgAutomationsAllowed(supabase, organizationId, planGateCache))) {
+      await supabase.from("workflow_executions").update({
+        status: "skipped_plan",
+        error: "Plano da organização não inclui automations",
+        completed_at: new Date().toISOString(),
+      }).eq("id", executionId);
+      stats.skipped_plan++;
+      return;
+    }
+
     // Fetch workflow definition + trigger_config for condition validation
     const { data: workflow, error: wfError } = await supabase
       .from("workflows")
