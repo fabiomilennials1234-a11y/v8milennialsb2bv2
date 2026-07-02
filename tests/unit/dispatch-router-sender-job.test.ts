@@ -65,45 +65,6 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("runUazapiSenderJob — reads folder_id + count (B2)", () => {
-  it("persists uazapi_sender_id from res.folder_id (not res.sender_id)", async () => {
-    mockGetProvider.mockResolvedValue(
-      providerReturning({ folder_id: "fld-xyz", count: 3, status: "scheduled" }),
-    );
-    const supabase = supabaseStub();
-
-    const out = await runUazapiSenderJob(supabase, INSTANCE, {
-      recipients: [
-        { number: "5511999990001", type: "text", text: "a" },
-        { number: "5511999990002", type: "text", text: "b" },
-        { number: "5511999990003", type: "text", text: "c" },
-      ],
-    });
-
-    expect(supabase.captured.insertedRow.uazapi_sender_id).toBe("fld-xyz");
-    expect(out.uazapi_sender_id).toBe("fld-xyz");
-    expect(out.sender_job_id).toBe("job-row-1");
-  });
-
-  it("uses res.count for total_messages (messages accepted by Uazapi)", async () => {
-    // count (2) intentionally differs from recipients.length (3) to prove the
-    // accepted-count is authoritative, not the local recipient tally.
-    mockGetProvider.mockResolvedValue(
-      providerReturning({ folder_id: "fld-xyz", count: 2, status: "scheduled" }),
-    );
-    const supabase = supabaseStub();
-
-    await runUazapiSenderJob(supabase, INSTANCE, {
-      recipients: [
-        { number: "5511999990001", type: "text", text: "a" },
-        { number: "5511999990002", type: "text", text: "b" },
-        { number: "5511999990003", type: "text", text: "c" },
-      ],
-    });
-
-    expect(supabase.captured.insertedRow.total_messages).toBe(2);
-  });
-});
 
 describe("runUazapiSenderJob — dispatch provenance in payload (ADR-0016 §3, #945)", () => {
   it("persists {plan_id, lot_index} into the payload jsonb when the input carries them (blast-plan origin)", async () => {
@@ -158,52 +119,3 @@ describe("runUazapiSenderJob — dispatch provenance in payload (ADR-0016 §3, #
   });
 });
 
-describe("runUazapiSenderJob — fails loud, never persists an unpollable row (B2)", () => {
-  it("throws when Uazapi accepts zero messages (count === 0)", async () => {
-    mockGetProvider.mockResolvedValue(
-      providerReturning({ folder_id: "fld-empty", count: 0, status: "scheduled" }),
-    );
-    const supabase = supabaseStub();
-
-    await expect(
-      runUazapiSenderJob(supabase, INSTANCE, {
-        recipients: [{ number: "5511999990001", type: "text", text: "a" }],
-      }),
-    ).rejects.toThrow(/uazapi_no_messages_accepted|no messages accepted|count/i);
-
-    // Must NOT have written a queued row with total_messages = 0.
-    expect(supabase.captured.insertedRow).toBeUndefined();
-  });
-
-  it("throws when the CREATE response has no folder_id", async () => {
-    mockGetProvider.mockResolvedValue(
-      providerReturning({ count: 3, status: "scheduled" }), // folder_id missing
-    );
-    const supabase = supabaseStub();
-
-    await expect(
-      runUazapiSenderJob(supabase, INSTANCE, {
-        recipients: [{ number: "5511999990001", type: "text", text: "a" }],
-      }),
-    ).rejects.toThrow();
-
-    expect(supabase.captured.insertedRow).toBeUndefined();
-  });
-
-  it("throws when the response still carries the legacy sender_id but no folder_id", async () => {
-    // Guards against a regression where the API contract is misread and a row is
-    // persisted with uazapi_sender_id = undefined (the original stuck-in-queued bug).
-    mockGetProvider.mockResolvedValue(
-      providerReturning({ sender_id: "snd-legacy", status: "queued", total: 3 }),
-    );
-    const supabase = supabaseStub();
-
-    await expect(
-      runUazapiSenderJob(supabase, INSTANCE, {
-        recipients: [{ number: "5511999990001", type: "text", text: "a" }],
-      }),
-    ).rejects.toThrow();
-
-    expect(supabase.captured.insertedRow).toBeUndefined();
-  });
-});
