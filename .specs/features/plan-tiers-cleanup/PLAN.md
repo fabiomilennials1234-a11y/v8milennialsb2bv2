@@ -224,8 +224,8 @@ COMMIT;
 - Modify: `supabase/functions/create-org-user/index.ts:178-205`
 - Test: `tests/unit/create-org-user-seat-limit.test.ts` (novo)
 
-- [ ] **Step 1: Teste falhando** — extrair a lógica de decisão pra função pura testável (ou testar via mock do client). Casos: (a) limite 5, 5 ativos → recusa 403; (b) limite 5, 4 ativos → permite; (c) limite -1 → permite; (d) master → permite.
-- [ ] **Step 2: Implementar** — substituir o bloco que lê `subscription_plans.limits.users` por chamada à RPC canônica:
+- [x] **Step 1: Teste falhando** — lógica extraída pra `_shared/seat-quota.ts` (`evaluateSeatQuota`, pura). 7 casos: 403 no limite, permite com folga, ilimitado, master bypass, erro RPC→500, quota null→permite (trigger backstopa), shape inesperado→permite. RED confirmado antes da implementação.
+- [x] **Step 2: Implementar** — substituir o bloco que lê `subscription_plans.limits.users` por chamada à RPC canônica:
 
 ```ts
 // Antes (no-op silencioso): limits.users não existe — key correta é max_users.
@@ -242,9 +242,9 @@ if (quota && quota.can_add === false) {
 }
 ```
 
-(Verificar assinatura/retorno reais de `org_resolve_quota` em `20260910000002_quota_resolution_rpcs.sql:23` — nomes de params e shape do JSONB — e ajustar. Trigger `trg_enforce_seat_limit` continua como backstop autoritativo.)
-- [ ] **Step 3:** `npm run test:unit` → verde.
-- [ ] **Step 4: Commit** — `fix(identity): seat check de create-org-user lia key inexistente (users vs max_users)`
+(Verificado: assinatura real é `org_resolve_quota(p_org_id, p_resource_key)` — o sketch acima usava `p_organization_id`, corrigido na implementação. Retorno JSONB tem `can_add`/`is_unlimited`/`effective_limit`. Trigger `trg_enforce_seat_limit` continua como backstop autoritativo.)
+- [x] **Step 3:** `npm run test:unit` → 7/7 no arquivo novo; suite completa: 71 failed/4871 passed — zero arquivos novos falhando vs baseline. `deno check` no módulo novo ✅ (deno check do index inteiro é baseline-red em _shared/auth.ts+sentry.ts pré-existentes).
+- [x] **Step 4: Commit** — `fix(identity): seat check de create-org-user lia key inexistente (users vs max_users)`
 
 ### Task 9: Helper server-side `plan-gate.ts`
 
@@ -252,8 +252,8 @@ if (quota && quota.can_add === false) {
 - Create: `supabase/functions/_shared/plan-gate.ts`
 - Test: `tests/unit/plan-gate.test.ts`
 
-- [ ] **Step 1: Teste falhando** — casos: feature true → passa; false/ausente → `PlanFeatureDeniedError`; plan_name master → passa; erro RPC → throw genérico (fail-CLOSED).
-- [ ] **Step 2: Implementar**
+- [x] **Step 1: Teste falhando** — 6 casos: true→passa; false→PlanFeatureDeniedError(403, featureKey, planName); ausente→nega; master→passa; erro RPC→throw genérico ≠ DeniedError (fail-closed); payload null sem erro→nega. RED confirmado.
+- [x] **Step 2: Implementar**
 
 ```ts
 // supabase/functions/_shared/plan-gate.ts
@@ -283,8 +283,8 @@ export async function assertPlanFeature(
 }
 ```
 
-(Verificar nome do param da RPC em `20260910000008_update_features_limits_rpc.sql:15` e ajustar. Seguir padrão de import estático — dynamic import de `_shared` quebra eszip, memória `project_realsc_scheduled_blast_dynamic_import`.)
-- [ ] **Step 3:** Testes verde. Commit: `feat(plan-gate): helper server-side de feature por plano (fail-closed)`
+(Verificado: param é `p_org_id` — sketch estava errado com `p_organization_id`, corrigido. Import estático ✅. Extra: helper `planDeniedResponse()` pro 403 JSON padrão `{error, feature, plan}`.)
+- [x] **Step 3:** Testes verde (6/6 + deno check ✅). Commit: `feat(plan-gate): helper server-side de feature por plano (fail-closed)`
 
 ### Task 10: Aplicar plan-gate nas edges premium
 
