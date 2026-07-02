@@ -48,7 +48,7 @@ export default function MasterInsights() {
       />
 
       <div className="relative z-10 px-8 lg:px-12">
-        {/* Chrome próprio: voltar + wordmark Insights */}
+        {/* Chrome próprio: voltar + wordmark Gestor */}
         <div className="flex items-center justify-between py-4">
           <button
             type="button"
@@ -60,7 +60,7 @@ export default function MasterInsights() {
           </button>
           <span className="inline-flex items-center gap-1.5 text-sm font-medium text-insights">
             <LineChart className="h-4 w-4" />
-            Insights
+            Gestor
           </span>
         </div>
 

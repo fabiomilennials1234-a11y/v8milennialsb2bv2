@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ToolContext, ToolDef, ToolResult } from "../lib/types.ts";
+import type { ToolContext, ToolDef, ToolResult } from "../../_shared/mcp/types.ts";
 
 /**
  * Drift between the migrations *in the repo* and what is *applied in the database*

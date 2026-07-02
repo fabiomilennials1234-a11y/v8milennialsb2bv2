@@ -10,6 +10,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { captureError } from "./sentry.ts";
 
 /**
  * Key patterns to redact (case-insensitive substring match on key name).
@@ -156,5 +157,23 @@ export async function logRuntime(params: LogRuntimeParams): Promise<void> {
     });
   } catch (err) {
     console.warn("[logRuntime] Failed to write log (non-fatal):", err);
+    // Surface persistent insert failures to Sentry instead of swallowing them.
+    // A CHECK/enum drift can silently drop an entire module's logs (incident
+    // 2026-06-24: 'whatsapp' missing from runtime_logs_module_check dropped 100%
+    // of WhatsApp telemetry for days, hiding the inbound outage). captureError
+    // never throws, so this stays strictly non-fatal on the hot path.
+    try {
+      await captureError(err, {
+        functionName: "logRuntime",
+        organizationId: params.organizationId,
+        extra: {
+          log_module: params.module,
+          log_action: params.action,
+          log_status: params.status,
+        },
+      });
+    } catch {
+      // never let observability reporting break the caller
+    }
   }
 }

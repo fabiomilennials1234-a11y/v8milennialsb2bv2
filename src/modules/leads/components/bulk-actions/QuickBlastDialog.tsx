@@ -66,8 +66,7 @@ export function QuickBlastDialog(props: QuickBlastDialogProps) {
       <UpgradeModal
         open={props.open}
         onOpenChange={props.onOpenChange}
-        featureLabel="Disparo em Massa"
-        featureDescription="O envio de mensagens em lote não está disponível no seu plano atual."
+        featureKey="whatsapp_bulk"
       />
     );
   }

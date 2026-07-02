@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { redact } from "./redact.ts";
+import { redact } from "../../_shared/mcp/redact.ts";
 
 // Re-export redact so callers can import from a single audit module.
 export { redact };

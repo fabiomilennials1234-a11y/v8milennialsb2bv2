@@ -15,7 +15,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem, SelectLabel,
+  SelectSeparator, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -30,6 +31,7 @@ import { usePipeOps } from "../../pipe-ops";
 import type { PipelineType } from "@/contracts/pipe";
 import {
   useBulkMoveStage,
+  useBulkMoveToCustomPipe,
   useBulkAssign,
   useBulkTag,
   useBulkDelete,
@@ -135,20 +137,45 @@ function BulkMoveDialog({
   leadIds: string[];
   onSuccess: () => void;
 }) {
-  const { usePipelineStages } = usePipeOps();
-  const [pipe, setPipe] = useState<PipelineType>("whatsapp");
+  const CUSTOM_PREFIX = "custom:";
+  const { usePipelineStages, useCustomPipelines, useCustomPipelineStages } = usePipeOps();
+
+  // `pipe` carrega tanto os 3 pipes system (values whatsapp/confirmacao/propostas)
+  // quanto os funis custom, sinalizados pelo sentinela `custom:<pipeline.id>`.
+  const [pipe, setPipe] = useState<string>("whatsapp");
   const [stage, setStage] = useState("");
-  const { data: stages = [] } = usePipelineStages(pipe);
-  const mutation = useBulkMoveStage();
+
+  const isCustom = pipe.startsWith(CUSTOM_PREFIX);
+  const customPipelineId = isCustom ? pipe.slice(CUSTOM_PREFIX.length) : undefined;
+
+  const { data: customPipelines = [] } = useCustomPipelines();
+  // Ambos os hooks de stages são chamados incondicionalmente (regras de hooks);
+  // só o relevante ao tipo selecionado alimenta o dropdown de etapas.
+  const { data: systemStages = [] } = usePipelineStages(
+    (isCustom ? "whatsapp" : pipe) as PipelineType,
+  );
+  const { data: customStages = [] } = useCustomPipelineStages(customPipelineId);
+
+  const moveStage = useBulkMoveStage();
+  const moveCustom = useBulkMoveToCustomPipe();
+  const isPending = moveStage.isPending || moveCustom.isPending;
 
   const handleSubmit = async () => {
     if (!stage) return;
     try {
-      await mutation.mutateAsync({
-        lead_ids: leadIds,
-        target_pipe: pipe,
-        target_stage: stage,
-      });
+      if (isCustom && customPipelineId) {
+        await moveCustom.mutateAsync({
+          lead_ids: leadIds,
+          pipeline_id: customPipelineId,
+          stage_id: stage,
+        });
+      } else {
+        await moveStage.mutateAsync({
+          lead_ids: leadIds,
+          target_pipe: pipe,
+          target_stage: stage,
+        });
+      }
       toast.success(`${leadIds.length} leads movidos`);
       onOpenChange(false);
       onSuccess();
@@ -166,12 +193,28 @@ function BulkMoveDialog({
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Pipeline</label>
-            <Select value={pipe} onValueChange={(v) => { setPipe(v as PipelineType); setStage(""); }}>
+            <Select value={pipe} onValueChange={(v) => { setPipe(v); setStage(""); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="whatsapp">Qualificacao</SelectItem>
-                <SelectItem value="confirmacao">Confirmacao</SelectItem>
-                <SelectItem value="propostas">Propostas</SelectItem>
+                <SelectGroup>
+                  <SelectLabel>Padrao</SelectLabel>
+                  <SelectItem value="whatsapp">Qualificacao</SelectItem>
+                  <SelectItem value="confirmacao">Confirmacao</SelectItem>
+                  <SelectItem value="propostas">Propostas</SelectItem>
+                </SelectGroup>
+                {customPipelines.length > 0 && (
+                  <>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel>Personalizados</SelectLabel>
+                      {customPipelines.map((p) => (
+                        <SelectItem key={p.id} value={`${CUSTOM_PREFIX}${p.id}`}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -180,18 +223,24 @@ function BulkMoveDialog({
             <Select value={stage} onValueChange={setStage}>
               <SelectTrigger><SelectValue placeholder="Selecionar etapa" /></SelectTrigger>
               <SelectContent>
-                {stages.map((s: any) => (
-                  <SelectItem key={s.id || s.stage_key} value={s.stage_key}>
-                    {s.name}
-                  </SelectItem>
-                ))}
+                {isCustom
+                  ? customStages.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))
+                  : systemStages.map((s: any) => (
+                      <SelectItem key={s.id || s.stage_key} value={s.stage_key}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
               </SelectContent>
             </Select>
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={handleSubmit} disabled={!stage || mutation.isPending}>
-            {mutation.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+          <Button onClick={handleSubmit} disabled={!stage || isPending}>
+            {isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
             Mover
           </Button>
         </DialogFooter>

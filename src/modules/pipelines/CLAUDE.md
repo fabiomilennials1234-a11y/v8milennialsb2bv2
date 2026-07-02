@@ -118,7 +118,6 @@ Ver `./index.ts` para a superfície completa. Estável.
 - `@/modules/pipelines/pages/PipeWhatsapp`
 - `@/modules/pipelines/pages/PipeConfirmacao`
 - `@/modules/pipelines/pages/PipePropostas`
-- `@/modules/pipelines/pages/PipeFollowUps`
 - `@/modules/pipelines/pages/CustomPipeline`
 - `@/modules/pipelines/pages/FunisHub`
 - `@/modules/pipelines/pages/Negocios`

@@ -2,22 +2,32 @@ import { createClient } from "@supabase/supabase-js";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { captureError } from "../_shared/sentry.ts";
 import { loadConfig } from "./lib/config.ts";
-import { createCachedMasterClientProvider } from "./lib/auth.ts";
+import { createCachedMasterClientProvider } from "../_shared/mcp/auth.ts";
 import { signInAsMaster } from "./lib/clients.ts";
-import { handleRpcPayload, secretMatches } from "./lib/http.ts";
-import type { DispatchContext } from "./lib/dispatch.ts";
-import type { JsonRpcRequest } from "./lib/types.ts";
+import { handleRpcPayload, secretMatches } from "../_shared/mcp/http.ts";
+import type { DispatchContext } from "../_shared/mcp/dispatch.ts";
+import type { JsonRpcRequest } from "../_shared/mcp/types.ts";
 import { leadGetTool, leadRestoreTool } from "./tools/lead.ts";
 import { leadTraceHistoryTool } from "./tools/trace.ts";
 import { conversationGetTool } from "./tools/conversation.ts";
 import { whatsappInstanceStatusTool } from "./tools/whatsapp.ts";
 import { blastStatusTool } from "./tools/blast.ts";
-import { copilotDumpPromptTool, copilotUpdatePromptTool } from "./tools/copilot.ts";
+import {
+  copilotDumpPromptTool,
+  copilotSetSectionsTool,
+  copilotUpdatePromptTool,
+} from "./tools/copilot.ts";
 import { cronToggleTool } from "./tools/cron.ts";
 import { dbReadSqlTool } from "./tools/db.ts";
 import { rlsCheckAccessTool } from "./tools/rls.ts";
 import { schemaAuditDefinerTool, schemaAuditTriggersTool } from "./tools/schema.ts";
 import { migrationDiffTool } from "./tools/migration.ts";
+import {
+  workflowBuildTool,
+  workflowGetTool,
+  workflowSetActiveTool,
+  workflowValidateTool,
+} from "./tools/workflow.ts";
 
 // Fail loud at boot if a required secret is missing (docs/adr/0011, REQ-M04).
 const config = loadConfig(Deno.env.toObject());
@@ -36,9 +46,14 @@ const TOOLS = [
   schemaAuditDefinerTool,
   schemaAuditTriggersTool,
   migrationDiffTool,
+  workflowGetTool,
+  workflowValidateTool,
   leadRestoreTool,
   copilotUpdatePromptTool,
+  copilotSetSectionsTool,
   cronToggleTool,
+  workflowBuildTool,
+  workflowSetActiveTool,
 ];
 
 // Isolate-scoped cache of the signed-in master session. The principal is fixed

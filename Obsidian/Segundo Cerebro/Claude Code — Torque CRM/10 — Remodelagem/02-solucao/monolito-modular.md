@@ -1,16 +1,21 @@
 ---
 type: reference
 title: Solução — Monolito Modular
-status: active
+status: archived
 created: 2026-05-26
+updated: 2026-05-28
 tags: [remodelagem, solucao, arquitetura]
 related:
   - "[[ADR-2026-05-26-modularizacao-monolito-modular]]"
+  - "[[ADR-2026-05-28-modularizacao-conclusao]]"
   - "[[event-bus]]"
   - "[[boundary-enforcement]]"
 ---
 
 # Solução — Monolito Modular
+
+> [!success] IMPLEMENTADO — 2026-05-28
+> Decisão executada (slices 0–19 merged em `develop`). Encerramento em [[ADR-2026-05-28-modularizacao-conclusao]].
 
 Decisão arquitetural raiz. Detalhe formal em [[ADR-2026-05-26-modularizacao-monolito-modular]].
 

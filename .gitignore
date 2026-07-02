@@ -101,3 +101,12 @@ scripts/basic4u-clients.json
 
 # Scripts one-off de ops/incidentes — arquivar fora do repo (Desktop/torque-ops-archive-*)
 scripts/recovery/
+
+# Scratch/debug dumps na raiz (query outputs, briefings descartáveis).
+# Ancorado em / pra NÃO pegar arquivos _foo.py legítimos em subpastas.
+/_*.txt
+/_*.json
+/_*.gs
+/_*.py
+/_*.sql
+/_*.md

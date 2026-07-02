@@ -9,7 +9,7 @@ interface CacBandGaugeProps {
   cacMinimo: number | null;
   cacIdeal: number | null;
   cacMaximo: number | null;
-  despesasTotais: number;
+  anuncios: number;
   numVendas: number;
 }
 
@@ -28,12 +28,12 @@ const CAP_BG: Record<Zone, string> = {
 };
 
 /**
- * CAC em 3 bandas (DESIGN §8). As bandas (mín/ideal/máx) são TICKET-BASED: o
- * máximo = ticket médio = o ponto de break-even (Σcustos = faturamento → lucro
- * por cliente = 0). Trilho de tolerância cujo domínio é
- * [0 … max(cacAtual, cacMaximo) × 1.15] — acomoda o CAC real PODER ultrapassar o
- * teto (ticket): quando isso ocorre a agulha cai na zona vermelha (custo por
- * venda > ticket = prejuízo).
+ * CAC em 3 bandas (DESIGN §8, modelo da planilha). A agulha (`cacAtual`) é o
+ * investimento em aquisição (anúncios) por venda. As bandas vêm de `Ticket −
+ * Lucro Líquido`: máximo = custos não-aquisição por venda (Bom = máx/2, Escala =
+ * máx/3). Trilho cujo domínio é [0 … max(cacAtual, cacMaximo) × 1.15] — acomoda o
+ * CAC real PODER ultrapassar o teto: quando isso ocorre o gasto de aquisição passou
+ * do que a venda comporta → agulha na zona vermelha.
  *
  * Dois estados degenerados (sem gauge):
  *  - `semVendas` (cacAtual null, numVendas <= 0): CAC indefinido, sem agulha.
@@ -44,7 +44,7 @@ export function CacBandGauge({
   cacMinimo,
   cacIdeal,
   cacMaximo,
-  despesasTotais,
+  anuncios,
   numVendas,
 }: CacBandGaugeProps) {
   const [showCalc, setShowCalc] = useState(false);
@@ -130,13 +130,13 @@ export function CacBandGauge({
           {/* Ticks */}
           <div className="relative mt-2 h-9">
             {([
-              { label: "Mínimo", v: cacMinimo ?? 0, accent: false, hint: undefined },
-              { label: "Ideal", v: cacIdeal!, accent: true, hint: undefined },
+              { label: "Escala", v: cacMinimo ?? 0, accent: false, hint: undefined },
+              { label: "Bom", v: cacIdeal!, accent: true, hint: undefined },
               {
                 label: "Máximo",
                 v: cacMaximo!,
                 accent: false,
-                hint: "Máximo = ticket médio (break-even)",
+                hint: "Máximo = Ticket − Lucro Líquido",
               },
             ] as const).map((tick) => (
               <div
@@ -164,7 +164,7 @@ export function CacBandGauge({
                 </span>
                 {tick.hint && (
                   <span className="mt-0.5 block whitespace-nowrap text-[10px] text-muted-foreground/70">
-                    break-even
+                    teto
                   </span>
                 )}
               </div>
@@ -186,10 +186,10 @@ export function CacBandGauge({
           {showCalc && (
             <div className="mt-2 space-y-1 font-mono text-[12px] leading-relaxed text-muted-foreground">
               <p>
-                CAC atual = Despesas totais ÷ Nº de vendas = {formatBRL(despesasTotais)} ÷{" "}
+                CAC atual = Anúncios ÷ Nº de vendas = {formatBRL(anuncios)} ÷{" "}
                 {formatInt(numVendas)} = {formatBRL(cacAtual!)}
               </p>
-              <p>Máximo = Ticket médio = {formatBRL(cacMaximo!)}</p>
+              <p>Máximo = Ticket − Lucro Líquido = {formatBRL(cacMaximo!)}</p>
             </div>
           )}
         </>

@@ -42,7 +42,8 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
   };
 
   const handleCreateCampaign = () => {
-    navigate("/campanhas?create=true");
+    // Campanhas legadas foram retiradas — campanhas viraram funis com prazo
+    navigate("/funis");
     handleClose();
   };
 

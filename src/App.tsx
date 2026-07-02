@@ -18,7 +18,7 @@ import { useAutoAdminAssignment } from "@/modules/identity/hooks/useAutoAdminAss
 import { SubscriptionProtectedRoute } from "@/modules/identity/components/SubscriptionProtectedRoute";
 import { GlobalErrorBoundary } from "@/modules/platform/components/GlobalErrorBoundary";
 import { OnboardingGate } from "@/modules/platform/components/onboarding/OnboardingGate";
-import { PlanFeatureProtectedRoute } from "@/modules/platform/components/PlanFeatureProtectedRoute";
+import { FeatureRoute } from "@/modules/platform";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { ServiceWorkerUpdater } from "@/modules/platform/components/ServiceWorkerUpdater";
 import { PushPermissionPrompt } from "@/modules/platform/components/PushPermissionPrompt";
@@ -44,7 +44,6 @@ const Dashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/D
 const PipeConfirmacao = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeConfirmacao")));
 const PipePropostas = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipePropostas")));
 const PipeWhatsapp = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeWhatsapp")));
-const PipeFollowUps = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeFollowUps")));
 const Revisao = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Revisao")));
 const Performance = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Performance")));
 const Equipe = lazy(() => lazyRetry(() => import("@/modules/identity/org-team/pages/Equipe")));
@@ -54,11 +53,9 @@ const Leads = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Leads")))
 const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash")));
 const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
 const Configuracoes = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Configuracoes")));
-const OnboardingHubPage = lazy(() => lazyRetry(() => import("@/modules/platform/pages/OnboardingHub")));
-const OnboardingHubPreview = lazy(() => lazyRetry(() => import("@/modules/platform/pages/OnboardingHubPreview")));
 const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
-const CampanhaDetail = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/CampanhaDetail")));
 const DisparosPanel = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/DisparosPanel")));
+const NovoDisparo = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/NovoDisparo")));
 const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));
 // Marketing and Analytics are unified in the Analytics tab — see TabAnalyticsV2.tsx
 const Produtos = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Produtos")));
@@ -75,6 +72,7 @@ const ClienteDetail = lazy(() => lazyRetry(() => import("@/modules/carteira/comp
 const CustomPipeline = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/CustomPipeline")));
 const Agenda = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Agenda")));
 const Privacidade = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Privacidade")));
+const Faq = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Faq")));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/modules/copilot/components/playground").then(m => ({ default: m.CopilotPlayground }))));
 const ChecklistPage = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/ChecklistPage")));
 const MessageTemplates = lazy(() => lazyRetry(() => import("@/modules/communication/pages/MessageTemplates")));
@@ -210,12 +208,9 @@ function AppRoutes() {
       <Route path="/landing" element={<Landing />} />
       <Route path="/auth" element={<AuthRoute />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/signup" element={<Navigate to="/auth" replace />} />
+      {/* Signup dedicado — renderiza a página (honra ?plan vindo do pricing) em vez de redirecionar p/ /auth e perder o plano */}
+      <Route path="/signup" element={<Signup />} />
       <Route path="/privacidade" element={<Privacidade />} />
-      {/* DEV-only: preview do onboarding sem auth/backend (co-design de UI) */}
-      {import.meta.env.DEV && (
-        <Route path="/onboarding-preview" element={<OnboardingHubPreview />} />
-      )}
       {/* Old onboarding/checkout routes removed — OnboardingGate handles inline */}
       <Route path="/" element={<RootRedirect />} />
       <Route path="/pricing" element={<Navigate to="/#pricing" replace />} />
@@ -234,42 +229,36 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="funnels" featureLabel="Funis">
-                <PermissionProtectedRoute featureKey="pipeline.view">
-                  <FunisHub />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
+              <PermissionProtectedRoute featureKey="pipeline.view">
+                <FeatureRoute feature="funnels"><FunisHub /></FeatureRoute>
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
       />
+      {/* /campanhas — Kanban de campanhas legado RETIRADO; redireciona pros funis (links antigos) */}
       <Route
         path="/campanhas"
         element={<Navigate to="/funis" replace />}
       />
+      {/* /disparos — porta canônica, aberta a qualquer membro (#904, sem gate de feature) */}
       <Route
         path="/disparos"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="whatsapp_bulk" featureLabel="Disparos">
-                <PermissionProtectedRoute featureKey="campaigns.view">
-                  <DisparosPanel />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
-            </LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="whatsapp_bulk">
+              <DisparosPanel />
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
       <Route
-        path="/campanhas/:id"
+        path="/disparos/novo"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="campaigns.view">
-                <CampanhaDetail />
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="whatsapp_bulk">
+              <NovoDisparo />
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -280,11 +269,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="funnels" featureLabel="Funis">
-                <PermissionProtectedRoute featureKey="pipeline.view">
-                  <PipeConfirmacao />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
+              <PermissionProtectedRoute featureKey="pipeline.view">
+                <FeatureRoute feature="funnels"><PipeConfirmacao /></FeatureRoute>
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -294,11 +281,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="funnels" featureLabel="Funis">
-                <PermissionProtectedRoute featureKey="pipeline.view">
-                  <PipePropostas />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
+              <PermissionProtectedRoute featureKey="pipeline.view">
+                <FeatureRoute feature="funnels"><PipePropostas /></FeatureRoute>
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -308,11 +293,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="performance" featureLabel="Pódio">
-                <PermissionProtectedRoute featureKey="performance.view">
-                  <Performance />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
+              <PermissionProtectedRoute featureKey="performance.view">
+                <FeatureRoute feature="performance"><Performance /></FeatureRoute>
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -338,11 +321,19 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="funnels" featureLabel="Funis">
-                <PermissionProtectedRoute featureKey="pipeline.view">
-                  <PipeWhatsapp />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
+              <PermissionProtectedRoute featureKey="pipeline.view">
+                <FeatureRoute feature="funnels"><PipeWhatsapp /></FeatureRoute>
+              </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/faq"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <Faq />
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -352,11 +343,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="review" featureLabel="Revisão">
-                <PermissionProtectedRoute featureKey="followups.view">
-                  <Revisao />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
+              <PermissionProtectedRoute featureKey="followups.view">
+                <FeatureRoute feature="review"><Revisao /></FeatureRoute>
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -378,11 +367,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="leads" featureLabel="Combustível">
-                <PermissionProtectedRoute featureKey="leads.view">
-                  <Leads />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
+              <PermissionProtectedRoute featureKey="leads.view">
+                <FeatureRoute feature="leads"><Leads /></FeatureRoute>
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -391,13 +378,11 @@ function AppRoutes() {
         path="/lixeira"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="leads" featureLabel="Combustível">
-                <PermissionProtectedRoute featureKey="leads.view">
-                  <TrashPage />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
-            </LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="leads">
+              <PermissionProtectedRoute featureKey="leads.view">
+                <TrashPage />
+              </PermissionProtectedRoute>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -405,30 +390,22 @@ function AppRoutes() {
         path="/duplicatas"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="leads" featureLabel="Combustível">
-                <PermissionProtectedRoute featureKey="leads.view">
-                  <Duplicates />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
-            </LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="leads">
+              <PermissionProtectedRoute featureKey="leads.view">
+                <Duplicates />
+              </PermissionProtectedRoute>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
-      />
-      <Route
-        path="/premiacoes"
-        element={<Navigate to="/performance" replace />}
       />
       <Route
         path="/comissoes"
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="commissions" featureLabel="Comissões">
-                <PermissionProtectedRoute featureKey="commissions.view">
-                  <Comissoes />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
+              <PermissionProtectedRoute featureKey="commissions.view">
+                <FeatureRoute feature="commissions"><Comissoes /></FeatureRoute>
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -458,22 +435,10 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/onboarding"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <OnboardingHubPage />
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/tv"
         element={
           <ProtectedRoute>
-            <PlanFeatureProtectedRoute feature="tv_dashboard" featureLabel="TV Dashboard">
-              <TVDashboard />
-            </PlanFeatureProtectedRoute>
+            <FeatureRoute feature="tv_dashboard"><TVDashboard /></FeatureRoute>
           </ProtectedRoute>
         }
       />
@@ -482,9 +447,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="deals" featureLabel="Negócios">
-                <Negocios />
-              </PlanFeatureProtectedRoute>
+              <FeatureRoute feature="deals"><Negocios /></FeatureRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -494,11 +457,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="products" featureLabel="Produtos">
-                <PermissionProtectedRoute featureKey="products.view">
-                  <Produtos />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
+              <PermissionProtectedRoute featureKey="products.view">
+                <FeatureRoute feature="products"><Produtos /></FeatureRoute>
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -508,11 +469,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="copilot" featureLabel="Copilot">
-                <PermissionProtectedRoute featureKey="copilot.view">
-                  <Copilot />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
+              <PermissionProtectedRoute featureKey="copilot.view">
+                <FeatureRoute feature="copilot"><Copilot /></FeatureRoute>
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -521,44 +480,28 @@ function AppRoutes() {
         path="/copilot/metricas"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="copilot" featureLabel="Copilot">
-                <PermissionProtectedRoute featureKey="copilot.view">
-                  <CopilotMetrics />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
-            </LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="copilot">
+              <PermissionProtectedRoute featureKey="copilot.view">
+                <CopilotMetrics />
+              </PermissionProtectedRoute>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/chat"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="chat" featureLabel="Chat">
-                <PermissionProtectedRoute featureKey="whatsapp.view">
-                  <Suspense fallback={<ChatSkeleton />}>
-                    <ChatWhatsApp />
-                  </Suspense>
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
+      {/* /chat — alias legado consolidado em /chat-whatsapp (canônico: deep-links ?phone/?instance, sidebar, prefetch/skeleton) */}
+      <Route path="/chat" element={<Navigate to="/chat-whatsapp" replace />} />
       <Route
         path="/chat-whatsapp"
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="chat" featureLabel="Chat">
-                <PermissionProtectedRoute featureKey="whatsapp.view">
+              <PermissionProtectedRoute featureKey="whatsapp.view">
+                <FeatureRoute feature="chat">
                   <Suspense fallback={<ChatSkeleton />}>
                     <ChatWhatsApp />
                   </Suspense>
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
+                </FeatureRoute>
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -567,13 +510,13 @@ function AppRoutes() {
         path="/atendimento/meta"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="chat" featureLabel="Mensagens Meta">
+            <LayoutWrapper><FeatureRoute feature="chat">
+              <PermissionProtectedRoute featureKey="whatsapp.view">
                 <Suspense fallback={<ChatSkeleton />}>
                   <AtendimentoMeta />
                 </Suspense>
-              </PlanFeatureProtectedRoute>
-            </LayoutWrapper>
+              </PermissionProtectedRoute>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -582,11 +525,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="carteira" featureLabel="Carteira">
-                <PermissionProtectedRoute featureKey="upsell.view">
-                  <Upsell />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
+              <PermissionProtectedRoute featureKey="upsell.view">
+                <FeatureRoute feature="carteira"><Upsell /></FeatureRoute>
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -595,11 +536,9 @@ function AppRoutes() {
         path="/carteira/:clientId"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="carteira" featureLabel="Carteira">
-                <ClienteDetail />
-              </PlanFeatureProtectedRoute>
-            </LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="carteira">
+              <ClienteDetail />
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -631,13 +570,11 @@ function AppRoutes() {
         path="/copilot/novo"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="copilot" featureLabel="Copilot">
-                <SubscriptionProtectedRoute requireActive>
-                  <CopilotPlayground />
-                </SubscriptionProtectedRoute>
-              </PlanFeatureProtectedRoute>
-            </LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="copilot">
+              <SubscriptionProtectedRoute requireActive>
+                <CopilotPlayground />
+              </SubscriptionProtectedRoute>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -645,13 +582,11 @@ function AppRoutes() {
         path="/copilot/:id/editar"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="copilot" featureLabel="Copilot">
-                <SubscriptionProtectedRoute requireActive>
-                  <CopilotPlayground />
-                </SubscriptionProtectedRoute>
-              </PlanFeatureProtectedRoute>
-            </LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="copilot">
+              <SubscriptionProtectedRoute requireActive>
+                <CopilotPlayground />
+              </SubscriptionProtectedRoute>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -659,13 +594,11 @@ function AppRoutes() {
         path="/automacoes"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="automations" featureLabel="Automações">
-                <PermissionProtectedRoute featureKey="workflows.view">
-                  <Automacoes />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
-            </LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="automations">
+              <PermissionProtectedRoute featureKey="workflows.view">
+                <Automacoes />
+              </PermissionProtectedRoute>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -673,13 +606,11 @@ function AppRoutes() {
         path="/automacoes/novo"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="automations" featureLabel="Automações">
-                <PermissionProtectedRoute featureKey="workflows.view">
-                  <AutomacoesEditor />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
-            </LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="automations">
+              <PermissionProtectedRoute featureKey="workflows.view">
+                <AutomacoesEditor />
+              </PermissionProtectedRoute>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -687,13 +618,11 @@ function AppRoutes() {
         path="/automacoes/:id"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="automations" featureLabel="Automações">
-                <PermissionProtectedRoute featureKey="workflows.view">
-                  <AutomacoesEditor />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
-            </LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="automations">
+              <PermissionProtectedRoute featureKey="workflows.view">
+                <AutomacoesEditor />
+              </PermissionProtectedRoute>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -701,13 +630,11 @@ function AppRoutes() {
         path="/automacoes/:id/execucoes"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="automations" featureLabel="Automações">
-                <PermissionProtectedRoute featureKey="workflows.view">
-                  <AutomacoesExecucoes />
-                </PermissionProtectedRoute>
-              </PlanFeatureProtectedRoute>
-            </LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="automations">
+              <PermissionProtectedRoute featureKey="workflows.view">
+                <AutomacoesExecucoes />
+              </PermissionProtectedRoute>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -716,9 +643,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PlanFeatureProtectedRoute feature="message_templates" featureLabel="Templates">
-                <MessageTemplates />
-              </PlanFeatureProtectedRoute>
+              <FeatureRoute feature="message_templates"><MessageTemplates /></FeatureRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -789,12 +714,7 @@ const App = () => {
                       <CommandPaletteProvider>
                         <GlobalShortcutsProvider>
                           <AppRoutes />
-                          {/* Palette monta fora do LayoutWrapper — precisa do próprio
-                              OrgFeaturesProvider pro cadeado de plano (query deduplicada
-                              pela queryKey ["org-features", orgId]). */}
-                          <OrgFeaturesProvider>
-                            <CommandPaletteComponent />
-                          </OrgFeaturesProvider>
+                          <CommandPaletteComponent />
                         </GlobalShortcutsProvider>
                       </CommandPaletteProvider>
                     </GlobalErrorBoundary>

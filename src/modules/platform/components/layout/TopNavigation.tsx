@@ -45,6 +45,7 @@ import {
   Trash2,
   Instagram,
   Send,
+  HelpCircle,
 } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueLogoDark from "@/assets/torque-logo-dark.png";
@@ -57,7 +58,7 @@ import { useIdentity } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { useMetaPages } from "@/modules/communication/hooks/chat-meta/useMetaPages";
-import { SIDEBAR_FEATURE_MAP } from "@/modules/platform/lib/feature-registry";
+import { SIDEBAR_FEATURE_MAP, type FeatureKey } from "@/modules/platform/lib/feature-registry";
 import { UpgradeModal } from "@/shared/components/UpgradeModal";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -128,21 +129,23 @@ const turboSubItems: NavItem[] = [
 // Primary items — always visible in the top bar
 const primaryNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/dashboard" },
-  { label: "Chat", icon: Zap, path: "/chat" },
+  { label: "Chat", icon: Zap, path: "/chat-whatsapp" },
+  // Disparos — porta canônica, sempre visível perto do Chat (#904)
+  { label: "Disparos", icon: Send, path: "/disparos" },
   // { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
   { label: "Carteira", icon: Wallet, path: "/upsell" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Ranking", icon: Trophy, path: "/performance" },
-  { label: "Comissões", icon: DollarSign, path: "/comissoes" },
 ];
 
 // Secondary items — go inside "Mais" overflow menu
 const moreNavItems: NavItemWithChildren[] = [
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Combustível", icon: Fuel, path: "/leads" },
-  { label: "Disparos", icon: Send, path: "/disparos" },
+  // Comissões desceu pro "Mais" — Disparos tomou seu lugar na top bar (#904)
+  { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Checklists", icon: ListChecks, path: "/checklists" },
   { label: "Templates", icon: FileText, path: "/templates" },
   { label: "Duplicatas", icon: Copy, path: "/duplicatas" },
@@ -154,7 +157,9 @@ const allNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/dashboard" },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
-  { label: "Chat", icon: Zap, path: "/chat" },
+  { label: "Chat", icon: Zap, path: "/chat-whatsapp" },
+  // Disparos perto do Chat também no mobile (#904)
+  { label: "Disparos", icon: Send, path: "/disparos" },
   // { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
   { label: "Carteira", icon: Wallet, path: "/upsell" },
@@ -162,7 +167,6 @@ const allNavItems: NavItemWithChildren[] = [
   { label: "Ranking", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
-  { label: "Disparos", icon: Send, path: "/disparos" },
   { label: "Checklists", icon: ListChecks, path: "/checklists" },
   { label: "Templates", icon: FileText, path: "/templates" },
   { label: "Duplicatas", icon: Copy, path: "/duplicatas" },
@@ -206,7 +210,7 @@ const CUSTOM_PIPE_ICON_MAP: Record<string, React.ElementType> = {
 
 const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/campanhas": "campaigns.view",
-  "/disparos": "campaigns.view",
+  // /disparos — porta canônica aberta a qualquer membro (#904): sem gate de view
   "/marketing": "marketing.view",
   "/chat": "whatsapp.view",
   "/pipe-whatsapp": "pipeline.view",
@@ -232,7 +236,7 @@ const NAV_VIEW_PERMISSIONS: Record<string, string> = {
 
 // ─── Component ──────────────────────────────────────────────
 export function TopNavigation() {
-  const [upgradeModal, setUpgradeModal] = useState<{ open: boolean; label: string; description?: string }>({ open: false, label: "" });
+  const [upgradeFeature, setUpgradeFeature] = useState<FeatureKey | null>(null);
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -314,10 +318,11 @@ export function TopNavigation() {
     return !hasFeature(featureKey);
   };
 
-  const handleLockedClick = (e: React.MouseEvent, label: string) => {
+  const handleLockedClick = (e: React.MouseEvent, path: string) => {
     e.preventDefault();
     e.stopPropagation();
-    setUpgradeModal({ open: true, label, description: `O módulo "${label}" não está disponível no seu plano atual.` });
+    const key = SIDEBAR_FEATURE_MAP[path];
+    if (key) setUpgradeFeature(key);
   };
 
   const isActive = (path: string) => {
@@ -425,7 +430,7 @@ export function TopNavigation() {
       return (
         <button
           key={item.path}
-          onClick={(e) => handleLockedClick(e, item.label)}
+          onClick={(e) => handleLockedClick(e, item.path)}
           className="topnav-item topnav-item-locked"
         >
           <span>{item.label}</span>
@@ -457,7 +462,7 @@ export function TopNavigation() {
               return (
                 <button
                   key={child.path}
-                  onClick={(e) => handleLockedClick(e, child.label)}
+                  onClick={(e) => handleLockedClick(e, child.path)}
                   className="topnav-dropdown-item topnav-dropdown-locked"
                 >
                   <child.icon className="w-4 h-4 flex-shrink-0 opacity-50" />
@@ -545,7 +550,7 @@ export function TopNavigation() {
       return (
         <button
           key={item.path}
-          onClick={(e) => handleLockedClick(e, item.label)}
+          onClick={(e) => handleLockedClick(e, item.path)}
           className="topnav-item topnav-item-locked"
         >
           <span>{item.label}</span>
@@ -584,7 +589,7 @@ export function TopNavigation() {
         return (
           <button
             key={item.path}
-            onClick={(e) => handleLockedClick(e, item.label)}
+            onClick={(e) => handleLockedClick(e, item.path)}
             className="mobile-nav-item opacity-40 cursor-not-allowed"
           >
             <item.icon className="w-5 h-5 flex-shrink-0" />
@@ -611,7 +616,7 @@ export function TopNavigation() {
                 return (
                   <button
                     key={child.path}
-                    onClick={(e) => handleLockedClick(e, child.label)}
+                    onClick={(e) => handleLockedClick(e, child.path)}
                     className="mobile-nav-item opacity-40 cursor-not-allowed text-sm"
                   >
                     <child.icon className="w-4 h-4 flex-shrink-0" />
@@ -658,7 +663,7 @@ export function TopNavigation() {
       return (
         <button
           key={item.path}
-          onClick={(e) => handleLockedClick(e, item.label)}
+          onClick={(e) => handleLockedClick(e, item.path)}
           className="mobile-nav-item opacity-40 cursor-not-allowed"
         >
           <item.icon className="w-5 h-5 flex-shrink-0" />
@@ -711,7 +716,7 @@ export function TopNavigation() {
                     return (
                       <button
                         key={item.path}
-                        onClick={(e) => handleLockedClick(e, item.label)}
+                        onClick={(e) => handleLockedClick(e, item.path)}
                         className="topnav-dropdown-item topnav-dropdown-locked"
                       >
                         <item.icon className="w-4 h-4 flex-shrink-0 opacity-50" />
@@ -745,7 +750,7 @@ export function TopNavigation() {
                         return (
                           <button
                             key={item.path}
-                            onClick={(e) => handleLockedClick(e, item.label)}
+                            onClick={(e) => handleLockedClick(e, item.path)}
                             className="topnav-dropdown-item topnav-dropdown-locked"
                           >
                             <item.icon className="w-4 h-4 flex-shrink-0 opacity-50" />
@@ -794,6 +799,19 @@ export function TopNavigation() {
           <div className="hidden sm:block">
             <OrgSwitcher />
           </div>
+
+          {/* FAQ — Central de Ajuda (acesso para todos) */}
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="hidden sm:inline-flex gap-1.5 border-yellow-500/40 text-yellow-600 hover:bg-yellow-500/10 hover:text-yellow-700 dark:text-yellow-400 dark:hover:text-yellow-300"
+          >
+            <NavLink to="/faq" title="Central de Ajuda">
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span className="text-xs font-medium">FAQ</span>
+            </NavLink>
+          </Button>
 
           <AlertsDropdown />
 
@@ -867,6 +885,15 @@ export function TopNavigation() {
                 <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
                   {visibleAll.map(renderMobileNavItem)}
 
+                  <NavLink
+                    to="/faq"
+                    onClick={() => setMobileOpen(false)}
+                    className={cn("mobile-nav-item", isActive("/faq") && "mobile-nav-item-active")}
+                  >
+                    <HelpCircle className="w-5 h-5 flex-shrink-0 text-yellow-500" />
+                    <span className="flex-1">FAQ</span>
+                  </NavLink>
+
                   {role === "admin" && visibleAdminItems.length > 0 && (
                     <>
                       <div className="pt-4 pb-1 px-3">
@@ -878,7 +905,7 @@ export function TopNavigation() {
                           return (
                             <button
                               key={item.path}
-                              onClick={(e) => handleLockedClick(e, item.label)}
+                              onClick={(e) => handleLockedClick(e, item.path)}
                               className="mobile-nav-item opacity-40 cursor-not-allowed"
                             >
                               <item.icon className="w-5 h-5 flex-shrink-0" />
@@ -988,12 +1015,13 @@ export function TopNavigation() {
         </DialogContent>
       </Dialog>
 
-      <UpgradeModal
-        open={upgradeModal.open}
-        onOpenChange={(v) => setUpgradeModal((prev) => ({ ...prev, open: v }))}
-        featureLabel={upgradeModal.label}
-        featureDescription={upgradeModal.description}
-      />
+      {upgradeFeature && (
+        <UpgradeModal
+          open={!!upgradeFeature}
+          onOpenChange={(v) => { if (!v) setUpgradeFeature(null); }}
+          featureKey={upgradeFeature}
+        />
+      )}
 
       <CreateFunilOuCampanhaModal open={showCreatePipeline} onOpenChange={setShowCreatePipeline} />
     </>

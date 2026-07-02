@@ -23,9 +23,10 @@ function makeInput(overrides: Partial<UnitEconomicsInputs> = {}): UnitEconomicsI
   };
 }
 
-// Caso canônico do CTO (Milennials):
+// Caso canônico do CTO (Milennials), modelo da planilha:
 //   ticket 5153,75 / 8 vendas / anúncios 15000 / imposto 10% / admin 20%
-//   → despesas 27369 → cacAtual 3421,125; máx 5153,75; ideal 2576,875; mín 1288,4375
+//   → despesas 27369; cacAtual = anúncios/vendas = 1875; nonAd 12369 → máx 1546,125;
+//     Bom 773,0625; Escala 515,375. cacAtual 1875 > teto → zona vermelha (Prejuízo).
 function milennials(): UnitEconomicsInputs {
   return makeInput({
     ticketMedio: 5153.75,
@@ -74,10 +75,10 @@ describe("computeMarkerMes — 4 regimes do CAC", () => {
     expect(computeMarkerMes(10, 100, 25)).toBe(12);
   });
 
-  it("caso Milennials → markerMes ≈ 7,59 (banda Ganho de margem)", () => {
-    const m = computeMarkerMes(3421.125, 5153.75, 1288.4375)!;
-    expect(m).toBeCloseTo(7.586, 2);
-    expect(phaseKeyAtMes(m)).toBe("margem");
+  it("caso Milennials → markerMes ≈ 3,36 (CAC acima do teto → Prejuízo)", () => {
+    const m = computeMarkerMes(1875, 1546.125, 515.375)!;
+    expect(m).toBeCloseTo(3.362, 2);
+    expect(phaseKeyAtMes(m)).toBe("prejuizo");
   });
 });
 
@@ -111,14 +112,14 @@ describe("computeEconomicsTimeline — estrutura e marcador", () => {
     expect(t.roi).toHaveLength(18);
   });
 
-  it("Milennials → markerMes ≈ 7,59 e markerPhaseKey 'margem'", () => {
+  it("Milennials → markerMes ≈ 3,36 e markerPhaseKey 'prejuizo' (CAC acima do teto)", () => {
     const t = computeEconomicsTimeline(milennials());
     expect(t.markerMes).not.toBeNull();
-    expect(t.markerMes!).toBeCloseTo(7.586, 2);
-    expect(t.markerPhaseKey).toBe("margem");
-    expect(t.meta.cacAtual).toBeCloseTo(3421.125, 6);
-    expect(t.meta.cacMaximo).toBeCloseTo(5153.75, 6);
-    expect(t.meta.cacMinimo).toBeCloseTo(1288.4375, 6);
+    expect(t.markerMes!).toBeCloseTo(3.362, 2);
+    expect(t.markerPhaseKey).toBe("prejuizo");
+    expect(t.meta.cacAtual).toBeCloseTo(1875, 6);
+    expect(t.meta.cacMaximo).toBeCloseTo(1546.125, 6);
+    expect(t.meta.cacMinimo).toBeCloseTo(515.375, 6);
   });
 });
 

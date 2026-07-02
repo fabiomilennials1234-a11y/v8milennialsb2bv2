@@ -2,10 +2,18 @@ import { useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Plus, Trash2, Tag, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { migrateSplitAbData, distributePercentages } from "@/types/workflow";
 import type { SplitAbNodeData, SplitVariant } from "@/types/workflow";
+import { useTags } from "@/modules/leads";
 
 interface SplitAbPanelProps {
   data: SplitAbNodeData;
@@ -57,6 +65,16 @@ export function SplitAbPanel({ data, onUpdate }: SplitAbPanelProps) {
     (index: number, label: string) => {
       const newVariants = variants.map((v, i) =>
         i === index ? { ...v, label } : v
+      );
+      updateVariants(newVariants);
+    },
+    [variants, updateVariants]
+  );
+
+  const handleTagsChange = useCallback(
+    (index: number, tags: string[]) => {
+      const newVariants = variants.map((v, i) =>
+        i === index ? { ...v, tags } : v
       );
       updateVariants(newVariants);
     },
@@ -154,36 +172,43 @@ export function SplitAbPanel({ data, onUpdate }: SplitAbPanelProps) {
           {variants.map((variant, index) => (
             <div
               key={variant.id}
-              className="flex items-center gap-2 p-2 rounded-lg border bg-background"
+              className="space-y-2 p-2 rounded-lg border bg-background"
             >
-              <Input
-                value={variant.label}
-                onChange={(e) => handleLabelChange(index, e.target.value)}
-                placeholder={`Caminho ${index + 1}`}
-                className="flex-1 h-8 text-sm"
-              />
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
                 <Input
-                  type="number"
-                  value={variant.percentage}
-                  onChange={(e) => handlePercentageChange(index, e.target.value)}
-                  min={0}
-                  max={100}
-                  step={1}
-                  className="w-20 h-8 text-sm text-right"
+                  value={variant.label}
+                  onChange={(e) => handleLabelChange(index, e.target.value)}
+                  placeholder={`Caminho ${index + 1}`}
+                  className="flex-1 h-8 text-sm"
                 />
-                <span className="text-xs text-muted-foreground">%</span>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    value={variant.percentage}
+                    onChange={(e) => handlePercentageChange(index, e.target.value)}
+                    min={0}
+                    max={100}
+                    step={1}
+                    className="w-20 h-8 text-sm text-right"
+                  />
+                  <span className="text-xs text-muted-foreground">%</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => handleRemoveVariant(index)}
+                  disabled={variants.length <= 2}
+                  title="Remover caminho"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0"
-                onClick={() => handleRemoveVariant(index)}
-                disabled={variants.length <= 2}
-                title="Remover caminho"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </Button>
+
+              <VariantTagSelector
+                selected={variant.tags ?? []}
+                onChange={(tags) => handleTagsChange(index, tags)}
+              />
             </div>
           ))}
         </div>
@@ -218,8 +243,112 @@ export function SplitAbPanel({ data, onUpdate }: SplitAbPanelProps) {
         <p className="text-xs text-pink-700 dark:text-pink-300">
           Divide aleatoriamente os leads entre múltiplos caminhos para testar abordagens diferentes.
           Ideal para A/B/N testing de mensagens, fluxos ou estratégias.
+          Leads com uma tag vinculada a um caminho entram direto nele, ignorando o sorteio por %.
         </p>
       </div>
+    </div>
+  );
+}
+
+// ── Seletor de tags por caminho ───────────────────────────────────────────────
+
+function VariantTagSelector({
+  selected,
+  onChange,
+}: {
+  selected: string[];
+  onChange: (tags: string[]) => void;
+}) {
+  const { data: tags, isLoading, isError } = useTags();
+
+  // Tags ainda não selecionadas neste caminho (match por nome, case-insensitive)
+  const selectedLower = selected.map((t) => t.toLowerCase());
+  const available = (tags ?? []).filter(
+    (t) => !selectedLower.includes(t.name.toLowerCase())
+  );
+
+  const addTag = (name: string) => {
+    if (selectedLower.includes(name.toLowerCase())) return;
+    onChange([...selected, name]);
+  };
+
+  const removeTag = (name: string) => {
+    onChange(selected.filter((t) => t.toLowerCase() !== name.toLowerCase()));
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Tag className="w-3 h-3" />
+        <span>Tags que entram direto neste caminho (ignora %)</span>
+      </div>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {selected.map((name) => {
+            const tag = (tags ?? []).find(
+              (t) => t.name.toLowerCase() === name.toLowerCase()
+            );
+            return (
+              <span
+                key={name}
+                className="inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-md border bg-muted/50 text-xs"
+              >
+                <span
+                  className="inline-block w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: tag?.color || "#888" }}
+                />
+                <span className="truncate max-w-[120px]">{name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeTag(name)}
+                  className="rounded-sm hover:bg-muted-foreground/20 p-0.5"
+                  title="Remover tag"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {isError ? (
+        <p className="text-xs text-destructive">Erro ao carregar tags.</p>
+      ) : (
+        <Select
+          value=""
+          onValueChange={(v) => addTag(v)}
+          disabled={isLoading || available.length === 0}
+        >
+          <SelectTrigger className="h-7 text-xs">
+            <SelectValue
+              placeholder={
+                isLoading
+                  ? "Carregando tags..."
+                  : (tags ?? []).length === 0
+                    ? "Nenhuma tag na organização"
+                    : available.length === 0
+                      ? "Todas as tags adicionadas"
+                      : "Adicionar tag..."
+              }
+            />
+          </SelectTrigger>
+          <SelectContent>
+            {available.map((t) => (
+              <SelectItem key={t.id} value={t.name}>
+                <span className="flex items-center gap-2">
+                  <span
+                    className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: t.color || "#888" }}
+                  />
+                  {t.name}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
     </div>
   );
 }

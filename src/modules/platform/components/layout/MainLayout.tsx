@@ -67,7 +67,7 @@ function MainLayoutInner({ children }: MainLayoutProps) {
       window.dispatchEvent(new CustomEvent("v8:shortcut:new-lead"));
     },
     onGoDashboard: () => navigate("/dashboard"),
-    onGoChat: () => navigate("/chat"),
+    onGoChat: () => navigate("/chat-whatsapp"),
     onGoFunis: () => navigate("/funis"),
     onShowHelp: toggleHelp,
   });

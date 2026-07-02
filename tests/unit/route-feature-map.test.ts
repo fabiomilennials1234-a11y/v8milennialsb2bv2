@@ -3,11 +3,11 @@
  *
  * Fonte única: feature-registry. Este teste lê App.tsx e garante que:
  *  1. Todo path de ROUTE_FEATURE_MAP existe como rota e está envolto em
- *     <PlanFeatureProtectedRoute feature="<key>"> com a key certa.
+ *     <FeatureRoute feature="<key>"> com a key certa.
  *  2. Todo path de SIDEBAR_FEATURE_MAP (cadeado na nav) ou é redirect
  *     conhecido ou tem entrada correspondente em ROUTE_FEATURE_MAP —
  *     cadeado na nav SEM guard na rota = divergência (contornável via URL).
- *  3. Nenhuma rota usa PlanFeatureProtectedRoute com key fora do registry
+ *  3. Nenhuma rota usa FeatureRoute com key fora do registry
  *     (guard sem key mapeada = mapa desatualizado).
  */
 import { describe, it, expect } from "vitest";
@@ -22,7 +22,7 @@ const appSource = readFileSync(resolve(__dirname, "../../src/App.tsx"), "utf-8")
 
 // Paths da sidebar que são <Navigate> (redirect) — não têm elemento pra guardar;
 // o destino (/dashboard) é core sem feature key.
-const REDIRECT_ONLY_PATHS = new Set(["/marketing", "/analytics"]);
+const REDIRECT_ONLY_PATHS = new Set(["/marketing", "/analytics", "/chat"]);
 
 /** Divide o JSX de rotas em chunks: cada chunk começa em `<Route` e vai até o próximo. */
 function routeChunks(): Map<string, string> {
@@ -45,11 +45,11 @@ describe("ROUTE_FEATURE_MAP ↔ App.tsx", () => {
     expect(missing).toEqual([]);
   });
 
-  it("todo path mapeado está envolto em PlanFeatureProtectedRoute com a key certa", () => {
+  it("todo path mapeado está envolto em FeatureRoute com a key certa", () => {
     const unguarded: string[] = [];
     for (const [path, key] of Object.entries(ROUTE_FEATURE_MAP)) {
       const chunk = chunks.get(path);
-      if (!chunk || !chunk.includes(`PlanFeatureProtectedRoute feature="${key}"`)) {
+      if (!chunk || !chunk.includes(`FeatureRoute feature="${key}"`)) {
         unguarded.push(`${path} → ${key}`);
       }
     }
@@ -68,10 +68,10 @@ describe("SIDEBAR_FEATURE_MAP ↔ ROUTE_FEATURE_MAP", () => {
 });
 
 describe("guards em App.tsx ↔ registry", () => {
-  it("toda rota com PlanFeatureProtectedRoute está em ROUTE_FEATURE_MAP com a mesma key", () => {
+  it("toda rota com FeatureRoute está em ROUTE_FEATURE_MAP com a mesma key", () => {
     const strays: string[] = [];
     for (const [path, chunk] of chunks) {
-      const guardMatch = chunk.match(/PlanFeatureProtectedRoute feature="([^"]+)"/);
+      const guardMatch = chunk.match(/FeatureRoute feature="([^"]+)"/);
       if (!guardMatch) continue;
       if (ROUTE_FEATURE_MAP[path] !== guardMatch[1]) {
         strays.push(`${path} guarda "${guardMatch[1]}" mas mapa diz "${ROUTE_FEATURE_MAP[path] ?? "∅"}"`);

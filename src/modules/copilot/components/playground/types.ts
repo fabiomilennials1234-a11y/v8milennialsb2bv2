@@ -275,6 +275,10 @@ export function isMoverCardAutoEnabled(activePipes: string[] | undefined | null)
 // TOOL REGISTRY
 // =====================================================
 
+// ⚠️ MIRROR: server-side port at supabase/functions/_shared/copilot-prompt/tools-catalog.ts
+// ({id,name,defaultInstruction}, same order). The torque-mcp copilot.set_sections recompiler reads
+// the port. If you add/rename/reorder a tool here, update the mirror — the byte-identical golden
+// fixtures (compose-goldens.json, asserted on both runtimes) only pin tools they exercise.
 export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
   {
     id: "QUALIFICAR_LEAD",

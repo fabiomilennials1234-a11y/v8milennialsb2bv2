@@ -16,10 +16,10 @@ Engajamento dos vendedores com o sistema. Inclui:
 - **Meetings** — reuniões via dialog + participants + status
 - **Call Logs** — registro de ligações (manual ou via API telefonia)
 - **Gamification** — badges, awards, competitions, levels, streak, celebration effects
-- **Ranking** — vendedor ranking + history/transitions
-- **Premiações** — awards CRUD (`useAwards`; UI v1 `Premiacoes.tsx` era órfã — deletada 2026-07-02)
+- **Ranking** — vendedor ranking + history/transitions (`useVendedorRanking`/`useRankingTransitions`; UI consolidada em `analytics/pages/Performance.tsx` — aba Ranking)
+- **Premiações** — prêmios/awards (`useAwards`; UI consolidada em `analytics/pages/Performance.tsx` — awards)
 - **Comissões** — financial perf do vendedor (`Comissoes.tsx`, `useCommissions`)
-- **Goals** — vendedor + team goals (`useGoals`/`useTeamGoals`; UI v1 `Metas.tsx`/`GestaoMetas.tsx` era órfã — deletada 2026-07-02; superfície atual vive em Performance)
+- **Goals** — vendedor + team goals (`useGoals`/`useTeamGoals`; gestão de metas consolidada em `analytics/pages/Performance.tsx` — aba Gestão)
 - **Daily Priorities** — fila do dia ("ações do dia")
 - **Coaching Suggestions** — IA sugere áreas de melhoria por conversa
 - **Performance** — KPIs por vendedor (closer + SDR perspective)
@@ -56,6 +56,8 @@ src/modules/engagement/
 │   ├── ChecklistPage.tsx  # /checklist
 │   ├── Comissoes.tsx      # /comissoes
 │   └── Revisao.tsx        # /revisao
+│                          # Ranking/Premiacoes/Metas/GestaoMetas DELETADAS (órfãs) —
+│                          # features consolidadas em analytics/pages/Performance.tsx (abas Ranking/Gestão + awards)
 ├── index.ts            # API pública
 └── CLAUDE.md           # este arquivo
 ```
@@ -99,7 +101,7 @@ NÃO re-exportadas — App.tsx faz deep-import via React.lazy (padrão dos slice
 - `@/modules/engagement/pages/Comissoes` (rota `/comissoes`)
 - `@/modules/engagement/pages/Revisao` (rota `/revisao`)
 
-> Pages órfãs v1 (`Premiacoes`, `Ranking`, `Metas`, `GestaoMetas`) deletadas em 2026-07-02 (plan-tiers-cleanup) — zero rotas/importers; rotas atuais redirecionam pra `/performance`.
+> `Premiacoes`, `Ranking`, `Metas`, `GestaoMetas` foram **deletadas** (órfãs sem rota). Features migraram para `analytics/pages/Performance.tsx` (abas Ranking/Gestão + awards). Hooks subjacentes (`useGoals`, `useAwards`, `useVendedorRanking`, `useDashboardMetrics`) seguem vivos.
 
 ### Types
 
@@ -123,7 +125,7 @@ Tipos públicos re-exportados via barrel: `Activity`, `ActivityWithNames`, `Acti
 
 🟠 **Approval flow** — `usePendingApprovals` + `useRequestApproval` + `useDecideApproval`. Gates de permissão importam — teste com admin/membro/master separado se mudar lógica.
 
-🟠 **Goal calculation** — `useGoals` calcula progresso baseado em metrics e consome `useDashboardMetrics` (analytics) — cross-module. Superfície de UI vive em Performance (pages v1 Metas/GestaoMetas deletadas 2026-07-02).
+🟠 **Goal calculation** — `useGoals` calcula progresso baseado em metrics; consome `useDashboardMetrics` (analytics) — cross-module. UI (display + CRUD de metas) consolidada em `analytics/pages/Performance.tsx` (aba Gestão).
 
 ## Dependências cross-module
 
@@ -137,7 +139,7 @@ Tipos públicos re-exportados via barrel: `Activity`, `ActivityWithNames`, `Acti
 ### Consumidores cross-module (importam de `@/modules/engagement`)
 
 - `@/modules/leads` — `LeadDetailHeader`, `LeadModalChecklist`, `LeadModalToolbar`, `LeadChecklistSection`, `LeadModal`, `gates-applied.test.tsx` — consomem `ActivityTimeline`, `useChecklists`, `useActivities`, `ScheduleFollowUpButton`
-- `@/modules/pipelines` — `CustomPipelineKanban`, `CustomPipeSettingsDialog`, `QuickAddDailyAction`, `ManagePipelineStagesModal`, `PipeConfirmacao`, `PipeFollowUps`, `PipePropostas`, `PipeWhatsapp` — consomem `useFollowUps`, `useAcoesDoDia`, `useApprovals`, `useChecklists`, `useAgendaEvents`
+- `@/modules/pipelines` — `CustomPipelineKanban`, `CustomPipeSettingsDialog`, `QuickAddDailyAction`, `ManagePipelineStagesModal`, `PipeConfirmacao`, `PipePropostas`, `PipeWhatsapp` — consomem `useFollowUps`, `useAcoesDoDia`, `useApprovals`, `useChecklists`, `useAgendaEvents`
 - `@/modules/workflows` — `ActionPanel` — consume `useApprovals`
 - `src/pages/Configuracoes.tsx`, `src/pages/Performance.tsx`, `src/pages/DashboardOutbound.tsx`, `src/pages/TVDashboard.tsx` — consomem assorted engagement hooks (assets serão absorvidos por seus módulos respectivos em slices 12-14)
 
@@ -177,7 +179,7 @@ Backend (próximas slices):
 - 🟠 **Cross-module deep-imports residuais** — `src/components/dashboard/ActivityFeed.tsx`, `src/components/settings/*`, `src/pages/DashboardOutbound.tsx`, `src/pages/Performance.tsx`, `src/pages/TVDashboard.tsx`, `src/pages/Configuracoes.tsx` ainda fazem deep-import de `@/modules/engagement/hooks/*` em vez de via barrel. Em slice 12+ (quando absorvidos em seus BCs respectivos), deve trocar pro barrel.
 - 🟠 **`tests/unit/revision-item.test.tsx` falha no baseline** — pré-existente (não causado pela slice). Imports atualizados pelo codemod. Reportar como dívida da slice 12+ ou de feature owner do RevisionItem.
 - 🟠 **`useCoachingSuggestions`/`useNextBestActions` cross-domain** — pertencem a engagement por consumidores, mas a IA propriamente é copilot. Auditar slice 15 (refactor cross-module).
-- ✅ **Pages órfãs** — resolvido 2026-07-02 (plan-tiers-cleanup): `Premiacoes`, `Ranking`, `Metas`, `GestaoMetas` deletadas (opção b).
+- ✅ **Pages órfãs** — `Premiacoes`, `Ranking`, `Metas`, `GestaoMetas` foram **deletadas** (eram órfãs sem rota). Features consolidadas em `analytics/pages/Performance.tsx` (abas Ranking/Gestão + awards); hooks subjacentes seguem vivos.
 
 ## Slice de migração
 

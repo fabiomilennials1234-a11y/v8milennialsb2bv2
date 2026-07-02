@@ -31,6 +31,7 @@ import {
 import { channelMessagesActivitySource } from "../_shared/quick-blast/refinements.ts";
 import { blastPlanStore } from "../_shared/quick-blast/blast-plan-store.ts";
 import { releaseBlastPlanLot } from "../_shared/quick-blast/blast-plan.ts";
+import { instanceDailyUsageSource } from "../_shared/quick-blast/instance-budget.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -60,6 +61,7 @@ Deno.serve(
     const today = saoPauloUsageDate(now);
     const store = blastPlanStore(supabase);
     const usageSource = blastDailyUsageSource(supabase as any);
+    const instanceUsageSource = instanceDailyUsageSource(supabase as any);
     const activitySource = channelMessagesActivitySource(supabase);
 
     // Resolve the plan's whatsapp_instances row by id (the releaser dispatches
@@ -99,7 +101,7 @@ Deno.serve(
       try {
         const dailyBudget = await dailyBudgetFor(plan.organization_id);
         const result = await releaseBlastPlanLot(
-          { store, usageSource, dispatch: dispatchFor(supabase), activitySource, instanceResolver },
+          { store, usageSource, instanceUsageSource, dispatch: dispatchFor(supabase), activitySource, instanceResolver },
           { planId: plan.id!, dailyBudget, now },
         );
         if (!result.ok) {

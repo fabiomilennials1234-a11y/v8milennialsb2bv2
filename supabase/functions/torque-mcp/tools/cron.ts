@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ToolContext, ToolDef, ToolResult } from "../lib/types.ts";
-import { runMutation } from "../lib/guardrails.ts";
+import type { ToolContext, ToolDef, ToolResult } from "../../_shared/mcp/types.ts";
+import { runMutation } from "../../_shared/mcp/guardrails.ts";
 import { auditMcpAction } from "../lib/audit.ts";
 
 export function buildCronPlan(jobname: string, enabled: boolean) {

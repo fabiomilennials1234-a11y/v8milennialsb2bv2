@@ -35,6 +35,14 @@ export {
   type ProviderCapabilities,
 } from "./lib/whatsapp-provider";
 
+// ── Lib: blast media guard (consumido por campaigns/Disparos, #904) ────────
+export {
+  validateBlastMedia,
+  BLAST_MEDIA_LIMITS_MB,
+  type BlastMediaType,
+  type BlastMediaValidation,
+} from "./lib/blast-media-validator";
+
 // ── Hooks: WhatsApp — chat shell barrel (re-exports principais) ───────────
 export {
   useWhatsAppInstancesForUser,

@@ -1,0 +1,100 @@
+
+Fluxo de Reativação de Clientes – WhatsApp Motor 100
+Abaixo está o fluxo estratégico completo para reativação da base de clientes inativos (+30 dias sem compra ou abaixo de R$500 em pedidos no período), com foco em:
+Retomar o relacionamento comercial
+Gerar pedidos rápidos
+Oferecer um benefício com urgência
+Encaminhar respostas diretamente ao time comercial
+🎯 Objetivo da campanha
+Estimular clientes inativos a realizarem um pedido mínimo de R$200 em até 3 dias após o primeiro disparo, oferecendo como incentivo:🎁 3 unidades de aditivo para radiador AutoSecurity grátis junto do pedido.
+📅 Fluxo da automação
+Mensagem 1Primeiro contato com oferta principal.Envio de:
+Mensagem de texto
+Mensagem de áudio
+Arte promocional
+Prazo da ação:  até 7 dias
+Mensagem 2 (envio após 3 dias do primeiro envio)Reforço da oportunidade e lembrança do prazo.Envio de:
+Mensagem de texto
+Mensagem de áudio
+Reenvio da arte promocional
+Mensagem 3 (envio após 3 dias do segundo envio)Última chamada da campanha.Envio de:
+Mensagem de texto
+Mensagem de áudio
+Reenvio da arte promocional com “Última Chance”
+Mensagem 4 (envio após 3 dias do terceiro envio)Mensagem de relacionamento para quem não respondeu nem comprou.Envio de:
+Mensagem de texto
+Mensagem de áudio
+Sem arte promocional
+Objetivo: abrir conversa e entender necessidades do cliente.
+
+📌 Regras operacionais
+✔️ Público: clientes sem compra há mais de 30 dias e/ou abaixo de R$500 em pedidos no período definido.
+✔️ Benefício válido para 1 resgate por cliente.
+✔️ Pedido mínimo: R$200.
+✔️ Brinde: 3 aditivos para radiador AutoSecurity.
+✔️ Respostas no WhatsApp devem ser direcionadas imediatamente ao responsável pelo time comercial.
+✔️ O comercial confirma o pedido e registra o envio do brinde (“Comprou, Ganhou”).
+
+Sugestões de Copy – Disparo 1 
+🔹 Opção 1 – Direta e comercial
+Texto
+Olá, [Nome]! 👋
+Sentimos sua falta por aqui e por isso temos um presente exclusivo para você voltar a comprar com a Motor 100.
+🎁 Faça um pedido mínimo de R$200 até sexta-feira (19/06) e ganhe 3 aditivos para radiador AutoSecurity grátis junto do seu pedido.
+É simples: comprou, ganhou! 😉
+Se quiser aproveitar, é só responder esta mensagem que nosso time comercial já te atende.
+
+Áudio (roteiro curto – 20 a 25s)
+“Olá, [Nome], tudo bem? Aqui é o {nome} gerente da loja aqui da Motor 100. Vi que faz um tempo que não compra conosco e te selecionei pra uma condição especial exclusiva pra você.Fazendo um pedido acima de 200 reais até sexta-feira, eu vou separar 3 aditivos para radiador AutoSecurity totalmente grátis que vão junto do seu pedido. Se quiser aproveitar, é só responder esta mensagem que nosso time já te atende rapidinho.”
+
+Arte promocional
+
+Sugestões de Copy – Disparo 2 (Reforço)
+🔹 Opção 1 – Foco em estoque e oportunidade
+Texto
+[Nome], já conferiu o que está faltando no seu estoque? 👀
+Essa pode ser a hora ideal para repor peças e ainda garantir um bônus extra:
+🎁 3 aditivos AutoSecurity grátis em pedidos acima de R$200, válidos até amanhã.
+Fala com a gente aqui no WhatsApp e aproveite a condição especial.
+Áudio
+“[Nome], tudo bem? Aproveitando para lembrar que a ação da Motor 100 termina sexta. 
+É uma boa oportunidade para repor o estoque e ainda ganhar 3 aditivos AutoSecurity grátis em pedidos acima de 200 reais. Responde aqui que nosso time já te ajuda.”
+
+Sugestões de Copy – Disparo 3 (Última chamada)
+🔹 Opção 1 – Última chance direta
+Texto
+🚨 Última chance, [Nome]!
+Hoje é o último dia para garantir 3 aditivos AutoSecurity grátis na sua compra.
+🛒 Pedido mínimo de R$200 📅 Válido somente até amanhã!
+Se quiser aproveitar, responde agora esta mensagem que nosso time comercial já finaliza seu pedido. 
+
+Sugestões de Copy – Disparo 4 (10 dias depois – Relacionamento)
+🔹 Opção 1 – Conversa aberta
+Texto
+Olá, [Nome]! 👋
+Percebemos que faz um tempinho que você não compra com a Motor 100, e gostaríamos de entender melhor como podemos te ajudar.
+Tem faltado algum produto específico? Mudou sua demanda? Ou existe algo que possamos melhorar no atendimento?
+Sua opinião é muito importante para nós. Se puder, responde esta mensagem com um “oi” que nosso time conversa com você sem compromisso. 🤝
+
+📊 Dicas estratégicas para aumentar resultado
+Dispare em horário comercial estratégico
+Segunda: 09h30–10h30
+Terça: 14h00–15h00
+Quarta: 09h00–10h00 (última chamada cedo)
+Mensagem 4: 15h00–16h00
+Use nome do cliente e filial responsávelPersonalização aumenta significativamente a taxa de resposta.
+Áudios curtos convertem melhorMantenha entre 15 e 25 segundos, com voz natural e tom de parceiro.
+Time comercial preparadoCrie um script interno para o vendedor:
+Confirmar elegibilidade
+Montar pedido rapidamente
+Informar que o brinde será enviado junto
+Registrar no ERP/CRM a origem da campanha
+📈 Indicadores para acompanhar
+Taxa de entrega do WhatsApp
+Taxa de abertura/visualização
+Taxa de resposta
+Quantidade de pedidos gerados
+Ticket médio dos pedidos reativados
+Custo da campanha x faturamento gerado
+Quantidade de clientes efetivamente reativados
+

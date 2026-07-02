@@ -1,21 +1,25 @@
 ---
 type: reference
 title: Modularização — Auditoria de Duplicatas
-status: active
+status: archived
 created: 2026-05-26
-updated: 2026-05-26
+updated: 2026-05-28
 tags: [modularizacao, auditoria, duplicatas]
 related:
   - "[[ADR-2026-05-26-modularizacao-monolito-modular]]"
+  - "[[ADR-2026-05-28-modularizacao-conclusao]]"
   - "[[event-bus-plano]]"
 owner: gabriel
 ---
 
 # Modularização — Auditoria de Duplicatas
 
+> [!success] COMPLETED — 2026-05-28
+> Diagnóstico **executado**: as duplicatas mapeadas abaixo foram consolidadas nas slices de dedup (ex.: `useLeadHistory`/`useLeadTimeline`/`useFieldChangelog`/`useFieldChanges` no slice 03; `useRealtimeChannel*`→`useRealtimeSubscription` no slice 05; `_shared/auth.ts`+`user-auth.ts` no slice 16). Doc mantido como registro do baseline pré-modularização. Ver [[ADR-2026-05-28-modularizacao-conclusao]].
+
 **Created:** 2026-05-26
 **Owner:** arquiteto
-**Status:** Diagnóstico (input pra slices de dedup do SPEC)
+**Status:** ✅ Concluído 2026-05-28 (diagnóstico consumido pelas slices de dedup)
 **SPEC:** [`.specs/features/modularizacao/SPEC.md`](../../../../../.specs/features/modularizacao/SPEC.md)
 
 Pré-requisito da modularização: dedupe ANTES de mover. Mover hook duplicado pra módulo perpetua o problema.

@@ -7,3 +7,10 @@ export type {
   DisparoContext,
   SystemPipelineType,
 } from "./DisparoWizard";
+export {
+  AudienceConditionsControls,
+  EMPTY_CONDITIONS,
+  TIER_OPTIONS,
+  ORIGIN_OPTIONS,
+} from "./AudienceConditionsControls";
+export type { AudienceConditions } from "./AudienceConditionsControls";

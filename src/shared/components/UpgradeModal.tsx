@@ -1,51 +1,41 @@
 /**
- * UpgradeModal — modal de incentivo a upgrade quando o usuário tenta
- * acessar uma feature bloqueada pelo plano.
+ * UpgradeModal v2 — incentivo a upgrade quando o usuário toca uma feature
+ * bloqueada pelo plano. Deriva o plano-alvo de featureUnlockPlan (DB).
  */
 
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Lock } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { getFeatureMeta, type FeatureKey } from "@/modules/platform/lib/feature-registry";
 
 interface UpgradeModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  featureLabel: string;
-  featureDescription?: string;
+  featureKey: FeatureKey;
 }
 
-export const PLAN_LABELS: Record<string, string> = {
-  "torque-1.0": "Torque Base",
-  "torque-2.0": "Torque Automation",
-  "torque-v8": "Torque Copilot",
-  // Planos legados desativados — orgs antigas ainda podem referenciar
-  basic: "Basic",
-  free: "Free",
-  starter: "Starter",
-  pro: "Pro",
-  enterprise: "Enterprise",
-};
+export function UpgradeModal({ open, onOpenChange, featureKey }: UpgradeModalProps) {
+  const navigate = useNavigate();
+  const { featureUnlockPlan } = useOrgFeatures();
 
-/** CTA único de upgrade — usado pelo modal e pelo guard de rota. */
-export const UPGRADE_CONTACT_URL =
-  "https://wa.me/5511999999999?text=Ol%C3%A1%2C%20gostaria%20de%20fazer%20upgrade%20do%20meu%20plano!";
+  const meta = getFeatureMeta(featureKey);
+  const featureLabel = meta?.label ?? featureKey;
+  const target = featureUnlockPlan[featureKey];
+  const targetName = target?.display_name;
 
-export function UpgradeModal({
-  open,
-  onOpenChange,
-  featureLabel,
-  featureDescription,
-}: UpgradeModalProps) {
-  const { planName } = useOrgFeatures();
-  const currentPlanLabel = PLAN_LABELS[planName] ?? planName;
+  const handleUpgrade = () => {
+    const url = import.meta.env.VITE_UPGRADE_CONTACT_URL as string | undefined;
+    if (url) {
+      window.open(url, "_blank", "noopener");
+    } else {
+      navigate("/configuracoes");
+    }
+    onOpenChange(false);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -53,43 +43,39 @@ export function UpgradeModal({
         <DialogHeader>
           <div className="flex items-center justify-center mb-3">
             <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <Sparkles className="h-6 w-6 text-primary" />
+              <Lock className="h-6 w-6 text-primary" />
             </div>
           </div>
           <DialogTitle className="text-xl text-center" style={{ letterSpacing: "-0.02em" }}>
             Desbloqueie {featureLabel}
           </DialogTitle>
           <DialogDescription className="text-center">
-            Esse recurso não está disponível no plano {currentPlanLabel}.
-            {featureDescription && (
-              <span className="block mt-1 text-muted-foreground">
-                {featureDescription}
-              </span>
+            {targetName
+              ? <>Esse recurso está disponível no plano <strong>{targetName}</strong>.</>
+              : <>Esse recurso não está disponível no seu plano atual.</>}
+            {meta?.description && (
+              <span className="block mt-1 text-muted-foreground">{meta.description}</span>
             )}
           </DialogDescription>
         </DialogHeader>
 
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-2">
           <p className="text-sm font-medium">
-            Faça upgrade para ter acesso a {featureLabel} e dezenas de recursos avançados para sua equipe.
+            {targetName
+              ? <>Faça upgrade para o {targetName} e libere {featureLabel} e os demais recursos do plano.</>
+              : <>Fale com nosso time para liberar {featureLabel}.</>}
           </p>
-          <p className="text-xs text-muted-foreground">
-            Fale com nosso time comercial — é rápido.
-          </p>
+          <p className="text-xs text-muted-foreground">Nosso time resolve rápido.</p>
         </div>
 
         <DialogFooter className="flex-col sm:flex-row gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Voltar
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Voltar</Button>
           <Button
             className="gradient-primary gradient-primary-hover text-white font-semibold border-0"
-            onClick={() => {
-              window.open(UPGRADE_CONTACT_URL, "_blank");
-            }}
+            onClick={handleUpgrade}
           >
             <Sparkles className="w-4 h-4 mr-2" />
-            Falar com Comercial
+            {targetName ? "Fazer upgrade" : "Falar com Comercial"}
           </Button>
         </DialogFooter>
       </DialogContent>

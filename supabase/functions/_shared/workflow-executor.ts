@@ -9,7 +9,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { evaluateCondition } from "./workflow-condition-evaluator.ts";
+import { evaluateCondition, getLeadTags } from "./workflow-condition-evaluator.ts";
 import { executeWorkflowAction, type ActionResult } from "./workflow-action-handler.ts";
 import { getNextSendTime } from "./followupSchedule.ts";
 import { resolveActiveWindow, computeNextWindowStart as computeNextWindowStartLocal } from "./copilot/time-context.ts";
@@ -37,6 +37,19 @@ interface WorkflowEdge {
 interface WorkflowDefinition {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
+}
+
+/**
+ * A single Split A/B path. `tags` (optional, by name) force a lead carrying
+ * any of them into this path, with priority over sticky/random selection.
+ * Mirrors src/types/workflow.ts SplitVariant (kept in sync manually — Deno
+ * edge functions can't import from the frontend src/ tree).
+ */
+interface SplitVariant {
+  id: string;
+  label: string;
+  percentage: number;
+  tags?: string[];
 }
 
 interface ExecuteWorkflowParams {
@@ -467,10 +480,10 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
 
         case "split_ab": {
           // Support both new variants[] format and legacy splitPercentA format
-          let variants: { id: string; label: string; percentage: number }[];
+          let variants: SplitVariant[];
 
           if (Array.isArray(node.data.variants) && (node.data.variants as any[]).length > 0) {
-            variants = node.data.variants as { id: string; label: string; percentage: number }[];
+            variants = node.data.variants as SplitVariant[];
           } else {
             const percentA = Number(node.data.splitPercentA) || 50;
             variants = [
@@ -479,18 +492,19 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
             ];
           }
 
-          // Sticky assignment: same lead always gets same variant in this split
-          const { variant: chosenVariant, roll, reused } = await resolveOrCreateSplitAssignment(
-            supabase,
-            {
-              organizationId,
-              workflowId,
-              nodeId,
-              leadId,
-              executionId,
-              variants,
-            },
-          );
+          // Priority: tag override > sticky assignment > weighted random
+          const { variant: chosenVariant, roll, reused, matchedByTag, matchedTag } =
+            await resolveOrCreateSplitAssignment(
+              supabase,
+              {
+                organizationId,
+                workflowId,
+                nodeId,
+                leadId,
+                executionId,
+                variants,
+              },
+            );
 
           // Find the edge matching this variant
           const outEdges = edgeMap.get(nodeId) || [];
@@ -513,6 +527,8 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
               chosenVariantId: chosenVariant.id,
               roll,
               reused,
+              matchedByTag,
+              matchedTag: matchedTag ?? null,
               nextNodeId: nextNodeId || null,
             },
           );
@@ -1003,12 +1019,75 @@ async function resolveOrCreateSplitAssignment(
     nodeId: string;
     leadId: string;
     executionId: string;
-    variants: { id: string; label: string; percentage: number }[];
+    variants: SplitVariant[];
   },
-): Promise<{ variant: { id: string; label: string; percentage: number }; roll: number | null; reused: boolean }> {
+): Promise<{
+  variant: SplitVariant;
+  roll: number | null;
+  reused: boolean;
+  matchedByTag: boolean;
+  matchedTag: string | null;
+}> {
   const { organizationId, workflowId, nodeId, leadId, executionId, variants } = params;
 
-  // 1. Check existing assignment
+  const persist = async (variant: SplitVariant) => {
+    try {
+      await supabase
+        .from("workflow_split_assignments")
+        .upsert({
+          organization_id: organizationId,
+          workflow_id: workflowId,
+          node_id: nodeId,
+          lead_id: leadId,
+          variant_id: variant.id,
+          variant_label: variant.label,
+          execution_id: executionId,
+        }, { onConflict: "workflow_id,node_id,lead_id" });
+    } catch (err) {
+      console.warn("[workflow-executor] Failed to persist split assignment:", err);
+    }
+  };
+
+  // 0. Tag override (highest priority). Only queries lead tags when at least
+  //    one variant declares tags — keeps tagless workflows on the exact same
+  //    path (no extra query, no behaviour change).
+  const hasTagRules = variants.some(v => Array.isArray(v.tags) && v.tags.length > 0);
+  if (hasTagRules) {
+    try {
+      // getLeadTags returns a comma-separated list of tag names.
+      const csv = await getLeadTags(supabase, leadId);
+      const leadTags = csv
+        .split(",")
+        .map(t => t.trim().toLowerCase())
+        .filter(Boolean);
+
+      if (leadTags.length > 0) {
+        // First variant (in array order) with a tag the lead carries wins.
+        let matchedTagName: string | null = null;
+        const tagged = variants.find(v =>
+          (v.tags ?? []).some(tag => {
+            const t = tag.trim().toLowerCase();
+            if (t && leadTags.includes(t)) {
+              matchedTagName = tag;
+              return true;
+            }
+            return false;
+          })
+        );
+
+        if (tagged) {
+          // Persist so metrics/edges stay consistent — overwrites any prior
+          // sticky assignment when a tag rule forces a different path.
+          await persist(tagged);
+          return { variant: tagged, roll: null, reused: false, matchedByTag: true, matchedTag: matchedTagName };
+        }
+      }
+    } catch (err) {
+      console.warn("[workflow-executor] Failed to evaluate split tag override:", err);
+    }
+  }
+
+  // 1. Check existing assignment (sticky)
   try {
     const { data: existing } = await supabase
       .from("workflow_split_assignments")
@@ -1021,7 +1100,7 @@ async function resolveOrCreateSplitAssignment(
     if (existing) {
       const matched = variants.find(v => v.id === existing.variant_id);
       if (matched) {
-        return { variant: matched, roll: null, reused: true };
+        return { variant: matched, roll: null, reused: true, matchedByTag: false, matchedTag: null };
       }
       // Variant was removed from config — fall through to new assignment
     }
@@ -1042,23 +1121,9 @@ async function resolveOrCreateSplitAssignment(
   }
 
   // 3. Persist assignment (upsert to handle race conditions)
-  try {
-    await supabase
-      .from("workflow_split_assignments")
-      .upsert({
-        organization_id: organizationId,
-        workflow_id: workflowId,
-        node_id: nodeId,
-        lead_id: leadId,
-        variant_id: chosenVariant.id,
-        variant_label: chosenVariant.label,
-        execution_id: executionId,
-      }, { onConflict: "workflow_id,node_id,lead_id" });
-  } catch (err) {
-    console.warn("[workflow-executor] Failed to persist split assignment:", err);
-  }
+  await persist(chosenVariant);
 
-  return { variant: chosenVariant, roll: Math.round(roll * 100) / 100, reused: false };
+  return { variant: chosenVariant, roll: Math.round(roll * 100) / 100, reused: false, matchedByTag: false, matchedTag: null };
 }
 
 async function recordSplitEvent(

@@ -164,16 +164,15 @@ SIDEBAR_FEATURE_MAP["/chat-whatsapp"] = "chat";
 // ─── Route Path → Feature Key Map (guards de rota) ───────────
 /**
  * Fonte única dos guards de rota por plano. Todo path aqui DEVE estar
- * envolto em <PlanFeatureProtectedRoute feature="<key>"> no App.tsx —
- * consistência enforced por tests/unit/route-feature-map.test.ts
- * (cadeado na nav sem guard na rota = contornável via URL direta).
+ * envolto em <FeatureRoute feature="<key>"> no App.tsx — consistência
+ * enforced por tests/unit/route-feature-map.test.ts (cadeado na nav sem
+ * guard na rota = contornável via URL direta).
  *
- * Paths de redirect (/marketing, /analytics → /dashboard) ficam FORA —
+ * Paths de redirect (/marketing, /analytics, /chat) ficam FORA —
  * não têm elemento pra guardar.
  */
 export const ROUTE_FEATURE_MAP: Record<string, FeatureKey> = {
-  // chat
-  "/chat": "chat",
+  // chat (/chat é redirect pra /chat-whatsapp — fora do mapa)
   "/chat-whatsapp": "chat",
   "/atendimento/meta": "chat",
   // funis (CRM core — true nos 3 planos; guard fecha a porta pra plano futuro)
@@ -209,6 +208,7 @@ export const ROUTE_FEATURE_MAP: Record<string, FeatureKey> = {
   "/automacoes/:id/execucoes": "automations",
   // disparos + templates
   "/disparos": "whatsapp_bulk",
+  "/disparos/novo": "whatsapp_bulk",
   "/templates": "message_templates",
 };
 

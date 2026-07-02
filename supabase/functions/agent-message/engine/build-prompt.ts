@@ -7,7 +7,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { resolveActiveWindow, formatNowText, getDayKeyInTimezone } from "../../_shared/copilot/time-context.ts";
+import { resolveActiveWindow, formatTemporalAnchor } from "../../_shared/copilot/time-context.ts";
 import { parseCustomInstructions } from "./utils.ts";
 
 interface ConversationContextSummary {
@@ -361,8 +361,6 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
     const availabilityForTime = (capabilities.availability || {}) as { timezone?: string };
     const tz = availabilityForTime.timezone || "America/Sao_Paulo";
     const now = new Date();
-    const dayKey = getDayKeyInTimezone(now, tz);
-    const nowText = formatNowText(now, tz, dayKey);
     const timeContext = resolveActiveWindow(
       { behavior_windows: capabilities.behavior_windows, availability: availabilityForTime },
       now,
@@ -370,7 +368,7 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
 
     sections.push("");
     sections.push("# CONTEXTO TEMPORAL");
-    sections.push(`- Agora: ${nowText}`);
+    sections.push(formatTemporalAnchor(now, tz));
     if (timeContext) {
       sections.push(
         "IMPORTANTE: Adapte sua resposta ao momento atual e ao comportamento configurado para esta janela.",

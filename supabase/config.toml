@@ -27,6 +27,12 @@ verify_jwt = false
 [functions.torque-mcp]
 verify_jwt = false
 
+# crm-mcp: customer-facing BYO-AI MCP (.specs/features/crm-mcp/DESIGN.md). The bearer is a
+# customer PAT (not a Supabase JWT), resolved + minted to a per-user RLS client inside the fn
+# — so platform JWT verification is off; auth is done in-function. Never service_role/master.
+[functions.crm-mcp]
+verify_jwt = false
+
 # meta: leadgen polling cron (ADR-0009); auth via x-cron-secret inside fn
 [functions.meta-leadgen-poll]
 verify_jwt = false
@@ -292,6 +298,12 @@ verify_jwt = false
 [functions.quick-blast-create]
 verify_jwt = false
 
+# disparo-planilha-create: fonte "Subir planilha" do disparo (ADR-0014 / #906).
+# Upsert keyed por telefone canônico; cria leads dos não-match no funil/etapa
+# escolhidos. JWT validado no handler (getUser); SEM role gate — qualquer membro.
+[functions.disparo-planilha-create]
+verify_jwt = false
+
 # blast-plan-create: cria Blast Plan auto-batched (ADR-0003 / #707). JWT validado
 # no handler (getUser); SEM role gate — qualquer membro da org, teto diário é a trava.
 [functions.blast-plan-create]
@@ -304,6 +316,11 @@ verify_jwt = false
 # blast-plan-control: pause/resume/cancel de Blast Plan (ADR-0003 / #707). JWT validado
 # no handler (getUser); SEM role gate — qualquer membro da org controla seus planos.
 [functions.blast-plan-control]
+verify_jwt = false
+
+# blast-plan-edit: edita message / release_time de Blast Plan ativo/pausado (ADR-0003 / #911).
+# Audiência é imutável. JWT validado no handler (getUser); SEM role gate — qualquer membro da org.
+[functions.blast-plan-edit]
 verify_jwt = false
 
 # mass-send-status: polls status (JWT user OR x-cron-secret)

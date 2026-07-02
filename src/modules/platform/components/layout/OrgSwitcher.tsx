@@ -114,7 +114,7 @@ export function OrgSwitcher() {
           onClick={() => navigate("/insights")}
         >
           <LineChart className="w-3.5 h-3.5" />
-          <span className="text-xs font-medium">Insights</span>
+          <span className="text-xs font-medium">Gestor</span>
         </Button>
       )}
     </div>

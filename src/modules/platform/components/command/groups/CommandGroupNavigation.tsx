@@ -33,7 +33,7 @@ interface CommandGroupNavigationProps {
 const NAV_ITEMS = [
   { id: "nav-dashboard",   label: "Dashboard",      path: "/dashboard",      Icon: LayoutDashboard },
   { id: "nav-leads",       label: "Leads",           path: "/leads",          Icon: Users },
-  { id: "nav-chat",        label: "Chat WhatsApp",   path: "/chat",           Icon: MessageSquare },
+  { id: "nav-chat",        label: "Chat WhatsApp",   path: "/chat-whatsapp",   Icon: MessageSquare },
   { id: "nav-copilot",     label: "Copilot IA",      path: "/copilot",        Icon: Bot },
   { id: "nav-agenda",      label: "Agenda",          path: "/agenda",         Icon: CalendarDays },
   { id: "nav-analytics",   label: "Analytics",       path: "/analytics",      Icon: BarChart3 },
@@ -50,7 +50,7 @@ export function CommandGroupNavigation({ onClose }: CommandGroupNavigationProps)
   const orgFeatures = useOrgFeaturesOptional();
 
   // Plan gating — item bloqueado mostra cadeado e navega pro estado
-  // bloqueado da rota (PlanFeatureProtectedRoute), sem entrar nos recentes.
+  // bloqueado da rota (FeatureRoute), sem entrar nos recentes.
   const isItemLocked = (path: string): boolean => {
     if (!orgFeatures) return false;
     const featureKey = SIDEBAR_FEATURE_MAP[path];

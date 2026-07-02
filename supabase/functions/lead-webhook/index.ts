@@ -14,7 +14,7 @@ import { getCampaignLeadAssignment, getCampaignCloserAssignment } from "../_shar
 import { logRuntime } from "../_shared/logger.ts";
 import { isValidUUID, isValidISODate, validateArraySize, validateReferencedId } from "../_shared/validation.ts";
 import { successResponse, errorResponse } from "../_shared/response.ts";
-import { upsertPipeEntry, getPipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
+import { upsertPipeEntry, getPipeEntry, updatePipeEntryById, resolveActiveStageKey } from "../_shared/pipeline-adapter.ts";
 import type { PipeSlug } from "../_shared/pipeline-adapter.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -422,17 +422,24 @@ serve(withSentry('lead-webhook', async (req) => {
 
     let result: Awaited<ReturnType<typeof getOrCreateLead>>;
 
-    // ── Meta dummy/test lead — nunca deduplica ───────────────────────────
+    // ── Meta dummy/test lead — DESCARTAR (não persistir) ─────────────────
     // A "Testing Tool" do Meta Lead Ads envia leads com email test@meta.com e
-    // valores literais "<test lead: dummy data for {campo}>". Com
-    // update_existing_if_match esses casam um registro de teste já existente
-    // (até soft-deletado) e o atualizam silenciosamente — o envio "dá sucesso"
-    // mas nada novo aparece. Dummy = sempre criar, jamais deduplicar.
+    // valores literais "<test lead: dummy data for {campo}>". Não são leads
+    // reais — só validam o webhook. Antes a função CRIAVA esses leads: o lixo
+    // acumulava (28 orgs poluídas) e os antigos caíam na etapa "novo"
+    // (desativada em várias orgs) → invisíveis no kanban mas contados =
+    // "leads fantasmas" (incidente HGE Iluminação 2026-06-30). O Meta só
+    // precisa de um 200 — reconhecemos sem gravar nada. Ver [[ghost-stage]].
     const isDummyTestLead = [email, name, phone, company, ...Object.values(customFields)]
       .some((v) => typeof v === "string" &&
         (v.trim().toLowerCase() === "test@meta.com" || /^<test lead: dummy data for\b/i.test(v.trim())));
     if (isDummyTestLead) {
-      console.log("[lead-webhook] Meta dummy/test lead detectado — pulando dedup (sempre cria):", { email });
+      console.log("[lead-webhook] Meta dummy/test lead detectado — descartando (ack 200, sem criar):", { email });
+      return successResponse(
+        { success: true, dummy_test_lead: true, message: "Lead de teste do Meta reconhecido (não persistido)" },
+        corsHeaders,
+        { req },
+      );
     }
 
     // Padrão: sempre criar novo lead. Só busca por telefone/email quando o cliente envia update_existing_if_match = true.
@@ -813,11 +820,24 @@ serve(withSentry('lead-webhook', async (req) => {
         if (match) {
           resolvedStageKey = match.stage_key;
         } else {
-          // Stage não resolveu: grava o literal cru e o lead some do kanban (coluna é keyed por
-          // stage_key). Loga warn pra não falhar mudo — caller deve mandar stage_key, não rótulo.
-          console.warn(
-            `[lead-webhook] stage não resolvido em ${pipeSlug}: "${stageVal}" não casa stage_key nem nome de etapa ativa (org ${organizationId}). Gravando literal — lead pode não aparecer no funil.`,
-          );
+          // Stage não casa key nem nome de etapa ATIVA. Em vez de gravar o literal (lead some
+          // do kanban — coluna é keyed por stage_key), remapeia p/ a 1ª etapa ativa do pipe
+          // (ghost-stage guard). Ex.: integração externa manda stage="novo" mas a org desativou
+          // "novo" e usa "novo_lead" como 1ª etapa → o lead cai em novo_lead, visível.
+          // Incidente DNA de Almas 2026-06: Zuvic mandava place_in_pipe whatsapp/novo e todo
+          // lead caía na coluna "novo" (inativa) → invisível. Mesma classe de [[ghost-stage]].
+          const guardStage = await resolveActiveStageKey(supabase, organizationId, pipeSlug, stageVal);
+          if (guardStage && guardStage !== stageVal) {
+            console.warn(
+              `[lead-webhook] stage "${stageVal}" não casa etapa ativa em ${pipeSlug} (org ${organizationId}); remapeando p/ 1ª ativa "${guardStage}" (ghost-stage guard).`,
+            );
+            resolvedStageKey = guardStage;
+          } else if (!guardStage) {
+            // Org sem nenhuma etapa ativa nesse pipe — não há p/ onde remapear; mantém literal.
+            console.warn(
+              `[lead-webhook] stage "${stageVal}" não resolvido e org sem etapas ativas em ${pipeSlug} (org ${organizationId}). Gravando literal — lead pode não aparecer no funil.`,
+            );
+          }
         }
       }
 

@@ -1,23 +1,27 @@
 # Module — campaigns
 
-**Status:** 🟢 Active (slice 9 — frontend completo. Backend `_shared/campaign-distribution.ts` + edge functions `campaign-rule-dispatch`, `process-outbound-dispatches`, `outbound-trigger`, `mass-send-{create,status,control}` no slice 15/16)
+**Status:** 🟢 Active (slice 9 — frontend migrado. UI Kanban de campanhas **retirada** — entidade + hooks vivos, gestão migrou pra funis com prazo (`pipelines/FunisHub`) + envio em massa em `/disparos`. Backend `_shared/campaign-distribution.ts` + edge functions `campaign-rule-dispatch`, `process-outbound-dispatches`, `outbound-trigger`, `mass-send-{create,status,control}` no slice 15/16)
 **BC:** campaigns
 **Entidade primária:** Campaign + Mass Send
 **Owner:** marketing / vendas
 
 ## Escopo
 
-Campanhas paralelas aos pipes. Cada campanha:
+> **UI legada do Kanban de campanhas retirada.** As páginas `Campanhas`/`CampanhaDetail` e o cluster de 17 componentes (`CampanhaCard`, `CampanhaKanban`, `CampanhaAnalytics`, `CampanhaViewersSection`, `CampanhaDisparosTab`, `CampanhaAutomaticaPanel`, `CampanhaSemiAutomaticaPanel`, `CampanhaDispatchRulesSection`, `CampanhaPipeAutomationsSection`, `CreateCampanhaModal`, `EditCampanhaModal`, `AddLeadToCampanhaModal`, `CampaignEndModal`, `CampaignTemplateSelector`, `ExtractToPipeModal`, `ImportLeadsModal`, `ManageStagesModal`) foram **deletados**. Campanhas agora são modeladas como **funis com prazo** (funis temporários) em `pipelines/FunisHub`, e o envio em massa vive em `/disparos` (`DisparosPanel`/`NovoDisparo` + Wizard Linear #904). A **entidade** Campaign + seus hooks permanecem vivos (consumidos por `workflows` + `leads` + disparos) — só a superfície de UI Kanban saiu.
+
+A entidade Campaign (paralela aos pipes) ainda modela:
 - Objetivo (`qualificacao`, `agendamentos`, `propostas`, `livre`) + deadline
 - Agente IA (opcional — pra conversar com lead)
 - Metas (volume, conversão)
 - Round-robin entre membros do time (SDR/Closer)
 - Sequence de mensagens (dispatch rules + steps com delay/timeout/wait_response)
 - Templates pré-aprovados (com variáveis `{{lead.name}}`, `{{lead.empresa}}`, etc.)
-- Stages dinâmicas (Kanban) + viewers (permissões granulares)
+- Stages dinâmicas + viewers (permissões granulares)
 - Pipe automations (campanha → pipe destino quando lead atinge estágio)
 
-Mass send: envio em massa one-shot via Uazapi `/sender/*` para lista de leads (separado de campanha contínua) — `uazapi_sender_jobs`.
+Esses dados seguem expostos pelos hooks (`useCampanhas`, `useCampanhaStages`, `useCampaignTemplates`, …) e consumidos por `workflows`, `leads` e disparos. O que saiu foi só a UI Kanban de gestão.
+
+Mass send: envio em massa one-shot via Uazapi `/sender/*` para lista de leads (separado de campanha contínua) — `uazapi_sender_jobs`. UI canônica em `/disparos`.
 
 Dispatch queue: fila de itens disparados (por campanha ou pipe) com retry — `outbound_dispatches`.
 
@@ -34,37 +38,25 @@ Dispatch queue: fila de itens disparados (por campanha ou pipe) com retry — `o
 
 ```
 src/modules/campaigns/
-├── components/                    # 20 components do domínio
-│   ├── AddLeadToCampanhaModal.tsx
+├── components/                    # Components do domínio (disparo + selectors). Cluster Kanban legado deletado.
 │   ├── AgentSelectorStep.tsx
-│   ├── CampaignEndModal.tsx
-│   ├── CampaignTemplateSelector.tsx
-│   ├── CampanhaAnalytics.tsx
-│   ├── CampanhaAutomaticaPanel.tsx
-│   ├── CampanhaCard.tsx
-│   ├── CampanhaDisparosTab.tsx
-│   ├── CampanhaDispatchRulesSection.tsx
-│   ├── CampanhaKanban.tsx
-│   ├── CampanhaPipeAutomationsSection.tsx
-│   ├── CampanhaSemiAutomaticaPanel.tsx
-│   ├── CampanhaViewersSection.tsx
-│   ├── CreateCampanhaModal.tsx
+│   ├── BlastPlanCard.tsx
 │   ├── CreateTemplateModal.tsx
-│   ├── EditCampanhaModal.tsx
-│   ├── ExtractToPipeModal.tsx
-│   ├── ImportLeadsModal.tsx
-│   ├── ManageStagesModal.tsx
-│   └── TemplateSelectorStep.tsx
+│   ├── TemplateSelectorStep.tsx
+│   └── disparo-wizard/            # Wizard Linear (#904): shell + 5 passos + state machine pura
 ├── hooks/
 │   ├── useCampanhas.ts            # CRUD + stages + members + leads + viewers + pipe automations + dispatch rules
 │   ├── useCampaignTemplates.ts    # Templates + dispatch batches + logs + stats
 │   ├── useMassSendJobs.ts         # Uazapi /sender/* one-shot mass send
-│   └── useDispatchQueueItems.ts   # Outbound dispatch queue (cross-module: campaigns + pipelines)
-├── pages/
-│   ├── Campanhas.tsx              # Lista de campanhas
-│   ├── CampanhaDetail.tsx         # Detalhe (Kanban + analytics + dispatch + viewers + stages)
-│   └── MassSend.tsx               # UI de mass send (não roteada atualmente — órfã, mantida pra futuro)
-├── lib/                           # vazio — utils internos quando necessário
+│   ├── useBlastPlans.ts           # Blast Plans auto-batched (ADR-0003 / #707)
+│   ├── useDispatchQueueItems.ts   # Outbound dispatch queue (cross-module: campaigns + pipelines)
+│   ├── useAudienceResolve.ts      # Resolução de audiência do disparo (#904)
+│   └── useDisparoPlanilhaCreate.ts # Criação de disparo por planilha (#904)
+├── pages/                         # Páginas Campanhas/CampanhaDetail (Kanban) deletadas — UI = funis com prazo + /disparos
+│   ├── DisparosPanel.tsx          # /disparos — porta canônica (empty guiado + histórico) #904
+│   └── NovoDisparo.tsx            # /disparos/novo — wrapper do Wizard Linear #904
+├── lib/
+│   └── blast-planning.ts          # Twin frontend do core puro Deno (planBlast/nextValidSendTime) #904
 ├── index.ts                       # API pública
 └── CLAUDE.md                      # este arquivo
 ```
@@ -89,15 +81,15 @@ src/modules/campaigns/
 
 ### Components
 
-Internals (não re-exportados — usados apenas via Pages do próprio módulo e dentro de `CampanhaDetail`).
+Internals (não re-exportados — usados apenas via Pages do próprio módulo, `DisparosPanel`/`NovoDisparo` e o `disparo-wizard`).
 
 ### Pages
 
 NÃO re-exportadas — App.tsx faz deep-import via React.lazy:
-- `@/modules/campaigns/pages/CampanhaDetail`
-- `@/modules/campaigns/pages/MassSend` (órfã — não roteada hoje, preservada)
+- `@/modules/campaigns/pages/DisparosPanel` (rota `/disparos` — porta canônica #904)
+- `@/modules/campaigns/pages/NovoDisparo` (rota `/disparos/novo` — Wizard Linear #904)
 
-> `pages/Campanhas.tsx` (lista v1) deletada em 2026-07-02 (plan-tiers-cleanup) — lazy import em App.tsx nunca era renderizado.
+> `Campanhas`/`CampanhaDetail` (Kanban de campanhas) foram deletadas — a gestão de campanha migrou pra funis com prazo em `pipelines/FunisHub`.
 
 ### Types
 
@@ -136,14 +128,14 @@ Re-exportados via index.ts: `CampaignObjective`, `TargetPipe`, `CampaignType`, `
 ## Origem (slice 9 — frontend migrado em 2026-05-27)
 
 Frontend (✅ migrado pra cá):
-- ~~`src/components/campanhas/`~~ (20 files) → `./components/`
+- ~~`src/components/campanhas/`~~ (20 files) → `./components/` (17 do cluster Kanban depois **deletados** ao retirar a UI de campanhas; sobraram os selectors de disparo)
 - ~~`src/hooks/useCampanhas.ts`~~ → `./hooks/useCampanhas.ts`
 - ~~`src/hooks/useCampaignTemplates.ts`~~ → `./hooks/useCampaignTemplates.ts`
 - ~~`src/hooks/useMassSendJobs.ts`~~ → `./hooks/useMassSendJobs.ts`
 - ~~`src/hooks/useDispatchQueueItems.ts`~~ → `./hooks/useDispatchQueueItems.ts`
-- ~~`src/pages/Campanhas.tsx`~~ → `./pages/Campanhas.tsx`
-- ~~`src/pages/CampanhaDetail.tsx`~~ → `./pages/CampanhaDetail.tsx`
-- ~~`src/pages/campaigns/MassSend.tsx`~~ → `./pages/MassSend.tsx`
+- ~~`src/pages/Campanhas.tsx`~~ → ~~`./pages/Campanhas.tsx`~~ **deletada** (UI Kanban de campanhas retirada — gestão migrou pra funis com prazo em `pipelines/FunisHub`). Entidade Campaign + hooks `useCampanhas`/`useCampanhaStages`/… seguem vivos.
+- ~~`src/pages/CampanhaDetail.tsx`~~ → ~~`./pages/CampanhaDetail.tsx`~~ **deletada** (idem — junto com o cluster de 17 componentes Kanban: `CampanhaKanban`, `CampanhaAnalytics`, `CreateCampanhaModal`, … ).
+- ~~`src/pages/campaigns/MassSend.tsx`~~ → ~~`./pages/MassSend.tsx`~~ **deletada** (#904 — órfã sem rota, substituída pela porta `/disparos`). Hooks `useMassSendJobs`/`useCreateMassSend`/`useControlMassSend`/`useRefreshMassSendStatus` seguem vivos (Quick Blast / Disparos).
 
 Backend (próximas slices):
 - `supabase/functions/campaign-rule-dispatch/` (slice 15)

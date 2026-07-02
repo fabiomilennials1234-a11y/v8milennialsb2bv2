@@ -16,10 +16,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mic, MicOff, Upload, Trash2, Play, Square } from "lucide-react";
+import { Mic, MicOff, Upload, Trash2, Play, Square, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ACTION_CATEGORIES, ACTION_LABELS } from "@/types/workflow";
-import type { ActionNodeData, WorkflowActionType } from "@/types/workflow";
+import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
+import type { ActionNodeData, WorkflowActionType, MessageType } from "@/types/workflow";
+import { MenuNodeConfig, PixButtonNodeConfig } from "@/modules/workflows/components/action-configs";
+import { useFeatureFlag } from "@/modules/platform";
 import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
 import { useOrganization } from "@/modules/identity";
 import { useCampaignTemplatesByType } from "@/modules/campaigns/hooks/useCampaignTemplates";
@@ -139,6 +141,104 @@ function ApplyChecklistConfig({
   );
 }
 
+function SendToNumberConfig({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const taRef = useRef<TemplateTextareaHandle>(null);
+  // Always render at least one input row so the operator has somewhere to type.
+  const phones = (data.notifyPhones && data.notifyPhones.length > 0)
+    ? data.notifyPhones
+    : [""];
+
+  const updatePhone = (index: number, value: string) => {
+    const next = [...phones];
+    next[index] = value;
+    onUpdate({ notifyPhones: next });
+  };
+
+  const addPhone = () => onUpdate({ notifyPhones: [...phones, ""] });
+
+  const removePhone = (index: number) => {
+    const next = phones.filter((_, i) => i !== index);
+    onUpdate({ notifyPhones: next.length > 0 ? next : [""] });
+  };
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Números de destino</Label>
+        <div className="space-y-2">
+          {phones.map((phone, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <Input
+                value={phone}
+                onChange={(e) => updatePhone(index, e.target.value)}
+                placeholder="Ex: 5511999998888"
+                inputMode="tel"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0 text-muted-foreground hover:text-destructive"
+                onClick={() => removePhone(index)}
+                disabled={phones.length === 1 && !phone}
+                title="Remover número"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={addPhone}
+          className="w-full"
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          Adicionar número
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          A mensagem é enviada para cada número (com DDI/DDD, ex: 55 + DDD +
+          número). Não é o número do lead — use para avisar um vendedor.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Mensagem</Label>
+        <VariableInserter onInsert={(v) => taRef.current?.insertAtCursor(v)} />
+        <TemplateTextarea
+          ref={taRef}
+          value={data.messageTemplate || ""}
+          onChange={(v) => onUpdate({ messageTemplate: v })}
+          placeholder="Lead {{nome}} ({{empresa}}) respondeu. Assuma a conversa."
+          rows={4}
+        />
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg border p-3">
+        <div className="space-y-0.5 pr-2">
+          <Label className="text-sm">Resumir conversa do lead ao enviar</Label>
+          <p className="text-xs text-muted-foreground">
+            Anexa um resumo da conversa (IA) + o telefone do lead à mensagem,
+            para o vendedor ter contexto.
+          </p>
+        </div>
+        <Switch
+          checked={!!data.includeConversationSummary}
+          onCheckedChange={(v) => onUpdate({ includeConversationSummary: v })}
+        />
+      </div>
+    </>
+  );
+}
+
 interface ActionPanelProps {
   data: ActionNodeData;
   onUpdate: (updates: Partial<ActionNodeData>) => void;
@@ -146,6 +246,10 @@ interface ActionPanelProps {
 
 export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
   const at = data.actionType;
+  // Node unificado gateado por org (ADR-0012). Fail-closed: enquanto carrega ou
+  // se a org não tem a flag, o picker mostra os envios legados, como antes.
+  const { enabled: unifiedEnabled } = useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
+  const actionCategories = getActionCategories(unifiedEnabled);
 
   return (
     <div className="space-y-4">
@@ -170,7 +274,7 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
             <SelectValue placeholder="Selecione a ação" />
           </SelectTrigger>
           <SelectContent className="max-h-80">
-            {ACTION_CATEGORIES.map((cat) => (
+            {actionCategories.map((cat) => (
               <SelectGroup key={cat.label}>
                 <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
                   {cat.label}
@@ -189,17 +293,24 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
       {/* ═══════ COMUNICAÇÃO ═══════ */}
 
       {/* WhatsApp Instance Selector (shared by all WhatsApp actions) */}
-      {(at === "send_whatsapp" ||
+      {(at === "send_whatsapp_message" ||
+        at === "send_whatsapp" ||
         at === "send_whatsapp_audio" ||
         at === "send_whatsapp_image" ||
         at === "send_whatsapp_sticker" ||
-        at === "send_whatsapp_template") && (
+        at === "send_whatsapp_template" ||
+        at === "send_to_number") && (
         <WhatsAppInstanceSelector
           instanceId={data.whatsappInstanceId}
           onSelect={(id, name) =>
             onUpdate({ whatsappInstanceId: id, whatsappInstanceName: name })
           }
         />
+      )}
+
+      {/* Unified "Enviar Mensagem" node (ADR-0012) */}
+      {at === "send_whatsapp_message" && (
+        <UnifiedMessagePanel data={data} onUpdate={onUpdate} />
       )}
 
       {/* Send WhatsApp (Texto) */}
@@ -296,6 +407,11 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
             </p>
           </div>
         </>
+      )}
+
+      {/* Send to fixed number(s) */}
+      {at === "send_to_number" && (
+        <SendToNumberConfig data={data} onUpdate={onUpdate} />
       )}
 
       {/* ═══════ LEAD MANAGEMENT ═══════ */}
@@ -940,12 +1056,92 @@ function TagSelectorField({
 
 // ── WhatsApp Texto ────────────────────────────────────────────────────────────
 
-function WhatsAppTextPanel({
+// ── Unified "Enviar Mensagem" node (ADR-0012) ─────────────────────────────────
+
+const MESSAGE_TYPE_OPTIONS: { value: MessageType; label: string }[] = [
+  { value: "texto", label: "Texto" },
+  { value: "imagem", label: "Imagem" },
+  { value: "audio", label: "Áudio" },
+  { value: "sticker", label: "Sticker" },
+  { value: "menu", label: "Menu" },
+  { value: "pix", label: "Botão PIX" },
+];
+
+function UnifiedMessagePanel({
   data,
   onUpdate,
 }: {
   data: ActionNodeData;
   onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const mt: MessageType = (data.messageType as MessageType) || "texto";
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Tipo de mensagem</Label>
+        <Select
+          value={mt}
+          onValueChange={(v) => onUpdate({ messageType: v as MessageType })}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione o tipo" />
+          </SelectTrigger>
+          <SelectContent>
+            {MESSAGE_TYPE_OPTIONS.map((t) => (
+              <SelectItem key={t.value} value={t.value}>
+                {t.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {mt === "texto" && <WhatsAppTextPanel data={data} onUpdate={onUpdate} aiMode />}
+      {mt === "imagem" && <WhatsAppImagePanel data={data} onUpdate={onUpdate} />}
+      {mt === "audio" && <WhatsAppAudioPanel data={data} onUpdate={onUpdate} />}
+      {mt === "sticker" && (
+        <div className="space-y-2">
+          <Label>URL da Figurinha</Label>
+          <Input
+            value={data.stickerUrl || ""}
+            onChange={(e) => onUpdate({ stickerUrl: e.target.value })}
+            placeholder="https://... (PNG ou WebP, idealmente 512x512)"
+          />
+          <p className="text-xs text-muted-foreground">
+            Imagem PNG ou WebP. Recomendado 512×512px com fundo transparente.
+          </p>
+        </div>
+      )}
+      {mt === "menu" && <MenuNodeConfig data={data} onUpdate={onUpdate} />}
+      {mt === "pix" && <PixButtonNodeConfig data={data} onUpdate={onUpdate} />}
+
+      {/* Semi-automático — aplica à mensagem inteira (ADR-0012) */}
+      <div className="flex items-center justify-between rounded-lg border p-3 mt-2">
+        <div className="space-y-0.5 pr-2">
+          <Label className="text-sm">Semi-automático</Label>
+          <p className="text-xs text-muted-foreground">
+            Exige aprovação do SDR antes de enviar.
+          </p>
+        </div>
+        <Switch
+          checked={!!data.semiAutomatic}
+          onCheckedChange={(v) => onUpdate({ semiAutomatic: v })}
+        />
+      </div>
+    </>
+  );
+}
+
+function WhatsAppTextPanel({
+  data,
+  onUpdate,
+  aiMode = false,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+  /** Unified node (ADR-0012): replaces "Template Meta" mode with "Gerar com IA". */
+  aiMode?: boolean;
 }) {
   const taRef = useRef<TemplateTextareaHandle>(null);
 
@@ -964,7 +1160,7 @@ function WhatsAppTextPanel({
       t.name.toLowerCase().includes(templateSearch.toLowerCase()),
   );
 
-  const handleModeChange = (mode: "free" | "campaign_template" | "meta_template") => {
+  const handleModeChange = (mode: "free" | "campaign_template" | "meta_template" | "ai") => {
     onUpdate({ templateMode: mode, useTemplate: mode === "meta_template" });
   };
 
@@ -984,11 +1180,17 @@ function WhatsAppTextPanel({
         <Label>Modo de mensagem</Label>
         <div className="flex gap-1 rounded-lg border p-1 bg-muted/30">
           {(
-            [
-              { mode: "free", label: "Escrever" },
-              { mode: "campaign_template", label: "Template" },
-              { mode: "meta_template", label: "Template Meta" },
-            ] as const
+            aiMode
+              ? ([
+                  { mode: "free", label: "Escrever" },
+                  { mode: "campaign_template", label: "Template" },
+                  { mode: "ai", label: "Gerar com IA" },
+                ] as const)
+              : ([
+                  { mode: "free", label: "Escrever" },
+                  { mode: "campaign_template", label: "Template" },
+                  { mode: "meta_template", label: "Template Meta" },
+                ] as const)
           ).map(({ mode, label }) => (
             <Button
               key={mode}
@@ -1015,6 +1217,28 @@ function WhatsAppTextPanel({
           />
           <p className="text-xs text-muted-foreground">
             Templates aprovados pela Meta para envio em massa.
+          </p>
+        </div>
+      )}
+
+      {/* Gerar com IA mode (ADR-0012) — prompt gera em variável, node envia */}
+      {templateMode === "ai" && (
+        <div className="space-y-2">
+          <Label>Prompt para a IA</Label>
+          <Textarea
+            value={data.aiPrompt || ""}
+            onChange={(e) => onUpdate({ aiPrompt: e.target.value })}
+            placeholder="Gere uma mensagem de follow-up para {{nome}} da {{empresa}} considerando que..."
+            rows={3}
+          />
+          <Label>Salvar resultado em variável</Label>
+          <Input
+            value={data.aiOutputVariable || "ai_message"}
+            onChange={(e) => onUpdate({ aiOutputVariable: e.target.value })}
+            placeholder="ai_message"
+          />
+          <p className="text-xs text-muted-foreground">
+            Use {"{{ai_message}}"} na mensagem abaixo para inserir o texto gerado.
           </p>
         </div>
       )}

@@ -39,7 +39,16 @@ export interface BlastPlanLotBreakdown {
 }
 
 export interface CreateBlastPlanInput {
-  instance_id: string;
+  /** Legacy single-number path (still accepted by the backend for retrocompat). */
+  instance_id?: string;
+  /** ADR-0015 multi-number: every selected number. Distributed round-robin per
+   *  number per day, each bounded by its own Number Daily Cap. */
+  instance_ids?: string[];
+  /** Per-number cap override, keyed by instance id. Default: the number's stored
+   *  daily_blast_cap. */
+  caps?: Record<string, number>;
+  /** Per-leva send window (ADR-0015 / #909). Default server-side: Mon–Sat 08–20. */
+  window?: { days?: number[]; from_minutes?: number; to_minutes?: number };
   lead_ids: string[];
   message: string;
   delay_min_ms?: number;
@@ -88,9 +97,13 @@ export function useBlastPlans() {
     queryKey: ["blast_plans", orgId],
     queryFn: async (): Promise<BlastPlan[]> => {
       if (!orgId) return [];
+      // Filtro explícito de org: master tem policy SELECT cross-org
+      // (master_select_all_blast_plans, torque-mcp) — sem o eq, o painel
+      // Disparos mostraria os plans de todas as orgs pra usuário master.
       const { data, error } = await supabase
         .from("blast_plans" as any)
         .select("*")
+        .eq("organization_id", orgId)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as unknown as BlastPlan[];
@@ -127,6 +140,38 @@ export function useBlastPlanProgress(planId: string | null) {
       return p;
     },
     enabled: !!planId,
+  });
+}
+
+export interface UpdateBlastPlanInput {
+  plan_id: string;
+  /** New frozen message template — reaches every not-yet-sent recipient. */
+  message?: string;
+  /** New daily release time-of-day (HH:MM). */
+  release_time?: string;
+}
+
+/**
+ * Edit a live Blast Plan's message / release_time (#911). The audience is
+ * immutable (ADR-0003) so it is never touched. Writes go through the
+ * service_role edge fn (blast_plans is SELECT-only for members) which validates
+ * the org, guards the tenant, and rejects terminal plans.
+ */
+export function useUpdateBlastPlan() {
+  const qc = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
+  return useMutation({
+    mutationFn: async (input: UpdateBlastPlanInput) => {
+      const { data, error } = await supabase.functions.invoke("blast-plan-edit", { body: input });
+      if (error) throw new Error(error.message);
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data as { ok: true };
+    },
+    onSuccess: () => {
+      if (teamMember?.organization_id) {
+        qc.invalidateQueries({ queryKey: ["blast_plans", teamMember.organization_id] });
+      }
+    },
   });
 }
 

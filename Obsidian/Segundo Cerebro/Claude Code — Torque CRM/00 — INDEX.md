@@ -3,7 +3,7 @@ type: identity
 title: INDEX — Torque CRM Vault
 status: active
 created: 2026-04-12
-updated: 2026-05-15
+updated: 2026-06-30
 tags: [claude-code, index, torque-crm]
 related: []
 owner: gabriel
@@ -66,82 +66,37 @@ Org Milennials: `6030520a-2ca7-477d-be89-55758e2cd808`.
 
 ## Mapa do vault
 
-### 01 — Identidade
-- [[Subagentes]] — Pipeline `CTO → arquiteto → [design|engenheiro] → arquiteto → CTO` + spec dos 3 subagentes
+> Cada pasta tem um `_MOC.md` auto-gerado por `scripts/vault-regen-indexes.mjs` que
+> lista suas notas. Este mapa aponta pros índices — **não duplica** a lista de arquivos
+> (era a fonte do drift; rodar o regen mantém os MOCs em dia).
 
-### 04 — Decisões (ADRs)
-- [[ADR-2026-04-27-refactor-agent-engine-modular]] — Quebra de god module `AgentEngine` (2920→924 linhas)
-- [[ADR-2026-04-30-meeting-date-sync]] — Sync `meeting_date ⇄ compromisso_date` + `move_pipe_record` fail-closed
-- [[ADR-2026-05-15-consolidacao-subagentes]] — Consolidação 10→3 subagentes do harness Claude Code
-- [ADR-2026-05-25 — Meta Chat canal separado](04%20—%20Decisões/ADR-2026-05-25-meta-chat-canal-separado.md)
-- [ADR-2026-05-26 — Modularização monolito modular](04%20—%20Decisões/ADR-2026-05-26-modularizacao-monolito-modular.md)
+| Pasta | Conteúdo | Índice |
+|---|---|---|
+| **01 — Identidade** | Subagentes, convenções, certificação de permanência | [[01 — Identidade/_MOC\|_MOC]] |
+| **02 — Arquitetura** | Visão geral, multi-tenancy, áreas frágeis, módulos, integrações, roadmap, As-Is/To-Be | [[02 — Arquitetura/_MOC\|_MOC]] |
+| **03 — Reference** | Schema, RLS, Edge Functions, Cron, Env Vars, RPCs, Webhooks (rev. 2026-06-30) | [[03 — Reference/_MOC\|_MOC]] |
+| **04 — Decisões** | ADRs imutáveis | [[04 — Decisões/_MOC\|_MOC]] |
+| **05 — How-to** | deploy-edge-function, aplicar-migration-prod, debug-whatsapp, criar-nova-org, ... | [[05 — How-to/_MOC\|_MOC]] |
+| **06 — Features** | Regras de negócio por domínio (Comunicação, Vendas, IA, Admin, Infra) | [[06 — Features/_MOC\|_MOC]] |
+| **07 — Changelog** | Append-only — diário (`YYYY-MM-DD.md`) + per-feature (`YYYY-MM-DD-slug.md`) | [[07 — Changelog/_MOC\|_MOC]] |
+| **08 — Backlog** | Work in progress + pendências | [[08 — Backlog/_MOC\|_MOC]] |
+| **09 — Tutorials** | Onboarding dev, primeiro PR, tour vault, trabalhando com Claude | [[09 — Tutorials/_MOC\|_MOC]] |
+| **10 — Remodelagem** | Projeto Modularização — **CONCLUÍDO 2026-05-28** (As-Is → Solução → To-Be) | [[10 — Remodelagem/_MOC\|_MOC]] |
+| **99 — Templates** | Esqueletos pra notas novas (adr, backlog-item, ...) | [[99 — Templates/_MOC\|_MOC]] |
 
-### 06 — Features
+### Decisões recentes (ADRs)
 
-#### Comunicação
-- [[whatsapp-stability-plan]] — Estado consolidado pipeline WhatsApp (Uazapi → V8 → DB → UI)
-- [[chat-bubble]] — Chat Bubble Kanban (FAB flutuante)
-- [[chat-bubble-instance-filter]] — Filtro de instância WhatsApp no Chat Bubble
-- [[01-schema|WhatsApp Write Instance — Schema]] — Vínculo 1:1 user→instância de escrita (Etapa A)
-- [[02-ui-states|WhatsApp Write Instance — UI States]] — Spec visual (banner, card erro, modal admin)
-- [[03-frontend|WhatsApp Write Instance — Frontend]] — Hook `useLeadWriteInstance` + ChatComposerShell + InstanceOwnerModal
-- [[04-uat-roteiro|WhatsApp Write Instance — UAT]] — Roteiro F1-F8 testes presenciais
+- [[ADR-2026-06-29-dna-almas-tag-driven-routing]] — roteamento tag-driven canônico (partner webhooks)
+- [[ADR-2026-06-29-send-to-number-workflow-node]] — workflow node `send_to_number`
+- [[ADR-2026-06-26-master-insights-unit-economics]] — unit economics master-only por org
+- [[ADR-2026-06-26-copilot-set-sections-faithful-recompile]] — `copilot.set_sections` recompile fiel
+- [[ADR-2026-06-24-torque-mcp-s5-s6-audit-triggers-migration-diff]] — tools de diagnóstico do torque-mcp
+- [[ADR-2026-06-23-definer-search-path-hardening]] — pin `search_path` em SECURITY DEFINER (42883)
+- [[ADR-2026-06-22-torque-mcp-interno]] — torque-mcp servidor interno (Edge Function)
+- [[ADR-2026-05-28-modularizacao-conclusao]] · [[ADR-2026-05-26-modularizacao-monolito-modular]] — modularização
 
-#### Vendas
-- [[Pipe Confirmacao]] — Kanban de confirmação de reunião (D-5 → compareceu)
-- [[Agenda Interna]] — Calendário unificado (meetings + follow-ups + msgs agendadas + confirmação)
-- [[Upsell]] — Módulo de pós-venda e cross-sell
-
-#### IA
-- [[Copilot]] — Agentes IA conversacionais (qualificador, SDR, agendador, followup, prospectador, custom)
-
-#### Admin
-- [[Permissoes Sistema]] — RBAC 4 camadas (master → admin → feature → role)
-
-#### Infraestrutura
-- [[Runbook — Cron e Webhooks|Runbook Cron + Webhooks]] — pg_cron, webhook deliveries, dead letter
-
-#### Automações
-- [[rpc-consolidation]] — Consolidação de overloads RPC + health check + pg_net cleanup
-
-#### Modularização (em planejamento)
-- [Auditoria de duplicatas](06%20—%20Features/modularizacao/auditoria-duplicatas.md) — Hooks, components, edge functions e `_shared/` sobrepostos antes de mover
-- [Event-bus plano](06%20—%20Features/modularizacao/event-bus-plano.md) — `domain_events` + dispatcher cron + piloto `lead.stage_changed`
-
-### 07 — Changelog
-- [[2026-04-27]] — Daily: refactor copilot + products RLS + PDF chunking
-- [[2026-04-27-refactor-copilot-modules]] — Quebra god module copilot
-- [[2026-04-27-pdf-chunking-rag]] — Fix PDF agente BRUNA em loading infinito
-- [[2026-04-27-products-rls-strict]] — RLS estrita em `products`
-- [[2026-04-28-chat-deep-link-funil]] — Deep link funil → chat
-- [[2026-04-29]] — Daily
-- [[2026-04-29-chat-layout-min-w-0]] — Fix chat layout min-w-0
-- [[2026-04-30]] — Daily: sync `meeting_date ⇄ compromisso_date`
-- [[2026-04-30-meeting-date-sync]] — Detalhe técnico do fix
-- [[2026-05-04]] — Daily: Agenda interna, RPC, webhook
-- [[2026-05-06]] — Daily: Fix delete leads upsell FK + import error tracking
-- [[2026-05-08]] — Daily: WhatsApp write instance frontend
-- [[2026-05-08-whatsapp-write-instance-frontend]] — Etapa C frontend
-- [[2026-05-12]] — Daily: RPC consolidation + chat bubble instance filter
-- [[2026-05-15-bl-wa-01-fallback-polling]] — Fallback polling realtime WhatsApp
-- [[2026-05-15-bl-wa-03-session-dead-banner]] — UI banner sessão morta
-- [[2026-05-15-bl-wa-04-media-dlq-retry]] — Mídia DLQ + retry
-- [[2026-05-15-bl-wa-05-group-capture]] — Captura mensagens de grupo
-- [[2026-05-15-whatsapp-stability-rollout]] — Incidente Uazapi V2 + rollout estabilização
-
-### 08 — Backlog
-
-#### Em progresso
-- [[whatsapp-stability-100pct]] — Fechar 100% pipeline WhatsApp (BL-WA-01..14, 5/14 done)
-- [[promote-refactor-copilot-to-main]] — Promote refactor copilot develop→main (aguardando validação)
-
-#### Backlog (pendente)
-- [[move-pipe-record-server-side]] — HIGH: trigger DB ou RPC `SECURITY DEFINER` para gate server-side
-- [[permissions-fallback-fail-closed]] — MEDIUM: auditar fallback `allowed: true` em `src/lib/permissions.ts`
-- [[tests-unit-usePipeConfirmacao-useLeads-sync]] — MEDIUM: testes unit dos paths SELECT-then-compare
-- [[microcopy-reschedule-modal]] — LOW: microcopy do `RescheduleModal`
-- [[toast-sync-inverso-falha]] — LOW: toast/Sentry no sync inverso
-- [[triggerStageChangedWorkflows-duplicate]] — LOW: dedupe trigger workflows client vs server
+> ADRs também vivem no repo em `docs/adr/00NN-slug.md` (mais perto do código). ⚠️ Há
+> colisões de numeração no repo a resolver (dois `0002`, dois `0012`) — ver `08 — Backlog`.
 
 ## Convenções
 
@@ -149,55 +104,9 @@ Org Milennials: `6030520a-2ca7-477d-be89-55758e2cd808`.
 - **Frontmatter universal**: `type`, `title`, `status`, `created`, `updated`, `tags`, `related`, `owner`. Ver [[99 — Templates/_README|Templates]].
 - **Wikilinks**: usar `[[arquivo]]` ou `[[arquivo|texto custom]]`. Pasta `[[Pasta/arquivo]]` aceita.
 - **Commit scope**: `docs(vault):` para mudanças só no vault.
-
-## Roadmap do vault
-
-Reestruturação em andamento (2026-05-15+). Ver [[ADR-2026-05-15-vault-restructure]]
-para plano completo, ou `08 — Backlog/em-progresso/vault-restructure.md`.
-
-Estado vs target:
-- ✅ F0 Proteção 8 camadas (`chore/vault-protection`)
-- 🟡 F1 Limpeza (em andamento)
-- 🔜 F2 Templates + convenções
-- 🔜 F3 Diátaxis full (02-Arquitetura, 03-Reference, 05-How-to, 09-Tutorials)
-- 🔜 F4 Root docs (AGENTS.md, llms.txt, sub-CLAUDE.md)
-- 🔜 F5 C4 diagrams
-- 🔜 F6 Automação (vault-regen, vault-lint)
-- 🔜 F7 Migração legacy
-- 🔜 F8 Onboarding + health monitoring
+- **Manutenção**: rodar `node scripts/vault-regen-indexes.mjs` após adicionar/remover notas (regenera os `_MOC.md`). `--check` falha no CI se algum MOC estiver desatualizado.
 
 ## Não confundir
 
 - **Subagente do harness** (arquiteto/design/engenheiro) — ferramenta dev → ver [[Subagentes]]
 - **Agente IA do produto (Copilot)** — IA conversacional pra leads → ver [[Copilot]]
-
-### 02 — Arquitetura/Modulos
-- [Atendimento Meta](02%20—%20Arquitetura/Modulos/atendimento-meta.md)
-
-### 05 — How-to
-- [Debug Meta Chat](05%20—%20How-to/debug-meta-chat.md)
-
-### 10 — Remodelagem (projeto ativo)
-
-Projeto **Modularização do Torque CRM**. As-Is → Solução → To-Be. Ver [MOC](10%20—%20Remodelagem/_MOC.md).
-
-#### As-Is (problemas)
-- [Panorama atual](10%20—%20Remodelagem/01-as-is/panorama-atual.md) — números crus do codebase hoje
-- [Problemas críticos](10%20—%20Remodelagem/01-as-is/problemas-criticos.md) — blast radius, onboarding, acoplamento
-- [Duplicatas mapeadas](10%20—%20Remodelagem/01-as-is/duplicatas-mapeadas.md) — síntese executiva (detalhe em `06 — Features/modularizacao/auditoria-duplicatas.md`)
-
-#### Solução (decisões)
-- [Monolito modular](10%20—%20Remodelagem/02-solucao/monolito-modular.md) — decisão raiz
-- [Event-bus](10%20—%20Remodelagem/02-solucao/event-bus.md) — comunicação inter-módulo via `domain_events`
-- [Boundary enforcement](10%20—%20Remodelagem/02-solucao/boundary-enforcement.md) — ESLint + dep-cruiser + CI gate
-- [Bounded contexts](10%20—%20Remodelagem/02-solucao/bounded-contexts.md) — 14 BCs canônicos
-
-#### To-Be (goal)
-- [Estrutura final](10%20—%20Remodelagem/03-to-be/estrutura-final.md) — layout target
-- [Princípios do módulo](10%20—%20Remodelagem/03-to-be/principios-modulo.md) — 10 regras invariantes
-- [Critérios de sucesso](10%20—%20Remodelagem/03-to-be/criterios-sucesso.md) — checklist objetivo
-
-#### Execução
-- [Slices](10%20—%20Remodelagem/04-execucao/slices.md) — 19 slices vertical thin
-- [Decisões pendentes](10%20—%20Remodelagem/04-execucao/decisoes-pendentes.md) — bloqueios CTO
-- [Riscos e mitigações](10%20—%20Remodelagem/04-execucao/riscos-mitigacoes.md)

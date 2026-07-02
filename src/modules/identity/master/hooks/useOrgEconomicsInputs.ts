@@ -11,10 +11,18 @@ import { supabase } from "@/integrations/supabase/client";
  */
 export type EconomicsScenario = "dados" | "projecao";
 
+export type DespesasMode = "detalhado" | "mc";
+
 export interface OrgEconomicsInputs {
   organization_id: string;
   scenario: EconomicsScenario;
   anuncios: number;
+  /** Custo do produto por unidade (R$). Total no cálculo = × nº vendas. */
+  custo_por_produto: number;
+  /** Modo do custo não-aquisição: 'detalhado' (itens) ou 'mc' (margem de contribuição %). */
+  despesas_mode: DespesasMode;
+  /** Margem de contribuição (% do ticket) — usado só no modo 'mc'. */
+  margem_contribuicao_pct: number;
   embalagem: number;
   frete: number;
   imposto_pct: number;
@@ -36,6 +44,9 @@ export type OrgEconomicsInputsUpsert = {
   Pick<
     OrgEconomicsInputs,
     | "anuncios"
+    | "custo_por_produto"
+    | "despesas_mode"
+    | "margem_contribuicao_pct"
     | "embalagem"
     | "frete"
     | "imposto_pct"

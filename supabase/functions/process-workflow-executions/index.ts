@@ -19,7 +19,7 @@ import { logRuntime } from "../_shared/logger.ts";
 import { trackEvent } from "../_shared/track.ts";
 import { startJob, finishJob, failJob } from "../_shared/job-tracker.ts";
 import { executeWorkflow } from "../_shared/workflow-executor.ts";
-import { fireTrigger, processCronTriggers, matchesTriggerConfig } from "../_shared/workflow-trigger.ts";
+import { fireTrigger, processCronTriggers, processScheduledDateTriggers, matchesTriggerConfig } from "../_shared/workflow-trigger.ts";
 import { resolvePipelineId } from "../_shared/pipeline-adapter.ts";
 import { requireCronAuth } from "../_shared/auth.ts";
 import { assertPlanFeature, PlanFeatureDeniedError } from "../_shared/plan-gate.ts";
@@ -73,10 +73,12 @@ Deno.serve(
       if (mode === "cron_triggers") {
         const cronCount = await processCronTriggers(supabase);
         const periodicCount = await processPeriodicTriggers(supabase);
+        const scheduledDateCount = await processScheduledDateTriggers(supabase);
         return new Response(JSON.stringify({
           mode: "cron_triggers",
           cron_triggered: cronCount,
           periodic_triggered: periodicCount,
+          scheduled_date_triggered: scheduledDateCount,
         }), { headers });
       }
 

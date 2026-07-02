@@ -1,13 +1,17 @@
 ---
 type: reference
 title: To-Be — Princípios do Módulo
-status: active
+status: archived
 created: 2026-05-26
+updated: 2026-05-28
 tags: [remodelagem, to-be, principios]
-related: ["[[monolito-modular]]", "[[boundary-enforcement]]"]
+related: ["[[monolito-modular]]", "[[boundary-enforcement]]", "[[ADR-2026-05-28-modularizacao-conclusao]]"]
 ---
 
 # To-Be — Princípios do Módulo
+
+> [!success] EM VIGOR — 2026-05-28
+> Princípios aplicados e enforced (ESLint `boundaries` error mode + CI gate) após a conclusão das slices. Ver [[ADR-2026-05-28-modularizacao-conclusao]].
 
 Regras invariantes que todo módulo respeita.
 

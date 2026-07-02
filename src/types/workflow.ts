@@ -26,7 +26,8 @@ export type WorkflowTriggerType =
   | "campaign_lead_replied"
   | "campaign_lead_no_reply"
   | "campaign_completed"
-  | "field_changed";
+  | "field_changed"
+  | "scheduled_date";
 
 export type WorkflowNodeType =
   | "trigger"
@@ -43,8 +44,17 @@ export type WorkflowNodeType =
   | "wait_business_window"
   | "assign_responsible";
 
+export type MessageType =
+  | "texto"
+  | "imagem"
+  | "audio"
+  | "sticker"
+  | "menu"
+  | "pix";
+
 export type WorkflowActionType =
   // Comunicação
+  | "send_whatsapp_message" // node unificado (ADR-0012)
   | "send_whatsapp"
   | "send_whatsapp_audio"
   | "send_whatsapp_image"
@@ -54,6 +64,7 @@ export type WorkflowActionType =
   | "send_whatsapp_pix_button"
   | "send_meta_message"
   | "send_semi_automatic"
+  | "send_to_number"
   // Lead Management
   | "move_stage"
   | "add_tag"
@@ -224,6 +235,39 @@ export interface TriggerConfigFieldChanged {
   new_value?: string;
 }
 
+/**
+ * Trigger "Antes de uma data" (scheduled_date).
+ *
+ * Alvo = data da reunião marcada de cada lead (`pipeline_entries.metadata->>'meeting_date'`),
+ * por-lead (não uma data global fixa). Audiência = 1 pipe + etapa(s) + origem opcional.
+ * Cada item de `dispatches` dispara uma vez por lead por reunião; remarcar re-arma todos os itens.
+ */
+export type ScheduledDispatchUnit = "days" | "hours" | "minutes";
+
+/** Dispara assim que a reunião é marcada (Fatia 2). Repete a cada remarcação. */
+export interface ScheduledDispatchOnBook {
+  anchor: "ao_marcar";
+  send_time?: string;       // "HH:MM" — opcional
+}
+
+/** Dispara `value` `unit` antes da reunião, no horário `send_time` (fuso da org). */
+export interface ScheduledDispatchBefore {
+  anchor: "antes_da_reuniao";
+  value: number;
+  unit: ScheduledDispatchUnit;
+  send_time?: string;       // "HH:MM" — default "09:00"
+}
+
+export type ScheduledDispatchItem = ScheduledDispatchOnBook | ScheduledDispatchBefore;
+
+export interface TriggerConfigScheduledDate {
+  pipe_type?: string;       // slug do pipe de sistema: "whatsapp" | "confirmacao" | "propostas"
+  pipeline_id?: string;     // UUID para funis custom (alternativa a pipe_type)
+  stages?: string[];        // etapa(s) selecionada(s); vazio = qualquer etapa do pipe
+  filter_origin?: string;   // origem opcional
+  dispatches: ScheduledDispatchItem[];
+}
+
 export type TriggerConfig =
   | TriggerConfigLeadCreated
   | TriggerConfigStageChanged
@@ -238,7 +282,8 @@ export type TriggerConfig =
   | TriggerConfigWebhookReceived
   | TriggerConfigLeadAssigned
   | TriggerConfigCampaignStatus
-  | TriggerConfigFieldChanged;
+  | TriggerConfigFieldChanged
+  | TriggerConfigScheduledDate;
 
 // =====================================================
 // NODE DATA
@@ -259,11 +304,14 @@ export interface ActionNodeData {
   // WhatsApp instance (shared by all WhatsApp actions)
   whatsappInstanceId?: string;
   whatsappInstanceName?: string;
+  // Unified "Enviar Mensagem" node (ADR-0012) — discriminator + semi-auto toggle
+  messageType?: MessageType;
+  semiAutomatic?: boolean;
   // Send WhatsApp (texto)
   messageTemplate?: string;
   templateId?: string;
   useTemplate?: boolean;
-  templateMode?: "free" | "campaign_template" | "meta_template";
+  templateMode?: "free" | "campaign_template" | "meta_template" | "ai";
   templateSourceId?: string;
   // Send WhatsApp (áudio)
   audioId?: string;
@@ -294,6 +342,10 @@ export interface ActionNodeData {
   // Semi-automático
   semiAutoMessage?: string;
   semiAutoApprover?: string;
+  // Enviar para número fixo (send_to_number) — destinos fixos, NÃO o número do lead.
+  // messageTemplate (acima) carrega o texto; reusa o mesmo resolvedor de variáveis.
+  notifyPhones?: string[];
+  includeConversationSummary?: boolean;
   // Move stage
   pipeType?: string;
   targetStage?: string;
@@ -404,6 +456,13 @@ export interface SplitVariant {
   id: string;
   label: string;
   percentage: number;
+  /**
+   * Optional tag names (case-insensitive) that force a lead into this path.
+   * Stored by NAME (not id) so they travel through export/import in the
+   * definition jsonb and degrade safely if the destination org lacks the tag.
+   * Tag match has PRIORITY over the weighted random roll.
+   */
+  tags?: string[];
 }
 
 export interface SplitAbNodeData {
@@ -666,6 +725,7 @@ export const NODE_LABELS: Record<WorkflowNodeType, string> = {
 
 export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   // Comunicação
+  send_whatsapp_message: "Enviar Mensagem",
   send_whatsapp: "Enviar WhatsApp (Texto)",
   send_whatsapp_audio: "Enviar WhatsApp (Áudio)",
   send_whatsapp_image: "Enviar WhatsApp (Imagem)",
@@ -675,6 +735,7 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   send_whatsapp_pix_button: "Enviar Botão PIX (Uazapi)",
   send_meta_message: "Enviar Mensagem Meta",
   send_semi_automatic: "Envio Semi-Automático",
+  send_to_number: "Enviar p/ número fixo",
   // Lead Management
   move_stage: "Mover Estágio",
   add_tag: "Adicionar Tag",
@@ -736,6 +797,7 @@ export const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
   campaign_lead_no_reply: "Lead Não Respondeu na Campanha",
   campaign_completed: "Lead Concluiu a Campanha",
   field_changed: "Campo do Lead Alterado",
+  scheduled_date: "Antes de uma data",
 };
 
 export const CONDITION_OPERATOR_LABELS: Record<ConditionOperator, string> = {
@@ -784,6 +846,7 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
       "send_whatsapp_pix_button",
       "send_meta_message",
       "send_semi_automatic",
+      "send_to_number",
     ],
   },
   {
@@ -827,6 +890,43 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
     actions: ["generate_ai_message", "summarize_conversation", "evaluate_conversation"],
   },
 ];
+
+/**
+ * Feature flag (organizations.feature_flags) que libera o node unificado
+ * "Enviar Mensagem" (ADR-0012). Rollout por org; fail-closed.
+ */
+export const UNIFIED_MESSAGE_NODE_FLAG = "unified_message_node";
+
+/** Os 6 envios WhatsApp colapsados pelo node unificado quando a flag está ON. */
+const LEGACY_WHATSAPP_SEND_ACTIONS: WorkflowActionType[] = [
+  "send_whatsapp",
+  "send_whatsapp_audio",
+  "send_whatsapp_image",
+  "send_whatsapp_sticker",
+  "send_whatsapp_menu",
+  "send_whatsapp_pix_button",
+];
+
+/**
+ * Categorias do picker conforme a flag do node unificado.
+ * - OFF (default / fail-closed): lista legada, exatamente como antes.
+ * - ON: os 6 envios viram a única entrada `send_whatsapp_message`.
+ * Os labels legados seguem em ACTION_LABELS para nós já salvos.
+ */
+export function getActionCategories(unifiedEnabled: boolean): ActionCategory[] {
+  if (!unifiedEnabled) return ACTION_CATEGORIES;
+  return ACTION_CATEGORIES.map((cat) =>
+    cat.label !== "Comunicação"
+      ? cat
+      : {
+          ...cat,
+          actions: [
+            "send_whatsapp_message",
+            ...cat.actions.filter((a) => !LEGACY_WHATSAPP_SEND_ACTIONS.includes(a)),
+          ],
+        },
+  );
+}
 
 // =====================================================
 // TRIGGER CATEGORIES (para UI de seleção agrupada)
@@ -897,7 +997,7 @@ export const TRIGGER_CATEGORIES: TriggerCategory[] = [
   },
   {
     label: "Pipeline",
-    triggers: ["stage_changed", "meeting_confirmed", "meeting_not_confirmed", "proposal_accepted", "proposal_lost"],
+    triggers: ["stage_changed", "meeting_confirmed", "meeting_not_confirmed", "scheduled_date", "proposal_accepted", "proposal_lost"],
   },
   {
     label: "Campanhas",

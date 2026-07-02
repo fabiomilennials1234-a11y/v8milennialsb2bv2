@@ -1,13 +1,17 @@
 ---
 type: reference
 title: Solução — Boundary Enforcement
-status: active
+status: archived
 created: 2026-05-26
+updated: 2026-05-28
 tags: [remodelagem, solucao, tooling, eslint]
-related: ["[[monolito-modular]]", "[[principios-modulo]]"]
+related: ["[[monolito-modular]]", "[[principios-modulo]]", "[[ADR-2026-05-28-modularizacao-conclusao]]"]
 ---
 
 # Solução — Boundary Enforcement
+
+> [!success] IMPLEMENTADO — 2026-05-28
+> `eslint-plugin-boundaries` ativo em **error mode** (flip warn→error no slice 17) + `dependency-cruiser` + CI gate. Ver [[ADR-2026-05-28-modularizacao-conclusao]].
 
 Disciplina enforced por tooling, não por boa vontade.
 

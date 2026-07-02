@@ -55,7 +55,7 @@ Legados `free/starter/pro/enterprise`: `is_active=false`. **Addon `turbo`** (`pl
 | Seats (pre-check) | `create-org-user` → `_shared/seat-quota.ts` (`evaluateSeatQuota`) — 403 claro antes de criar auth user |
 | Server-side (edges) | `_shared/plan-gate.ts` (`assertPlanFeature`, fail-closed) — mapa função→key em `docs/PERMISSION-ENFORCEMENT.md` |
 | Frontend contexto | `OrgFeaturesContext.hasFeature()` — fail-open no loading (anti-flash) |
-| Frontend rota | `PlanFeatureProtectedRoute` — ESTRITO (espera `isReady`); fonte `ROUTE_FEATURE_MAP` |
+| Frontend rota | `FeatureRoute` (feature-lock) — ESTRITO (espera `isReady`); fonte `ROUTE_FEATURE_MAP` |
 | Frontend nav (4 superfícies) | `SIDEBAR_FEATURE_MAP` → cadeado em TopNavigation (top + mobile sheet), MobileBottomNav, CommandGroupNavigation; clique → `UpgradeModal` |
 | Consistência nav↔rota | `tests/unit/route-feature-map.test.ts` (lê App.tsx; cadeado sem guard = fail) |
 

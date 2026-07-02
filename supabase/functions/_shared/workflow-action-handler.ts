@@ -17,6 +17,7 @@ import { sendWhatsApp as sharedSendWhatsApp } from "./action-handlers/send-whats
 import { sendWhatsAppAudio as sharedSendWhatsAppAudio, sendWhatsAppImage as sharedSendWhatsAppImage, sendWhatsAppSticker as sharedSendWhatsAppSticker } from "./action-handlers/send-whatsapp-media.ts";
 import { sendWhatsAppTemplate as sharedSendWhatsAppTemplate, sendWhatsAppMenu as sharedSendWhatsAppMenu, sendWhatsAppPixButton as sharedSendWhatsAppPixButton } from "./action-handlers/send-whatsapp-rich.ts";
 import { sendMetaMessage as sharedSendMetaMessage, sendSemiAutomatic as sharedSendSemiAutomatic } from "./action-handlers/send-meta.ts";
+import { sendToNumber as sharedSendToNumber } from "./action-handlers/send-to-number.ts";
 import { addToCampaign as sharedAddToCampaign, removeFromCampaign as sharedRemoveFromCampaign, moveCampaignStage as sharedMoveCampaignStage, pauseCampaignSequence as sharedPauseCampaignSequence, resumeCampaignSequence as sharedResumeCampaignSequence } from "./action-handlers/campaign-operations.ts";
 import { createCalendarEvent as sharedCreateCalendarEvent } from "./action-handlers/calendar-operations.ts";
 import { createTinyerpOrder as sharedCreateTinyerpOrder, createTinyerpUpsellOrder as sharedCreateTinyerpUpsellOrder } from "./action-handlers/tinyerp-operations.ts";
@@ -307,6 +308,65 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
     case "send_semi_automatic":
       result = await sharedSendSemiAutomatic(toActionInput(ctx));
       break;
+    case "send_to_number":
+      result = await sharedSendToNumber(toActionInput(ctx));
+      break;
+
+    // ── Unified "Enviar Mensagem" node — dispatch by messageType (ADR-0012) ──
+    case "send_whatsapp_message": {
+      // Semi-automatic: route the whole message through SDR approval before send
+      // instead of auto-sending (ADR-0012).
+      if (ctx.nodeData.semiAutomatic) {
+        const semiInput = toActionInput(ctx);
+        semiInput.params.semiAutoMessage =
+          (ctx.nodeData.semiAutoMessage as string) ||
+          (ctx.nodeData.messageTemplate as string) ||
+          (ctx.nodeData.imageCaption as string) ||
+          "";
+        result = await sharedSendSemiAutomatic(semiInput);
+        break;
+      }
+      const messageType = (ctx.nodeData.messageType as string) || "texto";
+      switch (messageType) {
+        case "texto": {
+          // "Gerar com IA" mode: generate into a variable first, then send the
+          // resolved text in the same node (ADR-0012). Mirrors generate_ai_message.
+          if ((ctx.nodeData.templateMode as string) === "ai") {
+            const aiInput = toActionInput(ctx);
+            const aiPromptRaw = (ctx.nodeData.aiPrompt as string) || "";
+            if (aiPromptRaw && ctx.leadId) {
+              aiInput.params.aiPrompt = await resolveVariables(ctx.supabase, ctx.leadId, aiPromptRaw, ctx.executionContext);
+            }
+            const aiResult = await sharedGenerateAiMessage(aiInput);
+            if (!aiResult.success) { result = aiResult; break; }
+            const outputVar = (ctx.nodeData.aiOutputVariable as string) || "ai_message";
+            if (aiResult.data && aiResult.data[outputVar] != null) {
+              ctx.executionContext[outputVar] = aiResult.data[outputVar];
+            }
+          }
+          result = await sharedSendWhatsApp(toActionInput(ctx));
+          break;
+        }
+        case "imagem":
+          result = await sharedSendWhatsAppImage(toActionInput(ctx));
+          break;
+        case "audio":
+          result = await sharedSendWhatsAppAudio(toActionInput(ctx));
+          break;
+        case "sticker":
+          result = await sharedSendWhatsAppSticker(toActionInput(ctx));
+          break;
+        case "menu":
+          result = await sharedSendWhatsAppMenu(toActionInput(ctx));
+          break;
+        case "pix":
+          result = await sharedSendWhatsAppPixButton(toActionInput(ctx));
+          break;
+        default:
+          return { success: false, error: `Unknown message type: ${messageType}`, retryable: false };
+      }
+      break;
+    }
 
     // ── Uazapi-only interactive messages (delegated to action-handlers/) ──
     case "send_whatsapp_menu":

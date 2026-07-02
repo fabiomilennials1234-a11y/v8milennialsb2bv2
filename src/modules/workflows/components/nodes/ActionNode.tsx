@@ -35,8 +35,27 @@ import { BaseNode } from "./BaseNode";
 import { ACTION_LABELS } from "@/types/workflow";
 import type { ActionNodeData } from "@/types/workflow";
 
+const MESSAGE_TYPE_ICONS: Record<string, React.ElementType> = {
+  texto: MessageSquare,
+  imagem: Image,
+  audio: Mic,
+  sticker: Image,
+  menu: FileText,
+  pix: FileText,
+};
+
+const MESSAGE_TYPE_LABELS: Record<string, string> = {
+  texto: "Texto",
+  imagem: "Imagem",
+  audio: "Áudio",
+  sticker: "Sticker",
+  menu: "Menu",
+  pix: "Botão PIX",
+};
+
 const ACTION_ICONS: Record<string, React.ElementType> = {
   // Comunicação
+  send_whatsapp_message: MessageSquare,
   send_whatsapp: MessageSquare,
   send_whatsapp_audio: Mic,
   send_whatsapp_image: Image,
@@ -79,7 +98,14 @@ const ACTION_ICONS: Record<string, React.ElementType> = {
 
 function ActionNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as ActionNodeData;
-  const Icon = ACTION_ICONS[nodeData.actionType] || Play;
+  const isUnified = nodeData.actionType === "send_whatsapp_message";
+  const mt = nodeData.messageType || "texto";
+  const Icon = isUnified
+    ? MESSAGE_TYPE_ICONS[mt] || MessageSquare
+    : ACTION_ICONS[nodeData.actionType] || Play;
+  const subtitle = isUnified
+    ? `WhatsApp · ${MESSAGE_TYPE_LABELS[mt] || "Texto"}`
+    : ACTION_LABELS[nodeData.actionType] || "Selecione a ação";
 
   return (
     <BaseNode
@@ -87,7 +113,7 @@ function ActionNodeComponent({ id, data, selected }: NodeProps) {
       nodeType="action"
       icon={<Icon className="w-5 h-5 text-green-500" />}
       title={nodeData.label || "Ação"}
-      subtitle={ACTION_LABELS[nodeData.actionType] || "Selecione a ação"}
+      subtitle={subtitle}
       selected={selected}
     />
   );

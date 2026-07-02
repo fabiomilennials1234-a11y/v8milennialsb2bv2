@@ -1,6 +1,21 @@
+---
+type: backlog
+title: Meta Chat — FASE 0
+status: shipped
+created: 2026-05-25
+updated: 2026-05-25
+tags: [meta-chat, messenger, instagram, communication]
+related:
+  - "[[ADR-2026-05-25-meta-chat-canal-separado]]"
+owner: gabriel
+---
+
 # Meta Chat — FASE 0
 
-**Status:** Planejado, pronto pra executar.
+> [!success] COMPLETE — 2026-05-25
+> Implementação completa e **merged em `main`** via PR #449 (commit `5483695d` — "feat(meta-chat): FASE 0 — chat Messenger + Instagram em rota dedicada"). Chat Messenger + Instagram Direct em `/atendimento/meta`, isolado do `/chat` WhatsApp. Follow-ups de FASE 0.5/FASE 1 listados ao final continuam abertos. Decisão de canais separados em [[ADR-2026-05-25-meta-chat-canal-separado]].
+
+**Status:** ✅ COMPLETE 2026-05-25 (merged main via PR #449)
 **Card Trello:** "Meta Integração | FASE 0" (Urgente)
 **Owner:** Marcelo Montemezzo
 

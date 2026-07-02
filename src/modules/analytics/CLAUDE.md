@@ -101,7 +101,7 @@ n/a — analytics é read-only (consome eventos via aggregation tables/RPCs).
 
 🟠 **Filtros cross-pipe** — `useAnalyticsFilters` + `useAnalyticsOverview` + `useAnalyticsPipesFunis` cruzam pipe_whatsapp/confirmacao/propostas (views compat sobre `pipeline_entries`). Coluna `status` = `stage_key` (slug). Não tocar lógica sem confirmar comportamento das views.
 
-🟠 **`useDashboardMetrics` cross-module** — consumido por `@/modules/engagement` (hooks de goals) e Performance.tsx (mesmo módulo). Mudança de assinatura impacta engagement. Manter contract estável.
+🟠 **`useDashboardMetrics` / `useRankingData`** — consumidos por `analytics/pages/Performance.tsx` + componentes `dashboard/*` (mesmo módulo). A página engagement `Metas.tsx` que os consumia foi deletada; features (Ranking/Gestão/awards) consolidadas em `Performance.tsx`. Manter contract estável.
 
 ## Dependências cross-module
 
@@ -114,6 +114,7 @@ n/a — analytics é read-only (consome eventos via aggregation tables/RPCs).
 
 ### Consumidores cross-module (importam de `@/modules/analytics`)
 
+- _(as páginas engagement `Metas.tsx`/`Premiacoes.tsx`/`Ranking.tsx` que consumiam `useDashboardMetrics`/`useRankingData` foram deletadas; o consumo agora é in-module via `analytics/pages/Performance.tsx`)_
 - `@/modules/carteira/components/client/CarteiraCohortHeatmap.tsx` — consome `CohortHeatmap` chart
 - `@/modules/workflows/components/SplitAbAnalytics.tsx` — consome `useSplitAbMetrics`
 - `@/modules/pipelines/pages/PipePropostas.tsx` — consome `useAnalyticsFilters` (ou similar)
