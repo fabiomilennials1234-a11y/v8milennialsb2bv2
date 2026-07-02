@@ -93,9 +93,11 @@ function firstLine(message: string): string {
 
 interface BlastPlanCardProps {
   plan: BlastPlan;
+  /** Drill-down (#944): card inteiro clicável → sheet da audiência congelada. */
+  onOpen?: () => void;
 }
 
-export function BlastPlanCard({ plan }: BlastPlanCardProps) {
+export function BlastPlanCard({ plan, onOpen }: BlastPlanCardProps) {
   const { data: progress } = useBlastPlanProgress(plan.id);
   const control = useBlastPlanControl();
   const update = useUpdateBlastPlan();
@@ -160,10 +162,32 @@ export function BlastPlanCard({ plan }: BlastPlanCardProps) {
   };
 
   return (
+    // Card inteiro = alvo do drill-down (#944). Div interativa (não <button>)
+    // porque os controles internos (pausar/editar/cancelar) são <button> reais —
+    // eles param a propagação no container à direita. Os Dialogs ficam FORA da
+    // div clicável: eventos React borbulham pela árvore de componentes mesmo
+    // com portal, então dentro dela um clique no modal abriria o drill-down.
+    <>
     <div
+      role={onOpen ? "button" : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      aria-label={onOpen ? "Ver leads do disparo" : undefined}
+      onClick={onOpen}
+      onKeyDown={
+        onOpen
+          ? (e) => {
+              if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                e.preventDefault();
+                onOpen();
+              }
+            }
+          : undefined
+      }
       className={cn(
         "group rounded-xl border border-border/70 bg-card p-4 transition-colors duration-200",
         "hover:border-border",
+        onOpen &&
+          "cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isTerminal && "opacity-75",
       )}
     >
@@ -208,8 +232,8 @@ export function BlastPlanCard({ plan }: BlastPlanCardProps) {
           </div>
         </div>
 
-        {/* Right: controls */}
-        <div className="flex shrink-0 items-center gap-1.5">
+        {/* Right: controls — cliques aqui nunca abrem o drill-down */}
+        <div className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
           {isActive && (
             <Button
               size="sm"
@@ -291,6 +315,8 @@ export function BlastPlanCard({ plan }: BlastPlanCardProps) {
         </div>
       </div>
 
+    </div>
+
       {/* Edit — message + release time only. The audience is immutable (ADR-0003). */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
@@ -360,6 +386,6 @@ export function BlastPlanCard({ plan }: BlastPlanCardProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }

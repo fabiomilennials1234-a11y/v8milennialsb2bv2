@@ -10,8 +10,12 @@
  *
  * Creation runs through the Wizard Linear at /disparos/novo. Each plan card owns
  * its own progress query (BlastPlanCard). `useBlastPlans` is the real source.
+ *
+ * Drill-down (#944): clicking a plan card opens BlastPlanRecipientsSheet (the
+ * frozen audience — Enviados / Pulados / Aguardando); clicking a lead there
+ * closes the sheet and opens the LeadDetailSheet (same mechanics as TabSaude).
  */
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -20,8 +24,10 @@ import {
   type BlastPlanStatus,
 } from "@/modules/campaigns/hooks/useBlastPlans";
 import { useOrganization } from "@/modules/identity";
+import { LeadPanelProvider, LeadDetailSheet, useLeadSheet } from "@/modules/leads";
 import { trackModuleVisit } from "@/lib/analytics";
 import { BlastPlanCard } from "@/modules/campaigns/components/BlastPlanCard";
+import { BlastPlanRecipientsSheet } from "@/modules/campaigns/components/BlastPlanRecipientsSheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -59,15 +65,19 @@ const RECIPE: { icon: React.ElementType; title: string; body: string }[] = [
   },
 ];
 
-export default function DisparosPanel() {
+function DisparosPanelBase() {
   const navigate = useNavigate();
   const { organizationId } = useOrganization();
+  const { openLead } = useLeadSheet();
   useEffect(() => {
     trackModuleVisit("disparos", organizationId);
   }, [organizationId]);
 
   const { data: plans, isLoading, isError, refetch } = useBlastPlans();
   const hasBlasts = (plans?.length ?? 0) > 0;
+  // Drill-down aberto — o plano vem SEMPRE do useBlastPlans (org-filtrado),
+  // pré-condição multi-tenancy do useBlastPlanRecipients (policy master-ghost).
+  const [openPlan, setOpenPlan] = useState<BlastPlan | null>(null);
 
   const grouped = useMemo(() => {
     const list = plans ?? [];
@@ -194,12 +204,32 @@ export default function DisparosPanel() {
             </div>
             <div className="space-y-3">
               {group.items.map((plan) => (
-                <BlastPlanCard key={plan.id} plan={plan} />
+                <BlastPlanCard key={plan.id} plan={plan} onOpen={() => setOpenPlan(plan)} />
               ))}
             </div>
           </section>
         ))}
       </div>
+
+      <BlastPlanRecipientsSheet
+        plan={openPlan}
+        onClose={() => setOpenPlan(null)}
+        onOpenLead={(id) => {
+          // Mesma mecânica do drill-down da aba Saúde: fecha o sheet do disparo
+          // e abre a ficha completa do lead por cima.
+          setOpenPlan(null);
+          openLead(id);
+        }}
+      />
     </div>
+  );
+}
+
+export default function DisparosPanel() {
+  return (
+    <LeadPanelProvider>
+      <DisparosPanelBase />
+      <LeadDetailSheet />
+    </LeadPanelProvider>
   );
 }
