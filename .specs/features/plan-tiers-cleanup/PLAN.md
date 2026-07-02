@@ -354,7 +354,7 @@ export async function assertPlanFeature(
 - Modify: `docs/PERMISSION-ENFORCEMENT.md` — nova seção "Plan gating server-side" com o mapa função→feature key da Task 10
 - Modify: `Obsidian/.../07 — Changelog/` — append
 
-- [ ] **Step 1:** Escrever as 3 atualizações. **Step 2:** Commit: `docs: matriz de planos + enforcement server-side documentados`
+- [x] **Step 1:** Escrever as 3 atualizações. → Vault: nota NOVA `03 — Reference/Planos e Feature Gating.md` (matriz completa + onde vive cada camada + gotcha de key ausente) + linha no `_MOC.md`; `docs/PERMISSION-ENFORCEMENT.md`: seção "Plan Gating Server-Side" (mapa função→key + comportamentos de negação) + 2 rows no Utility Reference; changelog: `07 — Changelog/2026-07-02-plan-tiers-cleanup-matriz-enforcement.md`. **Step 2:** Commit: `docs: matriz de planos + enforcement server-side documentados` [x]
 
 ### Task 16: Gate final + PR
 
