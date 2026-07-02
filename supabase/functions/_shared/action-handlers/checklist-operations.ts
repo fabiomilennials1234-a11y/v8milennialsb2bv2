@@ -64,7 +64,7 @@ export async function applyChecklist(input: ActionInput): Promise<ActionResult> 
 
   const { data: templateItems, error: iErr } = await supabase
     .from("checklist_items")
-    .select("title, position")
+    .select("id, title, position")
     .eq("checklist_id", templateId)
     .order("position", { ascending: true });
 
@@ -106,10 +106,14 @@ export async function applyChecklist(input: ActionInput): Promise<ActionResult> 
   }
 
   if (templateItems && templateItems.length > 0) {
-    const itemsToInsert = templateItems.map((it: { title: string; position: number }) => ({
+    const itemsToInsert = templateItems.map((it: { id: string; title: string; position: number }) => ({
       checklist_id: newChecklist.id,
       title: it.title,
       position: it.position,
+      // Linhagem estavel template->lead (ADR-0016): o item copiado aponta pro
+      // item de template de origem. E o identificador que o node de workflow usa
+      // pra achar "este item" atravessando a copia, ja que o id da copia so nasce aqui.
+      template_item_id: it.id,
     }));
 
     const { error: insErr } = await supabase

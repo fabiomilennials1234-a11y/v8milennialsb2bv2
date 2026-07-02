@@ -57,9 +57,24 @@ export function useApplyChecklistTemplate() {
 
       if (tErr) throw tErr;
 
+      // Idempotência: espelha o handler de workflow e o trigger de stage.
+      // Se este template já foi aplicado neste lead, no-op em vez de duplicar.
+      // Antes deste guard, o apply manual inseria sem source_template_id e furava
+      // o índice parcial único uniq_checklists_lead_source — gerando checklists
+      // duplicados do mesmo template no lead (ADR-0016).
+      const { data: existing } = await supabase
+        .from("checklists")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .eq("lead_id", leadId)
+        .eq("source_template_id", templateId)
+        .maybeSingle();
+
+      if (existing) return existing;
+
       const { data: templateItems, error: iErr } = await supabase
         .from("checklist_items")
-        .select("title, position")
+        .select("id, title, position")
         .eq("checklist_id", templateId)
         .order("position", { ascending: true });
 
@@ -73,6 +88,9 @@ export function useApplyChecklistTemplate() {
           title: template.title,
           description: template.description,
           lead_id: leadId,
+          // Marca a origem → habilita dedup via índice parcial único
+          // (lead_id, source_template_id) e deixa o checklist auditável.
+          source_template_id: templateId,
         })
         .select()
         .single();
@@ -84,6 +102,8 @@ export function useApplyChecklistTemplate() {
           checklist_id: newChecklist.id,
           title: item.title,
           position: item.position,
+          // Linhagem estável template→lead (ADR-0016).
+          template_item_id: item.id,
         }));
 
         const { error: insertErr } = await supabase
