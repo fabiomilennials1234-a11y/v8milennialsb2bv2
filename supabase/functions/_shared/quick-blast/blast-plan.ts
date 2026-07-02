@@ -556,7 +556,7 @@ export async function releaseBlastPlanLot(
   if ((recencyOn || nonResponderOn) && lot.length > 0) {
     const source = deps.activitySource;
     if (source) {
-      const { keptLeadIds, skipped } = await refineBlastAudience({
+      const { keptLeadIds, skipped, skippedLeadIds } = await refineBlastAudience({
         orgId,
         candidates: lot.map((r) => ({ leadId: r.lead_id, phone: r.phone })),
         options: { excludeBlastedWithinDays: refOpts.excludeBlastedWithinDays, onlyNonResponders: nonResponderOn },
@@ -564,12 +564,17 @@ export async function releaseBlastPlanLot(
         now,
       });
       const keepSet = new Set(keptLeadIds);
-      const dropped = lot.filter((r) => !keepSet.has(r.lead_id));
       kept = lot.filter((r) => keepSet.has(r.lead_id));
       skippedRecency = skipped.alreadyContactedWithinWindow;
       skippedReplied = skipped.replied;
-      if (dropped.length > 0) {
-        await deps.store.markRecipients(params.planId, dropped.map((r) => r.lead_id), "skipped", "refined");
+      // Razão granular por recipient (ADR-0016 §5): quem deixou de ser
+      // não-respondente grava "replied"; quem caiu na janela de recência grava
+      // "recency". Linhas legadas "refined" permanecem válidas — sem retrofit.
+      if (skippedLeadIds.replied.length > 0) {
+        await deps.store.markRecipients(params.planId, skippedLeadIds.replied, "skipped", "replied");
+      }
+      if (skippedLeadIds.alreadyContactedWithinWindow.length > 0) {
+        await deps.store.markRecipients(params.planId, skippedLeadIds.alreadyContactedWithinWindow, "skipped", "recency");
       }
     }
   }
