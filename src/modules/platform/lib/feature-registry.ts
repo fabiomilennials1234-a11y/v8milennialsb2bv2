@@ -161,6 +161,57 @@ SIDEBAR_FEATURE_MAP["/templates"] = "message_templates";
 // Rota legada do chat — mesma feature key da rota atual
 SIDEBAR_FEATURE_MAP["/chat-whatsapp"] = "chat";
 
+// ─── Route Path → Feature Key Map (guards de rota) ───────────
+/**
+ * Fonte única dos guards de rota por plano. Todo path aqui DEVE estar
+ * envolto em <PlanFeatureProtectedRoute feature="<key>"> no App.tsx —
+ * consistência enforced por tests/unit/route-feature-map.test.ts
+ * (cadeado na nav sem guard na rota = contornável via URL direta).
+ *
+ * Paths de redirect (/marketing, /analytics → /dashboard) ficam FORA —
+ * não têm elemento pra guardar.
+ */
+export const ROUTE_FEATURE_MAP: Record<string, FeatureKey> = {
+  // chat
+  "/chat": "chat",
+  "/chat-whatsapp": "chat",
+  "/atendimento/meta": "chat",
+  // funis (CRM core — true nos 3 planos; guard fecha a porta pra plano futuro)
+  "/funis": "funnels",
+  "/pipe-whatsapp": "funnels",
+  "/pipe-confirmacao": "funnels",
+  "/pipe-propostas": "funnels",
+  // leads
+  "/leads": "leads",
+  "/lixeira": "leads",
+  "/duplicatas": "leads",
+  // revisão / follow-ups
+  "/follow-ups": "review",
+  // performance / comissões / tv
+  "/performance": "performance",
+  "/comissoes": "commissions",
+  "/tv": "tv_dashboard",
+  // catálogo / negócios
+  "/produtos": "products",
+  "/negocios": "deals",
+  // carteira
+  "/upsell": "carteira",
+  "/carteira/:clientId": "carteira",
+  // copilot
+  "/copilot": "copilot",
+  "/copilot/metricas": "copilot",
+  "/copilot/novo": "copilot",
+  "/copilot/:id/editar": "copilot",
+  // automações
+  "/automacoes": "automations",
+  "/automacoes/novo": "automations",
+  "/automacoes/:id": "automations",
+  "/automacoes/:id/execucoes": "automations",
+  // disparos + templates
+  "/disparos": "whatsapp_bulk",
+  "/templates": "message_templates",
+};
+
 // ─── Campaign Type → Feature Key Map (legacy) ────────────────
 export const CAMPAIGN_TYPE_FEATURE_MAP: Record<string, FeatureKey> = {
   manual: "campaigns_manual",

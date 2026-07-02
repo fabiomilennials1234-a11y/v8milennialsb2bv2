@@ -7,7 +7,9 @@
  * 3. Estado bloqueado mostra label do plano atual (torque-1.0 → Torque Base)
  * 4. "Falar com Comercial" abre o CTA de upgrade em nova aba
  * 5. "Voltar ao início" navega pro /dashboard
- * 6. Loading (hasFeature true por convenção) → renderiza children, sem lock flash
+ * 6. Loading (isReady=false) → skeleton neutro: NEM children NEM cadeado
+ *    (Task 13 plan-tiers-cleanup: guard estrito — era fail-open no loading.
+ *     hasFeature do contexto continua fail-open pra nav; só o guard espera.)
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
@@ -48,6 +50,7 @@ describe("PlanFeatureProtectedRoute", () => {
     mockUseOrgFeatures.mockReturnValue({
       hasFeature: () => true,
       planName: "torque-v8",
+      isReady: true,
     });
     renderGuard();
     expect(screen.getByTestId("gated-page")).toBeInTheDocument();
@@ -58,6 +61,7 @@ describe("PlanFeatureProtectedRoute", () => {
     mockUseOrgFeatures.mockReturnValue({
       hasFeature: () => false,
       planName: "torque-2.0",
+      isReady: true,
     });
     renderGuard();
     expect(screen.queryByTestId("gated-page")).not.toBeInTheDocument();
@@ -69,6 +73,7 @@ describe("PlanFeatureProtectedRoute", () => {
     mockUseOrgFeatures.mockReturnValue({
       hasFeature: () => false,
       planName: "torque-1.0",
+      isReady: true,
     });
     renderGuard({ label: "Chat" });
     expect(screen.getByText(/plano Torque Base/)).toBeInTheDocument();
@@ -78,6 +83,7 @@ describe("PlanFeatureProtectedRoute", () => {
     mockUseOrgFeatures.mockReturnValue({
       hasFeature: () => false,
       planName: "plano-desconhecido",
+      isReady: true,
     });
     renderGuard();
     expect(screen.getByText(/plano plano-desconhecido/)).toBeInTheDocument();
@@ -87,6 +93,7 @@ describe("PlanFeatureProtectedRoute", () => {
     mockUseOrgFeatures.mockReturnValue({
       hasFeature: () => false,
       planName: "torque-1.0",
+      isReady: true,
     });
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
     renderGuard();
@@ -99,9 +106,22 @@ describe("PlanFeatureProtectedRoute", () => {
     mockUseOrgFeatures.mockReturnValue({
       hasFeature: () => false,
       planName: "torque-1.0",
+      isReady: true,
     });
     renderGuard();
     fireEvent.click(screen.getByRole("button", { name: /Voltar ao início/ }));
     expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("isReady=false → skeleton neutro: NEM children NEM cadeado (guard estrito)", () => {
+    // hasFeature fail-open devolve true durante o loading — o guard NÃO pode confiar nisso
+    mockUseOrgFeatures.mockReturnValue({
+      hasFeature: () => true,
+      planName: "free",
+      isReady: false,
+    });
+    renderGuard();
+    expect(screen.queryByTestId("gated-page")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Desbloqueie/)).not.toBeInTheDocument();
   });
 });

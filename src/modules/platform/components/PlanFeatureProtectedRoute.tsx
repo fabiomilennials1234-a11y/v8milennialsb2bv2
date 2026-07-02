@@ -6,14 +6,17 @@
  * fora do plano renderiza o estado bloqueado com CTA de upgrade.
  *
  * - Master sempre passa (org_get_features_and_limits retorna tudo true).
- * - Enquanto as features carregam, renderiza children — mesma convenção de
- *   hasFeature (evita flash de lock na navegação normal).
+ * - Enquanto as features carregam (isReady=false), renderiza um loader neutro
+ *   e SÓ DEPOIS decide — guard estrito. hasFeature do contexto continua
+ *   fail-open (evita flash de cadeado no chrome/nav), mas confiar nele aqui
+ *   abria uma janela de acesso a rota bloqueada durante o loading.
  */
 
 import { type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { PLAN_LABELS, UPGRADE_CONTACT_URL } from "@/shared/components/UpgradeModal";
 import type { FeatureKey } from "@/modules/platform/lib/feature-registry";
@@ -31,8 +34,12 @@ export function PlanFeatureProtectedRoute({
   featureLabel,
   children,
 }: PlanFeatureProtectedRouteProps) {
-  const { hasFeature, planName } = useOrgFeatures();
+  const { hasFeature, planName, isReady } = useOrgFeatures();
   const navigate = useNavigate();
+
+  if (!isReady) {
+    return <TorqueLoader variant="inline" />;
+  }
 
   if (hasFeature(feature)) {
     return <>{children}</>;

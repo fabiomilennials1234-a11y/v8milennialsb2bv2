@@ -89,14 +89,15 @@ src/modules/campaigns/
 
 ### Components
 
-Internals (não re-exportados — usados apenas via Pages do próprio módulo e dentro de `Campanhas`/`CampanhaDetail`).
+Internals (não re-exportados — usados apenas via Pages do próprio módulo e dentro de `CampanhaDetail`).
 
 ### Pages
 
 NÃO re-exportadas — App.tsx faz deep-import via React.lazy:
-- `@/modules/campaigns/pages/Campanhas`
 - `@/modules/campaigns/pages/CampanhaDetail`
 - `@/modules/campaigns/pages/MassSend` (órfã — não roteada hoje, preservada)
+
+> `pages/Campanhas.tsx` (lista v1) deletada em 2026-07-02 (plan-tiers-cleanup) — lazy import em App.tsx nunca era renderizado.
 
 ### Types
 

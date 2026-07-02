@@ -24,6 +24,7 @@ import {
   runUazapiSenderJob,
 } from "../_shared/dispatch-router.ts";
 import { assertPermission, permissionDeniedResponse } from "../_shared/assert-permission.ts";
+import { assertPlanFeature, PlanFeatureDeniedError, planDeniedResponse } from "../_shared/plan-gate.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -81,6 +82,14 @@ Deno.serve(
     const permission = await assertPermission(supabaseAdmin, user.id, orgId, "mass_send");
     if (!permission.allowed) {
       return permissionDeniedResponse(permission.reason, corsHeaders);
+    }
+
+    // Plan gate — whatsapp_bulk fora do plano → 403 antes de qualquer side-effect
+    try {
+      await assertPlanFeature(supabaseAdmin, orgId, "whatsapp_bulk");
+    } catch (e) {
+      if (e instanceof PlanFeatureDeniedError) return planDeniedResponse(e, corsHeaders);
+      throw e;
     }
 
     const body = await req.json().catch(() => null);

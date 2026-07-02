@@ -20,6 +20,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { assertPlanFeature, PlanFeatureDeniedError, planDeniedResponse } from "../_shared/plan-gate.ts";
 import {
   getWhatsAppProvider,
   type WhatsAppInstance,
@@ -195,6 +196,18 @@ Deno.serve(
     // -------------------------------------------------------------------------
     if (!checkRateLimit(callerOrgId)) {
       return jsonResponse(429, { error: "Rate limit exceeded" }, corsHeaders);
+    }
+
+    // -------------------------------------------------------------------------
+    // 4.5 Plan gate — chat fora do plano → 403 (master opera qualquer org)
+    // -------------------------------------------------------------------------
+    if (!isMaster) {
+      try {
+        await assertPlanFeature(supabaseAdmin, callerOrgId, "chat");
+      } catch (e) {
+        if (e instanceof PlanFeatureDeniedError) return planDeniedResponse(e, corsHeaders);
+        throw e;
+      }
     }
 
     // -------------------------------------------------------------------------
