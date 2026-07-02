@@ -8,7 +8,7 @@
  * locally and advances to the monitor step.
  */
 import { useMemo } from "react";
-import { Users, MessageSquare, Smartphone, Clock, Paperclip } from "lucide-react";
+import { Users, MessageSquare, MoveRight, Smartphone, Clock, Paperclip } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { planBlast, nextValidSendTime, DEFAULT_QUIET_WINDOW } from "@/modules/campaigns/lib/blast-planning";
@@ -65,7 +65,7 @@ export function StepReview({ draft }: StepReviewProps) {
   return (
     <div className="space-y-7">
       <StepHeader
-        kicker="Passo 4 de 5"
+        kicker="Passo 5 de 6"
         title="Tudo certo?"
         subtitle="Confira antes de enviar. Depois de iniciado, o disparo segue sozinho — você acompanha e pode pausar a qualquer momento."
       />
@@ -88,6 +88,19 @@ export function StepReview({ draft }: StepReviewProps) {
               <Paperclip className="h-3.5 w-3.5" />
               {draft.media.name}
             </p>
+          )}
+        </Row>
+
+        <Row icon={MoveRight} label="Depois do envio">
+          {draft.postSendMode === "move" && draft.postSendStageKey ? (
+            <>
+              <span className="font-medium">{draft.postSendLabel}</span>
+              <span className="text-muted-foreground"> · movido no envio de cada mensagem</span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">
+              Sem movimentação — contatos ficam onde estão
+            </span>
           )}
         </Row>
 

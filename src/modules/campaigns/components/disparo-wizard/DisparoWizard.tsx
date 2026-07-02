@@ -23,6 +23,7 @@ import { useDisparoWizard } from "./useDisparoWizard";
 import { WizardProgress } from "./WizardProgress";
 import { StepAudience } from "./StepAudience";
 import { StepMessage } from "./StepMessage";
+import { StepPostSend } from "./StepPostSend";
 import { StepSpeed } from "./StepSpeed";
 import { StepReview } from "./StepReview";
 import { StepMonitor } from "./StepMonitor";
@@ -98,6 +99,20 @@ function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerPr
     const imageUrl =
       draft.media?.type === "image" && draft.media.url ? draft.media.url : undefined;
 
+    // Post-send destination: each lead is moved when ITS message is sent (per
+    // lot, over the plan's days). Validated fail-closed by blast-plan-create.
+    const postSendTarget =
+      draft.postSendMode === "move" && draft.postSendStageKey
+        ? {
+            funnelKind: draft.postSendFunnelKind,
+            ...(draft.postSendFunnelKind === "system"
+              ? { pipelineType: draft.postSendPipelineType ?? undefined }
+              : { pipelineId: draft.postSendPipelineId ?? undefined }),
+            stageKey: draft.postSendStageKey,
+            label: draft.postSendLabel,
+          }
+        : undefined;
+
     try {
       const res = await createPlan.mutateAsync({
         instance_ids: instanceIds,
@@ -110,6 +125,7 @@ function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerPr
         delay_max_ms: delayMax,
         image_url: imageUrl,
         source: draft.audienceSource ?? undefined,
+        post_send_target: postSendTarget,
       });
       setPlanId(res.plan_id);
       wiz.release();
@@ -124,6 +140,8 @@ function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerPr
         return <StepAudience draft={wiz.draft} patch={wiz.patch} />;
       case "message":
         return <StepMessage draft={wiz.draft} patch={wiz.patch} />;
+      case "postsend":
+        return <StepPostSend draft={wiz.draft} patch={wiz.patch} />;
       case "speed":
         return <StepSpeed draft={wiz.draft} patch={wiz.patch} />;
       case "review":

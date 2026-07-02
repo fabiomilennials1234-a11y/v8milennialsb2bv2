@@ -43,7 +43,7 @@ src/modules/campaigns/
 │   ├── BlastPlanCard.tsx
 │   ├── CreateTemplateModal.tsx
 │   ├── TemplateSelectorStep.tsx
-│   └── disparo-wizard/            # Wizard Linear (#904): shell + 5 passos + state machine pura
+│   └── disparo-wizard/            # Wizard Linear (#904): shell + 6 passos (Pra quem · Mensagem · Destino · Velocidade · Revisão · Acompanhar) + state machine pura. Passo "Destino" (postsend) = movimentação opcional pós-envio: cada lead é movido pro funil/etapa escolhidos NO MOMENTO em que a mensagem dele é enviada (por lote — blast_plans.post_send_target, validado fail-closed em blast-plan-create; move via _shared/action-handlers/move-stage.ts, best-effort)
 ├── hooks/
 │   ├── useCampanhas.ts            # CRUD + stages + members + leads + viewers + pipe automations + dispatch rules
 │   ├── useCampaignTemplates.ts    # Templates + dispatch batches + logs + stats

@@ -110,7 +110,7 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
   return (
     <div className="space-y-7">
       <StepHeader
-        kicker="Passo 2 de 5"
+        kicker="Passo 2 de 6"
         title="O que você quer dizer?"
         subtitle="Escreva a mensagem. Use variáveis para personalizar cada contato pelo nome ou empresa."
       />

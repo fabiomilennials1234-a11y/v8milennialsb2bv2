@@ -21,6 +21,7 @@ import {
   Check,
   Clock3,
   ListChecks,
+  MoveRight,
   UserPlus,
   Loader2,
 } from "lucide-react";
@@ -182,6 +183,14 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
             </Button>
           </div>
         </div>
+      )}
+
+      {/* Post-send destination note — only when the plan moves leads on send */}
+      {!terminal && draft.postSendMode === "move" && draft.postSendStageKey && (
+        <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground/70">
+          <MoveRight className="h-3.5 w-3.5" />
+          Contatos enviados vão pra {draft.postSendLabel}.
+        </p>
       )}
 
       {/* Transparent report — real recipient outcomes */}

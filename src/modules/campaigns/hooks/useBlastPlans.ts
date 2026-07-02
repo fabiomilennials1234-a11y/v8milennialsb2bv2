@@ -38,6 +38,24 @@ export interface BlastPlanLotBreakdown {
   count: number;
 }
 
+/**
+ * Post-send destination (wizard "Destino" step): each lead is moved to this
+ * funnel stage AT THE MOMENT its message is sent (per lot, over the plan's
+ * days). Persisted as blast_plans.post_send_target; validated fail-closed by
+ * blast-plan-create against the caller's org.
+ */
+export interface BlastPostSendTarget {
+  funnelKind: "system" | "custom";
+  /** System pipe when funnelKind === "system". */
+  pipelineType?: "whatsapp" | "confirmacao" | "propostas";
+  /** Custom pipeline id when funnelKind === "custom". */
+  pipelineId?: string;
+  /** system: stage_key slug; custom: custom_pipeline_stages.id uuid. */
+  stageKey: string;
+  /** Human label, e.g. "Oportunidades · Em negociação" (panel display). */
+  label: string;
+}
+
 export interface CreateBlastPlanInput {
   /** Legacy single-number path (still accepted by the backend for retrocompat). */
   instance_id?: string;
@@ -60,6 +78,9 @@ export interface CreateBlastPlanInput {
   release_time?: string;
   /** Audience provenance, recorded for the panel ("Estágio Novo", etc.). */
   source?: Record<string, unknown>;
+  /** Optional post-send move: each lead moved to this stage when its message
+   *  goes out. Omitted = leads stay where they are. */
+  post_send_target?: BlastPostSendTarget;
 }
 
 export interface CreateBlastPlanResult {

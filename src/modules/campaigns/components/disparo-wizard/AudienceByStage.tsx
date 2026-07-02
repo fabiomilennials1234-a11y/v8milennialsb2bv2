@@ -7,7 +7,7 @@
  * writes count/ids/provenance back onto the draft. Mounted only while the chosen
  * source is "estagio", so its resolve effect never fights the spreadsheet source.
  */
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { Loader2, Users, AlertTriangle } from "lucide-react";
 import {
   Select,
@@ -19,9 +19,6 @@ import {
 import { Label } from "@/components/ui/label";
 import {
   AudienceConditionsControls,
-  useCustomPipelines,
-  useCustomPipelineStages,
-  usePipelineStages,
   type SystemPipelineType,
 } from "@/modules/pipelines";
 import { useTags } from "@/modules/leads";
@@ -32,6 +29,7 @@ import {
   buildAudienceSource,
   type AudienceSelection,
 } from "./audience-resolve";
+import { useFunnelStageOptions, funnelSelectValue } from "./use-funnel-stage-options";
 import type { DisparoDraft } from "./wizard-machine";
 
 interface AudienceByStageProps {
@@ -39,34 +37,12 @@ interface AudienceByStageProps {
   patch: (p: Partial<DisparoDraft>) => void;
 }
 
-/** Funnel picker value encoding — keeps system pipes and custom ids in one Select. */
-function funnelValue(sel: AudienceSelection): string {
-  return sel.funnelKind === "system" ? `system:${sel.pipelineType}` : `custom:${sel.pipelineId ?? ""}`;
-}
-
 export function AudienceByStage({ draft, patch }: AudienceByStageProps) {
   const sel = draft.audience;
-  const isSystem = sel.funnelKind === "system";
 
-  const { data: customPipelines = [] } = useCustomPipelines();
-  const { data: systemStages = [], isLoading: systemStagesLoading } = usePipelineStages(
-    isSystem ? sel.pipelineType : ("whatsapp" as SystemPipelineType),
-  );
-  const { data: customStages = [], isLoading: customStagesLoading } = useCustomPipelineStages(
-    !isSystem ? (sel.pipelineId ?? undefined) : undefined,
-  );
+  const { customPipelines, stages, stagesLoading, funnelLabel } = useFunnelStageOptions(sel);
   const { data: tags = [] } = useTags();
 
-  // Unified stage list for the picker: system → stage_key slug; custom → stage_id uuid.
-  const stages = useMemo<{ key: string; name: string }[]>(() => {
-    if (isSystem) return systemStages.map((s) => ({ key: s.stage_key, name: s.name }));
-    return customStages.map((s) => ({ key: s.id, name: s.name }));
-  }, [isSystem, systemStages, customStages]);
-  const stagesLoading = isSystem ? systemStagesLoading : customStagesLoading;
-
-  const funnelLabel = isSystem
-    ? SYSTEM_FUNNELS.find((f) => f.value === sel.pipelineType)?.label ?? "Funil"
-    : customPipelines.find((p) => p.id === sel.pipelineId)?.name ?? "Funil";
   const stageName = stages.find((s) => s.key === sel.stageKey)?.name ?? "";
 
   const resolved = useAudienceResolve(sel);
@@ -114,7 +90,7 @@ export function AudienceByStage({ draft, patch }: AudienceByStageProps) {
         {/* Funnel */}
         <div className="space-y-1.5">
           <Label className="text-sm">Funil</Label>
-          <Select value={funnelValue(sel)} onValueChange={onFunnelChange}>
+          <Select value={funnelSelectValue(sel)} onValueChange={onFunnelChange}>
             <SelectTrigger>
               <SelectValue placeholder="Escolha um funil" />
             </SelectTrigger>

@@ -82,6 +82,10 @@ export interface PlanRow {
   window_days?: number[] | null;
   window_from_minutes?: number | null;
   window_to_minutes?: number | null;
+  /** Post-send destination (wizard "Destino"): each lead is moved there when
+   *  its message is sent. NULL/absent = no move. Consumed by the edge fns to
+   *  inject `onRecipientsSent`; the core treats it as opaque data. */
+  post_send_target?: Record<string, unknown> | null;
   /** The instance row, needed by the releaser to dispatch. Persisted as a column
    *  in production via the FK + a read; carried inline here for the store seam. */
   instance?: { id: string; organization_id: string; provider?: string };
@@ -133,6 +137,24 @@ export interface BlastPlanDeps {
   instanceResolver?: (
     instanceId: string,
   ) => Promise<{ id: string; organization_id: string; provider?: string; daily_blast_cap?: number | null } | null>;
+  /** Post-send hook: invoked with the lead ids just marked "sent" (per dispatch
+   *  batch — skipped/deferred leads never reach it). BEST-EFFORT: the core
+   *  wraps every call in try/catch; a failure is logged and NEVER propagates —
+   *  the leads already received their message, the send cannot fail because of
+   *  the hook. Injected by the edge fns when the plan has a post_send_target. */
+  onRecipientsSent?: (leadIds: string[]) => Promise<void>;
+}
+
+/** Invoke the post-send hook best-effort: log-and-swallow, never throw. */
+async function notifyRecipientsSent(deps: BlastPlanDeps, leadIds: string[]): Promise<void> {
+  if (!deps.onRecipientsSent || leadIds.length === 0) return;
+  try {
+    await deps.onRecipientsSent(leadIds);
+  } catch (e) {
+    console.warn(
+      `[blast-plan] onRecipientsSent failed for ${leadIds.length} lead(s) (best-effort, ignored): ${(e as Error)?.message ?? e}`,
+    );
+  }
 }
 
 // ── createBlastPlan ──────────────────────────────────────────────────────────
@@ -170,6 +192,9 @@ export interface CreateBlastPlanParams {
   releaseTime?: string;
   /** Descriptor of how the audience was resolved (for the record only). */
   source?: Record<string, unknown> | null;
+  /** Post-send destination (already validated fail-closed by the edge fn).
+   *  Persisted on the plan so the releaser can rebuild the move hook. */
+  postSendTarget?: Record<string, unknown> | null;
   /** Injected clock for deterministic Sao Paulo date resolution. */
   now?: Date;
 }
@@ -257,6 +282,7 @@ export async function createBlastPlan(
     lots_released: 0,
     release_time: params.releaseTime ?? "09:00",
     next_release_date: todayDate,
+    post_send_target: params.postSendTarget ?? null,
     instance: singleInstance,
   };
   const planId = await deps.store.insertPlan(planRow);
@@ -310,6 +336,7 @@ export async function createBlastPlan(
       trackSource: "blast-plan",
     });
     await deps.store.markRecipients(planId, toSendRows.map((r) => r.lead_id), "sent", null);
+    await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
     await deps.usageSource.increment(params.orgId, todayDate, slice.toSend);
     lotsReleased = 1;
   }
@@ -388,6 +415,7 @@ async function createMultiNumberBlastPlan(
     window_days: params.window?.days ?? null,
     window_from_minutes: params.window?.fromMinutes ?? null,
     window_to_minutes: params.window?.toMinutes ?? null,
+    post_send_target: params.postSendTarget ?? null,
     instance: primary,
   };
   const planId = await deps.store.insertPlan(planRow);
@@ -441,6 +469,7 @@ async function createMultiNumberBlastPlan(
         trackSource: "blast-plan",
       });
       await deps.store.markRecipients(planId, toSendRows.map((r) => r.lead_id), "sent", null);
+      await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
       if (deps.instanceUsageSource) {
         await deps.instanceUsageSource.increment(n.instance.id, todayDate, toSendRows.length);
       }
@@ -612,6 +641,7 @@ export async function releaseBlastPlanLot(
         const recipients = buildPlanRecipients(toSendRows, plan.message, plan.image_url ?? undefined);
         await deps.dispatch(inst, { recipients, ...dispatchOpts });
         await deps.store.markRecipients(params.planId, toSendRows.map((r) => r.lead_id), "sent", null);
+        await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
         await deps.instanceUsageSource!.increment(instanceId, todayDate, toSendRows.length);
         sent += toSendRows.length;
       }
@@ -628,6 +658,7 @@ export async function releaseBlastPlanLot(
       const recipients = buildPlanRecipients(toSendRows, plan.message, plan.image_url ?? undefined);
       await deps.dispatch(instance, { recipients, ...dispatchOpts });
       await deps.store.markRecipients(params.planId, toSendRows.map((r) => r.lead_id), "sent", null);
+      await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
       await deps.usageSource.increment(orgId, todayDate, slice.toSend);
       sent = slice.toSend;
     }
