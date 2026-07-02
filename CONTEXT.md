@@ -102,6 +102,8 @@ Canonical terms used across the system. No implementation details here — this 
 
 - **Blast Plan**: A Mass Send whose Audience exceeds one day's budget, sliced into daily lots over consecutive days. The Audience is **frozen at creation** (a snapshot — Leads that enter the source Stage afterward are not added); each lot is released by a daily job that re-applies the audience refinements (reply status, contact recency) at send time and consumes at most the remaining Daily Blast Budget. A Blast Plan is finite and self-terminating — distinct from a Workflow (event-triggered, standing) and a Campaign (stages + enrollment). It is "a blast spread over days," not a rule.
 
+- **Blast Recipient Status**: The mutually-exclusive state of one Lead inside a Blast Plan, as the operator reads it: **Enviado** (dispatched through the number and not reported failed), **Falha na entrega** (the WhatsApp provider reported the send failed — invalid number, banned, rejected), **Pulado** (cut by a plan rule at release time — the Lead replied or was contacted too recently; the rule working, not a failure), **Aguardando** (not yet dispatched; belongs to a future lot). "Enviado" means accepted by the sending queue, not read-receipt; a Lead may move from Enviado to Falha na entrega asynchronously as the provider reports back. Falha na entrega is distinct from Pulado: broken delivery vs. deliberate refinement.
+
 ## Automation
 
 - **Action Handler**: A function that executes a specific domain operation (move_stage, send_whatsapp, update_lead, etc.). Registered in a handler map and dispatched by the Workflow engine or Copilot.
