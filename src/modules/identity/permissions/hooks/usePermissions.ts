@@ -73,37 +73,13 @@ export function useMyPermissions() {
   });
 }
 
-/**
- * Lista permissões por role da organização (apenas admin).
- * Usado na tela de configurações para o admin habilitar/desabilitar por role.
- */
-export function useOrganizationRolePermissions() {
-  const { organizationId, isReady } = useOrganization();
-
-  return useQuery({
-    queryKey: ["organization-role-permissions", organizationId],
-    queryFn: async () => {
-      if (!organizationId) return [];
-      const { data, error } = await supabase
-        .from("organization_role_permissions")
-        .select("*")
-        .eq("organization_id", organizationId)
-        .order("role")
-        .order("permission_key");
-      if (error) throw error;
-      return data as OrgRolePermission[];
-    },
-    enabled: isReady && !!organizationId,
-    staleTime: 5 * 60 * 1000,
-  });
-}
-
-export interface TeamMemberOrgPermission {
-  id: string;
-  team_member_id: string;
-  permission_key: PermissionKey;
-  enabled: boolean;
-}
+// NOTA (2026-07-02): useOrganizationRolePermissions, useTeamMemberOrgPermissions
+// e useSaveTeamMemberOrgPermissions foram REMOVIDOS — consultavam as tabelas
+// organization_role_permissions/team_member_org_permissions, DROPADAS pela
+// consolidação de permissões (PRD #408, migration 20261032000002). O modelo
+// consolidado vive em feature_permissions (catálogo global) +
+// member_feature_permissions (override por membro) — superfície de UI:
+// Equipe > MemberPermissions.
 
 const PERMISSION_KEYS: PermissionKey[] = [
   "see_unassigned_cards",
@@ -129,68 +105,3 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
   can_manage_campaigns: "Gerenciar campanhas",
 };
 
-/**
- * Lista permissões de um membro da equipe (seleção múltipla).
- * Admin usa para editar quais features o membro tem.
- */
-export function useTeamMemberOrgPermissions(teamMemberId: string | null) {
-  return useQuery({
-    queryKey: ["team-member-org-permissions", teamMemberId],
-    queryFn: async (): Promise<Record<PermissionKey, boolean>> => {
-      if (!teamMemberId) {
-        return PERMISSION_KEYS.reduce((acc, k) => ({ ...acc, [k]: false }), {} as Record<PermissionKey, boolean>);
-      }
-      const { data, error } = await supabase
-        .from("team_member_org_permissions")
-        .select("permission_key, enabled")
-        .eq("team_member_id", teamMemberId);
-      if (error) throw error;
-      const map = PERMISSION_KEYS.reduce((acc, k) => ({ ...acc, [k]: false }), {} as Record<PermissionKey, boolean>);
-      (data || []).forEach((row: { permission_key: PermissionKey; enabled: boolean }) => {
-        if (PERMISSION_KEYS.includes(row.permission_key)) map[row.permission_key] = row.enabled;
-      });
-      return map;
-    },
-    enabled: !!teamMemberId,
-    staleTime: 5 * 60 * 1000,
-  });
-}
-
-/**
- * Salva permissões (seleção múltipla) de um membro da equipe.
- * Substitui todas as linhas do team_member por um upsert por permission_key.
- */
-export function useSaveTeamMemberOrgPermissions() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      teamMemberId,
-      permissions,
-    }: {
-      teamMemberId: string;
-      permissions: Record<PermissionKey, boolean>;
-    }) => {
-      const rows = PERMISSION_KEYS.filter((k) => permissions[k]).map((k) => ({
-        team_member_id: teamMemberId,
-        permission_key: k,
-        enabled: true,
-      }));
-      const { error: delErr } = await supabase
-        .from("team_member_org_permissions")
-        .delete()
-        .eq("team_member_id", teamMemberId);
-      if (delErr) throw delErr;
-      if (rows.length > 0) {
-        const { error: insErr } = await supabase.from("team_member_org_permissions").insert(rows);
-        if (insErr) throw insErr;
-      }
-    },
-    onSuccess: (_, { teamMemberId }) => {
-      queryClient.invalidateQueries({ queryKey: ["team-member-org-permissions", teamMemberId] });
-      queryClient.invalidateQueries({ queryKey: ["my-permissions"] });
-    },
-    onError: (err: Error) => {
-      toast.error(err.message || "Erro ao salvar permissões");
-    },
-  });
-}

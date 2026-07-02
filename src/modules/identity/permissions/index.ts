@@ -33,23 +33,16 @@ export type { AppRole, UserRole } from "./hooks/useUserRole";
 export { useCanDo } from "./hooks/useCanDo";
 
 // ── Hooks: permissions (granular) ──────────────────────────────────────────
+// (Hooks org-wide do Pitstop > Permissões removidos em 2026-07-02: consultavam
+//  organization_role_permissions/team_member_org_permissions — DROPADAS na
+//  consolidação PRD #408. Superfície viva do modelo consolidado: Equipe >
+//  MemberPermissions sobre member_feature_permissions + feature_permissions.)
 export {
   useHasPermission,
   useMyPermissions,
-  useOrganizationRolePermissions,
-  useTeamMemberOrgPermissions,
-  useSaveTeamMemberOrgPermissions,
   PERMISSION_LABELS,
 } from "./hooks/usePermissions";
-export type {
-  PermissionKey,
-  TeamMemberOrgPermission,
-} from "./hooks/usePermissions";
-export { useOrgRolePermissions } from "./hooks/useOrgRolePermissions";
-export type { OrgRolePermissionsMap } from "./hooks/useOrgRolePermissions";
-export { useUpdateRolePermission } from "./hooks/useUpdateRolePermission";
-export type { UpdateRolePermissionInput } from "./hooks/useUpdateRolePermission";
-export { useResetOrgRolePermissions } from "./hooks/useResetOrgRolePermissions";
+export type { PermissionKey } from "./hooks/usePermissions";
 
 // ── Components ─────────────────────────────────────────────────────────────
 export { PermissionProtectedRoute } from "./components/PermissionProtectedRoute";

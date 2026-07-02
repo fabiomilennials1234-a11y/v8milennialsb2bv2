@@ -111,11 +111,6 @@ const ApiKeysPanel = lazy(() =>
     default: m.ApiKeysPanel,
   }))
 );
-const PermissionsSettings = lazy(() =>
-  import("@/modules/identity/permissions/components/PermissionsTab").then((m) => ({
-    default: m.PermissionsTab,
-  }))
-);
 
 const colorOptions = [
   "#F5C518", "#22C55E", "#3B82F6", "#8B5CF6", "#EF4444",
@@ -642,10 +637,6 @@ export default function Configuracoes() {
             <Timer className="w-4 h-4" />
             SLA
           </TabsTrigger>
-          <TabsTrigger value="permissoes" className="gap-2">
-            <Shield className="w-4 h-4" />
-            Permissões
-          </TabsTrigger>
           <TabsTrigger value="api-keys" className="gap-2">
             <Key className="w-4 h-4" />
             API Keys
@@ -731,15 +722,6 @@ export default function Configuracoes() {
           </TabsContent>
 
 
-          <TabsContent value="permissoes">
-            <Suspense fallback={<TabFallback label="Permissões" />}>
-              <Card className="glass-card">
-                <CardContent className="pt-6">
-                  <PermissionsSettings />
-                </CardContent>
-              </Card>
-            </Suspense>
-          </TabsContent>
 
           <TabsContent value="api-keys">
             <Suspense fallback={<TabFallback label="API Keys" />}>
