@@ -20,6 +20,7 @@ owner: claude-agent
 - [[Edge Functions|Edge Functions]]
 - [[Env Vars|Variáveis de Ambiente]]
 - [[Message Logs Schema Audit|Message Logs Schema Audit]] (complete (no migration needed))
+- [[Planos e Feature Gating|Planos e Feature Gating]]
 - [[RLS Policies|RLS Policies]] 🟡 draft
 - [[RLS Realtime Audit|RLS Realtime Audit]] (1 RED → fix em migration 20261030000003)
 - [[RPCs|RPCs (Postgres Functions)]]
