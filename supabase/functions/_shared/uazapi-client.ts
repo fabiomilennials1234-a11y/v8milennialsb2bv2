@@ -24,6 +24,7 @@ import type {
   UazapiSenderAdvancedInput,
   UazapiSenderCreateResponse,
   UazapiSenderFolder,
+  UazapiSenderMessage,
   UazapiSenderResponse,
   UazapiSenderStatus,
   UazapiSendMediaInput,
@@ -320,6 +321,40 @@ export class UazapiClient {
       failed: folder.log_failed ?? 0,
       total: folder.log_total ?? 0,
     };
+  }
+
+  /**
+   * LIST a sender campaign's per-message statuses — POST /sender/listmessages
+   * (spike #943 / ADR-0016). Instance-token endpoint, same auth scheme as
+   * /sender/listfolders. Paginates until exhausted (limit 1000/page, capped at
+   * 100 pages as a runaway guard) and flattens the {messages, pagination}
+   * envelope. Rows come back raw: Uazapi has documented doc↔server drift, so
+   * shape guarantees live with the consumer (failure-sync core), not here —
+   * this method only guarantees "array, never throws on a weird envelope".
+   */
+  async senderListMessages(
+    folderId: string,
+    opts: { messageStatus?: "Scheduled" | "Sent" | "Failed" } = {}
+  ): Promise<UazapiSenderMessage[]> {
+    const limit = 1000;
+    const maxPages = 100; // 100k messages — far beyond any real folder
+    const messages: UazapiSenderMessage[] = [];
+    for (let page = 0; page < maxPages; page++) {
+      const res = await this.request<unknown>("POST", "/sender/listmessages", {
+        folder_id: folderId,
+        ...(opts.messageStatus ? { messageStatus: opts.messageStatus } : {}),
+        limit,
+        offset: page * limit,
+      });
+      const batch: UazapiSenderMessage[] = Array.isArray((res as any)?.messages)
+        ? (res as any).messages
+        : Array.isArray(res)
+          ? (res as UazapiSenderMessage[])
+          : [];
+      messages.push(...batch);
+      if (batch.length < limit) break;
+    }
+    return messages;
   }
 
   /**

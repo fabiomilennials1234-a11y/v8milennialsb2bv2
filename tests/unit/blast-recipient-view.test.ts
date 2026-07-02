@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   awaitingLotLabel,
   deriveAwaitingLot,
+  failureReasonLabel,
   recipientMatchesQuery,
   skipReasonLabel,
 } from "@/modules/campaigns/lib/blast-recipient-view";
@@ -112,6 +113,35 @@ describe("blast-recipient-view", () => {
 
     it("reason desconhecida → motivo genérico (nunca vaza código cru pra UI)", () => {
       expect(skipReasonLabel("whatever_new_code")).toBe("Cortado pelas regras do disparo");
+    });
+  });
+
+  // Reasons canônicos do failure-sync (ADR-0016, #948): o poll grava
+  // invalid_number | instance_disconnected | provider_rejected | provider_error
+  // em blast_plan_recipients.reason ao reclassificar sent → failed.
+  describe("failureReasonLabel", () => {
+    it('invalid_number → "Número inválido"', () => {
+      expect(failureReasonLabel("invalid_number")).toBe("Número inválido");
+    });
+
+    it('instance_disconnected → "Número desconectado"', () => {
+      expect(failureReasonLabel("instance_disconnected")).toBe("Número desconectado");
+    });
+
+    it('provider_rejected → "Rejeitado pelo WhatsApp"', () => {
+      expect(failureReasonLabel("provider_rejected")).toBe("Rejeitado pelo WhatsApp");
+    });
+
+    it('provider_error → "Erro no envio"', () => {
+      expect(failureReasonLabel("provider_error")).toBe("Erro no envio");
+    });
+
+    it("null → genérico (nunca vaza código cru pra UI)", () => {
+      expect(failureReasonLabel(null)).toBe("Erro no envio");
+    });
+
+    it("reason desconhecida → genérico", () => {
+      expect(failureReasonLabel("whatever_new_code")).toBe("Erro no envio");
     });
   });
 

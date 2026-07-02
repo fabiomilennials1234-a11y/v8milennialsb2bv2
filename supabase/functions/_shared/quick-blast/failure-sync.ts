@@ -45,8 +45,13 @@ export interface FailureSyncRecipient {
  * Parses the dispatch provenance written by runUazapiSenderJob. A folder
  * without a valid `{plan_id, lot_index}` link predates the payload link (or is
  * not a blast-plan dispatch) and is ignored — no heuristic retrofit (ADR-0016).
+ *
+ * Exported so the sync runner (#948) can gate BEFORE hitting the provider —
+ * a legacy folder must cost zero /sender/listmessages calls.
  */
-function parseProvenance(raw: unknown): { plan_id: string; lot_index: number } | null {
+export function parseDispatchProvenance(
+  raw: unknown,
+): { plan_id: string; lot_index: number } | null {
   if (typeof raw !== "object" || raw === null) return null;
   const { plan_id, lot_index } = raw as Record<string, unknown>;
   if (typeof plan_id !== "string" || plan_id === "") return null;
@@ -64,7 +69,7 @@ export function computeFailedTransitions(
   folder: SenderFolderSnapshot,
   recipients: readonly FailureSyncRecipient[],
 ): FailedTransition[] {
-  const provenance = parseProvenance(folder.provenance);
+  const provenance = parseDispatchProvenance(folder.provenance);
   if (!provenance) return [];
   if (!Array.isArray(folder.messages)) return [];
 

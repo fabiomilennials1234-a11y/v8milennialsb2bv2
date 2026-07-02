@@ -15,6 +15,8 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { getWhatsAppProvider } from "../_shared/whatsapp-client.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
+import { syncFolderFailures } from "../_shared/quick-blast/failure-sync-runner.ts";
+import type { FailureSyncRecipient } from "../_shared/quick-blast/failure-sync.ts";
 
 // Force bundler to include provider modules (used via dynamic import in whatsapp-client)
 import "../_shared/whatsapp-providers/evolution-provider.ts";
@@ -29,6 +31,92 @@ function jsonResponse(status: number, body: unknown, headers: Record<string, str
     status,
     headers: { ...headers, "Content-Type": "application/json" },
   });
+}
+
+/**
+ * Per-recipient delivery-failure sync (ADR-0016, #948) — runs after every
+ * successful aggregate refresh. The handler only builds the seams; the
+ * decision logic lives in syncFolderFailures (unit-tested with fake deps):
+ * no provenance / provider without /sender/listmessages → silent skip.
+ *
+ * Contract: NEVER throws (runner captures errors; this wrapper only logs), so
+ * a failure-visibility problem can never break the job refresh the operators
+ * and the cron depend on.
+ */
+async function syncRecipientFailures(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  provider: unknown,
+  job: { id: string; uazapi_sender_id: string | null; payload: unknown; organization_id?: string }
+): Promise<void> {
+  const listImpl = (provider as any).senderListMessages as
+    | undefined
+    | ((folderId: string, opts?: { messageStatus?: string }) => Promise<unknown[]>);
+
+  const result = await syncFolderFailures(
+    {
+      // Only explicit "Failed" rows matter — server-side filter (spike #943).
+      listFolderFailedMessages: listImpl
+        ? (folderId) => listImpl.call(provider, folderId, { messageStatus: "Failed" })
+        : undefined,
+      getSentRecipients: async (planId, lotIndex) => {
+        // Paginate past PostgREST's 1000-row page. lead_id null (lead deleted,
+        // FK SET NULL) is excluded: the core matches transitions by lead_id,
+        // so those rows cannot be addressed — they simply stay `sent`.
+        const rows: FailureSyncRecipient[] = [];
+        const PAGE = 1000;
+        for (let page = 0; page < 20; page++) {
+          const from = page * PAGE;
+          const { data, error } = await supabaseAdmin
+            .from("blast_plan_recipients")
+            .select("lead_id, phone, status")
+            .eq("plan_id", planId)
+            .eq("lot_index", lotIndex)
+            .eq("status", "sent")
+            .not("lead_id", "is", null)
+            .range(from, from + PAGE - 1);
+          if (error) throw new Error(error.message);
+          const batch = (data ?? []) as unknown as FailureSyncRecipient[];
+          rows.push(...batch);
+          if (batch.length < PAGE) break;
+        }
+        return rows;
+      },
+      markFailed: async (t) => {
+        // `status = 'sent'` guard: idempotent under concurrent re-polls and
+        // never clobbers a terminal state written elsewhere. Only the
+        // canonical reason persists — raw provider text is heuristic input,
+        // not schema (ADR-0016; there is no raw-text column by design).
+        const { error } = await supabaseAdmin
+          .from("blast_plan_recipients")
+          .update({ status: "failed", reason: t.reason })
+          .eq("plan_id", t.plan_id)
+          .eq("lot_index", t.lot_index)
+          .eq("lead_id", t.lead_id)
+          .eq("status", "sent");
+        if (error) throw new Error(error.message);
+      },
+    },
+    { uazapi_sender_id: job.uazapi_sender_id, payload: job.payload }
+  );
+
+  if (result.error) {
+    await logRuntime({
+      module: "mass-send-status",
+      action: "failure_sync",
+      status: "error",
+      organizationId: job.organization_id,
+      errorMessage: result.error,
+      payloadSnapshot: { job_id: job.id, synced: result.synced },
+    });
+  } else if (result.synced > 0) {
+    await logRuntime({
+      module: "mass-send-status",
+      action: "failure_sync",
+      status: "success",
+      organizationId: job.organization_id,
+      payloadSnapshot: { job_id: job.id, synced: result.synced },
+    });
+  }
 }
 
 async function refreshJob(
@@ -73,6 +161,30 @@ async function refreshJob(
         total_messages: res.total ?? (job as any).total_messages,
       })
       .eq("id", jobId);
+
+    // Per-recipient failure sync (ADR-0016, #948) — after the aggregates, on
+    // this same poll tick (cron = 1/min ⇒ a provider-reported failure lands on
+    // blast_plan_recipients within the next cycle, including the final poll
+    // that completes the job). Belt-and-braces try/catch: the runner already
+    // never throws, and even an unexpected error here must not break the
+    // refresh contract (200 + aggregates updated).
+    try {
+      await syncRecipientFailures(supabaseAdmin, provider, {
+        id: (job as any).id,
+        uazapi_sender_id: (job as any).uazapi_sender_id,
+        payload: (job as any).payload,
+        organization_id: (job as any).organization_id,
+      });
+    } catch (syncErr) {
+      await logRuntime({
+        module: "mass-send-status",
+        action: "failure_sync",
+        status: "error",
+        organizationId: (job as any).organization_id,
+        errorMessage: (syncErr as Error).message ?? String(syncErr),
+        payloadSnapshot: { job_id: jobId },
+      }).catch(() => {});
+    }
 
     return { ok: true, status: res.status };
   } catch (e) {
