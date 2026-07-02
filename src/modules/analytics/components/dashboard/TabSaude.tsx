@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,17 +28,18 @@ import {
   StatusChip,
   type StageKey,
 } from "@/modules/analytics/lib/funnel-health-stages";
-import type { PeriodRange } from "@/modules/analytics/hooks/useCommandMetrics";
+import {
+  computeSaudePeriodRange,
+  type SaudeCustomRange,
+  type SaudePeriodPreset,
+  type SaudeRange,
+} from "@/modules/analytics/lib/saude-period";
 import { format } from "date-fns";
-import { useState } from "react";
 import { LeadPanelProvider, LeadDetailSheet, useLeadSheet } from "@/modules/leads";
 import { FunnelStageLeadsSheet } from "./FunnelStageLeadsSheet";
 import { SaudeOriginFilter } from "./SaudeOriginFilter";
+import { SaudePeriodFilter } from "./SaudePeriodFilter";
 import { ORIGIN_LABELS } from "@/modules/analytics/hooks/useMktOriginConfig";
-
-interface TabSaudeProps {
-  range: PeriodRange;
-}
 
 const MATRIX_TOOLTIPS: Record<string, string> = {
   Vinculados:
@@ -63,8 +64,23 @@ function fmtDays(v: number | null | undefined) {
   return v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 }
 
-function TabSaudeBase({ range }: TabSaudeProps) {
+function TabSaudeBase() {
+  // Período local da aba — independente do período global do CommandHeader.
+  const [preset, setPreset] = useState<SaudePeriodPreset>("month");
+  const [customRange, setCustomRange] = useState<SaudeCustomRange | null>(null);
   const [origins, setOrigins] = useState<string[]>([]);
+
+  const computedRange = useMemo(
+    () => computeSaudePeriodRange(preset, customRange),
+    [preset, customRange],
+  );
+  // Personalizado incompleto (só `from`) → mantém o último range válido nos
+  // dados, sem disparar query com intervalo aberto. Default (month) garante
+  // range válido no primeiro render.
+  const lastValidRangeRef = useRef<SaudeRange | null>(null);
+  if (computedRange) lastValidRangeRef.current = computedRange;
+  const range = computedRange ?? lastValidRangeRef.current!;
+
   const { data, isLoading } = useFunnelHealth({ start: range.start, end: range.end }, origins);
   const [openStage, setOpenStage] = useState<StageKey | null>(null);
   const { openLead } = useLeadSheet();
@@ -121,7 +137,13 @@ function TabSaudeBase({ range }: TabSaudeProps) {
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="mt-4 flex items-center justify-end">
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+        <SaudePeriodFilter
+          preset={preset}
+          customRange={customRange}
+          onPresetChange={setPreset}
+          onCustomRangeChange={setCustomRange}
+        />
         <SaudeOriginFilter value={origins} onChange={setOrigins} />
       </div>
       <div className="mt-3 grid items-start gap-4 lg:grid-cols-[380px_1fr]">
@@ -485,10 +507,10 @@ function TabSaudeBase({ range }: TabSaudeProps) {
   );
 }
 
-function TabSaudeWithProviders(props: TabSaudeProps) {
+function TabSaudeWithProviders() {
   return (
     <LeadPanelProvider>
-      <TabSaudeBase {...props} />
+      <TabSaudeBase />
       <LeadDetailSheet />
     </LeadPanelProvider>
   );
