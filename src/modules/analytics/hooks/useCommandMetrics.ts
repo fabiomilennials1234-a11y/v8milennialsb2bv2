@@ -4,6 +4,7 @@ import { useIdentity } from "@/modules/identity";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
+import { startOfUTCDay, endOfUTCDay } from "@/modules/analytics/lib/utc-day";
 
 export type CommandPeriod = "today" | "week" | "month" | "quarter";
 
@@ -51,13 +52,6 @@ export interface PeriodRange {
 }
 
 const MONTH_SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-
-function startOfUTCDay(d: Date) {
-  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-}
-function endOfUTCDay(d: Date) {
-  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999));
-}
 
 /**
  * Calcula o intervalo do período + intervalo equivalente anterior (pros deltas).
