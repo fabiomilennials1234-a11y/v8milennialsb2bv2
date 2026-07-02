@@ -296,18 +296,18 @@ export async function assertPlanFeature(
 - `supabase/functions/whatsapp-api-proxy/index.ts` → `"chat"`
 - Test: ampliar `tests/unit/plan-gate.test.ts` + testes por função onde já houver suite
 
-- [ ] **Step 1:** Um commit POR função (deploy independente, rollback granular). Em cada uma: teste (quando a função tiver suite em `tests/unit/`) → gate no topo → catch de `PlanFeatureDeniedError` → resposta 403 JSON com `{ error, feature, plan }`.
-- [ ] **Step 2:** ⚠️ Cuidados: (a) `agent-message` é o fluxo mais frágil do sistema — gate ANTES de qualquer side-effect, e org com addon turbo tem `copilot: true` resolvido pela RPC (addon já entra no JSONB via organization_features — VERIFICAR; se não entrar, resolver addon no gate); (b) `process-workflow-executions` não pode derrubar o batch inteiro por uma org sem plano — isolar por execução; (c) NÃO gatear `copilot-v2-worker` (sistema inert de propósito, só Milennials) — deixar fora.
-- [ ] **Step 3:** `npm run test:unit` verde por commit. Commits: `feat(plan-gate): enforce <feature> em <função>` (×5).
-- [ ] **Step 4:** Deploy DEV das 5 funções (`supabase functions deploy <fn> --project-ref bcfadphgsibjzivtbjvc`). Smoke: org dev em torque-1.0 chamando mass-send-create → 403.
+- [x] **Step 1:** Um commit POR função (×5: 9a611af8 mass-send-create, 6e19f98f oraculo, e88823cb whatsapp-api-proxy, adcf49ee process-workflow-executions, c587dcfa agent-message). Teste adicionado onde havia suite de handler (mass-send-create: +5 casos, 10/10). Suites de oraculo/proxy/worker são logic-level ou inexistentes — gate coberto por plan-gate.test.ts (6/6).
+- [x] **Step 2:** Cuidados aplicados: (a) agent-message gate 0.85 ANTES de lock/getOrCreateLead; denial = **200 {skipped, reason: plan_denied}** (não 403 — segue idioma dos early-gates da função; 4xx viraria retry/DLQ storm no hop interno). Addon turbo VERIFICADO: `plan_addons.features_unlocked=['copilot','oraculo']` materializa via `organization_features` → coberto pela RPC. (b) worker: gate POR EXECUÇÃO + cache por org + `skipped_plan` (status é TEXT sem constraint — verificado no dev) + fail-open em erro de resolução (marcar skipped por erro transiente perderia execução; catch marca failed terminal). (c) copilot-v2-worker NÃO gateado. (d) whatsapp-api-proxy: master bypassa (opera qualquer org).
+- [x] **Step 3:** Testes verdes por commit (targeted); suite completa verde vs baseline no gate da Task 8. agent-message-batch: 2 failed/9 passed IDÊNTICO com e sem o gate (falhas pré-existentes em absorbPendingMessages).
+- [ ] **Step 4:** Deploy DEV — **BLOQUEADO pelo permission classifier da sessão** (negou `supabase functions deploy` mesmo pra dev). Comando pronto p/ CTO/humano: `for fn in agent-message oraculo-comercial process-workflow-executions mass-send-create whatsapp-api-proxy create-org-user; do supabase functions deploy $fn --project-ref bcfadphgsibjzivtbjvc; done`. Smoke pós-deploy: org dev torque-1.0 → mass-send-create 403 / agent-message 200 skipped plan_denied.
 
 ### Task 11: UI de equipe respeita o novo limite
 
 **Files:**
 - Verify: `src/modules/identity/org-team/pages/Equipe.tsx:589` (botão já desabilita via `seatUsage.can_add`) + `SeatUsageBar`
 
-- [ ] **Step 1:** Com migration aplicada em dev, validar que `org_get_seat_usage` retorna `paid_seats: 5` e a UI mostra "X de 5". Se `SeatUsageBar` tratava -1/ilimitado com copy especial, confirmar que o caminho finito renderiza bem.
-- [ ] **Step 2:** Ajuste de copy/estado se necessário; senão task é verify-only. Commit se houver diff: `fix(identity): UI de assentos com limite finito de 5`
+- [x] **Step 1:** Validado no dev (Milennials): `org_get_seat_usage` → `{paid_seats: 5, active_members: 11, can_add: false, remaining: 0, is_unlimited: false}`. UI: botão "Criar usuário" desabilita via `seatUsage.can_add` (Equipe.tsx:589); `SeatUsageBar` trata finito bem — "11 / 5 seats", badge "Limite atingido", barra capada em 100% destructive. Caminho -1 tem branch próprio "Ilimitado".
+- [x] **Step 2:** Verify-only — zero diff necessário.
 
 ---
 
@@ -320,9 +320,9 @@ export async function assertPlanFeature(
 - Modify: `src/App.tsx` — envolver as rotas faltantes com `PlanFeatureProtectedRoute`
 - Test: `tests/unit/route-feature-map.test.ts` — asserta que todo path em `SIDEBAR_FEATURE_MAP`/`ROUTE_FEATURE_MAP` com feature key tem guard correspondente (teste de consistência lê ambos os mapas; guard sem key ou key sem guard = fail)
 
-- [ ] **Step 1:** Teste de consistência falhando (rotas sem guard listadas acima).
-- [ ] **Step 2:** Adicionar guards em App.tsx. Nota: como a matriz dá `commissions/tv_dashboard/products/deals/performance: true` nos 3 planos, isso NÃO muda comportamento hoje — fecha a porta pro futuro (plano novo sem essas keys) e mata a divergência nav-cadeado vs rota-aberta.
-- [ ] **Step 3:** Verde. Commit: `feat(plans): guards de rota derivados do registry — nav e rota nunca divergem`
+- [x] **Step 1:** Teste de consistência falhando — RED listou exatamente 13 rotas sem guard (as 5 do plano + funis/pipes/leads/lixeira/duplicatas/follow-ups, todas com cadeado na nav via SIDEBAR_FEATURE_MAP). 4 asserts: mapa→rota existe, mapa→guard com key certa, sidebar⊆mapa (exceto redirects /marketing,/analytics), guard∈mapa.
+- [x] **Step 2:** ROUTE_FEATURE_MAP (27 rotas) no registry + 13 guards novos em App.tsx. Zero mudança de comportamento hoje (keys true nos 3 planos). Fora do mapa por decisão: `/campanhas/:id` (superfície legada, sem key na sidebar — registrar no PR) e `/pipe/custom/:slug` (gate in-place por funnels_custom).
+- [x] **Step 3:** Verde (4/4) + tsc ✅. Commit: `feat(plans): guards de rota derivados do registry — nav e rota nunca divergem`
 
 ### Task 13: Matar fail-open no guard de rota
 

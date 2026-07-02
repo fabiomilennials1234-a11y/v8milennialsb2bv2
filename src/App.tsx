@@ -234,9 +234,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="pipeline.view">
-                <FunisHub />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="funnels" featureLabel="Funis">
+                <PermissionProtectedRoute featureKey="pipeline.view">
+                  <FunisHub />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -278,9 +280,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="pipeline.view">
-                <PipeConfirmacao />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="funnels" featureLabel="Funis">
+                <PermissionProtectedRoute featureKey="pipeline.view">
+                  <PipeConfirmacao />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -290,9 +294,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="pipeline.view">
-                <PipePropostas />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="funnels" featureLabel="Funis">
+                <PermissionProtectedRoute featureKey="pipeline.view">
+                  <PipePropostas />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -302,9 +308,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="performance.view">
-                <Performance />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="performance" featureLabel="Pódio">
+                <PermissionProtectedRoute featureKey="performance.view">
+                  <Performance />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -330,9 +338,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="pipeline.view">
-                <PipeWhatsapp />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="funnels" featureLabel="Funis">
+                <PermissionProtectedRoute featureKey="pipeline.view">
+                  <PipeWhatsapp />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -342,9 +352,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="followups.view">
-                <Revisao />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="review" featureLabel="Revisão">
+                <PermissionProtectedRoute featureKey="followups.view">
+                  <Revisao />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -366,9 +378,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="leads.view">
-                <Leads />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="leads" featureLabel="Combustível">
+                <PermissionProtectedRoute featureKey="leads.view">
+                  <Leads />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -378,9 +392,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="leads.view">
-                <TrashPage />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="leads" featureLabel="Combustível">
+                <PermissionProtectedRoute featureKey="leads.view">
+                  <TrashPage />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -390,9 +406,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="leads.view">
-                <Duplicates />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="leads" featureLabel="Combustível">
+                <PermissionProtectedRoute featureKey="leads.view">
+                  <Duplicates />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -406,9 +424,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="commissions.view">
-                <Comissoes />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="commissions" featureLabel="Comissões">
+                <PermissionProtectedRoute featureKey="commissions.view">
+                  <Comissoes />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -451,7 +471,9 @@ function AppRoutes() {
         path="/tv"
         element={
           <ProtectedRoute>
-            <TVDashboard />
+            <PlanFeatureProtectedRoute feature="tv_dashboard" featureLabel="TV Dashboard">
+              <TVDashboard />
+            </PlanFeatureProtectedRoute>
           </ProtectedRoute>
         }
       />
@@ -460,7 +482,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Negocios />
+              <PlanFeatureProtectedRoute feature="deals" featureLabel="Negócios">
+                <Negocios />
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -470,9 +494,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="products.view">
-                <Produtos />
-              </PermissionProtectedRoute>
+              <PlanFeatureProtectedRoute feature="products" featureLabel="Produtos">
+                <PermissionProtectedRoute featureKey="products.view">
+                  <Produtos />
+                </PermissionProtectedRoute>
+              </PlanFeatureProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
