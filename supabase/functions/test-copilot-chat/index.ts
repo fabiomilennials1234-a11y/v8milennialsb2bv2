@@ -363,7 +363,9 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
       );
     }
 
-    const recentHistory = messages.slice(-12);
+    // Mantém as últimas 20 mensagens — alinhado a HISTORY_KEEP_RECENT do agent-message
+    // (produção), pra o preview refletir a memória real do agente em conversas longas.
+    const recentHistory = messages.slice(-20);
     const hasAttachment = !!attachment;
 
     const userContent = buildUserContent(userMessage, attachment);
