@@ -245,7 +245,7 @@ export function useLeadTimelineCompact(leadId: string | undefined) {
 // ─── Legacy lead_history reader/writer ────────────────────
 // Consolidado de `useLeadHistory.ts` (slice 4) — mantém signature
 // compatível com call sites legados (ConfirmacaoDetailModal,
-// ProposalDetailModal, ClientDetailModal, LeadModal) que iteram
+// ClientDetailModal, LeadModal) que iteram
 // sobre o row completo de `lead_history`.
 
 export function useLeadHistory(leadId: string | undefined | null) {

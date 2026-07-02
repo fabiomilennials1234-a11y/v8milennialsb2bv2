@@ -75,7 +75,6 @@ NÃO re-exportadas — App.tsx faz deep-import via React.lazy:
 
 - `@/modules/analytics/components/analytics/sections/AquisicaoSection.tsx` — consome `MktConfigModal`, `MktOriginCard`, `MktOriginRanking` (via deep-import)
 - `@/modules/carteira/components/proposal/CadastroExternoConfirmDialog.tsx` — `useCadastroExternoPush`
-- `@/modules/carteira/components/proposal/ProposalDetailModal.tsx` — `useCadastroExternoEnabled`
 - `@/modules/leads/components/lead-detail/cross-pipe/BudgetFieldBlock.tsx` — `useCadastroExternoEnabled`
 - `@/modules/leads/components/leads/funnel-contexts/PropostasContext.tsx` — `useCadastroExternoEnabled`
 - `@/modules/pipelines/pages/PipePropostas.tsx` — `useCadastroExternoEnabled`
