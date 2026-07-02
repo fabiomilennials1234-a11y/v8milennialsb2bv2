@@ -113,6 +113,12 @@ export type DispatchFn = (
     triggeredByUserId?: string | null;
     triggeredVia?: "ui" | "api" | "cron" | "workflow";
     trackSource?: string;
+    /** Dispatch provenance (ADR-0016 §3): the plan+lot that originated this job,
+     *  persisted into uazapi_sender_jobs.payload so the mass-send-status poll can
+     *  trace a provider folder back to its blast_plan_recipients. Only ever set
+     *  by the blast-plan paths — Quick Blast / campaign jobs never carry them. */
+    planId?: string;
+    lotIndex?: number;
   },
 ) => Promise<{ sender_job_id: string; uazapi_sender_id: string }>;
 
@@ -308,6 +314,8 @@ export async function createBlastPlan(
       triggeredByUserId: params.userId,
       triggeredVia: "ui",
       trackSource: "blast-plan",
+      planId,
+      lotIndex: 0,
     });
     await deps.store.markRecipients(planId, toSendRows.map((r) => r.lead_id), "sent", null);
     await deps.usageSource.increment(params.orgId, todayDate, slice.toSend);
@@ -439,6 +447,8 @@ async function createMultiNumberBlastPlan(
         triggeredByUserId: params.userId,
         triggeredVia: "ui",
         trackSource: "blast-plan",
+        planId,
+        lotIndex: 0,
       });
       await deps.store.markRecipients(planId, toSendRows.map((r) => r.lead_id), "sent", null);
       if (deps.instanceUsageSource) {
@@ -585,6 +595,10 @@ export async function releaseBlastPlanLot(
     triggeredByUserId: plan.created_by ?? null,
     triggeredVia: "cron" as const,
     trackSource: "blast-plan",
+    // Dispatch provenance (ADR-0016 §3): deferred recipients carry the lot index
+    // they are RELEASED under (this one), not the lot they were frozen into.
+    planId: params.planId,
+    lotIndex,
   };
 
   let sent = 0;
