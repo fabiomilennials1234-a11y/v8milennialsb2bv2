@@ -150,8 +150,8 @@ Resultado: **`DashboardOutbound.tsx` NÃO é órfã** — importada e renderizad
 **Files:**
 - Modify: `supabase/functions/CLAUDE.md` — corrigir nota de `webhook-send-test` ("deletar candidato" → "USADO por WebhookSettings.tsx:197"); anotar `process-followup-situations` (ADR-0006, rollout pendente, sem cron ainda) e `recover-stuck-conversations` (ferramenta ops manual, service_role).
 
-- [ ] **Step 1:** Editar as 3 notas.
-- [ ] **Step 2:** Commit: `docs(functions): corrige notas de funções vivas que pareciam mortas`
+- [x] **Step 1:** Editar as 3 notas. → webhook-send-test (USADO por WebhookSettings.tsx:197 — nota corrigida em functions/CLAUDE.md e platform/CLAUDE.md), process-followup-situations + recover-stuck-conversations adicionadas ao mapa copilot (contagem 18→20).
+- [x] **Step 2:** Commit: `docs(functions): corrige notas de funções vivas que pareciam mortas`
 
 ### Task 6: Vault sync da faxina
 
@@ -159,10 +159,10 @@ Resultado: **`DashboardOutbound.tsx` NÃO é órfã** — importada e renderizad
 - Modify: `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/07 — Changelog/` (append nota da faxina)
 - Verify: `06 — Features/` — se alguma nota documentar exclusivamente feature deletada (ex.: podium v1, telas metas/ranking v1), marcar como histórico ou deletar.
 
-- [ ] **Step 1:** Ler `06 — Features/_MOC.md` + subpastas (Vendas, Dashboard, Admin); identificar notas que referenciam SÓ artefatos deletados nas Tasks 1-3.
-- [ ] **Step 2:** Notas 100% obsoletas → deletar. ⚠️ Commit de deleção no vault EXIGE `[vault-delete-ok]` na mensagem. Notas parcialmente obsoletas → editar removendo a parte morta.
-- [ ] **Step 3:** Append no changelog: data, o que saiu, por quê.
-- [ ] **Step 4:** Commit: `docs(vault): sync faxina de features mortas [vault-delete-ok]`
+- [x] **Step 1:** Ler `06 — Features/_MOC.md` + subpastas (Vendas, Dashboard, Admin); identificar notas que referenciam SÓ artefatos deletados nas Tasks 1-3. → recon exaustivo (agente): ZERO notas 100% sobre artefato deletado; só menções incidentais em inventários (auditoria-duplicatas, As-Is, bounded-contexts) e changelog histórico.
+- [x] **Step 2:** Notas 100% obsoletas → deletar. → Nenhuma deleção necessária (sem `[vault-delete-ok]`). Editadas as linhas acionáveis erradas de `auditoria-duplicatas.md` (webhook-send-test "DELETAR"→VIVO; webhook-validate-url→DELETADA; ProposalDetailModal/Premiacoes marcados resolvidos). Snapshots históricos (As-Is, bounded-contexts, To-Be) intocados de propósito — documentam estado pré-modularização.
+- [x] **Step 3:** Append no changelog: data, o que saiu, por quê. → `07 — Changelog/2026-07-02-plan-tiers-cleanup-faxina.md`.
+- [x] **Step 4:** Commit: `docs(vault): sync faxina de features mortas` (sem flag — zero deleções no vault)
 
 ---
 
@@ -173,7 +173,7 @@ Resultado: **`DashboardOutbound.tsx` NÃO é órfã** — importada e renderizad
 **Files:**
 - Create: `supabase/migrations/20270105000000_plan_matrix_base_automation_copilot.sql`
 
-- [ ] **Step 1: Escrever migration (idempotente)**
+- [x] **Step 1: Escrever migration (idempotente)** — escrita com ajuste: + audit trail em `quota_audit_log`, guard `IS DISTINCT FROM 5` p/ idempotência.
 
 ```sql
 -- Matriz plano→feature v1: Base=CRM, Automation=+chat/automações, Copilot=tudo. 5 users em todos.
@@ -211,10 +211,10 @@ WHERE q.organization_id = o.id
 COMMIT;
 ```
 
-- [ ] **Step 2: Verificar schema real de `org_quotas` antes de aplicar** — ler `20260910000100_*.sql`: se `effective_limit` for coluna gerada, o UPDATE acima basta; se for materializada por trigger/função, chamar a função de resync no lugar. Ajustar SQL conforme.
-- [ ] **Step 3: Verificar grandfathering** — query de leitura: orgs torque com `count(team_members ativos) > 5`. Registrar lista no PR (essas orgs não quebram; só não adicionam mais). NÃO mexer em `admin_adjustment`.
-- [ ] **Step 4: Aplicar em DEV** (`bcfadphgsibjzivtbjvc`) via Supabase Management API (memória `reference_supabase_mgmt_api`; dev tem quota 402 p/ REST — Management API funciona). Validar: `SELECT name, limits->>'max_users', features->>'carteira' FROM subscription_plans WHERE name LIKE 'torque%'`.
-- [ ] **Step 5: Commit** — `feat(plans): matriz Base/Automation/Copilot + limite 5 usuários por plano`
+- [x] **Step 2: Verificar schema real de `org_quotas` antes de aplicar** — verificado: `effective_limit` é `GENERATED ALWAYS ... STORED` (20260910000100:18-23) → UPDATE de `plan_base` basta. Adicionado INSERT em `quota_audit_log` (change_reason `data_migration`) antes do resync — `sync_org_quotas_from_plan` não é chamável de migration (guard exige service_role/master).
+- [x] **Step 3: Verificar grandfathering** — DEV: 5 orgs >5 ativos, todas torque-v8 — Organização Principal (33), Alamaster (33), VitrineVET (23), Milennials (11), Basic4u (6). Registrado p/ PR. `admin_adjustment` intocado. (Lista de PROD precisa ser levantada quando CTO autorizar apply prod.)
+- [x] **Step 4: Aplicar em DEV** — aplicado via Management API + registrado em `supabase_migrations.schema_migrations` (mesmo padrão da 20270103000000). Validado: 3 planos com `max_users=5`, `carteira/customer_portfolio/marketing=true`; 22 rows de `org_quotas` resyncadas p/ plan_base=5.
+- [x] **Step 5: Commit** — `feat(plans): matriz Base/Automation/Copilot + limite 5 usuários por plano`
 
 ⚠️ PROD: só com pedido explícito do CTO. Migration fica pronta; aplicar não.
 
