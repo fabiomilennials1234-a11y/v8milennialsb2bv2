@@ -202,6 +202,24 @@ describe("createBlastPlan — multi-number distribution", () => {
     expect(state.plans.get(out.planId).status).toBe("completed");
   });
 
+  it("stamps dispatch provenance {planId, lotIndex: 0} on EVERY per-number lot-0 job (ADR-0016 §3)", async () => {
+    const { store } = planStore();
+    const dispatch = okDispatch();
+
+    const out = await createBlastPlan(
+      { store, usageSource: usageStub().source, instanceUsageSource: instanceUsageStub().source, dispatch },
+      baseParams(),
+    );
+
+    expect(out.ok).toBe(true);
+    expect(dispatch).toHaveBeenCalledTimes(2); // one job per number
+    for (const call of dispatch.mock.calls) {
+      const input = call[1] as any;
+      expect(input.planId).toBe(out.planId);
+      expect(input.lotIndex).toBe(0);
+    }
+  });
+
   it("rejects a foreign-org number (tenant guard)", async () => {
     const out = await createBlastPlan(
       { store: planStore().store, usageSource: usageStub().source, instanceUsageSource: instanceUsageStub().source, dispatch: okDispatch() },
@@ -284,6 +302,27 @@ describe("releaseBlastPlanLot — multi-number + window", () => {
     expect(instUsage.state.byKey.get("b|2026-06-06")).toBe(3); // 1 seeded + 2
     expect(usage.state.byDate.get("2026-06-06")).toBe(4);
     expect(state.plans.get(planId).status).toBe("completed");
+  });
+
+  it("stamps dispatch provenance {planId, lotIndex} on every per-number released job (ADR-0016 §3)", async () => {
+    const { store } = planStore();
+    const dispatch = okDispatch();
+    const planId = await seedMulti(store, [
+      { id: "0", inst: "a" },
+      { id: "1", inst: "b" },
+    ]);
+
+    await releaseBlastPlanLot(
+      { store, usageSource: usageStub().source, instanceUsageSource: instanceUsageStub().source, dispatch, instanceResolver: resolver },
+      { planId, now: new Date("2026-06-06T12:00:00Z"), dailyBudget: 1000 },
+    );
+
+    expect(dispatch).toHaveBeenCalledTimes(2); // one job per number
+    for (const call of dispatch.mock.calls) {
+      const input = call[1] as any;
+      expect(input.planId).toBe(planId);
+      expect(input.lotIndex).toBe(1); // lots_released = 1 → this release fires lot 1
+    }
   });
 
   it("a saturated number defers its share while the other still sends", async () => {

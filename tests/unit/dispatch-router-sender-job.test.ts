@@ -105,6 +105,59 @@ describe("runUazapiSenderJob — reads folder_id + count (B2)", () => {
   });
 });
 
+describe("runUazapiSenderJob — dispatch provenance in payload (ADR-0016 §3, #945)", () => {
+  it("persists {plan_id, lot_index} into the payload jsonb when the input carries them (blast-plan origin)", async () => {
+    mockGetProvider.mockResolvedValue(
+      providerReturning({ folder_id: "fld-plan", count: 1, status: "scheduled" }),
+    );
+    const supabase = supabaseStub();
+
+    await runUazapiSenderJob(supabase, INSTANCE, {
+      recipients: [{ number: "5511999990001", type: "text", text: "a" }],
+      trackSource: "blast-plan",
+      planId: "plan-42",
+      lotIndex: 3,
+    });
+
+    // The plan→folder link (ADR-0016): the poll reads these to trace failures
+    // back to blast_plan_recipients. lot_index 0 must survive too (falsy guard).
+    expect(supabase.captured.insertedRow.payload.plan_id).toBe("plan-42");
+    expect(supabase.captured.insertedRow.payload.lot_index).toBe(3);
+  });
+
+  it("persists lot_index 0 (creation lot) — falsy-zero must not be dropped", async () => {
+    mockGetProvider.mockResolvedValue(
+      providerReturning({ folder_id: "fld-lot0", count: 1, status: "scheduled" }),
+    );
+    const supabase = supabaseStub();
+
+    await runUazapiSenderJob(supabase, INSTANCE, {
+      recipients: [{ number: "5511999990001", type: "text", text: "a" }],
+      trackSource: "blast-plan",
+      planId: "plan-42",
+      lotIndex: 0,
+    });
+
+    expect(supabase.captured.insertedRow.payload.plan_id).toBe("plan-42");
+    expect(supabase.captured.insertedRow.payload.lot_index).toBe(0);
+  });
+
+  it("does NOT add plan_id/lot_index for non-plan jobs (Quick Blast avulso / campaign) — payload unchanged", async () => {
+    mockGetProvider.mockResolvedValue(
+      providerReturning({ folder_id: "fld-qb", count: 1, status: "scheduled" }),
+    );
+    const supabase = supabaseStub();
+
+    await runUazapiSenderJob(supabase, INSTANCE, {
+      recipients: [{ number: "5511999990001", type: "text", text: "a" }],
+      trackSource: "quick-blast",
+    });
+
+    expect(supabase.captured.insertedRow.payload).not.toHaveProperty("plan_id");
+    expect(supabase.captured.insertedRow.payload).not.toHaveProperty("lot_index");
+  });
+});
+
 describe("runUazapiSenderJob — fails loud, never persists an unpollable row (B2)", () => {
   it("throws when Uazapi accepts zero messages (count === 0)", async () => {
     mockGetProvider.mockResolvedValue(
