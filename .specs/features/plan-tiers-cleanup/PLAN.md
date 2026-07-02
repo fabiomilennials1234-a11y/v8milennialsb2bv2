@@ -132,10 +132,10 @@ Resultado: **`DashboardOutbound.tsx` NÃO é órfã** — importada e renderizad
 - Modify: `src/modules/carteira/components/.../ClientDetailModal.tsx` (REMOVER a tag `@deprecated` — componente é vivo, usado por `UpsellBaseList.tsx:7,113`)
 - Verify+delete se órfã: `supabase/functions/webhook-validate-url/` (+ entrada no `config.toml`)
 
-- [ ] **Step 1:** `rg "WhatsAppMigrationBanner" src/` → só barrel + arquivo. Deletar ambos os pontos.
-- [ ] **Step 2:** `rg "webhook-validate-url" src/ supabase/` → se nenhum invoke/call-site fora do config.toml, deletar pasta + entrada config.toml. Se houver call-site, manter.
-- [ ] **Step 3:** Corrigir tag do `ClientDetailModal`.
-- [ ] **Step 4:** Build + testes verde. Commit: `chore(cleanup): banner de migração órfão, tag deprecated incorreta, edge órfã`
+- [x] **Step 1:** `rg "WhatsAppMigrationBanner" src/` → só barrel + arquivo. Deletar ambos os pontos. → deletado + barrel (index.ts:234) + sub-barrel; `RepairingWizard` preservado (deep-imports vivos em WhatsAppMigration.tsx:32 e CommandGroupUazapi.tsx:20).
+- [x] **Step 2:** `rg "webhook-validate-url"` → zero call-sites (só docs/config.toml/próprio index) → pasta deletada + entrada config.toml removida + docs (EDGE-FUNCTIONS-AUTH-MAP, functions/CLAUDE.md) atualizados.
+- [x] **Step 3:** Corrigir tag do `ClientDetailModal`. → tag @deprecated removida (componente vivo via UpsellBaseList).
+- [x] **Step 4:** Build + testes verde. → tsc ✅, build ✅. Gate revelou 1 arquivo novo falhando (`tests/unit/whatsapp-migration.test.tsx` — testava o banner deletado); describe do banner removido, testes de hooks vivos mantidos → arquivo re-rodado: 1 passed (4 tests). Commit: `chore(cleanup): banner de migração órfão, tag deprecated incorreta, edge órfã`
 
 ### Task 4: `scripts/recovery/` (untracked, ~90 arquivos de incidentes)
 

@@ -39,7 +39,7 @@ src/modules/communication/
 │   ├── email/                     # Email channel UI (slice 16)
 │   ├── sms/                       # SMS channel UI (slice 16)
 │   ├── whatsapp/                  # SessionDeadBanner (lifecycle alerts)
-│   └── whatsapp-migration/        # Evolution→Uazapi migration banner + wizard
+│   └── whatsapp-migration/        # Evolution→Uazapi RepairingWizard (banner órfão deletado 2026-07-02)
 ├── hooks/
 │   ├── chat/                      # WhatsApp-specific hooks (instances, contacts, messages, send, realtime, sz-chat) + shared/queryKeys
 │   ├── chat-meta/                 # Meta hooks (pages, conversations, messages, send, realtime, link-lead)
@@ -100,7 +100,7 @@ Superfície completa em `./index.ts`. Resumo:
 
 **Hooks email/sms/ai (slice 16 longtail):** `useEmailAccounts`, `useEmails`, `useSms`, `useAiEmailDrafts`.
 
-**Components:** `ChatShellWithContext`, `ChatSkeleton`, `MessageBubble`, `MessagesAreaErrorBoundary`, `AudioPlayer`, `AudioRecorder`, `ImagePreviewModal`, `MessageImage/Video/Document`, `ChatEmptyState`, `ScrollToBottomFab`, `UnreadDivider`, `ScheduledMessagesBanner`, `ScheduleMessageModal`, `ConversationNotes`, `LeadContactModal`, `HumanPauseBadge`, `ChannelBadge`, `RealtimeStatusBadge`; Meta: `MetaChatShell`, `MetaChatHeader`, `MetaConversationList(Item)`, `MetaMessage{List,Bubble}`, `MetaComposer`, `MetaWindowWarning`, `LinkLeadDialog`, `ChatMetaSkeleton`; WhatsApp lifecycle: `SessionDeadBanner`, `WhatsAppMigrationBanner`, `RepairingWizard`; Email/SMS/AI (slice 16): `AiEmailWriter`, email/sms internals.
+**Components:** `ChatShellWithContext`, `ChatSkeleton`, `MessageBubble`, `MessagesAreaErrorBoundary`, `AudioPlayer`, `AudioRecorder`, `ImagePreviewModal`, `MessageImage/Video/Document`, `ChatEmptyState`, `ScrollToBottomFab`, `UnreadDivider`, `ScheduledMessagesBanner`, `ScheduleMessageModal`, `ConversationNotes`, `LeadContactModal`, `HumanPauseBadge`, `ChannelBadge`, `RealtimeStatusBadge`; Meta: `MetaChatShell`, `MetaChatHeader`, `MetaConversationList(Item)`, `MetaMessage{List,Bubble}`, `MetaComposer`, `MetaWindowWarning`, `LinkLeadDialog`, `ChatMetaSkeleton`; WhatsApp lifecycle: `SessionDeadBanner`, `RepairingWizard`; Email/SMS/AI (slice 16): `AiEmailWriter`, email/sms internals.
 
 **Lib:** `whatsappApi` (namespace export), `primaryInstanceFor`, `computeNeedsDeepLinkResolve`, `prefetchChatRoute`, `prefetchChatData`.
 
