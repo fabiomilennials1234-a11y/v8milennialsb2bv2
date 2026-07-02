@@ -117,24 +117,27 @@ export interface BlastPlanProgress {
   sent: number;
   skipped: number;
   pending: number;
+  /** Reclassificados sent → failed pelo sync do poll (ADR-0016, #948). */
+  failed: number;
 }
 
-/** Per-plan recipient progress (sent / skipped / pending), for the Disparos panel. */
+/** Per-plan recipient progress (sent / skipped / pending / failed), for the Disparos panel. */
 export function useBlastPlanProgress(planId: string | null) {
   return useQuery({
     queryKey: ["blast_plan_recipients", planId],
     queryFn: async (): Promise<BlastPlanProgress> => {
-      if (!planId) return { total: 0, sent: 0, skipped: 0, pending: 0 };
+      if (!planId) return { total: 0, sent: 0, skipped: 0, pending: 0, failed: 0 };
       const { data, error } = await supabase
         .from("blast_plan_recipients" as any)
         .select("status")
         .eq("plan_id", planId);
       if (error) throw error;
       const rows = (data ?? []) as unknown as { status: string }[];
-      const p: BlastPlanProgress = { total: rows.length, sent: 0, skipped: 0, pending: 0 };
+      const p: BlastPlanProgress = { total: rows.length, sent: 0, skipped: 0, pending: 0, failed: 0 };
       for (const r of rows) {
         if (r.status === "sent") p.sent += 1;
         else if (r.status === "skipped") p.skipped += 1;
+        else if (r.status === "failed") p.failed += 1;
         else p.pending += 1;
       }
       return p;

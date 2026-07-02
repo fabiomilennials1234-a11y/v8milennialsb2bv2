@@ -481,6 +481,130 @@ describe("senderGet — path encoding", () => {
 });
 
 // ---------------------------------------------------------------------------
+// senderListMessages — POST /sender/listmessages (spike #943 / ADR-0016, #948)
+// Per-message statuses of a sender folder. Paginates until exhausted
+// (limit 1000/page) and parses the {messages, pagination} envelope
+// defensively (documented doc↔server drift).
+// ---------------------------------------------------------------------------
+
+describe("senderListMessages — per-message folder statuses", () => {
+  /** Build n message rows for a mocked page. */
+  const page = (n: number, prefix = "m") =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `${prefix}-${i}`,
+      chatid: `55119${String(i).padStart(8, "0")}@s.whatsapp.net`,
+      status: "Failed",
+      error: "invalid jid",
+    }));
+
+  it("POSTs /sender/listmessages with folder_id, messageStatus filter, limit 1000 and offset 0", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeResponse(200, {
+        messages: page(2),
+        pagination: { totalRecords: 2, limit: 1000, offset: 0 },
+      })
+    );
+
+    const client = new UazapiClient(BASE_CONFIG);
+    const res = await client.senderListMessages("fld-1", { messageStatus: "Failed" });
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("https://uazapi.example.com/sender/listmessages");
+    expect((init as RequestInit).method).toBe("POST");
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({
+      folder_id: "fld-1",
+      messageStatus: "Failed",
+      limit: 1000,
+      offset: 0,
+    });
+    // Instance-token endpoint (same auth scheme as /sender/listfolders).
+    expect(
+      new Headers((init as RequestInit).headers as HeadersInit).get("token")
+    ).toBe(BASE_CONFIG.token);
+    expect(res).toHaveLength(2);
+    expect(res[0]).toMatchObject({ chatid: expect.stringContaining("@s.whatsapp.net") });
+  });
+
+  it("omits the messageStatus filter when not requested", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeResponse(200, { messages: [], pagination: { totalRecords: 0, limit: 1000, offset: 0 } })
+    );
+
+    const client = new UazapiClient(BASE_CONFIG);
+    await client.senderListMessages("fld-1");
+
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({
+      folder_id: "fld-1",
+      limit: 1000,
+      offset: 0,
+    });
+  });
+
+  it("paginates past 1000 messages, advancing offset until a short page", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        makeResponse(200, {
+          messages: page(1000, "a"),
+          pagination: { totalRecords: 1200, limit: 1000, offset: 0 },
+        })
+      )
+      .mockResolvedValueOnce(
+        makeResponse(200, {
+          messages: page(200, "b"),
+          pagination: { totalRecords: 1200, limit: 1000, offset: 1000 },
+        })
+      );
+
+    const client = new UazapiClient(BASE_CONFIG);
+    const res = await client.senderListMessages("fld-1", { messageStatus: "Failed" });
+
+    expect(res).toHaveLength(1200);
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+    const secondBody = JSON.parse(String((vi.mocked(fetch).mock.calls[1][1] as RequestInit).body));
+    expect(secondBody.offset).toBe(1000);
+    expect(secondBody.limit).toBe(1000);
+  });
+
+  it("stops after a single page when the folder has fewer than 1000 messages", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeResponse(200, {
+        messages: page(3),
+        pagination: { totalRecords: 3, limit: 1000, offset: 0 },
+      })
+    );
+
+    const client = new UazapiClient(BASE_CONFIG);
+    const res = await client.senderListMessages("fld-1", { messageStatus: "Failed" });
+
+    expect(res).toHaveLength(3);
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["an envelope without messages", { pagination: { totalRecords: 0 } }],
+    ["a non-object body", "nope"],
+    ["a null body", null],
+  ])("returns [] for %s (doc↔server drift never throws)", async (_, body) => {
+    vi.mocked(fetch).mockResolvedValueOnce(makeResponse(200, body));
+
+    const client = new UazapiClient(BASE_CONFIG);
+    await expect(
+      client.senderListMessages("fld-1", { messageStatus: "Failed" })
+    ).resolves.toEqual([]);
+  });
+
+  it("accepts a bare array body (server variant without the envelope)", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(makeResponse(200, page(2)));
+
+    const client = new UazapiClient(BASE_CONFIG);
+    const res = await client.senderListMessages("fld-1", { messageStatus: "Failed" });
+
+    expect(res).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // trailingSlash normalisation
 // ---------------------------------------------------------------------------
 

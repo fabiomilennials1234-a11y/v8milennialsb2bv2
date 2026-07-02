@@ -17,6 +17,7 @@
 import { UazapiClient } from "./uazapi-client.ts";
 import type {
   UazapiSenderAdvancedInput,
+  UazapiSenderMessage,
   UazapiSenderResponse,
 } from "./uazapi-types.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -170,6 +171,12 @@ export interface WhatsAppProvider {
   // Mass send / sender (Uazapi-only) — drives Quick Blast + CSV Mass Send
   senderAdvanced?(input: UazapiSenderAdvancedInput): Promise<UazapiSenderResponse>;
   senderGet?(senderId: string): Promise<UazapiSenderResponse>;
+  /** Per-message folder statuses (POST /sender/listmessages, spike #943/ADR-0016).
+   *  Raw rows, fully paginated — consumers parse defensively (doc↔server drift). */
+  senderListMessages?(
+    folderId: string,
+    opts?: { messageStatus?: "Scheduled" | "Sent" | "Failed" }
+  ): Promise<UazapiSenderMessage[]>;
   senderPause?(senderId: string): Promise<void>;
   senderResume?(senderId: string): Promise<void>;
   senderStop?(senderId: string): Promise<void>;

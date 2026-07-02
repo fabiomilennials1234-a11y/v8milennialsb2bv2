@@ -198,6 +198,26 @@ export type UazapiSenderResponse = {
   failed: number;
 };
 
+/**
+ * Per-message row of POST /sender/listmessages (spike #943 / ADR-0016).
+ * `status` lifecycle: Queued | Canceled | Failed | Sent | Delivered | Read
+ * (open enum — documented by examples); `error` is free text ("" when none);
+ * `chatid` is the JID `<phone>@s.whatsapp.net`. Every field optional: Uazapi
+ * has documented doc↔server drift, so consumers parse defensively.
+ */
+export type UazapiSenderMessage = {
+  id?: string;
+  messageid?: string;
+  chatid?: string;
+  sender?: string;
+  status?: string;
+  error?: string;
+  send_folder_id?: string;
+  track_source?: string;
+  track_id?: string;
+  messageTimestamp?: number;
+};
+
 // ---------------------------------------------------------------------------
 // Error
 // ---------------------------------------------------------------------------

@@ -113,15 +113,18 @@ export function BlastPlanCard({ plan, onOpen }: BlastPlanCardProps) {
 
   // Progress: prefer recipient-level counts; fall back to lot ratio while the
   // recipient query is still loading so the bar never reads empty for a live plan.
-  const { total, sent, skipped, pct } = useMemo(() => {
+  // `failed` (sent reclassificado pelo sync do poll, ADR-0016/#948) conta como
+  // processado — o disparo passou por ele — mas nunca soma em "enviados".
+  const { total, sent, skipped, failed, pct } = useMemo(() => {
     const t = progress?.total ?? plan.total_recipients ?? 0;
     const s = progress?.sent ?? 0;
     const sk = progress?.skipped ?? 0;
-    const processed = s + sk;
+    const f = progress?.failed ?? 0;
+    const processed = s + sk + f;
     const lotPct =
       plan.lots_total > 0 ? Math.round((plan.lots_released / plan.lots_total) * 100) : 0;
     const recipientPct = t > 0 ? Math.round((processed / t) * 100) : 0;
-    return { total: t, sent: s, skipped: sk, pct: progress ? recipientPct : lotPct };
+    return { total: t, sent: s, skipped: sk, failed: f, pct: progress ? recipientPct : lotPct };
   }, [progress, plan.total_recipients, plan.lots_total, plan.lots_released]);
 
   const runControl = async (action: "pause" | "resume" | "cancel") => {
@@ -307,6 +310,9 @@ export function BlastPlanCard({ plan, onOpen }: BlastPlanCardProps) {
         <div className="flex items-center justify-between text-[11px] tabular-nums text-muted-foreground">
           <span>
             <span className="text-foreground/80">{sent.toLocaleString("pt-BR")}</span> enviados
+            {failed > 0 && (
+              <span className="text-destructive"> · {failed.toLocaleString("pt-BR")} falhas</span>
+            )}
             {skipped > 0 && (
               <span className="text-muted-foreground/70"> · {skipped.toLocaleString("pt-BR")} ignorados</span>
             )}
