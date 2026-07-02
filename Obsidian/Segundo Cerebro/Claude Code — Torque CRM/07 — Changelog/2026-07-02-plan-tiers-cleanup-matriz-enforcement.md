@@ -1,3 +1,14 @@
+---
+type: changelog
+title: "2026-07-02 — plan-tiers-cleanup: matriz de planos + enforcement fechado"
+status: shipped
+created: 2026-07-02
+updated: 2026-07-02
+tags: [changelog, plans, plan-tiers-cleanup]
+related: []
+owner: claude-agent
+---
+
 # 2026-07-02 — plan-tiers-cleanup: matriz de planos + enforcement fechado
 
 Fases 2–4 do projeto (branch `feat/plan-tiers-cleanup`). Fase 1 (faxina): ver nota do mesmo dia.

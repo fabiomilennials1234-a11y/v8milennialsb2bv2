@@ -1,3 +1,14 @@
+---
+type: changelog
+title: "2026-07-02 — plan-tiers-cleanup: faxina de código morto"
+status: shipped
+created: 2026-07-02
+updated: 2026-07-02
+tags: [changelog, plans, plan-tiers-cleanup]
+related: []
+owner: claude-agent
+---
+
 # 2026-07-02 — plan-tiers-cleanup: faxina de código morto
 
 Fase 1 do projeto **plan-tiers-cleanup** (branch `feat/plan-tiers-cleanup`, stacked sobre `feat/plan-feature-gating`). Sweep de código morto verificado em 2026-07-02.
