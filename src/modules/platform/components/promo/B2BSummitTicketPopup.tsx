@@ -6,7 +6,7 @@
  * não interage. Clique no backdrop ou Esc durante a intro pulam pro ticket (não fecham).
  *
  * Aparece 1x por browser (localStorage — não cruza devices; aceito pra promo temporária).
- * Cupom rotacionado 50/50 (LUCAS | MARCELO), persistido por usuário — o CTA abre o
+ * Cupom rotacionado 50/50 (FINKLER | MARCELO), persistido por usuário — o CTA abre o
  * checkout do parceiro com ?cupom= já aplicado. Temporário — remover após o evento.
  */
 
@@ -24,7 +24,8 @@ const EVENT_ART_URL = "/promo/b2b-summit-2026.jpg";
 
 const STORAGE_KEY = "b2b-summit-2026-ticket-dismissed";
 const COUPON_KEY = "b2b-summit-2026-coupon";
-const COUPONS = ["LUCAS", "MARCELO"] as const;
+// Cupom salvo fora desta lista é re-sorteado (troca de cupom em campanha viva é segura).
+const COUPONS = ["FINKLER", "MARCELO"] as const;
 const ENTRY_DELAY_MS = 900;
 // Intro: barra entra → bilhete espia e espera o puxão do cliente (com fallback)
 const BAR_PHASE_MS = 1100;
