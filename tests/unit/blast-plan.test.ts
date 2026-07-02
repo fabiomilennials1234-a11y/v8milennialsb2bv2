@@ -253,6 +253,25 @@ describe("createBlastPlan — freeze + slice + lot 1 today", () => {
     expect(state.recipients.filter((r) => r.status === "sent")).toHaveLength(0);
   });
 
+  it("stamps dispatch provenance {planId, lotIndex: 0} on the lot-0 job (ADR-0016 §3)", async () => {
+    const { store } = planStore();
+    const usage = usageStub(0);
+    const dispatch = okDispatch();
+
+    const out = await createBlastPlan(
+      { store, usageSource: usage.source, dispatch },
+      baseCreateParams({ leads: leads(50), dailyBudget: 200 }),
+    );
+
+    expect(out.ok).toBe(true);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    const input = dispatch.mock.calls[0][1] as any;
+    // The sender job must be traceable back to the plan+lot that originated it —
+    // the mass-send-status poll matches failures by folder → plan+lot → phone.
+    expect(input.planId).toBe(out.planId);
+    expect(input.lotIndex).toBe(0);
+  });
+
   it("rejects an empty audience without creating a plan", async () => {
     const { store, state } = planStore();
     const out = await createBlastPlan(
@@ -415,6 +434,50 @@ describe("releaseBlastPlanLot — daily releaser", () => {
     expect(plan.status).toBe("active");
     expect(plan.lots_released).toBe(2);
     expect(plan.next_release_date).toBe("2026-06-07");
+  });
+
+  it("stamps dispatch provenance {planId, lotIndex} on the released lot's job (ADR-0016 §3)", async () => {
+    const { store } = planStore();
+    const usage = usageStub(0);
+    const dispatch = okDispatch();
+    const planId = await seedPlan(store, { lot1: leads(10), nextDate: "2026-06-06", lotsTotal: 2 });
+
+    await releaseBlastPlanLot(
+      { store, usageSource: usage.source, dispatch, activitySource: activity() },
+      { planId, now: new Date("2026-06-06T12:00:00Z"), dailyBudget: 200 },
+    );
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    const input = dispatch.mock.calls[0][1] as any;
+    expect(input.planId).toBe(planId);
+    expect(input.lotIndex).toBe(1); // lots_released = 1 → this release fires lot 1
+  });
+
+  it("a deferred remainder is dispatched with its NEW lot index on the next day's release", async () => {
+    const { store } = planStore();
+    const usage = usageStub(0);
+    usage.state.byDate.set("2026-06-06", 180); // only 20 budget left today
+    const dispatch = okDispatch();
+    const planId = await seedPlan(store, { lot1: leads(50), nextDate: "2026-06-06", lotsTotal: 2 });
+
+    // Day 1: 20 sent (lot 1), 30 deferred forward to lot 2.
+    await releaseBlastPlanLot(
+      { store, usageSource: usage.source, dispatch, activitySource: activity() },
+      { planId, now: new Date("2026-06-06T12:00:00Z"), dailyBudget: 200 },
+    );
+    expect((dispatch.mock.calls[0][1] as any).lotIndex).toBe(1);
+
+    // Day 2: the deferred 30 go out as lot 2 — provenance must carry the index
+    // they were RELEASED under, not the one they were frozen into.
+    await releaseBlastPlanLot(
+      { store, usageSource: usage.source, dispatch, activitySource: activity() },
+      { planId, now: new Date("2026-06-07T12:00:00Z"), dailyBudget: 200 },
+    );
+    expect(dispatch).toHaveBeenCalledTimes(2);
+    const input = dispatch.mock.calls[1][1] as any;
+    expect(input.recipients).toHaveLength(30);
+    expect(input.planId).toBe(planId);
+    expect(input.lotIndex).toBe(2);
   });
 
   it("does not release a paused plan", async () => {

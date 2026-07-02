@@ -104,6 +104,13 @@ export type UazapiSenderInput = {
   triggeredByUserId?: string | null;
   triggeredVia?: "ui" | "api" | "cron" | "workflow";
   trackSource?: string;
+  /** Dispatch provenance (ADR-0016 §3): the Blast Plan + lot that originated this
+   *  job. Persisted into the payload jsonb as {plan_id, lot_index} so the
+   *  mass-send-status poll can trace a provider folder back to its
+   *  blast_plan_recipients. Only the blast-plan paths set these — Quick Blast
+   *  avulso / campaign jobs never carry them (payload unchanged). */
+  planId?: string;
+  lotIndex?: number;
 };
 
 /**
@@ -173,6 +180,11 @@ export async function runUazapiSenderJob(
         scheduledFor: input.scheduledFor,
         trackSource: input.trackSource,
         recipients_count: input.recipients.length,
+        // Dispatch provenance (ADR-0016 §3) — blast-plan origin only. `!= null`
+        // (not truthiness): lot_index 0 is the creation lot and must persist.
+        ...(input.planId != null
+          ? { plan_id: input.planId, lot_index: input.lotIndex }
+          : {}),
       },
     })
     .select("id")
