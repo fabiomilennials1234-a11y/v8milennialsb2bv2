@@ -32,7 +32,7 @@ src/modules/carteira/
 ├── components/
 │   ├── client/         # ex-src/components/carteira/ (25 files — CarteiraClient*, ClienteX*, OrderApprovalCard, NewOrderModal, HealthSparkline, RevenueChart, AnalyticsKPICards, ...)
 │   ├── upsell/         # ex-src/components/upsell/ (13 files — UpsellBaseKanban, UpsellGestaoKanban, ClientDetailModal, CreateCampanhaModal, ImportUpsellClientsContent, ...)
-│   ├── proposal/       # ex-src/components/proposals/ (12 files — ProposalDetailModal, TinyErpConfirmOrderDialog, TinyErpOrderStatus, CalorSlider, ProductCombobox, ...)
+│   ├── proposal/       # ex-src/components/proposals/ (11 files — TinyErpConfirmOrderDialog, TinyErpOrderStatus, CalorSlider, ProductCombobox, ...)
 │   ├── deal/           # ex-src/components/deals/ (5 files — CreateDealDialog, DealDetailDrawer, DealItemsTable, DealKanbanCard, DealKPICards)
 │   └── product/        # ex-src/components/products/ (4 files — CreateProductModal, EditProductModal, ProductImportModal, ProductMaterialsSection)
 ├── hooks/              # 24 hooks (ver lista abaixo)
@@ -103,7 +103,7 @@ Re-exportados via index.ts: `PortfolioKPIs`, `PortfolioClientRow`, `PortfolioCli
 ### Consumidores cross-module (importam de `@/modules/carteira`)
 
 - `@/modules/leads` — `useLeadProducts` (lead-products hook em `src/modules/leads/hooks/lead/useLeadProducts.ts`), `BudgetFieldBlock`, `PropostasContext`, `UpsellContext`, `LeadTabProducts`, `ImportLeadsFunnelModal` — consomem `useProducts`, `useDeals`, `useUpsellClientByLeadId`
-- `@/modules/pipelines` — `PipePropostas`, `Negocios`, `PipeSettingsDialog` — consomem `ProposalDetailModal`, `useDeals`, `useProducts`, `CreateDealDialog`
+- `@/modules/pipelines` — `PipePropostas`, `Negocios`, `PipeSettingsDialog` — consomem `useDeals`, `useProducts`, `CreateDealDialog`
 - `src/components/settings/IntegrationsCatalog.tsx`, `src/components/settings/TinyErpSettings.tsx` — consomem `useTinyErp*` (será absorvido por `integrations` ou `platform` em slice 13/14)
 - `src/components/dashboard/ProductRanking.tsx` — `useProductRanking` (será absorvido por `analytics` em slice 12)
 

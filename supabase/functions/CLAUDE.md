@@ -86,7 +86,7 @@ Rename físico = projeto separado (ver "Rename futuro" abaixo).
 
 🔴 **Áreas frágeis** comm: `whatsapp-webhook`, `whatsapp-api-proxy`, `agent-message` (copilot BC mas hop por comm).
 
-### copilot (18) — agents IA, RAG, geração de contexto
+### copilot (20) — agents IA, RAG, geração de contexto
 
 | Função | Trigger | Auth |
 |--------|---------|------|
@@ -104,6 +104,8 @@ Rename físico = projeto separado (ver "Rename futuro" abaixo).
 | `process-agent-document` | upload | JWT |
 | `process-ai-actions` | pg_cron | x-cron-secret |
 | `process-copilot-followups` | pg_cron | x-cron-secret |
+| `process-followup-situations` | **rollout pendente** (ADR-0006 accepted; sem cron agendado ainda — não é código morto) | x-cron-secret |
+| `recover-stuck-conversations` | ferramenta ops **manual** (destrava conversations presas — não é código morto) | service_role |
 | `reembed-all` | admin script | service_role |
 | `semi-automatic-dispatch` | UI / pg_cron | JWT / x-cron-secret |
 | `suggest-retention-action` | UI | JWT |
@@ -191,7 +193,9 @@ Funções declaradas em `config.toml` mas SEM código local — deployadas diret
 | `meta-oauth-callback` | OAuth redirect | code + state |
 | `refresh-meta-tokens` | pg_cron | x-cron-secret |
 
-### platform (10) — observability, dead letter, infra
+### platform (9) — observability, dead letter, infra
+
+> `webhook-validate-url` deletada em 2026-07-02 (plan-tiers-cleanup) — zero call-sites (UI validava URL só client-side).
 
 | Função | Trigger | Auth |
 |--------|---------|------|
@@ -202,8 +206,7 @@ Funções declaradas em `config.toml` mas SEM código local — deployadas diret
 | `process-webhook-deliveries` | pg_cron | x-cron-secret |
 | `reprocess-job` | UI admin | JWT admin |
 | `retry-dead-letter-jobs` | pg_cron | x-cron-secret |
-| `webhook-send-test` | UI dev (deletar candidato) | JWT |
-| `webhook-validate-url` | UI workflow | JWT |
+| `webhook-send-test` | UI — **USADO** por `WebhookSettings.tsx:197` (teste de webhook do usuário) | JWT |
 
 ## Para subagent que tocar uma função
 

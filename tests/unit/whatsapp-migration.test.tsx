@@ -2,12 +2,12 @@
  * Sprint 3 — WhatsApp migration unit tests.
  *
  * Covers:
- *  - WhatsAppMigrationBanner render branches (hidden/pending/failed)
- *  - statusBadge mapping in master dashboard (snapshot via render)
- *  - useSetMigrationStatus mutation shape
+ *  - useSetMigrationStatus / useSetProviderOverride mutation shape
+ *
+ * (Testes do WhatsAppMigrationBanner removidos em 2026-07-02 —
+ *  componente órfão deletado no plan-tiers-cleanup.)
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { type ReactNode } from "react";
@@ -84,76 +84,5 @@ describe("useSetProviderOverride", () => {
     const { result } = renderHook(() => useSetProviderOverride(), { wrapper });
     await result.current.mutateAsync({ organizationId: "org-a", override: "uazapi" });
     expect(mockUpdateEq).toHaveBeenCalled();
-  });
-});
-
-// WhatsAppMigrationBanner — render branches
-// Since the banner depends on query result, mock the hook directly
-describe("WhatsAppMigrationBanner", () => {
-  it("hides when status=migrated", async () => {
-    vi.resetModules();
-    vi.doMock("@/modules/communication/hooks/useOrgWhatsAppMigration", () => ({
-      useSetMigrationStatus: () => ({ mutateAsync: vi.fn() }),
-      useSetProviderOverride: () => ({ mutateAsync: vi.fn() }),
-      useOrgMigrationStatus: () => ({
-        data: {
-          id: "org-a",
-          whatsapp_migration_status: "migrated",
-          whatsapp_provider_override: null,
-          whatsapp_migration_completed_at: "2026-04-23T00:00:00Z",
-          name: "Test",
-        },
-      }),
-    }));
-    const { WhatsAppMigrationBanner } = await import(
-      "@/modules/communication/components/whatsapp-migration/WhatsAppMigrationBanner"
-    );
-    const { container } = render(<WhatsAppMigrationBanner />, { wrapper });
-    expect(container.firstChild).toBeNull();
-  });
-
-  it("renders banner when status=pending", async () => {
-    vi.resetModules();
-    vi.doMock("@/modules/communication/hooks/useOrgWhatsAppMigration", () => ({
-      useSetMigrationStatus: () => ({ mutateAsync: vi.fn() }),
-      useSetProviderOverride: () => ({ mutateAsync: vi.fn() }),
-      useOrgMigrationStatus: () => ({
-        data: {
-          id: "org-a",
-          whatsapp_migration_status: "pending",
-          whatsapp_provider_override: null,
-          whatsapp_migration_completed_at: null,
-          name: "Test",
-        },
-      }),
-    }));
-    const { WhatsAppMigrationBanner } = await import(
-      "@/modules/communication/components/whatsapp-migration/WhatsAppMigrationBanner"
-    );
-    render(<WhatsAppMigrationBanner />, { wrapper });
-    expect(screen.getByText(/Migração WhatsApp pendente/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Migrar agora/i })).toBeInTheDocument();
-  });
-
-  it("renders failed variant when status=failed", async () => {
-    vi.resetModules();
-    vi.doMock("@/modules/communication/hooks/useOrgWhatsAppMigration", () => ({
-      useSetMigrationStatus: () => ({ mutateAsync: vi.fn() }),
-      useSetProviderOverride: () => ({ mutateAsync: vi.fn() }),
-      useOrgMigrationStatus: () => ({
-        data: {
-          id: "org-a",
-          whatsapp_migration_status: "failed",
-          whatsapp_provider_override: null,
-          whatsapp_migration_completed_at: null,
-          name: "Test",
-        },
-      }),
-    }));
-    const { WhatsAppMigrationBanner } = await import(
-      "@/modules/communication/components/whatsapp-migration/WhatsAppMigrationBanner"
-    );
-    render(<WhatsAppMigrationBanner />, { wrapper });
-    expect(screen.getByText(/Migração anterior falhou/)).toBeInTheDocument();
   });
 });

@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/select";
 import { useWhatsAppInstances } from "@/modules/communication";
 import { useQuickBlast } from "@/modules/leads/hooks/useQuickBlast";
+import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
+import { UpgradeModal } from "@/shared/components/UpgradeModal";
 
 interface QuickBlastDialogProps {
   open: boolean;
@@ -51,7 +53,27 @@ function previewMessage(template: string): string {
   return withVars.replace(/\{([^{}]*\|[^{}]*)\}/g, (_m, body: string) => body.split("|")[0]);
 }
 
-export function QuickBlastDialog({ open, onOpenChange, leadIds, onDone }: QuickBlastDialogProps) {
+/**
+ * Plan gate — disparo rápido é feature `whatsapp_bulk`. Wrapper pra não
+ * condicionar a ordem dos hooks do dialog.
+ */
+export function QuickBlastDialog(props: QuickBlastDialogProps) {
+  const orgFeatures = useOrgFeaturesOptional();
+  const locked = orgFeatures ? !orgFeatures.hasFeature("whatsapp_bulk") : false;
+
+  if (locked) {
+    return (
+      <UpgradeModal
+        open={props.open}
+        onOpenChange={props.onOpenChange}
+        featureKey="whatsapp_bulk"
+      />
+    );
+  }
+  return <QuickBlastDialogInner {...props} />;
+}
+
+function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBlastDialogProps) {
   const { data: instances = [] } = useWhatsAppInstances();
   const blast = useQuickBlast();
 

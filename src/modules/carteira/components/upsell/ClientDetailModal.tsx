@@ -1,5 +1,6 @@
 /**
- * @deprecated Use LeadDetailSheet + UpsellClientContext instead. This component is kept for reference only.
+ * Modal de detalhe do cliente de carteira — VIVO: usado por UpsellBaseList.
+ * (Tag @deprecated removida em 2026-07-02 — estava incorreta.)
  */
 import { useState } from "react";
 import {

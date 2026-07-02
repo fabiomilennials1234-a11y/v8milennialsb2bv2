@@ -44,7 +44,7 @@ Números atuais:
 | `useFieldChangelog` | (sem queryFn — só `FIELD_LABELS`) | Órfão funcional |
 | `useFieldChanges` | RPC `get_lead_field_changes` | Ativo |
 
-Componentes consumidores espalhados: `ActivityFeed`, `TimelineItem`, `LeadDetailTimeline`, `LeadDetailNotes`, `LeadStageHistory`, `LeadTabHistory`, `ContextPanelHistory`, `FieldChangelogTimeline`, `ClientDetailModal`, `ProposalDetailModal`, `ConfirmacaoDetailModal` (~11).
+Componentes consumidores espalhados: `ActivityFeed`, `TimelineItem`, `LeadDetailTimeline`, `LeadDetailNotes`, `LeadStageHistory`, `LeadTabHistory`, `ContextPanelHistory`, `FieldChangelogTimeline`, `ClientDetailModal`, ~~`ProposalDetailModal`~~ (deletado 2026-07-02), `ConfirmacaoDetailModal` (~10).
 
 **Recomendação:** consolidar em `useLeadTimeline` (mais rico). Migrar `useLeadHistory` → emitir como source `manual/system` do timeline. `useFieldChangelog` → mover `FIELD_LABELS` pra `shared/format/`, deletar hook. `useFieldChanges` → renomear pra `useLeadFieldChanges`, mantém RPC mas vira sub-query do timeline.
 
@@ -180,7 +180,7 @@ CONTEXT.md agrupa em "carteira". **Recomendação:** `modules/carteira/component
 
 - `MockupChat.tsx` + `MockupChatV2.tsx` + `MockupChatV3.tsx` + `MockupChatV3 2.tsx` (último tem espaço no nome = file corrupto de copy-paste). Verificar router; deletar se não roteados.
 - `Negocios.tsx` vs `PipePropostas.tsx` vs `Deals` — qual é o ativo?
-- `Premiacoes.tsx` vs `Comissoes.tsx` — payouts vs comissões (provavelmente OK distintos).
+- `Premiacoes.tsx` vs `Comissoes.tsx` — payouts vs comissões (provavelmente OK distintos). **Resolvido 2026-07-02:** `Premiacoes.tsx` (+ `Ranking`/`Metas`/`GestaoMetas` v1) deletadas — órfãs sem rota; `Comissoes.tsx` vive.
 
 ---
 
@@ -198,8 +198,8 @@ CONTEXT.md agrupa em "carteira". **Recomendação:** `modules/carteira/component
 | `meeting-webhook` | **(?)** | Provável duplicata `webhook-calcom` |
 | `webhook-confirmacao` | **(?)** | — |
 | `webhook-orchestrator` | Router central (?) | Se ativo, outros viram subroutas |
-| `webhook-send-test` | Dev artifact | DELETAR |
-| `webhook-validate-url` | Helper validation | Mover pra `_shared/webhook/` |
+| `webhook-send-test` | Teste de webhook do usuário | ~~DELETAR~~ **VIVO** — usado por `WebhookSettings.tsx:197` (auditoria corrigida 2026-07-02) |
+| `webhook-validate-url` | Helper validation | **DELETADA 2026-07-02** (plan-tiers-cleanup) — zero call-sites |
 | `partner-webhook` | **(?)** | Auditar |
 | `sz-chat-webhook` | SZ.Chat inbound | — |
 | `google-calendar-webhook` | GCal push | — |

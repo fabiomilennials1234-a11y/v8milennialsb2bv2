@@ -250,7 +250,7 @@ export function useUpdateTinyErpSettings() {
   });
 }
 
-// ─── Order Mapping (for ProposalDetailModal) ────────────────────────────────
+// ─── Order Mapping ───────────────────────────────────────────────────────────
 
 export function useTinyErpOrderMapping(pipePropostaId: string | null) {
   const { organizationId } = useOrganization();

@@ -38,8 +38,8 @@ Exports re-exportados via barrel (ver `./index.ts`):
 - **Hooks (onboarding/):** `useDemoData`, `useOnboardingChecklist`, `usePrimeOnboardingProgress`
 - **Hooks (slice 16 longtail):** `useSavedViews`, `useApplyViewFromUrl`, `useGlobalShortcuts`, `useKeyboardShortcuts`, `useSandbox`
 - **Lib:** `feature-flags`, `feature-registry` (`FEATURES`, `LIMITS`, `FeatureKey`, `LimitKey`, `getFeatureMeta`, `getLimitMeta`, `isUnlimited`, `SIDEBAR_FEATURE_MAP`, `CAMPAIGN_TYPE_FEATURE_MAP`, `FUNNEL_TEMPLATE_FEATURE_MAP`), `logger` (`logger`, `LogLevel`, `LogContext`), `optimistic-lock` (`OptimisticLockConflictError`, `isPostgrestNoRows`), `rate-limit` (`createRateLimiter`, `tokenBucket`), `onboarding-suggestions`, `pipeline-config-from-quiz`, `tv-config-from-quiz`
-- **Components:** `GlobalErrorBoundary`, `PushPermissionPrompt`, `ServiceWorkerUpdater`, `OnboardingChecklist`, `OnboardingFlow`, `OnboardingGate`, `OnboardingQuestion`, `OnboardingWizard`, `AlertsDropdown`, `AlertsBanner`, + `components/command/*` (Command palette `Cmd+K`), `components/saved-views/*`, `components/layout/*` (slice 16 longtail)
-- **Pages (deep-import via React.lazy, NÃO no barrel):** `pages/Configuracoes`, `pages/Onboarding` (page legada), `pages/Privacidade`, `pages/NotFound`
+- **Components:** `GlobalErrorBoundary`, `PushPermissionPrompt`, `ServiceWorkerUpdater`, `feature-lock/*` (`FeatureRoute` guard estrito de rota + `FeatureLockedScreen` + `FeatureLock`), `OnboardingChecklist`, `OnboardingFlow`, `OnboardingGate`, `OnboardingQuestion`, `OnboardingWizard`, `AlertsDropdown`, `AlertsBanner`, + `components/command/*` (Command palette `Cmd+K`), `components/saved-views/*`, `components/layout/*` (slice 16 longtail)
+- **Pages (deep-import via React.lazy, NÃO no barrel):** `pages/Configuracoes`, `pages/Privacidade`, `pages/NotFound`, `pages/OnboardingHub` (+ `OnboardingHubPreview` dev-only). `pages/Onboarding` legada deletada 2026-07-02 (plan-tiers-cleanup).
 - **Settings panels** (`components/settings/*`): NÃO re-exportados — `Configuracoes.tsx` faz lazy interno por aba (chunking).
 - Eventos (post slice 19): `onboarding.step_completed`, `feature_flag.toggled`, `system.health_degraded`
 
@@ -81,8 +81,7 @@ Edge functions: doc-only (slice 15) — flat layout em `supabase/functions/` man
 - `supabase/functions/reprocess-job/`
 - `supabase/functions/onboarding-advance/`
 - `supabase/functions/webhook-orchestrator/` (auditar)
-- `supabase/functions/webhook-validate-url/`
-- `supabase/functions/webhook-send-test/` (deletar)
+- `supabase/functions/webhook-send-test/` (USADO por `WebhookSettings.tsx:197`)
 - `supabase/functions/_shared/sentry.ts`, `logger.ts`, `rate-limit.ts` (não encontrado — verificar), `security-headers.ts`, `cors.ts`, `response.ts`, `supabase-admin.ts`, `validation.ts`, `edge-framework.ts`, `fetch-utils.ts`, `track.ts`
 - `supabase/functions/_shared/job-tracker.ts`, `instance-write-guard.ts`, `webhook-utils.ts`, `url-validator.ts`, `time-variables.ts`, `embeddings.ts`, `followupSchedule.ts`, `onboarding-engine.ts`, `message-sanitizer.ts`
 
@@ -93,7 +92,6 @@ Edge functions: doc-only (slice 15) — flat layout em `supabase/functions/` man
 ## Dedup pendente
 
 - `useAutoSaveField` vs `useExplicitSaveForm` — convenção (decisão CTO pendente)
-- Várias funções dev: `webhook-send-test` → deletar
 - `_shared/` core utils → `_shared/core/` (slice 16)
 
 ## Refs

@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/select";
 
 import { useWhatsAppInstances } from "@/modules/communication";
+import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
+import { UpgradeModal } from "@/shared/components/UpgradeModal";
 import {
   TEMPLATE_VARIABLES,
   replaceVariablesWithExamples,
@@ -156,7 +158,29 @@ function previewMessage(template: string): string {
   return withVars.replace(/\{([^{}]*\|[^{}]*)\}/g, (_m, body: string) => body.split("|")[0]);
 }
 
-export function DisparoWizard({
+/**
+ * Plan gate — disparo em massa é feature `whatsapp_bulk`. Wrapper (e não
+ * early-return interno) pra não condicionar a ordem dos hooks do wizard.
+ * Cobre todos os entry points (pipes, custom, carteira, bulk bars) num
+ * único choke point.
+ */
+export function DisparoWizard(props: DisparoWizardProps) {
+  const orgFeatures = useOrgFeaturesOptional();
+  const locked = orgFeatures ? !orgFeatures.hasFeature("whatsapp_bulk") : false;
+
+  if (locked) {
+    return (
+      <UpgradeModal
+        open={props.open}
+        onOpenChange={props.onOpenChange}
+        featureKey="whatsapp_bulk"
+      />
+    );
+  }
+  return <DisparoWizardInner {...props} />;
+}
+
+function DisparoWizardInner({
   open,
   onOpenChange,
   context = DEFAULT_CONTEXT,
