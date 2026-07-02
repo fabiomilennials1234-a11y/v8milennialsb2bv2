@@ -64,7 +64,7 @@ def main():
         print("   2. Copie a 'service_role' key (secret)")
         print("   3. Adicione no .env: SUPABASE_SERVICE_ROLE_KEY='sua_key_aqui'")
         print("\n   OU execute manualmente no Supabase SQL Editor:")
-        print(f"   Arquivo: {root_dir}/ADD_USER_SEPARATION.sql")
+        print(f"   Arquivo: {root_dir}/docs/archive/sql/ADD_USER_SEPARATION.sql")
         sys.exit(1)
     
     # Ler arquivo de migration
@@ -81,7 +81,7 @@ def main():
     print("⚠️  A API REST do Supabase não suporta execução de DDL (ALTER TABLE, CREATE POLICY, etc.)")
     print("📝 Execute a migration manualmente no Supabase SQL Editor:")
     print(f"   1. Acesse: {supabase_url.replace('/rest/v1', '')}/project/twoghutcvlfgemadaeez/sql/new")
-    print(f"   2. Abra o arquivo: {root_dir}/ADD_USER_SEPARATION.sql")
+    print(f"   2. Abra o arquivo: {root_dir}/docs/archive/sql/ADD_USER_SEPARATION.sql")
     print("   3. Cole o conteúdo no SQL Editor")
     print("   4. Execute (Run)")
     

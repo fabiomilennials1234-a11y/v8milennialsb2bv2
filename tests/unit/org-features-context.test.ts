@@ -265,4 +265,39 @@ describe("OrgFeaturesContext", () => {
     expect(result.current.hasFeature("copilot" as any)).toBe(true);
     expect(result.current.checkLimit("max_leads" as any)).toBe(-1);
   });
+
+  // ── 12: Master bypass — plan_name "master" ignora o mapa ──
+  it("hasFeature returns true for any key when plan_name is 'master'", async () => {
+    // Branch is_master_user() da RPC monta o mapa a partir de feature_flags;
+    // keys sem row ficariam ausentes (ex.: automations) — o bypass client-side
+    // garante que master nunca vê lock (classe master-ghost).
+    mockRpc.mockResolvedValue({
+      data: makeFeaturesAndLimits({
+        features: { copilot: true }, // mapa incompleto de propósito
+        plan_name: "master",
+      }),
+      error: null,
+    });
+
+    const { result } = renderHook(() => useOrgFeatures(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isReady).toBe(true));
+
+    expect(result.current.hasFeature("automations" as any)).toBe(true);
+    expect(result.current.hasFeature("carteira" as any)).toBe(true);
+    expect(result.current.hasFeature("oraculo" as any)).toBe(true);
+  });
+
+  // ── 13: Plano normal continua fail-closed pra key ausente ──
+  it("hasFeature stays false for missing keys on a regular plan", async () => {
+    mockRpc.mockResolvedValue({
+      data: makeFeaturesAndLimits({ features: { copilot: true }, plan_name: "torque-2.0" }),
+      error: null,
+    });
+
+    const { result } = renderHook(() => useOrgFeatures(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isReady).toBe(true));
+
+    expect(result.current.hasFeature("copilot" as any)).toBe(true);
+    expect(result.current.hasFeature("automations" as any)).toBe(false);
+  });
 });

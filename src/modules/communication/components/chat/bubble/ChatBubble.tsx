@@ -13,6 +13,7 @@ import { lazy, Suspense, useCallback, useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useLocation } from "react-router-dom";
 import { featureFlags } from "@/modules/platform/lib/feature-flags";
+import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
 import { useChatBubble } from "@/modules/communication/hooks/useChatBubble";
 import { useToast } from "@/hooks/use-toast";
 import { useViewport } from "@/shared/hooks/use-viewport";
@@ -41,6 +42,7 @@ function shouldRenderForPath(pathname: string): boolean {
 export function ChatBubble() {
   const { isMobile } = useViewport();
   const { pathname } = useLocation();
+  const orgFeatures = useOrgFeaturesOptional();
   const {
     isOpen,
     isMinimized,
@@ -76,6 +78,9 @@ export function ChatBubble() {
   // Gate: no bubble on mobile — avoids lazy-loading the panel chunk entirely
   if (isMobile) return null;
   if (!featureFlags.chatBubble) return null;
+  // Plan gate: chat é feature de plano — sem ela, nada de painel de conversa
+  // in-place nas pipe pages (a rota /chat já é bloqueada pelo route guard).
+  if (orgFeatures && !orgFeatures.hasFeature("chat")) return null;
   if (!shouldRenderForPath(pathname)) return null;
 
   const showPanel = isOpen && !isMinimized;

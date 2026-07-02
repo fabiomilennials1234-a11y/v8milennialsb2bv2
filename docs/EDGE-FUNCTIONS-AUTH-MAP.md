@@ -101,7 +101,7 @@ Generated 2026-05-15 during security audit.
 | tinyerp-webhook | WEBHOOK (env secret) | OK | Added TINYERP_WEBHOOK_SECRET validation via header/query param (Wave 5) |
 | tinyerp-fetch-nfe | JWT + SVC_ROLE | OK | Added requireAuth for frontend, timingSafeCompare for service_role (Wave 5) |
 | webhook-send-test | JWT + org check | OK | Already had JWT validation + org membership check |
-| webhook-validate-url | JWT | OK | Added requireAuth (Wave 5) |
+| ~~webhook-validate-url~~ | — | REMOVED | Deletada 2026-07-02 (plan-tiers-cleanup) — zero call-sites |
 | webhook-confirmacao | API_KEY (grace) | OK | Has validateApiKey — grace period ends 2026-07-09 |
 | webhook-new-lead | API_KEY (grace) | OK | Has validateApiKey — grace period ends 2026-07-09 |
 | webhook-orchestrator | API_KEY | OK | Has x-api-key validation |

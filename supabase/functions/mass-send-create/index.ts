@@ -24,7 +24,7 @@ import {
   runUazapiSenderJob,
 } from "../_shared/dispatch-router.ts";
 import { assertPermission, permissionDeniedResponse } from "../_shared/assert-permission.ts";
-import { assertOrgFeature, FeatureLockedError } from "../_shared/assert-org-feature.ts";
+import { assertPlanFeature, PlanFeatureDeniedError, planDeniedResponse } from "../_shared/plan-gate.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -84,13 +84,11 @@ Deno.serve(
       return permissionDeniedResponse(permission.reason, corsHeaders);
     }
 
-    // Feature gate — org must have whatsapp_bulk on their plan
+    // Plan gate — whatsapp_bulk fora do plano → 403 antes de qualquer side-effect
     try {
-      await assertOrgFeature(supabaseAdmin, orgId, "whatsapp_bulk");
+      await assertPlanFeature(supabaseAdmin, orgId, "whatsapp_bulk");
     } catch (e) {
-      if (e instanceof FeatureLockedError) {
-        return jsonResponse(403, { error: "feature_locked", feature: "whatsapp_bulk" }, corsHeaders);
-      }
+      if (e instanceof PlanFeatureDeniedError) return planDeniedResponse(e, corsHeaders);
       throw e;
     }
 

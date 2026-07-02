@@ -5,6 +5,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { validateOrganizationAccess, unauthorizedResponse } from "../_shared/auth.ts";
+import { assertPlanFeature, PlanFeatureDeniedError, planDeniedResponse } from "../_shared/plan-gate.ts";
 
 interface MetricsData {
   role?: "sdr" | "closer"; // deprecated, use metric_type
@@ -947,6 +948,15 @@ serve(withSentry('oraculo-comercial', async (req) => {
 
     body.organization_id = verifiedOrgId;
     body.user_id = userId;
+
+    // Plan gate — oraculo fora do plano → 403 antes de qualquer modo/side-effect.
+    // Addon turbo materializa via organization_features (coberto pela RPC).
+    try {
+      await assertPlanFeature(supabaseAdmin, verifiedOrgId, "oraculo");
+    } catch (e) {
+      if (e instanceof PlanFeatureDeniedError) return planDeniedResponse(e, corsHeaders);
+      throw e; // fail-closed: catch externo devolve 500
+    }
 
     // Route to appropriate mode
     if (body.mode === "chat") {

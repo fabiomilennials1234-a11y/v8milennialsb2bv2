@@ -20,9 +20,9 @@
  *
  * Pages NÃO são re-exportadas — App.tsx faz deep-import via React.lazy:
  *   @/modules/platform/pages/Configuracoes
- *   @/modules/platform/pages/Onboarding (page legada, sem rota ativa)
  *   @/modules/platform/pages/Privacidade
  *   @/modules/platform/pages/NotFound
+ *   @/modules/platform/pages/OnboardingHub (+ OnboardingHubPreview dev-only)
  */
 
 // ────────────────────────────────────────────────────────────────────────

@@ -246,9 +246,9 @@ function AppRoutes() {
         path="/disparos"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="whatsapp_bulk">
               <DisparosPanel />
-            </LayoutWrapper>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -256,9 +256,9 @@ function AppRoutes() {
         path="/disparos/novo"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="whatsapp_bulk">
               <NovoDisparo />
-            </LayoutWrapper>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -378,11 +378,11 @@ function AppRoutes() {
         path="/lixeira"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="leads">
               <PermissionProtectedRoute featureKey="leads.view">
                 <TrashPage />
               </PermissionProtectedRoute>
-            </LayoutWrapper>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -390,11 +390,11 @@ function AppRoutes() {
         path="/duplicatas"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="leads">
               <PermissionProtectedRoute featureKey="leads.view">
                 <Duplicates />
               </PermissionProtectedRoute>
-            </LayoutWrapper>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -480,11 +480,11 @@ function AppRoutes() {
         path="/copilot/metricas"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="copilot">
               <PermissionProtectedRoute featureKey="copilot.view">
                 <CopilotMetrics />
               </PermissionProtectedRoute>
-            </LayoutWrapper>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -510,13 +510,13 @@ function AppRoutes() {
         path="/atendimento/meta"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="chat">
               <PermissionProtectedRoute featureKey="whatsapp.view">
                 <Suspense fallback={<ChatSkeleton />}>
                   <AtendimentoMeta />
                 </Suspense>
               </PermissionProtectedRoute>
-            </LayoutWrapper>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -536,9 +536,9 @@ function AppRoutes() {
         path="/carteira/:clientId"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="carteira">
               <ClienteDetail />
-            </LayoutWrapper>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -570,11 +570,11 @@ function AppRoutes() {
         path="/copilot/novo"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="copilot">
               <SubscriptionProtectedRoute requireActive>
                 <CopilotPlayground />
               </SubscriptionProtectedRoute>
-            </LayoutWrapper>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -582,11 +582,11 @@ function AppRoutes() {
         path="/copilot/:id/editar"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="copilot">
               <SubscriptionProtectedRoute requireActive>
                 <CopilotPlayground />
               </SubscriptionProtectedRoute>
-            </LayoutWrapper>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -594,11 +594,11 @@ function AppRoutes() {
         path="/automacoes"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="automations">
               <PermissionProtectedRoute featureKey="workflows.view">
                 <Automacoes />
               </PermissionProtectedRoute>
-            </LayoutWrapper>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -606,11 +606,11 @@ function AppRoutes() {
         path="/automacoes/novo"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="automations">
               <PermissionProtectedRoute featureKey="workflows.view">
                 <AutomacoesEditor />
               </PermissionProtectedRoute>
-            </LayoutWrapper>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -618,11 +618,11 @@ function AppRoutes() {
         path="/automacoes/:id"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="automations">
               <PermissionProtectedRoute featureKey="workflows.view">
                 <AutomacoesEditor />
               </PermissionProtectedRoute>
-            </LayoutWrapper>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -630,11 +630,11 @@ function AppRoutes() {
         path="/automacoes/:id/execucoes"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
+            <LayoutWrapper><FeatureRoute feature="automations">
               <PermissionProtectedRoute featureKey="workflows.view">
                 <AutomacoesExecucoes />
               </PermissionProtectedRoute>
-            </LayoutWrapper>
+            </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>
         }
       />

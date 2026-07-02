@@ -238,10 +238,7 @@ export { LinkLeadDialog } from "./components/chat-meta/LinkLeadDialog";
 
 // ── Components: WhatsApp lifecycle (session-dead + migration) ────────────
 export { SessionDeadBanner } from "./components/whatsapp/SessionDeadBanner";
-export {
-  WhatsAppMigrationBanner,
-  RepairingWizard,
-} from "./components/whatsapp-migration";
+export { RepairingWizard } from "./components/whatsapp-migration";
 
 // ── Lib: low-level API + helpers ──────────────────────────────────────────
 export * as whatsappApi from "./lib/whatsappApi";

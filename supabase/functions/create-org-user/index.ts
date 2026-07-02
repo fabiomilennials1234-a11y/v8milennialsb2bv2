@@ -16,6 +16,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { evaluateSeatQuota } from "../_shared/seat-quota.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -174,35 +175,31 @@ serve(withSentry('create-org-user', async (req) => {
       );
     }
 
-    // ----- Criar usuário com senha (email + senha para login) -----
-    const { data: orgCreate } = await supabase
-      .from("organizations")
-      .select("subscription_plan")
-      .eq("id", organizationId)
-      .single();
-    const planNameCreate = orgCreate?.subscription_plan ?? "free";
-    const { data: planCreate } = await supabase
-      .from("subscription_plans")
-      .select("limits")
-      .eq("name", planNameCreate)
-      .maybeSingle();
-    const limitsCreate = (planCreate?.limits as Record<string, number>) ?? {};
-    const userLimitCreate = limitsCreate.users;
-    // Master pode criar à vontade; admin da org respeita limite do plano
-    if (!isMaster && typeof userLimitCreate === "number" && userLimitCreate !== -1) {
-      const { count, error: countErr } = await supabase
-        .from("team_members")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", organizationId)
-        .eq("is_active", true);
-      if (!countErr && count !== null && count >= userLimitCreate) {
-        return jsonResponse(
-          { success: false, error: "Limit exceeded", message: "Limite de usuários do plano atingido." },
-          403,
-          corsHeaders
-        );
-      }
+    // ----- Seat check via RPC canônica (org_resolve_quota) -----
+    // O bloco antigo lia subscription_plans.limits.users — key inexistente
+    // (correta: max_users) → no-op silencioso. Master cria à vontade;
+    // trigger trg_enforce_seat_limit continua como backstop no DB.
+    const { data: seatQuota, error: seatQuotaErr } = await supabase.rpc("org_resolve_quota", {
+      p_org_id: organizationId,
+      p_resource_key: "max_users",
+    });
+    const seatDecision = evaluateSeatQuota({
+      isMaster,
+      quota: (seatQuota as Record<string, unknown> | null) ?? null,
+      quotaError: seatQuotaErr ? { message: seatQuotaErr.message } : null,
+    });
+    if (!seatDecision.allowed) {
+      return jsonResponse(
+        {
+          success: false,
+          error: seatDecision.status === 403 ? "Limit exceeded" : "Quota resolution failed",
+          message: seatDecision.message,
+        },
+        seatDecision.status ?? 500,
+        corsHeaders
+      );
     }
+    // ----- Criar usuário com senha (email + senha para login) -----
     const { data: createData, error: createError } = await supabase.auth.admin.createUser({
       email: email.toLowerCase(),
       password,

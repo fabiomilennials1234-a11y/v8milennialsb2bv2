@@ -122,6 +122,36 @@ When `team_member_permissions` has **no row** for a given `(team_member_id, reso
 
 **Future:** Backlog item [`permissions-fallback-fail-closed`](../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/08%20—%20Backlog/backlog/permissions-fallback-fail-closed.md) tracks migrating to fail-closed after all orgs have been provisioned with explicit allow rows.
 
+## Plan Gating Server-Side (2026-07-02 — plan-tiers-cleanup)
+
+Camada ORTOGONAL às permissões de usuário: gateia por **plano da org** (Base /
+Automation / Copilot), não por role. Resolução via RPC
+`org_get_features_and_limits(p_org_id)` — mesma fonte do frontend
+(`OrgFeaturesContext`); addon `turbo` entra via `organization_features`.
+Helper: `_shared/plan-gate.ts` → `assertPlanFeature(client, orgId, key)`
+(**fail-closed**: erro na resolução = negado) + `planDeniedResponse()` (403
+JSON `{error, feature, plan}`). `plan_name === "master"` bypassa.
+
+| Edge function | Feature key | Comportamento na negação |
+|---|---|---|
+| `agent-message` | `copilot` | 200 `{skipped, reason: "plan_denied"}` — hop interno; 4xx viraria retry/DLQ storm |
+| `oraculo-comercial` | `oraculo` | 403 `{error, feature, plan}` (todos os modos: chat, tv_analysis, legacy) |
+| `process-workflow-executions` | `automations` | por execução → `workflow_executions.status = "skipped_plan"`; cache por org no batch; **fail-open em erro de resolução** (erro transiente não pode marcar execução como skipped — seria perda permanente) |
+| `mass-send-create` | `whatsapp_bulk` | 403, após `assertPermission("mass_send")`, antes de qualquer side-effect |
+| `whatsapp-api-proxy` | `chat` | 403; master bypassa (opera qualquer org) |
+
+Não gateado de propósito: `copilot-v2-worker` (sistema live-but-inert, só Milennials).
+
+**Seat limit** (relacionado): `create-org-user` usa `_shared/seat-quota.ts`
+(`evaluateSeatQuota`) sobre a RPC `org_resolve_quota(p_org_id, 'max_users')` —
+pre-check com 403 claro; o trigger `trg_enforce_seat_limit` no DB continua
+autoritativo. (O bloco antigo lia `limits.users`, key inexistente — no-op.)
+
+Frontend correspondente: guards de rota derivados de `ROUTE_FEATURE_MAP`
+(`feature-registry.ts`), consistência nav↔rota enforced por
+`tests/unit/route-feature-map.test.ts`. Referência completa da matriz:
+vault `03 — Reference/Planos e Feature Gating.md`.
+
 ## Utility Reference
 
 | File | Export | Purpose |
@@ -130,4 +160,6 @@ When `team_member_permissions` has **no row** for a given `(team_member_id, reso
 | `_shared/assert-permission.ts` | `permissionDeniedResponse` | Builds standardized 403 JSON response |
 | `_shared/permission_engine.ts` | `canUserPerformAction` | Full cascading engine (object params) |
 | `_shared/permission_engine.ts` | `canUserAccessFeature` | Feature-key check (simpler boolean) |
+| `_shared/plan-gate.ts` | `assertPlanFeature` / `planDeniedResponse` | Plan-feature gate (fail-closed) + 403 padrão |
+| `_shared/seat-quota.ts` | `evaluateSeatQuota` | Decisão pura do pre-check de seats (create-org-user) |
 | `src/lib/permissions.ts` | `useCanPerformAction` | Frontend hook (optimistic gate) |

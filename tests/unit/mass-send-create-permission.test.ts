@@ -131,14 +131,21 @@ function setupAuthMocks(role: "admin" | "master" | "membro" = "admin") {
     return teamChain;
   });
 
-  // org_has_feature guard (assertOrgFeature) — allow by default
-  mockRpc.mockResolvedValue({ data: true, error: null });
-
   mockCreateClient.mockImplementation((_url: string, key: string) => {
     if (key === "anon-key") {
       return { auth: { getUser: mockGetUser } };
     }
     return { from: mockFrom, rpc: mockRpc };
+  });
+
+  // Plan gate (org_get_features_and_limits): default = plano com whatsapp_bulk
+  mockRpc.mockResolvedValue({
+    data: {
+      features: { whatsapp_bulk: true },
+      limits: { max_users: 5 },
+      plan_name: "torque-2.0",
+    },
+    error: null,
   });
 }
 
@@ -219,5 +226,68 @@ describe("mass-send-create permission gate", () => {
 
     expect(res.status).toBe(200);
     expect(mockAssertPermission).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("mass-send-create plan gate (whatsapp_bulk)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupAuthMocks("admin");
+    mockAssertPermission.mockResolvedValue({ allowed: true, reason: "admin" });
+  });
+
+  it("consulta org_get_features_and_limits com a org do caller", async () => {
+    await getHandler()(makeRequest(validBody));
+
+    expect(mockRpc).toHaveBeenCalledWith("org_get_features_and_limits", {
+      p_org_id: "org-1",
+    });
+  });
+
+  it("403 {error, feature, plan} quando plano não tem whatsapp_bulk — sem side-effect", async () => {
+    const { runUazapiSenderJob } = await import(
+      "../../supabase/functions/_shared/dispatch-router.ts"
+    );
+    mockRpc.mockResolvedValue({
+      data: { features: { whatsapp_bulk: false }, limits: {}, plan_name: "torque-1.0" },
+      error: null,
+    });
+
+    const res = await getHandler()(makeRequest(validBody));
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.feature).toBe("whatsapp_bulk");
+    expect(body.plan).toBe("torque-1.0");
+    expect(runUazapiSenderJob).not.toHaveBeenCalled();
+  });
+
+  it("plan_name=master passa mesmo sem feature no payload", async () => {
+    mockRpc.mockResolvedValue({
+      data: { features: {}, limits: {}, plan_name: "master" },
+      error: null,
+    });
+
+    const res = await getHandler()(makeRequest(validBody));
+    expect(res.status).toBe(200);
+  });
+
+  it("erro na RPC → fail-closed (nenhum job criado)", async () => {
+    const { runUazapiSenderJob } = await import(
+      "../../supabase/functions/_shared/dispatch-router.ts"
+    );
+    mockRpc.mockResolvedValue({ data: null, error: { message: "db down" } });
+
+    await expect(getHandler()(makeRequest(validBody))).rejects.toThrow(/plan-gate/);
+    expect(runUazapiSenderJob).not.toHaveBeenCalled();
+  });
+
+  it("gate roda DEPOIS do permission check (permission denied vence)", async () => {
+    mockAssertPermission.mockResolvedValue({ allowed: false, reason: "feature_disabled" });
+    mockPermissionDeniedResponse.mockReturnValue(new Response("{}", { status: 403 }));
+
+    await getHandler()(makeRequest(validBody));
+
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 });
