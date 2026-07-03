@@ -2271,6 +2271,7 @@ export type Database = {
           id: string
           is_completed: boolean
           position: number
+          template_item_id: string | null
           title: string
           updated_at: string
         }
@@ -2281,6 +2282,7 @@ export type Database = {
           id?: string
           is_completed?: boolean
           position?: number
+          template_item_id?: string | null
           title: string
           updated_at?: string
         }
@@ -2291,6 +2293,7 @@ export type Database = {
           id?: string
           is_completed?: boolean
           position?: number
+          template_item_id?: string | null
           title?: string
           updated_at?: string
         }
@@ -2300,6 +2303,13 @@ export type Database = {
             columns: ["checklist_id"]
             isOneToOne: false
             referencedRelation: "checklists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_items_template_item_id_fkey"
+            columns: ["template_item_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_items"
             referencedColumns: ["id"]
           },
         ]

@@ -98,6 +98,7 @@ export type WorkflowActionType =
   | "create_followup"
   // Checklists
   | "apply_checklist"
+  | "mark_checklist_item"
   // Copilot / IA
   | "generate_ai_message"
   | "summarize_conversation"
@@ -399,6 +400,10 @@ export interface ActionNodeData {
   // Checklist
   checklistTemplateId?: string;
   checklistTemplateName?: string;
+  // Mark checklist item (ADR-0016): endereça o item pela linhagem do template.
+  checklistItemTemplateId?: string;
+  checklistItemTitle?: string;
+  checklistItemAction?: "mark" | "unmark";
   // IA
   aiAgentId?: string;
   aiAgentName?: string;
@@ -769,6 +774,7 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   create_followup: "Criar Follow-up",
   // Checklists
   apply_checklist: "Aplicar Checklist",
+  mark_checklist_item: "Marcar Item do Checklist",
   // IA
   generate_ai_message: "Gerar Mensagem com IA",
   summarize_conversation: "Resumir Conversa (IA)",
@@ -863,6 +869,7 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
       "remove_from_pipe",
       "mark_as_lost",
       "apply_checklist",
+      "mark_checklist_item",
     ],
   },
   {

@@ -122,7 +122,9 @@ Canonical terms used across the system. No implementation details here — this 
 
 ## Engagement
 
-- **Checklist**: A template-driven task list attached to a Lead. Has items with completion tracking.
+- **Checklist**: A template-driven task list attached to a Lead. A **template** Checklist (`lead_id` null) is the reusable definition; applying it to a Lead **copies** it — a per-Lead instance with its own items. A Lead may hold **many** Checklists at once (applied manually, by the `apply_checklist` Workflow action, or auto-attached when the Lead enters a Pipeline stage that names a template). Completion is tracked per item.
+
+- **Checklist Item**: One task line on a Checklist, with a completed/not-completed state. A Lead's item is a **copy** of a template item and carries **lineage** back to it (`template_item_id`) — the stable identity that lets a Workflow address "this specific item" across the template→Lead copy, since the copy's own id is minted only at apply time. Renaming or reordering a Lead's item does not break the lineage. Distinct from an **Activity** (an item is a task to do; an Activity is the audit record of a thing already done).
 
 - **Activity**: An audit log entry recording any domain action (call logged, email sent, stage moved, etc.). Consumer-only — records events from all modules.
 

@@ -111,6 +111,20 @@ describe("applyChecklist", () => {
     expect(items[1].title).toBe("Task 2");
   });
 
+  it("stamps template_item_id lineage on each copied item (ADR-0016)", async () => {
+    const m = seed([TEMPLATE], [
+      { id: "tpl-item-a", title: "Task 1", position: 1, checklist_id: "tpl-1" },
+      { id: "tpl-item-b", title: "Task 2", position: 2, checklist_id: "tpl-1" },
+    ]);
+    const result = await run(m);
+    expect(result.success).toBe(true);
+
+    const items = m.getInserted("checklist_items");
+    expect(items.length).toBe(2);
+    expect(items[0]).toMatchObject({ title: "Task 1", template_item_id: "tpl-item-a" });
+    expect(items[1]).toMatchObject({ title: "Task 2", template_item_id: "tpl-item-b" });
+  });
+
   it("succeeds with zero template items", async () => {
     const m = seed([{ ...TEMPLATE, title: "Empty" }], []);
     const result = await run(m);

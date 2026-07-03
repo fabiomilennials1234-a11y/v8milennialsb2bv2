@@ -15,6 +15,7 @@ export { createTinyerpOrder, createTinyerpUpsellOrder } from "./tinyerp-operatio
 export { assignResponsible, assignSdr, assignCloser, notifyTeamMember } from "./team-operations.ts";
 export { createFollowup } from "./followup-operations.ts";
 export { applyChecklist } from "./checklist-operations.ts";
+export { markChecklistItem } from "./checklist-item-marker.ts";
 export { sendCampaignMessage } from "./send-campaign-message.ts";
 export { generateAiMessage, summarizeConversation, evaluateConversation, queueScheduleMeeting } from "./ai-operations.ts";
 export type { ActionInput, ActionResult, ActionHandler } from "./types.ts";
@@ -37,6 +38,7 @@ import { createTinyerpOrder, createTinyerpUpsellOrder } from "./tinyerp-operatio
 import { assignResponsible, assignSdr, assignCloser, notifyTeamMember } from "./team-operations.ts";
 import { createFollowup } from "./followup-operations.ts";
 import { applyChecklist } from "./checklist-operations.ts";
+import { markChecklistItem } from "./checklist-item-marker.ts";
 import { sendCampaignMessage } from "./send-campaign-message.ts";
 import { generateAiMessage, summarizeConversation, evaluateConversation, queueScheduleMeeting } from "./ai-operations.ts";
 
@@ -76,6 +78,7 @@ export const handlers: Record<string, ActionHandler> = {
   notify_team_member: notifyTeamMember,
   create_followup: createFollowup,
   apply_checklist: applyChecklist,
+  mark_checklist_item: markChecklistItem,
   send_campaign_message: sendCampaignMessage,
   generate_ai_message: generateAiMessage,
   summarize_conversation: summarizeConversation,

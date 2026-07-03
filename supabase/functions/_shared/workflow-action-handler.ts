@@ -24,6 +24,7 @@ import { createTinyerpOrder as sharedCreateTinyerpOrder, createTinyerpUpsellOrde
 import { assignResponsible as sharedAssignResponsible, assignSdr as sharedAssignSdr, assignCloser as sharedAssignCloser, notifyTeamMember as sharedNotifyTeamMember } from "./action-handlers/team-operations.ts";
 import { createFollowup as sharedCreateFollowup } from "./action-handlers/followup-operations.ts";
 import { applyChecklist as sharedApplyChecklist } from "./action-handlers/checklist-operations.ts";
+import { markChecklistItem as sharedMarkChecklistItem } from "./action-handlers/checklist-item-marker.ts";
 import { sendCampaignMessage as sharedSendCampaignMessage } from "./action-handlers/send-campaign-message.ts";
 import { generateAiMessage as sharedGenerateAiMessage, summarizeConversation as sharedSummarizeConversation, evaluateConversation as sharedEvaluateConversation, queueScheduleMeeting as sharedQueueScheduleMeeting } from "./action-handlers/ai-operations.ts";
 
@@ -578,6 +579,17 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
         supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
         conversationId: null,
         params: { checklistTemplateId: ctx.nodeData.checklistTemplateId },
+      });
+      break;
+
+    case "mark_checklist_item":
+      result = await sharedMarkChecklistItem({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: {
+          templateItemId: ctx.nodeData.checklistItemTemplateId,
+          action: ctx.nodeData.checklistItemAction ?? "mark",
+        },
       });
       break;
 

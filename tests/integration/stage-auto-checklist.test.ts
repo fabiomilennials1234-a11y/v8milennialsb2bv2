@@ -110,6 +110,35 @@ describe.skipIf(skipReason)("stage auto-checklist trigger", () => {
     expect(items!.map(i => i.title)).toEqual(["Item A", "Item B", "Item C"]);
   });
 
+  it("stamps template_item_id lineage on each copied item (ADR-0016)", async () => {
+    await admin.from("pipeline_stages").upsert({
+      organization_id: orgId, pipeline_type: "whatsapp",
+      stage_key: "auto_test_stage", name: "Auto Test", position: 99,
+      is_active: true, checklist_template_id: templateId,
+    }, { onConflict: "organization_id,pipeline_type,stage_key" });
+
+    await admin.from("pipeline_entries").insert({
+      organization_id: orgId, pipeline_id: pipelineId, lead_id: leadId,
+      stage_key: "auto_test_stage",
+    });
+
+    const { data: checklist } = await admin.from("checklists")
+      .select("id").eq("lead_id", leadId).eq("source_template_id", templateId).single();
+
+    const { data: templateItems } = await admin.from("checklist_items")
+      .select("id, title").eq("checklist_id", templateId);
+    const tplByTitle = new Map(templateItems!.map(i => [i.title, i.id]));
+
+    const { data: leadItems } = await admin.from("checklist_items")
+      .select("title, template_item_id").eq("checklist_id", checklist!.id).order("position");
+
+    expect(leadItems).toHaveLength(3);
+    // Every copied item points back at the exact template item of the same title.
+    for (const item of leadItems!) {
+      expect(item.template_item_id).toBe(tplByTitle.get(item.title));
+    }
+  });
+
   it("is idempotent: moving away and back does not create a duplicate", async () => {
     await admin.from("pipeline_stages").upsert({
       organization_id: orgId, pipeline_type: "whatsapp",

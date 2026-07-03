@@ -41,6 +41,7 @@ import { CampaignSelectorField } from "./CampaignSelectorField";
 import { CampaignStageSelectorField } from "./CampaignStageSelectorField";
 import { CampaignTemplateSelectorField } from "./CampaignTemplateSelectorField";
 import { useChecklistTemplates } from "@/modules/engagement/hooks/useChecklistTemplates";
+import { useChecklistItems } from "@/modules/engagement/hooks/useChecklists";
 
 function AssignResponsibleConfig({
   data,
@@ -236,6 +237,118 @@ function SendToNumberConfig({
         />
       </div>
     </>
+  );
+}
+
+function MarkChecklistItemConfig({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const { data: templates = [], isLoading: loadingTemplates } = useChecklistTemplates();
+  // Os itens do template são carregados pelo id do template (checklist_id === templateId).
+  // O id de cada item É o template_item_id que o node guarda pra endereçar a cópia no lead (ADR-0016).
+  const { data: items = [], isLoading: loadingItems } = useChecklistItems(
+    data.checklistTemplateId || null,
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label>Checklist (template)</Label>
+        <Select
+          value={data.checklistTemplateId || ""}
+          onValueChange={(v) => {
+            const tpl = templates.find((t) => t.id === v);
+            // Troca de template invalida o item selecionado.
+            onUpdate({
+              checklistTemplateId: v,
+              checklistTemplateName: tpl?.title || "",
+              checklistItemTemplateId: undefined,
+              checklistItemTitle: undefined,
+            });
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={loadingTemplates ? "Carregando..." : "Selecione o checklist"} />
+          </SelectTrigger>
+          <SelectContent>
+            {templates.map((t) => (
+              <SelectItem key={t.id} value={t.id}>
+                {t.title} ({t.total_items} itens)
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Item para marcar</Label>
+        <Select
+          value={data.checklistItemTemplateId || ""}
+          disabled={!data.checklistTemplateId || loadingItems}
+          onValueChange={(v) => {
+            const item = items.find((i) => i.id === v);
+            onUpdate({
+              checklistItemTemplateId: v,
+              checklistItemTitle: item?.title || "",
+            });
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue
+              placeholder={
+                !data.checklistTemplateId
+                  ? "Escolha o checklist primeiro"
+                  : loadingItems
+                    ? "Carregando..."
+                    : "Selecione o item"
+              }
+            />
+          </SelectTrigger>
+          <SelectContent>
+            {items.map((i) => (
+              <SelectItem key={i.id} value={i.id}>
+                {i.title}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Ação</Label>
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            { value: "mark", label: "Marcar" },
+            { value: "unmark", label: "Desmarcar" },
+          ] as const).map((opt) => {
+            const active = (data.checklistItemAction ?? "mark") === opt.value;
+            return (
+              <Button
+                key={opt.value}
+                type="button"
+                variant={active ? "default" : "outline"}
+                size="sm"
+                className={cn(!active && "text-muted-foreground")}
+                onClick={() => onUpdate({ checklistItemAction: opt.value })}
+              >
+                {opt.label}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        {(data.checklistItemAction ?? "mark") === "unmark"
+          ? "Desmarca este item no checklist do lead (reabre a etapa) quando o workflow executar."
+          : "Marca este item no checklist do lead quando o workflow executar."}{" "}
+        Se o lead ainda não tiver o checklist, o node não faz nada (fica registrado na execução).
+      </p>
+    </div>
   );
 }
 
@@ -866,6 +979,10 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
       {at === "apply_checklist" && (
         <ApplyChecklistConfig data={data} onUpdate={onUpdate} />
+      )}
+
+      {at === "mark_checklist_item" && (
+        <MarkChecklistItemConfig data={data} onUpdate={onUpdate} />
       )}
     </div>
   );
