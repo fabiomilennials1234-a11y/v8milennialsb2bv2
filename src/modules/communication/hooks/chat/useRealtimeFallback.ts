@@ -15,6 +15,18 @@ import type { RealtimeChannelState } from "@/lib/realtimeStatusStore";
 
 export const FALLBACK_THRESHOLD_MS = 10_000;
 export const FALLBACK_POLL_INTERVAL_MS = 10_000;
+/**
+ * Backstop de reconciliação aplicado MESMO quando o canal reporta "joined".
+ *
+ * Motivo: sob carga, o `apply_rls()` de `whatsapp_messages` (hot table, ~4.7x
+ * overhead) atrasa/derruba postgres_changes sem derrubar o canal — o estado
+ * fica "joined", `shouldFallback` retorna false e nenhum poll roda, então
+ * mensagens/conversas novas só aparecem no F5. Este intervalo é um refetch de
+ * segurança (belt-and-suspenders) que reconcilia o cache periodicamente. Só
+ * dispara com a aba focada (refetchIntervalInBackground=false, default) → custo
+ * baixo. Mais lento que o poll de fallback pra não pesar no caminho saudável.
+ */
+export const JOINED_BACKSTOP_POLL_INTERVAL_MS = 20_000;
 const TICK_INTERVAL_MS = 5_000;
 
 const NON_HEALTHY_STATES: RealtimeChannelState[] = [
