@@ -318,9 +318,35 @@ function MarkChecklistItemConfig({
         </Select>
       </div>
 
+      <div className="space-y-2">
+        <Label>Ação</Label>
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            { value: "mark", label: "Marcar" },
+            { value: "unmark", label: "Desmarcar" },
+          ] as const).map((opt) => {
+            const active = (data.checklistItemAction ?? "mark") === opt.value;
+            return (
+              <Button
+                key={opt.value}
+                type="button"
+                variant={active ? "default" : "outline"}
+                size="sm"
+                className={cn(!active && "text-muted-foreground")}
+                onClick={() => onUpdate({ checklistItemAction: opt.value })}
+              >
+                {opt.label}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+
       <p className="text-xs text-muted-foreground">
-        Marca este item no checklist do lead quando o workflow executar. Se o lead ainda
-        não tiver o checklist, o node não faz nada (fica registrado na execução).
+        {(data.checklistItemAction ?? "mark") === "unmark"
+          ? "Desmarca este item no checklist do lead (reabre a etapa) quando o workflow executar."
+          : "Marca este item no checklist do lead quando o workflow executar."}{" "}
+        Se o lead ainda não tiver o checklist, o node não faz nada (fica registrado na execução).
       </p>
     </div>
   );
