@@ -176,6 +176,29 @@ Deno.serve(
     const dataFinal = ddmmyyyy(now);
     const nowIso = now.toISOString();
 
+    // DEBUG probe: escaneia N páginas de pedidos.pesquisa (sem obter/escrita, com
+    // delay anti-rate-limit) e reporta por página. Diagnóstico de paginação.
+    const probePages = (body as { probe_pages?: number }).probe_pages;
+    if (probePages && probePages > 0) {
+      const report: Array<Record<string, unknown>> = [];
+      for (let pg = startPage; pg < startPage + Math.min(probePages, 25); pg++) {
+        await new Promise((r) => setTimeout(r, 400));
+        const r: TinyApiResponse = await callTinyApi(tokenData.token, "pedidos.pesquisa.php", { dataInicial, dataFinal, pagina: pg });
+        const peds = (r.retorno.pedidos as Array<{ pedido: TinyPedidoListItem }> | undefined) ?? [];
+        report.push({
+          page: pg, count: peds.length,
+          total_pages: r.retorno.numero_paginas ?? null,
+          proc: r.retorno.status_processamento,
+          status: r.retorno.status,
+          erros: r.retorno.erros ?? null,
+          first_date: peds[0]?.pedido?.data_pedido,
+          last_date: peds[peds.length - 1]?.pedido?.data_pedido,
+        });
+        if (peds.length === 0) break;
+      }
+      return new Response(JSON.stringify({ ok: true, dataInicial, dataFinal, probe: report }), { status: 200, headers });
+    }
+
     const stats = {
       pages_scanned: 0, pedidos_seen: 0, skipped_situacao: 0, skipped_dup: 0,
       obter_calls: 0, orders_created: 0, clients_created: 0, failed: 0,
@@ -186,14 +209,29 @@ Deno.serve(
     try {
       let page = startPage;
       let obterBudget = maxObter;
+      // numero_paginas SÓ é confiável em página com dados. Resposta rate-limited vem
+      // vazia E sem numero_paginas (=0). Guardamos o último total conhecido pra
+      // distinguir FIM real (page > total) de rate-limit (page <= total → retoma).
+      let lastKnownTotal = 0;
 
       for (let i = 0; i < maxPages; i++, page++) {
+        // Delay antes de CADA pesquisa (inclui a 1ª). Sem isso o Tiny rejeita a
+        // chamada imediata (volta vazia) e a paginação parava. Empírico: probe com
+        // delay pega 100/página; sem delay volta vazio.
+        await new Promise((r) => setTimeout(r, 500));
         const resp: TinyApiResponse = await callTinyApi(tokenData.token, "pedidos.pesquisa.php", {
           dataInicial, dataFinal, pagina: page,
         });
         const pedidos = (resp.retorno.pedidos as Array<{ pedido: TinyPedidoListItem }> | undefined) ?? [];
-        stats.total_pages = Number(resp.retorno.numero_paginas ?? 0);
-        if (pedidos.length === 0) { stats.next_page = null; break; }
+        const tp = Number(resp.retorno.numero_paginas ?? 0);
+        if (tp > 0) lastKnownTotal = tp;
+        stats.total_pages = lastKnownTotal;
+        if (pedidos.length === 0) {
+          // Vazio: conclui SÓ se sabemos o total e já passamos dele. Senão (inclui
+          // rate-limit sem numero_paginas) → retoma ESTA página (cursor fica aqui).
+          stats.next_page = (lastKnownTotal > 0 && page > lastKnownTotal) ? null : page;
+          break;
+        }
         stats.pages_scanned++;
 
         for (const row of pedidos) {
@@ -287,8 +325,9 @@ Deno.serve(
         }
 
         if (stats.next_page === page) break; // orçamento esgotado no meio da página
-        stats.next_page = stats.total_pages && page < stats.total_pages ? page + 1 : null;
-        if (stats.next_page === null) break;
+        // Avança sempre +1. Fim = página vazia (checado no topo do loop). NÃO confiar
+        // em numero_paginas: o Tiny às vezes devolve 0/ausente → cursor ia pra 0 cedo.
+        stats.next_page = page + 1;
       }
 
       if (!dryRun) {
