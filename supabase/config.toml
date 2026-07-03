@@ -298,6 +298,14 @@ verify_jwt = false
 [functions.calculate-portfolio-health]
 verify_jwt = false
 
+# tinyerp-sync-contacts: cron/serviço puxa contatos Tiny → upsell_clients (x-cron-secret)
+[functions.tinyerp-sync-contacts]
+verify_jwt = false
+
+# tinyerp-pull-orders: cron/serviço puxa pedidos Tiny → upsell_orders (x-cron-secret)
+[functions.tinyerp-pull-orders]
+verify_jwt = false
+
 # suggest-retention-action: AI next-best-action; JWT validated inside function
 [functions.suggest-retention-action]
 verify_jwt = false
