@@ -20,12 +20,16 @@ interface ChainResult {
 export function createMockSupabase() {
   const tables: Record<string, MockData> = {};
   const insertedRows: Record<string, MockData> = {};
+  const updatedRows: Record<string, MockData> = {};
   const upsertOpts: Record<string, unknown[]> = {};
   const rpcResults: Record<string, unknown> = {};
   const insertErrors: Record<string, { code: string; message: string }> = {};
 
   function mockTable(name: string, data: MockData) {
-    tables[name] = data;
+    // Clone so the mock owns its rows. Updates persist by mutating rows in
+    // tables[] (read-after-write); cloning keeps that from leaking back into
+    // shared seed consts across tests.
+    tables[name] = data.map((row) => ({ ...row }));
   }
 
   /** Force the next (and subsequent) inserts on `table` to fail with `error`. */
@@ -39,6 +43,10 @@ export function createMockSupabase() {
 
   function getInserted(table: string): MockData {
     return insertedRows[table] || [];
+  }
+
+  function getUpdated(table: string): MockData {
+    return updatedRows[table] || [];
   }
 
   function getUpsertOpts(table: string): unknown[] {
@@ -232,6 +240,15 @@ export function createMockSupabase() {
       if (insertError) {
         return Promise.resolve({ data: null, error: insertError, count: null });
       }
+      // Persist updates so read-after-write works. applyFilters() returns refs to
+      // the shared table row objects, so Object.assign mutates tables in place.
+      if (isUpdate) {
+        const matched = applyFilters();
+        for (const row of matched) Object.assign(row, updateData);
+        if (!updatedRows[tableName]) updatedRows[tableName] = [];
+        updatedRows[tableName].push(...matched);
+        return Promise.resolve({ data: matched, error: null, count: matched.length });
+      }
       const filtered = applyFilters();
       if (selectOpts?.head) {
         return Promise.resolve({
@@ -331,5 +348,5 @@ export function createMockSupabase() {
     channel: (name: string) => createChannel(name),
   };
 
-  return { sb: sb as any, mockTable, mockRpc, mockInsertError, getInserted, getUpsertOpts, emitEvent };
+  return { sb: sb as any, mockTable, mockRpc, mockInsertError, getInserted, getUpdated, getUpsertOpts, emitEvent };
 }
