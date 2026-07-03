@@ -452,7 +452,12 @@ function AppRoutes() {
         path="/tv"
         element={
           <ProtectedRoute>
-            <FeatureRoute feature="tv_dashboard"><TVDashboard /></FeatureRoute>
+            {/* Rota standalone (sem LayoutWrapper) — precisa do OrgFeaturesProvider
+                explícito, pois é o LayoutWrapper que o monta nas demais rotas.
+                Sem ele, o FeatureRoute → useOrgFeatures() estoura. */}
+            <OrgFeaturesProvider>
+              <FeatureRoute feature="tv_dashboard"><TVDashboard /></FeatureRoute>
+            </OrgFeaturesProvider>
           </ProtectedRoute>
         }
       />
