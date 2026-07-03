@@ -48,6 +48,7 @@ import {
   type ProductivityCountType,
 } from "@/modules/analytics/hooks/useProductivityActivity";
 import { ProductivityDrill } from "./ProductivityDrill";
+import { ProductivitySellerBoard } from "./ProductivitySellerBoard";
 
 type Preset = "today" | "7d" | "month" | "last_month" | "custom";
 
@@ -261,6 +262,9 @@ export function ProductivityBlock({ teamMembers }: ProductivityBlockProps) {
           ? ` · ${sellableMembers.find((m) => m.id === sellerId)?.name ?? "vendedor"}`
           : " · todos os vendedores"}
       </p>
+
+      {/* Placar por vendedor — mesmo período dos cards acima */}
+      <ProductivitySellerBoard from={from} to={to} />
 
       <ProductivityDrill
         countType={drillType}
