@@ -13,6 +13,7 @@ import type { ChatContact, ChatContactTag } from "./types";
 import {
   useWhatsAppRealtimeFallback,
   FALLBACK_POLL_INTERVAL_MS,
+  JOINED_BACKSTOP_POLL_INTERVAL_MS,
 } from "./useRealtimeFallback";
 
 const normalizePhone = (p: string) => {
@@ -352,6 +353,12 @@ export function useWhatsAppContacts(instanceId: string | null) {
     },
     enabled: !!organizationId && !!instanceId,
     staleTime: 30_000,
-    refetchInterval: shouldPoll ? FALLBACK_POLL_INTERVAL_MS : false,
+    // A lista lê da tabela-resumo `whatsapp_conversation_summary`, que NÃO está
+    // na publicação realtime — depende do evento de `whatsapp_messages` disparar
+    // o invalidate embutido. Se esse evento é dropado (apply_rls sob carga), a
+    // conversa nova só aparece no F5. Backstop reconcilia mesmo com canal saudável.
+    refetchInterval: shouldPoll
+      ? FALLBACK_POLL_INTERVAL_MS
+      : JOINED_BACKSTOP_POLL_INTERVAL_MS,
   });
 }

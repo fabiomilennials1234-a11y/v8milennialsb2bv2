@@ -9,11 +9,11 @@
  *
  * Replaces ChatComposer + ChatQuickActions on mobile surfaces.
  */
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Send, Mic, Camera, Paperclip, FileText, Clock, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/modules/identity";
@@ -80,7 +80,7 @@ export function MobileComposerContextual({
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const isSending = sendMessage.isPending || sendMedia.isPending;
   const hasText = message.trim().length > 0;
@@ -183,12 +183,16 @@ export function MobileComposerContextual({
     }
   }, [setMessage]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  }, [handleSend]);
+  // Auto-resize do textarea (cresce até ~5 linhas, depois rola).
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
+  }, [message]);
+
+  // No mobile o Enter insere nova linha (comportamento nativo do textarea, igual
+  // WhatsApp) — o envio é só pelo botão. Sem onKeyDown de envio.
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -288,16 +292,16 @@ export function MobileComposerContextual({
           />
         </Button>
 
-        {/* Text input */}
-        <Input
+        {/* Text input — textarea p/ suportar quebra de linha */}
+        <Textarea
           ref={inputRef}
+          rows={1}
           placeholder={`Mensagem para ${contactName}...`}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={handleKeyDown}
           disabled={isSending}
           aria-label={`Mensagem para ${contactName}`}
-          className="flex-1 rounded-full border border-border/60 bg-background"
+          className="flex-1 min-h-[40px] max-h-32 resize-none rounded-2xl border border-border/60 bg-background py-2 leading-5"
         />
 
         {/* Mic or Send */}

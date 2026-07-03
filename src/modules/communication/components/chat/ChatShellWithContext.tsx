@@ -48,6 +48,7 @@ import { useWhatsAppInstancesForUser } from "@/modules/communication/hooks/chat/
 import { useWhatsAppContacts } from "@/modules/communication/hooks/chat/useWhatsAppContacts";
 import { useWhatsAppMessages } from "@/modules/communication/hooks/chat/useWhatsAppMessages";
 import { useWhatsAppMessagesRealtime } from "@/modules/communication/hooks/chat/useWhatsAppRealtime";
+import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
 import { useFailedMessages, useRetryMessage } from "@/modules/communication/hooks/chat/useWhatsAppSend";
 import { useChatDensity } from "@/modules/communication/hooks/chat/useChatDensity";
 import { useTakeover } from "@/modules/communication/hooks/chat/useTakeover";
@@ -323,6 +324,7 @@ export function ChatShellWithContext() {
   const organizationId = teamMember?.organization_id ?? null;
   const { isAdmin } = useIdentity();
   const { data: allTags = [] } = useTags();
+  const queryClient = useQueryClient();
 
   // ── Instâncias ──────────────────────────────────────────────────────────────
   const { data: instances = [], isLoading: instancesLoading } = useWhatsAppInstancesForUser();
@@ -499,6 +501,40 @@ export function ChatShellWithContext() {
   const handleBack = useCallback(() => {
     setSelectedPhone(null);
   }, []);
+
+  // ── Read-state: zera "não lida" ao abrir a conversa ─────────────────────────
+  // O badge de unread é server-side (get_whatsapp_conversation_list lê de
+  // conversation_read_state). Sem gravar read-state, `last_read_at` fica vazio e
+  // a RPC conta as incoming dos últimos 7 dias pra sempre → conversa nunca sai de
+  // "não lida". Espelha o padrão que o chat-bubble flutuante já usa
+  // (ChatBubbleContext.markReadServer). Otimista no cache + RPC fire-and-forget.
+  const markConversationRead = useCallback(
+    (phone: string, instanceId: string) => {
+      const norm = normalizePhone(phone);
+      if (!norm) return;
+      queryClient.setQueryData<ChatContact[]>(
+        chatQueryKeys.contacts(organizationId, instanceId),
+        (old) =>
+          old?.map((c) =>
+            c.phone_number === phone ? { ...c, unread_count: 0 } : c,
+          ) ?? old,
+      );
+      void supabase
+        .rpc("mark_conversation_read", {
+          p_instance_id: instanceId,
+          p_normalized_phone: norm,
+        })
+        .then(undefined, () => {
+          /* tabela/perm indisponível — sem-op, backstop cobre no próximo refetch */
+        });
+    },
+    [queryClient, organizationId],
+  );
+
+  useEffect(() => {
+    if (!selectedPhone || !selectedInstanceId) return;
+    markConversationRead(selectedPhone, selectedInstanceId);
+  }, [selectedPhone, selectedInstanceId, markConversationRead]);
 
   // ── Realtime ────────────────────────────────────────────────────────────────
   useWhatsAppMessagesRealtime(selectedPhone, selectedInstanceId);

@@ -14,6 +14,7 @@ import { chatQueryKeys } from "./shared/queryKeys";
 import {
   useWhatsAppRealtimeFallback,
   FALLBACK_POLL_INTERVAL_MS,
+  JOINED_BACKSTOP_POLL_INTERVAL_MS,
 } from "./useRealtimeFallback";
 
 /**
@@ -49,6 +50,12 @@ export function useWhatsAppMessages(
       return data as WhatsAppMessage[];
     },
     enabled: !!organizationId && !!phoneNumber && !!instanceId,
-    refetchInterval: shouldPoll ? FALLBACK_POLL_INTERVAL_MS : false,
+    // Backstop de reconciliação: se um postgres_changes é dropado pelo apply_rls
+    // sob carga (canal segue "joined"), a msg nova só apareceria no F5. Refetch
+    // de segurança periódico com a aba focada garante progresso. Ver
+    // JOINED_BACKSTOP_POLL_INTERVAL_MS em useRealtimeFallback.
+    refetchInterval: shouldPoll
+      ? FALLBACK_POLL_INTERVAL_MS
+      : JOINED_BACKSTOP_POLL_INTERVAL_MS,
   });
 }

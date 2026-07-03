@@ -19,6 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Send, Loader2, ImageIcon, Mic, Clock, AlertCircle, X, LayoutList, QrCode, Sticker } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -107,7 +108,7 @@ export function ChatComposer({
   const [sendAsSticker, setSendAsSticker] = useState(false);
 
   // Refs
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Mutations
@@ -167,7 +168,7 @@ export function ChatComposer({
     setShowSlashPopover(false);
   }, [leadForTemplates, selectedContact, phoneNumber, teamMember, setMessage]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Slash popover captura Enter para selecionar template
     if (showSlashPopover) return;
 
@@ -321,6 +322,16 @@ export function ChatComposer({
     inputRef.current?.focus();
   }, [conversationKey]);
 
+  // Auto-resize do textarea: cresce com o conteúdo até um teto (~6 linhas),
+  // depois rola. Roda a cada mudança de `message` — cobre digitação, inserção
+  // de template e reset pós-envio.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [message]);
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -427,7 +438,7 @@ export function ChatComposer({
           />
 
           {/* Input row — container "pill" arredondado (estilo mockup) */}
-          <div className="relative flex items-center gap-1 rounded-xl border border-border/70 dark:border-white/[0.07] bg-muted/30 dark:bg-white/[0.03] px-1.5 py-1 transition-colors focus-within:border-primary/40">
+          <div className="relative flex items-end gap-1 rounded-xl border border-border/70 dark:border-white/[0.07] bg-muted/30 dark:bg-white/[0.03] px-1.5 py-1 transition-colors focus-within:border-primary/40">
             {/* File input oculto */}
             <input
               ref={fileInputRef}
@@ -489,9 +500,10 @@ export function ChatComposer({
               />
             )}
 
-            {/* Input de texto */}
-            <Input
+            {/* Input de texto — textarea p/ suportar quebra de linha (⇧⏎) */}
+            <Textarea
               ref={inputRef}
+              rows={1}
               placeholder={`Mensagem para ${contactName}...`}
               value={message}
               onChange={(e) => {
@@ -504,7 +516,7 @@ export function ChatComposer({
               onKeyDown={handleKeyDown}
               disabled={sendMessage.isPending || sendMedia.isPending}
               aria-label={`Digite uma mensagem para ${contactName}`}
-              className="flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-2"
+              className="flex-1 min-h-[36px] max-h-40 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-2 py-2 leading-5"
             />
 
             {/* Botão agendar */}
