@@ -214,70 +214,37 @@ describe("fireTrigger — error paths", () => {
     expect(n).toBe(0);
   });
 
-  it("returns 0 when insert fails", async () => {
-    // First query returns one matching workflow; insert returns error.
-    const sb = {
-      from: (table: string) => {
-        if (table === "workflows") {
-          return {
-            select: () => ({
-              eq: () => ({
-                eq: () => ({
-                  eq: () =>
-                    Promise.resolve({
-                      data: [
-                        {
-                          id: "wf-1",
-                          trigger_config: {},
-                        },
-                      ],
-                      error: null,
-                    }),
-                }),
-              }),
-            }),
-          };
-        }
-        // workflow_executions.insert
-        return {
-          insert: () =>
-            Promise.resolve({ error: { message: "constraint violation" } }),
-        };
-      },
-    } as any;
+  it("skips workflows that already have an in-flight execution for the lead (L1: no re-dispatch)", async () => {
+    // Regression — incident 2026-07-03 (Motor 100): a re-entry into a "disparo"
+    // stage while an execution is still active must NOT create a new execution
+    // (which would re-run the send nodes and re-blast the lead).
+    const { sb, mockTable, getInserted } = createMockSupabase();
+    mockTable("workflows", [
+      { id: "wf-1", organization_id: "org-1", trigger_type: "stage_changed", is_active: true, trigger_config: {} },
+    ]);
+    // wf-1 already has a waiting execution for this lead.
+    mockTable("workflow_executions", [
+      { id: "exec-1", workflow_id: "wf-1", lead_id: "lead-1", status: "waiting_response" },
+    ]);
     const n = await fireTrigger({
       supabase: sb,
       organizationId: "org-1",
-      triggerType: "lead_created",
+      triggerType: "stage_changed",
       leadId: "lead-1",
+      context: { to_stage: "disparo_sexta" },
     });
     expect(n).toBe(0);
+    // No new execution inserted.
+    expect(getInserted("workflow_executions")).toHaveLength(0);
   });
 
   it("inserts and returns matching count on success", async () => {
-    const sb = {
-      from: (table: string) => {
-        if (table === "workflows") {
-          return {
-            select: () => ({
-              eq: () => ({
-                eq: () => ({
-                  eq: () =>
-                    Promise.resolve({
-                      data: [
-                        { id: "wf-1", trigger_config: {} },
-                        { id: "wf-2", trigger_config: {} },
-                      ],
-                      error: null,
-                    }),
-                }),
-              }),
-            }),
-          };
-        }
-        return { insert: () => Promise.resolve({ error: null }) };
-      },
-    } as any;
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("workflows", [
+      { id: "wf-1", organization_id: "org-1", trigger_type: "lead_created", is_active: true, trigger_config: {} },
+      { id: "wf-2", organization_id: "org-1", trigger_type: "lead_created", is_active: true, trigger_config: {} },
+    ]);
+    mockTable("workflow_executions", []);
     const n = await fireTrigger({
       supabase: sb,
       organizationId: "org-1",
@@ -287,33 +254,15 @@ describe("fireTrigger — error paths", () => {
     expect(n).toBe(2);
   });
 
-  it("filters out non-matching workflows before insert", async () => {
-    const insertSpy = vi.fn(() => Promise.resolve({ error: null }));
-    const sb = {
-      from: (table: string) => {
-        if (table === "workflows") {
-          return {
-            select: () => ({
-              eq: () => ({
-                eq: () => ({
-                  eq: () =>
-                    Promise.resolve({
-                      data: [
-                        // Matches — no filter
-                        { id: "wf-match", trigger_config: {} },
-                        // Rejects — origin mismatch
-                        { id: "wf-miss", trigger_config: { filter_origin: "google_ads" } },
-                      ],
-                      error: null,
-                    }),
-                }),
-              }),
-            }),
-          };
-        }
-        return { insert: insertSpy };
-      },
-    } as any;
+  it("filters non-matching workflows and stamps a trigger_dedup_key on the insert", async () => {
+    const { sb, mockTable, getInserted, getUpsertOpts } = createMockSupabase();
+    mockTable("workflows", [
+      // Matches — no filter
+      { id: "wf-match", organization_id: "org-1", trigger_type: "lead_created", is_active: true, trigger_config: {} },
+      // Rejects — origin mismatch
+      { id: "wf-miss", organization_id: "org-1", trigger_type: "lead_created", is_active: true, trigger_config: { filter_origin: "google_ads" } },
+    ]);
+    mockTable("workflow_executions", []);
     const n = await fireTrigger({
       supabase: sb,
       organizationId: "org-1",
@@ -322,9 +271,16 @@ describe("fireTrigger — error paths", () => {
       context: { origin: "meta_ads" },
     });
     expect(n).toBe(1);
-    // Inserted exactly one execution (wf-match)
-    const inserted = insertSpy.mock.calls[0][0] as Array<{ workflow_id: string }>;
+
+    // Upserted exactly one execution (wf-match) carrying a dedup key, via
+    // ON CONFLICT DO NOTHING on the trigger-dedup unique index.
+    const inserted = getInserted("workflow_executions") as Array<{ workflow_id: string; trigger_dedup_key: string | null }>;
     expect(inserted).toHaveLength(1);
     expect(inserted[0].workflow_id).toBe("wf-match");
+    expect(inserted[0].trigger_dedup_key).toBeTruthy();
+    expect(getUpsertOpts("workflow_executions")[0]).toMatchObject({
+      onConflict: "workflow_id,lead_id,trigger_dedup_key",
+      ignoreDuplicates: true,
+    });
   });
 });
