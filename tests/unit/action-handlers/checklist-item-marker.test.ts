@@ -119,4 +119,43 @@ describe("markChecklistItem", () => {
     // cl-1 rollup ran but must resolve to not-complete (li-2 still open).
     expect(updatedChecklists.every((c) => c.is_completed === false)).toBe(true);
   });
+
+  // ── Slice 3: unmark / reopen ──────────────────────────────────────────────
+  it("unmarks the matching item and clears completed_at", async () => {
+    const m = seedLead([
+      { id: "li-1", checklist_id: "cl-1", title: "A", is_completed: true, completed_at: "2026-01-01T00:00:00Z", template_item_id: "tpl-item-a" },
+    ]);
+    const result = await run(m, { templateItemId: "tpl-item-a", action: "unmark" });
+    expect(result.success).toBe(true);
+    expect(result.data?.action).toBe("unmark");
+
+    const updated = m.getUpdated("checklist_items");
+    expect(updated).toHaveLength(1);
+    expect(updated[0]).toMatchObject({ id: "li-1", is_completed: false, completed_at: null });
+  });
+
+  it("reopens a completed checklist when an item is unmarked", async () => {
+    // Checklist starts fully complete; unmarking one item must flip it back to open.
+    const m = seedLead(
+      [
+        { id: "li-1", checklist_id: "cl-1", title: "A", is_completed: true, template_item_id: "tpl-item-a" },
+        { id: "li-2", checklist_id: "cl-1", title: "B", is_completed: true, template_item_id: "tpl-item-b" },
+      ],
+      [{ id: "cl-1", organization_id: "org-1", lead_id: "lead-1", is_completed: true }],
+    );
+    const result = await run(m, { templateItemId: "tpl-item-a", action: "unmark" });
+    expect(result.success).toBe(true);
+
+    const updatedChecklists = m.getUpdated("checklists");
+    expect(updatedChecklists.some((c) => c.id === "cl-1" && c.is_completed === false)).toBe(true);
+  });
+
+  it("defaults to mark when action is an unknown value", async () => {
+    const m = seedLead([
+      { id: "li-1", checklist_id: "cl-1", title: "A", is_completed: false, template_item_id: "tpl-item-a" },
+    ]);
+    const result = await run(m, { templateItemId: "tpl-item-a", action: "bogus" });
+    expect(result.success).toBe(true);
+    expect(m.getUpdated("checklist_items")[0]).toMatchObject({ is_completed: true });
+  });
 });
