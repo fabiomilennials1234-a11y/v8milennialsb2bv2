@@ -16,6 +16,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { computeTriggerDedupKey } from "./workflow-trigger-dedup.ts";
 
 interface FireTriggerParams {
   supabase: SupabaseClient;
@@ -71,51 +72,75 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
       .in("workflow_id", matchingIds)
       .in("status", ["running", "processing", "waiting_response", "paused"]);
 
-    let deduped = matching;
+    // ── Dedup: SKIP workflows that already have an in-flight execution for this
+    // lead. Applies to ALL trigger types, including stage_changed.
+    //
+    // stage_changed previously CANCELLED the active execution and started a fresh
+    // one from the trigger node — which re-ran every send node, re-dispatching the
+    // whole flow (text + audio + image) on each re-entry into the triggering stage.
+    // A user re-dropping a lead into a "disparo" column (or the workflow's own
+    // stage moves) therefore blasted the lead 7-12× (incident 2026-07-03, Motor 100).
+    //
+    // `activeExecs` is already filtered to `matchingIds` — i.e. executions of the
+    // very workflows about to fire — so an active exec here is always the SAME
+    // workflow re-triggering. Cancel-and-restart never protected a distinct flow;
+    // skipping is strictly safer. If a genuine re-dispatch is wanted, the prior
+    // execution must reach a terminal state first.
+    const activeWorkflowIds = new Set((activeExecs ?? []).map((e: { workflow_id: string }) => e.workflow_id));
+    const deduped = matching.filter((w: { id: string }) => !activeWorkflowIds.has(w.id));
 
-    if (triggerType === "stage_changed" && activeExecs?.length) {
-      const activeIds = activeExecs.map((e: { id: string }) => e.id);
-      await supabase
-        .from("workflow_executions")
-        .update({
-          status: "cancelled",
-          completed_at: new Date().toISOString(),
-          error: "Auto-cancelled: new stage_changed trigger",
-        })
-        .in("id", activeIds);
-      console.log(`[workflow-trigger] Auto-cancelled ${activeIds.length} executions for lead ${leadId}`);
-    } else {
-      const activeWorkflowIds = new Set((activeExecs ?? []).map((e: { workflow_id: string }) => e.workflow_id));
-      deduped = matching.filter((w: { id: string }) => !activeWorkflowIds.has(w.id));
-
-      if (deduped.length === 0) {
-        console.log(`[workflow-trigger] All ${matching.length} workflows already active for lead ${leadId}, skipping`);
-        return 0;
-      }
-
-      if (deduped.length < matching.length) {
-        console.log(`[workflow-trigger] Dedup: ${matching.length - deduped.length} workflows already active, firing ${deduped.length}`);
-      }
+    if (deduped.length === 0) {
+      console.log(`[workflow-trigger] All ${matching.length} workflows already active for lead ${leadId}, skipping (no re-dispatch)`);
+      return 0;
     }
 
-    const executions = deduped.map((w: { id: string }) => ({
-      workflow_id: w.id,
-      organization_id: organizationId,
-      lead_id: leadId,
-      status: "running",
-      context: { trigger_type: triggerType, ...(context || {}) },
-    }));
+    if (deduped.length < matching.length) {
+      console.log(`[workflow-trigger] Dedup: ${matching.length - deduped.length} workflows already active for lead ${leadId}, firing ${deduped.length}`);
+    }
 
+    // Atomic dedup key (closes the check-then-insert race the skip above cannot):
+    // N near-simultaneous stage_changed events for the same lead compute the SAME
+    // key within the window bucket, so the partial-window unique index
+    // (workflow_id, lead_id, trigger_dedup_key) lets only the first insert win.
+    // stage_changed uses a 300s window (re-dispatching the same lead within 5min is
+    // never intended); other triggers use 60s. leadId-less triggers get a null key
+    // (never deduped) — distinct NULLs, so they always insert.
+    const dedupWindowSeconds = triggerType === "stage_changed" ? 300 : 60;
+    const now = new Date();
+    const executions = await Promise.all(
+      deduped.map(async (w: { id: string }) => ({
+        workflow_id: w.id,
+        organization_id: organizationId,
+        lead_id: leadId,
+        status: "running",
+        context: { trigger_type: triggerType, ...(context || {}) },
+        trigger_dedup_key: leadId
+          ? await computeTriggerDedupKey({
+              triggerType,
+              payload: context || {},
+              now,
+              windowSeconds: dedupWindowSeconds,
+            })
+          : null,
+      })),
+    );
+
+    // ON CONFLICT DO NOTHING (ignoreDuplicates) → concurrent identical fires that
+    // computed the same key collapse to a single row at the DB. The returned count
+    // is the ATTEMPTED count; the unique index is the actual guarantee.
     const { error: insertError } = await supabase
       .from("workflow_executions")
-      .insert(executions);
+      .upsert(executions, {
+        onConflict: "workflow_id,lead_id,trigger_dedup_key",
+        ignoreDuplicates: true,
+      });
 
     if (insertError) {
       console.warn("[workflow-trigger] Insert failed:", insertError.message);
       return 0;
     }
 
-    console.log(`[workflow-trigger] Fired ${deduped.length} workflows for ${triggerType}`);
+    console.log(`[workflow-trigger] Fired ${deduped.length} workflows for ${triggerType} (dedup-keyed)`);
     return deduped.length;
   } catch (err) {
     console.warn("[workflow-trigger] Error:", err);
