@@ -68,7 +68,7 @@ function makeInput(overrides: Partial<{
   instances: Record<string, unknown>[];
   withInstance: boolean;
 }> = {}) {
-  const { sb, mockTable } = createMockSupabase();
+  const { sb, mockTable, getInserted, getUpsertOpts } = createMockSupabase();
   const instances = overrides.instances
     ?? (overrides.withInstance === false ? [] : [WA_INSTANCE]);
   mockTable("whatsapp_instances", instances);
@@ -90,6 +90,8 @@ function makeInput(overrides: Partial<{
     },
     sb,
     mockTable,
+    getInserted,
+    getUpsertOpts,
   };
 }
 
@@ -395,5 +397,89 @@ describe("sendToNumber action handler", () => {
     expect(result.error).toContain("all 2 number(s)");
     // Live instance + reachable recipients → genuine transient blip → retryable default.
     expect(result.retryable).toBeUndefined();
+  });
+
+  // ── Chat visibility: persist an outgoing row keyed to the RECIPIENT's number ──
+  describe("chat history persistence", () => {
+    it("persists one outgoing whatsapp_messages row per delivered number, keyed to the recipient (lead_id null)", async () => {
+      const { input, getInserted, getUpsertOpts } = makeInput({
+        params: {
+          notifyPhones: ["11988887777", "5521977776666"],
+          messageTemplate: "Lead {{nome}} respondeu!",
+          whatsappInstanceId: "inst-1",
+        },
+      });
+      const result = await sendToNumber(input);
+      expect(result.success).toBe(true);
+
+      const rows = getInserted("whatsapp_messages");
+      expect(rows).toHaveLength(2);
+
+      const r0 = rows[0] as Record<string, unknown>;
+      expect(r0.direction).toBe("outgoing");
+      expect(r0.message_type).toBe("conversation");
+      // Load-bearing: this is what makes fn_human_pause_on_manual_send early-return.
+      expect(r0.sent_source).toBe("workflow-send-to-number");
+      // Keyed to the RECIPIENT's number, NOT the lead — lead_id stays null.
+      expect(r0.lead_id).toBeNull();
+      expect(r0.phone_number).toBe("5511988887777");
+      expect(r0.remote_jid).toBe("5511988887777@s.whatsapp.net");
+      expect(r0.content).toBe("Lead Test Lead respondeu!");
+      expect(r0.organization_id).toBe("org-1");
+      expect(r0.instance_id).toBe("inst-1");
+      // message_id = provider id so the fromMe echo UPSERTs this row (no dup).
+      expect(r0.message_id).toBe("m1");
+
+      const r1 = rows[1] as Record<string, unknown>;
+      expect(r1.phone_number).toBe("5521977776666");
+
+      // Upsert dedupes against the provider echo by (message_id, instance_id).
+      const opts = getUpsertOpts("whatsapp_messages");
+      expect(opts[0]).toMatchObject({ onConflict: "message_id,instance_id", ignoreDuplicates: true });
+    });
+
+    it("falls back to a synthetic message_id when the provider returns none", async () => {
+      vi.mocked(sendTextViaInstance).mockResolvedValueOnce({ success: true });
+      const { input, getInserted } = makeInput();
+      const result = await sendToNumber(input);
+      expect(result.success).toBe(true);
+
+      const rows = getInserted("whatsapp_messages");
+      expect(rows).toHaveLength(1);
+      expect((rows[0] as Record<string, unknown>).message_id).toMatch(/^wf_/);
+    });
+
+    it("persists ONLY delivered numbers on partial failure", async () => {
+      vi.mocked(sendTextViaInstance)
+        .mockResolvedValueOnce({ success: true, messageId: "m1" })
+        .mockResolvedValueOnce({ success: false, error: "uazapi 500" });
+
+      const { input, getInserted } = makeInput({
+        params: {
+          notifyPhones: ["5511988887777", "5521977776666"],
+          messageTemplate: "oi",
+          whatsappInstanceId: "inst-1",
+        },
+      });
+      const result = await sendToNumber(input);
+      expect(result.success).toBe(true);
+
+      const rows = getInserted("whatsapp_messages");
+      expect(rows).toHaveLength(1);
+      expect((rows[0] as Record<string, unknown>).phone_number).toBe("5511988887777");
+    });
+
+    it("does NOT persist any row when every send fails", async () => {
+      vi.mocked(sendTextViaInstance).mockResolvedValue({ success: false, error: "uazapi 500" });
+      const { input, getInserted } = makeInput({
+        params: {
+          notifyPhones: ["5511988887777", "5521977776666"],
+          messageTemplate: "oi",
+          whatsappInstanceId: "inst-1",
+        },
+      });
+      await sendToNumber(input);
+      expect(getInserted("whatsapp_messages")).toHaveLength(0);
+    });
   });
 });

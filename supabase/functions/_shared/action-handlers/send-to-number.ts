@@ -15,8 +15,10 @@
  *    appended.
  *  - We send via `sendTextViaInstance` (the provider adapter) — deliberately NOT the
  *    lead-scoped gateway — because the recipients are fixed operator/salesperson
- *    numbers, not the lead. We therefore do NOT write a lead-associated
- *    whatsapp_messages row (that would pollute the lead's chat thread).
+ *    numbers, not the lead. We do write an OUTGOING whatsapp_messages row, but keyed
+ *    to the RECIPIENT's number with lead_id NULL (see persistChatHistory) so the
+ *    notification shows up as the salesperson's own chat thread and never pollutes the
+ *    lead's thread.
  *  - The FROM instance is the operator-selected one (params.whatsappInstanceId) or
  *    the org default — leadId is intentionally NOT passed to instance resolution so
  *    strict-write lead binding doesn't force the lead's responsible's instance.
@@ -74,6 +76,55 @@ function isInstanceLive(
   if (!instance) return false;
   if (instance.session_dead_since != null) return false;
   return instance.status === "open" || instance.status === "connected";
+}
+
+/**
+ * Persist the sent notification as an OUTGOING whatsapp_messages row so it surfaces
+ * in the chat inbox as a thread with the RECIPIENT's number (the salesperson) — NOT
+ * the lead's thread. Mirrors outbound-sender's row shape.
+ *
+ *  - message_id = the provider id so the Uazapi fromMe echo UPSERTs THIS row instead
+ *    of inserting a duplicate (onConflict message_id,instance_id).
+ *  - direction 'outgoing' + message_type 'conversation' → renders as a sent bubble.
+ *  - sent_source 'workflow-send-to-number' is load-bearing: fn_human_pause_on_manual_send
+ *    early-returns unless sent_source = 'manual', so this write does NOT pause the AI.
+ *  - lead_id is left NULL on purpose. The BEFORE trigger resolve_message_lead_id() only
+ *    attaches a lead if the RECIPIENT's own number matches one — so a normal salesperson
+ *    number yields a standalone thread and the lead's chat is never polluted.
+ *
+ * Best-effort: the WhatsApp message already went out, so a history-write failure must
+ * never fail the notification nor flip the action to retryable.
+ */
+async function persistChatHistory(
+  supabase: ActionInput["supabase"],
+  organizationId: string,
+  instance: { id: string },
+  phone: string,
+  content: string,
+  messageId?: string,
+): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from("whatsapp_messages")
+      .upsert({
+        organization_id: organizationId,
+        instance_id: instance.id,
+        message_id: messageId || `wf_${crypto.randomUUID()}`,
+        remote_jid: `${phone}@s.whatsapp.net`,
+        phone_number: phone,
+        direction: "outgoing",
+        message_type: "conversation",
+        content,
+        sent_source: "workflow-send-to-number",
+        lead_id: null,
+        timestamp: new Date().toISOString(),
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
+    if (error) {
+      console.warn("[send-to-number] chat history upsert failed (non-fatal):", error.message);
+    }
+  } catch (err) {
+    console.warn("[send-to-number] chat history upsert threw (non-fatal):", err);
+  }
 }
 
 export async function sendToNumber(input: ActionInput): Promise<ActionResult> {
@@ -178,8 +229,12 @@ export async function sendToNumber(input: ActionInput): Promise<ActionResult> {
       trackSource: "workflow-send-to-number",
       trackId,
     });
-    if (res.success) succeeded.push(phone);
-    else failures.push({ phone, error: res.error ?? "unknown send error" });
+    if (res.success) {
+      succeeded.push(phone);
+      await persistChatHistory(supabase, organizationId, wa.instance, phone, message, res.messageId);
+    } else {
+      failures.push({ phone, error: res.error ?? "unknown send error" });
+    }
   }
 
   // 7) Aggregate.
