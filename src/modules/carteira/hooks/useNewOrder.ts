@@ -42,6 +42,11 @@ export function useNewOrder() {
           sale_value: totalValue,
           source: params.source,
           origin: "upsell",
+          // Venda manual da carteira entra já aprovada — sem gate de aprovação
+          // (o gate default 'pending' tornava a venda invisível pra métrica até
+          // aprovação manual numa aba escondida). Ver migration recalc_upsell_client_metrics.
+          approval_status: "approved",
+          approved_at: new Date().toISOString(),
           sold_at: params.soldAt
             ? new Date(params.soldAt + "T12:00:00").toISOString()
             : undefined,
@@ -97,6 +102,11 @@ export function useNewOrder() {
       queryClient.invalidateQueries({ queryKey: ["portfolio-health"] });
       queryClient.invalidateQueries({ queryKey: ["last-order"] });
       queryClient.invalidateQueries({ queryKey: ["pending-orders"] });
+      // Métricas da carteira recomputam via trigger no insert (order approved) —
+      // invalidar pra refetch pegar os valores já atualizados.
+      queryClient.invalidateQueries({ queryKey: ["portfolio-kpis"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolio-clients"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolio-trends"] });
     },
   });
 }

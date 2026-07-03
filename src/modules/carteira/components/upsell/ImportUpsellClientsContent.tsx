@@ -637,14 +637,27 @@ export function ImportUpsellClientsContent({
               .filter(Boolean)
               .join(", ");
 
+            // upsell_orders exige sale_value > 0 (CHECK) e NOT NULL. Grupo sem
+            // valor não vira pedido — pula (não dá pra representar como order válida).
+            if (!saleValue || saleValue <= 0) {
+              continue;
+            }
+
             const { data: newOrder, error: orderError } = await supabase
               .from("upsell_orders")
               .insert({
                 organization_id: organizationId,
-                upsell_client_id: group.upsellClientId,
+                // FK correta é client_id (upsell_client_id não existe na tabela —
+                // insert falhava e todo pedido importado era pulado).
+                client_id: group.upsellClientId,
                 source: "csv_import",
-                sale_value: saleValue || null,
-                product_name: productNames || null,
+                // Colunas NOT NULL sem default: product_type + product_name.
+                product_type: "unitario",
+                // Histórico importado entra aprovado — conta na métrica.
+                approval_status: "approved",
+                approved_at: new Date().toISOString(),
+                sale_value: saleValue,
+                product_name: productNames || "Pedido importado",
                 sold_at: soldAt,
               })
               .select("id")
