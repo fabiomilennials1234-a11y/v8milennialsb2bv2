@@ -32,6 +32,13 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ERP_WEBHOOK_SECRET = Deno.env.get("ERP_ORDER_WEBHOOK_SECRET") || "";
 
+// CNPJ/CPF só dígitos; vazio → null
+function normalizeDoc(v?: string | null): string | null {
+  if (!v) return null;
+  const d = v.replace(/\D/g, "");
+  return d.length > 0 ? d : null;
+}
+
 interface ERPOrderPayload {
   organization_id: string;
   secret?: string;
@@ -102,68 +109,64 @@ Deno.serve(
 
       console.log(`[erp-order-webhook] org=${orgId} pedido=${pedido.id} cliente=${pedido.cliente.nome} itens=${pedido.itens.length}`);
 
-      // Match client by company name (case-insensitive)
+      // Match cliente: CNPJ (do payload) → nome exato → company → auto-cria.
+      // Modelo carteira person-based (cliente derivado do pedido). Ver Camada 2.
       const clientName = pedido.cliente.nome.trim();
-      const { data: matchedClients } = await supabase
-        .from("upsell_clients")
-        .select("id, name, closer_id")
-        .eq("organization_id", orgId)
-        .eq("is_active", true)
-        .ilike("name", clientName);
-
+      const cnpj = normalizeDoc(pedido.cliente.cpf_cnpj);
+      const nameNorm = clientName.toLowerCase().replace(/\s+/g, " ");
       let clientId: string | null = null;
       let closerId: string | null = null;
 
-      if (matchedClients && matchedClients.length > 0) {
-        clientId = matchedClients[0].id;
-        closerId = matchedClients[0].closer_id;
-      } else {
-        // Try matching by company field
-        const { data: companyMatch } = await supabase
-          .from("upsell_clients")
-          .select("id, name, closer_id")
-          .eq("organization_id", orgId)
-          .eq("is_active", true)
-          .ilike("company", clientName);
-
-        if (companyMatch && companyMatch.length > 0) {
-          clientId = companyMatch[0].id;
-          closerId = companyMatch[0].closer_id;
-        }
+      if (cnpj) {
+        const { data } = await supabase
+          .from("upsell_clients").select("id, closer_id")
+          .eq("organization_id", orgId).eq("cnpj", cnpj)
+          .order("updated_at", { ascending: false }).limit(1).maybeSingle();
+        if (data) { clientId = data.id; closerId = data.closer_id; }
       }
-
-      if (!clientId) {
-        console.log(`[erp-order-webhook] No matching client for "${clientName}" in org ${orgId}`);
-
-        await logRuntime({
-          organizationId: orgId,
-          module: "general",
-          action: "erp_order_import",
-          status: "skipped",
-          payloadSnapshot: {
-            reason: "no_client_match",
-            cliente: clientName,
-            pedido_id: pedido.id,
-          },
-        });
-
-        return new Response(
-          JSON.stringify({
-            ok: false,
-            reason: "no_client_match",
-            message: `No upsell_client matched for "${clientName}"`,
-          }),
-          { status: 200, headers: jsonHeaders },
+      if (!clientId && nameNorm) {
+        const { data } = await supabase
+          .from("upsell_clients").select("id, closer_id, name")
+          .eq("organization_id", orgId).ilike("name", clientName).limit(3);
+        const exact = (data ?? []).filter(
+          (r: { name?: string }) => (r.name ?? "").trim().toLowerCase().replace(/\s+/g, " ") === nameNorm,
         );
+        if (exact.length === 1) { clientId = exact[0].id; closerId = exact[0].closer_id; }
+      }
+      if (!clientId) {
+        const { data } = await supabase
+          .from("upsell_clients").select("id, closer_id")
+          .eq("organization_id", orgId).ilike("company", clientName).limit(1);
+        if (data && data.length > 0) { clientId = data[0].id; closerId = data[0].closer_id; }
+      }
+      // Auto-cria se não achou (não perde o pedido).
+      if (!clientId) {
+        const { data: novo, error: createErr } = await supabase
+          .from("upsell_clients").insert({
+            organization_id: orgId,
+            name: clientName || "Cliente ERP",
+            cnpj,
+            external_source: "tiny",
+            tiny_synced_at: new Date().toISOString(),
+            is_active: true,
+          }).select("id, closer_id").single();
+        if (createErr) {
+          console.error(`[erp-order-webhook] Failed to create client:`, createErr);
+          return new Response(
+            JSON.stringify({ ok: false, error: createErr.message }),
+            { status: 200, headers: jsonHeaders },
+          );
+        }
+        clientId = novo.id;
+        closerId = novo.closer_id;
       }
 
-      // Dedup: check if order with same TinyERP ID already exists
+      // Dedup por tiny_order_id (idempotente)
       const { data: existingOrder } = await supabase
         .from("upsell_orders")
         .select("id")
-        .eq("client_id", clientId)
-        .eq("source", "erp")
-        .eq("notes", `tiny:${pedido.id}`)
+        .eq("organization_id", orgId)
+        .eq("tiny_order_id", String(pedido.id))
         .maybeSingle();
 
       if (existingOrder) {
@@ -189,9 +192,12 @@ Deno.serve(
           product_name: productName,
           product_type: "unitario",
           sale_value: saleValue,
-          origin: "erp",
+          origin: "upsell", // CHECK só aceita new_business|upsell (não 'erp')
           source: "erp",
+          approval_status: "approved", // pedido do ERP entra aprovado → conta na métrica
+          approved_at: new Date().toISOString(),
           sold_at: pedido.data_pedido ? new Date(pedido.data_pedido).toISOString() : new Date().toISOString(),
+          tiny_order_id: String(pedido.id),
           notes: `tiny:${pedido.id}`,
         })
         .select("id")
@@ -224,7 +230,7 @@ Deno.serve(
 
       await logRuntime({
         organizationId: orgId,
-        module: "general",
+        module: "carteira",
         action: "erp_order_import",
         status: "success",
         entityType: "upsell_order",
@@ -252,7 +258,7 @@ Deno.serve(
       console.error("[erp-order-webhook] Error:", err);
 
       await logRuntime({
-        module: "general",
+        module: "carteira",
         action: "erp_order_import",
         status: "error",
         errorMessage: err instanceof Error ? err.message : String(err),
