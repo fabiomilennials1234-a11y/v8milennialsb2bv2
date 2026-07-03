@@ -77,7 +77,11 @@ export function useTVKPIs(range: TVPeriodRange): TVKPIValues {
       leads,
       leads_novos: newLeads.total,
       propostas: closerPerf.totals.propostas,
+      // Fix #23 (SP-0): base_ativa não tem métrica real de carteira ainda. Placeholder
+      // NÃO exibido — removido do pool de KPIs em tv-config-from-quiz. SP-3 liga o dado.
       base_ativa: 0,
+      // Fix #23 (SP-0): "respostas" hoje conta o stage "abordado" do kanban, NÃO respostas
+      // reais de conversation_messages. Exibido como "Leads Abordados" no TV até SP-3.
       respostas: leadsAbordado,
     };
   }, [

@@ -37,8 +37,11 @@ const KPI_TICKET_PROJ: TVKpi = { key: "ticket_proj", label: "Ticket Médio Proj.
 const KPI_LEADS: TVKpi = { key: "leads", label: "Leads p/ Trabalhar", color: "orange" };
 const KPI_LEADS_NOVOS: TVKpi = { key: "leads_novos", label: "Leads Novos", color: "blue" };
 const KPI_PROPOSTAS: TVKpi = { key: "propostas", label: "Propostas Enviadas", color: "purple" };
-const KPI_BASE_ATIVA: TVKpi = { key: "base_ativa", label: "Base Ativa", color: "emerald" };
-const KPI_RESPOSTAS: TVKpi = { key: "respostas", label: "Respostas", color: "blue" };
+// Fix #23 (SP-0): "Base Ativa" era placeholder hardcoded 0 em useTVKPIs — removido
+// do pool de KPIs até SP-3 ligar a métrica real de carteira. Nunca exibir 0 como dado.
+// "Respostas" media na verdade o stage "abordado" do kanban, NÃO respostas reais de
+// conversation_messages — rotulado honestamente como "Leads Abordados" até SP-3.
+const KPI_RESPOSTAS: TVKpi = { key: "respostas", label: "Leads Abordados", color: "blue" };
 
 // ── Default Config ─────────────────────────────────────────
 
@@ -92,14 +95,12 @@ export function generateTVConfig(answers?: OnboardingAnswers | null): TVConfig {
 
   kpis.push(KPI_TICKET_MRR);
 
-  if (wantsCarteira) {
-    kpis.push(KPI_BASE_ATIVA);
-  } else {
-    kpis.push(KPI_LEADS);
-  }
+  // Fix #23 (SP-0): carteira orgs recebiam "Base Ativa" (placeholder hardcoded 0).
+  // Até SP-3 ligar a métrica real, mostrar "Leads p/ Trabalhar" (dado real) pra todos.
+  kpis.push(KPI_LEADS);
 
   // Fill up to 6 KPIs if we have less
-  const fallbackPool = [KPI_TICKET_PROJ, KPI_LEADS, KPI_PROPOSTAS, KPI_LEADS_NOVOS, KPI_REUNIOES, KPI_NOSHOW, KPI_RESPOSTAS, KPI_BASE_ATIVA];
+  const fallbackPool = [KPI_TICKET_PROJ, KPI_LEADS, KPI_PROPOSTAS, KPI_LEADS_NOVOS, KPI_REUNIOES, KPI_NOSHOW, KPI_RESPOSTAS];
   for (const fallback of fallbackPool) {
     if (kpis.length >= 6) break;
     if (!kpis.some(k => k.key === fallback.key)) {
