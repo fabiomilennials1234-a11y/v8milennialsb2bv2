@@ -59,6 +59,9 @@ export function useCreateOrder() {
           sale_value: totalValue,
           source: params.source,
           origin: "upsell",
+          // Venda manual entra aprovada — ver useNewOrder / migration recalc.
+          approval_status: "approved",
+          approved_at: new Date().toISOString(),
         })
         .select("id")
         .single();
@@ -88,6 +91,9 @@ export function useCreateOrder() {
       queryClient.invalidateQueries({ queryKey: ["upsell_clients"] });
       queryClient.invalidateQueries({ queryKey: ["portfolio-health"] });
       queryClient.invalidateQueries({ queryKey: ["last-order"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolio-kpis"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolio-clients"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolio-trends"] });
     },
   });
 }

@@ -73,10 +73,15 @@ export function useCreateUpsellOrder() {
         contract_duration?: number | null;
       };
     }) => {
-      // 1. Criar order
+      // 1. Criar order — venda rápida entra aprovada (sem gate). Caller pode
+      // sobrescrever approval_status explicitamente se precisar.
       const { data: orderData, error: orderError } = await supabase
         .from("upsell_orders")
-        .insert(params.order)
+        .insert({
+          approval_status: "approved",
+          approved_at: new Date().toISOString(),
+          ...params.order,
+        })
         .select()
         .single();
 
@@ -97,6 +102,9 @@ export function useCreateUpsellOrder() {
       queryClient.invalidateQueries({ queryKey: ["upsell_orders"] });
       queryClient.invalidateQueries({ queryKey: ["upsell_client_products"] });
       queryClient.invalidateQueries({ queryKey: ["upsell_clients"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolio-kpis"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolio-clients"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolio-trends"] });
     },
   });
 }

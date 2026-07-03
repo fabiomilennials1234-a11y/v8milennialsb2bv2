@@ -682,6 +682,9 @@ export function ImportUpsellClientsContent({
                 organization_id: organizationId,
                 client_id: group.upsellClientId,
                 source: "csv_import",
+                // Histórico importado entra aprovado — conta na métrica (recompute síncrono).
+                approval_status: "approved",
+                approved_at: new Date().toISOString(),
                 sale_value: saleValue,
                 product_name: productNames || "Importação",
                 product_type: "unitario",

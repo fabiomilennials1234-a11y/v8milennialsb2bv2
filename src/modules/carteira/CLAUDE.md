@@ -90,7 +90,11 @@ Re-exportados via index.ts: `PortfolioKPIs`, `PortfolioClientRow`, `PortfolioCli
 
 🟠 **Auto-move upsell** — cron move clientes entre stages baseado em regras (`useUpsellGestaoRules`). `useAutoMoveUpsellClients` lê dados; cron real é edge function (`auto-move-upsell-clients`? — slice 15 audita nome).
 
-🟠 **Portfolio health snapshots** — `calculate-portfolio-health` edge function escreve `portfolio_health_snapshots` (diário). `usePortfolioKPIs`/`usePortfolioTrends` leem snapshot mais recente. Se cron falhar, KPIs ficam stale.
+🟠 **Portfolio health snapshots** — `calculate-portfolio-health` edge function escreve `client_health_snapshots` (a cada 30min) + colunas derivadas em `upsell_clients`. `usePortfolioTrends` lê snapshots; `usePortfolioKPIs` (`get_portfolio_kpis`) lê colunas de `upsell_clients` direto.
+
+🟢 **Recompute síncrono de métricas de dinheiro** (migration `20270107000000`, 2026-07-03) — trigger `trg_upsell_order_recalc_metrics` em `upsell_orders` chama `recalc_upsell_client_metrics(client_id)` a cada order `approved` que entra/sai/muda. Recomputa `avg_ticket`, `last_order_at`, `next_order_expected`, `order_count`, `lifetime_value`, `reorder_cycle_days`, `days_since_last_order` na hora (antes só o cron 30min). **health_score/segment/churn/trend continuam no cron** — não replicar em SQL. Semântica espelha `calculate-portfolio-health`; ao mexer no cálculo de dinheiro, mudar OS DOIS em sincronia senão divergem (KPI flica entre trigger e cron).
+
+🔴 **Venda manual auto-aprovada** — `useNewOrder`/`useCreateOrder`/`useCreateUpsellOrder` + import gravam `approval_status:'approved'`. O default da coluna é `'pending'` e pending é invisível pra métrica (cron + `get_portfolio_kpis` só contam `approved`). Qualquer novo caminho que insira em `upsell_orders` e queira contar na métrica DEVE setar `approved` (ou o pedido some até aprovação manual na aba Aprovações).
 
 ## Dependências cross-module
 
