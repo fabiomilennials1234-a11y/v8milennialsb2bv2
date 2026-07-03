@@ -149,7 +149,6 @@ Deno.serve(
     const orgId = body.organization_id;
     const dryRun = body.dry_run === true;
     const monthsBack = Math.max(1, Math.min(body.months_back ?? 12, 120));
-    const startPage = Math.max(1, body.start_page ?? 1);
     const maxPages = Math.max(1, Math.min(body.max_pages ?? 5, 50));
     const maxObter = Math.max(1, Math.min(body.max_obter ?? 120, 500));
     const rateMs = Math.max(0, Math.min(body.rate_ms ?? 350, 3000));
@@ -158,8 +157,16 @@ Deno.serve(
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
     const { data: conn } = await supabase
-      .from("tinyerp_connections").select("id, status").eq("organization_id", orgId).eq("status", "connected").maybeSingle();
+      .from("tinyerp_connections").select("id, status, order_pull_cursor").eq("organization_id", orgId).eq("status", "connected").maybeSingle();
     if (!conn) return new Response(JSON.stringify({ ok: false, reason: "not_connected" }), { status: 200, headers });
+
+    // Cursor: cron reentra sem estado próprio. body.start_page sobrepõe (rodada manual).
+    const cursor: number | null = (conn as { order_pull_cursor?: number | null }).order_pull_cursor ?? null;
+    const useCursor = body.start_page == null;
+    if (useCursor && cursor === 0) {
+      return new Response(JSON.stringify({ ok: true, done: true, reason: "backfill_complete" }), { status: 200, headers });
+    }
+    const startPage = Math.max(1, body.start_page ?? cursor ?? 1);
 
     const tokenData = await getOrgTinyToken(supabase, orgId);
     if (!tokenData) return new Response(JSON.stringify({ ok: false, reason: "no_token" }), { status: 200, headers });
@@ -285,7 +292,11 @@ Deno.serve(
       }
 
       if (!dryRun) {
-        await supabase.from("tinyerp_connections").update({ last_order_pull_at: nowIso }).eq("id", conn.id);
+        const patch: Record<string, unknown> = { last_order_pull_at: nowIso };
+        // Avança cursor só quando rodando pelo cron (sem start_page explícito).
+        // next_page null = fim → 0 (concluído, idle nas próximas rodadas).
+        if (useCursor) patch.order_pull_cursor = stats.next_page ?? 0;
+        await supabase.from("tinyerp_connections").update(patch).eq("id", conn.id);
       }
 
       return new Response(
