@@ -36,13 +36,18 @@ CREATE UNIQUE INDEX idx_send_dedup_log_idk_partial
 
 ALTER TABLE public.send_dedup_log ENABLE ROW LEVEL SECURITY;
 
+-- Tenant isolation via get_my_organization_ids() (SECURITY DEFINER, bypasses RLS
+-- to avoid recursion — the project standard). The original draft referenced a
+-- non-existent auth.org_id(), which is why this migration never applied. Edge
+-- functions write via service_role (RLS bypassed); these policies gate the
+-- authenticated role.
 CREATE POLICY "tenant_isolation_select" ON public.send_dedup_log
-  FOR SELECT USING (org_id = auth.org_id());
+  FOR SELECT USING (org_id IN (SELECT get_my_organization_ids()));
 
 CREATE POLICY "tenant_isolation_all" ON public.send_dedup_log
   FOR ALL
-  USING (org_id = auth.org_id())
-  WITH CHECK (org_id = auth.org_id());
+  USING (org_id IN (SELECT get_my_organization_ids()))
+  WITH CHECK (org_id IN (SELECT get_my_organization_ids()));
 
 GRANT SELECT, INSERT ON public.send_dedup_log TO authenticated;
 GRANT ALL ON public.send_dedup_log TO service_role;
