@@ -50,6 +50,9 @@ export function useNewOrder() {
             sale_value: params.saleValue,
             source: params.source,
             origin: "upsell",
+            // venda avulsa também entra aprovada (mesmo motivo do modo items)
+            approval_status: "approved",
+            approved_at: new Date().toISOString(),
             sold_at: soldAtIso,
             notes: params.notes || null,
           })
@@ -85,6 +88,11 @@ export function useNewOrder() {
           sale_value: totalValue,
           source: params.source,
           origin: "upsell",
+          // Venda manual da carteira entra já aprovada — sem gate de aprovação
+          // (default 'pending' tornava a venda invisível pra métrica). Ver
+          // migration recalc_upsell_client_metrics (recompute síncrono).
+          approval_status: "approved",
+          approved_at: new Date().toISOString(),
           sold_at: soldAtIso,
           notes: params.notes || null,
         })
@@ -138,6 +146,11 @@ export function useNewOrder() {
       queryClient.invalidateQueries({ queryKey: ["portfolio-health"] });
       queryClient.invalidateQueries({ queryKey: ["last-order"] });
       queryClient.invalidateQueries({ queryKey: ["pending-orders"] });
+      // Métricas da carteira recomputam via trigger no insert (order approved) —
+      // invalidar pra refetch pegar os valores já atualizados.
+      queryClient.invalidateQueries({ queryKey: ["portfolio-kpis"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolio-clients"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolio-trends"] });
     },
   });
 }
