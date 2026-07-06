@@ -210,6 +210,9 @@ function AppRoutes() {
     <Routes>
       <Route path="/landing" element={<Landing />} />
       <Route path="/auth" element={<AuthRoute />} />
+      {/* Self-hosted reset: token vem no path. A rota sem token renderiza o
+          estado "link inválido" amigável (mesma página). */}
+      <Route path="/reset-password/:token" element={<ResetPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       {/* Signup dedicado — renderiza a página (honra ?plan vindo do pricing) em vez de redirecionar p/ /auth e perder o plano */}
       <Route path="/signup" element={<Signup />} />

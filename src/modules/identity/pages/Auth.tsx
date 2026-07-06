@@ -37,13 +37,18 @@ export default function Auth() {
     }
     setLoading(true);
     try {
-      const redirectUrl = `${window.location.origin}/reset-password`;
-      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl });
+      // Self-hosted reset flow (não usa mais o mailer/PKCE do Supabase Auth).
+      // A resposta do backend é genérica de propósito (anti-enumeração): não
+      // revela se o e-mail existe. Por isso mostramos sempre o mesmo estado de
+      // sucesso, salvo falha de rede/infra.
+      const { error } = await supabase.functions.invoke('forgot-password', {
+        body: { email: email.trim() },
+      });
       if (error) {
-        toast({ title: 'Erro ao enviar e-mail', description: error.message, variant: 'destructive' });
+        toast({ title: 'Erro ao enviar e-mail', description: 'Tente novamente mais tarde.', variant: 'destructive' });
       } else {
         setResetEmailSent(true);
-        toast({ title: 'E-mail enviado', description: 'Verifique sua caixa de entrada para redefinir a senha.' });
+        toast({ title: 'E-mail enviado', description: 'Se o e-mail estiver cadastrado, você receberá o link.' });
       }
     } catch {
       toast({ title: 'Erro inesperado', description: 'Tente novamente mais tarde.', variant: 'destructive' });
