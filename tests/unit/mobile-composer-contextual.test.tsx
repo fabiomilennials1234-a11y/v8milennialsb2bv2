@@ -74,7 +74,16 @@ vi.mock("@/modules/communication/lib/audioToMp3", () => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+}));
+
+// Templates + team member (para o slash popover de "Template rápido")
+let mockTemplateList: unknown[] = [];
+vi.mock("@/modules/communication/hooks/useMessageTemplates", () => ({
+  useMessageTemplates: () => ({ data: mockTemplateList }),
+}));
+vi.mock("@/modules/identity/org-team/hooks/useCurrentTeamMember", () => ({
+  useCurrentTeamMember: () => ({ data: { id: "tm1", name: "Vendedor" } }),
 }));
 
 // Framer motion — simplify for tests
@@ -124,9 +133,12 @@ function renderComposer(overrides?: Partial<typeof BASE_PROPS>) {
 describe("MobileComposerContextual", () => {
   beforeEach(() => {
     mockDraft = "";
+    mockTemplateList = [];
     mockSendMutateAsync.mockClear();
     mockMediaMutateAsync.mockClear();
     mockSetDraft.mockClear();
+    // jsdom não implementa scrollIntoView (usado na navegação ↑↓ do popover)
+    HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
   // ─── Cycle 1: IDLE state ───────────────────────────────────
@@ -204,5 +216,57 @@ describe("MobileComposerContextual", () => {
     renderComposer();
     fireEvent.click(screen.getByLabelText("Gravar audio"));
     expect(screen.getByTestId("audio-recorder")).toBeInTheDocument();
+  });
+
+  // ─── Template slash popover (fix: botão Template era morto) ─────
+  const TEXT_TPL = {
+    id: "t1", organization_id: "org1", command: "ola", display_name: "Saudação",
+    body: "Olá {nome}!", media_url: null, media_type: "text",
+    created_by: "u", updated_at: "", created_at: "",
+  };
+  const MEDIA_TPL = {
+    id: "t2", organization_id: "org1", command: "catalogo", display_name: "Catálogo",
+    body: "Veja {nome}", media_url: "https://cdn.example/catalogo.pdf", media_type: "document",
+    created_by: "u", updated_at: "", created_at: "",
+  };
+
+  function openTemplatePopover() {
+    fireEvent.click(screen.getByLabelText("Abrir acoes"));
+    fireEvent.click(screen.getByLabelText("Template"));
+  }
+
+  it("abre o slash popover com templates ao tocar em 'Template'", () => {
+    mockTemplateList = [TEXT_TPL, MEDIA_TPL];
+    renderComposer();
+    openTemplatePopover();
+    expect(screen.getByText("/ola")).toBeInTheDocument();
+    expect(screen.getByText("/catalogo")).toBeInTheDocument();
+  });
+
+  it("template de texto preenche o input com as variáveis resolvidas", () => {
+    mockTemplateList = [TEXT_TPL];
+    renderComposer();
+    openTemplatePopover();
+    fireEvent.click(screen.getByText("/ola"));
+    // selectedContact.lead_name = "João da Silva"
+    expect(mockSetDraft).toHaveBeenCalledWith("Olá João da Silva!");
+    expect(mockMediaMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("template com mídia dispara envio de mídia (não só texto)", async () => {
+    mockTemplateList = [MEDIA_TPL];
+    renderComposer();
+    openTemplatePopover();
+    fireEvent.click(screen.getByText("/catalogo"));
+    await waitFor(() => {
+      expect(mockMediaMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mediaType: "document",
+          media: "https://cdn.example/catalogo.pdf",
+          caption: "Veja João da Silva",
+          instanceId: "inst-uuid-1",
+        }),
+      );
+    });
   });
 });

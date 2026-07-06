@@ -10,19 +10,26 @@
  * Replaces ChatComposer + ChatQuickActions on mobile surfaces.
  */
 import { useRef, useState, useCallback, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Send, Mic, Camera, Paperclip, FileText, Clock, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/modules/identity";
+import { useAuth, useCurrentTeamMember } from "@/modules/identity";
 import { useConversationDraft } from "@/modules/communication/hooks/useConversationDraft";
 import { useSendWhatsAppMessage, useSendWhatsAppMedia } from "@/modules/communication/hooks/chat/useWhatsAppSend";
+import { useMessageTemplates } from "@/modules/communication/hooks/useMessageTemplates";
 import { useKeyboardOffset } from "@/shared/hooks/use-keyboard-offset";
 import { AudioRecorder } from "@/modules/communication/components/chat/media/AudioRecorder";
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
+import { SlashCommandPopover } from "@/modules/communication/components/chat/SlashCommandPopover";
+import { resolveVariables } from "@/lib/template-variables";
 import { convertAudioBlobToMp3 } from "@/modules/communication/lib/audioToMp3";
+import type { LeadContext, AttendantContext } from "@/lib/template-variables";
+import type { MessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,15 +75,35 @@ export function MobileComposerContextual({
   selectedContact,
 }: MobileComposerContextualProps) {
   const { user } = useAuth();
+  const { data: teamMember } = useCurrentTeamMember();
   const { draft: message, setDraft: setMessage } = useConversationDraft(conversationKey, user?.id);
   const { offset } = useKeyboardOffset();
 
   const sendMessage = useSendWhatsAppMessage();
   const sendMedia = useSendWhatsAppMedia();
 
+  const { data: templates } = useMessageTemplates();
+
+  // Dados do lead para resolução de variáveis de template
+  const { data: leadForTemplates } = useQuery({
+    queryKey: ["lead-for-templates", leadId],
+    queryFn: async () => {
+      if (!leadId) return null;
+      const { data } = await supabase
+        .from("leads")
+        .select("name, company, email, phone, source, interest, segment, campaign_name")
+        .eq("id", leadId)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!leadId,
+    staleTime: 1000 * 60 * 5,
+  });
+
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [trayOpen, setTrayOpen] = useState(false);
+  const [showSlashPopover, setShowSlashPopover] = useState(false);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -163,6 +190,47 @@ export function MobileComposerContextual({
     }
   }, [phoneNumber, instanceName, instanceId, sendMedia]);
 
+  const handleSlashSelect = useCallback(async (template: MessageTemplate) => {
+    const leadCtx: LeadContext = {
+      name: leadForTemplates?.name ?? selectedContact?.lead_name ?? selectedContact?.push_name ?? undefined,
+      company: leadForTemplates?.company ?? undefined,
+      email: leadForTemplates?.email ?? undefined,
+      phone: leadForTemplates?.phone ?? phoneNumber ?? undefined,
+      source: leadForTemplates?.source ?? undefined,
+      interest: leadForTemplates?.interest ?? undefined,
+      segment: leadForTemplates?.segment ?? undefined,
+      campaign_name: leadForTemplates?.campaign_name ?? undefined,
+    };
+    const attendantCtx: AttendantContext = { name: teamMember?.name ?? undefined };
+    const resolved = resolveVariables(template.body, leadCtx, attendantCtx);
+    setShowSlashPopover(false);
+
+    // Template com mídia → envia direto (o corpo resolvido vira caption).
+    if (template.media_url && template.media_type !== "text") {
+      if (!instanceName) return;
+      try {
+        await sendMedia.mutateAsync({
+          phoneNumber,
+          instanceName,
+          instanceId,
+          mediaType: template.media_type,
+          media: template.media_url,
+          caption: template.media_type === "audio" ? undefined : (resolved || undefined),
+          leadId: leadId ?? null,
+        });
+        setMessage("");
+        toast.success("Template enviado!");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Erro ao enviar template");
+      }
+      return;
+    }
+
+    // Template de texto → preenche input para revisão antes de enviar.
+    setMessage(resolved);
+    inputRef.current?.focus();
+  }, [leadForTemplates, selectedContact, phoneNumber, instanceName, instanceId, leadId, teamMember, sendMedia, setMessage]);
+
   const handleTrayAction = useCallback((action: TrayAction) => {
     switch (action) {
       case "camera":
@@ -174,6 +242,7 @@ export function MobileComposerContextual({
       case "template":
         setTrayOpen(false);
         setMessage("/");
+        setShowSlashPopover(true);
         inputRef.current?.focus();
         break;
       case "schedule":
@@ -292,17 +361,31 @@ export function MobileComposerContextual({
           />
         </Button>
 
-        {/* Text input — textarea p/ suportar quebra de linha */}
-        <Textarea
-          ref={inputRef}
-          rows={1}
-          placeholder={`Mensagem para ${contactName}...`}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          disabled={isSending}
-          aria-label={`Mensagem para ${contactName}`}
-          className="flex-1 min-h-[40px] max-h-32 resize-none rounded-2xl border border-border/60 bg-background py-2 leading-5"
-        />
+        {/* Text input — textarea p/ suportar quebra de linha + slash popover */}
+        <div className="relative flex-1">
+          {showSlashPopover && templates && (
+            <SlashCommandPopover
+              query={message}
+              templates={templates}
+              onSelect={handleSlashSelect}
+              onClose={() => setShowSlashPopover(false)}
+            />
+          )}
+          <Textarea
+            ref={inputRef}
+            rows={1}
+            placeholder={`Mensagem para ${contactName}...`}
+            value={message}
+            onChange={(e) => {
+              const val = e.target.value;
+              setMessage(val);
+              setShowSlashPopover(val.startsWith("/") && val.length > 0);
+            }}
+            disabled={isSending}
+            aria-label={`Mensagem para ${contactName}`}
+            className="w-full min-h-[40px] max-h-32 resize-none rounded-2xl border border-border/60 bg-background py-2 leading-5"
+          />
+        </div>
 
         {/* Mic or Send */}
         {hasText ? (
