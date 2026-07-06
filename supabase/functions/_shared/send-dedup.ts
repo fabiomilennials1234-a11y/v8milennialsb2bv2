@@ -91,7 +91,11 @@ export async function tryReserveSend(args: TryReserveSendArgs): Promise<DedupRes
     .select()
     .maybeSingle();
 
-  if (insertError) {
+  // A unique violation (23505) IS the dedup signal — the slot is already held
+  // inside the active window. Anything else is a real infra error and is thrown
+  // so the caller's fail-open wrapper can let the send through (never drop a
+  // customer message because the dedup table hiccuped).
+  if (insertError && insertError.code !== "23505") {
     throw new Error(`send-dedup insert failed: ${insertError.message ?? insertError}`);
   }
 
@@ -143,6 +147,58 @@ export async function tryReserveSend(args: TryReserveSendArgs): Promise<DedupRes
     firstSentAt: existing.reserved_at,
     ttlSeconds: Math.max(0, Math.ceil(remainingMs / 1000)),
   };
+}
+
+/**
+ * Fail-open convenience wrapper for the common "reserve an outbound send by its
+ * content, skip if it's a duplicate" flow. Hashes the content, reserves a slot,
+ * and returns whether the caller should SKIP the send.
+ *
+ * Fail-open by design: if the dedup infra errors (table missing on an env, RLS,
+ * transient DB blip), it returns `{ duplicate: false }` so the send proceeds.
+ * Dropping a real customer message because a best-effort dedup hiccuped is worse
+ * than the rare duplicate this guards against.
+ *
+ * Empty/whitespace content is never deduped (nothing meaningful to hash).
+ */
+export async function reserveSendOrSkip(args: {
+  supabase: any;
+  orgId: string;
+  phone: string;
+  content: string | null | undefined;
+  source: SendSource;
+  idempotencyKey?: string;
+  windowSeconds?: number;
+}): Promise<{ duplicate: boolean; firstSentAt?: string; ttlSeconds?: number }> {
+  try {
+    if (!args.orgId || !args.phone) return { duplicate: false };
+    const text = (args.content ?? "").trim();
+    if (!text) return { duplicate: false };
+
+    const contentHash = await hashContent(text);
+    const result = await tryReserveSend({
+      supabase: args.supabase,
+      orgId: args.orgId,
+      phone: args.phone,
+      contentHash,
+      source: args.source,
+      idempotencyKey: args.idempotencyKey,
+      windowSeconds: args.windowSeconds,
+    });
+
+    if (result.kind === "duplicate") {
+      console.warn(
+        `[send-dedup] BLOCKED duplicate ${args.source} send to ${args.phone} ` +
+        `(first sent ${result.firstSentAt}, ${result.ttlSeconds}s window)`,
+      );
+      return { duplicate: true, firstSentAt: result.firstSentAt, ttlSeconds: result.ttlSeconds };
+    }
+    return { duplicate: false };
+  } catch (err) {
+    // Fail-open: never block a send because dedup infra failed.
+    console.warn("[send-dedup] reserve failed, sending anyway (fail-open):", err instanceof Error ? err.message : err);
+    return { duplicate: false };
+  }
 }
 
 export async function hashContent(text: string): Promise<string> {

@@ -29,6 +29,11 @@ vi.mock("../../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
   getPipeEntry: vi.fn().mockResolvedValue(null),
 }));
 
+// Mock send-dedup — default: not a duplicate (existing tests send normally).
+vi.mock("../../../supabase/functions/_shared/send-dedup.ts", () => ({
+  reserveSendOrSkip: vi.fn().mockResolvedValue({ duplicate: false }),
+}));
+
 // Partial-mock whatsapp-helpers: keep the real resolvers, but control the
 // recipient reachability gate. Default (unset) → undefined → no gate.
 vi.mock("../../../supabase/functions/_shared/action-handlers/whatsapp-helpers.ts", async (orig) => ({
@@ -40,6 +45,7 @@ import { sendWhatsApp } from "../../../supabase/functions/_shared/action-handler
 import { recipientGate } from "../../../supabase/functions/_shared/action-handlers/whatsapp-helpers";
 import { sendMessage } from "../../../supabase/functions/_shared/message-gateway";
 import { sendTextViaInstance } from "../../../supabase/functions/_shared/whatsapp-dispatch";
+import { reserveSendOrSkip } from "../../../supabase/functions/_shared/send-dedup";
 
 const WA_INSTANCE = {
   id: "inst-1",
@@ -94,6 +100,17 @@ describe("sendWhatsApp action handler", () => {
     const result = await sendWhatsApp(input);
     expect(result.success).toBe(false);
     expect(result.error).toContain("leadId");
+  });
+
+  it("skips the send (no provider call) when the content-dedup flags a duplicate", async () => {
+    vi.mocked(reserveSendOrSkip).mockResolvedValueOnce({ duplicate: true });
+    const { input } = makeInput();
+    const result = await sendWhatsApp(input);
+    expect(result.success).toBe(true);
+    expect(result.message).toMatch(/duplicate/i);
+    // Neither the gateway nor the legacy provider send was attempted.
+    expect(vi.mocked(sendMessage)).not.toHaveBeenCalled();
+    expect(vi.mocked(sendTextViaInstance)).not.toHaveBeenCalled();
   });
 
   it("returns error when no WhatsApp instance available", async () => {

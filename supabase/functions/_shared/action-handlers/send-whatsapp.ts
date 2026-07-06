@@ -5,6 +5,7 @@
 
 import type { ActionInput, ActionResult } from "./types.ts";
 import { sendMessage } from "../message-gateway.ts";
+import { reserveSendOrSkip } from "../send-dedup.ts";
 import {
   getWhatsAppInstance,
   getLeadPhone,
@@ -41,6 +42,14 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
   const template = (params.messageTemplate as string) || "";
   const message = await resolveVariables(supabase, leadId, template, executionContext);
   if (!message) return { success: false, error: "Empty message template", retryable: false };
+
+  // Content-hash dedup backstop (fail-open): blocks an identical workflow text to
+  // the same number inside the 300s window even if a duplicate execution slipped
+  // past the trigger-level dedup (retry, resumed wait node, un-keyed insert path).
+  const { duplicate } = await reserveSendOrSkip({
+    supabase, orgId: organizationId, phone, content: message, source: "workflow",
+  });
+  if (duplicate) return { success: true, message: "WhatsApp text skipped (duplicate within window)" };
 
   const trackId = buildTrackId(params);
 

@@ -136,6 +136,7 @@ import {
   hashContent,
   getDefaultWindow,
   tryReserveSend,
+  reserveSendOrSkip,
   type SendSource,
 } from "../../supabase/functions/_shared/send-dedup.ts";
 
@@ -282,5 +283,68 @@ describe("tryReserveSend — behavior contract", () => {
     expect(replay.kind).toBe("ok");
 
     vi.useRealTimers();
+  });
+
+  // The in-memory fake models a conflict as {data:null, error:null}. Real
+  // supabase-js returns a 23505 error object on a unique violation — the ORIGINAL
+  // module threw on it (bug: it treated the dedup signal as a fatal error). These
+  // drive that real shape directly.
+  it("treats a real 23505 unique violation as duplicate (not a thrown error)", async () => {
+    const sb = {
+      from: () => ({
+        insert: () => ({ select: () => ({ maybeSingle: async () => ({ data: null, error: { code: "23505", message: "duplicate key" } }) }) }),
+        select: () => {
+          const chain: any = {};
+          for (const m of ["eq", "gt", "order", "limit"]) chain[m] = () => chain;
+          chain.maybeSingle = async () => ({ data: { reserved_at: "2026-07-03T10:00:00Z", expires_at: "2026-07-03T10:05:00Z" }, error: null });
+          return chain;
+        },
+      }),
+    } as any;
+    const r = await tryReserveSend({ supabase: sb, orgId: "o", phone: "p", contentHash: "h", source: "workflow" });
+    expect(r.kind).toBe("duplicate");
+  });
+
+  it("throws on a non-23505 infra error so the caller can fail-open", async () => {
+    const sb = {
+      from: () => ({
+        insert: () => ({ select: () => ({ maybeSingle: async () => ({ data: null, error: { code: "42P01", message: "relation does not exist" } }) }) }),
+      }),
+    } as any;
+    await expect(
+      tryReserveSend({ supabase: sb, orgId: "o", phone: "p", contentHash: "h", source: "workflow" }),
+    ).rejects.toThrow(/send-dedup insert failed/);
+  });
+});
+
+describe("reserveSendOrSkip — fail-open wrapper", () => {
+  it("not-duplicate on a fresh reserve", async () => {
+    const { client } = createFakeSupabase();
+    const r = await reserveSendOrSkip({ supabase: client, orgId: "o", phone: "p", content: "Olá!", source: "workflow" });
+    expect(r.duplicate).toBe(false);
+  });
+
+  it("duplicate=true on the second identical send within the window", async () => {
+    const { client } = createFakeSupabase();
+    const a = { supabase: client, orgId: "o", phone: "p", content: "Mesma msg", source: "workflow" as const };
+    expect((await reserveSendOrSkip(a)).duplicate).toBe(false);
+    expect((await reserveSendOrSkip(a)).duplicate).toBe(true);
+  });
+
+  it("FAILS OPEN (duplicate=false) when the dedup infra errors — never drops a real send", async () => {
+    const sb = {
+      from: () => ({
+        insert: () => ({ select: () => ({ maybeSingle: async () => ({ data: null, error: { code: "42P01", message: "no table" } }) }) }),
+      }),
+    } as any;
+    const r = await reserveSendOrSkip({ supabase: sb, orgId: "o", phone: "p", content: "hi", source: "workflow" });
+    expect(r.duplicate).toBe(false);
+  });
+
+  it("never dedups empty/whitespace content (no reservation attempted)", async () => {
+    const from = vi.fn();
+    const r = await reserveSendOrSkip({ supabase: { from } as any, orgId: "o", phone: "p", content: "   ", source: "workflow" });
+    expect(r.duplicate).toBe(false);
+    expect(from).not.toHaveBeenCalled();
   });
 });

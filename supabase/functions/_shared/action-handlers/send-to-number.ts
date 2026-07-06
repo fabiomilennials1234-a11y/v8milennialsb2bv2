@@ -42,6 +42,7 @@ import {
 } from "./whatsapp-helpers.ts";
 import { sendTextViaInstance, normalizeBrazilianPhone } from "../whatsapp-dispatch.ts";
 import { summarizeConversation } from "./ai-operations.ts";
+import { reserveSendOrSkip } from "../send-dedup.ts";
 
 /** Parse + normalize + dedupe the configured destination numbers. */
 function resolveDestinations(raw: unknown): { valid: string[]; invalid: string[] } {
@@ -225,6 +226,11 @@ export async function sendToNumber(input: ActionInput): Promise<ActionResult> {
   const succeeded: string[] = [];
 
   for (const phone of reachable) {
+    // Content-hash dedup backstop (fail-open): if this exact notification already
+    // went to this number inside the window, count it delivered and skip re-send.
+    const dedup = await reserveSendOrSkip({ supabase, orgId: organizationId, phone, content: message, source: "workflow" });
+    if (dedup.duplicate) { succeeded.push(phone); continue; }
+
     const res = await sendTextViaInstance(supabase, wa.instance, phone, message, {
       trackSource: "workflow-send-to-number",
       trackId,

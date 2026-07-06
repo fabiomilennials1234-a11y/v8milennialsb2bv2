@@ -5,6 +5,7 @@
 
 import type { ActionInput, ActionResult } from "./types.ts";
 import { sendMessage } from "../message-gateway.ts";
+import { reserveSendOrSkip } from "../send-dedup.ts";
 import { getWhatsAppProvider } from "../whatsapp-client.ts";
 import { sendAudioViaProvider } from "../audio-sender.ts";
 import {
@@ -41,6 +42,10 @@ export async function sendWhatsAppAudio(input: ActionInput): Promise<ActionResul
 
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
   if (recipientBlock) return recipientBlock;
+
+  // Content-hash dedup backstop (fail-open) keyed on the media URL.
+  const audioDedup = await reserveSendOrSkip({ supabase, orgId: organizationId, phone, content: `audio:${audioUrl}`, source: "workflow" });
+  if (audioDedup.duplicate) return { success: true, message: "WhatsApp audio skipped (duplicate within window)" };
 
   const trackId = buildTrackId(params);
 
@@ -127,6 +132,11 @@ export async function sendWhatsAppImage(input: ActionInput): Promise<ActionResul
 
   const caption = (params.imageCaption as string) || "";
   const resolvedCaption = await resolveVariables(supabase, leadId, caption, executionContext);
+
+  // Content-hash dedup backstop (fail-open) keyed on the image URL + caption.
+  const imgDedup = await reserveSendOrSkip({ supabase, orgId: organizationId, phone, content: `image:${imageUrl}|${resolvedCaption}`, source: "workflow" });
+  if (imgDedup.duplicate) return { success: true, message: "WhatsApp image skipped (duplicate within window)" };
+
   const trackId = buildTrackId(params);
 
   // Gateway dual-path
@@ -189,6 +199,10 @@ export async function sendWhatsAppSticker(input: ActionInput): Promise<ActionRes
 
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
   if (recipientBlock) return recipientBlock;
+
+  // Content-hash dedup backstop (fail-open) keyed on the sticker URL.
+  const stickerDedup = await reserveSendOrSkip({ supabase, orgId: organizationId, phone, content: `sticker:${stickerUrl}`, source: "workflow" });
+  if (stickerDedup.duplicate) return { success: true, message: "WhatsApp sticker skipped (duplicate within window)" };
 
   const trackId = buildTrackId(params);
 
