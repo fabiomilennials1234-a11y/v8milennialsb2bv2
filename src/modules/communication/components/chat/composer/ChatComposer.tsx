@@ -151,7 +151,7 @@ export function ChatComposer({
     }
   }, [message, instanceName, phoneNumber, instanceId, sendMessage, setMessage]);
 
-  const handleSlashSelect = useCallback((template: MessageTemplate) => {
+  const handleSlashSelect = useCallback(async (template: MessageTemplate) => {
     const leadCtx: LeadContext = {
       name: leadForTemplates?.name ?? selectedContact?.lead_name ?? selectedContact?.push_name ?? undefined,
       company: leadForTemplates?.company ?? undefined,
@@ -164,9 +164,33 @@ export function ChatComposer({
     };
     const attendantCtx: AttendantContext = { name: teamMember?.name ?? undefined };
     const resolved = resolveVariables(template.body, leadCtx, attendantCtx);
-    setMessage(resolved);
     setShowSlashPopover(false);
-  }, [leadForTemplates, selectedContact, phoneNumber, teamMember, setMessage]);
+
+    // Template com mídia → envia direto (o corpo resolvido vira caption).
+    // Texto não é editável inline p/ mídia, então selecionar = enviar.
+    if (template.media_url && template.media_type !== "text") {
+      if (!instanceName) return;
+      try {
+        await sendMedia.mutateAsync({
+          phoneNumber,
+          instanceName,
+          instanceId,
+          mediaType: template.media_type,
+          media: template.media_url,
+          caption: template.media_type === "audio" ? undefined : (resolved || undefined),
+          leadId: leadId ?? null,
+        });
+        setMessage("");
+        toast.success("Template enviado!");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Erro ao enviar template");
+      }
+      return;
+    }
+
+    // Template de texto → preenche input para revisão antes de enviar.
+    setMessage(resolved);
+  }, [leadForTemplates, selectedContact, phoneNumber, instanceName, instanceId, leadId, teamMember, sendMedia, setMessage]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Slash popover captura Enter para selecionar template

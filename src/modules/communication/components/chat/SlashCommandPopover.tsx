@@ -65,7 +65,17 @@ export function SlashCommandPopover({
     el?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
 
-  if (filtered.length === 0) return null;
+  if (filtered.length === 0) {
+    return (
+      <div className="absolute bottom-full left-0 right-0 mb-2 rounded-lg border bg-popover shadow-lg z-50 px-3 py-2.5">
+        <p className="text-sm text-muted-foreground">
+          {templates.length === 0
+            ? "Nenhum template cadastrado ainda."
+            : `Nenhum template para "${search}".`}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div
