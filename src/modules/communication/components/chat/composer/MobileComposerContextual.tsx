@@ -28,6 +28,7 @@ import { ScheduleMessageModal } from "@/modules/communication/components/chat/Sc
 import { SlashCommandPopover } from "@/modules/communication/components/chat/SlashCommandPopover";
 import { resolveVariables } from "@/lib/template-variables";
 import { convertAudioBlobToMp3 } from "@/modules/communication/lib/audioToMp3";
+import { deriveAttachmentMediaType } from "@/modules/communication/lib/attachment-media-type";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
 
@@ -172,9 +173,7 @@ export function MobileComposerContextual({
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
-      const isImage = file.type.startsWith("image/");
-      const isVideo = file.type.startsWith("video/");
-      const mediaType = isImage ? "image" : isVideo ? "video" : "document";
+      const mediaType = deriveAttachmentMediaType(file.type);
       await sendMedia.mutateAsync({
         phoneNumber,
         instanceName,

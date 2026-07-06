@@ -16,7 +16,7 @@
  */
 import { useRef, useState, useCallback, useEffect, type DragEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Send, Loader2, ImageIcon, Mic, Clock, AlertCircle, X, LayoutList, QrCode, Sticker } from "lucide-react";
+import { Send, Loader2, Mic, Clock, AlertCircle, X, LayoutList, QrCode, Sticker, Paperclip, FileText, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,6 +35,7 @@ import { useMessageTemplates } from "@/modules/communication/hooks/useMessageTem
 import { useInstanceCapabilities } from "@/modules/communication/hooks/useInstanceCapabilities";
 import { resolveVariables } from "@/lib/template-variables";
 import { convertAudioBlobToMp3, preloadLamejs } from "@/modules/communication/lib/audioToMp3";
+import { deriveAttachmentMediaType } from "@/modules/communication/lib/attachment-media-type";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
 import type { DensityMode } from "@/modules/communication/components/chat/layout/ChatShell";
@@ -95,9 +96,10 @@ export function ChatComposer({
   // State local
   const [showSlashPopover, setShowSlashPopover] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [imageCaption, setImageCaption] = useState("");
+  // Preview só existe pra imagem (data URL). Documento/vídeo mostram chip com nome.
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [caption, setCaption] = useState("");
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [menuDialogOpen, setMenuDialogOpen] = useState(false);
   const [pixDialogOpen, setPixDialogOpen] = useState(false);
@@ -215,54 +217,76 @@ export function ChatComposer({
     }
   }, [showSlashPopover, isRecording, handleSend, setMessage]);
 
-  const handleImageSelect = useCallback((file: File | null) => {
+  // Teto único pra qualquer anexo. Uazapi/WhatsApp aguenta mais que imagem,
+  // mas base64 → Storage → provider fica pesado acima disso; 16MB cobre PDF/
+  // planilha/vídeo curto sem travar o browser.
+  const MAX_ATTACHMENT_BYTES = 16 * 1024 * 1024;
+
+  const handleFileSelect = useCallback((file: File | null) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Selecione apenas imagens");
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      toast.error("Arquivo muito grande (máximo 16MB)");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("Imagem muito grande (máximo 10MB)");
-      return;
+    const kind = deriveAttachmentMediaType(file.type);
+    setSelectedFile(file);
+    setSendAsSticker(false);
+    // Preview visual só faz sentido pra imagem; doc/vídeo usam chip com nome.
+    if (kind === "image") {
+      const reader = new FileReader();
+      reader.onload = (e) => setFilePreview(e.target?.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      setFilePreview(null);
     }
-    setSelectedImage(file);
-    const reader = new FileReader();
-    reader.onload = (e) => setImagePreview(e.target?.result as string);
-    reader.readAsDataURL(file);
+  }, [MAX_ATTACHMENT_BYTES]);
+
+  const clearAttachment = useCallback(() => {
+    setSelectedFile(null);
+    setFilePreview(null);
+    setCaption("");
+    setSendAsSticker(false);
   }, []);
 
   const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    handleImageSelect(e.target.files?.[0] ?? null);
-  }, [handleImageSelect]);
+    handleFileSelect(e.target.files?.[0] ?? null);
+    // Permite reanexar o mesmo arquivo (onChange não dispara se value igual).
+    e.target.value = "";
+  }, [handleFileSelect]);
 
-  const handleSendImage = useCallback(async () => {
-    if (!selectedImage || !instanceName) return;
+  const handleSendMedia = useCallback(async () => {
+    if (!selectedFile || !instanceName) return;
+    const kind = deriveAttachmentMediaType(selectedFile.type);
+    const asSticker = sendAsSticker && kind === "image";
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
         reader.onerror = reject;
-        reader.readAsDataURL(selectedImage);
+        reader.readAsDataURL(selectedFile);
       });
       await sendMedia.mutateAsync({
         phoneNumber,
         instanceName,
         instanceId,
-        mediaType: sendAsSticker ? "sticker" : "image",
+        mediaType: asSticker ? "sticker" : kind,
         media: base64,
-        caption: sendAsSticker ? undefined : (imageCaption || undefined),
-        fileName: selectedImage.name,
-        mimetype: selectedImage.type,
+        caption: asSticker ? undefined : (caption || undefined),
+        fileName: selectedFile.name,
+        mimetype: selectedFile.type,
+        leadId: leadId ?? null,
       });
-      setSelectedImage(null);
-      setImagePreview(null);
-      setImageCaption("");
-      setSendAsSticker(false);
-      toast.success(sendAsSticker ? "Figurinha enviada!" : "Imagem enviada!");
+      clearAttachment();
+      toast.success(
+        asSticker ? "Figurinha enviada!"
+          : kind === "document" ? "Arquivo enviado!"
+          : kind === "video" ? "Vídeo enviado!"
+          : "Imagem enviada!",
+      );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar imagem");
+      toast.error(err instanceof Error ? err.message : "Erro ao enviar arquivo");
     }
-  }, [selectedImage, instanceName, phoneNumber, instanceId, imageCaption, sendMedia, sendAsSticker]);
+  }, [selectedFile, instanceName, phoneNumber, instanceId, leadId, caption, sendMedia, sendAsSticker, clearAttachment]);
 
   const handleAudioRecorded = useCallback(async (audioBlob: Blob) => {
     setIsRecording(false);
@@ -310,8 +334,8 @@ export function ChatComposer({
     e.preventDefault();
     setIsDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) handleImageSelect(file);
-  }, [handleImageSelect]);
+    if (file) handleFileSelect(file);
+  }, [handleFileSelect]);
 
   // Presence: "composing" on type, "available" after 3s idle or blur
   const presenceTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -384,65 +408,83 @@ export function ChatComposer({
         />
       ) : (
         <>
-          {/* Image Preview acima do input */}
-          {selectedImage && imagePreview && (
-            <div className="mb-3 flex items-start gap-3">
-              <div className="relative">
-                <img
-                  src={imagePreview}
-                  alt="Preview da imagem a ser enviada"
-                  className="w-20 h-20 object-cover rounded-lg"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedImage(null);
-                    setImagePreview(null);
-                    setImageCaption("");
-                    setSendAsSticker(false);
-                  }}
-                  aria-label="Remover imagem"
-                  className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex-1 space-y-2">
-                {!sendAsSticker && (
-                  <Input
-                    placeholder="Adicionar legenda (opcional)..."
-                    value={imageCaption}
-                    onChange={(e) => setImageCaption(e.target.value)}
-                  />
-                )}
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleSendImage}
-                    disabled={sendMedia.isPending}
-                    className="flex-1"
+          {/* Preview do anexo acima do input — imagem mostra thumbnail,
+              documento/vídeo mostram chip com ícone + nome. */}
+          {selectedFile && (() => {
+            const kind = deriveAttachmentMediaType(selectedFile.type);
+            const isImage = kind === "image";
+            const KindIcon = kind === "video" ? Film : FileText;
+            return (
+              <div className="mb-3 flex items-start gap-3">
+                <div className="relative shrink-0">
+                  {isImage && filePreview ? (
+                    <img
+                      src={filePreview}
+                      alt="Preview da imagem a ser enviada"
+                      className="w-20 h-20 object-cover rounded-lg"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center border border-border/60">
+                      <KindIcon className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={clearAttachment}
+                    aria-label="Remover anexo"
+                    className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center"
                   >
-                    {sendMedia.isPending ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : sendAsSticker ? (
-                      <Sticker className="w-4 h-4 mr-2" />
-                    ) : (
-                      <Send className="w-4 h-4 mr-2" />
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex-1 min-w-0 space-y-2">
+                  {!isImage && (
+                    <p className="text-sm text-foreground truncate" title={selectedFile.name}>
+                      {selectedFile.name}
+                    </p>
+                  )}
+                  {!sendAsSticker && (
+                    <Input
+                      placeholder="Adicionar legenda (opcional)..."
+                      value={caption}
+                      onChange={(e) => setCaption(e.target.value)}
+                    />
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleSendMedia}
+                      disabled={sendMedia.isPending}
+                      className="flex-1"
+                    >
+                      {sendMedia.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : sendAsSticker ? (
+                        <Sticker className="w-4 h-4 mr-2" />
+                      ) : (
+                        <Send className="w-4 h-4 mr-2" />
+                      )}
+                      {sendAsSticker ? "Enviar Figurinha"
+                        : kind === "document" ? "Enviar Arquivo"
+                        : kind === "video" ? "Enviar Vídeo"
+                        : "Enviar Imagem"}
+                    </Button>
+                    {/* Figurinha só pra imagem */}
+                    {isImage && (
+                      <Button
+                        variant={sendAsSticker ? "default" : "outline"}
+                        size="icon"
+                        onClick={() => setSendAsSticker(!sendAsSticker)}
+                        title={sendAsSticker ? "Enviar como imagem" : "Enviar como figurinha"}
+                        className="shrink-0"
+                      >
+                        <Sticker className="w-4 h-4" />
+                      </Button>
                     )}
-                    {sendAsSticker ? "Enviar Figurinha" : "Enviar Imagem"}
-                  </Button>
-                  <Button
-                    variant={sendAsSticker ? "default" : "outline"}
-                    size="icon"
-                    onClick={() => setSendAsSticker(!sendAsSticker)}
-                    title={sendAsSticker ? "Enviar como imagem" : "Enviar como figurinha"}
-                    className="shrink-0"
-                  >
-                    <Sticker className="w-4 h-4" />
-                  </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Quick action bar */}
           <ChatQuickActions
@@ -467,22 +509,23 @@ export function ChatComposer({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt"
               onChange={handleFileInputChange}
               className="hidden"
               aria-hidden="true"
             />
 
-            {/* Botão anexar imagem */}
+            {/* Botão anexar arquivo */}
             <Button
               variant="ghost"
               size="icon"
               onClick={() => fileInputRef.current?.click()}
               disabled={sendMessage.isPending || sendMedia.isPending}
-              aria-label="Anexar imagem"
+              aria-label="Anexar arquivo"
+              title="Anexar imagem, vídeo ou documento"
               className="opacity-50 hover:opacity-100 transition-opacity"
             >
-              <ImageIcon className="w-5 h-5 text-muted-foreground" />
+              <Paperclip className="w-5 h-5 text-muted-foreground" />
             </Button>
 
             {/* Menu + Pix — Uazapi-only (hidden for Meta/Evolution instances) */}
