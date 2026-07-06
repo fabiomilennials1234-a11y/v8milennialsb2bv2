@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -12,43 +12,15 @@ import torqueLogo from '@/assets/torque-logo.png';
 import { validatePassword } from '@/lib/password-validation';
 
 export default function ResetPassword() {
+  // Self-hosted reset: the raw token comes from the URL path (/reset-password/:token),
+  // NOT from a Supabase PKCE recovery session. No onAuthStateChange / getSession here.
+  const { token } = useParams<{ token: string }>();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [sessionReady, setSessionReady] = useState(false);
-  const [sessionError, setSessionError] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
-
-  // Wait for Supabase to process the recovery token from the URL hash
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setSessionReady(true);
-      }
-    });
-
-    // Also check if we already have a session (e.g., if the event fired before mount)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setSessionReady(true);
-      }
-    });
-
-    // Timeout: if no recovery session after 5 seconds, show error
-    const timeout = setTimeout(() => {
-      setSessionReady((ready) => {
-        if (!ready) setSessionError(true);
-        return ready;
-      });
-    }, 5000);
-
-    return () => {
-      subscription.unsubscribe();
-      clearTimeout(timeout);
-    };
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,11 +36,21 @@ export default function ResetPassword() {
       return;
     }
 
+    if (!token) return;
+
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) {
-        toast({ title: 'Erro ao redefinir senha', description: error.message, variant: 'destructive' });
+      const { data, error } = await supabase.functions.invoke('reset-password', {
+        body: { token, password },
+      });
+      // supabase.functions.invoke surfaces non-2xx as `error`; the backend also
+      // returns { success: false, message } on validation/expiry failures.
+      const failed = error || (data && (data as { success?: boolean }).success === false);
+      if (failed) {
+        const message =
+          (data as { message?: string } | null)?.message ??
+          'Link invalido ou expirado. Solicite um novo na tela de login.';
+        toast({ title: 'Erro ao redefinir senha', description: message, variant: 'destructive' });
       } else {
         setSuccess(true);
         toast({ title: 'Senha redefinida!', description: 'Sua senha foi alterada com sucesso.' });
@@ -80,7 +62,8 @@ export default function ResetPassword() {
     }
   };
 
-  // Success state
+  // Success state — the session is NOT created automatically, so send the user
+  // to the login screen to sign in with the new password.
   if (success) {
     return (
       <ResetPasswordLayout>
@@ -91,12 +74,12 @@ export default function ResetPassword() {
           <div>
             <h3 className="text-xl font-semibold text-foreground">Senha redefinida!</h3>
             <p className="text-sm text-muted-foreground mt-2">
-              Sua senha foi alterada com sucesso. Voce ja pode acessar o sistema.
+              Sua senha foi alterada com sucesso. Faca login com a nova senha para acessar o sistema.
             </p>
           </div>
           <Button
             className="w-full gradient-primary gradient-primary-hover text-white font-semibold h-12 border-0 mt-4"
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/auth')}
           >
             Acessar o sistema
             <ArrowRight className="ml-2 h-4 w-4" />
@@ -106,8 +89,8 @@ export default function ResetPassword() {
     );
   }
 
-  // Error state — invalid or expired link
-  if (sessionError && !sessionReady) {
+  // Error state — no token in the URL (e.g. bare /reset-password, or a mangled link).
+  if (!token) {
     return (
       <ResetPasswordLayout>
         <div className="text-center space-y-4">
@@ -132,19 +115,7 @@ export default function ResetPassword() {
     );
   }
 
-  // Loading state — waiting for recovery session
-  if (!sessionReady) {
-    return (
-      <ResetPasswordLayout>
-        <div className="flex flex-col items-center justify-center py-8 gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Verificando link de recuperacao...</p>
-        </div>
-      </ResetPasswordLayout>
-    );
-  }
-
-  // Form state — ready to reset
+  // Form state — ready to reset.
   return (
     <ResetPasswordLayout>
       <div className="text-center mb-8">
@@ -167,11 +138,13 @@ export default function ResetPassword() {
               onChange={(e) => setPassword(e.target.value)}
               className="pl-10"
               required
-              minLength={6}
+              minLength={12}
               autoFocus
             />
           </div>
-          <p className="text-xs text-muted-foreground">Minimo de 6 caracteres</p>
+          <p className="text-xs text-muted-foreground">
+            Minimo de 12 caracteres, incluindo maiuscula, minuscula, numero e caractere especial
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -186,7 +159,7 @@ export default function ResetPassword() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="pl-10"
               required
-              minLength={6}
+              minLength={12}
             />
           </div>
           {confirmPassword && password !== confirmPassword && (
@@ -197,7 +170,7 @@ export default function ResetPassword() {
         <Button
           type="submit"
           className="w-full gradient-primary gradient-primary-hover text-white font-semibold h-12 border-0"
-          disabled={loading || password !== confirmPassword || password.length < 6}
+          disabled={loading || password !== confirmPassword || password.length < 12}
         >
           {loading ? (
             <Loader2 className="h-5 w-5 animate-spin" />

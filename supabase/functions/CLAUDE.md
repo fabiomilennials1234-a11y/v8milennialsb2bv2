@@ -23,7 +23,7 @@ Rename físico = projeto separado (ver "Rename futuro" abaixo).
 
 ## Mapa por BC (96 funções)
 
-### identity (9) — auth, org, team, permissions, master
+### identity (11) — auth, org, team, permissions, master
 
 | Função | Trigger | Auth |
 |--------|---------|------|
@@ -31,11 +31,20 @@ Rename físico = projeto separado (ver "Rename futuro" abaixo).
 | `assign-user-to-org` | UI master | JWT admin |
 | `attach-to-org-by-pending-invite` | UI signup | JWT user |
 | `create-org-user` | UI master / signup | JWT/admin |
+| `forgot-password` | UI auth | público + rate-limit |
 | `get-member-permissions` | UI | JWT |
 | `list-organizations` | UI master | JWT master |
 | `list-unassigned-users` | UI master | JWT master |
 | `remove-org-member` | UI admin | JWT admin |
+| `reset-password` | UI auth | público + rate-limit |
 | `save-member-permissions` | UI admin | JWT admin |
+
+> `forgot-password` / `reset-password` = fluxo self-hosted de "esqueci minha senha"
+> (substitui o mailer/PKCE do Supabase Auth). Token próprio hash-only em
+> `password_reset_tokens` (RLS deny-all), e-mail via Resend, troca via admin API.
+> Rate-limit por IP via `auth_rate_limits` + `check_auth_rate_limit`. Consumo
+> uso-único via `claim_password_reset_token`. Ver
+> `07 — Changelog/2026-07-06-self-hosted-password-reset.md`.
 
 ### leads (7) — lead ingest, score, timeline
 

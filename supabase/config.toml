@@ -371,6 +371,17 @@ verify_jwt = false
 [functions.event-dispatcher]
 verify_jwt = false
 
+# forgot-password: self-hosted password reset step 1 (público). verify_jwt=false —
+# endpoint anônimo (o usuário não tem sessão ao pedir reset); rate-limited por IP
+# no handler (auth_rate_limits + check_auth_rate_limit) e anti-enumeração.
+[functions.forgot-password]
+verify_jwt = false
+
+# reset-password: self-hosted password reset step 2 (público). verify_jwt=false —
+# valida o token próprio (hash) e troca a senha via admin API; rate-limited por IP.
+[functions.reset-password]
+verify_jwt = false
+
 # agent-runtime-v2: Copilot v2 border/queue entry; org resolvido por instance/secret, NÃO pelo payload
 [functions.agent-runtime-v2]
 verify_jwt = false
