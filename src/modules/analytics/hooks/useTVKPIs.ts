@@ -20,7 +20,7 @@ import { useCloserPerformance } from "@/modules/engagement/hooks/useCloserPerfor
 import { useNewLeads } from "@/modules/leads";
 import { usePipeWhatsapp } from "@/modules/pipelines";
 import type { TVPeriodRange } from "@/lib/tv-periods";
-import { isMissingSchemaError } from "@/lib/rpc-errors";
+import { isRpcAbsentError } from "@/lib/rpc-errors";
 import {
   localDateStr,
   unwrapRpcJsonb,
@@ -81,8 +81,9 @@ export function useTVKPIs(range: TVPeriodRange): TVKPIValues {
         p_filter_member_id: null, // KPI row é resumo do time inteiro
       });
       if (error) {
-        // Ledger vazio / migration pendente → zeros, sem travar a TV (rollback ADR-0018).
-        if (isMissingSchemaError(error)) return null;
+        // RPC ausente (migration pendente) → zeros, sem travar a TV (rollback ADR-0018).
+        // Por CÓDIGO apenas (FIX-A): erro de runtime real propaga, não zera dinheiro.
+        if (isRpcAbsentError(error)) return null;
         throw new Error(`get_sales_metrics failed: ${error.message}`);
       }
       return unwrapRpcJsonb<SalesMetricsResult>(data);

@@ -14,7 +14,7 @@ import { useTeamMembers, useCurrentTeamMember, useIdentity } from "@/modules/ide
 import { usePipePropostas, usePipeConfirmacao, usePipeWhatsapp } from "@/modules/pipelines";
 import { useTeamGoals, useIndividualGoals } from "@/modules/engagement/hooks/useGoals";
 import { useSDRPerformance } from "@/modules/engagement/hooks/useSDRPerformance";
-import { isMissingSchemaError } from "@/lib/rpc-errors";
+import { isRpcAbsentError } from "@/lib/rpc-errors";
 import {
   localDateStr,
   unwrapRpcJsonb,
@@ -127,9 +127,11 @@ export function useTVDashboardData() {
           p_filter_member_id: isAdmin ? null : myId,
         });
         if (error) {
-          // Migration ainda não aplicada (ledger vazio) → degrada pra zeros em vez
-          // de travar a TV. get_dashboard_metrics segue vivo como rollback (ADR-0018).
-          if (!isMissingSchemaError(error)) {
+          // RPC ausente (migration não aplicada) → degrada pra zeros em vez de
+          // travar a TV. get_dashboard_metrics segue vivo como rollback (ADR-0018).
+          // Detecção por CÓDIGO apenas (FIX-A): um erro de runtime real da RPC
+          // canônica implantada propaga (throw) em vez de zerar dinheiro em silêncio.
+          if (!isRpcAbsentError(error)) {
             throw new Error(`get_sales_metrics failed: ${error.message}`);
           }
         } else {

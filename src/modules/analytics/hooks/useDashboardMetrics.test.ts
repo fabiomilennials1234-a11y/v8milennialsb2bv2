@@ -138,6 +138,22 @@ describe("useDashboardMetrics — canonical sales overlay", () => {
     expect(m.vendaTotal).toBe(99999); // legacy survives
     expect(m.isCanonicalRevenue).toBeUndefined();
   });
+
+  it("SURFACES a real runtime error from the canonical RPC instead of degrading (FIX-A)", async () => {
+    // Deployed canonical RPC throws a genuine error whose text contains "does not
+    // exist" but whose code is NOT PGRST202/42883. Must throw (isError), NOT hide
+    // wrong money behind the legacy revenue.
+    routeRpc({
+      get_sales_metrics: {
+        data: null,
+        error: { code: "42703", message: 'column "sold_at" does not exist' },
+      },
+    });
+    const { result } = renderHook(() => useDashboardMetrics(6, 2026), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    // Did NOT silently degrade to legacy money.
+    expect(result.current.data).toBeUndefined();
+  });
 });
 
 const LEGACY_RANKING = {

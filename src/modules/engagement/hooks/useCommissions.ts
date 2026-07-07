@@ -6,7 +6,7 @@ import { useOrganization } from "@/modules/identity";
 // de módulo) — evita puxar o barrel inteiro de analytics (que importa hooks →
 // identity) e formar ciclo de import. Mesma origem que #998 consome internamente.
 import { monthPeriodArgs, type CommissionLedgerResult } from "@/modules/analytics/types/canonical-metrics";
-import { isMissingSchemaError } from "@/lib/rpc-errors";
+import { isRpcAbsentError } from "@/lib/rpc-errors";
 import { resolveSalesGoalProgress } from "@/modules/engagement/lib/goal-progress";
 export type Commission = Tables<"commissions">;
 export type CommissionInsert = TablesInsert<"commissions">;
@@ -183,9 +183,12 @@ async function overlayCommissionLedger(
   } as never);
 
   if (error) {
-    if (isMissingSchemaError(error)) return null; // migration pendente → mantém legado
+    // RPC ausente (migration pendente) → mantém o cálculo legado on-the-fly.
+    // Por CÓDIGO apenas (FIX-A): um erro de runtime real da RPC canônica implantada
+    // propaga (throw) em vez de degradar em silêncio pra comissão legada errada.
+    if (isRpcAbsentError(error)) return null;
     console.error("❌ [overlayCommissionLedger] RPC error:", error.message, error.code);
-    return null;
+    throw new Error(`get_commission_ledger failed: ${error.message}`);
   }
 
   const raw = Array.isArray(data) ? (data.length > 0 ? data[0] : null) : data;

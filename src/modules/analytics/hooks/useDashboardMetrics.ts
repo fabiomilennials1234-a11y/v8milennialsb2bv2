@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/modules/identity";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
-import { isMissingSchemaError } from "@/lib/rpc-errors";
+import { isMissingSchemaError, isRpcAbsentError } from "@/lib/rpc-errors";
 import { computeMeetingRates, type MeetingEventLike } from "@/modules/analytics/lib/meeting-rates";
 import {
   monthPeriodArgs,
@@ -101,10 +101,12 @@ async function overlayCanonicalSales(
   } as never);
 
   if (error) {
-    // Migration pendente → mantém a receita legada (comportamento idêntico ao anterior).
-    if (isMissingSchemaError(error)) return base;
+    // Migration pendente (RPC ausente) → mantém a receita legada. Detecção por
+    // CÓDIGO apenas (FIX-A): um erro de runtime real da RPC canônica JÁ implantada
+    // deve propagar, não degradar em silêncio pra dinheiro legado errado.
+    if (isRpcAbsentError(error)) return base;
     console.error("❌ [overlayCanonicalSales] RPC error:", error.message, error.code);
-    return base;
+    throw new Error(`get_sales_metrics failed: ${error.message}`);
   }
 
   const s = unwrapJsonb<SalesMetricsResult>(data);
@@ -172,9 +174,11 @@ async function overlayCanonicalRanking(
   } as never);
 
   if (error) {
-    if (isMissingSchemaError(error)) return legacy;
+    // RPC ausente (migration pendente) → pódio legado intacto. Por CÓDIGO apenas
+    // (FIX-A): erro de runtime real da RPC canônica implantada propaga, não some.
+    if (isRpcAbsentError(error)) return legacy;
     console.error("❌ [overlayCanonicalRanking] RPC error:", error.message, error.code);
-    return legacy;
+    throw new Error(`get_ranking failed: ${error.message}`);
   }
 
   const r = unwrapJsonb<RankingResult>(data);
