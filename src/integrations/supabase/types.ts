@@ -10734,6 +10734,7 @@ export type Database = {
           sla_escalate_to: string | null
           sla_hours: number | null
           stage_key: string
+          stage_role: Database["public"]["Enums"]["stage_role"]
           target_pipe_type: string | null
           target_stage_key: string | null
           updated_at: string | null
@@ -10758,6 +10759,7 @@ export type Database = {
           sla_escalate_to?: string | null
           sla_hours?: number | null
           stage_key: string
+          stage_role?: Database["public"]["Enums"]["stage_role"]
           target_pipe_type?: string | null
           target_stage_key?: string | null
           updated_at?: string | null
@@ -10782,6 +10784,7 @@ export type Database = {
           sla_escalate_to?: string | null
           sla_hours?: number | null
           stage_key?: string
+          stage_role?: Database["public"]["Enums"]["stage_role"]
           target_pipe_type?: string | null
           target_stage_key?: string | null
           updated_at?: string | null
@@ -16747,6 +16750,12 @@ export type Database = {
         | "prata"
         | "bronze"
         | "desqualificado"
+      stage_role:
+        | "open"
+        | "meeting_booked"
+        | "meeting_held"
+        | "won"
+        | "lost"
       upsell_campanha_status:
         | "cliente"
         | "planejado"
@@ -16979,6 +16988,13 @@ export const Constants = {
         "prata",
         "bronze",
         "desqualificado",
+      ],
+      stage_role: [
+        "open",
+        "meeting_booked",
+        "meeting_held",
+        "won",
+        "lost",
       ],
       upsell_campanha_status: [
         "cliente",
