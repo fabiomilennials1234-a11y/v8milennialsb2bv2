@@ -12,6 +12,7 @@ import {
   resolveVariables,
   buildTrackId,
   recipientGate,
+  isRetryableSendFailure,
 } from "./whatsapp-helpers.ts";
 
 export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
@@ -66,7 +67,8 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
     });
 
     if (!sendResult.success) {
-      return { success: false, error: `WhatsApp send failed: ${sendResult.error}` };
+      const error = `WhatsApp send failed: ${sendResult.error}`;
+      return { success: false, error, retryable: isRetryableSendFailure(error) };
     }
 
     const messageId = sendResult.messageId || `wf_${crypto.randomUUID()}`;
@@ -87,7 +89,8 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
     }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
   } else if (!gwResult.success) {
     console.error("[send-whatsapp] Gateway send failed:", gwResult.error);
-    return { success: false, error: `WhatsApp send failed: ${gwResult.error}` };
+    const error = `WhatsApp send failed: ${gwResult.error}`;
+    return { success: false, error, retryable: isRetryableSendFailure(error) };
   }
 
   return { success: true, message: "WhatsApp text sent" };
