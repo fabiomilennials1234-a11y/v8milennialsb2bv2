@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { FileText, Wrench, BookOpen, Sparkles, GitBranch, Plug, SlidersHorizontal, RefreshCw, BellRing } from "lucide-react";
+import { FileText, Wrench, BookOpen, GitBranch, Plug, SlidersHorizontal, BellRing } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -44,10 +44,8 @@ import { PlaygroundKnowledge } from "./PlaygroundKnowledge";
 import { PlaygroundFunis } from "./PlaygroundFunis";
 import { PlaygroundConexao } from "./PlaygroundConexao";
 import { PlaygroundComportamento } from "./PlaygroundComportamento";
-import { FollowupSituationsTab } from "../FollowupSituationsTab";
 import { PlaygroundHandoffNotify } from "./PlaygroundHandoffNotify";
 import { LivePreviewChat } from "./LivePreviewChat";
-import { PromptAnalysisTab } from "./PromptAnalysisTab";
 import { funisStateToPayload, payloadToFunisState } from "./funis-mapping";
 import {
   conexaoStateToPayload,
@@ -81,6 +79,50 @@ import { useUploadAgentDocument, useAgentDocuments, useDeleteAgentDocument, useU
 
 import { useCurrentTeamMember } from "@/modules/identity";
 import { hasFullBehaviorCoverage } from "@/modules/copilot/components/BehaviorWindowsEditor";
+
+// Gradient hover-expand tab trigger — same design as the prompt-section pills.
+// At rest it's an icon circle; on hover, or when active (Radix data-state), it
+// expands into a gold gradient pill with a blur glow + its label. The active state
+// is driven by `group-data-[state=active]` so Radix owns it (no JS boolean).
+// `data-gradient` opts it out of the global .copilot-surface gold-hover rule;
+// `after:hidden` removes the base underline.
+function GradientTabTrigger({
+  value,
+  icon,
+  label,
+}: {
+  value: string;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <TabsTrigger
+      value={value}
+      data-gradient
+      title={label}
+      style={
+        {
+          "--gradient-from": "hsl(47 100% 58%)",
+          "--gradient-to": "hsl(40 96% 45%)",
+        } as React.CSSProperties
+      }
+      className="group relative h-[56px] w-[56px] shrink-0 flex items-center justify-center rounded-full border border-border/60 bg-card shadow-sm p-0 transition-all duration-500 after:hidden hover:w-[184px] hover:border-transparent data-[state=active]:w-[184px] data-[state=active]:border-transparent data-[state=active]:shadow-none"
+    >
+      {/* Gradient fill */}
+      <span className="absolute inset-0 rounded-full bg-[linear-gradient(45deg,var(--gradient-from),var(--gradient-to))] opacity-0 transition-opacity duration-500 group-hover:opacity-100 group-data-[state=active]:opacity-100" />
+      {/* Blur glow */}
+      <span className="absolute top-2 inset-x-0 h-full rounded-full bg-[linear-gradient(45deg,var(--gradient-from),var(--gradient-to))] blur-[15px] -z-10 opacity-0 transition-opacity duration-500 group-hover:opacity-40 group-data-[state=active]:opacity-40" />
+      {/* Icon */}
+      <span className="relative z-10 scale-100 text-muted-foreground transition-transform duration-500 group-hover:scale-0 group-data-[state=active]:scale-0 [&_svg]:w-6 [&_svg]:h-6">
+        {icon}
+      </span>
+      {/* Label */}
+      <span className="absolute inset-0 z-10 flex items-center justify-center px-3 text-center uppercase tracking-wide text-[11px] font-semibold text-primary-foreground whitespace-nowrap scale-0 transition-transform duration-500 group-hover:scale-100 group-hover:delay-150 group-data-[state=active]:scale-100 group-data-[state=active]:delay-150">
+        {label}
+      </span>
+    </TabsTrigger>
+  );
+}
 
 // =============================================================
 // HELPER: Build system prompt from playground data
@@ -582,7 +624,7 @@ export function CopilotPlayground() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
+    <div className="copilot-surface flex h-[calc(100vh-4rem)]">
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -690,43 +732,14 @@ export function CopilotPlayground() {
         {/* ===== Left Column: Tabs (Prompt | Tools | Conhecimento) ===== */}
         <div className="flex flex-col w-[60%] border-r min-h-0">
           <Tabs defaultValue="prompt" className="flex flex-col flex-1 min-h-0">
-            <TabsList className="grid w-full grid-cols-8 rounded-none border-b bg-background h-11 shrink-0">
-              <TabsTrigger value="prompt" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
-                <FileText className="w-3.5 h-3.5" />
-                Prompt
-              </TabsTrigger>
-              <TabsTrigger value="tools" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
-                <Wrench className="w-3.5 h-3.5" />
-                Tools
-              </TabsTrigger>
-              <TabsTrigger value="funis" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
-                <GitBranch className="w-3.5 h-3.5" />
-                Funis
-              </TabsTrigger>
-              <TabsTrigger value="knowledge" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
-                <BookOpen className="w-3.5 h-3.5" />
-                Conhecimento
-              </TabsTrigger>
-              <TabsTrigger value="followup" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
-                <RefreshCw className="w-3.5 h-3.5" />
-                Follow-up
-              </TabsTrigger>
-              <TabsTrigger value="conexao" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
-                <Plug className="w-3.5 h-3.5" />
-                Conexao
-              </TabsTrigger>
-              <TabsTrigger value="comportamento" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                Comportamento
-              </TabsTrigger>
-              <TabsTrigger value="handoff-notify" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
-                <BellRing className="w-3.5 h-3.5" />
-                Notificação
-              </TabsTrigger>
-              <TabsTrigger value="analysis" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
-                <Sparkles className="w-3.5 h-3.5" />
-                Analise
-              </TabsTrigger>
+            <TabsList className="flex flex-wrap w-full items-center gap-4 border-b bg-background px-4 py-5 shrink-0 h-auto">
+              <GradientTabTrigger value="prompt" icon={<FileText />} label="Prompt" />
+              <GradientTabTrigger value="tools" icon={<Wrench />} label="Tools" />
+              <GradientTabTrigger value="funis" icon={<GitBranch />} label="Funis" />
+              <GradientTabTrigger value="knowledge" icon={<BookOpen />} label="Conhecimento" />
+              <GradientTabTrigger value="conexao" icon={<Plug />} label="Conexão" />
+              <GradientTabTrigger value="comportamento" icon={<SlidersHorizontal />} label="Comportamento" />
+              <GradientTabTrigger value="handoff-notify" icon={<BellRing />} label="Notificação" />
             </TabsList>
 
             <TabsContent value="prompt" className="flex-1 overflow-y-auto m-0 p-0 data-[state=inactive]:hidden">
@@ -806,10 +819,6 @@ export function CopilotPlayground() {
               />
             </TabsContent>
 
-            <TabsContent value="followup" className="flex-1 overflow-y-auto m-0 p-6 data-[state=inactive]:hidden">
-              <FollowupSituationsTab organizationId={organizationId || currentAgent?.organization_id} />
-            </TabsContent>
-
             <TabsContent value="conexao" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
               <PlaygroundConexao
                 state={conexao}
@@ -827,10 +836,6 @@ export function CopilotPlayground() {
 
             <TabsContent value="handoff-notify" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
               <PlaygroundHandoffNotify data={data} onChange={updateData} />
-            </TabsContent>
-
-            <TabsContent value="analysis" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
-              <PromptAnalysisTab agentId={editId ?? undefined} />
             </TabsContent>
           </Tabs>
         </div>

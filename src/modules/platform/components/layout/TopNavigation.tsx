@@ -431,7 +431,7 @@ export function TopNavigation() {
         <button
           key={item.path}
           onClick={(e) => handleLockedClick(e, item.path)}
-          className="topnav-item topnav-item-locked"
+          className="topnav-item topnav-item-locked hover:-translate-y-0.5"
         >
           <span>{item.label}</span>
           <Lock className="w-3 h-3 text-amber-500/70" />
@@ -446,7 +446,7 @@ export function TopNavigation() {
     return (
       <Popover key={item.path} onOpenChange={(open) => { if (open && isFunis) prefetchPipes(); }}>
         <PopoverTrigger asChild>
-          <button className={cn("topnav-item group/dd", parentActive && "topnav-item-active")}>
+          <button className={cn("topnav-item group/dd hover:-translate-y-0.5", parentActive && "topnav-item-active")}>
             <span>{item.label}</span>
             <ChevronDown className="w-3 h-3 opacity-40 transition-transform duration-200 group-data-[state=open]/dd:rotate-180" />
           </button>
@@ -551,7 +551,7 @@ export function TopNavigation() {
         <button
           key={item.path}
           onClick={(e) => handleLockedClick(e, item.path)}
-          className="topnav-item topnav-item-locked"
+          className="topnav-item topnav-item-locked hover:-translate-y-0.5"
         >
           <span>{item.label}</span>
           <Lock className="w-3 h-3 text-amber-500/70" />
@@ -563,7 +563,7 @@ export function TopNavigation() {
       <NavLink
         key={item.path}
         to={item.path}
-        className={cn("topnav-item", isActive(item.path) && "topnav-item-active")}
+        className={cn("topnav-item hover:-translate-y-0.5", isActive(item.path) && "topnav-item-active")}
       >
         <span>{item.label}</span>
       </NavLink>
@@ -691,9 +691,28 @@ export function TopNavigation() {
     <>
       <header className="topnav-header" data-topnav>
         {/* ── Left: Logo ── */}
-        <NavLink to="/dashboard" className="flex items-center flex-shrink-0" title="Central de Comando">
-          <img src={torqueIcon} alt="Torque" className="h-7 w-7 object-contain lg:hidden" />
-          <img src={isDark ? torqueLogo : torqueLogoDark} alt="Torque CRM" className="h-7 object-contain object-left hidden lg:block" style={{ width: 110 }} />
+        <NavLink
+          to="/dashboard"
+          className="group flex items-center flex-shrink-0 no-underline"
+          title="Central de Comando"
+          aria-label="Torque — Central de Comando"
+        >
+          <img
+            src={torqueIcon}
+            alt="Torque"
+            className="h-8 w-8 object-contain transition-all duration-700 ease-out group-hover:rotate-[360deg] group-hover:drop-shadow-[0_0_12px_hsl(var(--primary)/0.6)]"
+          />
+          {/* Wordmark recortado do logo real (fonte original) — o hexágono do
+              logo é empurrado p/ fora do recorte; revela no hover. */}
+          <div className="max-w-0 overflow-hidden transition-[max-width,margin] duration-500 ease-out group-hover:ml-2 group-hover:max-w-[170px]">
+            <img
+              src={isDark ? torqueLogo : torqueLogoDark}
+              alt=""
+              aria-hidden
+              style={{ marginLeft: "-36px" }}
+              className="h-8 max-w-none object-contain object-left"
+            />
+          </div>
         </NavLink>
 
         {/* ── Center: Desktop Navigation (text-only, Clint-style) ── */}
@@ -704,7 +723,7 @@ export function TopNavigation() {
           {(visibleMore.length > 0 || (role === "admin" && visibleAdminItems.length > 0) || visibleBottomItems.length > 0) && (
             <Popover>
               <PopoverTrigger asChild>
-                <button className={cn("topnav-item topnav-mais group/mais", isMoreActive && "topnav-item-active")}>
+                <button className={cn("topnav-item topnav-mais group/mais hover:-translate-y-0.5", isMoreActive && "topnav-item-active")}>
                   <MoreHorizontal className="w-4 h-4 opacity-50" />
                   <span>Mais</span>
                 </button>

@@ -366,6 +366,26 @@
     @apply bg-card rounded-lg border border-border p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
   }
 
+  /* ─── Copilot: gold hover treatment ──────────────────────────────
+     Scoped to .copilot-surface (applied on the copilot screens' roots).
+     Every enabled button "lights up" gold on hover — a discreet gold glow
+     + subtle lift. Single source of truth for the effect across all copilot
+     buttons. Excludes toggles/switches/radios and the active pill (which
+     keeps its own solid gold fill). Portaled surfaces (dialogs, dropdowns,
+     selects) render outside .copilot-surface and are intentionally untouched. */
+  .copilot-surface button:not([data-gradient]) {
+    transition-property: color, background-color, border-color, box-shadow, transform;
+    transition-duration: 180ms;
+    transition-timing-function: ease-out;
+  }
+
+  .copilot-surface button:not(:disabled):not([data-disabled]):not([data-state="active"]):not([role="switch"]):not([role="checkbox"]):not([role="radio"]):not([data-gradient]):hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 0 0 1px hsl(var(--primary) / 0.14),
+      0 3px 12px -5px hsl(var(--primary) / 0.20);
+  }
+
   .kanban-column {
     @apply bg-muted/50 rounded-xl p-4 min-h-[400px];
   }
