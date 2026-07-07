@@ -101,6 +101,8 @@ const CopilotReasoning = lazy(() => lazyRetry(() => import("@/modules/identity/m
 const CopilotToggleAudit = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/CopilotToggleAudit")));
 const MasterOnboarding = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOnboarding")));
 const MasterMetaAssets = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterMetaAssets")));
+// Revisão master de stage_role won/lost (#991, ADR-0017 §1)
+const MasterStageRoleReview = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterStageRoleReview")));
 // Insights — área master azul de unit economics (chrome próprio, fora do MasterLayout)
 const MasterInsights = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterInsights")));
 // Master route/layout — carregam sob demanda quando acessar /master
@@ -694,6 +696,7 @@ function AppRoutes() {
         <Route path="copilot-toggle-audit" element={<CopilotToggleAudit />} />
         <Route path="onboarding" element={<MasterOnboarding />} />
         <Route path="meta-assets" element={<MasterMetaAssets />} />
+        <Route path="stage-roles" element={<MasterStageRoleReview />} />
       </Route>
 
       {/* Insights — área master azul (top-level, chrome próprio, sem MasterLayout) */}

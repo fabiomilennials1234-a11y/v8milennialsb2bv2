@@ -23,6 +23,7 @@ import {
   MessageSquare,
   Rocket,
   Megaphone,
+  CircleDollarSign,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,7 @@ const allNavItems: NavItem[] = [
   { label: "WhatsApp Health", icon: MessageSquare, path: "/master/whatsapp-health", permission: "audit" },
   { label: "Copilot Reasoning", icon: Brain, path: "/master/copilot-reasoning", permission: "audit" },
   { label: "Copilot Toggle Audit", icon: ToggleLeft, path: "/master/copilot-toggle-audit", permission: "audit" },
+  { label: "Etapas Won/Lost", icon: CircleDollarSign, path: "/master/stage-roles", permission: "audit" },
   { label: "Onboarding", icon: Rocket, path: "/master/onboarding", permission: "features" },
   { label: "Meta — Ativos", icon: Megaphone, path: "/master/meta-assets", permission: "features" },
 ];
