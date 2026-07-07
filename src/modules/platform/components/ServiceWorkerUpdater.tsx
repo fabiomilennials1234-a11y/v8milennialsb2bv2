@@ -11,7 +11,11 @@ export function ServiceWorkerUpdater() {
   const updateRef = useRef<() => void>(() => {});
 
   const onNeedRefresh = useCallback(() => {
+    // id fixo: sonner atualiza o toast existente em vez de empilhar caso o
+    // sinal de update chegue mais de uma vez (belt-and-suspenders do guard
+    // notifiedRef em use-sw-update).
     toast('Nova versao disponivel', {
+      id: 'sw-update',
       description: 'Clique para atualizar o Torque CRM.',
       duration: Infinity,
       action: {
