@@ -11,7 +11,9 @@
  * result to the interfaces below. Delete this file and switch to the generated
  * types once the ledger migrations are applied and types.ts is regenerated.
  *
- * OWNERSHIP: issue #998. Do not edit from #999 (TV) / #1000 (productivity).
+ * OWNERSHIP: issue #998 (sales/ranking/funnel). Commission-ledger contracts below
+ * added by #1000 (metas/comissões consumer). #999 (TV) uses a separate
+ * canonical-tv.ts — no overlap. Do not edit the #998 sections from #999.
  */
 
 /** Revenue stream is decided by the CLIENT at sale time (ADR-0017 §2). */
@@ -133,4 +135,46 @@ export function monthPeriodArgs(month: number, year: number): CanonicalPeriodArg
 export function rangePeriodArgs(start: Date, end: Date): CanonicalPeriodArgs {
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   return { p_period: "range", p_ref: null, p_start: iso(start), p_end: iso(end) };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// get_commission_ledger (#997 / ADR-0017 §6,§8) — commission as a READ of the
+// sale_events projection (commissions.source='sale_event_projection', #994):
+// rate/amount snapshotted, net-of-reversal via anti-join on the sale, anchored
+// on sold_at <@ metric_period_bounds. Invariant (proven in #997): a member's
+// base_revenue == get_ranking.revenue for the same member, and member-on-podium
+// ⟺ member-has-ledger-line. Consumed by #1000 (Comissões / OTE) so the number a
+// member sees equals the podium — the R5/#3/#11-killer. Owner: #1000.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Commission slice for one product type (mrr | projeto). rate_percent is NULL
+ *  when the snapshotted rate is not uniform across the type's sales (honest). */
+export interface CommissionByType {
+  commission: number;
+  base_revenue: number;
+  sale_count: number;
+  rate_percent: number | null;
+}
+
+/** One member's commission ledger row. `base_revenue` == that member's canonical
+ *  podium revenue (get_ranking.revenue) for the same period — one number. */
+export interface CommissionLedgerMember {
+  member_id: string;
+  commission: number;
+  base_revenue: number;
+  sale_count: number;
+  by_type: {
+    mrr: CommissionByType;
+    projeto: CommissionByType;
+  };
+}
+
+/** get_commission_ledger(p_org_id, p_period, p_ref, p_start, p_end, p_filter_member_id). */
+export interface CommissionLedgerResult {
+  period: CanonicalPeriod;
+  filter_member_id: string | null;
+  commission_total: number;
+  base_revenue_total: number;
+  sale_count_total: number;
+  by_member: CommissionLedgerMember[];
 }

@@ -2,6 +2,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { useOrganization } from "@/modules/identity";
+// Deep import do arquivo de CONTRATOS puro (só tipos + funções puras, zero grafo
+// de módulo) — evita puxar o barrel inteiro de analytics (que importa hooks →
+// identity) e formar ciclo de import. Mesma origem que #998 consome internamente.
+import { monthPeriodArgs, type CommissionLedgerResult } from "@/modules/analytics/types/canonical-metrics";
+import { isMissingSchemaError } from "@/lib/rpc-errors";
+import { resolveSalesGoalProgress } from "@/modules/engagement/lib/goal-progress";
 export type Commission = Tables<"commissions">;
 export type CommissionInsert = TablesInsert<"commissions">;
 export type CommissionUpdate = TablesUpdate<"commissions">;
@@ -141,6 +147,71 @@ export function calculateOTEBonus(
   return oteBonus * 1.2;
 }
 
+/**
+ * Overlay canônico da comissão de UM membro a partir de get_commission_ledger
+ * (#997 / ADR-0017 §6): amount/rate SNAPSHOTADOS no evento, líquido de estorno
+ * (anti-join na venda), atribuição por chave única (== pódio). Degrada em
+ * PGRST202 (migration pendente) → retorna null e o cálculo legado on-the-fly
+ * sobrevive (no-op até os cadernos existirem). `base_revenue` por membro ==
+ * receita do pódio daquele membro (invariante #997): a barra da meta, o pódio e
+ * o bônus OTE passam a ler o MESMO número (mata o 3º-formula do finding #9 + R5/#3).
+ */
+interface CanonicalCommission {
+  totalMRR: number;
+  totalProjeto: number;
+  commissionMRR: number;
+  commissionProjeto: number;
+  totalCommission: number;
+  baseRevenue: number;
+  saleCount: number;
+}
+
+async function overlayCommissionLedger(
+  organizationId: string,
+  teamMemberId: string,
+  month: number,
+  year: number,
+): Promise<CanonicalCommission | null> {
+  const period = monthPeriodArgs(month, year);
+  const { data, error } = await supabase.rpc("get_commission_ledger" as never, {
+    p_org_id: organizationId,
+    p_period: period.p_period,
+    p_ref: period.p_ref,
+    p_start: period.p_start,
+    p_end: period.p_end,
+    p_filter_member_id: teamMemberId,
+  } as never);
+
+  if (error) {
+    if (isMissingSchemaError(error)) return null; // migration pendente → mantém legado
+    console.error("❌ [overlayCommissionLedger] RPC error:", error.message, error.code);
+    return null;
+  }
+
+  const raw = Array.isArray(data) ? (data.length > 0 ? data[0] : null) : data;
+  const ledger = raw as CommissionLedgerResult | null;
+  if (!ledger) return null;
+
+  // Filtrado por membro → by_member tem 0 ou 1 linha. Sem linha = sem venda
+  // canônica no período (comissão 0) — coerente com "membro fora do pódio" (R5).
+  const m = ledger.by_member?.find((x) => x.member_id === teamMemberId) ?? null;
+  if (!m) {
+    return {
+      totalMRR: 0, totalProjeto: 0, commissionMRR: 0, commissionProjeto: 0,
+      totalCommission: 0, baseRevenue: 0, saleCount: 0,
+    };
+  }
+  return {
+    totalMRR: m.by_type.mrr.base_revenue,
+    totalProjeto: m.by_type.projeto.base_revenue,
+    commissionMRR: m.by_type.mrr.commission,
+    commissionProjeto: m.by_type.projeto.commission,
+    totalCommission: m.commission,
+    baseRevenue: m.base_revenue,
+    saleCount: m.sale_count,
+  };
+}
+
 // Calculate commission summary for a closer
 export interface CommissionSummary {
   totalMRR: number;
@@ -209,10 +280,10 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
       if (salesQ2.error) throw salesQ2.error;
       const sales = [...(salesQ1.data || []), ...(salesQ2.data || [])];
 
-      // Calculate totals by product type
+      // Calculate totals by product type (LEGADO — base de fallback)
       let totalMRR = 0;
       let totalProjeto = 0;
-      const salesCount = sales?.length || 0;
+      let salesCount = sales?.length || 0;
 
       sales?.forEach(sale => {
         const value = Number(sale.sale_value) || 0;
@@ -224,13 +295,27 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
         }
       });
 
-      // Calculate commissions - allow zero values
+      // Calculate commissions - allow zero values (LEGADO)
       const commissionMRRPercent = member.commission_mrr_percent != null ? Number(member.commission_mrr_percent) : 1;
       const commissionProjetoPercent = member.commission_projeto_percent != null ? Number(member.commission_projeto_percent) : 0.5;
-      
-      const commissionMRR = totalMRR * (commissionMRRPercent / 100);
-      const commissionProjeto = totalProjeto * (commissionProjetoPercent / 100);
-      const totalCommission = commissionMRR + commissionProjeto;
+
+      let commissionMRR = totalMRR * (commissionMRRPercent / 100);
+      let commissionProjeto = totalProjeto * (commissionProjetoPercent / 100);
+      let totalCommission = commissionMRR + commissionProjeto;
+
+      // ── Overlay CANÔNICO (get_commission_ledger, #997/ADR-0017 §6) ──────────
+      // Receita e comissão passam a vir do caderno sale_events (snapshot de taxa,
+      // líquido de estorno, atribuição única) — o MESMO número do pódio. Degrada
+      // pra legado se a migration não aplicou (PGRST202) — no-op nesse caso.
+      const canonical = await overlayCommissionLedger(organizationId, teamMemberId, month, year);
+      if (canonical) {
+        totalMRR = canonical.totalMRR;
+        totalProjeto = canonical.totalProjeto;
+        commissionMRR = canonical.commissionMRR;
+        commissionProjeto = canonical.commissionProjeto;
+        totalCommission = canonical.totalCommission;
+        salesCount = canonical.saleCount;
+      }
 
       // Get goal progress based on member metric_type
       // Prefer: individual goal; fallback: team goal (team_member_id null)
@@ -295,34 +380,40 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
         }).length;
         goalProgress = goalTarget > 0 ? (goalCurrent / goalTarget) * 100 : 0;
       } else {
-        // Sales (ex-Closer): tenta usar meta em ordem de prioridade
+        // Sales (ex-Closer): tenta usar meta em ordem de prioridade. O valor
+        // corrente vem do MESMO número canônico que o pódio (totalMRR/totalProjeto
+        // e salesCount já são canônicos quando o overlay do ledger sucedeu), via a
+        // fórmula ÚNICA resolveSalesGoalProgress (mata o 3º-formula do finding #9).
         const vendasTarget = await fetchGoalTarget("vendas");
         const clientesTarget = vendasTarget > 0 ? 0 : await fetchGoalTarget("clientes");
         const faturamentoTarget = vendasTarget > 0 || clientesTarget > 0 ? 0 : await fetchGoalTarget("faturamento");
 
+        // (target, isRevenue): "vendas" >= 500 é heurística de meta em R$; senão
+        // quantidade. "clientes" = contagem; "faturamento" = R$.
+        let goalIsRevenue = false;
         if (vendasTarget > 0) {
           goalTarget = vendasTarget;
-
-          // Heurística: se a meta de "vendas" for muito alta, ela normalmente
-          // está sendo usada como meta de faturamento (R$) e não quantidade.
-          // Ex: "10k em vendas".
-          if (vendasTarget >= 500) {
-            goalCurrent = totalMRR + totalProjeto;
-          } else {
-            goalCurrent = salesCount;
-          }
+          goalIsRevenue = vendasTarget >= 500;
         } else if (clientesTarget > 0) {
           goalTarget = clientesTarget;
-          goalCurrent = salesCount;
+          goalIsRevenue = false;
         } else if (faturamentoTarget > 0) {
           goalTarget = faturamentoTarget;
-          goalCurrent = totalMRR + totalProjeto;
+          goalIsRevenue = true;
         } else {
           goalTarget = 0;
-          goalCurrent = salesCount;
+          goalIsRevenue = false;
         }
 
-        goalProgress = goalTarget > 0 ? (goalCurrent / goalTarget) * 100 : 0;
+        const sp = resolveSalesGoalProgress({
+          goalTarget,
+          goalIsRevenue,
+          canonicalRevenue: totalMRR + totalProjeto,
+          canonicalSaleCount: salesCount,
+        });
+        goalTarget = sp.target;
+        goalCurrent = sp.current;
+        goalProgress = sp.progress;
       }
 
       // Calculate OTE bonus
