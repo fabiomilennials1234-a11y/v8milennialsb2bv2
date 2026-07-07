@@ -42,6 +42,11 @@
 #      ADR-0017 §6,§8): reads only the projection, net-of-reversal, rate
 #      snapshot immovable, R5-killer equivalence (ranking member ⟺ ledger line,
 #      base==get_ranking.revenue), member filter, org-tz, assert_org_access.
+#  12. productivity_canonical_test.sql — produtividade activity-in-period (#1000,
+#      ADR-0013 / ADR-0017 §2-5): dimensão `vendido` lê SÓ sale_events, líquida
+#      de estorno + atribuição sale_responsible_id única (R5) + sem type='system'
+#      (R3) + âncora sold_at (R4); novos por created_at, reuniões por
+#      meeting_events; drill do caderno; assert_org_access.
 #
 # All files run inside rolled-back transactions, so none mutates the DB.
 #
@@ -71,12 +76,13 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/get_sales_metrics_test.sql" \
     "$SCRIPT_DIR/get_funnel_flow_test.sql" \
     "$SCRIPT_DIR/get_ranking_test.sql" \
-    "$SCRIPT_DIR/get_commission_ledger_test.sql"
+    "$SCRIPT_DIR/get_commission_ledger_test.sql" \
+    "$SCRIPT_DIR/productivity_canonical_test.sql"
 }
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql pipeline_stage_events_test.sql sale_events_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql pipeline_stage_events_test.sql sale_events_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces
