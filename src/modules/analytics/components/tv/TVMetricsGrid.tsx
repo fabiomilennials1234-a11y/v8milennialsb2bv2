@@ -112,7 +112,7 @@ export function TVMetricsGrid({
       />
       
       <MetricCard
-        title="Ticket Médio Rec."
+        title="Ticket Médio Novo Negócio"
         value={formatCurrency(ticketMedioMRR)}
         icon={DollarSign}
         color="primary"
@@ -120,7 +120,7 @@ export function TVMetricsGrid({
       />
       
       <MetricCard
-        title="Ticket Médio Projeto"
+        title="Ticket Médio Carteira"
         value={formatCurrency(ticketMedioProjeto)}
         icon={Briefcase}
         color="purple"
