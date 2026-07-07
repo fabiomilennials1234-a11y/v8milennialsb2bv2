@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { deriveAttachmentMediaType } from "@/modules/communication/lib/attachment-media-type";
+import {
+  deriveAttachmentMediaType,
+  getAttachmentValidationError,
+  ATTACHMENT_ACCEPT,
+  MAX_ATTACHMENT_BYTES,
+} from "@/modules/communication/lib/attachment-media-type";
 
 describe("deriveAttachmentMediaType", () => {
   it("maps image/* to image", () => {
@@ -38,5 +43,36 @@ describe("deriveAttachmentMediaType", () => {
     expect(deriveAttachmentMediaType(null)).toBe("document");
     expect(deriveAttachmentMediaType(undefined)).toBe("document");
     expect(deriveAttachmentMediaType("application/octet-stream")).toBe("document");
+  });
+});
+
+describe("shared attachment constants", () => {
+  it("accept list covers image, video and business documents (PDF, NF-e XML, ZIP)", () => {
+    for (const token of ["image/*", "video/*", "application/pdf", ".docx", ".xlsx", ".csv", ".xml", ".zip"]) {
+      expect(ATTACHMENT_ACCEPT).toContain(token);
+    }
+  });
+
+  it("accept list excludes audio (voice notes have their own flow)", () => {
+    expect(ATTACHMENT_ACCEPT).not.toContain("audio");
+  });
+
+  it("size cap is 16MB", () => {
+    expect(MAX_ATTACHMENT_BYTES).toBe(16 * 1024 * 1024);
+  });
+});
+
+describe("getAttachmentValidationError", () => {
+  it("rejects empty files (0 bytes)", () => {
+    expect(getAttachmentValidationError({ size: 0 })).toMatch(/vazio/);
+  });
+
+  it("rejects files above the 16MB cap", () => {
+    expect(getAttachmentValidationError({ size: MAX_ATTACHMENT_BYTES + 1 })).toMatch(/16MB/);
+  });
+
+  it("accepts files within bounds (including exactly 16MB)", () => {
+    expect(getAttachmentValidationError({ size: 1 })).toBeNull();
+    expect(getAttachmentValidationError({ size: MAX_ATTACHMENT_BYTES })).toBeNull();
   });
 });

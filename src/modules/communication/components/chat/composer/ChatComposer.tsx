@@ -35,7 +35,11 @@ import { useMessageTemplates } from "@/modules/communication/hooks/useMessageTem
 import { useInstanceCapabilities } from "@/modules/communication/hooks/useInstanceCapabilities";
 import { resolveVariables } from "@/lib/template-variables";
 import { convertAudioBlobToMp3, preloadLamejs } from "@/modules/communication/lib/audioToMp3";
-import { deriveAttachmentMediaType } from "@/modules/communication/lib/attachment-media-type";
+import {
+  deriveAttachmentMediaType,
+  getAttachmentValidationError,
+  ATTACHMENT_ACCEPT,
+} from "@/modules/communication/lib/attachment-media-type";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
 import type { DensityMode } from "@/modules/communication/components/chat/layout/ChatShell";
@@ -108,6 +112,8 @@ export function ChatComposer({
   const caps = useInstanceCapabilities(instanceId);
   const [isDragOver, setIsDragOver] = useState(false);
   const [sendAsSticker, setSendAsSticker] = useState(false);
+  // Leitura base64 do anexo em andamento (janela pré-mutation)
+  const [isPreparing, setIsPreparing] = useState(false);
 
   // Refs
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -217,15 +223,11 @@ export function ChatComposer({
     }
   }, [showSlashPopover, isRecording, handleSend, setMessage]);
 
-  // Teto único pra qualquer anexo. Uazapi/WhatsApp aguenta mais que imagem,
-  // mas base64 → Storage → provider fica pesado acima disso; 16MB cobre PDF/
-  // planilha/vídeo curto sem travar o browser.
-  const MAX_ATTACHMENT_BYTES = 16 * 1024 * 1024;
-
   const handleFileSelect = useCallback((file: File | null) => {
     if (!file) return;
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      toast.error("Arquivo muito grande (máximo 16MB)");
+    const validationError = getAttachmentValidationError(file);
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
     const kind = deriveAttachmentMediaType(file.type);
@@ -239,7 +241,7 @@ export function ChatComposer({
     } else {
       setFilePreview(null);
     }
-  }, [MAX_ATTACHMENT_BYTES]);
+  }, []);
 
   const clearAttachment = useCallback(() => {
     setSelectedFile(null);
@@ -255,9 +257,13 @@ export function ChatComposer({
   }, [handleFileSelect]);
 
   const handleSendMedia = useCallback(async () => {
-    if (!selectedFile || !instanceName) return;
+    // isPreparing cobre a janela da leitura base64 (centenas de ms num PDF de
+    // 16MB) em que sendMedia.isPending ainda é false — sem isso, duplo-clique
+    // envia o arquivo em duplicata.
+    if (!selectedFile || !instanceName || sendMedia.isPending || isPreparing) return;
     const kind = deriveAttachmentMediaType(selectedFile.type);
     const asSticker = sendAsSticker && kind === "image";
+    setIsPreparing(true);
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -285,8 +291,10 @@ export function ChatComposer({
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao enviar arquivo");
+    } finally {
+      setIsPreparing(false);
     }
-  }, [selectedFile, instanceName, phoneNumber, instanceId, leadId, caption, sendMedia, sendAsSticker, clearAttachment]);
+  }, [selectedFile, instanceName, phoneNumber, instanceId, leadId, caption, sendMedia, sendAsSticker, clearAttachment, isPreparing]);
 
   const handleAudioRecorded = useCallback(async (audioBlob: Blob) => {
     setIsRecording(false);
@@ -311,12 +319,13 @@ export function ChatComposer({
         mediaType: "audio",
         media: base64,
         mimetype: "audio/mpeg",
+        leadId: leadId ?? null,
       });
       toast.success("Áudio enviado!");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao enviar áudio");
     }
-  }, [phoneNumber, instanceName, instanceId, sendMedia]);
+  }, [phoneNumber, instanceName, instanceId, sendMedia, leadId]);
 
   // ─── Drop zone ──────────────────────────────────────────────────────────────
 
@@ -453,10 +462,10 @@ export function ChatComposer({
                   <div className="flex gap-2">
                     <Button
                       onClick={handleSendMedia}
-                      disabled={sendMedia.isPending}
+                      disabled={sendMedia.isPending || isPreparing}
                       className="flex-1"
                     >
-                      {sendMedia.isPending ? (
+                      {sendMedia.isPending || isPreparing ? (
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       ) : sendAsSticker ? (
                         <Sticker className="w-4 h-4 mr-2" />
@@ -500,7 +509,7 @@ export function ChatComposer({
               setShowSlashPopover(true);
             }}
             onAttach={() => fileInputRef.current?.click()}
-            disabled={sendMessage.isPending}
+            disabled={sendMessage.isPending || sendMedia.isPending}
           />
 
           {/* Input row — container "pill" arredondado (estilo mockup) */}
@@ -509,7 +518,7 @@ export function ChatComposer({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt"
+              accept={ATTACHMENT_ACCEPT}
               onChange={handleFileInputChange}
               className="hidden"
               aria-hidden="true"

@@ -8,9 +8,12 @@
  *
  * Reusa hooks de envio do /chat (useSendWhatsAppMessage / useSendWhatsAppMedia)
  * e o componente AudioRecorder. UI é toda própria.
+ *
+ * Anexos: mesma paridade do composer desktop (imagem, vídeo, PDF/documentos) —
+ * accept/teto/derivação vêm de `lib/attachment-media-type`.
  */
 import { useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
-import { Mic, Paperclip, Send } from "lucide-react";
+import { Film, FileText, Mic, Paperclip, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +21,11 @@ import {
   useSendWhatsAppMessage,
   useSendWhatsAppMedia,
 } from "@/modules/communication/hooks/chat/useWhatsAppSend";
+import {
+  deriveAttachmentMediaType,
+  getAttachmentValidationError,
+  ATTACHMENT_ACCEPT,
+} from "@/modules/communication/lib/attachment-media-type";
 import { AudioRecorder } from "@/modules/communication/components/chat/media/AudioRecorder";
 
 interface ChatBubbleComposerProps {
@@ -39,7 +47,8 @@ export function ChatBubbleComposer({
 }: ChatBubbleComposerProps) {
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
-  const [imagePreview, setImagePreview] = useState<{ data: string; name: string } | null>(null);
+  // Anexo pendente — imagem mostra thumbnail; documento/vídeo mostram chip.
+  const [attachment, setAttachment] = useState<{ data: string; name: string; mime: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -83,43 +92,60 @@ export function ChatBubbleComposer({
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
+    const validationError = getAttachmentValidationError(file);
+    if (validationError) {
       toast({
-        title: "Formato não suportado",
-        description: "Selecione uma imagem (PNG, JPG, etc).",
+        title: "Anexo inválido",
+        description: validationError,
         variant: "destructive",
       });
+      e.target.value = "";
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       const data = reader.result as string;
-      setImagePreview({ data, name: file.name });
+      setAttachment({ data, name: file.name, mime: file.type });
+    };
+    reader.onerror = () => {
+      toast({
+        title: "Erro ao ler arquivo",
+        description: "Não foi possível ler o arquivo selecionado. Tente novamente.",
+        variant: "destructive",
+      });
     };
     reader.readAsDataURL(file);
-    e.target.value = ""; // permite re-selecionar mesma imagem
+    e.target.value = ""; // permite re-selecionar mesmo arquivo
   };
 
-  const handleSendImage = async () => {
-    if (!imagePreview || isSending) return;
-    const captionText = trimmed;
-    const preview = imagePreview;
-    setImagePreview(null);
-    setText("");
+  const handleSendAttachment = async () => {
+    if (!attachment || isSending) return;
+    const kind = deriveAttachmentMediaType(attachment.mime);
     try {
       await sendMedia.mutateAsync({
         phoneNumber,
         instanceName,
         instanceId,
-        mediaType: "image",
-        media: preview.data,
-        caption: captionText || undefined,
-        fileName: preview.name,
+        mediaType: kind,
+        media: attachment.data,
+        caption: trimmed || undefined,
+        fileName: attachment.name,
+        mimetype: attachment.mime,
         leadId,
+      });
+      // Limpa só no sucesso — em falha o preview fica intacto pra retry
+      // (mesmo contrato do composer desktop).
+      setAttachment(null);
+      setText("");
+      toast({
+        title:
+          kind === "document" ? "Arquivo enviado!"
+            : kind === "video" ? "Vídeo enviado!"
+            : "Imagem enviada!",
       });
     } catch (err) {
       toast({
-        title: "Falha ao enviar imagem",
+        title: "Falha ao enviar arquivo",
         description: err instanceof Error ? err.message : "Tente novamente.",
         variant: "destructive",
       });
@@ -165,23 +191,34 @@ export function ChatBubbleComposer({
     );
   }
 
-  // ── Image preview antes de enviar ─────────────────────────────────────────
-  if (imagePreview) {
+  // ── Preview do anexo antes de enviar — imagem mostra thumbnail,
+  //    documento/vídeo mostram chip com ícone + nome. ─────────────────────────
+  if (attachment) {
+    const kind = deriveAttachmentMediaType(attachment.mime);
+    const KindIcon = kind === "video" ? Film : FileText;
     return (
       <div className="border-t border-border/40 bg-popover/95">
         <div className="px-3 pt-3 pb-2 flex items-start gap-2">
-          <img
-            src={imagePreview.data}
-            alt={imagePreview.name}
-            className="w-16 h-16 rounded-lg object-cover border border-border"
-          />
+          {kind === "image" ? (
+            <img
+              src={attachment.data}
+              alt={attachment.name}
+              className="w-16 h-16 rounded-lg object-cover border border-border"
+            />
+          ) : (
+            <div className="w-16 h-16 shrink-0 rounded-lg bg-muted flex items-center justify-center border border-border">
+              <KindIcon className="w-6 h-6 text-muted-foreground" aria-hidden />
+            </div>
+          )}
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-muted-foreground truncate">{imagePreview.name}</p>
+            <p className="text-xs text-muted-foreground truncate" title={attachment.name}>
+              {attachment.name}
+            </p>
             <Textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Adicione uma legenda (opcional)"
-              aria-label="Legenda da imagem"
+              aria-label="Legenda do anexo"
               rows={1}
               className="mt-1 min-h-[32px] max-h-[80px] py-1 px-2 resize-none border-0 bg-muted/40 text-xs rounded-md focus-visible:ring-1 focus-visible:ring-ring"
             />
@@ -192,14 +229,14 @@ export function ChatBubbleComposer({
             variant="ghost"
             size="sm"
             onClick={() => {
-              setImagePreview(null);
+              setAttachment(null);
               setText("");
             }}
             disabled={isSending}
           >
             Cancelar
           </Button>
-          <Button size="sm" onClick={handleSendImage} disabled={isSending}>
+          <Button size="sm" onClick={handleSendAttachment} disabled={isSending}>
             {isSending ? "Enviando…" : "Enviar"}
           </Button>
         </div>
@@ -213,7 +250,8 @@ export function ChatBubbleComposer({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept={ATTACHMENT_ACCEPT}
+        data-testid="bubble-file-input"
         onChange={handleFileChange}
         hidden
         aria-hidden
@@ -225,7 +263,8 @@ export function ChatBubbleComposer({
         className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
         onClick={() => fileInputRef.current?.click()}
         disabled={isSending}
-        aria-label="Anexar imagem"
+        aria-label="Anexar arquivo"
+        title="Anexar imagem, vídeo ou documento"
       >
         <Paperclip className="w-4 h-4" aria-hidden />
       </Button>
