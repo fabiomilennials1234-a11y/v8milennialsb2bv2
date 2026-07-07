@@ -206,6 +206,10 @@ verify_jwt = false
 [functions.classify-followup-stages]
 verify_jwt = false
 
+# classify-stage-roles: Stage Role Classifier (#991, ADR-0017 §1); x-cron-secret
+[functions.classify-stage-roles]
+verify_jwt = false
+
 # process-outbound-dispatches: chamado por pg_cron; autenticação via x-cron-secret
 [functions.process-outbound-dispatches]
 verify_jwt = false
