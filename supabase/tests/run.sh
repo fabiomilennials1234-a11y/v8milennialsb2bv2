@@ -25,6 +25,10 @@
 #   7. commission_projection_test.sql  — commission as projection of the sale
 #      ledger (#994, ADR-0017 §6): rate snapshot + reversal mirror +
 #      idempotency + projection guard + column grants.
+#   8. get_sales_metrics_test.sql      — canonical sales reader (#995,
+#      ADR-0017 §2-5,§8): net-of-reversal + stream split + per-closer +
+#      unattributed invariant + org-tz period cut + pipeline/member filters +
+#      NULL-safe ticket + assert_org_access.
 #
 # All files run inside rolled-back transactions, so none mutates the DB.
 #
@@ -50,12 +54,13 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/stage_role_test.sql" \
     "$SCRIPT_DIR/pipeline_stage_events_test.sql" \
     "$SCRIPT_DIR/sale_events_test.sql" \
-    "$SCRIPT_DIR/commission_projection_test.sql"
+    "$SCRIPT_DIR/commission_projection_test.sql" \
+    "$SCRIPT_DIR/get_sales_metrics_test.sql"
 }
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql pipeline_stage_events_test.sql sale_events_test.sql commission_projection_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql pipeline_stage_events_test.sql sale_events_test.sql commission_projection_test.sql get_sales_metrics_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces
