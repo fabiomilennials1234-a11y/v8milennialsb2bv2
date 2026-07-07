@@ -9717,6 +9717,7 @@ export type Database = {
           subscription_expires_at: string | null
           subscription_plan: string | null
           subscription_status: string
+          timezone: string
           updated_at: string | null
           user_creation_key: string | null
           whatsapp_migration_completed_at: string | null
@@ -9755,6 +9756,7 @@ export type Database = {
           subscription_expires_at?: string | null
           subscription_plan?: string | null
           subscription_status?: string
+          timezone?: string
           updated_at?: string | null
           user_creation_key?: string | null
           whatsapp_migration_completed_at?: string | null
@@ -9793,6 +9795,7 @@ export type Database = {
           subscription_expires_at?: string | null
           subscription_plan?: string | null
           subscription_status?: string
+          timezone?: string
           updated_at?: string | null
           user_creation_key?: string | null
           whatsapp_migration_completed_at?: string | null

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # supabase/tests/run.sh
 #
-# Runs the pgTAP RLS-invariant suite (issue #638) against a Postgres database
-# that already has the project migrations applied.
+# Runs the pgTAP suites (RLS invariants #638 + metric period bounds #989)
+# against a Postgres database that already has the project migrations applied.
 #
 # In CI this runs after `supabase start` (which applies supabase/migrations/*).
 # Locally: `supabase start && supabase/tests/run.sh`.
@@ -13,8 +13,10 @@
 #      suite is load-bearing (would fail on a real violation).
 #   2. rls_invariants.sql              — the GREEN gate: asserts the real schema
 #      has zero violations. This is the actual CI failure condition.
+#   3. metric_period_bounds_test.sql   — Metric Period foundation (#989,
+#      ADR-0017 §5): organizations.timezone + metric_period_bounds().
 #
-# Both files run inside rolled-back transactions, so neither mutates the DB.
+# All files run inside rolled-back transactions, so none mutates the DB.
 #
 # Env:
 #   DATABASE_URL  full libpq URL. Defaults to the supabase-local db on :54322.
@@ -25,7 +27,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 DATABASE_URL="${DATABASE_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}"
 
-echo "==> RLS invariant suite (issue #638)"
+echo "==> pgTAP suites (RLS invariants #638 + metric period bounds #989)"
 echo "    DB: ${DATABASE_URL%%\?*}"
 
 # pgTAP harness. Prefer pg_prove (TAP aggregation); fall back to raw psql if the
@@ -33,12 +35,13 @@ echo "    DB: ${DATABASE_URL%%\?*}"
 run_with_pg_prove() {
   pg_prove --verbose --ext .sql -d "$DATABASE_URL" \
     "$SCRIPT_DIR/rls_invariants_red_fixture.sql" \
-    "$SCRIPT_DIR/rls_invariants.sql"
+    "$SCRIPT_DIR/rls_invariants.sql" \
+    "$SCRIPT_DIR/metric_period_bounds_test.sql"
 }
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces
@@ -64,4 +67,4 @@ else
   run_with_psql
 fi
 
-echo "==> RLS invariant suite passed"
+echo "==> pgTAP suites passed"
