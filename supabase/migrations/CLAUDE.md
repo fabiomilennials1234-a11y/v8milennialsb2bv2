@@ -15,6 +15,22 @@
 5. **`WITH CHECK` em UPDATE/INSERT policies.** Sem isso → escalada de privilégio.
 6. **Apply em prod só com autorização CTO explícita** na sessão.
 
+## Lint de métricas (ADR-0017) — bloqueante no CI
+
+`scripts/check-metric-antipatterns.sh` reprova migration NOVA com os anti-padrões
+que causaram as 24 inconsistências da auditoria 2026-07-02:
+
+1. **`type = 'system'` como filtro** — cega custom pipelines. Parametrize por `pipeline_id`.
+2. **`COALESCE` encadeando 2+ chaves de atribuição** (`sale_responsible_id`, `closer_id`,
+   `sdr_id`, ...) — gera `SUM(membro) ≠ total`. Use 1 chave canônica por papel; snapshot no evento.
+3. **`updated_at` como âncora temporal** — qualquer touch move a venda de mês.
+   Use a data gravada no evento (`sold_at`/`occurred_at`).
+4. **`SUM` de receita fora de `sale_events`** — receita só do caderno, líquida de estornos.
+
+Backlog congelado em `scripts/metric-antipatterns-baseline.txt` (ratchet — só diminui).
+Exceção deliberada (ex.: migração de dados one-off): sufixo `-- metric-lint-allow: <motivo>`
+na linha. Contexto completo: `docs/adr/0017-event-sourced-sales-and-stage-metrics.md`.
+
 ## Naming
 
 ```

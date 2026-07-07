@@ -25,6 +25,8 @@ jobs:
         run: npm run lint:deps:check
       - name: Migration version lint (no new duplicate version prefixes)
         run: bash scripts/check-migration-versions.sh
+      - name: Metric anti-pattern lint (ADR-0017 — no new metric root causes)
+        run: bash scripts/check-metric-antipatterns.sh
       - name: TSC ratchet (no new type errors vs baseline)
         run: npm run typecheck:ratchet
       - name: Build (prod)
