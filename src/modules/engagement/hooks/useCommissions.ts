@@ -13,6 +13,9 @@ export function useCommissions(month?: number, year?: number) {
     queryKey: ["commissions", month, year, organizationId],
     queryFn: async () => {
       if (!organizationId) return [];
+      // source='manual': linhas projetadas de sale_events (#994, ADR-0017 §6)
+      // ficam INVISÍVEIS pra esta UI até o SP-3 — os cards desta página já
+      // calculam comissão on-the-fly; somar a projeção aqui dobraria o valor.
       let query = supabase
         .from("commissions")
         .select(`
@@ -24,6 +27,7 @@ export function useCommissions(month?: number, year?: number) {
           )
         `)
         .eq("organization_id", organizationId)
+        .eq("source", "manual")
         .order("created_at", { ascending: false });
 
       if (month !== undefined) {
@@ -59,6 +63,8 @@ export function useCommissionsByMember(teamMemberId: string, month?: number, yea
         `)
         .eq("organization_id", organizationId)
         .eq("team_member_id", teamMemberId)
+        // Projeções de sale_events (#994) invisíveis até o SP-3 — ver useCommissions.
+        .eq("source", "manual")
         .order("created_at", { ascending: false });
 
       if (month !== undefined) {

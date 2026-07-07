@@ -17,17 +17,17 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 import { useCommissions } from "@/modules/engagement/hooks/useCommissions";
 
 function mockCommissionQuery(data: unknown[]) {
+  // Chain auto-referente + thenable: suporta qualquer sequência de .eq
+  // (org, source #994, month, year) em qualquer ordem, inclusive após .order.
+  const chain: Record<string, unknown> = {};
+  chain.eq = vi.fn().mockReturnValue(chain);
+  chain.gte = vi.fn().mockReturnValue(chain);
+  chain.lte = vi.fn().mockReturnValue(chain);
+  chain.order = vi.fn().mockReturnValue(chain);
+  chain.then = (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+    Promise.resolve({ data, error: null }).then(resolve, reject);
   mockFrom.mockReturnValue({
-    select: vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        gte: vi.fn().mockReturnValue({
-          lte: vi.fn().mockReturnValue({
-            order: vi.fn().mockResolvedValue({ data, error: null }),
-          }),
-        }),
-        order: vi.fn().mockResolvedValue({ data, error: null }),
-      }),
-    }),
+    select: vi.fn().mockReturnValue(chain),
   });
 }
 

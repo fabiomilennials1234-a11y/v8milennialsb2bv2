@@ -2643,6 +2643,9 @@ export type Database = {
           organization_id: string | null
           paid: boolean | null
           pipe_proposta_id: string | null
+          rate_percent: number | null
+          sale_event_id: string | null
+          source: string
           team_member_id: string
           type: Database["public"]["Enums"]["product_type"]
           year: number
@@ -2655,6 +2658,9 @@ export type Database = {
           organization_id?: string | null
           paid?: boolean | null
           pipe_proposta_id?: string | null
+          rate_percent?: number | null
+          sale_event_id?: string | null
+          source?: string
           team_member_id: string
           type: Database["public"]["Enums"]["product_type"]
           year: number
@@ -2667,6 +2673,9 @@ export type Database = {
           organization_id?: string | null
           paid?: boolean | null
           pipe_proposta_id?: string | null
+          rate_percent?: number | null
+          sale_event_id?: string | null
+          source?: string
           team_member_id?: string
           type?: Database["public"]["Enums"]["product_type"]
           year?: number
@@ -2705,6 +2714,13 @@ export type Database = {
             columns: ["pipe_proposta_id"]
             isOneToOne: false
             referencedRelation: "pipeline_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commissions_sale_event_id_fkey"
+            columns: ["sale_event_id"]
+            isOneToOne: true
+            referencedRelation: "sale_events"
             referencedColumns: ["id"]
           },
           {
