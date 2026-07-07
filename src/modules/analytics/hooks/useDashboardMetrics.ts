@@ -5,6 +5,11 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
 import { computeMeetingRates, type MeetingEventLike } from "@/modules/analytics/lib/meeting-rates";
+import {
+  monthPeriodArgs,
+  type SalesMetricsResult,
+  type RankingResult,
+} from "@/modules/analytics/types/canonical-metrics";
 
 /** Intervalo do mês em UTC — igual ao usado na importação (metrics_period_at = 1º do mês 00:00 UTC). */
 function getMonthRangeUTC(month: number, year: number) {
@@ -33,6 +38,17 @@ interface DashboardMetrics {
   vendaBaseAtiva: number;
   taxaConversao: number;
   dailySales: Array<{ day: string; revenue: number; count: number }>;
+  // ── Canonical ledger dimensions (#995 / ADR-0017). Additive & optional: legacy
+  //    consumers ignore them; new surfaces can read them. Present only when the
+  //    canonical get_sales_metrics overlay succeeded (see isCanonicalRevenue). ──
+  /** true when vendaTotal/ticketMedio/stream came from the canonical ledger (net of reversals). */
+  isCanonicalRevenue?: boolean;
+  /** Reversal-aware revenue split by stream — novo_negocio (primeiro pedido) vs carteira (base ativa). */
+  revenueByStream?: { novoNegocio: number; carteira: number };
+  /** Revenue whose sale had no canonical sale_responsible_id (Σ closers + this == total). */
+  unattributedRevenue?: number;
+  /** Count of reversal-losing sales excluded from revenue in the period. */
+  lostCount?: number;
 }
 
 const EMPTY_DASHBOARD_METRICS: DashboardMetrics = {
@@ -43,6 +59,150 @@ const EMPTY_DASHBOARD_METRICS: DashboardMetrics = {
   propostasEnviadas: 0, tempoMedioResposta: 0,
   vendaPrimeiroPedido: 0, vendaBaseAtiva: 0, taxaConversao: 0, dailySales: [],
 };
+
+/**
+ * Unwrap a jsonb RPC result that Supabase may hand back as a single-element array.
+ */
+function unwrapJsonb<T>(data: unknown): T | null {
+  if (Array.isArray(data)) return (data.length > 0 ? data[0] : null) as T | null;
+  return (data ?? null) as T | null;
+}
+
+/**
+ * Overlay the CANONICAL sales ledger (get_sales_metrics, #995 / ADR-0017 §2-5) onto
+ * a legacy DashboardMetrics base. The legacy RPC (get_dashboard_metrics) stays the
+ * source for the non-money dimensions that this SP-3 slice has no ledger for — leads,
+ * meetings, proposals, response time, conversion, dailySales — while MONEY is taken
+ * from the append-only sale_events caderno: net of reversals (§3), single-key
+ * attribution (R5), stream split decided by the client (§2). Period is NAMED and cut
+ * in the org timezone by the DB (§5) — the frontend never computes UTC bounds.
+ *
+ * The canonical call degrades gracefully: if its migration is not yet applied
+ * (PGRST202 / undefined_function), the legacy money survives untouched, so this is
+ * a no-op in environments where the ledgers do not exist and becomes canonical the
+ * moment they do (rollback = revert this commit; ADR-0018 keeps the legacy RPC alive).
+ */
+async function overlayCanonicalSales(
+  base: DashboardMetrics,
+  organizationId: string,
+  month: number,
+  year: number,
+  filterMemberId: string | null,
+): Promise<DashboardMetrics> {
+  const period = monthPeriodArgs(month, year);
+  const { data, error } = await supabase.rpc("get_sales_metrics" as never, {
+    p_org_id: organizationId,
+    p_period: period.p_period,
+    p_ref: period.p_ref,
+    p_start: period.p_start,
+    p_end: period.p_end,
+    p_pipeline_id: null,
+    p_filter_member_id: filterMemberId,
+  } as never);
+
+  if (error) {
+    // Migration pendente → mantém a receita legada (comportamento idêntico ao anterior).
+    if (isMissingSchemaError(error)) return base;
+    console.error("❌ [overlayCanonicalSales] RPC error:", error.message, error.code);
+    return base;
+  }
+
+  const s = unwrapJsonb<SalesMetricsResult>(data);
+  if (!s) return base;
+
+  const novo = s.revenue_by_stream?.novo_negocio?.revenue ?? 0;
+  const carteira = s.revenue_by_stream?.carteira?.revenue ?? 0;
+
+  return {
+    ...base,
+    // Money → canonical (reversal-aware, single-key attribution).
+    vendaTotal: s.revenue_total ?? base.vendaTotal,
+    ticketMedio: s.ticket_medio ?? 0,
+    novosClientes: s.won_count ?? base.novosClientes,
+    // Stream split maps 1:1 onto the "Primeiro Pedido × Base Ativa" card (FirstOrderVsBase).
+    vendaPrimeiroPedido: novo,
+    vendaBaseAtiva: carteira,
+    // Additive canonical dimensions.
+    isCanonicalRevenue: true,
+    revenueByStream: { novoNegocio: novo, carteira },
+    unattributedRevenue: s.unattributed?.revenue ?? 0,
+    lostCount: s.lost_count ?? 0,
+  };
+}
+
+/** Enriched sales-ranking row consumed by TopPerformers / RankingTable / RankingPodium. */
+interface SalesRankingEntry {
+  id: string;
+  name: string | null;
+  job_title: string | null;
+  metric_type: string;
+  value: number;
+  conversions: number;
+  goal: number;
+  goalProgress: number;
+  position: number;
+  role: string;
+  /** Additive canonical dimension: share of period revenue ∈ [0,100]. */
+  revenueShare?: number;
+}
+
+/**
+ * Rebuild the sales podium from the CANONICAL leaderboard (get_ranking, #997 / ADR-0017),
+ * enriching name/job_title/goal from the legacy row of the same member id. Money
+ * (value), count (conversions) and position come from the caderno with single-key
+ * attribution; goalProgress is recomputed against the canonical value so the bar
+ * matches the canonical money. Members present in the legacy 5-key set but absent
+ * from the canonical single-key set are correctly dropped (they earned no canonical
+ * credit — R5). Degrades: RPC ausente → returns the legacy ranking unchanged.
+ */
+async function overlayCanonicalRanking(
+  legacy: SalesRankingEntry[],
+  organizationId: string,
+  month: number,
+  year: number,
+): Promise<SalesRankingEntry[]> {
+  const period = monthPeriodArgs(month, year);
+  const { data, error } = await supabase.rpc("get_ranking" as never, {
+    p_org_id: organizationId,
+    p_period: period.p_period,
+    p_ref: period.p_ref,
+    p_start: period.p_start,
+    p_end: period.p_end,
+    p_pipeline_id: null,
+  } as never);
+
+  if (error) {
+    if (isMissingSchemaError(error)) return legacy;
+    console.error("❌ [overlayCanonicalRanking] RPC error:", error.message, error.code);
+    return legacy;
+  }
+
+  const r = unwrapJsonb<RankingResult>(data);
+  if (!r || !Array.isArray(r.ranking)) return legacy;
+
+  const legacyById = new Map(legacy.map((m) => [m.id, m]));
+
+  return r.ranking
+    .slice()
+    .sort((a, b) => a.rank - b.rank)
+    .map((entry): SalesRankingEntry => {
+      const base = legacyById.get(entry.member_id);
+      const goal = base?.goal ?? 0;
+      return {
+        id: entry.member_id,
+        name: base?.name ?? null,
+        job_title: base?.job_title ?? null,
+        metric_type: base?.metric_type ?? "sales",
+        value: entry.revenue,
+        conversions: entry.sale_count,
+        goal,
+        goalProgress: goal > 0 ? Math.round((entry.revenue / goal) * 100) : 0,
+        position: entry.rank,
+        role: base?.role ?? "",
+        revenueShare: entry.revenue_share,
+      };
+    });
+}
 
 interface ConversionRate {
   id: string;
@@ -124,7 +284,9 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
       // Supabase RPC pode retornar JSONB como array — desembrulhar
       const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;
       const d = raw as Record<string, number> | null;
-      return {
+      // Base legada: dimensões sem caderno canônico nesta fatia (leads, reuniões,
+      // propostas, tempo de resposta, conversão, dailySales) seguem vindo daqui.
+      const legacyBase: DashboardMetrics = {
         totalLeads: d?.totalLeads ?? 0,
         reunioesMarcadas: d?.reunioesMarcadas ?? 0,
         reunioesComparecidas: d?.reunioesComparecidas ?? 0,
@@ -144,6 +306,13 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
         taxaConversao: d?.taxaConversao ?? 0,
         dailySales: (d?.dailySales as any[]) ?? [],
       };
+      // Receita (venda) → caderno canônico sale_events, líquida de estorno (ADR-0017).
+      // TODO(design #998): vendaMRR/vendaProjeto (eixo Recorrência×Projeto do
+      //   SalesBreakdown) NÃO têm equivalente canônico — o eixo canônico é
+      //   novo_negocio×carteira (FirstOrderVsBase). Mantidos legados até o eixo
+      //   MRR/Projeto ganhar um caderno próprio; podem divergir de vendaTotal
+      //   canônico durante o backfill (portão de reconciliação, ADR-0018).
+      return overlayCanonicalSales(legacyBase, organizationId, selectedMonth, selectedYear, effectiveFilter);
     },
     enabled: !!organizationId,
     staleTime: 5 * 60 * 1000, // 5 minutos — métricas sobrevivem navegação entre páginas
@@ -213,6 +382,16 @@ export function useConversionRates(month?: number, year?: number) {
   });
 }
 
+/**
+ * TODO(#998 — canonical funnel deferred): the canonical funnel leitor is
+ * get_funnel_flow (#996 / ADR-0017), but it REQUIRES a p_pipeline_id (funil é
+ * por-pipeline — mata R3) and returns a cohort/flow shape (open→booked→held→won)
+ * with NO "propostas" role. This hook (and the dashboard's org-wide funnel) has
+ * no pipeline in scope and shows a "Propostas" step, so it cannot map cleanly
+ * without a pipeline selector (redesign — out of scope here). Kept on the legacy
+ * get_dashboard_metrics until a pipeline picker lands. NB: this hook currently
+ * has no consumers (TabVisaoGeral derives its funnel inline from totalMetrics).
+ */
 export function useFunnelData(month?: number, year?: number) {
   const now = new Date();
   const selectedMonth = month ?? now.getMonth() + 1;
@@ -301,19 +480,38 @@ export function useRankingData(month?: number, year?: number) {
 
       const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;
 
+      const legacySalesRanking = (raw?.salesRanking ?? []) as Array<{
+        id: string;
+        name: string | null;
+        job_title: string | null;
+        metric_type: string;
+        value: number;
+        conversions: number;
+        goal: number;
+        goalProgress: number;
+        position: number;
+        role: string;
+        revenueShare?: number;
+      }>;
+
+      // Pódio de VENDA → leaderboard canônico get_ranking (#997 / ADR-0017). Money,
+      // contagem e posição vêm do caderno sale_events com atribuição por chave ÚNICA
+      // (sale_responsible_id) — mata R5 (soma-por-membro == total) e R3 (funil custom
+      // rankeia igual). Nome/cargo/meta são enriquecidos a partir da linha legada
+      // (mesmo id): a chave canônica é subconjunto da OR-chain legada, então todo
+      // membro canônico existe na base legada. Metas seguem legadas (fora do #997).
+      // meetingsRanking permanece 100% legado — get_ranking é só venda por decisão
+      // de escopo (#997); ranking de reunião é fatia posterior.
+      // Degrada: RPC ausente (migration pendente) → mantém o pódio legado intacto.
+      const salesRanking = await overlayCanonicalRanking(
+        legacySalesRanking,
+        organizationId,
+        selectedMonth,
+        selectedYear,
+      );
+
       return {
-        salesRanking: (raw?.salesRanking ?? []) as Array<{
-          id: string;
-          name: string | null;
-          job_title: string | null;
-          metric_type: string;
-          value: number;
-          conversions: number;
-          goal: number;
-          goalProgress: number;
-          position: number;
-          role: string;
-        }>,
+        salesRanking,
         meetingsRanking: (raw?.meetingsRanking ?? []) as Array<{
           id: string;
           name: string | null;

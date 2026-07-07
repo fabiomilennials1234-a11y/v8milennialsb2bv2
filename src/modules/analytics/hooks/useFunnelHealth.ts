@@ -6,6 +6,20 @@ import { useCurrentTeamMember } from "@/modules/identity";
  * Indicador de Saúde do Funil — coorte por período de criação do lead.
  * Semântica em CONTEXT.md (Funnel Health Indicator); RPC get_funnel_health
  * (migration 20261127000000), coberta por tests/integration/get-funnel-health.test.ts.
+ *
+ * TODO(#998 — canonical funnel deferred): o leitor canônico de funil é
+ *   get_funnel_flow (#996 / ADR-0017 §1). NÃO migrado nesta fatia por dois
+ *   bloqueios reais, não por falta de rewire:
+ *     1. get_funnel_flow EXIGE p_pipeline_id (funil é por-pipeline — mata R3).
+ *        Este hook recebe {start,end}+origins e NÃO tem pipeline em escopo;
+ *        adicionar um seletor de pipeline à aba Saúde é redesign (fora do #998).
+ *     2. get_funnel_flow devolve só coorte/fluxo (cohort_size, open→booked→held→
+ *        won, lost). A aba Saúde depende de dimensões SEM equivalente canônico
+ *        nesta fatia — tiers (avaliados/bons), depth, matriz pré-vendas×etapas
+ *        (sellers) e ciclos médios (cycles). Migrar agora zeraria essas colunas.
+ *   Prioridade do #998 é a correção do DINHEIRO (get_sales_metrics/get_ranking),
+ *   já entregue em useDashboardMetrics. get_funnel_health segue vivo como base
+ *   (ADR-0018 mantém as RPCs legadas como caminho de rollback).
  */
 
 export interface FunnelHealthStages {
