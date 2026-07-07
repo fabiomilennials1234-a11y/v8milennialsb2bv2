@@ -10809,6 +10809,13 @@ export type Database = {
           sla_hours: number | null
           stage_key: string
           stage_role: Database["public"]["Enums"]["stage_role"]
+          stage_role_reviewed_at: string | null
+          stage_role_reviewed_by: string | null
+          stage_role_suggested_at: string | null
+          stage_role_suggestion_source: string | null
+          suggested_stage_role:
+            | Database["public"]["Enums"]["stage_role"]
+            | null
           target_pipe_type: string | null
           target_stage_key: string | null
           updated_at: string | null
@@ -10834,6 +10841,13 @@ export type Database = {
           sla_hours?: number | null
           stage_key: string
           stage_role?: Database["public"]["Enums"]["stage_role"]
+          stage_role_reviewed_at?: string | null
+          stage_role_reviewed_by?: string | null
+          stage_role_suggested_at?: string | null
+          stage_role_suggestion_source?: string | null
+          suggested_stage_role?:
+            | Database["public"]["Enums"]["stage_role"]
+            | null
           target_pipe_type?: string | null
           target_stage_key?: string | null
           updated_at?: string | null
@@ -10859,6 +10873,13 @@ export type Database = {
           sla_hours?: number | null
           stage_key?: string
           stage_role?: Database["public"]["Enums"]["stage_role"]
+          stage_role_reviewed_at?: string | null
+          stage_role_reviewed_by?: string | null
+          stage_role_suggested_at?: string | null
+          stage_role_suggestion_source?: string | null
+          suggested_stage_role?:
+            | Database["public"]["Enums"]["stage_role"]
+            | null
           target_pipe_type?: string | null
           target_stage_key?: string | null
           updated_at?: string | null

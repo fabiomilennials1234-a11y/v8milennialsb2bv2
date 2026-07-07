@@ -31,6 +31,22 @@ export type {
   UsageByOrg,
 } from "./hooks/useMasterOperations";
 
+// ── Stage role review (won/lost — #991, ADR-0017 §1) ──────────────────────
+export {
+  useStageRoleSuggestions,
+  useReviewStageRoleSuggestion,
+} from "./hooks/useStageRoleSuggestions";
+export type { ReviewSuggestionInput } from "./hooks/useStageRoleSuggestions";
+export {
+  groupSuggestionsByOrg,
+  buildReviewUpdate,
+} from "./lib/stage-role-review";
+export type {
+  StageRoleSuggestionRow,
+  OrgSuggestionGroup,
+  ReviewAction,
+} from "./lib/stage-role-review";
+
 // ── Organizations ──────────────────────────────────────────────────────────
 export {
   useMasterOrganizations,

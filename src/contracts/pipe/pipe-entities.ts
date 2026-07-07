@@ -127,6 +127,23 @@ export interface LossReason {
   created_at: string;
 }
 
+/**
+ * Papel semântico governado de uma etapa (ADR-0017 §1, #990). Enum exclusivo
+ * — ÚNICO input de etapa permitido em métricas (is_final_* é UI-only).
+ */
+export type StageRole =
+  | "open"
+  | "meeting_booked"
+  | "meeting_held"
+  | "won"
+  | "lost";
+
+/** Roles que o Stage Role Classifier (#991) pode sugerir — `open` = sem sugestão. */
+export type SuggestableStageRole = Exclude<StageRole, "open">;
+
+/** Origem de uma sugestão do classifier (#991). */
+export type StageRoleSuggestionSource = "deterministic" | "ai" | "flag";
+
 /** Etapa de pipeline canônico (tabela `pipeline_stages`). */
 export interface PipelineStage {
   id: string;
@@ -139,6 +156,14 @@ export interface PipelineStage {
   is_active: boolean;
   is_final_positive: boolean;
   is_final_negative: boolean;
+  stage_role: StageRole;
+  // Sugestão pendente do Stage Role Classifier (#991) — won/lost aguardando
+  // confirmação humana (meeting_* auto-aplicam e não persistem aqui).
+  suggested_stage_role: StageRole | null;
+  stage_role_suggested_at: string | null;
+  stage_role_suggestion_source: StageRoleSuggestionSource | null;
+  stage_role_reviewed_at: string | null;
+  stage_role_reviewed_by: string | null;
   auto_move_min_days: number | null;
   auto_move_max_days: number | null;
   // Transição automática ao atingir etapa de sucesso. Destino é custom XOR
@@ -162,6 +187,12 @@ export interface PipelineStageInsert {
   position: number;
   is_final_positive?: boolean;
   is_final_negative?: boolean;
+  /**
+   * Papel semântico (ADR-0017 §1). Omitido → 'open' (trigger do #990 aplica o
+   * mapa de sistema em seeds). won/lost aqui = escolha explícita do humano no
+   * modal de etapa — confirmação permitida.
+   */
+  stage_role?: StageRole;
 }
 
 /** Modo de agendamento usado pelo RescheduleModal (slot do PipeOpsPort). */

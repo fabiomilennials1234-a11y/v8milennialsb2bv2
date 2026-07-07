@@ -32,6 +32,9 @@ import {
   TransitionSelector,
   type TransitionTarget,
 } from "@/modules/pipelines/components/shared/TransitionSelector";
+import { classifyStageRole } from "@/modules/pipelines/lib/stage-role-classifier";
+import { STAGE_ROLES, STAGE_ROLE_META } from "@/modules/pipelines/lib/stage-role";
+import type { StageRole } from "@/contracts/pipe";
 import {
   Plus,
   Trash2,
@@ -41,6 +44,7 @@ import {
   X,
   Loader2,
   AlertTriangle,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -94,6 +98,65 @@ const STAGE_COLORS = [
   "#64748b", // slate
 ];
 
+/**
+ * Dropdown do papel semântico da etapa (stage_role, ADR-0017 §1).
+ *
+ * won/lost selecionáveis manualmente — escolha explícita do admin conta como
+ * confirmação humana. A sugestão do classifier (#991) só PRÉ-PREENCHE; quem
+ * decide é sempre quem salva.
+ */
+function StageRoleSelect({
+  value,
+  onChange,
+  isSuggested,
+  idSuffix,
+}: {
+  value: StageRole;
+  onChange: (role: StageRole) => void;
+  isSuggested?: boolean;
+  idSuffix: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <Label htmlFor={`stage-role-${idSuffix}`} className="text-xs text-muted-foreground">
+          Papel nas métricas
+        </Label>
+        {isSuggested && (
+          <span className="inline-flex items-center gap-1 text-[11px] text-primary">
+            <Sparkles className="w-3 h-3" />
+            Sugerido pelo nome
+          </span>
+        )}
+      </div>
+      <Select value={value} onValueChange={(v) => onChange(v as StageRole)}>
+        <SelectTrigger id={`stage-role-${idSuffix}`} className="h-auto min-h-10 py-1.5">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {STAGE_ROLES.map((role) => (
+            <SelectItem key={role} value={role}>
+              <div className="flex items-center gap-2.5 py-0.5">
+                <span
+                  className={cn("w-2 h-2 rounded-full shrink-0", STAGE_ROLE_META[role].dotClassName)}
+                />
+                <div className="min-w-0 text-left">
+                  <div className="text-sm font-medium leading-tight">
+                    {STAGE_ROLE_META[role].label}
+                  </div>
+                  <div className="text-xs text-muted-foreground leading-tight">
+                    {STAGE_ROLE_META[role].description}
+                  </div>
+                </div>
+              </div>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 // Gerar stage_key a partir do nome
 function generateStageKey(name: string): string {
   return name
@@ -115,6 +178,7 @@ function SortableStageItem({
   editColor,
   editIsFinalPositive,
   editIsFinalNegative,
+  editStageRole,
   editTargetPipelineId,
   editTargetStageId,
   editTargetPipeType,
@@ -123,6 +187,7 @@ function SortableStageItem({
   onEditColorChange,
   onEditIsFinalPositiveChange,
   onEditIsFinalNegativeChange,
+  onEditStageRoleChange,
   onEditTargetChange,
   onSaveEdit,
   onCancelEdit,
@@ -139,6 +204,7 @@ function SortableStageItem({
   editColor: string;
   editIsFinalPositive: boolean;
   editIsFinalNegative: boolean;
+  editStageRole: StageRole;
   editTargetPipelineId: string | null;
   editTargetStageId: string | null;
   editTargetPipeType: string | null;
@@ -147,6 +213,7 @@ function SortableStageItem({
   onEditColorChange: (color: string) => void;
   onEditIsFinalPositiveChange: (value: boolean) => void;
   onEditIsFinalNegativeChange: (value: boolean) => void;
+  onEditStageRoleChange: (role: StageRole) => void;
   onEditTargetChange: (updates: TransitionTarget) => void;
   onSaveEdit: () => void;
   onCancelEdit: () => void;
@@ -259,6 +326,11 @@ function SortableStageItem({
               </Label>
             </div>
           </div>
+          <StageRoleSelect
+            value={editStageRole}
+            onChange={onEditStageRoleChange}
+            idSuffix={stage.id}
+          />
           {/* Transição automática — só para etapas de sucesso. Destino pode ser
               pipe padrão OU funil customizado da org (componente unificado). */}
           {editIsFinalPositive && (
@@ -283,6 +355,28 @@ function SortableStageItem({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-medium">{stage.name}</span>
+              {stage.stage_role && stage.stage_role !== "open" && (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 text-xs border px-2 py-0.5 rounded-full",
+                    STAGE_ROLE_META[stage.stage_role].badgeClassName,
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "w-1.5 h-1.5 rounded-full",
+                      STAGE_ROLE_META[stage.stage_role].dotClassName,
+                    )}
+                  />
+                  {STAGE_ROLE_META[stage.stage_role].label}
+                </span>
+              )}
+              {stage.suggested_stage_role && (
+                <span className="inline-flex items-center gap-1 text-xs border border-amber-500/30 bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded-full">
+                  <Sparkles className="w-3 h-3" />
+                  Sugestão: {STAGE_ROLE_META[stage.suggested_stage_role].label} · em revisão
+                </span>
+              )}
               {stage.is_final_positive && (
                 <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">
                   Sucesso
@@ -360,6 +454,7 @@ export function ManagePipelineStagesContent({
   const [editColor, setEditColor] = useState("");
   const [editIsFinalPositive, setEditIsFinalPositive] = useState(false);
   const [editIsFinalNegative, setEditIsFinalNegative] = useState(false);
+  const [editStageRole, setEditStageRole] = useState<StageRole>("open");
   const [editTargetPipelineId, setEditTargetPipelineId] = useState<string | null>(null);
   const [editTargetStageId, setEditTargetStageId] = useState<string | null>(null);
   const [editTargetPipeType, setEditTargetPipeType] = useState<string | null>(null);
@@ -368,6 +463,10 @@ export function ManagePipelineStagesContent({
   const [newStageColor, setNewStageColor] = useState(STAGE_COLORS[0]);
   const [newStageIsFinalPositive, setNewStageIsFinalPositive] = useState(false);
   const [newStageIsFinalNegative, setNewStageIsFinalNegative] = useState(false);
+  // stage_role da etapa nova: pré-preenchido pelo classifier (#991) enquanto o
+  // usuário digita o nome; ao tocar no dropdown a escolha humana passa a valer.
+  const [newStageRoleTouched, setNewStageRoleTouched] = useState(false);
+  const [newStageRoleManual, setNewStageRoleManual] = useState<StageRole>("open");
   const [showNewStageForm, setShowNewStageForm] = useState(false);
   const [deleteStageId, setDeleteStageId] = useState<string | null>(null);
   const [migrateToStageKey, setMigrateToStageKey] = useState<string>("");
@@ -379,6 +478,16 @@ export function ManagePipelineStagesContent({
   const reorderStages = useReorderPipelineStages();
   const { data: templates = [] } = useChecklistTemplates();
   const { data: stageLeadCounts = {} } = usePipelineStageLeadCounts(pipelineType);
+
+  // Sugestão do classifier pro nome digitado (flags entram como sinal fraco).
+  const newStageRoleSuggestion = classifyStageRole({
+    name: newStageName,
+    isFinalPositive: newStageIsFinalPositive,
+    isFinalNegative: newStageIsFinalNegative,
+  });
+  const newStageRole: StageRole = newStageRoleTouched
+    ? newStageRoleManual
+    : newStageRoleSuggestion?.role ?? "open";
 
   // Etapa marcada para remoção + quantos leads ela ainda tem.
   const stageToDelete = localStages.find((s) => s.id === deleteStageId) ?? null;
@@ -452,6 +561,7 @@ export function ManagePipelineStagesContent({
     setEditColor(stage.color || STAGE_COLORS[0]);
     setEditIsFinalPositive(stage.is_final_positive);
     setEditIsFinalNegative(stage.is_final_negative);
+    setEditStageRole(stage.stage_role ?? "open");
     setEditTargetPipelineId(stage.target_pipeline_id || null);
     setEditTargetStageId(stage.target_stage_id || null);
     setEditTargetPipeType(stage.target_pipe_type || null);
@@ -464,6 +574,7 @@ export function ManagePipelineStagesContent({
     setEditColor("");
     setEditIsFinalPositive(false);
     setEditIsFinalNegative(false);
+    setEditStageRole("open");
     setEditTargetPipelineId(null);
     setEditTargetStageId(null);
     setEditTargetPipeType(null);
@@ -481,6 +592,9 @@ export function ManagePipelineStagesContent({
         color: editColor,
         is_final_positive: editIsFinalPositive,
         is_final_negative: editIsFinalNegative,
+        // Escolha explícita do admin no dropdown = confirmação humana
+        // (won/lost permitido por este caminho — ADR-0017 §1).
+        stage_role: editStageRole,
         // Só persiste destino em etapa de sucesso. Destino é custom XOR standard.
         target_pipe_type: editIsFinalPositive && editTargetPipeType ? editTargetPipeType : null,
         target_stage_key:
@@ -509,12 +623,17 @@ export function ManagePipelineStagesContent({
         position: localStages.length,
         is_final_positive: newStageIsFinalPositive,
         is_final_negative: newStageIsFinalNegative,
+        // Sugestão pré-preenchida do classifier OU escolha manual — em ambos
+        // os casos o humano vê e salva (confirmação explícita, ADR-0017 §1).
+        stage_role: newStageRole,
       });
       toast.success("Etapa criada");
       setNewStageName("");
       setNewStageColor(STAGE_COLORS[0]);
       setNewStageIsFinalPositive(false);
       setNewStageIsFinalNegative(false);
+      setNewStageRoleTouched(false);
+      setNewStageRoleManual("open");
       setShowNewStageForm(false);
     } catch (error: any) {
       console.error("Error creating stage:", error);
@@ -583,6 +702,7 @@ export function ManagePipelineStagesContent({
                       editColor={editColor}
                       editIsFinalPositive={editIsFinalPositive}
                       editIsFinalNegative={editIsFinalNegative}
+                      editStageRole={editStageRole}
                       editTargetPipelineId={editTargetPipelineId}
                       editTargetStageId={editTargetStageId}
                       editTargetPipeType={editTargetPipeType}
@@ -591,6 +711,7 @@ export function ManagePipelineStagesContent({
                       onEditColorChange={setEditColor}
                       onEditIsFinalPositiveChange={setEditIsFinalPositive}
                       onEditIsFinalNegativeChange={setEditIsFinalNegative}
+                      onEditStageRoleChange={setEditStageRole}
                       onEditTargetChange={(t) => {
                         setEditTargetPipelineId(t.targetPipelineId);
                         setEditTargetStageId(t.targetStageId);
@@ -671,6 +792,15 @@ export function ManagePipelineStagesContent({
                     </Label>
                   </div>
                 </div>
+                <StageRoleSelect
+                  value={newStageRole}
+                  onChange={(role) => {
+                    setNewStageRoleTouched(true);
+                    setNewStageRoleManual(role);
+                  }}
+                  isSuggested={!newStageRoleTouched && !!newStageRoleSuggestion}
+                  idSuffix="new"
+                />
                 <div className="flex gap-2">
                   <Button
                     onClick={handleCreateStage}
@@ -689,6 +819,8 @@ export function ManagePipelineStagesContent({
                     onClick={() => {
                       setShowNewStageForm(false);
                       setNewStageName("");
+                      setNewStageRoleTouched(false);
+                      setNewStageRoleManual("open");
                     }}
                   >
                     Cancelar

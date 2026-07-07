@@ -225,6 +225,12 @@ export function useUpdatePipelineStage() {
       is_active?: boolean;
       is_final_positive?: boolean;
       is_final_negative?: boolean;
+      /**
+       * ADR-0017 §1 — papel semântico governado. Vindo do modal de etapa é
+       * sempre escolha explícita do admin (won/lost permitido — confirmação
+       * humana). O classifier (#991) NUNCA escreve won/lost por este caminho.
+       */
+      stage_role?: import("@/contracts/pipe").StageRole;
       auto_move_min_days?: number | null;
       auto_move_max_days?: number | null;
       target_pipe_type?: string | null;
