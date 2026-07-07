@@ -10716,6 +10716,77 @@ export type Database = {
         }
         Relationships: []
       }
+      pipeline_stage_events: {
+        Row: {
+          actor: string | null
+          created_at: string
+          entry_id: string | null
+          from_stage_key: string | null
+          id: string
+          lead_id: string
+          occurred_at: string
+          organization_id: string
+          pipeline_id: string
+          source: string
+          to_stage_key: string
+        }
+        Insert: {
+          actor?: string | null
+          created_at?: string
+          entry_id?: string | null
+          from_stage_key?: string | null
+          id?: string
+          lead_id: string
+          occurred_at?: string
+          organization_id: string
+          pipeline_id: string
+          source?: string
+          to_stage_key: string
+        }
+        Update: {
+          actor?: string | null
+          created_at?: string
+          entry_id?: string | null
+          from_stage_key?: string | null
+          id?: string
+          lead_id?: string
+          occurred_at?: string
+          organization_id?: string
+          pipeline_id?: string
+          source?: string
+          to_stage_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_stage_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_stage_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_compat"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_stage_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_stage_events_pipeline_id_fkey"
+            columns: ["pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "pipelines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pipeline_stages: {
         Row: {
           auto_move_max_days: number | null

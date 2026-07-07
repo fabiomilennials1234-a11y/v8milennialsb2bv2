@@ -17,6 +17,8 @@
 #      ADR-0017 §5): organizations.timezone + metric_period_bounds().
 #   4. stage_role_test.sql             — Stage Role governance (#990,
 #      ADR-0017 §1): pipeline_stages.stage_role + system_stage_role() map.
+#   5. pipeline_stage_events_test.sql  — append-only stage ledger (#992,
+#      ADR-0017 write model): capture triggers + immutability + RLS.
 #
 # All files run inside rolled-back transactions, so none mutates the DB.
 #
@@ -39,12 +41,13 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/rls_invariants_red_fixture.sql" \
     "$SCRIPT_DIR/rls_invariants.sql" \
     "$SCRIPT_DIR/metric_period_bounds_test.sql" \
-    "$SCRIPT_DIR/stage_role_test.sql"
+    "$SCRIPT_DIR/stage_role_test.sql" \
+    "$SCRIPT_DIR/pipeline_stage_events_test.sql"
 }
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql pipeline_stage_events_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces
