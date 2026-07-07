@@ -1,14 +1,36 @@
 /**
- * Regressão: Reuniões marcadas no funil contam pelo período de marcação
- * (metrics_period_at ?? created_at), NÃO pela data do meeting.
- *
- * Bug pré-fix: reuniões marcadas neste mês com meeting_date em mês futuro
- * sumiam do funil porque o filtro era em meeting_date.
+ * Issue #999 (SP-3): a TV lê o caderno canônico. O funil de reunião
+ * (reunioesMarcadas / comparecidas) vem de meeting_events (ADR-0007) via
+ * useSDRPerformance — a MESMA fonte do KPI "Reuniões" do useTVKPIs. Isso mata o
+ * R6 da auditoria: KPI "Reuniões" e funil "Comparecidas" na mesma tela
+ * reconciliam por construção (uma fonte só). A semântica de marcadas por
+ * occurred_at (reunião com meeting_date futuro NÃO some) é garantida e testada
+ * em useSDRPerformance.test.ts.
  */
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
+
+// Fonte de reunião ÚNICA (meeting_events via useSDRPerformance), compartilhada
+// pelos dois hooks — o pivô do R6 kill.
+const SDR_TOTALS = { marcadas: 3, comparecidas: 2, noShow: 1, noShowRate: 33.3 };
+vi.mock("@/modules/engagement/hooks/useSDRPerformance", () => ({
+  useSDRPerformance: () => ({
+    totals: SDR_TOTALS,
+    bySDR: [{ id: "tm2", name: "SDR 1", ...SDR_TOTALS }],
+  }),
+}));
+
+// useTVKPIs deps (para o teste de reconciliação R6).
+vi.mock("@/modules/engagement/hooks/useCloserPerformance", () => ({
+  useCloserPerformance: () => ({
+    totals: { reunioesRealizadas: 0, propostas: 4, vendas: 1, vendasValor: 5000, ticketMedio: 5000, conversao: 0 },
+    byCloser: [],
+    topCloserId: null,
+  }),
+}));
+vi.mock("@/modules/leads/hooks/useNewLeads", () => ({ useNewLeads: () => ({ total: 0 }) }));
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -20,6 +42,7 @@ vi.mock("@/integrations/supabase/client", () => ({
     }),
     channel: vi.fn().mockReturnValue({ on: vi.fn().mockReturnThis(), subscribe: vi.fn() }),
     removeChannel: vi.fn(),
+    // get_sales_metrics vazio: este arquivo foca no funil de reunião (R6).
     rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
     auth: {
       getUser: vi.fn().mockResolvedValue({ data: { user: { id: "u1" } } }),
@@ -63,6 +86,7 @@ vi.mock("@/modules/analytics/hooks/useDashboardMetrics", () => ({
   useFunnelData: () => ({ data: [] }),
   useRankingData: () => ({ data: { salesRanking: [], meetingsRanking: [] } }),
 }));
+vi.mock("@/modules/pipelines/hooks/legacy/usePipeConfirmacao", () => ({ usePipeConfirmacao: () => ({ data: [] }), useCreatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useUpdatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useDeletePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
 vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {},
@@ -74,52 +98,6 @@ vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({
   useAllPipelineStageOptions: vi.fn(() => ({ data: [] })),
 }));
 
-const now = new Date();
-const thisMonth = new Date(now.getFullYear(), now.getMonth(), 15).toISOString();
-const futureMonth = new Date(now.getFullYear(), now.getMonth() + 2, 10).toISOString();
-const pastMonth = new Date(now.getFullYear(), now.getMonth() - 2, 10).toISOString();
-
-const mockConfirmacoes = [
-  // Marcada este mês, meeting no futuro — DEVE entrar em "Reuniões Marcadas"
-  {
-    id: "c-future-meeting",
-    status: "reuniao_marcada",
-    meeting_date: futureMonth,
-    created_at: thisMonth,
-    metrics_period_at: thisMonth,
-    closer_id: "tm1",
-    sdr_id: "tm2",
-    pre_sale_responsible_id: "tm2",
-    sale_responsible_id: "tm1",
-  },
-  // Marcada em mês passado, meeting este mês compareceu — NÃO entra em marcadas (passou); ENTRA em comparecidas
-  {
-    id: "c-past-scheduled-attended",
-    status: "compareceu",
-    meeting_date: thisMonth,
-    created_at: pastMonth,
-    metrics_period_at: pastMonth,
-    closer_id: "tm1",
-    sdr_id: "tm2",
-    pre_sale_responsible_id: "tm2",
-    sale_responsible_id: "tm1",
-  },
-  // Marcada este mês, meeting este mês compareceu — entra em marcadas E comparecidas
-  {
-    id: "c-current-attended",
-    status: "compareceu",
-    meeting_date: thisMonth,
-    created_at: thisMonth,
-    metrics_period_at: thisMonth,
-    closer_id: "tm1",
-    sdr_id: "tm2",
-    pre_sale_responsible_id: "tm2",
-    sale_responsible_id: "tm1",
-  },
-];
-
-vi.mock("@/modules/pipelines/hooks/legacy/usePipeConfirmacao", () => ({ usePipeConfirmacao: () => ({ data: mockConfirmacoes }), useCreatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useUpdatePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })), useDeletePipeConfirmacao: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn() })) }));
-
 function createWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return ({ children }: { children: React.ReactNode }) =>
@@ -127,33 +105,36 @@ function createWrapper() {
 }
 
 import { useTVDashboardData } from "@/modules/analytics/hooks/useTVDashboardData";
+import { useTVKPIs } from "@/modules/analytics/hooks/useTVKPIs";
+import { getPeriodRange } from "@/lib/tv-periods";
 
-describe("useTVDashboardData — funnel regression", () => {
-  it("reunioesMarcadas conta por metrics_period_at (não meeting_date)", async () => {
+describe("useTVDashboardData — funil de reunião canônico (meeting_events)", () => {
+  it("reunioesMarcadas vem de meeting_events (useSDRPerformance.totals.marcadas)", async () => {
     const { result } = renderHook(() => useTVDashboardData(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true), { timeout: 5000 });
-    const data = result.current.data!;
-
-    // 2 marcadas neste mês (c-future-meeting + c-current-attended).
-    // c-past-scheduled-attended foi marcada em mês passado — não conta.
-    expect(data.funnel.reunioesMarcadas).toBe(2);
+    expect(result.current.data!.funnel.reunioesMarcadas).toBe(SDR_TOTALS.marcadas);
   });
 
-  it("comparecidas conta por meeting_date (evento real)", async () => {
+  it("comparecidas vem de meeting_events (useSDRPerformance.totals.comparecidas)", async () => {
     const { result } = renderHook(() => useTVDashboardData(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true), { timeout: 5000 });
-    const data = result.current.data!;
-
-    // 2 comparecidas com meeting_date neste mês: c-past-scheduled-attended + c-current-attended
-    expect(data.funnel.comparecidas).toBe(2);
+    expect(result.current.data!.funnel.comparecidas).toBe(SDR_TOTALS.comparecidas);
   });
+});
 
-  it("reuniões marcadas com meeting futuro NÃO somem (bug regression)", async () => {
-    const { result } = renderHook(() => useTVDashboardData(), { wrapper: createWrapper() });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true), { timeout: 5000 });
-    const data = result.current.data!;
+describe("R6 kill — KPI Reuniões e funil Comparecidas compartilham a fonte", () => {
+  it("useTVKPIs.reunioes === useTVDashboardData.funnel.comparecidas (mesma fonte meeting_events)", async () => {
+    const wrapper = createWrapper();
+    const dash = renderHook(() => useTVDashboardData(), { wrapper });
+    const kpis = renderHook(() => useTVKPIs(getPeriodRange("mes")), { wrapper });
 
-    // Garante que c-future-meeting (marcada este mês, meeting em 2 meses) está no contador.
-    expect(data.funnel.reunioesMarcadas).toBeGreaterThanOrEqual(1);
+    await waitFor(() => expect(dash.result.current.isSuccess).toBe(true), { timeout: 5000 });
+
+    const funnelComparecidas = dash.result.current.data!.funnel.comparecidas;
+    const kpiReunioes = kpis.result.current.reunioes;
+
+    // Ambos derivam de useSDRPerformance.totals.comparecidas → iguais por construção.
+    expect(kpiReunioes).toBe(SDR_TOTALS.comparecidas);
+    expect(funnelComparecidas).toBe(kpiReunioes);
   });
 });

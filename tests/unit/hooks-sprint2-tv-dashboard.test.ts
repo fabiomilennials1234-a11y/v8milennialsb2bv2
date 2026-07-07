@@ -5,6 +5,24 @@ import React from "react";
 
 // ---- Mocks ----
 
+// Caderno canônico get_sales_metrics (#995): receita líquida de estorno, ticket,
+// contagens won/lost, split por stream, por closer. É a fonte de venda da TV (#999).
+const SALES_METRICS_JSON = {
+  period: { name: "month", start: "2026-07-01T00:00:00Z", end: "2026-08-01T00:00:00Z" },
+  pipeline_id: null,
+  filter_member_id: null,
+  revenue_total: 5000,
+  revenue_by_stream: {
+    novo_negocio: { revenue: 5000, sale_count: 1 },
+    carteira: { revenue: 0, sale_count: 0 },
+  },
+  won_count: 1,
+  lost_count: 1, // 1 won + 1 lost ⇒ conversão canônica = 50%
+  ticket_medio: 5000,
+  by_closer: [{ member_id: "tm1", revenue: 5000, sale_count: 1 }],
+  unattributed: { revenue: 0, sale_count: 0 },
+};
+
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: vi.fn().mockReturnValue({
@@ -15,12 +33,25 @@ vi.mock("@/integrations/supabase/client", () => ({
     }),
     channel: vi.fn().mockReturnValue({ on: vi.fn().mockReturnThis(), subscribe: vi.fn() }),
     removeChannel: vi.fn(),
-    rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
+    rpc: vi.fn().mockImplementation((fn: string) =>
+      fn === "get_sales_metrics"
+        ? Promise.resolve({ data: SALES_METRICS_JSON, error: null })
+        : Promise.resolve({ data: null, error: null })
+    ),
     auth: {
       getUser: vi.fn().mockResolvedValue({ data: { user: { id: "u1" } } }),
       onAuthStateChange: vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }),
     },
   },
+}));
+
+// Reunião: fonte canônica meeting_events (ADR-0007) via useSDRPerformance — a
+// MESMA usada pelo funil e pelo KPI (mata o R6). Mockada para controlar totais.
+vi.mock("@/modules/engagement/hooks/useSDRPerformance", () => ({
+  useSDRPerformance: () => ({
+    totals: { marcadas: 2, comparecidas: 1, noShow: 1, noShowRate: 50 },
+    bySDR: [{ id: "tm2", name: "SDR 1", marcadas: 2, comparecidas: 1, noShow: 1 }],
+  }),
 }));
 
 vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: { access_token: "tok" } }) }));
@@ -241,16 +272,18 @@ describe("useTVDashboardData", () => {
       // Sales goal
       expect(data.metaVendasMes).toBe(100000);
 
-      // Receita do mês = Σ sale_value (canônico ADR 2026-04-24) — vem da RPC mockada.
-      // MRR 5000, sem × contract_duration.
+      // Receita do mês = get_sales_metrics.revenue_total (líquido de estorno, #995).
+      // NÃO recomputada no cliente. Split por stream: novo_negocio 5000, carteira 0.
       expect(data.vendasRealizadas).toBe(5000);
       expect(data.vendasMRR).toBe(5000);
       expect(data.vendasProjeto).toBe(0);
+      // Ticket médio canônico (get_sales_metrics.ticket_medio), não recomputado.
+      expect(data.ticketMedio).toBe(5000);
 
       // quantoFalta
       expect(data.quantoFalta).toBe(100000 - 5000);
 
-      // reunioesComparecidas
+      // reunioesComparecidas — fonte meeting_events (useSDRPerformance), não pipe.
       expect(data.reunioesComparecidas).toBe(1);
 
       // Leads to work
@@ -263,15 +296,20 @@ describe("useTVDashboardData", () => {
       expect(data.propostasQuentes.length).toBe(1);
       expect(data.propostasQuentes[0].id).toBe("p2");
 
-      // Conversion rate: 1 vendido out of 2 total = 50%
+      // Conversão canônica = won / (won + lost) = 1 / (1 + 1) = 50%. Do caderno,
+      // não do array truncado.
       expect(data.taxaConversaoGeral).toBe(50);
 
       // Individual goals
       expect(data.individualGoals.closers.length).toBe(1);
       expect(data.individualGoals.sdrs.length).toBe(1);
 
-      // Funnel
-      expect(data.funnel.reunioesMarcadas).toBeGreaterThanOrEqual(0);
+      // Funil canônico: vendido = won_count, valor = revenue_total (#995);
+      // comparecidas/marcadas = meeting_events (useSDRPerformance).
+      expect(data.funnel.vendido).toBe(1);
+      expect(data.funnel.vendidoValue).toBe(5000);
+      expect(data.funnel.comparecidas).toBe(1);
+      expect(data.funnel.reunioesMarcadas).toBe(2);
     }
   });
 
