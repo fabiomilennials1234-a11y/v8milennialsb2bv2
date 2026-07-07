@@ -94,6 +94,22 @@ Fixes isolados, sem schema novo, cada um com teste. Ordem por confiança:
 - Escolha final da ferramenta de camada semântica (decidida em SP-4).
 - Redesign visual dos dashboards (só correção de números; UI só onde o número é lido).
 
+## 8.5 Decisões do grill 2026-07-07 (CTO) — vinculantes
+
+Registradas em **ADR-0017** (modelo de eventos) e **ADR-0018** (protocolo snapshot). Resumo:
+
+1. **SP-0.5 (novo, antes de SP-1):** snapshot das RPCs de métrica VIVAS de prod (`pg_get_functiondef`) commitado como migrations `snapshot_*` datadas corretamente. Prod = source of truth de corpo de RPC até reconciliação geral. NÃO fazer db push dos arquivos SP-0 mis-datados (ADR-0018).
+2. **SP-0.6 (novo, antes de SP-1):** guardrail CI — lint de migrations bloqueando `type='system'` em métrica, COALESCE de atribuição, `updated_at` como âncora, agregação de receita fora dos cadernos + regra documentada em `supabase/migrations/CLAUDE.md`.
+3. **Etapa governada = enum único `stage_role`** (`open|meeting_booked|meeting_held|won|lost`), NÃO flags booleanas paralelas (§3.2 fica emendada). `is_final_positive/negative` viram UI-only, proibidas como input de métrica. Atribuição de role: mapa determinístico (chaves de sistema) + AI Stage Classifier sugere pra custom + confirmação humana obrigatória só em won/lost.
+4. **Revenue Stream** obrigatório em todo `sale_event`: `novo_negocio` vs `carteira`, decidido **pelo cliente** (lead já tem Carteira Client no momento da venda → carteira), não pelo funil. Um caderno só; dashboards exibem os streams separados; total = soma. Mata a segunda superfície de receita da Carteira.
+5. **Estorno por evento** (`sale_reversed` referenciando o original; par se anula na leitura; cascateia pra comissão projetada). Nunca editar/apagar evento.
+6. **`sold_at` = momento do registro, sempre** (`now()` no write). Sem data retroativa informável, sem exceção.
+7. **Timezone da org**: coluna `organizations.timezone` (default America/Sao_Paulo); corte de período é responsabilidade EXCLUSIVA do banco; frontend nomeia período, nunca converte data.
+8. **Backfill best-effort com corte contratual 2026-12-01**; eventos reconstruídos com `source='backfill'`; antes do corte = melhor esforço declarado.
+9. **Portão de reconciliação = delta-explicado + invariantes**: toda célula divergente do motor velho vinculada a finding numerado da auditoria ou decisão desta seção, senão reprova; + suite de invariantes no CI. Lista de deltas justificados commitada junto da migration.
+
+Ordem final: **SP-0.5 → SP-0.6 → SP-1 → SP-2 → SP-3 → SP-4 → SP-5.**
+
 ## 8. Critério de sucesso do programa
 
 `Dashboard == Financeiro == Ranking == Produtividade` para o mesmo período/org; `SUM(por membro) + não-atribuído == total`; toda taxa ∈ [0,100]; comissão paga == número na tela; org com pipeline custom vê métrica real; renomear etapa não zera métrica. Tudo coberto por invariantes no CI.
