@@ -7,7 +7,7 @@
  * self-hides when there are no dead sessions, so the layout cost is zero in
  * the steady-state.
  *
- * CTA navigates to /settings where the QR re-pair flow lives.
+ * CTA navigates to /configuracoes (aba WhatsApp) where the QR re-pair flow lives.
  */
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, ArrowRight } from "lucide-react";
@@ -65,7 +65,7 @@ export function SessionDeadBanner({ className }: { className?: string }) {
         size="sm"
         variant="outline"
         className="shrink-0 border-red-400/40 bg-red-500/10 text-red-50 hover:bg-red-500/20 hover:text-white"
-        onClick={() => navigate("/settings")}
+        onClick={() => navigate("/configuracoes?tab=whatsapp")}
       >
         Reparear agora
         <ArrowRight size={14} className="ml-1.5" />
