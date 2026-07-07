@@ -11718,6 +11718,95 @@ export type Database = {
           },
         ]
       }
+      sale_events: {
+        Row: {
+          actor: string | null
+          created_at: string
+          currency: string
+          event_type: string
+          id: string
+          lead_id: string
+          organization_id: string
+          pipeline_id: string
+          pre_sale_responsible_id: string | null
+          revenue_stream: string
+          reversed_event_id: string | null
+          sale_responsible_id: string | null
+          sale_value: number | null
+          sold_at: string
+          source: string
+          stage_event_id: string | null
+          stage_key: string
+        }
+        Insert: {
+          actor?: string | null
+          created_at?: string
+          currency?: string
+          event_type: string
+          id?: string
+          lead_id: string
+          organization_id: string
+          pipeline_id: string
+          pre_sale_responsible_id?: string | null
+          revenue_stream: string
+          reversed_event_id?: string | null
+          sale_responsible_id?: string | null
+          sale_value?: number | null
+          sold_at?: string
+          source?: string
+          stage_event_id?: string | null
+          stage_key: string
+        }
+        Update: {
+          actor?: string | null
+          created_at?: string
+          currency?: string
+          event_type?: string
+          id?: string
+          lead_id?: string
+          organization_id?: string
+          pipeline_id?: string
+          pre_sale_responsible_id?: string | null
+          revenue_stream?: string
+          reversed_event_id?: string | null
+          sale_responsible_id?: string | null
+          sale_value?: number | null
+          sold_at?: string
+          source?: string
+          stage_event_id?: string | null
+          stage_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_compat"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_events_reversed_event_id_fkey"
+            columns: ["reversed_event_id"]
+            isOneToOne: false
+            referencedRelation: "sale_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       saved_views: {
         Row: {
           created_at: string
