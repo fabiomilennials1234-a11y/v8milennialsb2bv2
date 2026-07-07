@@ -47,7 +47,7 @@ npm run lint             # ESLint
 
 Deploy edge functions: `supabase functions deploy <fn> --project-ref <ref>`
 - Prod: `jsjsmuncfkbsbzqzqhfq` | Dev: `bcfadphgsibjzivtbjvc`
-- Frontend: push main → builds Docker image em ghcr.io (`:latest` + `:sha-<short>`). **Deploy é manual** via EasyPanel UI (VPS Hostinger, puxa `:latest`). Decoupled de propósito — evita push surpresa em prod a partir de merge rotineiro.
+- Frontend: push main → builds Docker image em ghcr.io (`:latest` + `:sha-<short>`) → **EasyPanel (VPS Hostinger) puxa `:latest` automaticamente**. Merge em main = deploy de frontend em prod. Edge functions + migrations continuam manuais.
 
 Org Milennials: `6030520a-2ca7-477d-be89-55758e2cd808`
 
