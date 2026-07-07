@@ -12,7 +12,7 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Send, Mic, Camera, Paperclip, FileText, Clock, Loader2, X } from "lucide-react";
+import { Plus, Send, Mic, Camera, Paperclip, FileText, Film, Clock, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -28,7 +28,11 @@ import { ScheduleMessageModal } from "@/modules/communication/components/chat/Sc
 import { SlashCommandPopover } from "@/modules/communication/components/chat/SlashCommandPopover";
 import { resolveVariables } from "@/lib/template-variables";
 import { convertAudioBlobToMp3 } from "@/modules/communication/lib/audioToMp3";
-import { deriveAttachmentMediaType } from "@/modules/communication/lib/attachment-media-type";
+import {
+  deriveAttachmentMediaType,
+  getAttachmentValidationError,
+  ATTACHMENT_ACCEPT,
+} from "@/modules/communication/lib/attachment-media-type";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
 
@@ -55,7 +59,7 @@ export interface MobileComposerContextualProps {
 // ─── Tray items ───────────────────────────────────────────────────────────────
 
 const TRAY_ITEMS = [
-  { id: "camera", icon: Camera, label: "Camera" },
+  { id: "camera", icon: Camera, label: "Câmera" },
   { id: "file", icon: Paperclip, label: "Arquivo" },
   { id: "template", icon: FileText, label: "Template" },
   { id: "schedule", icon: Clock, label: "Agendar" },
@@ -105,6 +109,10 @@ export function MobileComposerContextual({
   const [isRecording, setIsRecording] = useState(false);
   const [trayOpen, setTrayOpen] = useState(false);
   const [showSlashPopover, setShowSlashPopover] = useState(false);
+  // Anexo pendente de confirmação — imagem mostra thumbnail; doc/vídeo, chip.
+  const [pendingAttachment, setPendingAttachment] =
+    useState<{ data: string; name: string; mime: string } | null>(null);
+  const [attachmentCaption, setAttachmentCaption] = useState("");
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -157,15 +165,25 @@ export function MobileComposerContextual({
         mediaType: "audio",
         media: base64,
         mimetype: "audio/mpeg",
+        leadId: leadId ?? null,
       });
-      toast.success("Audio enviado!");
+      toast.success("Áudio enviado!");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar audio");
+      toast.error(err instanceof Error ? err.message : "Erro ao enviar áudio");
     }
-  }, [phoneNumber, instanceName, instanceId, sendMedia]);
+  }, [phoneNumber, instanceName, instanceId, sendMedia, leadId]);
 
   const handleFileSelected = useCallback(async (file: File) => {
     setTrayOpen(false);
+    if (isSending) {
+      toast.info("Aguarde o envio anterior finalizar.");
+      return;
+    }
+    const validationError = getAttachmentValidationError(file);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -173,21 +191,46 @@ export function MobileComposerContextual({
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
-      const mediaType = deriveAttachmentMediaType(file.type);
+      // Preview antes de enviar (paridade desktop/bubble) — mis-tap no picker
+      // não dispara mais o arquivo direto pro cliente.
+      setPendingAttachment({ data: base64, name: file.name, mime: file.type });
+      setAttachmentCaption("");
+    } catch {
+      toast.error("Erro ao ler arquivo. Tente novamente.");
+    }
+  }, [isSending]);
+
+  const clearPendingAttachment = useCallback(() => {
+    setPendingAttachment(null);
+    setAttachmentCaption("");
+  }, []);
+
+  const handleSendAttachment = useCallback(async () => {
+    if (!pendingAttachment || isSending) return;
+    const kind = deriveAttachmentMediaType(pendingAttachment.mime);
+    try {
       await sendMedia.mutateAsync({
         phoneNumber,
         instanceName,
         instanceId,
-        mediaType,
-        media: base64,
-        fileName: file.name,
-        mimetype: file.type,
+        mediaType: kind,
+        media: pendingAttachment.data,
+        caption: attachmentCaption.trim() || undefined,
+        fileName: pendingAttachment.name,
+        mimetype: pendingAttachment.mime,
+        leadId: leadId ?? null,
       });
-      toast.success("Arquivo enviado!");
+      // Limpa só no sucesso — em falha o preview fica pra retry.
+      clearPendingAttachment();
+      toast.success(
+        kind === "document" ? "Arquivo enviado!"
+          : kind === "video" ? "Vídeo enviado!"
+          : "Imagem enviada!",
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao enviar arquivo");
     }
-  }, [phoneNumber, instanceName, instanceId, sendMedia]);
+  }, [pendingAttachment, attachmentCaption, isSending, phoneNumber, instanceName, instanceId, leadId, sendMedia, clearPendingAttachment]);
 
   const handleSlashSelect = useCallback(async (template: MessageTemplate) => {
     const leadCtx: LeadContext = {
@@ -269,7 +312,7 @@ export function MobileComposerContextual({
       <div className="p-3 border-t border-border/60 bg-background" style={{ paddingBottom: offset || undefined }}>
         <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
           <X className="w-4 h-4 shrink-0" />
-          <span>Sem permissao para responder neste chat.</span>
+          <span>Sem permissão para responder neste chat.</span>
         </div>
       </div>
     );
@@ -297,14 +340,24 @@ export function MobileComposerContextual({
         type="file"
         accept="image/*,video/*"
         capture="environment"
-        onChange={(e) => e.target.files?.[0] && handleFileSelected(e.target.files[0])}
+        onChange={(e) => {
+          if (e.target.files?.[0]) handleFileSelected(e.target.files[0]);
+          // Permite recapturar/re-selecionar o mesmo arquivo.
+          e.target.value = "";
+        }}
         className="hidden"
         aria-hidden="true"
       />
       <input
         ref={fileInputRef}
         type="file"
-        onChange={(e) => e.target.files?.[0] && handleFileSelected(e.target.files[0])}
+        accept={ATTACHMENT_ACCEPT}
+        data-testid="mobile-file-input"
+        onChange={(e) => {
+          if (e.target.files?.[0]) handleFileSelected(e.target.files[0]);
+          // Permite reanexar o mesmo arquivo (onChange não dispara se value igual).
+          e.target.value = "";
+        }}
         className="hidden"
         aria-hidden="true"
       />
@@ -342,6 +395,69 @@ export function MobileComposerContextual({
         )}
       </AnimatePresence>
 
+      {/* Preview do anexo antes de enviar — imagem mostra thumbnail,
+          documento/vídeo mostram chip com ícone + nome. */}
+      {pendingAttachment && (() => {
+        const kind = deriveAttachmentMediaType(pendingAttachment.mime);
+        const KindIcon = kind === "video" ? Film : FileText;
+        return (
+          <div className="border-b border-border/40 px-3 pt-3 pb-2" data-testid="attachment-preview">
+            <div className="flex items-start gap-3">
+              <div className="relative shrink-0">
+                {kind === "image" ? (
+                  <img
+                    src={pendingAttachment.data}
+                    alt={pendingAttachment.name}
+                    className="w-16 h-16 object-cover rounded-lg border border-border/60"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center border border-border/60">
+                    <KindIcon className="w-6 h-6 text-muted-foreground" aria-hidden />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={clearPendingAttachment}
+                  aria-label="Remover anexo"
+                  className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex-1 min-w-0 space-y-2">
+                {kind !== "image" && (
+                  <p className="text-sm text-foreground truncate" title={pendingAttachment.name}>
+                    {pendingAttachment.name}
+                  </p>
+                )}
+                <Textarea
+                  value={attachmentCaption}
+                  onChange={(e) => setAttachmentCaption(e.target.value)}
+                  placeholder="Adicionar legenda (opcional)..."
+                  aria-label="Legenda do anexo"
+                  rows={1}
+                  className="min-h-[36px] max-h-24 resize-none py-2"
+                />
+                <Button
+                  onClick={handleSendAttachment}
+                  disabled={isSending}
+                  className="w-full"
+                >
+                  {isSending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4 mr-2" />
+                  )}
+                  {kind === "document" ? "Enviar Arquivo"
+                    : kind === "video" ? "Enviar Vídeo"
+                    : "Enviar Imagem"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Composer row */}
       <div className="flex items-center gap-2 p-3">
         {/* Plus / close tray toggle */}
@@ -349,7 +465,7 @@ export function MobileComposerContextual({
           variant="ghost"
           size="icon"
           onClick={() => setTrayOpen((v) => !v)}
-          aria-label={trayOpen ? "Fechar acoes" : "Abrir acoes"}
+          aria-label={trayOpen ? "Fechar ações" : "Abrir ações"}
           className="shrink-0"
         >
           <Plus
@@ -412,7 +528,7 @@ export function MobileComposerContextual({
               }
               setIsRecording(true);
             }}
-            aria-label="Gravar audio"
+            aria-label="Gravar áudio"
             className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
           >
             <Mic className="w-5 h-5 text-muted-foreground" />

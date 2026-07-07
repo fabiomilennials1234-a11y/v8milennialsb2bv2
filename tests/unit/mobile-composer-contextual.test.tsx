@@ -144,7 +144,7 @@ describe("MobileComposerContextual", () => {
   // ─── Cycle 1: IDLE state ───────────────────────────────────
   it("shows mic button when input is empty", () => {
     renderComposer();
-    expect(screen.getByLabelText("Gravar audio")).toBeInTheDocument();
+    expect(screen.getByLabelText("Gravar áudio")).toBeInTheDocument();
     expect(screen.queryByLabelText("Enviar mensagem")).not.toBeInTheDocument();
   });
 
@@ -153,7 +153,7 @@ describe("MobileComposerContextual", () => {
     mockDraft = "hello";
     renderComposer();
     expect(screen.getByLabelText("Enviar mensagem")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Gravar audio")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Gravar áudio")).not.toBeInTheDocument();
   });
 
   // ─── Cycle 3: TRAY_OPEN ───────────────────────────────────
@@ -164,11 +164,11 @@ describe("MobileComposerContextual", () => {
     expect(screen.queryByTestId("action-tray")).not.toBeInTheDocument();
 
     // Click "+"
-    fireEvent.click(screen.getByLabelText("Abrir acoes"));
+    fireEvent.click(screen.getByLabelText("Abrir ações"));
 
     // Tray visible with 4 actions
     expect(screen.getByTestId("action-tray")).toBeInTheDocument();
-    expect(screen.getByLabelText("Camera")).toBeInTheDocument();
+    expect(screen.getByLabelText("Câmera")).toBeInTheDocument();
     expect(screen.getByLabelText("Arquivo")).toBeInTheDocument();
     expect(screen.getByLabelText("Template")).toBeInTheDocument();
     expect(screen.getByLabelText("Agendar")).toBeInTheDocument();
@@ -178,10 +178,10 @@ describe("MobileComposerContextual", () => {
   it("closes tray on second '+' click", () => {
     renderComposer();
 
-    fireEvent.click(screen.getByLabelText("Abrir acoes"));
+    fireEvent.click(screen.getByLabelText("Abrir ações"));
     expect(screen.getByTestId("action-tray")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("Fechar acoes"));
+    fireEvent.click(screen.getByLabelText("Fechar ações"));
     expect(screen.queryByTestId("action-tray")).not.toBeInTheDocument();
   });
 
@@ -207,14 +207,14 @@ describe("MobileComposerContextual", () => {
   // ─── canReply=false shows warning ─────────────────────────
   it("shows permission warning when canReply is false", () => {
     renderComposer({ canReply: false });
-    expect(screen.getByText(/Sem permissao/)).toBeInTheDocument();
-    expect(screen.queryByLabelText("Gravar audio")).not.toBeInTheDocument();
+    expect(screen.getByText(/Sem permissão/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Gravar áudio")).not.toBeInTheDocument();
   });
 
   // ─── Mic click enters RECORDING ──────────────────────────
   it("shows AudioRecorder when mic is clicked", () => {
     renderComposer();
-    fireEvent.click(screen.getByLabelText("Gravar audio"));
+    fireEvent.click(screen.getByLabelText("Gravar áudio"));
     expect(screen.getByTestId("audio-recorder")).toBeInTheDocument();
   });
 
@@ -231,7 +231,7 @@ describe("MobileComposerContextual", () => {
   };
 
   function openTemplatePopover() {
-    fireEvent.click(screen.getByLabelText("Abrir acoes"));
+    fireEvent.click(screen.getByLabelText("Abrir ações"));
     fireEvent.click(screen.getByLabelText("Template"));
   }
 
@@ -268,5 +268,100 @@ describe("MobileComposerContextual", () => {
         }),
       );
     });
+  });
+
+  // ─── Anexo via tray: PDF (paridade com desktop) ────────────
+  it("PDF anexado via tray mostra preview e envia como document após confirmar", async () => {
+    renderComposer();
+    const pdf = new File(["%PDF-1.7 fake"], "proposta.pdf", { type: "application/pdf" });
+    const input = screen.getByTestId("mobile-file-input") as HTMLInputElement;
+
+    expect(input.getAttribute("accept")).toContain("application/pdf");
+
+    fireEvent.change(input, { target: { files: [pdf] } });
+
+    // Preview antes de enviar — nada dispara sem confirmação
+    await waitFor(() => {
+      expect(screen.getByTestId("attachment-preview")).toBeInTheDocument();
+      expect(screen.getByText("proposta.pdf")).toBeInTheDocument();
+    });
+    expect(mockMediaMutateAsync).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Legenda do anexo"), {
+      target: { value: "Segue a proposta" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Enviar Arquivo/ }));
+
+    await waitFor(() => {
+      expect(mockMediaMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mediaType: "document",
+          fileName: "proposta.pdf",
+          mimetype: "application/pdf",
+          caption: "Segue a proposta",
+          instanceId: "inst-uuid-1",
+          leadId: null,
+        }),
+      );
+    });
+    // Preview limpa após sucesso
+    await waitFor(() => {
+      expect(screen.queryByTestId("attachment-preview")).not.toBeInTheDocument();
+    });
+  });
+
+  it("remover anexo no preview cancela sem enviar", async () => {
+    renderComposer();
+    const pdf = new File(["%PDF-1.7 fake"], "proposta.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByTestId("mobile-file-input"), { target: { files: [pdf] } });
+    await waitFor(() => screen.getByTestId("attachment-preview"));
+
+    fireEvent.click(screen.getByLabelText("Remover anexo"));
+
+    expect(screen.queryByTestId("attachment-preview")).not.toBeInTheDocument();
+    expect(mockMediaMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("envio falho mantém o preview pra retry", async () => {
+    mockMediaMutateAsync.mockRejectedValueOnce(new Error("sessão morta"));
+    renderComposer();
+    const pdf = new File(["%PDF-1.7 fake"], "proposta.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByTestId("mobile-file-input"), { target: { files: [pdf] } });
+    await waitFor(() => screen.getByTestId("attachment-preview"));
+
+    fireEvent.click(screen.getByRole("button", { name: /Enviar Arquivo/ }));
+
+    await waitFor(() => expect(mockMediaMutateAsync).toHaveBeenCalled());
+    // Preview NÃO limpa em falha
+    expect(screen.getByTestId("attachment-preview")).toBeInTheDocument();
+    expect(screen.getByText("proposta.pdf")).toBeInTheDocument();
+  });
+
+  it("arquivo acima de 16MB é rejeitado sem preview nem envio", async () => {
+    const { toast } = await import("sonner");
+    renderComposer();
+    const big = new File(["x"], "gigante.pdf", { type: "application/pdf" });
+    Object.defineProperty(big, "size", { value: 16 * 1024 * 1024 + 1 });
+
+    fireEvent.change(screen.getByTestId("mobile-file-input"), { target: { files: [big] } });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Arquivo muito grande (máximo 16MB)");
+    });
+    expect(screen.queryByTestId("attachment-preview")).not.toBeInTheDocument();
+    expect(mockMediaMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("arquivo de 0 bytes é rejeitado antes do preview", async () => {
+    const { toast } = await import("sonner");
+    renderComposer();
+    const empty = new File([], "vazio.pdf", { type: "application/pdf" });
+
+    fireEvent.change(screen.getByTestId("mobile-file-input"), { target: { files: [empty] } });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Arquivo vazio — selecione outro arquivo.");
+    });
+    expect(mockMediaMutateAsync).not.toHaveBeenCalled();
   });
 });
