@@ -281,3 +281,22 @@ export type { ReschedulingMode } from "./components/legacy/confirmacao";
 // CompareceuModal movido para `leads` (inversão F7) — re-exportado dali para
 // manter a API pública de pipelines estável p/ call sites legados.
 export { CompareceuModal } from "@/modules/leads";
+
+// ── Stage Role (#990/#991 — ADR-0017 §1) ──────────────────────────────────
+// Enum governado de etapa + classifier determinístico (twin do core Deno) +
+// metadados de apresentação. Consumidos pelo modal de etapa (interno) e pela
+// tela master de revisão won/lost em `identity` (cross-module via barrel).
+export {
+  classifyStageRole,
+  classifyStageNameDeterministic,
+  decideStageRoleAction,
+  normalizeStageName,
+} from "./lib/stage-role-classifier";
+export type { StageRoleSuggestion, StageRoleAction } from "./lib/stage-role-classifier";
+export { STAGE_ROLES, STAGE_ROLE_META, STAGE_ROLE_SOURCE_LABEL } from "./lib/stage-role";
+export type { StageRoleMeta } from "./lib/stage-role";
+export type {
+  StageRole,
+  SuggestableStageRole,
+  StageRoleSuggestionSource,
+} from "@/contracts/pipe";
