@@ -23,6 +23,13 @@ vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
 }));
 
+// canonical_metrics dark-launch flag (U3). Default ON so the overlay assertions
+// keep exercising the canonical path; the OFF gate test flips it.
+let canonicalFlag = { enabled: true, isLoading: false };
+vi.mock("@/modules/platform/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => canonicalFlag,
+}));
+
 import { useCommissionSummary } from "@/modules/engagement/hooks/useCommissions";
 
 // ── Self-referential chain factory (single / maybeSingle / thenable) ───────────
@@ -97,6 +104,7 @@ describe("useCommissionSummary — canonical commission-ledger overlay (#1000)",
     mockFrom.mockReset();
     mockRpc.mockReset();
     routeFrom();
+    canonicalFlag = { enabled: true, isLoading: false };
   });
 
   it("maps the nested ledger (by_type.*.base_revenue/commission) onto the summary", async () => {
@@ -167,6 +175,25 @@ describe("useCommissionSummary — canonical commission-ledger overlay (#1000)",
     expect(s.totalMRR).toBe(2000);
     expect(s.totalProjeto).toBe(0);
     expect(s.commissionMRR).toBe(20); // 2000 * 1%
+    expect(s.totalCommission).toBe(20);
+  });
+
+  it("flag OFF → NUNCA chama get_commission_ledger; comissão legada on-the-fly permanece", async () => {
+    canonicalFlag = { enabled: false, isLoading: false };
+    // Ledger available, but the gate must skip it entirely.
+    mockRpc.mockImplementation((name: string) =>
+      Promise.resolve(name === "get_commission_ledger" ? { data: LEDGER, error: null } : { data: null, error: null }),
+    );
+
+    const { result } = renderHook(() => useCommissionSummary("tm1", 6, 2026), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockRpc.mock.calls.some((c) => c[0] === "get_commission_ledger")).toBe(false);
+    // Legacy computation (product_type), NOT the canonical 30000/20000.
+    const s = result.current.data!;
+    expect(s.totalMRR).toBe(2000);
+    expect(s.totalProjeto).toBe(0);
+    expect(s.commissionMRR).toBe(20);
     expect(s.totalCommission).toBe(20);
   });
 });

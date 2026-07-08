@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { useOrganization } from "@/modules/identity";
+import { useFeatureFlag } from "@/modules/platform";
 // Deep import do arquivo de CONTRATOS puro (só tipos + funções puras, zero grafo
 // de módulo) — evita puxar o barrel inteiro de analytics (que importa hooks →
 // identity) e formar ciclo de import. Mesma origem que #998 consome internamente.
@@ -233,9 +234,13 @@ export interface CommissionSummary {
 
 export function useCommissionSummary(teamMemberId: string, month: number, year: number) {
   const { organizationId, isReady } = useOrganization();
+  // Dark-launch gate (U3): the canonical commission overlay runs only when the org
+  // has `canonical_metrics` flipped on. Fail-closed → default is the legacy
+  // on-the-fly computation (get_commission_ledger never called).
+  const useCanonical = useFeatureFlag("canonical_metrics").enabled;
 
   return useQuery({
-    queryKey: ["commission_summary", teamMemberId, month, year, organizationId],
+    queryKey: ["commission_summary", teamMemberId, month, year, organizationId, useCanonical],
     queryFn: async () => {
       if (!organizationId) throw new Error("Organização não disponível");
 
@@ -310,7 +315,11 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
       // Receita e comissão passam a vir do caderno sale_events (snapshot de taxa,
       // líquido de estorno, atribuição única) — o MESMO número do pódio. Degrada
       // pra legado se a migration não aplicou (PGRST202) — no-op nesse caso.
-      const canonical = await overlayCommissionLedger(organizationId, teamMemberId, month, year);
+      // Gate (U3): flag OFF/loading → overlay pulado, get_commission_ledger nunca
+      // chamado; a comissão legada on-the-fly acima permanece a fonte.
+      const canonical = useCanonical
+        ? await overlayCommissionLedger(organizationId, teamMemberId, month, year)
+        : null;
       if (canonical) {
         totalMRR = canonical.totalMRR;
         totalProjeto = canonical.totalProjeto;
