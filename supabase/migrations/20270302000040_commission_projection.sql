@@ -81,7 +81,8 @@
 --
 -- Rollback: supabase/migrations/rollback/20270302000040_commission_projection.sql
 -- Testes:   supabase/tests/commission_projection_test.sql (pgTAP, wired no run.sh)
--- Reconciliação (portão SP-3): scripts/reconcile-commissions-994.sql
+-- Reconciliação (portão SP-3): scripts/reconcile-commission-997.sql (instância
+--   do motor genérico scripts/reconcile-metrics.sql, via scripts/reconcile-metrics.sh)
 
 -- ============================================================================
 -- 1. Colunas novas em commissions
