@@ -17,6 +17,8 @@
 #      ADR-0017 §5): organizations.timezone + metric_period_bounds().
 #   4. stage_role_test.sql             — Stage Role governance (#990,
 #      ADR-0017 §1): pipeline_stages.stage_role + system_stage_role() map.
+#   4b. stage_role_money_guard_test.sql — write-gate on won/lost (FIX-4,
+#      ADR-0017 §1): only master/org-admin/backend may set money roles.
 #   5. pipeline_stage_events_test.sql  — append-only stage ledger (#992,
 #      ADR-0017 write model): capture triggers + immutability + RLS.
 #   6. sale_events_test.sql            — append-only sale ledger (#993,
@@ -70,6 +72,7 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/rls_invariants.sql" \
     "$SCRIPT_DIR/metric_period_bounds_test.sql" \
     "$SCRIPT_DIR/stage_role_test.sql" \
+    "$SCRIPT_DIR/stage_role_money_guard_test.sql" \
     "$SCRIPT_DIR/pipeline_stage_events_test.sql" \
     "$SCRIPT_DIR/sale_events_test.sql" \
     "$SCRIPT_DIR/commission_projection_test.sql" \
@@ -82,18 +85,25 @@ run_with_pg_prove() {
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql pipeline_stage_events_test.sql sale_events_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces
-    # failure signal, since `is()` reports rather than raises.
+    # failure signal, since `is()`/`ok()`/`cmp_ok()` REPORT rather than raise.
+    #
+    # -t -A (tuples-only, unaligned) is load-bearing: without it psql prints TAP
+    # inside its ALIGNED table layout, so every `not ok` line comes out as
+    # "␠not ok N" (leading space + column framing). That made the old
+    # `^not ok` anchor never match — with pg_prove absent, every failing
+    # assertion in all 12 suites was silently reported as PASS. -t -A emits TAP
+    # at column 0; the widened `(^|[[:space:]])not ok` grep is a second belt.
     local out
     out="$(psql "$DATABASE_URL" \
-            --no-psqlrc --quiet \
+            --no-psqlrc --quiet -t -A \
             --variable ON_ERROR_STOP=1 \
             --file "$SCRIPT_DIR/$f" 2>&1)"
     echo "$out"
-    if grep -Eq '^not ok' <<<"$out"; then
+    if grep -Eq '(^|[[:space:]])not ok' <<<"$out"; then
       echo "FAILED: $f reported a 'not ok' assertion" >&2
       return 1
     fi
