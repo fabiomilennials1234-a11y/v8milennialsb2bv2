@@ -24,6 +24,11 @@
 #   6. sale_events_test.sql            — append-only sale ledger (#993,
 #      ADR-0017 §2-4): sale/sale_lost/sale_reversed + Revenue Stream +
 #      sold_at tamper-proof + immutability + RLS.
+#   6b. sale_events_state_backfill_test.sql — governed CURRENT-STATE sale
+#      backfill (U2, ADR-0017 §7): live won/lost entries emit one honest
+#      sale/sale_lost anchored on the REAL stage_changed_at (NOT now()),
+#      role-resolved (not hardcoded 'vendido'), Revenue Stream by client,
+#      value snapshot (malformed → NULL), idempotent vs re-run AND live capture.
 #   7. commission_projection_test.sql  — commission as projection of the sale
 #      ledger (#994, ADR-0017 §6): rate snapshot + reversal mirror +
 #      idempotency + projection guard + column grants.
@@ -75,6 +80,7 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/stage_role_money_guard_test.sql" \
     "$SCRIPT_DIR/pipeline_stage_events_test.sql" \
     "$SCRIPT_DIR/sale_events_test.sql" \
+    "$SCRIPT_DIR/sale_events_state_backfill_test.sql" \
     "$SCRIPT_DIR/commission_projection_test.sql" \
     "$SCRIPT_DIR/get_sales_metrics_test.sql" \
     "$SCRIPT_DIR/get_funnel_flow_test.sql" \
@@ -85,7 +91,7 @@ run_with_pg_prove() {
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces
