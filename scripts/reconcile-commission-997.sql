@@ -1,9 +1,10 @@
 -- scripts/reconcile-commission-997.sql
 --
 -- INSTÂNCIA do par de COMISSÃO (#997) pro motor genérico reconcile-metrics.sql
--- (ADR-0017 §8). É o LIFT de scripts/reconcile-commissions-994.sql (que já
--- carregava a réplica fiel do cálculo antigo) pro contrato de temp table
--- recon_cells — mesma comparação, agora plugável no portão genérico.
+-- (ADR-0017 §8). Absorve e substitui o antigo script standalone de comissão
+-- (#994), carregando aqui a réplica fiel do cálculo antigo pro contrato de
+-- temp table recon_cells — mesma comparação, agora plugável no portão genérico
+-- (com portão fail-closed real; o standalone sempre saía 0, por isso removido).
 --
 --   NOVO   = projeção de comissão (commissions.source='sale_event_projection',
 --            #994) — taxa/amount SNAPSHOTADOS, líquida de estorno (linhas

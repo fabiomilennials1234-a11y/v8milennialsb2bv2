@@ -2,7 +2,7 @@
 --
 -- MOTOR GENÉRICO de reconciliação (ADR-0017 §8) — reutilizável por qualquer
 -- par NOVO×ANTIGO da fatia de leitura SP-3 (#995 vendas, #996, #997 ...).
--- Generaliza a estrutura de scripts/reconcile-commissions-994.sql (par único)
+-- Generaliza a estrutura do par único de comissão (hoje reconcile-commission-997.sql)
 -- num comparador que NÃO conhece coluna de domínio nenhuma: fala só em
 -- células (`dims jsonb`), valores e vínculo com finding.
 --
@@ -60,13 +60,29 @@
 -- current_setting('recon.tolerance').
 SELECT set_config('recon.tolerance', :'tolerance', false);
 
--- Guard de contrato: recon_cells tem de existir (a instância rodou?).
+-- Guard de contrato: recon_cells tem de existir (a instância rodou?) E ter
+-- linhas. Uma comparação vazia (0 células) é VACUAMENTE verde — `since` no
+-- futuro, join quebrado, org_id errado ou caderno ainda sem eventos produzem
+-- zero células comparáveis e o portão passaria sem ter reconciliado NADA.
+-- Fail-closed: 0 células = falha explícita, não pass silencioso.
 DO $guard$
+DECLARE
+  v_cells int;
 BEGIN
   IF to_regclass('pg_temp.recon_cells') IS NULL THEN
     RAISE EXCEPTION 'reconcile-metrics: temp table recon_cells ausente — '
       'rode o arquivo de instância (ex.: reconcile-sales-995.sql) ANTES do motor '
       '(use scripts/reconcile-metrics.sh)';
+  END IF;
+
+  SELECT count(*) INTO v_cells FROM recon_cells;
+  RAISE NOTICE '==> Contrato: recon_cells com % célula(s) comparável(is).', v_cells;
+  IF v_cells = 0 THEN
+    RAISE EXCEPTION 'reconcile-metrics: recon_cells VAZIA (0 células comparáveis) — '
+      'portão FALHA (fail-closed). Comparação vacuamente verde não reconcilia nada. '
+      'Causas prováveis: `since` no futuro, filtro de org_id sem match, join do par '
+      'quebrado, ou caderno (sale_events/commissions) ainda sem eventos no período. '
+      'Verifique os parâmetros (-v org_id / -v since) e a instância antes de reler o portão.';
   END IF;
 END
 $guard$;

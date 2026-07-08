@@ -7,7 +7,7 @@
 --            líquida de estorno, período cortado no tz da org, atribuição por
 --            sale_responsible_id único. Aqui replicada como SQL DIRETO sobre o
 --            caderno (mesma fonte, mesma regra líquida ⇒ algebricamente igual à
---            RPC; prior art: reconcile-commissions-994.sql lê a projeção direto).
+--            RPC; prior art: reconcile-commission-997.sql lê a projeção direto).
 --
 --   ANTIGO = get_dashboard_metrics (snapshot #987) — réplica SQL FIEL, bug-a-bug,
 --            do cálculo de venda do motor vivo:
