@@ -45,6 +45,13 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
+// canonical_metrics dark-launch flag (U3). Default ON so the overlay assertions
+// keep exercising the canonical path; the OFF gate test flips it.
+let canonicalFlag = { enabled: true, isLoading: false };
+vi.mock("@/modules/platform/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => canonicalFlag,
+}));
+
 // Reunião: fonte canônica meeting_events (ADR-0007) via useSDRPerformance — a
 // MESMA usada pelo funil e pelo KPI (mata o R6). Mockada para controlar totais.
 vi.mock("@/modules/engagement/hooks/useSDRPerformance", () => ({
@@ -260,6 +267,7 @@ import { useTVDashboardData } from "@/modules/analytics/hooks/useTVDashboardData
 describe("useTVDashboardData", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    canonicalFlag = { enabled: true, isLoading: false };
   });
 
   it("computes dashboard metrics", async () => {
@@ -338,5 +346,20 @@ describe("useTVDashboardData", () => {
       expect(data).toHaveProperty("individualGoals");
       expect(data).toHaveProperty("funnel");
     }
+  });
+
+  it("flag OFF → não lê get_sales_metrics; receita degrada a zero (reunião intacta)", async () => {
+    canonicalFlag = { enabled: false, isLoading: false };
+    const { result } = renderHook(() => useTVDashboardData(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true), { timeout: 5000 });
+
+    expect(result.current.isSuccess).toBe(true);
+    const data = result.current.data!;
+    // RPC would return revenue_total 5000, but the gate ignores it → zeros.
+    expect(data.vendasRealizadas).toBe(0);
+    expect(data.ticketMedio).toBe(0);
+    expect(data.funnel.vendido).toBe(0);
+    // Meeting dim (meeting_events) unaffected by the money gate.
+    expect(data.reunioesComparecidas).toBe(1);
   });
 });

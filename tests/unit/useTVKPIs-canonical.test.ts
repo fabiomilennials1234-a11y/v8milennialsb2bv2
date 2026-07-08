@@ -6,7 +6,7 @@
  *  - conversao = won / (won + lost).
  *  - reunioes = meeting_events (useSDRPerformance) — mesma fonte do funil (R6).
  */
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
@@ -47,6 +47,13 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: "org-t", isReady: true }),
+}));
+
+// canonical_metrics dark-launch flag (U3). Default ON so the overlay assertions
+// above keep exercising the canonical path; the OFF gate test flips it.
+let canonicalFlag = { enabled: true, isLoading: false };
+vi.mock("@/modules/platform/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => canonicalFlag,
 }));
 vi.mock("@/modules/pipelines/hooks/legacy/usePipeWhatsapp", () => ({
   usePipeWhatsapp: () => ({ data: [{ id: "w1", status: "novo" }, { id: "w2", status: "abordado" }] }),
@@ -116,5 +123,23 @@ describe("useTVKPIs — leitura canônica (get_sales_metrics)", () => {
     expect(call?.[1]).toMatchObject({ p_org_id: "org-t", p_period: "range" });
     expect(typeof call?.[1].p_start).toBe("string");
     expect(typeof call?.[1].p_end).toBe("string");
+  });
+});
+
+describe("useTVKPIs — canonical_metrics flag gate (U3)", () => {
+  afterEach(() => {
+    canonicalFlag = { enabled: true, isLoading: false };
+  });
+
+  it("OFF → nunca chama get_sales_metrics; KPIs de dinheiro degradam a zero", async () => {
+    canonicalFlag = { enabled: false, isLoading: false };
+    rpcMock.mockClear();
+    const { result } = renderHook(() => useTVKPIs(getPeriodRange("mes")), { wrapper: createWrapper() });
+    // KPI de reunião (fonte própria) resolve normalmente.
+    await waitFor(() => expect(result.current.reunioes).toBe(4));
+    expect(rpcMock.mock.calls.some((c) => c[0] === "get_sales_metrics")).toBe(false);
+    expect(result.current.conversao).toBe(0);
+    expect(result.current.ticket_mrr).toBe(0);
+    expect(result.current.ticket_proj).toBe(0);
   });
 });

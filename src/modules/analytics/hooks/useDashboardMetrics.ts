@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/modules/identity";
 import { useCurrentTeamMember } from "@/modules/identity";
+import { useFeatureFlag } from "@/modules/platform";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { isMissingSchemaError, isRpcAbsentError } from "@/lib/rpc-errors";
 import { computeMeetingRates, type MeetingEventLike } from "@/modules/analytics/lib/meeting-rates";
@@ -235,6 +236,11 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
   // Explicit override takes precedence over auto-logic
   const effectiveFilter = filterMemberId !== undefined ? filterMemberId : (filterByMe ? myId : null);
 
+  // Dark-launch gate (U3): the canonical ledger overlay runs ONLY when the org
+  // has `canonical_metrics` flipped on. Fail-closed (loading/no-org → false), so
+  // the default — and the whole merge-to-prod — is the legacy path unchanged.
+  const useCanonical = useFeatureFlag("canonical_metrics").enabled;
+
   const { startStr, endStr } = getMonthRangeUTC(selectedMonth, selectedYear);
 
   // Realtime: RPC canônica de receita do mês. Invalida quando qualquer pipe
@@ -251,7 +257,7 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
   useRealtimeSubscription("leads", ["dashboard-metrics"]);
 
   return useQuery({
-    queryKey: ["dashboard-metrics", selectedMonth, selectedYear, effectiveFilter, organizationId],
+    queryKey: ["dashboard-metrics", selectedMonth, selectedYear, effectiveFilter, organizationId, useCanonical],
     queryFn: async (): Promise<DashboardMetrics> => {
       console.log("🔍 [useDashboardMetrics] Chamando RPC:", { organizationId, startStr, endStr, effectiveFilter });
 
@@ -310,6 +316,8 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
         taxaConversao: d?.taxaConversao ?? 0,
         dailySales: (d?.dailySales as any[]) ?? [],
       };
+      // Gate (U3): flag OFF/loading → legacy money only, canonical RPC never called.
+      if (!useCanonical) return legacyBase;
       // Receita (venda) → caderno canônico sale_events, líquida de estorno (ADR-0017).
       // TODO(design #998): vendaMRR/vendaProjeto (eixo Recorrência×Projeto do
       //   SalesBreakdown) NÃO têm equivalente canônico — o eixo canônico é
@@ -456,6 +464,7 @@ export function useRankingData(month?: number, year?: number) {
   const selectedYear = year ?? now.getFullYear();
   const { data: currentTeamMember } = useCurrentTeamMember();
   const organizationId = currentTeamMember?.organization_id ?? null;
+  const useCanonical = useFeatureFlag("canonical_metrics").enabled;
 
   // Single subscription — pipeline_entries (tabela base publicada) cobre os
   // stages de propostas, driver primário do ranking. NÃO assinar pipe_propostas:
@@ -463,7 +472,7 @@ export function useRankingData(month?: number, year?: number) {
   useRealtimeSubscription("pipeline_entries", ["ranking-data"]);
 
   return useQuery({
-    queryKey: ["ranking-data", selectedMonth, selectedYear, organizationId],
+    queryKey: ["ranking-data", selectedMonth, selectedYear, organizationId, useCanonical],
     queryFn: async () => {
       if (!organizationId) return { salesRanking: [], meetingsRanking: [] };
 
@@ -507,12 +516,10 @@ export function useRankingData(month?: number, year?: number) {
       // meetingsRanking permanece 100% legado — get_ranking é só venda por decisão
       // de escopo (#997); ranking de reunião é fatia posterior.
       // Degrada: RPC ausente (migration pendente) → mantém o pódio legado intacto.
-      const salesRanking = await overlayCanonicalRanking(
-        legacySalesRanking,
-        organizationId,
-        selectedMonth,
-        selectedYear,
-      );
+      // Gate (U3): flag OFF/loading → pódio legado, get_ranking nunca é chamado.
+      const salesRanking = useCanonical
+        ? await overlayCanonicalRanking(legacySalesRanking, organizationId, selectedMonth, selectedYear)
+        : legacySalesRanking;
 
       return {
         salesRanking,

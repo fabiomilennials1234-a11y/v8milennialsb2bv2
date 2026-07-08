@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
-import { createWrapper } from "../../../../tests/helpers/hook-test-utils";
+import { createWrapper } from "../helpers/hook-test-utils";
 
 const rpcMock = vi.fn();
 
@@ -29,7 +29,14 @@ vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({
   useRealtimeSubscription: () => undefined,
 }));
 
-import { useDashboardMetrics, useRankingData } from "./useDashboardMetrics";
+// Dark-launch flag (U3): default ON here so the existing overlay assertions keep
+// exercising the canonical path. The OFF/loading behaviors flip `flagState`.
+let flagState: { enabled: boolean; isLoading: boolean } = { enabled: true, isLoading: false };
+vi.mock("@/modules/platform", () => ({
+  useFeatureFlag: () => flagState,
+}));
+
+import { useDashboardMetrics, useRankingData } from "@/modules/analytics/hooks/useDashboardMetrics";
 
 const LEGACY_DASHBOARD = {
   totalLeads: 120,
@@ -81,7 +88,10 @@ function routeRpc(overrides: Record<string, { data: unknown; error: unknown }> =
 }
 
 describe("useDashboardMetrics — canonical sales overlay", () => {
-  beforeEach(() => rpcMock.mockReset());
+  beforeEach(() => {
+    rpcMock.mockReset();
+    flagState = { enabled: true, isLoading: false };
+  });
 
   it("overlays net-of-reversal revenue and stream split onto the legacy base", async () => {
     routeRpc();
@@ -222,5 +232,98 @@ describe("useRankingData — canonical ranking overlay", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(result.current.data!.salesRanking.map((s) => s.id)).toEqual(["a", "b", "c"]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// U3 dark-launch: canonical_metrics feature flag gates the overlay. Default OFF
+// (legacy behavior = today) until an org is explicitly flipped on via DB.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("useDashboardMetrics — canonical_metrics flag gate", () => {
+  beforeEach(() => {
+    rpcMock.mockReset();
+    flagState = { enabled: true, isLoading: false };
+  });
+
+  it("OFF → does NOT call get_sales_metrics; returns the legacy get_dashboard_metrics result", async () => {
+    flagState = { enabled: false, isLoading: false };
+    routeRpc();
+    const { result } = renderHook(() => useDashboardMetrics(6, 2026), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    // Canonical RPC never touched.
+    expect(rpcMock.mock.calls.some((c) => c[0] === "get_sales_metrics")).toBe(false);
+    // Legacy money survives untouched; no canonical dimensions.
+    const m = result.current.data!;
+    expect(m.vendaTotal).toBe(99999);
+    expect(m.novosClientes).toBe(3);
+    expect(m.vendaPrimeiroPedido).toBe(111);
+    expect(m.isCanonicalRevenue).toBeUndefined();
+  });
+
+  it("loading (fail-closed) → legacy only, no canonical call, no flicker", async () => {
+    flagState = { enabled: false, isLoading: true };
+    routeRpc();
+    const { result } = renderHook(() => useDashboardMetrics(6, 2026), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(rpcMock.mock.calls.some((c) => c[0] === "get_sales_metrics")).toBe(false);
+    expect(result.current.data!.vendaTotal).toBe(99999);
+    expect(result.current.data!.isCanonicalRevenue).toBeUndefined();
+  });
+
+  it("ON → calls get_sales_metrics and overlays (current behavior preserved)", async () => {
+    flagState = { enabled: true, isLoading: false };
+    routeRpc();
+    const { result } = renderHook(() => useDashboardMetrics(6, 2026), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(rpcMock.mock.calls.some((c) => c[0] === "get_sales_metrics")).toBe(true);
+    expect(result.current.data!.vendaTotal).toBe(50000);
+    expect(result.current.data!.isCanonicalRevenue).toBe(true);
+  });
+});
+
+describe("useRankingData — canonical_metrics flag gate", () => {
+  beforeEach(() => {
+    rpcMock.mockReset();
+    flagState = { enabled: true, isLoading: false };
+  });
+
+  it("OFF → legacy get_ranking_data only; does NOT call get_ranking", async () => {
+    flagState = { enabled: false, isLoading: false };
+    rpcMock.mockImplementation((name: string) =>
+      Promise.resolve(
+        name === "get_ranking_data"
+          ? { data: LEGACY_RANKING, error: null }
+          : { data: CANONICAL_RANKING, error: null },
+      ),
+    );
+
+    const { result } = renderHook(() => useRankingData(6, 2026), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(rpcMock.mock.calls.some((c) => c[0] === "get_ranking")).toBe(false);
+    // Legacy podium intact (Caio still present — no canonical drop).
+    expect(result.current.data!.salesRanking.map((s) => s.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("ON → get_ranking overlay applied", async () => {
+    flagState = { enabled: true, isLoading: false };
+    rpcMock.mockImplementation((name: string) =>
+      Promise.resolve(
+        name === "get_ranking_data"
+          ? { data: LEGACY_RANKING, error: null }
+          : name === "get_ranking"
+          ? { data: CANONICAL_RANKING, error: null }
+          : { data: null, error: null },
+      ),
+    );
+
+    const { result } = renderHook(() => useRankingData(6, 2026), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(rpcMock.mock.calls.some((c) => c[0] === "get_ranking")).toBe(true);
+    expect(result.current.data!.salesRanking.map((s) => s.id)).toEqual(["a", "b"]);
   });
 });
