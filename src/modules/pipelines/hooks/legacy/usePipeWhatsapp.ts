@@ -6,6 +6,7 @@ import { triggerFollowUpAutomation } from "@/modules/workflows/hooks/useAutoFoll
 import { useOrganization } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";
 import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platform/lib/optimistic-lock";
+import { optimisticMovePipelineEntry, rollbackPipelineEntryMove, type OptimisticMoveSnapshot } from "@/modules/pipelines/lib/optimistic-move";
 // Importa via o shim de path estável (`../usePipelineEntries`), não `../model/...`,
 // para preservar o module-id que mocks de teste interceptam (slice 7.3-bis).
 import { usePipelineEntries, usePipelineId, findOrCreatePipelineEntry } from "../model/usePipelineEntries";
@@ -105,27 +106,42 @@ export function useUpdatePipeWhatsapp() {
           : "Sem permissão para mover registros no pipe");
       }
 
-      // Fetch current entry to merge metadata
-      const { data: current, error: fetchError } = await supabase
-        .from("pipeline_entries")
-        .select("metadata, lead_id, organization_id")
-        .eq("id", id)
-        .single();
+      // fix2: só busca o metadata atual quando há mudança que exige merge
+      // (responsáveis / scheduled_date). Um drag puro altera só `stage_key` e
+      // não toca metadata — aí pulamos a viagem de SELECT prévia (−1 round trip
+      // por move, o caminho quente do kanban).
+      const touchesMetadata =
+        updates.pre_sale_responsible_id !== undefined ||
+        updates.sale_responsible_id !== undefined ||
+        (updates as any).scheduled_date !== undefined;
+      const touchesAssigned =
+        touchesMetadata ||
+        updates.responsible_id !== undefined ||
+        updates.sdr_id !== undefined;
 
-      if (fetchError) throw fetchError;
+      let mergedMetadata: Record<string, unknown> | undefined;
+      if (touchesAssigned) {
+        // Fetch current entry to merge metadata
+        const { data: current, error: fetchError } = await supabase
+          .from("pipeline_entries")
+          .select("metadata")
+          .eq("id", id)
+          .single();
+        if (fetchError) throw fetchError;
 
-      const currentMetadata = (current.metadata as Record<string, any>) ?? {};
-      // Fase A: dual-only metadata writes.
-      const newMetadata: Record<string, unknown> = {};
-      if (updates.pre_sale_responsible_id !== undefined) newMetadata.pre_sale_responsible_id = updates.pre_sale_responsible_id;
-      if (updates.sale_responsible_id !== undefined) newMetadata.sale_responsible_id = updates.sale_responsible_id;
-      if ((updates as any).scheduled_date !== undefined) newMetadata.scheduled_date = (updates as any).scheduled_date;
+        const currentMetadata = (current?.metadata as Record<string, any>) ?? {};
+        // Fase A: dual-only metadata writes.
+        const newMetadata: Record<string, unknown> = {};
+        if (updates.pre_sale_responsible_id !== undefined) newMetadata.pre_sale_responsible_id = updates.pre_sale_responsible_id;
+        if (updates.sale_responsible_id !== undefined) newMetadata.sale_responsible_id = updates.sale_responsible_id;
+        if ((updates as any).scheduled_date !== undefined) newMetadata.scheduled_date = (updates as any).scheduled_date;
+        mergedMetadata = { ...currentMetadata, ...newMetadata };
+      }
 
-      const mergedMetadata = { ...currentMetadata, ...newMetadata };
-
-      const updatePayload: Record<string, unknown> = {
-        metadata: mergedMetadata,
-      };
+      const updatePayload: Record<string, unknown> = {};
+      if (mergedMetadata !== undefined) {
+        updatePayload.metadata = mergedMetadata;
+      }
       if (updates.status !== undefined) {
         updatePayload.stage_key = updates.status;
       }
@@ -134,19 +150,13 @@ export function useUpdatePipeWhatsapp() {
       }
       // assigned_to: prefer dual on the merged result; legacy retained as
       // transition fallback so historical entries still produce a usable FK.
-      const assignedTo =
-        mergedMetadata.pre_sale_responsible_id ??
-        mergedMetadata.sale_responsible_id ??
-        mergedMetadata.responsible_id ??
-        mergedMetadata.sdr_id ??
-        null;
-      if (
-        updates.pre_sale_responsible_id !== undefined ||
-        updates.sale_responsible_id !== undefined ||
-        updates.responsible_id !== undefined ||
-        updates.sdr_id !== undefined
-      ) {
-        updatePayload.assigned_to = assignedTo;
+      if (touchesAssigned && mergedMetadata) {
+        updatePayload.assigned_to =
+          mergedMetadata.pre_sale_responsible_id ??
+          mergedMetadata.sale_responsible_id ??
+          mergedMetadata.responsible_id ??
+          mergedMetadata.sdr_id ??
+          null;
       }
 
       let updateQuery = supabase
@@ -196,9 +206,32 @@ export function useUpdatePipeWhatsapp() {
 
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"], refetchType: "active" });
-      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
+    // fix1: move o card no cache do board na hora. Sem isso o card só reflete
+    // no eco do Realtime (debounce 2s) → congelava ~2-3s por move.
+    onMutate: async ({ id, status }): Promise<{ snapshot: OptimisticMoveSnapshot | null }> => {
+      if (!status) return { snapshot: null };
+      await queryClient.cancelQueries({ queryKey: ["pipeline-page", "whatsapp"] });
+      const snapshot = optimisticMovePipelineEntry(queryClient, {
+        slug: "whatsapp",
+        id,
+        toStage: status,
+      });
+      return { snapshot };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.snapshot) rollbackPipelineEntryMove(queryClient, context.snapshot);
+    },
+    // fix3: invalida a chave REAL do board (`pipeline-page`/`pipeline-stage-counts`)
+    // — antes invalidava `pipeline_entries` (não casava, no-op) e o board só
+    // atualizava via Realtime. Uma reconciliação silenciosa; o card já está no
+    // lugar pelo otimismo, então não há salto visual.
+    onSettled: (_data, _err, vars) => {
+      if (vars?.status) {
+        queryClient.invalidateQueries({ queryKey: ["pipeline-page", "whatsapp"] });
+        queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts", "whatsapp"] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
+      }
     },
   });
 }
