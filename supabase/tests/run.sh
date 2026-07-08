@@ -54,6 +54,12 @@
 #      de estorno + atribuição sale_responsible_id única (R5) + sem type='system'
 #      (R3) + âncora sold_at (R4); novos por created_at, reuniões por
 #      meeting_events; drill do caderno; assert_org_access.
+#  13. custom_pipeline_stages_stage_role_test.sql — STAGE_ROLE GOVERNANCE reaches
+#      CUSTOM pipelines (U1, ADR-0017 §1 / #990 extension): custom_pipeline_stages
+#      gains stage_role (+ suggestion columns + money guard); metric_stage_role
+#      dispatches system vs custom via the real join keys (custom_pipeline_stages
+#      .pipeline_id + stage_key), so custom-funnel sales finally emit sale_events
+#      (R3 killer at the resolver) + won/lost money guard on custom (FIX-4 reuse).
 #
 # All files run inside rolled-back transactions, so none mutates the DB.
 #
@@ -86,12 +92,13 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/get_funnel_flow_test.sql" \
     "$SCRIPT_DIR/get_ranking_test.sql" \
     "$SCRIPT_DIR/get_commission_ledger_test.sql" \
-    "$SCRIPT_DIR/productivity_canonical_test.sql"
+    "$SCRIPT_DIR/productivity_canonical_test.sql" \
+    "$SCRIPT_DIR/custom_pipeline_stages_stage_role_test.sql"
 }
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces
