@@ -32,7 +32,12 @@ export default defineConfig(({ mode }) => {
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.ts',
-      registerType: 'autoUpdate',
+      // 'prompt' é obrigatório com este sw.ts: ele só chama skipWaiting() ao
+      // receber SKIP_WAITING, que apenas o build 'prompt' de registerSW envia
+      // (via updateSW no toast). Com 'autoUpdate' o updateSW compila como
+      // no-op, onNeedRefresh nunca dispara e o update fica waiting pra sempre
+      // enquanto houver aba aberta.
+      registerType: 'prompt',
       includeAssets: ['favicon.png', 'favicon.svg'],
       manifest: {
         name: 'Torque CRM',

@@ -15,6 +15,7 @@ import {
   resolveVariables,
   buildTrackId,
   recipientGate,
+  isRetryableSendFailure,
 } from "./whatsapp-helpers.ts";
 
 // ─── Audio ─────────────────────────────────────────────────────────────────
@@ -77,7 +78,10 @@ export async function sendWhatsAppAudio(input: ActionInput): Promise<ActionResul
       trackSource: "workflow-action-audio",
       trackId: params._executionId as string | undefined,
     });
-    if (!result.success) return { success: false, error: result.error || "Audio send failed" };
+    if (!result.success) {
+      const error = result.error || "Audio send failed";
+      return { success: false, error, retryable: isRetryableSendFailure(error) };
+    }
 
     const messageId = result.messageId || `wf_${crypto.randomUUID()}`;
 
@@ -98,7 +102,8 @@ export async function sendWhatsAppAudio(input: ActionInput): Promise<ActionResul
     }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-media] Gateway audio send failed:", gwResult.error);
-    return { success: false, error: `Audio send failed: ${gwResult.error}` };
+    const error = `Audio send failed: ${gwResult.error}`;
+    return { success: false, error, retryable: isRetryableSendFailure(error) };
   }
 
   return { success: true, message: "WhatsApp audio sent" };
@@ -165,10 +170,14 @@ export async function sendWhatsAppImage(input: ActionInput): Promise<ActionResul
       { trackSource: "workflow-action", trackId: params._executionId as string | undefined },
     );
 
-    if (!sendResult.success) return { success: false, error: `Image send failed: ${sendResult.error}` };
+    if (!sendResult.success) {
+      const error = `Image send failed: ${sendResult.error}`;
+      return { success: false, error, retryable: isRetryableSendFailure(error) };
+    }
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-media] Gateway image send failed:", gwResult.error);
-    return { success: false, error: `Image send failed: ${gwResult.error}` };
+    const error = `Image send failed: ${gwResult.error}`;
+    return { success: false, error, retryable: isRetryableSendFailure(error) };
   }
 
   return { success: true, message: "WhatsApp image sent" };
@@ -231,10 +240,14 @@ export async function sendWhatsAppSticker(input: ActionInput): Promise<ActionRes
       { trackSource: "workflow-action", trackId: params._executionId as string | undefined },
     );
 
-    if (!sendResult.success) return { success: false, error: `Sticker send failed: ${sendResult.error}` };
+    if (!sendResult.success) {
+      const error = `Sticker send failed: ${sendResult.error}`;
+      return { success: false, error, retryable: isRetryableSendFailure(error) };
+    }
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-media] Gateway sticker send failed:", gwResult.error);
-    return { success: false, error: `Sticker send failed: ${gwResult.error}` };
+    const error = `Sticker send failed: ${gwResult.error}`;
+    return { success: false, error, retryable: isRetryableSendFailure(error) };
   }
 
   return { success: true, message: "WhatsApp sticker sent" };

@@ -14,6 +14,7 @@ import { PipeOpsProvider } from "@/modules/pipelines";
 import { ProtectedRoute } from "@/modules/identity/auth";
 import { PermissionProtectedRoute } from "@/modules/identity/permissions";
 import { MainLayout } from "@/modules/platform/components/layout/MainLayout";
+import { TorqueIntro } from "@/modules/platform/components/layout/TorqueIntro";
 import { useAutoAdminAssignment } from "@/modules/identity/hooks/useAutoAdminAssignment";
 import { SubscriptionProtectedRoute } from "@/modules/identity/components/SubscriptionProtectedRoute";
 import { GlobalErrorBoundary } from "@/modules/platform/components/GlobalErrorBoundary";
@@ -732,6 +733,7 @@ const App = () => {
             <ServiceWorkerUpdater />
             <BrowserRouter>
               <AuthProvider>
+                <TorqueIntro />
                 <RealtimeOrgBridge>
                   <PipeOpsProvider>
                     <GlobalErrorBoundary>
