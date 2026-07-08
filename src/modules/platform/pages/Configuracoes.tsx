@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense, type CSSProperties, type ReactNode } from "react";
 import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
 import { useThemeTransition } from "@/contexts/ThemeTransitionContext";
@@ -24,6 +24,7 @@ import {
   Key,
   FlaskConical,
   ClipboardList,
+  Award,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -588,6 +589,48 @@ function GeneralSettings() {
   );
 }
 
+// Gradiente dourado das pílulas (mesma paleta dos botões de seção do Copilot Playground).
+const PILL_GRADIENT = {
+  "--gradient-from": "hsl(47 100% 58%)",
+  "--gradient-to": "hsl(40 96% 45%)",
+} as CSSProperties;
+
+/**
+ * PillTab — trigger de aba no estilo "pílula gradiente hover-expand" (portado do
+ * PromptEditor do Copilot Playground). Círculo de ícone (48px) que expande para
+ * 160px revelando preenchimento gradiente + glow + label uppercase.
+ *
+ * Comportamento pedido: no hover a pílula cresce NO FLUXO, empurrando as vizinhas
+ * PARA O LADO (permitido) — mas nunca quebra linha nem mexe a página. Isso é
+ * garantido no container (`TabsList`): `flex-nowrap` trava tudo numa linha só (não
+ * desce) e `overflow-x:clip` corta qualquer transbordo horizontal sem criar
+ * scrollbar (não empurra a tela) — e, ao contrário de `hidden`, o `clip` deixa o
+ * glow vertical aparecer. Estados lidos via `data-state` do Radix.
+ */
+function PillTab({ value, label, icon }: { value: string; label: string; icon: ReactNode }) {
+  return (
+    <TabsTrigger
+      value={value}
+      title={label}
+      style={PILL_GRADIENT}
+      className="group relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card p-0 shadow-sm transition-all duration-500 hover:w-[160px] hover:border-transparent hover:shadow-none data-[state=active]:w-[160px] data-[state=active]:border-transparent data-[state=active]:shadow-none after:hidden"
+    >
+      {/* Gradient fill */}
+      <span className="absolute inset-0 rounded-full bg-[linear-gradient(45deg,var(--gradient-from),var(--gradient-to))] opacity-0 transition-opacity duration-500 group-hover:opacity-100 group-data-[state=active]:opacity-100" />
+      {/* Blur glow */}
+      <span className="absolute top-2 inset-x-0 h-full rounded-full bg-[linear-gradient(45deg,var(--gradient-from),var(--gradient-to))] blur-[15px] -z-10 opacity-0 transition-opacity duration-500 group-hover:opacity-40 group-data-[state=active]:opacity-40" />
+      {/* Icon */}
+      <span className="relative z-10 text-muted-foreground transition-transform duration-500 [&_svg]:w-5 [&_svg]:h-5 scale-100 group-hover:scale-0 group-data-[state=active]:scale-0">
+        {icon}
+      </span>
+      {/* Label */}
+      <span className="absolute inset-0 z-10 flex items-center justify-center px-3 text-center text-primary-foreground uppercase tracking-wide text-[11px] font-semibold whitespace-nowrap transition-transform duration-500 scale-0 group-hover:scale-100 group-hover:delay-150 group-data-[state=active]:scale-100 group-data-[state=active]:delay-150">
+        {label}
+      </span>
+    </TabsTrigger>
+  );
+}
+
 export default function Configuracoes() {
   const { orgType } = useOrganization();
   return (
@@ -608,58 +651,22 @@ export default function Configuracoes() {
       </div>
 
       <Tabs defaultValue="tags" className="w-full">
-        <TabsList className="flex flex-wrap gap-1 h-auto p-1 w-full max-w-5xl">
-          <TabsTrigger value="tags" className="gap-2">
-            <Tag className="w-4 h-4" />
-            Tags
-          </TabsTrigger>
-          <TabsTrigger value="notifications" className="gap-2">
-            <Bell className="w-4 h-4" />
-            Notificações
-          </TabsTrigger>
-          <TabsTrigger value="whatsapp" className="gap-2">
-            <MessageSquare className="w-4 h-4" />
-            WhatsApp
-          </TabsTrigger>
-          <TabsTrigger value="integracoes" className="gap-2">
-            <Plug className="w-4 h-4" />
-            Integrações
-          </TabsTrigger>
-          <TabsTrigger value="webhooks" className="gap-2">
-            <Webhook className="w-4 h-4" />
-            Webhooks
-          </TabsTrigger>
-          <TabsTrigger value="api" className="gap-2">
-            <Code className="w-4 h-4" />
-            API & Chaves
-          </TabsTrigger>
-          <TabsTrigger value="sla" className="gap-2">
-            <Timer className="w-4 h-4" />
-            SLA
-          </TabsTrigger>
-          <TabsTrigger value="api-keys" className="gap-2">
-            <Key className="w-4 h-4" />
-            API Keys
-          </TabsTrigger>
-          <TabsTrigger value="sandbox" className="gap-2">
-            <FlaskConical className="w-4 h-4" />
-            Sandbox
-          </TabsTrigger>
-          <TabsTrigger value="checklists" className="gap-2">
-            <ClipboardList className="w-4 h-4" />
-            Checklists
-          </TabsTrigger>
-          <TabsTrigger value="general" className="gap-2">
-            <Settings className="w-4 h-4" />
-            Geral
-          </TabsTrigger>
+        <TabsList className="flex flex-nowrap items-center gap-3 h-auto border-b-0 bg-transparent p-0 py-2 w-full max-w-5xl [overflow-x:clip]">
+          <PillTab value="tags" label="Tags" icon={<Tag className="w-4 h-4" />} />
+          <PillTab value="notifications" label="Notificações" icon={<Bell className="w-4 h-4" />} />
+          <PillTab value="whatsapp" label="WhatsApp" icon={<MessageSquare className="w-4 h-4" />} />
+          <PillTab value="integracoes" label="Integrações" icon={<Plug className="w-4 h-4" />} />
+          <PillTab value="webhooks" label="Webhooks" icon={<Webhook className="w-4 h-4" />} />
+          <PillTab value="api" label="API & Chaves" icon={<Code className="w-4 h-4" />} />
+          <PillTab value="sla" label="SLA" icon={<Timer className="w-4 h-4" />} />
+          <PillTab value="api-keys" label="API Keys" icon={<Key className="w-4 h-4" />} />
+          <PillTab value="sandbox" label="Sandbox" icon={<FlaskConical className="w-4 h-4" />} />
+          <PillTab value="checklists" label="Checklists" icon={<ClipboardList className="w-4 h-4" />} />
+          <PillTab value="general" label="Geral" icon={<Settings className="w-4 h-4" />} />
           {orgType === "outbound" && (
-            <TabsTrigger value="marcos">Marcos & Badges</TabsTrigger>
+            <PillTab value="marcos" label="Marcos" icon={<Award className="w-4 h-4" />} />
           )}
-          <TabsTrigger value="ajuda" className="gap-2">
-            <HelpCircle className="w-4 h-4" />
-            Ajuda
-          </TabsTrigger>
+          <PillTab value="ajuda" label="Ajuda" icon={<HelpCircle className="w-4 h-4" />} />
         </TabsList>
 
         <div className="mt-6">
