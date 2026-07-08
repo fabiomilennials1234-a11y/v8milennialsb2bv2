@@ -7,7 +7,7 @@
  */
 
 import { assertEquals } from "jsr:@std/assert@^1.0.0";
-import { resolveVariables } from "./whatsapp-helpers.ts";
+import { resolveVariables, isRetryableSendFailure } from "./whatsapp-helpers.ts";
 
 /**
  * Minimal fake of the Supabase query builder used by resolveVariables.
@@ -74,4 +74,25 @@ Deno.test("resolveVariables — {{tag.X}} renders empty when the Lead has no tag
   const out = await resolveVariables(supabase, "lead-1", "linha {{tag.AÇAIZINHO}}.");
 
   assertEquals(out, "linha .");
+});
+
+/**
+ * isRetryableSendFailure — the guard that stopped the SC Beauty "4× Bom dia"
+ * duplicate sends. Ambiguous provider failures (5xx / timeout / network) may
+ * have delivered the message, so they must NOT be retried; only failures we
+ * know blocked the send before it left are retryable.
+ */
+Deno.test("isRetryableSendFailure — ambiguous 500/timeout/network are terminal (never retried)", () => {
+  assertEquals(isRetryableSendFailure("WhatsApp send failed: Uazapi server error 500 on POST /send/text"), false);
+  assertEquals(isRetryableSendFailure("WhatsApp send failed: Uazapi timeout after 15000ms on POST /send/text"), false);
+  assertEquals(isRetryableSendFailure("Image send failed: Uazapi server error 500 on POST /send/media"), false);
+  assertEquals(isRetryableSendFailure("network error"), false);
+  assertEquals(isRetryableSendFailure(""), false);
+  assertEquals(isRetryableSendFailure(undefined), false);
+});
+
+Deno.test("isRetryableSendFailure — pre-send blocks are retryable (message never left)", () => {
+  assertEquals(isRetryableSendFailure("WhatsApp send failed: Circuit breaker open for /send/text until 2026-07-07T13:16"), true);
+  assertEquals(isRetryableSendFailure("WhatsApp instance not available"), true);
+  assertEquals(isRetryableSendFailure("Rate limit exceeded for instance abc"), true);
 });

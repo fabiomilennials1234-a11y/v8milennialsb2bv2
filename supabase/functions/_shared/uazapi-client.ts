@@ -574,9 +574,17 @@ export class UazapiClient {
     const url = `${this.baseUrl}${path}`;
     const timeout = opts?.timeoutMs ?? this.timeoutMs;
 
+    // Message sends (`/send/*`) are NOT idempotent: Uazapi answers 500/timeout for
+    // some sends it actually delivered, so an internal retry re-delivers the
+    // message (SC Beauty "4× Bom dia" incident, 2026-07-07). Cap those at a single
+    // attempt — ambiguous failures surface once and the caller decides (it treats
+    // them as terminal). Reads/status/other writes keep the 3-attempt backoff.
+    const nonIdempotentSend = path.startsWith("/send/");
+    const maxAttempts = nonIdempotentSend ? 1 : MAX_RETRIES;
+
     let lastError: unknown;
 
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeout);
 
@@ -638,7 +646,7 @@ export class UazapiClient {
             raw: errBody,
           } satisfies UazapiError;
           this.recordFailure(cbKey);
-          await this.backoff(attempt);
+          if (attempt < maxAttempts - 1) await this.backoff(attempt);
           continue;
         }
 
@@ -665,7 +673,7 @@ export class UazapiClient {
             provider_code: "timeout",
           } satisfies UazapiError;
           this.recordFailure(cbKey);
-          await this.backoff(attempt);
+          if (attempt < maxAttempts - 1) await this.backoff(attempt);
           continue;
         }
 
@@ -681,7 +689,7 @@ export class UazapiClient {
         // Network or unknown error
         lastError = e;
         this.recordFailure(cbKey);
-        await this.backoff(attempt);
+        if (attempt < maxAttempts - 1) await this.backoff(attempt);
       }
     }
 

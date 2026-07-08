@@ -204,6 +204,34 @@ export async function recipientGate(
   };
 }
 
+// ─── Send-failure classification (duplicate-safety) ────────────────────────
+
+/**
+ * Decide whether a failed WhatsApp send is safe to retry.
+ *
+ * A WhatsApp send is NOT idempotent: Uazapi answers `/send/*` with HTTP 500 or a
+ * 15s timeout for some sends that were in fact delivered. Retrying those
+ * ambiguous failures re-delivers the message — the SC Beauty "4× Bom dia"
+ * incident (2026-07-07). So we only allow a retry when we can be SURE the
+ * message never left: the breaker blocked it, no instance was resolved, or a
+ * rate/credential guard tripped BEFORE the provider call. Anything else (5xx,
+ * timeout, network) is ambiguous and treated as terminal to guarantee
+ * at-most-once delivery.
+ */
+export function isRetryableSendFailure(error: string | undefined | null): boolean {
+  const e = (error ?? "").toLowerCase();
+  if (!e) return false;
+  // Provably NOT delivered — send was blocked before reaching WhatsApp.
+  if (e.includes("circuit breaker open")) return true;
+  if (e.includes("instance not available") || e.includes("no_instance") ||
+      e.includes("no whatsapp instance")) return true;
+  if (e.includes("rate limit") || e.includes("rate_limited")) return true;
+  if (e.includes("provider error") || e.includes("token is required")) return true;
+  // Ambiguous (5xx / timeout / network): the message may already be delivered.
+  // Retrying would duplicate it — fail terminally instead.
+  return false;
+}
+
 // ─── Rate limit enforcement ────────────────────────────────────────────────
 
 export async function enforceWhatsAppRateLimit(
