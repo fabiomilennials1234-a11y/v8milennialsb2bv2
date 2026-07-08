@@ -35,10 +35,12 @@ const KPI_NOSHOW: TVKpi = { key: "noshow", label: "No-Show", color: "red" };
 // FIX-C (code review): as keys `ticket_mrr`/`ticket_proj` são load-bearing (switch
 // no TVDashboard + saída do useTVKPIs) e NÃO mudam. Mas o NÚMERO alimentado nelas é
 // o ticket por STREAM canônico (novo_negocio|carteira), não por product_type
-// (recorrência|projeto). Rótulo humano corrigido pro stream real — número certo sob
-// label certo. Ver useTVKPIs.ts (streamTicket sobre revenue_by_stream).
-const KPI_TICKET_MRR: TVKpi = { key: "ticket_mrr", label: "Ticket Médio Novo Negócio", color: "purple" };
-const KPI_TICKET_PROJ: TVKpi = { key: "ticket_proj", label: "Ticket Médio Carteira", color: "amber" };
+// (recorrência|projeto). Labels legados MANTIDOS: com canonical_metrics OFF (dark
+// default) useTVKPIs devolve dado legado MRR/Projeto — label tem que casar com ele.
+// Sob flag ON o dado vira stream (novo/carteira); renomear pro stream é parte do
+// cutover canônico (TODO design), não pode ser incondicional senão mislabel no legado.
+const KPI_TICKET_MRR: TVKpi = { key: "ticket_mrr", label: "Ticket Médio Recorrência", color: "purple" };
+const KPI_TICKET_PROJ: TVKpi = { key: "ticket_proj", label: "Ticket Médio Projeto", color: "amber" };
 const KPI_LEADS: TVKpi = { key: "leads", label: "Leads p/ Trabalhar", color: "orange" };
 const KPI_LEADS_NOVOS: TVKpi = { key: "leads_novos", label: "Leads Novos", color: "blue" };
 const KPI_PROPOSTAS: TVKpi = { key: "propostas", label: "Propostas Enviadas", color: "purple" };
