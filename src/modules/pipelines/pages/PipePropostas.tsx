@@ -45,6 +45,9 @@ import { PipeViewToggle } from "@/modules/pipelines/components/shared/PipeViewTo
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/modules/leads";
 import { usePipelineStages, stagesToColumns } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
+import { useSaleValueGuard } from "@/modules/pipelines/hooks/useSaleValueGuard";
+import { SaleValueRequiredModal } from "@/modules/pipelines/components/shared/SaleValueRequiredModal";
+import { parseSaleValue } from "@/modules/pipelines/lib/sale-value-guard";
 import { useQueryClient } from "@tanstack/react-query";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
 import { useTeamMembers, useResponsibleMembers } from "@/modules/identity";
@@ -249,6 +252,7 @@ function PipePropostasInner() {
     lead: any;
     items: Array<{ product_name: string; sale_value: number }>;
     totalValue: number;
+    saleValue?: number;
   } | null>(null);
 
   // State for Cadastro Externo confirmation modal on drag-to-vendido
@@ -262,6 +266,7 @@ function PipePropostasInner() {
     totalValue: number;
     contractDuration: number | null;
     proposalNotes: string | null;
+    saleValue?: number;
   } | null>(null);
 
   // State for loss reason dialog (drag-to-perdido)
@@ -272,6 +277,9 @@ function PipePropostasInner() {
     leadId: string;
     closerId: string | null;
   } | null>(null);
+
+  // Lead name shown in the required-sale-value modal (D1 / SQL-I3).
+  const [wonValueLeadName, setWonValueLeadName] = useState<string | undefined>(undefined);
 
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
@@ -285,6 +293,8 @@ function PipePropostasInner() {
   useEffect(() => { trackModuleVisit("pipe_propostas", organizationId); }, []);
 
   const { data: pipelineStages = [] } = usePipelineStages("propostas");
+  // D1 / SQL-I3: gate won-transitions behind a required sale_value.
+  const saleGuard = useSaleValueGuard(pipelineStages);
   const periodRange = useMemo(() => getDateRange(periodState), [periodState]);
   const { stageData, allItems: pipeData, isLoading } = usePaginatedPipeline(
     "propostas",
@@ -741,9 +751,44 @@ function PipePropostasInner() {
     }
   };
 
-  // Handle status change from drag-and-drop
-  const handleStatusChange = async (itemId: string, newStatus: string) => {
-    console.log("[PipePropostas] handleStatusChange called:", { itemId, newStatus, tinyConnected: tinyStatus?.connected });
+  // Handle status change from drag-and-drop.
+  // D1 / SQL-I3: gate won-transitions behind a required sale_value so the value
+  // lands in the SAME mutation as the won stage_key (fn_capture_sale_event
+  // snapshots metadata->>'sale_value' at the transition instant). Won stage is
+  // resolved by stage_role (governed), not a hardcoded 'vendido' (R2).
+  const handleStatusChange = (itemId: string, newStatus: string) => {
+    const item = pipeData?.find(p => p.id === itemId);
+    if (!item) {
+      console.warn("[PipePropostas] Item not found in pipeData:", itemId);
+      return;
+    }
+
+    // Effective value = entry metadata sale_value, else the items sum (which we
+    // also persist into metadata so the ledger captures it).
+    const metadataValue = parseSaleValue(item.sale_value);
+    const itemsSum = (item.items || []).reduce(
+      (sum: number, it: any) => sum + (Number(it?.sale_value) || 0),
+      0,
+    );
+    const effectiveValue = metadataValue ?? (itemsSum > 0 ? itemsSum : null);
+
+    setWonValueLeadName(item.lead?.name || undefined);
+    saleGuard.guardWonTransition({
+      targetStageKey: newStatus,
+      currentValue: effectiveValue,
+      proceed: (enteredValue) => {
+        // Write a value into metadata when it wasn't there: the user-entered
+        // value, or the items sum. Undefined = value already in metadata.
+        const saleValueOverride =
+          enteredValue ?? (metadataValue == null ? effectiveValue ?? undefined : undefined);
+        void continueStatusChange(itemId, newStatus, saleValueOverride ?? undefined);
+      },
+    });
+  };
+
+  // Continue a status change once the sale_value gate (if any) has passed.
+  const continueStatusChange = async (itemId: string, newStatus: string, saleValueOverride?: number) => {
+    console.log("[PipePropostas] continueStatusChange called:", { itemId, newStatus, saleValueOverride, tinyConnected: tinyStatus?.connected });
     const item = pipeData?.find(p => p.id === itemId);
     if (!item) {
       console.warn("[PipePropostas] Item not found in pipeData:", itemId);
@@ -796,6 +841,7 @@ function PipePropostasInner() {
           lead: item.lead,
           items: itemsList,
           totalValue: total || Number(item.sale_value) || 0,
+          saleValue: saleValueOverride,
         });
         setTinyConfirmOpen(true);
         return;
@@ -817,6 +863,7 @@ function PipePropostasInner() {
           totalValue: total || Number(item.sale_value) || 0,
           contractDuration: item.contract_duration || null,
           proposalNotes: item.notes || null,
+          saleValue: saleValueOverride,
         });
         setCadastroExternoOpen(true);
         return;
@@ -835,7 +882,7 @@ function PipePropostasInner() {
       return;
     }
 
-    await executeStatusChange(itemId, newStatus, item.lead_id, item.closer_id);
+    await executeStatusChange(itemId, newStatus, item.lead_id, item.closer_id, undefined, undefined, undefined, saleValueOverride);
   };
 
   // Handle loss reason dialog confirmation
@@ -870,7 +917,8 @@ function PipePropostasInner() {
     closerId: string | null,
     commitmentDate?: Date,
     skipAutoPush?: boolean,
-    lossReason?: string | null
+    lossReason?: string | null,
+    saleValue?: number
   ) => {
     try {
       const updates: any = {
@@ -880,6 +928,10 @@ function PipePropostasInner() {
         closerId,
         skip_auto_push: skipAutoPush,
       };
+
+      // D1 / SQL-I3: sale_value rides in the SAME mutation as the won stage_key,
+      // so fn_capture_sale_event snapshots metadata->>'sale_value' at capture.
+      if (saleValue !== undefined) updates.sale_value = saleValue;
 
       // If commitment date is provided, set it
       if (commitmentDate) {
@@ -969,7 +1021,9 @@ function PipePropostasInner() {
         pv.leadId,
         pv.closerId,
         undefined,
-        true // skip auto-push — modal already sent the order (or user chose to skip)
+        true, // skip auto-push — modal already sent the order (or user chose to skip)
+        undefined,
+        pv.saleValue
       );
     } finally {
       vendidoCompletingRef.current = false;
@@ -991,6 +1045,10 @@ function PipePropostasInner() {
         "vendido",
         pv.leadId,
         pv.closerId,
+        undefined,
+        undefined,
+        undefined,
+        pv.saleValue
       );
     } finally {
       cadastroCompletingRef.current = false;
@@ -1446,6 +1504,14 @@ function PipePropostasInner() {
           onSuccess={handleCadastroExternoComplete}
         />
       )}
+
+      {/* Required sale-value gate before a won-transition (D1 / SQL-I3) */}
+      <SaleValueRequiredModal
+        open={saleGuard.saleValueModalOpen}
+        onConfirm={saleGuard.confirmSaleValue}
+        onCancel={saleGuard.cancelSaleValue}
+        leadName={wonValueLeadName}
+      />
 
       {/* Commitment Date Modal */}
       <CommitmentDateModal
