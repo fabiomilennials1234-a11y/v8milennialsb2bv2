@@ -1,10 +1,13 @@
 import { withSentry } from "../_shared/sentry.ts";
 /**
- * Stage Role Classifier (#991, ADR-0017 §1 — padrão ADR-0006).
+ * Stage Role Classifier (#991 + U4, ADR-0017 §1 — padrão ADR-0006).
  *
- * Sugere `stage_role` para etapas CUSTOM de `pipeline_stages` (role 'open',
- * chave fora do mapa de sistema do #990, sem sugestão pendente e nunca
- * revisadas). Pipeline em duas passadas:
+ * Sugere `stage_role` para etapas ungovernadas de DOIS cadernos de etapa:
+ * SISTEMA `pipeline_stages` (chave fora do mapa de sistema do #990) E CUSTOM
+ * `custom_pipeline_stages` (as 22 orgs de funil custom, U4). Predicado idêntico
+ * nos dois: role 'open', sem sugestão pendente e nunca revisadas. O plano é
+ * escrito de volta na MESMA tabela de onde a linha veio (U1 espelhou as colunas
+ * de sugestão em custom_pipeline_stages — payload table-agnostic). Duas passadas:
  *
  *   1. Determinística — mapa de sinônimos pt-BR pelo NOME + flags
  *      is_final_positive/negative como sinal fraco (fallback). Nomes óbvios
@@ -35,6 +38,10 @@ import {
   type StageToClassify,
   type SuggestableStageRole,
 } from "../_shared/metrics/stage-role-classifier.ts";
+import {
+  buildStageRoleUpdate,
+  type StageSourceTable,
+} from "../_shared/metrics/stage-role-writeback.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -57,7 +64,14 @@ interface StageRow {
   position: number;
   is_final_positive: boolean | null;
   is_final_negative: boolean | null;
+  /** Caderno de origem — decide para onde o plano volta a ser escrito. */
+  source_table: StageSourceTable;
 }
+
+/** Custom stages não têm coluna pipeline_type; nunca são de sistema. Este
+ * sentinela garante isSystemStageKey()=false (não existe funil de sistema
+ * "custom"), então toda etapa custom é classificada — nenhuma é pulada. */
+const CUSTOM_PIPELINE_TYPE_SENTINEL = "custom";
 
 function buildPrompt(stages: StageRow[]): string {
   const lines = stages.map((s) =>
@@ -105,6 +119,16 @@ function parseAiClassification(
   return out;
 }
 
+interface TableCounts {
+  examined: number;
+  auto_applied: number;
+  queued_review: number;
+}
+
+function emptyTableCounts(): TableCounts {
+  return { examined: 0, auto_applied: 0, queued_review: 0 };
+}
+
 interface OrgResult {
   organization_id: string;
   examined: number;
@@ -112,7 +136,13 @@ interface OrgResult {
   queued_review: number;
   unresolved: number;
   skipped_system: number;
-  items: (StagePlanItem & { stage_key: string; name: string })[];
+  /** Quebra system vs custom — o operador vê de onde veio cada sugestão. */
+  by_table: Record<StageSourceTable, TableCounts>;
+  items: (StagePlanItem & {
+    stage_key: string;
+    name: string;
+    source_table: StageSourceTable;
+  })[];
 }
 
 Deno.serve(withSentry("classify-stage-roles", async (req) => {
@@ -141,11 +171,15 @@ Deno.serve(withSentry("classify-stage-roles", async (req) => {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  // Candidatas: ativas, sem role definido, sem sugestão pendente e nunca
-  // revisadas (reviewed_at é o marcador anti-re-sugestão de etapa dispensada).
-  // Etapas de sistema saem no plano (isSystemStageKey) — role delas é
-  // governado pelo mapa SQL do #990, nunca pelo classifier.
-  let query = supabase
+  // Candidatas (predicado IDÊNTICO nas duas tabelas): ativas, sem role
+  // definido, sem sugestão pendente e nunca revisadas (reviewed_at é o marcador
+  // anti-re-sugestão de etapa dispensada). Em pipeline_stages, etapas de
+  // sistema entram no fetch mas saem no plano (isSystemStageKey) — role delas é
+  // governado pelo mapa SQL do #990, nunca pelo classifier. Etapas custom nunca
+  // são de sistema (tabela distinta, sem mapa determinístico).
+
+  // SISTEMA — pipeline_stages (carrega pipeline_type real).
+  let systemQuery = supabase
     .from("pipeline_stages")
     .select(
       "id, organization_id, pipeline_type, stage_key, name, position, is_final_positive, is_final_negative",
@@ -154,13 +188,39 @@ Deno.serve(withSentry("classify-stage-roles", async (req) => {
     .eq("stage_role", "open")
     .is("suggested_stage_role", null)
     .is("stage_role_reviewed_at", null);
-  if (!allOrgs) query = query.eq("organization_id", organizationId!);
+  if (!allOrgs) systemQuery = systemQuery.eq("organization_id", organizationId!);
 
-  const { data: rows, error: fetchError } = await query;
-  if (fetchError) return json({ error: fetchError.message }, 500);
+  // CUSTOM — custom_pipeline_stages (sem coluna pipeline_type; U1 espelhou role
+  // + colunas de sugestão). U4: é o que traz as 22 orgs de funil custom.
+  let customQuery = supabase
+    .from("custom_pipeline_stages")
+    .select(
+      "id, organization_id, stage_key, name, position, is_final_positive, is_final_negative",
+    )
+    .eq("is_active", true)
+    .eq("stage_role", "open")
+    .is("suggested_stage_role", null)
+    .is("stage_role_reviewed_at", null);
+  if (!allOrgs) customQuery = customQuery.eq("organization_id", organizationId!);
+
+  const [systemRes, customRes] = await Promise.all([systemQuery, customQuery]);
+  if (systemRes.error) return json({ error: systemRes.error.message }, 500);
+  if (customRes.error) return json({ error: customRes.error.message }, 500);
+
+  const stageRows: StageRow[] = [
+    ...((systemRes.data ?? []) as Omit<StageRow, "source_table">[]).map((r) => ({
+      ...r,
+      source_table: "pipeline_stages" as StageSourceTable,
+    })),
+    ...((customRes.data ?? []) as Omit<StageRow, "source_table" | "pipeline_type">[]).map((r) => ({
+      ...r,
+      pipeline_type: CUSTOM_PIPELINE_TYPE_SENTINEL,
+      source_table: "custom_pipeline_stages" as StageSourceTable,
+    })),
+  ];
 
   const byOrg = new Map<string, StageRow[]>();
-  for (const row of (rows ?? []) as StageRow[]) {
+  for (const row of stageRows) {
     const list = byOrg.get(row.organization_id);
     if (list) list.push(row);
     else byOrg.set(row.organization_id, [row]);
@@ -171,6 +231,10 @@ Deno.serve(withSentry("classify-stage-roles", async (req) => {
   const results: OrgResult[] = [];
   let totalAutoApplied = 0;
   let totalQueued = 0;
+  const totalsByTable: Record<StageSourceTable, TableCounts> = {
+    pipeline_stages: emptyTableCounts(),
+    custom_pipeline_stages: emptyTableCounts(),
+  };
 
   for (const [orgId, orgRows] of byOrg) {
     const stages: StageToClassify[] = orgRows.map((r) => ({
@@ -208,6 +272,12 @@ Deno.serve(withSentry("classify-stage-roles", async (req) => {
     }
 
     const rowById = new Map(orgRows.map((r) => [r.id, r]));
+    const byTable: Record<StageSourceTable, TableCounts> = {
+      pipeline_stages: emptyTableCounts(),
+      custom_pipeline_stages: emptyTableCounts(),
+    };
+    for (const r of orgRows) byTable[r.source_table].examined++;
+
     const orgResult: OrgResult = {
       organization_id: orgId,
       examined: stages.length,
@@ -215,46 +285,52 @@ Deno.serve(withSentry("classify-stage-roles", async (req) => {
       queued_review: 0,
       unresolved: plan.unresolved.length,
       skipped_system: plan.skippedSystem,
+      by_table: byTable,
       items: plan.items.map((i) => ({
         ...i,
         stage_key: rowById.get(i.id)?.stage_key ?? "",
         name: rowById.get(i.id)?.name ?? "",
+        source_table: rowById.get(i.id)?.source_table ?? "pipeline_stages",
       })),
     };
 
     for (const item of plan.items) {
       // Invariante ADR-0017 §1: won/lost jamais auto-aplicam. A decisão vem de
-      // decideStageRoleAction (testada em unit), e o update reflete-a 1:1.
-      const update = item.action === "auto_apply"
-        ? {
-          stage_role: item.role,
-          stage_role_suggested_at: nowIso,
-          stage_role_suggestion_source: item.source,
-        }
-        : {
-          suggested_stage_role: item.role,
-          stage_role_suggested_at: nowIso,
-          stage_role_suggestion_source: item.source,
-        };
+      // decideStageRoleAction (testada em unit); buildStageRoleUpdate reflete-a
+      // 1:1 (won/lost → suggested_stage_role; meeting_* → stage_role). Payload
+      // idêntico nas duas tabelas (U1). O write volta pra tabela de origem.
+      const row = rowById.get(item.id);
+      const table: StageSourceTable = row?.source_table ?? "pipeline_stages";
+      const update = buildStageRoleUpdate(item, nowIso);
 
       if (!dryRun) {
         const { error: updateError } = await supabase
-          .from("pipeline_stages")
+          .from(table)
           .update(update)
           .eq("id", item.id)
           .eq("stage_role", "open"); // guarda: não sobrescreve role definido no meio-tempo
         if (updateError) {
-          console.error(`classify-stage-roles: update failed for stage ${item.id}:`, updateError.message);
+          console.error(`classify-stage-roles: update failed for stage ${item.id} (${table}):`, updateError.message);
           continue;
         }
       }
 
-      if (item.action === "auto_apply") orgResult.auto_applied++;
-      else orgResult.queued_review++;
+      if (item.action === "auto_apply") {
+        orgResult.auto_applied++;
+        byTable[table].auto_applied++;
+      } else {
+        orgResult.queued_review++;
+        byTable[table].queued_review++;
+      }
     }
 
     totalAutoApplied += orgResult.auto_applied;
     totalQueued += orgResult.queued_review;
+    for (const t of ["pipeline_stages", "custom_pipeline_stages"] as StageSourceTable[]) {
+      totalsByTable[t].examined += byTable[t].examined;
+      totalsByTable[t].auto_applied += byTable[t].auto_applied;
+      totalsByTable[t].queued_review += byTable[t].queued_review;
+    }
     results.push(orgResult);
   }
 
@@ -264,6 +340,7 @@ Deno.serve(withSentry("classify-stage-roles", async (req) => {
     orgs: results.length,
     auto_applied: totalAutoApplied,
     queued_review: totalQueued,
+    by_table: totalsByTable,
     results,
   });
 }));
