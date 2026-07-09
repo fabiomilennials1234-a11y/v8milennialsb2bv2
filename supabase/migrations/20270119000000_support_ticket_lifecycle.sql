@@ -29,6 +29,11 @@
 -- A máquina de estados espelha `src/modules/platform/lib/ticket-lifecycle.ts`.
 -- Duas cópias da mesma regra é o preço de a regra existir dos dois lados; o
 -- banco é o que vale.
+--
+-- Verificado em produção por sondas em transação revertida: o cliente é recusado
+-- ao tentar `em_andamento`, `fechado` e `resolvido`; reabrir um resolvido é
+-- aceito e soma `reopen_count`, limpando `resolved_at`; `fechado` recusa
+-- qualquer saída; o cron fecha um resolvido de 8 dias e poupa o de 6.
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.enforce_support_ticket_write_rules()
