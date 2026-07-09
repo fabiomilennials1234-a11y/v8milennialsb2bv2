@@ -1,13 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/modules/identity";
+import { useOrganization } from "@/modules/identity";
 
 // Definição canônica em contracts. Re-exportada aqui (API pública inalterada).
 import type { LossReason } from "@/contracts/pipe";
 export type { LossReason };
 
 export function useLossReasons() {
-  const { organizationId } = useAuth();
+  const { organizationId } = useOrganization();
   return useQuery({
     queryKey: ["loss_reasons", organizationId],
     queryFn: async () => {
@@ -23,7 +23,7 @@ export function useLossReasons() {
 
 export function useCreateLossReason() {
   const qc = useQueryClient();
-  const { organizationId } = useAuth();
+  const { organizationId } = useOrganization();
   return useMutation({
     mutationFn: async (input: { name: string; slug: string; category?: string }) => {
       const { data, error } = await (supabase.from as any)("loss_reasons")

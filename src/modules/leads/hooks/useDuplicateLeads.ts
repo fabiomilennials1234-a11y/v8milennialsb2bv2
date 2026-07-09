@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/modules/identity";
+import { useOrganization } from "@/modules/identity";
 export interface DuplicateGroup {
   lead_a_id: string;
   lead_a_name: string;
@@ -17,7 +17,7 @@ export interface DuplicateGroup {
 }
 
 export function useDuplicateLeads() {
-  const { organizationId } = useAuth();
+  const { organizationId } = useOrganization();
   return useQuery({
     queryKey: ["duplicate_leads", organizationId],
     queryFn: async () => {

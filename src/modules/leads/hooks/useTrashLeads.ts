@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/modules/identity";
+import { useOrganization } from "@/modules/identity";
 export interface TrashLead {
   id: string;
   name: string;
@@ -12,7 +12,7 @@ export interface TrashLead {
 }
 
 export function useTrashLeads() {
-  const { organizationId } = useAuth();
+  const { organizationId } = useOrganization();
   return useQuery({
     queryKey: ["trash_leads", organizationId],
     queryFn: async () => {
