@@ -51,7 +51,7 @@ export async function logTraceStep(
       meta,
     });
   } catch (_err) {
-    // Observability must never break delivery. Swallow (Sentry breadcrumb is
-    // added by the caller's withSentry wrapper).
+    // Observability must never break delivery. Swallow (the structured log is
+    // added by the caller's withErrorBoundary wrapper).
   }
 }

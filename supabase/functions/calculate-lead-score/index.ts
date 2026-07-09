@@ -1,4 +1,4 @@
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
 import { logRuntime } from "../_shared/logger.ts";
@@ -35,7 +35,7 @@ interface HistoryData {
   last_interaction?: string;
 }
 
-serve(withSentry('calculate-lead-score', async (req) => {
+serve(withErrorBoundary('calculate-lead-score', async (req) => {
   const origin = req.headers.get("Origin") ?? undefined;
   const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 

@@ -28,10 +28,10 @@ vi.mock("../../supabase/functions/_shared/embeddings.ts", () => ({
   generateEmbeddingsBatch: vi.fn(),
 }));
 
-vi.mock("../../supabase/functions/_shared/sentry.ts", () => ({
-  withSentry: (_n: string, fn: unknown) => fn,
-  captureError: vi.fn(async () => {}),
-  captureMessage: vi.fn(async () => {}),
+vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({
+  withErrorBoundary: (_n: string, fn: unknown) => fn,
+  logError: vi.fn(async () => {}),
+  logEvent: vi.fn(async () => {}),
 }));
 
 vi.mock("../../supabase/functions/_shared/logger.ts", () => ({

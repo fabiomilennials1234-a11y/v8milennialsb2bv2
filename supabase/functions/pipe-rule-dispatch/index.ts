@@ -1,4 +1,4 @@
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { logRuntime } from '../_shared/logger.ts';
 import { trackEvent } from '../_shared/track.ts';
 import { startJob, finishJob, failJob } from '../_shared/job-tracker.ts';
@@ -46,7 +46,7 @@ interface ProcessResult {
   error?: string;
 }
 
-Deno.serve(withSentry('pipe-rule-dispatch', async (req) => {
+Deno.serve(withErrorBoundary('pipe-rule-dispatch', async (req) => {
   const origin = req.headers.get("origin") ?? req.headers.get("Origin");
   const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 

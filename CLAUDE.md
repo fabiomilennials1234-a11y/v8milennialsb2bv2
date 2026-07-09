@@ -32,7 +32,7 @@ Pipeline: `CTO → arquiteto → [design | engenheiro | ambos] → arquiteto (co
 
 ## Stack
 
-Frontend: React 18 + TS 5.8 + Vite 5 (SWC) | UI: shadcn/ui (Radix) + Tailwind 3 + Lucide | State: TanStack Query v5 + Context (auth/features) | Forms: RHF + Zod | Backend: Supabase (Postgres + Auth + Edge Functions + Realtime + Storage) | AI: Gemini (embeddings 1536d) + pgvector | Integrações: Uazapi, Meta, Google Calendar, TinyERP, Asaas, n8n, SZ.Chat, ElevenLabs | Testes: Vitest + Playwright | Monitoring: Sentry
+Frontend: React 18 + TS 5.8 + Vite 5 (SWC) | UI: shadcn/ui (Radix) + Tailwind 3 + Lucide | State: TanStack Query v5 + Context (auth/features) | Forms: RHF + Zod | Backend: Supabase (Postgres + Auth + Edge Functions + Realtime + Storage) | AI: Gemini (embeddings 1536d) + pgvector | Integrações: Uazapi, Meta, Google Calendar, TinyERP, Asaas, n8n, SZ.Chat, ElevenLabs | Testes: Vitest + Playwright | Observabilidade: `runtime_logs` (in-house, ADR-0017)
 
 ## Comandos
 
@@ -98,7 +98,7 @@ supabase/
 
 **Pipelines**: `pipe_whatsapp` (qualificação), `pipe_confirmacao` (reunião), `pipe_propostas` (fechamento), `custom_pipelines`. Stages dinâmicas em `pipeline_stages`. Lead pode estar em múltiplos pipes.
 
-**Edge Function pattern**: `Deno.serve(withSentry('nome', handler))` + `withSecurityHeaders(getCorsHeaders(req))` + OPTIONS early return.
+**Edge Function pattern**: `Deno.serve(withErrorBoundary('nome', handler))` + `withSecurityHeaders(getCorsHeaders(req))` + OPTIONS early return. O boundary devolve 500 **com CORS** — nunca remova o wrapper.
 
 **Realtime**: `useRealtimeSubscription(table, queryKeys)` de `@/shared/realtime` — postgres_changes, filtro org_id, debounce 2s.
 

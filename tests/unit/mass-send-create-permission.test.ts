@@ -56,8 +56,8 @@ vi.mock("../../supabase/functions/_shared/assert-permission.ts", () => ({
   permissionDeniedResponse: mockPermissionDeniedResponse,
 }));
 
-vi.mock("../../supabase/functions/_shared/sentry.ts", () => ({
-  withSentry: (_name: string, handler: Function) => handler,
+vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({
+  withErrorBoundary: (_name: string, handler: Function) => handler,
 }));
 
 vi.mock("../../supabase/functions/_shared/cors.ts", () => ({

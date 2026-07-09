@@ -1,4 +1,4 @@
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { getTimeBasedVariables } from '../_shared/time-variables.ts';
 /**
  * Outbound Trigger - Disparo Automático de Primeira Mensagem
@@ -43,7 +43,7 @@ interface OutboundConfig {
   retryIntervalMinutes: number;
 }
 
-serve(withSentry('outbound-trigger', async (req) => {
+serve(withErrorBoundary('outbound-trigger', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });

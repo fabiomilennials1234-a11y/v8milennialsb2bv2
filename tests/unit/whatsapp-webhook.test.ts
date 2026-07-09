@@ -17,8 +17,8 @@ vi.stubGlobal("Deno", {
   serve: (_handler: unknown) => {},
 });
 
-vi.mock("../../supabase/functions/_shared/sentry.ts", () => ({
-  withSentry: (_name: string, fn: unknown) => fn,
+vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({
+  withErrorBoundary: (_name: string, fn: unknown) => fn,
 }));
 
 vi.mock("../../supabase/functions/_shared/logger.ts", () => ({

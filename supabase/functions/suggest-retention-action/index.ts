@@ -7,7 +7,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
@@ -34,7 +34,7 @@ Regras:
 - A mensagem deve poder ser copiada e colada no WhatsApp sem edição.`;
 
 Deno.serve(
-  withSentry("suggest-retention-action", async (req: Request): Promise<Response> => {
+  withErrorBoundary("suggest-retention-action", async (req: Request): Promise<Response> => {
     const headers = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
     const jsonHeaders = { ...headers, "Content-Type": "application/json" };
 

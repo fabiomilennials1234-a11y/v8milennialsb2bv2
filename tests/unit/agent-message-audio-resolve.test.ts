@@ -26,10 +26,10 @@ vi.stubGlobal("Deno", {
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
-vi.mock("../../supabase/functions/_shared/sentry.ts", () => ({
-  withSentry: (_name: string, fn: unknown) => fn,
-  captureMessage: vi.fn(async () => {}),
-  captureError: vi.fn(async () => {}),
+vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({
+  withErrorBoundary: (_name: string, fn: unknown) => fn,
+  logEvent: vi.fn(async () => {}),
+  logError: vi.fn(async () => {}),
 }));
 
 const { resolveMediaContent } = await import(

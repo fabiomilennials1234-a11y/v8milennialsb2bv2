@@ -21,7 +21,7 @@ global.fetch = mockFetch as any;
 
 // Mock dependencies
 vi.mock("../../supabase/functions/_shared/logger.ts", () => ({ logRuntime: vi.fn() }));
-vi.mock("../../supabase/functions/_shared/sentry.ts", () => ({ captureException: vi.fn() }));
+vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({ captureException: vi.fn() }));
 vi.mock("../../supabase/functions/_shared/validation.ts", () => ({
   sanitizeString: (input: string | null | undefined, _maxLength?: number) =>
     input == null ? null : String(input).trim(),

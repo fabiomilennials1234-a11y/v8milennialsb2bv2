@@ -1,4 +1,4 @@
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 /**
  * meta-oauth-callback
@@ -25,7 +25,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const APP_URL = Deno.env.get("APP_URL") ?? "http://localhost:5173";
 
-Deno.serve(withSentry('meta-oauth-callback', async (req) => {
+Deno.serve(withErrorBoundary('meta-oauth-callback', async (req) => {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");

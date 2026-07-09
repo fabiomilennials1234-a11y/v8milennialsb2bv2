@@ -16,7 +16,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
@@ -1180,7 +1180,7 @@ function resolveCustomStageFromName(
 // ─── Main Handler ───────────────────────────────────────
 
 Deno.serve(
-  withSentry("import-leads", async (req: Request): Promise<Response> => {
+  withErrorBoundary("import-leads", async (req: Request): Promise<Response> => {
     const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
     if (req.method === "OPTIONS") {

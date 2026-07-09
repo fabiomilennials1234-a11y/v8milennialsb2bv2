@@ -1,4 +1,4 @@
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -27,7 +27,7 @@ function logUsage(
     .catch((err: unknown) => console.error("[partner-webhook] usage log error:", err));
 }
 
-Deno.serve(withSentry('partner-webhook', async (req) => {
+Deno.serve(withErrorBoundary('partner-webhook', async (req) => {
   const startTime = performance.now();
   const origin = req.headers.get("Origin") ?? undefined;
   const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));

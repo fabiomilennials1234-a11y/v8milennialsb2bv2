@@ -11,7 +11,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { logRuntime } from "../_shared/logger.ts";
 import { sanitizeAssistantMessage, splitByDelimiter } from "../_shared/message-sanitizer.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
@@ -210,7 +210,7 @@ async function callOpenRouter(
   return await response.json();
 }
 
-Deno.serve(withSentry('test-copilot-chat', async (req) => {
+Deno.serve(withErrorBoundary('test-copilot-chat', async (req) => {
   const origin = req.headers.get("Origin") ?? undefined;
   const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 

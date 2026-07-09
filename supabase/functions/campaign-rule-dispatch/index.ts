@@ -17,7 +17,7 @@
  * Também processa timeouts de wait_response vencidos.
  */
 
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { trackEvent } from '../_shared/track.ts';
 import { logRuntime } from "../_shared/logger.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -46,7 +46,7 @@ interface ProcessResult {
   error?: string;
 }
 
-Deno.serve(withSentry('campaign-rule-dispatch', async (req) => {
+Deno.serve(withErrorBoundary('campaign-rule-dispatch', async (req) => {
   const origin = req.headers.get("origin") ?? req.headers.get("Origin");
   const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 

@@ -12,7 +12,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import * as Sentry from "@sentry/react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useAuth } from "@/modules/identity";
@@ -101,16 +100,11 @@ export function useMessageSearch(): UseMessageSearchResult {
       if (!rl.allowed) {
         const retrySec = Math.ceil(rl.retryAfterMs / 1000);
 
-        // Sentry breadcrumb — severity warning, não error (acidental, não adversarial)
-        Sentry.addBreadcrumb({
-          category: "rate_limit",
-          message: "search_messages_rate_limited",
-          level: "warning",
-          data: {
-            userId: user?.id,
-            retryAfterMs: rl.retryAfterMs,
-            tokensRemaining: rl.tokensRemaining,
-          },
+        // Warning, não error — acidental, não adversarial.
+        console.warn("[rate_limit] search_messages_rate_limited", {
+          userId: user?.id,
+          retryAfterMs: rl.retryAfterMs,
+          tokensRemaining: rl.tokensRemaining,
         });
 
         setRateLimited(true);
@@ -134,7 +128,7 @@ export function useMessageSearch(): UseMessageSearchResult {
     placeholderData: (prev) => prev,
   });
 
-  // Tratar erro de rate limit — toast uma vez, não propagar como Sentry error
+  // Tratar erro de rate limit — toast uma vez, não propagar como erro
   useEffect(() => {
     if (!error) return;
     const msg = error.message;

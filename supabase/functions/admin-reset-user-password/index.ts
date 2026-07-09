@@ -5,7 +5,7 @@
  * Usa Supabase Auth Admin API (service_role).
  */
 
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
@@ -32,7 +32,7 @@ interface Body {
   new_password: string;
 }
 
-serve(withSentry('admin-reset-user-password', async (req) => {
+serve(withErrorBoundary('admin-reset-user-password', async (req) => {
   const origin = req.headers.get("Origin") ?? undefined;
   const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 

@@ -25,7 +25,6 @@ owner: gabriel
 |---|---|
 | `VITE_SUPABASE_URL` | URL do projeto Supabase |
 | `VITE_SUPABASE_ANON_KEY` | Anon key (público, OK em frontend) |
-| `VITE_SENTRY_DSN` | Sentry DSN frontend |
 | `VITE_APP_URL` | URL do app (pra links absolutos) |
 | `VITE_GOOGLE_CLIENT_ID` | Google OAuth |
 | (outras conforme integrações) |
@@ -66,7 +65,6 @@ owner: gabriel
 ### Monitoring
 | Variável | Função |
 |---|---|
-| `SENTRY_DSN_EDGE` | Sentry DSN edge fns |
 
 ## Per-tenant secrets
 

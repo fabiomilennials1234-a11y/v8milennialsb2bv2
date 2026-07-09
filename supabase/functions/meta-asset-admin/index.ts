@@ -13,13 +13,13 @@
  * DELETE { asset_id }                                                      → unbind
  */
 
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { createMetaGraphClient } from "../_shared/meta/graph-client.ts";
 
-Deno.serve(withSentry("meta-asset-admin", async (req) => {
+Deno.serve(withErrorBoundary("meta-asset-admin", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("Origin") ?? undefined));
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 

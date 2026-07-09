@@ -9,7 +9,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getOrgTinyToken, callTinyApi, logTinyOp, getTinyErrorMessage, isTinyNoRecordsError } from "../_shared/tinyerp-utils.ts";
-import { captureError, withSentry } from '../_shared/sentry.ts';
+import { logError, withErrorBoundary } from '../_shared/error-boundary.ts';
 import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -28,7 +28,7 @@ interface TinyProduct {
   situacao?: string;
 }
 
-Deno.serve(withSentry("tinyerp-sync-products", async (req) => {
+Deno.serve(withErrorBoundary("tinyerp-sync-products", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   if (req.method === "OPTIONS") {
@@ -306,7 +306,7 @@ Deno.serve(withSentry("tinyerp-sync-products", async (req) => {
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error("[TinyERP Sync] Error:", errorMsg, err instanceof Error ? err.stack : "");
-    await captureError(err, { functionName: "tinyerp-sync-products" }).catch(() => {});
+    await logError(err, { functionName: "tinyerp-sync-products" }).catch(() => {});
     await logRuntime({
       module: "general",
       action: "tinyerp_sync_products",

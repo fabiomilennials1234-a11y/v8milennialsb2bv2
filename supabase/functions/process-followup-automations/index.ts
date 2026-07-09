@@ -1,4 +1,4 @@
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 /**
  * Worker: Processa regras de follow-up baseadas em tempo
  *
@@ -36,7 +36,7 @@ interface AutomationRule {
   filter_stages: string[] | null;
 }
 
-Deno.serve(withSentry('process-followup-automations', async (req: Request) => {
+Deno.serve(withErrorBoundary('process-followup-automations', async (req: Request) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {

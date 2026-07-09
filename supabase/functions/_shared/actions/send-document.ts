@@ -12,7 +12,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { ActionResult } from "./types.ts";
 import { resolveDispatchContext, DispatchResolutionError } from "../whatsapp-dispatch.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../copilot/cancellation.ts";
-import { captureMessage } from "../sentry.ts";
+import { logEvent } from "../error-boundary.ts";
 
 /**
  * Checks if a document was already sent in a conversation.
@@ -60,7 +60,7 @@ export async function checkDocumentAlreadySent(
     );
 
     if (isDuplicate) {
-      captureMessage("copilot_duplicate_document_blocked", {
+      logEvent("copilot_duplicate_document_blocked", {
         tags: {
           "copilot.document_id": documentId,
           "copilot.conversation_id": conversationId,
@@ -103,7 +103,7 @@ export async function checkDocumentAlreadySent(
     .limit(1);
 
   if (sentMessages && sentMessages.length > 0) {
-    captureMessage("copilot_duplicate_document_blocked_whatsapp_fallback", {
+    logEvent("copilot_duplicate_document_blocked_whatsapp_fallback", {
       tags: {
         "copilot.document_id": documentId,
         "copilot.conversation_id": conversationId,

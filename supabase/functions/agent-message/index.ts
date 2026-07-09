@@ -1,4 +1,4 @@
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { logRuntime } from '../_shared/logger.ts';
 import { trackEvent } from '../_shared/track.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -22,7 +22,7 @@ import { resolveMediaContent } from "../_shared/audio-transcription.ts";
  * Webhook receptor de mensagens de leads
  * Twilio/WhatsApp → /agent-message
  */
-Deno.serve(withSentry('agent-message', async (req) => {
+Deno.serve(withErrorBoundary('agent-message', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   if (req.method === "OPTIONS") {

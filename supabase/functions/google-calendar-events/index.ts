@@ -25,7 +25,7 @@ import {
   logCalendarOp,
 } from "../_shared/google-calendar-utils.ts";
 import { logRuntime } from "../_shared/logger.ts";
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { getPipeEntry, upsertPipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
 
 const SUPABASE_URL              = Deno.env.get("SUPABASE_URL")!;
@@ -213,7 +213,7 @@ async function canAccessCalendar(
 
 // ─── Handler principal ────────────────────────────────────────────────────────
 
-Deno.serve(withSentry('google-calendar-events', async (req) => {
+Deno.serve(withErrorBoundary('google-calendar-events', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   if (req.method === "OPTIONS") {

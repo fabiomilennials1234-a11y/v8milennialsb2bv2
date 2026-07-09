@@ -8,19 +8,19 @@
  * Auth: the instance/secret resolves organization_id (trusted). The inbound
  * payload's org field, if present, is IGNORED — a provider can forge it.
  *
- * Pattern: Deno.serve(withSentry(...)) + withSecurityHeaders(getCorsHeaders) +
+ * Pattern: Deno.serve(withErrorBoundary(...)) + withSecurityHeaders(getCorsHeaders) +
  * OPTIONS early return. config.toml: verify_jwt = false (custom auth).
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { processInbound, type BorderContext } from "../_shared/copilot-v2/border.ts";
 
 serve(
-  withSentry("agent-runtime-v2", async (req: Request) => {
+  withErrorBoundary("agent-runtime-v2", async (req: Request) => {
     const cors = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
     if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 

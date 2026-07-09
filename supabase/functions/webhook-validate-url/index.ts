@@ -6,11 +6,11 @@
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { validateUrl } from "../_shared/webhook-utils.ts";
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { logRuntime } from "../_shared/logger.ts";
 import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 
-Deno.serve(withSentry('webhook-validate-url', async (req) => {
+Deno.serve(withErrorBoundary('webhook-validate-url', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });

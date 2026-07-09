@@ -12,7 +12,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { logRuntime } from "../_shared/logger.ts";
 import { validateOrganizationAccess, unauthorizedResponse } from "../_shared/auth.ts";
 
@@ -23,7 +23,7 @@ const BUCKET = "media";
 // Só permitir paths do chat (evitar expor outros objetos)
 const ALLOWED_PREFIX = "whatsapp-media/";
 
-serve(withSentry('stream-media', async (req) => {
+serve(withErrorBoundary('stream-media', async (req) => {
   const origin = req.headers.get("origin");
   const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 

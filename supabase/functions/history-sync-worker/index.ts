@@ -15,7 +15,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { getWhatsAppProvider } from "../_shared/whatsapp-client.ts";
@@ -608,7 +608,7 @@ async function resetStaleJobs(supabase: ReturnType<typeof createClient>): Promis
 // ---------------------------------------------------------------------------
 
 Deno.serve(
-  withSentry("history-sync-worker", async (req: Request) => {
+  withErrorBoundary("history-sync-worker", async (req: Request) => {
     const providedSecret = req.headers.get("x-cron-secret");
     if (!CRON_SECRET || !providedSecret || !timingSafeCompare(providedSecret, CRON_SECRET)) {
       return jsonResponse(401, { error: "unauthorized" });

@@ -32,9 +32,9 @@ vi.stubGlobal("Deno", {
   serve: () => {},
 });
 
-vi.mock("../../supabase/functions/_shared/sentry.ts", () => ({
-  withSentry: (_name: string, fn: unknown) => fn,
-  captureError: vi.fn(async () => {}),
+vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({
+  withErrorBoundary: (_name: string, fn: unknown) => fn,
+  logError: vi.fn(async () => {}),
 }));
 vi.mock("../../supabase/functions/_shared/logger.ts", () => ({
   logRuntime: vi.fn(async () => {}),

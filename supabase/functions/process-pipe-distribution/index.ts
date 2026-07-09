@@ -10,7 +10,7 @@
  *  - round_robin: assign to the member with fewest active leads (least-loaded)
  */
 
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { trackEvent } from "../_shared/track.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
@@ -29,7 +29,7 @@ const VALID_PIPE_SLUGS: Record<string, PipeSlug> = {
 const TERMINAL_STATUSES = ["vendido", "perdido", "cancelado"];
 
 Deno.serve(
-  withSentry("process-pipe-distribution", async (req) => {
+  withErrorBoundary("process-pipe-distribution", async (req) => {
     const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
     if (req.method === "OPTIONS") {

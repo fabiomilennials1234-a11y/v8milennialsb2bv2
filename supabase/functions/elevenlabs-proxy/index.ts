@@ -1,4 +1,4 @@
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { logRuntime } from "../_shared/logger.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
@@ -25,7 +25,7 @@ interface ProxyRequest {
   files?: Array<{ name: string; data: string; mime_type: string }>;
 }
 
-Deno.serve(withSentry('elevenlabs-proxy', async (req) => {
+Deno.serve(withErrorBoundary('elevenlabs-proxy', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   if (req.method === "OPTIONS") {

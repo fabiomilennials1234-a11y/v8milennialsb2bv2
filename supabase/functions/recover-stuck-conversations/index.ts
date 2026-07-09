@@ -1,4 +1,4 @@
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
@@ -37,7 +37,7 @@ interface RecoverRequest {
 
 const UNDELIVERABLE_PREFIXES = ["[undecryptable]", "[mensagem não suportada]", "[unsupported]"];
 
-Deno.serve(withSentry("recover-stuck-conversations", async (req) => {
+Deno.serve(withErrorBoundary("recover-stuck-conversations", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 

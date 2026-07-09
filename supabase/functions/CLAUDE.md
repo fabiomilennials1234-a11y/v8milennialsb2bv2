@@ -206,7 +206,7 @@ Funções declaradas em `config.toml` mas SEM código local — deployadas diret
 
 1. Identifique o BC dono na tabela acima
 2. Compartilhe via `supabase/functions/_shared/<bc>/<modulo>.ts` quando código for usado por 2+ funções do mesmo BC
-3. `_shared/core/` reservado a cors, response, sentry-init, supabase-admin, security-headers, edge-framework, logger (slice 16 separa)
+3. `_shared/core/` reservado a cors, response, error-boundary, supabase-admin, security-headers, edge-framework, logger (slice 16 separa)
 4. Atualize esta tabela se mover função entre BCs ou adicionar nova
 
 ## Discrepâncias config.toml × disco
@@ -238,4 +238,4 @@ Não escopo desta slice. Documentar quando virar projeto.
   - `supabase/functions/whatsapp-webhook/CLAUDE.md`
   - `supabase/functions/_shared/CLAUDE.md`
 - SPEC modularização: `.specs/features/modularizacao/SPEC.md` slice 15
-- Padrão edge function: ver `CLAUDE.md` raiz (Deno.serve + withSentry + withSecurityHeaders + getCorsHeaders + OPTIONS early return)
+- Padrão edge function: ver `CLAUDE.md` raiz (Deno.serve + withErrorBoundary + withSecurityHeaders + getCorsHeaders + OPTIONS early return)

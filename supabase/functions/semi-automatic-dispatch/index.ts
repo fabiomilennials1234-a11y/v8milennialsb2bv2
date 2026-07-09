@@ -16,7 +16,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { logRuntime } from "../_shared/logger.ts";
 import { getTimeBasedVariables } from '../_shared/time-variables.ts';
 
@@ -34,7 +34,7 @@ interface LeadFilter {
   exclude_contacted?: boolean;
 }
 
-Deno.serve(withSentry('semi-automatic-dispatch', async (req) => {
+Deno.serve(withErrorBoundary('semi-automatic-dispatch', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   if (req.method === "OPTIONS") {

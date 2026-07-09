@@ -85,7 +85,7 @@ Torque CRM — SaaS B2B multi-tenant. ~30 organizacoes ativas. Dominio: `torquec
 ## Controles em vigor
 
 - RLS em todas as tabelas org-scoped
-- `withSentry()` wrapper em edge functions — observabilidade de erros
+- `withErrorBoundary()` wrapper em edge functions — try/catch de topo: converte exceção não tratada em 500 **com headers de CORS**. Sem ele, o browser do chamador vê falha de CORS e o erro real some.
 - `withSecurityHeaders()` e `getCorsHeaders()` compartilhados
 - CORS com allowlist (`torquecrm.com.br`)
 - Migrations versionadas

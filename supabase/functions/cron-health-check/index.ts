@@ -11,14 +11,14 @@
  * What this does:
  *   - Reads `cron_config.cron_secret` (table) and the local `CRON_SECRET` env.
  *   - Issues a probe call to `process-workflow-executions` with the table secret.
- *   - If response != 200 → log error + emit Sentry message ("CRON secret drift").
+ *   - If response != 200 → log error to runtime_logs ("CRON secret drift").
  *
  * Schedule: every 5 minutes via pg_cron (see migration 20261001000003).
  * Auth: same x-cron-secret / service_role pattern as other cron-driven functions.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
@@ -65,7 +65,7 @@ function buildTableSecretFetcher(
 }
 
 Deno.serve(
-  withSentry("cron-health-check", async (req: Request): Promise<Response> => {
+  withErrorBoundary("cron-health-check", async (req: Request): Promise<Response> => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";

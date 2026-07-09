@@ -1,4 +1,4 @@
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { getTimeBasedVariables as getTimeVars } from '../_shared/time-variables.ts';
 import { getPipeEntriesByLeads } from "../_shared/pipeline-adapter.ts";
 /**
@@ -42,7 +42,7 @@ function replaceVariables(template: string, vars: Record<string, string>): strin
 
 // getTimeVars is now imported from _shared/time-variables.ts (aliased from getTimeBasedVariables)
 
-Deno.serve(withSentry('process-copilot-followups', async (req) => {
+Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });

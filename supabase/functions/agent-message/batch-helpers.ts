@@ -5,7 +5,7 @@
  * without spinning up the full Deno edge function.
  */
 
-import { captureMessage } from "../_shared/sentry.ts";
+import { logEvent } from "../_shared/error-boundary.ts";
 
 /**
  * Concatenate an array of channel_messages into a single string
@@ -80,7 +80,7 @@ export async function absorbPendingMessages(opts: {
   }
 
   if (iterations > 0) {
-    captureMessage("copilot_absorb_completed", {
+    logEvent("copilot_absorb_completed", {
       functionName: "agent-message",
       organizationId,
       tags: {
