@@ -14,3 +14,12 @@ export * from "./usePipelineStages";
 export * from "./useStageLeadIds";
 export * from "./useFilteredLeadIds";
 export * from "./useCustomFilteredLeadIds";
+
+// `usePipelineEntries` existe em ./usePipelines (versão por pipelineId) e em
+// ./usePipelineEntries (versão slug-typed). O conflito entre os dois `export *`
+// acima torna o nome ambíguo — o esbuild (dev server / Vite) falha com
+// "Ambiguous import has multiple matching exports". Este re-export nomeado
+// explícito tem precedência sobre os `export *` e fixa a versão pública como a
+// slug-typed (intenção documentada no CLAUDE.md do módulo). A versão por
+// pipelineId continua acessível via deep-import de ./usePipelines.
+export { usePipelineEntries } from "./usePipelineEntries";
