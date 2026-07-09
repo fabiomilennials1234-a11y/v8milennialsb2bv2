@@ -21,7 +21,8 @@ vi.mock("@/modules/platform/hooks/useSupportTickets", () => ({
   useReopenSupportTicket: () => ({ mutate: reopen, isPending: false }),
 }));
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+const toastError = vi.fn();
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: (...a: unknown[]) => toastError(...a) } }));
 
 const articlesData = { current: [] as unknown[] };
 vi.mock("@/modules/platform/hooks/useHelpCenter", () => ({
@@ -86,6 +87,7 @@ const artigo = (over: Record<string, unknown>) => ({
 });
 
 beforeEach(() => {
+  toastError.mockClear();
   articlesData.current = [];
   openTicketData.current = null;
   reopen.mockClear();
@@ -340,6 +342,40 @@ describe("SupportPanel", () => {
     expect(await screen.findByText(/foi fechado/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /reabrir/i })).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Responder…")).not.toBeInTheDocument();
+  });
+
+  // Cinco chamados por hora. O usuario nao e spammer: e gente com problema, e a
+  // mensagem oferece a saida em vez de acusar.
+  it("traduz o erro de rate limit do banco numa mensagem que ajuda", async () => {
+    const user = userEvent.setup();
+    createTicket.mockRejectedValueOnce(new Error("rate_limit_chamados:15:04"));
+    setup();
+    await user.click(screen.getByText("cmd-k abrir chamado"));
+
+    await user.click(await screen.findByText("Algo está quebrado"));
+    await user.type(screen.getByLabelText("Assunto"), "Sexto chamado da hora");
+    await user.click(screen.getByText("Sim, estou parado"));
+    await user.click(screen.getByRole("button", { name: /^abrir chamado$/i }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    const [mensagem] = toastError.mock.calls[0];
+    expect(mensagem).toContain("15:04");
+    expect(mensagem).toContain("5 chamados");
+    expect(mensagem).not.toContain("rate_limit_chamados");
+  });
+
+  it("um erro qualquer não vira mensagem de rate limit", async () => {
+    const user = userEvent.setup();
+    createTicket.mockRejectedValueOnce(new Error("permission denied"));
+    setup();
+    await user.click(screen.getByText("cmd-k abrir chamado"));
+
+    await user.click(await screen.findByText("Algo está quebrado"));
+    await user.type(screen.getByLabelText("Assunto"), "Chamado normal");
+    await user.click(screen.getByText("Sim, estou parado"));
+    await user.click(screen.getByRole("button", { name: /^abrir chamado$/i }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("permission denied"));
   });
 
   it("cai no thread do chamado recém-aberto", async () => {
