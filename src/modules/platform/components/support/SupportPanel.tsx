@@ -5,6 +5,7 @@ import { ChevronRight, LifeBuoy, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { useSupportTickets, type SupportTicket } from "@/modules/platform/hooks/useSupportTickets";
+import { useSupportUnread } from "@/modules/platform/hooks/useSupportUnread";
 import { STATUS_LABELS } from "@/modules/platform/lib/support-ticket-draft";
 import { useHelpArticles, type HelpArticleWithCategory } from "@/modules/platform/hooks/useHelpCenter";
 import { HelpArticleDialog } from "@/modules/platform/components/settings/help/HelpArticleDialog";
@@ -55,6 +56,7 @@ function TicketList({
 }) {
   const { data: tickets = [], isLoading } = useSupportTickets();
   const { data: articles = [] } = useHelpArticles();
+  const { byTicket: unread } = useSupportUnread();
   const [openArticle, setOpenArticle] = useState<HelpArticleWithCategory | null>(null);
 
   return (
@@ -87,7 +89,7 @@ function TicketList({
         ) : (
           <ul className="divide-y divide-border/40">
             {tickets.map((t) => (
-              <TicketRow key={t.id} ticket={t} onSelect={onSelect} />
+              <TicketRow key={t.id} ticket={t} unread={unread[t.id] ?? 0} onSelect={onSelect} />
             ))}
           </ul>
         )}
@@ -107,9 +109,11 @@ function TicketList({
 
 function TicketRow({
   ticket,
+  unread,
   onSelect,
 }: {
   ticket: SupportTicket;
+  unread: number;
   onSelect: (id: string) => void;
 }) {
   return (
@@ -128,7 +132,16 @@ function TicketRow({
             {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true, locale: ptBR })}
           </p>
         </div>
-        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50" aria-hidden />
+        {unread > 0 ? (
+          <span
+            aria-label={`${unread} resposta${unread > 1 ? "s" : ""} não lida${unread > 1 ? "s" : ""}`}
+            className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground"
+          >
+            {unread}
+          </span>
+        ) : (
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50" aria-hidden />
+        )}
       </button>
     </li>
   );

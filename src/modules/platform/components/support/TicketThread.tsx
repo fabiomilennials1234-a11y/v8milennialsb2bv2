@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -12,6 +12,7 @@ import {
   useSupportTicketComments,
   useCreateSupportTicketComment,
 } from "@/modules/platform/hooks/useSupportTickets";
+import { useMarkSupportRepliesRead } from "@/modules/platform/hooks/useSupportUnread";
 import { STATUS_LABELS } from "@/modules/platform/lib/support-ticket-draft";
 import {
   TICKET_AUTHOR_LABELS,
@@ -31,7 +32,15 @@ export function TicketThread({ ticketId, onBack }: Props) {
   const { data: ticket, isLoading } = useSupportTicket(ticketId);
   const { data: comments = [] } = useSupportTicketComments(ticketId);
   const createComment = useCreateSupportTicketComment();
+  const markRead = useMarkSupportRepliesRead();
   const [body, setBody] = useState("");
+
+  // Abrir o thread e o ato de ler. Pedir um clique em "marcar como lido" seria
+  // pedir ao usuario que confirmasse que leu o que ja esta na tela dele.
+  const markReadMutate = markRead.mutate;
+  useEffect(() => {
+    markReadMutate(ticketId);
+  }, [ticketId, markReadMutate]);
 
   const closed = ticket?.status === "fechado";
 

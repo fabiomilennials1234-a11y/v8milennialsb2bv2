@@ -32,6 +32,13 @@ vi.mock("@/modules/platform/components/settings/help/HelpArticleDialog", () => (
 // O contexto real depende de router, sessionStorage e navigator. Ele tem testes
 // proprios em src/core/observability — aqui interessa que o painel o anexe.
 const captureSupportContext = vi.fn(() => ({ route: "/oportunidades", session_id: "sess-1" }));
+
+const unreadData = { current: {} as Record<string, number> };
+const markRead = vi.fn();
+vi.mock("@/modules/platform/hooks/useSupportUnread", () => ({
+  useSupportUnread: () => ({ byTicket: unreadData.current, total: 0, isLoading: false }),
+  useMarkSupportRepliesRead: () => ({ mutate: markRead }),
+}));
 vi.mock("@/modules/platform/hooks/useSupportContext", () => ({
   useCaptureSupportContext: () => captureSupportContext,
 }));
@@ -77,6 +84,8 @@ const artigo = (over: Record<string, unknown>) => ({
 
 beforeEach(() => {
   articlesData.current = [];
+  unreadData.current = {};
+  markRead.mockClear();
   captureSupportContext.mockClear();
   createTicket.mockReset().mockResolvedValue({ id: "t-novo" });
   createComment.mockReset();
@@ -238,6 +247,46 @@ describe("SupportPanel", () => {
     const artigoEl = await screen.findByText("Por que um lead não aparece no kanban?");
     const cta = screen.getByRole("button", { name: /^abrir chamado$/i });
     expect(artigoEl.compareDocumentPosition(cta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // O loop de volta: o cliente precisa saber que o suporte respondeu.
+  it("mostra o número de respostas não lidas no chamado", async () => {
+    const user = userEvent.setup();
+    ticketsData.current = [
+      { id: "t1", title: "Kanban trava", status: "aberto", created_at: new Date().toISOString() },
+    ];
+    unreadData.current = { t1: 2 };
+    setup();
+    await user.click(screen.getByText("abrir painel"));
+
+    expect(await screen.findByLabelText("2 respostas não lidas")).toHaveTextContent("2");
+  });
+
+  it("não mostra badge quando não há resposta nova", async () => {
+    const user = userEvent.setup();
+    ticketsData.current = [
+      { id: "t1", title: "Kanban trava", status: "aberto", created_at: new Date().toISOString() },
+    ];
+    setup();
+    await user.click(screen.getByText("abrir painel"));
+
+    await screen.findByText("Kanban trava");
+    expect(screen.queryByLabelText(/não lida/)).not.toBeInTheDocument();
+  });
+
+  // Abrir o thread e o ato de ler. Um botao "marcar como lido" pediria ao
+  // usuario que confirmasse que leu o que ja esta na tela dele.
+  it("abrir o chamado marca as respostas como lidas", async () => {
+    const user = userEvent.setup();
+    ticketsData.current = [
+      { id: "t1", title: "Kanban trava", status: "aberto", created_at: new Date().toISOString() },
+    ];
+    unreadData.current = { t1: 1 };
+    setup();
+    await user.click(screen.getByText("abrir painel"));
+    await user.click(await screen.findByText("Kanban trava"));
+
+    await waitFor(() => expect(markRead).toHaveBeenCalledWith("t1"));
   });
 
   it("cai no thread do chamado recém-aberto", async () => {
