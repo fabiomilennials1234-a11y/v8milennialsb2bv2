@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from "@/modules/identity";
+import { useAuth, useOrganization } from "@/modules/identity";
 type PushPermission = NotificationPermission | 'unsupported';
 
 interface UsePushSubscriptionReturn {
@@ -56,7 +56,8 @@ function detectSupport(): boolean {
 }
 
 export function usePushSubscription(): UsePushSubscriptionReturn {
-  const { user, organizationId } = useAuth();
+  const { user } = useAuth();
+  const { organizationId } = useOrganization();
   const isSupported = detectSupport();
 
   const [permission, setPermission] = useState<PushPermission>(
