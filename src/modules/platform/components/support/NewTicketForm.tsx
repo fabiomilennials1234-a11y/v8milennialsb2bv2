@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useCreateSupportTicket } from "@/modules/platform/hooks/useSupportTickets";
 import { useCaptureSupportContext } from "@/modules/platform/hooks/useSupportContext";
+import { parseRateLimitError, rateLimitMessage } from "@/modules/platform/lib/support-rate-limit";
 import {
   DRAFT_ERROR_LABELS,
   IMPACTO_LABELS,
@@ -61,6 +62,13 @@ export function NewTicketForm({ onCreated, onCancel }: Props) {
       toast.success("Chamado aberto. A gente te responde por aqui.");
       onCreated(ticket.id);
     } catch (err) {
+      // O trigger no banco recusa a sexta abertura da hora. A mensagem oferece a
+      // saída — responder no chamado existente — em vez de acusar.
+      const limit = parseRateLimitError(err);
+      if (limit.limited) {
+        toast.error(rateLimitMessage(limit.nextAt), { duration: 8000 });
+        return;
+      }
       toast.error(err instanceof Error ? err.message : "Não deu para abrir o chamado.");
     }
   }

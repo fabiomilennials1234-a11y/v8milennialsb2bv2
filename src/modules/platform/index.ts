@@ -95,4 +95,6 @@ export { AlertsBanner } from "./components/system-alerts/AlertsBanner";
 export * from "./lib/support-ticket-draft";
 export * from "./lib/ticket-author";
 export * from "./lib/support-unread";
+export * from "./lib/support-rate-limit";
+export * from "./lib/ticket-lifecycle";
 export * from "./lib/help-suggestions";
