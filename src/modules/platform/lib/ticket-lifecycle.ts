@@ -31,11 +31,26 @@ export type TicketEvent =
   | "reopen"
   | "auto_close";
 
+/**
+ * O staff move o chamado livremente entre os estados de trabalho — pode pedir
+ * algo ao cliente antes de "pegar" o chamado, e pode resolver direto de
+ * `aberto`. O que ele NÃO pode é fechar (o fechamento é automático) nem sair de
+ * `fechado` (terminal). É exatamente o que o trigger no banco impõe; um mapa
+ * mais estrito aqui seria uma restrição que só existe na UI, e um dia alguém a
+ * descobriria contornável pela API.
+ */
+const WORKING: TicketStatus[] = ["aberto", "em_andamento", "aguardando_cliente", "resolvido"];
+
+const from = (states: TicketStatus[], to: TicketStatus) =>
+  Object.fromEntries(states.filter((s) => s !== to).map((s) => [s, to])) as Partial<
+    Record<TicketStatus, TicketStatus>
+  >;
+
 const TRANSITIONS: Record<TicketEvent, Partial<Record<TicketStatus, TicketStatus>>> = {
-  staff_start: { aberto: "em_andamento", aguardando_cliente: "em_andamento" },
-  staff_await_customer: { em_andamento: "aguardando_cliente" },
+  staff_start: from(WORKING, "em_andamento"),
+  staff_await_customer: from(WORKING, "aguardando_cliente"),
   customer_replied: { aguardando_cliente: "em_andamento" },
-  staff_resolve: { aberto: "resolvido", em_andamento: "resolvido", aguardando_cliente: "resolvido" },
+  staff_resolve: from(WORKING, "resolvido"),
   reopen: { resolvido: "aberto" },
   auto_close: { resolvido: "fechado" },
 };

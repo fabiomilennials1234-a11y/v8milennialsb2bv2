@@ -29,10 +29,21 @@ describe("nextStatus", () => {
     ok("aberto", "staff_resolve", "resolvido");
   });
 
-  // `aberto` significa nao triado. Nao existe um estado `triado` — status a
-  // mais e status que ninguem atualiza.
-  it("não existe transição para um estado 'triado'", () => {
-    nope("aberto", "staff_await_customer");
+  // O staff move o chamado livremente entre os estados de trabalho — pode pedir
+  // algo ao cliente antes de "pegar" o chamado. E' o que o trigger no banco
+  // permite; um mapa mais estrito aqui seria uma restricao so da UI.
+  it("o suporte pede algo ao cliente sem antes pegar o chamado", () => {
+    ok("aberto", "staff_await_customer", "aguardando_cliente");
+  });
+
+  it("o suporte reabre o trabalho de um chamado que estava aguardando", () => {
+    ok("aguardando_cliente", "staff_start", "em_andamento");
+  });
+
+  // `aberto` significa nao triado. Nao existe um estado `triado` — status a mais
+  // e status que ninguem atualiza.
+  it("resolvido pode voltar ao trabalho pelas mãos do staff", () => {
+    ok("resolvido", "staff_start", "em_andamento");
   });
 
   it("reabrir devolve o chamado a aberto", () => {
