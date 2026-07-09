@@ -16,6 +16,8 @@ export interface WhatsAppMessage {
   message_type: string;
   content: string | null;
   media_url: string | null;
+  /** True when media was purged by the 30-day retention job. Renders "expired" state. */
+  media_expired?: boolean | null;
   push_name: string | null;
   status: string;
   lead_id: string | null;

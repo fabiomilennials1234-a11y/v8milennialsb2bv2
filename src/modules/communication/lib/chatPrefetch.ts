@@ -76,7 +76,7 @@ export async function prefetchChatData(
       const { data, error } = await supabase
         .from("whatsapp_messages")
         .select(
-          "id, organization_id, instance_id, message_id, remote_jid, phone_number, direction, message_type, content, media_url, push_name, status, lead_id, timestamp, created_at, sent_by_ai, sent_source",
+          "id, organization_id, instance_id, message_id, remote_jid, phone_number, direction, message_type, content, media_url, media_expired, push_name, status, lead_id, timestamp, created_at, sent_by_ai, sent_source",
         )
         .eq("organization_id", organizationId)
         .eq("instance_id", instanceId)

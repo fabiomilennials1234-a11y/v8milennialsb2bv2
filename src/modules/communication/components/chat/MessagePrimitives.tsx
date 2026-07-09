@@ -26,7 +26,7 @@ import {
 import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday } from "date-fns";
 import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
-import { MessageImage, MessageVideo, MessageDocument } from "./media/MessageMedia";
+import { MessageImage, MessageVideo, MessageDocument, ExpiredMedia, resolveExpiredMediaKind } from "./media/MessageMedia";
 import {
   MessageBubbleActions,
   MessageMetaBadges,
@@ -149,6 +149,9 @@ export function MessageBubble({
   const isVideo = messageType === "video" || messageType === "ptv" || messageType === "gif" || messageType === "motion_video";
   const isDocument = messageType === "document";
   const isSticker = messageType === "sticker" || messageType === "1p_sticker" || messageType === "user_created_sticker" || messageType === "avatar_sticker";
+  // Media purged by the 30-day retention job. media_url is NULL by now; show a
+  // graceful "expired" state instead of the "[Mídia indisponível]" fallback.
+  const isMediaExpired = isWhatsAppMsg && (message as WhatsAppMessage).media_expired === true;
   const isLocation = messageType === "location" || messageType === "LocationMessage" || messageType === "livelocation";
   const isContact = messageType === "contact" || messageType === "ContactMessage" || messageType === "ContactsArrayMessage" || messageType === "vcard" || messageType === "contact_array";
   const isReaction = messageType === "reaction" || messageType === "ReactionMessage";
@@ -307,8 +310,13 @@ export function MessageBubble({
               </p>
             )}
 
+            {/* Mídia expirada (retenção 30 dias) — estado gracioso por tipo */}
+            {isMediaExpired && (
+              <ExpiredMedia kind={resolveExpiredMediaKind(messageType)} />
+            )}
+
             {/* Áudio */}
-            {isAudio && message.media_url && (
+            {!isMediaExpired && isAudio && message.media_url && (
               <div>
                 <AudioPlayer
                   src={getAudioPlaybackUrl(message.media_url) ?? message.media_url}
@@ -341,7 +349,7 @@ export function MessageBubble({
             )}
 
             {/* Sticker */}
-            {isSticker && (
+            {!isMediaExpired && isSticker && (
               message.media_url && !["https://a.whatsapp.net", "https://web.whatsapp.net"].includes(message.media_url)
                 ? <img
                     src={message.media_url}
@@ -391,8 +399,8 @@ export function MessageBubble({
               </div>
             )}
 
-            {/* Media without media_url — empty bubble guard */}
-            {hasMedia && !mediaUrl && !message.content && (
+            {/* Media without media_url — empty bubble guard (expired handled above) */}
+            {hasMedia && !mediaUrl && !message.content && !isMediaExpired && (
               <p className="text-sm italic text-muted-foreground">
                 [Mídia indisponível]
               </p>

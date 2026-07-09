@@ -289,6 +289,9 @@ verify_jwt = false
 # whatsapp-media-retry: drena whatsapp_media_jobs (CDN download + Storage upload); cron 2min; auth via x-cron-secret
 [functions.whatsapp-media-retry]
 verify_jwt = false
+# whatsapp-media-retention: deleta whatsapp-media/ >30d via Storage API + marca media_expired; cron diário 04:00; auth via x-cron-secret
+[functions.whatsapp-media-retention]
+verify_jwt = false
 # history-sync-worker: chamado por pg_cron via pg_net; auth via x-cron-secret
 [functions.history-sync-worker]
 verify_jwt = false

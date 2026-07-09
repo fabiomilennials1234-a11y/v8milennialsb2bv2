@@ -9,8 +9,84 @@
  * Extraído de WhatsAppChat.tsx (C4).
  */
 import { useState } from "react";
-import { Loader2, FileImage, FileVideo, FileText, File, Download } from "lucide-react";
+import { Loader2, FileImage, FileVideo, FileText, File, FileAudio, Download, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// ─── ExpiredMedia ─────────────────────────────────────────────────────────────
+
+export type ExpiredMediaKind = "image" | "video" | "audio" | "document" | "file";
+
+/**
+ * Maps a whatsapp_messages.message_type to the icon bucket used by the expired
+ * media placeholder. Pure — unit-tested.
+ */
+export function resolveExpiredMediaKind(messageType: string | null | undefined): ExpiredMediaKind {
+  switch (messageType) {
+    case "image":
+    case "album":
+    case "motion_photo":
+    case "sticker":
+    case "1p_sticker":
+    case "user_created_sticker":
+    case "avatar_sticker":
+      return "image";
+    case "video":
+    case "ptv":
+    case "gif":
+    case "motion_video":
+      return "video";
+    case "audio":
+    case "ptt":
+      return "audio";
+    case "document":
+      return "document";
+    default:
+      return "file";
+  }
+}
+
+const EXPIRED_KIND_ICON: Record<ExpiredMediaKind, typeof FileImage> = {
+  image: FileImage,
+  video: FileVideo,
+  audio: FileAudio,
+  document: FileText,
+  file: File,
+};
+
+const EXPIRED_KIND_LABEL: Record<ExpiredMediaKind, string> = {
+  image: "Imagem expirada",
+  video: "Vídeo expirado",
+  audio: "Áudio expirado",
+  document: "Documento expirado",
+  file: "Mídia expirada",
+};
+
+/**
+ * Graceful placeholder for media purged by the 30-day retention job. Renders a
+ * type-specific icon + label and NEVER issues a broken <img>/<video>/<audio>
+ * request (the underlying media_url is already NULL by the time this shows).
+ */
+export function ExpiredMedia({ kind }: { kind: ExpiredMediaKind }) {
+  const Icon = EXPIRED_KIND_ICON[kind];
+  return (
+    <div
+      className="flex items-center gap-2.5 py-2 px-2.5 rounded-lg bg-muted/40 text-muted-foreground max-w-[240px]"
+      role="note"
+      aria-label={EXPIRED_KIND_LABEL[kind]}
+    >
+      <div className="relative shrink-0">
+        <Icon className="w-6 h-6 opacity-70" />
+        <Clock className="w-3 h-3 absolute -bottom-0.5 -right-0.5 bg-background rounded-full" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs font-medium leading-tight">{EXPIRED_KIND_LABEL[kind]}</p>
+        <p className="text-[10px] text-muted-foreground/70 leading-tight">
+          Retida por 30 dias
+        </p>
+      </div>
+    </div>
+  );
+}
 
 // ─── MessageImage ─────────────────────────────────────────────────────────────
 
