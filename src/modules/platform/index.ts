@@ -97,4 +97,5 @@ export * from "./lib/ticket-author";
 export * from "./lib/support-unread";
 export * from "./lib/support-rate-limit";
 export * from "./lib/ticket-lifecycle";
+export * from "./lib/first-response-clock";
 export * from "./lib/help-suggestions";
