@@ -158,6 +158,12 @@ CREATE TRIGGER trg_support_tickets_write_rules
   BEFORE INSERT OR UPDATE ON public.support_tickets
   FOR EACH ROW EXECUTE FUNCTION public.enforce_support_ticket_write_rules();
 
+-- Uma função SECURITY DEFINER com EXECUTE para PUBLIC vira um endpoint em
+-- /rest/v1/rpc. Esta é uma função de trigger: ninguém a chama diretamente.
+-- O Postgres checa EXECUTE em CREATE TRIGGER, não no disparo — revogar depois
+-- de criar o trigger é seguro, e verificado.
+REVOKE ALL ON FUNCTION public.enforce_support_ticket_write_rules() FROM PUBLIC, anon, authenticated;
+
 -- ============================================================
 -- RLS
 --

@@ -1134,10 +1134,43 @@ export type Database = {
           },
         ]
       }
+      blast_instance_daily_usage: {
+        Row: {
+          created_at: string
+          instance_id: string
+          leads_sent: number
+          updated_at: string
+          usage_date: string
+        }
+        Insert: {
+          created_at?: string
+          instance_id: string
+          leads_sent?: number
+          updated_at?: string
+          usage_date: string
+        }
+        Update: {
+          created_at?: string
+          instance_id?: string
+          leads_sent?: number
+          updated_at?: string
+          usage_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blast_instance_daily_usage_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       blast_plan_recipients: {
         Row: {
           created_at: string
           id: string
+          instance_id: string | null
           lead_id: string | null
           lot_index: number
           phone: string | null
@@ -1149,6 +1182,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          instance_id?: string | null
           lead_id?: string | null
           lot_index?: number
           phone?: string | null
@@ -1160,6 +1194,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          instance_id?: string | null
           lead_id?: string | null
           lot_index?: number
           phone?: string | null
@@ -1169,6 +1204,13 @@ export type Database = {
           variable_snapshot?: Json
         }
         Relationships: [
+          {
+            foreignKeyName: "blast_plan_recipients_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "blast_plan_recipients_lead_id_fkey"
             columns: ["lead_id"]
@@ -1206,12 +1248,16 @@ export type Database = {
           message: string
           next_release_date: string | null
           organization_id: string
+          post_send_target: Json | null
           refinements: Json
           release_time: string
           source: Json | null
           status: string
           total_recipients: number
           updated_at: string
+          window_days: number[] | null
+          window_from_minutes: number | null
+          window_to_minutes: number | null
         }
         Insert: {
           created_at?: string
@@ -1226,12 +1272,16 @@ export type Database = {
           message: string
           next_release_date?: string | null
           organization_id: string
+          post_send_target?: Json | null
           refinements?: Json
           release_time?: string
           source?: Json | null
           status?: string
           total_recipients?: number
           updated_at?: string
+          window_days?: number[] | null
+          window_from_minutes?: number | null
+          window_to_minutes?: number | null
         }
         Update: {
           created_at?: string
@@ -1246,12 +1296,16 @@ export type Database = {
           message?: string
           next_release_date?: string | null
           organization_id?: string
+          post_send_target?: Json | null
           refinements?: Json
           release_time?: string
           source?: Json | null
           status?: string
           total_recipients?: number
           updated_at?: string
+          window_days?: number[] | null
+          window_from_minutes?: number | null
+          window_to_minutes?: number | null
         }
         Relationships: [
           {
@@ -4688,11 +4742,15 @@ export type Database = {
       }
       copilot_message_queue: {
         Row: {
+          attempts: number
           batch_key: string | null
-          conversation_id: string
+          claimed_at: string | null
+          conversation_id: string | null
           created_at: string
           id: string
+          last_error: string | null
           message_id: string
+          next_attempt_at: string | null
           organization_id: string
           phone: string
           processed_at: string | null
@@ -4700,11 +4758,15 @@ export type Database = {
           status: string
         }
         Insert: {
+          attempts?: number
           batch_key?: string | null
-          conversation_id: string
+          claimed_at?: string | null
+          conversation_id?: string | null
           created_at?: string
           id?: string
+          last_error?: string | null
           message_id: string
+          next_attempt_at?: string | null
           organization_id: string
           phone: string
           processed_at?: string | null
@@ -4712,11 +4774,15 @@ export type Database = {
           status?: string
         }
         Update: {
+          attempts?: number
           batch_key?: string | null
-          conversation_id?: string
+          claimed_at?: string | null
+          conversation_id?: string | null
           created_at?: string
           id?: string
+          last_error?: string | null
           message_id?: string
+          next_attempt_at?: string | null
           organization_id?: string
           phone?: string
           processed_at?: string | null
@@ -4735,7 +4801,7 @@ export type Database = {
             foreignKeyName: "copilot_message_queue_message_id_fkey"
             columns: ["message_id"]
             isOneToOne: false
-            referencedRelation: "channel_messages"
+            referencedRelation: "whatsapp_messages"
             referencedColumns: ["id"]
           },
           {
@@ -5671,6 +5737,12 @@ export type Database = {
           pipeline_id: string
           position: number | null
           stage_key: string
+          stage_role: Database["public"]["Enums"]["stage_role"]
+          stage_role_reviewed_at: string | null
+          stage_role_reviewed_by: string | null
+          stage_role_suggested_at: string | null
+          stage_role_suggestion_source: string | null
+          suggested_stage_role: Database["public"]["Enums"]["stage_role"] | null
           target_pipe_type: string | null
           target_pipeline_id: string | null
           target_stage_id: string | null
@@ -5690,6 +5762,14 @@ export type Database = {
           pipeline_id: string
           position?: number | null
           stage_key: string
+          stage_role?: Database["public"]["Enums"]["stage_role"]
+          stage_role_reviewed_at?: string | null
+          stage_role_reviewed_by?: string | null
+          stage_role_suggested_at?: string | null
+          stage_role_suggestion_source?: string | null
+          suggested_stage_role?:
+            | Database["public"]["Enums"]["stage_role"]
+            | null
           target_pipe_type?: string | null
           target_pipeline_id?: string | null
           target_stage_id?: string | null
@@ -5709,6 +5789,14 @@ export type Database = {
           pipeline_id?: string
           position?: number | null
           stage_key?: string
+          stage_role?: Database["public"]["Enums"]["stage_role"]
+          stage_role_reviewed_at?: string | null
+          stage_role_reviewed_by?: string | null
+          stage_role_suggested_at?: string | null
+          stage_role_suggestion_source?: string | null
+          suggested_stage_role?:
+            | Database["public"]["Enums"]["stage_role"]
+            | null
           target_pipe_type?: string | null
           target_pipeline_id?: string | null
           target_stage_id?: string | null
@@ -8198,6 +8286,7 @@ export type Database = {
           meta_ad_id: string | null
           meta_adset_id: string | null
           meta_campaign_id: string | null
+          meta_lead_id: string | null
           metrics_period_at: string | null
           name: string
           normalized_phone: string | null
@@ -8252,6 +8341,7 @@ export type Database = {
           meta_ad_id?: string | null
           meta_adset_id?: string | null
           meta_campaign_id?: string | null
+          meta_lead_id?: string | null
           metrics_period_at?: string | null
           name: string
           normalized_phone?: string | null
@@ -8306,6 +8396,7 @@ export type Database = {
           meta_ad_id?: string | null
           meta_adset_id?: string | null
           meta_campaign_id?: string | null
+          meta_lead_id?: string | null
           metrics_period_at?: string | null
           name?: string
           normalized_phone?: string | null
@@ -8934,6 +9025,77 @@ export type Database = {
           },
         ]
       }
+      meta_app_config: {
+        Row: {
+          business_id: string | null
+          id: boolean
+          system_user_token: string
+          updated_at: string
+        }
+        Insert: {
+          business_id?: string | null
+          id?: boolean
+          system_user_token: string
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string | null
+          id?: boolean
+          system_user_token?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      meta_asset_bindings: {
+        Row: {
+          asset_id: string
+          asset_name: string | null
+          asset_type: string
+          created_at: string
+          dataset_id: string | null
+          id: string
+          last_error: string | null
+          last_polled_at: string | null
+          organization_id: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          asset_id: string
+          asset_name?: string | null
+          asset_type: string
+          created_at?: string
+          dataset_id?: string | null
+          id?: string
+          last_error?: string | null
+          last_polled_at?: string | null
+          organization_id: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          asset_id?: string
+          asset_name?: string | null
+          asset_type?: string
+          created_at?: string
+          dataset_id?: string | null
+          id?: string
+          last_error?: string | null
+          last_polled_at?: string | null
+          organization_id?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_asset_bindings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meta_connections: {
         Row: {
           access_token: string
@@ -9117,6 +9279,52 @@ export type Database = {
           },
         ]
       }
+      meta_signals_sent: {
+        Row: {
+          event_name: string
+          id: string
+          lead_id: string
+          organization_id: string
+          sent_at: string
+        }
+        Insert: {
+          event_name: string
+          id?: string
+          lead_id: string
+          organization_id: string
+          sent_at?: string
+        }
+        Update: {
+          event_name?: string
+          id?: string
+          lead_id?: string
+          organization_id?: string
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_signals_sent_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_signals_sent_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_compat"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_signals_sent_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mkt_origin_config: {
         Row: {
           created_at: string | null
@@ -9250,6 +9458,7 @@ export type Database = {
         Row: {
           created_at: string | null
           description: string | null
+          entity_id: string | null
           id: string
           lead_id: string | null
           link: string | null
@@ -9262,6 +9471,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           description?: string | null
+          entity_id?: string | null
           id?: string
           lead_id?: string | null
           link?: string | null
@@ -9274,6 +9484,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           description?: string | null
+          entity_id?: string | null
           id?: string
           lead_id?: string | null
           link?: string | null
@@ -9643,6 +9854,65 @@ export type Database = {
             columns: ["plan_id"]
             isOneToOne: false
             referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_unit_economics_inputs: {
+        Row: {
+          admin_pct: number
+          anuncios: number
+          comissao_pct: number
+          created_at: string
+          embalagem: number
+          frete: number
+          imposto_pct: number
+          meta_num_vendas: number | null
+          meta_ticket_medio: number | null
+          organization_id: string
+          recompras: number
+          scenario: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          admin_pct?: number
+          anuncios?: number
+          comissao_pct?: number
+          created_at?: string
+          embalagem?: number
+          frete?: number
+          imposto_pct?: number
+          meta_num_vendas?: number | null
+          meta_ticket_medio?: number | null
+          organization_id: string
+          recompras?: number
+          scenario?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          admin_pct?: number
+          anuncios?: number
+          comissao_pct?: number
+          created_at?: string
+          embalagem?: number
+          frete?: number
+          imposto_pct?: number
+          meta_num_vendas?: number | null
+          meta_ticket_medio?: number | null
+          organization_id?: string
+          recompras?: number
+          scenario?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_unit_economics_inputs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -10829,10 +11099,10 @@ export type Database = {
           stage_role_reviewed_by: string | null
           stage_role_suggested_at: string | null
           stage_role_suggestion_source: string | null
-          suggested_stage_role:
-            | Database["public"]["Enums"]["stage_role"]
-            | null
+          suggested_stage_role: Database["public"]["Enums"]["stage_role"] | null
           target_pipe_type: string | null
+          target_pipeline_id: string | null
+          target_stage_id: string | null
           target_stage_key: string | null
           updated_at: string | null
         }
@@ -10865,6 +11135,8 @@ export type Database = {
             | Database["public"]["Enums"]["stage_role"]
             | null
           target_pipe_type?: string | null
+          target_pipeline_id?: string | null
+          target_stage_id?: string | null
           target_stage_key?: string | null
           updated_at?: string | null
         }
@@ -10897,6 +11169,8 @@ export type Database = {
             | Database["public"]["Enums"]["stage_role"]
             | null
           target_pipe_type?: string | null
+          target_pipeline_id?: string | null
+          target_stage_id?: string | null
           target_stage_key?: string | null
           updated_at?: string | null
         }
@@ -10913,6 +11187,20 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_stages_target_pipeline_id_fkey"
+            columns: ["target_pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "custom_pipelines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_stages_target_stage_id_fkey"
+            columns: ["target_stage_id"]
+            isOneToOne: false
+            referencedRelation: "custom_pipeline_stages"
             referencedColumns: ["id"]
           },
         ]
@@ -11685,6 +11973,8 @@ export type Database = {
           payload_snapshot: Json | null
           prompt_tokens: number | null
           reasoning: string | null
+          request_id: string | null
+          session_id: string | null
           status: string
           triggered_by: string | null
         }
@@ -11703,6 +11993,8 @@ export type Database = {
           payload_snapshot?: Json | null
           prompt_tokens?: number | null
           reasoning?: string | null
+          request_id?: string | null
+          session_id?: string | null
           status: string
           triggered_by?: string | null
         }
@@ -11721,6 +12013,8 @@ export type Database = {
           payload_snapshot?: Json | null
           prompt_tokens?: number | null
           reasoning?: string | null
+          request_id?: string | null
+          session_id?: string | null
           status?: string
           triggered_by?: string | null
         }
@@ -12580,6 +12874,128 @@ export type Database = {
         }
         Relationships: []
       }
+      support_ticket_comments: {
+        Row: {
+          author_user_id: string | null
+          body: string
+          created_at: string
+          id: string
+          is_internal: boolean
+          ticket_id: string
+        }
+        Insert: {
+          author_user_id?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          is_internal?: boolean
+          ticket_id: string
+        }
+        Update: {
+          author_user_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          is_internal?: boolean
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_ticket_comments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_tickets: {
+        Row: {
+          assigned_master_user_id: string | null
+          author_user_id: string | null
+          awaiting_customer_ms: number
+          awaiting_since: string | null
+          created_at: string
+          defect_url: string | null
+          description: string | null
+          first_response_at: string | null
+          id: string
+          impacto: Database["public"]["Enums"]["support_ticket_impacto"]
+          organization_id: string
+          reopen_count: number
+          resolved_at: string | null
+          severidade:
+            | Database["public"]["Enums"]["support_ticket_severidade"]
+            | null
+          status: Database["public"]["Enums"]["support_ticket_status"]
+          support_context: Json
+          tipo: Database["public"]["Enums"]["support_ticket_tipo"]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_master_user_id?: string | null
+          author_user_id?: string | null
+          awaiting_customer_ms?: number
+          awaiting_since?: string | null
+          created_at?: string
+          defect_url?: string | null
+          description?: string | null
+          first_response_at?: string | null
+          id?: string
+          impacto: Database["public"]["Enums"]["support_ticket_impacto"]
+          organization_id: string
+          reopen_count?: number
+          resolved_at?: string | null
+          severidade?:
+            | Database["public"]["Enums"]["support_ticket_severidade"]
+            | null
+          status?: Database["public"]["Enums"]["support_ticket_status"]
+          support_context?: Json
+          tipo: Database["public"]["Enums"]["support_ticket_tipo"]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_master_user_id?: string | null
+          author_user_id?: string | null
+          awaiting_customer_ms?: number
+          awaiting_since?: string | null
+          created_at?: string
+          defect_url?: string | null
+          description?: string | null
+          first_response_at?: string | null
+          id?: string
+          impacto?: Database["public"]["Enums"]["support_ticket_impacto"]
+          organization_id?: string
+          reopen_count?: number
+          resolved_at?: string | null
+          severidade?:
+            | Database["public"]["Enums"]["support_ticket_severidade"]
+            | null
+          status?: Database["public"]["Enums"]["support_ticket_status"]
+          support_context?: Json
+          tipo?: Database["public"]["Enums"]["support_ticket_tipo"]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_tickets_assigned_master_user_id_fkey"
+            columns: ["assigned_master_user_id"]
+            isOneToOne: false
+            referencedRelation: "master_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_tickets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_alerts: {
         Row: {
           category: string
@@ -12748,14 +13164,18 @@ export type Database = {
           auto_push_orders: boolean | null
           auto_sync_products: boolean | null
           connected_at: string | null
+          contact_sync_mode: string
           created_at: string | null
           encrypted_api_token: string
           encryption_key_id: string
           encryption_nonce: string
           id: string
+          last_contact_sync_at: string | null
           last_error: string | null
+          last_order_pull_at: string | null
           last_order_push_at: string | null
           last_product_sync_at: string | null
+          order_pull_cursor: number | null
           organization_id: string
           status: string
           sync_contacts: boolean | null
@@ -12768,14 +13188,18 @@ export type Database = {
           auto_push_orders?: boolean | null
           auto_sync_products?: boolean | null
           connected_at?: string | null
+          contact_sync_mode?: string
           created_at?: string | null
           encrypted_api_token: string
           encryption_key_id?: string
           encryption_nonce: string
           id?: string
+          last_contact_sync_at?: string | null
           last_error?: string | null
+          last_order_pull_at?: string | null
           last_order_push_at?: string | null
           last_product_sync_at?: string | null
+          order_pull_cursor?: number | null
           organization_id: string
           status?: string
           sync_contacts?: boolean | null
@@ -12788,14 +13212,18 @@ export type Database = {
           auto_push_orders?: boolean | null
           auto_sync_products?: boolean | null
           connected_at?: string | null
+          contact_sync_mode?: string
           created_at?: string | null
           encrypted_api_token?: string
           encryption_key_id?: string
           encryption_nonce?: string
           id?: string
+          last_contact_sync_at?: string | null
           last_error?: string | null
+          last_order_pull_at?: string | null
           last_order_push_at?: string | null
           last_product_sync_at?: string | null
+          order_pull_cursor?: number | null
           organization_id?: string
           status?: string
           sync_contacts?: boolean | null
@@ -13286,11 +13714,13 @@ export type Database = {
           churn_probability: number | null
           churned_at: string | null
           closer_id: string | null
+          cnpj: string | null
           company: string | null
           company_id: string | null
           created_at: string
           days_since_last_order: number | null
           email: string | null
+          external_source: string | null
           first_sale_at: string
           gestao_manual_override: boolean
           gestao_stage: string | null
@@ -13314,6 +13744,8 @@ export type Database = {
           responsible_id: string | null
           sale_responsible_id: string | null
           segment: string | null
+          tiny_contact_id: string | null
+          tiny_synced_at: string | null
           tipo_cliente_tempo: string
           trend: string | null
           updated_at: string
@@ -13323,11 +13755,13 @@ export type Database = {
           churn_probability?: number | null
           churned_at?: string | null
           closer_id?: string | null
+          cnpj?: string | null
           company?: string | null
           company_id?: string | null
           created_at?: string
           days_since_last_order?: number | null
           email?: string | null
+          external_source?: string | null
           first_sale_at?: string
           gestao_manual_override?: boolean
           gestao_stage?: string | null
@@ -13351,6 +13785,8 @@ export type Database = {
           responsible_id?: string | null
           sale_responsible_id?: string | null
           segment?: string | null
+          tiny_contact_id?: string | null
+          tiny_synced_at?: string | null
           tipo_cliente_tempo?: string
           trend?: string | null
           updated_at?: string
@@ -13360,11 +13796,13 @@ export type Database = {
           churn_probability?: number | null
           churned_at?: string | null
           closer_id?: string | null
+          cnpj?: string | null
           company?: string | null
           company_id?: string | null
           created_at?: string
           days_since_last_order?: number | null
           email?: string | null
+          external_source?: string | null
           first_sale_at?: string
           gestao_manual_override?: boolean
           gestao_stage?: string | null
@@ -13388,6 +13826,8 @@ export type Database = {
           responsible_id?: string | null
           sale_responsible_id?: string | null
           segment?: string | null
+          tiny_contact_id?: string | null
+          tiny_synced_at?: string | null
           tipo_cliente_tempo?: string
           trend?: string | null
           updated_at?: string
@@ -13547,6 +13987,7 @@ export type Database = {
           sale_value: number
           sold_at: string
           source: string | null
+          tiny_order_id: string | null
         }
         Insert: {
           approval_comment?: string | null
@@ -13571,6 +14012,7 @@ export type Database = {
           sale_value: number
           sold_at?: string
           source?: string | null
+          tiny_order_id?: string | null
         }
         Update: {
           approval_comment?: string | null
@@ -13595,6 +14037,7 @@ export type Database = {
           sale_value?: number
           sold_at?: string
           source?: string | null
+          tiny_order_id?: string | null
         }
         Relationships: [
           {
@@ -14303,27 +14746,36 @@ export type Database = {
         Row: {
           created_at: string
           instance_id: string
+          meta_access_token: string | null
+          meta_phone_number_id: string | null
+          meta_waba_id: string | null
           organization_id: string
           uazapi_instance_id: string | null
-          uazapi_token: string
+          uazapi_token: string | null
           updated_at: string
           webhook_secret: string | null
         }
         Insert: {
           created_at?: string
           instance_id: string
+          meta_access_token?: string | null
+          meta_phone_number_id?: string | null
+          meta_waba_id?: string | null
           organization_id: string
           uazapi_instance_id?: string | null
-          uazapi_token: string
+          uazapi_token?: string | null
           updated_at?: string
           webhook_secret?: string | null
         }
         Update: {
           created_at?: string
           instance_id?: string
+          meta_access_token?: string | null
+          meta_phone_number_id?: string | null
+          meta_waba_id?: string | null
           organization_id?: string
           uazapi_instance_id?: string | null
-          uazapi_token?: string
+          uazapi_token?: string | null
           updated_at?: string
           webhook_secret?: string | null
         }
@@ -14348,6 +14800,7 @@ export type Database = {
         Row: {
           copilot_agent_id: string | null
           created_at: string | null
+          daily_blast_cap: number
           id: string
           instance_id: string | null
           instance_name: string
@@ -14368,6 +14821,7 @@ export type Database = {
         Insert: {
           copilot_agent_id?: string | null
           created_at?: string | null
+          daily_blast_cap?: number
           id?: string
           instance_id?: string | null
           instance_name: string
@@ -14388,6 +14842,7 @@ export type Database = {
         Update: {
           copilot_agent_id?: string | null
           created_at?: string | null
+          daily_blast_cap?: number
           id?: string
           instance_id?: string | null
           instance_name?: string
@@ -14508,6 +14963,7 @@ export type Database = {
           instance_id: string | null
           is_group: boolean
           lead_id: string | null
+          media_expired: boolean
           media_url: string | null
           message_id: string
           message_type: string
@@ -14538,6 +14994,7 @@ export type Database = {
           instance_id?: string | null
           is_group?: boolean
           lead_id?: string | null
+          media_expired?: boolean
           media_url?: string | null
           message_id: string
           message_type?: string
@@ -14568,6 +15025,7 @@ export type Database = {
           instance_id?: string | null
           is_group?: boolean
           lead_id?: string | null
+          media_expired?: boolean
           media_url?: string | null
           message_id?: string
           message_type?: string
@@ -14790,6 +15248,7 @@ export type Database = {
           retry_of: string | null
           started_at: string
           status: string
+          trigger_dedup_key: string | null
           triggered_by_execution_id: string | null
           updated_at: string
           workflow_id: string
@@ -14808,6 +15267,7 @@ export type Database = {
           retry_of?: string | null
           started_at?: string
           status?: string
+          trigger_dedup_key?: string | null
           triggered_by_execution_id?: string | null
           updated_at?: string
           workflow_id: string
@@ -14826,6 +15286,7 @@ export type Database = {
           retry_of?: string | null
           started_at?: string
           status?: string
+          trigger_dedup_key?: string | null
           triggered_by_execution_id?: string | null
           updated_at?: string
           workflow_id?: string
@@ -15481,8 +15942,113 @@ export type Database = {
         Args: { p_expected_state: string; p_org_id: string; p_payload?: Json }
         Returns: Json
       }
+      api_add_lead_tags: {
+        Args: { p_lead_id: string; p_org: string; p_tags: string[] }
+        Returns: Json
+      }
+      api_get_lead: {
+        Args: { p_lead_id: string; p_org: string }
+        Returns: Json
+      }
+      api_lead_exists: {
+        Args: { p_lead_id: string; p_org: string }
+        Returns: boolean
+      }
+      api_lead_timeline: {
+        Args: {
+          p_cursor_created_at?: string
+          p_cursor_id?: string
+          p_lead_id: string
+          p_limit?: number
+          p_org: string
+        }
+        Returns: {
+          action: string
+          created_at: string
+          description: string
+          entity_id: string
+          entity_type: string
+          id: string
+          metadata: Json
+          source: string
+        }[]
+      }
+      api_list_custom_fields: {
+        Args: { p_org: string }
+        Returns: {
+          display_order: number
+          field_name: string
+          field_options: Json
+          field_type: string
+          id: string
+          is_required: boolean
+        }[]
+      }
+      api_list_leads: {
+        Args: {
+          p_created_from?: string
+          p_created_to?: string
+          p_cursor_created_at?: string
+          p_cursor_id?: string
+          p_limit?: number
+          p_org: string
+          p_origin?: string[]
+          p_q?: string
+          p_responsible_id?: string
+          p_stage?: string[]
+          p_tag?: string[]
+          p_tier?: string[]
+        }
+        Returns: {
+          closer_id: string
+          company: string
+          created_at: string
+          email: string
+          id: string
+          name: string
+          origin: string
+          phone: string
+          qualification_score: number
+          rating: number
+          responsible_id: string
+          sale_value: number
+          sdr_id: string
+          sold: boolean
+          tags: Json
+          tier_efetivo: string
+        }[]
+      }
+      api_list_pipelines: { Args: { p_org: string }; Returns: Json }
+      api_list_tags: {
+        Args: { p_org: string }
+        Returns: {
+          color: string
+          id: string
+          name: string
+        }[]
+      }
+      api_remove_lead_tag: {
+        Args: { p_lead_id: string; p_org: string; p_tag: string }
+        Returns: Json
+      }
+      api_set_custom_fields: {
+        Args: { p_lead_id: string; p_org: string; p_values: Json }
+        Returns: Json
+      }
+      api_update_lead: {
+        Args: { p_lead_id: string; p_org: string; p_patch: Json }
+        Returns: Json
+      }
       assert_org_access: { Args: { p_org_id: string }; Returns: undefined }
       assert_org_member: { Args: { p_org_id: string }; Returns: undefined }
+      bulk_add_to_custom_pipe: {
+        Args: {
+          p_lead_ids: string[]
+          p_pipeline_id: string
+          p_stage_id: string
+        }
+        Returns: undefined
+      }
       bulk_assign_leads: {
         Args: {
           p_closer_id?: string
@@ -15516,6 +16082,14 @@ export type Database = {
       can_manage_whatsapp_instances:
         | { Args: never; Returns: boolean }
         | { Args: { p_org_id: string }; Returns: boolean }
+      can_read_support_attachment: {
+        Args: { object_name: string }
+        Returns: boolean
+      }
+      can_read_support_ticket: {
+        Args: { _ticket_id: string }
+        Returns: boolean
+      }
       can_see_lead_by_permissions: {
         Args: { p_closer_id: string; p_sdr_id: string }
         Returns: boolean
@@ -15564,27 +16138,57 @@ export type Database = {
           claimed_id: string
         }[]
       }
-      claim_copilot_batch: {
-        Args: { p_batch_key: string }
-        Returns: {
-          batch_key: string | null
-          conversation_id: string
-          created_at: string
-          id: string
-          message_id: string
-          organization_id: string
-          phone: string
-          processed_at: string | null
-          queued_at: string
-          status: string
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "copilot_message_queue"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
+      claim_copilot_batch:
+        | {
+            Args: { p_batch_key: string }
+            Returns: {
+              attempts: number
+              batch_key: string | null
+              claimed_at: string | null
+              conversation_id: string | null
+              created_at: string
+              id: string
+              last_error: string | null
+              message_id: string
+              next_attempt_at: string | null
+              organization_id: string
+              phone: string
+              processed_at: string | null
+              queued_at: string
+              status: string
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "copilot_message_queue"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: { p_batch_key: string; p_lease_seconds?: number }
+            Returns: {
+              attempts: number
+              batch_key: string | null
+              claimed_at: string | null
+              conversation_id: string | null
+              created_at: string
+              id: string
+              last_error: string | null
+              message_id: string
+              next_attempt_at: string | null
+              organization_id: string
+              phone: string
+              processed_at: string | null
+              queued_at: string
+              status: string
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "copilot_message_queue"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
       claim_pending_ai_actions: {
         Args: { batch_size?: number; per_org_cap?: number }
         Returns: {
@@ -15632,6 +16236,7 @@ export type Database = {
           retry_of: string | null
           started_at: string
           status: string
+          trigger_dedup_key: string | null
           triggered_by_execution_id: string | null
           updated_at: string
           workflow_id: string
@@ -15649,6 +16254,7 @@ export type Database = {
         Args: { p_conversation_id: string }
         Returns: undefined
       }
+      close_resolved_support_tickets: { Args: never; Returns: number }
       convert_campaign_rule_to_workflow: {
         Args: { p_rule_id: string }
         Returns: string
@@ -15809,6 +16415,17 @@ export type Database = {
         }
         Returns: number
       }
+      fn_backfill_parse_sale_value: { Args: { p_raw: string }; Returns: number }
+      fn_backfill_state_sales: { Args: never; Returns: number }
+      fn_funnel_flow_step: {
+        Args: {
+          p_cohort_size: number
+          p_prev: number
+          p_reached: number
+          p_role: string
+        }
+        Returns: Json
+      }
       generate_api_key: {
         Args: { p_created_by: string; p_name: string; p_org_id: string }
         Returns: Json
@@ -15942,6 +16559,7 @@ export type Database = {
       }
       get_carteira_lead_ids: {
         Args: {
+          p_organization_id?: string
           p_origin?: string[]
           p_pre_qualification_tier?: string[]
           p_qualification_tier?: string[]
@@ -15950,6 +16568,17 @@ export type Database = {
           p_tag_ids?: string[]
         }
         Returns: string[]
+      }
+      get_commission_ledger: {
+        Args: {
+          p_end?: string
+          p_filter_member_id?: string
+          p_org_id: string
+          p_period: string
+          p_ref?: string
+          p_start?: string
+        }
+        Returns: Json
       }
       get_competitor_stats: {
         Args: { p_org_id: string }
@@ -15963,6 +16592,7 @@ export type Database = {
       }
       get_custom_filtered_lead_ids: {
         Args: {
+          p_organization_id?: string
           p_origin?: string[]
           p_pipeline_id: string
           p_pre_qualification_tier?: string[]
@@ -16016,6 +16646,7 @@ export type Database = {
       }
       get_filtered_lead_ids: {
         Args: {
+          p_organization_id?: string
           p_origin?: string[]
           p_pipeline_type: string
           p_pre_qualification_tier?: string[]
@@ -16053,6 +16684,36 @@ export type Database = {
           total_current: number
           total_entered: number
         }[]
+      }
+      get_funnel_flow: {
+        Args: {
+          p_end?: string
+          p_org_id: string
+          p_period: string
+          p_pipeline_id: string
+          p_ref?: string
+          p_start?: string
+        }
+        Returns: Json
+      }
+      get_funnel_health: {
+        Args: {
+          p_end_date: string
+          p_org_id: string
+          p_origins?: string[]
+          p_start_date: string
+        }
+        Returns: Json
+      }
+      get_funnel_health_stage_leads: {
+        Args: {
+          p_end_date: string
+          p_org_id: string
+          p_origins?: string[]
+          p_stage: string
+          p_start_date: string
+        }
+        Returns: Json
       }
       get_import_batches: {
         Args: { p_limit?: number }
@@ -16160,6 +16821,15 @@ export type Database = {
           whatsapp_stage: string
         }[]
       }
+      get_meta_cloud_credentials: {
+        Args: { p_instance_id: string }
+        Returns: {
+          meta_access_token: string
+          meta_phone_number_id: string
+          meta_waba_id: string
+          organization_id: string
+        }[]
+      }
       get_mkt_origin_metrics: {
         Args: {
           p_end_date: string
@@ -16218,6 +16888,19 @@ export type Database = {
         Returns: Json
       }
       get_org_team_member_ids: { Args: never; Returns: string[] }
+      get_pending_meta_conversion_signals: {
+        Args: never
+        Returns: {
+          ad_account_id: string
+          dataset_override: string
+          email: string
+          event_name: string
+          lead_id: string
+          meta_lead_id: string
+          organization_id: string
+          phone: string
+        }[]
+      }
       get_pending_orders: {
         Args: { p_org_id: string; p_page?: number; p_page_size?: number }
         Returns: Json
@@ -16230,14 +16913,30 @@ export type Database = {
           }
       get_pipeline_page: {
         Args: {
+          p_calor_max?: number
+          p_calor_min?: number
+          p_closed_status_keys?: string[]
           p_cursor?: string
+          p_meeting_after?: string
+          p_meeting_before?: string
           p_org_id: string
+          p_origins?: string[]
+          p_overdue_exclude_status_keys?: string[]
           p_page_size?: number
+          p_period_after?: string
+          p_period_before?: string
           p_pipeline_slug: string
+          p_product_type?: string
+          p_rating_max?: number
+          p_rating_min?: number
           p_responsible_id?: string
+          p_scheduled?: boolean
           p_search?: string
           p_stage_id: string
+          p_status_keys?: string[]
           p_tag_ids?: string[]
+          p_updated_before?: string
+          p_urgency?: string
         }
         Returns: {
           assigned_to: string
@@ -16256,11 +16955,27 @@ export type Database = {
       }
       get_pipeline_stage_counts: {
         Args: {
+          p_calor_max?: number
+          p_calor_min?: number
+          p_closed_status_keys?: string[]
+          p_meeting_after?: string
+          p_meeting_before?: string
           p_org_id: string
+          p_origins?: string[]
+          p_overdue_exclude_status_keys?: string[]
+          p_period_after?: string
+          p_period_before?: string
           p_pipeline_slug: string
+          p_product_type?: string
+          p_rating_max?: number
+          p_rating_min?: number
           p_responsible_id?: string
+          p_scheduled?: boolean
           p_search?: string
+          p_status_keys?: string[]
           p_tag_ids?: string[]
+          p_updated_before?: string
+          p_urgency?: string
         }
         Returns: {
           cnt: number
@@ -16296,6 +17011,29 @@ export type Database = {
         Args: { p_end_date: string; p_org_id: string; p_start_date: string }
         Returns: Json
       }
+      get_productivity_activity: {
+        Args: {
+          p_from: string
+          p_org_id: string
+          p_seller?: string
+          p_to: string
+        }
+        Returns: Json
+      }
+      get_productivity_activity_by_seller: {
+        Args: { p_from: string; p_org_id: string; p_to: string }
+        Returns: Json
+      }
+      get_productivity_activity_leads: {
+        Args: {
+          p_count_type: string
+          p_from: string
+          p_org_id: string
+          p_seller?: string
+          p_to: string
+        }
+        Returns: Json
+      }
       get_proposal_no_reply_candidates: {
         Args: { p_organization_id: string; p_stage_keys: string[] }
         Returns: {
@@ -16304,6 +17042,17 @@ export type Database = {
           lead_id: string
           propostas_stage: string
         }[]
+      }
+      get_ranking: {
+        Args: {
+          p_end?: string
+          p_org_id: string
+          p_period: string
+          p_pipeline_id?: string
+          p_ref?: string
+          p_start?: string
+        }
+        Returns: Json
       }
       get_ranking_data: {
         Args: { p_month: number; p_organization_id?: string; p_year: number }
@@ -16346,17 +17095,33 @@ export type Database = {
           transition_count: number
         }[]
       }
+      get_sales_metrics: {
+        Args: {
+          p_end?: string
+          p_filter_member_id?: string
+          p_org_id: string
+          p_period: string
+          p_pipeline_id?: string
+          p_ref?: string
+          p_start?: string
+        }
+        Returns: Json
+      }
       get_segment_benchmark: { Args: { p_org_id: string }; Returns: Json }
       get_seller_activity_scores: {
         Args: { p_end_date: string; p_org_id: string; p_start_date: string }
         Returns: Json
       }
       get_stage_lead_ids: {
-        Args: { p_pipeline_type: string; p_stage_key: string }
+        Args: {
+          p_organization_id?: string
+          p_pipeline_type: string
+          p_stage_key: string
+        }
         Returns: string[]
       }
       get_trash_leads: {
-        Args: never
+        Args: { p_org_id?: string }
         Returns: {
           company: string
           deleted_at: string
@@ -16521,6 +17286,10 @@ export type Database = {
         Returns: undefined
       }
       increment_coupon_uses: { Args: { p_coupon_id: string }; Returns: boolean }
+      increment_instance_daily_usage: {
+        Args: { p_count: number; p_instance_id: string; p_usage_date: string }
+        Returns: number
+      }
       invoke_blast_plan_release: { Args: never; Returns: undefined }
       invoke_calculate_portfolio_health: { Args: never; Returns: undefined }
       invoke_campaign_rule_dispatch: { Args: never; Returns: undefined }
@@ -16529,6 +17298,8 @@ export type Database = {
       invoke_followup_reclassify: { Args: never; Returns: undefined }
       invoke_history_sync_worker: { Args: never; Returns: undefined }
       invoke_mass_send_status: { Args: never; Returns: undefined }
+      invoke_meta_conversion_dispatch: { Args: never; Returns: undefined }
+      invoke_meta_leadgen_poll: { Args: never; Returns: undefined }
       invoke_pipe_rule_dispatch: { Args: never; Returns: undefined }
       invoke_process_ai_actions: { Args: never; Returns: undefined }
       invoke_process_copilot_followups: { Args: never; Returns: undefined }
@@ -16545,6 +17316,7 @@ export type Database = {
       invoke_retry_dead_letter_jobs: { Args: never; Returns: undefined }
       invoke_whatsapp_dlq_replay: { Args: never; Returns: undefined }
       invoke_whatsapp_health_monitor: { Args: never; Returns: undefined }
+      invoke_whatsapp_media_retention: { Args: never; Returns: undefined }
       invoke_whatsapp_media_retry: { Args: never; Returns: undefined }
       invoke_whatsapp_session_watchdog: { Args: never; Returns: undefined }
       invoke_workflow_cron_triggers: { Args: never; Returns: undefined }
@@ -16573,10 +17345,15 @@ export type Database = {
         Args: { p_lead_id: string }
         Returns: boolean
       }
+      is_valid_timezone: { Args: { p_tz: string }; Returns: boolean }
       lead_in_my_org: { Args: { p_lead_id: string }; Returns: boolean }
       link_agent_to_instance: {
         Args: { p_agent_id: string; p_instance_id: string }
         Returns: undefined
+      }
+      list_expired_whatsapp_media: {
+        Args: { p_limit?: number; p_older_than_days?: number }
+        Returns: Json
       }
       log_activity: {
         Args: {
@@ -16611,6 +17388,10 @@ export type Database = {
           _reason: string
         }
         Returns: undefined
+      }
+      master_get_org_sales_summary: {
+        Args: { p_end: string; p_org_id: string; p_start: string }
+        Returns: Json
       }
       master_override_billing: {
         Args: {
@@ -16680,6 +17461,28 @@ export type Database = {
         Args: { p_config: Json; p_context: Json; p_trigger_type: string }
         Returns: boolean
       }
+      mcp_exec_readonly_sql: {
+        Args: { p_max_rows?: number; p_sql: string }
+        Returns: Json
+      }
+      metric_period_bounds: {
+        Args: {
+          p_end?: string
+          p_org_id: string
+          p_period: string
+          p_ref?: string
+          p_start?: string
+        }
+        Returns: unknown
+      }
+      metric_stage_role: {
+        Args: {
+          p_organization_id: string
+          p_pipeline_id: string
+          p_stage_key: string
+        }
+        Returns: Database["public"]["Enums"]["stage_role"]
+      }
       migrate_follow_ups_to_activities: { Args: never; Returns: Json }
       migrate_leads_to_contacts_companies: {
         Args: { p_batch_size?: number }
@@ -16710,6 +17513,11 @@ export type Database = {
       }
       purge_expired_rate_limits: { Args: never; Returns: undefined }
       purge_lead: { Args: { p_lead_id: string }; Returns: undefined }
+      purge_runtime_logs: { Args: never; Returns: undefined }
+      recalc_upsell_client_metrics: {
+        Args: { p_client_id: string }
+        Returns: undefined
+      }
       record_oraculo_usage: {
         Args: {
           p_org_id: string
@@ -16799,6 +17607,16 @@ export type Database = {
         }
         Returns: string
       }
+      set_meta_cloud_credentials: {
+        Args: {
+          p_instance_id: string
+          p_meta_access_token: string
+          p_meta_phone_number_id: string
+          p_meta_waba_id: string
+          p_organization_id: string
+        }
+        Returns: undefined
+      }
       set_uazapi_credentials: {
         Args: {
           p_instance_id: string
@@ -16819,9 +17637,22 @@ export type Database = {
         }
         Returns: string
       }
+      support_clock_is_internal: { Args: never; Returns: boolean }
+      sweep_copilot_queue: {
+        Args: { p_lease_seconds?: number }
+        Returns: number
+      }
       sync_org_quotas_from_plan: {
         Args: { p_org_id: string }
         Returns: undefined
+      }
+      system_stage_role: {
+        Args: { p_pipeline_type: string; p_stage_key: string }
+        Returns: Database["public"]["Enums"]["stage_role"]
+      }
+      toggle_cron_job: {
+        Args: { p_enabled: boolean; p_jobname: string }
+        Returns: Json
       }
       toggle_lead_ai: {
         Args: { p_disabled: boolean; p_lead_id: string }
@@ -16931,6 +17762,7 @@ export type Database = {
         | "prospeccao_ativa"
         | "landing_page"
         | "web"
+        | "disparo_planilha"
       lead_visibility_status:
         | "exists"
         | "not_found"
@@ -16950,12 +17782,16 @@ export type Database = {
         | "prata"
         | "bronze"
         | "desqualificado"
-      stage_role:
-        | "open"
-        | "meeting_booked"
-        | "meeting_held"
-        | "won"
-        | "lost"
+      stage_role: "open" | "meeting_booked" | "meeting_held" | "won" | "lost"
+      support_ticket_impacto: "parado" | "contorno" | "incomodo"
+      support_ticket_severidade: "baixa" | "media" | "alta" | "critica"
+      support_ticket_status:
+        | "aberto"
+        | "em_andamento"
+        | "aguardando_cliente"
+        | "resolvido"
+        | "fechado"
+      support_ticket_tipo: "bug" | "duvida" | "solicitacao"
       upsell_campanha_status:
         | "cliente"
         | "planejado"
@@ -17166,6 +18002,7 @@ export const Constants = {
         "prospeccao_ativa",
         "landing_page",
         "web",
+        "disparo_planilha",
       ],
       lead_visibility_status: [
         "exists",
@@ -17189,13 +18026,17 @@ export const Constants = {
         "bronze",
         "desqualificado",
       ],
-      stage_role: [
-        "open",
-        "meeting_booked",
-        "meeting_held",
-        "won",
-        "lost",
+      stage_role: ["open", "meeting_booked", "meeting_held", "won", "lost"],
+      support_ticket_impacto: ["parado", "contorno", "incomodo"],
+      support_ticket_severidade: ["baixa", "media", "alta", "critica"],
+      support_ticket_status: [
+        "aberto",
+        "em_andamento",
+        "aguardando_cliente",
+        "resolvido",
+        "fechado",
       ],
+      support_ticket_tipo: ["bug", "duvida", "solicitacao"],
       upsell_campanha_status: [
         "cliente",
         "planejado",
