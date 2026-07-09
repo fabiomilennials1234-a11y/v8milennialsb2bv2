@@ -1,6 +1,12 @@
 import { createRoot } from "react-dom/client";
+import { installClientErrorCapture } from "./core/observability/client-error-buffer";
 import App from "./App.tsx";
 import "./index.css";
+
+// Captura os erros que ninguem tratou. Sao a metade da observabilidade que
+// `runtime_logs` nao ve: RLS, constraint, render. Anexados a um Chamado
+// quando o usuario abre um. Ver docs/adr/0017.
+installClientErrorCapture();
 
 // Usuários com index.html cacheado de um deploy anterior apontam para chunks
 // hashados que não existem mais (nginx agora devolve 404 nesses assets).

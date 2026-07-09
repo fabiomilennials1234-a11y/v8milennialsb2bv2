@@ -101,7 +101,12 @@ export default defineConfig(({ mode }) => {
     },
   },
   define: {
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version),
+    // Identifica o build, não o produto. A imagem Docker é taggeada com o sha
+    // curto; sem isto o Support Context de um Chamado apontaria para a versao
+    // do package.json, que nao muda entre deploys.
+    __APP_VERSION__: JSON.stringify(
+      process.env.VITE_APP_VERSION || process.env.npm_package_version || "dev",
+    ),
   },
 };
 });

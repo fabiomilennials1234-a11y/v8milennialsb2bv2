@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useCreateSupportTicket } from "@/modules/platform/hooks/useSupportTickets";
+import { useCaptureSupportContext } from "@/modules/platform/hooks/useSupportContext";
 import {
   DRAFT_ERROR_LABELS,
   IMPACTO_LABELS,
@@ -34,6 +35,7 @@ export function NewTicketForm({ onCreated, onCancel }: Props) {
   const [draft, setDraft] = useState<TicketDraft>(emptyTicketDraft());
   const [submitted, setSubmitted] = useState(false);
   const createTicket = useCreateSupportTicket();
+  const captureSupportContext = useCaptureSupportContext();
 
   const errors = ticketDraftErrors(draft);
   // Erros só aparecem depois da primeira tentativa. Gritar com quem ainda não
@@ -49,9 +51,12 @@ export function NewTicketForm({ onCreated, onCancel }: Props) {
     if (errors.length > 0) return;
 
     try {
+      // Silencioso: rota sanitizada, versao, browser, session_id e os ultimos
+      // erros deste browser. Nada aqui expoe conteudo. (Screenshot e outra
+      // conversa, com aviso explicito — fatia #1025.)
       const ticket = await createTicket.mutateAsync({
         draft,
-        supportContext: { route: window.location.pathname + window.location.search },
+        supportContext: captureSupportContext(),
       });
       toast.success("Chamado aberto. A gente te responde por aqui.");
       onCreated(ticket.id);

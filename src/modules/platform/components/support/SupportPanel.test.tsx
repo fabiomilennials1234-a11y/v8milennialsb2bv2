@@ -19,6 +19,13 @@ vi.mock("@/modules/platform/hooks/useSupportTickets", () => ({
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+// O contexto real depende de router, sessionStorage e navigator. Ele tem testes
+// proprios em src/core/observability — aqui interessa que o painel o anexe.
+const captureSupportContext = vi.fn(() => ({ route: "/oportunidades", session_id: "sess-1" }));
+vi.mock("@/modules/platform/hooks/useSupportContext", () => ({
+  useCaptureSupportContext: () => captureSupportContext,
+}));
+
 // O thread lê o usuário para saber de quem é cada mensagem.
 vi.mock("@/modules/identity/auth/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "user-1" } }),
@@ -47,6 +54,7 @@ function setup(children?: ReactNode) {
 }
 
 beforeEach(() => {
+  captureSupportContext.mockClear();
   createTicket.mockReset().mockResolvedValue({ id: "t-novo" });
   createComment.mockReset();
   ticketsData.current = [];
@@ -130,7 +138,28 @@ describe("SupportPanel", () => {
     expect(arg.draft.tipo).toBe("bug");
     expect(arg.draft.impacto).toBe("parado");
     expect(arg.draft.title).toBe("Kanban trava ao arrastar card");
-    expect(arg.supportContext.route).toBeTruthy();
+  });
+
+  // O snapshot descreve o mundo quando quebrou. Capturar no submit, e nao no
+  // render, e o que faz dele uma fotografia e nao uma lembranca.
+  it("captura o Support Context no envio e o anexa ao chamado", async () => {
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByText("cmd-k abrir chamado"));
+
+    await user.click(await screen.findByText("Algo está quebrado"));
+    await user.type(screen.getByLabelText("Assunto"), "Kanban trava ao arrastar card");
+    await user.click(screen.getByText("Sim, estou parado"));
+    expect(captureSupportContext).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /^abrir chamado$/i }));
+
+    await waitFor(() => expect(createTicket).toHaveBeenCalledTimes(1));
+    expect(captureSupportContext).toHaveBeenCalledTimes(1);
+    expect(createTicket.mock.calls[0][0].supportContext).toEqual({
+      route: "/oportunidades",
+      session_id: "sess-1",
+    });
   });
 
   it("cai no thread do chamado recém-aberto", async () => {
