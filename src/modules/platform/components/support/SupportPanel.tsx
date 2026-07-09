@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ChevronRight, LifeBuoy, Loader2 } from "lucide-react";
@@ -5,7 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { useSupportTickets, type SupportTicket } from "@/modules/platform/hooks/useSupportTickets";
 import { STATUS_LABELS } from "@/modules/platform/lib/support-ticket-draft";
+import { useHelpArticles, type HelpArticleWithCategory } from "@/modules/platform/hooks/useHelpCenter";
+import { HelpArticleDialog } from "@/modules/platform/components/settings/help/HelpArticleDialog";
 import { useSupportPanel } from "./SupportPanelContext";
+import { HelpSection } from "./HelpSection";
 import { NewTicketForm } from "./NewTicketForm";
 import { TicketThread } from "./TicketThread";
 import { StatusDot } from "./StatusDot";
@@ -50,15 +54,28 @@ function TicketList({
   onNew: () => void;
 }) {
   const { data: tickets = [], isLoading } = useSupportTickets();
+  const { data: articles = [] } = useHelpArticles();
+  const [openArticle, setOpenArticle] = useState<HelpArticleWithCategory | null>(null);
 
   return (
     <>
       <SheetHeader className="border-b border-border/50 px-6 pb-4 pt-6 text-left">
         <SheetTitle className="text-base font-semibold">Ajuda</SheetTitle>
         <SheetDescription className="text-xs">
-          Seus chamados com o suporte da Torque.
+          Procure uma resposta ou fale com o suporte da Torque.
         </SheetDescription>
       </SheetHeader>
+
+      {/* Deflexão primeiro. O humano vive no rodapé. */}
+      <HelpSection onOpenArticle={setOpenArticle} />
+
+      <HelpArticleDialog
+        article={openArticle}
+        articles={articles}
+        open={!!openArticle}
+        onOpenChange={(open) => !open && setOpenArticle(null)}
+        onNavigate={setOpenArticle}
+      />
 
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
@@ -76,10 +93,7 @@ function TicketList({
         )}
       </div>
 
-      {/*
-        O humano vive no rodapé, nunca no topo. A busca na central de ajuda entra
-        acima desta lista numa fatia própria — é ela que deve ser tentada antes.
-      */}
+      {/* O humano vive no rodapé, nunca no topo. */}
       <div className="border-t border-border/50 bg-muted/20 px-6 py-4">
         <p className="mb-2.5 text-xs text-muted-foreground">Não encontrou o que precisava?</p>
         <Button onClick={onNew} className="w-full gap-2">

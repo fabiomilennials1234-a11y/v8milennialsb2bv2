@@ -26,7 +26,9 @@ Buying also means our customers' customers' data — lead names, phones, CNPJs, 
 
 4. **Cross-tenant defects are tracked in GitHub Issues, not in Postgres.** Each Chamado carries a `defect_url`. Counting Chamados grouped by that URL is what makes Severidade a measurement rather than a guess, and lets staff resolve N tenants' Chamados when one issue closes. A `Defeito` table would be a second source of truth about a bug that already has an owner, a label, and a linked PR somewhere else.
 
-5. **Deflection is article search, no AI.** The Help Center moves out of the `/configuracoes` tab into the support panel, with articles suggested by current route. At ~30 tenants an LLM deflection layer costs more trust than it saves hours.
+5. **Deflection is article search, no AI.** The Help Center's *reading* surface moves out of the `/configuracoes` tab into the support panel, with articles suggested by current route; the authoring panel stays in Pitstop, admin-gated. At ~30 tenants an LLM deflection layer costs more trust than it saves hours.
+
+   **Correction (2026-07-09).** This decision was written believing "we already have the content; what's missing is the funnel." That was wrong: `help_articles` and `help_categories` are *empty* in production — zero rows since the tables were created. The funnel now exists and hides itself when the corpus is empty (an "Articles" block with no articles is worse than its absence: it announces that no help exists there). Deflection deflects nothing until someone writes the articles. Tracked in issue #1042; it is product work, not engineering work.
 
 6. **The entry point is a unified dock, not a fourth floating bubble.** `ChatBubbleFab`, `OraculoFloatingButton`, and `QuickBlastProgressPanel` all already render at `fixed bottom-6 right-6`, stacking and occluding each other. Support joins them behind one expandable dock, which resolves the existing collision rather than adding to it.
 

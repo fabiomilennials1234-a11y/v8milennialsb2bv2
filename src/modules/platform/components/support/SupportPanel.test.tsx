@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { SupportPanelProvider } from "./SupportPanelProvider";
 import { SupportPanel } from "./SupportPanel";
@@ -18,6 +19,15 @@ vi.mock("@/modules/platform/hooks/useSupportTickets", () => ({
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
+const articlesData = { current: [] as unknown[] };
+vi.mock("@/modules/platform/hooks/useHelpCenter", () => ({
+  useHelpArticles: () => ({ data: articlesData.current, isLoading: false }),
+}));
+vi.mock("@/modules/platform/components/settings/help/HelpArticleDialog", () => ({
+  HelpArticleDialog: ({ article }: { article: { title: string } | null }) =>
+    article ? <div>artigo aberto: {article.title}</div> : null,
+}));
 
 // O contexto real depende de router, sessionStorage e navigator. Ele tem testes
 // proprios em src/core/observability — aqui interessa que o painel o anexe.
@@ -43,17 +53,30 @@ function OpenNewTicket() {
   );
 }
 
-function setup(children?: ReactNode) {
+function setup(children?: ReactNode, route = "/oportunidades") {
   return render(
-    <SupportPanelProvider>
-      <OpenNewTicket />
-      {children}
-      <SupportPanel />
-    </SupportPanelProvider>,
+    <MemoryRouter initialEntries={[route]}>
+      <SupportPanelProvider>
+        <OpenNewTicket />
+        {children}
+        <SupportPanel />
+      </SupportPanelProvider>
+    </MemoryRouter>,
   );
 }
 
+const artigo = (over: Record<string, unknown>) => ({
+  id: "a1",
+  title: "Por que um lead não aparece no kanban?",
+  summary: null,
+  tags: [],
+  is_published: true,
+  category: { slug: "oportunidades", name: "Funil" },
+  ...over,
+});
+
 beforeEach(() => {
+  articlesData.current = [];
   captureSupportContext.mockClear();
   createTicket.mockReset().mockResolvedValue({ id: "t-novo" });
   createComment.mockReset();
@@ -160,6 +183,61 @@ describe("SupportPanel", () => {
       route: "/oportunidades",
       session_id: "sess-1",
     });
+  });
+
+  // Um bloco "Artigos" vazio e pior que sua ausencia: sinaliza que ali nao
+  // existe ajuda. Em producao o corpus esta vazio hoje.
+  it("esconde a central de ajuda quando não há artigo publicado", async () => {
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByText("abrir painel"));
+
+    expect(await screen.findByText("Nenhum chamado por aqui")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Buscar na central de ajuda")).not.toBeInTheDocument();
+  });
+
+  it("esconde a central quando os artigos existem mas nenhum foi publicado", async () => {
+    const user = userEvent.setup();
+    articlesData.current = [artigo({ is_published: false })];
+    setup();
+    await user.click(screen.getByText("abrir painel"));
+
+    await screen.findByText("Nenhum chamado por aqui");
+    expect(screen.queryByLabelText("Buscar na central de ajuda")).not.toBeInTheDocument();
+  });
+
+  it("mostra a busca e o artigo sugerido pela rota", async () => {
+    const user = userEvent.setup();
+    articlesData.current = [artigo({})];
+    setup(undefined, "/oportunidades");
+    await user.click(screen.getByText("abrir painel"));
+
+    expect(await screen.findByLabelText("Buscar na central de ajuda")).toBeInTheDocument();
+    expect(screen.getByText("Por que um lead não aparece no kanban?")).toBeInTheDocument();
+    expect(screen.getByText("/oportunidades")).toBeInTheDocument();
+  });
+
+  it("a busca filtra, e um termo sem resultado não devolve fallback", async () => {
+    const user = userEvent.setup();
+    articlesData.current = [artigo({})];
+    setup();
+    await user.click(screen.getByText("abrir painel"));
+
+    await user.type(await screen.findByLabelText("Buscar na central de ajuda"), "zzzzz");
+    expect(screen.queryByText("Por que um lead não aparece no kanban?")).not.toBeInTheDocument();
+    expect(screen.getByText(/Nenhum artigo para/)).toBeInTheDocument();
+  });
+
+  // Ajuda antes de humano: o CTA humano fica depois dos artigos, no rodape.
+  it("o botão de abrir chamado vem depois dos artigos", async () => {
+    const user = userEvent.setup();
+    articlesData.current = [artigo({})];
+    setup();
+    await user.click(screen.getByText("abrir painel"));
+
+    const artigoEl = await screen.findByText("Por que um lead não aparece no kanban?");
+    const cta = screen.getByRole("button", { name: /^abrir chamado$/i });
+    expect(artigoEl.compareDocumentPosition(cta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("cai no thread do chamado recém-aberto", async () => {
