@@ -29,11 +29,21 @@ Two further facts pushed the decision:
 
 3. **A client-side error ring buffer covers the frontend.** An in-memory buffer of the last N `window.onerror`, `unhandledrejection`, and failed `supabase` calls, held in the browser and flushed into a Chamado's Support Context at open time. It is not a table and not a stream — it exists only to be attached to a Chamado.
 
-4. **Correlation is by `session_id`, not by a vendor trace.** The client mints a `session_id` per browsing session and sends it as a header on every edge-function call; `runtime_logs` stores it alongside a per-call `trace_id`. Given a Chamado, staff query `runtime_logs` by `session_id` to reconstruct the timeline of backend work during that session.
+4. **Correlation is by `session_id`, not by a vendor trace.** The client mints a `session_id` per browsing session and sends it as a header on every call the Supabase client makes; `runtime_logs` stores it alongside a per-call `request_id`. Given a Chamado, staff query `runtime_logs` by `session_id` to reconstruct the timeline of backend work during that session.
+
+   It is `request_id`, not `trace_id`, because `trace_id` already means something else here — a Copilot v2 agent turn, persisted to `copilot_v2_trace_steps`. Two identifiers of the same name at different granularities would mislead every future reader, human or model.
+
+5. **Retention makes or breaks the above, and is therefore part of the decision.** A correlation id is worthless if the rows it points at are gone. Production was running three contradictory policies on `runtime_logs` — a job named `cleanup_runtime_logs_90d` that actually deleted at 14 days, and a `purge-runtime-logs-2d` that deleted at 2 and won. The table held two days. A Chamado opened on a Friday and triaged on a Monday would have found nothing.
+
+   Retention is now per-module: `webhook` keeps 2 days, everything else keeps 30. `webhook` is 98% of the volume (~105k rows/day against ~2k for every other module combined) and its diagnostic value decays in hours; a Chamado's does not.
+
+6. **Phone numbers in `runtime_logs` are masked, not redacted.** A phone in a log payload is PII belonging to *our customer's lead*, not to our customer. Full redaction would make it impossible to tie a log line to a conversation; clear text is unacceptable. The middle is masked (`5511*****2210`), preserving a JID's suffix. Credential keys still redact entirely.
 
 ## Consequences
 
-- **We lose Session Replay.** Nothing reproduces "watch the user click." The compensations are the client error buffer, the `session_id` timeline, and an optional user-attached screenshot. This is accepted: the privacy-safe replay was already close to worthless for our screens.
+- **We lose Session Replay.** Nothing reproduces "watch the user click." The compensations are the client error buffer, the `session_id` timeline, and an optional user-attached screenshot. This is accepted: the privacy-safe replay was already close to worthless for our screens. Note that the `session_id` timeline only compensates for as long as the rows survive — see decision 5. Shortening `runtime_logs` retention silently removes the compensation.
 - **We lose managed alerting, grouping, and release health.** These must be rebuilt on `runtime_logs` if and when they are wanted. Nothing is lost today because nothing was being read today.
+- **A `module` typo is now a build error, not a lost row.** The `CHECK` on `runtime_logs.module` allowed 10 values while the code wrote 25, and `logRuntime` swallows a failed INSERT by design — so 15 modules believed they were logging and never wrote a line. The constraint was dropped and the vocabulary moved to the `RuntimeLogModule` union type. That guard only bites if the type checker runs, and today edge functions are tested with `deno test --no-check`; tracked separately.
+
 - **Both observability halves become load-bearing.** `runtime_logs` covers edge functions; the client buffer covers PostgREST/RLS/render failures. Neither is redundant with the other, and neither alone is sufficient.
 - **Customer telemetry stops leaving our infrastructure.** All error evidence now lives in the same Postgres, under the same RLS, as the data it describes — which materially simplifies the data-processing story with B2B customers.
