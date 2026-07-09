@@ -9458,6 +9458,7 @@ export type Database = {
         Row: {
           created_at: string | null
           description: string | null
+          entity_id: string | null
           id: string
           lead_id: string | null
           link: string | null
@@ -9470,6 +9471,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           description?: string | null
+          entity_id?: string | null
           id?: string
           lead_id?: string | null
           link?: string | null
@@ -9482,6 +9484,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           description?: string | null
+          entity_id?: string | null
           id?: string
           lead_id?: string | null
           link?: string | null
@@ -17629,6 +17632,7 @@ export type Database = {
         }
         Returns: string
       }
+      support_clock_is_internal: { Args: never; Returns: boolean }
       sweep_copilot_queue: {
         Args: { p_lease_seconds?: number }
         Returns: number

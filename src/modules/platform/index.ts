@@ -37,6 +37,7 @@ export * from "./hooks/useHealthHistory";
 export * from "./hooks/useHelpCenter";
 export * from "./hooks/useSupportTickets";
 export * from "./hooks/useSupportContext";
+export * from "./hooks/useSupportUnread";
 export * from "./hooks/useLogger";
 export * from "./hooks/useOnlineStatus";
 export * from "./hooks/useTrackView";
@@ -93,3 +94,5 @@ export { AlertsBanner } from "./components/system-alerts/AlertsBanner";
 // como o command palette. Apenas hooks e logica pura ficam no barrel.
 export * from "./lib/support-ticket-draft";
 export * from "./lib/ticket-author";
+export * from "./lib/support-unread";
+export * from "./lib/help-suggestions";
