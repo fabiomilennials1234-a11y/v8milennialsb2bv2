@@ -18,6 +18,10 @@
 --
 -- O marcador `rate_limit_chamados:<HH:MM>` existe para o cliente não ter que
 -- casar a mensagem inteira. Ver `src/modules/platform/lib/support-rate-limit.ts`.
+--
+-- Verificado em produção por sonda em transação revertida: as cinco primeiras
+-- aberturas passam, a sexta é recusada com marcador e horário, dez comentários
+-- no mesmo chamado passam, e sete chamados abertos pelo staff passam.
 -- ============================================================
 
 -- A contagem é por (autor, janela). O índice de autor existente não cobre o
