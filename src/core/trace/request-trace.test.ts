@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { clearClientErrors, readClientErrors } from "../observability/client-error-buffer";
 import {
   SESSION_ID_HEADER,
   REQUEST_ID_HEADER,
@@ -137,5 +138,70 @@ describe("createTracedFetch", () => {
     const boom = new Error("network down");
     const traced = createTracedFetch(vi.fn().mockRejectedValue(boom));
     await expect(traced("https://api.test/x")).rejects.toBe(boom);
+  });
+});
+
+describe("createTracedFetch — captura de falhas", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    resetSessionIdForTests();
+    clearClientErrors();
+  });
+
+  it("não registra nada quando a resposta é ok", async () => {
+    await createTracedFetch(vi.fn().mockResolvedValue(new Response("ok")))("https://api.test/x");
+    expect(readClientErrors()).toHaveLength(0);
+  });
+
+  it("registra uma resposta de erro com método, caminho e status", async () => {
+    const base = vi.fn().mockResolvedValue(new Response("nope", { status: 403 }));
+    await createTracedFetch(base)("https://api.test/rest/v1/leads", { method: "POST" });
+
+    const [e] = readClientErrors();
+    expect(e.source).toBe("request");
+    expect(e.message).toContain("POST");
+    expect(e.message).toContain("/rest/v1/leads");
+    expect(e.message).toContain("403");
+  });
+
+  it("assume GET quando o método não é informado", async () => {
+    await createTracedFetch(vi.fn().mockResolvedValue(new Response("", { status: 500 })))(
+      "https://api.test/x",
+    );
+    expect(readClientErrors()[0].message).toContain("GET");
+  });
+
+  // Um filtro do PostgREST é `?name=eq.Fulano` — PII de um lead do cliente.
+  it("não guarda a query string da chamada que falhou", async () => {
+    await createTracedFetch(vi.fn().mockResolvedValue(new Response("", { status: 400 })))(
+      "https://api.test/rest/v1/leads?name=eq.Fulano",
+    );
+    expect(readClientErrors()[0].message).not.toContain("Fulano");
+  });
+
+  it("registra uma falha de rede e ainda propaga o erro", async () => {
+    const boom = new Error("network down");
+    const traced = createTracedFetch(vi.fn().mockRejectedValue(boom));
+
+    await expect(traced("https://api.test/rest/v1/leads")).rejects.toBe(boom);
+    const [e] = readClientErrors();
+    expect(e.source).toBe("request");
+    expect(e.message).toContain("/rest/v1/leads");
+  });
+
+  // A resposta é consumida uma vez só. Ler o corpo para telemetria roubaria o
+  // corpo de quem chamou.
+  it("não consome o corpo da resposta", async () => {
+    const traced = createTracedFetch(
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ a: 1 }), { status: 400 })),
+    );
+    const res = await traced("https://api.test/x");
+    await expect(res.json()).resolves.toEqual({ a: 1 });
+  });
+
+  it("aceita um Request como primeiro argumento", async () => {
+    const base = vi.fn().mockResolvedValue(new Response("", { status: 404 }));
+    await createTracedFetch(base)(new Request("https://api.test/rest/v1/x", { method: "DELETE" }));
+    expect(readClientErrors()[0].message).toContain("/rest/v1/x");
   });
 });

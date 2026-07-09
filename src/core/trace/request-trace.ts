@@ -15,6 +15,8 @@
  * Ver docs/adr/0017-drop-sentry-for-in-house-runtime-logs.md
  */
 
+import { recordRequestFailure } from "../observability/client-error-buffer";
+
 export const SESSION_ID_HEADER = "x-torque-session-id";
 export const REQUEST_ID_HEADER = "x-torque-request-id";
 
@@ -75,11 +77,27 @@ export function withTraceHeaders(input: HeaderInput): Record<string, string> {
   return Object.fromEntries(headers.entries());
 }
 
+function methodOf(input: RequestInfo | URL, init?: RequestInit): string {
+  if (init?.method) return init.method;
+  if (typeof Request !== "undefined" && input instanceof Request) return input.method;
+  return "GET";
+}
+
+function urlOf(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
+}
+
 /**
- * Envolve um `fetch` carimbando os headers de trace em toda saída.
+ * Envolve um `fetch` carimbando os headers de trace em toda saída, e anotando
+ * as falhas no buffer de erros do cliente.
  *
  * Usado como `global.fetch` do client Supabase, o que cobre PostgREST, RPCs,
- * Storage e `functions.invoke()` de uma vez — sem tocar em nenhum call site.
+ * Storage e `functions.invoke()` de uma vez — sem tocar em nenhum call site. É
+ * exatamente a metade que `runtime_logs` não vê: negação de RLS, violação de
+ * constraint, 400. Nada disso chega a uma edge function.
+ *
  * Erros do fetch subjacente sobem intactos: telemetria nunca muda o
  * comportamento de erro da chamada.
  */
@@ -88,8 +106,24 @@ export function createTracedFetch(baseFetch?: typeof fetch): typeof fetch {
   // o Chrome lança `Illegal invocation` ao chamá-lo como função solta.
   const send: typeof fetch = baseFetch ?? ((input, init) => fetch(input, init));
 
-  return (input, init) =>
-    send(input, { ...init, headers: withTraceHeaders(init?.headers) });
+  return async (input, init) => {
+    const method = methodOf(input, init);
+    const url = urlOf(input);
+
+    try {
+      const response = await send(input, { ...init, headers: withTraceHeaders(init?.headers) });
+
+      // Só o status. Ler o corpo aqui o roubaria de quem chamou — uma Response
+      // se consome uma vez.
+      if (!response.ok) recordRequestFailure(method, url, response.status);
+
+      return response;
+    } catch (error) {
+      // Status 0: a requisição nem chegou a ter resposta.
+      recordRequestFailure(method, url, 0);
+      throw error;
+    }
+  };
 }
 
 /** Apenas para testes — descarta o id em memória. */
