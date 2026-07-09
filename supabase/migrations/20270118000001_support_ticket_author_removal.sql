@@ -11,6 +11,10 @@
 -- levantava exceção — **deletar o usuário falhava**.
 --
 -- Descoberto por uma sonda em produção, antes de existir o primeiro chamado.
+-- Verificado depois do fix, também por sonda em transação revertida: um usuário
+-- efêmero autora um chamado, é deletado de `auth.users`, o DELETE agora executa,
+-- o chamado sobrevive e o autor vira NULL. Trocar o autor por outro usuário e
+-- trocar a organização continuam bloqueados.
 --
 -- A guarda passa a permitir exatamente uma transição: autor → NULL. Trocar o
 -- autor por OUTRO usuário continua proibido; é isso que a guarda existe para
