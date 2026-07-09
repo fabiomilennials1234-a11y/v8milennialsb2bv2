@@ -448,6 +448,28 @@ describe("useImportLeads", () => {
     expect(typeof result.current.parseCSV).toBe("function");
   });
 
+  it("coleta valores de campo personalizado (custom:<nome>) sem vazar para a observação", async () => {
+    mockParseFn.mockImplementation((_f: File, opts: any) => {
+      opts.complete({
+        data: [{ Nome: "João", Telefone: "11999999999", cnpj: "12345678000199" }],
+        errors: [],
+      });
+    });
+    const file = new File(["Nome,Telefone,cnpj\nJoão,11999999999,12345678000199"], "leads.csv");
+    const { result } = renderHook(() => useImportLeads(), { wrapper: createWrapper() });
+    const leads = await result.current.parseCSV(file, { cnpj: "custom:cnpj" });
+
+    expect(leads).toHaveLength(1);
+    // valor vai para customFields (edge grava em lead_custom_field_values)
+    expect(leads[0].customFields).toEqual({ cnpj: "12345678000199" });
+    // e NÃO vaza para "Outros campos" da observação
+    expect(leads[0].notes ?? "").not.toContain("12345678000199");
+    expect(leads[0].kommoBlock ?? "").not.toContain("12345678000199");
+    // campos de sistema seguem normais
+    expect(leads[0].name).toBe("João");
+    expect(leads[0].phone).toBe("11999999999");
+  });
+
   it("exposes importLeads function", () => {
     const { result } = renderHook(() => useImportLeads(), { wrapper: createWrapper() });
     expect(typeof result.current.importLeads).toBe("function");

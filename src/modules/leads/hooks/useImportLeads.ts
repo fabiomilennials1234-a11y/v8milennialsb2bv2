@@ -329,6 +329,8 @@ interface ParsedLead {
   contract_duration?: number;
   /** Observações da etapa no funil (pipe_notes). */
   pipe_notes?: string;
+  /** Valores de campos personalizados (nome do campo → valor). Gravados em lead_custom_field_values pela edge. */
+  customFields?: Record<string, string>;
 }
 
 export type FunnelDestination = "qualificacao" | "propostas" | "confirmacao";
@@ -727,18 +729,30 @@ export function useImportLeads() {
     }
     for (const row of rows) {
             const usedKeys = new Set<string>();
+            const customFieldValues: Record<string, string> = {};
             const rowForParse: Record<string, string> = { ...row };
             if (userColumnMapping) {
               for (const [fileCol, field] of Object.entries(userColumnMapping)) {
                 if (field && field !== "ignore" && row[fileCol] != null) {
-                  rowForParse[field] = String(row[fileCol]).trim();
+                  const value = String(row[fileCol]).trim();
+                  // Campo personalizado (custom:<nome>): coleta pelo NOME (sem o prefixo) e
+                  // consome a coluna de origem. A edge import-leads persiste em
+                  // lead_custom_field_values. Antes, o valor vazava para "Outros campos"
+                  // da observação (a UI oferecia o mapeamento mas nada gravava no campo).
+                  if (field.startsWith("custom:")) {
+                    const fieldName = field.slice("custom:".length);
+                    if (fieldName && value) customFieldValues[fieldName] = value;
+                    usedKeys.add(fileCol);
+                    continue;
+                  }
+                  rowForParse[field] = value;
                   // Toda coluna mapeada explicitamente para um campo do sistema é consumida:
                   // seu valor vai para a coluna dedicada (ou metadata de etapa), nunca para
                   // "Outros campos" da observação. Sem isso, campos cujo nome não casa o
                   // próprio coletor (segment/rating/origin/...) vazavam para o notes.
                   // Exceção: "notes" é capturado depois via noteColumns (lê pela chave),
                   // então consumi-lo aqui esvaziaria a observação legítima.
-                  if (!field.startsWith("custom:") && field !== "notes") {
+                  if (field !== "notes") {
                     usedKeys.add(field);
                     usedKeys.add(fileCol);
                   }
@@ -1127,6 +1141,7 @@ export function useImportLeads() {
               commitment_date,
               contract_duration,
               pipe_notes: pipe_notes || undefined,
+              customFields: Object.keys(customFieldValues).length ? customFieldValues : undefined,
             });
           }
 
