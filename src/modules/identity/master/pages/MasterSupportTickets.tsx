@@ -38,6 +38,7 @@ import {
   type TicketTipo,
 } from "@/modules/platform/lib/support-ticket-draft";
 import { isTerminal } from "@/modules/platform/lib/ticket-lifecycle";
+import { firstResponseClock } from "@/modules/platform/lib/first-response-clock";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 import {
   useClaimSupportTicket,
@@ -239,6 +240,7 @@ function TicketRow({
             {ticket.reopen_count > 0 && (
               <span className="ml-2 text-amber-400">reaberto {ticket.reopen_count}×</span>
             )}
+            <OverdueTag ticket={ticket} />
           </p>
         </TableCell>
         <TableCell className="text-sm text-muted-foreground">
@@ -337,6 +339,30 @@ function TicketRow({
       )}
     </>
   );
+}
+
+/**
+ * O relógio de primeira resposta. A meta é política, não SLA — nada foi
+ * prometido a ninguém. E o tempo em `aguardando_cliente` é descontado: sem isso,
+ * um chamado em que o cliente sumiu por uma semana apareceria como "staff
+ * demorou 7 dias".
+ */
+function useTicketClock(ticket: MasterSupportTicket) {
+  return firstResponseClock({
+    severidade: ticket.severidade,
+    createdAt: new Date(ticket.created_at),
+    firstResponseAt: ticket.first_response_at ? new Date(ticket.first_response_at) : null,
+    awaitingCustomerMs: Number(ticket.awaiting_customer_ms ?? 0),
+    awaitingSince: ticket.awaiting_since ? new Date(ticket.awaiting_since) : null,
+    now: new Date(),
+  });
+}
+
+/** Só aparece quando há meta e ela estourou. Um selo que sempre aparece não é sinal. */
+function OverdueTag({ ticket }: { ticket: MasterSupportTicket }) {
+  const clock = useTicketClock(ticket);
+  if (clock.responded || !clock.isOverdue) return null;
+  return <span className="ml-2 font-medium text-red-400">atrasado</span>;
 }
 
 function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
@@ -448,17 +474,7 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
             label="Aberto em"
             value={format(new Date(ticket.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
           />
-          <ContextRow
-            label="1ª resposta"
-            value={
-              ticket.first_response_at
-                ? formatDistanceToNow(new Date(ticket.first_response_at), {
-                    addSuffix: true,
-                    locale: ptBR,
-                  })
-                : "ainda não"
-            }
-          />
+          <ClockRow ticket={ticket} />
         </dl>
 
         {ticket.severidade && (
@@ -485,6 +501,36 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
           </div>
         )}
       </aside>
+    </div>
+  );
+}
+
+function ClockRow({ ticket }: { ticket: MasterSupportTicket }) {
+  const clock = useTicketClock(ticket);
+
+  if (clock.responded) {
+    return (
+      <ContextRow
+        label="1ª resposta"
+        value={`${formatDistanceToNow(new Date(ticket.first_response_at!), {
+          addSuffix: true,
+          locale: ptBR,
+        })}${clock.isOverdue ? " · fora da meta" : ""}`}
+      />
+    );
+  }
+
+  if (!clock.deadline) {
+    return <ContextRow label="1ª resposta" value="sem meta — falta triar" />;
+  }
+
+  return (
+    <div className="flex gap-2">
+      <dt className="w-[76px] shrink-0 text-muted-foreground">Responder</dt>
+      <dd className={cn("min-w-0 flex-1", clock.isOverdue && "font-medium text-red-400")}>
+        {clock.isOverdue ? "atrasado desde " : "até "}
+        {format(clock.deadline, "dd/MM HH:mm", { locale: ptBR })}
+      </dd>
     </div>
   );
 }
