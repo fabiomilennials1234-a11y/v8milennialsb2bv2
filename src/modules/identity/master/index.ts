@@ -76,3 +76,13 @@ export {
   useMasterAuditStats,
 } from "./hooks/useMasterAuditLogs";
 export type { AuditLog, AuditLogFilters } from "./hooks/useMasterAuditLogs";
+
+// Chamados (ADR-0018). A pagina e deep-imported pelo App.tsx, como as demais.
+export {
+  useMasterSupportTickets,
+  useMasterTicketComments,
+  useTriageSupportTicket,
+  useClaimSupportTicket,
+  useCreateStaffComment,
+} from "./hooks/useMasterSupportTickets";
+export type { MasterSupportTicket, MasterTicketFilters } from "./hooks/useMasterSupportTickets";

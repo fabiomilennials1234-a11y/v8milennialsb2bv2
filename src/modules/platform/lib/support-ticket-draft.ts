@@ -115,12 +115,35 @@ export const IMPACTO_LABELS: Record<TicketImpacto, string> = {
   incomodo: "Não, é um incômodo",
 };
 
+/**
+ * Rótulos vistos pela Organização. O mesmo estado tem nomes diferentes dos dois
+ * lados da mesa: `aguardando_cliente` é "aguardando você" para quem abriu o
+ * chamado, e "aguardando cliente" para quem o atende. Um mapa só mentiria para
+ * metade dos leitores.
+ */
 export const STATUS_LABELS: Record<TicketStatus, string> = {
   aberto: "Aberto",
   em_andamento: "Em andamento",
   aguardando_cliente: "Aguardando você",
   resolvido: "Resolvido",
   fechado: "Fechado",
+};
+
+/** Rótulos vistos pelo suporte da Torque. */
+export const STATUS_LABELS_STAFF: Record<TicketStatus, string> = {
+  aberto: "Aberto",
+  em_andamento: "Em andamento",
+  aguardando_cliente: "Aguardando cliente",
+  resolvido: "Resolvido",
+  fechado: "Fechado",
+};
+
+/** Veredito do staff. O cliente nunca vê estes rótulos num seletor. */
+export const SEVERIDADE_LABELS: Record<TicketSeveridade, string> = {
+  baixa: "Baixa",
+  media: "Média",
+  alta: "Alta",
+  critica: "Crítica",
 };
 
 export const DRAFT_ERROR_LABELS: Record<TicketDraftError, string> = {

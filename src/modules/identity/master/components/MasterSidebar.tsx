@@ -23,6 +23,7 @@ import {
   MessageSquare,
   Rocket,
   Megaphone,
+  LifeBuoy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -43,7 +44,8 @@ const allNavItems: NavItem[] = [
   { label: "Usuários", icon: Users, path: "/master/users", permission: "users" },
   { label: "Planos", icon: CreditCard, path: "/master/plans", permission: "billing" },
   { label: "Features", icon: Flag, path: "/master/features", permission: "features" },
-  { label: "Logs de Auditoria", icon: Activity, path: "/master/audit-logs", permission: "audit" },
+    { label: "Suporte", icon: LifeBuoy, path: "/master/support-tickets", permission: "support" },
+{ label: "Logs de Auditoria", icon: Activity, path: "/master/audit-logs", permission: "audit" },
   { label: "Operations", icon: Monitor, path: "/master/operations", permission: "audit" },
   { label: "Automation Health", icon: Heart, path: "/master/automation-health", permission: "audit" },
   { label: "WhatsApp Health", icon: MessageSquare, path: "/master/whatsapp-health", permission: "audit" },

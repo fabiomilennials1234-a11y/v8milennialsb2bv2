@@ -25,6 +25,8 @@ export interface MasterPermissions {
   features?: boolean;
   impersonation?: boolean;
   audit?: boolean;
+  /** Fila de Chamados (ADR-0018). */
+  support?: boolean;
   outbound_only?: boolean;
 }
 
