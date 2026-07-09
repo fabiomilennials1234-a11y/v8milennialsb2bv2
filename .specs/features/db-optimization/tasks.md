@@ -60,11 +60,13 @@ Regra: dev-first; prod só com "vai" do CTO; `DROP INDEX CONCURRENTLY` via Manag
 - **Done when:** execuções de org sem instância viva não re-falham; despausam quando instância volta
 - **Estimativa:** 2.5h · **branch:** `fix/workflow-live-instance-gate`
 
-### T1.2.2 🟠 — Fallback org-default em getWhatsAppInstance
+### T1.2.2 ✅ — Fallback org-default em getWhatsAppInstance — FEITO 2026-07-09
 - **What:** quando node pina `instanceId` morto, cair pro fallback org-default (mesmo predicado de liveness)
-- **Where:** `_shared/whatsapp-helpers.ts:45-52`
-- **Done when:** 163874dd (Evolution-404) volta a enviar sozinha sem tocar workflow
-- **Depends on:** T1.2.1 (mesmo predicado) · **Estimativa:** 1.5h
+- **Where:** `_shared/action-handlers/whatsapp-helpers.ts` — `isInstanceLive()` extraída + gate na branch pinada
+- **Done when:** 163874dd (Evolution-404, 83 falhas/7d) volta a enviar sozinha sem tocar workflow ✓
+- **QA:** 7 Deno.test verdes (+2 novos), type-clean (0 erros novos). Branch `fix/workflow-live-instance-gate`, PR pendente.
+- **Deploy:** redeploy das edge fns que bundlam o helper (send-whatsapp*, send-to-number, followup-sender, outbound-sender, process-workflow-executions) — **pendente "vai" do CTO**.
+- **Nota:** independente da T1.2.1 na prática (o fallback já é liveness-aware); a dependência era conceitual.
 
 ### T1.2.3 [P] — Remediação por org
 - **What:** Motor100+Bertin re-parear (CS); DNA+17c46b69 desativar (reversível); d7f78b22 `image_url`; 589f6a52 team member
