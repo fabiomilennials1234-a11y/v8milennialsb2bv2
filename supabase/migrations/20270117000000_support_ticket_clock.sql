@@ -135,6 +135,10 @@ BEGIN
   END IF;
 
   IF NEW.status IS DISTINCT FROM OLD.status THEN
+    -- `now()` é o instante da TRANSAÇÃO, não do relógio de parede. Abrir e
+    -- fechar a janela na mesma transação acumula zero — correto: nenhum tempo
+    -- real passou para o cliente. Cada mudança de status vem numa requisição
+    -- própria, logo numa transação própria.
     IF NEW.status = 'aguardando_cliente' THEN
       NEW.awaiting_since := now();
 
