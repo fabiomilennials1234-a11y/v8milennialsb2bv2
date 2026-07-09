@@ -8,7 +8,7 @@
  * Autenticação: igual a create-org-user (JWT admin + user_creation_key ou X-Internal-Api-Key).
  */
 
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
@@ -251,4 +251,4 @@ const handler = async (req: Request) => {
   }
 };
 
-serve(withSentry('remove-org-member', handler));
+serve(withErrorBoundary('remove-org-member', handler));

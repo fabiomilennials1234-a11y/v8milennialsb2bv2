@@ -35,8 +35,8 @@ vi.mock("../../supabase/functions/_shared/logger.ts", () => ({
   redactSecrets: (v: unknown) => v,
 }));
 
-vi.mock("../../supabase/functions/_shared/sentry.ts", () => ({
-  withSentry: (_name: string, fn: unknown) => fn,
+vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({
+  withErrorBoundary: (_name: string, fn: unknown) => fn,
 }));
 
 vi.mock("../../supabase/functions/_shared/security-headers.ts", () => ({

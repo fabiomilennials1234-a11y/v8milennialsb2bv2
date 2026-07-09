@@ -9,7 +9,7 @@
  * Auth: Bearer JWT user (role=admin/master) OU x-cron-secret.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
@@ -198,7 +198,7 @@ async function refreshJob(
 }
 
 Deno.serve(
-  withSentry("mass-send-status", async (req: Request) => {
+  withErrorBoundary("mass-send-status", async (req: Request) => {
     const origin = req.headers.get("Origin") ?? undefined;
     const corsHeaders = withSecurityHeaders(
       getCorsHeaders(origin) as Record<string, string>

@@ -1,9 +1,9 @@
 import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 
-Deno.serve(withSentry("get-member-permissions", async (req) => {
+Deno.serve(withErrorBoundary("get-member-permissions", async (req) => {
   const origin = req.headers.get("Origin") ?? undefined;
   const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 
@@ -84,7 +84,7 @@ Deno.serve(withSentry("get-member-permissions", async (req) => {
     if (error instanceof AuthError) {
       // Telemetria Fase 3: AuthError de requireOrganization é sinal da
       // regressão de permissões (incidente 2026-04-24). Log estruturado
-      // pra Sentry/log aggregator filtrar. 400 aqui = frontend chamou sem
+      // pro log aggregator filtrar. 400 aqui = frontend chamou sem
       // org_id ou org_id inválida para o user.
       console.error(
         JSON.stringify({

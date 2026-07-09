@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 import { createEdgeFunction } from "../_shared/edge-framework.ts";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import {
   getOrgIdFromJwt,
   verifyWhatsAppConnected,
@@ -98,4 +98,4 @@ const handler = createEdgeFunction({
   },
 });
 
-Deno.serve(withSentry("onboarding-advance", handler));
+Deno.serve(withErrorBoundary("onboarding-advance", handler));

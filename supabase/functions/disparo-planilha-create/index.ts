@@ -25,7 +25,7 @@
  * no writes), then call again without it to create + return `lead_ids`.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import {
@@ -71,7 +71,7 @@ function toMappedRow(raw: any): MappedRow {
 }
 
 Deno.serve(
-  withSentry("disparo-planilha-create", async (req: Request) => {
+  withErrorBoundary("disparo-planilha-create", async (req: Request) => {
     const origin = req.headers.get("Origin") ?? undefined;
     const corsHeaders = withSecurityHeaders(
       (await import("../_shared/cors.ts")).getCorsHeaders(origin) as Record<string, string>,

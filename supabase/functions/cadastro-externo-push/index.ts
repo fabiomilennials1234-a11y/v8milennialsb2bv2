@@ -12,7 +12,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { assertOrgFeature, FeatureLockedError } from "../_shared/assert-org-feature.ts";
 
@@ -57,7 +57,7 @@ interface PushPayload {
 }
 
 Deno.serve(
-  withSentry("cadastro-externo-push", async (req) => {
+  withErrorBoundary("cadastro-externo-push", async (req) => {
     const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
     if (req.method === "OPTIONS") {

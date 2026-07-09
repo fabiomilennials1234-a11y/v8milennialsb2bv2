@@ -8,7 +8,7 @@
  * Método: POST
  */
 
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -28,7 +28,7 @@ const SUPABASE_ANON_KEY         =
   Deno.env.get("SUPABASE_ANON_KEY")?.trim() ||
   "";
 
-Deno.serve(withSentry('google-calendar-disconnect', async (req) => {
+Deno.serve(withErrorBoundary('google-calendar-disconnect', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   if (req.method === "OPTIONS") {

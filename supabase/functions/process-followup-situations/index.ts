@@ -1,4 +1,4 @@
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 /**
  * Worker: situation-based Copilot Follow-up (ADR-0006).
  *
@@ -193,7 +193,7 @@ async function sourceCandidates(supabase: Supa, cfg: SituationConfigRow): Promis
   return [];
 }
 
-Deno.serve(withSentry("process-followup-situations", async (req) => {
+Deno.serve(withErrorBoundary("process-followup-situations", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });

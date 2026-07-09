@@ -51,7 +51,6 @@ jobs:
             VITE_INVITE_API_URL=${{ secrets.VITE_INVITE_API_URL }}
             VITE_META_APP_ID=${{ secrets.VITE_META_APP_ID }}
             VITE_META_WA_CONFIG_ID=${{ secrets.VITE_META_WA_CONFIG_ID }}
-            VITE_SENTRY_DSN=${{ secrets.VITE_SENTRY_DSN }}
 
       # Deploy is intentionally decoupled from main. Push to main only builds
       # and publishes the image to ghcr.io as :latest + :sha-<short>. To ship

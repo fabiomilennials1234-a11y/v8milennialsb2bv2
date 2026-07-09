@@ -9,7 +9,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
@@ -35,7 +35,7 @@ const RESURRECTION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // ação mais velha que 24
 const MAX_RESURRECTION_RETRIES = 5; // teto absoluto de tentativas
 
 Deno.serve(
-  withSentry("retry-dead-letter-jobs", async (req: Request): Promise<Response> => {
+  withErrorBoundary("retry-dead-letter-jobs", async (req: Request): Promise<Response> => {
     const corsHeaders = getCorsHeaders(req.headers.get("origin"));
     const headers = withSecurityHeaders({ ...corsHeaders, "Content-Type": "application/json" });
 

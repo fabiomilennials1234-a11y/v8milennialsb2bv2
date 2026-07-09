@@ -17,7 +17,6 @@ import {
   Sparkles,
   MessageSquare,
   CreditCard,
-  Bug,
   Share2,
   Bot,
 } from "lucide-react";
@@ -70,11 +69,6 @@ const SERVICE_META: Record<string, { icon: React.ReactNode; description: string;
     icon: <CreditCard className="w-5 h-5" />,
     description: "Pagamentos (PIX, boleto, cartao)",
     category: "Billing",
-  },
-  "Sentry": {
-    icon: <Bug className="w-5 h-5" />,
-    description: "Error tracking + performance",
-    category: "Monitoring",
   },
   "Meta (Facebook)": {
     icon: <Share2 className="w-5 h-5" />,

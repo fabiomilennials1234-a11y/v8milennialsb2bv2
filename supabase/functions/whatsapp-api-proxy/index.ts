@@ -15,7 +15,7 @@
  * Phase 3 adds: sendText, sendMedia (via senders)
  */
 
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
@@ -74,7 +74,7 @@ function jsonResponse(
 // ---------------------------------------------------------------------------
 
 Deno.serve(
-  withSentry("whatsapp-api-proxy", async (req: Request) => {
+  withErrorBoundary("whatsapp-api-proxy", async (req: Request) => {
     const origin = req.headers.get("Origin") ?? undefined;
     const corsHeaders = withSecurityHeaders(
       getCorsHeaders(origin) as Record<string, string>

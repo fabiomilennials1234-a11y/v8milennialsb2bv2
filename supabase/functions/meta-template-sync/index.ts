@@ -18,7 +18,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 import { createMetaTemplateGraph, mapMetaStatus } from "../_shared/meta-templates.ts";
@@ -33,7 +33,7 @@ interface PendingTemplate {
   meta_template_id: string;
 }
 
-Deno.serve(withSentry("meta-template-sync", async (req) => {
+Deno.serve(withErrorBoundary("meta-template-sync", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin") ?? undefined));
   const headers = { ...corsHeaders, "Content-Type": "application/json" };
 

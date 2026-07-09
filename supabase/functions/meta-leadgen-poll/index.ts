@@ -15,7 +15,7 @@
  * so the first real poll only ingests NEW leads (no historical dump).
  */
 
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -26,7 +26,7 @@ import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
-Deno.serve(withSentry("meta-leadgen-poll", async (req) => {
+Deno.serve(withErrorBoundary("meta-leadgen-poll", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("Origin") ?? undefined));
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 

@@ -8,7 +8,7 @@
  * Auth: x-cron-secret.
  */
 
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
@@ -18,7 +18,7 @@ const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const DEFAULT_BATCH_SIZE = 50;
 
 Deno.serve(
-  withSentry("event-dispatcher", async (req: Request): Promise<Response> => {
+  withErrorBoundary("event-dispatcher", async (req: Request): Promise<Response> => {
     const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
     if (req.method === "OPTIONS") {

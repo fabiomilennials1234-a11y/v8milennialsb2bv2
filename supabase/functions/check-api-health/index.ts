@@ -158,16 +158,6 @@ async function checkAsaas(): Promise<ApiHealthResult> {
   }
 }
 
-function checkSentry(): ApiHealthResult {
-  const dsn = Deno.env.get("SENTRY_DSN");
-  return {
-    service: "Sentry",
-    status: dsn ? "connected" : "not_configured",
-    latency_ms: 0,
-    checked_at: new Date().toISOString(),
-  };
-}
-
 function checkMeta(): ApiHealthResult {
   const appSecret = Deno.env.get("META_APP_SECRET");
   return {
@@ -206,7 +196,6 @@ serve(async (req) => {
       checkEmbeddings(),
       checkOpenAI(),
       checkAsaas(),
-      Promise.resolve(checkSentry()),
       Promise.resolve(checkMeta()),
     ]);
 

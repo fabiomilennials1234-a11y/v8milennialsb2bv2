@@ -19,7 +19,7 @@
  * Auth: x-cron-secret.
  */
 
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -36,7 +36,7 @@ interface Candidate {
   dataset_override: string | null;
 }
 
-Deno.serve(withSentry("meta-conversion-dispatch", async (req) => {
+Deno.serve(withErrorBoundary("meta-conversion-dispatch", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("Origin") ?? undefined));
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 

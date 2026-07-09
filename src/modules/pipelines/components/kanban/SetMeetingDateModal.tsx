@@ -16,7 +16,7 @@ import { CalendarIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
-import * as Sentry from "@sentry/react";
+import { logger } from "@/modules/platform";
 import { getErrorMessage } from "@/shared/errors";
 import { cn } from "@/lib/utils";
 import { useSetMeetingDate } from "../../hooks/model/useSetMeetingDate";
@@ -72,10 +72,11 @@ export function SetMeetingDateModal({
 
   const onSaveError = (err: unknown) => {
     console.error("[SetMeetingDateModal] Falha ao salvar data da reunião:", err);
-    Sentry.captureException(err, {
-      tags: { feature: "pipelines", kind: "set-meeting-date-failed" },
-      extra: { entryId, leadId, variant },
-    });
+    void logger.error(
+      "Falha ao salvar data da reunião",
+      err instanceof Error ? err : new Error(String(err)),
+      { resource: "pipelines", action: "set-meeting-date-failed", metadata: { entryId, leadId, variant } },
+    );
     toast.error(
       variant === "reschedule" ? "Erro ao remarcar reunião" : "Erro ao salvar data da reunião",
       { description: getErrorMessage(err) },

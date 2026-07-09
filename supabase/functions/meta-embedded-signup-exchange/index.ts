@@ -33,7 +33,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 import {
   validateExchangeRequest,
@@ -51,7 +51,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
  *  per number; for newly-onboarded Cloud numbers a fresh PIN is accepted. */
 const REGISTER_PIN = Deno.env.get("META_CLOUD_REGISTER_PIN") ?? "000000";
 
-Deno.serve(withSentry("meta-embedded-signup-exchange", async (req) => {
+Deno.serve(withErrorBoundary("meta-embedded-signup-exchange", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin") ?? undefined));
   const headers = { ...corsHeaders, "Content-Type": "application/json" };
 

@@ -20,7 +20,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry, captureMessage } from "../_shared/sentry.ts";
+import { withErrorBoundary, logEvent } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
@@ -38,7 +38,7 @@ import {
 const SLEEP_MS = BATCH_IDLE_WINDOW_MS; // 5s — janela idle antes de checar maturidade
 const LEASE_SECONDS = 120; // lease de claim; processing além disso é reclaimável
 
-Deno.serve(withSentry('copilot-batch-processor', async (req: Request): Promise<Response> => {
+Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Promise<Response> => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -253,7 +253,7 @@ Deno.serve(withSentry('copilot-batch-processor', async (req: Request): Promise<R
     await applyOutcome(outcome);
 
     if (outcome.kind === "delivered") {
-      captureMessage("copilot_batch_delivered", {
+      logEvent("copilot_batch_delivered", {
         functionName: "copilot-batch-processor",
         organizationId: orgId,
         tags: {

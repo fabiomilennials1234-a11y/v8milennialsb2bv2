@@ -20,7 +20,7 @@ junior + agentes IA.
 - **AI**: Google Gemini (embeddings 1536d) + pgvector
 - **WhatsApp**: Uazapi (provider-agnostic adapter)
 - **Tests**: Vitest + Playwright
-- **Monitoring**: Sentry
+- **Observabilidade**: `runtime_logs` (Postgres, in-house — ADR-0017)
 
 ## Quick start
 
@@ -68,7 +68,7 @@ CI roda em PR: unit → integration → e2e → docker-image.
   garante isolamento. Frontend nunca envia `org_id` — vem do auth context.
 - **Permissions 3 camadas**: Master → Org Admin → Feature Permissions → Role
   Matrix. Roles: `admin`, `master`, `membro`.
-- **Edge Function pattern**: `Deno.serve(withSentry('nome', handler))` +
+- **Edge Function pattern**: `Deno.serve(withErrorBoundary('nome', handler))` +
   `withSecurityHeaders(getCorsHeaders(req))` + OPTIONS early return. Edge
   functions vivem em `supabase/functions/` (flat — Supabase CLI exige).
   Mapping BC→fn doc-only em `supabase/functions/CLAUDE.md` (slice 15).

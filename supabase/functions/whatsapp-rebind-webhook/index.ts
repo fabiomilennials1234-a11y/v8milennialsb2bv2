@@ -56,7 +56,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
@@ -229,7 +229,7 @@ async function rebindOne(
 }
 
 Deno.serve(
-  withSentry("whatsapp-rebind-webhook", async (req: Request): Promise<Response> => {
+  withErrorBoundary("whatsapp-rebind-webhook", async (req: Request): Promise<Response> => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";

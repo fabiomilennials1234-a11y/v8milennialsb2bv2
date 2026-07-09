@@ -1,7 +1,7 @@
 /**
  * Unit tests for supabase/functions/lead-webhook/index.ts
  *
- * The edge function registers a handler via `serve(withSentry(...))` at
+ * The edge function registers a handler via `serve(withErrorBoundary(...))` at
  * module load. We mock both so the handler is captured and callable in
  * isolation. All external helpers (lead-service, webhook-utils, campaign-
  * distribution, logger) are mocked to avoid network/DB side effects.
@@ -24,8 +24,8 @@ vi.mock("https://deno.land/std@0.168.0/http/server.ts", () => ({
   },
 }));
 
-vi.mock("../../supabase/functions/_shared/sentry.ts", () => ({
-  withSentry: (_name: string, handler: any) => handler,
+vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({
+  withErrorBoundary: (_name: string, handler: any) => handler,
 }));
 
 // ─── Configurable supabase client (mutable per test) ──────────────────────

@@ -42,7 +42,7 @@ Detalhe completo em `10 — Remodelagem/03-to-be/principios-modulo.md`.
 
 - `src/ui/` ou `src/components/ui/` — primitivos shadcn
 - `src/shared/` — utils puros sem dependência de domínio
-- `src/core/` — supabase client, env, types globais, sentry init
+- `src/core/` — supabase client, env, types globais, observability boot
 
 ## Convenção interna do módulo
 

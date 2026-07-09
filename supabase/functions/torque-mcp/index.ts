@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { captureError } from "../_shared/sentry.ts";
+import { logError } from "../_shared/error-boundary.ts";
 import { loadConfig } from "./lib/config.ts";
 import { createCachedMasterClientProvider } from "../_shared/mcp/auth.ts";
 import { signInAsMaster } from "./lib/clients.ts";
@@ -126,8 +126,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json(result, 200, cors);
   } catch (e) {
     console.error("[torque-mcp] handler error:", e); // stderr
-    // Report to Sentry but keep the JSON-RPC envelope (MCP clients expect it).
-    await captureError(e, { functionName: "torque-mcp", extra: { method: req.method } });
+    // Report to the in-house runtime logs but keep the JSON-RPC envelope (MCP clients expect it).
+    await logError(e, { functionName: "torque-mcp", extra: { method: req.method } });
     const message = e instanceof Error ? e.message : String(e);
     return json(
       { jsonrpc: "2.0", id: null, error: { code: -32603, message: `Internal error: ${message}` } },

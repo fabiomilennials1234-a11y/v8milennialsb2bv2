@@ -1,4 +1,4 @@
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -124,7 +124,7 @@ function parseSuggestions(raw: string): Suggestion[] {
 }
 
 Deno.serve(
-  withSentry("analyze-copilot-prompt", async (req) => {
+  withErrorBoundary("analyze-copilot-prompt", async (req) => {
     const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
     if (req.method === "OPTIONS") {

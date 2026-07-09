@@ -61,7 +61,7 @@ export interface FetchLeadsResult {
 /**
  * Normalizes a Graph `error` object into an Error. Deliberately carries only
  * the Graph-supplied message + code — never the access token, which would
- * otherwise leak through logs/Sentry if callers print the error.
+ * otherwise leak through logs if callers print the error.
  */
 function graphError(error: { message?: string; code?: number; type?: string }): Error {
   const code = error.code != null ? ` (code ${error.code})` : "";

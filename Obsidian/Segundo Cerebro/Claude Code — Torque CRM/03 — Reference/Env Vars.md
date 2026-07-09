@@ -37,6 +37,10 @@ A coluna **Secret?** marca `✅` para credenciais que NUNCA podem vazar (chaves 
 > Outras `VITE_*` conforme integrações ativadas. Anon key é segura no browser **porque RLS é a fronteira** — qualquer leak de service-role aqui seria crítico.
 
 ---
+| `VITE_SUPABASE_ANON_KEY` | Anon key (público, OK em frontend) |
+| `VITE_APP_URL` | URL do app (pra links absolutos) |
+| `VITE_GOOGLE_CLIENT_ID` | Google OAuth |
+| (outras conforme integrações) |
 
 ## Backend (edge fn secrets)
 
@@ -65,6 +69,9 @@ A coluna **Secret?** marca `✅` para credenciais que NUNCA podem vazar (chaves 
 | `TEST_MODE_SECRET` | ✅ | Habilita caminho de test-mode em prod sob segredo |
 
 ### WhatsApp — Uazapi 🔴
+### Monitoring
+| Variável | Função |
+|---|---|
 
 | Variável | Secret? | Função |
 |---|:---:|---|

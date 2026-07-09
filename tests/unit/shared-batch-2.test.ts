@@ -1,5 +1,5 @@
 /**
- * Batch tests for _shared modules — embeddings, sentry, asaas, tinyerp, track, logger, ai-queue
+ * Batch tests for _shared modules — embeddings, error-boundary, asaas, tinyerp, track, logger, ai-queue
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import "../../tests/helpers/deno-mock";
@@ -78,57 +78,68 @@ describe("generateEmbeddingsBatch", () => {
   });
 });
 
-// ── sentry.ts ──
-import { captureError, withSentry } from "../../supabase/functions/_shared/sentry";
+// ── error-boundary.ts ──
+import { logError, logEvent, withErrorBoundary } from "../../supabase/functions/_shared/error-boundary";
 
-describe("captureError", () => {
-  it("does nothing when no SENTRY_DSN", async () => {
-    clearDenoEnv();
-    await captureError(new Error("test"));
+describe("logError", () => {
+  it("never throws on an Error", async () => {
+    await expect(logError(new Error("test"), { functionName: "test-fn" })).resolves.not.toThrow();
+  });
+
+  it("never throws on a non-Error value", async () => {
+    await expect(logError("string error")).resolves.not.toThrow();
+  });
+
+  it("does not reach the network", async () => {
+    await logError(new Error("test"));
     expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it("sends error when DSN is set", async () => {
-    setDenoEnv("SENTRY_DSN", "https://abc123@o123.ingest.sentry.io/456");
-    mockFetch.mockResolvedValueOnce({ ok: true });
-    await captureError(new Error("test error"), { functionName: "test-fn" });
-    expect(mockFetch).toHaveBeenCalled();
-  });
-
-  it("handles non-Error objects", async () => {
-    setDenoEnv("SENTRY_DSN", "https://abc123@o123.ingest.sentry.io/456");
-    mockFetch.mockResolvedValueOnce({ ok: true });
-    await captureError("string error");
-    // Should not throw
-  });
-
-  it("silently ignores fetch failures", async () => {
-    setDenoEnv("SENTRY_DSN", "https://abc123@o123.ingest.sentry.io/456");
-    mockFetch.mockRejectedValueOnce(new Error("network"));
-    await expect(captureError(new Error("test"))).resolves.not.toThrow();
   });
 });
 
-describe("withSentry", () => {
+describe("logEvent", () => {
+  it("never throws", async () => {
+    await expect(logEvent("some_event", { tags: { a: 1 } })).resolves.not.toThrow();
+  });
+
+  it("does not reach the network", async () => {
+    await logEvent("some_event");
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("withErrorBoundary", () => {
   it("returns a function", () => {
-    const wrapped = withSentry("test-fn", async () => new Response("ok"));
+    const wrapped = withErrorBoundary("test-fn", async () => new Response("ok"));
     expect(typeof wrapped).toBe("function");
   });
 
   it("passes through successful responses", async () => {
-    const handler = withSentry("test-fn", async () => new Response("ok", { status: 200 }));
-    const req = new Request("http://test.com");
-    const res = await handler(req);
+    const handler = withErrorBoundary("test-fn", async () => new Response("ok", { status: 200 }));
+    const res = await handler(new Request("http://test.com"));
     expect(res.status).toBe(200);
   });
 
-  it("catches and reports errors", async () => {
-    setDenoEnv("SENTRY_DSN", "https://abc123@o123.ingest.sentry.io/456");
-    mockFetch.mockResolvedValue({ ok: true });
-    const handler = withSentry("test-fn", async () => { throw new Error("boom"); });
-    const req = new Request("http://test.com");
-    const res = await handler(req);
+  it("turns an unhandled throw into a 500", async () => {
+    const handler = withErrorBoundary("test-fn", async () => { throw new Error("boom"); });
+    const res = await handler(new Request("http://test.com"));
     expect(res.status).toBe(500);
+  });
+
+  // O motivo de o boundary existir: sem os headers de CORS na resposta de erro,
+  // o browser do chamador reporta falha de CORS e o erro real fica invisível.
+  it("carries CORS headers on the 500", async () => {
+    const handler = withErrorBoundary("test-fn", async () => { throw new Error("boom"); });
+    const res = await handler(
+      new Request("http://test.com", { headers: { origin: "https://torquecrm.com.br" } }),
+    );
+    expect(res.status).toBe(500);
+    expect(res.headers.get("access-control-allow-origin")).toBeTruthy();
+  });
+
+  it("surfaces the error message in the body", async () => {
+    const handler = withErrorBoundary("test-fn", async () => { throw new Error("boom"); });
+    const res = await handler(new Request("http://test.com"));
+    expect(await res.json()).toEqual({ error: "boom" });
   });
 });
 
