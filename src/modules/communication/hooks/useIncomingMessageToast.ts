@@ -11,7 +11,7 @@ import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/modules/identity";
+import { useAuth, useOrganization } from "@/modules/identity";
 /** Rotas onde o toast é suprimido — user já está vendo o chat */
 const CHAT_ROUTE_PATTERNS = [/^\/chat(\/|$)/, /^\/chat-whatsapp/];
 
@@ -20,7 +20,8 @@ function isChatRoute(pathname: string): boolean {
 }
 
 export function useIncomingMessageToast() {
-  const { user, organizationId } = useAuth();
+  const { user } = useAuth();
+  const { organizationId } = useOrganization();
   const location = useLocation();
   const navigate = useNavigate();
 
