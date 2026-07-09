@@ -625,7 +625,7 @@ Deno.serve(
 
     if (targetOrgIds.length === 0) {
       await logRuntime({
-        module: "calculate-portfolio-health",
+        module: "carteira",
         action: "run",
         status: "skipped",
         payloadSnapshot: { reason: "no orgs with customer_portfolio enabled" },
@@ -651,7 +651,7 @@ Deno.serve(
     const durationMs = Date.now() - t0;
 
     await logRuntime({
-      module: "calculate-portfolio-health",
+      module: "carteira",
       action: "run",
       status: totalFailed === 0 ? "success" : "error",
       payloadSnapshot: {

@@ -137,7 +137,7 @@ Deno.serve(
     await logRuntime({
       module: "webhook",
       action: "media_retry_run",
-      status: "ok",
+      status: "success",
       payloadSnapshot: { total, resolved, still_failing: stillFailing, exhausted },
     });
 

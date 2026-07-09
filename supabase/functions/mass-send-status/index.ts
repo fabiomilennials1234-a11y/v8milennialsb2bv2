@@ -231,7 +231,7 @@ Deno.serve(
         results.push({ id: (j as any).id, ...r });
       }
       await logRuntime({
-        module: "mass-send-status",
+        module: "campaign",
         action: "cron_refresh",
         status: "success",
         payloadSnapshot: { count: results.length },

@@ -12,6 +12,7 @@
  */
 
 import { getCorsHeaders } from "./cors.ts";
+import { getTraceContext } from "./request-trace.ts";
 
 interface LogContext {
   functionName?: string;
@@ -100,10 +101,12 @@ export function withErrorBoundary(
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`[${functionName}] Unhandled error:`, errorMessage);
 
+      const { sessionId, requestId } = getTraceContext(req);
+
       await logError(error, {
         functionName,
         userId,
-        extra: { method: req.method, url: req.url },
+        extra: { method: req.method, url: req.url, sessionId, requestId },
       });
 
       const corsHeaders = getCorsHeaders(req.headers.get("origin"));

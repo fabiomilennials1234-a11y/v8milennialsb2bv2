@@ -133,7 +133,7 @@ Deno.serve(
     if ((instance as any).organization_id !== orgId) {
       await logRuntime({
         organizationId: orgId,
-        module: "mass-send-create",
+        module: "campaign",
         action: "cross_tenant_attempt",
         status: "error",
         payloadSnapshot: { caller: orgId, target: (instance as any).organization_id },
@@ -196,7 +196,7 @@ Deno.serve(
 
       await logRuntime({
         organizationId: orgId,
-        module: "mass-send-create",
+        module: "campaign",
         action: "created",
         status: "success",
         entityType: "uazapi_sender_jobs",
@@ -213,7 +213,7 @@ Deno.serve(
       const msg = (e as Error).message ?? "unknown error";
       await logRuntime({
         organizationId: orgId,
-        module: "mass-send-create",
+        module: "campaign",
         action: "failed",
         status: "error",
         errorMessage: msg,

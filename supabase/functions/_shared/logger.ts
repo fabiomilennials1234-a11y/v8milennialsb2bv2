@@ -105,9 +105,45 @@ export function redactSecrets(input: unknown, _seen?: WeakSet<object>): unknown 
   return result;
 }
 
+/**
+ * Vocabulário de `runtime_logs.module`.
+ *
+ * Garantido aqui, em compile time — a tabela deliberadamente NÃO tem CHECK.
+ * Um CHECK falharia em runtime, no INSERT, e `logRuntime` engole a falha por
+ * design (telemetria não pode derrubar edge function): o constraint destruiria
+ * silenciosamente a linha que deveria proteger. Já destruiu — ver a migration
+ * 20270115. Ao adicionar um módulo, adicione o literal aqui.
+ */
+export type RuntimeLogModule =
+  | "agent"
+  | "analytics"
+  | "auth"
+  | "calendar"
+  | "campaign"
+  | "carteira"
+  | "channel"
+  | "copilot"
+  | "followup"
+  | "general"
+  | "job_monitor"
+  | "lead"
+  | "media"
+  | "meeting"
+  | "outbound"
+  | "permission"
+  | "pipe_dispatch"
+  | "pipe_distribution"
+  | "scheduled_user_messages"
+  | "support"
+  | "sz_chat"
+  | "tts"
+  | "webhook"
+  | "whatsapp"
+  | "workflow";
+
 interface LogRuntimeParams {
   organizationId?: string;
-  module: string;
+  module: RuntimeLogModule;
   action: string;
   status: "success" | "error" | "skipped";
   payloadSnapshot?: Record<string, unknown>;
@@ -120,6 +156,10 @@ interface LogRuntimeParams {
   tokens?: { prompt?: number; completion?: number; model?: string };
   // RC.1: chain-of-thought capturado do agente (extraído de <thinking>...</thinking>)
   reasoning?: string;
+  // ADR-0017: correlação com a sessão de navegação do usuário. Use
+  // `getTraceContext(req)` de `_shared/request-trace.ts` para preenchê-los.
+  sessionId?: string | null;
+  requestId?: string | null;
 }
 
 /**
@@ -154,6 +194,8 @@ export async function logRuntime(params: LogRuntimeParams): Promise<void> {
       completion_tokens: params.tokens?.completion ?? null,
       llm_model: params.tokens?.model ?? null,
       reasoning: params.reasoning ?? null,
+      session_id: params.sessionId ?? null,
+      request_id: params.requestId ?? null,
     });
   } catch (err) {
     console.warn("[logRuntime] Failed to write log (non-fatal):", err);

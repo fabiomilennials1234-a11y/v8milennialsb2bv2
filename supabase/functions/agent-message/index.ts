@@ -191,9 +191,9 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
           await logRuntime({
             module: "copilot",
             action: "audience_gate_block",
-            status: "ok",
-            metadata: {
-              organization_id,
+            status: "success",
+            organizationId: organization_id,
+            payloadSnapshot: {
               phone: normalizedPhone,
               agent_id: gate.agentId,
               reason: "unknown_phone_blocked",
