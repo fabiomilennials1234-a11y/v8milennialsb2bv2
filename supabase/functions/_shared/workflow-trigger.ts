@@ -396,6 +396,13 @@ const DEFAULT_SCHEDULED_TZ = "America/Sao_Paulo";
 const DEFAULT_SEND_TIME = "09:00";
 /** Teto do catch-up em segundos: tolera atraso do cron/outage sem disparar janelas perdidas. */
 const SCHEDULED_GRACE_CAP_SECONDS = 3600;
+/**
+ * Piso do catch-up em segundos. Sem ele, dispatches de offset curto/zero (ex.: "no dia
+ * da reunião", offset 0 → grace 0) teriam janela de largura zero e o cron de ~1 min
+ * nunca acertaria o disparo. 120s (~2 ticks do cron) garante que disparem de forma
+ * confiável sem reabrir janelas legitimamente perdidas.
+ */
+const SCHEDULED_GRACE_FLOOR_SECONDS = 120;
 
 export type ScheduledDispatchUnit = "days" | "hours" | "minutes";
 
@@ -580,7 +587,10 @@ export function planScheduledDateDispatches(
           item.anchor === "antes_da_reuniao"
             ? (Number(item.value) || 0) * UNIT_SECONDS[item.unit ?? "days"] * 1000
             : 0;
-        const graceMs = Math.min(offsetMs / 2, SCHEDULED_GRACE_CAP_SECONDS * 1000);
+        const graceMs = Math.min(
+          Math.max(offsetMs / 2, SCHEDULED_GRACE_FLOOR_SECONDS * 1000),
+          SCHEDULED_GRACE_CAP_SECONDS * 1000,
+        );
         if (nowMs - fireAt > graceMs) return; // janela perdida
 
         const itemKey = scheduledItemKey(index);

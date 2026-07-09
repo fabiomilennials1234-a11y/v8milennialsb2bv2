@@ -84,6 +84,34 @@ describe("planScheduledDateDispatches — antes_da_reuniao (dias)", () => {
   });
 });
 
+describe("planScheduledDateDispatches — offset zero (no dia da reunião)", () => {
+  // value=0 days + send_time → fireAt no dia da reunião no send_time. offsetMs=0, então
+  // sem o piso (SCHEDULED_GRACE_FLOOR_SECONDS) a grace seria 0 e o cron de 1min nunca
+  // acertaria. Meeting 2026-07-10T15:00Z, send_time 08:00 → fireAt 2026-07-10T08:00Z.
+  const dayOf = wf({
+    dispatches: [{ anchor: "antes_da_reuniao", value: 0, unit: "days", send_time: "08:00" }],
+  });
+
+  it("fires at send_time on the meeting day (grace floor)", () => {
+    const out = planScheduledDateDispatches(new Date("2026-07-10T08:00:00Z"), [dayOf], [meeting()], []);
+    expect(out).toHaveLength(1);
+    expect(out[0].item_key).toBe("item-0");
+  });
+
+  it("fires when the cron tick lands within the grace floor (fireAt + 60s)", () => {
+    const out = planScheduledDateDispatches(new Date("2026-07-10T08:01:00Z"), [dayOf], [meeting()], []);
+    expect(out).toHaveLength(1);
+  });
+
+  it("does not fire before send_time", () => {
+    expect(planScheduledDateDispatches(new Date("2026-07-10T07:59:00Z"), [dayOf], [meeting()], [])).toHaveLength(0);
+  });
+
+  it("still skips a genuinely missed window beyond the floor (fireAt + 5min)", () => {
+    expect(planScheduledDateDispatches(new Date("2026-07-10T08:05:00Z"), [dayOf], [meeting()], [])).toHaveLength(0);
+  });
+});
+
 describe("planScheduledDateDispatches — dedup & re-arme", () => {
   it("does not re-fire an item already in the log", () => {
     const now = new Date("2026-07-03T09:00:00Z");
