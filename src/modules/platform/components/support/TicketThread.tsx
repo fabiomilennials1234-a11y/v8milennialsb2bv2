@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ArrowLeft, Loader2, Send } from "lucide-react";
+import { ArrowLeft, Loader2, RotateCcw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ import {
   useSupportTicket,
   useSupportTicketComments,
   useCreateSupportTicketComment,
+  useReopenSupportTicket,
 } from "@/modules/platform/hooks/useSupportTickets";
 import { useMarkSupportRepliesRead } from "@/modules/platform/hooks/useSupportUnread";
 import { STATUS_LABELS } from "@/modules/platform/lib/support-ticket-draft";
@@ -33,6 +34,7 @@ export function TicketThread({ ticketId, onBack }: Props) {
   const { data: comments = [] } = useSupportTicketComments(ticketId);
   const createComment = useCreateSupportTicketComment();
   const markRead = useMarkSupportRepliesRead();
+  const reopen = useReopenSupportTicket();
   const [body, setBody] = useState("");
 
   // Abrir o thread e o ato de ler. Pedir um clique em "marcar como lido" seria
@@ -43,6 +45,7 @@ export function TicketThread({ ticketId, onBack }: Props) {
   }, [ticketId, markReadMutate]);
 
   const closed = ticket?.status === "fechado";
+  const resolved = ticket?.status === "resolvido";
 
   async function handleSend() {
     if (!body.trim()) return;
@@ -116,6 +119,32 @@ export function TicketThread({ ticketId, onBack }: Props) {
         <p className="border-t border-border/50 bg-muted/20 px-6 py-4 text-center text-xs text-muted-foreground">
           Este chamado foi fechado. Abra um novo se o problema voltar.
         </p>
+      ) : resolved ? (
+        /* Sete dias de silêncio confirmam o conserto. Enquanto isso, reabrir é
+           a única transição que o cliente pode fazer. */
+        <div className="space-y-2 border-t border-border/50 bg-muted/20 px-6 py-4 text-center">
+          <p className="text-xs text-muted-foreground">
+            O suporte marcou este chamado como resolvido. Ele fecha sozinho em 7 dias.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full gap-2"
+            disabled={reopen.isPending}
+            onClick={() =>
+              reopen.mutate(ticketId, {
+                onError: () => toast.error("Não deu para reabrir o chamado."),
+              })
+            }
+          >
+            {reopen.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            ) : (
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+            )}
+            O problema voltou — reabrir
+          </Button>
+        </div>
       ) : (
         <div className="flex items-end gap-2 border-t border-border/50 bg-muted/20 px-6 py-4">
           <Textarea

@@ -10,12 +10,15 @@ const createTicket = vi.fn();
 const createComment = vi.fn();
 const ticketsData = { current: [] as unknown[] };
 
+const openTicketData = { current: null as Record<string, unknown> | null };
+const reopen = vi.fn();
 vi.mock("@/modules/platform/hooks/useSupportTickets", () => ({
   useSupportTickets: () => ({ data: ticketsData.current, isLoading: false }),
-  useSupportTicket: () => ({ data: null, isLoading: true }),
+  useSupportTicket: () => ({ data: openTicketData.current, isLoading: !openTicketData.current }),
   useSupportTicketComments: () => ({ data: [] }),
   useCreateSupportTicket: () => ({ mutateAsync: createTicket, isPending: false }),
   useCreateSupportTicketComment: () => ({ mutateAsync: createComment, isPending: false }),
+  useReopenSupportTicket: () => ({ mutate: reopen, isPending: false }),
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -84,6 +87,8 @@ const artigo = (over: Record<string, unknown>) => ({
 
 beforeEach(() => {
   articlesData.current = [];
+  openTicketData.current = null;
+  reopen.mockClear();
   unreadData.current = {};
   markRead.mockClear();
   captureSupportContext.mockClear();
@@ -287,6 +292,54 @@ describe("SupportPanel", () => {
     await user.click(await screen.findByText("Kanban trava"));
 
     await waitFor(() => expect(markRead).toHaveBeenCalledWith("t1"));
+  });
+
+  const abrirThread = async (
+    user: ReturnType<typeof userEvent.setup>,
+    ticket: Record<string, unknown>,
+  ) => {
+    openTicketData.current = {
+      id: "t1",
+      title: "Kanban trava",
+      description: null,
+      status: "aberto",
+      author_user_id: "user-1",
+      created_at: new Date().toISOString(),
+      ...ticket,
+    };
+    ticketsData.current = [openTicketData.current];
+    setup();
+    await user.click(screen.getByText("abrir painel"));
+    await user.click(await screen.findByText("Kanban trava"));
+  };
+
+  // Sete dias de silencio confirmam o conserto. Ate la, reabrir e a unica
+  // transicao que o cliente pode fazer.
+  it("oferece reabrir quando o chamado está resolvido", async () => {
+    const user = userEvent.setup();
+    await abrirThread(user, { status: "resolvido" });
+
+    const botao = await screen.findByRole("button", { name: /reabrir/i });
+    await user.click(botao);
+    expect(reopen).toHaveBeenCalledWith("t1", expect.anything());
+  });
+
+  it("não oferece reabrir num chamado aberto", async () => {
+    const user = userEvent.setup();
+    await abrirThread(user, { status: "aberto" });
+
+    await screen.findByPlaceholderText("Responder…");
+    expect(screen.queryByRole("button", { name: /reabrir/i })).not.toBeInTheDocument();
+  });
+
+  // `fechado` e terminal: nem reabrir, nem responder.
+  it("um chamado fechado não oferece reabrir nem responder", async () => {
+    const user = userEvent.setup();
+    await abrirThread(user, { status: "fechado" });
+
+    expect(await screen.findByText(/foi fechado/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reabrir/i })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Responder…")).not.toBeInTheDocument();
   });
 
   it("cai no thread do chamado recém-aberto", async () => {

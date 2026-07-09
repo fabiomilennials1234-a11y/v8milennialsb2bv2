@@ -101,6 +101,36 @@ export function useCreateSupportTicket() {
 }
 
 /**
+ * Reabrir é a única transição de status que o cliente pode fazer. O trigger no
+ * banco recusa qualquer outra — inclusive `fechado`, que é terminal e chega só
+ * pelo cron, 7 dias depois de `resolvido`.
+ *
+ * `reopen_count` é incrementado pelo banco: um Chamado reaberto três vezes é
+ * evidência de que a correção nunca pegou, e esse sinal precisa somar.
+ */
+export function useReopenSupportTicket() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (ticketId: string) => {
+      const { data, error } = await supabase
+        .from("support_tickets")
+        .update({ status: "aberto" })
+        .eq("id", ticketId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as SupportTicket;
+    },
+    onSuccess: (_data, ticketId) => {
+      queryClient.invalidateQueries({ queryKey: [TICKETS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [COMMENTS_KEY, ticketId] });
+    },
+  });
+}
+
+/**
  * Os comentários que a RLS entrega. Notas internas do staff nunca chegam ao
  * cliente — o filtro está na policy de SELECT, não numa cláusula daqui.
  */
