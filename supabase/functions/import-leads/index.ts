@@ -50,6 +50,8 @@ interface ParsedLead {
   commitment_date?: string;
   contract_duration?: number;
   pipe_notes?: string;
+  /** Valores de campos personalizados (nome do campo → valor). Gravados em lead_custom_field_values. */
+  customFields?: Record<string, string>;
 }
 
 interface ImportPayload {
@@ -103,6 +105,55 @@ function getServiceClient() {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     { auth: { persistSession: false } },
   );
+}
+
+/**
+ * Carrega os campos personalizados da org: nome normalizado (lower/trim) → field_id.
+ * Usado para resolver o mapeamento `customFields` (por nome) para lead_custom_field_values.
+ */
+async function loadCustomFieldMap(
+  supabase: ReturnType<typeof createClient>,
+  organizationId: string,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const { data } = await supabase
+    .from("lead_custom_fields")
+    .select("id, field_name")
+    .eq("organization_id", organizationId);
+  for (const f of (data ?? []) as { id: string; field_name: string | null }[]) {
+    const name = (f.field_name ?? "").toLowerCase().trim();
+    if (name) map.set(name, f.id);
+  }
+  return map;
+}
+
+/**
+ * Persiste os valores de campos personalizados do lead em lead_custom_field_values.
+ * Upsert por (lead_id, field_id) — reimportar atualiza. Campos sem correspondência
+ * na org são ignorados (silenciosamente). Nunca lança: falha aqui não deve derrubar o lead.
+ */
+async function applyCustomFields(
+  supabase: ReturnType<typeof createClient>,
+  leadId: string,
+  customFields: Record<string, string> | undefined,
+  fieldMap: Map<string, string>,
+): Promise<void> {
+  if (!customFields || fieldMap.size === 0) return;
+  const rows: { lead_id: string; field_id: string; value: string }[] = [];
+  for (const [name, rawValue] of Object.entries(customFields)) {
+    const value = (rawValue ?? "").toString().trim();
+    if (!value) continue;
+    const fieldId = fieldMap.get(name.toLowerCase().trim());
+    if (!fieldId) continue;
+    rows.push({ lead_id: leadId, field_id: fieldId, value });
+  }
+  if (rows.length === 0) return;
+  const { error } = await supabase
+    .from("lead_custom_field_values")
+    .upsert(rows, { onConflict: "lead_id,field_id" });
+  if (error) {
+    console.error("[import-leads] applyCustomFields falhou", { leadId, error: error.message });
+  }
 }
 
 /**
@@ -353,6 +404,8 @@ async function importToCampaign(
   if (!campanhaId) throw new Error("campanha_id é obrigatório para importação em campanha");
   if (!stageId) throw new Error("stage_id é obrigatório para importação em campanha");
 
+  const customFieldMap = await loadCustomFieldMap(supabase, organizationId);
+
   // Pre-fetch existing leads by phone for dedup
   const phones = leads.filter((l) => l.phone).map((l) => formatPhone(l.phone!));
   const { data: existingLeads } = await supabase
@@ -498,6 +551,7 @@ async function importToCampaign(
             }
           }
 
+          await applyCustomFields(supabase, existingLead.id, lead.customFields, customFieldMap);
           if (formattedPhone) processedPhones.add(formattedPhone);
           continue;
         }
@@ -560,6 +614,7 @@ async function importToCampaign(
         }
 
         await supabase.from("lead_tags").insert({ lead_id: newLead.id, tag_id: tagId });
+        await applyCustomFields(supabase, newLead.id, lead.customFields, customFieldMap);
         if (formattedPhone) processedPhones.add(formattedPhone);
 
         report.created++;
@@ -658,6 +713,8 @@ async function importToFunnel(
 
   if (!destination) throw new Error("funnel_destination é obrigatório para importação em funil");
   if (!defaultStageKey) throw new Error("stage_key é obrigatório para importação em funil");
+
+  const customFieldMap = await loadCustomFieldMap(supabase, organizationId);
 
   const metricsPeriodAt =
     metrics_period_month != null && metrics_period_year != null
@@ -775,6 +832,9 @@ async function importToFunnel(
           report.created++;
           createdLeadIds.push(newLead.id);
         }
+
+        // Campos personalizados → lead_custom_field_values (upsert por lead+field)
+        await applyCustomFields(supabase, leadId, lead.customFields, customFieldMap);
 
         // Resolve stage
         const stageKeyForLead =
@@ -945,6 +1005,8 @@ async function importToCustomPipeline(
     .maybeSingle();
   if (!stageRow) throw new Error("Etapa padrão não encontrada ou não pertence a este pipeline");
 
+  const customFieldMap = await loadCustomFieldMap(supabase, organizationId);
+
   // Pre-fetch existing leads by phone (skip .in() with empty array — PostgREST rejects it)
   const phones = leads.filter((l) => l.phone).map((l) => formatPhone(l.phone!));
   const existingMap = new Map<string, { id: string; phone: string | null; name: string; company: string | null; email: string | null; faturamento: string | null; segment: string | null }>();
@@ -1045,6 +1107,9 @@ async function importToCustomPipeline(
           report.created++;
           createdLeadIds.push(newLead.id);
         }
+
+        // Campos personalizados → lead_custom_field_values (upsert por lead+field)
+        await applyCustomFields(supabase, leadId, lead.customFields, customFieldMap);
 
         // Resolve stage — match by name if stages provided, fallback to default
         const stageIdForLead = stages?.length
