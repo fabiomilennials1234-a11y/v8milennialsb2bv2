@@ -36,6 +36,40 @@ const REDACTED = "***REDACTED***";
 const BEARER_RE = /^(Bearer|Basic)\s+\S+/i;
 
 /**
+ * Chaves cujo valor é um telefone. Um telefone em `runtime_logs` é PII de um
+ * *lead do nosso cliente* — não do nosso cliente. Redigir por completo
+ * inviabilizaria correlacionar um log a uma conversa; deixar em claro é
+ * inaceitável. Mascaramos o miolo, preservando prefixo e sufixo.
+ *
+ * Credencial vence telefone: uma chave que case as duas listas é redigida
+ * inteira (`isSensitiveKey` é avaliado primeiro).
+ */
+const PHONE_KEY_PATTERNS = ["phone", "telefone", "remote_jid", "msisdn"];
+
+/** Menos que isto e o mascaramento revelaria o número inteiro. */
+const MIN_MASKABLE_DIGITS = 10;
+
+function isPhoneKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  return PHONE_KEY_PATTERNS.some((p) => lower.includes(p));
+}
+
+/**
+ * Mascara toda sequência longa de dígitos, mantendo os 4 primeiros e os 4
+ * últimos. Aplicado sobre a string inteira, preserva o sufixo de um JID
+ * (`@s.whatsapp.net`, `@g.us`) sem precisar conhecê-lo.
+ */
+function maskPhone(value: string): string {
+  let masked = false;
+  const out = value.replace(/\d{6,}/g, (digits) => {
+    if (digits.length < MIN_MASKABLE_DIGITS) return digits;
+    masked = true;
+    return digits.slice(0, 4) + "*".repeat(digits.length - 8) + digits.slice(-4);
+  });
+  return masked ? out : REDACTED;
+}
+
+/**
  * Returns true if the given key name should have its value redacted.
  * Match is case-insensitive substring: if the key contains any sensitive
  * pattern, it is redacted.
@@ -95,6 +129,8 @@ export function redactSecrets(input: unknown, _seen?: WeakSet<object>): unknown 
       } else {
         result[key] = REDACTED;
       }
+    } else if (isPhoneKey(key)) {
+      result[key] = typeof value === "string" ? maskPhone(value) : REDACTED;
     } else {
       result[key] = redactSecrets(value, seen);
     }
