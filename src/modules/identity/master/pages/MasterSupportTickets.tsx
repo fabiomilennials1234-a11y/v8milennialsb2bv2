@@ -37,6 +37,7 @@ import {
   type TicketStatus,
   type TicketTipo,
 } from "@/modules/platform/lib/support-ticket-draft";
+import { isTerminal } from "@/modules/platform/lib/ticket-lifecycle";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 import {
   useClaimSupportTicket,
@@ -274,8 +275,14 @@ function TicketRow({
           </Select>
         </TableCell>
         <TableCell onClick={(e) => e.stopPropagation()}>
+          {/*
+            `fechado` nao aparece: o fechamento e automatico, 7 dias apos
+            `resolvido`, e o banco recusa um fechamento manual. E um chamado ja
+            fechado e terminal — nao ha para onde levá-lo.
+          */}
           <Select
             value={ticket.status}
+            disabled={isTerminal(ticket.status)}
             onValueChange={(v) =>
               triage.mutate(
                 { ticketId: ticket.id, status: v as TicketStatus },
@@ -287,11 +294,13 @@ function TicketRow({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {(Object.keys(STATUS_LABELS_STAFF) as TicketStatus[]).map((s) => (
-                <SelectItem key={s} value={s}>
-                  {STATUS_LABELS_STAFF[s]}
-                </SelectItem>
-              ))}
+              {(Object.keys(STATUS_LABELS_STAFF) as TicketStatus[])
+                .filter((s) => !isTerminal(s) || ticket.status === s)
+                .map((s) => (
+                  <SelectItem key={s} value={s} disabled={isTerminal(s)}>
+                    {STATUS_LABELS_STAFF[s]}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
         </TableCell>
