@@ -29,8 +29,6 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import {
-  correlatePathToMessage,
-  escapeLike,
   isWhatsAppMediaPath,
   summarizeCandidates,
   type MediaCandidate,
@@ -38,12 +36,12 @@ import {
 
 // Retention window. Retry rescues media within ~14d, so 30d never races it.
 const RETENTION_DAYS = 30;
-// Max objects listed + deleted per invocation (bounds runtime).
-const MAX_FILES_PER_RUN = 2000;
+// Max objects listed + deleted per invocation (bounds runtime). Sized so a
+// single run stays under the edge wall-clock limit while draining the initial
+// backfill in a few invocations; daily steady-state has far fewer candidates.
+const MAX_FILES_PER_RUN = 25000;
 // Objects per storage remove() call.
-const DELETE_BATCH = 200;
-// message_id values per whatsapp_messages update (inbound correlation).
-const UPDATE_BATCH = 100;
+const DELETE_BATCH = 500;
 
 Deno.serve(
   withSentry("whatsapp-media-retention", async (req: Request): Promise<Response> => {
@@ -107,9 +105,9 @@ Deno.serve(
     // Defensive scope guard: never operate on a path outside whatsapp-media/.
     const candidates: MediaCandidate[] = [];
     let skippedOutOfScope = 0;
-    for (const row of (rawCandidates ?? []) as Array<{ path: string; size_bytes: number }>) {
+    for (const row of (rawCandidates ?? []) as Array<{ path: string; size: number }>) {
       if (isWhatsAppMediaPath(row.path)) {
-        candidates.push({ path: row.path, size_bytes: Number(row.size_bytes) || 0 });
+        candidates.push({ path: row.path, size_bytes: Number(row.size) || 0 });
       } else {
         skippedOutOfScope += 1;
       }
@@ -197,59 +195,30 @@ Deno.serve(
       }
     }
 
-    // ── Correlate deleted paths → mark messages expired ──────────────────
-    // Inbound: precise match by message_id (indexed), scoped by org.
-    // Outbound: match by media_url LIKE '%' || path, scoped by org.
-    const inboundByOrg = new Map<string, string[]>();
-    const outboundByOrg = new Map<string, string[]>();
-
-    for (const path of deletedPaths) {
-      const corr = correlatePathToMessage(path);
-      if (corr.kind === "inbound") {
-        const arr = inboundByOrg.get(corr.orgId) ?? [];
-        arr.push(corr.messageId);
-        inboundByOrg.set(corr.orgId, arr);
-      } else if (corr.kind === "outbound") {
-        const arr = outboundByOrg.get(corr.orgId) ?? [];
-        arr.push(corr.path);
-        outboundByOrg.set(corr.orgId, arr);
-      }
-    }
-
+    // ── Mark aged-out messages "expired" (set-based, by timestamp window) ──
+    // Storage paths do NOT embed a joinable message_id (the filename is
+    // `{type}_{hex}_{ts}.{ext}`), so per-path correlation is impossible. Mark
+    // by the message `timestamp` window instead: timestamp ≈ media age (verified
+    // within 1 day for every whatsapp-media message). The [30d, 45d) window is
+    // index-backed (idx_whatsapp_messages_timestamp) and only touches newly
+    // aged rows — cheap for the daily run. The UI trigger is
+    // media_expired === true, so nulling media_url is unnecessary.
     let messagesMarked = 0;
-
-    // Inbound updates — batched by message_id per org.
-    for (const [orgId, messageIds] of inboundByOrg) {
-      for (let i = 0; i < messageIds.length; i += UPDATE_BATCH) {
-        const ids = messageIds.slice(i, i + UPDATE_BATCH);
-        const { count, error } = await supabase
-          .from("whatsapp_messages")
-          .update({ media_url: null, media_expired: true }, { count: "exact" })
-          .eq("organization_id", orgId)
-          .in("message_id", ids)
-          .not("media_url", "is", null);
-        if (error) {
-          console.error(`[whatsapp-media-retention] inbound mark failed: ${error.message}`);
-        } else {
-          messagesMarked += count ?? 0;
-        }
-      }
-    }
-
-    // Outbound updates — one LIKE per path (rarer volume than inbound).
-    for (const [orgId, paths] of outboundByOrg) {
-      for (const path of paths) {
-        const { count, error } = await supabase
-          .from("whatsapp_messages")
-          .update({ media_url: null, media_expired: true }, { count: "exact" })
-          .eq("organization_id", orgId)
-          .like("media_url", `%${escapeLike(path)}`)
-          .not("media_url", "is", null);
-        if (error) {
-          console.error(`[whatsapp-media-retention] outbound mark failed: ${error.message}`);
-        } else {
-          messagesMarked += count ?? 0;
-        }
+    if (deletedPaths.length > 0) {
+      const nowMs = Date.now();
+      const cutoffIso = new Date(nowMs - RETENTION_DAYS * 86_400_000).toISOString();
+      const windowStartIso = new Date(nowMs - (RETENTION_DAYS + 15) * 86_400_000).toISOString();
+      const { count, error } = await supabase
+        .from("whatsapp_messages")
+        .update({ media_expired: true }, { count: "exact" })
+        .gte("timestamp", windowStartIso)
+        .lt("timestamp", cutoffIso)
+        .like("media_url", "%whatsapp-media/%")
+        .eq("media_expired", false);
+      if (error) {
+        console.error(`[whatsapp-media-retention] mark failed: ${error.message}`);
+      } else {
+        messagesMarked = count ?? 0;
       }
     }
 
