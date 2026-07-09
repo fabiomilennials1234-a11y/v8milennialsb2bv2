@@ -8,7 +8,11 @@ import type { PipelineStage } from "./usePipelineStages";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
-const MAX_STAGES = 20;
+// Fixed-slots cap: always call this many useStageSlot hooks, enable only the
+// active ones (see loop below). Boards with more active stages than this hide
+// the overflow columns' cards entirely. Raised 20→40 because orgs like Basic4u
+// run 25+ active stages (leads in stages 21-25 were invisible on the board).
+const MAX_STAGES = 40;
 
 /**
  * Filters applied to a paginated board. `search`, `responsibleId` and `tagIds`
