@@ -16,6 +16,7 @@ import { featureFlags } from "@/modules/platform/lib/feature-flags";
 import { useChatBubble } from "@/modules/communication/hooks/useChatBubble";
 import { useToast } from "@/hooks/use-toast";
 import { useViewport } from "@/shared/hooks/use-viewport";
+import { DockItem, DockOrder } from "@/modules/platform/components/dock/FloatingDock";
 import { ChatBubbleFab } from "./ChatBubbleFab";
 
 const LazyChatBubblePanel = lazy(() => import("./ChatBubblePanel"));
@@ -82,11 +83,13 @@ export function ChatBubble() {
 
   return (
     <>
-      <ChatBubbleFab
-        isOpen={showPanel}
-        unreadTotal={unreadTotal}
-        onClick={handleFabClick}
-      />
+      <DockItem order={DockOrder.chat}>
+        <ChatBubbleFab
+          isOpen={showPanel}
+          unreadTotal={unreadTotal}
+          onClick={handleFabClick}
+        />
+      </DockItem>
       <AnimatePresence>
         {showPanel && (
           <Suspense fallback={null}>

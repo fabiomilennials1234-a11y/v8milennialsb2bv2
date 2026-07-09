@@ -13,6 +13,8 @@ import { featureFlags } from "@/modules/platform/lib/feature-flags";
 import { ChatBubbleProvider } from "@/contexts/ChatBubbleContext";
 import { MobileChatProvider, useMobileChatContext } from "@/contexts/MobileChatContext";
 import { ChatBubble } from "@/modules/communication/components/chat/bubble";
+import { FloatingDock } from "@/modules/platform/components/dock/FloatingDock";
+import { SupportFab } from "@/modules/platform/components/support/SupportFab";
 import { SessionDeadBanner } from "@/modules/communication/components/whatsapp/SessionDeadBanner";
 import { QuickBlastProgressPanel } from "@/modules/leads/components/bulk-actions/QuickBlastProgressPanel";
 
@@ -133,6 +135,10 @@ function MainLayoutInner({ children }: MainLayoutProps) {
         shortcuts={globalShortcuts}
       />
 
+      {/* Um lugar só para os botões flutuantes. Antes, três componentes de três
+          módulos disputavam `fixed bottom-6 right-6` — ver FloatingDock.tsx. */}
+      <FloatingDock />
+      <SupportFab />
       {featureFlags.chatBubble && <ChatBubble />}
 
       <QuickBlastProgressPanel />

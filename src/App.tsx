@@ -112,6 +112,7 @@ import { CommandPaletteProvider } from "@/modules/platform/components/command/Co
 import { CommandPalette as CommandPaletteComponent } from "@/modules/platform/components/command/CommandPalette";
 import { GlobalShortcutsProvider } from "@/modules/platform/components/command/GlobalShortcutsProvider";
 import { SupportPanelProvider } from "@/modules/platform/components/support/SupportPanelProvider";
+import { FloatingDockProvider } from "@/modules/platform/components/dock/FloatingDock";
 import { SupportPanel } from "@/modules/platform/components/support/SupportPanel";
 
 const queryClient = new QueryClient({
@@ -709,15 +710,17 @@ const App = () => {
                       <PushPermissionPrompt />
                       {/* SupportPanelProvider envolve o palette: a ação
                           "Abrir chamado" do Cmd+K abre este painel. */}
-                      <SupportPanelProvider>
-                        <CommandPaletteProvider>
-                          <GlobalShortcutsProvider>
-                            <AppRoutes />
-                            <CommandPaletteComponent />
-                            <SupportPanel />
-                          </GlobalShortcutsProvider>
-                        </CommandPaletteProvider>
-                      </SupportPanelProvider>
+                      <FloatingDockProvider>
+                        <SupportPanelProvider>
+                          <CommandPaletteProvider>
+                            <GlobalShortcutsProvider>
+                              <AppRoutes />
+                              <CommandPaletteComponent />
+                              <SupportPanel />
+                            </GlobalShortcutsProvider>
+                          </CommandPaletteProvider>
+                        </SupportPanelProvider>
+                      </FloatingDockProvider>
                     </GlobalErrorBoundary>
                   </PipeOpsProvider>
                 </RealtimeOrgBridge>

@@ -51,16 +51,14 @@ function ChatBubbleFabBase({ isOpen, unreadTotal, onClick }: ChatBubbleFabProps)
       className={
         isOpen
           ? // Estado open: círculo compact 56×56
-            `fixed bottom-6 right-6 z-40
-             w-14 h-14 rounded-full
+            `w-14 h-14 rounded-full
              flex items-center justify-center
              text-primary-foreground
              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background
              transition-shadow duration-200
              motion-reduce:transition-none`
           : // Estado idle: pílula horizontal — chama atenção
-            `fixed bottom-6 right-6 z-40
-             h-14 px-5 rounded-full
+            `h-14 px-5 rounded-full
              flex items-center gap-2.5
              text-primary-foreground font-semibold text-[13px] tracking-tight
              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background

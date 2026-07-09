@@ -9,6 +9,7 @@ import { TabInteligencia } from "@/modules/analytics/components/dashboard/TabInt
 
 const TabAnalyticsV2 = lazy(() => import("@/modules/analytics/components/dashboard/TabAnalyticsV2").then(m => ({ default: m.TabAnalyticsV2 })));
 import { OraculoFloatingButton } from "@/modules/analytics/components/dashboard/OraculoFloatingButton";
+import { DockItem, DockOrder } from "@/modules/platform/components/dock/FloatingDock";
 import { OraculoChat } from "@/modules/analytics/components/dashboard/OraculoChat";
 import { useOraculoChat } from "@/modules/copilot/hooks/useOraculoChat";
 import { useAuth } from "@/modules/identity";
@@ -119,11 +120,13 @@ export default function Dashboard() {
         )}
       </Tabs>
 
-      <OraculoFloatingButton
-        remaining={oraculo.rateLimit.remaining}
-        isOpen={oraculo.isOpen}
-        onClick={() => oraculo.setIsOpen(!oraculo.isOpen)}
-      />
+      <DockItem order={DockOrder.oraculo}>
+        <OraculoFloatingButton
+          remaining={oraculo.rateLimit.remaining}
+          isOpen={oraculo.isOpen}
+          onClick={() => oraculo.setIsOpen(!oraculo.isOpen)}
+        />
+      </DockItem>
       <AnimatePresence>
         {oraculo.isOpen && (
           <OraculoChat
