@@ -629,7 +629,7 @@ Deno.serve(
 
     if (error) {
       await logRuntime({
-        module: "history-sync-worker",
+        module: "whatsapp",
         action: "fetch_queue",
         status: "error",
         errorMessage: error.message,
@@ -649,7 +649,7 @@ Deno.serve(
     }
 
     await logRuntime({
-      module: "history-sync-worker",
+      module: "whatsapp",
       action: "run",
       status: "success",
       payloadSnapshot: {

@@ -165,7 +165,7 @@ Deno.serve(
 
       await logRuntime({
         organizationId: orgId,
-        module: "blast-plan-control",
+        module: "campaign",
         action,
         status: "success",
         entityType: "blast_plans",
@@ -178,7 +178,7 @@ Deno.serve(
       const msg = (e as Error).message ?? "unknown error";
       await logRuntime({
         organizationId: orgId,
-        module: "blast-plan-control",
+        module: "campaign",
         action,
         status: "error",
         entityType: "blast_plans",

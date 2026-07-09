@@ -893,7 +893,7 @@ export async function persistMessage(
         organizationId: instance.organization_id,
         module: "webhook",
         action: "uazapi_group_message_skipped",
-        status: "ok",
+        status: "success",
         payloadSnapshot: {
           instance_id: instance.id,
           remote_jid: normalized.remote_jid,
@@ -948,7 +948,7 @@ export async function persistMessage(
       organizationId: instance.organization_id,
       module: "webhook",
       action: "uazapi_group_message_captured",
-      status: "ok",
+      status: "success",
       payloadSnapshot: {
         instance_id: instance.id,
         remote_jid: normalized.remote_jid,

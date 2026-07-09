@@ -264,7 +264,7 @@ Deno.serve(
 
     await logRuntime({
       organizationId: orgId,
-      module: "copilot-builder",
+      module: "copilot",
       action: "turn",
       status: "success",
       entityType: "copilot_agent",

@@ -170,7 +170,7 @@ Deno.serve(
 
       await logRuntime({
         organizationId: orgId,
-        module: "quick-blast-create",
+        module: "campaign",
         action: "created",
         status: "success",
         entityType: "uazapi_sender_jobs",
@@ -190,7 +190,7 @@ Deno.serve(
       const msg = (e as Error).message ?? "unknown error";
       await logRuntime({
         organizationId: orgId,
-        module: "quick-blast-create",
+        module: "campaign",
         action: "failed",
         status: "error",
         errorMessage: msg,

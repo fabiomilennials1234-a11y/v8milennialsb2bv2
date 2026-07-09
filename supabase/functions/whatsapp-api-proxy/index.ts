@@ -293,7 +293,7 @@ Deno.serve(
 
         await logRuntime({
           organizationId: callerOrgId,
-          module: "whatsapp-api-proxy",
+          module: "whatsapp",
           action: "createInstance",
           status: "success",
           entityType: "whatsapp_instances",
@@ -325,7 +325,7 @@ Deno.serve(
       if ((instance as WhatsAppInstance).organization_id !== callerOrgId) {
         await logRuntime({
           organizationId: callerOrgId,
-          module: "whatsapp-api-proxy",
+          module: "whatsapp",
           action: "cross_tenant_attempt",
           status: "error",
           payloadSnapshot: {
@@ -390,7 +390,7 @@ Deno.serve(
           if (deleteErr) {
             await logRuntime({
               organizationId: callerOrgId,
-              module: "whatsapp-api-proxy",
+              module: "whatsapp",
               action: "deleteInstance",
               status: "error",
               entityType: "whatsapp_instances",
@@ -416,7 +416,7 @@ Deno.serve(
 
           await logRuntime({
             organizationId: callerOrgId,
-            module: "whatsapp-api-proxy",
+            module: "whatsapp",
             action: "deleteInstance",
             status: "success",
             entityType: "whatsapp_instances",
@@ -455,7 +455,7 @@ Deno.serve(
           if (!resolved.ok || !resolved.instance) {
             await logRuntime({
               organizationId: callerOrgId,
-              module: "whatsapp-api-proxy",
+              module: "whatsapp",
               action: "strict_write_blocked",
               status: "error",
               entityType: "leads",
@@ -471,7 +471,7 @@ Deno.serve(
           if (resolved.instance.instanceId !== instanceId) {
             await logRuntime({
               organizationId: callerOrgId,
-              module: "whatsapp-api-proxy",
+              module: "whatsapp",
               action: "strict_write_instance_mismatch",
               status: "error",
               entityType: "leads",
@@ -498,7 +498,7 @@ Deno.serve(
             if (authErr instanceof WriteAuthorizationError) {
               await logRuntime({
                 organizationId: callerOrgId,
-                module: "whatsapp-api-proxy",
+                module: "whatsapp",
                 action: "strict_write_authz_denied",
                 status: "error",
                 entityType: "whatsapp_instances",
@@ -817,7 +817,7 @@ Deno.serve(
 
       await logRuntime({
         organizationId: callerOrgId,
-        module: "whatsapp-api-proxy",
+        module: "whatsapp",
         action,
         status: "error",
         errorMessage: msg,

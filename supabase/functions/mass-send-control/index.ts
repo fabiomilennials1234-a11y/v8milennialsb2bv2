@@ -93,7 +93,7 @@ Deno.serve(
 
       await logRuntime({
         organizationId: member.organization_id,
-        module: "mass-send-control",
+        module: "campaign",
         action,
         status: "success",
         entityType: "uazapi_sender_jobs",
@@ -104,7 +104,7 @@ Deno.serve(
       const msg = (e as Error).message ?? "unknown";
       await logRuntime({
         organizationId: member.organization_id,
-        module: "mass-send-control",
+        module: "campaign",
         action,
         status: "error",
         errorMessage: msg,

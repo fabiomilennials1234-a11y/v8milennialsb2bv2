@@ -146,7 +146,7 @@ Deno.serve(
         if (searchData.found) {
           await logRuntime({
             organizationId,
-            module: "cadastro-externo",
+            module: "lead",
             action: "push_client",
             status: "skipped",
             payloadSnapshot: { cnpj, existing_id: searchData.cliente_id },
@@ -198,7 +198,7 @@ Deno.serve(
         if (createRes.status === 409 && createData.cliente_id) {
           await logRuntime({
             organizationId,
-            module: "cadastro-externo",
+            module: "lead",
             action: "push_client",
             status: "skipped",
             payloadSnapshot: { cnpj, existing_id: createData.cliente_id },
@@ -218,7 +218,7 @@ Deno.serve(
         const errorMsg = createData.error || "Erro ao cadastrar cliente no sistema externo";
         await logRuntime({
           organizationId,
-          module: "cadastro-externo",
+          module: "lead",
           action: "push_client",
           status: "error",
           payloadSnapshot: { cnpj, nome_cliente },
@@ -237,7 +237,7 @@ Deno.serve(
       // ── 3. Success ────────────────────────────────────────
       await logRuntime({
         organizationId,
-        module: "cadastro-externo",
+        module: "lead",
         action: "push_client",
         status: "success",
         payloadSnapshot: { cnpj, nome_cliente, cliente_id: createData.cliente_id },
@@ -256,7 +256,7 @@ Deno.serve(
       const msg = err instanceof Error ? err.message : "Erro interno";
       await logRuntime({
         organizationId,
-        module: "cadastro-externo",
+        module: "lead",
         action: "push_client",
         status: "error",
         errorMessage: msg,

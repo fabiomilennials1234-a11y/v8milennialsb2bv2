@@ -112,7 +112,7 @@ Deno.serve(
 
         await logRuntime({
           organizationId: plan.organization_id,
-          module: "blast-plan-release",
+          module: "campaign",
           action: "lot_released",
           status: "success",
           entityType: "blast_plans",
@@ -130,7 +130,7 @@ Deno.serve(
         errors.push({ plan_id: plan.id!, error: msg });
         await logRuntime({
           organizationId: plan.organization_id,
-          module: "blast-plan-release",
+          module: "campaign",
           action: "lot_released",
           status: "error",
           entityType: "blast_plans",
