@@ -7,6 +7,7 @@ import {
   useCreateSupportTicket,
   useSupportTicketComments,
   useCreateSupportTicketComment,
+  useReopenSupportTicket,
 } from "./useSupportTickets";
 
 const orgMock = vi.fn();
@@ -216,5 +217,32 @@ describe("useCreateSupportTicketComment", () => {
     const { result } = renderHook(() => useCreateSupportTicketComment(), { wrapper: wrap(newQc()) });
 
     await expect(result.current.mutateAsync({ ticketId: "t1", body: "oi" })).rejects.toThrow(/autenticado/);
+  });
+});
+
+describe("useReopenSupportTicket", () => {
+  it("devolve o chamado a aberto", async () => {
+    ready();
+    authed();
+    mock.mockTable("support_tickets", [{ id: "t1", status: "resolvido" }]);
+    const { result } = renderHook(() => useReopenSupportTicket(), { wrapper: wrap(newQc()) });
+
+    await result.current.mutateAsync("t1");
+    expect(mock.getUpdated("support_tickets")[0].status).toBe("aberto");
+  });
+
+  // O contador é do banco. Um Chamado reaberto três vezes é evidência de que a
+  // correção nunca pegou, e esse sinal precisa somar — não ser sobrescrito por
+  // um cliente que mande `reopen_count: 1`.
+  it("não escreve reopen_count nem resolved_at", async () => {
+    ready();
+    authed();
+    mock.mockTable("support_tickets", [{ id: "t1", status: "resolvido" }]);
+    const { result } = renderHook(() => useReopenSupportTicket(), { wrapper: wrap(newQc()) });
+
+    await result.current.mutateAsync("t1");
+    const [row] = mock.getUpdated("support_tickets");
+    expect(row).not.toHaveProperty("reopen_count");
+    expect(row).not.toHaveProperty("resolved_at");
   });
 });
