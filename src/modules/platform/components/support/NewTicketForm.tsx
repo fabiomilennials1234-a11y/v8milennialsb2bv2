@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { Loader2, AlertTriangle, LifeBuoy, MessageCircleQuestion, Sparkles } from "lucide-react";
+import { Loader2, AlertTriangle, MessageCircleQuestion, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -182,12 +182,8 @@ export function NewTicketForm({ onCreated, onCancel }: Props) {
         <Button type="button" variant="ghost" onClick={onCancel} disabled={createTicket.isPending}>
           Cancelar
         </Button>
-        <Button type="submit" className="flex-1 gap-2" disabled={createTicket.isPending}>
-          {createTicket.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          ) : (
-            <LifeBuoy className="h-4 w-4" aria-hidden />
-          )}
+        <Button type="submit" className="flex-1 gap-2 font-semibold" disabled={createTicket.isPending}>
+          {createTicket.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
           Abrir chamado
         </Button>
       </div>
