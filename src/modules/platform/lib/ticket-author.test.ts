@@ -2,44 +2,34 @@ import { describe, it, expect } from "vitest";
 import { isFromOrganization, ticketMessageAuthor } from "./ticket-author";
 
 const AUTOR = "user-autor";
-const STAFF = "user-staff";
 const ADMIN = "user-admin";
 
 describe("ticketMessageAuthor", () => {
-  it("marca como 'voce' a mensagem de quem está lendo", () => {
-    expect(ticketMessageAuthor(AUTOR, AUTOR, AUTOR)).toBe("voce");
+  it("é 'suporte' quando veio do staff, independente de quem escreveu", () => {
+    expect(ticketMessageAuthor(true, AUTOR, ADMIN)).toBe("suporte");
+    // até se o autor do comentário for o próprio leitor: a origem manda.
+    expect(ticketMessageAuthor(true, ADMIN, ADMIN)).toBe("suporte");
   });
 
-  it("marca como 'suporte' quem não é o autor do chamado", () => {
-    expect(ticketMessageAuthor(STAFF, AUTOR, AUTOR)).toBe("suporte");
+  it("marca como 'voce' a mensagem da org escrita por quem está lendo", () => {
+    expect(ticketMessageAuthor(false, AUTOR, AUTOR)).toBe("voce");
   });
 
-  // O caso que a heurística ingênua "não é você ⇒ suporte" erra: o admin lê o
+  // O caso que a heurística ingênua "não é você ⇒ suporte" errava: o admin lê o
   // chamado de um membro e veria o próprio colega etiquetado como Torque.
-  it("um admin lendo o chamado de um membro vê o membro como autor, não como suporte", () => {
-    expect(ticketMessageAuthor(AUTOR, AUTOR, ADMIN)).toBe("autor");
+  it("um admin lendo a mensagem de um membro vê 'autor', nunca 'suporte'", () => {
+    expect(ticketMessageAuthor(false, AUTOR, ADMIN)).toBe("autor");
   });
 
-  it("o admin vê a mensagem do staff como suporte", () => {
-    expect(ticketMessageAuthor(STAFF, AUTOR, ADMIN)).toBe("suporte");
+  it("o admin vê a própria mensagem da org como sua", () => {
+    expect(ticketMessageAuthor(false, ADMIN, ADMIN)).toBe("voce");
   });
 
-  it("o admin vê a própria mensagem como sua", () => {
-    expect(ticketMessageAuthor(ADMIN, AUTOR, ADMIN)).toBe("voce");
-  });
-
-  // author_user_id é nullable: o autor pode ter saído da empresa.
-  it("trata autor removido como suporte apenas se não casar com ninguém", () => {
-    expect(ticketMessageAuthor(null, AUTOR, ADMIN)).toBe("suporte");
-    expect(ticketMessageAuthor(AUTOR, null, ADMIN)).toBe("suporte");
-  });
-
-  it("não casa nulo com nulo", () => {
-    expect(ticketMessageAuthor(null, null, undefined)).toBe("suporte");
-  });
-
-  it("não confunde viewer indefinido com autor indefinido", () => {
-    expect(ticketMessageAuthor(AUTOR, AUTOR, undefined)).toBe("autor");
+  // Um master escrevendo pelo painel do cliente (shadow) carimba from_staff=false
+  // → é mensagem da org, não do suporte.
+  it("mensagem de org sem casar com o leitor cai em 'autor', não em 'suporte'", () => {
+    expect(ticketMessageAuthor(false, AUTOR, undefined)).toBe("autor");
+    expect(ticketMessageAuthor(false, null, ADMIN)).toBe("autor");
   });
 });
 

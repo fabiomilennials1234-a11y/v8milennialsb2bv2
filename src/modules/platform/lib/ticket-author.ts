@@ -7,14 +7,21 @@
  */
 export type TicketMessageAuthor = "voce" | "autor" | "suporte";
 
+/**
+ * "Suporte" vem da ORIGEM (`fromStaff`, carimbado pelo console do master), nunca
+ * de "não é você". Deduzir suporte por exclusão etiquetaria o admin da própria
+ * Organização como Torque, e trocaria o papel de um master conforme ele escreve
+ * pelo console (staff) ou pelo painel do cliente em shadow (org). A identidade
+ * só separa "você" de "quem abriu" dentro da Organização.
+ */
 export function ticketMessageAuthor(
+  fromStaff: boolean,
   commentAuthorId: string | null,
-  ticketAuthorId: string | null,
   viewerId: string | undefined | null,
 ): TicketMessageAuthor {
+  if (fromStaff) return "suporte";
   if (commentAuthorId && viewerId && commentAuthorId === viewerId) return "voce";
-  if (commentAuthorId && ticketAuthorId && commentAuthorId === ticketAuthorId) return "autor";
-  return "suporte";
+  return "autor";
 }
 
 export const TICKET_AUTHOR_LABELS: Record<TicketMessageAuthor, string> = {

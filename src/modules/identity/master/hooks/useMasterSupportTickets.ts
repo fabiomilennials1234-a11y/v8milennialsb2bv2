@@ -197,6 +197,10 @@ export function useCreateStaffComment() {
           author_user_id: authorUserId,
           body: trimmed,
           is_internal: isInternal,
+          // Escrito pelo console do suporte: é do staff, seja resposta pública
+          // ou nota interna. É o que faz o thread do cliente rotular "Suporte
+          // Torque" mesmo quando o autor também é membro/dono de alguma org.
+          from_staff: true,
         })
         .select()
         .single();

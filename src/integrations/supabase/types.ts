@@ -12879,6 +12879,7 @@ export type Database = {
           author_user_id: string | null
           body: string
           created_at: string
+          from_staff: boolean
           id: string
           is_internal: boolean
           ticket_id: string
@@ -12887,6 +12888,7 @@ export type Database = {
           author_user_id?: string | null
           body: string
           created_at?: string
+          from_staff?: boolean
           id?: string
           is_internal?: boolean
           ticket_id: string
@@ -12895,6 +12897,7 @@ export type Database = {
           author_user_id?: string | null
           body?: string
           created_at?: string
+          from_staff?: boolean
           id?: string
           is_internal?: boolean
           ticket_id?: string
@@ -17346,6 +17349,10 @@ export type Database = {
         Returns: boolean
       }
       is_valid_timezone: { Args: { p_tz: string }; Returns: boolean }
+      lead_excluded_from_metrics: {
+        Args: { p_lead_id: string; p_org_id: string }
+        Returns: boolean
+      }
       lead_in_my_org: { Args: { p_lead_id: string }; Returns: boolean }
       link_agent_to_instance: {
         Args: { p_agent_id: string; p_instance_id: string }
