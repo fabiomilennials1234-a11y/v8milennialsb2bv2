@@ -170,6 +170,10 @@ export function useCreateSupportTicketComment() {
           ticket_id: ticketId,
           author_user_id: user.id,
           body: trimmed,
+          // Este é o painel do cliente: a mensagem é da Organização, nunca do
+          // suporte — mesmo quando um master a escreve em shadow mode. A origem
+          // é o que conta, não a identidade do autor.
+          from_staff: false,
           // `is_internal` é omitido de propósito: o default do banco é false e a
           // policy recusaria `true` vindo de um cliente. Enviar o campo faria
           // parecer que ele é do cliente escolher.

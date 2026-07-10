@@ -45,6 +45,9 @@ export function TicketThread({ ticketId, onBack }: Props) {
     markReadMutate(ticketId);
   }, [ticketId, markReadMutate]);
 
+  // O painel do cliente jamais mostra nota interna, seja quem for que o abra.
+  const publicComments = comments.filter((c) => !c.is_internal);
+
   const closed = ticket?.status === "fechado";
   const resolved = ticket?.status === "resolvido";
 
@@ -89,27 +92,29 @@ export function TicketThread({ ticketId, onBack }: Props) {
       <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
         {ticket.description && (
           <Bubble
-            author={ticketMessageAuthor(ticket.author_user_id, ticket.author_user_id, user?.id)}
+            author={ticketMessageAuthor(false, ticket.author_user_id, user?.id)}
             body={ticket.description}
             at={ticket.created_at}
           />
         )}
 
         {/*
-          Comentários internos do staff nunca chegam aqui: a policy de SELECT os
-          filtra. Não há nada a esconder nesta lista porque nada a esconder
-          chegou até ela.
+          Notas internas nunca aparecem no painel do cliente. A policy de SELECT
+          já as esconde do cliente real, mas o staff usa este mesmo painel (seu
+          próprio chamado, shadow mode) e para ele a policy as entrega — então o
+          filtro mora AQUI também. A regra do banco protege; esta protege a
+          experiência.
         */}
-        {comments.map((c) => (
+        {publicComments.map((c) => (
           <Bubble
             key={c.id}
-            author={ticketMessageAuthor(c.author_user_id, ticket.author_user_id, user?.id)}
+            author={ticketMessageAuthor(c.from_staff, c.author_user_id, user?.id)}
             body={c.body}
             at={c.created_at}
           />
         ))}
 
-        {comments.length === 0 && !ticket.description && (
+        {publicComments.length === 0 && !ticket.description && (
           <p className="pt-6 text-center text-xs text-muted-foreground">
             Ainda não há mensagens neste chamado.
           </p>

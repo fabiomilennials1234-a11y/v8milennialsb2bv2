@@ -11,11 +11,12 @@ const createComment = vi.fn();
 const ticketsData = { current: [] as unknown[] };
 
 const openTicketData = { current: null as Record<string, unknown> | null };
+const commentsData = { current: [] as unknown[] };
 const reopen = vi.fn();
 vi.mock("@/modules/platform/hooks/useSupportTickets", () => ({
   useSupportTickets: () => ({ data: ticketsData.current, isLoading: false }),
   useSupportTicket: () => ({ data: openTicketData.current, isLoading: !openTicketData.current }),
-  useSupportTicketComments: () => ({ data: [] }),
+  useSupportTicketComments: () => ({ data: commentsData.current }),
   useCreateSupportTicket: () => ({ mutateAsync: createTicket, isPending: false }),
   useCreateSupportTicketComment: () => ({ mutateAsync: createComment, isPending: false }),
   useReopenSupportTicket: () => ({ mutate: reopen, isPending: false }),
@@ -97,6 +98,7 @@ beforeEach(() => {
   toastError.mockClear();
   articlesData.current = [];
   openTicketData.current = null;
+  commentsData.current = [];
   reopen.mockClear();
   unreadData.current = {};
   markRead.mockClear();
@@ -339,6 +341,35 @@ describe("SupportPanel", () => {
 
     await screen.findByPlaceholderText("Responder…");
     expect(screen.queryByRole("button", { name: /reabrir/i })).not.toBeInTheDocument();
+  });
+
+  // Regressão: a nota interna do staff jamais aparece no painel do cliente,
+  // mesmo que a RLS a entregue a um master que usa este mesmo painel (chamado
+  // próprio / shadow). O filtro mora no componente, não só na policy.
+  it("nunca renderiza nota interna no painel do cliente", async () => {
+    const user = userEvent.setup();
+    const now = new Date().toISOString();
+    commentsData.current = [
+      { id: "c1", body: "resposta publica do suporte", is_internal: false, from_staff: true, author_user_id: "staff-1", created_at: now },
+      { id: "c2", body: "NOTA INTERNA SECRETA", is_internal: true, from_staff: true, author_user_id: "staff-1", created_at: now },
+    ];
+    await abrirThread(user, { status: "aberto" });
+
+    expect(await screen.findByText("resposta publica do suporte")).toBeInTheDocument();
+    expect(screen.queryByText("NOTA INTERNA SECRETA")).not.toBeInTheDocument();
+  });
+
+  // Regressão: a resposta do staff (from_staff) é etiquetada "Suporte Torque",
+  // por origem — não por identidade.
+  it("etiqueta a resposta do staff como Suporte Torque", async () => {
+    const user = userEvent.setup();
+    commentsData.current = [
+      { id: "c1", body: "aqui e o suporte", is_internal: false, from_staff: true, author_user_id: "staff-1", created_at: new Date().toISOString() },
+    ];
+    await abrirThread(user, { status: "aberto" });
+
+    expect(await screen.findByText("aqui e o suporte")).toBeInTheDocument();
+    expect(screen.getByText(/Suporte Torque/)).toBeInTheDocument();
   });
 
   // `fechado` e terminal: nem reabrir, nem responder.
