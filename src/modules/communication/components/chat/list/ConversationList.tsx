@@ -73,6 +73,18 @@ interface ConversationListProps {
   onOpenInstances?: () => void;
   /** Modo de densidade para altura estimada dos itens. */
   density?: DensityMode;
+  // ─── Filtro por vendedor ────────────────────────────────────────────────────
+  /** Valor atual: "all" | "mine" | "unassigned" | <teamMemberId>. */
+  vendorFilter: string;
+  onVendorFilterChange: (value: string) => void;
+  /** Vendedores selecionáveis (membros ativos da org). */
+  vendorOptions: { id: string; name: string }[];
+  /** Resolve a qual vendedor (team_member id) a conversa pertence — via lead. */
+  resolveContactVendorId: (contact: ChatContact) => string | null;
+  /** team_member id do usuário logado — habilita a opção "Minhas conversas". */
+  currentTeamMemberId: string | null;
+  /** Só admin/master enxerga a opção "Não atribuídas". */
+  canSeeUnassigned: boolean;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -106,6 +118,12 @@ export function ConversationList({
   onRemoveTag,
   onOpenInstances,
   density = "comfortable",
+  vendorFilter,
+  onVendorFilterChange,
+  vendorOptions,
+  resolveContactVendorId,
+  currentTeamMemberId,
+  canSeeUnassigned,
 }: ConversationListProps) {
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const { isMobile } = useViewport();
@@ -113,6 +131,17 @@ export function ConversationList({
   const [mobileFilter, setMobileFilter] = useState<MobileChatFilter>("all");
 
   const filteredContacts = contacts.filter((c) => {
+    // Filtro por vendedor (aplica em mobile e desktop). "all" = sem filtro.
+    if (vendorFilter !== "all") {
+      const vendorId = resolveContactVendorId(c);
+      if (vendorFilter === "mine") {
+        if (vendorId !== currentTeamMemberId) return false;
+      } else if (vendorFilter === "unassigned") {
+        if (vendorId) return false;
+      } else if (vendorId !== vendorFilter) {
+        return false;
+      }
+    }
     // Mobile filter mapping
     if (isMobile) {
       if (mobileFilter === "groups") {
@@ -187,6 +216,11 @@ export function ConversationList({
           activeFilter={mobileFilter}
           onFilterChange={setMobileFilter}
           unreadCount={unreadCount}
+          vendorFilter={vendorFilter}
+          onVendorFilterChange={onVendorFilterChange}
+          vendorOptions={vendorOptions}
+          currentTeamMemberId={currentTeamMemberId}
+          canSeeUnassigned={canSeeUnassigned}
         />
       ) : (
       <div className="p-3 border-b bg-background shrink-0">
@@ -247,6 +281,37 @@ export function ConversationList({
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-9 h-9 bg-background"
           />
+        </div>
+
+        {/* ─── Filtro por vendedor ─────────────────────────────────────────── */}
+        <div className="mt-2">
+          <Select value={vendorFilter} onValueChange={onVendorFilterChange}>
+            <SelectTrigger
+              className={cn(
+                "h-9 w-full bg-background",
+                vendorFilter !== "all" && "border-primary/50 text-primary",
+              )}
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                <Users className="w-3.5 h-3.5 shrink-0" />
+                <SelectValue placeholder="Vendedor" />
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os vendedores</SelectItem>
+              {currentTeamMemberId && (
+                <SelectItem value="mine">Minhas conversas</SelectItem>
+              )}
+              {vendorOptions.map((v) => (
+                <SelectItem key={v.id} value={v.id}>
+                  {v.name}
+                </SelectItem>
+              ))}
+              {canSeeUnassigned && (
+                <SelectItem value="unassigned">Não atribuídas</SelectItem>
+              )}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex items-center justify-between mt-2">
