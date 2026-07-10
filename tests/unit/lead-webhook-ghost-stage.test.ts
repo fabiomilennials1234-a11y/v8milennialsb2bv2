@@ -26,8 +26,8 @@ vi.mock("https://deno.land/std@0.168.0/http/server.ts", () => ({
   },
 }));
 
-vi.mock("../../supabase/functions/_shared/sentry.ts", () => ({
-  withSentry: (_name: string, handler: any) => handler,
+vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({
+  withErrorBoundary: (_name: string, handler: any) => handler,
 }));
 
 const state = vi.hoisted(() => ({

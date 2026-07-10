@@ -36,8 +36,8 @@ let activeSb: any = null;
 vi.mock("https://esm.sh/@supabase/supabase-js@2", () => ({
   createClient: () => activeSb,
 }));
-vi.mock("../../supabase/functions/_shared/sentry.ts", () => ({
-  withSentry: (_n: string, h: any) => h,
+vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({
+  withErrorBoundary: (_n: string, h: any) => h,
 }));
 vi.mock("../../supabase/functions/_shared/cors.ts", () => ({ getCorsHeaders: () => ({}) }));
 vi.mock("../../supabase/functions/_shared/security-headers.ts", () => ({ withSecurityHeaders: (h: any) => h }));

@@ -37,6 +37,9 @@ export default defineConfig({
       'src/modules/**/VariableInserter.test.tsx',
       'src/modules/**/TimelineItem.test.tsx',
       'src/modules/**/usePaginatedPipeline.test.tsx',
+      // Importa `./permissions`, que mudou para `modules/identity/permissions/lib`.
+      // `tests/unit/assert-permission.test.ts` ja cobre o mesmo assertPermission.
+      'src/lib/permissions.test.tsx',
     ],
     coverage: {
       provider: 'v8',
