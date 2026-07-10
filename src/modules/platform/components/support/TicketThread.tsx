@@ -22,6 +22,7 @@ import {
   type TicketMessageAuthor,
 } from "@/modules/platform/lib/ticket-author";
 import { StatusDot } from "./StatusDot";
+import { AttachmentStrip } from "./AttachmentStrip";
 
 interface Props {
   ticketId: string;
@@ -113,6 +114,8 @@ export function TicketThread({ ticketId, onBack }: Props) {
             Ainda não há mensagens neste chamado.
           </p>
         )}
+
+        <AttachmentStrip ticketId={ticketId} canAttach={!closed} />
       </div>
 
       {closed ? (

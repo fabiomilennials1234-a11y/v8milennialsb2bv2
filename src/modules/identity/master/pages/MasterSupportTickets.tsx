@@ -45,6 +45,7 @@ import {
   groupByDefect,
   normalizeDefectUrl,
 } from "@/modules/platform/lib/defect-url";
+import { AttachmentStrip } from "@/modules/platform/components/support/AttachmentStrip";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 import {
   useClaimSupportTicket,
@@ -548,6 +549,9 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
         )}
 
         <DefectField ticket={ticket} />
+
+        {/* O staff vê o print, mas não anexa: a evidência é do cliente. */}
+        <AttachmentStrip ticketId={ticket.id} canAttach={false} />
 
         {clientErrors.length > 0 && (
           <div className="space-y-1.5">

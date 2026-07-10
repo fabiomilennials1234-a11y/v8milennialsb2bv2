@@ -21,6 +21,13 @@ vi.mock("@/modules/platform/hooks/useSupportTickets", () => ({
   useReopenSupportTicket: () => ({ mutate: reopen, isPending: false }),
 }));
 
+// O thread renderiza a tira de anexos, que fala com o Storage. Ela tem testes
+// proprios em AttachmentStrip.test.tsx.
+vi.mock("@/modules/platform/hooks/useTicketAttachments", () => ({
+  useTicketAttachments: () => ({ data: [] }),
+  useUploadTicketAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
 const toastError = vi.fn();
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: (...a: unknown[]) => toastError(...a) } }));
 
