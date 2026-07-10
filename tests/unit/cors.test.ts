@@ -60,4 +60,14 @@ describe("getCorsHeaders", () => {
     expect(headers["Access-Control-Allow-Headers"]).toContain("x-cron-secret");
     expect(headers["Access-Control-Allow-Headers"]).toContain("x-webhook-key");
   });
+
+  // Regression: createTracedFetch (src/core/trace/request-trace.ts) stamps these
+  // on every supabase client call, functions.invoke included. If the allowlist
+  // omits them, the browser blocks the invoke POST on preflight and surfaces
+  // "Failed to send a request to the Edge Function".
+  it("allows x-torque-session-id and x-torque-request-id trace headers", () => {
+    const headers = getCorsHeaders();
+    expect(headers["Access-Control-Allow-Headers"]).toContain("x-torque-session-id");
+    expect(headers["Access-Control-Allow-Headers"]).toContain("x-torque-request-id");
+  });
 });
