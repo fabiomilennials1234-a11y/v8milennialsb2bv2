@@ -103,7 +103,12 @@ export function CustomPipelineKanban({
 
   // Transforma CustomPipeEntry â†’ LeadCardData
   const transformToCard = (entry: CustomPipeEntry): LeadCardData => {
-    const lead = entry.lead;
+    const lead = entry.lead as any;
+    // Responsável: prioriza o dono real do lead (responsible → closer → sdr);
+    // cai pro assigned_to da entry só quando o lead não tem nenhum vínculo.
+    const responsibleName =
+      lead?.responsible?.name || lead?.closer?.name || lead?.sdr?.name ||
+      entry.assigned_profile?.full_name || null;
     return {
       id: entry.id,
       name: lead?.name || "Sem nome",
@@ -111,8 +116,14 @@ export function CustomPipelineKanban({
       phone: lead?.phone || null,
       email: lead?.email || null,
       rating: lead?.rating || 0,
-      responsible: entry.assigned_profile?.full_name || null,
       origin: lead?.origin,
+      urgency: lead?.urgency || null,
+      faturamento: lead?.faturamento ?? null,
+      responsible: responsibleName,
+      preSaleResponsible: responsibleName ? { name: responsibleName, avatar_url: lead?.responsible?.avatar_url ?? null } : null,
+      avatarUrl: lead?.avatar_url || null,
+      preQualTier: lead?.pre_qualification_tier || null,
+      qualTier: lead?.qualification_tier || null,
       tags: lead?.lead_tags?.map((lt: any) => ({ name: lt.tag?.name, color: lt.tag?.color || "#888" })).filter((t: any) => t.name) || [],
       createdAt: entry.created_at,
       notes: entry.notes,
@@ -171,6 +182,7 @@ export function CustomPipelineKanban({
         <LeadCard
           lead={card}
           variant="custom"
+          showValue
           selected={bulk.isSelected(card.leadId || "")}
           onSelect={(e) => {
             const lid = card.leadId || "";
