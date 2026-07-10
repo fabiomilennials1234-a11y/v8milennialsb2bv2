@@ -162,6 +162,10 @@ verify_jwt = false
 [functions.tinyerp-webhook]
 verify_jwt = false
 
+# support-notify-staff: chamado por trigger pg_net; autenticação via x-cron-secret
+[functions.support-notify-staff]
+verify_jwt = false
+
 # erp-order-webhook: recebe pedidos do ERP e cria upsell_orders (auth via x-webhook-secret)
 [functions.erp-order-webhook]
 verify_jwt = false
