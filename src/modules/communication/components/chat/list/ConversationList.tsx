@@ -216,6 +216,11 @@ export function ConversationList({
           activeFilter={mobileFilter}
           onFilterChange={setMobileFilter}
           unreadCount={unreadCount}
+          vendorFilter={vendorFilter}
+          onVendorFilterChange={onVendorFilterChange}
+          vendorOptions={vendorOptions}
+          currentTeamMemberId={currentTeamMemberId}
+          canSeeUnassigned={canSeeUnassigned}
         />
       ) : (
       <div className="p-3 border-b bg-background shrink-0">
