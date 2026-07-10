@@ -7,7 +7,7 @@
  */
 
 import { assertEquals } from "jsr:@std/assert@^1.0.0";
-import { resolveVariables, isRetryableSendFailure } from "./whatsapp-helpers.ts";
+import { resolveVariables, isRetryableSendFailure, isInstanceLive } from "./whatsapp-helpers.ts";
 
 /**
  * Minimal fake of the Supabase query builder used by resolveVariables.
@@ -95,4 +95,28 @@ Deno.test("isRetryableSendFailure — pre-send blocks are retryable (message nev
   assertEquals(isRetryableSendFailure("WhatsApp send failed: Circuit breaker open for /send/text until 2026-07-07T13:16"), true);
   assertEquals(isRetryableSendFailure("WhatsApp instance not available"), true);
   assertEquals(isRetryableSendFailure("Rate limit exceeded for instance abc"), true);
+});
+
+/**
+ * isInstanceLive — the liveness predicate that gates BOTH the org-default
+ * fallback and (new) the pinned-instance branch in getWhatsAppInstance. A node
+ * that pins an instance later logged out or deleted at the provider (org
+ * 163874dd: extinct Evolution instance) must NOT be used blindly — the pin only
+ * counts when the session is genuinely live. `status` freezes at "connected"
+ * after a remote logout; `session_dead_since` (watchdog) is the real verdict.
+ */
+Deno.test("isInstanceLive — connected with no dead session is live", () => {
+  assertEquals(isInstanceLive({ status: "connected", session_dead_since: null }), true);
+  assertEquals(isInstanceLive({ status: "open", session_dead_since: null }), true);
+  assertEquals(isInstanceLive({ status: "connected" }), true); // undefined dead_since
+});
+
+Deno.test("isInstanceLive — dead session or non-connected status is not live", () => {
+  // status frozen at "connected" but the watchdog flagged the session dead (remote logout)
+  assertEquals(isInstanceLive({ status: "connected", session_dead_since: "2026-07-07T20:10:00Z" }), false);
+  assertEquals(isInstanceLive({ status: "disconnected", session_dead_since: null }), false);
+  assertEquals(isInstanceLive({ status: "connecting", session_dead_since: null }), false);
+  assertEquals(isInstanceLive({ status: null, session_dead_since: null }), false);
+  assertEquals(isInstanceLive(null), false);
+  assertEquals(isInstanceLive(undefined), false);
 });

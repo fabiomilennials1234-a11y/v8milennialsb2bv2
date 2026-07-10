@@ -11,6 +11,23 @@ import type { ActionResult } from "./types.ts";
 
 // ─── WhatsApp instance resolution ──────────────────────────────────────────
 
+/**
+ * A WhatsApp instance is "live" (safe to send from) when the provider webhook
+ * reports it connected AND the watchdog has not recorded a dead session.
+ *
+ * `status` alone is unreliable: it freezes at "connected" after a remote logout
+ * from another device — the real verdict is `session_dead_since`, set by
+ * whatsapp-session-watchdog. This mirrors the org-default fallback filter below
+ * and the frontend's deriveInstanceStatus().
+ */
+export function isInstanceLive(
+  inst: { status?: string | null; session_dead_since?: string | null } | null | undefined,
+): boolean {
+  if (!inst) return false;
+  const connected = inst.status === "open" || inst.status === "connected";
+  return connected && inst.session_dead_since == null;
+}
+
 export async function getWhatsAppInstance(
   supabase: SupabaseClient,
   organizationId: string,
@@ -48,7 +65,23 @@ export async function getWhatsAppInstance(
       .select("*")
       .eq("id", instanceId)
       .maybeSingle();
-    resolved = data;
+    // Only honour the pinned instance if its session is actually live. A node can
+    // pin an instance that was later logged out, or (Evolution→Uazapi migration)
+    // deleted at the provider — sending to it is a guaranteed 5xx/404 that the
+    // executor then retries into a noisy "outage". When the pin is dead, fall
+    // through to the org-default live-instance fallback below instead of using it
+    // blindly. (org 163874dd: 83 failed workflow execs/7d from a node pinned to an
+    // extinct Evolution instance — this routes them to the org's one live one.)
+    if (data && isInstanceLive(data)) {
+      resolved = data;
+    } else if (data) {
+      console.warn(
+        "[action-handler] pinned instance %s not live (status=%s, dead_since=%s) — falling back to org-default",
+        instanceId,
+        (data as { status?: string }).status,
+        (data as { session_dead_since?: string }).session_dead_since,
+      );
+    }
   }
 
   if (!resolved) {
