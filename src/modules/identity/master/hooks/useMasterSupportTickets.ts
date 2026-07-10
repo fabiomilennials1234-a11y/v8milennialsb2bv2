@@ -31,6 +31,8 @@ export interface MasterTicketFilters {
   organizationId?: string;
   /** `true` mostra só os que ninguém pegou. */
   unassigned?: boolean;
+  /** Todos os chamados de um mesmo defeito — o link da issue do GitHub. */
+  defectUrl?: string;
 }
 
 const QUEUE_KEY = "master-support-tickets";
@@ -53,6 +55,7 @@ export function useMasterSupportTickets(filters: MasterTicketFilters = {}) {
       if (filters.severidade) query = query.eq("severidade", filters.severidade);
       if (filters.organizationId) query = query.eq("organization_id", filters.organizationId);
       if (filters.unassigned) query = query.is("assigned_master_user_id", null);
+      if (filters.defectUrl) query = query.eq("defect_url", filters.defectUrl);
 
       const { data, error } = await query;
       if (error) throw error;
@@ -106,6 +109,8 @@ export function useTriageSupportTicket() {
       tipo?: TicketTipo;
       severidade?: TicketSeveridade;
       status?: TicketStatus;
+      /** `null` desvincula. O trigger recusa `defect_url` vinda do cliente. */
+      defect_url?: string | null;
     }) => {
       const { data, error } = await supabase
         .from("support_tickets")
