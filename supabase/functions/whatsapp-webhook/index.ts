@@ -34,6 +34,11 @@ import {
 } from "../_shared/whatsapp-media.ts";
 import { timingSafeCompare, checkRateLimitPersistent } from "../_shared/auth.ts";
 import { extractOwnerNumber } from "../_shared/whatsapp-owner.ts";
+import {
+  DLQ_REPLAY_MAX_ATTEMPTS,
+  makePoisonChecker,
+  POISON_DROP_LOG_SAMPLE,
+} from "./poison-denylist.ts";
 
 // ============================================================================
 // Config
@@ -57,6 +62,34 @@ const MEDIA_PERSIST_TIMEOUT_MS = 25_000;
 // ============================================================================
 
 const rateLimitState = new Map<string, { count: number; resetAt: number }>();
+
+// ============================================================================
+// Poison-token early-drop (ERR-4) — ghost instances still webhook-bound on the
+// Uazapi side. Verdict derived from the DLQ itself (see poison-denylist.ts);
+// same per-isolate lifetime as rateLimitState above.
+// ============================================================================
+
+const isPoisonToken = makePoisonChecker({
+  countExhausted: async (token) => {
+    try {
+      const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { count, error } = await supabase
+        .from("whatsapp_webhook_dlq")
+        .select("id", { count: "exact", head: true })
+        .eq("reason", "unknown_instance")
+        .is("resolved_at", null)
+        .gte("attempts", DLQ_REPLAY_MAX_ATTEMPTS)
+        .eq("payload->>token", token);
+      if (error) return null;
+      return count ?? 0;
+    } catch {
+      return null;
+    }
+  },
+});
+let poisonDropsSinceBoot = 0;
 
 function checkRateLimit(ip: string): { allowed: boolean; remaining: number } {
   const now = Date.now();
@@ -1444,6 +1477,25 @@ Deno.serve(
       }
     }
     if (!instance) {
+      // ERR-4 early-drop: a token whose DLQ rows already exhausted replay will
+      // never resolve — 200 without enqueueing (no DLQ row, no error log).
+      // Sampled "skipped" log keeps the drop volume observable in runtime_logs.
+      if (uazapiToken && (await isPoisonToken(uazapiToken))) {
+        poisonDropsSinceBoot += 1;
+        if (poisonDropsSinceBoot % POISON_DROP_LOG_SAMPLE === 1) {
+          await logRuntime({
+            module: "webhook",
+            action: "uazapi_unknown_instance_dropped",
+            status: "skipped",
+            payloadSnapshot: {
+              event,
+              instance_ref: uazapiToken.slice(0, 8),
+              drops_since_boot: poisonDropsSinceBoot,
+            },
+          });
+        }
+        return genericResponse(200);
+      }
       await logRuntime({
         module: "webhook",
         action: "uazapi_unknown_instance",
