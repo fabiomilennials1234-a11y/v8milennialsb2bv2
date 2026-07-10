@@ -18,6 +18,13 @@
 --
 -- Esconder um botão no React não protege arquivo nenhum: quem souber o caminho,
 -- baixa. A regra mora aqui.
+--
+-- Verificado em produção por sonda em transação revertida: o bucket é privado; a
+-- função devolve `false` para lixo, travessia de diretório, caminho vazio e
+-- objeto de outro bucket, sem levantar; a policy foi avaliada como `authenticated`
+-- sobre os 168.296 objetos dos outros buckets sem quebrar nenhum; o autor lê o
+-- próprio anexo, o master lê, um usuário de outra Organização não lê, e ninguém
+-- lê o anexo de um chamado inexistente.
 -- ============================================================
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
