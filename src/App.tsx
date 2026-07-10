@@ -701,6 +701,7 @@ function AppRoutes() {
         <Route path="copilot-toggle-audit" element={<CopilotToggleAudit />} />
         <Route path="onboarding" element={<MasterOnboarding />} />
         <Route path="meta-assets" element={<MasterMetaAssets />} />
+        <Route path="support-tickets" element={<MasterSupportTickets />} />
         <Route path="stage-roles" element={<MasterStageRoleReview />} />
       </Route>
 
