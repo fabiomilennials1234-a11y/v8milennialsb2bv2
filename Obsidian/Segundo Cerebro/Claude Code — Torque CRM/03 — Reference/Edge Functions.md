@@ -21,9 +21,11 @@ Toda edge function segue:
 
 ```typescript
 import { withSentry } from "../_shared/sentry.ts";
+import { Deno } from "deno-types";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders, getCorsHeaders } from "../_shared/cors.ts";
 
-Deno.serve(withSentry('nome-da-funcao', async (req) => {
+Deno.serve(withErrorBoundary('nome-da-funcao', async (req) => {
   // OPTIONS early return
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: withSecurityHeaders(getCorsHeaders(req)) });
