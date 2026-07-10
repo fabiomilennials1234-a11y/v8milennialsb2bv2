@@ -104,8 +104,13 @@ describe("ActivityFeed day grouping (issue #311)", () => {
       },
     });
     renderFeed();
-    const hojeKey = new Date(today).toISOString().slice(0, 10);
-    const ontemKey = y.toISOString().slice(0, 10);
+    // O componente agrupa pela data LOCAL (`format` da date-fns). Montar a
+    // chave com `toISOString()` usaria a data UTC, e o teste falhava das 21h a
+    // meia-noite no fuso do Brasil — invisivel no CI, que roda em UTC.
+    const localKey = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const hojeKey = localKey(new Date(today));
+    const ontemKey = localKey(y);
     const todayGroup = screen.getByTestId(`activity-day-${hojeKey}`);
     const yGroup = screen.getByTestId(`activity-day-${ontemKey}`);
     expect(within(todayGroup).getByText("Hoje")).toBeInTheDocument();
