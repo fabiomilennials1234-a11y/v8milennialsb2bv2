@@ -1,33 +1,12 @@
-import * as Sentry from "@sentry/react";
 import { createRoot } from "react-dom/client";
+import { installClientErrorCapture } from "./core/observability/client-error-buffer";
 import App from "./App.tsx";
 import "./index.css";
 
-Sentry.init({
-  dsn: import.meta.env.VITE_SENTRY_DSN,
-  environment: import.meta.env.MODE,
-  integrations: [
-    Sentry.browserTracingIntegration(),
-    Sentry.replayIntegration({ maskAllText: true }),
-  ],
-  tracesSampleRate: 1.0,
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1.0,
-  beforeSend(event) {
-    if (event.request?.data) {
-      event.request.data = "[REDACTED]";
-    }
-    if (event.breadcrumbs) {
-      event.breadcrumbs = event.breadcrumbs.map((b) => {
-        if (b.category === "fetch" || b.category === "xhr") {
-          return { ...b, data: { ...b.data, request_body: undefined, response_body: undefined } };
-        }
-        return b;
-      });
-    }
-    return event;
-  },
-});
+// Captura os erros que ninguem tratou. Sao a metade da observabilidade que
+// `runtime_logs` nao ve: RLS, constraint, render. Anexados a um Chamado
+// quando o usuario abre um. Ver docs/adr/0017.
+installClientErrorCapture();
 
 // Usuários com index.html cacheado de um deploy anterior apontam para chunks
 // hashados que não existem mais (nginx agora devolve 404 nesses assets).

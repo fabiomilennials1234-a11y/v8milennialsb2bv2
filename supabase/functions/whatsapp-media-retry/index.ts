@@ -12,14 +12,14 @@
  *   - For each row, call `downloadAndPersistMedia` from the shared helper.
  *   - On success: stamp resolved_at + storage_path.
  *   - On failure: increment attempts + stamp last_error. After MAX_ATTEMPTS
- *     the row is left for manual review (Sentry critical).
+ *     the row is left for manual review (logged as critical).
  *
  * Schedule: every 2 minutes via pg_cron.
  * Auth: x-cron-secret or service_role.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
@@ -43,7 +43,7 @@ type MediaJobRow = {
 };
 
 Deno.serve(
-  withSentry("whatsapp-media-retry", async (req: Request): Promise<Response> => {
+  withErrorBoundary("whatsapp-media-retry", async (req: Request): Promise<Response> => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
@@ -137,7 +137,7 @@ Deno.serve(
     await logRuntime({
       module: "webhook",
       action: "media_retry_run",
-      status: "ok",
+      status: "success",
       payloadSnapshot: { total, resolved, still_failing: stillFailing, exhausted },
     });
 

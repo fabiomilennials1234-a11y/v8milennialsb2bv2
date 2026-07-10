@@ -3,7 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 
@@ -36,7 +36,7 @@ async function fetchGraphProfile(
   };
 }
 
-Deno.serve(withSentry("meta-conversation-profile", async (req) => {
+Deno.serve(withErrorBoundary("meta-conversation-profile", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   const headers = { ...corsHeaders, "Content-Type": "application/json" };
 

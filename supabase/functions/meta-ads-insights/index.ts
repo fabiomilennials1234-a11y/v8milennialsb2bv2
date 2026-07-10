@@ -18,7 +18,7 @@
 
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { logRuntime } from "../_shared/logger.ts";
 
 const GRAPH_API_VERSION = "v21.0";
@@ -40,7 +40,7 @@ interface MetaInsightRow {
   action_values?: Array<{ action_type: string; value: string }>;
 }
 
-Deno.serve(withSentry("meta-ads-insights", async (req) => {
+Deno.serve(withErrorBoundary("meta-ads-insights", async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
   const headers = withSecurityHeaders({
     ...corsHeaders,

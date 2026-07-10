@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import {
@@ -62,7 +62,7 @@ function resolveVariables(template: string, client: ClientData): string {
 }
 
 Deno.serve(
-  withSentry("carteira-bulk-message", async (req: Request) => {
+  withErrorBoundary("carteira-bulk-message", async (req: Request) => {
     const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
     if (req.method === "OPTIONS") {

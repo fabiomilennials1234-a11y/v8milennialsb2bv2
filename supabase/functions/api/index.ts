@@ -9,7 +9,7 @@
  * API key (fail-closed). Every route handler MUST scope queries by it — RLS
  * does not protect this path alone.
  */
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -58,7 +58,7 @@ const routes: ApiRoute[] = [
 ];
 
 Deno.serve(
-  withSentry("api", async (req) => {
+  withErrorBoundary("api", async (req) => {
     const origin = req.headers.get("Origin") ?? undefined;
     const cors = withSecurityHeaders(getCorsHeaders(origin));
 

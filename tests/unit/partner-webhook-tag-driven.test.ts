@@ -32,8 +32,8 @@ vi.hoisted(() => {
   g.Deno.serve = (_h: any) => {};
 });
 
-vi.mock("../../supabase/functions/_shared/sentry.ts", () => ({
-  withSentry: (_name: string, h: any) => {
+vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({
+  withErrorBoundary: (_name: string, h: any) => {
     capture.handler = h;
     return h;
   },

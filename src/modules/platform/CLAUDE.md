@@ -21,7 +21,7 @@ Infraestrutura do produto. Não é domínio de negócio. Inclui:
 - **API keys** — pra integração externa
 - **Templates** — message templates compartilhados (não confundir com workflow templates)
 - **Help center** — docs in-app
-- **Logger / Sentry init** — observability boot
+- **Logger** — observability boot (`runtime_logs`, sem APM de terceiro)
 - **Command palette** — `Cmd+K`
 
 ## Não-escopo
@@ -82,7 +82,7 @@ Edge functions: doc-only (slice 15) — flat layout em `supabase/functions/` man
 - `supabase/functions/onboarding-advance/`
 - `supabase/functions/webhook-orchestrator/` (auditar)
 - `supabase/functions/webhook-send-test/` (USADO por `WebhookSettings.tsx:197`)
-- `supabase/functions/_shared/sentry.ts`, `logger.ts`, `rate-limit.ts` (não encontrado — verificar), `security-headers.ts`, `cors.ts`, `response.ts`, `supabase-admin.ts`, `validation.ts`, `edge-framework.ts`, `fetch-utils.ts`, `track.ts`
+- `supabase/functions/_shared/error-boundary.ts`, `logger.ts`, `rate-limit.ts` (não encontrado — verificar), `security-headers.ts`, `cors.ts`, `response.ts`, `supabase-admin.ts`, `validation.ts`, `edge-framework.ts`, `fetch-utils.ts`, `track.ts`
 - `supabase/functions/_shared/job-tracker.ts`, `instance-write-guard.ts`, `webhook-utils.ts`, `url-validator.ts`, `time-variables.ts`, `embeddings.ts`, `followupSchedule.ts`, `onboarding-engine.ts`, `message-sanitizer.ts`
 
 ## Slice de migração

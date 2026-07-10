@@ -50,7 +50,7 @@ import { AddMeetingModal } from "@/modules/pipelines/components/legacy/confirmac
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
-import * as Sentry from "@sentry/react";
+import { logger } from "@/modules/platform";
 import { getErrorMessage } from "@/shared/errors";
 import { useOrganization } from "@/modules/identity";
 import { track, trackModuleVisit } from "@/lib/analytics";
@@ -892,10 +892,15 @@ function PipeWhatsappInner() {
               toast.success("Reunião agendada e lead movido para Confirmação!");
             } catch (err) {
               console.error("[PipeWhatsapp] Falha ao mover card após agendar reunião:", err);
-              Sentry.captureException(err, {
-                tags: { feature: "pipelines", kind: "post-meeting-move-failed" },
-                extra: { pipeId: pending.pipeId, leadId: pending.leadId, toStage: pending.newStatus },
-              });
+              void logger.error(
+                "Falha ao mover card após agendar reunião",
+                err instanceof Error ? err : new Error(String(err)),
+                {
+                  resource: "pipelines",
+                  action: "post-meeting-move-failed",
+                  metadata: { pipeId: pending.pipeId, leadId: pending.leadId, toStage: pending.newStatus },
+                },
+              );
               toast.error("Reunião agendada, mas não foi possível mover o card no funil", {
                 description: getErrorMessage(err),
               });

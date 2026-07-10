@@ -1,9 +1,9 @@
 import { requireAdmin, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 
-Deno.serve(withSentry("save-member-permissions", async (req) => {
+Deno.serve(withErrorBoundary("save-member-permissions", async (req) => {
   const origin = req.headers.get("Origin") ?? undefined;
   const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 

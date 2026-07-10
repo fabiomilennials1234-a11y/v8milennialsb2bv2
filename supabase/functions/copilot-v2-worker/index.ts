@@ -14,7 +14,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getWhatsAppProvider } from "../_shared/whatsapp-client.ts";
@@ -30,7 +30,7 @@ import type { AgentConfig } from "../_shared/copilot-v2/prompt-builder.ts";
 const BATCH_SIZE = 10;
 
 serve(
-  withSentry("copilot-v2-worker", async (req: Request) => {
+  withErrorBoundary("copilot-v2-worker", async (req: Request) => {
     const cors = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
     if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
     const json = (b: unknown, s = 200) =>

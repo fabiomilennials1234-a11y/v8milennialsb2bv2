@@ -21,7 +21,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
@@ -893,7 +893,7 @@ export async function persistMessage(
         organizationId: instance.organization_id,
         module: "webhook",
         action: "uazapi_group_message_skipped",
-        status: "ok",
+        status: "success",
         payloadSnapshot: {
           instance_id: instance.id,
           remote_jid: normalized.remote_jid,
@@ -948,7 +948,7 @@ export async function persistMessage(
       organizationId: instance.organization_id,
       module: "webhook",
       action: "uazapi_group_message_captured",
-      status: "ok",
+      status: "success",
       payloadSnapshot: {
         instance_id: instance.id,
         remote_jid: normalized.remote_jid,
@@ -1257,7 +1257,7 @@ async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 }
 
 Deno.serve(
-  withSentry("whatsapp-webhook", async (req: Request) => {
+  withErrorBoundary("whatsapp-webhook", async (req: Request) => {
     const url = new URL(req.url);
     if (req.method === "GET" && url.pathname.endsWith("/health")) {
       return genericResponse(200, { ok: true });

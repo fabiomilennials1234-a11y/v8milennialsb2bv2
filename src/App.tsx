@@ -96,6 +96,7 @@ const MasterPlans = lazy(() => lazyRetry(() => import("@/modules/identity/master
 const MasterFeatures = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterFeatures")));
 const MasterAuditLogs = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterAuditLogs")));
 const MasterOperations = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOperations")));
+const MasterSupportTickets = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterSupportTickets")));
 const MasterAutomationHealth = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterAutomationHealth")));
 const MasterWhatsAppHealth = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterWhatsAppHealth")));
 const CopilotReasoning = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/CopilotReasoning")));
@@ -114,6 +115,9 @@ import { MasterLayout } from "@/modules/identity/master/components/MasterLayout"
 import { CommandPaletteProvider } from "@/modules/platform/components/command/CommandPaletteProvider";
 import { CommandPalette as CommandPaletteComponent } from "@/modules/platform/components/command/CommandPalette";
 import { GlobalShortcutsProvider } from "@/modules/platform/components/command/GlobalShortcutsProvider";
+import { SupportPanelProvider } from "@/modules/platform/components/support/SupportPanelProvider";
+import { FloatingDockProvider } from "@/modules/platform/components/dock/FloatingDock";
+import { SupportPanel } from "@/modules/platform/components/support/SupportPanel";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -738,12 +742,19 @@ const App = () => {
                   <PipeOpsProvider>
                     <GlobalErrorBoundary>
                       <PushPermissionPrompt />
-                      <CommandPaletteProvider>
-                        <GlobalShortcutsProvider>
-                          <AppRoutes />
-                          <CommandPaletteComponent />
-                        </GlobalShortcutsProvider>
-                      </CommandPaletteProvider>
+                      {/* SupportPanelProvider envolve o palette: a ação
+                          "Abrir chamado" do Cmd+K abre este painel. */}
+                      <FloatingDockProvider>
+                        <SupportPanelProvider>
+                          <CommandPaletteProvider>
+                            <GlobalShortcutsProvider>
+                              <AppRoutes />
+                              <CommandPaletteComponent />
+                              <SupportPanel />
+                            </GlobalShortcutsProvider>
+                          </CommandPaletteProvider>
+                        </SupportPanelProvider>
+                      </FloatingDockProvider>
                     </GlobalErrorBoundary>
                   </PipeOpsProvider>
                 </RealtimeOrgBridge>

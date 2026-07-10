@@ -76,4 +76,4 @@ npx vitest run tests/integration/agent-message.test.ts  # se existir
 supabase functions logs agent-message --project-ref bcfadphgsibjzivtbjvc
 ```
 
-Sentry tags: `copilot.agent_id`, `copilot.org_id`, `copilot.conversation_id`.
+Tags em `runtime_logs`: `copilot.agent_id`, `copilot.org_id`, `copilot.conversation_id`.

@@ -10,7 +10,7 @@
  * Callers: n8n, cal.com, Zapier, Make, or any external system.
  */
 
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { getCorsHeaders } from '../_shared/cors.ts';
 import { withSecurityHeaders } from '../_shared/security-headers.ts';
 import { successResponse, errorResponse } from '../_shared/response.ts';
@@ -247,7 +247,7 @@ async function authenticateApiKey(
 // Main handler
 // ---------------------------------------------------------------------------
 
-Deno.serve(withSentry('meeting-webhook', async (req) => {
+Deno.serve(withErrorBoundary('meeting-webhook', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get('origin')));
 
   // Preflight

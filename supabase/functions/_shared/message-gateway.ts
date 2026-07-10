@@ -364,7 +364,7 @@ export async function sendMessage(
     steps.flag_check = "skipped";
     await logRuntime({
       organizationId: req.organization_id,
-      module: "message-gateway",
+      module: "outbound",
       action: "send_delegated",
       status: "skipped",
       payloadSnapshot: { source: req.source, message_type: req.message_type },
@@ -397,7 +397,7 @@ export async function sendMessage(
     };
     await logRuntime({
       organizationId: req.organization_id,
-      module: "message-gateway",
+      module: "outbound",
       action: "send",
       status: "skipped",
       payloadSnapshot: buildPayload(req, steps, { normalizedPhone, track_id: req.track_id }),
@@ -498,7 +498,7 @@ export async function sendMessage(
     };
     await logRuntime({
       organizationId: req.organization_id,
-      module: "message-gateway",
+      module: "outbound",
       action: "send",
       status: "error",
       entityType: "whatsapp_messages",
@@ -581,7 +581,7 @@ async function logSend(
 ): Promise<void> {
   await logRuntime({
     organizationId: req.organization_id,
-    module: "message-gateway",
+    module: "outbound",
     action: "send",
     status: result.success ? "success" : "error",
     entityType: "whatsapp_messages",

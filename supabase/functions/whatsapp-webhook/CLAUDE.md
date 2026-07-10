@@ -20,7 +20,7 @@ Mitigação shipped:
 - **Patch defensivo**: resolução de instância com fallback por token, hash, número
 - **DLQ**: `whatsapp_webhook_dlq` grava events que não resolveram
 - **Replay**: `whatsapp-dlq-replay` cron 5min drena DLQ
-- **Métricas**: `uazapi_resolved_by_*` Sentry events
+- **Métricas**: `uazapi_resolved_by_*` em `runtime_logs`
 - **Contract tests**: 14 testes Vitest pra detectar schema drift
 
 Ver [`05 — How-to/debug-whatsapp`](../../../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/05%20—%20How-to/debug-whatsapp.md).
@@ -74,7 +74,7 @@ media, edit, delete, react, etc.
 
 **Se falhar** → schema Uazapi mudou. Investigar antes de qualquer fix.
 
-## Métricas Sentry
+## Métricas (runtime_logs)
 
 - `whatsapp_resolved_by_payload_instance` (V1 path)
 - `whatsapp_resolved_by_token_fallback` (V2 path)

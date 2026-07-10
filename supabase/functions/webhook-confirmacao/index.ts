@@ -1,4 +1,4 @@
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -9,7 +9,7 @@ import { successResponse, errorResponse } from "../_shared/response.ts";
 import { isFeatureFlagEnabled } from "../_shared/feature-flags.ts";
 import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
 
-Deno.serve(withSentry('webhook-confirmacao', async (req) => {
+Deno.serve(withErrorBoundary('webhook-confirmacao', async (req) => {
   const origin = req.headers.get("origin");
   const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
   

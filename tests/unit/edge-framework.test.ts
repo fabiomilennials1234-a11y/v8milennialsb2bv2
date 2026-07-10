@@ -2,7 +2,7 @@
  * createEdgeFunction — unified handler framework (#166)
  *
  * Tests: CORS, OPTIONS 204, auth dispatch, error wrapping, method restriction,
- * Supabase client injection, Sentry wrapping.
+ * Supabase client injection, error-boundary wrapping.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -15,7 +15,6 @@ vi.stubGlobal("Deno", {
         SUPABASE_SERVICE_ROLE_KEY: "svc-role",
         SUPABASE_ANON_KEY: "anon-key",
         CRON_SECRET: "my-cron-secret",
-        SENTRY_DSN: "https://key@sentry.io/123",
         ALLOWED_ORIGINS: "https://torquecrm.com.br",
       };
       return m[k] ?? undefined;
@@ -25,10 +24,10 @@ vi.stubGlobal("Deno", {
   serve: vi.fn(),
 });
 
-vi.mock("../../supabase/functions/_shared/sentry.ts", () => ({
-  withSentry: (_n: string, fn: unknown) => fn,
-  captureError: vi.fn(async () => {}),
-  captureMessage: vi.fn(async () => {}),
+vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({
+  withErrorBoundary: (_n: string, fn: unknown) => fn,
+  logError: vi.fn(async () => {}),
+  logEvent: vi.fn(async () => {}),
 }));
 
 vi.mock("https://esm.sh/@supabase/supabase-js@2", () => ({

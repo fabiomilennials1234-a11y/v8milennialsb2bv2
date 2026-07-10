@@ -78,9 +78,9 @@ const WebhookSettings = lazy(() =>
 const IntegrationsCatalog = lazy(() =>
   import("@/modules/platform/components/settings/IntegrationsCatalog")
 );
-const HelpCenter = lazy(() =>
-  import("@/modules/platform/components/settings/help/HelpCenter").then((m) => ({
-    default: m.HelpCenter,
+const HelpAdminPanel = lazy(() =>
+  import("@/modules/platform/components/settings/help/HelpAdminPanel").then((m) => ({
+    default: m.HelpAdminPanel,
   }))
 );
 const MilestonesConfig = lazy(() =>
@@ -649,6 +649,7 @@ const TAB_VALUES = new Set([
 
 export default function Configuracoes() {
   const { orgType } = useOrganization();
+  const { isAdmin } = useIdentity();
   const [searchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab");
   const initialTab =
@@ -688,7 +689,13 @@ export default function Configuracoes() {
           {orgType === "outbound" && (
             <PillTab value="marcos" label="Marcos" icon={<Award className="w-4 h-4" />} />
           )}
-          <PillTab value="ajuda" label="Ajuda" icon={<HelpCircle className="w-4 h-4" />} />
+          {/* Leitura mora no painel de suporte (o "?" do Cmd+K). Aqui fica só a
+              autoria — dois lugares para buscar ajuda e nenhum seria o óbvio.
+              `HelpAdminPanel` nao se protege sozinho: quem gateava era o
+              `HelpCenter`, que saiu daqui. */}
+          {isAdmin && (
+            <PillTab value="ajuda" label="Central de Ajuda" icon={<HelpCircle className="w-4 h-4" />} />
+          )}
         </TabsList>
 
         <div className="mt-6">
@@ -790,15 +797,17 @@ export default function Configuracoes() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="ajuda">
-            <Suspense fallback={<TabFallback label="Central de Ajuda" />}>
-              <Card className="glass-card">
-                <CardContent className="pt-6">
-                  <HelpCenter />
-                </CardContent>
-              </Card>
-            </Suspense>
-          </TabsContent>
+          {isAdmin && (
+            <TabsContent value="ajuda">
+              <Suspense fallback={<TabFallback label="Central de Ajuda" />}>
+                <Card className="glass-card">
+                  <CardContent className="pt-6">
+                    <HelpAdminPanel />
+                  </CardContent>
+                </Card>
+              </Suspense>
+            </TabsContent>
+          )}
 
           {orgType === "outbound" && (
             <TabsContent value="marcos">

@@ -35,6 +35,10 @@ export * from "./hooks/useConsent";
 export * from "./hooks/useFeatureFlag";
 export * from "./hooks/useHealthHistory";
 export * from "./hooks/useHelpCenter";
+export * from "./hooks/useSupportTickets";
+export * from "./hooks/useSupportContext";
+export * from "./hooks/useSupportUnread";
+export * from "./hooks/useTicketAttachments";
 export * from "./hooks/useLogger";
 export * from "./hooks/useOnlineStatus";
 export * from "./hooks/useTrackView";
@@ -93,3 +97,15 @@ export type { FeatureUnlockMap, UnlockPlan, ActivePlan } from "./lib/feature-unl
 // Components — Settings panels NÃO são re-exportados aqui. Consumidores
 // internos (Configuracoes.tsx) fazem lazy via deep-import — chunking por aba.
 // Re-exportar `export *` desses panels infla o bundle.
+
+// Chamado (ADR-0018) — o painel e o provider sao deep-imported pelo App.tsx,
+// como o command palette. Apenas hooks e logica pura ficam no barrel.
+export * from "./lib/support-ticket-draft";
+export * from "./lib/ticket-author";
+export * from "./lib/support-unread";
+export * from "./lib/support-rate-limit";
+export * from "./lib/ticket-lifecycle";
+export * from "./lib/first-response-clock";
+export * from "./lib/defect-url";
+export * from "./lib/support-attachments";
+export * from "./lib/help-suggestions";

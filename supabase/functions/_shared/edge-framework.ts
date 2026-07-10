@@ -9,7 +9,7 @@
 import { getCorsHeaders } from "./cors.ts";
 import { withSecurityHeaders } from "./security-headers.ts";
 import { timingSafeCompare } from "./auth.ts";
-import { captureError } from "./sentry.ts";
+import { logError } from "./error-boundary.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 type AuthStrategy = "none" | "cron-secret" | "webhook-secret" | "jwt";
@@ -85,7 +85,7 @@ export function createEdgeFunction(config: EdgeFunctionConfig): (req: Request) =
 
       return new Response(JSON.stringify(result), { status: 200, headers: jsonHeaders });
     } catch (error) {
-      await captureError(error, { functionName: name }).catch(() => {});
+      await logError(error, { functionName: name }).catch(() => {});
 
       const message = error instanceof Error ? error.message : String(error);
       return new Response(

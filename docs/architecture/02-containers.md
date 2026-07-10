@@ -66,7 +66,7 @@ graph TB
 ### Edge Functions
 - **Tecnologia**: Deno + TypeScript
 - **Quantidade**: 94 funções
-- **Padrão**: `Deno.serve(withSentry('nome', handler))` + CORS + OPTIONS early return
+- **Padrão**: `Deno.serve(withErrorBoundary('nome', handler))` + CORS + OPTIONS early return
 - **Auth**: maioria `verify_jwt=false`, valida via headers custom
 - **Responsabilidade**: lógica de negócio que requer service role / validação custom / integrações externas
 

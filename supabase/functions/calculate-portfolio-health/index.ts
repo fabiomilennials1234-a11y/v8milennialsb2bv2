@@ -16,7 +16,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
@@ -565,7 +565,7 @@ async function processOrg(
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 Deno.serve(
-  withSentry("calculate-portfolio-health", async (req: Request): Promise<Response> => {
+  withErrorBoundary("calculate-portfolio-health", async (req: Request): Promise<Response> => {
     const headers = withSecurityHeaders({ "Content-Type": "application/json" });
 
     // Auth
@@ -625,7 +625,7 @@ Deno.serve(
 
     if (targetOrgIds.length === 0) {
       await logRuntime({
-        module: "calculate-portfolio-health",
+        module: "carteira",
         action: "run",
         status: "skipped",
         payloadSnapshot: { reason: "no orgs with customer_portfolio enabled" },
@@ -651,7 +651,7 @@ Deno.serve(
     const durationMs = Date.now() - t0;
 
     await logRuntime({
-      module: "calculate-portfolio-health",
+      module: "carteira",
       action: "run",
       status: totalFailed === 0 ? "success" : "error",
       payloadSnapshot: {

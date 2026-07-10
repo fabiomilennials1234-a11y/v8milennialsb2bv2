@@ -16,7 +16,7 @@
  * decideDispatchRoute, whose <threshold path would reject small sends).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { runUazapiSenderJob } from "../_shared/dispatch-router.ts";
@@ -33,7 +33,7 @@ function jsonResponse(status: number, body: unknown, headers: Record<string, str
 }
 
 Deno.serve(
-  withSentry("quick-blast-create", async (req: Request) => {
+  withErrorBoundary("quick-blast-create", async (req: Request) => {
     const origin = req.headers.get("Origin") ?? undefined;
     const corsHeaders = withSecurityHeaders(
       (await import("../_shared/cors.ts")).getCorsHeaders(origin) as Record<string, string>,
@@ -176,7 +176,7 @@ Deno.serve(
 
       await logRuntime({
         organizationId: orgId,
-        module: "quick-blast-create",
+        module: "campaign",
         action: "created",
         status: "success",
         entityType: "uazapi_sender_jobs",
@@ -196,7 +196,7 @@ Deno.serve(
       const msg = (e as Error).message ?? "unknown error";
       await logRuntime({
         organizationId: orgId,
-        module: "quick-blast-create",
+        module: "campaign",
         action: "failed",
         status: "error",
         errorMessage: msg,

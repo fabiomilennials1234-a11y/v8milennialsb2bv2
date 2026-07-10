@@ -10,7 +10,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { refreshLongLivedToken } from "../_shared/meta-api.ts";
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
@@ -18,7 +18,7 @@ import { timingSafeCompare } from "../_shared/auth.ts";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-Deno.serve(withSentry('refresh-meta-tokens', async (req) => {
+Deno.serve(withErrorBoundary('refresh-meta-tokens', async (req) => {
   // Cron secret is mandatory — reject if env var missing or mismatch
   const cronSecret = req.headers.get("x-cron-secret") ?? "";
   const expectedSecret = Deno.env.get("CRON_SECRET") ?? "";

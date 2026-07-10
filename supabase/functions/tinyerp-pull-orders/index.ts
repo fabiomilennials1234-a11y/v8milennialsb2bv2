@@ -23,7 +23,7 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { getOrgTinyToken, callTinyApi, type TinyApiResponse } from "../_shared/tinyerp-utils.ts";
 
@@ -128,7 +128,7 @@ async function matchOrCreateClient(
 }
 
 Deno.serve(
-  withSentry("tinyerp-pull-orders", async (req: Request): Promise<Response> => {
+  withErrorBoundary("tinyerp-pull-orders", async (req: Request): Promise<Response> => {
     const headers = withSecurityHeaders({
       ...getCorsHeaders(req.headers.get("origin")),
       "Content-Type": "application/json",

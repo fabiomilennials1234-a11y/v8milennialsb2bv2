@@ -12,7 +12,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { importJWK } from "jose";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { captureError } from "../_shared/sentry.ts";
+import { logError } from "../_shared/error-boundary.ts";
 import { handleRpcPayload } from "../_shared/mcp/http.ts";
 import type { DispatchContext } from "../_shared/mcp/dispatch.ts";
 import type { JsonRpcRequest, ToolDef } from "../_shared/mcp/types.ts";
@@ -135,7 +135,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   try {
     resolution = await resolvePat(token);
   } catch (e) {
-    await captureError(e, { functionName: "crm-mcp", extra: { stage: "resolve" } });
+    await logError(e, { functionName: "crm-mcp", extra: { stage: "resolve" } });
     return rpcError(-32603, "Internal error", 500, cors);
   }
   if (!resolution.ok) {
@@ -161,7 +161,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }, Math.floor(Date.now() / 1000));
     assertWellFormedJwt(userJwt);
   } catch (e) {
-    await captureError(e, { functionName: "crm-mcp", extra: { stage: "mint" } });
+    await logError(e, { functionName: "crm-mcp", extra: { stage: "mint" } });
     return rpcError(-32603, "Internal error", 500, cors);
   }
 
@@ -197,7 +197,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (result === null) return new Response(null, { status: 202, headers: cors });
     return json(result, 200, cors);
   } catch (e) {
-    await captureError(e, { functionName: "crm-mcp", extra: { stage: "dispatch" } });
+    await logError(e, { functionName: "crm-mcp", extra: { stage: "dispatch" } });
     return rpcError(-32603, "Internal error", 500, cors);
   }
 });

@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { captureMessage } from "../sentry.ts";
+import { logEvent } from "../error-boundary.ts";
 import { getHandler } from "./registry.ts";
 import type { DispatchResult, DomainEvent, DomainEventRow } from "./types.ts";
 
@@ -64,7 +64,7 @@ export async function dispatchPending(
       result.dispatched++;
 
       // Observability: tag event_type for breadcrumb-like metrics.
-      await captureMessage(`event-dispatched`, {
+      await logEvent(`event-dispatched`, {
         functionName: "event-dispatcher",
         organizationId: row.organization_id,
         tags: { event_type: row.event_type },

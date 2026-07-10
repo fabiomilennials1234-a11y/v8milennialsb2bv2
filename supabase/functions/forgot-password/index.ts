@@ -19,7 +19,7 @@
  * The raw token / reset link are NEVER logged.
  */
 
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCorsHeaders } from '../_shared/cors.ts';
@@ -147,7 +147,7 @@ async function sendResetEmail(toEmail: string, rawToken: string): Promise<void> 
 }
 
 serve(
-  withSentry('forgot-password', async (req) => {
+  withErrorBoundary('forgot-password', async (req) => {
     const origin = req.headers.get('Origin') ?? undefined;
     const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 

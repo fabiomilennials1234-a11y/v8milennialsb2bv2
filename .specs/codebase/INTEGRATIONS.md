@@ -25,22 +25,19 @@
 
 ---
 
-## 2. Error Monitoring -- Sentry
+## 2. Error Monitoring -- in-house
 
-**Service:** Sentry
-**Purpose:** Error tracking and performance monitoring across frontend and edge functions.
+**Service:** none. There is no third-party APM (Sentry was removed — see `docs/adr/0017-drop-sentry-for-in-house-runtime-logs.md`).
+**Purpose:** Error tracking lives in our own Postgres, under the same RLS as the data it describes.
 
 ### Frontend (React)
-**Implementation:** `src/main.tsx`
-**SDK:** `@sentry/react`
-**Features:** Browser tracing, session replay (10% sample, 100% on error), full trace sampling.
-**Configuration:** `VITE_SENTRY_DSN`
+**Implementation:** `GlobalErrorBoundary` + a client-side error ring buffer attached to a Chamado (support ticket) when the user opens one.
+**Configuration:** none.
 
 ### Edge Functions (Deno)
-**Implementation:** `supabase/functions/_shared/sentry.ts`
-**Approach:** Custom HTTP envelope API (no official Deno SDK). Every edge function is wrapped with `withSentry()` for automatic error capture.
-**Configuration:** `SENTRY_DSN`, `ENVIRONMENT`
-**Authentication:** Sentry DSN public key extracted from DSN URL.
+**Implementation:** `supabase/functions/_shared/error-boundary.ts`
+**Approach:** `withErrorBoundary()` wraps every edge function. It is the top-level try/catch — it turns an unhandled exception into a 500 *carrying the CORS headers*, and must never be removed. Structured events go to `runtime_logs` via `logger.ts#logRuntime`.
+**Configuration:** none.
 
 ---
 
@@ -415,7 +412,6 @@
 | `VITE_SUPABASE_URL` | Supabase |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase |
 | `VITE_SUPABASE_PROJECT_ID` | Supabase |
-| `VITE_SENTRY_DSN` | Sentry |
 | `VITE_CALENDAR_SERVICE_URL` | Google Calendar microservice |
 | `VITE_MILENNIALS_ORG_ID` | Feature gating |
 | `VITE_INTERNAL_API_KEY` | Edge function auth (optional) |
@@ -427,8 +423,6 @@
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Supabase (auto-injected) |
 | `OPENROUTER_API_KEY` | OpenRouter AI |
 | `OPENROUTER_REFERER_URL` | OpenRouter |
-| `SENTRY_DSN` | Sentry |
-| `ENVIRONMENT` | Sentry |
 | `EVOLUTION_API_URL` | Evolution API |
 | `EVOLUTION_API_KEY` | Evolution API |
 | `EVOLUTION_WEBHOOK_SECRET` | Evolution API webhooks |

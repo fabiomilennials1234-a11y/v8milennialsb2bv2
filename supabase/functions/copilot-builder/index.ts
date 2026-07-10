@@ -15,7 +15,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { OpenRouterClient, type OpenRouterTool } from "../agent-message/openrouter-client.ts";
 import {
@@ -62,7 +62,7 @@ function json(body: unknown, status: number, headers: HeadersInit): Response {
 }
 
 Deno.serve(
-  withSentry("copilot-builder", async (req) => {
+  withErrorBoundary("copilot-builder", async (req) => {
     const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
     if (req.method === "OPTIONS") {
@@ -264,7 +264,7 @@ Deno.serve(
 
     await logRuntime({
       organizationId: orgId,
-      module: "copilot-builder",
+      module: "copilot",
       action: "turn",
       status: "success",
       entityType: "copilot_agent",

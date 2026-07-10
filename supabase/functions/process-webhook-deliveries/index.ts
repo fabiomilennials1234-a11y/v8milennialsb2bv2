@@ -11,7 +11,7 @@ import {
   sendWebhook,
   nextRetryDelayMinutes,
 } from "../_shared/webhook-utils.ts";
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { logRuntime } from "../_shared/logger.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 
@@ -39,7 +39,7 @@ interface DeliveryRow {
   max_attempts: number;
 }
 
-Deno.serve(withSentry('process-webhook-deliveries', async (req) => {
+Deno.serve(withErrorBoundary('process-webhook-deliveries', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });

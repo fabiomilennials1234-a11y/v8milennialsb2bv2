@@ -21,7 +21,7 @@
  * porque o trigger só reage a mudança de colunas relevantes (title/start/end/...).
  */
 
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -61,7 +61,7 @@ async function resolveUserId(supabase: Supa, teamMemberId: string | null): Promi
   return (data?.user_id as string | undefined) ?? null;
 }
 
-Deno.serve(withSentry("meeting-calendar-sync", async (req) => {
+Deno.serve(withErrorBoundary("meeting-calendar-sync", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });

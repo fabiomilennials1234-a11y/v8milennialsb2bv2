@@ -49,7 +49,7 @@ export class EmbeddedSignupError extends Error {
 /**
  * Normalizes a Graph `error` object into an EmbeddedSignupError. Deliberately
  * carries only the Graph-supplied message + code — never the access token, which
- * would otherwise leak through logs/Sentry if a caller prints the error.
+ * would otherwise leak through logs if a caller prints the error.
  */
 export function graphError(error: { message?: string; code?: number; type?: string }): EmbeddedSignupError {
   const code = error.code != null ? ` (code ${error.code})` : "";

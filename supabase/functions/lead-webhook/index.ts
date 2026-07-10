@@ -5,7 +5,7 @@
  * e dispara o fluxo de outbound se houver agente configurado.
  */
 
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getOrCreateLead } from "../_shared/lead-service.ts";
@@ -188,7 +188,7 @@ function normalizeFieldKeys(fields: Record<string, string | undefined>): Record<
   return result;
 }
 
-serve(withSentry('lead-webhook', async (req) => {
+serve(withErrorBoundary('lead-webhook', async (req) => {
   const origin = req.headers.get("Origin") ?? undefined;
   const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 

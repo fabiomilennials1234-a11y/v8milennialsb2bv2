@@ -11,7 +11,7 @@ fora dos triviais.**
 - `permission_engine.ts` — engine de permissões (3 camadas)
 
 ### Observability
-- `sentry.ts` — `withSentry('nome', handler)` wrapper
+- `error-boundary.ts` — `withErrorBoundary('nome', handler)` wrapper + `logError` / `logEvent`. É o try/catch de topo: devolve 500 **com CORS** (ADR-0017)
 - `logger.ts` — wrapper estruturado (level/tags)
 
 ### WhatsApp

@@ -12,7 +12,7 @@ function OraculoFloatingButtonBase({ remaining, isOpen, onClick }: Props) {
   return (
     <motion.button
       onClick={onClick}
-      className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-lg flex items-center justify-center hover:shadow-purple-500/25 hover:shadow-xl transition-shadow"
+      className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-lg flex items-center justify-center hover:shadow-purple-500/25 hover:shadow-xl transition-shadow"
       animate={{
         scale: isOpen ? 0.9 : 1,
         rotate: isOpen ? 45 : 0,

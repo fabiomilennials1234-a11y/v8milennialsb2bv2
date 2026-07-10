@@ -6,7 +6,7 @@
  * e remove o registro de pending. Idempotente.
  */
 
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
@@ -32,7 +32,7 @@ function jsonResponse(
   });
 }
 
-serve(withSentry('attach-to-org-by-pending-invite', async (req) => {
+serve(withErrorBoundary('attach-to-org-by-pending-invite', async (req) => {
   const origin = req.headers.get("Origin") ?? undefined;
   const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 

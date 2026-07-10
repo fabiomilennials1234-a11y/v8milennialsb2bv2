@@ -39,7 +39,8 @@ export function QuickBlastProgressPanel() {
   if (active.length === 0) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-40 w-80 max-w-[calc(100vw-3rem)] space-y-2">
+    // Deslocado do canto: o FloatingDock ocupa `bottom-6 right-6`.
+    <div className="fixed bottom-6 right-24 z-40 w-80 max-w-[calc(100vw-6.5rem)] space-y-2">
       <AnimatePresence initial={false}>
         {active.map((job) => {
           const pct = job.total_messages > 0 ? Math.round((job.sent / job.total_messages) * 100) : 0;

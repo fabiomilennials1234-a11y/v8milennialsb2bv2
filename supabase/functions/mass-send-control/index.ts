@@ -5,7 +5,7 @@
  * Auth: Bearer JWT user (admin/master). Tenant check obrigatório.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
@@ -26,7 +26,7 @@ function jsonResponse(status: number, body: unknown, headers: Record<string, str
 }
 
 Deno.serve(
-  withSentry("mass-send-control", async (req: Request) => {
+  withErrorBoundary("mass-send-control", async (req: Request) => {
     const origin = req.headers.get("Origin") ?? undefined;
     const corsHeaders = withSecurityHeaders(
       getCorsHeaders(origin) as Record<string, string>
@@ -93,7 +93,7 @@ Deno.serve(
 
       await logRuntime({
         organizationId: member.organization_id,
-        module: "mass-send-control",
+        module: "campaign",
         action,
         status: "success",
         entityType: "uazapi_sender_jobs",
@@ -104,7 +104,7 @@ Deno.serve(
       const msg = (e as Error).message ?? "unknown";
       await logRuntime({
         organizationId: member.organization_id,
-        module: "mass-send-control",
+        module: "campaign",
         action,
         status: "error",
         errorMessage: msg,

@@ -55,7 +55,7 @@ export function useCreateLead() {
 ### Edge Functions (padrão obrigatório)
 
 ```ts
-Deno.serve(withSentry('nome', async (req) => {
+Deno.serve(withErrorBoundary('nome', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req));
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   // lógica

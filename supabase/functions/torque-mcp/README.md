@@ -64,7 +64,7 @@ new migration). Each targets a recurring incident class:
   present and `TORQUE_MCP_PROJECT` must be set explicitly to `dev`|`prod` (no silent default) — fail
   loud at boot rather than discover it at apply time.
 - `initialize` returns `serverInfo.project` so every caller sees which environment it hit.
-- Unhandled errors are reported to Sentry (`captureError`) while keeping the JSON-RPC envelope; each
+- Unhandled errors are reported to the in-house runtime logs (`logError`) while keeping the JSON-RPC envelope; each
   `tools/call` emits a PII-free structured log line (tool, outcome, ms).
 
 ### Rotating `x-mcp-secret`

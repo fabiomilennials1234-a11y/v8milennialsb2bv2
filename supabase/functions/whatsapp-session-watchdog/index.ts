@@ -15,7 +15,7 @@
  *     our `whatsapp_instances` row.
  *   - On transitions:
  *       healthy → dead: stamps session_dead_since + session_dead_reason,
- *                       logs runtime + emits Sentry breadcrumb.
+ *                       logs runtime.
  *       dead → healthy: clears session_dead_since + session_dead_reason.
  *   - Idempotent: does nothing when the local state already matches reality.
  *
@@ -24,7 +24,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
@@ -78,7 +78,7 @@ function isDead(status: string | undefined | null): boolean {
 }
 
 Deno.serve(
-  withSentry("whatsapp-session-watchdog", async (req: Request): Promise<Response> => {
+  withErrorBoundary("whatsapp-session-watchdog", async (req: Request): Promise<Response> => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";

@@ -16,7 +16,7 @@
  *     whatsapp-webhook endpoint (with the SAME secret and URL path), so the
  *     normal pipeline owns the insert idempotency contract.
  *   - On failure: increment attempts, set last_attempt_at + last_error. After
- *     MAX_ATTEMPTS the row is left for manual review (Sentry critical).
+ *     MAX_ATTEMPTS the row is left for manual review (logged as critical).
  *
  * Schedule: every 5 minutes via pg_cron.
  * Auth: x-cron-secret or service_role.
@@ -24,7 +24,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
@@ -128,7 +128,7 @@ async function replayPayload(
 }
 
 Deno.serve(
-  withSentry("whatsapp-dlq-replay", async (req: Request): Promise<Response> => {
+  withErrorBoundary("whatsapp-dlq-replay", async (req: Request): Promise<Response> => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";

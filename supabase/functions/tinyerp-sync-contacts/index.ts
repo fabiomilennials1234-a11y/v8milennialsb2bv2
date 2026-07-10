@@ -17,7 +17,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import {
@@ -69,7 +69,7 @@ function maskName(name?: string): string {
 }
 
 Deno.serve(
-  withSentry("tinyerp-sync-contacts", async (req: Request): Promise<Response> => {
+  withErrorBoundary("tinyerp-sync-contacts", async (req: Request): Promise<Response> => {
     const headers = withSecurityHeaders({
       ...getCorsHeaders(req.headers.get("origin")),
       "Content-Type": "application/json",

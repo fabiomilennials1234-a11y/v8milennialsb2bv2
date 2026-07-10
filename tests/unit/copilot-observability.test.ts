@@ -1,9 +1,9 @@
 /**
- * Sentry observability for copilot batching (#206)
+ * Observability for copilot batching (#206)
  *
  * Tests:
  * 1. agent-message emits copilot.absorb_iterations + copilot.lock_source tags
- * 2. send-document emits Sentry breadcrumb on duplicate block
+ * 2. send-document emits a structured event on duplicate block
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -14,7 +14,6 @@ vi.stubGlobal("Deno", {
       const m: Record<string, string> = {
         SUPABASE_URL: "https://local.test",
         SUPABASE_SERVICE_ROLE_KEY: "svc-role",
-        SENTRY_DSN: "https://key@sentry.io/123",
       };
       return m[k] ?? undefined;
     },
@@ -23,12 +22,12 @@ vi.stubGlobal("Deno", {
   serve: () => {},
 });
 
-const mockCaptureMessage = vi.fn(async () => {});
+const mockLogEvent = vi.fn(async () => {});
 
-vi.mock("../../supabase/functions/_shared/sentry.ts", () => ({
-  withSentry: (_n: string, fn: unknown) => fn,
-  captureError: vi.fn(async () => {}),
-  captureMessage: mockCaptureMessage,
+vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({
+  withErrorBoundary: (_n: string, fn: unknown) => fn,
+  logError: vi.fn(async () => {}),
+  logEvent: mockLogEvent,
 }));
 
 vi.mock("../../supabase/functions/_shared/logger.ts", () => ({
@@ -36,9 +35,9 @@ vi.mock("../../supabase/functions/_shared/logger.ts", () => ({
   redactSecrets: (v: unknown) => v,
 }));
 
-describe("copilot Sentry observability (#206)", () => {
+describe("copilot observability (#206)", () => {
   beforeEach(() => {
-    mockCaptureMessage.mockClear();
+    mockLogEvent.mockClear();
   });
 
   describe("agent-message absorb loop tags", () => {
@@ -94,8 +93,8 @@ describe("copilot Sentry observability (#206)", () => {
 
       expect(result.iterations).toBeGreaterThan(0);
 
-      // The function should call captureMessage with absorb tags
-      expect(mockCaptureMessage).toHaveBeenCalledWith(
+      // The function should call logEvent with absorb tags
+      expect(mockLogEvent).toHaveBeenCalledWith(
         "copilot_absorb_completed",
         expect.objectContaining({
           tags: expect.objectContaining({
@@ -131,12 +130,12 @@ describe("copilot Sentry observability (#206)", () => {
       });
 
       expect(result.iterations).toBe(0);
-      expect(mockCaptureMessage).not.toHaveBeenCalled();
+      expect(mockLogEvent).not.toHaveBeenCalled();
     });
   });
 
-  describe("send-document dedup breadcrumb", () => {
-    it("emits Sentry breadcrumb when duplicate document is blocked", async () => {
+  describe("send-document dedup event", () => {
+    it("emits a structured event when duplicate document is blocked", async () => {
       const { checkDocumentAlreadySent } = await import(
         "../../supabase/functions/_shared/actions/send-document.ts"
       );
@@ -160,7 +159,7 @@ describe("copilot Sentry observability (#206)", () => {
       expect(result).toBe(true);
 
       // Should emit breadcrumb on duplicate detection
-      expect(mockCaptureMessage).toHaveBeenCalledWith(
+      expect(mockLogEvent).toHaveBeenCalledWith(
         "copilot_duplicate_document_blocked",
         expect.objectContaining({
           tags: expect.objectContaining({
@@ -191,7 +190,7 @@ describe("copilot Sentry observability (#206)", () => {
 
       const result = await checkDocumentAlreadySent(supabase, "conv-aaa", "doc-new");
       expect(result).toBe(false);
-      expect(mockCaptureMessage).not.toHaveBeenCalled();
+      expect(mockLogEvent).not.toHaveBeenCalled();
     });
   });
 });

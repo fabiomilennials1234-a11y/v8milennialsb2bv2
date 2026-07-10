@@ -1,4 +1,4 @@
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 /**
  * Worker: Processa fila outbound_dispatch_log (disparos Copilot agendados)
  *
@@ -20,7 +20,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const BATCH_SIZE = 50;
 
-Deno.serve(withSentry('process-outbound-dispatches', async (req) => {
+Deno.serve(withErrorBoundary('process-outbound-dispatches', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });

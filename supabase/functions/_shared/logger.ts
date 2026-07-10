@@ -10,7 +10,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { captureError } from "./sentry.ts";
+import { logError } from "./error-boundary.ts";
 
 /**
  * Key patterns to redact (case-insensitive substring match on key name).
@@ -35,6 +35,40 @@ const SENSITIVE_KEY_PATTERNS = [
 
 const REDACTED = "***REDACTED***";
 const BEARER_RE = /^(Bearer|Basic)\s+\S+/i;
+
+/**
+ * Chaves cujo valor é um telefone. Um telefone em `runtime_logs` é PII de um
+ * *lead do nosso cliente* — não do nosso cliente. Redigir por completo
+ * inviabilizaria correlacionar um log a uma conversa; deixar em claro é
+ * inaceitável. Mascaramos o miolo, preservando prefixo e sufixo.
+ *
+ * Credencial vence telefone: uma chave que case as duas listas é redigida
+ * inteira (`isSensitiveKey` é avaliado primeiro).
+ */
+const PHONE_KEY_PATTERNS = ["phone", "telefone", "remote_jid", "msisdn"];
+
+/** Menos que isto e o mascaramento revelaria o número inteiro. */
+const MIN_MASKABLE_DIGITS = 10;
+
+function isPhoneKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  return PHONE_KEY_PATTERNS.some((p) => lower.includes(p));
+}
+
+/**
+ * Mascara toda sequência longa de dígitos, mantendo os 4 primeiros e os 4
+ * últimos. Aplicado sobre a string inteira, preserva o sufixo de um JID
+ * (`@s.whatsapp.net`, `@g.us`) sem precisar conhecê-lo.
+ */
+function maskPhone(value: string): string {
+  let masked = false;
+  const out = value.replace(/\d{6,}/g, (digits) => {
+    if (digits.length < MIN_MASKABLE_DIGITS) return digits;
+    masked = true;
+    return digits.slice(0, 4) + "*".repeat(digits.length - 8) + digits.slice(-4);
+  });
+  return masked ? out : REDACTED;
+}
 
 /**
  * Returns true if the given key name should have its value redacted.
@@ -96,6 +130,8 @@ export function redactSecrets(input: unknown, _seen?: WeakSet<object>): unknown 
       } else {
         result[key] = REDACTED;
       }
+    } else if (isPhoneKey(key)) {
+      result[key] = typeof value === "string" ? maskPhone(value) : REDACTED;
     } else {
       result[key] = redactSecrets(value, seen);
     }
@@ -105,9 +141,45 @@ export function redactSecrets(input: unknown, _seen?: WeakSet<object>): unknown 
   return result;
 }
 
+/**
+ * Vocabulário de `runtime_logs.module`.
+ *
+ * Garantido aqui, em compile time — a tabela deliberadamente NÃO tem CHECK.
+ * Um CHECK falharia em runtime, no INSERT, e `logRuntime` engole a falha por
+ * design (telemetria não pode derrubar edge function): o constraint destruiria
+ * silenciosamente a linha que deveria proteger. Já destruiu — ver a migration
+ * 20270115. Ao adicionar um módulo, adicione o literal aqui.
+ */
+export type RuntimeLogModule =
+  | "agent"
+  | "analytics"
+  | "auth"
+  | "calendar"
+  | "campaign"
+  | "carteira"
+  | "channel"
+  | "copilot"
+  | "followup"
+  | "general"
+  | "job_monitor"
+  | "lead"
+  | "media"
+  | "meeting"
+  | "outbound"
+  | "permission"
+  | "pipe_dispatch"
+  | "pipe_distribution"
+  | "scheduled_user_messages"
+  | "support"
+  | "sz_chat"
+  | "tts"
+  | "webhook"
+  | "whatsapp"
+  | "workflow";
+
 interface LogRuntimeParams {
   organizationId?: string;
-  module: string;
+  module: RuntimeLogModule;
   action: string;
   status: "success" | "error" | "skipped";
   payloadSnapshot?: Record<string, unknown>;
@@ -120,6 +192,10 @@ interface LogRuntimeParams {
   tokens?: { prompt?: number; completion?: number; model?: string };
   // RC.1: chain-of-thought capturado do agente (extraído de <thinking>...</thinking>)
   reasoning?: string;
+  // ADR-0017: correlação com a sessão de navegação do usuário. Use
+  // `getTraceContext(req)` de `_shared/request-trace.ts` para preenchê-los.
+  sessionId?: string | null;
+  requestId?: string | null;
 }
 
 /**
@@ -154,16 +230,18 @@ export async function logRuntime(params: LogRuntimeParams): Promise<void> {
       completion_tokens: params.tokens?.completion ?? null,
       llm_model: params.tokens?.model ?? null,
       reasoning: params.reasoning ?? null,
+      session_id: params.sessionId ?? null,
+      request_id: params.requestId ?? null,
     });
   } catch (err) {
     console.warn("[logRuntime] Failed to write log (non-fatal):", err);
-    // Surface persistent insert failures to Sentry instead of swallowing them.
+    // Surface persistent insert failures to runtime logs instead of swallowing them.
     // A CHECK/enum drift can silently drop an entire module's logs (incident
     // 2026-06-24: 'whatsapp' missing from runtime_logs_module_check dropped 100%
-    // of WhatsApp telemetry for days, hiding the inbound outage). captureError
+    // of WhatsApp telemetry for days, hiding the inbound outage). logError
     // never throws, so this stays strictly non-fatal on the hot path.
     try {
-      await captureError(err, {
+      await logError(err, {
         functionName: "logRuntime",
         organizationId: params.organizationId,
         extra: {

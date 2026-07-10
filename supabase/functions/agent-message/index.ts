@@ -1,4 +1,4 @@
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { logRuntime } from '../_shared/logger.ts';
 import { trackEvent } from '../_shared/track.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -23,7 +23,7 @@ import { assertPlanFeature, PlanFeatureDeniedError } from "../_shared/plan-gate.
  * Webhook receptor de mensagens de leads
  * Twilio/WhatsApp → /agent-message
  */
-Deno.serve(withSentry('agent-message', async (req) => {
+Deno.serve(withErrorBoundary('agent-message', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   if (req.method === "OPTIONS") {
@@ -191,9 +191,9 @@ Deno.serve(withSentry('agent-message', async (req) => {
           await logRuntime({
             module: "copilot",
             action: "audience_gate_block",
-            status: "ok",
-            metadata: {
-              organization_id,
+            status: "success",
+            organizationId: organization_id,
+            payloadSnapshot: {
               phone: normalizedPhone,
               agent_id: gate.agentId,
               reason: "unknown_phone_blocked",

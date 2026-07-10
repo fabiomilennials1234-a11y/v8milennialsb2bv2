@@ -12,7 +12,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { assertOrgFeature, FeatureLockedError } from "../_shared/assert-org-feature.ts";
 
@@ -57,7 +57,7 @@ interface PushPayload {
 }
 
 Deno.serve(
-  withSentry("cadastro-externo-push", async (req) => {
+  withErrorBoundary("cadastro-externo-push", async (req) => {
     const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
     if (req.method === "OPTIONS") {
@@ -166,7 +166,7 @@ Deno.serve(
         if (searchData.found) {
           await logRuntime({
             organizationId,
-            module: "cadastro-externo",
+            module: "lead",
             action: "push_client",
             status: "skipped",
             payloadSnapshot: { cnpj, existing_id: searchData.cliente_id },
@@ -218,7 +218,7 @@ Deno.serve(
         if (createRes.status === 409 && createData.cliente_id) {
           await logRuntime({
             organizationId,
-            module: "cadastro-externo",
+            module: "lead",
             action: "push_client",
             status: "skipped",
             payloadSnapshot: { cnpj, existing_id: createData.cliente_id },
@@ -238,7 +238,7 @@ Deno.serve(
         const errorMsg = createData.error || "Erro ao cadastrar cliente no sistema externo";
         await logRuntime({
           organizationId,
-          module: "cadastro-externo",
+          module: "lead",
           action: "push_client",
           status: "error",
           payloadSnapshot: { cnpj, nome_cliente },
@@ -257,7 +257,7 @@ Deno.serve(
       // ── 3. Success ────────────────────────────────────────
       await logRuntime({
         organizationId,
-        module: "cadastro-externo",
+        module: "lead",
         action: "push_client",
         status: "success",
         payloadSnapshot: { cnpj, nome_cliente, cliente_id: createData.cliente_id },
@@ -276,7 +276,7 @@ Deno.serve(
       const msg = err instanceof Error ? err.message : "Erro interno";
       await logRuntime({
         organizationId,
-        module: "cadastro-externo",
+        module: "lead",
         action: "push_client",
         status: "error",
         errorMessage: msg,

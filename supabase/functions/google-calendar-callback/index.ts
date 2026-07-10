@@ -8,7 +8,7 @@
  * URL: ${SUPABASE_URL}/functions/v1/google-calendar-callback?code=...&state=...
  */
 
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logRuntime } from "../_shared/logger.ts";
@@ -27,7 +27,7 @@ const SUPABASE_URL              = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const APP_URL                   = Deno.env.get("APP_URL") ?? "http://localhost:5173";
 
-Deno.serve(withSentry('google-calendar-callback', async (req) => {
+Deno.serve(withErrorBoundary('google-calendar-callback', async (req) => {
   try {
     const url    = new URL(req.url);
     const code   = url.searchParams.get("code");

@@ -1,4 +1,4 @@
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { logRuntime } from "../_shared/logger.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
@@ -827,7 +827,7 @@ function validateWebhookSecret(
 
 // ─── Main Handler ────────────────────────────────────────────────────────────
 
-Deno.serve(withSentry('sz-chat-webhook', async (req) => {
+Deno.serve(withErrorBoundary('sz-chat-webhook', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   // Handle CORS preflight

@@ -1,4 +1,4 @@
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { unzipSync } from "https://esm.sh/fflate@0.8.2";
@@ -169,7 +169,7 @@ async function cleanTextViaLLM(
   return result.choices?.[0]?.message?.content || "";
 }
 
-serve(withSentry('process-agent-document', async (req) => {
+serve(withErrorBoundary('process-agent-document', async (req) => {
   const origin = req.headers.get("Origin") ?? undefined;
   const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 

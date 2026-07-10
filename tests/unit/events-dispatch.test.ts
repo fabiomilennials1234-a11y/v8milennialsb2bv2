@@ -15,10 +15,10 @@ vi.mock("../../supabase/functions/_shared/events/registry.ts", () => ({
   handlers: {},
 }));
 
-vi.mock("../../supabase/functions/_shared/sentry.ts", () => ({
-  captureMessage: vi.fn(async () => {}),
-  captureError: vi.fn(async () => {}),
-  withSentry: (_n: string, h: unknown) => h,
+vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({
+  logEvent: vi.fn(async () => {}),
+  logError: vi.fn(async () => {}),
+  withErrorBoundary: (_n: string, h: unknown) => h,
 }));
 
 import { dispatchPending } from "../../supabase/functions/_shared/events/dispatch";

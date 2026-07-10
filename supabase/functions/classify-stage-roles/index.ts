@@ -1,4 +1,4 @@
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 /**
  * Stage Role Classifier (#991 + U4, ADR-0017 §1 — padrão ADR-0006).
  *
@@ -145,7 +145,7 @@ interface OrgResult {
   })[];
 }
 
-Deno.serve(withSentry("classify-stage-roles", async (req) => {
+Deno.serve(withErrorBoundary("classify-stage-roles", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   const json = (body: unknown, status = 200) =>

@@ -25,7 +25,7 @@ import {
   registerWatchChannel,
 } from "../_shared/google-calendar-utils.ts";
 import { logRuntime } from "../_shared/logger.ts";
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { isFeatureFlagEnabled } from "../_shared/feature-flags.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getPipeEntry, upsertPipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
@@ -35,7 +35,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 // ─── Handler principal ────────────────────────────────────────────────────────
 
-Deno.serve(withSentry('google-calendar-webhook', async (req) => {
+Deno.serve(withErrorBoundary('google-calendar-webhook', async (req) => {
   // Google usa POST para notificações
   if (req.method !== "POST") {
     return new Response("Method Not Allowed", { status: 405, headers: withSecurityHeaders({}) });

@@ -16,7 +16,7 @@
  * reject edits.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 
@@ -36,7 +36,7 @@ function isValidReleaseTime(v: string): boolean {
 }
 
 Deno.serve(
-  withSentry("blast-plan-edit", async (req: Request) => {
+  withErrorBoundary("blast-plan-edit", async (req: Request) => {
     const origin = req.headers.get("Origin") ?? undefined;
     const corsHeaders = withSecurityHeaders(
       (await import("../_shared/cors.ts")).getCorsHeaders(origin) as Record<string, string>,

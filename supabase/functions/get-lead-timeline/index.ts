@@ -5,7 +5,7 @@
  * Query params: lead_id, source, period, search, page, page_size
  */
 
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
@@ -38,7 +38,7 @@ function getPeriodStart(period: string): string | null {
 }
 
 Deno.serve(
-  withSentry("get-lead-timeline", async (req: Request): Promise<Response> => {
+  withErrorBoundary("get-lead-timeline", async (req: Request): Promise<Response> => {
     const corsHeaders = getCorsHeaders(req.headers.get("origin"));
     const headers = withSecurityHeaders({ ...corsHeaders, "Content-Type": "application/json" });
 

@@ -1,4 +1,4 @@
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 /**
  * AI Stage Classifier (ADR-0006 amendment).
  *
@@ -80,7 +80,7 @@ function parseClassification(raw: string, validKeys: Set<string>): Record<string
   return out;
 }
 
-Deno.serve(withSentry("classify-followup-stages", async (req) => {
+Deno.serve(withErrorBoundary("classify-followup-stages", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 

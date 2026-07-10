@@ -24,7 +24,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 
@@ -62,7 +62,7 @@ interface ERPOrderPayload {
 }
 
 Deno.serve(
-  withSentry("erp-order-webhook", async (req: Request): Promise<Response> => {
+  withErrorBoundary("erp-order-webhook", async (req: Request): Promise<Response> => {
     const headers = withSecurityHeaders(
       getCorsHeaders(req.headers.get("origin")),
     );

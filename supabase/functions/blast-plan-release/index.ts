@@ -19,7 +19,7 @@
  * plans in the same org share one day's ledger.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { runUazapiSenderJob } from "../_shared/dispatch-router.ts";
@@ -48,7 +48,7 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 Deno.serve(
-  withSentry("blast-plan-release", async (req: Request) => {
+  withErrorBoundary("blast-plan-release", async (req: Request) => {
     const providedSecret = req.headers.get("x-cron-secret");
     if (!CRON_SECRET || !providedSecret || !timingSafeCompare(providedSecret, CRON_SECRET)) {
       return jsonResponse(401, { error: "unauthorized" });
@@ -121,7 +121,7 @@ Deno.serve(
 
         await logRuntime({
           organizationId: plan.organization_id,
-          module: "blast-plan-release",
+          module: "campaign",
           action: "lot_released",
           status: "success",
           entityType: "blast_plans",
@@ -139,7 +139,7 @@ Deno.serve(
         errors.push({ plan_id: plan.id!, error: msg });
         await logRuntime({
           organizationId: plan.organization_id,
-          module: "blast-plan-release",
+          module: "campaign",
           action: "lot_released",
           status: "error",
           entityType: "blast_plans",

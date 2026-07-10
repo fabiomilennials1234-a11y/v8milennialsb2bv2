@@ -218,7 +218,7 @@ export function createMockSupabase() {
       delete: () => { isDelete = true; return chain; },
       single: () => {
         if (insertError) return Promise.resolve({ data: null, error: insertError });
-        const result = applyFilters();
+        const result = applyUpdateIfPending();
         return Promise.resolve({
           data: result[0] || null,
           error: null,
@@ -226,17 +226,31 @@ export function createMockSupabase() {
       },
       maybeSingle: () => {
         if (insertError) return Promise.resolve({ data: null, error: insertError });
-        const result = applyFilters();
+        const result = applyUpdateIfPending();
         return Promise.resolve({
           data: result[0] || null,
           error: null,
         });
       },
       then: (resolve: (val: ChainResult) => void) => {
-        const result = applyFilters();
+        const result = applyUpdateIfPending();
         resolve({ data: result, error: null, count: result.length });
       },
     };
+
+    /**
+     * `.update(...).select().single()` e a forma canonica no codebase. Antes o
+     * mock so persistia o update no caminho thenable, entao um hook que
+     * terminasse em `.single()` atualizava nada e `getUpdated()` vinha vazio.
+     */
+    function applyUpdateIfPending(): MockData {
+      const matched = applyFilters();
+      if (!isUpdate) return matched;
+      for (const row of matched) Object.assign(row, updateData);
+      if (!updatedRows[tableName]) updatedRows[tableName] = [];
+      updatedRows[tableName].push(...matched);
+      return matched;
+    }
 
     // Make chain thenable (for await without .single/.maybeSingle)
     chain[Symbol.toStringTag] = 'Promise';
@@ -247,10 +261,7 @@ export function createMockSupabase() {
       // Persist updates so read-after-write works. applyFilters() returns refs to
       // the shared table row objects, so Object.assign mutates tables in place.
       if (isUpdate) {
-        const matched = applyFilters();
-        for (const row of matched) Object.assign(row, updateData);
-        if (!updatedRows[tableName]) updatedRows[tableName] = [];
-        updatedRows[tableName].push(...matched);
+        const matched = applyUpdateIfPending();
         return Promise.resolve({ data: matched, error: null, count: matched.length });
       }
       const filtered = applyFilters();

@@ -5,7 +5,7 @@
  * (não estão em team_members). Apenas Master pode chamar.
  */
 
-import { withSentry } from '../_shared/sentry.ts';
+import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
@@ -38,7 +38,7 @@ export interface UnassignedUser {
   full_name: string | null;
 }
 
-serve(withSentry('list-unassigned-users', async (req) => {
+serve(withErrorBoundary('list-unassigned-users', async (req) => {
   const origin = req.headers.get("Origin") ?? undefined;
   const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 

@@ -15,13 +15,13 @@
 
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
-import { withSentry } from "../_shared/sentry.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 import { signMetaState } from "../_shared/meta-oauth-state.ts";
 
 const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes — enough for the OAuth round-trip.
 
-Deno.serve(withSentry("meta-oauth-start", async (req) => {
+Deno.serve(withErrorBoundary("meta-oauth-start", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   const headers = { ...corsHeaders, "Content-Type": "application/json" };
 
