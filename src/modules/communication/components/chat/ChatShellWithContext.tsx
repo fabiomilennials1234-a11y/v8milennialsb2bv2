@@ -55,7 +55,9 @@ import { useTakeover } from "@/modules/communication/hooks/chat/useTakeover";
 import { useIdentity } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { useCurrentTeamMember } from "@/modules/identity";
+import { useResponsibleMembers } from "@/modules/identity";
 import { useAuth } from "@/modules/identity";
+import { useLeadResponsibleMap } from "@/modules/communication/hooks/chat/useLeadResponsibleMap";
 import {
   useArchiveConversation,
   useUnarchiveConversation,
@@ -568,6 +570,31 @@ export function ChatShellWithContext() {
   const [showOnlyWaitingHuman, setShowOnlyWaitingHuman] = useState(false);
   const [activeTab, setActiveTab] = useState<ConversationTab>("active");
 
+  // ── Filtro por vendedor ─────────────────────────────────────────────────────
+  // Conversa não tem vendedor próprio: deriva do responsável do lead
+  // (leads.responsible_id). "all" = todos; "mine" = do usuário; "unassigned" =
+  // sem vendedor (só admin/master); <id> = de um vendedor específico.
+  const [vendorFilter, setVendorFilter] = useState<string>("all");
+  const responsibleMembers = useResponsibleMembers();
+  const vendorOptions = useMemo(
+    () => responsibleMembers.map((m) => ({ id: m.id, name: m.name })),
+    [responsibleMembers],
+  );
+  const leadIds = useMemo(
+    () => contacts.map((c) => c.lead_id).filter((id): id is string => !!id),
+    [contacts],
+  );
+  const leadResponsibleMap = useLeadResponsibleMap(leadIds, organizationId);
+  const resolveContactVendorId = useCallback(
+    (c: ChatContact): string | null =>
+      c.lead_id ? leadResponsibleMap.get(c.lead_id) ?? null : null,
+    [leadResponsibleMap],
+  );
+  // Reseta pra "Todos" ao trocar de org (evita filtrar por id de outra org).
+  useEffect(() => {
+    setVendorFilter("all");
+  }, [organizationId]);
+
   // ── Archive / Delete / Tags ─────────────────────────────────────────────────
   const archiveConversation = useArchiveConversation();
   const unarchiveConversation = useUnarchiveConversation();
@@ -683,6 +710,12 @@ export function ChatShellWithContext() {
             onAddTag={handleAddTag}
             onRemoveTag={handleRemoveTag}
             density={density}
+            vendorFilter={vendorFilter}
+            onVendorFilterChange={setVendorFilter}
+            vendorOptions={vendorOptions}
+            resolveContactVendorId={resolveContactVendorId}
+            currentTeamMemberId={teamMember?.id ?? null}
+            canSeeUnassigned={isAdmin}
           />
         }
         view={
