@@ -34,25 +34,22 @@ Regra: dev-first; prod só com "vai" do CTO; `DROP INDEX CONCURRENTLY` via Manag
 
 ## Onda 1 — Operacional (~7h)
 
-### T1.0.1 🟠 — DECISÃO NatuPlast (bloqueante do 1.1)
-- **What:** confirmar com CTO/cliente: número `556282392982` saiu de propósito ou re-registrar instância?
-- **Done when:** decisão registrada; se re-registrar, history-sync backfill agendado
-- **Blocks:** T1.1.2 (corte do token 932b8d10)
-- **Estimativa:** — (negócio)
+### T1.0.1 ✅ — DECISÃO NatuPlast — TOMADA 2026-07-10 (CTO)
+- **Decisão:** número `556282392982` (token `932b8d10`) está FORA de uso — número atual da operação é `5522999614934` ("Tath", instância `521a57c5`, connected, uazapi, criada 2026-07-02, única da org em prod). Caminho = desregistrar webhook do antigo (opção A), sem re-registro nem backfill.
+- **Caveat registrado:** o número antigo ainda recebia ~890 msgs reais/dia no Uazapi; pós-corte elas não chegam ao Torque (atendimento do número antigo, se houver, fica fora da plataforma).
+- **Unblocks:** T1.1.2 (corte do token 932b8d10)
 
-### T1.1.1 [P] 🟢 — Desregistrar webhook das instâncias de teste do dev
+### T1.1.1 [P] 🟡 — Desregistrar webhook das instâncias de teste do dev — CORTE MANUAL PENDENTE
 - **What:** desregistrar webhook (não deletar instância) dos tokens `10471d40`, `643a34f9`, `69943281` (teste dev 554891005289)
-- **Where:** edge fn `whatsapp-rebind-webhook` (fala com API Uazapi)
+- **Como (2026-07-10):** rebind-webhook NÃO alcança fantasma (só seleciona de `whatsapp_instances`). Caminho real = API Uazapi direto: `POST /webhook` com header `token: <instance_token>`, body `{"action":"delete","id":"<webhook_id>"}` (ids lidos via `GET /webhook`). Classifier bloqueou execução em auto mode — comandos entregues ao CTO pra rodar via `!`.
 - **Done when:** esses tokens param de aparecer em `whatsapp_webhook_dlq` (novos rows)
-- **Estimativa:** 1h
 
-### T1.1.2 🟠 — Cortar webhook fantasma + early-drop + demover log (ERR-4)
-- **What:** (1) desregistrar webhook de `932b8d10` (pós T1.0.1) + `3b8b416b`; (2) early-drop no `whatsapp-webhook` por denylist derivada de N exhausted; (3) `logRuntime uazapi_unknown_instance` error→contador agregado
-- **Where:** `whatsapp-webhook/index.ts` (branch `unknown_instance`), `_shared`
+### T1.1.2 🟡 — Cortar webhook fantasma + early-drop + demover log (ERR-4) — CÓDIGO FEITO 2026-07-10
+- **What:** (1) desregistrar webhook de `932b8d10` + `3b8b416b` — **manual CTO** (mesmo bloqueio do T1.1.1; ids/comandos prontos); (2) ✅ early-drop no `whatsapp-webhook` por denylist DERIVADA da DLQ (token com ≥50 rows exauridas não-resolvidas; cache isolate 5min; fail-open) — `whatsapp-webhook/poison-denylist.ts` puro + wiring; (3) ✅ drop denylistado = 200 sem DLQ row nem log error; log `skipped` sampled 1/50 (`uazapi_unknown_instance_dropped`); token não-denylistado mantém error (sinal legítimo de instância nova)
+- **Guarda (medida ANTES, 2026-07-10):** 95% das entradas 48h = token 932b8d10 (NatuPlast antigo, decisão A tomada); exclusão explícita `f689d60c` = número ATUAL NatuPlast (…4934) — não tocar
+- **QA:** 6 Deno.test verdes (threshold/TTL/fail-open/stale-verdict/independência) + contract 14/14 + deno check 36=36 baseline (0 novos)
 - **Done when:** entrada DLQ < 300/dia; erros de webhook em `runtime_logs` ~zero
-- **Test:** medir msgs reais dropadas ANTES de ligar denylist (guarda contra esconder perda)
-- **Gate:** `dlq_replay_batch` sem erro em 24h
-- **Depends on:** T1.0.1 · **Estimativa:** 2h · **branch:** `fix/dlq-poison-webhook-cut`
+- **Gate:** `dlq_replay_batch` sem erro em 24h · **branch:** `fix/dlq-poison-webhook-cut`
 
 ### T1.2.1 🟠 — Gate de liveness na execução de workflow (ERR-3)
 - **What:** gate no `process-workflow-executions`: instância viva = `status IN ('open','connected') AND session_dead_since IS NULL`; park `paused`+`error='no_live_instance'` com resume via watchdog
