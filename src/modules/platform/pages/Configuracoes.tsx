@@ -1,4 +1,5 @@
 import { useState, useEffect, lazy, Suspense, type CSSProperties, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
 import { useThemeTransition } from "@/contexts/ThemeTransitionContext";
@@ -631,8 +632,29 @@ function PillTab({ value, label, icon }: { value: string; label: string; icon: R
   );
 }
 
+const TAB_VALUES = new Set([
+  "tags",
+  "notifications",
+  "whatsapp",
+  "integracoes",
+  "webhooks",
+  "api",
+  "sla",
+  "api-keys",
+  "sandbox",
+  "checklists",
+  "general",
+  "ajuda",
+]);
+
 export default function Configuracoes() {
   const { orgType } = useOrganization();
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const initialTab =
+    requestedTab && (TAB_VALUES.has(requestedTab) || (requestedTab === "marcos" && orgType === "outbound"))
+      ? requestedTab
+      : "tags";
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -650,7 +672,7 @@ export default function Configuracoes() {
         </p>
       </div>
 
-      <Tabs defaultValue="tags" className="w-full">
+      <Tabs defaultValue={initialTab} className="w-full">
         <TabsList className="flex flex-nowrap items-center gap-3 h-auto border-b-0 bg-transparent p-0 py-2 w-full max-w-5xl [overflow-x:clip]">
           <PillTab value="tags" label="Tags" icon={<Tag className="w-4 h-4" />} />
           <PillTab value="notifications" label="Notificações" icon={<Bell className="w-4 h-4" />} />
