@@ -259,7 +259,14 @@ export function useCustomPipeEntries(pipelineId: string | undefined) {
         .from("custom_pipe_entries")
         .select(`
           *,
-          lead:leads(id, name, company, phone, email),
+          lead:leads(
+            id, name, company, phone, email, rating, origin, urgency, faturamento, notes,
+            avatar_url, pre_qualification_tier, qualification_tier,
+            responsible:team_members!leads_responsible_id_fkey(id, name, avatar_url),
+            sdr:team_members!leads_sdr_id_fkey(id, name, avatar_url),
+            closer:team_members!leads_closer_id_fkey(id, name, avatar_url),
+            lead_tags(tag:tags(id, name, color))
+          ),
           stage:custom_pipeline_stages(id, name, color, stage_key, position),
           assigned_member:team_members!custom_pipe_entries_assigned_to_fkey(
             id, name, user_id
