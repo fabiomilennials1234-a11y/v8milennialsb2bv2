@@ -7,8 +7,14 @@
  * Controlled component — all state from props. Instance selector UI handled by parent.
  */
 import { useRef, useState, useEffect } from "react";
-import { Search, X, ChevronDown } from "lucide-react";
+import { Search, X, ChevronDown, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -23,6 +29,13 @@ export interface MobileChatListHeaderProps {
   activeFilter: MobileChatFilter;
   onFilterChange: (filter: MobileChatFilter) => void;
   unreadCount: number;
+  // ─── Filtro por vendedor ────────────────────────────────────────────────────
+  /** Valor atual: "all" | "mine" | "unassigned" | <teamMemberId>. */
+  vendorFilter: string;
+  onVendorFilterChange: (value: string) => void;
+  vendorOptions: { id: string; name: string }[];
+  currentTeamMemberId: string | null;
+  canSeeUnassigned: boolean;
 }
 
 // ─── Filter chip config ──────────────────────────────────────────────────────
@@ -45,6 +58,11 @@ export function MobileChatListHeader({
   activeFilter,
   onFilterChange,
   unreadCount,
+  vendorFilter,
+  onVendorFilterChange,
+  vendorOptions,
+  currentTeamMemberId,
+  canSeeUnassigned,
 }: MobileChatListHeaderProps) {
   const [searchExpanded, setSearchExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -67,6 +85,17 @@ export function MobileChatListHeader({
     { key: "unread", label: "Não lidas", count: unreadCount },
     { key: "groups", label: "Grupos" },
   ];
+
+  // Label curta pro chip de vendedor (o valor completo fica no dropdown).
+  const vendorActive = vendorFilter !== "all";
+  const vendorLabel =
+    vendorFilter === "all"
+      ? "Vendedor"
+      : vendorFilter === "mine"
+        ? "Minhas"
+        : vendorFilter === "unassigned"
+          ? "Não atrib."
+          : vendorOptions.find((v) => v.id === vendorFilter)?.name ?? "Vendedor";
 
   return (
     <div className="bg-background border-b border-border/30 shrink-0">
@@ -138,6 +167,35 @@ export function MobileChatListHeader({
 
       {/* ── Row 2: Filter chips (horizontal scroll) ────────────────────────── */}
       <div className="flex gap-2 px-3 pt-1 pb-2 overflow-x-auto scrollbar-none">
+        {/* Chip de vendedor — Select estilizado como chip */}
+        <Select value={vendorFilter} onValueChange={onVendorFilterChange}>
+          <SelectTrigger
+            className={cn(
+              "shrink-0 h-auto w-auto gap-1 rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap [&>svg]:hidden",
+              vendorActive
+                ? "bg-[hsl(47_100%_50%)]/10 text-[hsl(47_100%_50%)] border-[hsl(47_100%_50%)]/30"
+                : "border-border/40 text-muted-foreground",
+            )}
+            aria-label="Filtrar por vendedor"
+          >
+            <Users className="w-3 h-3 shrink-0" />
+            {vendorLabel}
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os vendedores</SelectItem>
+            {currentTeamMemberId && (
+              <SelectItem value="mine">Minhas conversas</SelectItem>
+            )}
+            {vendorOptions.map((v) => (
+              <SelectItem key={v.id} value={v.id}>
+                {v.name}
+              </SelectItem>
+            ))}
+            {canSeeUnassigned && (
+              <SelectItem value="unassigned">Não atribuídas</SelectItem>
+            )}
+          </SelectContent>
+        </Select>
         {chips.map((chip) => {
           const isActive = activeFilter === chip.key;
           const showCount = chip.count != null && chip.count > 0;
