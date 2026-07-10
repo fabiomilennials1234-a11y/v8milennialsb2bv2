@@ -105,4 +105,5 @@ export * from "./lib/support-unread";
 export * from "./lib/support-rate-limit";
 export * from "./lib/ticket-lifecycle";
 export * from "./lib/first-response-clock";
+export * from "./lib/defect-url";
 export * from "./lib/help-suggestions";

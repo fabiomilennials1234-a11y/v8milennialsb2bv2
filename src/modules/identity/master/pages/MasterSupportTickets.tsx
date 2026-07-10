@@ -12,7 +12,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronDown, ChevronRight, Hand, LifeBuoy, Loader2, RotateCw, Send } from "lucide-react";
+import { Bug, ChevronDown, ChevronRight, Hand, LifeBuoy, Loader2, RotateCw, Send, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,6 +40,11 @@ import {
 } from "@/modules/platform/lib/support-ticket-draft";
 import { isTerminal } from "@/modules/platform/lib/ticket-lifecycle";
 import { firstResponseClock } from "@/modules/platform/lib/first-response-clock";
+import {
+  defectLabel,
+  groupByDefect,
+  normalizeDefectUrl,
+} from "@/modules/platform/lib/defect-url";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 import {
   useClaimSupportTicket,
@@ -128,6 +134,12 @@ export default function MasterSupportTickets() {
         )}
       </div>
 
+      <DefectSummary
+        tickets={tickets ?? []}
+        active={filters.defectUrl}
+        onSelect={(defectUrl) => setFilters((f) => ({ ...f, defectUrl }))}
+      />
+
       <Card>
         <CardContent className="p-0">
           <ScrollArea className="h-[620px]">
@@ -171,6 +183,58 @@ export default function MasterSupportTickets() {
           </ScrollArea>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * Quantas Organizações distintas estão em cada defeito. É este número — e não o
+ * relato de um cliente — que vira Severidade. Aparece só quando há defeito
+ * vinculado; um painel sempre visível vira ruído.
+ */
+function DefectSummary({
+  tickets,
+  active,
+  onSelect,
+}: {
+  tickets: MasterSupportTicket[];
+  active: string | undefined;
+  onSelect: (url: string | undefined) => void;
+}) {
+  const grupos = groupByDefect(tickets);
+  if (grupos.length === 0 && !active) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Bug className="h-3.5 w-3.5" aria-hidden />
+        Defeitos
+      </span>
+      {grupos.map((g) => (
+        <button
+          key={g.defectUrl}
+          type="button"
+          onClick={() => onSelect(active === g.defectUrl ? undefined : g.defectUrl)}
+          className={cn(
+            "rounded-full border px-2.5 py-1 text-xs transition-colors",
+            active === g.defectUrl
+              ? "border-primary/50 bg-primary/10 text-foreground"
+              : "border-border/60 text-muted-foreground hover:bg-muted/40",
+          )}
+        >
+          {defectLabel(g.defectUrl) ?? "defeito"}
+          <span className="ml-1.5 text-muted-foreground">
+            {g.organizations} org{g.organizations > 1 ? "s" : ""} · {g.tickets} chamado
+            {g.tickets > 1 ? "s" : ""}
+          </span>
+        </button>
+      ))}
+      {active && (
+        <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => onSelect(undefined)}>
+          <X className="h-3 w-3" aria-hidden />
+          Ver todos
+        </Button>
+      )}
     </div>
   );
 }
@@ -483,6 +547,8 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
           </Badge>
         )}
 
+        <DefectField ticket={ticket} />
+
         {clientErrors.length > 0 && (
           <div className="space-y-1.5">
             <h4 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -531,6 +597,64 @@ function ClockRow({ ticket }: { ticket: MasterSupportTicket }) {
         {clock.isOverdue ? "atrasado desde " : "até "}
         {format(clock.deadline, "dd/MM HH:mm", { locale: ptBR })}
       </dd>
+    </div>
+  );
+}
+
+/**
+ * O defeito vive no GitHub. Aqui só o link — contar chamados por ele é o que
+ * torna a Severidade uma medida.
+ */
+function DefectField({ ticket }: { ticket: MasterSupportTicket }) {
+  const triage = useTriageSupportTicket();
+  const [value, setValue] = useState(ticket.defect_url ?? "");
+  const [error, setError] = useState<string | null>(null);
+
+  function save() {
+    const parsed = normalizeDefectUrl(value);
+    if (!parsed.ok) {
+      setError(parsed.reason);
+      return;
+    }
+    setError(null);
+    if (parsed.url === (ticket.defect_url ?? null)) return;
+
+    triage.mutate(
+      { ticketId: ticket.id, defect_url: parsed.url },
+      { onError: () => toast.error("Não deu para vincular o defeito.") },
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <h4 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        Defeito (GitHub)
+      </h4>
+      <Input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => e.key === "Enter" && save()}
+        placeholder="https://github.com/…/issues/123"
+        aria-label="Link da issue do GitHub"
+        aria-invalid={!!error}
+        className="h-8 text-xs"
+      />
+      {error && (
+        <p role="alert" className="text-[11px] text-destructive">
+          {error}
+        </p>
+      )}
+      {ticket.defect_url && !error && (
+        <a
+          href={ticket.defect_url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-block text-[11px] text-primary underline-offset-2 hover:underline"
+        >
+          {defectLabel(ticket.defect_url)}
+        </a>
+      )}
     </div>
   );
 }

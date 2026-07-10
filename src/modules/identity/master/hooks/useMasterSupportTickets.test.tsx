@@ -87,6 +87,25 @@ describe("useMasterSupportTickets", () => {
     expect(result.current.data?.map((t) => t.id)).toEqual(["t1"]);
   });
 
+  // Filtrar por defeito e' como o staff responde os N clientes de uma vez
+  // quando o dev fecha a issue.
+  it("filtra todos os chamados de um mesmo defeito", async () => {
+    asMaster();
+    // `created_at` importa: a fila vem mais recente primeiro.
+    mock.mockTable("support_tickets", [
+      { id: "t1", created_at: "2026-07-03T00:00:00Z", defect_url: "https://github.com/o/r/issues/1" },
+      { id: "t2", created_at: "2026-07-02T00:00:00Z", defect_url: "https://github.com/o/r/issues/2" },
+      { id: "t3", created_at: "2026-07-01T00:00:00Z", defect_url: "https://github.com/o/r/issues/1" },
+    ]);
+
+    const { result } = renderHook(
+      () => useMasterSupportTickets({ defectUrl: "https://github.com/o/r/issues/1" }),
+      { wrapper: wrap(newQc()) },
+    );
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.data?.map((t) => t.id)).toEqual(["t1", "t3"]);
+  });
+
   it("filtros diferentes não compartilham cache", async () => {
     asMaster();
     const qc = newQc();
@@ -113,6 +132,29 @@ describe("useTriageSupportTicket", () => {
     expect(row.tipo).toBe("duvida");
     expect(row.severidade).toBe("alta");
     expect(row.status).toBe("em_andamento");
+  });
+
+  it("vincula o defeito", async () => {
+    asMaster();
+    mock.mockTable("support_tickets", [{ id: "t1" }]);
+    const { result } = renderHook(() => useTriageSupportTicket(), { wrapper: wrap(newQc()) });
+
+    await result.current.mutateAsync({
+      ticketId: "t1",
+      defect_url: "https://github.com/o/r/issues/1005",
+    });
+    expect(mock.getUpdated("support_tickets")[0].defect_url).toBe(
+      "https://github.com/o/r/issues/1005",
+    );
+  });
+
+  it("desvincula o defeito com null", async () => {
+    asMaster();
+    mock.mockTable("support_tickets", [{ id: "t1", defect_url: "x" }]);
+    const { result } = renderHook(() => useTriageSupportTicket(), { wrapper: wrap(newQc()) });
+
+    await result.current.mutateAsync({ ticketId: "t1", defect_url: null });
+    expect(mock.getUpdated("support_tickets")[0].defect_url).toBeNull();
   });
 
   // Os carimbos são do banco. O trigger levanta exceção se o cliente os tocar —
