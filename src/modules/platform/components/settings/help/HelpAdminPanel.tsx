@@ -15,6 +15,8 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { VideoBadge } from "./VideoBadge";
+import { FeedbackSummary } from "./FeedbackSummary";
+import { useHelpFeedbackSummaries } from "@/modules/platform/hooks/useHelpFeedbackSummaries";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -453,6 +455,7 @@ function ArticleForm({ article, categories, defaultCategoryId, open, onOpenChang
 export function HelpAdminPanel() {
   const { data: categories = [] } = useHelpCategories();
   const { data: articles = [] } = useHelpArticles();
+  const { data: feedbackSummaries = {} } = useHelpFeedbackSummaries();
   const deleteCategory = useDeleteHelpCategory();
   const deleteArticle = useDeleteHelpArticle();
 
@@ -585,7 +588,8 @@ export function HelpAdminPanel() {
                           <span className="text-sm">{art.title}</span>
                           {art.video_url && <VideoBadge />}
                         </div>
-                        <div className="flex gap-1">
+                        <div className="flex items-center gap-3">
+                          <FeedbackSummary summary={feedbackSummaries[art.id]} />
                           <Button
                             variant="ghost"
                             size="icon"

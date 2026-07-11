@@ -16773,6 +16773,15 @@ export type Database = {
         }
         Returns: Json
       }
+      get_help_article_feedback_summaries: {
+        Args: never
+        Returns: {
+          article_id: string
+          helpful_down: number
+          helpful_up: number
+          reasons: string[]
+        }[]
+      }
       get_import_batches: {
         Args: { p_limit?: number }
         Returns: {
