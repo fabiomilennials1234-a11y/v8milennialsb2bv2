@@ -25,6 +25,8 @@ export interface HelpArticle {
   title: string;
   summary: string | null;
   content: string;
+  /** Vídeo do Artigo (ADR-0019): URL de origem allowlisted (Loom/YouTube). NULL = sem vídeo. */
+  video_url: string | null;
   media: HelpArticleMedia[];
   tags: string[];
   sort_order: number;
