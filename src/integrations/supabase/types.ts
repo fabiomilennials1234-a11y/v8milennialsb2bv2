@@ -7475,6 +7475,54 @@ export type Database = {
           },
         ]
       }
+      help_article_feedback: {
+        Row: {
+          article_id: string
+          created_at: string
+          helpful: boolean
+          id: string
+          organization_id: string | null
+          reason: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          article_id: string
+          created_at?: string
+          helpful: boolean
+          id?: string
+          organization_id?: string | null
+          reason?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          article_id?: string
+          created_at?: string
+          helpful?: boolean
+          id?: string
+          organization_id?: string | null
+          reason?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "help_article_feedback_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "help_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "help_article_feedback_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       help_articles: {
         Row: {
           category_id: string
@@ -7489,6 +7537,7 @@ export type Database = {
           tags: string[] | null
           title: string
           updated_at: string | null
+          video_url: string | null
         }
         Insert: {
           category_id: string
@@ -7503,6 +7552,7 @@ export type Database = {
           tags?: string[] | null
           title: string
           updated_at?: string | null
+          video_url?: string | null
         }
         Update: {
           category_id?: string
@@ -7517,6 +7567,7 @@ export type Database = {
           tags?: string[] | null
           title?: string
           updated_at?: string | null
+          video_url?: string | null
         }
         Relationships: [
           {
@@ -16085,6 +16136,10 @@ export type Database = {
       can_manage_whatsapp_instances:
         | { Args: never; Returns: boolean }
         | { Args: { p_org_id: string }; Returns: boolean }
+      can_read_help_article: {
+        Args: { p_article_id: string }
+        Returns: boolean
+      }
       can_read_support_attachment: {
         Args: { object_name: string }
         Returns: boolean

@@ -10,7 +10,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { parseVideoEmbed } from "@/modules/platform/lib/video-embed";
 import type { HelpArticleWithCategory } from "@/modules/platform/hooks/useHelpCenter";
+import { ArticleFeedback } from "./ArticleFeedback";
 
 interface HelpArticleDialogProps {
   article: HelpArticleWithCategory | null;
@@ -44,6 +46,10 @@ export function HelpArticleDialog({
 
   const mediaItems = Array.isArray(article.media) ? article.media : [];
 
+  // Vídeo do Artigo (ADR-0019): só embeda se a URL passar pela allowlist.
+  // URL ausente/inválida → nada de vídeo, o artigo renderiza normalmente.
+  const videoEmbed = article.video_url ? parseVideoEmbed(article.video_url) : null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0">
@@ -55,6 +61,20 @@ export function HelpArticleDialog({
         </DialogHeader>
 
         <ScrollArea className="flex-1 px-6 pb-4">
+          {videoEmbed && (
+            <div className="mb-5 aspect-video w-full overflow-hidden rounded-xl border border-border bg-card">
+              <iframe
+                src={videoEmbed.embedUrl}
+                title={`Vídeo: ${article.title}`}
+                className="h-full w-full"
+                loading="lazy"
+                allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                allowFullScreen
+                sandbox="allow-scripts allow-same-origin allow-presentation"
+              />
+            </div>
+          )}
+
           <div className="prose prose-sm dark:prose-invert max-w-none">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
               {article.content}
@@ -80,6 +100,8 @@ export function HelpArticleDialog({
               ))}
             </div>
           )}
+
+          <ArticleFeedback articleId={article.id} />
         </ScrollArea>
 
         {(prevArticle || nextArticle) && (
