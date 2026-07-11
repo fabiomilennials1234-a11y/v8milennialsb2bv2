@@ -378,6 +378,18 @@ export function sanitizeAssistantMessage(
     }
   }
 
+  // Passo 1d: tag de scaffolding <prefill>...</prefill> emitida como texto
+  // (incidente prod 2026-07-11). gemini-3-flash-preview solta um
+  // bloco <prefill> (frequentemente vazio) onde intencionava disparar mídia —
+  // sem tool nativo disponível, improvisa a tag. Removemos só os marcadores e
+  // preservamos o texto interno (nunca deletar uma resposta real que o modelo
+  // por acaso tenha embrulhado). Sem chave "action" → nada a recuperar.
+  {
+    const before = text;
+    text = text.replace(/<\/?prefill\b[^>]*>/gi, "");
+    if (text !== before) droppedBlocks += 1;
+  }
+
   // Passo 2: objetos JSON soltos contendo "action":"..."
   const blocks = extractActionJsonBlocks(text);
   if (blocks.length > 0) {
@@ -422,7 +434,7 @@ export function sanitizeAssistantMessage(
   // pseudo-tags inline `<tool_name: args>` residuais.
   INLINE_TOOL_TAG_RE.lastIndex = 0;
   text = text
-    .replace(/<\/?(?:thinking|response)[^>]*>/gi, "")
+    .replace(/<\/?(?:thinking|response|prefill)[^>]*>/gi, "")
     .replace(/<\/?(?:tool_call|vertical_tool_calls|no_tool_calls)\b[^>]*\/?\s*>/gi, "")
     .replace(INLINE_TOOL_TAG_RE, "")
     .trim();

@@ -193,6 +193,31 @@ describe("sanitizeAssistantMessage", () => {
     expect(r.text).toBe("Tudo certo.");
   });
 
+  // Regressão: leak <prefill></prefill> (incidente prod 2026-07-11).
+  // gemini-3-flash-preview emite tag de scaffolding <prefill> como TEXTO
+  // (empty block onde intencionava disparar mídia). Sem strip, `<prefill>`
+  // e `</prefill>` viram balões literais no WhatsApp do cliente.
+  it("strips empty <prefill></prefill> scaffolding leaked as text (prod incident 2026-07-11)", () => {
+    const raw = "Vou te enviar o catálogo completo para você conhecer toda a nossa linha. <prefill> </prefill>";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Vou te enviar o catálogo completo para você conhecer toda a nossa linha.");
+    expect(r.text).not.toMatch(/prefill/i);
+  });
+
+  it("strips <prefill> tag markers but preserves inner text", () => {
+    const raw = "Olá <prefill>tudo bem?</prefill>";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Olá tudo bem?");
+    expect(r.text).not.toMatch(/prefill/i);
+  });
+
+  it("handles unclosed <prefill> defensively", () => {
+    const raw = "Segue o material.\n<prefill>";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Segue o material.");
+    expect(r.text).not.toMatch(/prefill/i);
+  });
+
   it("handles unclosed <tool_call> defensively (discards trailing leak)", () => {
     const raw = "Vou enviar.\n<tool_call>\n{\"tool_name\": \"send_product_material\", \"tool_arguments\":";
     const r = sanitizeAssistantMessage(raw, false);
