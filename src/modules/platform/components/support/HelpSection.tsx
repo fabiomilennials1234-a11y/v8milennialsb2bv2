@@ -4,6 +4,7 @@ import { BookOpen, ChevronRight, Search, Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useHelpArticles } from "@/modules/platform/hooks/useHelpCenter";
 import { rankHelpArticles } from "@/modules/platform/lib/help-suggestions";
+import { VideoBadge } from "@/modules/platform/components/settings/help/VideoBadge";
 import type { HelpArticleWithCategory } from "@/modules/platform/hooks/useHelpCenter";
 
 interface Props {
@@ -76,7 +77,10 @@ export function HelpSection({ onOpenArticle }: Props) {
                     <BookOpen className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">{article.title}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="min-w-0 truncate text-sm">{article.title}</span>
+                      {article.video_url && <VideoBadge />}
+                    </span>
                     {article.summary && (
                       <span className="block truncate text-xs text-muted-foreground">
                         {article.summary}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseVideoEmbed } from "./video-embed";
+import { parseVideoEmbed, resolveVideoUrlInput } from "./video-embed";
 
 const LOOM_ID = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4";
 
@@ -112,5 +112,32 @@ describe("parseVideoEmbed — esquemas perigosos (segurança)", () => {
   it("recusa esquema disfarçado com espaços/caixa", () => {
     expect(parseVideoEmbed("  javascript:alert(1)")).toBeNull();
     expect(parseVideoEmbed("JavaScript:alert(1)")).toBeNull();
+  });
+});
+
+// Fatia A2: o resolvedor do campo "URL de vídeo" no form do admin.
+describe("resolveVideoUrlInput — campo do form (A2)", () => {
+  it("vazio ou só espaços remove o vídeo (value null, ok)", () => {
+    expect(resolveVideoUrlInput("")).toEqual({ ok: true, value: null, embed: null });
+    expect(resolveVideoUrlInput("   ")).toEqual({ ok: true, value: null, embed: null });
+  });
+
+  it("URL allowlisted persiste a origem trimada e expõe o provider", () => {
+    expect(resolveVideoUrlInput("  https://youtu.be/dQw4w9WgXcQ  ")).toEqual({
+      ok: true,
+      value: "https://youtu.be/dQw4w9WgXcQ",
+      embed: { provider: "youtube", embedUrl: "https://www.youtube.com/embed/dQw4w9WgXcQ" },
+    });
+    expect(resolveVideoUrlInput(`https://www.loom.com/share/${LOOM_ID}`)).toEqual({
+      ok: true,
+      value: `https://www.loom.com/share/${LOOM_ID}`,
+      embed: { provider: "loom", embedUrl: `https://www.loom.com/embed/${LOOM_ID}` },
+    });
+  });
+
+  it("host fora da allowlist recusa (ok false), não persiste", () => {
+    expect(resolveVideoUrlInput("https://vimeo.com/123456789")).toEqual({ ok: false });
+    expect(resolveVideoUrlInput("isto não é uma url")).toEqual({ ok: false });
+    expect(resolveVideoUrlInput("javascript:alert(1)")).toEqual({ ok: false });
   });
 });
