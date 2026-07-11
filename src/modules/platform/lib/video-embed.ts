@@ -36,6 +36,28 @@ export function parseVideoEmbed(url: string): VideoEmbed | null {
   return null;
 }
 
+/**
+ * Resolve o campo "URL de vídeo" do form de artigo (fatia A2).
+ *
+ * O form guarda a URL de ORIGEM (Loom/YouTube) em `video_url`; o reader
+ * re-parseia com `parseVideoEmbed` na hora de embedar. Aqui só decidimos o que
+ * persistir e se o input é aceitável:
+ *  - vazio/só espaços → `value: null` (remove o vídeo), sempre ok.
+ *  - host allowlisted com id extraível → ok, persiste a URL trimada + provider.
+ *  - qualquer outra coisa → `ok: false` (o form mostra erro inline e não salva).
+ */
+export type VideoUrlResolution =
+  | { ok: true; value: string | null; embed: VideoEmbed | null }
+  | { ok: false };
+
+export function resolveVideoUrlInput(raw: string): VideoUrlResolution {
+  const trimmed = raw.trim();
+  if (trimmed === "") return { ok: true, value: null, embed: null };
+  const embed = parseVideoEmbed(trimmed);
+  if (!embed) return { ok: false };
+  return { ok: true, value: trimmed, embed };
+}
+
 function matchLoom(host: string, url: URL): string | null {
   if (host !== "loom.com") return null;
   // /share/ID e /embed/ID → o id é o segmento após o prefixo conhecido.

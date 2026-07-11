@@ -242,6 +242,27 @@ describe("SupportPanel", () => {
     expect(screen.getByText("/oportunidades")).toBeInTheDocument();
   });
 
+  // Fatia A3: o selo "vídeo" na linha do artigo, derivado de video_url.
+  it("mostra o selo de vídeo quando o artigo tem video_url", async () => {
+    const user = userEvent.setup();
+    articlesData.current = [artigo({ video_url: "https://youtu.be/dQw4w9WgXcQ" })];
+    setup(undefined, "/oportunidades");
+    await user.click(screen.getByText("abrir painel"));
+
+    await screen.findByText("Por que um lead não aparece no kanban?");
+    expect(screen.getByText("vídeo")).toBeInTheDocument();
+  });
+
+  it("não mostra o selo de vídeo quando video_url é nulo", async () => {
+    const user = userEvent.setup();
+    articlesData.current = [artigo({ video_url: null })];
+    setup(undefined, "/oportunidades");
+    await user.click(screen.getByText("abrir painel"));
+
+    await screen.findByText("Por que um lead não aparece no kanban?");
+    expect(screen.queryByText("vídeo")).not.toBeInTheDocument();
+  });
+
   it("a busca filtra, e um termo sem resultado não devolve fallback", async () => {
     const user = userEvent.setup();
     articlesData.current = [artigo({})];

@@ -10,8 +10,11 @@ import {
   Eye,
   EyeOff,
   FolderPlus,
+  Check,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { VideoBadge } from "./VideoBadge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,6 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { resolveVideoUrlInput } from "@/modules/platform/lib/video-embed";
 import {
   useHelpCategories,
   useHelpArticles,
@@ -202,11 +206,17 @@ function ArticleForm({ article, categories, defaultCategoryId, open, onOpenChang
     title: article?.title || "",
     summary: article?.summary || "",
     content: article?.content || "",
+    video_url: article?.video_url || "",
     tags: (article?.tags || []).join(", "),
     sort_order: article?.sort_order || 0,
     is_published: article?.is_published ?? true,
     media: (article?.media || []) as HelpArticleMedia[],
   });
+  const [videoError, setVideoError] = useState<string | null>(null);
+
+  // Preview do provedor reconhecido (✓ YouTube / ✓ Loom) e validação inline.
+  // Vazio nunca é erro — só remove o vídeo.
+  const videoResolution = resolveVideoUrlInput(form.video_url);
 
   const createArticle = useCreateHelpArticle();
   const updateArticle = useUpdateHelpArticle();
@@ -241,6 +251,15 @@ function ArticleForm({ article, categories, defaultCategoryId, open, onOpenChang
       toast.error("Título e categoria são obrigatórios");
       return;
     }
+    // Vídeo inválido (host fora da allowlist) bloqueia o save com erro inline;
+    // campo vazio resolve pra null e segue.
+    const video = resolveVideoUrlInput(form.video_url);
+    if (!video.ok) {
+      setVideoError("Cole um link do Loom ou do YouTube. Outros sites não são aceitos.");
+      return;
+    }
+    setVideoError(null);
+
     const tags = form.tags
       .split(",")
       .map((t) => t.trim())
@@ -252,6 +271,7 @@ function ArticleForm({ article, categories, defaultCategoryId, open, onOpenChang
         title: form.title,
         summary: form.summary || null,
         content: form.content,
+        video_url: video.value,
         tags,
         sort_order: form.sort_order,
         is_published: form.is_published,
@@ -326,6 +346,34 @@ function ArticleForm({ article, categories, defaultCategoryId, open, onOpenChang
               rows={12}
               className="font-mono text-sm"
             />
+          </div>
+
+          <div className="grid gap-2">
+            <Label>URL de vídeo (Loom ou YouTube)</Label>
+            <Input
+              value={form.video_url}
+              onChange={(e) => {
+                setForm({ ...form, video_url: e.target.value });
+                if (videoError) setVideoError(null);
+              }}
+              placeholder="https://www.loom.com/share/… ou https://youtu.be/…"
+              aria-invalid={!!videoError}
+              className={cn(videoError && "border-destructive focus-visible:ring-destructive")}
+            />
+            {videoError ? (
+              <p role="alert" className="text-xs text-destructive">
+                {videoError}
+              </p>
+            ) : videoResolution.ok && videoResolution.embed ? (
+              <p className="flex items-center gap-1 text-xs text-primary">
+                <Check className="h-3 w-3" aria-hidden />
+                {videoResolution.embed.provider === "youtube" ? "YouTube" : "Loom"} reconhecido
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Opcional. Deixe em branco para não exibir vídeo.
+              </p>
+            )}
           </div>
 
           <div className="grid gap-2">
@@ -535,6 +583,7 @@ export function HelpAdminPanel() {
                             <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
                           )}
                           <span className="text-sm">{art.title}</span>
+                          {art.video_url && <VideoBadge />}
                         </div>
                         <div className="flex gap-1">
                           <Button
