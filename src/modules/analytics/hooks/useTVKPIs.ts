@@ -15,7 +15,6 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
-import { useFeatureFlag } from "@/modules/platform";
 import { useSDRPerformance } from "@/modules/engagement/hooks/useSDRPerformance";
 import { useCloserPerformance } from "@/modules/engagement/hooks/useCloserPerformance";
 import { useNewLeads } from "@/modules/leads";
@@ -61,9 +60,6 @@ const EMPTY: TVKPIValues = {
 
 export function useTVKPIs(range: TVPeriodRange): TVKPIValues {
   const { organizationId, isReady } = useOrganization();
-  // Dark-launch gate (U3): canonical get_sales_metrics runs only when the org is
-  // flipped on. Fail-closed → default is legacy (money KPIs degrade to zeros).
-  const useCanonical = useFeatureFlag("canonical_metrics").enabled;
   const { data: whatsapp = [] } = usePipeWhatsapp();
   const sdrPerf = useSDRPerformance(range);
   const closerPerf = useCloserPerformance(range);
@@ -73,7 +69,7 @@ export function useTVKPIs(range: TVPeriodRange): TVKPIValues {
   // Período NOMEADO ('range' + datas locais); o banco resolve as fronteiras no
   // tz da org. Frontend NÃO converte tz nem trunca entries.
   const { data: sales } = useQuery({
-    queryKey: ["tv-kpi-sales-canonical", organizationId, useCanonical, localDateStr(range.start), localDateStr(range.end)],
+    queryKey: ["tv-kpi-sales-canonical", organizationId, localDateStr(range.start), localDateStr(range.end)],
     queryFn: async (): Promise<SalesMetricsResult | null> => {
       if (!organizationId) return null;
       const { data, error } = await supabase.rpc("get_sales_metrics" as any, {
@@ -92,7 +88,7 @@ export function useTVKPIs(range: TVPeriodRange): TVKPIValues {
       }
       return unwrapRpcJsonb<SalesMetricsResult>(data);
     },
-    enabled: isReady && !!organizationId && useCanonical,
+    enabled: isReady && !!organizationId,
     staleTime: 1000 * 30,
     refetchInterval: 1000 * 60,
     refetchIntervalInBackground: false,

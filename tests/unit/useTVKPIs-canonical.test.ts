@@ -126,20 +126,23 @@ describe("useTVKPIs — leitura canônica (get_sales_metrics)", () => {
   });
 });
 
-describe("useTVKPIs — canonical_metrics flag gate (U3)", () => {
+// Regressão do incidente 2026-07-13: o gate dark-launch U3 (canonical_metrics)
+// shipou OFF para 100% das orgs e zerou todo o dinheiro da TV. O gate foi REMOVIDO
+// — o caderno canônico é sempre-on. Este bloco trava a ausência do gate: mesmo com
+// a flag OFF, a RPC canônica é chamada e o dinheiro NÃO zera.
+describe("useTVKPIs — canônico sempre-on (gate U3 removido)", () => {
   afterEach(() => {
     canonicalFlag = { enabled: true, isLoading: false };
   });
 
-  it("OFF → nunca chama get_sales_metrics; KPIs de dinheiro degradam a zero", async () => {
+  it("flag OFF é ignorada → get_sales_metrics ainda roda, dinheiro NÃO zera", async () => {
     canonicalFlag = { enabled: false, isLoading: false };
     rpcMock.mockClear();
     const { result } = renderHook(() => useTVKPIs(getPeriodRange("mes")), { wrapper: createWrapper() });
-    // KPI de reunião (fonte própria) resolve normalmente.
-    await waitFor(() => expect(result.current.reunioes).toBe(4));
-    expect(rpcMock.mock.calls.some((c) => c[0] === "get_sales_metrics")).toBe(false);
-    expect(result.current.conversao).toBe(0);
-    expect(result.current.ticket_mrr).toBe(0);
-    expect(result.current.ticket_proj).toBe(0);
+    await waitFor(() => expect(rpcMock.mock.calls.some((c) => c[0] === "get_sales_metrics")).toBe(true));
+    await waitFor(() => expect(result.current.conversao).toBe(75));
+    expect(result.current.ticket_mrr).toBe(10000);
+    expect(result.current.ticket_proj).toBe(3000);
+    expect(result.current.reunioes).toBe(4);
   });
 });

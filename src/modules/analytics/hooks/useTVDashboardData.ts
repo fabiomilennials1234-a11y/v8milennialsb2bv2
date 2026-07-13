@@ -11,7 +11,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTeamMembers, useCurrentTeamMember, useIdentity } from "@/modules/identity";
-import { useFeatureFlag } from "@/modules/platform";
 import { usePipePropostas, usePipeConfirmacao, usePipeWhatsapp } from "@/modules/pipelines";
 import { useTeamGoals, useIndividualGoals } from "@/modules/engagement/hooks/useGoals";
 import { useSDRPerformance } from "@/modules/engagement/hooks/useSDRPerformance";
@@ -88,9 +87,6 @@ export function useTVDashboardData() {
   const lastDayOfMonth = new Date(currentYear, currentMonth, 0).getDate();
 
   const { isAdmin } = useIdentity();
-  // Dark-launch gate (U3): canonical get_sales_metrics runs only when the org is
-  // flipped on. Fail-closed → default is legacy (revenue degrades to zeros).
-  const useCanonical = useFeatureFlag("canonical_metrics").enabled;
   const { data: currentTeamMember } = useCurrentTeamMember();
   const organizationId = currentTeamMember?.organization_id ?? null;
   const { data: teamMembers } = useTeamMembers();
@@ -111,7 +107,7 @@ export function useTVDashboardData() {
   return useQuery({
     queryKey: [
       "tv-dashboard-canonical",
-      currentMonth, currentYear, isAdmin, myId, organizationId, useCanonical,
+      currentMonth, currentYear, isAdmin, myId, organizationId,
       propostas, confirmacoes, whatsapp, teamGoals, individualGoals,
       sdrPerf.totals.marcadas, sdrPerf.totals.comparecidas, sdrPerf.totals.noShowRate,
     ],
@@ -121,9 +117,12 @@ export function useTVDashboardData() {
       // tz da org. O frontend NUNCA converte tz nem trunca entries. Receita já
       // líquida de estorno, agregada no servidor sobre o conjunto completo.
       let sales: SalesMetricsResult | null = null;
-      // Gate (U3): flag OFF/loading → canonical RPC never called; sales stays null
-      // → money fields degrade to zeros (identical to the RPC-absent degrade path).
-      if (useCanonical && organizationId) {
+      // Canonical is always-on. Only degrade to zeros when the RPC is genuinely
+      // ABSENT (migration not applied) — never behind a dark-launch flag. The U3
+      // gate was removed: it shipped OFF for 100% of orgs and silently zeroed all
+      // TV money (incident 2026-07-13). A real deployed-RPC runtime error still
+      // propagates (FIX-A) instead of masking money as zero.
+      if (organizationId) {
         const { data, error } = await supabase.rpc("get_sales_metrics" as any, {
           p_org_id: organizationId,
           p_period: "month",

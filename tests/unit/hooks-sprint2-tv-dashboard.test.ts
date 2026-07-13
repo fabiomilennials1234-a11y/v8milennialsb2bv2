@@ -348,18 +348,20 @@ describe("useTVDashboardData", () => {
     }
   });
 
-  it("flag OFF → não lê get_sales_metrics; receita degrada a zero (reunião intacta)", async () => {
+  // Regressão do incidente 2026-07-13: o gate dark-launch U3 (canonical_metrics)
+  // shipou OFF para 100% das orgs e zerou toda a receita da TV. Gate REMOVIDO —
+  // o caderno canônico é sempre-on. Trava a ausência do gate: flag OFF é ignorada.
+  it("flag OFF é ignorada → lê get_sales_metrics normalmente, receita NÃO zera", async () => {
     canonicalFlag = { enabled: false, isLoading: false };
     const { result } = renderHook(() => useTVDashboardData(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true), { timeout: 5000 });
 
     expect(result.current.isSuccess).toBe(true);
     const data = result.current.data!;
-    // RPC would return revenue_total 5000, but the gate ignores it → zeros.
-    expect(data.vendasRealizadas).toBe(0);
-    expect(data.ticketMedio).toBe(0);
-    expect(data.funnel.vendido).toBe(0);
-    // Meeting dim (meeting_events) unaffected by the money gate.
+    // Caderno canônico roda independente da flag → receita real do fixture (5000).
+    expect(data.vendasRealizadas).toBe(5000);
+    expect(data.ticketMedio).toBe(5000);
+    expect(data.funnel.vendido).toBe(1);
     expect(data.reunioesComparecidas).toBe(1);
   });
 });
