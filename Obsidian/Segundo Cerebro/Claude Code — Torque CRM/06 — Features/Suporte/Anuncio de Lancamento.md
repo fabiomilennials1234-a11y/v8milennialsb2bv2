@@ -36,7 +36,7 @@ Aviso in-app em duas peças para os clientes (~30 orgs) descobrirem a Central de
 6. C "Pular" (ou Esc): fecha só nesta sessão; se A reaparecer na 2ª sessão, C volta depois dele.
 7. Abrir o Suporte por qualquer via (a qualquer momento) marca `engaged` + `coachDone`; anúncio ativo some na hora. O FAB continua clicável através do furo do spotlight (scrim `pointer-events-none`).
 8. Esgotadas as 2 exibições de A, nada mais aparece (mesmo com `coachDone: false`) — sem nag infinito.
-9. Delay de entrada: A aparece ~800ms após o mount, pra não competir com o paint inicial.
+9. Delay de entrada: A só aparece depois do app "assentar" — `[data-support-fab]` presente no DOM E nenhum `[data-torque-loader]` na tela (`isAppSettled` em `support-announcement.ts`) — mais 800ms de folga, com re-checagem de tudo (assentado, elegibilidade, suporte fechado) antes de exibir. O componente faz polling leve (250ms) até assentar; se um loader remontar durante a folga, volta a esperar. O polling encerra em definitivo quando o modal exibe ou a elegibilidade morre. Marcador: atributo `data-torque-loader` no root do `TorqueLoader` (ambas as variants).
 
 ## Edge cases
 
@@ -49,3 +49,4 @@ Aviso in-app em duas peças para os clientes (~30 orgs) descobrirem a Central de
 ## Histórico
 
 - 2026-07-13 — Criado: modal A + coach-mark C, state machine testada, montagem no App shell.
+- 2026-07-13 — Fix pós-deploy: entrada por espera de condição (`isAppSettled`) em vez de timer fixo — o modal abria por cima do `TorqueLoader` e morria pra sessão se o FAB não existisse aos 800ms.
