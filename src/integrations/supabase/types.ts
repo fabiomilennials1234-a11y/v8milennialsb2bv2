@@ -16706,6 +16706,17 @@ export type Database = {
         }
         Returns: string[]
       }
+      get_custom_pipeline_stage_counts: {
+        Args: {
+          p_org_id: string
+          p_pipeline_id: string
+          p_search?: string
+        }
+        Returns: {
+          cnt: number
+          stage_id: string
+        }[]
+      }
       get_dashboard_metrics: {
         Args: {
           p_end_date: string

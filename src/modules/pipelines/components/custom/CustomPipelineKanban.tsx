@@ -9,6 +9,7 @@ import {
   type CustomPipelineStage,
   type CustomPipeEntry,
   useMoveLeadInCustomPipe,
+  useCustomPipeStageCounts,
   groupEntriesByStage,
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { toast } from "sonner";
@@ -69,6 +70,10 @@ export function CustomPipelineKanban({
   const createAcaoDoDia = useCreateAcaoDoDia();
   const { allowed: canMovePipe } = useCanDo("move_pipe_record");
   const { data: workflowCounts = {} } = useCustomPipeWorkflowCounts(pipeline.id);
+  // Contagem server-side por stage — o loader de entries corta em 1000 rows
+  // (sem .range()), então o badge não pode depender de items.length. Passa a
+  // busca pra manter paridade do badge sob filtro.
+  const { data: stageCounts = {} } = useCustomPipeStageCounts(pipeline.id, searchQuery);
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
   const bulk = useBulkSelection();
 
@@ -135,13 +140,20 @@ export function CustomPipelineKanban({
   const columns: KanbanColumn<LeadCardData>[] = useMemo(() => {
     const grouped = groupEntriesByStage(filteredEntries, stages);
 
-    return stages.map((stage) => ({
-      id: stage.id,
-      title: stage.name,
-      color: stage.color || "#64748b",
-      items: (grouped[stage.id] || []).map(transformToCard),
-    }));
-  }, [stages, filteredEntries]);
+    return stages.map((stage) => {
+      const items = (grouped[stage.id] || []).map(transformToCard);
+      return {
+        id: stage.id,
+        title: stage.name,
+        color: stage.color || "#64748b",
+        items,
+        // Total real da coluna (server-side). Fallback pro length carregado
+        // enquanto o count não chega (undefined → DraggableKanbanBoard usa
+        // items.length). Chave por stage_id (uuid) do custom pipe.
+        totalCount: stageCounts[stage.id] ?? items.length,
+      };
+    });
+  }, [stages, filteredEntries, stageCounts]);
 
   const handleStatusChange = async (itemId: string, newStageId: string) => {
     try {

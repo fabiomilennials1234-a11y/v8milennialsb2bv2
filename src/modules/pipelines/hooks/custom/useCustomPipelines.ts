@@ -316,6 +316,54 @@ export function useCustomPipeEntries(pipelineId: string | undefined) {
   });
 }
 
+/**
+ * Contagem server-side de entries por stage de um funil custom.
+ *
+ * `useCustomPipeEntries` busca sem `.range()`, então o PostgREST corta em 1000
+ * rows e o badge da coluna (que caía em `items.length`) travava em 1000. Este
+ * hook chama a RPC `get_custom_pipeline_stage_counts` (COUNT server-side) pra o
+ * total real por stage — espelha o board canônico (`get_pipeline_stage_counts`).
+ *
+ * Sem busca → conta TODAS as entries por stage (inclusive lead_id null), igual
+ * ao comportamento atual do badge. Com busca → narrow server-side por
+ * nome/empresa/telefone (aproximado por acento; ver migration).
+ *
+ * Realtime: `useCustomPipeEntries` já assina `custom_pipe_entries` e as mutations
+ * invalidam esta queryKey — o count acompanha insert/move/delete.
+ *
+ * @returns Record<stage_id, count>
+ */
+export function useCustomPipeStageCounts(
+  pipelineId: string | undefined,
+  searchQuery?: string,
+) {
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id;
+  const search = searchQuery?.trim() || null;
+
+  return useQuery({
+    queryKey: ["custom_pipe_stage_counts", pipelineId, search],
+    queryFn: async () => {
+      if (!pipelineId || !organizationId) return {} as Record<string, number>;
+
+      const { data, error } = await supabase.rpc("get_custom_pipeline_stage_counts", {
+        p_pipeline_id: pipelineId,
+        p_org_id: organizationId,
+        p_search: search,
+      });
+
+      if (error) throw error;
+
+      const counts: Record<string, number> = {};
+      for (const row of data || []) {
+        if (row.stage_id) counts[row.stage_id] = Number(row.cnt);
+      }
+      return counts;
+    },
+    enabled: !!pipelineId && !!organizationId,
+  });
+}
+
 // ────────────────────────────────────────────────────────────
 // Mutations: Pipelines
 // ────────────────────────────────────────────────────────────
@@ -792,6 +840,7 @@ export function useAddLeadToCustomPipe() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries", variables.pipeline_id] });
+      queryClient.invalidateQueries({ queryKey: ["custom_pipe_stage_counts", variables.pipeline_id] });
     },
   });
 }
@@ -901,6 +950,7 @@ export function useMoveLeadInCustomPipe() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries", variables.pipeline_id] });
       queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
+      queryClient.invalidateQueries({ queryKey: ["custom_pipe_stage_counts", variables.pipeline_id] });
       // Invalidate standard pipe queries for cross-pipe transitions
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["upsell_clients"] });
@@ -924,6 +974,7 @@ export function useRemoveLeadFromCustomPipe() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries", variables.pipeline_id] });
+      queryClient.invalidateQueries({ queryKey: ["custom_pipe_stage_counts", variables.pipeline_id] });
     },
   });
 }

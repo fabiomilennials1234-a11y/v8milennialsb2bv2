@@ -89,6 +89,7 @@ import {
   useCustomPipeline,
   useCustomPipelineStages,
   useCustomPipeEntries,
+  useCustomPipeStageCounts,
   useCreateCustomPipeline,
   useActivateTemporaryFunnel,
   usePauseTemporaryFunnel,
@@ -112,6 +113,7 @@ import {
   type FunnelStatus,
   type FunnelTemplateType,
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
+import { supabase } from "@/integrations/supabase/client";
 
 // ---------------------------------------------------------------------------
 // Wrapper
@@ -296,6 +298,41 @@ describe("useCustomPipeEntries", () => {
 
   it("is disabled when pipelineId is undefined", () => {
     const { result } = renderHook(() => useCustomPipeEntries(undefined), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useCustomPipeStageCounts", () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it("maps RPC rows into a Record<stage_id, count> (>1000 not capped)", async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: [{ stage_id: "s1", cnt: 2543 }, { stage_id: "s2", cnt: 12 }],
+      error: null,
+    } as any);
+    const { result } = renderHook(() => useCustomPipeStageCounts("p1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(supabase.rpc).toHaveBeenCalledWith("get_custom_pipeline_stage_counts", {
+      p_pipeline_id: "p1",
+      p_org_id: "org-t",
+      p_search: null,
+    });
+    expect(result.current.data).toEqual({ s1: 2543, s2: 12 });
+  });
+
+  it("passes trimmed search to the RPC (null when empty)", async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({ data: [], error: null } as any);
+    const { result } = renderHook(() => useCustomPipeStageCounts("p1", "  ana  "), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(supabase.rpc).toHaveBeenCalledWith("get_custom_pipeline_stage_counts", {
+      p_pipeline_id: "p1",
+      p_org_id: "org-t",
+      p_search: "ana",
+    });
+  });
+
+  it("is disabled when pipelineId is undefined", () => {
+    const { result } = renderHook(() => useCustomPipeStageCounts(undefined), { wrapper: createWrapper() });
     expect(result.current.fetchStatus).toBe("idle");
   });
 });
