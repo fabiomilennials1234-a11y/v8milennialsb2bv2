@@ -107,7 +107,44 @@ PostgREST não resolve a função → kanban quebra. Ordem: migration → deploy
 e os defaults (`rating||0`, `calor??5`) têm que espelhar o SQL exato, senão o
 badge diverge dos cards. Coberto por `tests/unit/kanban-filter-params.test.ts`.
 
+## Funis custom — contagem do badge (2026-07-13)
+
+Os funis **custom** (`custom_pipe_entries` + `custom_pipeline_stages`, hooks
+`useCustom*`) têm o mesmo problema de badge que os funis sistema tinham, por uma
+causa diferente: `useCustomPipeEntries` busca as entries **sem `.range()`**, então
+o PostgREST corta em **1000 rows**. `CustomPipelineKanban` não setava `totalCount`
+na coluna → o badge caía em `items.length` (capado em 1000). Funil ativo de import
+(ex.: "Prospecção CNAE", etapa "Novo" com 2543+ leads e crescendo) mostrava 1000.
+
+Fix (espelha o board canônico, mas pro modelo custom):
+- RPC `public.get_custom_pipeline_stage_counts(p_pipeline_id, p_org_id, p_search)`
+  — `COUNT(*) FROM custom_pipe_entries GROUP BY stage_id`, filtrado por
+  `pipeline_id` + `organization_id`. `SECURITY INVOKER` + `search_path=''` → RLS
+  de `custom_pipe_entries` (via `get_my_organization_ids()`) mantém isolamento
+  tenant. Migration `20270314000000_get_custom_pipeline_stage_counts.sql`.
+- Hook `useCustomPipeStageCounts(pipelineId, searchQuery)` → `Record<stage_id, count>`.
+  Invalidação: as mutations `useAddLeadToCustomPipe`/`useMoveLeadInCustomPipe`/
+  `useRemoveLeadFromCustomPipe` invalidam `["custom_pipe_stage_counts", pipelineId]`
+  (mesmo padrão que já faziam pra `custom_pipe_entries`).
+- `CustomPipelineKanban` seta `totalCount: counts[stage.id] ?? items.length`.
+
+Parity: **sem busca** conta todas as entries por stage (inclusive `lead_id` null),
+igual ao comportamento antigo do badge — **exato**. **Com busca** faz LEFT JOIN
+`leads` + `ILIKE` em nome/empresa/telefone — **aproximado** (ILIKE não faz strip de
+acento NFD como o filtro client). Divergência aceita: o caso reportado é sem busca.
+
+Follow-up conhecido: o board ainda carrega só 1000 **cards** (`useCustomPipeEntries`
+não paginado). O badge agora está certo, mas rolar além de 1000 cards exige
+paginação/virtualização — fora do escopo deste fix. Ver [[08 — Backlog]].
+
+Onde mexer: migration acima · `src/modules/pipelines/hooks/custom/useCustomPipelines.ts`
+(`useCustomPipeStageCounts`) · `src/modules/pipelines/components/custom/CustomPipelineKanban.tsx`.
+
 ## Histórico
 
+- **2026-07-13** — **Badge dos funis custom → count server-side.** Novo RPC
+  `get_custom_pipeline_stage_counts` + hook `useCustomPipeStageCounts`; badge deixa
+  de travar em 1000. Parity provada contra prod via SQL read-only (Prospecção CNAE,
+  "Novo": RPC-equiv == `COUNT(*)` == 2838, ambos > 1000). Detalhes acima.
 - **2026-06-30** — **Todos os filtros → server-side.** Contagem do badge agora reflete o filtro (era sempre o total: Perdido=21 mesmo filtrando origem=site→10). `filterItemsLocal` removido das 3 páginas; params genéricos nos 2 RPCs (`20270101000400`). Mappers puros + 12 testes. Verificado contra prod via SQL read-only (origem=site→10, calor default→warm, período CASE). Detalhes: [[2026-06-30]].
 - **2026-05-18** — Filtro "Responsável" passa a usar helper único `matchesResponsibleFilter`. Cobre `pre_sale_responsible_id` e `sale_responsible_id` (entry + lead) — campos antes ignorados. Bug original: lead com `pipe_entries.metadata.pre_sale_responsible_id = Bruna` sumia quando ela filtrava por si mesma. Detalhes: [[2026-05-18-kanban-filter-responsible-helper]].
