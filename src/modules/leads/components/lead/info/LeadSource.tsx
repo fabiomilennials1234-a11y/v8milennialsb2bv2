@@ -6,7 +6,7 @@
 
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { getOriginLabel } from "@/lib/lead/lead-origins";
+import { useLeadOrigins } from "../../../hooks/useLeadOrigins";
 
 interface LeadSourceProps {
   origin?: string | null;
@@ -14,6 +14,7 @@ interface LeadSourceProps {
 }
 
 export function LeadSource({ origin, originDetail }: LeadSourceProps) {
+  const { labelOf } = useLeadOrigins();
   if (!origin) return null;
 
   return (
@@ -21,7 +22,7 @@ export function LeadSource({ origin, originDetail }: LeadSourceProps) {
       <Label className="text-xs">Origem</Label>
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="secondary" className="text-xs">
-          {getOriginLabel(origin)}
+          {labelOf(origin)}
         </Badge>
         {originDetail && (
           <span className="text-xs text-muted-foreground">{originDetail}</span>

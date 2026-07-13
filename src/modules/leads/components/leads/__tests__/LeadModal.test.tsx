@@ -52,6 +52,15 @@ vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({
   useLogLeadAction: () => vi.fn(),
 }));
 
+vi.mock("@/modules/leads/hooks/useLeadOrigins", () => ({
+  useLeadOrigins: () => ({
+    origins: [{ slug: "whatsapp", label: "WhatsApp", color: "#25D366" }],
+    labelOf: (s: string) => s,
+    colorOf: () => "#64748B",
+    isLoading: false,
+  }),
+}));
+
 vi.mock("@/modules/leads/hooks/useLeadCustomFields", () => ({
   useLeadCustomFields: () => ({ data: [] }),
   useLeadCustomFieldValues: () => ({ data: [] }),

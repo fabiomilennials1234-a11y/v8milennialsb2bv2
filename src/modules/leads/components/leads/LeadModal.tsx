@@ -25,6 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/modules/identity";
 import { useCreateLead, useUpdateLead } from "../../hooks/useLeads";
+import { useLeadOrigins } from "../../hooks/useLeadOrigins";
 import { useLogLeadAction } from "../../hooks/useLogLeadAction";
 import {
   useLeadCustomFields,
@@ -41,22 +42,6 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { BR_UFS } from "@/shared/format/br-uf";
-
-const originLabels: Record<string, string> = {
-  whatsapp: "WhatsApp",
-  meta_ads: "Meta Ads",
-  instagram: "Instagram",
-  tiktok: "Tiktok",
-  google_ads: "Google Ads",
-  site: "Site",
-  landing_page: "Landing Page",
-  remarketing: "Remarketing",
-  indicacao: "Indicação",
-  evento: "Evento",
-  prospeccao_ativa: "Prospecção Ativa",
-  cal: "Cal.com",
-  outro: "Outros",
-};
 
 interface LeadModalProps {
   open: boolean;
@@ -211,6 +196,7 @@ export function LeadModal({
   const [historyLimit, setHistoryLimit] = useState(50);
 
   const { data: teamMembers = [] } = useTeamMembers();
+  const { origins: leadOrigins } = useLeadOrigins();
   const { data: history, isLoading: historyLoading } = useLeadHistory(lead?.id || null);
   const { data: currentTeamMember, refetch: refetchTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
   const createLead = useCreateLead();
@@ -681,8 +667,8 @@ export function LeadModal({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.entries(originLabels).map(([key, label]) => (
-                              <SelectItem key={key} value={key}>{label}</SelectItem>
+                            {leadOrigins.map((o) => (
+                              <SelectItem key={o.slug} value={o.slug}>{o.label}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>

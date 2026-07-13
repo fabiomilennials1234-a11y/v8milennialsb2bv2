@@ -48,6 +48,14 @@ export type {
   PipelineStatus,
 } from "./hooks/useLeadAllPipelines";
 
+// ── Hooks: lead origins registry (fonte única de lista/label/cor) ──────────
+export {
+  useLeadOrigins,
+  BUILTIN_LEAD_ORIGINS,
+  FALLBACK_ORIGIN_COLOR,
+} from "./hooks/useLeadOrigins";
+export type { LeadOriginOption, UseLeadOriginsResult } from "./hooks/useLeadOrigins";
+
 // ── Hooks: custom fields ───────────────────────────────────────────────────
 export {
   useLeadCustomFields,

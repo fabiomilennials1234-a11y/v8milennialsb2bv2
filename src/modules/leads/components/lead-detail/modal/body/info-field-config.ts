@@ -5,8 +5,8 @@
 export interface LeadInfoFieldConfig {
   key: string;             // chave em `leads` (ou virtual pra campos compostos)
   label: string;
-  type?: "text" | "textarea" | "currency" | "phone" | "email";
-  readOnly?: boolean;      // campos não editáveis (origin, tracking, etc)
+  type?: "text" | "textarea" | "currency" | "phone" | "email" | "origin";
+  readOnly?: boolean;      // campos não editáveis (tracking/UTM/meta ids)
   group?: "form" | "tracking";
 }
 
@@ -22,7 +22,7 @@ export const LEAD_INFO_FIELDS: LeadInfoFieldConfig[] = [
 ];
 
 export const LEAD_TRACKING_FIELDS: LeadInfoFieldConfig[] = [
-  { key: "origin",          label: "Origem",         group: "tracking", readOnly: true },
+  { key: "origin",          label: "Origem",         group: "tracking", type: "origin" },
   { key: "utm_campaign",    label: "UTM Campaign",   group: "tracking", readOnly: true },
   { key: "utm_source",      label: "UTM Source",     group: "tracking", readOnly: true },
   { key: "utm_medium",      label: "UTM Medium",     group: "tracking", readOnly: true },

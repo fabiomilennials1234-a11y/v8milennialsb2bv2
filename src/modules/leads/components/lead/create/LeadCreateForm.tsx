@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { originOptions } from "@/lib/lead/lead-origins";
+import { useLeadOrigins } from "../../../hooks/useLeadOrigins";
 import {
   isStandardDestination,
   DEST_TO_PIPE_TYPE,
@@ -74,6 +74,7 @@ export function LeadCreateForm({
   const [customStageId, setCustomStageId] = useState("");
   const [stageId, setStageId] = useState("");
 
+  const { origins: originOptions } = useLeadOrigins();
   const { data: teamMember } = useCurrentTeamMember();
   const { data: teamMembers = [] } = useTeamMembers();
   const { data: campanhas = [] } = useCampanhas();
@@ -210,7 +211,7 @@ export function LeadCreateForm({
             </SelectTrigger>
             <SelectContent>
               {originOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
+                <SelectItem key={opt.slug} value={opt.slug}>
                   {opt.label}
                 </SelectItem>
               ))}
