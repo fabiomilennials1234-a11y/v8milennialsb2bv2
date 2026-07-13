@@ -5,7 +5,7 @@ import {
   Trophy, Target, Gift, Medal, Award, TrendingUp, Star, Crown,
   Flame, Calendar, Users, Plus, Edit2, Trash2, CheckCircle, Lock, Sparkles
 } from "lucide-react";
-import { useActiveCompetition, useCompetitionParticipants, useCompetitionPrizes, type Competition } from "@/modules/engagement/hooks/useCompetitions";
+import { useActiveCompetition, useCompetitionParticipants, useCompetitionPrizes, useEndCompetition, type Competition } from "@/modules/engagement/hooks/useCompetitions";
 import { CompetitionPodiumV2 } from "@/modules/analytics/components/performance/CompetitionPodiumV2";
 import { CompetitionRankingListV2 } from "@/modules/analytics/components/performance/CompetitionRankingListV2";
 import { CreateCompetitionModal } from "@/modules/analytics/components/performance/CreateCompetitionModal";
@@ -730,6 +730,8 @@ export default function Performance() {
   const [editingAward, setEditingAward] = useState<AwardType | null>(null);
   const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
   const [showCreateCompetition, setShowCreateCompetition] = useState(false);
+  const [editingCompetition, setEditingCompetition] = useState(false);
+  const [cancelCompetitionOpen, setCancelCompetitionOpen] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const queryClient = useQueryClient();
 
@@ -754,6 +756,19 @@ export default function Performance() {
   const activeCompetition = useActiveCompetition(selectedMonth, selectedYear);
   const { data: participants = [] } = useCompetitionParticipants(activeCompetition?.id ?? null);
   const { data: prizes = [] } = useCompetitionPrizes(activeCompetition?.id ?? null);
+  const endCompetition = useEndCompetition();
+
+  const handleCancelCompetition = useCallback(async () => {
+    if (!activeCompetition) return;
+    try {
+      await endCompetition.mutateAsync(activeCompetition.id);
+      toast.success("Competição cancelada.");
+    } catch (err: any) {
+      toast.error("Erro ao cancelar competição: " + (err?.message || ""));
+    } finally {
+      setCancelCompetitionOpen(false);
+    }
+  }, [activeCompetition, endCompetition]);
 
   const participantIds = useMemo(() => new Set(participants.map(p => p.team_member_id)), [participants]);
 
@@ -1376,13 +1391,23 @@ export default function Performance() {
             {activeCompetition ? (
               <Card className="glass-card">
                 <CardHeader>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <CardTitle className="text-base flex items-center gap-2">
                       🏆 {activeCompetition.name}
                       <Badge variant="outline" className="bg-green-500/20 text-green-600 border-green-500/30 text-[10px] font-bold uppercase ml-2">
                         Ativo
                       </Badge>
                     </CardTitle>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setEditingCompetition(true)}>
+                        <Edit2 className="w-4 h-4" />
+                        Editar
+                      </Button>
+                      <Button variant="ghost" size="sm" className="gap-1.5 text-destructive hover:text-destructive" onClick={() => setCancelCompetitionOpen(true)}>
+                        <Trash2 className="w-4 h-4" />
+                        Cancelar competição
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1502,9 +1527,46 @@ export default function Performance() {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog open={cancelCompetitionOpen} onOpenChange={setCancelCompetitionOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar competição?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A competição "{activeCompetition?.name}" será encerrada sem vencedor e sairá do ranking.
+              Os prêmios não serão distribuídos. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleCancelCompetition}
+              disabled={endCompetition.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Cancelar competição
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Criação de competição */}
       <CreateCompetitionModal
         open={showCreateCompetition}
         onOpenChange={setShowCreateCompetition}
+      />
+
+      {/* Edição da competição ativa */}
+      <CreateCompetitionModal
+        open={editingCompetition}
+        onOpenChange={setEditingCompetition}
+        competition={editingCompetition ? activeCompetition : null}
+        existingParticipants={participants.map((p) => p.team_member_id)}
+        existingPrizes={prizes.map((p) => ({
+          position: p.position,
+          prize_name: p.prize_name,
+          prize_value: p.prize_value,
+          prize_icon: p.prize_icon,
+        }))}
       />
     </div>
   );

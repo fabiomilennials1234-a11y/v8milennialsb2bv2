@@ -210,3 +210,100 @@ export function useEndCompetition() {
     },
   });
 }
+
+/**
+ * Edita uma competição existente num único fluxo:
+ * - UPDATE dos campos da row (não mexe em `status`)
+ * - Reconcilia participantes (delete removidos + insert novos; mantém os que
+ *   permanecem para preservar created_at)
+ * - Substitui prêmios por completo (display-only, sem FK dependente → replace
+ *   wholesale é seguro e mais simples que diff posicional)
+ *
+ * RLS: `competitions_manage FOR ALL` + policies manage em participants/prizes
+ * já autorizam UPDATE/DELETE/INSERT para membros da org (e master ghost).
+ */
+export function useSaveCompetitionEdits() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      id: string;
+      name: string;
+      description?: string;
+      criteria: "absolute_value" | "goal_percentage";
+      metric_type: "sales" | "meetings";
+      month: number;
+      year: number;
+      start_date: string;
+      end_date: string;
+      participants: string[];
+      existingParticipants: string[];
+      prizes: Array<{ position: number; prize_name: string; prize_description?: string; prize_value?: number; prize_icon?: string }>;
+    }) => {
+      // 1. Update competition row (status intocado)
+      const { error: compError } = await supabase
+        .from("competitions")
+        .update({
+          name: input.name,
+          description: input.description || null,
+          criteria: input.criteria,
+          metric_type: input.metric_type,
+          month: input.month,
+          year: input.year,
+          start_date: input.start_date,
+          end_date: input.end_date,
+        })
+        .eq("id", input.id);
+      if (compError) throw compError;
+
+      // 2. Reconcilia participantes
+      const desired = new Set(input.participants);
+      const existing = new Set(input.existingParticipants);
+      const toRemove = input.existingParticipants.filter((tmId) => !desired.has(tmId));
+      const toAdd = input.participants.filter((tmId) => !existing.has(tmId));
+
+      if (toRemove.length > 0) {
+        const { error: rmError } = await supabase
+          .from("competition_participants")
+          .delete()
+          .eq("competition_id", input.id)
+          .in("team_member_id", toRemove);
+        if (rmError) throw rmError;
+      }
+      if (toAdd.length > 0) {
+        const { error: addError } = await supabase
+          .from("competition_participants")
+          .insert(toAdd.map((tmId) => ({ competition_id: input.id, team_member_id: tmId })));
+        if (addError) throw addError;
+      }
+
+      // 3. Substitui prêmios (replace wholesale)
+      const { error: delPrizeError } = await supabase
+        .from("competition_prizes")
+        .delete()
+        .eq("competition_id", input.id);
+      if (delPrizeError) throw delPrizeError;
+
+      if (input.prizes.length > 0) {
+        const { error: insPrizeError } = await supabase
+          .from("competition_prizes")
+          .insert(input.prizes.map((p) => ({
+            competition_id: input.id,
+            position: p.position,
+            prize_name: p.prize_name,
+            prize_description: p.prize_description || null,
+            prize_value: p.prize_value ?? null,
+            prize_icon: p.prize_icon || "🏆",
+          })));
+        if (insPrizeError) throw insPrizeError;
+      }
+
+      return { id: input.id };
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["competitions"] });
+      queryClient.invalidateQueries({ queryKey: ["competition-participants", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["competition-prizes", variables.id] });
+    },
+  });
+}

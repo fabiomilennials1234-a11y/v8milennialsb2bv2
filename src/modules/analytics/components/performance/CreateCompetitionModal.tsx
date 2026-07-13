@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, Check, ArrowLeft, ArrowRight, Plus, X, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { useCreateCompetition } from "@/modules/engagement/hooks/useCompetitions";
+import { useCreateCompetition, useSaveCompetitionEdits, type Competition } from "@/modules/engagement/hooks/useCompetitions";
 import { useTeamMembers } from "@/modules/identity";
 import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { toast } from "sonner";
@@ -14,6 +14,12 @@ import { toast } from "sonner";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Presente → modo edição (prefila o wizard e salva alterações) */
+  competition?: Competition | null;
+  /** team_member_ids atuais da competição (para diff em edição) */
+  existingParticipants?: string[];
+  /** prêmios atuais da competição (para prefill em edição) */
+  existingPrizes?: Array<{ position: number; prize_name: string; prize_value: number | null; prize_icon: string }>;
 }
 
 interface PrizeInput {
@@ -23,11 +29,18 @@ interface PrizeInput {
   prize_icon: string;
 }
 
+const DEFAULT_PRIZES: PrizeInput[] = [
+  { position: 1, prize_name: "", prize_value: "", prize_icon: "🏆" },
+  { position: 2, prize_name: "", prize_value: "", prize_icon: "🎁" },
+  { position: 3, prize_name: "", prize_value: "", prize_icon: "🎧" },
+];
+
 const EMOJIS = ["🏆", "🎁", "🎧", "📱", "💰", "🎯", "⭐", "🔥"];
 const MEDAL_EMOJIS = ["🥇", "🥈", "🥉", "🏅", "🏅"];
 const STEPS = ["Básico", "Participantes", "Prêmios", "Confirmação"];
 
-export function CreateCompetitionModal({ open, onOpenChange }: Props) {
+export function CreateCompetitionModal({ open, onOpenChange, competition, existingParticipants, existingPrizes }: Props) {
+  const isEdit = !!competition;
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -37,15 +50,38 @@ export function CreateCompetitionModal({ open, onOpenChange }: Props) {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
-  const [prizes, setPrizes] = useState<PrizeInput[]>([
-    { position: 1, prize_name: "", prize_value: "", prize_icon: "🏆" },
-    { position: 2, prize_name: "", prize_value: "", prize_icon: "🎁" },
-    { position: 3, prize_name: "", prize_value: "", prize_icon: "🎧" },
-  ]);
+  const [prizes, setPrizes] = useState<PrizeInput[]>(DEFAULT_PRIZES);
 
   const { data: teamMembers = [] } = useTeamMembers();
   const avatarMap = useAvatarMap();
   const createCompetition = useCreateCompetition();
+  const saveEdits = useSaveCompetitionEdits();
+
+  // Prefill quando abre em modo edição
+  useEffect(() => {
+    if (open && competition) {
+      setStep(0);
+      setName(competition.name);
+      setDescription(competition.description ?? "");
+      setCriteria(competition.criteria);
+      setMetricType(competition.metric_type);
+      setMonth(competition.month);
+      setYear(competition.year);
+      setSelectedMembers(new Set(existingParticipants ?? []));
+      setPrizes(
+        existingPrizes && existingPrizes.length > 0
+          ? [...existingPrizes]
+              .sort((a, b) => a.position - b.position)
+              .map((p) => ({
+                position: p.position,
+                prize_name: p.prize_name,
+                prize_value: p.prize_value != null ? String(p.prize_value) : "",
+                prize_icon: p.prize_icon || "🏆",
+              }))
+          : DEFAULT_PRIZES,
+      );
+    }
+  }, [open, competition, existingParticipants, existingPrizes]);
 
   /**
    * Elegibilidade de participantes:
@@ -133,18 +169,51 @@ export function CreateCompetitionModal({ open, onOpenChange }: Props) {
     }
   };
 
+  const handleSaveEdit = async () => {
+    if (!competition) return;
+    const startDate = new Date(Date.UTC(year, month - 1, 1)).toISOString();
+    const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)).toISOString();
+
+    try {
+      await saveEdits.mutateAsync({
+        id: competition.id,
+        name,
+        description: description || undefined,
+        criteria,
+        metric_type: metricType,
+        month,
+        year,
+        start_date: startDate,
+        end_date: endDate,
+        participants: Array.from(selectedMembers),
+        existingParticipants: existingParticipants ?? [],
+        prizes: prizes.filter((p) => p.prize_name.trim()).map((p) => ({
+          position: p.position,
+          prize_name: p.prize_name,
+          prize_value: p.prize_value ? parseFloat(p.prize_value) : undefined,
+          prize_icon: p.prize_icon,
+        })),
+      });
+
+      toast.success("Competição atualizada!");
+      handleClose();
+    } catch (err: any) {
+      toast.error("Erro ao salvar competição: " + (err?.message || ""));
+    }
+  };
+
   const handleClose = () => {
     onOpenChange(false);
     setTimeout(() => {
       setStep(0);
       setName("");
       setDescription("");
+      setCriteria("absolute_value");
+      setMetricType("sales");
+      setMonth(now.getMonth() + 1);
+      setYear(now.getFullYear());
       setSelectedMembers(new Set());
-      setPrizes([
-        { position: 1, prize_name: "", prize_value: "", prize_icon: "🏆" },
-        { position: 2, prize_name: "", prize_value: "", prize_icon: "🎁" },
-        { position: 3, prize_name: "", prize_value: "", prize_icon: "🎧" },
-      ]);
+      setPrizes(DEFAULT_PRIZES);
     }, 200);
   };
 
@@ -154,7 +223,7 @@ export function CreateCompetitionModal({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Trophy className="w-5 h-5 text-primary" />
-            Nova Competição
+            {isEdit ? "Editar Competição" : "Nova Competição"}
           </DialogTitle>
         </DialogHeader>
 
@@ -339,6 +408,8 @@ export function CreateCompetitionModal({ open, onOpenChange }: Props) {
 
           {step < 3 ? (
             <Button onClick={() => setStep(step + 1)} disabled={!canNext()}>Próximo <ArrowRight className="w-4 h-4 ml-1" /></Button>
+          ) : isEdit ? (
+            <Button onClick={handleSaveEdit} disabled={saveEdits.isPending}>Salvar alterações</Button>
           ) : (
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => handleSubmit("draft")} disabled={createCompetition.isPending}>Rascunho</Button>
