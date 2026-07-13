@@ -30,7 +30,7 @@ export const FALLBACK_ORIGIN_COLOR = "#64748B";
 
 /**
  * Built-ins locais — espelham EXATAMENTE o seed de
- * `20270313000000_lead_origins_registry.sql` (que por sua vez espelha
+ * `20270314000000_lead_origins_registry.sql` (que por sua vez espelha
  * useMktOriginConfig.ts). Usados só como fallback de carregamento/vazio.
  */
 export const BUILTIN_LEAD_ORIGINS: LeadOriginOption[] = [

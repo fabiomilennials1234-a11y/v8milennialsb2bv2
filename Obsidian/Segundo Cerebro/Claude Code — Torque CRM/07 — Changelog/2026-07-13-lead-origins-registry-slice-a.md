@@ -3,7 +3,7 @@ data: 2026-07-13
 tipo: changelog
 área: leads
 slice: A
-status: dev (não-prod)
+status: prod (aplicado 2026-07-13)
 ---
 
 # 2026-07-13 — Origens de Lead: registry unificado + editar origem (Slice A)
@@ -35,7 +35,7 @@ e a origem era **read-only** no drawer de detalhe V2 (o CTO "não conseguia edit
   (usa `ORIGIN_COLORS` do LeadCard — sem regressão visual).
 
 ## Arquivos tocados
-- `supabase/migrations/20270313000000_lead_origins_registry.sql` — tabela + índices + RLS + seed
+- `supabase/migrations/20270314000000_lead_origins_registry.sql` — tabela + índices + RLS + seed
 - `src/modules/leads/hooks/useLeadOrigins.ts` — hook novo
 - `src/modules/leads/index.ts` — export do hook
 - `src/modules/leads/components/lead/create/LeadCreateForm.tsx` — lista dinâmica
@@ -64,8 +64,11 @@ e a origem era **read-only** no drawer de detalhe V2 (o CTO "não conseguia edit
 ## Follow-ups (Slice B)
 - Enum `lead_origin` → text + CRUD de origens custom por org (policies write + UI settings) + webhooks.
 - Migração dinâmica dos color maps estáticos restantes (LeadCard/kanban/analytics/marketing/useMktOriginConfig).
-- Aplicar a migration em **prod** (`jsjsmuncfkbsbzqzqhfq`) — pendente, responsabilidade do arquiteto/CTO.
 
 ## Estado
-Aplicado e verificado em **dev** (13 built-ins, RLS ativa, authenticated read-only, service_role write).
-`npm run test:unit` (novos): 7/7 verdes. Não commitado (versionamento = arquiteto).
+Aplicado e verificado em **dev** (`bcfadphgsibjzivtbjvc`) e **prod** (`jsjsmuncfkbsbzqzqhfq`, 2026-07-13,
+via MCP execute_sql — DDL idempotente): 13 built-ins, RLS on, `authenticated`=SELECT, `anon`=deny,
+`service_role`=ALL, 0 advisor hits. Bookkeeping `schema_migrations` gravado sob versão
+`20270314000000` (a `20270313000000` original colidia com `drop_dead_whatsapp_messages_indexes`
+já aplicada em prod — migration renomeada). `npm run test:unit` (novos): 7/7 verdes.
+**Merge em main** = auto-deploy do frontend (EasyPanel puxa `:latest`).

@@ -145,11 +145,15 @@ dessincronizadas (canônica `analytics/useMktOriginConfig`, stale `src/lib/lead/
 com só 7, + maps locais). Slice A criou a tabela registry `lead_origins` e o hook
 `useLeadOrigins` como fonte dinâmica.
 
-- **Migration**: `supabase/migrations/20270313000000_lead_origins_registry.sql` — tabela
+- **Migration**: `supabase/migrations/20270314000000_lead_origins_registry.sql` — tabela
   `lead_origins` (org_id NULL = built-in global; preenchido = custom da org), RLS
   (built-ins legíveis por qualquer authenticated; custom via `get_my_organization_ids()`
   OR `is_master_user()`; service_role FOR ALL), seed dos 13 built-ins espelhando
-  `useMktOriginConfig`. Aplicada em **dev** (`bcfadphgsibjzivtbjvc`). **NÃO** aplicada em prod.
+  `useMktOriginConfig`. Aplicada em **dev** (`bcfadphgsibjzivtbjvc`) e **prod**
+  (`jsjsmuncfkbsbzqzqhfq`, 2026-07-13 — via MCP execute_sql, DDL idempotente; verificado:
+  13 built-ins, RLS on, authenticated=SELECT, anon=deny, service_role=ALL, 0 advisor hits).
+  Versão da migration = `20270314000000` (a `20270313000000` colidia com
+  `drop_dead_whatsapp_messages_indexes` já em prod).
 - **Hook**: `useLeadOrigins()` (barrel `@/modules/leads`). Consumido por `LeadCreateForm`,
   `LeadModal`, `LeadSource` e o editor de origem do drawer V2 (`InfoBlockTracking`).
 - **Editar origem (drawer V2)**: `info-field-config.ts` origin `type:"origin"` (não mais
