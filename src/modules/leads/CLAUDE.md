@@ -32,6 +32,7 @@ Ver `./index.ts` para a superfície completa. Estável.
 
 ### Hooks
 - CRUD: `useLeads`, `useLeadsCount`, `useCreateLead`, `useUpdateLead`, `useDeleteLead`, `useDeleteAllLeadsInPipe`, `useDeleteAllLeads`
+- Origens: `useLeadOrigins` — fonte única (dinâmica) de lista/label/cor via tabela registry `lead_origins`. Retorna `{ origins, labelOf, colorOf, isLoading }`. Built-ins globais (org_id NULL) + custom da org (Slice B). Fallback local `BUILTIN_LEAD_ORIGINS` (13). Substitui a antiga `src/lib/lead/lead-origins.ts` (deletada) e os maps hardcoded de label do LeadModal/LeadCreateForm/LeadSource.
 - AI: `useLeadAiStatus`, `useToggleLeadAI`, `usePhoneAiStatus`, `useToggleConversationAI`
 - Cross-pipe placement: `useLeadAllPipelines`, `useAddLeadToStandardPipe`, `useMoveLeadInStandardPipe`, `useRemoveLeadFromStandardPipe`
 - Custom fields: `useLeadCustomFields`, `useLeadCustomFieldValues`, `useCreateCustomField`, `useDeleteCustomField`, `useSaveCustomFieldValue`
@@ -136,6 +137,35 @@ Comparação rápida (slice 4 — não-resolvida, vai pra slice 15):
 2. **Migrar pra `webhook-new-lead`** (mais limpo arquiteturalmente) — porém impacta 20+ workflows n8n em prod, exige coordenação com clientes.
 
 Decisão fica para slice 15 (consolidação backend).
+
+## Origens de lead — registry `lead_origins` (Slice A, 2026-07-13)
+
+Fonte única de **lista/label/cor** das origens de lead. Antes havia 4 fontes
+dessincronizadas (canônica `analytics/useMktOriginConfig`, stale `src/lib/lead/lead-origins`
+com só 7, + maps locais). Slice A criou a tabela registry `lead_origins` e o hook
+`useLeadOrigins` como fonte dinâmica.
+
+- **Migration**: `supabase/migrations/20270313000000_lead_origins_registry.sql` — tabela
+  `lead_origins` (org_id NULL = built-in global; preenchido = custom da org), RLS
+  (built-ins legíveis por qualquer authenticated; custom via `get_my_organization_ids()`
+  OR `is_master_user()`; service_role FOR ALL), seed dos 13 built-ins espelhando
+  `useMktOriginConfig`. Aplicada em **dev** (`bcfadphgsibjzivtbjvc`). **NÃO** aplicada em prod.
+- **Hook**: `useLeadOrigins()` (barrel `@/modules/leads`). Consumido por `LeadCreateForm`,
+  `LeadModal`, `LeadSource` e o editor de origem do drawer V2 (`InfoBlockTracking`).
+- **Editar origem (drawer V2)**: `info-field-config.ts` origin `type:"origin"` (não mais
+  readOnly) + `InfoBlockTracking` renderiza Select editável (persiste via `useUpdateLead`,
+  invalida `["lead-detail", id]` + `["leads"]`). Badge de cor preservado (usa
+  `ORIGIN_COLORS` de `LeadCard`, sem regressão visual).
+
+### Pendente Slice B (não fazer sem pedido)
+- Enum `lead_origin` → text + CRUD de origens custom por org (policies INSERT/UPDATE/DELETE
+  + UI de settings). Slice A **não** mexeu no enum nem em webhooks.
+- Migração dinâmica dos **color maps** que ainda são estáticos (built-ins idênticos ao seed,
+  mantidos para não regredir dashboards): `LeadCard.ORIGIN_COLORS` (bg/text pairs),
+  kanban (`KanbanCard`/`KanbanFilterPanel`/`CreateOpportunityModal`/`PipeTableView`),
+  analytics charts (`ResponseByOrigin`/`AttributionTable`/`LeadQualityByOrigin`/`RevenueAttribution`/`OriginDonut`),
+  marketing (`MktConfigModal`/`MktOriginCard`/`MktOriginRanking`), e os consts
+  `ALL_ORIGINS/ORIGIN_LABELS/ORIGIN_COLORS` de `analytics/useMktOriginConfig`.
 
 ## Slice de migração
 
