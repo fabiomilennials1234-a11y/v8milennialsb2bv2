@@ -26,6 +26,23 @@ export interface SupportAnnouncementState {
 
 export const MAX_MODAL_SHOWS = 2;
 
+/** FAB "?" do dock — o anúncio só existe onde ele existe. */
+export const SUPPORT_FAB_SELECTOR = "[data-support-fab]";
+/** Qualquer TorqueLoader montado (Suspense fallback, gates de auth/assinatura). */
+export const TORQUE_LOADER_SELECTOR = "[data-torque-loader]";
+
+/**
+ * App "assentado": o FAB do suporte está no DOM E nenhum TorqueLoader está na
+ * tela. Enquanto não assentar, o modal do anúncio não pode abrir — abriria por
+ * cima da animação de loading (chunk de página, gate de auth/assinatura).
+ */
+export function isAppSettled(doc: Document): boolean {
+  return (
+    doc.querySelector(SUPPORT_FAB_SELECTOR) !== null &&
+    doc.querySelector(TORQUE_LOADER_SELECTOR) === null
+  );
+}
+
 const STATE_KEY_PREFIX = "torque:support-announcement:v1:";
 const SESSION_KEY = "torque:support-announcement:session-shown";
 

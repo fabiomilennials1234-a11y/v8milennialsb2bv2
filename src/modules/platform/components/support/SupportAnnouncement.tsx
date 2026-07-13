@@ -4,12 +4,14 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useAuth } from "@/modules/identity";
 import { cn } from "@/lib/utils";
 import {
+  isAppSettled,
   markCoachDone,
   markEngaged,
   readSessionShown,
   readState,
   recordModalShown,
   shouldShowModal,
+  SUPPORT_FAB_SELECTOR,
 } from "@/modules/platform/lib/support-announcement";
 import { useSupportPanel } from "./SupportPanelContext";
 
@@ -26,7 +28,8 @@ import { useSupportPanel } from "./SupportPanelContext";
 type Phase = "idle" | "modal" | "coach" | "done";
 
 const ENTRY_DELAY_MS = 800;
-const FAB_SELECTOR = "[data-support-fab]";
+const SETTLE_POLL_MS = 250;
+const FAB_SELECTOR = SUPPORT_FAB_SELECTOR;
 
 /** Accent gold do design system, com alpha — pra gradientes/glows inline. */
 const gold = (alpha: number) => `hsl(47 100% 50% / ${alpha})`;
@@ -42,18 +45,63 @@ export function SupportAnnouncement() {
   const isOpenRef = useRef(isOpen);
   isOpenRef.current = isOpen;
 
-  // Entrada com delay: não compete com o paint inicial do app.
+  // Entrada por espera de condição: o app precisa estar "assentado" (FAB no DOM
+  // e nenhum TorqueLoader na tela — ver isAppSettled) antes do modal aparecer.
+  // Um timer fixo abria o modal por cima do loader de chunk/auth — ou, se o FAB
+  // ainda não existia aos 800ms, desistia e o anúncio morria pra sessão.
   useEffect(() => {
     if (!userId) return;
-    const timer = window.setTimeout(() => {
-      if (phaseRef.current !== "idle") return;
-      if (isOpenRef.current) return; // suporte já aberto — o effect abaixo engaja
-      if (!document.querySelector(FAB_SELECTOR)) return; // fora do app shell
-      if (!shouldShowModal(readState(userId), readSessionShown())) return;
-      recordModalShown(userId);
-      setPhase("modal");
-    }, ENTRY_DELAY_MS);
-    return () => window.clearTimeout(timer);
+
+    let intervalId: number | null = null;
+    let delayId: number | null = null;
+
+    // Encerramento definitivo: modal exibido, inelegível, ou unmount (cleanup).
+    const stop = () => {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+      if (delayId !== null) {
+        window.clearTimeout(delayId);
+        delayId = null;
+      }
+    };
+
+    const tick = () => {
+      if (delayId !== null) return; // assentou — aguardando o delay de entrada
+      if (phaseRef.current !== "idle") {
+        stop();
+        return;
+      }
+      if (!shouldShowModal(readState(userId), readSessionShown())) {
+        stop();
+        return;
+      }
+      if (isOpenRef.current) return; // suporte aberto — o effect abaixo engaja
+      if (!isAppSettled(document)) return; // ainda carregando — segue esperando
+
+      // Assentou: segura ENTRY_DELAY_MS e re-checa tudo antes de exibir — um
+      // chunk pode ter começado a carregar (loader de volta) nesse meio-tempo.
+      delayId = window.setTimeout(() => {
+        delayId = null;
+        if (phaseRef.current !== "idle") {
+          stop();
+          return;
+        }
+        if (!shouldShowModal(readState(userId), readSessionShown())) {
+          stop();
+          return;
+        }
+        if (isOpenRef.current || !isAppSettled(document)) return; // volta ao polling
+        stop();
+        recordModalShown(userId);
+        setPhase("modal");
+      }, ENTRY_DELAY_MS);
+    };
+
+    intervalId = window.setInterval(tick, SETTLE_POLL_MS);
+    tick();
+    return stop;
   }, [userId]);
 
   // Abrir o suporte por qualquer via = engajou. Anúncio ativo some na hora.

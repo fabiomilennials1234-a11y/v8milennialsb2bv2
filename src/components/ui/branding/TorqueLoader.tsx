@@ -26,6 +26,7 @@ export function TorqueLoader({ message, variant = "full" }: TorqueLoaderProps) {
     <AnimatePresence>
       <motion.div
         key="torque-loader"
+        data-torque-loader
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
