@@ -7,6 +7,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getTimeBasedVariables } from "../time-variables.ts";
 import { getPipeEntry } from "../pipeline-adapter.ts";
 import { getWhatsAppProvider } from "../whatsapp-client.ts";
+import { personalizationName, isPlaceholderLeadName, tidyEmptyVarGaps } from "../lead-name.ts";
 import type { ActionResult } from "./types.ts";
 
 // ─── WhatsApp instance resolution ──────────────────────────────────────────
@@ -332,7 +333,7 @@ export async function resolveVariables(
   let result = template;
 
   const vars: Record<string, string> = {
-    nome:       lead.name || "",
+    nome:       personalizationName(lead.name),
     empresa:    lead.company || "",
     email:      lead.email || "",
     telefone:   lead.phone || "",
@@ -496,6 +497,10 @@ export async function resolveVariables(
       result = result.replaceAll(match, tagNames.has(tagName) ? tagName : "");
     }
   }
+
+  // A suppressed placeholder name (see personalizationName) leaves a punctuation
+  // gap like "Boa tarde , tudo bem?" — clean it only when we actually blanked one.
+  if (isPlaceholderLeadName(lead.name)) result = tidyEmptyVarGaps(result);
 
   return result;
 }

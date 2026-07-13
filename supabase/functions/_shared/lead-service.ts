@@ -11,6 +11,7 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { upsertPipeEntry, resolveActiveStageKey } from "./pipeline-adapter.ts";
 import type { PipeSlug } from "./pipeline-adapter.ts";
+import { buildPlaceholderLeadName } from "./lead-name.ts";
 
 /**
  * Result from getOrCreateLead operation
@@ -191,9 +192,7 @@ export async function getOrCreateLead(
   const leadName =
     name ||
     pushName ||
-    (normalizedPhone
-      ? `WhatsApp ${normalizedPhone.slice(-4)}`
-      : `Lead ${Date.now()}`);
+    buildPlaceholderLeadName(normalizedPhone);
 
   // 3a. Consulta preferência por telefone (phone_ai_preferences)
   //     antes de default ai_disabled=false. Se o vendedor desligou a IA pro
