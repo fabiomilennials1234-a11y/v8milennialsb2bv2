@@ -17,7 +17,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -156,15 +155,13 @@ export default function MasterSupportTickets() {
 
       <Card>
         <CardContent className="p-0">
-          <ScrollArea className="h-[620px]">
-            <TicketTable
-              tickets={active}
-              isLoading={isLoading}
-              expanded={expanded}
-              onToggle={toggle}
-              emptyLabel={hasFilters ? "Nenhum chamado com esses filtros." : "A fila está vazia."}
-            />
-          </ScrollArea>
+          <TicketTable
+            tickets={active}
+            isLoading={isLoading}
+            expanded={expanded}
+            onToggle={toggle}
+            emptyLabel={hasFilters ? "Nenhum chamado com esses filtros." : "A fila está vazia."}
+          />
         </CardContent>
       </Card>
 
@@ -179,16 +176,14 @@ export default function MasterSupportTickets() {
           </h2>
           <Card className="border-emerald-500/20 bg-emerald-500/[0.03]">
             <CardContent className="p-0">
-              <ScrollArea className="max-h-[420px]">
-                <TicketTable
-                  tickets={resolved}
-                  isLoading={false}
-                  expanded={expanded}
-                  onToggle={toggle}
-                  resolved
-                  emptyLabel=""
-                />
-              </ScrollArea>
+              <TicketTable
+                tickets={resolved}
+                isLoading={false}
+                expanded={expanded}
+                onToggle={toggle}
+                resolved
+                emptyLabel=""
+              />
             </CardContent>
           </Card>
         </section>
