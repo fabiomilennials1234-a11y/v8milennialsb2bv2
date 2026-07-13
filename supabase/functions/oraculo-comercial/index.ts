@@ -134,6 +134,60 @@ ${incoming.slice(0, 5).map((m: any) => `  • "${m.content?.slice(0, 150)}"`).jo
   return "\nCONTEXTO DE CONVERSAS: Nenhuma conversa registrada no período.";
 }
 
+// ---- WhatsApp fallback: sample real chat threads for orgs without copilot conversations ----
+// Orgs that operate via manual WhatsApp (no active copilot agent) have zero rows in
+// `conversations`/`conversation_messages`. Without this, the deep-sample block is always empty
+// for them and the Oráculo can't do qualitative attendance analysis. Mirrors the aggregate
+// whatsapp fallback in fetchConversationContext (step 3).
+async function fetchWhatsappSamples(
+  supabase: any,
+  organizationId: string,
+  startDate: string,
+  endDate: string,
+): Promise<string> {
+  const { data: messages } = await supabase
+    .from("whatsapp_messages")
+    .select("lead_id, phone_number, push_name, direction, content, created_at")
+    .eq("organization_id", organizationId)
+    .eq("message_type", "text")
+    .eq("is_group", false)
+    .not("content", "is", null)
+    .gte("created_at", startDate)
+    .lte("created_at", endDate)
+    .order("created_at", { ascending: false })
+    .limit(300);
+
+  if (!messages || messages.length === 0) {
+    return "\nAMOSTRA DE CONVERSAS: Nenhuma conversa disponível para análise detalhada.";
+  }
+
+  // Group into threads by lead_id (fallback phone). Pick the 3 richest for analysis.
+  const threads = new Map<string, any[]>();
+  for (const m of messages) {
+    const key = m.lead_id || m.phone_number || "desconhecido";
+    const arr = threads.get(key) || [];
+    arr.push(m);
+    threads.set(key, arr);
+  }
+
+  const ranked = [...threads.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 3);
+
+  let output = `\nAMOSTRA DE ${ranked.length} CONVERSAS PARA ANÁLISE DETALHADA (WhatsApp):`;
+  for (const [, msgs] of ranked) {
+    const chrono = msgs.slice().reverse(); // fetched desc → chronological
+    const label = chrono.find((m: any) => m.push_name)?.push_name || chrono[0]?.phone_number || "Contato";
+    output += `\n\n--- Conversa com ${label} ---`;
+    for (const m of chrono.slice(-15)) {
+      const who = m.direction === "incoming" ? "LEAD" : "EQUIPE";
+      output += `\n[${who}]: ${(m.content || "").slice(0, 300)}`;
+    }
+  }
+
+  return output;
+}
+
 // ---- Fetch 3 random full conversations for deep analysis ----
 async function fetchConversationSamples(
   supabase: any,
@@ -152,7 +206,8 @@ async function fetchConversationSamples(
     .limit(20);
 
   if (!conversations || conversations.length === 0) {
-    return "\nAMOSTRA DE CONVERSAS: Nenhuma conversa disponível para análise detalhada.";
+    // No copilot conversations — fall back to manual WhatsApp threads.
+    return await fetchWhatsappSamples(supabase, organizationId, startDate, endDate);
   }
 
   // Pick 3 random conversations from the pool
@@ -169,7 +224,7 @@ async function fetchConversationSamples(
     .limit(90); // ~30 messages per conversation
 
   if (!messages || messages.length === 0) {
-    return "\nAMOSTRA DE CONVERSAS: Mensagens não encontradas para as conversas selecionadas.";
+    return await fetchWhatsappSamples(supabase, organizationId, startDate, endDate);
   }
 
   // Group messages by conversation
@@ -426,7 +481,7 @@ RANKING DE VENDEDORES:
 ${JSON.stringify(ranking?.salesRanking?.slice(0, 8) || [], null, 2)}
 
 RANKING PRÉ-VENDAS:
-${JSON.stringify(ranking?.sdrRanking?.slice(0, 8) || [], null, 2)}
+${JSON.stringify((ranking?.meetingsRanking ?? ranking?.sdrRanking)?.slice(0, 8) || [], null, 2)}
 
 ═══════════════════════════════════════
 INTELIGÊNCIA HISTÓRICA
