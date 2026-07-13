@@ -166,13 +166,19 @@ export function CustomPipelineKanban({
         setStageToExport({ id: stageId, title: stageTitle, count: col?.items.length ?? 0 });
       }}
       renderColumnExtra={(col) => {
+        // Workflows de stage_changed em pipes custom guardam o slug (`stage_key`)
+        // em trigger_config.stages — mesmo valor que o executor casa contra
+        // custom_pipe_entries.stage_key. Consultar por col.id (uuid) nunca casa.
+        // Fallback pra col.id espelha `stage_key || id` do editor de trigger.
+        const stage = stages.find((s) => s.id === col.id);
+        const stageKey = stage?.stage_key || col.id;
         const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };
-        const stageCounts = workflowCounts[col.id] || { total: 0, active: 0 };
+        const stageCounts = workflowCounts[stageKey] || { total: 0, active: 0 };
         const merged = { total: stageCounts.total + allCounts.total, active: stageCounts.active + allCounts.active };
         return (
           <CustomStageBadge
             pipelineId={pipeline.id}
-            stageId={col.id}
+            stageId={stageKey}
             stageName={col.title}
             counts={merged}
           />
