@@ -37,6 +37,11 @@ interface PlaceInCampaign {
 interface LeadWebhookPayload {
   // Identificação da fonte
   source: string; // "meta_ads", "google_ads", "landing_page", etc.
+  // Detalhe textual da origem (ex: "Cadastro LP Meta", "Agendamento Automático Meta").
+  // Gravado em leads.origin_detail e exibido ao lado do badge de origem no lead.
+  // Em reconversão (update_existing_if_match=true) sobrescreve o valor anterior —
+  // ex: lead que agendou passa de "Cadastro LP Meta" pra "Agendamento Automático Meta".
+  origin_detail?: string;
   campaign_id?: string;
   campaign_name?: string;
 
@@ -561,7 +566,10 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
     if (fieldsNotes !== undefined && fieldsNotes !== "") {
       updateData.notes = fieldsNotes;
     } else if (isNewLead) {
-      updateData.notes = `Fonte: ${payload.source}`;
+      updateData.notes = `Fonte: ${payload.origin_detail || payload.source}`;
+    }
+    if (typeof payload.origin_detail === "string" && payload.origin_detail.trim()) {
+      updateData.origin_detail = payload.origin_detail.trim().slice(0, 120);
     }
     if (segment !== undefined) updateData.segment = segment || null;
     // UF: valida 27 estados; resposta explícita vence o DDD derivado

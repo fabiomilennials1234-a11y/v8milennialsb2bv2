@@ -464,6 +464,93 @@ describe("lead-webhook — origin mapping", () => {
   }
 });
 
+// ─── origin_detail ────────────────────────────────────────────────────────
+
+describe("lead-webhook — origin_detail", () => {
+  it("saves origin_detail on new lead and uses it in default notes", async () => {
+    const mock = createMockSupabase();
+    mock.mockTable("organizations", [{ id: "org-1" }]);
+    // getOrCreateLead mockado com created=true — o update pós-create precisa
+    // achar a row no mock (insert direto gera id aleatório e o eq(id) não casa).
+    mock.mockTable("leads", [{ id: "lead-new", organization_id: "org-1" }]);
+    mock.mockTable("pipe_whatsapp", []);
+    state.mock = mock as any;
+    mockGetOrCreateLead.mockResolvedValueOnce({
+      lead: { id: "lead-new", name: "X", phone: "5511999998888", email: null, organization_id: "org-1" },
+      created: true,
+      source: "created",
+    });
+
+    const res = await invoke({
+      source: "meta_ads",
+      origin_detail: "Cadastro LP Meta",
+      update_existing_if_match: true,
+      fields: { phone: "5511999998888" },
+    });
+    expect(res.status).toBe(200);
+    const updated = mock.getUpdated("leads");
+    expect(updated.some((u) => u.origin_detail === "Cadastro LP Meta")).toBe(true);
+    expect(updated.some((u) => u.notes === "Fonte: Cadastro LP Meta")).toBe(true);
+  });
+
+  it("overwrites origin_detail on reconversion (update_existing_if_match)", async () => {
+    const mock = createMockSupabase();
+    mock.mockTable("organizations", [{ id: "org-1" }]);
+    mock.mockTable("leads", [
+      { id: "lead-existing", organization_id: "org-1", origin_detail: "Cadastro LP Meta" },
+    ]);
+    mock.mockTable("pipe_confirmacao", []);
+    state.mock = mock as any;
+
+    const res = await invoke({
+      source: "meta_ads",
+      origin_detail: "Agendamento Automático Meta",
+      update_existing_if_match: true,
+      fields: { phone: "11999", email: "e@x" },
+    });
+    expect(res.status).toBe(200);
+    const updated = mock.getUpdated("leads");
+    expect(updated.some((u) => u.origin_detail === "Agendamento Automático Meta")).toBe(true);
+  });
+
+  it("ignores blank origin_detail and keeps source in default notes", async () => {
+    const mock = createMockSupabase();
+    mock.mockTable("organizations", [{ id: "org-1" }]);
+    mock.mockTable("leads", []);
+    mock.mockTable("pipe_whatsapp", []);
+    state.mock = mock as any;
+
+    const res = await invoke({
+      source: "meta_ads",
+      origin_detail: "   ",
+      fields: { phone: "1" },
+    });
+    expect(res.status).toBe(200);
+    const updated = mock.getUpdated("leads");
+    expect(updated.some((u) => "origin_detail" in u)).toBe(false);
+  });
+
+  it("trims and caps origin_detail at 120 chars", async () => {
+    const mock = createMockSupabase();
+    mock.mockTable("organizations", [{ id: "org-1" }]);
+    mock.mockTable("leads", [{ id: "lead-existing", organization_id: "org-1" }]);
+    mock.mockTable("pipe_whatsapp", []);
+    state.mock = mock as any;
+
+    const res = await invoke({
+      source: "meta_ads",
+      origin_detail: `  ${"x".repeat(300)}  `,
+      update_existing_if_match: true,
+      fields: { phone: "11999", email: "e@x" },
+    });
+    expect(res.status).toBe(200);
+    const updated = mock.getUpdated("leads");
+    const saved = updated.find((u) => typeof u.origin_detail === "string");
+    expect(saved).toBeDefined();
+    expect((saved!.origin_detail as string).length).toBe(120);
+  });
+});
+
 // ─── update_existing_if_match branches ───────────────────────────────────
 
 describe("lead-webhook — update_existing_if_match", () => {
@@ -530,7 +617,7 @@ describe("lead-webhook — Meta dummy/test lead skips dedup", () => {
     state.mock = { sb, mockTable } as any;
   }
 
-  it("email test@meta.com forces create even with update_existing_if_match=true", async () => {
+  it("email test@meta.com is acked without persisting, even with update_existing_if_match=true", async () => {
     freshOrg();
     const res = await invoke({
       source: "meta_ads",
@@ -540,10 +627,11 @@ describe("lead-webhook — Meta dummy/test lead skips dedup", () => {
     expect(res.status).toBe(200);
     expect(mockGetOrCreateLead).not.toHaveBeenCalled();
     const body = await res.json();
-    expect(body.is_new).toBe(true);
+    expect(body.dummy_test_lead).toBe(true);
+    expect(body.lead_id).toBeUndefined();
   });
 
-  it("dummy placeholder value forces create (string 'true' too)", async () => {
+  it("dummy placeholder value is acked without persisting (string 'true' too)", async () => {
     freshOrg();
     const res = await invoke({
       source: "meta_ads",
@@ -557,7 +645,8 @@ describe("lead-webhook — Meta dummy/test lead skips dedup", () => {
     expect(res.status).toBe(200);
     expect(mockGetOrCreateLead).not.toHaveBeenCalled();
     const body = await res.json();
-    expect(body.is_new).toBe(true);
+    expect(body.dummy_test_lead).toBe(true);
+    expect(body.lead_id).toBeUndefined();
   });
 
   it("dummy detected in a custom field value also skips dedup", async () => {

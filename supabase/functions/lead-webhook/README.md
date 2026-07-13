@@ -26,6 +26,7 @@ supabase functions deploy lead-webhook
 | Campo | Obrigatório | Descrição |
 |-------|-------------|-----------|
 | `source` | Sim | Ex.: `meta_ads`, `n8n`, `landing_page` |
+| `origin_detail` | Não | Detalhe textual da origem (ex.: `Cadastro LP Meta`, `Agendamento Automático Meta`). Gravado em `leads.origin_detail` (máx. 120 chars) e exibido ao lado do badge de origem. Em reconversão sobrescreve o valor anterior. |
 | `fields` | Sim | Objeto com `name`, `phone`, `email`, `company` (ao menos `phone` ou `email`) |
 | `organization_id` | Recomendado | UUID da organização (multi-tenant) |
 | `tags` | Não | Array de strings |
