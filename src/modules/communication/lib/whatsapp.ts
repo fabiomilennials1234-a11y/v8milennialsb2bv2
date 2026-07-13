@@ -6,6 +6,7 @@ import {
   prefetchChatData,
 } from "@/modules/communication/lib/chatPrefetch";
 import { useCurrentTeamMember } from "@/modules/identity";
+import { useWhatsAppInstancesForUser } from "@/modules/communication/hooks/chat/useWhatsAppInstances";
 // Format phone number for WhatsApp: 55 + DDD (without 0) + number (add 9 if short)
 export function formatPhoneForWhatsApp(phone: string | undefined): string | null {
   if (!phone) return null;
@@ -81,11 +82,25 @@ export function useOpenWhatsAppChat(): OpenWhatsAppChat {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id ?? null;
 
+  // Quando a org/usuário não tem nenhuma instância interna de WhatsApp, o chat
+  // interno (`/chat-whatsapp`) não tem em qual instância abrir a conversa e cai
+  // numa tela vazia ("Nenhuma instância WhatsApp disponível"). Nesse caso o
+  // botão deve mandar direto pro WhatsApp Web (wa.me) para o vendedor falar com
+  // o lead. Só consideramos "sem instância" depois que a query resolveu
+  // (`isFetched`) para não desviar por engano enquanto ainda está carregando.
+  const { data: instances, isFetched: instancesFetched } =
+    useWhatsAppInstancesForUser();
+  const hasNoInstance = instancesFetched && (instances?.length ?? 0) === 0;
+
   return useMemo<OpenWhatsAppChat>(() => {
     const fn = ((phone: string | undefined, e?: React.MouseEvent, instanceId?: string) => {
       if (e) e.stopPropagation();
       const formatted = formatPhoneForWhatsApp(phone);
       if (!formatted) return;
+      if (hasNoInstance) {
+        window.open(`https://wa.me/${formatted}`, "_blank", "noopener,noreferrer");
+        return;
+      }
       const params = new URLSearchParams({ phone: formatted });
       if (instanceId) params.set("instance", instanceId);
       navigate(`/chat-whatsapp?${params.toString()}`);
@@ -108,7 +123,7 @@ export function useOpenWhatsAppChat(): OpenWhatsAppChat {
     };
 
     return fn;
-  }, [navigate, queryClient, organizationId]);
+  }, [navigate, queryClient, organizationId, hasNoInstance]);
 }
 
 /**
