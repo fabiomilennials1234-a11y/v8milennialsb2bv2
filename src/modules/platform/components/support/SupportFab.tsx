@@ -18,6 +18,7 @@ export function SupportFab() {
     <DockItem order={DockOrder.support}>
       <button
         type="button"
+        data-support-fab
         onClick={open}
         aria-label={
           total > 0
