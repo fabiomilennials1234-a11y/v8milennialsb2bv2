@@ -1,4 +1,4 @@
-import { LifeBuoy } from "lucide-react";
+import { HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DockItem, DockOrder } from "@/modules/platform/components/dock/FloatingDock";
 import { useSupportUnread } from "@/modules/platform/hooks/useSupportUnread";
@@ -18,6 +18,7 @@ export function SupportFab() {
     <DockItem order={DockOrder.support}>
       <button
         type="button"
+        data-support-fab
         onClick={open}
         aria-label={
           total > 0
@@ -26,14 +27,15 @@ export function SupportFab() {
         }
         title="Ajuda"
         className={cn(
-          "relative grid h-12 w-12 place-items-center rounded-full border transition-colors",
-          "border-border/60 bg-card/90 text-muted-foreground backdrop-blur",
-          "shadow-lg hover:bg-muted/60 hover:text-foreground",
+          // Sempre dourado: o Suporte é o "?" do dock, não um botão neutro.
+          "relative grid h-11 w-11 place-items-center rounded-full border transition-colors",
+          "border-primary/40 bg-primary/10 text-primary backdrop-blur",
+          "shadow-lg hover:border-primary/60 hover:bg-primary/20",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-          isOpen && "border-primary/50 bg-primary/10 text-primary",
+          isOpen && "border-primary/60 bg-primary/20",
         )}
       >
-        <LifeBuoy className="h-5 w-5" aria-hidden />
+        <HelpCircle className="h-5 w-5" aria-hidden />
 
         {total > 0 && (
           <span

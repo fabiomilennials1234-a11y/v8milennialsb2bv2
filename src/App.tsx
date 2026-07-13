@@ -114,6 +114,7 @@ import { GlobalShortcutsProvider } from "@/modules/platform/components/command/G
 import { SupportPanelProvider } from "@/modules/platform/components/support/SupportPanelProvider";
 import { FloatingDockProvider } from "@/modules/platform/components/dock/FloatingDock";
 import { SupportPanel } from "@/modules/platform/components/support/SupportPanel";
+import { SupportAnnouncement } from "@/modules/platform/components/support/SupportAnnouncement";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -717,6 +718,7 @@ const App = () => {
                               <AppRoutes />
                               <CommandPaletteComponent />
                               <SupportPanel />
+                              <SupportAnnouncement />
                             </GlobalShortcutsProvider>
                           </CommandPaletteProvider>
                         </SupportPanelProvider>
