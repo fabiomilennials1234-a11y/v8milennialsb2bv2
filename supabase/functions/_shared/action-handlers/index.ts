@@ -6,7 +6,7 @@ export { addTag, removeTag } from "./tag-operations.ts";
 export { updateLeadField, updateCustomField, updateRating } from "./lead-field-operations.ts";
 export { duplicateToPipe, removeFromPipe, markAsLost } from "./pipe-operations.ts";
 export { sendWhatsApp } from "./send-whatsapp.ts";
-export { sendWhatsAppAudio, sendWhatsAppImage, sendWhatsAppSticker } from "./send-whatsapp-media.ts";
+export { sendWhatsAppAudio, sendWhatsAppImage, sendWhatsAppSticker, sendWhatsAppDocument } from "./send-whatsapp-media.ts";
 export { sendWhatsAppTemplate, sendWhatsAppMenu, sendWhatsAppPixButton } from "./send-whatsapp-rich.ts";
 export { sendMetaMessage, sendSemiAutomatic } from "./send-meta.ts";
 export { addToCampaign, removeFromCampaign, moveCampaignStage, pauseCampaignSequence, resumeCampaignSequence } from "./campaign-operations.ts";
@@ -29,7 +29,7 @@ import { addTag, removeTag } from "./tag-operations.ts";
 import { updateLeadField, updateCustomField, updateRating } from "./lead-field-operations.ts";
 import { duplicateToPipe, removeFromPipe, markAsLost } from "./pipe-operations.ts";
 import { sendWhatsApp } from "./send-whatsapp.ts";
-import { sendWhatsAppAudio, sendWhatsAppImage, sendWhatsAppSticker } from "./send-whatsapp-media.ts";
+import { sendWhatsAppAudio, sendWhatsAppImage, sendWhatsAppSticker, sendWhatsAppDocument } from "./send-whatsapp-media.ts";
 import { sendWhatsAppTemplate, sendWhatsAppMenu, sendWhatsAppPixButton } from "./send-whatsapp-rich.ts";
 import { sendMetaMessage, sendSemiAutomatic } from "./send-meta.ts";
 import { addToCampaign, removeFromCampaign, moveCampaignStage, pauseCampaignSequence, resumeCampaignSequence } from "./campaign-operations.ts";
@@ -59,6 +59,7 @@ export const handlers: Record<string, ActionHandler> = {
   send_whatsapp_audio: sendWhatsAppAudio,
   send_whatsapp_image: sendWhatsAppImage,
   send_whatsapp_sticker: sendWhatsAppSticker,
+  send_whatsapp_document: sendWhatsAppDocument,
   send_whatsapp_template: sendWhatsAppTemplate,
   send_whatsapp_menu: sendWhatsAppMenu,
   send_whatsapp_pix_button: sendWhatsAppPixButton,

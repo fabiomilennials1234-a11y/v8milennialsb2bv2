@@ -36,7 +36,9 @@ import {
   sendWhatsAppAudio,
   sendWhatsAppImage,
   sendWhatsAppSticker,
+  sendWhatsAppDocument,
 } from "../../../supabase/functions/_shared/action-handlers/send-whatsapp-media";
+import { sendMediaViaInstance } from "../../../supabase/functions/_shared/whatsapp-dispatch";
 
 const WA_INSTANCE = {
   id: "inst-1",
@@ -181,5 +183,66 @@ describe("sendWhatsAppSticker", () => {
     const result = await sendWhatsAppSticker(input);
     expect(result.success).toBe(true);
     expect(result.message).toContain("sticker sent");
+  });
+});
+
+// ── Document ──
+describe("sendWhatsAppDocument", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns error when leadId is null", async () => {
+    const { input } = makeInput({ documentUrl: "https://cdn.test/proposta.pdf" }, { leadId: null });
+    const result = await sendWhatsAppDocument(input);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("leadId");
+  });
+
+  it("returns error when no document URL configured", async () => {
+    const { input } = makeInput({});
+    const result = await sendWhatsAppDocument(input);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("document URL");
+  });
+
+  it("returns error when lead has no phone", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("whatsapp_instances", [WA_INSTANCE]);
+    mockTable("whatsapp_messages", []);
+    mockTable("leads", [{ ...LEAD, phone: null }]);
+
+    const result = await sendWhatsAppDocument({
+      supabase: sb,
+      organizationId: "org-1",
+      leadId: "lead-1",
+      conversationId: null,
+      params: { documentUrl: "https://cdn.test/proposta.pdf", whatsappInstanceId: "inst-1" },
+      executionContext: {},
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("phone");
+  });
+
+  it("sends document successfully", async () => {
+    const { input } = makeInput({ documentUrl: "https://cdn.test/proposta.pdf" });
+    const result = await sendWhatsAppDocument(input);
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("document sent");
+  });
+
+  it("forwards filename + type=document + caption to the provider (legacy path)", async () => {
+    const { input } = makeInput({
+      documentUrl: "https://cdn.test/proposta.pdf",
+      documentName: "Proposta Comercial.pdf",
+      documentCaption: "Segue, {{nome}}!",
+    });
+    const result = await sendWhatsAppDocument(input);
+    expect(result.success).toBe(true);
+    expect(sendMediaViaInstance).toHaveBeenCalledTimes(1);
+    const mediaArg = (sendMediaViaInstance as unknown as import("vitest").Mock).mock.calls[0][3];
+    expect(mediaArg).toMatchObject({
+      type: "document",
+      file: "https://cdn.test/proposta.pdf",
+      filename: "Proposta Comercial.pdf",
+    });
   });
 });
