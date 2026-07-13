@@ -55,6 +55,8 @@ export interface GatewaySendRequest {
   source: MessageSource;
 
   media_url?: string;
+  /** Original filename for document sends (shown by WhatsApp). Ignored by other types. */
+  filename?: string;
   instance_id?: string;
   lead_id?: string;
   track_id?: string;
@@ -328,6 +330,7 @@ async function dispatchToProvider(
       return sendMediaViaInstance(supabase, instance, normalizedPhone, {
         type: req.message_type,
         file: req.media_url ?? "",
+        filename: req.filename,
         caption: req.caption,
       }, {
         trackSource: req.source,

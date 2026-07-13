@@ -252,3 +252,79 @@ export async function sendWhatsAppSticker(input: ActionInput): Promise<ActionRes
 
   return { success: true, message: "WhatsApp sticker sent" };
 }
+
+// ─── Document (PDF/DOC — até 16MB) ───────────────────────────────────────────
+
+export async function sendWhatsAppDocument(input: ActionInput): Promise<ActionResult> {
+  const { supabase, organizationId, leadId, params, executionContext } = input;
+
+  if (!leadId) {
+    return { success: false, error: "leadId is required for sendWhatsAppDocument" };
+  }
+
+  const documentUrl = params.documentUrl as string;
+  if (!documentUrl) return { success: false, error: "No document URL configured", retryable: false };
+  const documentName = (params.documentName as string) || undefined;
+
+  const wa = await getWhatsAppInstance(
+    supabase, organizationId,
+    params.whatsappInstanceId as string | undefined,
+    leadId,
+  );
+  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  await enforceWhatsAppRateLimit(supabase, wa.instanceId);
+
+  const phone = await getLeadPhone(supabase, leadId);
+  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
+
+  const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
+  if (recipientBlock) return recipientBlock;
+
+  const caption = (params.documentCaption as string) || "";
+  const resolvedCaption = await resolveVariables(supabase, leadId, caption, executionContext);
+
+  // Content-hash dedup backstop (fail-open) keyed on the document URL + caption.
+  const docDedup = await reserveSendOrSkip({ supabase, orgId: organizationId, phone, content: `document:${documentUrl}|${resolvedCaption}`, source: "workflow" });
+  if (docDedup.duplicate) return { success: true, message: "WhatsApp document skipped (duplicate within window)" };
+
+  const trackId = buildTrackId(params);
+
+  // Gateway dual-path
+  const gwResult = await sendMessage(supabase, {
+    organization_id: organizationId,
+    phone,
+    content: resolvedCaption || null,
+    message_type: "document",
+    source: "workflow",
+    media_url: documentUrl,
+    filename: documentName,
+    caption: resolvedCaption || undefined,
+    instance_id: wa.instanceId,
+    lead_id: leadId,
+    track_id: trackId,
+    triggered_by: "workflow",
+  });
+
+  if (!gwResult.delegated) {
+    // Legacy path
+    const { sendMediaViaInstance } = await import("../whatsapp-dispatch.ts");
+    const sendResult = await sendMediaViaInstance(
+      supabase,
+      wa.instance,
+      phone,
+      { type: "document", file: documentUrl, filename: documentName, caption: resolvedCaption },
+      { trackSource: "workflow-action", trackId: params._executionId as string | undefined },
+    );
+
+    if (!sendResult.success) {
+      const error = `Document send failed: ${sendResult.error}`;
+      return { success: false, error, retryable: isRetryableSendFailure(error) };
+    }
+  } else if (!gwResult.success) {
+    console.error("[send-whatsapp-media] Gateway document send failed:", gwResult.error);
+    const error = `Document send failed: ${gwResult.error}`;
+    return { success: false, error, retryable: isRetryableSendFailure(error) };
+  }
+
+  return { success: true, message: "WhatsApp document sent" };
+}

@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mic, MicOff, Upload, Trash2, Play, Square, Plus } from "lucide-react";
+import { Mic, MicOff, Upload, Trash2, Play, Square, Plus, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import type { ActionNodeData, WorkflowActionType, MessageType } from "@/types/workflow";
@@ -411,6 +411,7 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
         at === "send_whatsapp_audio" ||
         at === "send_whatsapp_image" ||
         at === "send_whatsapp_sticker" ||
+        at === "send_whatsapp_document" ||
         at === "send_whatsapp_template" ||
         at === "send_to_number") && (
         <WhatsAppInstanceSelector
@@ -454,6 +455,11 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
             Imagem PNG ou WebP. Recomendado 512×512px com fundo transparente.
           </p>
         </div>
+      )}
+
+      {/* Send WhatsApp (Documento) */}
+      {at === "send_whatsapp_document" && (
+        <WhatsAppDocumentPanel data={data} onUpdate={onUpdate} />
       )}
 
       {/* Send WhatsApp Template */}
@@ -1593,6 +1599,168 @@ function WhatsAppImagePanel({
           value={data.imageCaption || ""}
           onChange={(e) => onUpdate({ imageCaption: e.target.value })}
           placeholder="Confira nosso catálogo, {{nome}}!"
+          rows={2}
+        />
+        <p className="text-xs text-muted-foreground">
+          Variáveis: {"{{"} nome {"}}"}, {"{{"} empresa {"}}"} ...
+        </p>
+      </div>
+    </>
+  );
+}
+
+function WhatsAppDocumentPanel({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const { organizationId } = useOrganization();
+  const [isUploading, setIsUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      const { validateWorkflowDocumentFile, buildWorkflowAssetPath } = await import(
+        "@/lib/workflow-image-upload"
+      );
+
+      const validation = validateWorkflowDocumentFile(file);
+      if (!validation.valid) {
+        toast.error(validation.error!);
+        return;
+      }
+      if (!organizationId) {
+        toast.error("Organização não encontrada");
+        return;
+      }
+
+      setIsUploading(true);
+      try {
+        const path = buildWorkflowAssetPath(organizationId, file.name);
+        const { data: uploaded, error } = await supabase.storage
+          .from("media")
+          .upload(path, file, {
+            contentType: file.type || "application/pdf",
+            upsert: false,
+          });
+
+        if (error) throw new Error(error.message);
+
+        const { data: urlData } = supabase.storage
+          .from("media")
+          .getPublicUrl(uploaded.path);
+
+        if (!urlData?.publicUrl) throw new Error("Erro ao obter URL do documento");
+
+        onUpdate({ documentUrl: urlData.publicUrl, documentName: file.name });
+        toast.success("Documento enviado!");
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Erro ao enviar documento";
+        toast.error(message);
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [organizationId, onUpdate],
+  );
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+    e.target.value = "";
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
+
+  const removeDocument = () => {
+    onUpdate({ documentUrl: undefined, documentName: undefined });
+  };
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Documento</Label>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,application/pdf"
+          className="hidden"
+          onChange={handleInputChange}
+        />
+
+        {data.documentUrl ? (
+          <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-3">
+            <FileText className="h-8 w-8 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">
+                {data.documentName || "Documento"}
+              </p>
+              <p className="text-[10px] text-muted-foreground">Pronto para envio</p>
+            </div>
+            <div className="flex shrink-0 gap-1">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => inputRef.current?.click()}
+                disabled={isUploading}
+              >
+                <Upload className="h-3.5 w-3.5 mr-1" />
+                Trocar
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={removeDocument}
+                disabled={isUploading}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 cursor-pointer transition-colors",
+              dragOver
+                ? "border-primary bg-primary/5"
+                : "border-muted-foreground/25 hover:border-muted-foreground/50",
+              isUploading && "pointer-events-none opacity-60",
+            )}
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+          >
+            <Upload className="h-8 w-8 text-muted-foreground/50" />
+            <p className="text-xs text-muted-foreground text-center">
+              {isUploading ? "Enviando..." : "Clique ou arraste um documento aqui"}
+            </p>
+            <p className="text-[10px] text-muted-foreground/60">
+              PDF, DOC, XLS, PPT, TXT ou CSV — máx. 16MB
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label>Legenda (opcional)</Label>
+        <Textarea
+          value={data.documentCaption || ""}
+          onChange={(e) => onUpdate({ documentCaption: e.target.value })}
+          placeholder="Segue a proposta, {{nome}}!"
           rows={2}
         />
         <p className="text-xs text-muted-foreground">
