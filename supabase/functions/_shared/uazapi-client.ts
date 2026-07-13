@@ -158,18 +158,24 @@ export class UazapiClient {
   }
 
   async deleteInstance(): Promise<void> {
+    // uazapiGO: DELETE /instance authenticated with the INSTANCE token.
+    // (The previous `DELETE /instance/delete` + admintoken was rejected 405 by
+    //  the managed server, silently orphaning the Uazapi instance + its WhatsApp
+    //  linked-device session — the "logged out from another device" flapping.)
     await this.request<unknown>(
       "DELETE",
-      "/instance/delete",
+      "/instance",
       undefined,
-      { useAdminToken: true }
+      { useAdminToken: false }
     );
   }
 
   async logoutInstance(): Promise<void> {
+    // uazapiGO: POST /instance/disconnect (instance token) frees the WhatsApp
+    // linked-device session without deleting the instance record.
     await this.request<unknown>(
       "POST",
-      "/instance/logout",
+      "/instance/disconnect",
       undefined,
       { useAdminToken: false }
     );

@@ -451,6 +451,49 @@ describe("initInstance — admin token", () => {
 });
 
 // ---------------------------------------------------------------------------
+// deleteInstance / logoutInstance — instance-token lifecycle ops
+//
+// Regression: the managed uazapiGO server rejected the old
+// `DELETE /instance/delete` (admintoken) with 405, silently orphaning the
+// instance + its WhatsApp session ("logged out from another device" flapping).
+// Correct endpoints per the uazapiGO OpenAPI spec:
+//   DELETE /instance            (instance token) — delete instance
+//   POST   /instance/disconnect (instance token) — free the linked-device session
+// ---------------------------------------------------------------------------
+
+describe("deleteInstance", () => {
+  it("DELETEs /instance with the instance token (not admintoken)", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(makeResponse(200, { status: "deleted" }));
+
+    const client = new UazapiClient(BASE_CONFIG);
+    await client.deleteInstance();
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("https://uazapi.example.com/instance");
+    expect(init?.method).toBe("DELETE");
+    const headers = init?.headers as Record<string, string>;
+    expect(headers["token"]).toBe("tok-instance-xyz");
+    expect(headers["admintoken"]).toBeUndefined();
+  });
+});
+
+describe("logoutInstance", () => {
+  it("POSTs /instance/disconnect with the instance token", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(makeResponse(200, { status: "disconnected" }));
+
+    const client = new UazapiClient(BASE_CONFIG);
+    await client.logoutInstance();
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("https://uazapi.example.com/instance/disconnect");
+    expect(init?.method).toBe("POST");
+    const headers = init?.headers as Record<string, string>;
+    expect(headers["token"]).toBe("tok-instance-xyz");
+    expect(headers["admintoken"]).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // sendText — missing token guard
 // ---------------------------------------------------------------------------
 
