@@ -12,7 +12,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Bug, ChevronDown, ChevronRight, Hand, LifeBuoy, Loader2, RotateCw, Send, X } from "lucide-react";
+import { Bug, CheckCircle2, ChevronDown, ChevronRight, Hand, LifeBuoy, Loader2, RotateCw, Send, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,14 @@ import {
 
 const ALL = "__all__";
 
+/**
+ * O balcão de trabalho é a fila viva; um chamado `resolvido` ou `fechado` já saiu
+ * dela. Separá-los tira o ruído do resolvido de cima da fila que ainda pede ação,
+ * sem escondê-los — eles descem para um segundo balcão, esverdeado.
+ */
+const RESOLVED_STATUSES: TicketStatus[] = ["resolvido", "fechado"];
+const isResolved = (t: MasterSupportTicket) => RESOLVED_STATUSES.includes(t.status);
+
 const SEVERIDADE_TONE: Record<TicketSeveridade, string> = {
   baixa: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
   media: "bg-sky-500/10 text-sky-400 border-sky-500/20",
@@ -82,6 +90,11 @@ export default function MasterSupportTickets() {
   const { data: tickets, isLoading, refetch, isFetching } = useMasterSupportTickets(filters);
 
   const hasFilters = Object.values(filters).some(Boolean);
+
+  const active = (tickets ?? []).filter((t) => !isResolved(t));
+  const resolved = (tickets ?? []).filter(isResolved);
+
+  const toggle = (id: string) => setExpanded((cur) => (cur === id ? null : id));
 
   return (
     <div className="space-y-6">
@@ -144,47 +157,100 @@ export default function MasterSupportTickets() {
       <Card>
         <CardContent className="p-0">
           <ScrollArea className="h-[620px]">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-8" />
-                  <TableHead>Chamado</TableHead>
-                  <TableHead className="w-[180px]">Organização</TableHead>
-                  <TableHead className="w-[130px]">Impacto</TableHead>
-                  <TableHead className="w-[120px]">Severidade</TableHead>
-                  <TableHead className="w-[150px]">Status</TableHead>
-                  <TableHead className="w-[120px]">Dono</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
-                      <Loader2 className="mx-auto h-5 w-5 animate-spin" aria-hidden />
-                    </TableCell>
-                  </TableRow>
-                ) : !tickets?.length ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
-                      {hasFilters ? "Nenhum chamado com esses filtros." : "A fila está vazia."}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  tickets.map((t) => (
-                    <TicketRow
-                      key={t.id}
-                      ticket={t}
-                      isExpanded={expanded === t.id}
-                      onToggle={() => setExpanded(expanded === t.id ? null : t.id)}
-                    />
-                  ))
-                )}
-              </TableBody>
-            </Table>
+            <TicketTable
+              tickets={active}
+              isLoading={isLoading}
+              expanded={expanded}
+              onToggle={toggle}
+              emptyLabel={hasFilters ? "Nenhum chamado com esses filtros." : "A fila está vazia."}
+            />
           </ScrollArea>
         </CardContent>
       </Card>
+
+      {resolved.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="flex items-center gap-2 text-sm font-medium text-emerald-400">
+            <CheckCircle2 className="h-4 w-4" aria-hidden />
+            Resolvidos
+            <span className="text-xs font-normal text-muted-foreground">
+              {resolved.length} chamado{resolved.length > 1 ? "s" : ""}
+            </span>
+          </h2>
+          <Card className="border-emerald-500/20 bg-emerald-500/[0.03]">
+            <CardContent className="p-0">
+              <ScrollArea className="max-h-[420px]">
+                <TicketTable
+                  tickets={resolved}
+                  isLoading={false}
+                  expanded={expanded}
+                  onToggle={toggle}
+                  resolved
+                  emptyLabel=""
+                />
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </section>
+      )}
     </div>
+  );
+}
+
+function TicketTable({
+  tickets,
+  isLoading,
+  expanded,
+  onToggle,
+  emptyLabel,
+  resolved = false,
+}: {
+  tickets: MasterSupportTicket[];
+  isLoading: boolean;
+  expanded: string | null;
+  onToggle: (id: string) => void;
+  emptyLabel: string;
+  resolved?: boolean;
+}) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-8" />
+          <TableHead>Chamado</TableHead>
+          <TableHead className="w-[180px]">Organização</TableHead>
+          <TableHead className="w-[130px]">Impacto</TableHead>
+          <TableHead className="w-[120px]">Severidade</TableHead>
+          <TableHead className="w-[150px]">Status</TableHead>
+          <TableHead className="w-[120px]">Dono</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {isLoading ? (
+          <TableRow>
+            <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+              <Loader2 className="mx-auto h-5 w-5 animate-spin" aria-hidden />
+            </TableCell>
+          </TableRow>
+        ) : !tickets.length ? (
+          <TableRow>
+            <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+              {emptyLabel}
+            </TableCell>
+          </TableRow>
+        ) : (
+          tickets.map((t) => (
+            <TicketRow
+              key={t.id}
+              ticket={t}
+              isExpanded={expanded === t.id}
+              onToggle={() => onToggle(t.id)}
+              resolved={resolved}
+            />
+          ))
+        )}
+      </TableBody>
+    </Table>
   );
 }
 
@@ -275,10 +341,12 @@ function TicketRow({
   ticket,
   isExpanded,
   onToggle,
+  resolved = false,
 }: {
   ticket: MasterSupportTicket;
   isExpanded: boolean;
   onToggle: () => void;
+  resolved?: boolean;
 }) {
   const { masterUser } = useMasterAuth();
   const claim = useClaimSupportTicket();
@@ -288,7 +356,13 @@ function TicketRow({
 
   return (
     <>
-      <TableRow className="cursor-pointer hover:bg-accent/40" onClick={onToggle}>
+      <TableRow
+        className={cn(
+          "cursor-pointer",
+          resolved ? "hover:bg-emerald-500/10" : "hover:bg-accent/40",
+        )}
+        onClick={onToggle}
+      >
         <TableCell>
           {isExpanded ? (
             <ChevronDown className="h-4 w-4 text-muted-foreground" aria-hidden />
@@ -397,7 +471,7 @@ function TicketRow({
 
       {isExpanded && (
         <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={7} className="bg-muted/20 p-0">
+          <TableCell colSpan={7} className={cn("p-0", resolved ? "bg-emerald-500/[0.04]" : "bg-muted/20")}>
             <TicketDetail ticket={ticket} />
           </TableCell>
         </TableRow>
