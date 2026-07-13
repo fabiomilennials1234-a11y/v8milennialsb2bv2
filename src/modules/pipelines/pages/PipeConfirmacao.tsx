@@ -32,6 +32,7 @@ import { LeadModal } from "@/modules/leads";
 import { AddMeetingModal } from "@/modules/pipelines/components/legacy/confirmacao/AddMeetingModal";
 import { RescheduleModal } from "@/modules/pipelines/components/legacy/confirmacao/RescheduleModal";
 import { PipeViewToggle } from "@/modules/pipelines/components/shared/PipeViewToggle";
+import { AutoCreateLeadToggle } from "@/modules/pipelines/components/shared/AutoCreateLeadToggle";
 import { PipeConfirmacaoAnalytics } from "@/modules/pipelines/components/shared/PipeConfirmacaoAnalytics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/MetricsPeriodSelector";
@@ -729,6 +730,7 @@ function PipeConfirmacaoInner() {
               { value: "analytics", icon: BarChart3, label: "Analytics" },
             ]}
           />
+          <AutoCreateLeadToggle />
           <Button size="sm" variant="outline" onClick={() => setIsSettingsOpen(true)}>
             <Settings2 className="w-4 h-4 mr-2" />
             Configurações

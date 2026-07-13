@@ -34,6 +34,7 @@ owner: claude-agent
 
 - [[Copilot v2 — Rebuild|Copilot v2 — Rebuild]] (design)
 - [[Copilot|Copilot]]
+- [[Auto-criar lead no inbound|Auto-criar lead no inbound (WhatsApp)]]
 
 ## Infra
 

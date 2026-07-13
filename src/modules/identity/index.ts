@@ -35,6 +35,7 @@ export { useMasterAuth } from "./master";
 export {
   useOrganization,
   useOrganizationSettings,
+  useAutoCreateLeadSetting,
   useConfirmacaoOverdueDays,
   isConfirmacaoOverdue,
   useOrgQuotas,

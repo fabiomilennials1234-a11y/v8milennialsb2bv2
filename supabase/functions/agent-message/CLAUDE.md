@@ -45,6 +45,17 @@ funções extraídas via `*External` aliases (mantém compat com testes).
   `generate-faq-embeddings`.
 - Conversation sem mensagens prévias (cold start) → contexto curto, considerar
   template inicial.
+- **Flag `organizations.auto_create_lead_on_inbound` (aditiva, default false)** —
+  quando ON, os gates ACTIVE-AGENT (0.95) e AUDIENCE (1.0) **criam o lead** antes
+  do early-return (via `getOrCreateLead`, funil WhatsApp/etapa novo/sem dono) em
+  vez de só bailar. A IA continua NÃO respondendo nesses casos — só o lead é
+  materializado. Decisão isolada em `gate-decision.ts::decideBlockedInboundAction`
+  (gate + flag → `{createLead, reason}`). Reasons ON: `lead_created_no_ai` /
+  `lead_created_ai_blocked`. Com a flag OFF, os dois gates respondem
+  byte-a-byte como antes (`no_active_agents` / `unknown_phone_blocked`). NÃO
+  substitui `attend_unknown_contacts` (que governa SE a IA responde). **Limitação
+  v1:** inbound sem texto/mídia não passa por aqui (não tocamos `whatsapp-webhook`),
+  então não cria lead automático. Ver `06 — Features/IA/Auto-criar lead no inbound.md`.
 
 ## Schema dependencies
 
