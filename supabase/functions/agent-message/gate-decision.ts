@@ -5,8 +5,8 @@
  *
  * A flag org `auto_create_lead_on_inbound` é ADITIVA: com ela OFF (default de
  * TODAS as orgs) o comportamento é byte-a-byte o de hoje — o gate retorna
- * `skipped` SEM criar lead. Com ela ON, o mesmo early-return acontece (não há
- * IA pra responder), mas o lead é materializado antes de sair.
+ * `skipped` SEM criar lead. Com ela ON, o mesmo early-return acontece (a IA não
+ * responde NESTE turno), mas o lead é materializado antes de sair.
  *
  * Extraída como função pura pra ser testável isolada dos side-effects
  * (lock, getOrCreateLead, Response) que vivem inline no index.ts.
@@ -33,8 +33,10 @@ export interface GateDecision {
  *   - no_active_agents  → { createLead:true,  reason:"lead_created_no_ai" }
  *   - audience_blocked  → { createLead:true,  reason:"lead_created_ai_blocked" }
  *
- * Em ambos os casos o turno termina em early-return 200 (skipped) — a flag
- * NUNCA faz a IA responder num contexto onde hoje ela não responderia.
+ * Em ambos os casos o turno termina em early-return 200 (skipped): a flag não
+ * faz a IA responder NO TURNO que cria o lead. A partir do lead existir, o
+ * atendimento segue o fluxo normal (o audience-gate deixa de barrar os próximos
+ * inbounds do mesmo número via short-circuit de existingLead).
  */
 export function decideBlockedInboundAction(
   gate: InboundGate,

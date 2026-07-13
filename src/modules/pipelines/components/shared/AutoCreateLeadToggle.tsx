@@ -29,7 +29,7 @@ export function AutoCreateLeadToggle() {
   const { isMaster } = useMasterAuth();
   const isAdmin = isMaster || userRole?.role === "admin";
 
-  const { autoCreateLead, setAutoCreateLead, isUpdating } =
+  const { autoCreateLead, setAutoCreateLead, isUpdating, isLoading, isUnavailable } =
     useAutoCreateLeadSetting();
 
   // Vendedor (membro) não vê o controle. Só admin/owner + master.
@@ -54,7 +54,7 @@ export function AutoCreateLeadToggle() {
         id="auto-create-lead"
         checked={autoCreateLead}
         onCheckedChange={handleChange}
-        disabled={isUpdating}
+        disabled={isUpdating || isLoading || isUnavailable}
         className="scale-90"
       />
       <Label

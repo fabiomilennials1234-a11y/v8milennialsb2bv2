@@ -20,7 +20,7 @@ A decisão é isolada no helper puro `agent-message/gate-decision.ts::decideBloc
 
 Criação via `_shared/lead-service.ts::getOrCreateLead({ organizationId, phone, pushName, origin:"whatsapp" })` — idempotente (índice único `normalized_phone` + retry em `23505`), seguro dentro da região travada pelo lock. Destino: funil WhatsApp, etapa `novo`, **sem atribuição** (sem dono).
 
-Em ambos os casos com a flag ON o turno **ainda termina em early-return 200** — a flag nunca faz a IA responder num contexto onde hoje ela não responderia.
+Em ambos os casos com a flag ON o turno **ainda termina em early-return 200** — a IA não responde **no turno que cria o lead**. Mas, como o lead passa a existir, a partir do **próximo inbound** o número deixa de ser "desconhecido" e o atendimento segue o fluxo normal (ver **Handoff** abaixo).
 
 ## Regras de negócio
 - Vale pra **conta inteira** (não por-aba, não por-funil).
@@ -29,6 +29,9 @@ Em ambos os casos com a flag ON o turno **ainda termina em early-return 200** �
   - `auto_create_lead_on_inbound` → **SE o lead é materializado** quando a IA não vai responder.
 - Telefone **conhecido** OU (`attend_unknown_contacts=true` + agente ativo) → fluxo **inalterado**: cria lead + IA responde. A flag não toca esse caminho.
 - Retrocompat: com a flag OFF, os dois gates respondem byte-a-byte como antes.
+
+### Handoff da IA (importante)
+O lead auto-criado **passa a existir**, então a partir do **2º inbound** o `audience-gate` não barra mais aquele número (short-circuit `existingLead`) e a IA responde normalmente. Ou seja, ligar o toggle habilita o fluxo desenhado: automação `lead_created` **inicia o atendimento** → IA **dá seguimento** quando o lead responde. Isso é o comportamento desejado (não é bug). ⚠️ Em org que use `attend_unknown_contacts=false` como controle rígido de custo/privacidade, ligar este toggle passa a permitir a IA a partir da 2ª msg — decisão consciente **na ativação** (por isso o default é OFF e a ativação é manual). Além disso, a criação do lead dispara os triggers `lead_created`/`lead_added`: antes de ligar numa org, conferir se há automação/dispatch que possa mandar mensagem indesejada.
 
 ## UI
 Toggle `Switch` "Criar lead automático (WhatsApp)" na barra do funil (header do kanban), nas 3 abas de pipe (whatsapp/confirmacao/propostas).

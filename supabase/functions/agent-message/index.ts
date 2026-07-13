@@ -158,14 +158,19 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
     // região travada pelo lock. Se ON, os dois gates abaixo (sem agente ativo /
     // audience blocked) criam o lead antes de sair, em vez de só bailar. Se OFF
     // (default de TODAS as orgs), os gates se comportam byte-a-byte como hoje.
+    // Fail-safe: qualquer erro de leitura → OFF (não cria lead), mas logamos
+    // pra não virar no-op silencioso quando a coluna faltar num ambiente.
     // Ver migration 20270211000000_org_auto_create_lead_on_inbound.
     let autoCreateLead = false;
     {
-      const { data: orgFlagRow } = await supabase
+      const { data: orgFlagRow, error: orgFlagError } = await supabase
         .from("organizations")
         .select("auto_create_lead_on_inbound")
         .eq("id", organization_id)
         .maybeSingle();
+      if (orgFlagError) {
+        console.warn('[agent-message] Falha ao ler auto_create_lead_on_inbound (fail-safe OFF):', { organization_id, error: orgFlagError.message });
+      }
       autoCreateLead = orgFlagRow?.auto_create_lead_on_inbound === true;
     }
 
@@ -189,20 +194,25 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
         const decision = decideBlockedInboundAction("no_active_agents", autoCreateLead);
         if (decision.createLead) {
           const normalizedPhone = normalizePhoneForSearch(from);
-          await getOrCreateLead(supabase, {
+          // getOrCreateLead é idempotente e faz o lookup por normalized_phone;
+          // só logamos/contabilizamos como auto-criação quando REALMENTE criou
+          // (telefone já conhecido devolve created=false, sem ruído no hot path).
+          const result = await getOrCreateLead(supabase, {
             organizationId: organization_id,
             phone: from,
             pushName: push_name,
             origin: "whatsapp",
           });
-          console.log('[agent-message] Auto-created lead (no active agents):', { organization_id, phone: normalizedPhone });
-          await logRuntime({
-            organizationId: organization_id,
-            module: "copilot",
-            action: "auto_create_lead_on_inbound",
-            status: "success",
-            payloadSnapshot: { organization_id, phone: normalizedPhone, gate: "no_active_agents" },
-          });
+          if (result?.created) {
+            console.log('[agent-message] Auto-created lead (no active agents):', { organization_id, phone: normalizedPhone });
+            await logRuntime({
+              organizationId: organization_id,
+              module: "copilot",
+              action: "auto_create_lead_on_inbound",
+              status: "success",
+              payloadSnapshot: { organization_id, phone: normalizedPhone, gate: "no_active_agents" },
+            });
+          }
         } else {
           console.log('[agent-message] No active agents for org (early gate):', organization_id);
         }
@@ -221,27 +231,35 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
     // QUALQUER agente ativo da org tem attend_unknown_contacts=false.
     // Veto org-wide (fail-closed). Roda ANTES do getOrCreateLead pra nao
     // criar lead fantasma quando filtro esta on.
-    // EXCEÇÃO: se auto_create_lead_on_inbound=ON, materializa o lead e sai
-    // (a IA continua NÃO respondendo — só o lead é criado).
+    // EXCEÇÃO: se auto_create_lead_on_inbound=ON, materializa o lead e sai.
+    // A IA NÃO responde NESTE turno (early-return). Mas, como o lead passa a
+    // existir, o audience-gate deixa de barrar os próximos inbounds do mesmo
+    // número (short-circuit `existingLead` em audience-gate.ts) → o atendimento
+    // segue o fluxo normal: trigger `lead_created` dispara a automação de início
+    // e a IA dá handoff quando o lead responde. NÃO é "IA nunca responde".
     {
       const normalizedPhone = normalizePhoneForSearch(from);
       if (normalizedPhone) {
         const gate = await checkAudienceGate(supabase, organization_id, normalizedPhone);
         if (gate.blocked) {
           const decision = decideBlockedInboundAction("audience_blocked", autoCreateLead);
+          let leadCreated = false;
           if (decision.createLead) {
-            await getOrCreateLead(supabase, {
+            const result = await getOrCreateLead(supabase, {
               organizationId: organization_id,
               phone: from,
               pushName: push_name,
               origin: "whatsapp",
             });
-            console.log('[agent-message] Auto-created lead (audience blocked):', { organization_id, phone: normalizedPhone });
+            leadCreated = result?.created === true;
+            if (leadCreated) {
+              console.log('[agent-message] Auto-created lead (audience blocked):', { organization_id, phone: normalizedPhone });
+            }
           }
           await logRuntime({
             organizationId: organization_id,
             module: "copilot",
-            action: decision.createLead ? "auto_create_lead_on_inbound" : "audience_gate_block",
+            action: leadCreated ? "auto_create_lead_on_inbound" : "audience_gate_block",
             status: "success",
             payloadSnapshot: {
               phone: normalizedPhone,

@@ -48,8 +48,10 @@ funções extraídas via `*External` aliases (mantém compat com testes).
 - **Flag `organizations.auto_create_lead_on_inbound` (aditiva, default false)** —
   quando ON, os gates ACTIVE-AGENT (0.95) e AUDIENCE (1.0) **criam o lead** antes
   do early-return (via `getOrCreateLead`, funil WhatsApp/etapa novo/sem dono) em
-  vez de só bailar. A IA continua NÃO respondendo nesses casos — só o lead é
-  materializado. Decisão isolada em `gate-decision.ts::decideBlockedInboundAction`
+  vez de só bailar. A IA não responde NO TURNO que cria o lead (early-return);
+  a partir do lead existir, o atendimento segue o fluxo normal (trigger
+  `lead_created` inicia automação + IA dá handoff quando o lead responde) — NÃO
+  é "IA nunca responde". Decisão isolada em `gate-decision.ts::decideBlockedInboundAction`
   (gate + flag → `{createLead, reason}`). Reasons ON: `lead_created_no_ai` /
   `lead_created_ai_blocked`. Com a flag OFF, os dois gates respondem
   byte-a-byte como antes (`no_active_agents` / `unknown_phone_blocked`). NÃO
