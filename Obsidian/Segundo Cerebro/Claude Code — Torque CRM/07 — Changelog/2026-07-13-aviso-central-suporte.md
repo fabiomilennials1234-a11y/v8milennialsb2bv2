@@ -32,3 +32,8 @@ owner: claude-agent
 ## Follow-ups
 
 - Nenhum. Sem backend, sem migration, sem barrel export (deep-import intencional no App.tsx, padrão dos irmãos SupportPanel/SupportPanelProvider).
+
+## Fix pós-deploy (2026-07-13)
+
+- **Bug em prod**: o modal A abria por cima do `TorqueLoader` (Suspense de chunk / gates de auth) — o timer one-shot de 800ms só checava o FAB; e se o FAB ainda não existia, desistia e o anúncio morria pra sessão sem aparecer.
+- **Fix**: entrada por espera de condição — polling leve (250ms) até o app "assentar" (`isAppSettled`: FAB presente E nenhum `[data-torque-loader]`), depois +800ms com re-checagem completa antes de exibir; loader remontou → volta a esperar. `TorqueLoader.tsx` ganhou o atributo `data-torque-loader` no root. Testes do helper em `support-announcement.test.ts` (+5). Branch `fix/aviso-suporte-espera-loading`.

@@ -1,5 +1,6 @@
 import {
   emptyState,
+  isAppSettled,
   markCoachDone,
   markEngaged,
   markSessionShown,
@@ -41,6 +42,53 @@ describe("shouldShowModal", () => {
   // Refresh na mesma aba não conta segunda exibição.
   it("NÃO é elegível quando a sessão já exibiu", () => {
     expect(shouldShowModal(emptyState(), true)).toBe(false);
+  });
+});
+
+// App "assentado" = FAB no DOM E nenhum TorqueLoader na tela. Enquanto não
+// assentar, o modal não pode abrir (abriria por cima do loading).
+describe("isAppSettled", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  const addFab = () => {
+    const fab = document.createElement("button");
+    fab.setAttribute("data-support-fab", "");
+    document.body.appendChild(fab);
+  };
+
+  const addLoader = () => {
+    const loader = document.createElement("div");
+    loader.setAttribute("data-torque-loader", "");
+    document.body.appendChild(loader);
+  };
+
+  it("NÃO assentado sem FAB (loader full de auth, tela fullbleed/TV/login)", () => {
+    expect(isAppSettled(document)).toBe(false);
+  });
+
+  it("NÃO assentado com FAB mas TorqueLoader presente (Suspense de chunk)", () => {
+    addFab();
+    addLoader();
+    expect(isAppSettled(document)).toBe(false);
+  });
+
+  it("NÃO assentado com loader e sem FAB", () => {
+    addLoader();
+    expect(isAppSettled(document)).toBe(false);
+  });
+
+  it("assentado com FAB presente e nenhum loader", () => {
+    addFab();
+    expect(isAppSettled(document)).toBe(true);
+  });
+
+  it("volta a NÃO assentado quando um loader remonta depois do FAB existir", () => {
+    addFab();
+    expect(isAppSettled(document)).toBe(true);
+    addLoader();
+    expect(isAppSettled(document)).toBe(false);
   });
 });
 
