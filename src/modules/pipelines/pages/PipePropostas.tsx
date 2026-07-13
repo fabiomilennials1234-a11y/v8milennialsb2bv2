@@ -42,6 +42,7 @@ import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from 
 import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/MetricsPeriodSelector";
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
 import { PipeViewToggle } from "@/modules/pipelines/components/shared/PipeViewToggle";
+import { AutoCreateLeadToggle } from "@/modules/pipelines/components/shared/AutoCreateLeadToggle";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/modules/leads";
 import { usePipelineStages, stagesToColumns } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
@@ -1119,6 +1120,7 @@ function PipePropostasInner() {
               { value: "analytics", icon: BarChart3, label: "Analytics" },
             ]}
           />
+          <AutoCreateLeadToggle />
           <Button variant="outline" className="gap-2" onClick={() => setIsSettingsOpen(true)}>
             <Settings2 className="w-4 h-4" />
             Configurações

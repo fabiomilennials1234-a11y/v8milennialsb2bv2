@@ -10065,6 +10065,7 @@ export type Database = {
       }
       organizations: {
         Row: {
+          auto_create_lead_on_inbound: boolean
           billing_override: boolean | null
           billing_override_at: string | null
           billing_override_by: string | null
@@ -10104,6 +10105,7 @@ export type Database = {
           whatsapp_rate_limit: Json | null
         }
         Insert: {
+          auto_create_lead_on_inbound?: boolean
           billing_override?: boolean | null
           billing_override_at?: string | null
           billing_override_by?: string | null
@@ -10143,6 +10145,7 @@ export type Database = {
           whatsapp_rate_limit?: Json | null
         }
         Update: {
+          auto_create_lead_on_inbound?: boolean
           billing_override?: boolean | null
           billing_override_at?: string | null
           billing_override_by?: string | null

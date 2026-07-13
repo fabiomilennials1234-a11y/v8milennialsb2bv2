@@ -16,6 +16,7 @@ import "../_shared/whatsapp-providers/uazapi-provider.ts";
 
 import { buildBatchContent, absorbPendingMessages } from "./batch-helpers.ts";
 import { checkAudienceGate } from "./audience-gate.ts";
+import { decideBlockedInboundAction } from "./gate-decision.ts";
 import { resolveMediaContent } from "../_shared/audio-transcription.ts";
 import { assertPlanFeature, PlanFeatureDeniedError } from "../_shared/plan-gate.ts";
 
@@ -153,10 +154,33 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
       );
     }
 
+    // 0.96. AUTO-CREATE-LEAD FLAG (feature aditiva) — lida UMA vez, dentro da
+    // região travada pelo lock. Se ON, os dois gates abaixo (sem agente ativo /
+    // audience blocked) criam o lead antes de sair, em vez de só bailar. Se OFF
+    // (default de TODAS as orgs), os gates se comportam byte-a-byte como hoje.
+    // Fail-safe: qualquer erro de leitura → OFF (não cria lead), mas logamos
+    // pra não virar no-op silencioso quando a coluna faltar num ambiente.
+    // Ver migration 20270211000000_org_auto_create_lead_on_inbound.
+    let autoCreateLead = false;
+    {
+      const { data: orgFlagRow, error: orgFlagError } = await supabase
+        .from("organizations")
+        .select("auto_create_lead_on_inbound")
+        .eq("id", organization_id)
+        .maybeSingle();
+      if (orgFlagError) {
+        console.warn('[agent-message] Falha ao ler auto_create_lead_on_inbound (fail-safe OFF):', { organization_id, error: orgFlagError.message });
+      }
+      autoCreateLead = orgFlagRow?.auto_create_lead_on_inbound === true;
+    }
+
     // 0.95. AGENT ACTIVE GATE (early) — sem nenhum agente ativo na org,
     // não há motivo pra criar lead fantasma a partir de uma msg que ninguém
     // vai responder. Roda ANTES de getOrCreateLead pra evitar poluir o pipe
     // com contatos órfãos quando Copilot está totalmente desligado.
+    // EXCEÇÃO: se auto_create_lead_on_inbound=ON, materializa o lead (funil
+    // WhatsApp / etapa novo / sem dono) e mesmo assim sai (não há IA pra
+    // responder). Ver decideBlockedInboundAction (gate-decision.ts).
     {
       const { data: activeAgentEarly } = await supabase
         .from("copilot_agents")
@@ -167,11 +191,35 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
         .maybeSingle();
 
       if (!activeAgentEarly) {
-        console.log('[agent-message] No active agents for org (early gate):', organization_id);
+        const decision = decideBlockedInboundAction("no_active_agents", autoCreateLead);
+        if (decision.createLead) {
+          const normalizedPhone = normalizePhoneForSearch(from);
+          // getOrCreateLead é idempotente e faz o lookup por normalized_phone;
+          // só logamos/contabilizamos como auto-criação quando REALMENTE criou
+          // (telefone já conhecido devolve created=false, sem ruído no hot path).
+          const result = await getOrCreateLead(supabase, {
+            organizationId: organization_id,
+            phone: from,
+            pushName: push_name,
+            origin: "whatsapp",
+          });
+          if (result?.created) {
+            console.log('[agent-message] Auto-created lead (no active agents):', { organization_id, phone: normalizedPhone });
+            await logRuntime({
+              organizationId: organization_id,
+              module: "copilot",
+              action: "auto_create_lead_on_inbound",
+              status: "success",
+              payloadSnapshot: { organization_id, phone: normalizedPhone, gate: "no_active_agents" },
+            });
+          }
+        } else {
+          console.log('[agent-message] No active agents for org (early gate):', organization_id);
+        }
         return new Response(
           JSON.stringify({
             skipped: true,
-            reason: "no_active_agents",
+            reason: decision.reason,
             organization_id,
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -183,26 +231,47 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
     // QUALQUER agente ativo da org tem attend_unknown_contacts=false.
     // Veto org-wide (fail-closed). Roda ANTES do getOrCreateLead pra nao
     // criar lead fantasma quando filtro esta on.
+    // EXCEÇÃO: se auto_create_lead_on_inbound=ON, materializa o lead e sai.
+    // A IA NÃO responde NESTE turno (early-return). Mas, como o lead passa a
+    // existir, o audience-gate deixa de barrar os próximos inbounds do mesmo
+    // número (short-circuit `existingLead` em audience-gate.ts) → o atendimento
+    // segue o fluxo normal: trigger `lead_created` dispara a automação de início
+    // e a IA dá handoff quando o lead responde. NÃO é "IA nunca responde".
     {
       const normalizedPhone = normalizePhoneForSearch(from);
       if (normalizedPhone) {
         const gate = await checkAudienceGate(supabase, organization_id, normalizedPhone);
         if (gate.blocked) {
+          const decision = decideBlockedInboundAction("audience_blocked", autoCreateLead);
+          let leadCreated = false;
+          if (decision.createLead) {
+            const result = await getOrCreateLead(supabase, {
+              organizationId: organization_id,
+              phone: from,
+              pushName: push_name,
+              origin: "whatsapp",
+            });
+            leadCreated = result?.created === true;
+            if (leadCreated) {
+              console.log('[agent-message] Auto-created lead (audience blocked):', { organization_id, phone: normalizedPhone });
+            }
+          }
           await logRuntime({
-            module: "copilot",
-            action: "audience_gate_block",
-            status: "success",
             organizationId: organization_id,
+            module: "copilot",
+            action: leadCreated ? "auto_create_lead_on_inbound" : "audience_gate_block",
+            status: "success",
             payloadSnapshot: {
               phone: normalizedPhone,
               agent_id: gate.agentId,
-              reason: "unknown_phone_blocked",
+              gate: "audience_blocked",
+              reason: decision.reason,
             },
           });
           return new Response(
             JSON.stringify({
               skipped: true,
-              reason: "unknown_phone_blocked",
+              reason: decision.reason,
               organization_id,
             }),
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },

@@ -19,6 +19,8 @@ export {
   isConfirmacaoOverdue,
 } from "./hooks/useOrganizationSettings";
 export type { OrganizationSettings } from "./hooks/useOrganizationSettings";
+export { useAutoCreateLeadSetting } from "./hooks/useAutoCreateLeadSetting";
+export type { AutoCreateLeadSetting } from "./hooks/useAutoCreateLeadSetting";
 
 // ── Quotas + seats ─────────────────────────────────────────────────────────
 export { useOrgQuotas } from "./hooks/useOrgQuotas";

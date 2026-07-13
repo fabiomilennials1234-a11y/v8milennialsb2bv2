@@ -1,8 +1,28 @@
 # Project State
 
-**Last updated:** 2026-04-30 (meeting_date sync + move_pipe_record fail-closed)
+**Last updated:** 2026-07-13 (toggle auto_create_lead_on_inbound)
 
 ## Decisions
+
+### D053: Toggle por org `auto_create_lead_on_inbound` (2026-07-13)
+
+Feature aditiva: coluna `organizations.auto_create_lead_on_inbound` (`boolean NOT NULL DEFAULT false`, migration `20270211000000`). Governa se um inbound de WhatsApp de telefone **desconhecido** cria lead automaticamente quando a IA **não** vai responder (org sem agente ativo OU `attend_unknown_contacts=false` bloqueando).
+
+Contrato cross-componente:
+- **Edge `agent-message`** lê a flag 1x após o lock; nos gates ACTIVE-AGENT (0.95) e AUDIENCE (1.0), com flag ON, chama `getOrCreateLead` (funil WhatsApp/etapa novo/sem dono) antes do early-return 200. Decisão isolada em `agent-message/gate-decision.ts::decideBlockedInboundAction` (gate+flag → `{createLead, reason}`). Reasons ON: `lead_created_no_ai` / `lead_created_ai_blocked`. Flag OFF = byte-a-byte o legado (`no_active_agents` / `unknown_phone_blocked`, sem lead).
+- **Frontend**: hook `useAutoCreateLeadSetting` (identity/org-team, read/write org-scoped resiliente a coluna ausente) + toggle `AutoCreateLeadToggle` na barra do funil nas 3 abas de pipe, visível só a admin/owner+master.
+- **types.ts**: patch manual do Row/Insert/Update de `organizations`.
+
+Decisões:
+- **Ortogonal** a `attend_unknown_contacts` — não substitui nem regride copilot/automação. `attend_unknown_contacts` = SE a IA responde; `auto_create_lead_on_inbound` = SE o lead é materializado quando ela não responde.
+- Coluna tipada (não `feature_flags` jsonb) — gate hot-path, `DEFAULT false` garante todas as orgs OFF sem trigger de init.
+- Sem mudança no contrato de idempotência/DLQ; sem throw em path normal; `getOrCreateLead` idempotente é seguro dentro do lock.
+
+Validação: `gate-decision.test.ts` cobre OFF (reasons legados, não cria) + ON (cria + reasons novos). Lint 0 errors; typecheck sem erro nos arquivos tocados; test:unit sem regressão nas áreas tocadas (falhas restantes = baseline pré-existente, ex. `agent-message-batch` mock de `captureMessage`, `migration-version-collision` de timestamps duplicados legados).
+
+Pendências: aplicar migration no DEV + deploy da edge `agent-message` (NÃO feitos). Limitação v1: inbound sem texto/mídia não passa por `agent-message` (não tocamos `whatsapp-webhook`) → não cria lead automático.
+
+Detalhes em `06 — Features/IA/Auto-criar lead no inbound.md` + `07 — Changelog/2026-07-13-auto-create-lead-on-inbound.md`.
 
 ### D052: Fix meeting_date sync + move_pipe_record fail-closed (2026-04-30)
 
