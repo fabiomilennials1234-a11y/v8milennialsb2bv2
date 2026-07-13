@@ -363,21 +363,52 @@ Deno.serve(
       if (action === "deleteInstance") {
           console.log(`[deleteInstance] starting for instance=${instanceId} org=${callerOrgId}`);
 
-          // Best-effort provider-side delete (skip if credentials missing)
+          // Best-effort provider-side delete (skip if credentials missing).
+          //
+          // If the provider delete fails we DO NOT silently proceed: a swallowed
+          // failure here leaves the Uazapi instance — and its WhatsApp
+          // linked-device session — alive, which competes with the next paired
+          // instance and produces recurring "401 logged out from another device"
+          // flapping. So on failure we fall back to disconnecting the session
+          // (frees the linked device even when the instance record lingers) and
+          // log the failure loudly for cleanup.
           let providerError: string | null = null;
+          const withTimeout = <T>(p: Promise<T>, label: string): Promise<T> =>
+            Promise.race([
+              p,
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error(`${label} timed out (5s)`)), 5000)
+              ),
+            ]);
           try {
             const provider = await getWhatsAppProvider(
               instance as WhatsAppInstance,
               supabaseAdmin
             );
-            const providerTimeout = new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error("provider delete timed out (5s)")), 5000)
-            );
-            await Promise.race([provider.deleteInstance(), providerTimeout]);
-            console.log(`[deleteInstance] provider delete OK`);
+            try {
+              await withTimeout(provider.deleteInstance(), "provider delete");
+              console.log(`[deleteInstance] provider delete OK`);
+            } catch (delErr) {
+              providerError = (delErr as Error).message ?? "provider delete failed";
+              // Fallback: free the WhatsApp session so the linked device stops
+              // competing, even though the instance record could not be removed.
+              try {
+                await withTimeout(provider.logoutInstance(), "provider disconnect");
+                console.warn(
+                  `[deleteInstance] provider delete failed (${providerError}); disconnected session as fallback`
+                );
+              } catch (discErr) {
+                const discMsg = (discErr as Error).message ?? "disconnect failed";
+                providerError = `${providerError}; disconnect fallback failed: ${discMsg}`;
+                console.error(
+                  `[deleteInstance] ORPHAN RISK: provider delete AND disconnect failed for instance=${instanceId} org=${callerOrgId}: ${providerError}`
+                );
+              }
+            }
           } catch (e) {
-            providerError = (e as Error).message ?? "provider delete failed";
-            console.log(`[deleteInstance] provider delete skipped/failed (best-effort): ${providerError}`);
+            // No provider credentials (e.g. orphan from a failed createInstance).
+            providerError = (e as Error).message ?? "provider unavailable";
+            console.log(`[deleteInstance] provider unavailable (best-effort skip): ${providerError}`);
           }
 
           // Nullify/delete FKs in batches before deleting the instance row,
