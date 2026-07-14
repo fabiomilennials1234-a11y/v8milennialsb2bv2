@@ -1,0 +1,66 @@
+-- 20270313000000_drop_dead_whatsapp_messages_indexes.sql
+--
+-- RAM reclaim (feat/db-ram-reclaim). Dropa 4 índices de `whatsapp_messages`
+-- PROVADOS mortos — zero consumidor no código, zero scans em janela viva, e
+-- todos já constam no drop-list da Onda 3.1 do SPEC db-optimization. É a tabela
+-- write-hot (único INSERT vivo do DB, ~51K/dia): cada índice a menos = menos
+-- write-amplification + menos páginas quentes no cache (objetivo RAM).
+--
+-- APLICADO via execute_sql com CONCURRENTLY (NÃO roda em transação/migration
+-- normal — Postgres proíbe DROP INDEX CONCURRENTLY em txn). Este arquivo
+-- documenta + serve de runbook. Registrar em
+-- supabase_migrations.schema_migrations (version 20270313000000) após aplicar.
+-- Aplicar cada statement isolado, fora de transação. (Gotcha #1009: replay de DB
+-- fresco recria o índice — o IF EXISTS torna o re-drop idempotente.)
+--
+-- ── Evidência por índice (PROD jsjsmuncfkbsbzqzqhfq, 2026-07-13) ─────────────
+-- Método: code-sweep de todos os call-sites (PostgREST + RPCs) + EXPLAIN(ANALYZE,
+-- BUFFERS) dos consumidores reais + delta de idx_scan em janela de tráfego vivo.
+--
+-- idx_whatsapp_msgs_convlist  (190 MB, org,instance,normalized_phone,ts DESC
+--   WHERE deleted_at IS NULL) — ÓRFÃO. Seu único consumidor era o skip-scan do
+--   get_whatsapp_conversation_list ORIGINAL (20261119000012). O corpo em prod
+--   hoje (20261119000015) lê de whatsapp_conversation_summary e só toca
+--   whatsapp_messages na CTE `unread`, que EXPLAIN mostra usar
+--   idx_whatsapp_msgs_unread_cover (Index Only Scan). idx_scan CONGELADO em 3746
+--   numa janela onde unread_cover +54 e org_instance_phone +27.
+--
+-- idx_whatsapp_messages_sent_source  (7.4 MB, org,sent_source WHERE
+--   direction='outgoing') — `sent_source` nunca aparece em WHERE, só em SELECT.
+--   idx_scan cumulativo 51, congelado.
+--
+-- idx_whatsapp_messages_sent_by_ai  (360 KB, sent_by_ai WHERE sent_by_ai=true) —
+--   booleano parcial de baixíssima seletividade; os poucos predicados
+--   sent_by_ai=true vêm sempre colados a lead_id/phone_number seletivos, e o
+--   planner escolhe o índice de lead/phone. idx_scan cumulativo 26, congelado.
+--
+-- idx_whatsapp_messages_assigned_to  (8 KB, assigned_to WHERE assigned_to IS NOT
+--   NULL) — NENHUMA query filtra whatsapp_messages.assigned_to. A RLS referencia
+--   assigned_to só dentro de is_user_responsible(...) (chamada de função por
+--   linha, não-sargável) → não usa o índice. idx_scan 134, congelado.
+--
+-- Ganho: −198 MB físicos + 4 btrees a menos por INSERT no hot path (22 → 18).
+-- Zero regressão de leitura (nenhum plano muda — provado).
+--
+-- NÃO INCLUÍDO nesta migration (decisão consciente):
+--   * idx_whatsapp_msgs_org_dir_ts (117 MB): idx_scan também congelou (2013) e o
+--     code-sweep não achou query (org,direction,ts) sem instance; as de analytics
+--     filtram created_at, não "timestamp". PORÉM o SPEC db-optimization Onda 3.1
+--     marca MANTER. Divergência → decisão roteada pra Onda 3.1 com delta de 24-48h
+--     (janela de 3.6 min é curta demais p/ exonerar índice de baixa frequência).
+--   * idx_whatsapp_messages_instance (VETO do SPEC, 1.2M scans),
+--     org_inst_dir_ts / org_instance_ts / org_instance_phone / instance_jid_ts:
+--     TODOS quentes em prod (123K–475K scans) — a suspeita de "600 MB de
+--     composites redundantes" do diagnóstico é REFUTADA pelo idx_scan vivo.
+
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_whatsapp_msgs_convlist;         -- 190 MB
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_whatsapp_messages_sent_source;  -- 7.4 MB
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_whatsapp_messages_sent_by_ai;   -- 360 KB
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_whatsapp_messages_assigned_to;  -- 8 KB
+
+-- ── ROLLBACK (operacional, CONCURRENTLY fora de txn) ─────────────────────────
+-- Recria byte-idêntico (usar só se algum plano regredir — não deve ocorrer):
+-- CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_whatsapp_msgs_convlist ON public.whatsapp_messages USING btree (organization_id, instance_id, normalized_phone, "timestamp" DESC) WHERE (deleted_at IS NULL);
+-- CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_whatsapp_messages_sent_source ON public.whatsapp_messages USING btree (organization_id, sent_source) WHERE (direction = 'outgoing'::text);
+-- CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_whatsapp_messages_sent_by_ai ON public.whatsapp_messages USING btree (sent_by_ai) WHERE (sent_by_ai = true);
+-- CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_whatsapp_messages_assigned_to ON public.whatsapp_messages USING btree (assigned_to) WHERE (assigned_to IS NOT NULL);
