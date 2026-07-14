@@ -60,6 +60,10 @@ export interface PaginatedFilters {
   statusKeys?: string[] | null;
   /** true → only leads with a 'scheduled' scheduled_user_message */
   scheduled?: boolean | null;
+  /** leads.qualification_tier ∈ list (empty/undefined = no filter) */
+  qualificationTier?: string[];
+  /** leads.pre_qualification_tier ∈ list (IA tier; empty/undefined = no filter) */
+  preQualificationTier?: string[];
 }
 
 export interface StageData {
@@ -83,8 +87,13 @@ const orNull = <T,>(v: T | null | undefined) => (v === undefined || v === null ?
  * Shared param block sent to BOTH RPCs. Stage/cursor/page-size are appended by
  * the per-stage query. Empty arrays and "all" sentinels collapse to null so an
  * inactive filter short-circuits server-side.
+ *
+ * Exported for unit testing: it is the SINGLE source of the filter params for
+ * both get_pipeline_stage_counts (the column badge) and get_pipeline_page (the
+ * cards). Because both consume this exact object, the tier predicate can never
+ * be sent to only one of them — badge == cards by construction.
  */
-function sharedRpcParams(
+export function sharedRpcParams(
   slug: PipelineType,
   orgId: string,
   search: string,
@@ -114,6 +123,8 @@ function sharedRpcParams(
     p_overdue_exclude_status_keys: nonEmpty(filters.overdueExcludeStatusKeys),
     p_status_keys: nonEmpty(filters.statusKeys),
     p_scheduled: filters.scheduled ? true : null,
+    p_qualification_tier: nonEmpty(filters.qualificationTier),
+    p_pre_qualification_tier: nonEmpty(filters.preQualificationTier),
   };
 }
 
@@ -205,6 +216,8 @@ export function usePaginatedPipeline(
       filters.overdueExcludeStatusKeys,
       filters.statusKeys,
       filters.scheduled,
+      filters.qualificationTier,
+      filters.preQualificationTier,
     ]
   );
 

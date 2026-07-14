@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Check, ChevronDown, Filter, Tag as TagIcon, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { QUALIFICATION_TIERS, QUALIFICATION_TIER_CONFIG } from "@/modules/leads";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -41,14 +42,17 @@ export const EMPTY_CONDITIONS: AudienceConditions = {
   origin: [],
 };
 
-/** Qualification / pre-qualification tiers — shared value set, friendly labels. */
-export const TIER_OPTIONS: { value: string; label: string }[] = [
-  { value: "diamante", label: "Diamante" },
-  { value: "ouro", label: "Ouro" },
-  { value: "prata", label: "Prata" },
-  { value: "bronze", label: "Bronze" },
-  { value: "desqualificado", label: "Desqualificado" },
-];
+/**
+ * Qualification / pre-qualification tiers — derived from the canonical tier
+ * config in the leads module (single source of value set + labels). Same
+ * `{ value, label }` shape/order as before, so every TIER_OPTIONS consumer
+ * (DisparoWizard, campaigns) is unaffected.
+ */
+export const TIER_OPTIONS: { value: string; label: string }[] =
+  QUALIFICATION_TIERS.map((tier) => ({
+    value: tier,
+    label: QUALIFICATION_TIER_CONFIG[tier].label,
+  }));
 
 /** Lead origins — friendly pt-BR labels for the raw `leads.origin` enum. */
 export const ORIGIN_OPTIONS: { value: string; label: string }[] = [

@@ -84,6 +84,10 @@ export interface CustomPipeEntry {
     company: string | null;
     phone: string | null;
     email: string | null;
+    // Qualification tiers (selected by useCustomPipeEntries; drive the board's
+    // qualification filter). Optional/nullable — a lead may be unqualified.
+    qualification_tier?: string | null;
+    pre_qualification_tier?: string | null;
   };
   stage?: CustomPipelineStage;
   assigned_profile?: { id: string; full_name: string | null; avatar_url: string | null };

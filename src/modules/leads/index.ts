@@ -85,6 +85,14 @@ export {
 } from "./hooks/useLeadScore";
 export type { LeadScore } from "./hooks/useLeadScore";
 
+// ── Qualification tier: canonical value set + display config (labels/icons/
+// cores). Fonte única do módulo leads; consumido cross-module pelos filtros de
+// qualificação do Kanban (todos os pipes) e pelo Disparo. Boundaries error mode
+// exige que a config de tier só saia daqui via barrel.
+export { QUALIFICATION_TIER_CONFIG } from "./components/lead-detail/modal/qualification-config";
+export { QUALIFICATION_TIERS } from "./components/lead-detail/modal/types";
+export type { QualificationTier } from "./components/lead-detail/modal/types";
+
 // ── Hooks: WhatsApp write-instance resolution ──────────────────────────────
 export { useLeadWriteInstance } from "./hooks/useLeadWriteInstance";
 export type { LeadWriteInstanceState } from "./hooks/useLeadWriteInstance";

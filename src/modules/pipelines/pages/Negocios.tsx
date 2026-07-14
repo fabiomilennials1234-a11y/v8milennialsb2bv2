@@ -28,6 +28,12 @@ import {
   type KanbanColumn,
   type DraggableItem,
 } from "@/modules/pipelines/components/kanban/DraggableKanbanBoard";
+import {
+  KanbanFilterPanel,
+  FilterChips,
+  type FilterSectionConfig,
+} from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
+import { matchesQualificationFilters } from "@/modules/pipelines/lib/kanbanFilterParams";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
 
 const fmt = (v: number) =>
@@ -45,6 +51,8 @@ export default function Negocios() {
   );
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [search, setSearch] = useState("");
+  const [qualificationTier, setQualificationTier] = useState<string[]>([]);
+  const [preQualificationTier, setPreQualificationTier] = useState<string[]>([]);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -58,6 +66,35 @@ export default function Negocios() {
   const { data: kpis } = useDealKPIs();
   const updateDeal = useUpdateDeal();
 
+  // Qualification-tier filter (client-side — Negócios não é paginado no
+  // servidor). Aplicado sobre o `deals` já filtrado por status/busca no
+  // servidor, e alimenta TANTO a lista quanto o kanban, então linhas, cards e
+  // somatório por coluna ficam consistentes (mesma fonte filtrada).
+  const tierFilterActive =
+    qualificationTier.length > 0 || preQualificationTier.length > 0;
+  const filteredDeals = useMemo(
+    () =>
+      tierFilterActive
+        ? deals.filter((d) =>
+            matchesQualificationFilters(d.lead, qualificationTier, preQualificationTier),
+          )
+        : deals,
+    [deals, tierFilterActive, qualificationTier, preQualificationTier],
+  );
+
+  const filterSections: FilterSectionConfig[] = useMemo(
+    () => [
+      { type: "qualification-tier", value: qualificationTier, onChange: setQualificationTier },
+      { type: "pre-qualification-tier", value: preQualificationTier, onChange: setPreQualificationTier },
+    ],
+    [qualificationTier, preQualificationTier],
+  );
+
+  const handleClearFilters = () => {
+    setQualificationTier([]);
+    setPreQualificationTier([]);
+  };
+
   const openDeal = (id: string) => {
     setSelectedDealId(id);
     setDrawerOpen(true);
@@ -65,7 +102,7 @@ export default function Negocios() {
 
   // Group open deals by stage_id for kanban
   const kanbanColumns = useMemo<KanbanColumn<DealKanbanItem>[]>(() => {
-    const openDeals = deals.filter((d) => d.won === null);
+    const openDeals = filteredDeals.filter((d) => d.won === null);
 
     const stageGroups = new Map<string, DealKanbanItem[]>();
     stageGroups.set("__no_stage", []);
@@ -100,7 +137,7 @@ export default function Negocios() {
     }
 
     return cols;
-  }, [deals]);
+  }, [filteredDeals]);
 
   const handleStageChange = (dealId: string, newStageId: string) => {
     if (newStageId === "__no_stage") return;
@@ -145,6 +182,9 @@ export default function Negocios() {
           </TabsList>
         </Tabs>
 
+        {/* Qualification filter */}
+        <KanbanFilterPanel sections={filterSections} onClearAll={handleClearFilters} />
+
         {/* View toggle */}
         <div className="flex border rounded-md ml-auto">
           <Button
@@ -165,6 +205,8 @@ export default function Negocios() {
           </Button>
         </div>
       </div>
+
+      <FilterChips sections={filterSections} onClearAll={handleClearFilters} />
 
       {/* Content */}
       {isLoading ? (
@@ -187,7 +229,7 @@ export default function Negocios() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {deals.length === 0 ? (
+              {filteredDeals.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={8}
@@ -197,7 +239,7 @@ export default function Negocios() {
                   </TableCell>
                 </TableRow>
               ) : (
-                deals.map((deal) => (
+                filteredDeals.map((deal) => (
                   <TableRow
                     key={deal.id}
                     className="cursor-pointer"

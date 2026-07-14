@@ -26,6 +26,13 @@ interface CustomPipelineKanbanProps {
   stages: CustomPipelineStage[];
   entries: CustomPipeEntry[];
   searchQuery?: string;
+  /**
+   * True when a qualification-tier filter is active upstream (the page already
+   * removed non-matching entries). The server stage-count RPC doesn't know
+   * about tiers, so under a tier filter we must derive the column badge from
+   * the loaded (filtered) items instead — otherwise badge != cards.
+   */
+  tierFilterActive?: boolean;
   onRemoveEntry?: (entryId: string) => void;
   onClickEntry?: (entry: CustomPipeEntry) => void;
 }
@@ -62,6 +69,7 @@ export function CustomPipelineKanban({
   stages,
   entries,
   searchQuery,
+  tierFilterActive = false,
   onRemoveEntry,
   onClickEntry,
 }: CustomPipelineKanbanProps) {
@@ -150,10 +158,13 @@ export function CustomPipelineKanban({
         // Total real da coluna (server-side). Fallback pro length carregado
         // enquanto o count não chega (undefined → DraggableKanbanBoard usa
         // items.length). Chave por stage_id (uuid) do custom pipe.
-        totalCount: stageCounts[stage.id] ?? items.length,
+        // Sob filtro de qualificação (tier) o RPC de contagem não conhece o
+        // tier, então usamos a contagem client-side dos items filtrados —
+        // caso contrário o badge divergiria dos cards.
+        totalCount: tierFilterActive ? items.length : (stageCounts[stage.id] ?? items.length),
       };
     });
-  }, [stages, filteredEntries, stageCounts]);
+  }, [stages, filteredEntries, stageCounts, tierFilterActive]);
 
   const handleStatusChange = async (itemId: string, newStageId: string) => {
     try {

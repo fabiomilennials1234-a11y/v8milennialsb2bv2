@@ -161,6 +161,8 @@ type ConfirmacaoFilterState = {
   urgencyFilter: UrgencyFilter;
   selectedStatuses: string[];
   selectedTags: string[];
+  selectedQualificationTier: string[];
+  selectedPreQualificationTier: string[];
   selectedResponsibleId: string;
   viewMode: "kanban" | "timeline" | "analytics";
   membroDefaultApplied?: boolean;
@@ -173,6 +175,8 @@ const DEFAULT_CONFIRMACAO_FILTERS: ConfirmacaoFilterState = {
   urgencyFilter: "all",
   selectedStatuses: [],
   selectedTags: [],
+  selectedQualificationTier: [],
+  selectedPreQualificationTier: [],
   selectedResponsibleId: "all",
   viewMode: "kanban",
   membroDefaultApplied: false,
@@ -191,6 +195,8 @@ function PipeConfirmacaoInner() {
     urgencyFilter,
     selectedStatuses,
     selectedTags,
+    selectedQualificationTier,
+    selectedPreQualificationTier,
     selectedResponsibleId,
     viewMode,
   } = filterState;
@@ -217,6 +223,14 @@ function PipeConfirmacaoInner() {
   );
   const setSelectedTags = useCallback(
     (v: string[]) => setFilterState((f) => ({ ...f, selectedTags: v })),
+    [setFilterState]
+  );
+  const setSelectedQualificationTier = useCallback(
+    (v: string[]) => setFilterState((f) => ({ ...f, selectedQualificationTier: v })),
+    [setFilterState]
+  );
+  const setSelectedPreQualificationTier = useCallback(
+    (v: string[]) => setFilterState((f) => ({ ...f, selectedPreQualificationTier: v })),
     [setFilterState]
   );
   const setSelectedResponsibleId = useCallback(
@@ -315,10 +329,12 @@ function PipeConfirmacaoInner() {
       tagIds: selectedTags,
       // Client-only dimensions, now resolved server-side so the column count
       // matches the filtered cards (origin / urgency / status / scheduled /
-      // period / time bucket).
+      // period / time bucket / tier).
       origins: originFilter !== "all" ? [originFilter] : undefined,
       urgency: urgencyFilter !== "all" ? urgencyFilter : undefined,
       statusKeys: selectedStatuses.length ? selectedStatuses : undefined,
+      qualificationTier: selectedQualificationTier,
+      preQualificationTier: selectedPreQualificationTier,
       scheduled: filterScheduled || undefined,
       periodAfter: metricsRange?.startStr ?? undefined,
       periodBefore: metricsRange?.endStr ?? undefined,
@@ -375,10 +391,12 @@ function PipeConfirmacaoInner() {
     { type: "responsible", value: selectedResponsibleId, onChange: setSelectedResponsibleId, members: responsibleMembers },
     { type: "origin-single", value: originFilter, onChange: setOriginFilter as (v: string) => void },
     { type: "tags", value: selectedTags, onChange: setSelectedTags, tags: orgTags },
+    { type: "qualification-tier", value: selectedQualificationTier, onChange: setSelectedQualificationTier },
+    { type: "pre-qualification-tier", value: selectedPreQualificationTier, onChange: setSelectedPreQualificationTier },
     { type: "urgency", value: urgencyFilter, onChange: setUrgencyFilter as (v: string) => void },
     { type: "status-multi", value: selectedStatuses, onChange: setSelectedStatuses, options: statusColumns },
     { type: "scheduled", value: filterScheduled, onChange: setFilterScheduled },
-  ], [selectedResponsibleId, originFilter, selectedTags, urgencyFilter, selectedStatuses, filterScheduled, responsibleMembers, orgTags, statusColumns, setSelectedResponsibleId, setOriginFilter, setSelectedTags, setUrgencyFilter, setSelectedStatuses]);
+  ], [selectedResponsibleId, originFilter, selectedTags, selectedQualificationTier, selectedPreQualificationTier, urgencyFilter, selectedStatuses, filterScheduled, responsibleMembers, orgTags, statusColumns, setSelectedResponsibleId, setOriginFilter, setSelectedTags, setSelectedQualificationTier, setSelectedPreQualificationTier, setUrgencyFilter, setSelectedStatuses]);
 
   const handleClearAllFilters = useCallback(() => {
     setOriginFilter("all" as OriginFilter);
@@ -386,9 +404,11 @@ function PipeConfirmacaoInner() {
     setUrgencyFilter("all" as UrgencyFilter);
     setSelectedStatuses([]);
     setSelectedTags([]);
+    setSelectedQualificationTier([]);
+    setSelectedPreQualificationTier([]);
     setSelectedResponsibleId("all");
     setFilterScheduled(false);
-  }, [setOriginFilter, setTimeFilter, setUrgencyFilter, setSelectedStatuses, setSelectedTags, setSelectedResponsibleId]);
+  }, [setOriginFilter, setTimeFilter, setUrgencyFilter, setSelectedStatuses, setSelectedTags, setSelectedQualificationTier, setSelectedPreQualificationTier, setSelectedResponsibleId]);
 
   // Board filter handed to the Disparo "Filtro ativo" source. Mirrors EXACTLY
   // the dimensions usePaginatedPipeline resolves server-side (search,

@@ -11,6 +11,8 @@ import {
   X,
   AlertTriangle,
   Columns3,
+  Gem,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +20,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import {
+  QUALIFICATION_TIERS,
+  QUALIFICATION_TIER_CONFIG,
+  type QualificationTier,
+} from "@/modules/leads";
 import {
   Select,
   SelectContent,
@@ -86,7 +93,19 @@ export type FilterSectionConfig =
   | { type: "priority"; value: string; onChange: (v: string) => void }
   | { type: "urgency"; value: string; onChange: (v: string) => void }
   | { type: "status-multi"; value: string[]; onChange: (v: string[]) => void; options: { id: string; title: string; color: string }[] }
+  | { type: "qualification-tier"; value: string[]; onChange: (v: string[]) => void }
+  | { type: "pre-qualification-tier"; value: string[]; onChange: (v: string[]) => void }
   | { type: "scheduled"; value: boolean; onChange: (v: boolean) => void };
+
+// Ordered tier labels for chips (canonical labels come from the leads module).
+function tierChipLabel(value: string[]): string {
+  const labels = value
+    .map((t) => QUALIFICATION_TIER_CONFIG[t as QualificationTier]?.label ?? t)
+    .slice(0, 2)
+    .join(", ");
+  const suffix = value.length > 2 ? ` +${value.length - 2}` : "";
+  return `${labels}${suffix}`;
+}
 
 export interface KanbanFilterPanelProps {
   sections: FilterSectionConfig[];
@@ -109,6 +128,8 @@ export function countActiveFilters(sections: FilterSectionConfig[]): number {
       case "origin-multi":
       case "tags":
       case "status-multi":
+      case "qualification-tier":
+      case "pre-qualification-tier":
         if (section.value.length > 0) count++;
         break;
       case "scheduled":
@@ -236,6 +257,26 @@ export function getFilterChips(sections: FilterSectionConfig[]): FilterChipData[
           chips.push({
             id: "status-multi",
             label: `Status: ${labels}${suffix}`,
+            onRemove: () => section.onChange([]),
+          });
+        }
+        break;
+      }
+      case "qualification-tier": {
+        if (section.value.length > 0) {
+          chips.push({
+            id: "qualification-tier",
+            label: `Qualificação: ${tierChipLabel(section.value)}`,
+            onRemove: () => section.onChange([]),
+          });
+        }
+        break;
+      }
+      case "pre-qualification-tier": {
+        if (section.value.length > 0) {
+          chips.push({
+            id: "pre-qualification-tier",
+            label: `Pré-qualificação: ${tierChipLabel(section.value)}`,
             onRemove: () => section.onChange([]),
           });
         }
@@ -596,6 +637,20 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
         </FilterSectionWrapper>
       );
 
+    case "qualification-tier":
+      return (
+        <FilterSectionWrapper icon={Gem} label="Qualificação">
+          <TierCheckboxList value={section.value} onChange={section.onChange} />
+        </FilterSectionWrapper>
+      );
+
+    case "pre-qualification-tier":
+      return (
+        <FilterSectionWrapper icon={Sparkles} label="Pré-qualificação (IA)">
+          <TierCheckboxList value={section.value} onChange={section.onChange} />
+        </FilterSectionWrapper>
+      );
+
     case "scheduled":
       return (
         <div className="flex items-center justify-between">
@@ -610,6 +665,48 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
         </div>
       );
   }
+}
+
+// ─── Sub-component: qualification-tier multi-select (shared by both tier rows) ─
+function TierCheckboxList({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-1.5">
+      {QUALIFICATION_TIERS.map((tier) => {
+        const meta = QUALIFICATION_TIER_CONFIG[tier];
+        const Icon = meta.icon;
+        const checked = value.includes(tier);
+        return (
+          <label
+            key={tier}
+            className={cn(
+              "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors",
+              "hover:bg-muted/50",
+              checked && "bg-primary/5"
+            )}
+          >
+            <Checkbox
+              checked={checked}
+              onCheckedChange={(c) => {
+                const next = c
+                  ? [...value, tier]
+                  : value.filter((t) => t !== tier);
+                onChange(next);
+              }}
+              className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+            />
+            <Icon className={cn("h-3.5 w-3.5 shrink-0", meta.colorClass)} />
+            <span className="text-sm">{meta.label}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
 }
 
 // ─── Sub-component: section wrapper ─────────────────────────────────────────

@@ -45,6 +45,8 @@ custo zero quando inativo). Defaults espelham o client: `COALESCE(rating,0)`,
 | `p_updated_before` + `p_overdue_exclude_status_keys` | overdue (stale + ≠ compareceu/perdido) | confirmação |
 | `p_status_keys[]` | `stage_key = ANY` | confirmação (status multi) |
 | `p_scheduled` | EXISTS `scheduled_user_messages` status='scheduled' | os 3 |
+| `p_qualification_tier[]` | `leads.qualification_tier::text = ANY` | os 3 |
+| `p_pre_qualification_tier[]` | `leads.pre_qualification_tier::text = ANY` (tier da IA) | os 3 |
 
 Mappers puros de banda: `src/modules/pipelines/lib/kanbanFilterParams.ts`
 (`priorityBandToRating`, `calorBandToBounds` + constantes de status).
@@ -96,6 +98,8 @@ matchesResponsibleFilter(item, filterId): boolean
 - Mappers de banda: `src/modules/pipelines/lib/kanbanFilterParams.ts` + `tests/unit/kanban-filter-params.test.ts`
 - Pipes: `src/modules/pipelines/pages/{PipeWhatsapp,PipeConfirmacao,PipePropostas}.tsx` (objeto `filters` passado ao hook)
 - Shape do entry: `src/modules/pipelines/hooks/model/usePipelineEntries.ts` — `flattenMetadata`
+- Painel de filtro (variantes/seções): `src/modules/pipelines/components/kanban/KanbanFilterPanel.tsx`
+- Filtro de qualificação (tier): config canônica no barrel `@/modules/leads` (`QUALIFICATION_TIER_CONFIG`/`QUALIFICATION_TIERS`); predicado client `matchesQualificationFilters` em `kanbanFilterParams.ts`; boards bespoke `pages/CustomPipeline.tsx` (+ `components/custom/CustomPipelineKanban.tsx`) e `pages/Negocios.tsx` (+ `carteira/hooks/useDeals.ts`)
 
 ## Áreas frágeis (adicional)
 
@@ -140,8 +144,46 @@ paginação/virtualização — fora do escopo deste fix. Ver [[08 — Backlog]]
 Onde mexer: migration acima · `src/modules/pipelines/hooks/custom/useCustomPipelines.ts`
 (`useCustomPipeStageCounts`) · `src/modules/pipelines/components/custom/CustomPipelineKanban.tsx`.
 
+## Filtro por Qualificação (tier) — todos os 5 boards (2026-07-14)
+
+Dimensão de **visualização** por qualificação, disponível no board de **todos os
+pipes**: os 3 sistema (WhatsApp, Confirmação, Propostas) + os 2 bespoke
+(CustomPipeline, Negócios). Dois multi-selects: `qualification_tier` (manual) e
+`pre_qualification_tier` (IA, 2ª linha). Valores: `diamante, ouro, prata, bronze,
+desqualificado`. Vazio = todos (NULL-collapse). Não confundir com as seções
+`priority`/`calor` (rating manual) — são dimensões distintas.
+
+Config canônica de tier (labels/ícones/cores + value set) vive no módulo **leads**
+(`src/modules/leads/components/lead-detail/modal/qualification-config.tsx` +
+`.../types.ts`) e é exposta cross-module via o barrel `@/modules/leads`
+(`QUALIFICATION_TIER_CONFIG`, `QUALIFICATION_TIERS`, `type QualificationTier`).
+`KanbanFilterPanel` ganhou 2 variantes na union — `qualification-tier` e
+`pre-qualification-tier` (checkbox multi-select com ícone/cor do config).
+
+- **3 sistema (server-side)**: params `p_qualification_tier[]` /
+  `p_pre_qualification_tier[]` nos 2 RPCs (migration
+  `20270714120000_kanban_qualification_tier_filter.sql`, já em prod). Predicado
+  **idêntico** nos dois RPCs → badge == cards. Mapeados em `sharedRpcParams`
+  (`nonEmpty()`: vazio→null) e incluídos nas queryKeys/deps do
+  `usePaginatedPipeline`.
+- **2 bespoke (client-side)**: não são paginados no servidor. `CustomPipeline` e
+  `Negócios` filtram as entries/deals carregadas com `matchesQualificationFilters`
+  (`src/modules/pipelines/lib/kanbanFilterParams.ts`) — predicado byte-a-byte
+  equivalente ao SQL (`= ANY`, null nunca casa seleção não-vazia). **A contagem é
+  filtrada com a MESMA lógica**: em `CustomPipeline` o badge cai pra `items.length`
+  quando `tierFilterActive` (o RPC de count não conhece tier); em `Negócios` a
+  lista, os cards e o somatório por coluna derivam todos do mesmo `filteredDeals`.
+  `useDeals` passou a selecionar `qualification_tier`/`pre_qualification_tier` no
+  join do lead.
+
 ## Histórico
 
+- **2026-07-14** — **Filtro de qualificação (tier + pré-qualificação IA) em todos
+  os 5 boards.** Config de tier promovida ao barrel `@/modules/leads`. 3 sistema
+  server-side (migration `20270714120000`, params idênticos nos 2 RPCs); 2 bespoke
+  client-side (cards + contagem filtrados juntos). `types.ts` regenerado de prod.
+  Testes: `tests/unit/kanban-qualification-filter.test.ts` (predicado client + parity
+  dos params). Seção acima.
 - **2026-07-13** — **Badge dos funis custom → count server-side.** Novo RPC
   `get_custom_pipeline_stage_counts` + hook `useCustomPipeStageCounts`; badge deixa
   de travar em 1000. Parity provada contra prod via SQL read-only (Prospecção CNAE,

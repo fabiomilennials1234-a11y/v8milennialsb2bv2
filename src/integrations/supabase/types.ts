@@ -8131,6 +8131,50 @@ export type Database = {
           },
         ]
       }
+      lead_origins: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          organization_id: string
+          slug: string
+          sort_order: number
+          updated_at: string | null
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          organization_id: string
+          slug: string
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          organization_id?: string
+          slug?: string
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_origins_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_products: {
         Row: {
           avg_cycle_days: number | null
@@ -8315,47 +8359,6 @@ export type Database = {
           },
         ]
       }
-      lead_origins: {
-        Row: {
-          color: string
-          created_at: string
-          id: string
-          label: string
-          organization_id: string | null
-          slug: string
-          sort_order: number
-          updated_at: string
-        }
-        Insert: {
-          color: string
-          created_at?: string
-          id?: string
-          label: string
-          organization_id?: string | null
-          slug: string
-          sort_order?: number
-          updated_at?: string
-        }
-        Update: {
-          color?: string
-          created_at?: string
-          id?: string
-          label?: string
-          organization_id?: string | null
-          slug?: string
-          sort_order?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "lead_origins_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       leads: {
         Row: {
           ai_disabled: boolean | null
@@ -8384,7 +8387,7 @@ export type Database = {
           normalized_phone: string | null
           notes: string | null
           organization_id: string | null
-          origin: Database["public"]["Enums"]["lead_origin"]
+          origin: string
           phone: string | null
           phone_digits: string | null
           pipe_whatsapp: string | null
@@ -8439,7 +8442,7 @@ export type Database = {
           normalized_phone?: string | null
           notes?: string | null
           organization_id?: string | null
-          origin?: Database["public"]["Enums"]["lead_origin"]
+          origin: string
           phone?: string | null
           phone_digits?: string | null
           pipe_whatsapp?: string | null
@@ -8494,7 +8497,7 @@ export type Database = {
           normalized_phone?: string | null
           notes?: string | null
           organization_id?: string | null
-          origin?: Database["public"]["Enums"]["lead_origin"]
+          origin?: string
           phone?: string | null
           phone_digits?: string | null
           pipe_whatsapp?: string | null
@@ -15635,7 +15638,7 @@ export type Database = {
           normalized_phone: string | null
           notes: string | null
           organization_id: string | null
-          origin: Database["public"]["Enums"]["lead_origin"] | null
+          origin: string | null
           phone: string | null
           pipe_whatsapp: string | null
           pre_sale_responsible_id: string | null
@@ -15808,6 +15811,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      pg_buffercache: {
+        Row: {
+          bufferid: number | null
+          isdirty: boolean | null
+          pinning_backends: number | null
+          relblocknumber: number | null
+          reldatabase: unknown
+          relfilenode: unknown
+          relforknumber: number | null
+          reltablespace: unknown
+          usagecount: number | null
+        }
+        Relationships: []
       }
       pipe_confirmacao: {
         Row: {
@@ -16707,11 +16724,7 @@ export type Database = {
         Returns: string[]
       }
       get_custom_pipeline_stage_counts: {
-        Args: {
-          p_org_id: string
-          p_pipeline_id: string
-          p_search?: string
-        }
+        Args: { p_org_id: string; p_pipeline_id: string; p_search?: string }
         Returns: {
           cnt: number
           stage_id: string
@@ -16961,6 +16974,20 @@ export type Database = {
         }
         Returns: Json
       }
+      get_movement_metrics: {
+        Args: {
+          p_end: string
+          p_member_id?: string
+          p_org_id: string
+          p_start: string
+        }
+        Returns: {
+          comparecidas: number
+          marcadas: number
+          vendido_count: number
+          vendido_receita: number
+        }[]
+      }
       get_my_admin_organization_ids: { Args: never; Returns: string[] }
       get_my_org_ids: { Args: never; Returns: string[] }
       get_my_organization_ids: { Args: never; Returns: string[] }
@@ -17048,7 +17075,9 @@ export type Database = {
           p_period_after?: string
           p_period_before?: string
           p_pipeline_slug: string
+          p_pre_qualification_tier?: string[]
           p_product_type?: string
+          p_qualification_tier?: string[]
           p_rating_max?: number
           p_rating_min?: number
           p_responsible_id?: string
@@ -17088,7 +17117,9 @@ export type Database = {
           p_period_after?: string
           p_period_before?: string
           p_pipeline_slug: string
+          p_pre_qualification_tier?: string[]
           p_product_type?: string
+          p_qualification_tier?: string[]
           p_rating_max?: number
           p_rating_min?: number
           p_responsible_id?: string
@@ -17627,6 +17658,12 @@ export type Database = {
       org_resolve_quota: {
         Args: { p_org_id: string; p_resource_key: string }
         Returns: Json
+      }
+      pg_buffercache_pages: { Args: never; Returns: Record<string, unknown>[] }
+      pg_buffercache_summary: { Args: never; Returns: Record<string, unknown> }
+      pg_buffercache_usage_counts: {
+        Args: never
+        Returns: Record<string, unknown>[]
       }
       process_overdue_subscriptions: {
         Args: { p_grace_days?: number }
