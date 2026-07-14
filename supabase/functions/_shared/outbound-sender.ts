@@ -22,6 +22,7 @@ import {
 import type { WhatsAppProvider } from "./whatsapp-client.ts";
 import { assertRecipientReachableWithProvider } from "./action-handlers/whatsapp-helpers.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "./copilot/cancellation.ts";
+import { guardAutomaticSend } from "./send-window.ts";
 
 const AUDIO_DELAY_MS = 8000;
 
@@ -77,6 +78,26 @@ export async function sendOutboundDispatch(
         .update({ status: "skipped", error_message: "Agent disabled at send time" })
         .eq("id", dispatchId);
       return { success: false, error: "Agent disabled" };
+    }
+
+    // ── Janela de envio automático ─────────────────────────────────────────
+    // Copilot outbound (texto + áudio) foi o culpado dos disparos 2h-3h da
+    // madrugada. Fora da janela → NÃO envia: reagenda o próprio dispatch p/ a
+    // próxima abertura mantendo status='pending' (process-outbound-dispatches
+    // re-drena por scheduled_at <= NOW). Nada se perde, nada sai de madrugada.
+    const windowGuard = await guardAutomaticSend(supabase, organizationId, "copilot-outbound");
+    if (!windowGuard.allowed && windowGuard.nextValidAt) {
+      const nextIso = windowGuard.nextValidAt.toISOString();
+      console.log("[outbound-sender] Fora da janela de envio — reagendando dispatch", dispatchId, "para", nextIso);
+      await supabase
+        .from("outbound_dispatch_log")
+        .update({
+          status: "pending",
+          scheduled_at: nextIso,
+          error_message: `Adiado: fora da janela de envio automático (reagendado p/ ${nextIso})`,
+        })
+        .eq("id", dispatchId);
+      return { success: false, error: "deferred_send_window" };
     }
 
     // Resolve provider + instance + phone via unified dispatch helper.

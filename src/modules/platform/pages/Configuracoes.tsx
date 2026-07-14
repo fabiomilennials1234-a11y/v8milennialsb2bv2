@@ -61,6 +61,7 @@ import { useTags, useCreateTag, useUpdateTag, useDeleteTag, Tag as TagType } fro
 import { useIdentity } from "@/modules/identity";
 import { useOrganizationSettings } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
+import { SendWindowSettings } from "@/modules/platform/components/settings/SendWindowSettings";
 import { toast } from "sonner";
 
 // Lazy imports — cada tab carrega só quando ativada.
@@ -585,6 +586,10 @@ function GeneralSettings() {
 
       <div className="pt-6 border-t border-border">
         <ReorderCycleSettings />
+      </div>
+
+      <div className="pt-6 border-t border-border">
+        <SendWindowSettings />
       </div>
     </div>
   );
