@@ -6,7 +6,18 @@ import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscripti
 import { isMissingSchemaError } from "@/lib/rpc-errors";
 import { startOfUTCDay, endOfUTCDay } from "@/modules/analytics/lib/utc-day";
 
-export type CommandPeriod = "today" | "week" | "month" | "quarter";
+export type CommandPeriod = "today" | "week" | "month" | "quarter" | "custom";
+
+/**
+ * Intervalo arbitrário do preset "Personalizado". Mesma forma do `DateRange`
+ * do react-day-picker (Calendar mode="range") — `to` fica indefinido enquanto
+ * o usuário só clicou na data inicial. Datas em horário local (meia-noite);
+ * `computePeriodRange` converte pras fronteiras UTC canônicas.
+ */
+export interface CommandCustomRange {
+  from: Date;
+  to?: Date;
+}
 
 export interface CommandMetrics {
   totalLeads: number;
@@ -56,9 +67,39 @@ const MONTH_SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "se
 /**
  * Calcula o intervalo do período + intervalo equivalente anterior (pros deltas).
  * `month`/`year` só são usados quando period === "month" (navegação de meses).
+ * `customRange` só é usado quando period === "custom" (intervalo livre).
  */
-export function computePeriodRange(period: CommandPeriod, month: number, year: number): PeriodRange {
+export function computePeriodRange(
+  period: CommandPeriod,
+  month: number,
+  year: number,
+  customRange?: CommandCustomRange | null,
+): PeriodRange {
   const now = new Date();
+
+  if (period === "custom") {
+    // Contrato non-null: os callers derreferenciam `range.start` sem guard.
+    // Sem intervalo completo (só `from`, ou nada), cai pro mês corrente em vez
+    // de retornar null — evita crash enquanto o range está sendo escolhido.
+    if (!customRange?.from || !customRange?.to) {
+      return computePeriodRange("month", month, year);
+    }
+    const DAY_MS = 86400000;
+    const start = startOfUTCDay(customRange.from);
+    const end = endOfUTCDay(customRange.to);
+    // daysTotal a partir das meia-noites UTC (múltiplos exatos de DAY_MS).
+    const daysTotal =
+      Math.round((startOfUTCDay(customRange.to).getTime() - start.getTime()) / DAY_MS) + 1;
+    // Janela imediatamente anterior, mesma duração: termina no dia anterior ao start.
+    const prevEndMidnight = start.getTime() - DAY_MS;
+    const prevStart = new Date(prevEndMidnight - (daysTotal - 1) * DAY_MS);
+    const prevEnd = new Date(prevEndMidnight + (DAY_MS - 1));
+    // dias decorridos até hoje dentro do range (1-based), clampado a [1, daysTotal].
+    // Range todo no passado → daysTotal; range todo no futuro → 1.
+    const elapsed = Math.floor((startOfUTCDay(now).getTime() - start.getTime()) / DAY_MS) + 1;
+    const dayOfPeriod = Math.max(1, Math.min(elapsed, daysTotal));
+    return { start, end, prevStart, prevEnd, dayOfPeriod, daysTotal, prevLabel: "período anterior" };
+  }
 
   if (period === "today") {
     const start = startOfUTCDay(now);
