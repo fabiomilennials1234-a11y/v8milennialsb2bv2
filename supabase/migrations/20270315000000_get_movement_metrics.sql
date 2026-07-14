@@ -107,5 +107,9 @@ COMMENT ON FUNCTION public.get_movement_metrics(uuid, timestamptz, timestamptz, 
   '(pre_sale_responsible_id / sale_responsible_id). Guard assert_org_access.';
 
 REVOKE ALL ON FUNCTION public.get_movement_metrics(uuid, timestamptz, timestamptz, uuid) FROM PUBLIC;
+-- anon recebe EXECUTE via ALTER DEFAULT PRIVILEGES do Supabase (grant explícito, não
+-- via PUBLIC) — REVOKE FROM PUBLIC não o remove. Revoke explícito é obrigatório:
+-- RPC de métrica é authenticated-only (assert_org_access barra, mas defense-in-depth).
+REVOKE EXECUTE ON FUNCTION public.get_movement_metrics(uuid, timestamptz, timestamptz, uuid) FROM anon;
 GRANT EXECUTE ON FUNCTION public.get_movement_metrics(uuid, timestamptz, timestamptz, uuid)
   TO authenticated, service_role;
