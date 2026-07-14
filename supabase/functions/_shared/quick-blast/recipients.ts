@@ -6,6 +6,7 @@
  */
 import { normalizeBrazilianPhone } from "../whatsapp-dispatch.ts";
 import { resolveBlastMessage } from "./message-resolver.ts";
+import { personalizationName } from "../lead-name.ts";
 
 export interface BlastLead {
   id: string;
@@ -75,10 +76,11 @@ function leadVars(lead: BlastLead): Record<string, string | number | null | unde
     const n = num(v);
     return n === null ? "" : n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   };
+  const safeName = personalizationName(lead.name);
   return {
-    // Always available (from leads)
-    nome: lead.name ?? "",
-    primeiro_nome: (lead.name ?? "").trim().split(/\s+/)[0] ?? "",
+    // Always available (from leads) — placeholder names ("WhatsApp 2952") blanked
+    nome: safeName,
+    primeiro_nome: safeName.trim().split(/\s+/)[0] ?? "",
     empresa: lead.company ?? "",
     // Carteira variables — present only when an upsell_clients row was joined.
     // Absent → empty string (resolver treats null as "").

@@ -9,6 +9,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getTimeBasedVariables } from "./time-variables.ts";
 import { getPipeEntry } from "./pipeline-adapter.ts";
+import { personalizationName, isPlaceholderLeadName, tidyEmptyVarGaps } from "./lead-name.ts";
 import { moveStage as sharedMoveStage } from "./action-handlers/move-stage.ts";
 import { addTag as sharedAddTag, removeTag as sharedRemoveTag } from "./action-handlers/tag-operations.ts";
 import { updateLeadField as sharedUpdateLeadField, updateCustomField as sharedUpdateCustomField, updateRating as sharedUpdateRating } from "./action-handlers/lead-field-operations.ts";
@@ -81,7 +82,7 @@ async function resolveVariables(
 
   // Standard variables
   const vars: Record<string, string> = {
-    nome:       lead.name || "",
+    nome:       personalizationName(lead.name),
     empresa:    lead.company || "",
     email:      lead.email || "",
     telefone:   lead.phone || "",
@@ -232,6 +233,10 @@ async function resolveVariables(
       result = result.replaceAll(match, val);
     }
   }
+
+  // A suppressed placeholder name (see personalizationName) leaves a punctuation
+  // gap like "Boa tarde , tudo bem?" — clean it only when we actually blanked one.
+  if (isPlaceholderLeadName(lead.name)) result = tidyEmptyVarGaps(result);
 
   return result;
 }

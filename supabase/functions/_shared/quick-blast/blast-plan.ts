@@ -27,6 +27,7 @@
  */
 import { buildRecipients, type BlastLead, type BlastRecipient } from "./recipients.ts";
 import { resolveBlastMessage } from "./message-resolver.ts";
+import { personalizationName } from "../lead-name.ts";
 import {
   refineBlastAudience,
   type BlastActivitySource,
@@ -728,10 +729,10 @@ function groupByInstance(
  *  buildRecipients' leadVars; carried here so the wizard preview matches what the
  *  releaser sends). */
 function snapshotVars(lead: BlastLead): Record<string, unknown> {
-  const name = (lead.name ?? "").trim();
+  const safeName = personalizationName(lead.name);
   return {
-    nome: lead.name ?? "",
-    primeiro_nome: name.split(/\s+/)[0] ?? "",
+    nome: safeName,
+    primeiro_nome: safeName.trim().split(/\s+/)[0] ?? "",
     empresa: lead.company ?? "",
   };
 }
