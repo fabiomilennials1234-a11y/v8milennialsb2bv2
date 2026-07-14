@@ -14,6 +14,8 @@ import { CONDITION_OPERATOR_LABELS, WEEKDAY_OPTIONS } from "@/types/workflow";
 import type { ConditionNodeData, ConditionOperator, ConditionMode } from "@/types/workflow";
 import { Clock, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useOrgUtmValues, UTM_VALUE_FIELDS } from "@/modules/workflows/hooks/useOrgUtmValues";
+import { UtmValueCombobox } from "./UtmValueCombobox";
 
 interface ConditionPanelProps {
   data: ConditionNodeData;
@@ -64,6 +66,23 @@ const RESPONSIBLE_OPERATORS: ConditionOperator[] = [
   "is_not_empty",
 ];
 
+// UTM fields whose value is chosen via the creatable combobox (org's real UTM
+// values). Single source of truth = the hook's allowlist.
+const UTM_FIELDS = UTM_VALUE_FIELDS;
+
+// Operators that stay sensible against a UTM string value. UTM values carry
+// `.`/`[]`/acento (ex.: `[TESTE CRIATIVOS] BATERIA.`), so `equals` is fragile —
+// when entering a UTM field from an incompatible (numeric) operator we default
+// to `contains`, but we never override an already-sensible text operator.
+const TEXT_SAFE_OPERATORS = new Set<ConditionOperator>([
+  "contains",
+  "not_contains",
+  "starts_with",
+  "ends_with",
+  "is_empty",
+  "is_not_empty",
+]);
+
 const NO_VALUE_OPERATORS: ConditionOperator[] = ["is_empty", "is_not_empty"];
 
 const TIMEZONE_OPTIONS = [
@@ -82,6 +101,8 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
   const needsValue = !NO_VALUE_OPERATORS.includes(data.operator);
   const members = useResponsibleMembers();
   const isResponsibleField = RESPONSIBLE_FIELDS.has(data.field || "");
+  const isUtmField = UTM_FIELDS.has(data.field || "");
+  const { values: utmValues, isLoading: utmLoading } = useOrgUtmValues(data.field);
 
   const handleFieldChange = (v: string) => {
     const nowResponsible = RESPONSIBLE_FIELDS.has(v);
@@ -91,6 +112,12 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
     // Carry over only operators valid for a member field.
     if (nowResponsible && !RESPONSIBLE_OPERATORS.includes(data.operator)) {
       updates.operator = "equals";
+    }
+    // Entering a UTM field with a numeric/incompatible operator → default to
+    // `contains` (saved value has `.`/`[]`/acento; `equals` is fragile). Keep
+    // an already-sensible text operator untouched.
+    if (UTM_FIELDS.has(v) && !TEXT_SAFE_OPERATORS.has(data.operator)) {
+      updates.operator = "contains";
     }
     onUpdate(updates);
   };
@@ -248,6 +275,13 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
                     )}
                   </SelectContent>
                 </Select>
+              ) : isUtmField ? (
+                <UtmValueCombobox
+                  values={utmValues}
+                  isLoading={utmLoading}
+                  value={data.value || ""}
+                  onChange={(v) => onUpdate({ value: v })}
+                />
               ) : (
                 <Input
                   value={data.value || ""}
