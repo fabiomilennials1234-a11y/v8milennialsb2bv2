@@ -16,6 +16,7 @@ import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
 import {
   computePeriodRange,
   type CommandPeriod,
+  type CommandCustomRange,
 } from "@/modules/analytics/hooks/useCommandMetrics";
 import { useAuth } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
@@ -33,6 +34,7 @@ const PERIOD_LABEL: Record<CommandPeriod, string> = {
   week: "Semana atual",
   month: "",
   quarter: "Trimestre atual",
+  custom: "Personalizado",
 };
 
 export default function Dashboard() {
@@ -48,6 +50,7 @@ export default function Dashboard() {
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [period, setPeriod] = useState<CommandPeriod>("month");
+  const [customRange, setCustomRange] = useState<CommandCustomRange | null>(null);
   const [leadModalOpen, setLeadModalOpen] = useState(false);
 
   const oraculo = useOraculoChat({ month: selectedMonth, year: selectedYear });
@@ -72,18 +75,24 @@ export default function Dashboard() {
   }, [setOraculoOpen, oraculoEnabled]);
 
   const range = useMemo(
-    () => computePeriodRange(period, selectedMonth, selectedYear),
-    [period, selectedMonth, selectedYear],
+    () => computePeriodRange(period, selectedMonth, selectedYear, customRange),
+    [period, selectedMonth, selectedYear, customRange],
   );
 
   const subtitle = useMemo(() => {
+    if (period === "custom") {
+      if (customRange?.from && customRange?.to) {
+        return `de ${format(customRange.from, "dd/MM", { locale: ptBR })} a ${format(customRange.to, "dd/MM", { locale: ptBR })}`;
+      }
+      return "Selecione um intervalo";
+    }
     if (period === "month") {
       const monthLabel = format(new Date(selectedYear, selectedMonth - 1, 1), "MMMM yyyy", { locale: ptBR });
       const capitalized = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
       return `${capitalized} · dia ${range.dayOfPeriod}`;
     }
     return `${PERIOD_LABEL[period]} · dia ${range.dayOfPeriod} de ${range.daysTotal}`;
-  }, [period, selectedMonth, selectedYear, range]);
+  }, [period, selectedMonth, selectedYear, range, customRange]);
 
   if (orgType === "outbound" && role === "member") {
     return <DashboardOutbound />;
@@ -112,6 +121,8 @@ export default function Dashboard() {
           onMonthChange={(m, y) => { setSelectedMonth(m); setSelectedYear(y); }}
           period={period}
           onPeriodChange={setPeriod}
+          customRange={customRange}
+          onCustomRangeChange={setCustomRange}
           onNewLead={() => setLeadModalOpen(true)}
           showAnalytics={showAnalytics}
           subtitle={subtitle}
@@ -137,7 +148,7 @@ export default function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <TabPerformanceV2 month={selectedMonth} year={selectedYear} />
+            <TabPerformanceV2 month={selectedMonth} year={selectedYear} range={range} />
           </motion.div>
         </TabsContent>
 
@@ -148,7 +159,7 @@ export default function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <TabSaude />
+            <TabSaude range={range} />
           </motion.div>
         </TabsContent>
 

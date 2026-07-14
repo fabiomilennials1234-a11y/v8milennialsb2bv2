@@ -8,6 +8,8 @@ import { isMissingSchemaError, isRpcAbsentError } from "@/lib/rpc-errors";
 import { computeMeetingRates, type MeetingEventLike } from "@/modules/analytics/lib/meeting-rates";
 import {
   monthPeriodArgs,
+  rangePeriodArgs,
+  type CanonicalPeriodArgs,
   type SalesMetricsResult,
   type RankingResult,
 } from "@/modules/analytics/types/canonical-metrics";
@@ -161,10 +163,8 @@ interface SalesRankingEntry {
 async function overlayCanonicalRanking(
   legacy: SalesRankingEntry[],
   organizationId: string,
-  month: number,
-  year: number,
+  period: CanonicalPeriodArgs,
 ): Promise<SalesRankingEntry[]> {
-  const period = monthPeriodArgs(month, year);
   const { data, error } = await supabase.rpc("get_ranking" as never, {
     p_org_id: organizationId,
     p_period: period.p_period,
@@ -457,14 +457,42 @@ export function useFunnelData(month?: number, year?: number) {
   });
 }
 
-/** Ranking do pódio — sempre busca dados frescos (staleTime: 0) para refletir atualizações da RPC. */
-export function useRankingData(month?: number, year?: number) {
+/**
+ * Ranking do pódio — sempre busca dados frescos (staleTime: 0) para refletir atualizações da RPC.
+ *
+ * @param rangeOverride — intervalo arbitrário (Comando period-aware). Quando
+ *   presente: (a) o overlay CANÔNICO get_ranking passa a ser range-aware
+ *   (rangePeriodArgs); (b) month/year — quando não explícitos — são derivados
+ *   do início do range pro fallback legado.
+ *
+ *   ⚠️ LIMITAÇÃO: o get_ranking_data LEGADO é travado no mês (calcula o
+ *   intervalo do 1º ao último dia a partir de p_month/p_year) e NÃO aceita
+ *   range. Logo, com `canonical_metrics` OFF (default dark-launch) o ranking
+ *   permanece MENSAL mesmo com range sub-mês. A reatividade real ao período
+ *   só existe com a flag canônica ON (via get_ranking). O meetingsRanking é
+ *   100% legado → sempre mensal. Backend fora de escopo desta fatia.
+ */
+export function useRankingData(
+  month?: number,
+  year?: number,
+  rangeOverride?: { start: Date; end: Date } | null,
+) {
   const now = new Date();
-  const selectedMonth = month ?? now.getMonth() + 1;
-  const selectedYear = year ?? now.getFullYear();
+  // Sem month/year explícito, deriva do início do range (fallback legado mensal);
+  // sem nenhum dos dois, cai no mês corrente — comportamento original.
+  const selectedMonth = month ?? (rangeOverride ? rangeOverride.start.getUTCMonth() + 1 : now.getMonth() + 1);
+  const selectedYear = year ?? (rangeOverride ? rangeOverride.start.getUTCFullYear() : now.getFullYear());
   const { data: currentTeamMember } = useCurrentTeamMember();
   const organizationId = currentTeamMember?.organization_id ?? null;
   const useCanonical = useFeatureFlag("canonical_metrics").enabled;
+
+  // Args de período do overlay canônico: override → range; senão o mês.
+  const periodArgs = rangeOverride
+    ? rangePeriodArgs(rangeOverride.start, rangeOverride.end)
+    : monthPeriodArgs(selectedMonth, selectedYear);
+  const rangeKey = rangeOverride
+    ? `${rangeOverride.start.toISOString()}_${rangeOverride.end.toISOString()}`
+    : `${selectedMonth}-${selectedYear}`;
 
   // Single subscription — pipeline_entries (tabela base publicada) cobre os
   // stages de propostas, driver primário do ranking. NÃO assinar pipe_propostas:
@@ -472,7 +500,7 @@ export function useRankingData(month?: number, year?: number) {
   useRealtimeSubscription("pipeline_entries", ["ranking-data"]);
 
   return useQuery({
-    queryKey: ["ranking-data", selectedMonth, selectedYear, organizationId, useCanonical],
+    queryKey: ["ranking-data", selectedMonth, selectedYear, rangeKey, organizationId, useCanonical],
     queryFn: async () => {
       if (!organizationId) return { salesRanking: [], meetingsRanking: [] };
 
@@ -518,7 +546,7 @@ export function useRankingData(month?: number, year?: number) {
       // Degrada: RPC ausente (migration pendente) → mantém o pódio legado intacto.
       // Gate (U3): flag OFF/loading → pódio legado, get_ranking nunca é chamado.
       const salesRanking = useCanonical
-        ? await overlayCanonicalRanking(legacySalesRanking, organizationId, selectedMonth, selectedYear)
+        ? await overlayCanonicalRanking(legacySalesRanking, organizationId, periodArgs)
         : legacySalesRanking;
 
       return {

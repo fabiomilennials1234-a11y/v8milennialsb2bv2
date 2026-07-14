@@ -4,8 +4,8 @@ import { useProductRanking } from "@/modules/carteira";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface ProductChampionsProps {
-  month: number;
-  year: number;
+  /** Intervalo global do Comando — produtos seguem o período selecionado. */
+  range: { start: Date; end: Date };
 }
 
 function formatK(value: number): string {
@@ -15,8 +15,8 @@ function formatK(value: number): string {
 }
 
 /** Produtos campeões — top 5 por receita no período. */
-function ProductChampionsBase({ month, year }: ProductChampionsProps) {
-  const { data: products, isLoading } = useProductRanking(month, year);
+function ProductChampionsBase({ range }: ProductChampionsProps) {
+  const { data: products, isLoading } = useProductRanking(undefined, undefined, range);
   const top5 = (products ?? []).slice(0, 5);
 
   if (isLoading) {
