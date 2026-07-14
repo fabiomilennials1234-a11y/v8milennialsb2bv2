@@ -66,6 +66,18 @@ printf '%s\n' \
   '  index index.html;' \
   '  include /etc/nginx/security-headers.conf;' \
   '  location ~ /\. { return 404; }' \
+  '  # API REST pública v1 — proxy transparente p/ a edge function `api` do Supabase.' \
+  '  # URL limpa: torquecrm.com.br/api/v1/* -> .../functions/v1/api/v1/* (Supabase corta' \
+  '  # o prefixo /functions/v1, entao a function ve /api/v1/* e casa o router). Auth e' \
+  '  # scoping por X-API-Key (validada pela function); qualquer origem/cliente com key valida.' \
+  '  location ^~ /api/v1/ {' \
+  '    proxy_pass https://jsjsmuncfkbsbzqzqhfq.supabase.co/functions/v1/api/v1/;' \
+  '    proxy_ssl_server_name on;' \
+  '    proxy_set_header Host jsjsmuncfkbsbzqzqhfq.supabase.co;' \
+  '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
+  '    proxy_set_header X-Forwarded-Proto $scheme;' \
+  '    proxy_read_timeout 30s;' \
+  '  }' \
   '  location ~* ^/assets/.*\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|webp|ico|map)$ {' \
   '    include /etc/nginx/security-headers.conf;' \
   '    add_header Cache-Control "public, max-age=31536000, immutable" always;' \
