@@ -85,6 +85,8 @@ type WhatsappFilterState = {
   filterResponsible: string;
   filterOrigin: string;
   filterTags: string[];
+  filterQualificationTier: string[];
+  filterPreQualificationTier: string[];
   filterScheduled: boolean;
   viewMode: "kanban" | "list" | "analytics";
 };
@@ -94,6 +96,8 @@ const DEFAULT_WHATSAPP_FILTERS: WhatsappFilterState = {
   filterResponsible: "all",
   filterOrigin: "all",
   filterTags: [],
+  filterQualificationTier: [],
+  filterPreQualificationTier: [],
   filterScheduled: false,
   viewMode: "kanban",
 };
@@ -104,7 +108,7 @@ function PipeWhatsappInner() {
     DEFAULT_WHATSAPP_FILTERS
   );
 
-  const { searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled, viewMode } = filterState;
+  const { searchTerm, filterResponsible, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterScheduled, viewMode } = filterState;
   const { isMobile } = useViewport();
 
   const setSearchTerm = useCallback(
@@ -121,6 +125,14 @@ function PipeWhatsappInner() {
   );
   const setFilterTags = useCallback(
     (v: string[]) => setFilterState((f) => ({ ...f, filterTags: v })),
+    [setFilterState]
+  );
+  const setFilterQualificationTier = useCallback(
+    (v: string[]) => setFilterState((f) => ({ ...f, filterQualificationTier: v })),
+    [setFilterState]
+  );
+  const setFilterPreQualificationTier = useCallback(
+    (v: string[]) => setFilterState((f) => ({ ...f, filterPreQualificationTier: v })),
     [setFilterState]
   );
   const setFilterScheduled = useCallback(
@@ -174,8 +186,10 @@ function PipeWhatsappInner() {
       responsibleId: filterResponsible,
       tagIds: filterTags,
       // Client-only dimensions, now resolved server-side so the column count
-      // matches the filtered cards (origin / scheduled / period).
+      // matches the filtered cards (origin / scheduled / period / tier).
       origins: filterOrigin !== "all" ? [filterOrigin] : undefined,
+      qualificationTier: filterQualificationTier,
+      preQualificationTier: filterPreQualificationTier,
       scheduled: filterScheduled || undefined,
       periodAfter: metricsRange?.startStr ?? undefined,
       periodBefore: metricsRange?.endStr ?? undefined,
@@ -223,8 +237,10 @@ function PipeWhatsappInner() {
     { type: "responsible", value: filterResponsible, onChange: setFilterResponsible, members: responsibleMembers },
     { type: "origin-single", value: filterOrigin, onChange: setFilterOrigin },
     { type: "tags", value: filterTags, onChange: setFilterTags, tags: orgTags },
+    { type: "qualification-tier", value: filterQualificationTier, onChange: setFilterQualificationTier },
+    { type: "pre-qualification-tier", value: filterPreQualificationTier, onChange: setFilterPreQualificationTier },
     { type: "scheduled", value: filterScheduled, onChange: setFilterScheduled },
-  ], [filterResponsible, filterOrigin, filterTags, filterScheduled, responsibleMembers, orgTags]);
+  ], [filterResponsible, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterScheduled, responsibleMembers, orgTags, setFilterResponsible, setFilterOrigin, setFilterTags, setFilterQualificationTier, setFilterPreQualificationTier, setFilterScheduled]);
 
   const handleClearAllFilters = useCallback(() => {
     setFilterState((f) => ({
@@ -232,6 +248,8 @@ function PipeWhatsappInner() {
       filterResponsible: "all",
       filterOrigin: "all",
       filterTags: [],
+      filterQualificationTier: [],
+      filterPreQualificationTier: [],
       filterScheduled: false,
     }));
   }, [setFilterState]);

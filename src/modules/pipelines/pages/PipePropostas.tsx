@@ -156,6 +156,8 @@ type PropostasFilterState = {
   filterCalor: string;
   filterOrigin: string[];
   filterTags: string[];
+  filterQualificationTier: string[];
+  filterPreQualificationTier: string[];
   filterScheduled: boolean;
   viewMode: "kanban" | "analytics";
   // Marca se já aplicamos o default "me" para membros (one-shot por usuário).
@@ -171,6 +173,8 @@ const DEFAULT_PROPOSTAS_FILTERS: PropostasFilterState = {
   filterCalor: "all",
   filterOrigin: [],
   filterTags: [],
+  filterQualificationTier: [],
+  filterPreQualificationTier: [],
   filterScheduled: false,
   viewMode: "kanban",
   membroDefaultApplied: false,
@@ -182,7 +186,7 @@ function PipePropostasInner() {
     DEFAULT_PROPOSTAS_FILTERS
   );
 
-  const { searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterOrigin, filterTags, filterScheduled, viewMode } = filterState;
+  const { searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterScheduled, viewMode } = filterState;
 
   const setSearchTerm = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, searchTerm: v })),
@@ -208,6 +212,8 @@ function PipePropostasInner() {
       filterCalor: "all",
       filterOrigin: [],
       filterTags: [],
+      filterQualificationTier: [],
+      filterPreQualificationTier: [],
       filterScheduled: false,
     }));
   }, [setFilterState]);
@@ -306,10 +312,12 @@ function PipePropostasInner() {
       tagIds: filterTags,
       // Client-only dimensions, now resolved server-side so the column count
       // matches the filtered cards (origin / product / priority / calor /
-      // scheduled / period). Period uses the status-dependent ref date via
-      // closedStatusKeys (mirrors isPropostaInPeriod).
+      // scheduled / period / tier). Period uses the status-dependent ref date
+      // via closedStatusKeys (mirrors isPropostaInPeriod).
       origins: filterOrigin.length ? filterOrigin : undefined,
       productType: filterProductType !== "all" ? filterProductType : undefined,
+      qualificationTier: filterQualificationTier,
+      preQualificationTier: filterPreQualificationTier,
       ...priorityBandToRating(filterPriority),
       ...calorBandToBounds(filterCalor),
       scheduled: filterScheduled || undefined,
@@ -353,11 +361,13 @@ function PipePropostasInner() {
     { type: "responsible", value: filterResponsible, onChange: (v: string) => setFilterState((f) => ({ ...f, filterResponsible: v })), members: responsibleMembers },
     { type: "origin-multi", value: filterOrigin, onChange: (v: string[]) => setFilterState((f) => ({ ...f, filterOrigin: v })) },
     { type: "tags", value: filterTags, onChange: (v: string[]) => setFilterState((f) => ({ ...f, filterTags: v })), tags: orgTags },
+    { type: "qualification-tier", value: filterQualificationTier, onChange: (v: string[]) => setFilterState((f) => ({ ...f, filterQualificationTier: v })) },
+    { type: "pre-qualification-tier", value: filterPreQualificationTier, onChange: (v: string[]) => setFilterState((f) => ({ ...f, filterPreQualificationTier: v })) },
     { type: "product-type", value: filterProductType, onChange: (v: string) => setFilterState((f) => ({ ...f, filterProductType: v })) },
     { type: "calor", value: filterCalor, onChange: (v: string) => setFilterState((f) => ({ ...f, filterCalor: v })) },
     { type: "priority", value: filterPriority, onChange: (v: string) => setFilterState((f) => ({ ...f, filterPriority: v })) },
     { type: "scheduled", value: filterScheduled, onChange: (v: boolean) => setFilterState((f) => ({ ...f, filterScheduled: v })) },
-  ], [filterResponsible, filterOrigin, filterTags, filterProductType, filterCalor, filterPriority, filterScheduled, responsibleMembers, orgTags, setFilterState]);
+  ], [filterResponsible, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterProductType, filterCalor, filterPriority, filterScheduled, responsibleMembers, orgTags, setFilterState]);
 
   // Board filter handed to the Disparo "Filtro ativo" source. Mirrors EXACTLY
   // the dimensions usePaginatedPipeline resolves server-side (search,

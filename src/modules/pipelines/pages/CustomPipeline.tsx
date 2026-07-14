@@ -39,6 +39,8 @@ import {
   useMoveLeadInCustomPipe,
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { CustomPipelineKanban } from "@/modules/pipelines/components/custom/CustomPipelineKanban";
+import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
+import { matchesQualificationFilters } from "@/modules/pipelines/lib/kanbanFilterParams";
 import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
@@ -67,6 +69,8 @@ function CustomPipelinePageInner() {
 
   const { openLead } = useLeadSheet();
   const [searchQuery, setSearchQuery] = useState("");
+  const [qualificationTier, setQualificationTier] = useState<string[]>([]);
+  const [preQualificationTier, setPreQualificationTier] = useState<string[]>([]);
   const [showAddLead, setShowAddLead] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [removeEntryId, setRemoveEntryId] = useState<string | null>(null);
@@ -85,6 +89,34 @@ function CustomPipelinePageInner() {
 
   const isLoading = loadingPipeline || loadingStages || loadingEntries;
 
+  // Qualification-tier filter (client-side — este board não é paginado no
+  // servidor). Aplicado às entries carregadas ANTES de alimentar o kanban e a
+  // lista mobile, e propagado como `tierFilterActive` pro kanban derivar o
+  // badge da contagem client-side (o RPC de count não conhece tier).
+  const tierFilterActive = qualificationTier.length > 0 || preQualificationTier.length > 0;
+  const tieredEntries = useMemo(
+    () =>
+      tierFilterActive
+        ? entries.filter((e) =>
+            matchesQualificationFilters(e.lead, qualificationTier, preQualificationTier),
+          )
+        : entries,
+    [entries, tierFilterActive, qualificationTier, preQualificationTier],
+  );
+
+  const filterSections: FilterSectionConfig[] = useMemo(
+    () => [
+      { type: "qualification-tier", value: qualificationTier, onChange: setQualificationTier },
+      { type: "pre-qualification-tier", value: preQualificationTier, onChange: setPreQualificationTier },
+    ],
+    [qualificationTier, preQualificationTier],
+  );
+
+  const handleClearFilters = useCallback(() => {
+    setQualificationTier([]);
+    setPreQualificationTier([]);
+  }, []);
+
   // ── Mobile: lista por stage (PipelineListView) em vez do kanban drag-drop ──
   // Custom pipes usam stage_id (uuid) como chave. id = entry id.
   const { isMobile } = useViewport();
@@ -94,7 +126,7 @@ function CustomPipelinePageInner() {
   );
   const mobileLeads = useMemo(
     () =>
-      entries.map((e) => ({
+      tieredEntries.map((e) => ({
         id: e.id,
         name: e.lead?.name || "Sem nome",
         company: e.lead?.company || undefined,
@@ -103,7 +135,7 @@ function CustomPipelinePageInner() {
         stage_key: e.stage_id,
         created_at: e.created_at,
       })),
-    [entries],
+    [tieredEntries],
   );
   const handleMobileLeadClick = useCallback(
     (entryId: string) => {
@@ -212,20 +244,26 @@ function CustomPipelinePageInner() {
         </div>
       </div>
 
-      {/* Stats + Search */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar lead, empresa, telefone..."
-            className="pl-9"
-          />
+      {/* Stats + Search + Filtros */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar lead, empresa, telefone..."
+              className="pl-9"
+            />
+          </div>
+          {stages.length > 0 && (
+            <KanbanFilterPanel sections={filterSections} onClearAll={handleClearFilters} />
+          )}
+          <div className="text-sm text-muted-foreground ml-auto shrink-0">
+            {tieredEntries.length} {tieredEntries.length === 1 ? "lead" : "leads"} no funil
+          </div>
         </div>
-        <div className="text-sm text-muted-foreground">
-          {entries.length} {entries.length === 1 ? "lead" : "leads"} no funil
-        </div>
+        <FilterChips sections={filterSections} onClearAll={handleClearFilters} />
       </div>
 
       {/* Kanban */}
@@ -242,8 +280,9 @@ function CustomPipelinePageInner() {
           <CustomPipelineKanban
             pipeline={pipeline}
             stages={stages}
-            entries={entries}
+            entries={tieredEntries}
             searchQuery={searchQuery}
+            tierFilterActive={tierFilterActive}
             onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
             onClickEntry={(entry) => {
               openLead(entry.lead_id, entry.id);

@@ -26,7 +26,13 @@ export interface Deal {
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
-  lead?: { id: string; name: string; phone: string | null } | null;
+  lead?: {
+    id: string;
+    name: string;
+    phone: string | null;
+    qualification_tier?: string | null;
+    pre_qualification_tier?: string | null;
+  } | null;
   company?: { id: string; name: string } | null;
   owner?: { id: string; name: string } | null;
   deal_items?: DealItemRow[];
@@ -82,7 +88,7 @@ export function useDeals(filters?: DealsFilter) {
         .from("deals")
         .select(`
           *,
-          lead:leads!source_lead_id(id, name, phone),
+          lead:leads!source_lead_id(id, name, phone, qualification_tier, pre_qualification_tier),
           company:companies!company_id(id, name),
           owner:team_members!owner_id(id, name),
           deal_items(id, product_id, product_name, quantity, unit_price, discount_percent, total, sort_order)

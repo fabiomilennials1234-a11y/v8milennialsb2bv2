@@ -64,3 +64,40 @@ export const PROPOSTAS_CLOSED_STATUS_KEYS = ["vendido", "perdido"] as const;
  * isConfirmacaoOverdue (compareceu / perdido are never overdue).
  */
 export const CONFIRMACAO_OVERDUE_EXCLUDE_STATUS_KEYS = ["compareceu", "perdido"] as const;
+
+/**
+ * Client-side qualification-tier membership predicate. Used by the boards NOT
+ * resolved server-side — CustomPipeline and Negócios — so their cards AND their
+ * column counts are filtered by the SAME rule (badge == cards). Kept byte-for-
+ * byte equivalent to the server predicate in get_pipeline_page /
+ * get_pipeline_stage_counts (`l.qualification_tier::text = ANY(p_*)`):
+ *
+ *   - empty selection  → no filter (NULL-collapse: "todos")
+ *   - null/undefined tier → never matches a non-empty selection
+ *   - otherwise         → string membership
+ */
+export function matchesTierFilter(
+  tier: string | null | undefined,
+  selected: string[] | null | undefined,
+): boolean {
+  if (!selected || selected.length === 0) return true;
+  return tier != null && selected.includes(tier);
+}
+
+/**
+ * Combined qualification + pre-qualification predicate for a lead-bearing row.
+ * Both dimensions are ANDed, matching how the two server params compose.
+ */
+export function matchesQualificationFilters(
+  lead:
+    | { qualification_tier?: string | null; pre_qualification_tier?: string | null }
+    | null
+    | undefined,
+  qualificationTier: string[] | null | undefined,
+  preQualificationTier: string[] | null | undefined,
+): boolean {
+  return (
+    matchesTierFilter(lead?.qualification_tier, qualificationTier) &&
+    matchesTierFilter(lead?.pre_qualification_tier, preQualificationTier)
+  );
+}
