@@ -16,12 +16,29 @@ vi.mock('virtual:pwa-register', () => ({
 
 import { useServiceWorkerUpdate } from '@/modules/platform/hooks/use-sw-update';
 
-describe('useServiceWorkerUpdate', () => {
+function setVisibility(state: 'visible' | 'hidden') {
+  Object.defineProperty(document, 'visibilityState', {
+    value: state,
+    configurable: true,
+  });
+}
+
+describe('useServiceWorkerUpdate — registration + update signal', () => {
   let capturedOnNeedRefresh: (() => void) | undefined;
+  let originalLocation: Location;
 
   beforeEach(() => {
     vi.clearAllMocks();
     capturedOnNeedRefresh = undefined;
+    setVisibility('visible');
+
+    // updateSW arms a fallback setTimeout(reload) — stub reload so orphaned
+    // timers can't trigger jsdom navigation between tests.
+    originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      value: { ...originalLocation, reload: vi.fn() },
+      configurable: true,
+    });
 
     mockRegisterSW.mockImplementation((opts?: Record<string, unknown>) => {
       if (opts && typeof opts.onNeedRefresh === 'function') {
@@ -31,9 +48,18 @@ describe('useServiceWorkerUpdate', () => {
     });
   });
 
-  it('registers SW on mount', () => {
+  afterEach(() => {
+    Object.defineProperty(window, 'location', {
+      value: originalLocation,
+      configurable: true,
+    });
+  });
+
+  it('registers SW on mount with immediate:true', () => {
     renderHook(() => useServiceWorkerUpdate());
     expect(mockRegisterSW).toHaveBeenCalledOnce();
+    const callArgs = mockRegisterSW.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(callArgs?.immediate).toBe(true);
   });
 
   it('exposes needRefresh=false initially', () => {
@@ -42,9 +68,21 @@ describe('useServiceWorkerUpdate', () => {
   });
 
   it('sets needRefresh=true when SW signals update', () => {
+    setVisibility('visible'); // avoid immediate apply
     const { result } = renderHook(() => useServiceWorkerUpdate());
 
     act(() => {
+      capturedOnNeedRefresh?.();
+    });
+
+    expect(result.current.needRefresh).toBe(true);
+  });
+
+  it('flags needRefresh only once even if registerSW signals twice', () => {
+    const { result } = renderHook(() => useServiceWorkerUpdate());
+
+    act(() => {
+      capturedOnNeedRefresh?.();
       capturedOnNeedRefresh?.();
     });
 
@@ -61,36 +99,9 @@ describe('useServiceWorkerUpdate', () => {
     expect(mockUpdateSW).toHaveBeenCalledWith(true);
   });
 
-  it('calls onNeedRefresh callback when provided', () => {
-    const onNeedRefresh = vi.fn();
-    renderHook(() => useServiceWorkerUpdate({ onNeedRefresh }));
-
-    act(() => {
-      capturedOnNeedRefresh?.();
-    });
-
-    expect(onNeedRefresh).toHaveBeenCalledOnce();
-  });
-
-  // workbox-window classifica update achado >60s após o register como
-  // "externo" e dispara installed+waiting para o mesmo SW → o build prompt
-  // chama onNeedRefresh duas vezes. Sem guard = 2 toasts Infinity empilhados.
-  it('invokes onNeedRefresh callback only once even if registerSW signals twice', () => {
-    const onNeedRefresh = vi.fn();
-    const { result } = renderHook(() => useServiceWorkerUpdate({ onNeedRefresh }));
-
-    act(() => {
-      capturedOnNeedRefresh?.();
-      capturedOnNeedRefresh?.();
-    });
-
-    expect(onNeedRefresh).toHaveBeenCalledOnce();
-    expect(result.current.needRefresh).toBe(true);
-  });
-
   // O reload do build prompt depende de event.isUpdate no 'controlling',
-  // congelado como false em páginas que começaram sem controller (primeira
-  // visita, shift-reload). O hook precisa garantir o reload por conta própria.
+  // congelado como false em páginas que começaram sem controller. O hook
+  // precisa garantir o reload por conta própria.
   it('updateSW() arms a once controllerchange listener before skipping waiting', () => {
     const addEventListener = vi.fn();
     const originalSW = Object.getOwnPropertyDescriptor(navigator, 'serviceWorker');
@@ -117,11 +128,145 @@ describe('useServiceWorkerUpdate', () => {
     }
   });
 
-  it('registers with immediate:true for auto-check', () => {
-    renderHook(() => useServiceWorkerUpdate());
+  it('updateSW() force-reloads via fallback when controllerchange never fires', () => {
+    vi.useFakeTimers();
+    const reload = vi.fn();
+    Object.defineProperty(window, 'location', {
+      value: { ...originalLocation, reload },
+      configurable: true,
+    });
+    const originalSW = Object.getOwnPropertyDescriptor(navigator, 'serviceWorker');
+    delete (navigator as { serviceWorker?: unknown }).serviceWorker;
 
-    const callArgs = mockRegisterSW.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
-    expect(callArgs?.immediate).toBe(true);
+    try {
+      const { result } = renderHook(() => useServiceWorkerUpdate());
+      act(() => {
+        result.current.updateSW();
+      });
+
+      expect(reload).not.toHaveBeenCalled();
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+      expect(reload).toHaveBeenCalledOnce();
+    } finally {
+      if (originalSW) Object.defineProperty(navigator, 'serviceWorker', originalSW);
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('useServiceWorkerUpdate — silent auto-apply', () => {
+  let capturedOnNeedRefresh: (() => void) | undefined;
+  let originalLocation: Location;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    capturedOnNeedRefresh = undefined;
+    setVisibility('visible');
+
+    originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      value: { ...originalLocation, reload: vi.fn() },
+      configurable: true,
+    });
+
+    mockRegisterSW.mockImplementation((opts?: Record<string, unknown>) => {
+      if (opts && typeof opts.onNeedRefresh === 'function') {
+        capturedOnNeedRefresh = opts.onNeedRefresh as () => void;
+      }
+      return mockUpdateSW;
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    Object.defineProperty(window, 'location', {
+      value: originalLocation,
+      configurable: true,
+    });
+  });
+
+  it('does not apply while visible and active (before idle window)', () => {
+    renderHook(() => useServiceWorkerUpdate());
+    act(() => {
+      capturedOnNeedRefresh?.();
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(60_000); // < 2min idle window
+    });
+    expect(mockUpdateSW).not.toHaveBeenCalled();
+  });
+
+  it('applies once the visible tab has been idle for the idle window', () => {
+    renderHook(() => useServiceWorkerUpdate());
+    act(() => {
+      capturedOnNeedRefresh?.();
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(2 * 60_000);
+    });
+    expect(mockUpdateSW).toHaveBeenCalledWith(true);
+  });
+
+  it('user interaction resets the idle timer so a typing user is never reloaded', () => {
+    renderHook(() => useServiceWorkerUpdate());
+    act(() => {
+      capturedOnNeedRefresh?.();
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(90_000); // almost there
+      document.dispatchEvent(new Event('keydown'));
+      vi.advanceTimersByTime(90_000); // reset → still under window
+    });
+    expect(mockUpdateSW).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(30_000); // now crosses the reset window
+    });
+    expect(mockUpdateSW).toHaveBeenCalledWith(true);
+  });
+
+  it('applies immediately when the tab is hidden at signal time', () => {
+    setVisibility('hidden');
+    renderHook(() => useServiceWorkerUpdate());
+    act(() => {
+      capturedOnNeedRefresh?.();
+    });
+
+    expect(mockUpdateSW).toHaveBeenCalledWith(true);
+  });
+
+  it('applies as soon as the tab becomes hidden', () => {
+    renderHook(() => useServiceWorkerUpdate());
+    act(() => {
+      capturedOnNeedRefresh?.();
+    });
+    expect(mockUpdateSW).not.toHaveBeenCalled();
+
+    act(() => {
+      setVisibility('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(mockUpdateSW).toHaveBeenCalledWith(true);
+  });
+
+  it('applies the update at most once', () => {
+    setVisibility('hidden');
+    renderHook(() => useServiceWorkerUpdate());
+    act(() => {
+      capturedOnNeedRefresh?.();
+    });
+
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      vi.advanceTimersByTime(5 * 60_000);
+    });
+    expect(mockUpdateSW).toHaveBeenCalledTimes(1);
   });
 });
 
