@@ -466,6 +466,65 @@ describe("sanitizeAssistantMessage", () => {
     expect(r.text).toBe("Horário: 9h às 18h. Uso: aplicar e enxaguar.");
     expect(r.droppedBlocks).toBe(0);
   });
+
+  // ============================================================
+  // Regressão: tags de RACIOCÍNIO/estrutura inventadas além de
+  // <thinking>/<response> (incidente Forever Bella/Bia 2026-07-13).
+  // gpt-4.1-mini + reasoning_mode='always' vazou `<prefill> </prefill>`
+  // e `<thought>` como TEXTO no balão do cliente ("mensagem de código").
+  // O strip antigo só casava thinking|response.
+  // ============================================================
+
+  it("strips the leaked <prefill> </prefill> tag keeping the human text (Bia 2026-07-13)", () => {
+    const raw =
+      "Tenho sim, Natalia! Vou te enviar o catálogo completo pra você conhecer toda a nossa linha. <prefill> </prefill>";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe(
+      "Tenho sim, Natalia! Vou te enviar o catálogo completo pra você conhecer toda a nossa linha.",
+    );
+    expect(r.text).not.toContain("<");
+  });
+
+  it("strips a <perfil> variant tag (accented/PT hallucination) keeping content", () => {
+    const raw = "Segue seu resumo <perfil>cliente premium</perfil> e já te ajudo.";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).not.toContain("<perfil>");
+    expect(r.text).not.toContain("</perfil>");
+    expect(r.text).toContain("cliente premium");
+  });
+
+  it("drops a <thought>...</thought> reasoning block, keeps the answer after it", () => {
+    const raw =
+      "<thought>O cliente quer preço; vou responder o valor cheio primeiro.</thought>\n\nO Banho de Verniz fica R$ 179, tudo bem?";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("O Banho de Verniz fica R$ 179, tudo bem?");
+    expect(r.text).not.toMatch(/thought/i);
+    expect(r.reasoning).toContain("valor cheio");
+  });
+
+  it("drops an <analysis> block and unwraps <response>", () => {
+    const raw =
+      "<analysis>lead frio, reengajar</analysis><response>Oi! Vi que você se interessou pela Progressiva. Posso te ajudar?</response>";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe(
+      "Oi! Vi que você se interessou pela Progressiva. Posso te ajudar?",
+    );
+    expect(r.text).not.toMatch(/analysis|response/i);
+  });
+
+  it("handles unclosed <thought> defensively (discards trailing leak)", () => {
+    const raw = "Deixa eu ver...\n<thought>preciso conferir o estoque e o frete pra";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Deixa eu ver...");
+    expect(r.text).not.toMatch(/thought/i);
+  });
+
+  it("does NOT strip legit '<' in math/price comparisons or emoticons", () => {
+    const raw = "Se o pedido for <200 não fecha; acima disso sim. <3 valeu!";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe(raw);
+    expect(r.droppedBlocks).toBe(0);
+  });
 });
 
 describe("splitByDelimiter", () => {
@@ -479,6 +538,26 @@ describe("splitByDelimiter", () => {
 
   it("tolerates whitespace variation || SPLIT ||", () => {
     expect(splitByDelimiter("a || SPLIT || b")).toEqual(["a", "b"]);
+  });
+
+  // Incidente Forever Bella/Bia 2026-07-14: LLM truncou o token no meio e
+  // ||SPL|| vazou cru no balão do lead Kaylane (não bateu no split literal).
+  it("splits on front-truncated ||SPL|| (LLM stopped mid-token)", () => {
+    expect(
+      splitByDelimiter("Quer que eu te explique como funciona? ||SPL|| Assim, te mostro os preços."),
+    ).toEqual(["Quer que eu te explique como funciona?", "Assim, te mostro os preços."]);
+  });
+
+  it("splits on other truncated variants ||SPLI|| / ||SPLITT|| / |||SPLIT|||", () => {
+    expect(splitByDelimiter("a ||SPLI|| b")).toEqual(["a", "b"]);
+    expect(splitByDelimiter("a ||SPLITT|| b")).toEqual(["a", "b"]);
+    expect(splitByDelimiter("a |||SPLIT||| b")).toEqual(["a", "b"]);
+  });
+
+  it("does NOT eat legitimate double-pipe text (no 'spl' stem)", () => {
+    expect(splitByDelimiter("custa R$10 || R$20 no varejo")).toEqual([
+      "custa R$10 || R$20 no varejo",
+    ]);
   });
 
   it("returns single-element array when no delimiter", () => {
