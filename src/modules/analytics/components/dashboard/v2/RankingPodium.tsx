@@ -4,8 +4,8 @@ import { useRankingData } from "@/modules/analytics/hooks/useDashboardMetrics";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface RankingPodiumProps {
-  month: number;
-  year: number;
+  /** Intervalo global do Comando — o ranking segue o período selecionado. */
+  range: { start: Date; end: Date };
   /** vendaTotal do período (RPC) — detecta vendas sem vendedor atribuído. */
   teamSalesTotal?: number;
 }
@@ -56,8 +56,8 @@ function formatK(value: number): string {
  * Ranking do mês — pódio top 3 (líder elevado ao centro) + tabela do restante,
  * com toggle Vendas | Reuniões (metric_type sales/meetings do RankingTable legado).
  */
-function RankingPodiumBase({ month, year, teamSalesTotal }: RankingPodiumProps) {
-  const { data, isLoading } = useRankingData(month, year);
+function RankingPodiumBase({ range, teamSalesTotal }: RankingPodiumProps) {
+  const { data, isLoading } = useRankingData(undefined, undefined, range);
   const [mode, setMode] = useState<Mode>("vendas");
 
   const { ranked, totalLabel } = useMemo(() => {

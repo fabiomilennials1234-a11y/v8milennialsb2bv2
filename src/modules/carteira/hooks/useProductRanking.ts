@@ -16,16 +16,30 @@ function getMonthRangeUTC(month: number, year: number) {
   return { startStr: start.toISOString(), endStr: end.toISOString() };
 }
 
-export function useProductRanking(month?: number, year?: number) {
+/**
+ * @param rangeOverride — intervalo arbitrário (Comando period-aware). Quando
+ *   presente, tem precedência sobre `month`/`year` e é usado direto nos
+ *   `p_start_date`/`p_end_date` da RPC (que já é range-based). Ausente →
+ *   intervalo UTC-do-mês de sempre, comportamento inalterado.
+ */
+export function useProductRanking(
+  month?: number,
+  year?: number,
+  rangeOverride?: { start: Date; end: Date } | null,
+) {
   const now = new Date();
   const selectedMonth = month ?? now.getMonth() + 1;
   const selectedYear = year ?? now.getFullYear();
   const { data: currentTeamMember } = useCurrentTeamMember();
   const organizationId = currentTeamMember?.organization_id ?? null;
-  const { startStr, endStr } = getMonthRangeUTC(selectedMonth, selectedYear);
+  const { startStr, endStr } = rangeOverride
+    ? { startStr: rangeOverride.start.toISOString(), endStr: rangeOverride.end.toISOString() }
+    : getMonthRangeUTC(selectedMonth, selectedYear);
 
   return useQuery({
-    queryKey: ["product-ranking", selectedMonth, selectedYear, organizationId],
+    // Chave reflete o start/end EFETIVO — sem override, deriva de month/year
+    // deterministicamente, então a identidade da query é idêntica à de antes.
+    queryKey: ["product-ranking", startStr, endStr, organizationId],
     queryFn: async (): Promise<ProductRankingItem[]> => {
       if (!organizationId) return [];
 

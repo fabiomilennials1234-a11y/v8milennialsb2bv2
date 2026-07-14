@@ -3,8 +3,8 @@ import { useSellerActivity } from "@/modules/engagement";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface TeamActivityCardProps {
-  month: number;
-  year: number;
+  /** Intervalo global do Comando — atividade segue o período selecionado. */
+  range: { start: Date; end: Date };
 }
 
 const BAR_COLORS = [
@@ -34,8 +34,8 @@ function initials(name: string): string {
  * barra comparativa e breakdown explícito (leads, follow-ups, reuniões, propostas).
  * Substitui o SellerActivityCard (score abstrato) por leitura direta.
  */
-function TeamActivityCardBase({ month, year }: TeamActivityCardProps) {
-  const { data: sellers, isLoading } = useSellerActivity(month, year);
+function TeamActivityCardBase({ range }: TeamActivityCardProps) {
+  const { data: sellers, isLoading } = useSellerActivity(undefined, undefined, range);
 
   const rows = useMemo(() => {
     const list = (sellers ?? []).map((s) => ({

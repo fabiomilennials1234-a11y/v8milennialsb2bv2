@@ -59,7 +59,15 @@ function RealVsExpectedChartBase({ dailySales, goalTarget, month, year }: RealVs
   return (
     <div className="cmd-cell cmd-rise p-5" style={{ animationDelay: ".25s" }}>
       <div className="flex items-center justify-between">
-        <span className="cmd-lbl">Real vs esperado — faturamento</span>
+        <span className="flex items-baseline gap-1.5">
+          <span className="cmd-lbl">Real vs esperado — faturamento</span>
+          <span
+            className="text-[10px] font-semibold text-muted-foreground/50"
+            title="A meta segue mensal mesmo com período personalizado selecionado."
+          >
+            · mês
+          </span>
+        </span>
         <span
           className={cn(
             "inline-flex items-center rounded-[7px] px-[7px] py-[2.5px] text-[11px] font-bold",

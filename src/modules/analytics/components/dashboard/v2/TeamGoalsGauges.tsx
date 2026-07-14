@@ -58,7 +58,15 @@ function TeamGoalsGaugesBase({ gauges, expectedPercent }: TeamGoalsGaugesProps) 
   return (
     <div className="cmd-cell cmd-rise p-5" style={{ animationDelay: ".15s" }}>
       <div className="flex items-center justify-between">
-        <span className="cmd-lbl">Metas da equipe</span>
+        <span className="flex items-baseline gap-1.5">
+          <span className="cmd-lbl">Metas da equipe</span>
+          <span
+            className="text-[10px] font-semibold text-muted-foreground/50"
+            title="As metas seguem mensais mesmo com período personalizado selecionado."
+          >
+            · mês
+          </span>
+        </span>
         <Link to="/gestao-metas" className="text-[11.5px] font-bold text-muted-foreground transition-colors hover:text-primary">
           Ajustar →
         </Link>

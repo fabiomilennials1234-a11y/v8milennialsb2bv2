@@ -51,7 +51,15 @@ function IndividualGoalsListBase({ month, year }: IndividualGoalsListProps) {
   return (
     <div className="cmd-cell cmd-rise p-5" style={{ animationDelay: ".2s" }}>
       <div className="flex items-center justify-between">
-        <span className="cmd-lbl">Metas individuais</span>
+        <span className="flex items-baseline gap-1.5">
+          <span className="cmd-lbl">Metas individuais</span>
+          <span
+            className="text-[10px] font-semibold text-muted-foreground/50"
+            title="As metas seguem mensais mesmo com período personalizado selecionado."
+          >
+            · mês
+          </span>
+        </span>
         <span className="text-[11px] font-semibold text-muted-foreground/60">vendas e reuniões</span>
       </div>
       <div className="mt-2 max-h-[280px] overflow-y-auto pr-1">
