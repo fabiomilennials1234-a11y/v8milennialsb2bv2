@@ -36,6 +36,7 @@ export {
   useOrganization,
   useOrganizationSettings,
   useAutoCreateLeadSetting,
+  useAutoDistributeSetting,
   useConfirmacaoOverdueDays,
   isConfirmacaoOverdue,
   useOrgQuotas,

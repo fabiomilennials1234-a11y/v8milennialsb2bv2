@@ -571,9 +571,11 @@ export function ChatShellWithContext() {
   const [activeTab, setActiveTab] = useState<ConversationTab>("active");
 
   // ── Filtro por vendedor ─────────────────────────────────────────────────────
-  // Conversa não tem vendedor próprio: deriva do responsável do lead
-  // (leads.responsible_id). "all" = todos; "mine" = do usuário; "unassigned" =
-  // sem vendedor (só admin/master); <id> = de um vendedor específico.
+  // Conversa não tem vendedor próprio: deriva do responsável do lead (canônico
+  // pre_sale/sale, ver useLeadResponsibleMap). "all" = todos; "mine" = do usuário;
+  // "unassigned" = sem vendedor (só admin/master); <id> = vendedor específico.
+  // DEFAULT: member abre em "minhas conversas" (não vê o inbox inteiro); admin em
+  // "todos". Semeado no efeito abaixo quando isAdmin resolve. (feedback Sorvfoods #2)
   const [vendorFilter, setVendorFilter] = useState<string>("all");
   const responsibleMembers = useResponsibleMembers();
   const vendorOptions = useMemo(
@@ -590,10 +592,11 @@ export function ChatShellWithContext() {
       c.lead_id ? leadResponsibleMap.get(c.lead_id) ?? null : null,
     [leadResponsibleMap],
   );
-  // Reseta pra "Todos" ao trocar de org (evita filtrar por id de outra org).
+  // Semeia o default por papel ao trocar de org / quando isAdmin resolve:
+  // admin → "all"; member → "mine". Evita também filtrar por id de outra org.
   useEffect(() => {
-    setVendorFilter("all");
-  }, [organizationId]);
+    setVendorFilter(isAdmin ? "all" : "mine");
+  }, [organizationId, isAdmin]);
 
   // ── Archive / Delete / Tags ─────────────────────────────────────────────────
   const archiveConversation = useArchiveConversation();

@@ -21,6 +21,8 @@ export {
 export type { OrganizationSettings } from "./hooks/useOrganizationSettings";
 export { useAutoCreateLeadSetting } from "./hooks/useAutoCreateLeadSetting";
 export type { AutoCreateLeadSetting } from "./hooks/useAutoCreateLeadSetting";
+export { useAutoDistributeSetting } from "./hooks/useAutoDistributeSetting";
+export type { AutoDistributeSetting } from "./hooks/useAutoDistributeSetting";
 
 // ── Quotas + seats ─────────────────────────────────────────────────────────
 export { useOrgQuotas } from "./hooks/useOrgQuotas";

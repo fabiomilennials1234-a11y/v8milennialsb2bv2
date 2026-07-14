@@ -10066,6 +10066,7 @@ export type Database = {
       organizations: {
         Row: {
           auto_create_lead_on_inbound: boolean
+          auto_distribute_new_leads: boolean
           billing_override: boolean | null
           billing_override_at: string | null
           billing_override_by: string | null
@@ -10106,6 +10107,7 @@ export type Database = {
         }
         Insert: {
           auto_create_lead_on_inbound?: boolean
+          auto_distribute_new_leads?: boolean
           billing_override?: boolean | null
           billing_override_at?: string | null
           billing_override_by?: string | null
@@ -10146,6 +10148,7 @@ export type Database = {
         }
         Update: {
           auto_create_lead_on_inbound?: boolean
+          auto_distribute_new_leads?: boolean
           billing_override?: boolean | null
           billing_override_at?: string | null
           billing_override_by?: string | null
