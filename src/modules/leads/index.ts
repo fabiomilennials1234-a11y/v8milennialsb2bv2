@@ -188,6 +188,18 @@ export type { AttachedLeadTag } from "./hooks/lead/useLeadTagsAttached";
 export { useTags, useCreateTag, useUpdateTag, useDeleteTag } from "./hooks/useTags";
 export type { Tag, TagInsert, TagUpdate } from "./hooks/useTags";
 
+// Org-scoped lead origins (CRUD) — vocabulário gerenciável de origem de lead.
+// Substitui a lista fixa hardcoded. Consumido pela tela de Configurações.
+export {
+  useLeadOrigins,
+  useCreateLeadOrigin,
+  useUpdateLeadOrigin,
+  useDeleteLeadOrigin,
+  slugifyOrigin,
+} from "./hooks/useLeadOrigins";
+export type { LeadOrigin, LeadOriginInput } from "./hooks/useLeadOrigins";
+export { OriginSelect } from "./components/lead/info/OriginSelect";
+
 // ── Components: lead-detail (modal redesign — ADR-2026-05-17) ──────────────
 // V2 é o modal redesenhado (feature-flag `new_lead_modal_v2`). V1 = legado.
 // LeadDetailSheet é alias de LeadDetailDialog para compat com call sites antigos.

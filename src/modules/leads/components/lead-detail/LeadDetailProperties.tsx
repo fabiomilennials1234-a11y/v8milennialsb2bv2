@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PropertyGroup } from "./PropertyGroup";
 import { InlineField } from "./InlineField";
+import { OriginSelect } from "../lead/info/OriginSelect";
 import { LeadChecklistSection } from "../leads/LeadChecklistSection";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
@@ -136,11 +137,17 @@ export const LeadDetailProperties = memo(function LeadDetailProperties({
       </PropertyGroup>
 
       <PropertyGroup label="Detalhes">
-        <InlineField
-          label="Origem"
-          value={lead.origin || ""}
-          onSave={(v) => handleFieldSave("origin", v)}
-        />
+        <div className="flex items-center gap-2 py-[3px]">
+          <span className="text-[10px] text-muted-foreground/40 min-w-[70px] shrink-0">
+            Origem
+          </span>
+          <OriginSelect
+            value={lead.origin || null}
+            onChange={(v) => handleFieldSave("origin", v)}
+            triggerClassName="h-6 text-[10px] border-transparent hover:border-border/50 bg-transparent px-1.5"
+            placeholder="—"
+          />
+        </div>
         <InlineField
           label="Segmento"
           value={lead.segment || ""}

@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense, type CSSProperties, type ReactNode } from "react";
 import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
 import { useThemeTransition } from "@/contexts/ThemeTransitionContext";
@@ -24,6 +24,8 @@ import {
   Key,
   FlaskConical,
   ClipboardList,
+  Award,
+  Waypoints,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -56,6 +58,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag, Tag as TagType } from "@/modules/leads/hooks/useTags";
+import {
+  useLeadOrigins,
+  useCreateLeadOrigin,
+  useUpdateLeadOrigin,
+  useDeleteLeadOrigin,
+  type LeadOrigin,
+} from "@/modules/leads";
 import { useIdentity } from "@/modules/identity";
 import { useOrganizationSettings } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
@@ -334,6 +343,206 @@ function TagsSettings() {
   );
 }
 
+function OriginsSettings() {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<LeadOrigin | null>(null);
+  const [formData, setFormData] = useState({ name: "", color: "#6B7280" });
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const { data: origins = [], isLoading } = useLeadOrigins({ includeInactive: true });
+  const createOrigin = useCreateLeadOrigin();
+  const updateOrigin = useUpdateLeadOrigin();
+  const deleteOrigin = useDeleteLeadOrigin();
+  const { isAdmin } = useIdentity();
+
+  const handleOpenDialog = (o?: LeadOrigin) => {
+    if (o) {
+      setEditing(o);
+      setFormData({ name: o.name, color: o.color || "#6B7280" });
+    } else {
+      setEditing(null);
+      setFormData({ name: "", color: "#6B7280" });
+    }
+    setIsDialogOpen(true);
+  };
+
+  const handleSubmit = async () => {
+    if (!formData.name.trim()) {
+      toast.error("Nome é obrigatório");
+      return;
+    }
+    try {
+      if (editing) {
+        await updateOrigin.mutateAsync({ id: editing.id, name: formData.name.trim(), color: formData.color });
+        toast.success("Origem atualizada!");
+      } else {
+        await createOrigin.mutateAsync({ name: formData.name.trim(), color: formData.color });
+        toast.success("Origem criada!");
+      }
+      setIsDialogOpen(false);
+      setFormData({ name: "", color: "#6B7280" });
+      setEditing(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao salvar origem");
+      console.error(error);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      await deleteOrigin.mutateAsync(deleteId);
+      toast.success("Origem removida!");
+      setDeleteId(null);
+    } catch (error) {
+      toast.error("Erro ao remover origem");
+      console.error(error);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-medium">Origens de Leads</h3>
+          <p className="text-sm text-muted-foreground">
+            Crie e gerencie as origens usadas para classificar de onde vêm seus leads (alimenta as métricas de aquisição)
+          </p>
+        </div>
+        {isAdmin && (
+          <Button onClick={() => handleOpenDialog()} size="sm" className="gap-2">
+            <Plus className="w-4 h-4" />
+            Nova Origem
+          </Button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />
+          ))}
+        </div>
+      ) : origins.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
+          Nenhuma origem cadastrada
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {origins.map((o) => (
+            <motion.div
+              key={o.id}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex items-center justify-between p-3 rounded-lg border border-border bg-card hover:border-primary/50 transition-colors"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: o.color || "#6B7280" }} />
+                <span className="text-sm font-medium truncate">{o.name}</span>
+              </div>
+              {isAdmin && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+                      <MoreHorizontal className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleOpenDialog(o)}>
+                      <Edit2 className="w-4 h-4 mr-2" />
+                      Editar
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="text-destructive" onClick={() => setDeleteId(o.id)}>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Remover
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      {/* Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? "Editar Origem" : "Nova Origem"}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="origin-name">Nome</Label>
+              <Input
+                id="origin-name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Ex: Feira Agro, Indicação Parceiro..."
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Cor</Label>
+              <div className="flex flex-wrap gap-2">
+                {colorOptions.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, color })}
+                    className={`w-8 h-8 rounded-full border-2 transition-all ${
+                      formData.color === color ? "border-primary scale-110" : "border-transparent hover:scale-105"
+                    }`}
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label>Preview:</Label>
+              <Badge
+                variant="outline"
+                style={{
+                  backgroundColor: `${formData.color}20`,
+                  borderColor: `${formData.color}40`,
+                  color: formData.color,
+                }}
+              >
+                <Waypoints className="w-3 h-3 mr-1" />
+                {formData.name || "Nome da origem"}
+              </Badge>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSubmit} disabled={createOrigin.isPending || updateOrigin.isPending}>
+              {editing ? "Salvar" : "Criar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover Origem?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Leads que já usam esta origem mantêm o valor atual; ela só deixa de aparecer para novas seleções.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
 function NotificationSettings() {
   return (
     <div className="space-y-6">
@@ -588,6 +797,48 @@ function GeneralSettings() {
   );
 }
 
+// Gradiente dourado das pílulas (mesma paleta dos botões de seção do Copilot Playground).
+const PILL_GRADIENT = {
+  "--gradient-from": "hsl(47 100% 58%)",
+  "--gradient-to": "hsl(40 96% 45%)",
+} as CSSProperties;
+
+/**
+ * PillTab — trigger de aba no estilo "pílula gradiente hover-expand" (portado do
+ * PromptEditor do Copilot Playground). Círculo de ícone (48px) que expande para
+ * 160px revelando preenchimento gradiente + glow + label uppercase.
+ *
+ * Comportamento pedido: no hover a pílula cresce NO FLUXO, empurrando as vizinhas
+ * PARA O LADO (permitido) — mas nunca quebra linha nem mexe a página. Isso é
+ * garantido no container (`TabsList`): `flex-nowrap` trava tudo numa linha só (não
+ * desce) e `overflow-x:clip` corta qualquer transbordo horizontal sem criar
+ * scrollbar (não empurra a tela) — e, ao contrário de `hidden`, o `clip` deixa o
+ * glow vertical aparecer. Estados lidos via `data-state` do Radix.
+ */
+function PillTab({ value, label, icon }: { value: string; label: string; icon: ReactNode }) {
+  return (
+    <TabsTrigger
+      value={value}
+      title={label}
+      style={PILL_GRADIENT}
+      className="group relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card p-0 shadow-sm transition-all duration-500 hover:w-[160px] hover:border-transparent hover:shadow-none data-[state=active]:w-[160px] data-[state=active]:border-transparent data-[state=active]:shadow-none after:hidden"
+    >
+      {/* Gradient fill */}
+      <span className="absolute inset-0 rounded-full bg-[linear-gradient(45deg,var(--gradient-from),var(--gradient-to))] opacity-0 transition-opacity duration-500 group-hover:opacity-100 group-data-[state=active]:opacity-100" />
+      {/* Blur glow */}
+      <span className="absolute top-2 inset-x-0 h-full rounded-full bg-[linear-gradient(45deg,var(--gradient-from),var(--gradient-to))] blur-[15px] -z-10 opacity-0 transition-opacity duration-500 group-hover:opacity-40 group-data-[state=active]:opacity-40" />
+      {/* Icon */}
+      <span className="relative z-10 text-muted-foreground transition-transform duration-500 [&_svg]:w-5 [&_svg]:h-5 scale-100 group-hover:scale-0 group-data-[state=active]:scale-0">
+        {icon}
+      </span>
+      {/* Label */}
+      <span className="absolute inset-0 z-10 flex items-center justify-center px-3 text-center text-primary-foreground uppercase tracking-wide text-[11px] font-semibold whitespace-nowrap transition-transform duration-500 scale-0 group-hover:scale-100 group-hover:delay-150 group-data-[state=active]:scale-100 group-data-[state=active]:delay-150">
+        {label}
+      </span>
+    </TabsTrigger>
+  );
+}
+
 export default function Configuracoes() {
   const { orgType } = useOrganization();
   return (
@@ -608,58 +859,23 @@ export default function Configuracoes() {
       </div>
 
       <Tabs defaultValue="tags" className="w-full">
-        <TabsList className="flex flex-wrap gap-1 h-auto p-1 w-full max-w-5xl">
-          <TabsTrigger value="tags" className="gap-2">
-            <Tag className="w-4 h-4" />
-            Tags
-          </TabsTrigger>
-          <TabsTrigger value="notifications" className="gap-2">
-            <Bell className="w-4 h-4" />
-            Notificações
-          </TabsTrigger>
-          <TabsTrigger value="whatsapp" className="gap-2">
-            <MessageSquare className="w-4 h-4" />
-            WhatsApp
-          </TabsTrigger>
-          <TabsTrigger value="integracoes" className="gap-2">
-            <Plug className="w-4 h-4" />
-            Integrações
-          </TabsTrigger>
-          <TabsTrigger value="webhooks" className="gap-2">
-            <Webhook className="w-4 h-4" />
-            Webhooks
-          </TabsTrigger>
-          <TabsTrigger value="api" className="gap-2">
-            <Code className="w-4 h-4" />
-            API & Chaves
-          </TabsTrigger>
-          <TabsTrigger value="sla" className="gap-2">
-            <Timer className="w-4 h-4" />
-            SLA
-          </TabsTrigger>
-          <TabsTrigger value="api-keys" className="gap-2">
-            <Key className="w-4 h-4" />
-            API Keys
-          </TabsTrigger>
-          <TabsTrigger value="sandbox" className="gap-2">
-            <FlaskConical className="w-4 h-4" />
-            Sandbox
-          </TabsTrigger>
-          <TabsTrigger value="checklists" className="gap-2">
-            <ClipboardList className="w-4 h-4" />
-            Checklists
-          </TabsTrigger>
-          <TabsTrigger value="general" className="gap-2">
-            <Settings className="w-4 h-4" />
-            Geral
-          </TabsTrigger>
+        <TabsList className="flex flex-nowrap items-center gap-3 h-auto border-b-0 bg-transparent p-0 py-2 w-full max-w-5xl [overflow-x:clip]">
+          <PillTab value="tags" label="Tags" icon={<Tag className="w-4 h-4" />} />
+          <PillTab value="origens" label="Origens" icon={<Waypoints className="w-4 h-4" />} />
+          <PillTab value="notifications" label="Notificações" icon={<Bell className="w-4 h-4" />} />
+          <PillTab value="whatsapp" label="WhatsApp" icon={<MessageSquare className="w-4 h-4" />} />
+          <PillTab value="integracoes" label="Integrações" icon={<Plug className="w-4 h-4" />} />
+          <PillTab value="webhooks" label="Webhooks" icon={<Webhook className="w-4 h-4" />} />
+          <PillTab value="api" label="API & Chaves" icon={<Code className="w-4 h-4" />} />
+          <PillTab value="sla" label="SLA" icon={<Timer className="w-4 h-4" />} />
+          <PillTab value="api-keys" label="API Keys" icon={<Key className="w-4 h-4" />} />
+          <PillTab value="sandbox" label="Sandbox" icon={<FlaskConical className="w-4 h-4" />} />
+          <PillTab value="checklists" label="Checklists" icon={<ClipboardList className="w-4 h-4" />} />
+          <PillTab value="general" label="Geral" icon={<Settings className="w-4 h-4" />} />
           {orgType === "outbound" && (
-            <TabsTrigger value="marcos">Marcos & Badges</TabsTrigger>
+            <PillTab value="marcos" label="Marcos" icon={<Award className="w-4 h-4" />} />
           )}
-          <TabsTrigger value="ajuda" className="gap-2">
-            <HelpCircle className="w-4 h-4" />
-            Ajuda
-          </TabsTrigger>
+          <PillTab value="ajuda" label="Ajuda" icon={<HelpCircle className="w-4 h-4" />} />
         </TabsList>
 
         <div className="mt-6">
@@ -667,6 +883,14 @@ export default function Configuracoes() {
             <Card className="glass-card">
               <CardContent className="pt-6">
                 <TagsSettings />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="origens">
+            <Card className="glass-card">
+              <CardContent className="pt-6">
+                <OriginsSettings />
               </CardContent>
             </Card>
           </TabsContent>

@@ -111,8 +111,8 @@ export function LeadTabInfo({
         </div>
       )}
 
-      {/* Origem */}
-      <LeadSource origin={origin} originDetail={originDetail} />
+      {/* Origem — editável */}
+      <LeadSource origin={origin} originDetail={originDetail} editable leadId={leadId} />
 
       {/* Notas */}
       <LeadNotes formData={formData} onChange={onChange} />

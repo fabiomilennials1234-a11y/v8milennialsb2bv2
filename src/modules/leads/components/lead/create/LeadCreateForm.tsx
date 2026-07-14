@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { originOptions } from "@/lib/lead/lead-origins";
+import { OriginSelect } from "../info/OriginSelect";
 import {
   isStandardDestination,
   DEST_TO_PIPE_TYPE,
@@ -204,18 +204,7 @@ export function LeadCreateForm({
         {/* Origin */}
         <div className="grid gap-2">
           <Label htmlFor="create-origin">Origem *</Label>
-          <Select value={origin} onValueChange={setOrigin}>
-            <SelectTrigger id="create-origin">
-              <SelectValue placeholder="Selecione a origem" />
-            </SelectTrigger>
-            <SelectContent>
-              {originOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <OriginSelect value={origin} onChange={setOrigin} />
         </div>
 
         {/* Responsible */}
