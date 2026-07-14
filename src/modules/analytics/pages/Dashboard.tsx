@@ -148,7 +148,7 @@ export default function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <TabSaude />
+            <TabSaude range={range} />
           </motion.div>
         </TabsContent>
 

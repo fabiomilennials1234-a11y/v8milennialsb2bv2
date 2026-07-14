@@ -1,7 +1,7 @@
 /**
  * Fronteiras de dia em UTC a partir dos componentes locais da data.
- * Semântica canônica do Comando v2 — mesma usada por computePeriodRange
- * (useCommandMetrics) e computeSaudePeriodRange (saude-period).
+ * Semântica canônica do Comando v2 — usada por computePeriodRange
+ * (useCommandMetrics).
  */
 export function startOfUTCDay(d: Date): Date {
   return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
