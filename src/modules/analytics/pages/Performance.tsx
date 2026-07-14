@@ -52,6 +52,7 @@ import { CelebrationEffect } from "@/modules/engagement/components/gamification/
 import { useTeamGoals, useGoals, useCreateGoal, useUpdateGoal, Goal } from "@/modules/engagement/hooks/useGoals";
 import { useAwards, useCreateAward, useUpdateAward, useDeleteAward, Award as AwardType } from "@/modules/engagement/hooks/useAwards";
 import { useDashboardMetrics, useRankingData } from "@/modules/analytics/hooks/useDashboardMetrics";
+import { MovimentacoesPanel } from "@/modules/analytics/components/performance/MovimentacoesPanel";
 import { useTeamMembers, isVirtualTeamMember, type TeamMember } from "@/modules/identity";
 import { filterVisibleRanking } from "@/lib/visible-ranking";
 import { useUserRole, useFeaturePermission } from "@/modules/identity";
@@ -1143,6 +1144,10 @@ export default function Performance() {
           <img src={badgeIcon} alt="" className="w-10 h-10 opacity-80" />
         </div>
       </div>
+
+      {/* Movimentações no período — painel aditivo, isolado do ranking/gamificação.
+          Conta por data de movimentação (evento no ledger), não por criação do lead. */}
+      <MovimentacoesPanel />
 
       {/* Main Tabs */}
       <Tabs defaultValue="ranking_vendas" className="space-y-6">
