@@ -93,42 +93,101 @@ export interface SanitizeResult {
 }
 
 /**
- * Extrai e remove blocos <thinking>...</thinking> e <response>...</response>.
+ * Tags de RACIOCÍNIO/estrutura que os modelos inventam ALÉM do par
+ * <thinking>/<response> instruído por reasoning_mode. Curadas de propósito
+ * (denylist explícita, NÃO regex genérica `<\w+>`) pra não comer texto legítimo
+ * como `<200`, `<3`, `<=` ou autolink `<https://...>`.
  *
- * Bug crítico: se LLM esquece tag de fechamento `</thinking>`, regex normal
- * captura tudo até EOF e vaza pro lead. Mitigação: detecta abertura sem
- * fechamento → remove tudo APÓS `<thinking>` (descarta resposta inválida).
+ * Group A (DESCARTA o bloco inteiro — o conteúdo é raciocínio interno):
+ * incidentes gemini-*-preview / gpt-4.1-mini que "pensam em voz alta".
+ */
+const REASONING_TAG_NAMES = [
+  "thinking", "think", "thought", "thoughts", "reasoning", "reflection",
+  "analysis", "scratchpad", "inner_monologue", "monologue",
+  "chain_of_thought", "cot",
+];
+const REASONING_TAGS_ALT = REASONING_TAG_NAMES.join("|");
+/** Bloco completo <tag>...</tag> (fecha com a MESMA tag via backref). */
+const REASONING_BLOCK_RE = new RegExp(
+  `<(${REASONING_TAGS_ALT})\\b[^>]*>[\\s\\S]*?<\\/\\1\\s*>`, "gi",
+);
+/** Abertura de qualquer tag de raciocínio (para detectar leak sem fechamento). */
+const REASONING_OPEN_RE = new RegExp(`<(?:${REASONING_TAGS_ALT})\\b[^>]*>`, "i");
+/** Tag residual órfã de raciocínio (defensivo final). */
+const REASONING_RESIDUAL_RE = new RegExp(
+  `<\\/?(?:${REASONING_TAGS_ALT})\\b[^>]*>`, "gi",
+);
+
+/**
+ * Group B — tags que EMBRULHAM a resposta final (o texto do cliente fica
+ * DENTRO). DESEMBRULHA: remove só as tags, preserva o conteúdo. Cobre as
+ * variantes que o modelo inventa quando vai "enviar" algo:
+ * <prefill>/<perfil> (incidente Forever Bella/Bia 2026-07-13: `<prefill> </prefill>`),
+ * <response> (instruída), <final>/<answer>/<output>/<resposta>.
+ */
+const WRAPPER_TAG_NAMES = [
+  "response", "final_response", "final_answer", "final", "answer",
+  "output", "result", "reply", "prefill", "perfil", "resposta", "resposta_final",
+];
+const WRAPPER_TAGS_ALT = WRAPPER_TAG_NAMES.join("|");
+/** Bloco wrapper <tag>...</tag> (para usar só o conteúdo interno). */
+const WRAPPER_BLOCK_RE = new RegExp(
+  `<(${WRAPPER_TAGS_ALT})\\b[^>]*>([\\s\\S]*?)<\\/\\1\\s*>`, "i",
+);
+/** Tag residual órfã de wrapper (defensivo final — mantém o conteúdo). */
+const WRAPPER_RESIDUAL_RE = new RegExp(
+  `<\\/?(?:${WRAPPER_TAGS_ALT})\\b[^>]*>`, "gi",
+);
+
+/**
+ * Extrai e remove blocos de raciocínio (<thinking>, <thought>, <analysis>, ...)
+ * e desembrulha wrapper (<response>, <prefill>, ...).
+ *
+ * Bug crítico: se LLM esquece a tag de fechamento, regex normal captura tudo
+ * até EOF e vaza pro lead. Mitigação: detecta abertura de raciocínio sem
+ * fechamento → remove tudo APÓS ela (descarta resposta inválida).
+ *
+ * Robustez (2026-07-13): modelos como gpt-4.1-mini / gemini-*-preview não
+ * respeitam a convenção exata `<thinking>/<response>` — inventam `<thought>`,
+ * `<prefill>`, `<perfil>`, `<analysis>` e vazavam pro cliente porque o strip
+ * antigo só casava `thinking|response`. Agora cobre as duas denylists curadas.
  *
  * Returns: { cleanedText, reasoning }
  */
 function extractReasoningChain(input: string): { cleaned: string; reasoning?: string } {
-  if (!input || !input.includes("<thinking")) return { cleaned: input };
+  if (!input) return { cleaned: input };
+  REASONING_OPEN_RE.lastIndex = 0;
+  if (!REASONING_OPEN_RE.test(input)) return { cleaned: input };
 
-  // 1. Bloco completo <thinking>...</thinking>
-  const completeMatch = input.match(/<thinking>([\s\S]*?)<\/thinking>/i);
-  if (completeMatch) {
-    const reasoning = completeMatch[1].trim();
-    let cleaned = input.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
+  let reasoning: string | undefined;
 
-    // 2. Se houver bloco <response>...</response>, usa só o conteúdo dentro
-    const responseMatch = cleaned.match(/<response>([\s\S]*?)<\/response>/i);
-    if (responseMatch) {
-      cleaned = responseMatch[1].trim();
+  // 1. Remove blocos completos de raciocínio <tag>...</tag> (qualquer da lista),
+  //    guardando o primeiro como reasoning (log).
+  REASONING_BLOCK_RE.lastIndex = 0;
+  let cleaned = input.replace(REASONING_BLOCK_RE, (m: string) => {
+    if (reasoning === undefined) {
+      reasoning = m.replace(/^<[^>]*>/, "").replace(/<[^>]*>$/, "").trim();
     }
+    return "";
+  });
 
-    // 3. Strip tags resíduo (fallback defensivo)
-    cleaned = cleaned.replace(/<\/?(?:thinking|response)[^>]*>/gi, "").trim();
-    return { cleaned, reasoning };
-  }
+  // 2. Sobrou abertura de raciocínio SEM fechamento → vazamento: descarta daqui até EOF.
+  REASONING_OPEN_RE.lastIndex = 0;
+  const openIdx = cleaned.search(REASONING_OPEN_RE);
+  if (openIdx >= 0) cleaned = cleaned.slice(0, openIdx);
 
-  // 4. <thinking> abriu mas NÃO fechou — descarta tudo a partir dele (vazamento)
-  const openIdx = input.search(/<thinking[^>]*>/i);
-  if (openIdx >= 0) {
-    const before = input.slice(0, openIdx).trim();
-    return { cleaned: before, reasoning: undefined };
-  }
+  // 3. Se há bloco wrapper <response>...</response> (ou variante), usa só o interno.
+  const wrapperBlock = cleaned.match(WRAPPER_BLOCK_RE);
+  if (wrapperBlock) cleaned = wrapperBlock[2].trim();
 
-  return { cleaned: input };
+  // 4. Strip residual de tags de raciocínio + wrapper (defensivo; wrapper preserva conteúdo)
+  REASONING_RESIDUAL_RE.lastIndex = 0;
+  WRAPPER_RESIDUAL_RE.lastIndex = 0;
+  cleaned = cleaned
+    .replace(REASONING_RESIDUAL_RE, "")
+    .replace(WRAPPER_RESIDUAL_RE, "")
+    .trim();
+  return { cleaned, reasoning };
 }
 
 /**
@@ -651,8 +710,14 @@ export function sanitizeAssistantMessage(
   INLINE_TOOL_TAG_RE.lastIndex = 0;
   FUNCTION_CALL_TAG_RE.lastIndex = 0;
   NAMESPACED_HEAD_RE.lastIndex = 0;
+  REASONING_RESIDUAL_RE.lastIndex = 0;
+  WRAPPER_RESIDUAL_RE.lastIndex = 0;
   text = text
-    .replace(/<\/?(?:thinking|response)[^>]*>/gi, "")
+    // tags de raciocínio (thinking/thought/analysis/...) e wrapper
+    // (response/prefill/perfil/...) residuais — cobre o par instruído + as
+    // variantes inventadas por gpt-4.1-mini / gemini-*-preview.
+    .replace(REASONING_RESIDUAL_RE, "")
+    .replace(WRAPPER_RESIDUAL_RE, "")
     .replace(/<\/?(?:tool_call|tool_code|vertical_tool_calls|no_tool_calls)\b[^>]*\/?\s*>/gi, "")
     .replace(INLINE_TOOL_TAG_RE, "")
     .replace(FUNCTION_CALL_TAG_RE, "")
@@ -662,6 +727,8 @@ export function sanitizeAssistantMessage(
   INLINE_TOOL_TAG_RE.lastIndex = 0;
   FUNCTION_CALL_TAG_RE.lastIndex = 0;
   NAMESPACED_HEAD_RE.lastIndex = 0;
+  REASONING_RESIDUAL_RE.lastIndex = 0;
+  WRAPPER_RESIDUAL_RE.lastIndex = 0;
 
   return { text, droppedBlocks, recoveredAction, recoveredMediaByName, reasoning };
 }
@@ -710,8 +777,16 @@ function tryRecoverFromString(jsonStr: string): RecoveredAction | null {
 /**
  * Split case-insensitive tolerante a variações do delimitador `||SPLIT||`.
  * Mantém compatível com prompt que ensina o formato UPPER exato.
+ *
+ * Além de caixa/espaços (`||split||`, `|| SPLIT ||`), tolera **truncamento
+ * frontal do token** — modo de falha real do LLM que para de emitir o token no
+ * meio: `||SPL||` (incidente Forever Bella/Bia 2026-07-14, vazou pro lead
+ * Kaylane), `||SPLI||`, `||SPLITT||`. Casa qualquer palavra que comece por `spl`
+ * cercada por 2+ pipes de cada lado. `spl` entre pipes não ocorre em texto PT
+ * legítimo — é sempre token de controle vazado. Sem isto, a variante truncada
+ * NÃO batia no split → não quebrava a mensagem E ainda vazava crua no balão.
  */
-export const SPLIT_DELIMITER_RE = /\|\|\s*split\s*\|\|/gi;
+export const SPLIT_DELIMITER_RE = /\|{2,}\s*spl[a-z]*\s*\|{2,}/gi;
 
 /**
  * Quebra de parágrafo (linha em branco). Modelos como gemini-2.5-flash separam
