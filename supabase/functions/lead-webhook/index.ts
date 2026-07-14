@@ -887,6 +887,52 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
       }
     }
 
+    // ── Auto-distribuição round-robin de lead novo SEM place_in_pipe ──────────
+    // Caso comum Meta Ads / n8n que não posiciona o lead num pipe: ele foi
+    // semeado em whatsapp/novo sem dono. Se a org habilitou
+    // auto_distribute_new_leads, distribui o pré-venda round-robin pelo pool do
+    // pipe whatsapp (mesma RPC get_next_pipe_sdr usada acima). Grava
+    // pre_sale_responsible_id (o trigger fn_sync_canonical_assignment espelha
+    // sdr_id) + metadata/assignedTo da entry whatsapp — o filtro do chat lê
+    // pre_sale, então o lead aparece pro vendedor certo. (feedback Sorvfoods #2)
+    if (
+      isNewLead &&
+      !payload.assigned_user_id &&
+      !payload.place_in_pipe?.pipe &&
+      !skipWhatsappSeed
+    ) {
+      try {
+        const { data: orgRow } = await supabase
+          .from("organizations")
+          .select("auto_distribute_new_leads")
+          .eq("id", organizationId)
+          .maybeSingle();
+        if (orgRow?.auto_distribute_new_leads === true) {
+          const { data: sdrId } = await supabase.rpc("get_next_pipe_sdr", {
+            p_pipe_type: "whatsapp",
+            p_organization_id: organizationId,
+          });
+          if (sdrId) {
+            await supabase.from("leads")
+              .update({ pre_sale_responsible_id: sdrId })
+              .eq("id", leadId);
+            const entry = await getPipeEntry(supabase, leadId, organizationId, "whatsapp");
+            if (entry) {
+              await updatePipeEntryById(supabase, entry.id, {
+                metadata: { sdr_id: sdrId },
+                assignedTo: sdrId,
+              });
+            }
+            console.log("[lead-webhook] Lead novo auto-distribuído (sem place_in_pipe) p/ pré-venda:", sdrId);
+          } else {
+            console.log("[lead-webhook] auto_distribute_new_leads ON mas sem pool de pré-venda no pipe whatsapp — lead fica sem dono.");
+          }
+        }
+      } catch (e) {
+        console.warn("[lead-webhook] auto-distribuição de lead novo falhou:", e);
+      }
+    }
+
     // Colocar lead em uma campanha em etapa específica (ex: campanha de ads)
     let placedInCampaign: boolean | undefined;
     let placeInCampaignError: string | undefined;
