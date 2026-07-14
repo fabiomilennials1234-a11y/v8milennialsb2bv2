@@ -4,6 +4,9 @@ import { MethodBadge } from "./MethodBadge";
 import type { ApiEndpoint } from "@/lib/api-docs/types";
 
 const PARTNER_API_BASE_URL = "https://api.torquecrm.com.br";
+// REST API v1 pública: proxy do frontend (Nginx) reescreve /api/v1/* -> a edge
+// function `api` do Supabase, deixando a URL limpa e branded (sem supabase.co).
+const REST_API_BASE_URL = "https://torquecrm.com.br";
 
 interface ApiEndpointHeaderProps {
   endpoint: ApiEndpoint;
@@ -12,7 +15,12 @@ interface ApiEndpointHeaderProps {
 
 export function ApiEndpointHeader({ endpoint, baseUrl }: ApiEndpointHeaderProps) {
   const [copied, setCopied] = useState(false);
-  const resolvedBase = endpoint.category === "partner" ? PARTNER_API_BASE_URL : baseUrl;
+  const resolvedBase =
+    endpoint.category === "partner"
+      ? PARTNER_API_BASE_URL
+      : endpoint.category === "rest-api"
+        ? REST_API_BASE_URL
+        : baseUrl;
   const fullUrl = `${resolvedBase}${endpoint.path}`;
 
   const handleCopy = useCallback(() => {

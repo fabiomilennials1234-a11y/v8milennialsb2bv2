@@ -1,6 +1,8 @@
 import { ApiEndpoint } from "./types";
 
 const PARTNER_API_BASE_URL = "https://api.torquecrm.com.br";
+// REST API v1 pública — URL limpa via proxy /api/v1/* do frontend (ver Dockerfile).
+const REST_API_BASE_URL = "https://torquecrm.com.br";
 
 export interface OrgContext {
   baseUrl: string;
@@ -10,6 +12,7 @@ export interface OrgContext {
 
 function resolveBaseUrl(endpoint: ApiEndpoint, org: OrgContext): string {
   if (endpoint.category === "partner") return PARTNER_API_BASE_URL;
+  if (endpoint.category === "rest-api") return REST_API_BASE_URL;
   return org.baseUrl;
 }
 
