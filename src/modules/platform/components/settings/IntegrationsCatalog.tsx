@@ -1,16 +1,11 @@
 import { useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
-  Calendar,
-  Database,
-  Mic,
-  Instagram,
   CheckCircle2,
   Circle,
   Plug,
   Search,
   ChevronRight,
-  MessageSquare,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +22,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { FacebookSettings, InstagramSettings } from "./MetaSettings";
 import { GoogleCalendarSettings } from "./GoogleCalendarSettings";
 import { TinyErpSettings } from "./TinyErpSettings";
+import { OmieSettings } from "./OmieSettings";
 import { ElevenLabsSettings } from "./ElevenLabsSettings";
 import { WhatsAppSettings } from "./WhatsAppSettings";
 
@@ -34,6 +30,7 @@ import { WhatsAppSettings } from "./WhatsAppSettings";
 import { useMetaConnectionStatusByType } from "@/modules/communication/hooks/useMetaConnection";
 import { useGoogleCalendarStatus } from "@/modules/integrations/hooks/useGoogleCalendar";
 import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
+import { useOmieStatus } from "@/modules/integrations";
 import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
 import { useOrganization } from "@/modules/identity";
 import { useQuery } from "@tanstack/react-query";
@@ -109,6 +106,16 @@ function TinyErpLogo() {
       <path d="M15 16h18v3H15zM15 22h12v3H15zM15 28h15v3H15z" fill="white" opacity="0.9" />
       <circle cx="33" cy="31" r="4" fill="#A78BFA" />
       <path d="M31.5 31l1.2 1.2 2.3-2.3" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function OmieLogo() {
+  return (
+    <svg viewBox="0 0 48 48" className="w-full h-full">
+      <rect width="48" height="48" rx="12" fill="#00A868" />
+      <circle cx="24" cy="24" r="10" stroke="white" strokeWidth="3" fill="none" />
+      <circle cx="24" cy="24" r="3.5" fill="white" />
     </svg>
   );
 }
@@ -203,6 +210,16 @@ const INTEGRATIONS: IntegrationDef[] = [
     settingsId: "tinyerp",
   },
   {
+    id: "omie",
+    name: "Omie",
+    description: "Traga faturamento e contas a receber do ERP para a Carteira.",
+    longDescription: "Conecte a Omie para casar clientes e pedidos por CNPJ, acompanhar faturamento (NF-e) e contas a receber, e enxergar inadimplência e receita em risco direto na Carteira. O ERP é a fonte da verdade do dinheiro; o CRM, da relação.",
+    category: "crm",
+    logo: <OmieLogo />,
+    features: ["Clientes", "Pedidos", "Faturamento — em breve", "Contas a receber — em breve"],
+    settingsId: "omie",
+  },
+  {
     id: "elevenlabs",
     name: "ElevenLabs",
     description: "Habilite voz com IA para o Copilot enviar áudios naturais.",
@@ -221,6 +238,7 @@ function useIntegrationStatuses() {
   const { isConnected: igConnected } = useMetaConnectionStatusByType("instagram");
   const { data: calendarStatus } = useGoogleCalendarStatus();
   const { data: tinyStatus } = useTinyErpStatus();
+  const { data: omieStatus } = useOmieStatus();
   const { data: whatsappInstances = [] } = useWhatsAppInstances();
   const { organizationId } = useOrganization();
 
@@ -259,12 +277,16 @@ function useIntegrationStatuses() {
       detail: igConnected ? "Perfil conectado" : undefined,
     },
     google_calendar: {
-      connected: !!calendarStatus?.connected_email,
-      detail: calendarStatus?.connected_email || undefined,
+      connected: !!calendarStatus?.connected,
+      detail: calendarStatus?.google_email || undefined,
     },
     tinyerp: {
-      connected: !!tinyStatus?.is_connected,
-      detail: tinyStatus?.is_connected ? "API conectada" : undefined,
+      connected: !!tinyStatus?.connected,
+      detail: tinyStatus?.connected ? "API conectada" : undefined,
+    },
+    omie: {
+      connected: !!omieStatus?.connected,
+      detail: omieStatus?.connected ? "Conectado" : undefined,
     },
     elevenlabs: {
       connected: !!orgData?.elevenlabs_api_key,
@@ -428,6 +450,8 @@ function getSettingsComponent(settingsId: string): React.FC | null {
       return GoogleCalendarSettings;
     case "tinyerp":
       return TinyErpSettings;
+    case "omie":
+      return OmieSettings;
     case "elevenlabs":
       return ElevenLabsSettings;
     default:

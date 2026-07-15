@@ -9613,6 +9613,122 @@ export type Database = {
           },
         ]
       }
+      omie_connection_secrets: {
+        Row: {
+          app_key_ciphertext: string
+          app_key_nonce: string
+          app_secret_ciphertext: string
+          app_secret_nonce: string
+          connection_id: string
+          created_at: string
+          encryption_key_id: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          app_key_ciphertext: string
+          app_key_nonce: string
+          app_secret_ciphertext: string
+          app_secret_nonce: string
+          connection_id: string
+          created_at?: string
+          encryption_key_id?: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          app_key_ciphertext?: string
+          app_key_nonce?: string
+          app_secret_ciphertext?: string
+          app_secret_nonce?: string
+          connection_id?: string
+          created_at?: string
+          encryption_key_id?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "omie_connection_secrets_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: true
+            referencedRelation: "omie_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "omie_connection_secrets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      omie_connections: {
+        Row: {
+          clientes_cursor: number | null
+          connected_at: string | null
+          created_at: string
+          erp_sync_mode: string
+          financeiro_cursor: number | null
+          id: string
+          last_clientes_sync_at: string | null
+          last_error: string | null
+          last_financeiro_sync_at: string | null
+          last_pedidos_sync_at: string | null
+          omie_account_name: string | null
+          organization_id: string
+          pedidos_cursor: number | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          clientes_cursor?: number | null
+          connected_at?: string | null
+          created_at?: string
+          erp_sync_mode?: string
+          financeiro_cursor?: number | null
+          id?: string
+          last_clientes_sync_at?: string | null
+          last_error?: string | null
+          last_financeiro_sync_at?: string | null
+          last_pedidos_sync_at?: string | null
+          omie_account_name?: string | null
+          organization_id: string
+          pedidos_cursor?: number | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          clientes_cursor?: number | null
+          connected_at?: string | null
+          created_at?: string
+          erp_sync_mode?: string
+          financeiro_cursor?: number | null
+          id?: string
+          last_clientes_sync_at?: string | null
+          last_error?: string | null
+          last_financeiro_sync_at?: string | null
+          last_pedidos_sync_at?: string | null
+          omie_account_name?: string | null
+          organization_id?: string
+          pedidos_cursor?: number | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "omie_connections_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       onboarding_automation_templates: {
         Row: {
           created_at: string
@@ -13821,6 +13937,8 @@ export type Database = {
           created_at: string
           days_since_last_order: number | null
           email: string | null
+          external_id: string | null
+          external_ref: string | null
           external_source: string | null
           first_sale_at: string
           gestao_manual_override: boolean
@@ -13862,6 +13980,8 @@ export type Database = {
           created_at?: string
           days_since_last_order?: number | null
           email?: string | null
+          external_id?: string | null
+          external_ref?: string | null
           external_source?: string | null
           first_sale_at?: string
           gestao_manual_override?: boolean
@@ -13903,6 +14023,8 @@ export type Database = {
           created_at?: string
           days_since_last_order?: number | null
           email?: string | null
+          external_id?: string | null
+          external_ref?: string | null
           external_source?: string | null
           first_sale_at?: string
           gestao_manual_override?: boolean
@@ -14074,6 +14196,9 @@ export type Database = {
           client_id: string
           closer_id: string | null
           created_at: string
+          external_id: string | null
+          external_ref: string | null
+          external_source: string | null
           id: string
           notes: string | null
           organization_id: string
@@ -14099,6 +14224,9 @@ export type Database = {
           client_id: string
           closer_id?: string | null
           created_at?: string
+          external_id?: string | null
+          external_ref?: string | null
+          external_source?: string | null
           id?: string
           notes?: string | null
           organization_id: string
@@ -14124,6 +14252,9 @@ export type Database = {
           client_id?: string
           closer_id?: string | null
           created_at?: string
+          external_id?: string | null
+          external_ref?: string | null
+          external_source?: string | null
           id?: string
           notes?: string | null
           organization_id?: string
