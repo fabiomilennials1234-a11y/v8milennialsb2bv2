@@ -13,6 +13,8 @@ import { LeadModalToolbar } from "../LeadModalToolbar";
 
 // ─── Mocks ──────────────────────────────────────────────────────────
 
+type GateState = { allowed: boolean; isLoading: boolean; reason?: string };
+
 const gatesState = vi.hoisted(() => ({
   current: {
     canEditField: { allowed: true, isLoading: false },
@@ -25,7 +27,7 @@ const gatesState = vi.hoisted(() => ({
     canManageTags: { allowed: true, isLoading: false },
     canToggleAi: { allowed: true, isLoading: false },
     canMention: { allowed: true, isLoading: false },
-  },
+  } as Record<string, GateState>,
 }));
 
 vi.mock("@/modules/leads/components/lead-detail/hooks/useLeadActionGates", () => ({
