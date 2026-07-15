@@ -9549,6 +9549,79 @@ export type Database = {
           },
         ]
       }
+      notas_fiscais: {
+        Row: {
+          chave_nfe: string | null
+          client_id: string | null
+          created_at: string
+          data_emissao: string | null
+          external_id: string
+          external_ref: string | null
+          external_source: string
+          id: string
+          numero: string | null
+          order_id: string | null
+          organization_id: string
+          status: string | null
+          updated_at: string
+          valor: number | null
+        }
+        Insert: {
+          chave_nfe?: string | null
+          client_id?: string | null
+          created_at?: string
+          data_emissao?: string | null
+          external_id: string
+          external_ref?: string | null
+          external_source: string
+          id?: string
+          numero?: string | null
+          order_id?: string | null
+          organization_id: string
+          status?: string | null
+          updated_at?: string
+          valor?: number | null
+        }
+        Update: {
+          chave_nfe?: string | null
+          client_id?: string | null
+          created_at?: string
+          data_emissao?: string | null
+          external_id?: string
+          external_ref?: string | null
+          external_source?: string
+          id?: string
+          numero?: string | null
+          order_id?: string | null
+          organization_id?: string
+          status?: string | null
+          updated_at?: string
+          valor?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notas_fiscais_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "upsell_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "upsell_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string | null

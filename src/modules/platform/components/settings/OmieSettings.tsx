@@ -48,6 +48,7 @@ import {
   useDisconnectOmie,
   useSyncOmieClientes,
   useSyncOmiePedidos,
+  useSyncOmieFinanceiro,
   useUpdateOmieSyncMode,
   useErpProvider,
   type OmieSyncMode,
@@ -79,14 +80,17 @@ export function OmieSettings() {
   const disconnectOmie = useDisconnectOmie();
   const syncClientes = useSyncOmieClientes();
   const syncPedidos = useSyncOmiePedidos();
+  const syncFinanceiro = useSyncOmieFinanceiro();
   const updateSyncMode = useUpdateOmieSyncMode();
   const erp = useErpProvider();
 
-  const isSyncing = syncClientes.isPending || syncPedidos.isPending;
+  const isSyncing =
+    syncClientes.isPending || syncPedidos.isPending || syncFinanceiro.isPending;
   const handleSync = async () => {
-    // Clientes primeiro — pedidos casam com clientes já sincronizados.
+    // Ordem importa: clientes → pedidos → faturamento (cada um casa com o anterior).
     await syncClientes.mutateAsync();
     await syncPedidos.mutateAsync();
+    await syncFinanceiro.mutateAsync();
   };
 
   const showLoading = isLoading || isFetching;
@@ -294,6 +298,16 @@ export function OmieSettings() {
                 <RefreshCw className="w-3 h-3" />
                 Pedidos:{" "}
                 {formatDistanceToNow(new Date(status.last_pedidos_sync_at), {
+                  addSuffix: true,
+                  locale: ptBR,
+                })}
+              </p>
+            )}
+            {status?.last_financeiro_sync_at && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <RefreshCw className="w-3 h-3" />
+                Faturamento:{" "}
+                {formatDistanceToNow(new Date(status.last_financeiro_sync_at), {
                   addSuffix: true,
                   locale: ptBR,
                 })}

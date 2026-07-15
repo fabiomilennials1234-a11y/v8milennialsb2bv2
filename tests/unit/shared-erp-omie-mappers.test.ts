@@ -6,6 +6,7 @@ import { describe, it, expect } from "vitest";
 import {
   mapOmieClienteToCanonical,
   mapOmiePedidoToCanonical,
+  mapOmieNfeToCanonical,
 } from "../../supabase/functions/_shared/erp/omie-mappers";
 
 describe("mapOmieClienteToCanonical", () => {
@@ -79,5 +80,33 @@ describe("mapOmiePedidoToCanonical", () => {
     expect(o.productName).toBe("Pedido Omie 1002");
     expect(o.externalRef).toBeNull();
     expect(o.saleValue).toBe(10);
+  });
+});
+
+describe("mapOmieNfeToCanonical", () => {
+  it("maps NF-e identity, chave, valor, status and the linked order id", () => {
+    const nf = mapOmieNfeToCanonical({
+      nIdNF: 987,
+      cChaveNFe: "35200714200166000187550010000004451234567890",
+      nNumeroNF: "445",
+      nValorNF: 2500.0,
+      cStatus: "Autorizada",
+      nCodPedido: 555,
+    });
+    expect(nf.externalId).toBe("987");
+    expect(nf.chaveNfe).toBe("35200714200166000187550010000004451234567890");
+    expect(nf.numero).toBe("445");
+    expect(nf.valor).toBe(2500);
+    expect(nf.status).toBe("Autorizada");
+    expect(nf.orderExternalId).toBe("555");
+  });
+
+  it("defaults missing fields to null / zero", () => {
+    const nf = mapOmieNfeToCanonical({ nIdNF: 1 });
+    expect(nf.externalId).toBe("1");
+    expect(nf.chaveNfe).toBeNull();
+    expect(nf.valor).toBe(0);
+    expect(nf.orderExternalId).toBeNull();
+    expect(nf.status).toBeNull();
   });
 });

@@ -200,6 +200,61 @@ export function useSyncOmiePedidos() {
   });
 }
 
+export function useSyncOmieFinanceiro() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("omie-sync-financeiro", {});
+      if (error) throw await extractFunctionError(error);
+      if (data?.error) throw new Error(data.error);
+      return data as { ok: boolean; stats?: { created: number; updated: number } };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["notas-fiscais"] });
+      queryClient.invalidateQueries({ queryKey: ["omie-status"] });
+      const s = data?.stats;
+      if (s) toast.success(`Faturamento sincronizado: ${s.created} novas NF-e`);
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao sincronizar faturamento", { description: error.message });
+    },
+  });
+}
+
+// ─── Notas fiscais (faturamento) ────────────────────────────────────────────
+
+export interface NotaFiscal {
+  id: string;
+  order_id: string | null;
+  client_id: string | null;
+  numero: string | null;
+  chave_nfe: string | null;
+  valor: number | null;
+  status: string | null;
+  data_emissao: string | null;
+}
+
+export function useNotasFiscais(clientId: string | null | undefined) {
+  const { organizationId } = useOrganization();
+
+  return useQuery({
+    queryKey: ["notas-fiscais", organizationId, clientId],
+    queryFn: async (): Promise<NotaFiscal[]> => {
+      if (!organizationId || !clientId) return [];
+      const { data, error } = await supabase
+        .from("notas_fiscais")
+        .select("id, order_id, client_id, numero, chave_nfe, valor, status, data_emissao")
+        .eq("organization_id", organizationId)
+        .eq("client_id", clientId)
+        .order("data_emissao", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!organizationId && !!clientId,
+  });
+}
+
 export function useUpdateOmieSyncMode() {
   const { organizationId } = useOrganization();
   const queryClient = useQueryClient();

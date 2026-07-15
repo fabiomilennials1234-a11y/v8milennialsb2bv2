@@ -15,9 +15,12 @@ export {
   useDisconnectOmie,
   useSyncOmieClientes,
   useSyncOmiePedidos,
+  useSyncOmieFinanceiro,
+  useNotasFiscais,
   useUpdateOmieSyncMode,
   type OmieSyncMode,
   type OmieConnectionStatus,
+  type NotaFiscal,
 } from "./hooks/useOmie";
 
 export { useErpProvider, type UseErpProviderResult } from "./hooks/useErpProvider";

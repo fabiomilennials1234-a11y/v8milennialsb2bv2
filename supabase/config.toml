@@ -161,6 +161,9 @@ verify_jwt = false
 [functions.omie-sync-pedidos]
 verify_jwt = false
 
+[functions.omie-sync-financeiro]
+verify_jwt = false
+
 [functions.tinyerp-proxy]
 verify_jwt = false
 
