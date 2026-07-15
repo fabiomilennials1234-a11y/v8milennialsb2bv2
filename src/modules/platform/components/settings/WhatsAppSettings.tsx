@@ -180,6 +180,11 @@ function QRCodeModal({
 
   if (!instance) return null;
 
+  // Uazapi/Evolution conectam por QR/código de pareamento — API NÃO oficial.
+  // Meta Cloud é oficial e conecta por Embedded Signup (nunca cai neste modal),
+  // então o aviso de banimento só faz sentido para a instância não oficial.
+  const isOfficial = getProviderProfile(instance.provider).official;
+
   const qrCodeData = instance.qr_code?.startsWith("data:image")
     ? instance.qr_code
     : `data:image/png;base64,${instance.qr_code}`;
@@ -193,6 +198,16 @@ function QRCodeModal({
             Escolha como conectar: QR code ou código numérico de pareamento
           </DialogDescription>
         </DialogHeader>
+
+        {!isOfficial && (
+          <div className="flex items-center gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-200">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+            <p>
+              <strong>API não oficial:</strong> o número pode ser banido pela Meta
+              (política da Meta, não falha do Torque). Aqueça o número aos poucos.
+            </p>
+          </div>
+        )}
 
         <div className="flex gap-2 mb-2">
           <Button
@@ -627,6 +642,15 @@ export function WhatsAppSettings() {
             </p>
           )}
         </div>
+      </div>
+
+      <div className="flex items-center gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-200">
+        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+        <p>
+          Conexão via <strong>API não oficial</strong> do WhatsApp — o número pode ser
+          banido pela Meta (política da Meta, não falha do Torque). Aqueça números novos
+          aos poucos e evite disparos em massa.
+        </p>
       </div>
 
       {errorDetails && (
