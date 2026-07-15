@@ -81,7 +81,9 @@ export { OnboardingChecklist } from "./components/onboarding/OnboardingChecklist
 export { OnboardingFlow } from "./components/onboarding/OnboardingFlow";
 export { OnboardingGate } from "./components/onboarding/OnboardingGate";
 export { OnboardingQuestion } from "./components/onboarding/OnboardingQuestion";
-export { OnboardingWizard } from "./components/onboarding/OnboardingWizard";
+// OnboardingWizard intentionally NOT re-exported: seu step StepPrimeiroLead importa
+// @/modules/leads, criando o ciclo engagement→platform→leads→engagement no barrel.
+// Sem consumidores externos; se um dia for usado, deep-import direto do arquivo (pages/*).
 
 // Components — Notifications + System alerts
 export { AlertsDropdown } from "./components/notifications/AlertsDropdown";
