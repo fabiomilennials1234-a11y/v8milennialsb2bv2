@@ -17,9 +17,16 @@ import { logRuntime } from "../_shared/logger.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { OmieClient } from "../_shared/erp/omie-client.ts";
 import { loadOmieCredentials } from "../_shared/erp/omie-credentials.ts";
-import { mapOmieNfeToCanonical, type OmieNfeRaw } from "../_shared/erp/omie-mappers.ts";
+import {
+  mapOmieNfeToCanonical,
+  mapOmieTituloToCanonical,
+  type OmieNfeRaw,
+  type OmieTituloRaw,
+} from "../_shared/erp/omie-mappers.ts";
 import { supabaseNfeStore } from "../_shared/erp/sync/nfe-store.ts";
 import { upsertCanonicalNfe } from "../_shared/erp/sync/upsert-nfe.ts";
+import { supabaseTituloStore } from "../_shared/erp/sync/titulo-store.ts";
+import { upsertCanonicalTitulo } from "../_shared/erp/sync/upsert-titulo.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -31,6 +38,11 @@ const MAX_PAGES_PER_RUN = 20;
 
 interface ListarNfResp {
   nfCadastro?: OmieNfeRaw[];
+  total_de_paginas?: number;
+}
+
+interface ListarContasReceberResp {
+  conta_receber_cadastro?: OmieTituloRaw[];
   total_de_paginas?: number;
 }
 
@@ -100,7 +112,7 @@ Deno.serve(
 
     const { data: conn } = await admin
       .from("omie_connections")
-      .select("id, erp_sync_mode, status, financeiro_cursor")
+      .select("id, erp_sync_mode, status, financeiro_cursor, titulos_cursor")
       .eq("organization_id", organizationId)
       .eq("status", "connected")
       .maybeSingle();
@@ -127,56 +139,91 @@ Deno.serve(
     }
 
     const client = new OmieClient({ appKey: creds.appKey, appSecret: creds.appSecret });
-    const store = supabaseNfeStore(admin);
-
-    const stats = { pages: 0, seen: 0, created: 0, updated: 0, skipped: 0, failed: 0 };
+    const nfStore = supabaseNfeStore(admin);
+    const tituloStore = supabaseTituloStore(admin);
     const now = new Date().toISOString();
 
-    try {
-      let page = (conn.financeiro_cursor ?? 0) + 1;
+    type EntityStats = Record<"pages" | "seen" | "created" | "updated" | "skipped" | "failed", number>;
+
+    // Paginação resumível genérica: NF-e e títulos compartilham a mesma mecânica.
+    async function runPaged<T>(
+      startCursor: number,
+      service: string,
+      method: string,
+      extract: (resp: unknown) => T[],
+      handle: (row: T) => Promise<"created" | "updated" | "skipped">,
+    ): Promise<{ nextCursor: number; stats: EntityStats }> {
+      const stats: EntityStats = { pages: 0, seen: 0, created: 0, updated: 0, skipped: 0, failed: 0 };
+      let page = (startCursor ?? 0) + 1;
       let totalPages = page;
       let runs = 0;
 
       while (runs < MAX_PAGES_PER_RUN) {
-        const resp = await client.call<ListarNfResp>("produtos/nfconsultar", "ListarNF", {
+        const resp = await client.call<{ total_de_paginas?: number }>(service, method, {
           pagina: page,
           registros_por_pagina: PAGE_SIZE,
         });
         totalPages = Number(resp.total_de_paginas ?? 1);
-        const rows = resp.nfCadastro ?? [];
         stats.pages++;
-
-        for (const raw of rows) {
+        for (const row of extract(resp)) {
           stats.seen++;
           try {
-            const canonical = mapOmieNfeToCanonical(raw);
-            if (!canonical.externalId) {
-              stats.skipped++;
-              continue;
-            }
-            const r = await upsertCanonicalNfe(store, {
-              organizationId,
-              source: "omie",
-              nfe: canonical,
-            });
-            if (r.action === "created") stats.created++;
-            else if (r.action === "updated") stats.updated++;
-            else stats.skipped++;
+            stats[await handle(row)]++;
           } catch (e) {
             stats.failed++;
-            console.error("[omie-sync-financeiro] falha NF:", e instanceof Error ? e.message : e);
+            console.error("[omie-sync-financeiro] falha:", e instanceof Error ? e.message : e);
           }
         }
-
         runs++;
         if (page >= totalPages) break;
         page++;
       }
+      return { nextCursor: page >= totalPages ? 0 : page, stats };
+    }
 
-      const nextCursor = page >= totalPages ? 0 : page;
+    try {
+      const nf = await runPaged<OmieNfeRaw>(
+        conn.financeiro_cursor ?? 0,
+        "produtos/nfconsultar",
+        "ListarNF",
+        (resp) => (resp as ListarNfResp).nfCadastro ?? [],
+        async (raw) => {
+          const canonical = mapOmieNfeToCanonical(raw);
+          if (!canonical.externalId) return "skipped";
+          const r = await upsertCanonicalNfe(nfStore, {
+            organizationId,
+            source: "omie",
+            nfe: canonical,
+          });
+          return r.action === "created" ? "created" : r.action === "updated" ? "updated" : "skipped";
+        },
+      );
+
+      const titulos = await runPaged<OmieTituloRaw>(
+        conn.titulos_cursor ?? 0,
+        "financas/contareceber",
+        "ListarContasReceber",
+        (resp) => (resp as ListarContasReceberResp).conta_receber_cadastro ?? [],
+        async (raw) => {
+          const canonical = mapOmieTituloToCanonical(raw);
+          if (!canonical.externalId) return "skipped";
+          const r = await upsertCanonicalTitulo(tituloStore, {
+            organizationId,
+            source: "omie",
+            titulo: canonical,
+          });
+          return r.action === "created" ? "created" : r.action === "updated" ? "updated" : "skipped";
+        },
+      );
+
       await admin
         .from("omie_connections")
-        .update({ financeiro_cursor: nextCursor, last_financeiro_sync_at: now, last_error: null })
+        .update({
+          financeiro_cursor: nf.nextCursor,
+          titulos_cursor: titulos.nextCursor,
+          last_financeiro_sync_at: now,
+          last_error: null,
+        })
         .eq("id", conn.id);
 
       await logRuntime({
@@ -184,10 +231,13 @@ Deno.serve(
         module: "general",
         action: "omie_sync_financeiro",
         status: "success",
-        payloadSnapshot: { ...stats, nextCursor },
+        payloadSnapshot: { nf: nf.stats, titulos: titulos.stats },
       });
 
-      return new Response(JSON.stringify({ ok: true, stats }), { status: 200, headers });
+      return new Response(
+        JSON.stringify({ ok: true, stats: { nf: nf.stats, titulos: titulos.stats } }),
+        { status: 200, headers },
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await admin.from("omie_connections").update({ last_error: msg }).eq("id", conn.id);
@@ -197,12 +247,8 @@ Deno.serve(
         action: "omie_sync_financeiro",
         status: "error",
         errorMessage: msg,
-        payloadSnapshot: stats,
       });
-      return new Response(JSON.stringify({ ok: false, error: msg, stats }), {
-        status: 200,
-        headers,
-      });
+      return new Response(JSON.stringify({ ok: false, error: msg }), { status: 200, headers });
     }
   }),
 );

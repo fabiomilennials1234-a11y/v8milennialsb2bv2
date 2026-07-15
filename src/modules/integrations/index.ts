@@ -17,10 +17,13 @@ export {
   useSyncOmiePedidos,
   useSyncOmieFinanceiro,
   useNotasFiscais,
+  useTitulos,
   useUpdateOmieSyncMode,
   type OmieSyncMode,
   type OmieConnectionStatus,
   type NotaFiscal,
+  type Titulo,
+  type TituloStatus,
 } from "./hooks/useOmie";
 
 export { useErpProvider, type UseErpProviderResult } from "./hooks/useErpProvider";

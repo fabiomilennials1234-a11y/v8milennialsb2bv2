@@ -46,3 +46,18 @@ export interface CanonicalNfe {
   /** ERP order id this NF invoices — used to link to the upsell_order. */
   orderExternalId: string | null;
 }
+
+export type TituloStatus = "aberto" | "pago" | "atrasado";
+
+export interface CanonicalTitulo {
+  externalId: string;
+  externalRef: string | null;
+  clientExternalId: string | null;
+  orderExternalId: string | null;
+  valor: number;
+  /** Due date (ISO) or null — dd/mm/yyyy parsing deferred to the S1 spike. */
+  vencimento: string | null;
+  status: TituloStatus;
+  /** Payment timestamp (ISO) or null. */
+  pagoEm: string | null;
+}

@@ -9753,6 +9753,7 @@ export type Database = {
           organization_id: string
           pedidos_cursor: number | null
           status: string
+          titulos_cursor: number | null
           updated_at: string
           user_id: string
         }
@@ -9771,6 +9772,7 @@ export type Database = {
           organization_id: string
           pedidos_cursor?: number | null
           status?: string
+          titulos_cursor?: number | null
           updated_at?: string
           user_id: string
         }
@@ -9789,6 +9791,7 @@ export type Database = {
           organization_id?: string
           pedidos_cursor?: number | null
           status?: string
+          titulos_cursor?: number | null
           updated_at?: string
           user_id?: string
         }
@@ -13729,6 +13732,76 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tinyerp_sync_logs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      titulos_receber: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          external_id: string
+          external_ref: string | null
+          external_source: string
+          id: string
+          order_id: string | null
+          organization_id: string
+          pago_em: string | null
+          status: string
+          updated_at: string
+          valor: number | null
+          vencimento: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          external_id: string
+          external_ref?: string | null
+          external_source: string
+          id?: string
+          order_id?: string | null
+          organization_id: string
+          pago_em?: string | null
+          status?: string
+          updated_at?: string
+          valor?: number | null
+          vencimento?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          external_id?: string
+          external_ref?: string | null
+          external_source?: string
+          id?: string
+          order_id?: string | null
+          organization_id?: string
+          pago_em?: string | null
+          status?: string
+          updated_at?: string
+          valor?: number | null
+          vencimento?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "titulos_receber_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "upsell_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "titulos_receber_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "upsell_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "titulos_receber_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
