@@ -7,7 +7,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { resolveActiveWindow, formatTemporalAnchor } from "../../_shared/copilot/time-context.ts";
+import { resolveActiveWindow, formatTemporalAnchor, formatDateTimeInTz, formatDateInTz } from "../../_shared/copilot/time-context.ts";
 import { parseCustomInstructions } from "./utils.ts";
 
 interface ConversationContextSummary {
@@ -78,6 +78,12 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
   } = params;
 
   const sections: string[] = [];
+
+  // Fuso do agente pra exibir timestamps de eventos (reunião, venda fechada) em
+  // hora local, não UTC cru — o banco guarda UTC, converte-se só na exibição.
+  const agentTz =
+    ((capabilities.availability || {}) as { timezone?: string }).timezone ||
+    "America/Sao_Paulo";
 
   // =====================================================
   // 1. USAR PROMPT DO QUIZ (se existir) OU GERAR COMPLETO
@@ -609,7 +615,7 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
     if (leadData.confirmacao_status) {
       let confirmacaoInfo = `- Etapa no funil Confirmação: ${leadData.confirmacao_status}`;
       if (leadData.confirmacao_meeting_date)
-        confirmacaoInfo += ` (reunião: ${leadData.confirmacao_meeting_date})`;
+        confirmacaoInfo += ` (reunião: ${formatDateTimeInTz(leadData.confirmacao_meeting_date, agentTz)})`;
       if (leadData.confirmacao_is_confirmed) confirmacaoInfo += " [CONFIRMADO]";
       sections.push(confirmacaoInfo);
     }
@@ -669,7 +675,7 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
         const productName = deal.product?.name || deal.product_type || "Produto";
         const value = deal.sale_value ? `R$${deal.sale_value.toLocaleString("pt-BR")}` : "valor N/A";
         const closedDate = deal.closed_at
-          ? new Date(deal.closed_at).toLocaleDateString("pt-BR")
+          ? formatDateInTz(deal.closed_at, agentTz)
           : "data N/A";
         sections.push(`- ${productName}: ${value} (fechado em ${closedDate})`);
       }

@@ -114,6 +114,47 @@ export function formatNowText(now: Date, tz: string, dayKey: DayKey): string {
 }
 
 /**
+ * Formata um timestamp (ISO/timestamptz, armazenado em UTC) como DATA+HORA no
+ * fuso do agente: "DD/MM/AAAA HH:MM". Vazio se nulo/inválido.
+ *
+ * O banco guarda tudo em UTC (timestamptz) — correto. O bug clássico é EXIBIR
+ * cru (UTC) pro modelo: reunião às 14h (BRT) vira "17:00" no prompt e o copilot
+ * comunica horário errado. Sempre converter na exibição.
+ */
+export function formatDateTimeInTz(
+  iso: string | null | undefined,
+  tz: string = DEFAULT_TIMEZONE,
+): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const date = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric",
+  }).format(d);
+  const time = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(d);
+  return `${date} ${time}`;
+}
+
+/**
+ * Formata um timestamp (ISO/timestamptz UTC) como DATA no fuso do agente:
+ * "DD/MM/AAAA". Vazio se nulo/inválido. Usa o fuso pra não errar o dia perto
+ * da meia-noite (toLocaleDateString sem timeZone usa o fuso do servidor = UTC).
+ */
+export function formatDateInTz(
+  iso: string | null | undefined,
+  tz: string = DEFAULT_TIMEZONE,
+): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric",
+  }).format(d);
+}
+
+/**
  * Bloco de ancoragem temporal FORTE pro system prompt do copilot.
  *
  * Injeta HOJE e AMANHÃ já calculados (data + dia da semana, no fuso), pra o

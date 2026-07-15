@@ -6,6 +6,8 @@ import {
   buildDateInTimezone,
   computeNextWindowStart,
   formatTemporalAnchor,
+  formatDateTimeInTz,
+  formatDateInTz,
 } from '../../supabase/functions/_shared/copilot/time-context';
 
 const TZ_BR = 'America/Sao_Paulo';
@@ -321,5 +323,26 @@ describe('time-context — formatTemporalAnchor (RC 2026-06-24 data errada)', ()
     expect(out).toMatch(/NUNCA invente uma data/);
     expect(out).toContain('America/Sao_Paulo');
     expect(out).toContain('- Agora: quarta-feira, 24/06/2026 09:47');
+  });
+});
+
+describe('time-context — formatDateTimeInTz / formatDateInTz (UTC → fuso do agente)', () => {
+  it('reunião UTC 17:00Z vira 14:00 BRT (não vaza UTC pro copilot)', () => {
+    expect(formatDateTimeInTz('2026-07-15T17:00:00Z', TZ_BR)).toBe('15/07/2026 14:00');
+  });
+  it('vira o dia: 02:00Z é 23:00 BRT do dia anterior', () => {
+    expect(formatDateInTz('2026-07-15T02:00:00Z', TZ_BR)).toBe('14/07/2026');
+  });
+  it('data-only sem hora', () => {
+    expect(formatDateInTz('2026-07-15T17:00:00Z', TZ_BR)).toBe('15/07/2026');
+  });
+  it('null/undefined/inválido/vazio → string vazia (sem crash)', () => {
+    expect(formatDateTimeInTz(null, TZ_BR)).toBe('');
+    expect(formatDateTimeInTz(undefined, TZ_BR)).toBe('');
+    expect(formatDateTimeInTz('nao-e-data', TZ_BR)).toBe('');
+    expect(formatDateInTz('', TZ_BR)).toBe('');
+  });
+  it('default é America/Sao_Paulo', () => {
+    expect(formatDateTimeInTz('2026-07-15T17:00:00Z')).toBe('15/07/2026 14:00');
   });
 });
