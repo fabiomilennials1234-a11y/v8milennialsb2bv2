@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -17,6 +17,8 @@ import { useClientAlerts } from "@/modules/carteira/hooks/useClientAlerts";
 import { useHealthHistory } from "@/modules/platform/hooks/useHealthHistory";
 import { HealthSparkline } from "./HealthSparkline";
 import { NewOrderModal } from "./NewOrderModal";
+import { formatBRL } from "@/lib/format";
+import { useClientInadimplencia } from "@/modules/carteira/hooks/useClientInadimplencia";
 
 // ─── Derived types ────────────────────────────────────────────────────────────
 
@@ -103,6 +105,23 @@ export default function ClienteDetailPage() {
 
   const { data: alerts = [] } = useClientAlerts(clientId);
   const { data: healthHistory = [] } = useHealthHistory(clientId);
+  const { data: inadimplencia } = useClientInadimplencia(clientId);
+  const { data: notasFiscais = [] } = useQuery({
+    queryKey: ["client-notas-fiscais", clientId],
+    queryFn: async (): Promise<{ order_id: string | null }[]> => {
+      if (!clientId) return [];
+      const { data } = await supabase
+        .from("notas_fiscais")
+        .select("order_id")
+        .eq("client_id", clientId);
+      return data ?? [];
+    },
+    enabled: !!clientId,
+  });
+  const invoicedOrderIds = useMemo(
+    () => new Set(notasFiscais.map((n) => n.order_id).filter((x): x is string => !!x)),
+    [notasFiscais],
+  );
   const [newOrderOpen, setNewOrderOpen] = useState(false);
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -203,6 +222,17 @@ export default function ClienteDetailPage() {
               <p className="text-xs text-muted-foreground truncate">{clientCompany}</p>
             )}
           </div>
+
+          {/* Inadimplência badge (S9) */}
+          {inadimplencia?.isInadimplente && (
+            <span
+              className="flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-full text-xs font-bold tabular-nums bg-red-500/20 text-red-400"
+              title={`${inadimplencia.overdueCount} título(s) atrasado(s)`}
+            >
+              <AlertTriangle size={11} />
+              Inadimplente · {formatBRL(inadimplencia.receitaEmRisco)}
+            </span>
+          )}
 
           {/* Churn badge */}
           {client?.churn_probability != null && client.churn_probability > 0 && (
@@ -343,7 +373,11 @@ export default function ClienteDetailPage() {
                   ))}
                 </div>
               ) : (
-                <ClienteOrderHistory orders={orders} cycleDays={cycleDays} />
+                <ClienteOrderHistory
+                  orders={orders}
+                  cycleDays={cycleDays}
+                  invoicedOrderIds={invoicedOrderIds}
+                />
               )}
             </CardContent>
           </Card>
