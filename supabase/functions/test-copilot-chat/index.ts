@@ -16,6 +16,7 @@ import { logRuntime } from "../_shared/logger.ts";
 import { sanitizeAssistantMessage, splitByDelimiter } from "../_shared/message-sanitizer.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
+import { requireAuth, AuthError, authErrorResponse, type AuthContext } from "../_shared/user-auth.ts";
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_MODEL = "google/gemini-2.5-flash";
@@ -231,6 +232,16 @@ Deno.serve(withErrorBoundary('test-copilot-chat', async (req) => {
     const { messages = [], userMessage, generateFirstMessage = false, firstMessageTemplate, agentId, attachment, tools: dryRunTools } = body;
     let { systemPrompt } = body;
 
+    // AUTH: require an authenticated user (also closes the anon denial-of-wallet on the
+    // shared OpenRouter key). The per-agent org check runs below when agentId is provided.
+    let auth: AuthContext;
+    try {
+      auth = await requireAuth(req, { body: body as unknown as Record<string, unknown> });
+    } catch (e) {
+      if (e instanceof AuthError) return authErrorResponse(e, corsHeaders);
+      throw e;
+    }
+
     // Modelo e temperatura padrão — podem ser sobrescritos pelo agente do DB
     let model = Deno.env.get("OPENROUTER_DEFAULT_MODEL") || DEFAULT_MODEL;
     let temperature = 0.7;
@@ -241,9 +252,27 @@ Deno.serve(withErrorBoundary('test-copilot-chat', async (req) => {
         const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
         const { data: agent } = await supabase
           .from("copilot_agents")
-          .select("system_prompt, llm_model, llm_temperature_mode, copilot_agent_faqs(*)")
+          .select("organization_id, system_prompt, llm_model, llm_temperature_mode, copilot_agent_faqs(*)")
           .eq("id", agentId)
           .maybeSingle();
+
+        // AUTHORIZE: caller must belong to the agent's org (prevents cross-tenant
+        // extraction of another org's prompt / FAQs / knowledge base).
+        if (agent && !auth.isMaster) {
+          const { data: membership } = await supabase
+            .from("team_members")
+            .select("id")
+            .eq("user_id", auth.userId)
+            .eq("organization_id", agent.organization_id)
+            .eq("is_active", true)
+            .maybeSingle();
+          if (!membership) {
+            return new Response(
+              JSON.stringify({ error: "Forbidden: agent belongs to another organization" }),
+              { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+        }
 
         if (agent?.system_prompt) {
           systemPrompt = agent.system_prompt;
