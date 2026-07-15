@@ -2,7 +2,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { useOrganization } from "@/modules/identity";
-import { useFeatureFlag } from "@/modules/platform";
+// Deep import do hook direto (não do barrel @/modules/platform): o barrel
+// re-exporta OnboardingWizard → StepPrimeiroLead → @/modules/leads → engagement,
+// fechando ciclo de import (dep-cruiser no-circular). useFeatureFlag.ts só
+// depende de identity + react-query, sem grafo de volta. Mesma razão do
+// deep-import de canonical-metrics abaixo.
+import { useFeatureFlag } from "@/modules/platform/hooks/useFeatureFlag";
 // Deep import do arquivo de CONTRATOS puro (só tipos + funções puras, zero grafo
 // de módulo) — evita puxar o barrel inteiro de analytics (que importa hooks →
 // identity) e formar ciclo de import. Mesma origem que #998 consome internamente.
