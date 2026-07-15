@@ -7475,6 +7475,54 @@ export type Database = {
           },
         ]
       }
+      help_article_feedback: {
+        Row: {
+          article_id: string
+          created_at: string
+          helpful: boolean
+          id: string
+          organization_id: string | null
+          reason: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          article_id: string
+          created_at?: string
+          helpful: boolean
+          id?: string
+          organization_id?: string | null
+          reason?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          article_id?: string
+          created_at?: string
+          helpful?: boolean
+          id?: string
+          organization_id?: string | null
+          reason?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "help_article_feedback_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "help_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "help_article_feedback_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       help_articles: {
         Row: {
           category_id: string
@@ -7489,6 +7537,7 @@ export type Database = {
           tags: string[] | null
           title: string
           updated_at: string | null
+          video_url: string | null
         }
         Insert: {
           category_id: string
@@ -7503,6 +7552,7 @@ export type Database = {
           tags?: string[] | null
           title: string
           updated_at?: string | null
+          video_url?: string | null
         }
         Update: {
           category_id?: string
@@ -7517,6 +7567,7 @@ export type Database = {
           tags?: string[] | null
           title?: string
           updated_at?: string | null
+          video_url?: string | null
         }
         Relationships: [
           {
@@ -8080,6 +8131,50 @@ export type Database = {
           },
         ]
       }
+      lead_origins: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          organization_id: string
+          slug: string
+          sort_order: number
+          updated_at: string | null
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          organization_id: string
+          slug: string
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          organization_id?: string
+          slug?: string
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_origins_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_products: {
         Row: {
           avg_cycle_days: number | null
@@ -8292,7 +8387,7 @@ export type Database = {
           normalized_phone: string | null
           notes: string | null
           organization_id: string | null
-          origin: Database["public"]["Enums"]["lead_origin"]
+          origin: string
           phone: string | null
           phone_digits: string | null
           pipe_whatsapp: string | null
@@ -8347,7 +8442,7 @@ export type Database = {
           normalized_phone?: string | null
           notes?: string | null
           organization_id?: string | null
-          origin?: Database["public"]["Enums"]["lead_origin"]
+          origin: string
           phone?: string | null
           phone_digits?: string | null
           pipe_whatsapp?: string | null
@@ -8402,7 +8497,7 @@ export type Database = {
           normalized_phone?: string | null
           notes?: string | null
           organization_id?: string | null
-          origin?: Database["public"]["Enums"]["lead_origin"]
+          origin?: string
           phone?: string | null
           phone_digits?: string | null
           pipe_whatsapp?: string | null
@@ -9518,6 +9613,122 @@ export type Database = {
           },
         ]
       }
+      omie_connection_secrets: {
+        Row: {
+          app_key_ciphertext: string
+          app_key_nonce: string
+          app_secret_ciphertext: string
+          app_secret_nonce: string
+          connection_id: string
+          created_at: string
+          encryption_key_id: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          app_key_ciphertext: string
+          app_key_nonce: string
+          app_secret_ciphertext: string
+          app_secret_nonce: string
+          connection_id: string
+          created_at?: string
+          encryption_key_id?: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          app_key_ciphertext?: string
+          app_key_nonce?: string
+          app_secret_ciphertext?: string
+          app_secret_nonce?: string
+          connection_id?: string
+          created_at?: string
+          encryption_key_id?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "omie_connection_secrets_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: true
+            referencedRelation: "omie_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "omie_connection_secrets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      omie_connections: {
+        Row: {
+          clientes_cursor: number | null
+          connected_at: string | null
+          created_at: string
+          erp_sync_mode: string
+          financeiro_cursor: number | null
+          id: string
+          last_clientes_sync_at: string | null
+          last_error: string | null
+          last_financeiro_sync_at: string | null
+          last_pedidos_sync_at: string | null
+          omie_account_name: string | null
+          organization_id: string
+          pedidos_cursor: number | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          clientes_cursor?: number | null
+          connected_at?: string | null
+          created_at?: string
+          erp_sync_mode?: string
+          financeiro_cursor?: number | null
+          id?: string
+          last_clientes_sync_at?: string | null
+          last_error?: string | null
+          last_financeiro_sync_at?: string | null
+          last_pedidos_sync_at?: string | null
+          omie_account_name?: string | null
+          organization_id: string
+          pedidos_cursor?: number | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          clientes_cursor?: number | null
+          connected_at?: string | null
+          created_at?: string
+          erp_sync_mode?: string
+          financeiro_cursor?: number | null
+          id?: string
+          last_clientes_sync_at?: string | null
+          last_error?: string | null
+          last_financeiro_sync_at?: string | null
+          last_pedidos_sync_at?: string | null
+          omie_account_name?: string | null
+          organization_id?: string
+          pedidos_cursor?: number | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "omie_connections_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       onboarding_automation_templates: {
         Row: {
           created_at: string
@@ -9973,6 +10184,7 @@ export type Database = {
       }
       organizations: {
         Row: {
+          auto_create_lead_on_inbound: boolean
           billing_override: boolean | null
           billing_override_at: string | null
           billing_override_by: string | null
@@ -10012,6 +10224,7 @@ export type Database = {
           whatsapp_rate_limit: Json | null
         }
         Insert: {
+          auto_create_lead_on_inbound?: boolean
           billing_override?: boolean | null
           billing_override_at?: string | null
           billing_override_by?: string | null
@@ -10051,6 +10264,7 @@ export type Database = {
           whatsapp_rate_limit?: Json | null
         }
         Update: {
+          auto_create_lead_on_inbound?: boolean
           billing_override?: boolean | null
           billing_override_at?: string | null
           billing_override_by?: string | null
@@ -12879,6 +13093,7 @@ export type Database = {
           author_user_id: string | null
           body: string
           created_at: string
+          from_staff: boolean
           id: string
           is_internal: boolean
           ticket_id: string
@@ -12887,6 +13102,7 @@ export type Database = {
           author_user_id?: string | null
           body: string
           created_at?: string
+          from_staff?: boolean
           id?: string
           is_internal?: boolean
           ticket_id: string
@@ -12895,6 +13111,7 @@ export type Database = {
           author_user_id?: string | null
           body?: string
           created_at?: string
+          from_staff?: boolean
           id?: string
           is_internal?: boolean
           ticket_id?: string
@@ -13720,6 +13937,8 @@ export type Database = {
           created_at: string
           days_since_last_order: number | null
           email: string | null
+          external_id: string | null
+          external_ref: string | null
           external_source: string | null
           first_sale_at: string
           gestao_manual_override: boolean
@@ -13761,6 +13980,8 @@ export type Database = {
           created_at?: string
           days_since_last_order?: number | null
           email?: string | null
+          external_id?: string | null
+          external_ref?: string | null
           external_source?: string | null
           first_sale_at?: string
           gestao_manual_override?: boolean
@@ -13802,6 +14023,8 @@ export type Database = {
           created_at?: string
           days_since_last_order?: number | null
           email?: string | null
+          external_id?: string | null
+          external_ref?: string | null
           external_source?: string | null
           first_sale_at?: string
           gestao_manual_override?: boolean
@@ -13973,6 +14196,9 @@ export type Database = {
           client_id: string
           closer_id: string | null
           created_at: string
+          external_id: string | null
+          external_ref: string | null
+          external_source: string | null
           id: string
           notes: string | null
           organization_id: string
@@ -13998,6 +14224,9 @@ export type Database = {
           client_id: string
           closer_id?: string | null
           created_at?: string
+          external_id?: string | null
+          external_ref?: string | null
+          external_source?: string | null
           id?: string
           notes?: string | null
           organization_id: string
@@ -14023,6 +14252,9 @@ export type Database = {
           client_id?: string
           closer_id?: string | null
           created_at?: string
+          external_id?: string | null
+          external_ref?: string | null
+          external_source?: string | null
           id?: string
           notes?: string | null
           organization_id?: string
@@ -15537,7 +15769,7 @@ export type Database = {
           normalized_phone: string | null
           notes: string | null
           organization_id: string | null
-          origin: Database["public"]["Enums"]["lead_origin"] | null
+          origin: string | null
           phone: string | null
           pipe_whatsapp: string | null
           pre_sale_responsible_id: string | null
@@ -15710,6 +15942,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      pg_buffercache: {
+        Row: {
+          bufferid: number | null
+          isdirty: boolean | null
+          pinning_backends: number | null
+          relblocknumber: number | null
+          reldatabase: unknown
+          relfilenode: unknown
+          relforknumber: number | null
+          reltablespace: unknown
+          usagecount: number | null
+        }
+        Relationships: []
       }
       pipe_confirmacao: {
         Row: {
@@ -16082,6 +16328,14 @@ export type Database = {
       can_manage_whatsapp_instances:
         | { Args: never; Returns: boolean }
         | { Args: { p_org_id: string }; Returns: boolean }
+      can_read_help_article: {
+        Args: { p_article_id: string }
+        Returns: boolean
+      }
+      can_read_support_attachment: {
+        Args: { object_name: string }
+        Returns: boolean
+      }
       can_read_support_ticket: {
         Args: { _ticket_id: string }
         Returns: boolean
@@ -16250,6 +16504,7 @@ export type Database = {
         Args: { p_conversation_id: string }
         Returns: undefined
       }
+      close_resolved_support_tickets: { Args: never; Returns: number }
       convert_campaign_rule_to_workflow: {
         Args: { p_rule_id: string }
         Returns: string
@@ -16599,6 +16854,13 @@ export type Database = {
         }
         Returns: string[]
       }
+      get_custom_pipeline_stage_counts: {
+        Args: { p_org_id: string; p_pipeline_id: string; p_search?: string }
+        Returns: {
+          cnt: number
+          stage_id: string
+        }[]
+      }
       get_dashboard_metrics: {
         Args: {
           p_end_date: string
@@ -16709,6 +16971,15 @@ export type Database = {
           p_start_date: string
         }
         Returns: Json
+      }
+      get_help_article_feedback_summaries: {
+        Args: never
+        Returns: {
+          article_id: string
+          helpful_down: number
+          helpful_up: number
+          reasons: string[]
+        }[]
       }
       get_import_batches: {
         Args: { p_limit?: number }
@@ -16834,6 +17105,20 @@ export type Database = {
         }
         Returns: Json
       }
+      get_movement_metrics: {
+        Args: {
+          p_end: string
+          p_member_id?: string
+          p_org_id: string
+          p_start: string
+        }
+        Returns: {
+          comparecidas: number
+          marcadas: number
+          vendido_count: number
+          vendido_receita: number
+        }[]
+      }
       get_my_admin_organization_ids: { Args: never; Returns: string[] }
       get_my_org_ids: { Args: never; Returns: string[] }
       get_my_organization_ids: { Args: never; Returns: string[] }
@@ -16921,7 +17206,9 @@ export type Database = {
           p_period_after?: string
           p_period_before?: string
           p_pipeline_slug: string
+          p_pre_qualification_tier?: string[]
           p_product_type?: string
+          p_qualification_tier?: string[]
           p_rating_max?: number
           p_rating_min?: number
           p_responsible_id?: string
@@ -16961,7 +17248,9 @@ export type Database = {
           p_period_after?: string
           p_period_before?: string
           p_pipeline_slug: string
+          p_pre_qualification_tier?: string[]
           p_product_type?: string
+          p_qualification_tier?: string[]
           p_rating_max?: number
           p_rating_min?: number
           p_responsible_id?: string
@@ -17341,6 +17630,10 @@ export type Database = {
         Returns: boolean
       }
       is_valid_timezone: { Args: { p_tz: string }; Returns: boolean }
+      lead_excluded_from_metrics: {
+        Args: { p_lead_id: string; p_org_id: string }
+        Returns: boolean
+      }
       lead_in_my_org: { Args: { p_lead_id: string }; Returns: boolean }
       link_agent_to_instance: {
         Args: { p_agent_id: string; p_instance_id: string }
@@ -17496,6 +17789,12 @@ export type Database = {
       org_resolve_quota: {
         Args: { p_org_id: string; p_resource_key: string }
         Returns: Json
+      }
+      pg_buffercache_pages: { Args: never; Returns: Record<string, unknown>[] }
+      pg_buffercache_summary: { Args: never; Returns: Record<string, unknown> }
+      pg_buffercache_usage_counts: {
+        Args: never
+        Returns: Record<string, unknown>[]
       }
       process_overdue_subscriptions: {
         Args: { p_grace_days?: number }

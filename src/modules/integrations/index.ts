@@ -4,9 +4,28 @@
  * Public surface do bounded context. Tudo cross-module passa por aqui.
  * Internals (subpastas) são privados — ESLint `boundaries` impede import direto.
  *
- * 🚧 Vazio — exports virão durante a slice 13 (`feat/modularizacao/12-billing-marketing`).
  * Ver `./CLAUDE.md` para escopo (provider adapters: Google Calendar, Meta, TinyERP,
- * Asaas, SZ.Chat, Cal.com).
+ * Omie, Asaas, SZ.Chat, Cal.com).
  */
 
-export {};
+// ─── ERP: Omie (camada multi-ERP provider-neutral, ADR-0020) ───────────────
+export {
+  useOmieStatus,
+  useConnectOmie,
+  useDisconnectOmie,
+  useSyncOmieClientes,
+  useSyncOmiePedidos,
+  useUpdateOmieSyncMode,
+  type OmieSyncMode,
+  type OmieConnectionStatus,
+} from "./hooks/useOmie";
+
+export { useErpProvider, type UseErpProviderResult } from "./hooks/useErpProvider";
+export {
+  resolveErpProvider,
+  TINY_CAPABILITIES,
+  OMIE_CAPABILITIES,
+  type ErpCapabilities,
+  type ErpProviderId,
+  type ErpProviderManifest,
+} from "./lib/erp-provider";
