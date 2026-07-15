@@ -13,6 +13,7 @@ import {
   Users,
   Activity,
   Phone,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -810,6 +811,39 @@ export function WhatsAppSettings() {
               Crie uma nova instância para conectar um número WhatsApp
             </DialogDescription>
           </DialogHeader>
+          <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-hidden />
+            <div className="space-y-1.5 text-xs leading-relaxed text-amber-200/90">
+              <p className="text-sm font-semibold text-amber-200">
+                Atenção: esta é a API não oficial do WhatsApp
+              </p>
+              <p>
+                Este número pode ser <span className="font-medium">bloqueado ou banido pela própria Meta</span>{" "}
+                (dona do WhatsApp). Quando isso acontece, <span className="font-medium">não é falha nem culpa do Torque</span> —
+                o sistema apenas conecta o seu WhatsApp; quem decide banir é a Meta.
+              </p>
+              <p>O banimento costuma acontecer por sinais que a Meta monitora, principalmente:</p>
+              <ul className="ml-4 list-disc space-y-0.5">
+                <li>
+                  <span className="font-medium">Número/conta muito novo</span> (sem "aquecimento"): disparar muita mensagem
+                  logo de cara aumenta o risco.
+                </li>
+                <li>
+                  <span className="font-medium">Volume alto de mensagens</span> em pouco tempo, ou muitos envios para
+                  contatos que não te responderam.
+                </li>
+              </ul>
+              <p>
+                A Meta vem <span className="font-medium">restringindo o uso de APIs não oficiais</span> justamente para
+                empurrar as empresas a migrarem para a <span className="font-medium">API Oficial (WhatsApp Business API)</span>,
+                que é paga, porém não tem esse risco de banimento por política.
+              </p>
+              <p className="text-amber-200/80">
+                💡 Recomendação: aqueça o número aos poucos (comece com poucos envios e vá aumentando), evite disparos em
+                massa para quem não respondeu e, se o número for essencial para o negócio, considere a API Oficial.
+              </p>
+            </div>
+          </div>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="instance-name">Nome da Instância</Label>
