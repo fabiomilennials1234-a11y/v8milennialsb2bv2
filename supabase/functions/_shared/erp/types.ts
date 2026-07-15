@@ -30,3 +30,19 @@ export interface CanonicalOrder {
   /** ERP-side stage (Omie's etapa). NOT the CRM pipeline stage. */
   etapa: string | null;
 }
+
+export interface CanonicalNfe {
+  /** ERP's NF id (persisted as external_id). */
+  externalId: string;
+  externalRef: string | null;
+  /** 44-digit access key. */
+  chaveNfe: string | null;
+  numero: string | null;
+  valor: number;
+  /** ISO emission date, or null. */
+  dataEmissao: string | null;
+  /** ERP NF status (autorizada, cancelada, ...). */
+  status: string | null;
+  /** ERP order id this NF invoices — used to link to the upsell_order. */
+  orderExternalId: string | null;
+}

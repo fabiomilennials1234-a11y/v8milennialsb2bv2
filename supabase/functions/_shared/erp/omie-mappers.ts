@@ -4,7 +4,7 @@
  * (immutable), codigo_cliente_integracao → externalRef (our uuid bridge).
  */
 
-import { CanonicalClient, CanonicalOrder } from "./types.ts";
+import { CanonicalClient, CanonicalOrder, CanonicalNfe } from "./types.ts";
 
 export interface OmieClienteRaw {
   codigo_cliente_omie?: number | string;
@@ -74,5 +74,34 @@ export function mapOmiePedidoToCanonical(raw: OmiePedidoRaw): CanonicalOrder {
     // then sold_at defaults to now() in the DB.
     soldAt: null,
     etapa: trimOrNull(cab.etapa),
+  };
+}
+
+// NOTE: exact Omie ListarNF field names are to be confirmed in the S1 spike.
+// The mapping is isolated here — only this function changes if names differ.
+export interface OmieNfeRaw {
+  nIdNF?: number | string;
+  cChaveNFe?: string | null;
+  nNumeroNF?: string | number | null;
+  dEmissao?: string | null;
+  nValorNF?: number | string | null;
+  cStatus?: string | null;
+  nCodPedido?: number | string | null;
+}
+
+export function mapOmieNfeToCanonical(raw: OmieNfeRaw): CanonicalNfe {
+  const numero = raw.nNumeroNF != null ? String(raw.nNumeroNF).trim() : null;
+  const orderId = raw.nCodPedido != null ? String(raw.nCodPedido).trim() : "";
+
+  return {
+    externalId: String(raw.nIdNF ?? "").trim(),
+    externalRef: null,
+    chaveNfe: digits(raw.cChaveNFe),
+    numero: numero && numero.length > 0 ? numero : null,
+    valor: Number(raw.nValorNF ?? 0),
+    // dd/mm/yyyy parsing deferred to the S1 spike.
+    dataEmissao: null,
+    status: trimOrNull(raw.cStatus),
+    orderExternalId: orderId.length > 0 ? orderId : null,
   };
 }

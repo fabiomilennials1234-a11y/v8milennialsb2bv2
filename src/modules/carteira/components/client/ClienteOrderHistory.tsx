@@ -1,4 +1,4 @@
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart, ReceiptText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatBRL, formatDateFull } from "@/lib/format";
@@ -9,6 +9,12 @@ import type { Tables } from "@/integrations/supabase/types";
 interface ClienteOrderHistoryProps {
   orders: Tables<"upsell_orders">[];
   cycleDays: number;
+  /**
+   * Ids de pedidos que já têm NF-e emitida (faturados). Fonte: notas_fiscais do
+   * ERP. Distingue o vendido do faturado (ADR-0020). Opcional — quando ausente,
+   * nenhum badge de faturamento aparece.
+   */
+  invoicedOrderIds?: Set<string>;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -52,7 +58,11 @@ function dotColor(gap: number | null, cycleDays: number) {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function ClienteOrderHistory({ orders, cycleDays }: ClienteOrderHistoryProps) {
+export function ClienteOrderHistory({
+  orders,
+  cycleDays,
+  invoicedOrderIds,
+}: ClienteOrderHistoryProps) {
   if (orders.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
@@ -115,15 +125,26 @@ export function ClienteOrderHistory({ orders, cycleDays }: ClienteOrderHistoryPr
                   <span className="text-sm font-semibold tabular-nums text-card-foreground">
                     {order.sale_value != null ? formatBRL(order.sale_value) : "—"}
                   </span>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[10px] px-1.5 py-0 h-4 border",
-                      sourceBadgeClass(order.source),
+                  <div className="flex items-center gap-1">
+                    {invoicedOrderIds?.has(order.id) && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1.5 py-0 h-4 border bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                      >
+                        <ReceiptText className="w-2.5 h-2.5 mr-0.5" />
+                        Faturado
+                      </Badge>
                     )}
-                  >
-                    {sourceLabel(order.source)}
-                  </Badge>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] px-1.5 py-0 h-4 border",
+                        sourceBadgeClass(order.source),
+                      )}
+                    >
+                      {sourceLabel(order.source)}
+                    </Badge>
+                  </div>
                 </div>
               </div>
             </div>
