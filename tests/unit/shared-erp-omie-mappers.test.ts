@@ -7,6 +7,7 @@ import {
   mapOmieClienteToCanonical,
   mapOmiePedidoToCanonical,
   mapOmieNfeToCanonical,
+  mapOmieTituloToCanonical,
 } from "../../supabase/functions/_shared/erp/omie-mappers";
 
 describe("mapOmieClienteToCanonical", () => {
@@ -108,5 +109,45 @@ describe("mapOmieNfeToCanonical", () => {
     expect(nf.valor).toBe(0);
     expect(nf.orderExternalId).toBeNull();
     expect(nf.status).toBeNull();
+  });
+});
+
+describe("mapOmieTituloToCanonical", () => {
+  it("maps identity, valor and client/order refs", () => {
+    const t = mapOmieTituloToCanonical({
+      codigo_lancamento_omie: 44001,
+      codigo_lancamento_integracao: "tit-ref",
+      codigo_cliente_fornecedor: 12345,
+      nCodPedido: 555,
+      valor_documento: 800.5,
+      status_titulo: "ABERTO",
+    });
+    expect(t.externalId).toBe("44001");
+    expect(t.externalRef).toBe("tit-ref");
+    expect(t.clientExternalId).toBe("12345");
+    expect(t.orderExternalId).toBe("555");
+    expect(t.valor).toBe(800.5);
+    expect(t.status).toBe("aberto");
+  });
+
+  it("is pago when a payment date is present", () => {
+    const t = mapOmieTituloToCanonical({
+      codigo_lancamento_omie: 1,
+      status_titulo: "RECEBIDO",
+      data_pagamento: "10/07/2026",
+    });
+    expect(t.status).toBe("pago");
+  });
+
+  it("is atrasado when the status marks it overdue", () => {
+    const t = mapOmieTituloToCanonical({ codigo_lancamento_omie: 2, status_titulo: "ATRASADO" });
+    expect(t.status).toBe("atrasado");
+  });
+
+  it("defaults to aberto otherwise", () => {
+    const t = mapOmieTituloToCanonical({ codigo_lancamento_omie: 3 });
+    expect(t.status).toBe("aberto");
+    expect(t.valor).toBe(0);
+    expect(t.clientExternalId).toBeNull();
   });
 });

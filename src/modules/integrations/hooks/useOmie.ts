@@ -208,13 +208,21 @@ export function useSyncOmieFinanceiro() {
       const { data, error } = await supabase.functions.invoke("omie-sync-financeiro", {});
       if (error) throw await extractFunctionError(error);
       if (data?.error) throw new Error(data.error);
-      return data as { ok: boolean; stats?: { created: number; updated: number } };
+      return data as {
+        ok: boolean;
+        stats?: { nf?: { created: number }; titulos?: { created: number } };
+      };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["notas-fiscais"] });
+      queryClient.invalidateQueries({ queryKey: ["titulos-receber"] });
       queryClient.invalidateQueries({ queryKey: ["omie-status"] });
       const s = data?.stats;
-      if (s) toast.success(`Faturamento sincronizado: ${s.created} novas NF-e`);
+      if (s) {
+        toast.success(
+          `Faturamento sincronizado: ${s.nf?.created ?? 0} NF-e, ${s.titulos?.created ?? 0} títulos`,
+        );
+      }
     },
     onError: (error: Error) => {
       toast.error("Erro ao sincronizar faturamento", { description: error.message });
@@ -250,6 +258,40 @@ export function useNotasFiscais(clientId: string | null | undefined) {
         .order("data_emissao", { ascending: false });
       if (error) throw error;
       return data ?? [];
+    },
+    enabled: !!organizationId && !!clientId,
+  });
+}
+
+// ─── Títulos / contas a receber ─────────────────────────────────────────────
+
+export type TituloStatus = "aberto" | "pago" | "atrasado";
+
+export interface Titulo {
+  id: string;
+  order_id: string | null;
+  client_id: string | null;
+  valor: number | null;
+  vencimento: string | null;
+  status: TituloStatus;
+  pago_em: string | null;
+}
+
+export function useTitulos(clientId: string | null | undefined) {
+  const { organizationId } = useOrganization();
+
+  return useQuery({
+    queryKey: ["titulos-receber", organizationId, clientId],
+    queryFn: async (): Promise<Titulo[]> => {
+      if (!organizationId || !clientId) return [];
+      const { data, error } = await supabase
+        .from("titulos_receber")
+        .select("id, order_id, client_id, valor, vencimento, status, pago_em")
+        .eq("organization_id", organizationId)
+        .eq("client_id", clientId)
+        .order("vencimento", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as Titulo[];
     },
     enabled: !!organizationId && !!clientId,
   });

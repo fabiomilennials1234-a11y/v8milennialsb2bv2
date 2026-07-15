@@ -4,7 +4,13 @@
  * (immutable), codigo_cliente_integracao → externalRef (our uuid bridge).
  */
 
-import { CanonicalClient, CanonicalOrder, CanonicalNfe } from "./types.ts";
+import {
+  CanonicalClient,
+  CanonicalOrder,
+  CanonicalNfe,
+  CanonicalTitulo,
+  TituloStatus,
+} from "./types.ts";
 
 export interface OmieClienteRaw {
   codigo_cliente_omie?: number | string;
@@ -103,5 +109,45 @@ export function mapOmieNfeToCanonical(raw: OmieNfeRaw): CanonicalNfe {
     dataEmissao: null,
     status: trimOrNull(raw.cStatus),
     orderExternalId: orderId.length > 0 ? orderId : null,
+  };
+}
+
+// NOTE: exact Omie ListarContasReceber field names + status_titulo enum are to be
+// confirmed in the S1 spike. Mapping isolated here. Overdue-by-due-date refinement
+// is deferred (dd/mm/yyyy parsing) — status is derived from the raw status string.
+export interface OmieTituloRaw {
+  codigo_lancamento_omie?: number | string;
+  codigo_lancamento_integracao?: string | null;
+  codigo_cliente_fornecedor?: number | string | null;
+  nCodPedido?: number | string | null;
+  valor_documento?: number | string | null;
+  data_vencimento?: string | null;
+  status_titulo?: string | null;
+  data_pagamento?: string | null;
+}
+
+function deriveTituloStatus(rawStatus: string, dataPagamento?: string | null): TituloStatus {
+  if ((dataPagamento && dataPagamento.trim().length > 0) || /receb|pago|liquidad/i.test(rawStatus)) {
+    return "pago";
+  }
+  if (/atras|vencid/i.test(rawStatus)) return "atrasado";
+  return "aberto";
+}
+
+export function mapOmieTituloToCanonical(raw: OmieTituloRaw): CanonicalTitulo {
+  const clientId =
+    raw.codigo_cliente_fornecedor != null ? String(raw.codigo_cliente_fornecedor).trim() : "";
+  const orderId = raw.nCodPedido != null ? String(raw.nCodPedido).trim() : "";
+
+  return {
+    externalId: String(raw.codigo_lancamento_omie ?? "").trim(),
+    externalRef: trimOrNull(raw.codigo_lancamento_integracao),
+    clientExternalId: clientId.length > 0 ? clientId : null,
+    orderExternalId: orderId.length > 0 ? orderId : null,
+    valor: Number(raw.valor_documento ?? 0),
+    // dd/mm/yyyy parsing deferred to the S1 spike.
+    vencimento: null,
+    status: deriveTituloStatus(raw.status_titulo ?? "", raw.data_pagamento),
+    pagoEm: null,
   };
 }
