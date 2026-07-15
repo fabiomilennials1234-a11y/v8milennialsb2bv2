@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import type { PlaygroundToolState } from "./types";
 import { buildPreviewTools, type DryRunToolCall } from "@/lib/copilot/dry-run-engine";
 
@@ -248,13 +249,17 @@ export function LivePreviewChat({
       generateFirst: boolean,
       attachment?: ChatAttachment,
     ): Promise<EdgeFunctionResult> => {
+      // Send the user's session JWT (not the anon key) so the edge fn can authenticate the
+      // caller and authorize the requested agentId against their org (audit 2026-07-14 #6).
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token ?? anonKey;
       const response = await fetch(
         `${supabaseUrl}/functions/v1/test-copilot-chat`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${anonKey}`,
+            Authorization: `Bearer ${accessToken}`,
             apikey: anonKey,
           },
           body: JSON.stringify({

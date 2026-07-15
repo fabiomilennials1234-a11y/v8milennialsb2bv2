@@ -10,6 +10,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { requireAuth, AuthError, authErrorResponse, type AuthContext } from "../_shared/user-auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -43,7 +44,8 @@ Deno.serve(
     }
 
     try {
-      const { client_id } = await req.json();
+      const body = await req.json().catch(() => ({} as Record<string, unknown>));
+      const client_id = typeof body?.client_id === "string" ? body.client_id : undefined;
       if (!client_id) {
         return new Response(
           JSON.stringify({ error: "client_id required" }),
@@ -51,28 +53,22 @@ Deno.serve(
         );
       }
 
-      const authHeader = req.headers.get("authorization") ?? "";
-      const supabaseUser = createClient(SUPABASE_URL, authHeader.replace("Bearer ", "").trim() || SUPABASE_SERVICE_ROLE_KEY);
+      // AUTH: require an authenticated caller. Org is authorized against the client's org
+      // below — never trust the caller-supplied client_id alone (was an unauthenticated
+      // cross-tenant IDOR exposing B2B financial PII across orgs via service_role reads).
+      let auth: AuthContext;
+      try {
+        auth = await requireAuth(req, { body });
+      } catch (e) {
+        if (e instanceof AuthError) return authErrorResponse(e, jsonHeaders);
+        throw e;
+      }
+
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
         auth: { persistSession: false },
       });
 
-      // Check cache (24h TTL)
-      const { data: cached } = await supabaseUser
-        .from("retention_suggestions")
-        .select("*")
-        .eq("client_id", client_id)
-        .gt("expires_at", new Date().toISOString())
-        .maybeSingle();
-
-      if (cached) {
-        return new Response(JSON.stringify({ suggestion: cached, cached: true }), {
-          status: 200,
-          headers: jsonHeaders,
-        });
-      }
-
-      // Fetch client context
+      // Fetch client context (needed to resolve its org before authorizing).
       const { data: client } = await supabaseAdmin
         .from("upsell_clients")
         .select("id, organization_id, name, company, health_score, health_status, segment, avg_ticket, lifetime_value, order_count, reorder_cycle_days, days_since_last_order, next_order_expected, churn_probability, trend")
@@ -84,6 +80,38 @@ Deno.serve(
           JSON.stringify({ error: "Client not found" }),
           { status: 404, headers: jsonHeaders },
         );
+      }
+
+      // AUTHORIZE: caller must belong to the client's org (or be master).
+      if (!auth.isMaster) {
+        const { data: membership } = await supabaseAdmin
+          .from("team_members")
+          .select("id")
+          .eq("user_id", auth.userId)
+          .eq("organization_id", client.organization_id)
+          .eq("is_active", true)
+          .maybeSingle();
+        if (!membership) {
+          return authErrorResponse(
+            new AuthError("Você não tem acesso a este cliente", 403),
+            jsonHeaders,
+          );
+        }
+      }
+
+      // Check cache (24h TTL) — safe now that the caller is authorized for this client's org.
+      const { data: cached } = await supabaseAdmin
+        .from("retention_suggestions")
+        .select("*")
+        .eq("client_id", client_id)
+        .gt("expires_at", new Date().toISOString())
+        .maybeSingle();
+
+      if (cached) {
+        return new Response(JSON.stringify({ suggestion: cached, cached: true }), {
+          status: 200,
+          headers: jsonHeaders,
+        });
       }
 
       // Fetch recent orders

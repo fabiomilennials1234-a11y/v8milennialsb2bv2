@@ -7,6 +7,7 @@ import { generateEmbedding, generateEmbeddingsBatch, generateMultimodalEmbedding
 import { logRuntime } from "../_shared/logger.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
+import { requireAuth, AuthError, authErrorResponse, type AuthContext } from "../_shared/user-auth.ts";
 import { splitPdfIntoBatches, encodeBatchAsBase64 } from "./pdf-chunking.ts";
 
 // Threshold pra acionar chunking. PDFs >= esse tamanho viram batched
@@ -213,6 +214,16 @@ serve(withErrorBoundary('process-agent-document', async (req) => {
       );
     }
 
+    // AUTH: require an authenticated caller; org authorized against the doc below.
+    // Called only from the agent-docs UI via functions.invoke (user JWT).
+    let auth: AuthContext;
+    try {
+      auth = await requireAuth(req, { body: body as unknown as Record<string, unknown> });
+    } catch (e) {
+      if (e instanceof AuthError) return authErrorResponse(e, corsHeaders);
+      throw e;
+    }
+
     // 1. Buscar documento
     const { data: doc, error: docError } = await supabase
       .from("copilot_agent_documents")
@@ -225,6 +236,24 @@ serve(withErrorBoundary('process-agent-document', async (req) => {
         JSON.stringify({ error: "Document not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // AUTHORIZE: caller must belong to the document's org (or be master). Prevents the
+    // cross-tenant IDOR where any caller reprocesses/overwrites another org's document by id.
+    if (!auth.isMaster) {
+      const { data: membership } = await supabase
+        .from("team_members")
+        .select("id")
+        .eq("user_id", auth.userId)
+        .eq("organization_id", doc.organization_id)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (!membership) {
+        return new Response(
+          JSON.stringify({ error: "Forbidden: document belongs to another organization" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // 2. Marcar como processing

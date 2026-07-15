@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
+import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 
 interface GenerateBusinessContextRequest {
   companyName: string;
@@ -25,6 +26,15 @@ serve(withErrorBoundary('generate-business-context', async (req) => {
 
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
+
+  // AUTH: require an authenticated user — closes unauthenticated denial-of-wallet on the
+  // shared OpenRouter key (audit 2026-07-14 #17). No org data is read here.
+  try {
+    await requireAuth(req);
+  } catch (e) {
+    if (e instanceof AuthError) return authErrorResponse(e, corsHeaders);
+    throw e;
   }
 
   try {
