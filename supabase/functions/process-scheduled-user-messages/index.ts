@@ -13,11 +13,18 @@ import {
   sendMediaViaInstance,
   sendAudioViaInstance,
 } from "../_shared/whatsapp-dispatch.ts";
+import { sleepJitter, maxBatchForBudget } from "../_shared/anti-ban-jitter.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
-const BATCH_SIZE = 20;
+// Anti-ban Onda 0 QW3: 3–8s jitter between sends. Batch shrinks to fit the
+// budget (worst per item ≈ 8s jitter + ~4s send/notify); overlap with the
+// 1-min tick is safe (per-row 'sending' lock), and unfetched rows stay
+// 'scheduled' for the next tick (was 20).
+const TICK_BUDGET_MS = 120_000;
+const WORST_PER_MESSAGE_MS = 12_000;
+const BATCH_SIZE = maxBatchForBudget(TICK_BUDGET_MS, WORST_PER_MESSAGE_MS); // = 10
 
 Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
@@ -63,6 +70,9 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
 
     let sent = 0;
     let failed = 0;
+    // Anti-ban jitter (Onda 0 QW3): conta só envios REAIS — lock-miss não
+    // dorme, e nunca antes do primeiro.
+    let dispatched = 0;
 
     for (const msg of messages) {
       const { error: lockErr } = await supabase
@@ -134,6 +144,12 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
         }
 
         const formattedNumber = msg.phone_number.replace(/\D/g, "");
+
+        // Anti-ban jitter (Onda 0 QW3) — espaça envios do mesmo tick. Conteúdo
+        // é humano (agendado no chat), mas a ENTREGA é automação em lote: sem
+        // espaçamento, 10 mensagens às 09:00 saem coladas do mesmo número.
+        if (dispatched > 0) await sleepJitter();
+        dispatched++;
 
         if (msg.message_content) {
           if (isSzChat) {

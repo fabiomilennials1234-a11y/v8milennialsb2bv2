@@ -14,11 +14,19 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { sendOutboundDispatch } from "../_shared/outbound-sender.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
+import { sleepJitter, maxBatchForBudget } from "../_shared/anti-ban-jitter.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
-const BATCH_SIZE = 50;
+// Anti-ban Onda 0 QW3: 3–8s jitter between dispatches. The batch shrinks to
+// fit the tick: cron */5 with NO per-row lock, so the whole run must finish
+// well inside 300s or an overlapping tick could double-send. Worst per item ≈
+// 8s jitter + ~12s of humanize/split/send. Leftovers stay 'pending' for the
+// next tick (was 50).
+const TICK_BUDGET_MS = 240_000;
+const WORST_PER_DISPATCH_MS = 20_000;
+const BATCH_SIZE = maxBatchForBudget(TICK_BUDGET_MS, WORST_PER_DISPATCH_MS); // = 12
 
 Deno.serve(withErrorBoundary('process-outbound-dispatches', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
@@ -71,7 +79,13 @@ Deno.serve(withErrorBoundary('process-outbound-dispatches', async (req) => {
 
     let sent = 0;
     let failed = 0;
+    let first = true;
     for (const d of dispatches) {
+      // Anti-ban jitter (Onda 0 QW3): espaça os disparos do tick, nunca antes
+      // do primeiro. Caminho 100% automação (copilot outbound) — o composer
+      // humano não passa por aqui.
+      if (!first) await sleepJitter();
+      first = false;
       const result = await sendOutboundDispatch(supabase, d.id, d.organization_id);
       if (result.success) sent++;
       else failed++;

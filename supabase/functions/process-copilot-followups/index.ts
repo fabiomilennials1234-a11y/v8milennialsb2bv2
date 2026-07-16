@@ -25,12 +25,16 @@ import { timingSafeCompare } from "../_shared/auth.ts";
 import { isCopilotCanceled } from "../_shared/copilot/cancellation.ts";
 import { getNextCadenceStep, type CadenceStep, type StepLogEntry } from "../_shared/copilot/followup-cadence.ts";
 import { isLeadEligibleForTrigger, type TriggerLead } from "../_shared/copilot/followup-triggers.ts";
+import { sleepJitter } from "../_shared/anti-ban-jitter.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
-const BATCH_PER_RULE = 20;
+// Anti-ban Onda 0 QW3: halved (was 20) — cada envio agora carrega geração LLM
+// (~5s) + jitter 3–8s; 10/regra mantém o tick de 5min folgado mesmo com várias
+// regras ativas. Candidatos além do slice ficam pro próximo tick.
+const BATCH_PER_RULE = 10;
 
 function replaceVariables(template: string, vars: Record<string, string>): string {
   let out = template;
@@ -60,6 +64,9 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
   const now = new Date();
   let totalSent = 0;
   let totalSkipped = 0;
+  // Anti-ban jitter (Onda 0 QW3): conta tentativas REAIS de envio (skips não
+  // dormem) — espaça follow-ups através de TODAS as regras do tick.
+  let sendAttempts = 0;
 
   const SUPPORTED_TRIGGERS = [
     "no_response",
@@ -421,6 +428,11 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
           hora: timeVars.hora,
         });
       }
+
+      // Anti-ban jitter (Onda 0 QW3): 3–8s entre envios, nunca antes do
+      // primeiro. A geração LLM espaça um pouco, mas não garante piso.
+      if (sendAttempts > 0) await sleepJitter();
+      sendAttempts++;
 
       const result = await sendFollowupMessage(supabase, {
         organizationId: orgId,
