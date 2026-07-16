@@ -15,6 +15,11 @@
  * AbortController, and setTimeout are available in both Deno and Node/Vitest.
  */
 
+import {
+  classifyBanSignal,
+  instanceKeyFromToken,
+  recordBanSignal,
+} from "./reputation-signal.ts";
 import type {
   UazapiClientConfig,
   UazapiError,
@@ -621,6 +626,26 @@ export class UazapiClient {
               res.statusText,
             raw: errBody,
           };
+          // Reputation signal (anti-ban Onda 0 QW4) — OUT-OF-BAND telemetry
+          // only. Explicitly does NOT call recordFailure/feed the circuit
+          // breaker (a ban-ish 4xx must never open the breaker that blocks
+          // healthy sends, incl. the human composer), and the 4xx contract is
+          // unchanged: throw immediately, no retry. Best-effort by design.
+          try {
+            const cls = classifyBanSignal(res.status, errBody, err.message);
+            if (cls.isBanSignal) {
+              recordBanSignal({
+                status: res.status,
+                providerCode:
+                  err.provider_code != null ? String(err.provider_code) : undefined,
+                matchedBy: cls.matchedBy ?? "status",
+                path,
+                instanceKey: instanceKeyFromToken(useAdmin ? this.adminToken : this.token),
+              });
+            }
+          } catch {
+            // telemetry must never affect the send result
+          }
           throw err;
         }
 
