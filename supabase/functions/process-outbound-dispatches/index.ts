@@ -80,7 +80,13 @@ Deno.serve(withErrorBoundary('process-outbound-dispatches', async (req) => {
     let sent = 0;
     let failed = 0;
     let first = true;
+    const runStartedAt = Date.now();
     for (const d of dispatches) {
+      // Wall-clock guard: um dispatch individual pode custar bem mais que a
+      // estimativa (mensagem longa = muitos chunks + delays). Sem row-lock
+      // nesta fila, estourar o tick de 5min arrisca double-send por overlap —
+      // então o run para no budget e o resto fica 'pending' pro próximo tick.
+      if (Date.now() - runStartedAt > TICK_BUDGET_MS) break;
       // Anti-ban jitter (Onda 0 QW3): espaça os disparos do tick, nunca antes
       // do primeiro. Caminho 100% automação (copilot outbound) — o composer
       // humano não passa por aqui.
@@ -95,11 +101,11 @@ Deno.serve(withErrorBoundary('process-outbound-dispatches', async (req) => {
       module: "outbound",
       action: "process_outbound_dispatches",
       status: "success",
-      payloadSnapshot: { processed: dispatches.length, sent, failed },
+      payloadSnapshot: { fetched: dispatches.length, processed: sent + failed, sent, failed },
     });
 
     return new Response(
-      JSON.stringify({ processed: dispatches.length, sent, failed }),
+      JSON.stringify({ processed: sent + failed, fetched: dispatches.length, sent, failed }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

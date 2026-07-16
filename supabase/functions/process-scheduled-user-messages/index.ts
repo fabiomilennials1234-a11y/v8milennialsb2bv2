@@ -74,14 +74,26 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
     // dorme, e nunca antes do primeiro.
     let dispatched = 0;
 
+    const runStartedAt = Date.now();
+
     for (const msg of messages) {
-      const { error: lockErr } = await supabase
+      // Wall-clock guard: jitter can stretch a batch past the 1-min tick; stop
+      // early and let the next tick drain the tail (rows stay 'scheduled').
+      if (Date.now() - runStartedAt > TICK_BUDGET_MS) break;
+
+      // Per-row lock as a real compare-and-swap: PostgREST returns success
+      // even when 0 rows match (another overlapping tick already took it), so
+      // the affected row must be checked — not just the error. Lock-miss is
+      // NOT a failure: the other tick owns the row.
+      const { data: locked, error: lockErr } = await supabase
         .from("scheduled_user_messages")
         .update({ status: "sending" })
         .eq("id", msg.id)
-        .eq("status", "scheduled");
+        .eq("status", "scheduled")
+        .select("id");
 
       if (lockErr) { failed++; continue; }
+      if (!locked?.length) continue;
 
       try {
         // Resolve instance — may be SZ.Chat (handled separately) or WA provider.
