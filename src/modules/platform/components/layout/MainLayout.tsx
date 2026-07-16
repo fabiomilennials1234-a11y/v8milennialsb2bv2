@@ -30,8 +30,21 @@ const CHECKLIST_HIDDEN_PATTERNS = [
   /^\/chat-whatsapp/,
 ];
 
-// Rotas full-bleed: chat ocupa viewport completo (sem padding/max-width)
+// Rotas full-bleed: canvas/chat ocupam o viewport completo (sem padding, sem
+// max-width e SEM scroll de página). O editor de automação é um canvas full-
+// screen (xyflow) — sem full-bleed, o `-m-6`/`h-[calc(100vh-64px)]` dele briga
+// com o padding do <main> e sobra ~8px, revelando um scroll lateral fantasma.
+// Regex casa o editor (`/automacoes/novo` e `/automacoes/:id`) mas NÃO a lista
+// (`/automacoes`) nem as execuções (`/automacoes/:id/execucoes`).
 const FULL_BLEED_PATTERNS = [
+  /^\/chat(\/|$)/,
+  /^\/chat-whatsapp/,
+  /^\/automacoes\/[^/]+$/,
+];
+
+// Rotas de chat: no mobile escondem a navbar p/ imersão total. O canvas de
+// automação é full-bleed mas MANTÉM a navbar (não é uma conversa).
+const CHAT_PATTERNS = [
   /^\/chat(\/|$)/,
   /^\/chat-whatsapp/,
 ];
@@ -85,7 +98,7 @@ function MainLayoutInner({ children }: MainLayoutProps) {
     pattern.test(location.pathname),
   );
 
-  const isChatRoute = FULL_BLEED_PATTERNS.some((p) => p.test(location.pathname));
+  const isChatRoute = CHAT_PATTERNS.some((p) => p.test(location.pathname));
   const hideNavbar = isMobile && isChatRoute;
   const hideBottomNav = isChatThreadOpen;
 
