@@ -193,20 +193,19 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
     }
 
     // --- Entrega chunks (padrão recover-stuck-conversations) ---
-    const { data: instance } = await supabase
-      .from("whatsapp_instances")
-      .select("*")
-      .eq("organization_id", orgId)
-      .in("status", ["open", "connected"])
-      .limit(1)
-      .maybeSingle();
+    // Anti-ban Onda 0 QW5: preferir sessão VIVA (session_dead_since null,
+    // conexão mais recente) com FALLBACK pra query legada — nunca devolve
+    // no_active_instance quando existe instância connected (flag pode ser
+    // falso-positivo stale; exclusão dura silenciaria o copilot).
+    const { selectSendableInstance, sendTextViaInstance } = await import(
+      "../_shared/whatsapp-dispatch.ts"
+    );
+    const instance = await selectSendableInstance(supabase, orgId);
 
     if (!instance) {
       await applyOutcome({ kind: "transient_error", error: "no_active_instance" });
       return json({ ok: false, reason: "no_active_instance" }, 200);
     }
-
-    const { sendTextViaInstance } = await import("../_shared/whatsapp-dispatch.ts");
     let chunksSent = 0;
     let sendFailed = false;
     let canceledMid = false;

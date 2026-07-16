@@ -147,6 +147,45 @@ export async function resolveInstance(
 }
 
 /**
+ * selectSendableInstance — org-wide pick for automation senders that used a
+ * bare `status IN (open, connected) LIMIT 1`, which can grab a ZOMBIE: a row
+ * whose status froze at 'connected' after a remote logout (session_dead_since
+ * is the real verdict, stamped by whatsapp-session-watchdog).
+ *
+ * PREFER-LIVE-WITH-FALLBACK (anti-ban Onda 0 QW5) — chat-safety contract:
+ *   1. Prefer a live session: not session-dead, most recently connected.
+ *   2. FALLBACK: the legacy query byte-for-byte — session_dead_since can be a
+ *      stale false-positive (10-min watchdog cycle) and a hard filter would
+ *      silence the copilot. This NEVER returns null where the legacy query
+ *      would have returned a row.
+ */
+export async function selectSendableInstance(
+  supabaseAdmin: any,
+  organizationId: string,
+): Promise<WhatsAppInstance | null> {
+  const { data: live } = await supabaseAdmin
+    .from("whatsapp_instances")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .in("status", ["open", "connected"])
+    .is("session_dead_since", null)
+    .order("last_connection_at", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+  if (live) return live as WhatsAppInstance;
+
+  // Legacy fallback — identical to the callers' previous selection.
+  const { data: fallback } = await supabaseAdmin
+    .from("whatsapp_instances")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .in("status", ["open", "connected"])
+    .limit(1)
+    .maybeSingle();
+  return (fallback ?? null) as WhatsAppInstance | null;
+}
+
+/**
  * Resolve instance + provider + normalized phone in one call.
  * Throws DispatchResolutionError with actionable code on failure.
  *
