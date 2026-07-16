@@ -154,10 +154,15 @@ export async function resolveInstance(
  *
  * PREFER-LIVE-WITH-FALLBACK (anti-ban Onda 0 QW5) — chat-safety contract:
  *   1. Prefer a live session: not session-dead, most recently connected.
- *   2. FALLBACK: the legacy query byte-for-byte — session_dead_since can be a
- *      stale false-positive (10-min watchdog cycle) and a hard filter would
- *      silence the copilot. This NEVER returns null where the legacy query
- *      would have returned a row.
+ *      Provider-scoped to uazapi/evolution (Meta Cloud isolation, Rule 1 —
+ *      same rationale as resolveInstance above): a meta_cloud row is always
+ *      "live" here (the watchdog only audits uazapi rows) and would otherwise
+ *      deterministically win the recency ordering, mis-routing free-form
+ *      copilot replies through the Meta API.
+ *   2. FALLBACK: the legacy query byte-for-byte (provider-blind, unordered) —
+ *      session_dead_since can be a stale false-positive (10-min watchdog
+ *      cycle) and a hard filter would silence the copilot. This NEVER returns
+ *      null where the legacy query would have returned a row.
  */
 export async function selectSendableInstance(
   supabaseAdmin: any,
@@ -167,6 +172,7 @@ export async function selectSendableInstance(
     .from("whatsapp_instances")
     .select("*")
     .eq("organization_id", organizationId)
+    .in("provider", ["uazapi", "evolution"])
     .in("status", ["open", "connected"])
     .is("session_dead_since", null)
     .order("last_connection_at", { ascending: false, nullsFirst: false })

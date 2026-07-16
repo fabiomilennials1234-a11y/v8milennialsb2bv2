@@ -112,4 +112,19 @@ describe("selectSendableInstance — prefer live, fall back, never regress", () 
     const out = await selectSendableInstance(instancesStub([evo]), "org-1");
     expect(out?.id).toBe("evo");
   });
+
+  it("Meta Cloud isolation (Rule 1): never prefers a meta_cloud row over a live uazapi chip", async () => {
+    // meta rows are always "live" here (watchdog only audits uazapi) and carry
+    // a fresh last_connection_at — without the provider filter they would win.
+    const meta = inst({ id: "meta", provider: "meta_cloud", last_connection_at: "2026-07-16T09:00:00Z" });
+    const chip = inst({ id: "chip", last_connection_at: "2026-07-01T00:00:00Z" });
+    const out = await selectSendableInstance(instancesStub([meta, chip]), "org-1");
+    expect(out?.id).toBe("chip");
+  });
+
+  it("meta_cloud-only org: fallback keeps legacy parity (returns the meta row, exactly like the old query)", async () => {
+    const meta = inst({ id: "meta-only", provider: "meta_cloud" });
+    const out = await selectSendableInstance(instancesStub([meta]), "org-1");
+    expect(out?.id).toBe("meta-only");
+  });
 });
