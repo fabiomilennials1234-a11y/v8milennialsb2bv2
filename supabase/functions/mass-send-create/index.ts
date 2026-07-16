@@ -30,6 +30,7 @@ import {
   instanceDailyUsageSource,
 } from "../_shared/quick-blast/instance-budget.ts";
 import { saoPauloUsageDate } from "../_shared/quick-blast/daily-budget.ts";
+import { humanizeBatch } from "../_shared/humanize-batch.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -202,12 +203,18 @@ Deno.serve(
     const acceptedMsgs = msgs.slice(0, headroom);
     const trimmedCount = msgs.length - acceptedMsgs.length;
 
+    // Humanizer (anti-ban Onda 0 QW6): per-recipient rewrite kills the
+    // byte-identical fan-out. Fail-open + time-boxed by contract — a humanizer
+    // outage or a huge batch degrades the variation, never the send. The
+    // rewritten array is the frozen variant set that ships to /sender.
+    const humanizedMsgs = await humanizeBatch(acceptedMsgs);
+
     try {
       const { sender_job_id, uazapi_sender_id } = await runUazapiSenderJob(
         supabaseAdmin,
         instance as any,
         {
-          recipients: acceptedMsgs,
+          recipients: humanizedMsgs,
           delayMin: delay_min_ms,
           delayMax: delay_max_ms,
           scheduledFor: scheduled_for,
