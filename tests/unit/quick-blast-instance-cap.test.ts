@@ -114,7 +114,32 @@ describe("runQuickBlast — per-number daily cap (ADR-0015)", () => {
     expect(out.skipped.overInstanceCap).toBe(40); // labelled on the binding constraint
     expect(out.skipped.overDailyBudget).toBe(0);
     expect(out.skipped.overCap).toBe(0);
+    // `remaining` reflects the TIGHTEST headroom (number, not org) so the
+    // wizard's over-budget math and the "Agendar em lotes" offer engage.
+    expect(out.remaining).toBe(10);
     expect((dispatch.mock.calls[0][1] as any).recipients).toHaveLength(10);
+  });
+
+  it("checks and consumes the SEND day's ledger partition for scheduled blasts", async () => {
+    const dates: string[] = [];
+    const src = {
+      async getUsedToday(_i: string, d: string, _c: number) { dates.push(`read:${d}`); return 0; },
+      async increment(_i: string, d: string, c: number) { dates.push(`inc:${d}:${c}`); },
+    };
+
+    const out = await runQuickBlast(
+      { supabaseAdmin: supabaseStub({ dailyBudget: 200, leads: leads(5) }), dispatch: okDispatch(), usageSource: orgUsageStub(0).source, instanceUsageSource: src },
+      {
+        orgId: "org-1", userId: "u", instance: INSTANCE, leadIds: leads(5).map((l) => l.id),
+        message: "Hi",
+        scheduledFor: "2026-07-20T12:00:00Z", // leaves the chip on the 20th
+        now: new Date("2026-07-16T12:00:00Z"),
+      },
+    );
+
+    expect(out.ok).toBe(true);
+    // Both the read and the increment hit the SEND day's partition, not today.
+    expect(dates).toEqual(["read:2026-07-20", "inc:2026-07-20:5"]);
   });
 
   it("increments BOTH ledgers by the actually-dispatched count", async () => {

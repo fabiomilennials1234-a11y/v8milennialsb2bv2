@@ -170,15 +170,30 @@ export async function runQuickBlast(
   // injects it; legacy tests without the seam keep org-budget-only semantics).
   // Fail-closed inside the source: a per-number read error resolves the
   // number's headroom to 0 (block), never unlimited.
+  // The per-number ledger is partitioned by the day the messages LEAVE the
+  // chip: a blast scheduled for tomorrow consumes tomorrow's headroom, not
+  // today's (otherwise the scheduled batch + tomorrow's organic sends could
+  // stack up to 2x the cap on the actual send day).
   const instanceUsage = deps.instanceUsageSource ?? null;
   const instanceCap = resolveInstanceCap(params.instance.daily_blast_cap);
+  const instanceUsageDate = saoPauloUsageDate(
+    parseSendDate(params.scheduledFor, params.now ?? new Date()),
+  );
   let instanceRemaining = Number.POSITIVE_INFINITY;
   if (instanceUsage) {
-    const instanceUsed = await instanceUsage.getUsedToday(params.instance.id, usageDate, instanceCap);
+    const instanceUsed = await instanceUsage.getUsedToday(
+      params.instance.id,
+      instanceUsageDate,
+      instanceCap,
+    );
     instanceRemaining = Math.max(0, instanceCap - instanceUsed);
   }
   const numberIsBinding = instanceRemaining < effectiveCap;
   const sendCap = Math.min(effectiveCap, instanceRemaining);
+  // Headroom the wizard sees: the tightest of (org daily, number daily) — so
+  // "acima do teto" counts and the "Agendar em lotes" offer engage when the
+  // NUMBER is the binding constraint, not only the org budget.
+  const effectiveRemaining = Math.min(remaining, instanceRemaining);
 
   // Org-scoped fetch — foreign-org lead ids are excluded by the org filter.
   const { data: leads } = await supabaseAdmin
@@ -236,7 +251,7 @@ export async function runQuickBlast(
   // dispatch, no logging, and crucially NO ledger increment — a preview must
   // never consume budget.
   if (params.dryRun) {
-    return { ok: true, count: recipients.length, skipped, remaining };
+    return { ok: true, count: recipients.length, skipped, remaining: effectiveRemaining };
   }
 
   // Daily budget exhausted — nothing may go out today. Reject explicitly so the
@@ -245,18 +260,18 @@ export async function runQuickBlast(
   // into the engine's over-cap bucket, which `dailyIsBinding` already relabelled
   // as `overDailyBudget` — no recomputation needed.
   if (remaining <= 0) {
-    return { ok: false, count: 0, skipped, remaining, error: "daily_budget_exhausted" };
+    return { ok: false, count: 0, skipped, remaining: effectiveRemaining, error: "daily_budget_exhausted" };
   }
 
   // The sending number's own daily cap is exhausted — same semantics as the
   // org ceiling, scoped to the number (ADR-0015). Explicit error so the wizard
   // can tell "this number is done for today" apart from "no recipients".
   if (instanceRemaining <= 0) {
-    return { ok: false, count: 0, skipped, remaining, error: "instance_daily_cap_exhausted" };
+    return { ok: false, count: 0, skipped, remaining: effectiveRemaining, error: "instance_daily_cap_exhausted" };
   }
 
   if (recipients.length === 0) {
-    return { ok: false, count: 0, skipped, remaining, error: "no_recipients" };
+    return { ok: false, count: 0, skipped, remaining: effectiveRemaining, error: "no_recipients" };
   }
 
   const { sender_job_id, uazapi_sender_id } = await dispatch(params.instance, {
@@ -286,11 +301,12 @@ export async function runQuickBlast(
     // ledger increment is best-effort; the blast already dispatched
   }
 
-  // Per-number ledger (ADR-0015) — increment by the ACTUALLY-dispatched count,
-  // same atomic RPC the Blast Plan paths use. Best-effort for the same reason.
+  // Per-number ledger (ADR-0015) — increment by the ACTUALLY-dispatched count
+  // on the SEND day's partition, same atomic RPC the Blast Plan paths use.
+  // Best-effort for the same reason.
   if (instanceUsage) {
     try {
-      await instanceUsage.increment(params.instance.id, usageDate, recipients.length);
+      await instanceUsage.increment(params.instance.id, instanceUsageDate, recipients.length);
     } catch {
       // per-number ledger increment is best-effort; the blast already dispatched
     }
@@ -312,7 +328,15 @@ export async function runQuickBlast(
     // logging is best-effort; the blast already dispatched
   }
 
-  return { ok: true, sender_job_id, uazapi_sender_id, count: recipients.length, skipped, remaining };
+  return { ok: true, sender_job_id, uazapi_sender_id, count: recipients.length, skipped, remaining: effectiveRemaining };
+}
+
+/** The calendar day the messages actually LEAVE the chip: the scheduled date
+ *  when present/parseable, else "now". Ledger partitions key off this. */
+function parseSendDate(scheduledFor: string | undefined, fallback: Date): Date {
+  if (!scheduledFor) return fallback;
+  const ms = Date.parse(scheduledFor);
+  return Number.isNaN(ms) ? fallback : new Date(ms);
 }
 
 /**

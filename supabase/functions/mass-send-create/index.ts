@@ -190,7 +190,13 @@ Deno.serve(
     // the headroom to 0 and blocks; protecting the number outranks one more send.
     const instanceCap = resolveInstanceCap((instance as any).daily_blast_cap);
     const instanceUsage = instanceDailyUsageSource(supabaseAdmin);
-    const usageDate = saoPauloUsageDate(new Date());
+    // Ledger keys off the day the messages LEAVE the chip: a batch scheduled
+    // for tomorrow checks/consumes tomorrow's headroom, not today's (otherwise
+    // the scheduled batch + the send-day's organic blasts stack to 2x the cap).
+    const scheduledMs = scheduled_for ? Date.parse(scheduled_for) : NaN;
+    const usageDate = saoPauloUsageDate(
+      Number.isNaN(scheduledMs) ? new Date() : new Date(scheduledMs)
+    );
     const usedToday = await instanceUsage.getUsedToday(instance_id, usageDate, instanceCap);
     const headroom = Math.max(0, instanceCap - usedToday);
     if (headroom <= 0) {

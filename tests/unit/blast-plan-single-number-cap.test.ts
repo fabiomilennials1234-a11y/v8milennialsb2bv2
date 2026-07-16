@@ -142,20 +142,37 @@ describe("createBlastPlan — single-number, per-number cap on lot 0", () => {
     expect(org.state.increments).toEqual([40]);
   });
 
-  it("dispatches nothing today when the number is already at its cap (all deferred)", async () => {
+  it("dispatches nothing today when the number is already at its cap — recipients stay in lot 0 and the next release drains them (no stranding)", async () => {
     const dispatch = okDispatch();
     const { store, state } = planStore();
+    const org = orgUsageStub(0);
     const inst = instanceUsageStub(80); // cap 80 fully consumed
 
     const out = await createBlastPlan(
-      { store, usageSource: orgUsageStub(0).source, dispatch, instanceUsageSource: inst.source },
+      { store, usageSource: org.source, dispatch, instanceUsageSource: inst.source },
       { orgId: "org-1", userId: "u", instance: NUM, leads: leads(10), message: "Hi", dailyBudget: 100 },
     );
 
     expect(out.ok).toBe(true);
     expect(dispatch).not.toHaveBeenCalled();
     expect(state.recipients.every((r) => r.status === "pending")).toBe(true);
+    // Nothing released → rows must STAY in lot 0 (the lot the releaser reads
+    // next), and the plan stays active — not "completed with stranded rows".
+    expect(state.recipients.every((r) => r.lot_index === 0)).toBe(true);
+    const plan = [...state.plans.values()][0];
+    expect(plan.status).toBe("active");
+    expect(plan.lots_released).toBe(0);
     expect(inst.state.increments).toHaveLength(0);
+
+    // Next day the number has headroom again → the release actually sends.
+    inst.state.used = 0;
+    const rel = await releaseBlastPlanLot(
+      { store, usageSource: org.source, dispatch, instanceUsageSource: inst.source },
+      { planId: plan.id, dailyBudget: 100 },
+    );
+    expect(rel.ok).toBe(true);
+    expect(rel.sent).toBe(10);
+    expect(rel.completed).toBe(true);
   });
 });
 

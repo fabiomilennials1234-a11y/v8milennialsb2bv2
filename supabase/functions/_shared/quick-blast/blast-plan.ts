@@ -368,11 +368,15 @@ export async function createBlastPlan(
     lotsReleased = 1;
   }
 
-  // Defer whatever did not fit today (budget pressure) into the next lot index so
-  // it is retried tomorrow — elastic duration. When the whole lot fit, only the
-  // future lots remain.
+  // Defer whatever did not fit today (budget pressure) into the next lot index
+  // so it is retried tomorrow — elastic duration. Move ONLY when something was
+  // released (mirrors the multi-number branch): with lotsReleased=0 the next
+  // release reads lot `lots_released` = 0, so moving the rows to lot 1 would
+  // strand them — the releaser would find lot 0 empty and complete the plan
+  // with every recipient stuck pending (reachable when the number's daily cap
+  // is already exhausted at creation).
   const deferredRows = lot0.slice(slice.toSend);
-  if (deferredRows.length > 0) {
+  if (deferredRows.length > 0 && lotsReleased >= 1) {
     await deps.store.moveRecipientsToLot(planId, deferredRows.map((r) => r.lead_id), 1);
   }
 
