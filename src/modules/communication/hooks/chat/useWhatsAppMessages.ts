@@ -7,9 +7,8 @@
  * useWhatsAppMessagesRealtime aplica patches incrementais sem refetch.
  */
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
-import type { WhatsAppMessage } from "./types";
+import { fetchConversationMessages } from "@/modules/communication/lib/whatsappMessagesQuery";
 import { chatQueryKeys } from "./shared/queryKeys";
 import {
   useWhatsAppRealtimeFallback,
@@ -37,17 +36,7 @@ export function useWhatsAppMessages(
     queryKey: chatQueryKeys.messages(organizationId, phoneNumber, instanceId),
     queryFn: async () => {
       if (!organizationId || !phoneNumber || !instanceId) return [];
-
-      const { data, error } = await supabase
-        .from("whatsapp_messages")
-        .select("id, organization_id, instance_id, message_id, remote_jid, phone_number, direction, message_type, content, media_url, media_expired, push_name, status, lead_id, timestamp, created_at, sent_by_ai, sent_source")
-        .eq("organization_id", organizationId)
-        .eq("instance_id", instanceId)
-        .eq("phone_number", phoneNumber)
-        .order("timestamp", { ascending: true });
-
-      if (error) throw error;
-      return data as WhatsAppMessage[];
+      return fetchConversationMessages({ organizationId, instanceId, phoneNumber });
     },
     enabled: !!organizationId && !!phoneNumber && !!instanceId,
     // Backstop de reconciliação: se um postgres_changes é dropado pelo apply_rls

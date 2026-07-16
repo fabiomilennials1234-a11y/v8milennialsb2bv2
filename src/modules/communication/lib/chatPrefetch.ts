@@ -19,9 +19,8 @@
  * de chamar este helper.
  */
 import type { QueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
-import type { WhatsAppMessage } from "@/modules/communication/hooks/chat/types";
+import { fetchConversationMessages } from "@/modules/communication/lib/whatsappMessagesQuery";
 
 let chatChunkPromise: Promise<unknown> | null = null;
 
@@ -42,7 +41,7 @@ export function prefetchChatRoute(): Promise<unknown> {
 
 export interface PrefetchChatDataParams {
   organizationId: string;
-  /** Telefone já normalizado (formato do hook: 55 + DDD + número). */
+  /** Telefone em qualquer formato — `fetchConversationMessages` normaliza. */
   phoneNumber: string;
   /**
    * `instanceId` é opcional aqui. Se não souber, o prefetch ainda popula
@@ -72,20 +71,8 @@ export async function prefetchChatData(
 
   await queryClient.prefetchQuery({
     queryKey: chatQueryKeys.messages(organizationId, phoneNumber, instanceId),
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("whatsapp_messages")
-        .select(
-          "id, organization_id, instance_id, message_id, remote_jid, phone_number, direction, message_type, content, media_url, media_expired, push_name, status, lead_id, timestamp, created_at, sent_by_ai, sent_source",
-        )
-        .eq("organization_id", organizationId)
-        .eq("instance_id", instanceId)
-        .eq("phone_number", phoneNumber)
-        .order("timestamp", { ascending: true });
-
-      if (error) throw error;
-      return data as WhatsAppMessage[];
-    },
+    queryFn: () =>
+      fetchConversationMessages({ organizationId, instanceId, phoneNumber }),
     // mesmo staleTime padrão do QueryClient (5min) basta pra ser reaproveitado
   });
 }
