@@ -96,7 +96,7 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
   const canFire =
     message.trim().length > 0 &&
     !!instanceId &&
-    delayMin >= 0 &&
+    delayMin >= 3 &&
     delayMax >= delayMin &&
     leadIds.length > 0 &&
     (scheduledFor === "" || new Date(scheduledFor).getTime() > Date.now()) &&
@@ -266,7 +266,7 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
               <Input
                 id="qb-min"
                 type="number"
-                min={0}
+                min={3}
                 value={delayMin}
                 onChange={(e) => setDelayMin(Number(e.target.value))}
               />
@@ -276,7 +276,7 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
               <Input
                 id="qb-max"
                 type="number"
-                min={0}
+                min={3}
                 value={delayMax}
                 onChange={(e) => setDelayMax(Number(e.target.value))}
               />

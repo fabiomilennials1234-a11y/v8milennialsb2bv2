@@ -503,7 +503,7 @@ function DisparoWizardInner({
 
   const canAdvancePublico = sourceReady && !audienceLoading && audienceSize > 0;
   const canAdvanceMensagem =
-    message.trim().length > 0 && !!instanceId && delayMin >= 0 && delayMax >= delayMin && !uploading;
+    message.trim().length > 0 && !!instanceId && delayMin >= 3 && delayMax >= delayMin && !uploading;
   const scheduleValid = when === "now" || (!!scheduledFor && new Date(scheduledFor).getTime() > Date.now());
   const busy = blast.isPending || createPlan.isPending;
   // The active CTA: schedule a plan only when over budget AND the operator kept
@@ -1405,7 +1405,7 @@ function MensagemStep({
           <Input
             id="disparo-min"
             type="number"
-            min={0}
+            min={3}
             value={delayMin}
             onChange={(e) => onDelayMin(Number(e.target.value))}
           />
@@ -1417,7 +1417,7 @@ function MensagemStep({
           <Input
             id="disparo-max"
             type="number"
-            min={0}
+            min={3}
             value={delayMax}
             onChange={(e) => onDelayMax(Number(e.target.value))}
           />

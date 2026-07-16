@@ -25,6 +25,11 @@ import {
   saoPauloUsageDate,
   type BlastUsageSource,
 } from "../_shared/quick-blast/daily-budget.ts";
+import {
+  resolveInstanceCap,
+  instanceDailyUsageSource,
+  type InstanceUsageSource,
+} from "../_shared/quick-blast/instance-budget.ts";
 
 export interface QuickBlastDeps {
   // `rpc` is needed by the default daily-budget usage source (atomic ledger
@@ -51,12 +56,16 @@ export interface QuickBlastDeps {
    *  is unit-testable without a live DB; defaults to a `blast_daily_usage` read
    *  over `supabaseAdmin` when omitted. */
   usageSource?: BlastUsageSource;
+  /** Per-number Daily Cap ledger (ADR-0015) — the SAME `blast_instance_daily_usage`
+   *  ledger the Blast Plan paths consume, extended to the avulso Quick Blast.
+   *  Injected for tests; defaults to a read over `supabaseAdmin` when omitted. */
+  instanceUsageSource?: InstanceUsageSource;
 }
 
 export interface QuickBlastParams {
   orgId: string;
   userId: string;
-  instance: { id: string; organization_id: string; provider?: string };
+  instance: { id: string; organization_id: string; provider?: string; daily_blast_cap?: number | null };
   leadIds: string[];
   message: string;
   delayMinMs?: number;
@@ -95,6 +104,9 @@ export interface QuickBlastResult {
     alreadyContactedWithinWindow: number;
     replied: number;
     overDailyBudget: number;
+    /** Clipped by the sending NUMBER's own daily cap (ADR-0015) — tighter than
+     *  the org budget when the number already blasted close to its ceiling. */
+    overInstanceCap: number;
   };
   /** Daily Blast Budget headroom available to THIS blast before it consumed —
    *  `max(0, daily_blast_budget - usage_today)`. The wizard reads it as "today's
@@ -110,6 +122,7 @@ const EMPTY_SKIPPED = {
   alreadyContactedWithinWindow: 0,
   replied: 0,
   overDailyBudget: 0,
+  overInstanceCap: 0,
 };
 
 export async function runQuickBlast(
@@ -152,6 +165,36 @@ export async function runQuickBlast(
     perBlastMax: perBlastCap,
   });
 
+  // Per-number Daily Cap (ADR-0015) — the tightest of (per-blast, org daily,
+  // number daily) wins. Seam optional like blast-plan's (the edge fn always
+  // injects it; legacy tests without the seam keep org-budget-only semantics).
+  // Fail-closed inside the source: a per-number read error resolves the
+  // number's headroom to 0 (block), never unlimited.
+  // The per-number ledger is partitioned by the day the messages LEAVE the
+  // chip: a blast scheduled for tomorrow consumes tomorrow's headroom, not
+  // today's (otherwise the scheduled batch + tomorrow's organic sends could
+  // stack up to 2x the cap on the actual send day).
+  const instanceUsage = deps.instanceUsageSource ?? null;
+  const instanceCap = resolveInstanceCap(params.instance.daily_blast_cap);
+  const instanceUsageDate = saoPauloUsageDate(
+    parseSendDate(params.scheduledFor, params.now ?? new Date()),
+  );
+  let instanceRemaining = Number.POSITIVE_INFINITY;
+  if (instanceUsage) {
+    const instanceUsed = await instanceUsage.getUsedToday(
+      params.instance.id,
+      instanceUsageDate,
+      instanceCap,
+    );
+    instanceRemaining = Math.max(0, instanceCap - instanceUsed);
+  }
+  const numberIsBinding = instanceRemaining < effectiveCap;
+  const sendCap = Math.min(effectiveCap, instanceRemaining);
+  // Headroom the wizard sees: the tightest of (org daily, number daily) — so
+  // "acima do teto" counts and the "Agendar em lotes" offer engage when the
+  // NUMBER is the binding constraint, not only the org budget.
+  const effectiveRemaining = Math.min(remaining, instanceRemaining);
+
   // Org-scoped fetch — foreign-org lead ids are excluded by the org filter.
   const { data: leads } = await supabaseAdmin
     .from("leads")
@@ -174,7 +217,7 @@ export async function runQuickBlast(
 
   const { recipients, skipped: engineSkips } = buildRecipients(merged, {
     template: params.message ?? "",
-    cap: effectiveCap,
+    cap: sendCap,
     imageUrl: params.imageUrl,
   });
 
@@ -183,9 +226,12 @@ export async function runQuickBlast(
   // is the tightest limit, the overflow is reported as `overDailyBudget` so the
   // wizard can show "N acima do teto diário"; otherwise it stays per-blast
   // `overCap`. Same total — only the label changes.
+  // The number's own cap outranks the daily/per-blast labels when it is the
+  // strictly tightest constraint (ADR-0015) — same total, only the label moves.
   const dailyIsBinding = remaining <= perBlastCap && remaining === effectiveCap;
-  const overDailyBudget = dailyIsBinding ? engineSkips.overCap : 0;
-  const overCap = dailyIsBinding ? 0 : engineSkips.overCap;
+  const overInstanceCap = numberIsBinding ? engineSkips.overCap : 0;
+  const overDailyBudget = !numberIsBinding && dailyIsBinding ? engineSkips.overCap : 0;
+  const overCap = numberIsBinding || dailyIsBinding ? 0 : engineSkips.overCap;
 
   // Single reconciled breakdown: refinement skips (pre-dispatch narrowing) +
   // engine skips (phone/dedup/cap) + daily-budget overflow. Counts never double —
@@ -198,13 +244,14 @@ export async function runQuickBlast(
     alreadyContactedWithinWindow: refineSkips.skipped.alreadyContactedWithinWindow,
     replied: refineSkips.skipped.replied,
     overDailyBudget,
+    overInstanceCap,
   };
 
   // Preview (dry run): resolved audience + refinements + daily clamp, no
   // dispatch, no logging, and crucially NO ledger increment — a preview must
   // never consume budget.
   if (params.dryRun) {
-    return { ok: true, count: recipients.length, skipped, remaining };
+    return { ok: true, count: recipients.length, skipped, remaining: effectiveRemaining };
   }
 
   // Daily budget exhausted — nothing may go out today. Reject explicitly so the
@@ -213,11 +260,18 @@ export async function runQuickBlast(
   // into the engine's over-cap bucket, which `dailyIsBinding` already relabelled
   // as `overDailyBudget` — no recomputation needed.
   if (remaining <= 0) {
-    return { ok: false, count: 0, skipped, remaining, error: "daily_budget_exhausted" };
+    return { ok: false, count: 0, skipped, remaining: effectiveRemaining, error: "daily_budget_exhausted" };
+  }
+
+  // The sending number's own daily cap is exhausted — same semantics as the
+  // org ceiling, scoped to the number (ADR-0015). Explicit error so the wizard
+  // can tell "this number is done for today" apart from "no recipients".
+  if (instanceRemaining <= 0) {
+    return { ok: false, count: 0, skipped, remaining: effectiveRemaining, error: "instance_daily_cap_exhausted" };
   }
 
   if (recipients.length === 0) {
-    return { ok: false, count: 0, skipped, remaining, error: "no_recipients" };
+    return { ok: false, count: 0, skipped, remaining: effectiveRemaining, error: "no_recipients" };
   }
 
   const { sender_job_id, uazapi_sender_id } = await dispatch(params.instance, {
@@ -247,6 +301,17 @@ export async function runQuickBlast(
     // ledger increment is best-effort; the blast already dispatched
   }
 
+  // Per-number ledger (ADR-0015) — increment by the ACTUALLY-dispatched count
+  // on the SEND day's partition, same atomic RPC the Blast Plan paths use.
+  // Best-effort for the same reason.
+  if (instanceUsage) {
+    try {
+      await instanceUsage.increment(params.instance.id, instanceUsageDate, recipients.length);
+    } catch {
+      // per-number ledger increment is best-effort; the blast already dispatched
+    }
+  }
+
   // Per-lead conversation logging — optimistic at enqueue, non-fatal. Lets the
   // rep see what was sent and gives the Copilot context if the lead replies.
   try {
@@ -263,7 +328,15 @@ export async function runQuickBlast(
     // logging is best-effort; the blast already dispatched
   }
 
-  return { ok: true, sender_job_id, uazapi_sender_id, count: recipients.length, skipped, remaining };
+  return { ok: true, sender_job_id, uazapi_sender_id, count: recipients.length, skipped, remaining: effectiveRemaining };
+}
+
+/** The calendar day the messages actually LEAVE the chip: the scheduled date
+ *  when present/parseable, else "now". Ledger partitions key off this. */
+function parseSendDate(scheduledFor: string | undefined, fallback: Date): Date {
+  if (!scheduledFor) return fallback;
+  const ms = Date.parse(scheduledFor);
+  return Number.isNaN(ms) ? fallback : new Date(ms);
 }
 
 /**

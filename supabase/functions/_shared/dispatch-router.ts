@@ -124,6 +124,29 @@ function toEpochMs(iso: string | undefined): number | undefined {
   return Number.isNaN(ms) ? undefined : ms;
 }
 
+/** Server-side floor for the Uazapi /sender inter-message delay (anti-ban
+ *  Onda 0). All /sender/advanced exits converge on runUazapiSenderJob, so a
+ *  single clamp here covers Quick Blast, Blast Plan and Mass Send regardless
+ *  of what the client sent (stale frontend, direct API, 0/0, omitted). */
+export const MIN_SENDER_DELAY_MS = 3_000;
+
+/**
+ * Clamp the inter-message delay pair: delayMin ≥ MIN_SENDER_DELAY_MS and
+ * delayMax ≥ delayMin. Missing/invalid values (undefined, NaN, negative)
+ * resolve to the floor instead of passing through to Uazapi's unknown
+ * server-side default.
+ */
+export function clampSenderDelays(
+  delayMin?: number,
+  delayMax?: number,
+): { delayMin: number; delayMax: number } {
+  const rawMin = typeof delayMin === "number" && Number.isFinite(delayMin) ? Math.floor(delayMin) : 0;
+  const rawMax = typeof delayMax === "number" && Number.isFinite(delayMax) ? Math.floor(delayMax) : 0;
+  const min = Math.max(MIN_SENDER_DELAY_MS, rawMin);
+  const max = Math.max(min, rawMax);
+  return { delayMin: min, delayMax: max };
+}
+
 export async function runUazapiSenderJob(
   supabaseAdmin: any,
   instance: WhatsAppInstance,
@@ -138,10 +161,13 @@ export async function runUazapiSenderJob(
     throw new Error("provider does not support senderAdvanced");
   }
 
+  // Effective (clamped) delays — never trust the caller for the floor.
+  const { delayMin, delayMax } = clampSenderDelays(input.delayMin, input.delayMax);
+
   const res = await impl.call(provider, {
     messages: input.recipients,
-    delayMin: input.delayMin,
-    delayMax: input.delayMax,
+    delayMin,
+    delayMax,
     scheduled_for: toEpochMs(input.scheduledFor),
     track_source: input.trackSource ?? "dispatch-router-mass",
   });
@@ -175,8 +201,9 @@ export async function runUazapiSenderJob(
       triggered_by_user_id: input.triggeredByUserId ?? null,
       triggered_via: input.triggeredVia ?? "api",
       payload: {
-        delayMin: input.delayMin,
-        delayMax: input.delayMax,
+        // Effective values sent to Uazapi (post-clamp), not the raw client input.
+        delayMin,
+        delayMax,
         scheduledFor: input.scheduledFor,
         trackSource: input.trackSource,
         recipients_count: input.recipients.length,

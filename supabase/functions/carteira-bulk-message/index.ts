@@ -8,6 +8,13 @@ import {
   normalizeBrazilianPhone,
 } from "../_shared/whatsapp-dispatch.ts";
 import { getTimeBasedVariables } from "../_shared/time-variables.ts";
+import { sleepJitter } from "../_shared/anti-ban-jitter.ts";
+
+// Anti-ban Onda 0 QW3: espaçamento 3–8s entre envios do lote. Este endpoint é
+// SÍNCRONO (o admin espera a resposta HTTP), então o jitter tem um budget de
+// wall clock: estourou o budget, o loop CONTINUA ENVIANDO sem espaçamento —
+// degrada a proteção, nunca derruba a request nem perde um cliente do lote.
+const JITTER_BUDGET_MS = 90_000;
 
 interface BulkMessageRequest {
   organization_id: string;
@@ -143,6 +150,8 @@ Deno.serve(
     }
 
     const results: Array<{ client_id: string; name: string; success: boolean; error?: string }> = [];
+    const loopStartedAt = Date.now();
+    let dispatched = 0;
 
     for (const client of clients as ClientData[]) {
       const phone = client.lead?.phone;
@@ -152,6 +161,13 @@ Deno.serve(
         results.push({ client_id: client.id, name: client.name ?? "—", success: false, error: "Sem telefone" });
         continue;
       }
+
+      // Anti-ban jitter (Onda 0 QW3): entre envios reais, nunca antes do
+      // primeiro, e só enquanto couber no budget (request síncrona).
+      if (dispatched > 0 && Date.now() - loopStartedAt < JITTER_BUDGET_MS) {
+        await sleepJitter();
+      }
+      dispatched++;
 
       const resolvedMessage = resolveVariables(message_template, client);
 

@@ -216,14 +216,28 @@ export async function sendOutboundDispatch(
     } else if (chosenAudio) {
       textResult = await sendText();
       if (textResult.ok) {
-        // Background — don't block dispatch loop
-        setTimeout(async () => {
-          try {
-            await sendAudio();
-          } catch (e) {
+        // Background — don't block dispatch loop. A bare setTimeout dies
+        // silently when the Supabase Edge isolate recycles right after the
+        // caller's HTTP response (same failure mode as whatsapp-webhook RC
+        // 2026-06-24); EdgeRuntime.waitUntil keeps the isolate alive until
+        // the deferred audio goes out. Falls back to a floating promise
+        // outside Supabase Edge (local dev / tests).
+        const audioPromise = new Promise<void>((resolve) =>
+          setTimeout(resolve, AUDIO_DELAY_MS)
+        )
+          .then(() => sendAudio())
+          .then(() => undefined)
+          .catch((e) => {
             console.warn("[outbound-sender] Background audio send failed:", e);
-          }
-        }, AUDIO_DELAY_MS);
+          });
+        const edgeRuntime = (globalThis as {
+          EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void };
+        }).EdgeRuntime;
+        if (typeof edgeRuntime?.waitUntil === "function") {
+          edgeRuntime.waitUntil(audioPromise);
+        } else {
+          void audioPromise;
+        }
       }
     } else {
       textResult = await sendText();
