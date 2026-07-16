@@ -47,6 +47,19 @@ export interface CanonicalNfe {
   orderExternalId: string | null;
 }
 
+export interface CanonicalProduct {
+  /** Omie codigo_produto — immutable idempotency key. NEVER match on SKU. */
+  externalId: string;
+  externalRef: string | null;
+  /** Omie codigo — the visible, user-editable SKU. */
+  sku: string | null;
+  name: string;
+  ticket: number | null;
+  baseUnit: string | null;
+  description: string | null;
+  isActive: boolean;
+}
+
 export type TituloStatus = "aberto" | "pago" | "atrasado";
 
 export interface CanonicalTitulo {
