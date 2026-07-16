@@ -24,6 +24,9 @@ export const HUMANIZE_BUDGET_MS = 60_000;
 export interface HumanizableItem {
   text?: string;
   caption?: string;
+  /** Uazapi item type — for "image" the RENDERED content is the caption. */
+  type?: string;
+  file?: string;
   [key: string]: unknown;
 }
 
@@ -59,10 +62,21 @@ export async function humanizeBatch<T extends HumanizableItem>(
     while (next < out.length) {
       const i = next++;
       const item = out[i];
-      const field: "text" | "caption" | null =
-        typeof item.text === "string" && item.text.trim().length > 0
+      // Media items render the CAPTION (Uazapi media shape) — their `text`
+      // field is dead weight (mass-send stamps template_text on every item),
+      // so rewriting it would ship the byte-identical caption untouched.
+      const isMedia = item.type === "image" || typeof item.file === "string";
+      const hasText = typeof item.text === "string" && item.text.trim().length > 0;
+      const hasCaption = typeof item.caption === "string" && item.caption.trim().length > 0;
+      const field: "text" | "caption" | null = isMedia
+        ? hasCaption
+          ? "caption"
+          : hasText
+            ? "text"
+            : null
+        : hasText
           ? "text"
-          : typeof item.caption === "string" && item.caption.trim().length > 0
+          : hasCaption
             ? "caption"
             : null;
       if (!field) continue;

@@ -73,6 +73,17 @@ describe("humanizeBatch", () => {
     expect(out[0].text).toBeUndefined();
   });
 
+  it("image items with a dead text field STILL vary the caption (the rendered content)", async () => {
+    // mass-send stamps template_text on every item, including images — the
+    // rendered field for type "image" is the caption, so that's what varies.
+    const humanize = vi.fn(async (t: string) => t + " (var)");
+    const item = { number: "5511", type: "image" as const, text: "template morto", caption: "oferta da semana", file: "https://x/y.png" };
+    const out = await humanizeBatch([item], { humanize });
+    expect(out[0].caption).toBe("oferta da semana (var)");
+    expect(out[0].text).toBe("template morto"); // untouched
+    expect(humanize).toHaveBeenCalledWith("oferta da semana");
+  });
+
   it("skips items with no message content and preserves every other field", async () => {
     const humanize = vi.fn(async (t: string) => t + "!");
     const bare = { number: "5511", type: "image" as const, text: undefined, caption: undefined, file: "https://x/y.png" };
