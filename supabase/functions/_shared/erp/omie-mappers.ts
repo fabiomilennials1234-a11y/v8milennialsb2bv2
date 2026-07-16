@@ -9,6 +9,7 @@ import {
   CanonicalOrder,
   CanonicalNfe,
   CanonicalTitulo,
+  CanonicalProduct,
   TituloStatus,
 } from "./types.ts";
 
@@ -132,6 +133,31 @@ function deriveTituloStatus(rawStatus: string, dataPagamento?: string | null): T
   }
   if (/atras|vencid/i.test(rawStatus)) return "atrasado";
   return "aberto";
+}
+
+// NOTE: exact Omie ListarProdutos field names to be confirmed in the S1 spike.
+export interface OmieProdutoRaw {
+  codigo_produto?: number | string;
+  codigo_produto_integracao?: string | null;
+  codigo?: string | null; // SKU visível (editável) — nunca usar como chave
+  descricao?: string | null;
+  valor_unitario?: number | string | null;
+  unidade?: string | null;
+  descricao_detalhada?: string | null;
+  inativo?: string | null; // 'S' | 'N'
+}
+
+export function mapOmieProdutoToCanonical(raw: OmieProdutoRaw): CanonicalProduct {
+  return {
+    externalId: String(raw.codigo_produto ?? "").trim(),
+    externalRef: trimOrNull(raw.codigo_produto_integracao),
+    sku: trimOrNull(raw.codigo),
+    name: trimOrNull(raw.descricao) ?? "Produto Omie",
+    ticket: raw.valor_unitario != null ? Number(raw.valor_unitario) : null,
+    baseUnit: trimOrNull(raw.unidade),
+    description: trimOrNull(raw.descricao_detalhada),
+    isActive: (raw.inativo ?? "N").toString().trim().toUpperCase() !== "S",
+  };
 }
 
 export function mapOmieTituloToCanonical(raw: OmieTituloRaw): CanonicalTitulo {

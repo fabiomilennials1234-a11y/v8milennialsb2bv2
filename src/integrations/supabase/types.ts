@@ -9749,9 +9749,11 @@ export type Database = {
           last_error: string | null
           last_financeiro_sync_at: string | null
           last_pedidos_sync_at: string | null
+          last_produtos_sync_at: string | null
           omie_account_name: string | null
           organization_id: string
           pedidos_cursor: number | null
+          produtos_cursor: number | null
           status: string
           titulos_cursor: number | null
           updated_at: string
@@ -9768,9 +9770,11 @@ export type Database = {
           last_error?: string | null
           last_financeiro_sync_at?: string | null
           last_pedidos_sync_at?: string | null
+          last_produtos_sync_at?: string | null
           omie_account_name?: string | null
           organization_id: string
           pedidos_cursor?: number | null
+          produtos_cursor?: number | null
           status?: string
           titulos_cursor?: number | null
           updated_at?: string
@@ -9787,9 +9791,11 @@ export type Database = {
           last_error?: string | null
           last_financeiro_sync_at?: string | null
           last_pedidos_sync_at?: string | null
+          last_produtos_sync_at?: string | null
           omie_account_name?: string | null
           organization_id?: string
           pedidos_cursor?: number | null
+          produtos_cursor?: number | null
           status?: string
           titulos_cursor?: number | null
           updated_at?: string
@@ -11736,6 +11742,9 @@ export type Database = {
           created_at: string
           description: string | null
           entregaveis: string | null
+          external_id: string | null
+          external_ref: string | null
+          external_source: string | null
           has_variants: boolean
           id: string
           is_active: boolean
@@ -11757,6 +11766,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           entregaveis?: string | null
+          external_id?: string | null
+          external_ref?: string | null
+          external_source?: string | null
           has_variants?: boolean
           id?: string
           is_active?: boolean
@@ -11778,6 +11790,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           entregaveis?: string | null
+          external_id?: string | null
+          external_ref?: string | null
+          external_source?: string | null
           has_variants?: boolean
           id?: string
           is_active?: boolean
@@ -17730,6 +17745,7 @@ export type Database = {
       invoke_mass_send_status: { Args: never; Returns: undefined }
       invoke_meta_conversion_dispatch: { Args: never; Returns: undefined }
       invoke_meta_leadgen_poll: { Args: never; Returns: undefined }
+      invoke_omie_sync_dispatch: { Args: never; Returns: undefined }
       invoke_pipe_rule_dispatch: { Args: never; Returns: undefined }
       invoke_process_ai_actions: { Args: never; Returns: undefined }
       invoke_process_copilot_followups: { Args: never; Returns: undefined }

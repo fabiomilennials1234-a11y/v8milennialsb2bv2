@@ -137,6 +137,13 @@ verify_jwt = false
 [functions.omie-sync-financeiro]
 verify_jwt = false
 
+[functions.omie-sync-produtos]
+verify_jwt = false
+
+# omie-webhook: skeleton spike-gated (S11); deploy pós-confirmação do payload Omie
+[functions.omie-webhook]
+verify_jwt = false
+
 [functions.tinyerp-proxy]
 verify_jwt = false
 

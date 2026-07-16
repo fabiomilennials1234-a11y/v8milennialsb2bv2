@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   ShieldCheck,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -84,6 +85,8 @@ export function OmieSettings() {
   const updateSyncMode = useUpdateOmieSyncMode();
   const erp = useErpProvider();
 
+  const [confirmCanonical, setConfirmCanonical] = useState(false);
+
   const isSyncing =
     syncClientes.isPending || syncPedidos.isPending || syncFinanceiro.isPending;
   const handleSync = async () => {
@@ -91,6 +94,15 @@ export function OmieSettings() {
     await syncClientes.mutateAsync();
     await syncPedidos.mutateAsync();
     await syncFinanceiro.mutateAsync();
+  };
+
+  // Trocar PARA canonical é destrutivo (sobrescreve org inteira) — pede confirmação.
+  const handleSyncModeChange = (v: OmieSyncMode) => {
+    if (v === "canonical" && status?.erp_sync_mode !== "canonical") {
+      setConfirmCanonical(true);
+    } else {
+      updateSyncMode.mutate(v);
+    }
   };
 
   const showLoading = isLoading || isFetching;
@@ -320,7 +332,7 @@ export function OmieSettings() {
             <Label className="text-sm">Modo de sincronização de cliente</Label>
             <Select
               value={status?.erp_sync_mode ?? "enrich_only"}
-              onValueChange={(v) => updateSyncMode.mutate(v as OmieSyncMode)}
+              onValueChange={(v) => handleSyncModeChange(v as OmieSyncMode)}
               disabled={updateSyncMode.isPending}
             >
               <SelectTrigger className="w-full">
@@ -334,10 +346,47 @@ export function OmieSettings() {
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-[11px] text-muted-foreground">
+            <p
+              className={cn(
+                "text-[11px]",
+                status?.erp_sync_mode === "canonical"
+                  ? "text-amber-500 flex items-start gap-1"
+                  : "text-muted-foreground",
+              )}
+            >
+              {status?.erp_sync_mode === "canonical" && (
+                <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+              )}
               {SYNC_MODE_LABELS[status?.erp_sync_mode ?? "enrich_only"].hint}
             </p>
           </div>
+
+          {/* Confirmação da troca destrutiva para canonical */}
+          <AlertDialog open={confirmCanonical} onOpenChange={setConfirmCanonical}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Ativar modo ERP canônico?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  O ERP passa a <strong>sobrescrever nome, telefone, email e empresa de TODOS
+                  os clientes</strong> da carteira com o dado da Omie, e <strong>cria leads-stub
+                  </strong> para clientes do ERP que ainda não existem no CRM. A curadoria feita
+                  pela equipe é substituída. <strong>Não há como desfazer.</strong>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    updateSyncMode.mutate("canonical");
+                    setConfirmCanonical(false);
+                  }}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Ativar canônico
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* Info box — the money layer */}
           <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 text-xs text-muted-foreground">

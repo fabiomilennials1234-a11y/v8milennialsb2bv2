@@ -8,6 +8,7 @@ import {
   mapOmiePedidoToCanonical,
   mapOmieNfeToCanonical,
   mapOmieTituloToCanonical,
+  mapOmieProdutoToCanonical,
 } from "../../supabase/functions/_shared/erp/omie-mappers";
 
 describe("mapOmieClienteToCanonical", () => {
@@ -149,5 +150,35 @@ describe("mapOmieTituloToCanonical", () => {
     expect(t.status).toBe("aberto");
     expect(t.valor).toBe(0);
     expect(t.clientExternalId).toBeNull();
+  });
+});
+
+describe("mapOmieProdutoToCanonical", () => {
+  it("maps codigo_produto→externalId (immutable), codigo→sku, inverts inativo", () => {
+    const p = mapOmieProdutoToCanonical({
+      codigo_produto: 700,
+      codigo_produto_integracao: "prod-ref",
+      codigo: "SKU-9",
+      descricao: "Parafuso Sextavado",
+      valor_unitario: 3.5,
+      unidade: "UN",
+      descricao_detalhada: "Aço inox",
+      inativo: "N",
+    });
+    expect(p.externalId).toBe("700");
+    expect(p.externalRef).toBe("prod-ref");
+    expect(p.sku).toBe("SKU-9");
+    expect(p.name).toBe("Parafuso Sextavado");
+    expect(p.ticket).toBe(3.5);
+    expect(p.baseUnit).toBe("UN");
+    expect(p.isActive).toBe(true);
+  });
+
+  it("marks inativo 'S' as inactive and defaults name/nulls", () => {
+    const p = mapOmieProdutoToCanonical({ codigo_produto: 1, inativo: "S" });
+    expect(p.isActive).toBe(false);
+    expect(p.name).toBe("Produto Omie");
+    expect(p.sku).toBeNull();
+    expect(p.ticket).toBeNull();
   });
 });
