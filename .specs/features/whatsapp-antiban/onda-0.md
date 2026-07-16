@@ -42,6 +42,19 @@ Branch `fix/antiban-onda-0` · 2026-07-16 · 7 patches isolados, 1 commit por QW
 - `uazapi-client.test.ts`/`uazapi-provider.test.ts`: 10 falhas pré-existentes em HEAD (testes stale de retry) — verificado idêntico sem os commits desta branch.
 - Build/lint/test:unit completos + QA manual do chat: ver relatório da sessão.
 
+## Review adversarial (18 agentes: 5 lentes + verificação por finding)
+
+13 findings → 9 confirmados (7 únicos) → **todos corrigidos** em 4 fix-commits; 4 refutados.
+
+| Fix | Commit | Achado |
+|-----|--------|--------|
+| QW5 | `3ff73d25` | Query preferida provider-blind elegeria meta_cloud deterministicamente (sempre "viva" + last_connection_at fresco) → copilot mudo via MetaWindowClosedError. Provider filter na preferida; fallback continua byte-idêntico ao legado. |
+| QW1 | `855d069f` | (1) Plano single-number criado com número no teto estrandava TODOS os recipients (move incondicional pro lot 1 com lots_released=0 → release lia lot 0 vazio → completed; reproduzido por execução); (2) `remaining` do quick blast agora = min(org, número) → wizard oferece "Agendar em lotes" quando o número é o gargalo; (3) ledger per-número particiona pelo dia do ENVIO (`scheduled_for`), não da criação — senão o chip dobrava o cap no dia real. |
+| QW3 | `d515209c` | (1) Lock do scheduled-user-messages não era CAS (PostgREST sucesso com 0 rows) — jitter esticando o batch > tick de 1min = double-send em overlap; agora `.select('id')` + checagem; (2) guarda de wall-clock nos 2 workers (240s/120s) — pior caso real por dispatch (mensagem longa) não é limitado pela estimativa; run para no budget, resto fica pro próximo tick. |
+| QW6 | `15abaaad` | Item de mídia varia a CAPTION (campo renderizado) — text morto carimbado pelo mass-send era o que estava sendo reescrito. |
+
+Refutados (falso-positivo, com razão): trim silencioso do mass-send ×2 (useCreateMassSend não tem call-site vivo — página deletada no #904), check-then-act do ledger (design pré-existente documentado do ledger, janela mínima, increment atômico), PII no console do humanizer (log pré-existente do módulo, não desta branch).
+
 ## Follow-ups (fora da Onda 0)
 
 - Wizard exibir `overInstanceCap`/`trimmed_count` (UI hoje ignora as chaves novas — comportamento seguro).
