@@ -28,6 +28,7 @@ import { GotoNode } from "./nodes/GotoNode";
 import { WaitBusinessWindowNode } from "./nodes/WaitBusinessWindowNode";
 import { AssignResponsibleNode } from "./nodes/AssignResponsibleNode";
 import { AnimatedEdge } from "./edges/AnimatedEdge";
+import { SelectionAutoPan } from "./SelectionAutoPan";
 import type { WorkflowNode, WorkflowEdge } from "@/types/workflow";
 
 const nodeTypes: NodeTypes = {
@@ -152,6 +153,7 @@ export function WorkflowCanvas({
         selectionOnDrag={false}
         className="bg-background"
       >
+        <SelectionAutoPan />
         <Background
           variant={BackgroundVariant.Dots}
           gap={20}

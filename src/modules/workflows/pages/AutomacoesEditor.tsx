@@ -503,7 +503,7 @@ export default function AutomacoesEditor() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] -m-6">
+    <div className="flex flex-col h-full">
       <WorkflowToolbar
         name={name}
         onNameChange={setName}
