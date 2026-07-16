@@ -20,6 +20,7 @@ import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { runUazapiSenderJob } from "../_shared/dispatch-router.ts";
+import { instanceDailyUsageSource } from "../_shared/quick-blast/instance-budget.ts";
 import { runQuickBlast } from "./run.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -136,6 +137,9 @@ Deno.serve(
               triggeredVia: "ui",
               trackSource: "quick-blast",
             }),
+          // Per-number Daily Cap (ADR-0015) — same ledger the Blast Plan paths
+          // consume, now bounding the avulso Quick Blast too.
+          instanceUsageSource: instanceDailyUsageSource(supabaseAdmin),
         },
         {
           orgId,

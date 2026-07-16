@@ -25,6 +25,11 @@ import {
 } from "../_shared/dispatch-router.ts";
 import { assertPermission, permissionDeniedResponse } from "../_shared/assert-permission.ts";
 import { assertPlanFeature, PlanFeatureDeniedError, planDeniedResponse } from "../_shared/plan-gate.ts";
+import {
+  resolveInstanceCap,
+  instanceDailyUsageSource,
+} from "../_shared/quick-blast/instance-budget.ts";
+import { saoPauloUsageDate } from "../_shared/quick-blast/daily-budget.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -178,12 +183,31 @@ Deno.serve(
       };
     });
 
+    // Per-number Daily Cap (ADR-0015): trim the batch to the number's remaining
+    // headroom in the SAME ledger the Quick Blast / Blast Plan paths consume
+    // (blast_instance_daily_usage). Fail-closed — a ledger read error resolves
+    // the headroom to 0 and blocks; protecting the number outranks one more send.
+    const instanceCap = resolveInstanceCap((instance as any).daily_blast_cap);
+    const instanceUsage = instanceDailyUsageSource(supabaseAdmin);
+    const usageDate = saoPauloUsageDate(new Date());
+    const usedToday = await instanceUsage.getUsedToday(instance_id, usageDate, instanceCap);
+    const headroom = Math.max(0, instanceCap - usedToday);
+    if (headroom <= 0) {
+      return jsonResponse(
+        429,
+        { error: "instance_daily_cap_exhausted", cap: instanceCap, used_today: usedToday },
+        corsHeaders
+      );
+    }
+    const acceptedMsgs = msgs.slice(0, headroom);
+    const trimmedCount = msgs.length - acceptedMsgs.length;
+
     try {
       const { sender_job_id, uazapi_sender_id } = await runUazapiSenderJob(
         supabaseAdmin,
         instance as any,
         {
-          recipients: msgs,
+          recipients: acceptedMsgs,
           delayMin: delay_min_ms,
           delayMax: delay_max_ms,
           scheduledFor: scheduled_for,
@@ -194,6 +218,15 @@ Deno.serve(
         }
       );
 
+      // Consume the per-number ledger by the ENQUEUED batch size — the /sender
+      // queue accepted the whole lot server-side. Best-effort: the batch
+      // already left for the provider.
+      try {
+        await instanceUsage.increment(instance_id, usageDate, acceptedMsgs.length);
+      } catch {
+        // ledger increment is best-effort; the job is already queued at Uazapi
+      }
+
       await logRuntime({
         organizationId: orgId,
         module: "campaign",
@@ -201,12 +234,18 @@ Deno.serve(
         status: "success",
         entityType: "uazapi_sender_jobs",
         entityId: sender_job_id,
-        payloadSnapshot: { count: recipients.length },
+        payloadSnapshot: { count: acceptedMsgs.length, trimmed_over_instance_cap: trimmedCount },
       });
 
       return jsonResponse(
         200,
-        { ok: true, sender_job_id, uazapi_sender_id },
+        {
+          ok: true,
+          sender_job_id,
+          uazapi_sender_id,
+          accepted_count: acceptedMsgs.length,
+          trimmed_count: trimmedCount,
+        },
         corsHeaders
       );
     } catch (e) {

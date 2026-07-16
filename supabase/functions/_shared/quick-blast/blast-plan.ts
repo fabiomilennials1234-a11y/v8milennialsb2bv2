@@ -327,8 +327,23 @@ export async function createBlastPlan(
   const usedToday = await deps.usageSource.getUsedToday(params.orgId, todayDate, dailyBudget);
   const { remaining } = computeDailyClamp({ dailyBudget, usedToday });
 
+  // Per-number Daily Cap (ADR-0015) on the single-number path too: lot 0 is
+  // additionally bounded by the number's OWN ledger headroom, mirroring the
+  // multi-number branch. Seam absent (legacy tests) → org budget alone.
+  let numberRemaining = Number.POSITIVE_INFINITY;
+  if (deps.instanceUsageSource) {
+    const cap = resolveInstanceCap(
+      (singleInstance as { daily_blast_cap?: number | null }).daily_blast_cap,
+    );
+    const used = await deps.instanceUsageSource.getUsedToday(singleInstance.id, todayDate, cap);
+    numberRemaining = Math.max(0, cap - used);
+  }
+
   const lot0 = recipientRows.filter((r) => r.lot_index === 0);
-  const slice = selectLotSlice({ pendingCount: lot0.length, remainingBudget: remaining });
+  const slice = selectLotSlice({
+    pendingCount: lot0.length,
+    remainingBudget: Math.min(remaining, numberRemaining),
+  });
 
   let lotsReleased = 0;
   if (slice.toSend > 0) {
@@ -347,6 +362,9 @@ export async function createBlastPlan(
     await deps.store.markRecipients(planId, toSendRows.map((r) => r.lead_id), "sent", null);
     await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
     await deps.usageSource.increment(params.orgId, todayDate, slice.toSend);
+    if (deps.instanceUsageSource) {
+      await deps.instanceUsageSource.increment(singleInstance.id, todayDate, slice.toSend);
+    }
     lotsReleased = 1;
   }
 
@@ -664,10 +682,23 @@ export async function releaseBlastPlanLot(
     // Org-wide ledger records the day's total (cross-blast visibility).
     if (sent > 0) await deps.usageSource.increment(orgId, todayDate, sent);
   } else {
-    // Budget-bound the release against the shared ledger for today.
+    // Budget-bound the release against the shared ledger for today, AND the
+    // number's OWN Daily Cap (ADR-0015) when the seam is present — mirrors the
+    // multi-number branch; seam absent (legacy tests) → org budget alone.
     const usedToday = await deps.usageSource.getUsedToday(orgId, todayDate, params.dailyBudget);
     const { remaining } = computeDailyClamp({ dailyBudget: params.dailyBudget, usedToday });
-    const slice = selectLotSlice({ pendingCount: kept.length, remainingBudget: remaining });
+    let numberRemaining = Number.POSITIVE_INFINITY;
+    if (deps.instanceUsageSource) {
+      const cap = resolveInstanceCap(
+        (instance as { daily_blast_cap?: number | null }).daily_blast_cap,
+      );
+      const used = await deps.instanceUsageSource.getUsedToday(instance.id, todayDate, cap);
+      numberRemaining = Math.max(0, cap - used);
+    }
+    const slice = selectLotSlice({
+      pendingCount: kept.length,
+      remainingBudget: Math.min(remaining, numberRemaining),
+    });
     if (slice.toSend > 0) {
       const toSendRows = kept.slice(0, slice.toSend);
       const recipients = buildPlanRecipients(toSendRows, plan.message, plan.image_url ?? undefined);
@@ -675,6 +706,9 @@ export async function releaseBlastPlanLot(
       await deps.store.markRecipients(params.planId, toSendRows.map((r) => r.lead_id), "sent", null);
       await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
       await deps.usageSource.increment(orgId, todayDate, slice.toSend);
+      if (deps.instanceUsageSource) {
+        await deps.instanceUsageSource.increment(instance.id, todayDate, slice.toSend);
+      }
       sent = slice.toSend;
     }
     deferredRows = kept.slice(slice.toSend);

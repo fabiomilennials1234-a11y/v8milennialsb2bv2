@@ -25,6 +25,11 @@ import {
   saoPauloUsageDate,
   type BlastUsageSource,
 } from "../_shared/quick-blast/daily-budget.ts";
+import {
+  resolveInstanceCap,
+  instanceDailyUsageSource,
+  type InstanceUsageSource,
+} from "../_shared/quick-blast/instance-budget.ts";
 
 export interface QuickBlastDeps {
   // `rpc` is needed by the default daily-budget usage source (atomic ledger
@@ -51,12 +56,16 @@ export interface QuickBlastDeps {
    *  is unit-testable without a live DB; defaults to a `blast_daily_usage` read
    *  over `supabaseAdmin` when omitted. */
   usageSource?: BlastUsageSource;
+  /** Per-number Daily Cap ledger (ADR-0015) — the SAME `blast_instance_daily_usage`
+   *  ledger the Blast Plan paths consume, extended to the avulso Quick Blast.
+   *  Injected for tests; defaults to a read over `supabaseAdmin` when omitted. */
+  instanceUsageSource?: InstanceUsageSource;
 }
 
 export interface QuickBlastParams {
   orgId: string;
   userId: string;
-  instance: { id: string; organization_id: string; provider?: string };
+  instance: { id: string; organization_id: string; provider?: string; daily_blast_cap?: number | null };
   leadIds: string[];
   message: string;
   delayMinMs?: number;
@@ -95,6 +104,9 @@ export interface QuickBlastResult {
     alreadyContactedWithinWindow: number;
     replied: number;
     overDailyBudget: number;
+    /** Clipped by the sending NUMBER's own daily cap (ADR-0015) — tighter than
+     *  the org budget when the number already blasted close to its ceiling. */
+    overInstanceCap: number;
   };
   /** Daily Blast Budget headroom available to THIS blast before it consumed —
    *  `max(0, daily_blast_budget - usage_today)`. The wizard reads it as "today's
@@ -110,6 +122,7 @@ const EMPTY_SKIPPED = {
   alreadyContactedWithinWindow: 0,
   replied: 0,
   overDailyBudget: 0,
+  overInstanceCap: 0,
 };
 
 export async function runQuickBlast(
@@ -152,6 +165,21 @@ export async function runQuickBlast(
     perBlastMax: perBlastCap,
   });
 
+  // Per-number Daily Cap (ADR-0015) — the tightest of (per-blast, org daily,
+  // number daily) wins. Seam optional like blast-plan's (the edge fn always
+  // injects it; legacy tests without the seam keep org-budget-only semantics).
+  // Fail-closed inside the source: a per-number read error resolves the
+  // number's headroom to 0 (block), never unlimited.
+  const instanceUsage = deps.instanceUsageSource ?? null;
+  const instanceCap = resolveInstanceCap(params.instance.daily_blast_cap);
+  let instanceRemaining = Number.POSITIVE_INFINITY;
+  if (instanceUsage) {
+    const instanceUsed = await instanceUsage.getUsedToday(params.instance.id, usageDate, instanceCap);
+    instanceRemaining = Math.max(0, instanceCap - instanceUsed);
+  }
+  const numberIsBinding = instanceRemaining < effectiveCap;
+  const sendCap = Math.min(effectiveCap, instanceRemaining);
+
   // Org-scoped fetch — foreign-org lead ids are excluded by the org filter.
   const { data: leads } = await supabaseAdmin
     .from("leads")
@@ -174,7 +202,7 @@ export async function runQuickBlast(
 
   const { recipients, skipped: engineSkips } = buildRecipients(merged, {
     template: params.message ?? "",
-    cap: effectiveCap,
+    cap: sendCap,
     imageUrl: params.imageUrl,
   });
 
@@ -183,9 +211,12 @@ export async function runQuickBlast(
   // is the tightest limit, the overflow is reported as `overDailyBudget` so the
   // wizard can show "N acima do teto diário"; otherwise it stays per-blast
   // `overCap`. Same total — only the label changes.
+  // The number's own cap outranks the daily/per-blast labels when it is the
+  // strictly tightest constraint (ADR-0015) — same total, only the label moves.
   const dailyIsBinding = remaining <= perBlastCap && remaining === effectiveCap;
-  const overDailyBudget = dailyIsBinding ? engineSkips.overCap : 0;
-  const overCap = dailyIsBinding ? 0 : engineSkips.overCap;
+  const overInstanceCap = numberIsBinding ? engineSkips.overCap : 0;
+  const overDailyBudget = !numberIsBinding && dailyIsBinding ? engineSkips.overCap : 0;
+  const overCap = numberIsBinding || dailyIsBinding ? 0 : engineSkips.overCap;
 
   // Single reconciled breakdown: refinement skips (pre-dispatch narrowing) +
   // engine skips (phone/dedup/cap) + daily-budget overflow. Counts never double —
@@ -198,6 +229,7 @@ export async function runQuickBlast(
     alreadyContactedWithinWindow: refineSkips.skipped.alreadyContactedWithinWindow,
     replied: refineSkips.skipped.replied,
     overDailyBudget,
+    overInstanceCap,
   };
 
   // Preview (dry run): resolved audience + refinements + daily clamp, no
@@ -214,6 +246,13 @@ export async function runQuickBlast(
   // as `overDailyBudget` — no recomputation needed.
   if (remaining <= 0) {
     return { ok: false, count: 0, skipped, remaining, error: "daily_budget_exhausted" };
+  }
+
+  // The sending number's own daily cap is exhausted — same semantics as the
+  // org ceiling, scoped to the number (ADR-0015). Explicit error so the wizard
+  // can tell "this number is done for today" apart from "no recipients".
+  if (instanceRemaining <= 0) {
+    return { ok: false, count: 0, skipped, remaining, error: "instance_daily_cap_exhausted" };
   }
 
   if (recipients.length === 0) {
@@ -245,6 +284,16 @@ export async function runQuickBlast(
     await usageSource.increment(params.orgId, usageDate, recipients.length);
   } catch {
     // ledger increment is best-effort; the blast already dispatched
+  }
+
+  // Per-number ledger (ADR-0015) — increment by the ACTUALLY-dispatched count,
+  // same atomic RPC the Blast Plan paths use. Best-effort for the same reason.
+  if (instanceUsage) {
+    try {
+      await instanceUsage.increment(params.instance.id, usageDate, recipients.length);
+    } catch {
+      // per-number ledger increment is best-effort; the blast already dispatched
+    }
   }
 
   // Per-lead conversation logging — optimistic at enqueue, non-fatal. Lets the
