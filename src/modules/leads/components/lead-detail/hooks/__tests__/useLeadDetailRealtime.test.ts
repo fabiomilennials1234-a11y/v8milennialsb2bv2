@@ -119,8 +119,11 @@ describe("useLeadDetailRealtime — gated multi-table subscription (#306)", () =
     expect(byTable("lead_comments")?.filter).toBe("lead_id=eq.lead-1");
     expect(byTable("lead_tags")?.filter).toBe("lead_id=eq.lead-1");
     expect(byTable("pipeline_entries")?.filter).toBe("lead_id=eq.lead-1");
-    // pipe_proposta_items has no lead_id column — filter by org, dedupe client-side.
-    expect(byTable("pipe_proposta_items")?.filter).toBe("organization_id=eq.org-1");
+    // pipe_proposta_items has no organization_id column (nor lead_id) —
+    // subscribing with an org filter throws "invalid column for filter
+    // organization_id" and drops the channel (schema drift fix 2026-07-17).
+    // Subscribe with no filter; RLS gates events and invalidation narrows on refetch.
+    expect(byTable("pipe_proposta_items")?.filter).toBeUndefined();
   });
 
   it("invalidates the lead_history query keys when a lead_history event fires", async () => {

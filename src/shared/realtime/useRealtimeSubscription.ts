@@ -24,6 +24,18 @@ const TABLES_WITHOUT_ORG_ID = new Set([
   // blast_plan_recipients carries no organization_id (tenancy via plan_id →
   // blast_plans); subscribe without the org filter (#910 live blast feed).
   "blast_plan_recipients",
+  // Tabelas na publication supabase_realtime que NÃO têm coluna
+  // organization_id — filtrar por ela gera "invalid column for filter
+  // organization_id" e derruba o canal (degrada o pool de Realtime).
+  // A RLS (apply_rls) já gate os eventos por org; a invalidação por queryKey
+  // re-busca com escopo no servidor. (schema drift fix 2026-07-17)
+  "acoes_do_dia",
+  "campanha_leads",
+  "feature_permissions",
+  "lead_scores",
+  "pipe_proposta_items",
+  "support_ticket_comments",
+  "upsell_client_products",
 ]);
 
 export interface RealtimeHandlers<T = any> {
