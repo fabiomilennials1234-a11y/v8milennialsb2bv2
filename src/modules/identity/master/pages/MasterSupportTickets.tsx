@@ -56,6 +56,7 @@ import {
   type MasterSupportTicket,
   type MasterTicketFilters,
 } from "../hooks/useMasterSupportTickets";
+import { useMasterQueueChannel } from "../hooks/useMasterQueueChannel";
 
 const ALL = "__all__";
 
@@ -88,6 +89,7 @@ export default function MasterSupportTickets() {
   const [filters, setFilters] = useState<MasterTicketFilters>({});
   const [expanded, setExpanded] = useState<string | null>(null);
   const { data: tickets, isLoading, refetch, isFetching } = useMasterSupportTickets(filters);
+  useMasterQueueChannel(); // new Chamados and claims enter the queue live, no F5
 
   const hasFilters = Object.values(filters).some(Boolean);
 
