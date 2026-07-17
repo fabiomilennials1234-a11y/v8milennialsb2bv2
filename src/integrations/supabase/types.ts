@@ -9224,6 +9224,7 @@ export type Database = {
         Row: {
           created_at: string | null
           description: string | null
+          entity_id: string | null
           id: string
           lead_id: string | null
           link: string | null
@@ -9236,6 +9237,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           description?: string | null
+          entity_id?: string | null
           id?: string
           lead_id?: string | null
           link?: string | null
@@ -9248,6 +9250,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           description?: string | null
+          entity_id?: string | null
           id?: string
           lead_id?: string | null
           link?: string | null
@@ -12366,6 +12369,131 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      support_ticket_comments: {
+        Row: {
+          author_user_id: string | null
+          body: string
+          created_at: string
+          from_staff: boolean
+          id: string
+          is_internal: boolean
+          ticket_id: string
+        }
+        Insert: {
+          author_user_id?: string | null
+          body: string
+          created_at?: string
+          from_staff?: boolean
+          id?: string
+          is_internal?: boolean
+          ticket_id: string
+        }
+        Update: {
+          author_user_id?: string | null
+          body?: string
+          created_at?: string
+          from_staff?: boolean
+          id?: string
+          is_internal?: boolean
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_ticket_comments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_tickets: {
+        Row: {
+          assigned_master_user_id: string | null
+          author_user_id: string | null
+          awaiting_customer_ms: number
+          awaiting_since: string | null
+          created_at: string
+          defect_url: string | null
+          description: string | null
+          first_response_at: string | null
+          id: string
+          impacto: Database["public"]["Enums"]["support_ticket_impacto"]
+          organization_id: string
+          reopen_count: number
+          resolved_at: string | null
+          severidade:
+            | Database["public"]["Enums"]["support_ticket_severidade"]
+            | null
+          status: Database["public"]["Enums"]["support_ticket_status"]
+          support_context: Json
+          tipo: Database["public"]["Enums"]["support_ticket_tipo"]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_master_user_id?: string | null
+          author_user_id?: string | null
+          awaiting_customer_ms?: number
+          awaiting_since?: string | null
+          created_at?: string
+          defect_url?: string | null
+          description?: string | null
+          first_response_at?: string | null
+          id?: string
+          impacto: Database["public"]["Enums"]["support_ticket_impacto"]
+          organization_id: string
+          reopen_count?: number
+          resolved_at?: string | null
+          severidade?:
+            | Database["public"]["Enums"]["support_ticket_severidade"]
+            | null
+          status?: Database["public"]["Enums"]["support_ticket_status"]
+          support_context?: Json
+          tipo: Database["public"]["Enums"]["support_ticket_tipo"]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_master_user_id?: string | null
+          author_user_id?: string | null
+          awaiting_customer_ms?: number
+          awaiting_since?: string | null
+          created_at?: string
+          defect_url?: string | null
+          description?: string | null
+          first_response_at?: string | null
+          id?: string
+          impacto?: Database["public"]["Enums"]["support_ticket_impacto"]
+          organization_id?: string
+          reopen_count?: number
+          resolved_at?: string | null
+          severidade?:
+            | Database["public"]["Enums"]["support_ticket_severidade"]
+            | null
+          status?: Database["public"]["Enums"]["support_ticket_status"]
+          support_context?: Json
+          tipo?: Database["public"]["Enums"]["support_ticket_tipo"]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_tickets_assigned_master_user_id_fkey"
+            columns: ["assigned_master_user_id"]
+            isOneToOne: false
+            referencedRelation: "master_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_tickets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       system_alerts: {
         Row: {
@@ -16737,6 +16865,15 @@ export type Database = {
         | "prata"
         | "bronze"
         | "desqualificado"
+      support_ticket_impacto: "parado" | "contorno" | "incomodo"
+      support_ticket_severidade: "baixa" | "media" | "alta" | "critica"
+      support_ticket_status:
+        | "aberto"
+        | "em_andamento"
+        | "aguardando_cliente"
+        | "resolvido"
+        | "fechado"
+      support_ticket_tipo: "bug" | "duvida" | "solicitacao"
       upsell_campanha_status:
         | "cliente"
         | "planejado"
@@ -16970,6 +17107,16 @@ export const Constants = {
         "bronze",
         "desqualificado",
       ],
+      support_ticket_impacto: ["parado", "contorno", "incomodo"],
+      support_ticket_severidade: ["baixa", "media", "alta", "critica"],
+      support_ticket_status: [
+        "aberto",
+        "em_andamento",
+        "aguardando_cliente",
+        "resolvido",
+        "fechado",
+      ],
+      support_ticket_tipo: ["bug", "duvida", "solicitacao"],
       upsell_campanha_status: [
         "cliente",
         "planejado",

@@ -101,6 +101,7 @@ const CopilotReasoning = lazy(() => lazyRetry(() => import("@/modules/identity/m
 const CopilotToggleAudit = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/CopilotToggleAudit")));
 const MasterOnboarding = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOnboarding")));
 const MasterMetaAssets = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterMetaAssets")));
+const MasterSupportTickets = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterSupportTickets")));
 // Insights — área master azul de unit economics (chrome próprio, fora do MasterLayout)
 const MasterInsights = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterInsights")));
 // Master route/layout — carregam sob demanda quando acessar /master
@@ -111,6 +112,11 @@ import { MasterLayout } from "@/modules/identity/master/components/MasterLayout"
 import { CommandPaletteProvider } from "@/modules/platform/components/command/CommandPaletteProvider";
 import { CommandPalette as CommandPaletteComponent } from "@/modules/platform/components/command/CommandPalette";
 import { GlobalShortcutsProvider } from "@/modules/platform/components/command/GlobalShortcutsProvider";
+
+// Chamado — canal de suporte in-app (painel Intercom + FAB orb + dock)
+import { SupportPanelProvider } from "@/modules/platform/components/support/SupportPanelProvider";
+import { FloatingDockProvider } from "@/modules/platform/components/dock/FloatingDock";
+import { SupportPanel } from "@/modules/platform/components/support/SupportPanel";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -677,6 +683,7 @@ function AppRoutes() {
         <Route path="users" element={<MasterUsers />} />
         <Route path="plans" element={<MasterPlans />} />
         <Route path="features" element={<MasterFeatures />} />
+        <Route path="support-tickets" element={<MasterSupportTickets />} />
         <Route path="audit-logs" element={<MasterAuditLogs />} />
         <Route path="operations" element={<MasterOperations />} />
         <Route path="automation-health" element={<MasterAutomationHealth />} />
@@ -724,12 +731,19 @@ const App = () => {
                   <PipeOpsProvider>
                     <GlobalErrorBoundary>
                       <PushPermissionPrompt />
-                      <CommandPaletteProvider>
-                        <GlobalShortcutsProvider>
-                          <AppRoutes />
-                          <CommandPaletteComponent />
-                        </GlobalShortcutsProvider>
-                      </CommandPaletteProvider>
+                      {/* SupportPanelProvider envolve o palette: a ação
+                          "Abrir chamado" do Cmd+K abre este painel. */}
+                      <FloatingDockProvider>
+                        <SupportPanelProvider>
+                          <CommandPaletteProvider>
+                            <GlobalShortcutsProvider>
+                              <AppRoutes />
+                              <CommandPaletteComponent />
+                              <SupportPanel />
+                            </GlobalShortcutsProvider>
+                          </CommandPaletteProvider>
+                        </SupportPanelProvider>
+                      </FloatingDockProvider>
                     </GlobalErrorBoundary>
                   </PipeOpsProvider>
                 </RealtimeOrgBridge>

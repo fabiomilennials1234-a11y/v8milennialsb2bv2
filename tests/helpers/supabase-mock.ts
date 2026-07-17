@@ -7,8 +7,6 @@
  *   const result = await myFunction(sb, ...);
  */
 
-import { vi } from 'vitest';
-
 type MockData = Record<string, unknown>[];
 
 interface ChainResult {
@@ -20,12 +18,16 @@ interface ChainResult {
 export function createMockSupabase() {
   const tables: Record<string, MockData> = {};
   const insertedRows: Record<string, MockData> = {};
+  const updatedRows: Record<string, MockData> = {};
   const upsertOpts: Record<string, unknown[]> = {};
   const rpcResults: Record<string, unknown> = {};
   const insertErrors: Record<string, { code: string; message: string }> = {};
 
   function mockTable(name: string, data: MockData) {
-    tables[name] = data;
+    // Clone so the mock owns its rows. Updates persist by mutating rows in
+    // tables[] (read-after-write); cloning keeps that from leaking back into
+    // shared seed consts across tests.
+    tables[name] = data.map((row) => ({ ...row }));
   }
 
   /** Force the next (and subsequent) inserts on `table` to fail with `error`. */
@@ -41,24 +43,24 @@ export function createMockSupabase() {
     return insertedRows[table] || [];
   }
 
+  function getUpdated(table: string): MockData {
+    return updatedRows[table] || [];
+  }
+
   function getUpsertOpts(table: string): unknown[] {
     return upsertOpts[table] || [];
   }
 
   function createChain(tableName: string): any {
     let data = [...(tables[tableName] || [])];
-    let filters: Array<{ field: string; op: string; value: unknown }> = [];
-    let orFilters: Array<Array<{ field: string; op: string; value: unknown }>> = [];
-    let textSearchFilters: Array<{ field: string; query: string }> = [];
+    const filters: Array<{ field: string; op: string; value: unknown }> = [];
+    const orFilters: Array<Array<{ field: string; op: string; value: unknown }>> = [];
+    const textSearchFilters: Array<{ field: string; query: string }> = [];
     let orderField: string | null = null;
     let orderAsc = true;
     let limitCount: number | null = null;
-    let selectFields: string = '*';
     let selectOpts: { count?: string; head?: boolean } | null = null;
-    let isInsert = false;
-    let insertData: unknown = null;
     let insertError: { code: string; message: string } | null = null;
-    let isDelete = false;
     let isUpdate = false;
     let updateData: Record<string, unknown> = {};
 
@@ -144,8 +146,7 @@ export function createMockSupabase() {
     };
 
     const chain: any = {
-      select: (fields?: string, opts?: { count?: string; head?: boolean }) => {
-        selectFields = fields || '*';
+      select: (_fields?: string, opts?: { count?: string; head?: boolean }) => {
         if (opts) selectOpts = opts;
         return chain;
       },
@@ -169,8 +170,6 @@ export function createMockSupabase() {
       // `.returns<T>()` is a type-only helper on the real client; pass through.
       returns: () => chain,
       insert: (rows: unknown) => {
-        isInsert = true;
-        insertData = rows;
         if (insertErrors[tableName]) {
           insertError = insertErrors[tableName];
           return chain;
@@ -188,8 +187,6 @@ export function createMockSupabase() {
         return chain;
       },
       upsert: (rows: unknown, opts?: unknown) => {
-        isInsert = true;
-        insertData = rows;
         const arr = Array.isArray(rows) ? rows : [rows];
         if (!insertedRows[tableName]) insertedRows[tableName] = [];
         if (!upsertOpts[tableName]) upsertOpts[tableName] = [];
@@ -199,7 +196,7 @@ export function createMockSupabase() {
         data = withIds;
         return chain;
       },
-      not: (field: string, op: string, value: unknown) => {
+      not: (_field: string, _op: string, _value: unknown) => {
         // For simplicity, not() is a no-op filter in mock
         return chain;
       },
@@ -207,10 +204,10 @@ export function createMockSupabase() {
         filters.push({ field, op: 'in', value: values });
         return chain;
       },
-      delete: () => { isDelete = true; return chain; },
+      delete: () => { return chain; },
       single: () => {
         if (insertError) return Promise.resolve({ data: null, error: insertError });
-        const result = applyFilters();
+        const result = applyUpdateIfPending();
         return Promise.resolve({
           data: result[0] || null,
           error: null,
@@ -218,23 +215,43 @@ export function createMockSupabase() {
       },
       maybeSingle: () => {
         if (insertError) return Promise.resolve({ data: null, error: insertError });
-        const result = applyFilters();
+        const result = applyUpdateIfPending();
         return Promise.resolve({
           data: result[0] || null,
           error: null,
         });
       },
       then: (resolve: (val: ChainResult) => void) => {
-        const result = applyFilters();
+        const result = applyUpdateIfPending();
         resolve({ data: result, error: null, count: result.length });
       },
     };
+
+    /**
+     * `.update(...).select().single()` e a forma canonica no codebase. Antes o
+     * mock so persistia o update no caminho thenable, entao um hook que
+     * terminasse em `.single()` atualizava nada e `getUpdated()` vinha vazio.
+     */
+    function applyUpdateIfPending(): MockData {
+      const matched = applyFilters();
+      if (!isUpdate) return matched;
+      for (const row of matched) Object.assign(row, updateData);
+      if (!updatedRows[tableName]) updatedRows[tableName] = [];
+      updatedRows[tableName].push(...matched);
+      return matched;
+    }
 
     // Make chain thenable (for await without .single/.maybeSingle)
     chain[Symbol.toStringTag] = 'Promise';
     const defaultPromise = () => {
       if (insertError) {
         return Promise.resolve({ data: null, error: insertError, count: null });
+      }
+      // Persist updates so read-after-write works. applyFilters() returns refs to
+      // the shared table row objects, so Object.assign mutates tables in place.
+      if (isUpdate) {
+        const matched = applyUpdateIfPending();
+        return Promise.resolve({ data: matched, error: null, count: matched.length });
       }
       const filtered = applyFilters();
       if (selectOpts?.head) {
@@ -315,7 +332,7 @@ export function createMockSupabase() {
 
   const sb = {
     from: (table: string) => createChain(table),
-    rpc: (name: string, params?: unknown) => {
+    rpc: (name: string, _params?: unknown) => {
       return Promise.resolve({
         data: rpcResults[name] ?? null,
         error: rpcResults[name] !== undefined ? null : { message: 'RPC not mocked' },
@@ -335,5 +352,5 @@ export function createMockSupabase() {
     channel: (name: string) => createChannel(name),
   };
 
-  return { sb: sb as any, mockTable, mockRpc, mockInsertError, getInserted, getUpsertOpts, emitEvent };
+  return { sb: sb as any, mockTable, mockRpc, mockInsertError, getInserted, getUpdated, getUpsertOpts, emitEvent };
 }

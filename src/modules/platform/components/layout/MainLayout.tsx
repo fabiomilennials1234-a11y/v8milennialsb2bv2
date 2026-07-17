@@ -15,6 +15,8 @@ import { MobileChatProvider, useMobileChatContext } from "@/contexts/MobileChatC
 import { ChatBubble } from "@/modules/communication/components/chat/bubble";
 import { SessionDeadBanner } from "@/modules/communication/components/whatsapp/SessionDeadBanner";
 import { QuickBlastProgressPanel } from "@/modules/leads/components/bulk-actions/QuickBlastProgressPanel";
+import { FloatingDock } from "@/modules/platform/components/dock/FloatingDock";
+import { SupportFab } from "@/modules/platform/components/support/SupportFab";
 
 // Rotas onde o checklist NÃO deve aparecer
 const CHECKLIST_HIDDEN_PATTERNS = [
@@ -133,6 +135,10 @@ function MainLayoutInner({ children }: MainLayoutProps) {
         shortcuts={globalShortcuts}
       />
 
+      {/* Um lugar só para os botões flutuantes. Antes, três componentes de três
+          módulos disputavam `fixed bottom-6 right-6` — ver FloatingDock.tsx. */}
+      <FloatingDock />
+      <SupportFab />
       {featureFlags.chatBubble && <ChatBubble />}
 
       <QuickBlastProgressPanel />

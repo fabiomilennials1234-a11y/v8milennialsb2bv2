@@ -35,6 +35,11 @@ export * from "./hooks/useConsent";
 export * from "./hooks/useFeatureFlag";
 export * from "./hooks/useHealthHistory";
 export * from "./hooks/useHelpCenter";
+// Chamado (ADR-0018) — hooks de suporte
+export * from "./hooks/useSupportTickets";
+export * from "./hooks/useSupportContext";
+export * from "./hooks/useSupportUnread";
+export * from "./hooks/useTicketAttachments";
 export * from "./hooks/useLogger";
 export * from "./hooks/useOnlineStatus";
 export * from "./hooks/useTrackView";
@@ -63,6 +68,18 @@ export * from "./lib/rate-limit";
 export * from "./lib/onboarding-suggestions";
 export * from "./lib/pipeline-config-from-quiz";
 export * from "./lib/tv-config-from-quiz";
+
+// Chamado (ADR-0018) — lógica pura de suporte. O painel e o provider são
+// deep-imported pelo App.tsx (como o command palette); só hooks e libs no barrel.
+export * from "./lib/support-ticket-draft";
+export * from "./lib/ticket-author";
+export * from "./lib/support-unread";
+export * from "./lib/support-rate-limit";
+export * from "./lib/ticket-lifecycle";
+export * from "./lib/first-response-clock";
+export * from "./lib/defect-url";
+export * from "./lib/support-attachments";
+export * from "./lib/help-suggestions";
 
 // ────────────────────────────────────────────────────────────────────────
 // Components — boundary / PWA / global UX
