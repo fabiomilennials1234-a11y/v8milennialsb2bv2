@@ -82,7 +82,7 @@ function ProviderCard({
         ))}
       </ul>
 
-      <p className="mb-4 flex items-center gap-1.5 text-xs text-amber-500/90">
+      <p className="mb-4 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400/90">
         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
         {caveat}
       </p>
