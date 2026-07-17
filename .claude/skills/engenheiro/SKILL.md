@@ -69,8 +69,10 @@ import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase
 type Lead = Tables<"leads">;
 ```
 
-Nunca edite `src/integrations/supabase/types.ts` manualmente. Regenere:
-`supabase gen types typescript --project-id jsjsmuncfkbsbzqzqhfq > src/integrations/supabase/types.ts`
+Nunca edite `src/integrations/supabase/types.ts` manualmente. Regenere (default = dev; prod só com pedido explícito do CTO):
+`supabase gen types typescript --project-id bcfadphgsibjzivtbjvc > src/integrations/supabase/types.ts`
+
+Refs: dev `bcfadphgsibjzivtbjvc` | prod `jsjsmuncfkbsbzqzqhfq`.
 
 ### Realtime
 `useRealtimeSubscription(table, queryKeys)` filtra por `organization_id`, debounce 2s.
@@ -97,19 +99,34 @@ Autenticação via `x-cron-secret` header. Edge fn com `verify_jwt = false` no `
 
 ### RLS (template)
 
+Isolamento por org **sempre** via helpers `SECURITY DEFINER` — nunca por claim `auth.jwt() ->> 'organization_id'` (só cobre 1 org, ignora master ghost) e **nunca** por `SELECT ... FROM team_members` inline (recursão infinita quando Realtime avalia `apply_rls()`).
+
 ```sql
 alter table public.<tabela> enable row level security;
 
+-- membro/admin: vê a(s) org(s) dele; master: vê tudo
 create policy "<tabela>_select_own_org"
   on public.<tabela> for select
-  using (organization_id = (select auth.jwt() ->> 'organization_id')::uuid);
+  using (
+    organization_id in (select get_my_organization_ids())
+    or is_master_user()
+  );
 
 create policy "<tabela>_insert_own_org"
   on public.<tabela> for insert
-  with check (organization_id = (select auth.jwt() ->> 'organization_id')::uuid);
+  with check (
+    organization_id in (select get_my_organization_ids())
+    or is_master_user()
+  );
 ```
 
-Use `(select auth.jwt() ...)` (subquery) — perf melhor que call direto.
+Helpers disponíveis (todos `SECURITY DEFINER`, bypassam RLS, evitam recursão):
+- `get_my_organization_ids()` — orgs do usuário (membro/admin)
+- `get_my_admin_organization_ids()` — orgs onde é admin (gate de escrita admin-only)
+- `get_my_team_member_ids()` — team_member ids do usuário
+- `is_master_user()` — master ghost (acesso cross-org)
+
+Espelhe a policy de `leads` como referência canônica. Nunca reintroduza subquery inline em `team_members` (ver `project_lead_comments_rls_master_multi_org`).
 
 ### RPC
 
