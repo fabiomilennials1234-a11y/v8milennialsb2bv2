@@ -51,7 +51,8 @@ export const BUILTIN_LEAD_ORIGINS: LeadOriginOption[] = [
 
 interface LeadOriginRow {
   slug: string;
-  label: string;
+  /** Coluna real no banco é `name`; mapeada para `label` na API pública do hook. */
+  name: string;
   color: string;
   sort_order: number;
   organization_id: string | null;
@@ -74,9 +75,9 @@ export function useLeadOrigins(): UseLeadOriginsResult {
       // filtramos por org_id no client — a policy é o gate multi-tenant.
       const { data, error } = await supabase
         .from("lead_origins")
-        .select("slug,label,color,sort_order,organization_id")
+        .select("slug,name,color,sort_order,organization_id")
         .order("sort_order", { ascending: true })
-        .order("label", { ascending: true });
+        .order("name", { ascending: true });
       if (error) throw error;
       return (data ?? []) as LeadOriginRow[];
     },
@@ -89,11 +90,12 @@ export function useLeadOrigins(): UseLeadOriginsResult {
     if (!rows || rows.length === 0) return BUILTIN_LEAD_ORIGINS;
 
     // Custom da org (org_id != null) sobrepõe built-in de mesmo slug.
+    // `name` (coluna do banco) é exposto como `label` na API pública do hook.
     const bySlug = new Map<string, LeadOriginOption>();
     for (const r of rows) {
       const existing = bySlug.get(r.slug);
       if (!existing || (existing && r.organization_id !== null)) {
-        bySlug.set(r.slug, { slug: r.slug, label: r.label, color: r.color });
+        bySlug.set(r.slug, { slug: r.slug, label: r.name, color: r.color });
       }
     }
     return Array.from(bySlug.values());

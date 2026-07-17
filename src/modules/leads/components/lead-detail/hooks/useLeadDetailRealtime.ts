@@ -82,7 +82,6 @@ export function useLeadDetailRealtime(
   const isLive = enabled && !!leadId;
   const leadFilter = leadId ? `id=eq.${leadId}` : undefined;
   const leadIdFilter = leadId ? `lead_id=eq.${leadId}` : undefined;
-  const orgFilter = organizationId ? `organization_id=eq.${organizationId}` : undefined;
 
   useRealtimeChannel({
     table: "leads",
@@ -152,7 +151,11 @@ export function useLeadDetailRealtime(
 
   useRealtimeChannel({
     table: "pipe_proposta_items",
-    filter: orgFilter,
+    // `pipe_proposta_items` não tem coluna organization_id — filtrar por ela
+    // gera "invalid column for filter organization_id" e derruba o canal.
+    // Assinamos sem filtro; a RLS (apply_rls no realtime) gate os eventos por
+    // org e a invalidação abaixo re-busca com escopo no servidor.
+    filter: undefined,
     enabled: isLive && !!organizationId,
     onEvent: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
       if (!leadId) return;
