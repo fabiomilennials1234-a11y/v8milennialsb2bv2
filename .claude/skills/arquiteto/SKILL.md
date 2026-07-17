@@ -139,7 +139,7 @@ git commit -m "$(cat <<'EOF'
 
 <corpo opcional — só se "porquê" não for óbvio>
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 EOF
 )"
 
@@ -169,7 +169,7 @@ Subject ≤ 72 chars, imperativo, minúsculas, sem ponto final. Body em bullets 
 - NUNCA commit com lint/test falhando
 - NUNCA commit que mistura mudanças não-relacionadas — divida em commits separados ou em branches separadas
 - SEMPRE `git status` + `git diff` antes de commitar
-- SEMPRE Co-Authored-By: Claude Opus 4.7 (1M context)
+- SEMPRE Co-Authored-By: Claude Opus 4.8
 - SEMPRE relate URL do remote/branch após push
 
 ## Regras
