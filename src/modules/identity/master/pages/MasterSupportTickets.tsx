@@ -8,7 +8,7 @@
  * exceção. Ver a migration `20270117000000_support_ticket_clock.sql`.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -45,6 +45,7 @@ import {
   normalizeDefectUrl,
 } from "@/modules/platform/lib/defect-url";
 import { AttachmentStrip } from "@/modules/platform/components/support/AttachmentStrip";
+import { useTicketChannel } from "@/modules/platform/hooks/useTicketChannel";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 import {
   useClaimSupportTicket,
@@ -55,6 +56,11 @@ import {
   type MasterSupportTicket,
   type MasterTicketFilters,
 } from "../hooks/useMasterSupportTickets";
+import { useMasterQueueChannel } from "../hooks/useMasterQueueChannel";
+import {
+  useMasterSupportUnread,
+  useMarkMasterRepliesRead,
+} from "../hooks/useMasterSupportUnread";
 
 const ALL = "__all__";
 
@@ -87,6 +93,8 @@ export default function MasterSupportTickets() {
   const [filters, setFilters] = useState<MasterTicketFilters>({});
   const [expanded, setExpanded] = useState<string | null>(null);
   const { data: tickets, isLoading, refetch, isFetching } = useMasterSupportTickets(filters);
+  useMasterQueueChannel(); // new Chamados and claims enter the queue live, no F5
+  const { byTicket: unread } = useMasterSupportUnread(); // badge lights when a customer replies
 
   const hasFilters = Object.values(filters).some(Boolean);
 
@@ -160,6 +168,7 @@ export default function MasterSupportTickets() {
             isLoading={isLoading}
             expanded={expanded}
             onToggle={toggle}
+            unread={unread}
             emptyLabel={hasFilters ? "Nenhum chamado com esses filtros." : "A fila está vazia."}
           />
         </CardContent>
@@ -181,6 +190,7 @@ export default function MasterSupportTickets() {
                 isLoading={false}
                 expanded={expanded}
                 onToggle={toggle}
+                unread={unread}
                 resolved
                 emptyLabel=""
               />
@@ -198,6 +208,7 @@ function TicketTable({
   expanded,
   onToggle,
   emptyLabel,
+  unread,
   resolved = false,
 }: {
   tickets: MasterSupportTicket[];
@@ -205,6 +216,7 @@ function TicketTable({
   expanded: string | null;
   onToggle: (id: string) => void;
   emptyLabel: string;
+  unread?: Record<string, number>;
   resolved?: boolean;
 }) {
   return (
@@ -240,6 +252,7 @@ function TicketTable({
               ticket={t}
               isExpanded={expanded === t.id}
               onToggle={() => onToggle(t.id)}
+              unread={unread?.[t.id] ?? 0}
               resolved={resolved}
             />
           ))
@@ -336,11 +349,13 @@ function TicketRow({
   ticket,
   isExpanded,
   onToggle,
+  unread = 0,
   resolved = false,
 }: {
   ticket: MasterSupportTicket;
   isExpanded: boolean;
   onToggle: () => void;
+  unread?: number;
   resolved?: boolean;
 }) {
   const { masterUser } = useMasterAuth();
@@ -366,7 +381,18 @@ function TicketRow({
           )}
         </TableCell>
         <TableCell>
-          <p className="max-w-[380px] truncate text-sm font-medium">{ticket.title}</p>
+          <div className="flex items-center gap-2">
+            {unread > 0 && (
+              <span
+                className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground"
+                title={`${unread} resposta${unread > 1 ? "s" : ""} não lida${unread > 1 ? "s" : ""} do cliente`}
+                aria-label={`${unread} resposta não lida do cliente`}
+              >
+                {unread}
+              </span>
+            )}
+            <p className="max-w-[380px] truncate text-sm font-medium">{ticket.title}</p>
+          </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {TIPO_LABELS[ticket.tipo]}
             <span aria-hidden> · </span>
@@ -502,9 +528,17 @@ function OverdueTag({ ticket }: { ticket: MasterSupportTicket }) {
 function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
   const { user } = useAuth();
   const { data: comments = [] } = useMasterTicketComments(ticket.id);
+  useTicketChannel(ticket.id); // customer's reply lands live while the thread is open
   const createComment = useCreateStaffComment();
   const [body, setBody] = useState("");
   const [isInternal, setIsInternal] = useState(false);
+
+  // Opening the Chamado is the act of reading it — clear its unread badge.
+  const markRead = useMarkMasterRepliesRead();
+  const markReadMutate = markRead.mutate;
+  useEffect(() => {
+    markReadMutate(ticket.id);
+  }, [ticket.id, markReadMutate]);
 
   const ctx = (ticket.support_context ?? {}) as Record<string, unknown>;
   const clientErrors = (ctx.client_errors ?? []) as { name: string; message: string; at: string }[];

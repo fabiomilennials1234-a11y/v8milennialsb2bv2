@@ -36,6 +36,8 @@ export * from "./hooks/useFeatureFlag";
 export * from "./hooks/useHealthHistory";
 export * from "./hooks/useHelpCenter";
 export * from "./hooks/useSupportTickets";
+export * from "./hooks/useTicketChannel";
+export * from "./hooks/useSupportTicketsChannel";
 export * from "./hooks/useSupportContext";
 export * from "./hooks/useSupportUnread";
 export * from "./hooks/useTicketAttachments";

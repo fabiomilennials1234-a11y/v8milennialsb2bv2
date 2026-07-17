@@ -9,6 +9,8 @@
  */
 
 export const SUPPORT_REPLY_TYPE = "support_ticket_reply";
+/** Notificação endereçada ao staff quando o cliente responde (ADR-0021, S3). */
+export const SUPPORT_CUSTOMER_REPLY_TYPE = "support_ticket_customer_reply";
 
 export interface UnreadNotificationRow {
   type: string;
@@ -22,12 +24,15 @@ export interface UnreadSummary {
   total: number;
 }
 
-export function summarizeUnreadReplies(rows: UnreadNotificationRow[]): UnreadSummary {
+export function summarizeUnreadReplies(
+  rows: UnreadNotificationRow[],
+  type: string = SUPPORT_REPLY_TYPE,
+): UnreadSummary {
   const byTicket: Record<string, number> = {};
   let total = 0;
 
   for (const row of rows) {
-    if (row.type !== SUPPORT_REPLY_TYPE) continue;
+    if (row.type !== type) continue;
     // `entity_id` é nullable: uma linha antiga ou malformada não vira uma chave
     // "null" no mapa.
     if (!row.entity_id) continue;
