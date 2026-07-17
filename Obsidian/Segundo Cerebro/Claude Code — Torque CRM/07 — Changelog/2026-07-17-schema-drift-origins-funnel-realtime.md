@@ -1,11 +1,10 @@
 ---
 type: changelog
 title: 2026-07-17 — Hotfix drift código↔schema — lead_origins.label, funnel order_index, realtime org filter
-status: shipped-partial
+status: shipped
 created: 2026-07-17
 updated: 2026-07-17
 tags: [incident, schema-drift, lead-origins, funnel-conversion, realtime, multi-tenancy, hotfix]
-related: ["[[project_lead_origins_registry]]"]
 owner: gabriel
 ---
 
