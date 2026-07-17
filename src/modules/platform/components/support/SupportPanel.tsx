@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSupportTickets, type SupportTicket } from "@/modules/platform/hooks/useSupportTickets";
 import { useSupportUnread } from "@/modules/platform/hooks/useSupportUnread";
+import { useSupportTicketsChannel } from "@/modules/platform/hooks/useSupportTicketsChannel";
 import { STATUS_LABELS } from "@/modules/platform/lib/support-ticket-draft";
 import { useHelpArticles, type HelpArticleWithCategory } from "@/modules/platform/hooks/useHelpCenter";
 import { HelpArticleDialog } from "@/modules/platform/components/settings/help/HelpArticleDialog";
@@ -40,6 +41,8 @@ const PANEL_CLASS = cn(
 export function SupportPanel() {
   const { isOpen, close, ticketId, composing, openNewTicket, openTicket, backToList } =
     useSupportPanel();
+
+  useSupportTicketsChannel(); // status changes by staff reach the customer's list live
 
   return (
     <DialogPrimitive.Root open={isOpen} onOpenChange={(open) => !open && close()}>
