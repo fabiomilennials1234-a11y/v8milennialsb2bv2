@@ -45,6 +45,7 @@ import {
   normalizeDefectUrl,
 } from "@/modules/platform/lib/defect-url";
 import { AttachmentStrip } from "@/modules/platform/components/support/AttachmentStrip";
+import { useTicketChannel } from "@/modules/platform/hooks/useTicketChannel";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 import {
   useClaimSupportTicket,
@@ -502,6 +503,7 @@ function OverdueTag({ ticket }: { ticket: MasterSupportTicket }) {
 function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
   const { user } = useAuth();
   const { data: comments = [] } = useMasterTicketComments(ticket.id);
+  useTicketChannel(ticket.id); // customer's reply lands live while the thread is open
   const createComment = useCreateStaffComment();
   const [body, setBody] = useState("");
   const [isInternal, setIsInternal] = useState(false);

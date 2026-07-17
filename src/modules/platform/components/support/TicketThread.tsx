@@ -14,6 +14,7 @@ import {
   useReopenSupportTicket,
 } from "@/modules/platform/hooks/useSupportTickets";
 import { useMarkSupportRepliesRead } from "@/modules/platform/hooks/useSupportUnread";
+import { useTicketChannel } from "@/modules/platform/hooks/useTicketChannel";
 import { STATUS_LABELS } from "@/modules/platform/lib/support-ticket-draft";
 import {
   TICKET_AUTHOR_LABELS,
@@ -33,6 +34,7 @@ export function TicketThread({ ticketId, onBack }: Props) {
   const { user } = useAuth();
   const { data: ticket, isLoading } = useSupportTicket(ticketId);
   const { data: comments = [] } = useSupportTicketComments(ticketId);
+  useTicketChannel(ticketId); // master's reply lands live, no refresh
   const createComment = useCreateSupportTicketComment();
   const markRead = useMarkSupportRepliesRead();
   const reopen = useReopenSupportTicket();
