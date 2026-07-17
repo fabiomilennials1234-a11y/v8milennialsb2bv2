@@ -200,8 +200,8 @@ function QRCodeModal({
         </DialogHeader>
 
         {!isOfficial && (
-          <div className="flex items-center gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-200">
-            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+          <div className="flex items-center gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-800 dark:text-amber-200">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
             <p>
               <strong>API não oficial:</strong> o número pode ser banido pela Meta
               (política da Meta, não falha do Torque). Aqueça o número aos poucos.
@@ -644,8 +644,8 @@ export function WhatsAppSettings() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-200">
-        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+      <div className="flex items-center gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-800 dark:text-amber-200">
+        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
         <p>
           Conexão via <strong>API não oficial</strong> do WhatsApp — o número pode ser
           banido pela Meta (política da Meta, não falha do Torque). Aqueça números novos
@@ -836,9 +836,9 @@ export function WhatsAppSettings() {
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-hidden />
-            <div className="space-y-1.5 text-xs leading-relaxed text-amber-200/90">
-              <p className="text-sm font-semibold text-amber-200">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+            <div className="space-y-1.5 text-xs leading-relaxed text-amber-800 dark:text-amber-200/90">
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
                 Atenção: esta é a API não oficial do WhatsApp
               </p>
               <p>
@@ -862,7 +862,7 @@ export function WhatsAppSettings() {
                 empurrar as empresas a migrarem para a <span className="font-medium">API Oficial (WhatsApp Business API)</span>,
                 que é paga, porém não tem esse risco de banimento por política.
               </p>
-              <p className="text-amber-200/80">
+              <p className="text-amber-700 dark:text-amber-200/80">
                 💡 Recomendação: aqueça o número aos poucos (comece com poucos envios e vá aumentando), evite disparos em
                 massa para quem não respondeu e, se o número for essencial para o negócio, considere a API Oficial.
               </p>
