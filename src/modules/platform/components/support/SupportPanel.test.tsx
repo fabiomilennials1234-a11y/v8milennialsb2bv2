@@ -120,7 +120,7 @@ describe("SupportPanel", () => {
     await user.click(screen.getByText("abrir painel"));
 
     expect(await screen.findByText("Nenhum chamado por aqui")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /abrir chamado/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /enviar mensagem/i })).toBeInTheDocument();
   });
 
   it("lista os chamados que o hook devolveu", async () => {
@@ -282,7 +282,7 @@ describe("SupportPanel", () => {
     await user.click(screen.getByText("abrir painel"));
 
     const artigoEl = await screen.findByText("Por que um lead não aparece no kanban?");
-    const cta = screen.getByRole("button", { name: /^abrir chamado$/i });
+    const cta = screen.getByRole("button", { name: /^enviar mensagem$/i });
     expect(artigoEl.compareDocumentPosition(cta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 

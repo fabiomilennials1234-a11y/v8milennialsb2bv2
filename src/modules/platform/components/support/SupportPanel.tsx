@@ -2,8 +2,7 @@ import { useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronRight, Inbox, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ChevronRight, Headset, Inbox, Loader2, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSupportTickets, type SupportTicket } from "@/modules/platform/hooks/useSupportTickets";
 import { useSupportUnread } from "@/modules/platform/hooks/useSupportUnread";
@@ -24,6 +23,10 @@ import { StatusDot } from "./StatusDot";
  * enquanto o Popover exigiria o anchor montado na mesma árvore. O Dialog dá de
  * graça Esc, clique-fora, focus-trap e retorno de foco. Sem overlay escuro: é um
  * card, não um takeover — o modal já bloqueia a interação atrás dele.
+ *
+ * A home (TicketList) segue o padrão "messenger" (Intercom/Crisp): saudação em
+ * gradiente com a presença da equipe, deflexão logo abaixo e a retomada das
+ * conversas recentes antes do CTA de abrir um novo chamado.
  */
 const PANEL_CLASS = cn(
   "fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-border/80 bg-card text-card-foreground",
@@ -73,6 +76,9 @@ export function SupportPanel() {
   );
 }
 
+/** Iniciais decorativas da equipe. Presença é ilustrativa — não expõe pessoas. */
+const TEAM_INITIALS = ["A", "R", "M"] as const;
+
 function TicketList({
   onSelect,
   onNew,
@@ -87,12 +93,35 @@ function TicketList({
 
   return (
     <>
-      <header className="border-b border-border/60 px-5 pb-3.5 pt-4">
-        <DialogPrimitive.Title className="text-[15px] font-semibold tracking-tight">
-          Ajuda
+      {/* Header em gradiente com a presença da equipe — a assinatura "messenger". */}
+      <header className="relative overflow-hidden px-5 pb-5 pt-5">
+        <div
+          aria-hidden
+          className="absolute inset-0 -z-10 bg-gradient-to-br from-primary/25 via-primary/10 to-transparent"
+        />
+        <div
+          aria-hidden
+          className="absolute -right-8 -top-14 -z-10 h-40 w-40 rounded-full bg-primary/20 blur-3xl"
+        />
+        <div className="flex items-center gap-2">
+          <span aria-hidden className="flex -space-x-2">
+            {TEAM_INITIALS.map((c) => (
+              <span
+                key={c}
+                className="grid h-7 w-7 place-items-center rounded-full border-2 border-card bg-muted text-[11px] font-semibold text-foreground"
+              >
+                {c}
+              </span>
+            ))}
+          </span>
+          {/* Presença honesta: sem número de SLA fabricado. */}
+          <span className="text-xs text-muted-foreground">Equipe de suporte · respondemos rápido</span>
+        </div>
+        <DialogPrimitive.Title className="mt-3 text-xl font-semibold tracking-tight">
+          Precisa de ajuda?
         </DialogPrimitive.Title>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Encontre uma resposta ou fale com a gente.
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
+          Busque uma resposta ou fale com a gente.
         </p>
       </header>
 
@@ -109,14 +138,14 @@ function TicketList({
           <EmptyState />
         ) : (
           <>
-            <div className="flex items-center justify-between px-5 pb-1 pt-4">
+            <div className="flex items-center justify-between px-5 pb-1.5 pt-4">
               <span className="text-[10.5px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
-                Meus chamados
+                Continuar conversa
               </span>
               {/* "ver todos" omitido de propósito: a Central de Ajuda (#1042)
                   ainda não expõe uma listagem completa de chamados como destino. */}
             </div>
-            <ul className="divide-y divide-border/40">
+            <ul className="space-y-1.5 px-3 pb-1">
               {tickets.map((t) => (
                 <TicketRow key={t.id} ticket={t} unread={unread[t.id] ?? 0} onSelect={onSelect} />
               ))}
@@ -134,11 +163,15 @@ function TicketList({
       />
 
       {/* O humano vive no rodapé, nunca no topo. */}
-      <div className="border-t border-border/60 bg-muted/20 px-5 py-3.5">
-        <p className="mb-2.5 text-xs text-muted-foreground">Não encontrou o que precisava?</p>
-        <Button onClick={onNew} className="w-full font-semibold">
-          Abrir chamado
-        </Button>
+      <div className="border-t border-border/60 bg-muted/20 px-4 py-3.5">
+        <button
+          type="button"
+          onClick={onNew}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        >
+          <Send className="h-4 w-4" aria-hidden />
+          Enviar mensagem
+        </button>
       </div>
     </>
   );
@@ -158,12 +191,15 @@ function TicketRow({
       <button
         type="button"
         onClick={() => onSelect(ticket.id)}
-        className="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-muted/40"
+        className="group flex w-full items-center gap-3 rounded-xl border border-border/60 bg-background/40 p-2.5 text-left transition hover:border-border hover:bg-muted/40"
       >
-        <StatusDot status={ticket.status} className="mt-1.5 self-start" />
+        <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/15 text-primary">
+          <Headset className="h-4 w-4" aria-hidden />
+          <StatusDot status={ticket.status} className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 border-2 border-card" />
+        </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium leading-snug text-foreground">{ticket.title}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {STATUS_LABELS[ticket.status]}
             <span aria-hidden> · </span>
             {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true, locale: ptBR })}
@@ -177,7 +213,7 @@ function TicketRow({
             {unread}
           </span>
         ) : (
-          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50" aria-hidden />
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50 transition group-hover:translate-x-0.5" aria-hidden />
         )}
       </button>
     </li>
