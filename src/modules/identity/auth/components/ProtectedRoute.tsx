@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrentTeamMember } from '../../org-team/hooks/useTeamMembers';
 import { useIdentity } from '../hooks/useIdentity';
+import { useGestor } from '../../gestor/hooks/useGestor';
 import { AlertTriangle, Clock } from 'lucide-react';
 import { TorqueLoader } from '@/components/ui/branding/TorqueLoader';
 import { Button } from '@/components/ui/button';
@@ -16,8 +17,9 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
   const { user, loading: authLoading, signOut } = useAuth();
   const { data: teamMember, isLoading: teamMemberLoading, error: teamMemberError } = useCurrentTeamMember();
   const { isMaster, isLoading: masterLoading } = useIdentity();
+  const { isGestor, isLoading: gestorLoading } = useGestor();
 
-  if (authLoading || masterLoading) {
+  if (authLoading || masterLoading || gestorLoading) {
     return <TorqueLoader variant="full" />;
   }
 
@@ -31,6 +33,12 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
 
   if (requireOrganization && !isMaster) {
     if (!teamMember || !teamMember.organization_id) {
+      // Gestor de Portfólio (ADR-0021): não tem team_member enquanto não entra
+      // numa org vinculada pelo hub. Não está "sendo configurado" — mandar pra
+      // Área do Gestor, não pra tela de aguardando ativação.
+      if (isGestor) {
+        return <Navigate to="/gestor" replace />;
+      }
       return (
         <div className="min-h-screen flex items-center justify-center bg-background">
           <div className="flex flex-col items-center gap-4 max-w-md text-center p-6">
