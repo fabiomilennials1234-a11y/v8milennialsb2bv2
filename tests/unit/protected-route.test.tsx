@@ -25,6 +25,11 @@ vi.mock('@/modules/identity/auth/hooks/useIdentity', () => ({
   useIdentity: (...args: unknown[]) => mockUseIdentity(...args),
 }));
 
+const mockUseGestor = vi.fn();
+vi.mock('@/modules/identity/gestor/hooks/useGestor', () => ({
+  useGestor: (...args: unknown[]) => mockUseGestor(...args),
+}));
+
 vi.mock('@/modules/identity/permissions/hooks/useUserRole', () => ({
   useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
@@ -127,6 +132,7 @@ function setDefaults() {
     isReady: true,
   });
   mockUseLocation.mockReturnValue({ pathname: '/dashboard' });
+  mockUseGestor.mockReturnValue({ isGestor: false, gestorId: null, isLoading: false });
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
@@ -657,5 +663,46 @@ describe('ProtectedRoute', () => {
     expect(screen.getByText('protected')).toBeInTheDocument();
     expect(screen.queryByTestId('navigate')).not.toBeInTheDocument();
     expect(screen.queryByTestId('loader2')).not.toBeInTheDocument();
+  });
+});
+
+describe('ProtectedRoute — Gestor de Portfólio', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setDefaults();
+  });
+
+  it('redirects an active Gestor (no team member yet) to /gestor instead of "Aguardando Ativação"', () => {
+    // Gestor: não-master, sem team_member (ainda não escolheu org vinculada no hub).
+    mockUseCurrentTeamMember.mockReturnValue({ data: null, isLoading: false, error: null });
+    mockUseGestor.mockReturnValue({ isGestor: true, gestorId: 'g-1', isLoading: false });
+
+    render(
+      <ProtectedRoute requireOrganization>
+        <p>app</p>
+      </ProtectedRoute>,
+    );
+
+    expect(screen.getByTestId('navigate')).toHaveAttribute('data-to', '/gestor');
+    expect(screen.queryByText(/sendo configurada/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('app')).not.toBeInTheDocument();
+  });
+
+  it('lets a Gestor into the app once a bound org is selected (virtual member present)', () => {
+    mockUseCurrentTeamMember.mockReturnValue({
+      data: makeTeamMember({ id: 'gestor-virtual-user-1', role: 'admin' }),
+      isLoading: false,
+      error: null,
+    });
+    mockUseGestor.mockReturnValue({ isGestor: true, gestorId: 'g-1', isLoading: false });
+
+    render(
+      <ProtectedRoute requireOrganization>
+        <p>app</p>
+      </ProtectedRoute>,
+    );
+
+    expect(screen.getByText('app')).toBeInTheDocument();
+    expect(screen.queryByTestId('navigate')).not.toBeInTheDocument();
   });
 });
