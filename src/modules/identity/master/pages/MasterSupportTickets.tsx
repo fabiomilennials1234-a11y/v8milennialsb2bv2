@@ -392,6 +392,14 @@ function TicketRow({
               </span>
             )}
             <p className="max-w-[380px] truncate text-sm font-medium">{ticket.title}</p>
+            {ticket.author_gestor_id && (
+              <Badge
+                variant="outline"
+                className="shrink-0 border-violet-500/30 bg-violet-500/10 text-[10px] font-medium text-violet-400"
+              >
+                Gestor
+              </Badge>
+            )}
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {TIPO_LABELS[ticket.tipo]}

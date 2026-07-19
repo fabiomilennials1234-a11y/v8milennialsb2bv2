@@ -159,6 +159,20 @@ describe('useMasterAuth', () => {
     expect(result.current.hasPermission('audit')).toBe(false);
   });
 
+  // 6b. hasPermission gates the `gestores` key (ADR-0021 §8)
+  it("hasPermission gates the `gestores` key granularly", async () => {
+    setupSupabaseMock({
+      data: { ...MASTER_ROW, permissions: { all: false, gestores: true, billing: false } },
+      error: null,
+    });
+
+    const { result } = renderHook(() => useMasterAuth(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.hasPermission('gestores')).toBe(true);
+    expect(result.current.hasPermission('billing')).toBe(false);
+  });
+
   // 7. hasPermission returns false when masterUser is null
   it('hasPermission returns false when masterUser is null', async () => {
     setupSupabaseMock({ data: null, error: null });

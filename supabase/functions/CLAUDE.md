@@ -30,11 +30,13 @@ Rename físico = projeto separado (ver "Rename futuro" abaixo).
 | `admin-reset-user-password` | UI master | JWT admin |
 | `assign-user-to-org` | UI master | JWT admin |
 | `attach-to-org-by-pending-invite` | UI signup | JWT user |
+| `create-gestor` | UI master (Gestores) | JWT master |
 | `create-org-user` | UI master / signup | JWT/admin |
 | `forgot-password` | UI auth | público + rate-limit |
 | `get-member-permissions` | UI | JWT |
 | `list-organizations` | UI master | JWT master |
 | `list-unassigned-users` | UI master | JWT master |
+| `manage-gestor-orgs` | UI master (Gestores) | JWT master |
 | `remove-org-member` | UI admin | JWT admin |
 | `reset-password` | UI auth | público + rate-limit |
 | `save-member-permissions` | UI admin | JWT admin |
@@ -45,6 +47,7 @@ Rename físico = projeto separado (ver "Rename futuro" abaixo).
 > Rate-limit por IP via `auth_rate_limits` + `check_auth_rate_limit`. Consumo
 > uso-único via `claim_password_reset_token`. Ver
 > `07 — Changelog/2026-07-06-self-hosted-password-reset.md`.
+`create-gestor` / `manage-gestor-orgs` (ADR-0021 §8): provisão do Gestor de Portfólio. Master-gated inline (valida X-User-JWT → `master_users` ativo). Sem entrada em `config.toml` (verify_jwt padrão; frontend manda anon key em Authorization + JWT real em X-User-JWT — mesma convenção de create-org-user).
 
 ### leads (7) — lead ingest, score, timeline
 

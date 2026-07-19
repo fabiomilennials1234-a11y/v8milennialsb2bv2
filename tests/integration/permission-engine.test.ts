@@ -96,6 +96,56 @@ describe.skipIf(shouldSkip)('Permission Engine — integration', () => {
       .eq('feature_key', 'leads.delete');
   });
 
+  // ─── Gestor de Portfólio (scoped master — ADR-0021 §6, S3 #1139) ────────
+  // Verifica no nível de tabela que o binding gestor↔org resolve como esperado.
+  // O reconhecimento full no edge (canUserPerformAction/requireAuth) roda no
+  // runtime Deno e é coberto pelos unit tests; aqui garantimos o schema + o
+  // round-trip de vínculo que o server consulta.
+
+  it('gestores + gestor_organizations tables exist and bind round-trips', async () => {
+    // Cria org secundária de teste + gestor + vínculo, então consulta como o
+    // server (gestor ativo vinculado → 1 linha). Cleanup ao final.
+    const GESTOR_USER = '00000000-0000-0000-0000-0000000009a1';
+    const { data: gestor, error: gErr } = await supabase
+      .from('gestores')
+      .upsert({ user_id: GESTOR_USER, is_active: true }, { onConflict: 'user_id' })
+      .select('id')
+      .maybeSingle();
+
+    if (gErr) {
+      console.warn('⚠ gestores table not present — skipping (apply S1 migration)');
+      return;
+    }
+    expect(gestor?.id).toBeTruthy();
+
+    await supabase.from('gestor_organizations').upsert(
+      { gestor_id: gestor!.id, organization_id: TEST_ORG_ID },
+      { onConflict: 'gestor_id,organization_id' },
+    );
+
+    // Bound → 1 linha (o que isActiveGestorForOrg consulta no server)
+    const { data: bound } = await supabase
+      .from('gestor_organizations')
+      .select('id')
+      .eq('gestor_id', gestor!.id)
+      .eq('organization_id', TEST_ORG_ID)
+      .maybeSingle();
+    expect(bound?.id).toBeTruthy();
+
+    // Org não-vinculada → 0 linhas (fail-closed cross-org)
+    const { data: unbound } = await supabase
+      .from('gestor_organizations')
+      .select('id')
+      .eq('gestor_id', gestor!.id)
+      .eq('organization_id', '00000000-0000-0000-0000-0000000000ff')
+      .maybeSingle();
+    expect(unbound).toBeNull();
+
+    // Cleanup
+    await supabase.from('gestor_organizations').delete().eq('gestor_id', gestor!.id);
+    await supabase.from('gestores').delete().eq('id', gestor!.id);
+  });
+
   it('member_feature_permissions override enabled=true grants access', async () => {
     const memberTeamMemberId = '00000000-0000-0000-0000-000000000130';
 

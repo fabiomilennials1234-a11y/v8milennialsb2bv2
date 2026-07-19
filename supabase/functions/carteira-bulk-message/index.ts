@@ -15,6 +15,8 @@ import { sleepJitter } from "../_shared/anti-ban-jitter.ts";
 // wall clock: estourou o budget, o loop CONTINUA ENVIANDO sem espaçamento —
 // degrada a proteção, nunca derruba a request nem perde um cliente do lote.
 const JITTER_BUDGET_MS = 90_000;
+import { getActiveGestorForOrg, gestorRuntimeActor } from "../_shared/gestor-auth.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 interface BulkMessageRequest {
   organization_id: string;
@@ -118,11 +120,22 @@ Deno.serve(
       .eq("organization_id", organization_id)
       .maybeSingle();
 
+    // ADR-0021 §7: `gestores.id` real quando o ator é um Gestor (não team_member
+    // da org). Resolve o id — não só um booleano — para atribuir a escrita
+    // cross-org ao ator real na trilha forense.
+    let gestorId: string | undefined;
     if (!member) {
-      return new Response(
-        JSON.stringify({ error: "Not a member of this organization" }),
-        { status: 403, headers: withSecurityHeaders({ ...corsHeaders, "Content-Type": "application/json" }) },
-      );
+      // Gestor de Portfólio (scoped master — ADR-0021 §6): ator fora de
+      // team_members com escrita operacional full na org vinculada. Disparo de
+      // mensagem em massa da carteira = operação → liberado.
+      const gestorCtx = await getActiveGestorForOrg(supabaseAdmin, user.id, organization_id);
+      if (!gestorCtx) {
+        return new Response(
+          JSON.stringify({ error: "Not a member of this organization" }),
+          { status: 403, headers: withSecurityHeaders({ ...corsHeaders, "Content-Type": "application/json" }) },
+        );
+      }
+      gestorId = gestorCtx.gestorId;
     }
 
     const { data: clients } = await supabaseAdmin
@@ -193,7 +206,9 @@ Deno.serve(
           direction: "outbound",
           channel: "whatsapp",
           content: resolvedMessage,
-          sender_name: member.id,
+          // Gestor não tem team_member (member null) → atribui ao ator real
+          // (user.id), coerente com a atribuição forense do ADR-0021 §7.
+          sender_name: member?.id ?? user.id,
           metadata: { source: "carteira_bulk", client_id: client.id },
         }).then(() => {});
       }
@@ -201,6 +216,24 @@ Deno.serve(
 
     const sent = results.filter((r) => r.success).length;
     const failed = results.filter((r) => !r.success).length;
+
+    // ADR-0021 §7: disparo em massa é escrita de gestor DENTRO de dados de um
+    // cliente. Registra a trilha forense atribuída ao ator REAL (gestor_id +
+    // triggered_by = user.id real), respondendo "quem disparou?" com o gestor,
+    // nunca um membro genérico. Só quando gestor — membro comum não polui o log
+    // com colunas de atribuição de gestor (ver logger.ts / migration 20270211000003).
+    if (gestorId) {
+      await logRuntime({
+        ...gestorRuntimeActor(user.id, gestorId),
+        organizationId: organization_id,
+        module: "carteira",
+        action: "carteira_bulk_message",
+        status: failed > 0 && sent === 0 ? "error" : "success",
+        entityType: "organization",
+        entityId: organization_id,
+        payloadSnapshot: { sent, failed, total: results.length },
+      });
+    }
 
     return new Response(
       JSON.stringify({ sent, failed, total: results.length, results }),

@@ -150,6 +150,18 @@ export function redactSecrets(input: unknown, _seen?: WeakSet<object>): unknown 
  * silenciosamente a linha que deveria proteger. Já destruiu — ver a migration
  * 20270115. Ao adicionar um módulo, adicione o literal aqui.
  */
+/**
+ * Vocabulário de `runtime_logs.actor_type` (ADR-0021 §7).
+ *
+ * Garantido aqui em compile time — a coluna deliberadamente NÃO tem CHECK
+ * (mesma razão de `module`: `logRuntime` engole a falha do insert, então um
+ * constraint de runtime destruiria em silêncio a linha que deveria proteger).
+ *
+ * `gestor` é o único produzido hoje (o único ator cujo `triggered_by` sozinho
+ * não revela que a escrita é cross-org). Os demais existem para forward-safety.
+ */
+export type RuntimeActorType = "gestor" | "master" | "member" | "system";
+
 export type RuntimeLogModule =
   | "agent"
   | "analytics"
@@ -196,6 +208,14 @@ interface LogRuntimeParams {
   // `getTraceContext(req)` de `_shared/request-trace.ts` para preenchê-los.
   sessionId?: string | null;
   requestId?: string | null;
+  // ADR-0021 §7: quando o ator é um Gestor de Portfólio (scoped master atuando
+  // numa org vinculada), marca a linha com o tipo de ator e o `gestores.id`
+  // REAL. `triggeredBy` continua sendo o auth.users.id real do gestor. Só é
+  // gravado quando `actorType` está setado — log normal mantém a MESMA forma de
+  // insert (zero regressão antes da migration 20270211000003 ser aplicada).
+  // Use `gestorRuntimeActor()` de `_shared/gestor-auth.ts` para preenchê-los.
+  actorType?: RuntimeActorType;
+  gestorId?: string;
 }
 
 /**
@@ -215,7 +235,7 @@ export async function logRuntime(params: LogRuntimeParams): Promise<void> {
       ? (redactSecrets(params.payloadSnapshot) as Record<string, unknown>)
       : undefined;
 
-    await supabase.from("runtime_logs").insert({
+    const row: Record<string, unknown> = {
       organization_id: params.organizationId || null,
       module: params.module,
       action: params.action,
@@ -232,7 +252,18 @@ export async function logRuntime(params: LogRuntimeParams): Promise<void> {
       reasoning: params.reasoning ?? null,
       session_id: params.sessionId ?? null,
       request_id: params.requestId ?? null,
-    });
+    };
+
+    // ADR-0021 §7: só toca as colunas de atribuição do gestor quando há ator
+    // gestor. Mantém o insert idêntico para todo o resto — o dia em que a
+    // migration 20270211000003 ainda não rodou, log normal não referencia
+    // colunas inexistentes e não cai no drop silencioso.
+    if (params.actorType) {
+      row.actor_type = params.actorType;
+      if (params.gestorId) row.gestor_id = params.gestorId;
+    }
+
+    await supabase.from("runtime_logs").insert(row);
   } catch (err) {
     console.warn("[logRuntime] Failed to write log (non-fatal):", err);
     // Surface persistent insert failures to runtime logs instead of swallowing them.

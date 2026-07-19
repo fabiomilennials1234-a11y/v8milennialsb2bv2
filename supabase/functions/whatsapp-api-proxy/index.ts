@@ -25,6 +25,7 @@ import {
   getWhatsAppProvider,
   type WhatsAppInstance,
 } from "../_shared/whatsapp-client.ts";
+import { isActiveGestorForOrg } from "../_shared/gestor-auth.ts";
 
 // Force bundler to include provider modules (used via dynamic import in
 // whatsapp-client). meta-cloud is force-imported too so the human composer can
@@ -166,6 +167,15 @@ Deno.serve(
       if (!orgRow) {
         return jsonResponse(404, { error: "Organization not found" }, corsHeaders);
       }
+      callerOrgId = targetOrgId;
+    } else if (
+      targetOrgId &&
+      (await isActiveGestorForOrg(supabaseAdmin, user.id, targetOrgId))
+    ) {
+      // Gestor de Portfólio (scoped master — ADR-0021 §6): ator fora de
+      // team_members com escrita operacional full nas orgs vinculadas. Como o
+      // Master, precisa de organization_id explícito e só alcança orgs às quais
+      // está vinculado. Enviar mensagem é operação → liberado.
       callerOrgId = targetOrgId;
     } else {
       const { data: userOrg, error: orgErr } = await supabaseAdmin

@@ -85,6 +85,15 @@ export type {
   UserStats,
 } from "./hooks/useMasterUsers";
 
+// ── Gestores de Portfólio (ADR-0021 §8) ────────────────────────────────────
+export {
+  useMasterGestores,
+  useCreateGestor,
+  useToggleGestorActive,
+  useSetGestorOrgs,
+} from "./hooks/useMasterGestores";
+export type { MasterGestorView } from "./hooks/useMasterGestores";
+
 // ── Audit logs ─────────────────────────────────────────────────────────────
 export {
   useMasterAuditLogs,

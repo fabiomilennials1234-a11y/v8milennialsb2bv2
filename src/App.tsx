@@ -17,6 +17,10 @@ import { MainLayout } from "@/modules/platform/components/layout/MainLayout";
 import { TorqueIntro } from "@/modules/platform/components/layout/TorqueIntro";
 import { useAutoAdminAssignment } from "@/modules/identity/hooks/useAutoAdminAssignment";
 import { SubscriptionProtectedRoute } from "@/modules/identity/components/SubscriptionProtectedRoute";
+import { useMasterAuth } from "@/modules/identity/master/hooks/useMasterAuth";
+import { useGestor } from "@/modules/identity/gestor/hooks/useGestor";
+import { GestorRoute } from "@/modules/identity/gestor/components/GestorRoute";
+import { resolveBootRedirect } from "@/modules/identity/auth/lib/boot-gate";
 import { GlobalErrorBoundary } from "@/modules/platform/components/GlobalErrorBoundary";
 import { OnboardingGate } from "@/modules/platform/components/onboarding/OnboardingGate";
 import { FeatureRoute } from "@/modules/platform";
@@ -75,6 +79,9 @@ const CustomPipeline = lazy(() => lazyRetry(() => import("@/modules/pipelines/pa
 const Agenda = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Agenda")));
 const Privacidade = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Privacidade")));
 const Faq = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Faq")));
+// Área do Gestor (ADR-0021) — hub do Gestor de Portfólio + página master de gestores.
+const AreaGestor = lazy(() => lazyRetry(() => import("@/modules/identity/gestor/pages/AreaGestor")));
+const MasterGestores = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterGestores")));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/modules/copilot/components/playground").then(m => ({ default: m.CopilotPlayground }))));
 const ChecklistPage = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/ChecklistPage")));
 const MessageTemplates = lazy(() => lazyRetry(() => import("@/modules/communication/pages/MessageTemplates")));
@@ -188,14 +195,25 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Root route: always show Landing Page
+// Root route: boot gate. Ordem master → gestor → membro (ADR-0021 §5).
+// Master mantém o app (/dashboard); Gestor de Portfólio ativo entra na Área do
+// Gestor (/gestor); membro comum entra no app. Sem usuário → Landing.
 function RootRedirect() {
   const { user, loading } = useAuth();
+  const { isMaster, isLoading: masterLoading } = useMasterAuth();
+  const { isGestor, isLoading: gestorLoading } = useGestor();
 
-  if (loading) return null;
-  if (user) return <Navigate to="/dashboard" replace />;
+  const decision = resolveBootRedirect({
+    authLoading: loading,
+    hasUser: !!user,
+    gateLoading: !!user && (masterLoading || gestorLoading),
+    isMaster,
+    isGestor,
+  });
 
-  return <Landing />;
+  if (decision.kind === "loading") return null;
+  if (decision.kind === "landing") return <Landing />;
+  return <Navigate to={decision.to} replace />;
 }
 
 // Auth route that redirects to dashboard if already logged in
@@ -225,6 +243,19 @@ function AppRoutes() {
       {/* Signup dedicado — renderiza a página (honra ?plan vindo do pricing) em vez de redirecionar p/ /auth e perder o plano */}
       <Route path="/signup" element={<Signup />} />
       <Route path="/privacidade" element={<Privacidade />} />
+      {/* Área do Gestor (ADR-0021 §5): hub do Gestor de Portfólio. GestorRoute
+          nega não-gestor; requireOrganization=false porque o Gestor não tem
+          team_member/org ao chegar no hub. */}
+      <Route
+        path="/gestor"
+        element={
+          <ProtectedRoute requireOrganization={false}>
+            <GestorRoute>
+              <AreaGestor />
+            </GestorRoute>
+          </ProtectedRoute>
+        }
+      />
       {/* DEV-only: preview do popup B2B Summit sem auth */}
       {import.meta.env.DEV && (
         <Route
@@ -696,6 +727,7 @@ function AppRoutes() {
         <Route path="features" element={<MasterFeatures />} />
         <Route path="audit-logs" element={<MasterAuditLogs />} />
         <Route path="operations" element={<MasterOperations />} />
+        <Route path="gestores" element={<MasterGestores />} />
         <Route path="automation-health" element={<MasterAutomationHealth />} />
         <Route path="whatsapp-health" element={<MasterWhatsAppHealth />} />
         <Route path="copilot-reasoning" element={<CopilotReasoning />} />
