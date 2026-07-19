@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "../../auth/contexts/AuthContext";
 import { useCurrentTeamMember } from "../../org-team/hooks/useTeamMembers";
 import { useMasterAuth } from "../../master/hooks/useMasterAuth";
+import { useGestor } from "../../gestor/hooks/useGestor";
 import type { Tables } from "@/integrations/supabase/types";
 
 export type UserRole = Tables<"user_roles">;
@@ -136,15 +137,19 @@ export function useFeaturePermissions() {
   const { user } = useAuth();
   const { data: currentTeamMember } = useCurrentTeamMember();
   const { isMaster } = useMasterAuth();
+  const { isGestor } = useGestor();
   const organizationId = currentTeamMember?.organization_id ?? null;
 
   return useQuery({
-    queryKey: ["feature-permissions", user?.id, organizationId, isMaster],
+    queryKey: ["feature-permissions", user?.id, organizationId, isMaster, isGestor],
     queryFn: async (): Promise<Record<string, boolean>> => {
-      // Master bypassa permission checks via useFeaturePermission.allowed.
-      // Não precisa chamar edge function — evita 500 quando shadow user
-      // está em org sem team_member real. Incidente 2026-04-24.
-      if (isMaster) return {};
+      // Master E Gestor de Portfólio (ADR-0021) bypassam permission checks:
+      // ambos são shadow users que operam a org com virtual member role=admin,
+      // SEM team_member real. Chamar get-member-permissions com um teamMemberId
+      // virtual/vazio dá 500/hang → trava o loader do ProtectedRoute (o gate
+      // useIdentity.isLoading inclui este featuresLoading). Admin não precisa de
+      // feature flags. Mesma razão do bypass do master — incidente 2026-04-24.
+      if (isMaster || isGestor) return {};
 
       if (!user?.id) throw new Error("feature-permissions: usuário ausente");
       if (!organizationId) throw new Error("feature-permissions: organization_id ausente");

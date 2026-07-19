@@ -39,6 +39,11 @@ vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({
   useMasterAuth: () => ({ isMaster: false, isLoading: false }),
 }));
 
+const mockUseGestor = vi.fn(() => ({ isGestor: false, isLoading: false }));
+vi.mock("@/modules/identity/gestor/hooks/useGestor", () => ({
+  useGestor: () => mockUseGestor(),
+}));
+
 // Vite env vars used by the hook
 vi.stubEnv("VITE_SUPABASE_URL", "https://proj.supabase.co");
 vi.stubEnv("VITE_SUPABASE_PUBLISHABLE_KEY", "anon-key");
@@ -56,6 +61,7 @@ function wrapper() {
 let fetchSpy: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  mockUseGestor.mockReturnValue({ isGestor: false, isLoading: false });
   fetchSpy = vi.fn().mockResolvedValue({
     ok: true,
     json: async () => ({ features: { "pipeline.view": true }, isAdmin: false, jobTitle: "", metricType: "meetings" }),
@@ -115,6 +121,21 @@ describe("useFeaturePermissions — multi-tenant body.organization_id", () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(result.current.isFetching).toBe(false);
+  });
+
+  it("bypassa a edge function para Gestor de Portfólio (shadow user sem team_member real)", async () => {
+    // ADR-0021: gestor opera a org via virtual member role=admin, sem team_member.
+    // Chamar get-member-permissions travava o loader do ProtectedRoute (loading infinito).
+    mockUseGestor.mockReturnValue({ isGestor: true, isLoading: false });
+    mockUseCurrentTeamMember.mockReturnValue({
+      data: { id: "gestor-virtual-user-1", organization_id: "org-bound" },
+    });
+
+    const { result } = renderHook(() => useFeaturePermissions(), { wrapper: wrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({});
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("sends X-User-JWT header with the access_token (never sends service key)", async () => {
