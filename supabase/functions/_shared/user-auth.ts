@@ -11,6 +11,7 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logRuntime } from "./logger.ts";
 import { timingSafeCompare } from "./auth.ts";
+import { getActiveGestorForOrg, gestorRuntimeActor, isActiveGestorForOrg } from "./gestor-auth.ts";
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -21,6 +22,20 @@ export interface AuthContext {
   role: string;
   isMaster: boolean;
   isAdmin: boolean;
+  /**
+   * True quando o ator é um Gestor de Portfólio (scoped master — ADR-0021)
+   * atuando numa org vinculada, e NÃO um team_member real dela. isAdmin também
+   * é true (escrita operacional full). Edge functions de roster/billing devem
+   * negar o Gestor via requireAdmin({ denyGestor: true }) — carve-out §3.
+   */
+  isGestor: boolean;
+  /**
+   * ADR-0021 §7: `gestores.id` REAL do ator quando `isGestor`. Usado para
+   * atribuir a escrita cross-org ao ator real na trilha forense (`runtime_logs`
+   * via `gestorRuntimeActor`). `undefined` quando não é gestor. NUNCA é o
+   * virtual member (`gestor-virtual-<userId>`) — esse é UI-only, não persistido.
+   */
+  gestorId?: string;
   jobTitle: string;
   metricType: "meetings" | "sales";
 }
@@ -121,6 +136,7 @@ export async function requireAuth(
         role: "admin",
         isMaster: false,
         isAdmin: true,
+        isGestor: false,
         jobTitle: "Internal",
         metricType: "sales",
       };
@@ -198,19 +214,37 @@ export async function requireAuth(
     teamMember = data;
   }
 
-  if (!teamMember && !isMaster) {
+  // Gestor de Portfólio (scoped master — ADR-0021 §6): ator FORA de
+  // team_members com escrita full de admin operacional nas orgs vinculadas.
+  // Só é reconhecido quando há um orgId concreto (o Gestor opera SEMPRE dentro
+  // de uma org vinculada). Sem orgId não há alvo a checar → mantém o gate
+  // original (fail-closed). Um team_member real tem precedência (já resolvido
+  // acima); a checagem de Gestor só roda quando não há membro nem master.
+  let isGestor = false;
+  let gestorId: string | undefined;
+  if (!teamMember && !isMaster && orgId) {
+    // Resolve o gestor real (gestores.id) — não só um booleano — para que a
+    // escrita cross-org seja atribuível ao ator real na trilha (ADR-0021 §7).
+    const gestorCtx = await getActiveGestorForOrg(supabase, user.id, orgId);
+    if (gestorCtx) {
+      isGestor = true;
+      gestorId = gestorCtx.gestorId;
+    }
+  }
+
+  if (!teamMember && !isMaster && !isGestor) {
     throw new AuthError("Você não pertence a esta organização", 403);
   }
 
-  // Safety net: se a org foi fornecida mas o user não é membro dela e
-  // também não é master, falha explicitamente (evita service-role bypass
-  // silencioso quando body.organization_id é arbitrário).
-  if (orgId && !teamMember && !isMaster) {
+  // Safety net: se a org foi fornecida mas o user não é membro/master/gestor
+  // dela, falha explicitamente (evita service-role bypass silencioso quando
+  // body.organization_id é arbitrário).
+  if (orgId && !teamMember && !isMaster && !isGestor) {
     throw new AuthError("Você não pertence a esta organização", 403);
   }
 
-  const role = teamMember?.role || (isMaster ? "admin" : "member");
-  const isAdmin = isMaster || role === "admin";
+  const role = teamMember?.role || (isMaster || isGestor ? "admin" : "member");
+  const isAdmin = isMaster || isGestor || role === "admin";
 
   return {
     userId: user.id,
@@ -219,6 +253,8 @@ export async function requireAuth(
     role,
     isMaster,
     isAdmin,
+    isGestor,
+    gestorId,
     jobTitle: teamMember?.job_title || "",
     metricType: (teamMember?.metric_type as "meetings" | "sales") || "meetings",
   };
@@ -236,9 +272,32 @@ export async function requireAdmin(
     organizationId?: string;
     body?: Record<string, unknown>;
     allowInternalKey?: boolean;
+    /**
+     * Carve-out ADR-0021 §3: quando true, nega o Gestor de Portfólio mesmo
+     * sendo isAdmin. Use em edge functions de roster do cliente (criar/remover
+     * membro, permissões) e billing/plano — o Gestor NÃO gerencia a estrutura
+     * da org do cliente. Default false (operação normal libera o Gestor).
+     */
+    denyGestor?: boolean;
   },
 ): Promise<AuthContext> {
   const ctx = await requireAuth(req, options);
+
+  if (options?.denyGestor && ctx.isGestor) {
+    await logRuntime({
+      // ADR-0021 §7: tentativa negada também é ação do gestor — atribui ao ator
+      // real (gestor_id + triggered_by), nunca anonimizada.
+      ...(ctx.gestorId ? gestorRuntimeActor(ctx.userId, ctx.gestorId) : {}),
+      organizationId: ctx.organizationId,
+      module: "permission",
+      action: "require_admin_gestor_carveout",
+      status: "error",
+      errorMessage: `Gestor ${ctx.userId} tentou ação de roster/billing restrita ao admin do cliente`,
+      entityType: "user",
+      entityId: ctx.userId,
+    });
+    throw new AuthError("Esta ação é restrita ao administrador da organização", 403);
+  }
 
   if (!ctx.isAdmin) {
     await logRuntime({
@@ -297,7 +356,12 @@ export async function resolvePermission(
     .eq("is_active", true)
     .maybeSingle();
 
-  if (!tm) return false;
+  // 2b. Gestor de Portfólio: admin operacional na org vinculada. As keys
+  // resolvidas aqui (ORG_KEY_TO_FEATURE — visão de leads) são operacionais,
+  // fora dos carve-outs de roster/billing, então o Gestor herda como admin.
+  if (!tm) {
+    return isActiveGestorForOrg(supabase, userId, organizationId);
+  }
   if (tm.role === "admin") return true;
 
   // 3. Map org key → feature key, check feature permission

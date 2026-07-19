@@ -31,6 +31,11 @@ export { PermissionProtectedRoute } from "./permissions";
 // ── Master ops ──────────────────────────────────────────────────────────────
 export { useMasterAuth } from "./master";
 
+// ── Gestor de Portfólio (scoped master, ADR-0021) ───────────────────────────
+export { useGestor, GestorRoute } from "./gestor";
+export { resolveBootRedirect } from "./auth/lib/boot-gate";
+export type { BootState, BootDecision } from "./auth/lib/boot-gate";
+
 // ── Organization + team ─────────────────────────────────────────────────────
 export {
   useOrganization,

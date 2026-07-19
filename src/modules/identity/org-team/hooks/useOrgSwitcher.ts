@@ -11,6 +11,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "../../auth/contexts/AuthContext";
 import { useMasterAuth } from "../../master/hooks/useMasterAuth";
+import { useGestor } from "../../gestor/hooks/useGestor";
 import { setSelectedOrgId } from "./useCurrentTeamMember";
 
 export interface SwitcherOrg {
@@ -24,11 +25,12 @@ export interface SwitcherOrg {
 export function useOrgSwitcher() {
   const { user } = useAuth();
   const { isMaster, isLoading: masterLoading } = useMasterAuth();
+  const { isGestor, isLoading: gestorLoading } = useGestor();
   const queryClient = useQueryClient();
   const [isSwitching, setIsSwitching] = useState(false);
 
   const { data: orgs = [], isLoading } = useQuery({
-    queryKey: ["org-switcher", user?.id, isMaster],
+    queryKey: ["org-switcher", user?.id, isMaster, isGestor],
     queryFn: async (): Promise<SwitcherOrg[]> => {
       if (!user?.id) return [];
 
@@ -47,6 +49,26 @@ export function useOrgSwitcher() {
           org_type: org.org_type,
           role: "admin",
         }));
+      }
+
+      // Gestor de Portfólio (não-master): apenas as orgs vinculadas (whitelist).
+      // `gestor_organizations` ausente do types gerado → cast (ver gestor/types.ts).
+      // A RLS já escopa as linhas ao próprio gestor; o join traz nome/slug da org.
+      if (isGestor) {
+        const { data, error } = await supabase
+          .from("gestor_organizations" as any)
+          .select("organization_id, organizations!inner(id, name, slug, org_type)");
+
+        if (error) throw error;
+        return ((data ?? []) as any[])
+          .map((row) => ({
+            id: row.organizations.id,
+            name: row.organizations.name,
+            slug: row.organizations.slug,
+            org_type: row.organizations.org_type,
+            role: "admin",
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
       }
 
       // Usuário normal: apenas orgs com team_member ativo
@@ -71,7 +93,7 @@ export function useOrgSwitcher() {
         role: tm.role,
       }));
     },
-    enabled: !!user?.id && !masterLoading,
+    enabled: !!user?.id && !masterLoading && !gestorLoading,
     staleTime: 2 * 60 * 1000, // 2 minutos
   });
 
@@ -99,5 +121,6 @@ export function useOrgSwitcher() {
     isSwitching,
     switchOrg,
     hasMultipleOrgs: isMaster || orgs.length > 1,
+    isGestor,
   };
 }

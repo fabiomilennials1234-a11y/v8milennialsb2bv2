@@ -22,6 +22,13 @@ import { useMasterAuth } from "./useMasterAuth";
 
 export type MasterSupportTicket = Tables<"support_tickets"> & {
   organization: { name: string } | null;
+  /**
+   * Marcador de autor-gestor (ADR-0021 §9): setado quando o Chamado foi aberto
+   * por um Gestor de Portfólio, não por um Team Member da org. Ausente do
+   * types.ts gerado (drift repo↔prod) — chega via `select("*")` quando a coluna
+   * existir em prod; até lá, `undefined` → sem selo.
+   */
+  author_gestor_id?: string | null;
 };
 
 export interface MasterTicketFilters {

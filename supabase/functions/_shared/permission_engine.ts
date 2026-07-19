@@ -13,6 +13,13 @@
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logRuntime } from "./logger.ts";
+import {
+  GESTOR_DENIED_ACTIONS,
+  getActiveGestorForOrg,
+  gestorRuntimeActor,
+  isActiveGestorForOrg,
+  isGestorDeniedFeature,
+} from "./gestor-auth.ts";
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -116,6 +123,20 @@ export async function canUserPerformAction(params: {
     .maybeSingle();
 
   if (!tm) {
+    // 2b. Gestor de Portfólio (scoped master — ADR-0021 §6): ator fora de
+    // team_members com escrita full de admin operacional nas orgs vinculadas.
+    // Reconhece como admin, EXCETO nos carve-outs (roster/billing do cliente).
+    // Resolve o gestores.id real (não só booleano) para atribuir a ação do
+    // gestor ao ator real na trilha (ADR-0021 §7), inclusive numa negação.
+    const gestorCtx = await getActiveGestorForOrg(supabase, userId, organizationId);
+    if (gestorCtx) {
+      if (GESTOR_DENIED_ACTIONS.has(action)) {
+        await logDenied(userId, organizationId, action, "gestor_carveout", gestorCtx.gestorId);
+        return { allowed: false, reason: "Ação restrita ao admin da organização" };
+      }
+      return { allowed: true, reason: "gestor_scoped_master" };
+    }
+
     await logDenied(userId, organizationId, action, "not_org_member");
     return { allowed: false, reason: "Você não pertence a esta organização" };
   }
@@ -217,7 +238,12 @@ export async function canUserAccessFeature(
     .eq("is_active", true)
     .maybeSingle();
 
-  if (!tm) return false;
+  if (!tm) {
+    // 2b. Gestor de Portfólio: admin operacional na org vinculada, exceto
+    // features de roster/billing (carve-out ADR-0021 §3).
+    if (isGestorDeniedFeature(featureKey)) return false;
+    return isActiveGestorForOrg(supabase, userId, organizationId);
+  }
 
   // 3. Admin sempre pode
   if (tm.role === "admin") return true;
@@ -330,8 +356,13 @@ async function logDenied(
   organizationId: string,
   action: string,
   reason: string,
+  // ADR-0021 §7: quando a negação é de uma ação de Gestor (carve-out), atribui
+  // ao ator real (gestor_id + triggered_by). Ausente nas demais negações →
+  // linha idêntica à de antes (zero regressão pré-migration 20270211000003).
+  gestorId?: string,
 ): Promise<void> {
   await logRuntime({
+    ...(gestorId ? gestorRuntimeActor(userId, gestorId) : {}),
     organizationId,
     module: "permission",
     action: `denied:${action}`,

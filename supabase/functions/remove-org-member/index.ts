@@ -141,6 +141,16 @@ const handler = async (req: Request) => {
       }
     }
 
+    // Carve-out ADR-0021 §3: o Gestor de Portfólio (isAdmin=true operacional)
+    // NÃO gerencia o roster do cliente. Remover membro = roster → negado.
+    if (authCtx.isGestor) {
+      return jsonResponse(
+        { success: false, error: "Forbidden", message: "Gestor de Portfólio não remove membros da organização" },
+        403,
+        corsHeaders
+      );
+    }
+
     // Admin check
     if (!authCtx.isAdmin) {
       return jsonResponse(

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Loader2, AlertTriangle, MessageCircleQuestion, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,13 +30,46 @@ const TIPO_ICONS: Record<TicketTipo, typeof AlertTriangle> = {
 interface Props {
   onCreated: (ticketId: string) => void;
   onCancel: () => void;
+  /**
+   * Override do envio. Por padrão o Chamado é criado na org do contexto
+   * (`useCreateSupportTicket`), com autor = usuário. A Área do Gestor injeta o
+   * seu próprio submit — ancorado a uma org vinculada, com marcador de
+   * autor-gestor — reutilizando este formulário sem duplicá-lo (ADR-0021 §9).
+   */
+  submit?: (draft: TicketDraft) => Promise<{ id: string }>;
+  /** Campos extras no topo do formulário (ex.: seletor de org do Gestor). */
+  beforeFields?: ReactNode;
+  /** Bloqueia o envio (ex.: Gestor ainda sem org âncora escolhida). */
+  submitDisabled?: boolean;
+  /** Estado de envio quando o submit é injetado. */
+  isSubmitting?: boolean;
 }
 
-export function NewTicketForm({ onCreated, onCancel }: Props) {
+export function NewTicketForm({
+  onCreated,
+  onCancel,
+  submit,
+  beforeFields,
+  submitDisabled = false,
+  isSubmitting = false,
+}: Props) {
   const [draft, setDraft] = useState<TicketDraft>(emptyTicketDraft());
   const [submitted, setSubmitted] = useState(false);
   const createTicket = useCreateSupportTicket();
   const captureSupportContext = useCaptureSupportContext();
+
+  // Envio padrão (org do contexto). Só usado quando nenhum `submit` é injetado.
+  const submitFn =
+    submit ??
+    (async (d: TicketDraft) => {
+      const ticket = await createTicket.mutateAsync({
+        draft: d,
+        supportContext: { ...captureSupportContext() },
+      });
+      return { id: ticket.id };
+    });
+
+  const pending = isSubmitting || createTicket.isPending;
 
   const errors = ticketDraftErrors(draft);
   // Erros só aparecem depois da primeira tentativa. Gritar com quem ainda não
@@ -55,10 +88,7 @@ export function NewTicketForm({ onCreated, onCancel }: Props) {
       // Silencioso: rota sanitizada, versao, browser, session_id e os ultimos
       // erros deste browser. Nada aqui expoe conteudo. (Screenshot e outra
       // conversa, com aviso explicito — fatia #1025.)
-      const ticket = await createTicket.mutateAsync({
-        draft,
-        supportContext: captureSupportContext(),
-      });
+      const ticket = await submitFn(draft);
       toast.success("Chamado aberto. A gente te responde por aqui.");
       onCreated(ticket.id);
     } catch (err) {
@@ -76,6 +106,7 @@ export function NewTicketForm({ onCreated, onCancel }: Props) {
   return (
     <form onSubmit={handleSubmit} className="flex flex-1 flex-col overflow-hidden">
       <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+        {beforeFields}
         <fieldset className="space-y-2.5">
           <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             O que aconteceu?
@@ -179,11 +210,11 @@ export function NewTicketForm({ onCreated, onCancel }: Props) {
       </div>
 
       <div className="flex items-center gap-2 border-t border-border/50 bg-muted/20 px-6 py-4">
-        <Button type="button" variant="ghost" onClick={onCancel} disabled={createTicket.isPending}>
+        <Button type="button" variant="ghost" onClick={onCancel} disabled={pending}>
           Cancelar
         </Button>
-        <Button type="submit" className="flex-1 gap-2 font-semibold" disabled={createTicket.isPending}>
-          {createTicket.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+        <Button type="submit" className="flex-1 gap-2 font-semibold" disabled={pending || submitDisabled}>
+          {pending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
           Abrir chamado
         </Button>
       </div>

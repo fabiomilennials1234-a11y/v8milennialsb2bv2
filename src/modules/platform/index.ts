@@ -94,6 +94,12 @@ export { AlertsBanner } from "./components/system-alerts/AlertsBanner";
 // Components — Feature Lock / Feature Route
 export { FeatureLock, FeatureRoute, FeatureLockedScreen } from "./components/feature-lock";
 
+// Components — Support (Chamado). Reutilizados cross-module pela Área do Gestor
+// (ADR-0021 §9): o Gestor abre/vê chamados com as mesmas peças, sem duplicar UI.
+export { NewTicketForm } from "./components/support/NewTicketForm";
+export { TicketThread } from "./components/support/TicketThread";
+export { StatusDot } from "./components/support/StatusDot";
+
 // Lib — Feature Unlock
 export { computeFeatureUnlockPlan } from "./lib/feature-unlock";
 export type { FeatureUnlockMap, UnlockPlan, ActivePlan } from "./lib/feature-unlock";

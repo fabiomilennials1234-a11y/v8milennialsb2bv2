@@ -13,7 +13,9 @@ Deno.serve(withErrorBoundary("save-member-permissions", async (req) => {
 
   try {
     const body = await req.json();
-    const auth = await requireAdmin(req, { body });
+    // Carve-out ADR-0021 §3: gerenciar permissões do roster do cliente é
+    // restrito ao admin real da org — o Gestor de Portfólio NÃO passa.
+    const auth = await requireAdmin(req, { body, denyGestor: true });
 
     const { teamMemberId, permissions } = body as {
       teamMemberId: string;

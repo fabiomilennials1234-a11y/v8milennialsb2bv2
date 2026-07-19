@@ -27,6 +27,8 @@ export interface MasterPermissions {
   audit?: boolean;
   /** Fila de Chamados (ADR-0018). */
   support?: boolean;
+  /** Gestor de Portfólio — CRUD de gestores + binding de orgs (ADR-0021 §8). */
+  gestores?: boolean;
   outbound_only?: boolean;
 }
 

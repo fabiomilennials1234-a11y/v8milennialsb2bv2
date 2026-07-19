@@ -518,10 +518,116 @@ describe("Type exports", () => {
       role: "admin",
       isMaster: false,
       isAdmin: true,
+      isGestor: false,
       jobTitle: "SDR",
       metricType: "meetings",
     };
     expect(ctx.userId).toBe("u1");
     expect(ctx.isAdmin).toBe(true);
+  });
+});
+
+// ─── Gestor de Portfólio (scoped master — ADR-0021 §6, S3 #1139) ──────────
+
+describe("requireAuth — Gestor de Portfólio", () => {
+  function seedGestor(userId: string, boundOrgs: string[], active = true) {
+    mockState.tables.gestores = [{ id: "g1", user_id: userId, is_active: active }];
+    mockState.tables.gestor_organizations = boundOrgs.map((organization_id, i) => ({
+      id: `bind-${i}`,
+      gestor_id: "g1",
+      organization_id,
+    }));
+  }
+
+  it("reconhece gestor vinculado como admin operacional (isGestor + isAdmin)", async () => {
+    mockState.user = { id: "u-g" };
+    seedGestor("u-g", ["org-A"]);
+    const req = new Request("https://test.com/api", { headers: { Authorization: "Bearer valid" } });
+    const ctx = await requireAuth(req, { organizationId: "org-A" });
+    expect(ctx.isGestor).toBe(true);
+    expect(ctx.isAdmin).toBe(true);
+    expect(ctx.role).toBe("admin");
+    expect(ctx.organizationId).toBe("org-A");
+    expect(ctx.teamMemberId).toBe(""); // virtual — nunca persistido em FK
+  });
+
+  it("nega gestor em org NÃO-vinculada (403)", async () => {
+    mockState.user = { id: "u-g" };
+    seedGestor("u-g", ["org-A"]);
+    const req = new Request("https://test.com/api", { headers: { Authorization: "Bearer valid" } });
+    await expect(requireAuth(req, { organizationId: "org-B" })).rejects.toThrow(/não pertence/);
+  });
+
+  it("gestor inativo não é reconhecido (403)", async () => {
+    mockState.user = { id: "u-g" };
+    seedGestor("u-g", ["org-A"], false);
+    const req = new Request("https://test.com/api", { headers: { Authorization: "Bearer valid" } });
+    await expect(requireAuth(req, { organizationId: "org-A" })).rejects.toThrow(/não pertence/);
+  });
+
+  it("sem organizationId, gestor NÃO é reconhecido (fail-closed)", async () => {
+    mockState.user = { id: "u-g" };
+    seedGestor("u-g", ["org-A"]);
+    const req = new Request("https://test.com/api", { headers: { Authorization: "Bearer valid" } });
+    // Sem org concreta não há alvo a checar → cai no gate original.
+    await expect(requireAuth(req)).rejects.toThrow(/não pertence/);
+  });
+});
+
+describe("requireAdmin — carve-out denyGestor", () => {
+  function seedGestor(userId: string, boundOrgs: string[]) {
+    mockState.tables.gestores = [{ id: "g1", user_id: userId, is_active: true }];
+    mockState.tables.gestor_organizations = boundOrgs.map((organization_id, i) => ({
+      id: `bind-${i}`,
+      gestor_id: "g1",
+      organization_id,
+    }));
+  }
+
+  it("libera gestor por padrão (denyGestor ausente)", async () => {
+    mockState.user = { id: "u-g" };
+    seedGestor("u-g", ["org-A"]);
+    const req = new Request("https://test.com/api", { headers: { Authorization: "Bearer valid" } });
+    const ctx = await requireAdmin(req, { organizationId: "org-A" });
+    expect(ctx.isGestor).toBe(true);
+    expect(ctx.isAdmin).toBe(true);
+  });
+
+  it("nega gestor quando denyGestor=true (roster/billing carve-out)", async () => {
+    mockState.user = { id: "u-g" };
+    seedGestor("u-g", ["org-A"]);
+    const req = new Request("https://test.com/api", { headers: { Authorization: "Bearer valid" } });
+    await expect(
+      requireAdmin(req, { organizationId: "org-A", denyGestor: true }),
+    ).rejects.toThrow(/restrita ao administrador/);
+  });
+
+  it("admin real não é afetado por denyGestor", async () => {
+    mockState.user = { id: "u-admin" };
+    mockState.tables.team_members = [
+      { id: "tm1", user_id: "u-admin", organization_id: "org-A", role: "admin", is_active: true },
+    ];
+    const req = new Request("https://test.com/api", { headers: { Authorization: "Bearer valid" } });
+    const ctx = await requireAdmin(req, { organizationId: "org-A", denyGestor: true });
+    expect(ctx.isAdmin).toBe(true);
+    expect(ctx.isGestor).toBe(false);
+  });
+});
+
+describe("resolvePermission — Gestor de Portfólio", () => {
+  it("gestor vinculado herda permissão operacional de leads", async () => {
+    mockState.tables.gestores = [{ id: "g1", user_id: "u-g", is_active: true }];
+    mockState.tables.gestor_organizations = [
+      { id: "b1", gestor_id: "g1", organization_id: "org-A" },
+    ];
+    expect(await resolvePermission("u-g", "org-A", "see_all_leads")).toBe(true);
+  });
+
+  it("gestor não-vinculado é negado", async () => {
+    mockState.tables.gestores = [{ id: "g1", user_id: "u-g", is_active: true }];
+    mockState.tables.gestor_organizations = [
+      { id: "b1", gestor_id: "g1", organization_id: "org-A" },
+    ];
+    expect(await resolvePermission("u-g", "org-B", "see_all_leads")).toBe(false);
   });
 });

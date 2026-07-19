@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "../../auth/contexts/AuthContext";
 import { useMasterAuth } from "../../master/hooks/useMasterAuth";
+import { useGestor } from "../../gestor/hooks/useGestor";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
 export type TeamMember = Tables<"team_members">;
@@ -15,11 +16,12 @@ export type TeamMemberInsert = TablesInsert<"team_members">;
 export type TeamMemberUpdate = TablesUpdate<"team_members">;
 
 /**
- * Detecta se um teamMemberId é virtual (master shadow user).
- * IDs virtuais nunca devem ser usados em mutations com FK.
+ * Detecta se um teamMemberId é virtual (shadow user: master OU gestor de portfólio).
+ * IDs virtuais nunca devem ser usados em mutations com FK (ver fix `8f63435e` +
+ * ADR-0021: o virtual member do Gestor também é UI-only, nunca persiste).
  */
 export function isVirtualTeamMember(id: string | null | undefined): boolean {
-  return !!id?.startsWith("master-virtual-");
+  return !!id && (id.startsWith("master-virtual-") || id.startsWith("gestor-virtual-"));
 }
 
 // Chave no localStorage para org selecionada (org switcher)
@@ -42,15 +44,21 @@ export function setSelectedOrgId(orgId: string) {
 }
 
 /**
- * Cria um team member virtual para o master user (shadow user).
+ * Cria um team member virtual para um shadow user (master ou gestor de portfólio).
  * Não existe no banco — apenas no frontend para manter o fluxo de contexto.
+ * O `id` virtual (`master-virtual-*` / `gestor-virtual-*`) NUNCA é persistido em FK
+ * (ver `isVirtualTeamMember` + ADR-0021).
  */
-function buildVirtualTeamMember(userId: string, organizationId: string): TeamMember {
+function buildVirtualTeamMember(
+  userId: string,
+  organizationId: string,
+  actor: "master" | "gestor" = "master",
+): TeamMember {
   return {
-    id: `master-virtual-${userId}`,
+    id: `${actor}-virtual-${userId}`,
     user_id: userId,
     organization_id: organizationId,
-    name: "Master",
+    name: actor === "gestor" ? "Gestor" : "Master",
     role: "admin",
     is_active: true,
     ote_base: null,
@@ -68,9 +76,10 @@ function buildVirtualTeamMember(userId: string, organizationId: string): TeamMem
 export function useCurrentTeamMember() {
   const { user } = useAuth();
   const { isMaster, isLoading: masterLoading } = useMasterAuth();
+  const { isGestor, isLoading: gestorLoading } = useGestor();
 
   return useQuery({
-    queryKey: ["team_members", "current", user?.id, isMaster],
+    queryKey: ["team_members", "current", user?.id, isMaster, isGestor],
     queryFn: async () => {
       if (!user?.id) {
         console.log("🔍 useCurrentTeamMember: Sem user.id");
@@ -120,6 +129,23 @@ export function useCurrentTeamMember() {
           }
           // Org não existe mais, limpar e buscar outra
           console.log("⚠️ useCurrentTeamMember: Org não existe mais, limpando localStorage");
+          localStorage.removeItem(SELECTED_ORG_KEY);
+        } else if (isGestor) {
+          // Gestor de Portfólio: virtual member SÓ se a org selecionada estiver
+          // entre os vínculos (whitelist). A RLS já escopa gestor_organizations ao
+          // próprio gestor, então uma linha para storedOrgId prova o vínculo.
+          const { data: bound } = await supabase
+            .from("gestor_organizations" as any)
+            .select("organization_id")
+            .eq("organization_id", storedOrgId)
+            .maybeSingle();
+
+          if (bound) {
+            console.log("✅ useCurrentTeamMember: Gestor virtual (org vinculada):", { organizationId: storedOrgId });
+            return buildVirtualTeamMember(user.id, storedOrgId, "gestor");
+          }
+          // Org não vinculada ao gestor: limpar e cair no hub.
+          console.log("⚠️ useCurrentTeamMember: Gestor sem vínculo com a org selecionada, limpando localStorage");
           localStorage.removeItem(SELECTED_ORG_KEY);
         } else {
           // Não-master sem team_member na org selecionada: limpar e tentar fallback
@@ -181,7 +207,7 @@ export function useCurrentTeamMember() {
 
       return null;
     },
-    enabled: !!user?.id && !masterLoading,
+    enabled: !!user?.id && !masterLoading && !gestorLoading,
     retry: 2,
     staleTime: 5 * 60 * 1000, // 5 minutos
   });

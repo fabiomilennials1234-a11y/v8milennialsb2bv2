@@ -166,6 +166,16 @@ serve(withErrorBoundary('create-org-user', async (req) => {
       }
     }
 
+    // Carve-out ADR-0021 §3: o Gestor de Portfólio (isAdmin=true operacional)
+    // NÃO gerencia o roster do cliente. Criar usuário = roster → negado.
+    if (authCtx.isGestor) {
+      return jsonResponse(
+        { success: false, error: "Forbidden", message: "Gestor de Portfólio não gerencia usuários da organização" },
+        403,
+        corsHeaders
+      );
+    }
+
     // Admin check: requireAuth já resolveu isAdmin
     if (!authCtx.isAdmin) {
       return jsonResponse(
