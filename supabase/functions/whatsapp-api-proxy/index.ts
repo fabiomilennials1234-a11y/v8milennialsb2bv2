@@ -70,6 +70,21 @@ function jsonResponse(
   });
 }
 
+/**
+ * True when `number` carries enough digits to be a real recipient.
+ *
+ * A lead with a blank / whitespace / non-numeric phone reaches here as "55"
+ * (the frontend prepends the country code to an empty local part). Uazapi answers
+ * such sends with HTTP 500 "could not parse phone number: 55", which the UI then
+ * shows as the opaque "Edge Function returned a non-2xx status code". Gating on a
+ * digit floor turns that into a clean, immediate 400 and keeps garbage numbers from
+ * ever hitting the provider. Floor = 10 (DDD + 8, the shortest possible BR number);
+ * with the 55 prefix a real number is 12-13 digits.
+ */
+function hasSendableNumber(number: string | undefined | null): boolean {
+  return String(number ?? "").replace(/\D/g, "").length >= 10;
+}
+
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
@@ -635,6 +650,9 @@ Deno.serve(
           if (!number || !text) {
             return jsonResponse(400, { error: "Missing number/text" }, corsHeaders);
           }
+          if (!hasSendableNumber(number)) {
+            return jsonResponse(400, { error: "Número de telefone inválido ou ausente" }, corsHeaders);
+          }
           result = await provider.sendText({
             number,
             text,
@@ -657,6 +675,9 @@ Deno.serve(
           if (!number || !type || !file) {
             return jsonResponse(400, { error: "Missing number/type/file" }, corsHeaders);
           }
+          if (!hasSendableNumber(number)) {
+            return jsonResponse(400, { error: "Número de telefone inválido ou ausente" }, corsHeaders);
+          }
           result = await provider.sendMedia({
             number,
             type,
@@ -677,6 +698,9 @@ Deno.serve(
           };
           if (!number || !file) {
             return jsonResponse(400, { error: "Missing number/file" }, corsHeaders);
+          }
+          if (!hasSendableNumber(number)) {
+            return jsonResponse(400, { error: "Número de telefone inválido ou ausente" }, corsHeaders);
           }
           result = await provider.sendMedia({
             number,
@@ -828,6 +852,12 @@ Deno.serve(
           };
           if (!number || !state) {
             return jsonResponse(400, { error: "Missing number/state" }, corsHeaders);
+          }
+          // Presence (typing indicator) is a best-effort background signal — a lead
+          // with no valid phone must not turn it into a logged 500. Silently no-op.
+          if (!hasSendableNumber(number)) {
+            result = { ok: true, skipped: "invalid_number" };
+            break;
           }
           await provider.setPresence(number, state);
           result = { ok: true };

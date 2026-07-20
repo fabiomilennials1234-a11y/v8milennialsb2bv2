@@ -14,6 +14,15 @@ export function formatPhoneForWhatsApp(phone: string | undefined): string | null
   // Remove all non-numeric characters
   let cleaned = phone.replace(/\D/g, '');
 
+  // Guard: a phone that is blank, whitespace-only, or all non-digits collapses to
+  // "" here. Without this check we'd blindly return "55" (country code only), which
+  // Uazapi rejects with "could not parse phone number: 55" → HTTP 500 → the UI shows
+  // the opaque "Edge Function returned a non-2xx status code". A valid Brazilian
+  // number is at minimum DDD(2) + 8 digits = 10, so anything shorter can never be
+  // a real recipient. Returning null lets callers surface a clean
+  // "Número de telefone inválido" instead of firing a doomed send.
+  if (cleaned.length < 10) return null;
+
   // If already starts with 55, remove it to reprocess
   if (cleaned.startsWith('55')) {
     cleaned = cleaned.substring(2);

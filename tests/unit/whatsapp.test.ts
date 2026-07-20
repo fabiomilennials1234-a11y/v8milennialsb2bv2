@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatPhoneForWhatsApp } from "../../src/lib/whatsapp";
+import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
 
 describe("formatPhoneForWhatsApp", () => {
   it("returns null for undefined", () => {
@@ -36,5 +36,21 @@ describe("formatPhoneForWhatsApp", () => {
 
   it("handles short phone with 55 prefix", () => {
     expect(formatPhoneForWhatsApp("551198765432")).toBe("5511998765432");
+  });
+
+  // Regression: a blank / whitespace / non-numeric phone must NOT collapse to the
+  // bare country code "55" (Uazapi 500 → "Edge Function returned a non-2xx status
+  // code"). It must return null so the caller can surface "Número inválido".
+  it("returns null for whitespace-only phone", () => {
+    expect(formatPhoneForWhatsApp("     ")).toBeNull();
+  });
+
+  it("returns null for a phone with no digits", () => {
+    expect(formatPhoneForWhatsApp("(  ) -")).toBeNull();
+  });
+
+  it("returns null for a phone with too few digits", () => {
+    expect(formatPhoneForWhatsApp("55")).toBeNull();
+    expect(formatPhoneForWhatsApp("1198765")).toBeNull();
   });
 });

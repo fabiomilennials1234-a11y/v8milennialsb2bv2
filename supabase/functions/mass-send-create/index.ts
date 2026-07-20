@@ -169,10 +169,29 @@ Deno.serve(
       );
     }
 
+    // Drop recipients whose number can't be a real phone. A lead with a blank /
+    // whitespace / non-numeric phone arrives here as "55" (or fewer digits); Uazapi
+    // rejects each such item ("could not parse phone number: 55") and, when the WHOLE
+    // batch is invalid, the job creation itself 500s → the UI shows the opaque
+    // "Edge Function returned a non-2xx status code". Floor = 10 digits (shortest BR
+    // number, DDD + 8). Skipped count is surfaced so the caller can warn the user.
+    const eligible = recipients.filter(
+      (r) => String(r.number ?? "").replace(/\D/g, "").length >= 10,
+    );
+    const skippedInvalid = recipients.length - eligible.length;
+
+    if (eligible.length === 0) {
+      return jsonResponse(
+        400,
+        { error: "Nenhum destinatário com telefone válido", skipped: skippedInvalid },
+        corsHeaders,
+      );
+    }
+
     // Normalize recipients with template_text if provided. Every item MUST
     // carry a `type` — Uazapi silently rejects (count=0) any item without one.
     // Infer "image" when a file is present, otherwise "text".
-    const msgs = recipients.map((r) => {
+    const msgs = eligible.map((r) => {
       const type: "text" | "image" =
         r.type === "image" || (r.type == null && r.file) ? "image" : "text";
       return {
@@ -247,7 +266,11 @@ Deno.serve(
         status: "success",
         entityType: "uazapi_sender_jobs",
         entityId: sender_job_id,
-        payloadSnapshot: { count: acceptedMsgs.length, trimmed_over_instance_cap: trimmedCount },
+        payloadSnapshot: {
+          count: acceptedMsgs.length,
+          trimmed_over_instance_cap: trimmedCount,
+          skipped_invalid_number: skippedInvalid,
+        },
       });
 
       return jsonResponse(
@@ -258,6 +281,7 @@ Deno.serve(
           uazapi_sender_id,
           accepted_count: acceptedMsgs.length,
           trimmed_count: trimmedCount,
+          skipped_invalid: skippedInvalid,
         },
         corsHeaders
       );

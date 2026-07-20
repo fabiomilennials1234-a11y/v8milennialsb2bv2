@@ -119,9 +119,14 @@ export async function getWhatsAppInstance(
 export async function getLeadPhone(supabase: SupabaseClient, leadId: string): Promise<string | null> {
   const { data } = await supabase.from("leads").select("phone").eq("id", leadId).maybeSingle();
   if (!data?.phone) return null;
-  let phone = String(data.phone).replace(/\D/g, "");
-  if (!phone.startsWith("55")) phone = "55" + phone;
-  return phone;
+  const phone = String(data.phone).replace(/\D/g, "");
+  // A blank / whitespace / non-numeric phone strips to "" (or a handful of stray
+  // digits) here. Prepending "55" to that yields "55", which Uazapi rejects with
+  // "could not parse phone number: 55" (HTTP 500) — a doomed send that then retries
+  // 3× before terminal-failing. A valid Brazilian number is at minimum DDD(2) + 8 =
+  // 10 digits, so treat anything shorter as "no phone" and let callers skip cleanly.
+  if (phone.length < 10) return null;
+  return phone.startsWith("55") ? phone : "55" + phone;
 }
 
 // ─── Recipient reachability (WhatsApp existence pre-flight) ─────────────────
