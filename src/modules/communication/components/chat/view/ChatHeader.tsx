@@ -145,7 +145,7 @@ export function ChatHeader({
   onReactivateCopilot,
   isReactivating,
 }: ChatHeaderProps) {
-  const { data: limits } = useMessageLimits(instanceId ?? null);
+  const { data: limits } = useMessageLimits(instanceId ?? null, organizationId);
   const limitsWarning = limits && limits.limit > 0 && (limits.current / limits.limit) >= 0.8;
   const chatJid = phoneNumber ? `${phoneNumber.replace(/\D/g, "")}@s.whatsapp.net` : null;
   const avatarGradient = getAvatarGradient(phoneNumber || contactName);

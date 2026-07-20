@@ -283,9 +283,11 @@ export async function syncHistory(
 }
 
 export async function getMessageLimits(
-  instanceId: string
+  instanceId: string,
+  organizationId?: string
 ): Promise<{ current: number; limit: number; reachout_timelock?: number }> {
   return callProxy("getMessageLimits", {
     instance_id: instanceId,
+    organization_id: organizationId,
   });
 }
