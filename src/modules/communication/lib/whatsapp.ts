@@ -24,6 +24,12 @@ export function formatPhoneForWhatsApp(phone: string | undefined): string | null
     cleaned = cleaned.substring(1);
   }
 
+  // A dialable BR number needs at least DDD (2) + 8 digits. Anything shorter
+  // (whitespace-only phone, garbage, or a lone country code) is not a real
+  // number — bail before we accidentally emit a bare "55", which Uazapi
+  // rejects with a 500 that surfaces as "Edge Function returned a non-2xx".
+  if (cleaned.length < 10) return null;
+
   // If number is too short (DDD + 8 digits = 10), add 9 after DDD
   // DDD is 2 digits, so if total is 10, we need to add 9
   if (cleaned.length === 10) {
