@@ -351,6 +351,11 @@ export class AgentEngine {
     let finalNextState = conversation.state;
     let finalAction: { action: string; params: Record<string, unknown>; tenant_id: string } | null = null;
     let finalAssistantMessage = '';
+    // Tool-calls extras do MESMO turno (além da ação principal). Só ações de
+    // mídia são seguras de executar em paralelo (idempotentes); as demais
+    // continuam descartadas de propósito (evita qualify/advance/transfer duplos).
+    let finalExtraToolCalls: Array<{ action: string; params: Record<string, unknown>; tenant_id: string }> = [];
+    const PARALLEL_SAFE_ACTIONS = ['SEND_DOCUMENT', 'SEND_PRODUCT_MATERIAL'];
     const MAX_TOOL_TURNS = 3;
 
     // Telemetria por invocação — salva em runtime_logs
@@ -409,18 +414,20 @@ export class AgentEngine {
       const { nextState: ns, actionToExecute: action, assistantMessage: msg, extraToolCalls } =
         processLLMResponseExternal(response, conversation, this.organizationId);
       if (action?.action) telemetry.tools_called.push(action.action);
-      // Multi-tool responses: log + metric. Today only the first is executed;
-      // the others are dropped. This warn surfaces the case in runtime_logs.
-      // Escalar para enqueue paralelo é follow-up documentado no design.md.
+      // Multi-tool responses: a ação principal (primeira) vira finalAction; as
+      // EXTRAS de mídia (send_document/send_product_material) são enfileiradas
+      // em paralelo mais abaixo — permite mandar fotos de VÁRIOS produtos pedidos
+      // no mesmo turno. Extras não-mídia continuam descartadas de propósito.
       if (extraToolCalls && extraToolCalls.length > 0) {
         console.warn(
           '[AgentEngine] LLM returned',
           extraToolCalls.length + 1,
-          'tool_calls; executing only first. Extras:',
+          'tool_calls. Extras:',
           extraToolCalls.map((c) => c.action).join(','),
         );
         for (const extra of extraToolCalls) {
-          telemetry.tools_called.push(`DROPPED:${extra.action}`);
+          const label = PARALLEL_SAFE_ACTIONS.includes(extra.action) ? 'PARALLEL' : 'DROPPED';
+          telemetry.tools_called.push(`${label}:${extra.action}`);
         }
       }
 
@@ -452,6 +459,7 @@ export class AgentEngine {
       finalNextState = ns;
       finalAction = action;
       finalAssistantMessage = msg;
+      finalExtraToolCalls = extraToolCalls ?? [];
       break;
     }
 
@@ -795,6 +803,42 @@ export class AgentEngine {
       } catch (enqueueError) {
         console.warn('[AgentEngine] Action enqueue failed (non-fatal):', enqueueError);
         executionResult = { error: String(enqueueError), status: 'failed' };
+      }
+    }
+
+    // 8c. Enfileira as tool-calls de MÍDIA extras do mesmo turno (fotos de
+    // vários produtos pedidos de uma vez). A ação principal já foi enfileirada
+    // acima; aqui vão as EXTRAS (send_document/send_product_material), que são
+    // idempotentes (chave por document_id/material_id) e seguras de repetir.
+    // Ações não-mídia continuam descartadas (evita qualify/advance/transfer
+    // duplicados no mesmo turno). Falha aqui é não-fatal — a foto principal e o
+    // texto já saem normalmente.
+    if (finalExtraToolCalls.length > 0) {
+      const mediaExtras = finalExtraToolCalls.filter((c) => PARALLEL_SAFE_ACTIONS.includes(c.action));
+      const droppedExtras = finalExtraToolCalls.filter((c) => !PARALLEL_SAFE_ACTIONS.includes(c.action));
+      if (droppedExtras.length > 0) {
+        console.warn(
+          '[AgentEngine] Dropping non-media extra tool_calls:',
+          droppedExtras.map((c) => c.action).join(','),
+        );
+      }
+      for (const extra of mediaExtras) {
+        try {
+          const extraAction = this.currentLeadId
+            ? { ...extra, params: { ...extra.params, lead_id: this.currentLeadId } }
+            : extra;
+          const extraResult = await enqueueToolActionExternal({
+            supabase: this.supabase,
+            organizationId: this.organizationId,
+            currentLeadId: this.currentLeadId,
+            action: extraAction,
+            conversationId: conversation.id,
+            turnCount: conversation.turn_count,
+          });
+          console.log('[AgentEngine] Extra media action enqueued:', extra.action, extraResult);
+        } catch (extraErr) {
+          console.warn('[AgentEngine] Extra media enqueue failed (non-fatal):', extraErr);
+        }
       }
     }
 
