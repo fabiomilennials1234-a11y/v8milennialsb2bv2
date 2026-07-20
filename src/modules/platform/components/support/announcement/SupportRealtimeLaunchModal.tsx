@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Zap, BellRing, LifeBuoy, ArrowRight } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -12,14 +12,24 @@ import { SupportRealtimeChatDemo } from "./SupportRealtimeChatDemo";
  */
 export function SupportRealtimeLaunchModal({ onClose }: { onClose: () => void }) {
   const { openNewTicket } = useSupportPanel();
+  // Estado próprio de visibilidade: o Dialog é controlado, então sem isto o
+  // `open` fixo em `true` mantinha o takeover na tela mesmo depois do X/Esc —
+  // `onClose` só persistia no storage e o modal só sumia com um reload.
+  const [open, setOpen] = useState(true);
+
+  const dismiss = () => {
+    setOpen(false);
+    onClose();
+  };
 
   const startTicket = () => {
+    setOpen(false);
     onClose();
     openNewTicket();
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={open} onOpenChange={(next) => !next && dismiss()}>
       <DialogContent className="grid max-w-3xl gap-0 overflow-hidden p-0 sm:grid-cols-[1.05fr_1fr]">
         <div className="p-7 sm:p-8">
           <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
@@ -58,7 +68,7 @@ export function SupportRealtimeLaunchModal({ onClose }: { onClose: () => void })
               Abrir meu primeiro chamado
               <ArrowRight className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" onClick={onClose}>
+            <Button variant="ghost" onClick={dismiss}>
               Explorar depois
             </Button>
           </div>
