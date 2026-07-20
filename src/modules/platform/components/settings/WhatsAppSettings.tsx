@@ -321,8 +321,8 @@ function QRCodeModal({
   );
 }
 
-function MessageLimitsCard({ instanceId }: { instanceId: string }) {
-  const { data, isLoading } = useMessageLimits(instanceId);
+function MessageLimitsCard({ instanceId, organizationId }: { instanceId: string; organizationId?: string }) {
+  const { data, isLoading } = useMessageLimits(instanceId, organizationId);
   if (isLoading || !data) return null;
   const current = typeof data.current === "number" ? data.current : 0;
   const limit = typeof data.limit === "number" ? data.limit : 0;
@@ -781,7 +781,7 @@ export function WhatsAppSettings() {
 
               {isLive && (
                 <div className="mt-4 space-y-4 pt-4 border-t border-border/40">
-                  <MessageLimitsCard instanceId={instance.id} />
+                  <MessageLimitsCard instanceId={instance.id} organizationId={instance.organization_id} />
                   <HistorySyncPanel instanceId={instance.id} />
                 </div>
               )}
