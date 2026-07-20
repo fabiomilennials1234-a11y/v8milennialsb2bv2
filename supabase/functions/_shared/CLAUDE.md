@@ -32,6 +32,12 @@ fora dos triviais.**
 - `dispatch-router.ts` — roteamento de envio (WhatsApp/SMS/email)
 - `audio-sender.ts` — audio messages + TTS ElevenLabs
 - `followup-sender.ts` — follow-up scheduler
+- `send-window.ts` — guard de janela de horário p/ envio AUTOMÁTICO (quiet-hours
+  por org). `guardAutomaticSend(supabase, orgId, trackSource)` → decide/reagenda.
+  Só atua sobre trackSource automático (copilot/workflow/campanha/pipe/mass);
+  manual nunca bloqueia. Plugado em `outbound-sender` (defer via reschedule) +
+  wrappers de `whatsapp-dispatch` + `message-gateway` (backstop drop+log).
+  Math puro reusa `quick-blast/quiet-hours.ts`; TZ via `copilot/time-context.ts`.
 
 ### Integrações
 - `asaas.ts` — Asaas pagamentos

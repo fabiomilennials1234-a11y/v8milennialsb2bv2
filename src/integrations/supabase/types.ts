@@ -10267,6 +10267,10 @@ export type Database = {
       organizations: {
         Row: {
           auto_create_lead_on_inbound: boolean
+          auto_send_window_days: number[]
+          auto_send_window_enabled: boolean
+          auto_send_window_from_minutes: number
+          auto_send_window_to_minutes: number
           billing_override: boolean | null
           billing_override_at: string | null
           billing_override_by: string | null
@@ -10307,6 +10311,10 @@ export type Database = {
         }
         Insert: {
           auto_create_lead_on_inbound?: boolean
+          auto_send_window_days?: number[]
+          auto_send_window_enabled?: boolean
+          auto_send_window_from_minutes?: number
+          auto_send_window_to_minutes?: number
           billing_override?: boolean | null
           billing_override_at?: string | null
           billing_override_by?: string | null
@@ -10347,6 +10355,10 @@ export type Database = {
         }
         Update: {
           auto_create_lead_on_inbound?: boolean
+          auto_send_window_days?: number[]
+          auto_send_window_enabled?: boolean
+          auto_send_window_from_minutes?: number
+          auto_send_window_to_minutes?: number
           billing_override?: boolean | null
           billing_override_at?: string | null
           billing_override_by?: string | null

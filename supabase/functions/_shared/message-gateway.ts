@@ -24,6 +24,7 @@ import {
 import type { WhatsAppInstance } from "./whatsapp-client.ts";
 import { getWhatsAppProvider } from "./whatsapp-client.ts";
 import { logRuntime } from "./logger.ts";
+import { guardAutomaticSend } from "./send-window.ts";
 
 // ============================================================================
 // Types
@@ -376,6 +377,35 @@ export async function sendMessage(
     return { success: false, delegated: false, duration_ms: Date.now() - startMs };
   }
   steps.flag_check = "ok";
+
+  // ── Step 1.5: Janela de envio automático ─────────────────────────────────
+  // Barra sends automáticos (workflow/campanha/pipe/mass) fora do horário.
+  // Manual (source='manual') passa. delegated:true + success:false → o caller
+  // NÃO cai no fallback legado (que é reservado a flag OFF / delegated:false);
+  // e se caísse, o backstop em whatsapp-dispatch bloquearia de novo.
+  const windowGuard = await guardAutomaticSend(supabase, req.organization_id, req.source);
+  if (!windowGuard.allowed) {
+    await logRuntime({
+      organizationId: req.organization_id,
+      module: "outbound",
+      action: "send",
+      status: "skipped",
+      reasoning: "OUTSIDE_SEND_WINDOW",
+      payloadSnapshot: {
+        source: req.source,
+        message_type: req.message_type,
+        next_valid_at: windowGuard.nextValidAt?.toISOString() ?? null,
+      },
+      triggeredBy: req.triggered_by,
+    });
+    return {
+      success: false,
+      delegated: true,
+      error: "Outside automatic send window",
+      error_code: "send_window_blocked",
+      duration_ms: Date.now() - startMs,
+    };
+  }
 
   // ── Step 2: Normalize phone ──────────────────────────────────────────────
   const normalizedPhone = normalizeBrazilianPhone(req.phone);

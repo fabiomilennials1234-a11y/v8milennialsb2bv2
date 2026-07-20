@@ -33,6 +33,7 @@ import {
   resolveLeadWriteInstance,
   type WriteInstanceErrorCode,
 } from "./instance-write-guard.ts";
+import { guardAutomaticSend } from "./send-window.ts";
 
 export type ResolveOptions = {
   /** Preferred instance id from agent.whatsapp_instance_id */
@@ -292,7 +293,35 @@ export type SendResultSimple = {
   success: boolean;
   messageId?: string;
   error?: string;
+  /** True quando o envio automático foi barrado pela janela de horário. */
+  blocked?: boolean;
+  /** ISO UTC da próxima abertura, quando `blocked`. */
+  deferredUntil?: string;
 };
+
+/**
+ * Backstop de janela de envio para os wrappers legados. Só atua sobre
+ * trackSource automático (copilot/workflow/campanha/pipe/mass). Manual passa.
+ * Retorna resultado bloqueado (não envia) quando fora da janela; null → segue.
+ */
+async function checkSendWindow(
+  supabaseAdmin: any,
+  instance: WhatsAppInstance,
+  trackSource?: string,
+): Promise<SendResultSimple | null> {
+  const guard = await guardAutomaticSend(
+    supabaseAdmin,
+    (instance as any).organization_id,
+    trackSource,
+  );
+  if (guard.allowed) return null;
+  return {
+    success: false,
+    error: "send_window_blocked",
+    blocked: true,
+    deferredUntil: guard.nextValidAt?.toISOString(),
+  };
+}
 
 export async function sendTextViaInstance(
   supabaseAdmin: any,
@@ -303,6 +332,8 @@ export async function sendTextViaInstance(
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
+  const blocked = await checkSendWindow(supabaseAdmin, instance, opts.trackSource);
+  if (blocked) return blocked;
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
     const res = await provider.sendText({
@@ -331,6 +362,8 @@ export async function sendAudioViaInstance(
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
+  const blocked = await checkSendWindow(supabaseAdmin, instance, opts.trackSource);
+  if (blocked) return blocked;
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
     const res = await provider.sendMedia({
@@ -364,6 +397,8 @@ export async function sendMenuViaInstance(
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
+  const blocked = await checkSendWindow(supabaseAdmin, instance, opts.trackSource);
+  if (blocked) return blocked;
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
     if (!provider.sendMenu) {
@@ -407,6 +442,8 @@ export async function sendPixButtonViaInstance(
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
+  const blocked = await checkSendWindow(supabaseAdmin, instance, opts.trackSource);
+  if (blocked) return blocked;
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
     if (!provider.sendPixButton) {
@@ -449,6 +486,8 @@ export async function sendMediaViaInstance(
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
+  const blocked = await checkSendWindow(supabaseAdmin, instance, opts.trackSource);
+  if (blocked) return blocked;
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
     const res = await provider.sendMedia({
