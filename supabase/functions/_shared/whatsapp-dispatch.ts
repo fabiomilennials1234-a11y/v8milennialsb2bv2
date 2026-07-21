@@ -33,6 +33,8 @@ import {
   resolveLeadWriteInstance,
   type WriteInstanceErrorCode,
 } from "./instance-write-guard.ts";
+import { governSend, isSkippedSend } from "./send-governor/gate.ts";
+import { deriveCategory } from "./send-governor/core.ts";
 
 export type ResolveOptions = {
   /** Preferred instance id from agent.whatsapp_instance_id */
@@ -305,15 +307,32 @@ export async function sendTextViaInstance(
   if (!phone) return { success: false, error: "Invalid phone" };
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
-    const res = await provider.sendText({
-      number: phone,
-      text,
-      trackSource: opts.trackSource,
-      trackId: opts.trackId,
-      delay: opts.delay,
-      replyid: opts.replyId,
-    });
-    return { success: true, messageId: res.message_id };
+    // Send Governor (SHADOW seam). doSend runs exactly once; in shadow/off it
+    // ALWAYS runs and `governed` is exactly the provider response (shape byte-
+    // for-byte preserved). isSkippedSend is dormant here (only enforce skips).
+    const governed = await governSend(
+      supabaseAdmin,
+      {
+        orgId: instance.organization_id,
+        instanceId: instance.id,
+        category: deriveCategory(opts.trackSource),
+        recipientPhone: phone,
+        trackSource: opts.trackSource,
+      },
+      () =>
+        provider.sendText({
+          number: phone,
+          text,
+          trackSource: opts.trackSource,
+          trackId: opts.trackId,
+          delay: opts.delay,
+          replyid: opts.replyId,
+        }),
+    );
+    if (isSkippedSend(governed)) {
+      return { success: false, error: `governor_${governed.action}:${governed.reason}` };
+    }
+    return { success: true, messageId: governed.message_id };
   } catch (error) {
     return {
       success: false,
@@ -333,14 +352,29 @@ export async function sendAudioViaInstance(
   if (!phone) return { success: false, error: "Invalid phone" };
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
-    const res = await provider.sendMedia({
-      number: phone,
-      type: "ptt",
-      file: audioUrl,
-      trackSource: opts.trackSource,
-      trackId: opts.trackId,
-    });
-    return { success: true, messageId: res.message_id };
+    // Send Governor (SHADOW seam) — see sendTextViaInstance for the contract.
+    const governed = await governSend(
+      supabaseAdmin,
+      {
+        orgId: instance.organization_id,
+        instanceId: instance.id,
+        category: deriveCategory(opts.trackSource),
+        recipientPhone: phone,
+        trackSource: opts.trackSource,
+      },
+      () =>
+        provider.sendMedia({
+          number: phone,
+          type: "ptt",
+          file: audioUrl,
+          trackSource: opts.trackSource,
+          trackId: opts.trackId,
+        }),
+    );
+    if (isSkippedSend(governed)) {
+      return { success: false, error: `governor_${governed.action}:${governed.reason}` };
+    }
+    return { success: true, messageId: governed.message_id };
   } catch (error) {
     return {
       success: false,
@@ -372,18 +406,34 @@ export async function sendMenuViaInstance(
         error: `${provider.provider} does not support interactive menus`,
       };
     }
-    const res = await provider.sendMenu({
-      number: phone,
-      type: menu.type,
-      text: menu.text,
-      choices: menu.choices,
-      footer: menu.footer,
-      selectableCount: menu.selectableCount,
-      delay: opts.delay,
-      trackSource: opts.trackSource,
-      trackId: opts.trackId,
-    });
-    return { success: true, messageId: res.message_id };
+    // Send Governor (SHADOW seam) — see sendTextViaInstance for the contract.
+    const sendMenu = provider.sendMenu.bind(provider);
+    const governed = await governSend(
+      supabaseAdmin,
+      {
+        orgId: instance.organization_id,
+        instanceId: instance.id,
+        category: deriveCategory(opts.trackSource),
+        recipientPhone: phone,
+        trackSource: opts.trackSource,
+      },
+      () =>
+        sendMenu({
+          number: phone,
+          type: menu.type,
+          text: menu.text,
+          choices: menu.choices,
+          footer: menu.footer,
+          selectableCount: menu.selectableCount,
+          delay: opts.delay,
+          trackSource: opts.trackSource,
+          trackId: opts.trackId,
+        }),
+    );
+    if (isSkippedSend(governed)) {
+      return { success: false, error: `governor_${governed.action}:${governed.reason}` };
+    }
+    return { success: true, messageId: governed.message_id };
   } catch (error) {
     return {
       success: false,
@@ -415,18 +465,34 @@ export async function sendPixButtonViaInstance(
         error: `${provider.provider} does not support PIX button`,
       };
     }
-    const res = await provider.sendPixButton({
-      number: phone,
-      pixkey: pix.pixkey,
-      pixkeyType: pix.pixkeyType,
-      amount: pix.amount,
-      merchantName: pix.merchantName,
-      text: pix.text,
-      delay: opts.delay,
-      trackSource: opts.trackSource,
-      trackId: opts.trackId,
-    });
-    return { success: true, messageId: res.message_id };
+    // Send Governor (SHADOW seam) — see sendTextViaInstance for the contract.
+    const sendPixButton = provider.sendPixButton.bind(provider);
+    const governed = await governSend(
+      supabaseAdmin,
+      {
+        orgId: instance.organization_id,
+        instanceId: instance.id,
+        category: deriveCategory(opts.trackSource),
+        recipientPhone: phone,
+        trackSource: opts.trackSource,
+      },
+      () =>
+        sendPixButton({
+          number: phone,
+          pixkey: pix.pixkey,
+          pixkeyType: pix.pixkeyType,
+          amount: pix.amount,
+          merchantName: pix.merchantName,
+          text: pix.text,
+          delay: opts.delay,
+          trackSource: opts.trackSource,
+          trackId: opts.trackId,
+        }),
+    );
+    if (isSkippedSend(governed)) {
+      return { success: false, error: `governor_${governed.action}:${governed.reason}` };
+    }
+    return { success: true, messageId: governed.message_id };
   } catch (error) {
     return {
       success: false,
@@ -451,16 +517,31 @@ export async function sendMediaViaInstance(
   if (!phone) return { success: false, error: "Invalid phone" };
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
-    const res = await provider.sendMedia({
-      number: phone,
-      type: media.type,
-      file: media.file,
-      filename: media.filename,
-      caption: media.caption,
-      trackSource: opts.trackSource,
-      trackId: opts.trackId,
-    });
-    return { success: true, messageId: res.message_id };
+    // Send Governor (SHADOW seam) — see sendTextViaInstance for the contract.
+    const governed = await governSend(
+      supabaseAdmin,
+      {
+        orgId: instance.organization_id,
+        instanceId: instance.id,
+        category: deriveCategory(opts.trackSource),
+        recipientPhone: phone,
+        trackSource: opts.trackSource,
+      },
+      () =>
+        provider.sendMedia({
+          number: phone,
+          type: media.type,
+          file: media.file,
+          filename: media.filename,
+          caption: media.caption,
+          trackSource: opts.trackSource,
+          trackId: opts.trackId,
+        }),
+    );
+    if (isSkippedSend(governed)) {
+      return { success: false, error: `governor_${governed.action}:${governed.reason}` };
+    }
+    return { success: true, messageId: governed.message_id };
   } catch (error) {
     return {
       success: false,

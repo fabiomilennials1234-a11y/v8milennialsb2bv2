@@ -173,6 +173,7 @@ export type RuntimeLogModule =
   | "copilot"
   | "followup"
   | "general"
+  | "governor"
   | "job_monitor"
   | "lead"
   | "media"

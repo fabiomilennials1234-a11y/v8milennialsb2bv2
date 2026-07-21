@@ -16,6 +16,8 @@
 
 import type { WhatsAppInstance } from "./whatsapp-client.ts";
 import { getWhatsAppProvider } from "./whatsapp-client.ts";
+import { governSend, isSkippedSend } from "./send-governor/gate.ts";
+import type { GovernorSupabaseClient } from "./send-governor/types.ts";
 
 const DEFAULT_MASS_THRESHOLD = 50;
 
@@ -164,13 +166,44 @@ export async function runUazapiSenderJob(
   // Effective (clamped) delays — never trust the caller for the floor.
   const { delayMin, delayMax } = clampSenderDelays(input.delayMin, input.delayMax);
 
-  const res = await impl.call(provider, {
-    messages: input.recipients,
-    delayMin,
-    delayMax,
-    scheduled_for: toEpochMs(input.scheduledFor),
-    track_source: input.trackSource ?? "dispatch-router-mass",
-  });
+  // ── Send Governor P3 reputation gate (category 'mass') ────────────────────
+  // Mass only consults the P3 quarantine disjuntor here — volume caps stay owned
+  // by the existing blast_* ledgers (do NOT re-implement them). FAIL-OPEN is
+  // guaranteed by governSend: any governor error lets the send through, so the
+  // governor can never become a single point of failure for a blast. In
+  // SHADOW/off (all of PR-0) the effective action is ALWAYS 'allow', so the
+  // provider call runs EXACTLY ONCE and its result is returned byte-for-byte;
+  // only a future ENFORCE mode can skip a quarantined number. No recipientPhone
+  // is passed — a blast fans out to many numbers and the mass path never
+  // consults the cold gate (automation-only).
+  const governed = await governSend(
+    supabaseAdmin as GovernorSupabaseClient,
+    {
+      orgId: instance.organization_id,
+      instanceId: instance.id,
+      category: "mass",
+      trackSource: input.trackSource,
+    },
+    () =>
+      impl.call(provider, {
+        messages: input.recipients,
+        delayMin,
+        delayMax,
+        scheduled_for: toEpochMs(input.scheduledFor),
+        track_source: input.trackSource ?? "dispatch-router-mass",
+      }),
+  );
+
+  // Forward-safe narrowing. Unreachable in SHADOW/off (the send always runs);
+  // under a future ENFORCE mode a quarantined instance would skip the send —
+  // fail loud rather than persist an unpollable "queued" row that never had any
+  // messages accepted (mirrors the fail-loud contract below).
+  if (isSkippedSend(governed)) {
+    throw new Error(
+      `governor_blocked_mass_send: instance ${instance.id} ${governed.action} (${governed.reason})`,
+    );
+  }
+  const res = governed;
 
   // CREATE contract (verified live 2026-06-15): { folder_id, count, status }.
   // `folder_id` is the campaign id (persisted as uazapi_sender_id); `count` is

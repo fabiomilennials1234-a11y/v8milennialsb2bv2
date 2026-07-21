@@ -19,6 +19,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getWhatsAppProvider } from "../_shared/whatsapp-client.ts";
 import { resolveInstance, normalizeBrazilianPhone } from "../_shared/whatsapp-dispatch.ts";
+import { governSend, isSkippedSend } from "../_shared/send-governor/gate.ts";
 import { processBatch, type QueueRow } from "../_shared/copilot-v2/queue-processor.ts";
 import { routeArchetype, type ContactStatus } from "../_shared/copilot-v2/contact-status.ts";
 import { modelForArchetype, type Archetype, type ModelId } from "../_shared/copilot-v2/model-selector.ts";
@@ -161,6 +162,19 @@ async function sendReply(supabase: any, orgId: string, canonicalPhone: string, t
   if (!instance) throw new Error(`no connected WhatsApp instance for org ${orgId}`);
   const provider = await getWhatsAppProvider(instance, supabase);
   const number = normalizeBrazilianPhone(canonicalPhone) ?? canonicalPhone;
-  const res = await provider.sendText({ number, text, trackSource: "copilot_v2" });
+
+  // Send Governor (SHADOW in PR-0): evaluates + logs the would-be decision but
+  // NEVER blocks — doSend always runs and the caller shape is preserved. The
+  // copilot v2 turn is automation traffic. FAIL-OPEN: any governor error falls
+  // through to the send. supabase here is the service-role client (bypasses RLS).
+  const governed = await governSend(
+    supabase,
+    { orgId, instanceId: instance.id, category: "automation", recipientPhone: number, trackSource: "copilot_v2" },
+    () => provider.sendText({ number, text, trackSource: "copilot_v2" }),
+  );
+  // Forward-safe: unreachable in SHADOW (the send always runs). Under a future
+  // enforce mode a block/defer returns without having sent — treat as no-op here.
+  if (isSkippedSend(governed)) return;
+  const res = governed;
   if (!res?.success && (res as any)?.error) throw new Error(`sendText failed: ${(res as any).error}`);
 }
