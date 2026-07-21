@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Torque CRM — Plataforma de CRM e comunicação B2B para fábricas e distribuidoras</title>
+  <meta name="description" content="Torque CRM é uma plataforma SaaS de CRM para empresas B2B — fábricas e distribuidoras. Gestão de leads e funis de venda, campanhas, automações com inteligência artificial e comunicação com clientes por múltiplos canais, incluindo WhatsApp." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://torquecrm.com.br/sobre" />
+
+  <!-- Open Graph — ajuda crawlers a entender o negócio -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Torque CRM" />
+  <meta property="og:title" content="Torque CRM — Plataforma de CRM e comunicação B2B" />
+  <meta property="og:description" content="Plataforma SaaS de CRM para fábricas e distribuidoras B2B: gestão de leads e funis, campanhas, automações com IA e comunicação com clientes por múltiplos canais, incluindo WhatsApp." />
+  <meta property="og:url" content="https://torquecrm.com.br/sobre" />
+  <meta property="og:locale" content="pt_BR" />
+  <meta name="theme-color" content="#191714" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg:            hsl(36 11% 9%);
+      --bg-elev:       hsl(35 10% 11%);
+      --surface:       hsl(35 10% 13%);
+      --surface-hi:    hsl(35 9% 16%);
+      --border:        hsl(35 8% 19%);
+      --border-hi:     hsl(40 8% 26%);
+      --fg:            hsl(45 20% 95%);
+      --fg-muted:      hsl(40 8% 62%);
+      --fg-faint:      hsl(40 7% 46%);
+      --gold:          hsl(47 100% 50%);
+      --gold-soft:     hsl(47 100% 50% / 0.12);
+      --gold-line:     hsl(47 100% 50% / 0.28);
+      --maxw:          1120px;
+      --radius:        16px;
+      --radius-sm:     11px;
+    }
+
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      font-feature-settings: "cv11", "ss01";
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      overflow-x: hidden;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .wrap {
+      width: 100%;
+      max-width: var(--maxw);
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .display {
+      font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+      letter-spacing: -0.02em;
+      line-height: 1.08;
+    }
+
+    .eyebrow {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+
+    /* ─── Ambient glow ─────────────────────────────── */
+    .glow {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        radial-gradient(720px 420px at 78% -8%, hsl(47 100% 50% / 0.10), transparent 60%),
+        radial-gradient(560px 380px at 10% 4%, hsl(38 40% 30% / 0.14), transparent 62%);
+    }
+
+    main, header, footer { position: relative; z-index: 1; }
+
+    /* ─── Header ───────────────────────────────────── */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      background: hsl(36 11% 9% / 0.82);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      height: 64px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 11px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 17px;
+      letter-spacing: -0.01em;
+    }
+    .brand-mark {
+      width: 30px; height: 30px;
+      flex: 0 0 auto;
+      display: block;
+    }
+    .brand em { color: var(--gold); font-style: normal; }
+    .nav-links { display: flex; align-items: center; gap: 8px; }
+    .nav-link {
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--fg-muted);
+      padding: 8px 12px;
+      border-radius: 9px;
+      transition: color .15s ease, background-color .15s ease;
+    }
+    .nav-link:hover { color: var(--fg); background: hsl(35 9% 16% / 0.6); }
+    .nav-cta {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: hsl(30 18% 12%);
+      background: var(--gold);
+      padding: 9px 16px;
+      border-radius: 10px;
+      transition: filter .15s ease, transform .15s ease;
+      white-space: nowrap;
+    }
+    .nav-cta:hover { filter: brightness(1.06); transform: translateY(-1px); }
+
+    @media (max-width: 560px) {
+      .nav-link.hide-sm { display: none; }
+    }
+
+    /* ─── Hero ─────────────────────────────────────── */
+    .hero { padding: 96px 0 72px; }
+    .hero .eyebrow { display: block; margin-bottom: 22px; }
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(38px, 6.6vw, 68px);
+      font-weight: 700;
+    }
+    .hero h1 .accent { color: var(--gold); }
+    .hero p.lede {
+      margin: 26px 0 0;
+      max-width: 680px;
+      font-size: clamp(16px, 2.1vw, 20px);
+      color: var(--fg-muted);
+      line-height: 1.62;
+    }
+    .hero-actions {
+      margin-top: 38px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14.5px;
+      font-weight: 600;
+      padding: 13px 22px;
+      border-radius: 12px;
+      transition: filter .15s ease, transform .15s ease, border-color .15s ease, background-color .15s ease;
+    }
+    .btn-primary { background: var(--gold); color: hsl(30 18% 12%); }
+    .btn-primary:hover { filter: brightness(1.06); transform: translateY(-1px); }
+    .btn-ghost { border: 1px solid var(--border-hi); color: var(--fg); }
+    .btn-ghost:hover { background: var(--surface); border-color: var(--gold-line); }
+
+    /* ─── Section scaffolding ──────────────────────── */
+    section.block { padding: 40px 0; }
+    .section-head { max-width: 640px; margin-bottom: 40px; }
+    .section-head h2 {
+      margin: 14px 0 0;
+      font-size: clamp(26px, 3.6vw, 38px);
+      font-weight: 600;
+    }
+    .section-head p {
+      margin: 14px 0 0;
+      color: var(--fg-muted);
+      font-size: 16px;
+    }
+
+    .hr {
+      height: 1px;
+      background: linear-gradient(90deg, var(--border), transparent);
+      border: 0;
+      margin: 8px 0;
+    }
+
+    /* ─── Feature grid ─────────────────────────────── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+    @media (min-width: 900px) {
+      .grid { grid-template-columns: repeat(3, 1fr); }
+      .card-wide { grid-column: span 2; }
+    }
+    @media (max-width: 640px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: linear-gradient(180deg, var(--surface) 0%, var(--bg-elev) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 26px;
+      transition: border-color .2s ease, transform .2s ease;
+    }
+    .card:hover { border-color: var(--border-hi); transform: translateY(-2px); }
+    .card .icon {
+      width: 42px; height: 42px;
+      display: grid; place-items: center;
+      border-radius: 11px;
+      background: var(--gold-soft);
+      border: 1px solid var(--gold-line);
+      margin-bottom: 18px;
+    }
+    .card .icon svg { width: 21px; height: 21px; stroke: var(--gold); }
+    .card h3 {
+      margin: 0 0 8px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .card p {
+      margin: 0;
+      color: var(--fg-muted);
+      font-size: 14.5px;
+      line-height: 1.6;
+    }
+
+    /* ─── WhatsApp clarity panel ───────────────────── */
+    .panel {
+      background:
+        radial-gradient(600px 300px at 100% 0%, hsl(47 100% 50% / 0.07), transparent 60%),
+        var(--surface);
+      border: 1px solid var(--border-hi);
+      border-radius: var(--radius);
+      padding: clamp(28px, 4vw, 44px);
+    }
+    .panel h2 {
+      margin: 16px 0 0;
+      font-size: clamp(24px, 3.4vw, 34px);
+      font-weight: 600;
+    }
+    .panel p {
+      margin: 16px 0 0;
+      max-width: 760px;
+      color: var(--fg-muted);
+      font-size: 16px;
+    }
+    .panel ul {
+      margin: 26px 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 14px;
+    }
+    @media (min-width: 760px) { .panel ul { grid-template-columns: 1fr 1fr; } }
+    .panel li {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      font-size: 14.5px;
+      color: var(--fg);
+    }
+    .panel li svg { width: 19px; height: 19px; flex: 0 0 auto; margin-top: 2px; stroke: var(--gold); }
+    .panel li span { color: var(--fg-muted); }
+    .panel li b { color: var(--fg); font-weight: 600; }
+
+    /* ─── Info (Empresa + Contato) ─────────────────── */
+    .info-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 800px) { .info-grid { grid-template-columns: 1fr 1fr; } }
+
+    .info-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 30px 28px;
+    }
+    .info-card h3 {
+      margin: 0 0 20px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+    dl { margin: 0; }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 13px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .row:last-child { border-bottom: 0; }
+    .row dt {
+      color: var(--fg-faint);
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .row dd {
+      margin: 0;
+      text-align: right;
+      color: var(--fg);
+      font-size: 14.5px;
+      font-weight: 500;
+      word-break: break-word;
+    }
+    .row dd a:hover { color: var(--gold); }
+
+    /* ─── Footer ───────────────────────────────────── */
+    footer {
+      margin-top: 48px;
+      border-top: 1px solid var(--border);
+      padding: 40px 0 56px;
+    }
+    .foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .foot .copy { color: var(--fg-faint); font-size: 13.5px; }
+    .foot-links { display: flex; gap: 22px; }
+    .foot-links a {
+      color: var(--fg-muted);
+      font-size: 13.5px;
+      font-weight: 500;
+      transition: color .15s ease;
+    }
+    .foot-links a:hover { color: var(--gold); }
+
+    :where(a, .btn):focus-visible {
+      outline: 2px solid var(--gold);
+      outline-offset: 3px;
+      border-radius: 8px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { scroll-behavior: auto; }
+      .card:hover, .nav-cta:hover, .btn:hover { transform: none; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="glow" aria-hidden="true"></div>
+
+  <header>
+    <div class="wrap">
+      <nav class="nav" aria-label="Principal">
+        <a class="brand" href="https://torquecrm.com.br" aria-label="Torque CRM — página inicial">
+          <svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <rect x="1" y="1" width="30" height="30" rx="8" fill="hsl(35 10% 13%)" stroke="hsl(47 100% 50% / 0.5)"/>
+            <path d="M16 6.5a9.5 9.5 0 1 0 8.4 5.06" stroke="hsl(47 100% 50%)" stroke-width="2.4" stroke-linecap="round"/>
+            <line x1="16" y1="16" x2="16" y2="8.4" stroke="hsl(47 100% 50%)" stroke-width="2.4" stroke-linecap="round"/>
+          </svg>
+          <span>Torque&nbsp;<em>CRM</em></span>
+        </a>
+        <div class="nav-links">
+          <a class="nav-link hide-sm" href="/privacidade">Privacidade</a>
+          <a class="nav-cta" href="https://torquecrm.com.br">Acessar plataforma</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <section class="hero">
+      <div class="wrap">
+        <span class="eyebrow">Plataforma SaaS · CRM B2B</span>
+        <h1 class="display">
+          O sistema comercial das<br />
+          <span class="accent">fábricas e distribuidoras</span> B2B.
+        </h1>
+        <p class="lede">
+          O Torque CRM é uma plataforma de gestão comercial usada por empresas B2B para
+          organizar seus leads, conduzir funis de venda, executar campanhas e se comunicar
+          com os próprios clientes por múltiplos canais — incluindo o WhatsApp. Cada empresa
+          gerencia sua própria carteira, sua própria equipe e suas próprias conversas.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="https://torquecrm.com.br">Acessar a plataforma</a>
+          <a class="btn btn-ghost" href="#recursos">Ver o que a plataforma faz</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- RECURSOS -->
+    <section class="block" id="recursos">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">O que a plataforma faz</span>
+          <h2 class="display">Todo o ciclo comercial, em um só lugar.</h2>
+          <p>Do primeiro contato ao pós-venda, cada empresa opera seu processo comercial dentro de um ambiente isolado e próprio.</p>
+        </div>
+
+        <div class="grid">
+          <article class="card">
+            <div class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <h3>Leads &amp; Funis de venda</h3>
+            <p>Cadastro e histórico de cada lead, organização em funis visuais (kanban) por etapa e distribuição de oportunidades entre a equipe de vendas de cada empresa.</p>
+          </article>
+
+          <article class="card">
+            <div class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+            </div>
+            <h3>Campanhas comerciais</h3>
+            <p>Empresas planejam e acompanham campanhas de prospecção e relacionamento, com metas, sequências de mensagens e acompanhamento de resultados por período.</p>
+          </article>
+
+          <article class="card">
+            <div class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v1a3 3 0 0 0 0 6v1a3 3 0 0 0 6 0v-1a3 3 0 0 0 0-6V5a3 3 0 0 0-3-3z"/><path d="M4.5 12H3M21 12h-1.5M6 18l-1 1M19 5l-1 1"/></svg>
+            </div>
+            <h3>Automações com IA</h3>
+            <p>Agentes de inteligência artificial ajudam a qualificar e atender leads dentro das regras definidas pela própria empresa — sempre com supervisão humana da equipe comercial.</p>
+          </article>
+
+          <article class="card card-wide">
+            <div class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+            </div>
+            <h3>WhatsApp &amp; Comunicação multicanal</h3>
+            <p>Cada empresa centraliza a comunicação com seus próprios clientes — que optaram por receber contato — em um só painel: WhatsApp, e-mail e outros canais. As conversas ficam junto ao histórico do cliente, para que toda a equipe atenda com contexto.</p>
+          </article>
+
+          <article class="card">
+            <div class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>
+            </div>
+            <h3>Analytics comercial</h3>
+            <p>Painéis com conversão por etapa, desempenho da equipe, receita e evolução do funil — para a empresa tomar decisões com dados reais do seu processo de vendas.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- WHATSAPP CLARITY (para revisão Meta) -->
+    <section class="block" id="whatsapp">
+      <div class="wrap">
+        <div class="panel">
+          <span class="eyebrow">Uso do WhatsApp na plataforma</span>
+          <h2 class="display">Uma ferramenta para empresas falarem com os próprios clientes.</h2>
+          <p>
+            O Torque CRM é uma plataforma B2B multiempresa (multi-tenant). Cada empresa cliente conecta
+            o seu próprio número de WhatsApp Business para atender e dar continuidade a conversas com
+            os contatos da sua própria base — pessoas e empresas que consentiram em receber contato.
+            O Torque CRM fornece a infraestrutura de gestão; o relacionamento é entre a empresa e os
+            seus clientes.
+          </p>
+          <ul>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              <span><b>Número próprio da empresa.</b> Cada empresa usa o próprio WhatsApp Business, não um número compartilhado.</span>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              <span><b>Contatos consentidos.</b> A comunicação é dirigida a clientes e contatos que optaram por receber mensagens.</span>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              <span><b>Dados isolados por empresa.</b> Cada organização acessa apenas as suas próprias conversas e a sua própria base.</span>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              <span><b>Supervisão humana.</b> As automações operam sob regras e acompanhamento da equipe comercial da empresa.</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- EMPRESA + CONTATO -->
+    <section class="block" id="empresa">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">A empresa por trás do Torque CRM</span>
+          <h2 class="display">Dados institucionais e contato.</h2>
+        </div>
+
+        <div class="info-grid">
+          <div class="info-card">
+            <h3>Empresa</h3>
+            <dl>
+              <div class="row">
+                <dt>Razão social</dt>
+                <dd>MILENNIALS DIGITAL LTDA</dd>
+              </div>
+              <div class="row">
+                <dt>CNPJ</dt>
+                <dd>58.510.211/0001-54</dd>
+              </div>
+              <div class="row">
+                <dt>Produto</dt>
+                <dd>Torque CRM — CRM SaaS B2B</dd>
+              </div>
+              <div class="row">
+                <dt>Site</dt>
+                <dd><a href="https://torquecrm.com.br">torquecrm.com.br</a></dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="info-card">
+            <h3>Contato</h3>
+            <dl>
+              <div class="row">
+                <dt>E-mail</dt>
+                <dd><a href="mailto:contato@torquecrm.com.br">contato@torquecrm.com.br</a></dd>
+              </div>
+              <div class="row">
+                <dt>Telefone</dt>
+                <dd><a href="tel:+5547984775631">(47) 98477-5631</a></dd>
+              </div>
+              <div class="row">
+                <dt>Endereço</dt>
+                <dd>Rua São Pedro, 1014, Sala 02/03, Areias, São José – SC, CEP 88.113-250</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="foot">
+        <span class="copy">© Torque CRM 2026. Todos os direitos reservados.</span>
+        <nav class="foot-links" aria-label="Rodapé">
+          <a href="https://torquecrm.com.br">Plataforma</a>
+          <a href="/privacidade">Política de Privacidade</a>
+        </nav>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
