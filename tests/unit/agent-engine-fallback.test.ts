@@ -184,6 +184,52 @@ describe("AgentEngine.processLLMResponse", () => {
     ]);
   });
 
+  it("surfaces multiple send_document calls for multi-product photos (parallel media)", async () => {
+    // Cliente pede foto de vários produtos de uma vez → o modelo emite uma
+    // send_document por produto no MESMO turno. A 1ª é a ação principal; as
+    // demais precisam sair em extraToolCalls para serem enfileiradas em paralelo
+    // (senão só uma foto é enviada — bug relatado Forever Bella 2026-07-20).
+    const resp = {
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: "Segue as fotos!",
+            tool_calls: [
+              {
+                id: "tc-1",
+                type: "function",
+                function: { name: "send_document", arguments: '{"document_id":"thermo-1"}' },
+              },
+              {
+                id: "tc-2",
+                type: "function",
+                function: { name: "send_document", arguments: '{"document_id":"btox-1"}' },
+              },
+              {
+                id: "tc-3",
+                type: "function",
+                function: { name: "send_document", arguments: '{"document_id":"progressiva-1"}' },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+    };
+    const out = await engine.processLLMResponse(resp, conversation, capabilities);
+    expect(out.actionToExecute).toEqual({
+      action: "SEND_DOCUMENT",
+      params: { document_id: "thermo-1" },
+      tenant_id: orgId,
+    });
+    // As outras 2 fotos NÃO podem ser descartadas — vão para enqueue paralelo.
+    expect(out.extraToolCalls).toEqual([
+      { action: "SEND_DOCUMENT", params: { document_id: "btox-1" }, tenant_id: orgId },
+      { action: "SEND_DOCUMENT", params: { document_id: "progressiva-1" }, tenant_id: orgId },
+    ]);
+  });
+
   it("logs finish_reason (CR-4) — returns it to caller", async () => {
     const resp = {
       choices: [
