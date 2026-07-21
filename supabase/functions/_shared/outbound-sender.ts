@@ -22,6 +22,7 @@ import {
 import type { WhatsAppProvider } from "./whatsapp-client.ts";
 import { assertRecipientReachableWithProvider } from "./action-handlers/whatsapp-helpers.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "./copilot/cancellation.ts";
+import { governSend, isSkippedSend } from "./send-governor/gate.ts";
 
 const AUDIO_DELAY_MS = 8000;
 
@@ -174,12 +175,39 @@ export async function sendOutboundDispatch(
         }
 
         try {
-          const res = await provider.sendText({
-            number: phone,
-            text: chunks[i],
-            trackSource: "copilot-outbound",
-            trackId: dispatchId,
-          });
+          // Send Governor (copilot turn, category 'automation'). SHADOW/off:
+          // governSend always runs doSend and returns the provider result
+          // byte-for-byte, so the shape below is unchanged. Only a future
+          // enforce mode returns a SkippedSend (branch below, dormant in PR-0).
+          const governed = await governSend(
+            supabase,
+            {
+              orgId: organizationId,
+              instanceId: instance.id,
+              category: "automation",
+              recipientPhone: phone,
+              trackSource: "copilot-outbound",
+            },
+            () =>
+              provider.sendText({
+                number: phone,
+                text: chunks[i],
+                trackSource: "copilot-outbound",
+                trackId: dispatchId,
+              }),
+          );
+          // Forward-safe: never taken in shadow (the send always runs). Under a
+          // future enforce block/defer, stop the chunk loop and report partial.
+          if (isSkippedSend(governed)) {
+            return {
+              ok: chunksSent > 0,
+              messageId: firstMessageId,
+              chunksSent,
+              chunksTotal: chunks.length,
+              error: `governor_${governed.action}`,
+            };
+          }
+          const res = governed;
           if (i === 0) firstMessageId = res.message_id;
           chunksSent++;
         } catch (err) {

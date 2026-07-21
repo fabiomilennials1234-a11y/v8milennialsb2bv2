@@ -15,6 +15,7 @@ import {
 } from "./whatsapp-dispatch.ts";
 import { assertRecipientReachableWithProvider } from "./action-handlers/whatsapp-helpers.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "./copilot/cancellation.ts";
+import { governSend, isSkippedSend } from "./send-governor/gate.ts";
 
 export async function sendFollowupMessage(
   supabase: any,
@@ -118,12 +119,42 @@ export async function sendFollowupMessage(
     }
 
     try {
-      const res = await provider.sendText({
-        number: normalizedPhone,
-        text: chunks[i],
-        trackSource: "copilot-followup",
-        trackId: ruleId,
-      });
+      // Send Governor (SHADOW/PR-0): evaluates + logs would-be decision but
+      // NEVER blocks — `supabase` here is the callers' service-role client
+      // (process-copilot-followups / process-followup-situations), which the
+      // governor needs to bypass RLS. category='automation'. Fail-open is
+      // owned by governSend, so any governor error still lets the chunk send.
+      const governed = await governSend(
+        supabase,
+        {
+          orgId: organizationId,
+          instanceId: instance.id,
+          category: "automation",
+          recipientPhone: normalizedPhone,
+          trackSource: "copilot-followup",
+        },
+        () =>
+          provider.sendText({
+            number: normalizedPhone,
+            text: chunks[i],
+            trackSource: "copilot-followup",
+            trackId: ruleId,
+          }),
+      );
+      // Forward-safe: unreachable in SHADOW (send always runs). Under a future
+      // enforce mode a block/defer stops the remaining chunks (avoids a partial
+      // message) and reports the followup as not fully sent.
+      if (isSkippedSend(governed)) {
+        console.log(
+          "[followup-sender] governor skipped chunk",
+          i + 1,
+          governed.action,
+          governed.reason
+        );
+        allSent = false;
+        break;
+      }
+      const res = governed;
       if (i === 0) firstMessageId = res.message_id;
       chunksSent++;
     } catch (err) {

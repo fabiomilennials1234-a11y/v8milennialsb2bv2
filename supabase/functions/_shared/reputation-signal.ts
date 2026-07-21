@@ -72,6 +72,16 @@ export interface BanSignalEvent {
   matchedBy: "status" | "body";
   path: string;
   instanceKey: string;
+  /**
+   * The WhatsApp number's DB id, WHEN the caller knows it. The uazapi-client
+   * request() scope only holds a per-instance TOKEN (hashed into instanceKey),
+   * never the id — so this is usually undefined there. When a construction site
+   * DOES supply it (UazapiClientConfig.instanceId), the signal additionally
+   * feeds the Send Governor reputation state machine via record_ban_signal().
+   * Dormant until wiring threads the id through; keeps the token-hash telemetry
+   * path 100% unchanged when absent.
+   */
+  instanceId?: string;
 }
 
 // In-memory per-isolate counter — cheap aggregation + test observability. The
@@ -100,6 +110,8 @@ export function recordBanSignal(ev: BanSignalEvent): void {
       }),
     );
     persistBestEffort(ev, count);
+    // Send Governor bridge: only when the DB id is known (dormant otherwise).
+    if (ev.instanceId) feedReputationBestEffort(ev.instanceId, ev.status);
   } catch {
     // telemetry must never affect the send result
   }
@@ -119,19 +131,52 @@ function persistBestEffort(ev: BanSignalEvent, count: number): void {
           module: "whatsapp",
           action: "reputation_ban_signal",
           status: "error",
-          entityType: "whatsapp_instance_key",
-          entityId: ev.instanceKey,
+          // Prefer the DB id for correlation when known; else the token hash.
+          entityType: ev.instanceId ? "whatsapp_instance" : "whatsapp_instance_key",
+          entityId: ev.instanceId ?? ev.instanceKey,
           payloadSnapshot: {
             http_status: ev.status,
             provider_code: ev.providerCode ?? null,
             matched_by: ev.matchedBy,
             path: ev.path,
             count_in_isolate: count,
+            instance_id: ev.instanceId ?? null,
           },
         }),
       )
       .catch(() => {
         /* best-effort */
+      });
+  } catch {
+    // best-effort
+  }
+}
+
+/**
+ * Feed the ban signal into the Send Governor reputation state machine via the
+ * record_ban_signal RPC. Best-effort, fire-and-forget, Deno-guarded (lazily
+ * builds a service-role client, same pattern as logger.ts) so the module stays
+ * Node/Vitest-safe. Only ever called with a known instance id.
+ */
+function feedReputationBestEffort(instanceId: string, code: number): void {
+  try {
+    const deno = (globalThis as {
+      Deno?: { env?: { get?: (k: string) => string | undefined } };
+    }).Deno;
+    if (typeof deno?.env?.get !== "function") return;
+    const url = deno.env.get("SUPABASE_URL");
+    const key = deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!url || !key) return;
+    import("https://esm.sh/@supabase/supabase-js@2")
+      .then(({ createClient }) => {
+        const supabase = createClient(url, key);
+        return supabase.rpc("record_ban_signal", {
+          p_instance_id: instanceId,
+          p_code: code,
+        });
+      })
+      .catch(() => {
+        /* best-effort — reputation update never affects the send */
       });
   } catch {
     // best-effort

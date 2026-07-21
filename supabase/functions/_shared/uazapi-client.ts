@@ -110,6 +110,9 @@ export class UazapiClient {
   private readonly token?: string;
   private readonly adminToken?: string;
   private readonly timeoutMs: number;
+  /** Optional DB id of this number — only for ban-signal correlation, never
+   *  auth. Undefined at most construction sites today (see UazapiClientConfig). */
+  private readonly instanceId?: string;
 
   constructor(config: UazapiClientConfig) {
     if (!config.baseUrl) {
@@ -119,6 +122,7 @@ export class UazapiClient {
     this.token = config.token;
     this.adminToken = config.adminToken;
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.instanceId = config.instanceId;
   }
 
   // =========================================================================
@@ -626,11 +630,22 @@ export class UazapiClient {
               res.statusText,
             raw: errBody,
           };
-          // Reputation signal (anti-ban Onda 0 QW4) — OUT-OF-BAND telemetry
-          // only. Explicitly does NOT call recordFailure/feed the circuit
-          // breaker (a ban-ish 4xx must never open the breaker that blocks
-          // healthy sends, incl. the human composer), and the 4xx contract is
-          // unchanged: throw immediately, no retry. Best-effort by design.
+          // Reputation signal (anti-ban Onda 0 QW4 + Send Governor foundation)
+          // — OUT-OF-BAND telemetry only. Explicitly does NOT call
+          // recordFailure/feed the circuit breaker (a ban-ish 4xx must never
+          // open the breaker that blocks healthy sends, incl. the human
+          // composer), and the 4xx contract is unchanged: throw immediately, no
+          // retry. Best-effort by design.
+          //
+          // 463 (Meta/WhatsApp temporary restriction) and 429 (rate limit) both
+          // fall here and are captured to runtime_logs by recordBanSignal. When
+          // this client was constructed WITH an instanceId, the signal also
+          // feeds the governor reputation state machine (record_ban_signal). At
+          // most call sites today instanceId is undefined — request() holds only
+          // the per-instance TOKEN, not the id — so the DB-backed reputation
+          // update is driven from the governor gate layer instead; correlation
+          // by id here is a wiring follow-up (thread instanceId into the
+          // UazapiClient at construction). No fragile coupling is introduced.
           try {
             const cls = classifyBanSignal(res.status, errBody, err.message);
             if (cls.isBanSignal) {
@@ -641,6 +656,7 @@ export class UazapiClient {
                 matchedBy: cls.matchedBy ?? "status",
                 path,
                 instanceKey: instanceKeyFromToken(useAdmin ? this.adminToken : this.token),
+                instanceId: this.instanceId,
               });
             }
           } catch {

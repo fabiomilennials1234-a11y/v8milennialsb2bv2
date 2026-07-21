@@ -22,6 +22,14 @@ export type UazapiClientConfig = {
   adminToken?: string;
   /** Request timeout in ms. Default 15 000. Use 60 000 for media. */
   timeoutMs?: number;
+  /**
+   * The WhatsApp number's DB id (whatsapp_instances.id), WHEN the construction
+   * site knows it. Optional + purely additive: when set, a ban-ish 4xx (463/429)
+   * is correlated by id and fed into the Send Governor reputation state machine
+   * (record_ban_signal). When omitted, behavior is 100% unchanged — the signal
+   * is still captured out-of-band keyed by the token hash. Never used for auth.
+   */
+  instanceId?: string;
 };
 
 // ---------------------------------------------------------------------------
