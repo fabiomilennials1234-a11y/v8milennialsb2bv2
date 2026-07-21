@@ -71,6 +71,16 @@ printf '%s\n' \
   '    add_header Cache-Control "public, max-age=31536000, immutable" always;' \
   '    try_files $uri =404;' \
   '  }' \
+  '  location = /sobre {' \
+  '    include /etc/nginx/security-headers.conf;' \
+  '    add_header Cache-Control "no-store, must-revalidate" always;' \
+  '    try_files /sobre.html =404;' \
+  '  }' \
+  '  location = /privacidade {' \
+  '    include /etc/nginx/security-headers.conf;' \
+  '    add_header Cache-Control "no-store, must-revalidate" always;' \
+  '    try_files /privacidade.html =404;' \
+  '  }' \
   '  location = / {' \
   '    include /etc/nginx/security-headers.conf;' \
   '    add_header Cache-Control "no-store, must-revalidate" always;' \
