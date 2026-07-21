@@ -16,6 +16,7 @@ vi.mock("../../supabase/functions/_shared/followupSchedule.ts", () => ({
 }));
 
 import { executeWorkflow } from "../../supabase/functions/_shared/workflow-executor";
+import { executeWorkflowAction } from "../../supabase/functions/_shared/workflow-action-handler";
 import { createMockSupabase } from "../helpers/supabase-mock";
 
 describe("executeWorkflow", () => {
@@ -450,5 +451,73 @@ describe("executeWorkflow", () => {
     });
 
     expect(result.stepsExecuted).toBeGreaterThan(0);
+  });
+
+  // ── Send Governor defer handling ──────────────────────────────────────────
+  describe("Send Governor defer", () => {
+    const DEFINITION = {
+      nodes: [
+        { id: "t1", type: "trigger", data: {} },
+        { id: "a1", type: "action", data: { actionType: "send_whatsapp" } },
+      ],
+      edges: [{ id: "e1", source: "t1", target: "a1" }],
+    };
+
+    it("reschedules the node without failing, advancing, or counting a retry", async () => {
+      const { sb, mockTable, getUpdated } = createMockSupabase();
+      mockTable("workflow_execution_steps", []);
+      // Seed the execution row so the mock records .update().eq('id', …) writes.
+      mockTable("workflow_executions", [{ id: "exec-1", status: "running" }]);
+      mockTable("workflow_split_events", []);
+
+      const deferUntil = new Date(Date.now() + 3_600_000).toISOString();
+      vi.mocked(executeWorkflowAction).mockResolvedValueOnce({ success: true, deferUntil });
+
+      const context: Record<string, unknown> = {};
+      const result = await executeWorkflow({
+        supabase: sb, executionId: "exec-1", workflowId: "wf-1",
+        organizationId: "org-1", leadId: "lead-1",
+        definition: DEFINITION, loopLimit: 10, context,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.status).toBe("paused");
+      // Defer counter bumped, retry counter untouched.
+      expect((context._defer_counts as Record<string, number>).a1).toBe(1);
+      expect(context._retry_counts).toBeUndefined();
+      expect(context._governor_deferred).toBe("a1");
+      // Execution rescheduled at deferUntil, still pinned to the SAME node.
+      const updates = getUpdated("workflow_executions");
+      const deferUpdate = updates.find((u) => u.next_run_at === deferUntil);
+      expect(deferUpdate).toBeTruthy();
+      expect(deferUpdate!.current_node_id).toBe("a1");
+      expect(deferUpdate!.status).toBe("running");
+    });
+
+    it("resumes and sends on the next pass (defer marker cleared)", async () => {
+      const { sb, mockTable } = createMockSupabase();
+      mockTable("workflow_execution_steps", []);
+      mockTable("workflow_executions", []);
+      mockTable("workflow_split_events", []);
+
+      // Resume: currentNodeId pinned to a1, one prior defer recorded.
+      vi.mocked(executeWorkflowAction).mockResolvedValueOnce({ success: true });
+
+      const context: Record<string, unknown> = {
+        _defer_counts: { a1: 1 },
+        _governor_deferred: "a1",
+      };
+      const result = await executeWorkflow({
+        supabase: sb, executionId: "exec-1", workflowId: "wf-1",
+        organizationId: "org-1", leadId: "lead-1",
+        definition: DEFINITION, loopLimit: 10, context,
+        currentNodeId: "a1",
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.status).toBe("completed");
+      // Marker cleared once the node no longer defers.
+      expect(context._governor_deferred).toBeUndefined();
+    });
   });
 });

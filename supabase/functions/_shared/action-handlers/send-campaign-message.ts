@@ -18,11 +18,11 @@ import { sendMessage } from "../message-gateway.ts";
 import {
   getWhatsAppInstance,
   getLeadPhone,
-  enforceWhatsAppRateLimit,
   resolveVariables,
   buildTrackId,
   recipientGate,
 } from "./whatsapp-helpers.ts";
+import { governGate } from "./send-governor.ts";
 
 export async function sendCampaignMessage(input: ActionInput): Promise<ActionResult> {
   const { supabase, organizationId, leadId, params, executionContext } = input;
@@ -58,7 +58,12 @@ export async function sendCampaignMessage(input: ActionInput): Promise<ActionRes
     leadId,
   );
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(supabase, wa.instanceId);
+
+  const gate = await governGate({
+    supabase, organizationId, instance: wa.instance, instanceId: wa.instanceId,
+    params, executionContext, sendClass: "campaign",
+  });
+  if (gate.defer) return gate.result;
 
   // Resolve phone
   const phone = await getLeadPhone(supabase, leadId);
@@ -125,5 +130,6 @@ export async function sendCampaignMessage(input: ActionInput): Promise<ActionRes
     return { success: false, error: `Campaign message send failed: ${gwResult.error}` };
   }
 
+  await gate.commit();
   return { success: true, message: "Campaign message sent" };
 }

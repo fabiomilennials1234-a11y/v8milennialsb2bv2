@@ -46,6 +46,7 @@ import { recipientGate } from "../../../supabase/functions/_shared/action-handle
 import { sendMessage } from "../../../supabase/functions/_shared/message-gateway";
 import { sendTextViaInstance } from "../../../supabase/functions/_shared/whatsapp-dispatch";
 import { reserveSendOrSkip } from "../../../supabase/functions/_shared/send-dedup";
+import { saoPauloUsageDate } from "../../../supabase/functions/_shared/quick-blast/daily-budget";
 
 const WA_INSTANCE = {
   id: "inst-1",
@@ -174,6 +175,67 @@ describe("sendWhatsApp action handler", () => {
     expect(result.retryable).toBe(false);
     expect(result.error).toContain("not on WhatsApp");
     // The gate short-circuits before any send is attempted.
+    expect(vi.mocked(sendMessage)).not.toHaveBeenCalled();
+    expect(vi.mocked(sendTextViaInstance)).not.toHaveBeenCalled();
+  });
+});
+
+describe("sendWhatsApp — Send Governor", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Acceptance: master flag OFF must be byte-identical to the legacy behaviour —
+  // the send goes out normally, with no deferUntil.
+  it("flag OFF is a perfect no-op: sends normally, no deferUntil", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("whatsapp_instances", [WA_INSTANCE]);
+    mockTable("whatsapp_messages", []);
+    mockTable("leads", [LEAD]);
+    mockTable("organizations", [{ id: "org-1", workflow_send_governor_enabled: false }]);
+
+    const result = await sendWhatsApp({
+      supabase: sb, organizationId: "org-1", leadId: "lead-1", conversationId: null,
+      params: { messageTemplate: "Oi {{nome}}!", whatsappInstanceId: "inst-1", _nodeId: "n1" },
+      executionContext: {},
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.deferUntil).toBeUndefined();
+    expect(vi.mocked(sendMessage)).toHaveBeenCalledTimes(1);
+  });
+
+  // Enforce + per-number cap exhausted → DEFER (never fail), and NO send happens.
+  it("defers instead of sending when the number's daily cap is exhausted", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("whatsapp_instances", [{ ...WA_INSTANCE, daily_blast_cap: 80 }]);
+    mockTable("whatsapp_messages", []);
+    mockTable("leads", [LEAD]);
+    mockTable("organizations", [{
+      id: "org-1",
+      workflow_send_governor_enabled: true,
+      workflow_send_governor: {
+        jitter: { mode: "off" },
+        instance_cap: { mode: "enforce" },
+        org_cap: { mode: "off" },
+        quiet_hours: { mode: "off" },
+      },
+      daily_blast_budget: 200,
+    }]);
+    mockTable("blast_instance_daily_usage", [
+      { instance_id: "inst-1", usage_date: saoPauloUsageDate(new Date()), leads_sent: 999 },
+    ]);
+
+    const result = await sendWhatsApp({
+      supabase: sb, organizationId: "org-1", leadId: "lead-1", conversationId: null,
+      params: { messageTemplate: "Oi {{nome}}!", whatsappInstanceId: "inst-1", _nodeId: "n1" },
+      executionContext: {},
+    });
+
+    expect(result.success).toBe(true);
+    expect(typeof result.deferUntil).toBe("string");
+    expect(new Date(result.deferUntil!).getTime()).toBeGreaterThan(Date.now());
+    // Crucially: no message was sent — it was deferred, not delivered or failed.
     expect(vi.mocked(sendMessage)).not.toHaveBeenCalled();
     expect(vi.mocked(sendTextViaInstance)).not.toHaveBeenCalled();
   });

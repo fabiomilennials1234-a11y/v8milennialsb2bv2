@@ -5,6 +5,7 @@
 
 import type { ActionInput, ActionResult } from "./types.ts";
 import { resolveVariables } from "./whatsapp-helpers.ts";
+import { governGate } from "./send-governor.ts";
 
 // ─── Meta Message (Instagram / Facebook) ───────────────────────────────────
 
@@ -14,6 +15,14 @@ export async function sendMetaMessage(input: ActionInput): Promise<ActionResult>
   if (!leadId) {
     return { success: false, error: "leadId is required for sendMetaMessage" };
   }
+
+  // Send Governor gate. No WhatsApp instance here, so jitter + caps are inert; only
+  // the channel-agnostic quiet-hours guard applies (don't DM a lead at 3am). Flag
+  // OFF = no-op, so this never changes Meta behaviour until the governor is enabled.
+  const metaGate = await governGate({
+    supabase, organizationId, params, executionContext, sendClass: "automation",
+  });
+  if (metaGate.defer) return metaGate.result;
 
   const channel = (params.metaChannel as string) || "instagram";
   const message = (params.metaMessage as string) || "";

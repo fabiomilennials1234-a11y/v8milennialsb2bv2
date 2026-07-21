@@ -9,12 +9,12 @@ import { reserveSendOrSkip } from "../send-dedup.ts";
 import {
   getWhatsAppInstance,
   getLeadPhone,
-  enforceWhatsAppRateLimit,
   resolveVariables,
   buildTrackId,
   recipientGate,
   isRetryableSendFailure,
 } from "./whatsapp-helpers.ts";
+import { governGate } from "./send-governor.ts";
 
 export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
   const { supabase, organizationId, leadId, params, executionContext } = input;
@@ -29,7 +29,14 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
     leadId,
   );
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(supabase, wa.instanceId);
+
+  // Send Governor gate (replaces the fixed 3s throttle). Flag OFF = same 3s throttle.
+  // A defer reschedules the workflow node instead of sending — never an error.
+  const gate = await governGate({
+    supabase, organizationId, instance: wa.instance, instanceId: wa.instanceId,
+    params, executionContext, sendClass: "automation",
+  });
+  if (gate.defer) return gate.result;
 
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
@@ -102,5 +109,7 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
     return { success: false, error, retryable: isRetryableSendFailure(error) };
   }
 
+  // Message delivered → tally the shared anti-ban ledgers exactly once.
+  await gate.commit();
   return { success: true, message: "WhatsApp text sent" };
 }

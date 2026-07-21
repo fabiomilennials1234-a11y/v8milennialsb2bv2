@@ -11,12 +11,12 @@ import { sendAudioViaProvider } from "../audio-sender.ts";
 import {
   getWhatsAppInstance,
   getLeadPhone,
-  enforceWhatsAppRateLimit,
   resolveVariables,
   buildTrackId,
   recipientGate,
   isRetryableSendFailure,
 } from "./whatsapp-helpers.ts";
+import { governGate } from "./send-governor.ts";
 
 // ─── Audio ─────────────────────────────────────────────────────────────────
 
@@ -36,7 +36,12 @@ export async function sendWhatsAppAudio(input: ActionInput): Promise<ActionResul
     leadId,
   );
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(supabase, wa.instanceId);
+
+  const gate = await governGate({
+    supabase, organizationId, instance: wa.instance, instanceId: wa.instanceId,
+    params, executionContext, sendClass: "automation",
+  });
+  if (gate.defer) return gate.result;
 
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
@@ -106,6 +111,7 @@ export async function sendWhatsAppAudio(input: ActionInput): Promise<ActionResul
     return { success: false, error, retryable: isRetryableSendFailure(error) };
   }
 
+  await gate.commit();
   return { success: true, message: "WhatsApp audio sent" };
 }
 
@@ -127,7 +133,12 @@ export async function sendWhatsAppImage(input: ActionInput): Promise<ActionResul
     leadId,
   );
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(supabase, wa.instanceId);
+
+  const gate = await governGate({
+    supabase, organizationId, instance: wa.instance, instanceId: wa.instanceId,
+    params, executionContext, sendClass: "automation",
+  });
+  if (gate.defer) return gate.result;
 
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
@@ -180,6 +191,7 @@ export async function sendWhatsAppImage(input: ActionInput): Promise<ActionResul
     return { success: false, error, retryable: isRetryableSendFailure(error) };
   }
 
+  await gate.commit();
   return { success: true, message: "WhatsApp image sent" };
 }
 
@@ -201,7 +213,12 @@ export async function sendWhatsAppSticker(input: ActionInput): Promise<ActionRes
     leadId,
   );
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(supabase, wa.instanceId);
+
+  const gate = await governGate({
+    supabase, organizationId, instance: wa.instance, instanceId: wa.instanceId,
+    params, executionContext, sendClass: "automation",
+  });
+  if (gate.defer) return gate.result;
 
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
@@ -250,6 +267,7 @@ export async function sendWhatsAppSticker(input: ActionInput): Promise<ActionRes
     return { success: false, error, retryable: isRetryableSendFailure(error) };
   }
 
+  await gate.commit();
   return { success: true, message: "WhatsApp sticker sent" };
 }
 
@@ -272,7 +290,12 @@ export async function sendWhatsAppDocument(input: ActionInput): Promise<ActionRe
     leadId,
   );
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(supabase, wa.instanceId);
+
+  const gate = await governGate({
+    supabase, organizationId, instance: wa.instance, instanceId: wa.instanceId,
+    params, executionContext, sendClass: "automation",
+  });
+  if (gate.defer) return gate.result;
 
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
@@ -326,5 +349,6 @@ export async function sendWhatsAppDocument(input: ActionInput): Promise<ActionRe
     return { success: false, error, retryable: isRetryableSendFailure(error) };
   }
 
+  await gate.commit();
   return { success: true, message: "WhatsApp document sent" };
 }

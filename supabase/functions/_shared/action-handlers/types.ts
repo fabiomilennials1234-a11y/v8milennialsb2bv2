@@ -16,6 +16,12 @@ export interface ActionResult {
   error?: string;
   data?: Record<string, unknown>;
   retryable?: boolean;
+  /**
+   * Send Governor defer signal. When set, the send did NOT happen and the workflow
+   * executor must reschedule this node at `deferUntil` (ISO) WITHOUT advancing the
+   * graph, counting a retry, or failing. Always a future instant (> now + 60s).
+   */
+  deferUntil?: string;
 }
 
 export type ActionHandler = (input: ActionInput) => Promise<ActionResult>;

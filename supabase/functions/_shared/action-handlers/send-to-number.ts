@@ -43,6 +43,7 @@ import {
 import { sendTextViaInstance, normalizeBrazilianPhone } from "../whatsapp-dispatch.ts";
 import { summarizeConversation } from "./ai-operations.ts";
 import { reserveSendOrSkip } from "../send-dedup.ts";
+import { governGate } from "./send-governor.ts";
 
 /** Parse + normalize + dedupe the configured destination numbers. */
 function resolveDestinations(raw: unknown): { valid: string[]; invalid: string[] } {
@@ -172,6 +173,16 @@ export async function sendToNumber(input: ActionInput): Promise<ActionResult> {
     };
   }
 
+  // 2c) Send Governor gate (GAP #6: send_to_number had NO throttle at all). This is
+  //     an operator hand-off — apply jitter + throttle + cap backstop, but the
+  //     `operator_notification` class PULA quiet-hours: the recipients are
+  //     salespeople, so deferring a hand-off to morning would blow the lead SLA.
+  const gate = await governGate({
+    supabase, organizationId, instance: wa.instance, instanceId: wa.instanceId,
+    params, executionContext, sendClass: "operator_notification",
+  });
+  if (gate.defer) return gate.result;
+
   // 3) Resolve the message template against the lead.
   const template = (params.messageTemplate as string) || "";
   let message = await resolveVariables(supabase, leadId, template, executionContext);
@@ -238,6 +249,8 @@ export async function sendToNumber(input: ActionInput): Promise<ActionResult> {
     if (res.success) {
       succeeded.push(phone);
       await persistChatHistory(supabase, organizationId, wa.instance, phone, message, res.messageId);
+      // One delivered message → one ledger tally. NOT counted on the dedup path.
+      await gate.commit();
     } else {
       failures.push({ phone, error: res.error ?? "unknown send error" });
     }

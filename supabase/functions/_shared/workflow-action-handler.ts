@@ -35,12 +35,16 @@ export interface ActionResult {
   error?: string;
   data?: Record<string, unknown>;
   retryable?: boolean;
+  /** Send Governor defer signal — see action-handlers/types.ts ActionResult. */
+  deferUntil?: string;
 }
 
 interface ActionContext {
   supabase: SupabaseClient;
   organizationId: string;
   leadId: string;
+  /** Graph node id — the Send Governor defer-count key. */
+  nodeId?: string;
   nodeData: Record<string, unknown>;
   executionContext: Record<string, unknown>;
 }
@@ -279,6 +283,9 @@ function toActionInput(ctx: ActionContext) {
     params: {
       ...ctx.nodeData,
       _executionId: (ctx as unknown as { executionId?: string }).executionId,
+      // The graph node id — keys the Send Governor's per-node defer counter so
+      // the fail-open threshold lines up with the executor's _defer_counts.
+      _nodeId: ctx.nodeId,
     },
     executionContext: ctx.executionContext,
   };
@@ -639,9 +646,11 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
   }
 
   // Log to lead_history on success
-  // Skip for stage-related actions — PG triggers (trg_pipe_*_stage_change) handle these
+  // Skip for stage-related actions — PG triggers (trg_pipe_*_stage_change) handle these.
+  // Also skip when the Send Governor DEFERRED: the message has not been sent yet, so
+  // recording it as a completed action would be a lie in the lead timeline.
   const STAGE_ACTIONS = ["move_stage", "duplicate_to_pipe", "remove_from_pipe", "mark_as_lost"];
-  if (result.success && !STAGE_ACTIONS.includes(actionType)) {
+  if (result.success && !result.deferUntil && !STAGE_ACTIONS.includes(actionType)) {
     await logToHistory(
       ctx.supabase,
       ctx.leadId,

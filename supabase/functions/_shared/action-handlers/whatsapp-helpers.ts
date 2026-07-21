@@ -268,11 +268,15 @@ export function isRetryableSendFailure(error: string | undefined | null): boolea
 
 // ─── Rate limit enforcement ────────────────────────────────────────────────
 
-export async function enforceWhatsAppRateLimit(
+/**
+ * Epoch-ms of the last OUTGOING message on an instance, or null if none. Extracted
+ * so the Send Governor can compute jitter spacing against the same signal the
+ * legacy throttle uses.
+ */
+export async function getLastOutgoingAt(
   supabase: SupabaseClient,
   instanceId: string,
-): Promise<void> {
-  const MIN_INTERVAL_MS = 3000;
+): Promise<number | null> {
   const { data: lastMsg } = await supabase
     .from("whatsapp_messages")
     .select("timestamp")
@@ -281,11 +285,24 @@ export async function enforceWhatsAppRateLimit(
     .order("timestamp", { ascending: false })
     .limit(1)
     .maybeSingle();
+  return lastMsg?.timestamp ? new Date(lastMsg.timestamp).getTime() : null;
+}
 
-  if (lastMsg?.timestamp) {
-    const elapsed = Date.now() - new Date(lastMsg.timestamp).getTime();
-    if (elapsed < MIN_INTERVAL_MS) {
-      await new Promise(r => setTimeout(r, MIN_INTERVAL_MS - elapsed));
+/**
+ * Sleep until at least `intervalMs` has elapsed since the last outgoing message on
+ * this instance. `intervalMs` defaults to the legacy fixed 3000ms so every existing
+ * caller keeps byte-identical behaviour; the Send Governor passes a jittered value.
+ */
+export async function enforceWhatsAppRateLimit(
+  supabase: SupabaseClient,
+  instanceId: string,
+  intervalMs = 3000,
+): Promise<void> {
+  const last = await getLastOutgoingAt(supabase, instanceId);
+  if (last != null) {
+    const elapsed = Date.now() - last;
+    if (elapsed < intervalMs) {
+      await new Promise((r) => setTimeout(r, intervalMs - elapsed));
     }
   }
 }

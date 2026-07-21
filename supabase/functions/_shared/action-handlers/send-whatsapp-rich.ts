@@ -8,11 +8,11 @@ import { sendMessage } from "../message-gateway.ts";
 import {
   getWhatsAppInstance,
   getLeadPhone,
-  enforceWhatsAppRateLimit,
   resolveVariables,
   buildTrackId,
   recipientGate,
 } from "./whatsapp-helpers.ts";
+import { governGate } from "./send-governor.ts";
 
 // ─── Template ──────────────────────────────────────────────────────────────
 
@@ -32,7 +32,12 @@ export async function sendWhatsAppTemplate(input: ActionInput): Promise<ActionRe
     leadId,
   );
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(supabase, wa.instanceId);
+
+  const gate = await governGate({
+    supabase, organizationId, instance: wa.instance, instanceId: wa.instanceId,
+    params, executionContext, sendClass: "automation",
+  });
+  if (gate.defer) return gate.result;
 
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
@@ -79,6 +84,7 @@ export async function sendWhatsAppTemplate(input: ActionInput): Promise<ActionRe
     return { success: false, error: `Template send failed: ${gwResult.error}` };
   }
 
+  await gate.commit();
   return { success: true, message: `Template "${tpl.name}" sent` };
 }
 
@@ -97,7 +103,12 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
     leadId,
   );
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(supabase, wa.instanceId);
+
+  const gate = await governGate({
+    supabase, organizationId, instance: wa.instance, instanceId: wa.instanceId,
+    params, executionContext, sendClass: "automation",
+  });
+  if (gate.defer) return gate.result;
 
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
@@ -187,6 +198,7 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
     return { success: false, error: `Menu send failed: ${gwResult.error}` };
   }
 
+  await gate.commit();
   return { success: true, message: `WhatsApp ${menuType} menu sent` };
 }
 
@@ -205,7 +217,12 @@ export async function sendWhatsAppPixButton(input: ActionInput): Promise<ActionR
     leadId,
   );
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(supabase, wa.instanceId);
+
+  const gate = await governGate({
+    supabase, organizationId, instance: wa.instance, instanceId: wa.instanceId,
+    params, executionContext, sendClass: "automation",
+  });
+  if (gate.defer) return gate.result;
 
   const phone = await getLeadPhone(supabase, leadId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
@@ -291,5 +308,6 @@ export async function sendWhatsAppPixButton(input: ActionInput): Promise<ActionR
     return { success: false, error: `PIX button failed: ${gwResult.error}` };
   }
 
+  await gate.commit();
   return { success: true, message: "PIX button sent" };
 }

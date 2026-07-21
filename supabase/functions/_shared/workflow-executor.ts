@@ -143,7 +143,17 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
       node.type === "wait_business_window"
     ) && params.currentNodeId === nodeId;
 
-    if (!isTimeWindowResume) {
+    // Guard #4: a Send Governor defer re-runs the SAME action node on resume. That
+    // is a legitimate reschedule, not a graph loop — skip the loop counter so a
+    // handful of anti-ban defers can never trip loop_limit. The _defer_counts teto
+    // (fail-open) is the real termination guarantee for repeated defers.
+    const isGovernorDeferResume = (
+      node.type === "action" &&
+      params.currentNodeId === nodeId &&
+      (context._governor_deferred as string | undefined) === nodeId
+    );
+
+    if (!isTimeWindowResume && !isGovernorDeferResume) {
       loopCounters[nodeId] = (loopCounters[nodeId] || 0) + 1;
       if (loopCounters[nodeId] > loopLimit) {
         await updateExecution(supabase, executionId, "loop_limit_reached", nodeId, loopCounters, `Loop limit reached at node ${nodeId}`);
@@ -180,9 +190,45 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
             supabase,
             organizationId,
             leadId,
+            nodeId,
             nodeData: node.data,
             executionContext: context,
           });
+
+          // ── Send Governor defer ────────────────────────────────────────────
+          // The send did NOT happen; a volume/time control asked to wait. Mirror
+          // the time_window pause: reschedule THIS node, do NOT advance the graph,
+          // do NOT count a retry, do NOT fail. Guards: deferUntil is already
+          // clamped to > now+60s by the governor; _defer_counts + the governor's
+          // fail-open bound the number of reschedules so nothing sticks forever.
+          if (result.deferUntil) {
+            const deferCounts = (context._defer_counts as Record<string, number>) || {};
+            deferCounts[nodeId] = (deferCounts[nodeId] || 0) + 1;
+            context._defer_counts = deferCounts;
+            context._governor_deferred = nodeId;
+
+            await recordStep(supabase, executionId, node, "success", node.data, {
+              governor_deferred: true,
+              defer_until: result.deferUntil,
+              defer_count: deferCounts[nodeId],
+              reason: result.message ?? null,
+            });
+
+            await supabase.from("workflow_executions").update({
+              status: "running",
+              current_node_id: nodeId, // stay on THIS node → re-evaluate on resume
+              next_run_at: result.deferUntil,
+              loop_counters: loopCounters,
+              context: { ...context },
+            }).eq("id", executionId);
+
+            return { success: true, status: "paused", stepsExecuted };
+          }
+
+          // Node did NOT defer this pass — clear the resume marker for it.
+          if ((context._governor_deferred as string | undefined) === nodeId) {
+            delete context._governor_deferred;
+          }
 
           await recordStep(supabase, executionId, node, result.success ? "success" : "failed",
             node.data,
