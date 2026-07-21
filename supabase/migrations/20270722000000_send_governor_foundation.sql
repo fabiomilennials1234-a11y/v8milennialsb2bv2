@@ -71,10 +71,12 @@ ALTER TABLE public.whatsapp_instance_reputation ENABLE ROW LEVEL SECURITY;
 -- Tenant read (UI headroom / diagnostics). Reputation carries organization_id
 -- directly, so scope is a plain membership check (master sees all). Writes go
 -- exclusively through the RPCs (service_role) — clients get NO write grant.
+-- is_master_user takes the caller uuid (there is no zero-arg overload in prod).
+DROP POLICY IF EXISTS "tenant_isolation_select" ON public.whatsapp_instance_reputation;
 CREATE POLICY "tenant_isolation_select" ON public.whatsapp_instance_reputation
   FOR SELECT USING (
     organization_id IN (SELECT public.get_my_organization_ids())
-    OR public.is_master_user()
+    OR public.is_master_user(auth.uid())
   );
 
 GRANT SELECT ON public.whatsapp_instance_reputation TO authenticated;
@@ -109,6 +111,7 @@ ALTER TABLE public.automation_instance_daily_usage ENABLE ROW LEVEL SECURITY;
 
 -- Tenant read scoped through the parent instance (no own organization_id),
 -- identical to blast_instance_daily_usage. Writes via the RPC (service_role).
+DROP POLICY IF EXISTS "tenant_isolation_select" ON public.automation_instance_daily_usage;
 CREATE POLICY "tenant_isolation_select" ON public.automation_instance_daily_usage
   FOR SELECT USING (
     EXISTS (
@@ -116,7 +119,7 @@ CREATE POLICY "tenant_isolation_select" ON public.automation_instance_daily_usag
       WHERE wi.id = automation_instance_daily_usage.instance_id
         AND wi.organization_id IN (SELECT public.get_my_organization_ids())
     )
-    OR public.is_master_user()
+    OR public.is_master_user(auth.uid())
   );
 
 GRANT SELECT ON public.automation_instance_daily_usage TO authenticated;
