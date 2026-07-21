@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useResponsibleMembers } from "@/modules/identity";
+import { useLeadOrigins } from "@/modules/leads";
 import { CONDITION_OPERATOR_LABELS, WEEKDAY_OPTIONS } from "@/types/workflow";
 import type { ConditionNodeData, ConditionOperator, ConditionMode } from "@/types/workflow";
 import { Clock, Filter } from "lucide-react";
@@ -102,13 +103,25 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
   const members = useResponsibleMembers();
   const isResponsibleField = RESPONSIBLE_FIELDS.has(data.field || "");
   const isUtmField = UTM_FIELDS.has(data.field || "");
+  const isOriginField = data.field === "origin";
   const { values: utmValues, isLoading: utmLoading } = useOrgUtmValues(data.field);
+
+  // Catálogo dinâmico de origens (built-ins globais + custom da org) — mesma fonte do gatilho.
+  // Compara por slug; garante que o valor já salvo continue selecionável se sumiu do catálogo.
+  const { origins: leadOrigins } = useLeadOrigins();
+  const originItems = leadOrigins.map((o) => ({ value: o.slug, label: o.label }));
+  if (isOriginField && data.value && !originItems.some((o) => o.value === data.value)) {
+    originItems.unshift({ value: data.value, label: data.value });
+  }
 
   const handleFieldChange = (v: string) => {
     const nowResponsible = RESPONSIBLE_FIELDS.has(v);
+    const nowOrigin = v === "origin";
     const updates: Partial<ConditionNodeData> = { field: v };
     // Switching responsible <-> non-responsible swaps value semantics (member id vs free text) → clear.
     if (nowResponsible !== isResponsibleField) updates.value = "";
+    // Same for origin: free text <-> origin slug are incompatible → clear.
+    if (nowOrigin !== isOriginField) updates.value = "";
     // Carry over only operators valid for a member field.
     if (nowResponsible && !RESPONSIBLE_OPERATORS.includes(data.operator)) {
       updates.operator = "equals";
@@ -282,6 +295,28 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
                   value={data.value || ""}
                   onChange={(v) => onUpdate({ value: v })}
                 />
+              ) : isOriginField ? (
+                <Select
+                  value={data.value || ""}
+                  onValueChange={(v) => onUpdate({ value: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a origem" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {originItems.length === 0 ? (
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                        Nenhuma origem cadastrada
+                      </div>
+                    ) : (
+                      originItems.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
               ) : (
                 <Input
                   value={data.value || ""}

@@ -173,7 +173,14 @@ export function matchesTriggerConfig(
     }
 
     case "lead_created": {
-      if (config.filter_origin && context.origin && config.filter_origin !== context.origin) return false;
+      // Origem: compara slug normalizado (lowercase/trim) — leads.origin é texto livre
+      // por-org (lead_origins). Filtro ativo + lead sem origem NÃO dispara — mantém
+      // consistência com o caminho de agendados (ver `wf.filter_origin && !lm.origin`).
+      if (config.filter_origin) {
+        const want = String(config.filter_origin).toLowerCase().trim();
+        const got = context.origin == null ? "" : String(context.origin).toLowerCase().trim();
+        if (!got || got !== want) return false;
+      }
       // filter_pipe: e.g. "pipe_whatsapp", "pipe_confirmacao", "pipe_propostas"
       const ctxPipe = (context.pipe ?? context.pipe_type) as string | undefined;
       if (config.filter_pipe && ctxPipe && config.filter_pipe !== ctxPipe) return false;
@@ -562,8 +569,12 @@ export function planScheduledDateDispatches(
       if (lm.organization_id !== wf.organization_id) continue;
       if (lm.pipeline_id !== wf.pipeline_id) continue;
       if (stages.length > 0 && !stages.includes(lm.stage_key)) continue;
-      if (wf.filter_origin && lm.origin && wf.filter_origin !== lm.origin) continue;
-      if (wf.filter_origin && !lm.origin) continue;
+      if (wf.filter_origin) {
+        // Slug normalizado (lowercase/trim) — mesma regra do lead_created em matchesTriggerConfig.
+        const want = String(wf.filter_origin).toLowerCase().trim();
+        const got = lm.origin == null ? "" : String(lm.origin).toLowerCase().trim();
+        if (!got || got !== want) continue;
+      }
       if (!lm.meeting_date) continue;
 
       const meetingMs = new Date(lm.meeting_date).getTime();
