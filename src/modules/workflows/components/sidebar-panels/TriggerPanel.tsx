@@ -16,6 +16,7 @@ import { TRIGGER_CATEGORIES } from "@/types/workflow";
 import type { TriggerNodeData, WorkflowTriggerType, ScheduledDispatchItem } from "@/types/workflow";
 import { usePipelineStages, getPipelineTypeName, type PipelineType, useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines";
 import { useCampanhas, useCampanhaStages } from "@/modules/campaigns/hooks/useCampanhas";
+import { useLeadOrigins } from "@/modules/leads";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 
 interface TriggerPanelProps {
@@ -392,6 +393,16 @@ function LeadCreatedConfig({
   updateConfig: (updates: Record<string, unknown>) => void;
 }) {
   const { data: customPipelines } = useCustomPipelines();
+  const { origins: leadOrigins } = useLeadOrigins();
+
+  // Catálogo dinâmico de origens (built-ins globais + custom da org, via lead_origins).
+  // Garante que o valor já salvo continue selecionável mesmo se a origem sumiu do
+  // catálogo (senão o Select fica vazio).
+  const filterOrigin = (cfg.filter_origin as string) || "";
+  const originItems = leadOrigins.map((o) => ({ value: o.slug, label: o.label }));
+  if (filterOrigin && !originItems.some((o) => o.value === filterOrigin)) {
+    originItems.unshift({ value: filterOrigin, label: filterOrigin });
+  }
 
   const filterPipe = (cfg.filter_pipe as string) || "";
   const filterPipelineId = (cfg.filter_pipeline_id as string) || "";
@@ -413,25 +424,15 @@ function LeadCreatedConfig({
       <div className="space-y-2">
         <Label>Filtrar por origem (opcional)</Label>
         <Select
-          value={(cfg.filter_origin as string) || "__any__"}
+          value={filterOrigin || "__any__"}
           onValueChange={(v) => updateConfig({ filter_origin: v === "__any__" ? "" : v })}
         >
           <SelectTrigger><SelectValue placeholder="Qualquer origem" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__any__">Qualquer origem</SelectItem>
-            <SelectItem value="whatsapp">WhatsApp</SelectItem>
-            <SelectItem value="meta_ads">Meta Ads</SelectItem>
-            <SelectItem value="instagram">Instagram</SelectItem>
-            <SelectItem value="tiktok">Tiktok</SelectItem>
-            <SelectItem value="google_ads">Google Ads</SelectItem>
-            <SelectItem value="site">Site</SelectItem>
-            <SelectItem value="landing_page">Landing Page</SelectItem>
-            <SelectItem value="remarketing">Remarketing</SelectItem>
-            <SelectItem value="indicacao">Indicação</SelectItem>
-            <SelectItem value="evento">Evento</SelectItem>
-            <SelectItem value="prospeccao_ativa">Prospecção Ativa</SelectItem>
-            <SelectItem value="cal">Calendário (Cal)</SelectItem>
-            <SelectItem value="outro">Outro</SelectItem>
+            {originItems.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
