@@ -301,8 +301,13 @@ export class UazapiProvider implements WhatsAppProvider {
     number: string,
     state: "composing" | "available"
   ): Promise<void> {
+    // Uazapi /message/presence speaks whatsmeow *chat* presence: "composing"
+    // (typing) and "paused" (stopped). "available"/"unavailable" are GLOBAL
+    // presence values and get rejected here with 400 "Invalid presence value"
+    // (confirmed in prod 2026-07-21 via setPresence_probe), so the stop/idle
+    // state must map to "paused", not "available".
     const presence =
-      state === "composing" ? "composing" : "available";
+      state === "composing" ? "composing" : "paused";
     await this.client.setPresence({ number, presence });
   }
 
