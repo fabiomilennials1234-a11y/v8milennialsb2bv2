@@ -278,6 +278,50 @@ describe("instance_id required for non-createInstance actions", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Destination number guard — reject malformed numbers before hitting Uazapi
+// ---------------------------------------------------------------------------
+
+describe("destination number guard", () => {
+  // Mirrors the proxy's NUMBER_ACTIONS guard: send/presence actions whose
+  // `number` cleans down to < 10 digits are rejected with 422 instead of
+  // letting Uazapi 500 (surfacing as "Edge Function returned a non-2xx").
+  const NUMBER_ACTIONS = new Set(["sendText", "sendMedia", "sendAudio", "setPresence"]);
+
+  function validateNumber(action: string, rawNumber: unknown): { status: number } {
+    if (NUMBER_ACTIONS.has(action)) {
+      const digits = String(rawNumber ?? "").replace(/\D/g, "");
+      if (digits.length < 10) return { status: 422 };
+    }
+    return { status: 200 };
+  }
+
+  it("blocks a lone country code '55' → 422 (the reported bug)", () => {
+    expect(validateNumber("sendText", "55").status).toBe(422);
+  });
+
+  it("blocks empty/whitespace number → 422", () => {
+    expect(validateNumber("sendText", "   ").status).toBe(422);
+    expect(validateNumber("setPresence", "").status).toBe(422);
+  });
+
+  it("blocks setPresence on a bad number → 422 (kills the 'Invalid number' spam)", () => {
+    expect(validateNumber("setPresence", "55").status).toBe(422);
+  });
+
+  it("allows a well-formed BR number (55 + DDD + 9 digits)", () => {
+    expect(validateNumber("sendText", "5562996115735").status).toBe(200);
+  });
+
+  it("allows a formatted number with punctuation", () => {
+    expect(validateNumber("sendMedia", "+55 (62) 99611-5735").status).toBe(200);
+  });
+
+  it("does not touch non-number actions like getStatus", () => {
+    expect(validateNumber("getStatus", undefined).status).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Unknown action routing
 // ---------------------------------------------------------------------------
 

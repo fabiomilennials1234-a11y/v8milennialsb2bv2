@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatPhoneForWhatsApp } from "../../src/lib/whatsapp";
+import { formatPhoneForWhatsApp } from "../../src/modules/communication/lib/whatsapp";
 
 describe("formatPhoneForWhatsApp", () => {
   it("returns null for undefined", () => {
@@ -8,6 +8,25 @@ describe("formatPhoneForWhatsApp", () => {
 
   it("returns null for empty string", () => {
     expect(formatPhoneForWhatsApp("")).toBeNull();
+  });
+
+  // Regression: a whitespace-only or non-numeric phone must NOT collapse to a
+  // bare "55". Before the fix this produced "55", which Uazapi rejected with a
+  // 500 that surfaced as "Edge Function returned a non-2xx status code".
+  it("returns null for whitespace-only phone (bug: was emitting '55')", () => {
+    expect(formatPhoneForWhatsApp("                 ")).toBeNull();
+  });
+
+  it("returns null for non-numeric garbage", () => {
+    expect(formatPhoneForWhatsApp("no phone")).toBeNull();
+  });
+
+  it("returns null for a lone country code", () => {
+    expect(formatPhoneForWhatsApp("55")).toBeNull();
+  });
+
+  it("returns null for a too-short number (missing DDD)", () => {
+    expect(formatPhoneForWhatsApp("98765432")).toBeNull();
   });
 
   it("formats 11-digit BR phone with country code", () => {

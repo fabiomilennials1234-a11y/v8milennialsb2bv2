@@ -574,6 +574,34 @@ Deno.serve(
         }
       }
 
+      // Guard against malformed destination numbers reaching the provider.
+      // A phone that cleans down to fewer than 10 digits (empty, a
+      // whitespace-only lead phone, or a lone country code like "55") makes
+      // Uazapi return a 500 that surfaces to the user as the opaque "Edge
+      // Function returned a non-2xx status code". Reject early with a clear,
+      // actionable message instead. Defense-in-depth: the frontend already
+      // blocks these in formatPhoneForWhatsApp, but mass send / workflow /
+      // followup paths reach this proxy too.
+      const NUMBER_ACTIONS = new Set(["sendText", "sendMedia", "sendAudio", "setPresence"]);
+      if (NUMBER_ACTIONS.has(action)) {
+        const rawNumber = (payload?.number ?? "") as string;
+        const digits = String(rawNumber).replace(/\D/g, "");
+        if (digits.length < 10) {
+          await logRuntime({
+            organizationId: callerOrgId,
+            module: "whatsapp-api-proxy",
+            action: "invalid_number_blocked",
+            status: "error",
+            payloadSnapshot: { action, number: rawNumber },
+          });
+          return jsonResponse(
+            422,
+            { error: "Número de telefone inválido ou ausente para este contato." },
+            corsHeaders,
+          );
+        }
+      }
+
       const provider = await getWhatsAppProvider(
         instance as WhatsAppInstance,
         supabaseAdmin
