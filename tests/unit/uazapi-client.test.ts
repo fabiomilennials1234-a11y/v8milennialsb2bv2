@@ -37,6 +37,10 @@ const OK_MESSAGE: UazapiMessageResponse = {
   timestamp: 1_700_000_000,
 };
 
+// Mirrors the client's internal constant. Sends are capped at one attempt, so
+// the breaker reaches this threshold across successive calls, not within one.
+const CIRCUIT_BREAKER_THRESHOLD = 3;
+
 const BASE_CONFIG = {
   baseUrl: "https://uazapi.example.com",
   token: "tok-instance-xyz",
@@ -130,20 +134,27 @@ describe("sendText — success", () => {
     expect(body.track_id).toBe("my-idempotency-key");
   });
 
+});
+
+// ---------------------------------------------------------------------------
+// Circuit breaker — failure accounting
+// ---------------------------------------------------------------------------
+
+describe("circuit breaker — failure accounting", () => {
   it("resets circuit breaker failures on success", async () => {
-    // Simulate 2 previous failures (below threshold)
+    // Uses a replay-safe request: sends are capped at one attempt, so they
+    // cannot accumulate then clear failures within a single call.
+    // Simulate 2 previous failures (below threshold), then success.
     vi.mocked(fetch)
       .mockRejectedValueOnce(new Error("network error 1"))
       .mockRejectedValueOnce(new Error("network error 2"))
-      .mockResolvedValueOnce(makeResponse(200, OK_MESSAGE));
+      .mockResolvedValueOnce(makeResponse(200, { status: "connected", connected: true }));
 
     const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 100 });
 
-    const result = await withTimers(
-      client.sendText({ number: "5511999999999", text: "Hi" })
-    );
+    const result = await withTimers(client.getInstanceStatus());
 
-    expect(result).toEqual(OK_MESSAGE);
+    expect(result).toMatchObject({ status: "connected" });
 
     const state = UazapiClient._circuitState().get("token:[present]:default");
     expect(state?.failures ?? 0).toBe(0);
@@ -226,13 +237,13 @@ describe("sendText — 4xx error", () => {
 // sendText — 5xx: retries 3x then throws
 // ---------------------------------------------------------------------------
 
-describe("sendText — 5xx retry", () => {
+describe("5xx retry — replay-safe requests", () => {
   it("retries MAX_RETRIES times then throws last error", async () => {
     vi.mocked(fetch).mockResolvedValue(makeResponse(503, { message: "overloaded" }));
 
     const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 100 });
     await expect(
-      withTimers(client.sendText({ number: "5511999999999", text: "Hi" }))
+      withTimers(client.getInstanceStatus())
     ).rejects.toMatchObject({ status: 503 });
     // 3 attempts total
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
@@ -242,15 +253,24 @@ describe("sendText — 5xx retry", () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(makeResponse(500, { message: "err1" }))
       .mockResolvedValueOnce(makeResponse(500, { message: "err2" }))
-      .mockResolvedValueOnce(makeResponse(200, OK_MESSAGE));
+      .mockResolvedValueOnce(makeResponse(200, { status: "connected", connected: true }));
 
     const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 100 });
-    const result = await withTimers(
-      client.sendText({ number: "5511999999999", text: "Hi" })
-    );
+    const result = await withTimers(client.getInstanceStatus());
 
-    expect(result).toEqual(OK_MESSAGE);
+    expect(result).toMatchObject({ status: "connected" });
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
+  });
+
+  it("does NOT retry a message send on 5xx — a replay would re-deliver it", async () => {
+    vi.mocked(fetch).mockResolvedValue(makeResponse(503, { message: "overloaded" }));
+
+    const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 100 });
+    await expect(
+      withTimers(client.sendText({ number: "5511999999999", text: "Hi" }))
+    ).rejects.toMatchObject({ status: 503 });
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces the Uazapi 5xx response body (reason + code + raw)", async () => {
@@ -338,16 +358,14 @@ describe("checkNumbers — /chat/check", () => {
 // ---------------------------------------------------------------------------
 
 describe("timeout — AbortError handling", () => {
-  it("retries on timeout and increments circuit breaker", async () => {
+  it("retries a replay-safe request on timeout and increments circuit breaker", async () => {
     const abortErr = Object.assign(new Error("The operation was aborted"), {
       name: "AbortError",
     });
     vi.mocked(fetch).mockRejectedValue(abortErr);
 
     const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 50 });
-    await expect(
-      withTimers(client.sendText({ number: "5511999999999", text: "Hi" }))
-    ).rejects.toMatchObject({
+    await expect(withTimers(client.getInstanceStatus())).rejects.toMatchObject({
       status: 504,
       provider_code: "timeout",
     });
@@ -356,16 +374,48 @@ describe("timeout — AbortError handling", () => {
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
   });
 
+  it("does NOT retry a message send on timeout", async () => {
+    // The ambiguous case that motivated the cap: Uazapi may have delivered the
+    // message and simply answered late. Retrying would deliver it again.
+    const abortErr = Object.assign(new Error("The operation was aborted"), {
+      name: "AbortError",
+    });
+    vi.mocked(fetch).mockRejectedValue(abortErr);
+
+    const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 50 });
+    await expect(
+      withTimers(client.sendText({ number: "5511999999999", text: "Hi" }))
+    ).rejects.toMatchObject({ status: 504, provider_code: "timeout" });
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+  });
+
   it("opens circuit breaker after CIRCUIT_BREAKER_THRESHOLD consecutive failures", async () => {
     const abortErr = Object.assign(new Error("aborted"), { name: "AbortError" });
     vi.mocked(fetch).mockRejectedValue(abortErr);
 
     const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 50 });
 
-    // First call: 3 retries = 3 failures → circuit opens
-    await expect(
-      withTimers(client.sendText({ number: "5511999999999", text: "Hi" }))
-    ).rejects.toBeDefined();
+    // One replay-safe call: 3 attempts = 3 failures → circuit opens
+    await expect(withTimers(client.getInstanceStatus())).rejects.toBeDefined();
+
+    const state = UazapiClient._circuitState().get("token:[present]:default");
+    expect(state?.openUntil).toBeGreaterThan(Date.now());
+  });
+
+  it("still opens the breaker for sends — one failure per call, threshold reached across calls", async () => {
+    // Sends no longer retry internally, so the breaker protects them across
+    // successive calls instead of within one.
+    const abortErr = Object.assign(new Error("aborted"), { name: "AbortError" });
+    vi.mocked(fetch).mockRejectedValue(abortErr);
+
+    const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 50 });
+
+    for (let i = 0; i < CIRCUIT_BREAKER_THRESHOLD; i++) {
+      await expect(
+        withTimers(client.sendText({ number: "5511999999999", text: "Hi" }))
+      ).rejects.toBeDefined();
+    }
 
     const state = UazapiClient._circuitState().get("token:[present]:default");
     expect(state?.openUntil).toBeGreaterThan(Date.now());
@@ -584,20 +634,23 @@ describe("sendMedia — extended timeout", () => {
 
 describe("circuit breaker — per-endpoint isolation", () => {
   it("media failures open the media circuit, not the default one", async () => {
-    // All /send/media calls 500; one call exhausts 3 retries → 3 failures →
-    // media circuit opens.
+    // All /send/media calls 500. Media sends do not retry internally (a replay
+    // would re-deliver), so each call contributes one failure — the threshold
+    // is reached across calls, not within one.
     vi.mocked(fetch).mockResolvedValue(makeResponse(500, { message: "boom" }));
 
     const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 50 });
-    await expect(
-      withTimers(
-        client.sendMedia({
-          number: "5511999999999",
-          type: "ptt",
-          file: "https://cdn.example.com/audio.mp3",
-        })
-      )
-    ).rejects.toMatchObject({ status: 500 });
+    for (let i = 0; i < CIRCUIT_BREAKER_THRESHOLD; i++) {
+      await expect(
+        withTimers(
+          client.sendMedia({
+            number: "5511999999999",
+            type: "ptt",
+            file: "https://cdn.example.com/audio.mp3",
+          })
+        )
+      ).rejects.toMatchObject({ status: 500 });
+    }
 
     const mediaState = UazapiClient._circuitState().get("token:[present]:media");
     const defaultState = UazapiClient._circuitState().get(
@@ -814,5 +867,94 @@ describe("baseUrl trailing slash normalisation", () => {
 
     const [url] = vi.mocked(fetch).mock.calls[0];
     expect(url).toBe("https://uazapi.example.com/send/text");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mass-send campaign creation — non-idempotent, single attempt
+//
+// /sender/advanced ENQUEUES delivery work for the whole recipient list in one
+// request. Uazapi answers 500/timeout for work it actually accepted, so an
+// internal replay does not duplicate one message (the /send/* case, SC Beauty
+// "4× Bom dia", 2026-07-07) — it duplicates the ENTIRE campaign. It is also the
+// heaviest request we make, so it is the most likely to hit the timeout after
+// the provider already took the job.
+// ---------------------------------------------------------------------------
+
+const CAMPAIGN = {
+  messages: [
+    { number: "5511999999999", type: "text" as const, text: "Oi" },
+    { number: "5511888888888", type: "text" as const, text: "Oi" },
+  ],
+};
+
+describe("senderAdvanced — non-idempotent, single attempt", () => {
+  it("does not retry on timeout — a replay would duplicate the whole campaign", async () => {
+    const abortErr = Object.assign(new Error("aborted"), {
+      name: "AbortError",
+    });
+    vi.mocked(fetch).mockRejectedValue(abortErr);
+
+    const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 50 });
+    await expect(
+      withTimers(client.senderAdvanced(CAMPAIGN))
+    ).rejects.toMatchObject({ status: 504, provider_code: "timeout" });
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry on 5xx", async () => {
+    vi.mocked(fetch).mockResolvedValue(makeResponse(500, { error: "boom" }));
+
+    const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 100 });
+    await expect(
+      withTimers(client.senderAdvanced(CAMPAIGN))
+    ).rejects.toBeDefined();
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sender reads and state mutations stay retryable — replaying them converges
+// on the same state, and a failed pause is worse than a double pause.
+// ---------------------------------------------------------------------------
+
+describe("sender — reads and state mutations stay retryable", () => {
+  it("retries the campaign listing on 5xx", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(makeResponse(500, {}))
+      .mockResolvedValueOnce(makeResponse(200, []));
+
+    const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 100 });
+    await withTimers(client.senderList());
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries the per-message status read on 5xx, even though it is a POST", async () => {
+    // /sender/listmessages is a READ that happens to be a POST. It paginates a
+    // campaign's per-message statuses and feeds the failure-sync, so losing its
+    // retry would let one transient 5xx abort a whole sync mid-pagination.
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(makeResponse(500, {}))
+      .mockResolvedValueOnce(makeResponse(200, { messages: [], pagination: {} }));
+
+    const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 100 });
+    const result = await withTimers(client.senderListMessages("folder-1"));
+
+    expect(result).toEqual([]);
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries pause on 5xx", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(makeResponse(500, {}))
+      .mockResolvedValueOnce(makeResponse(200, {}));
+
+    const client = new UazapiClient({ ...BASE_CONFIG, timeoutMs: 100 });
+    await withTimers(client.senderPause("folder-1"));
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
   });
 });
