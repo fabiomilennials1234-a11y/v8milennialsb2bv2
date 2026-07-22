@@ -127,6 +127,45 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
       await assertPlanFeature(supabase, organization_id, "copilot");
     } catch (e) {
       if (e instanceof PlanFeatureDeniedError) {
+        // EXCEÇÃO auto-create: materializar o lead MESMO sem a feature `copilot`
+        // no plano. Auto-criar lead NÃO usa IA — sem esta exceção o plan gate
+        // barra justamente as orgs-alvo do recurso (planos sem copilot, ex.
+        // torque-2.0: Goletric Pinheiros / HGE Iluminação), que ligam a flag e
+        // nunca viam o lead cair. getOrCreateLead é idempotente (dedup por
+        // normalized_phone, trata corrida 23505) → seguro rodar antes do lock;
+        // só logamos/contabilizamos quando REALMENTE cria. Flag OFF (default de
+        // TODAS as orgs) = comportamento byte-a-byte anterior (plan_denied puro).
+        const { data: planFlagRow, error: planFlagError } = await supabase
+          .from("organizations")
+          .select("auto_create_lead_on_inbound")
+          .eq("id", organization_id)
+          .maybeSingle();
+        if (planFlagError) {
+          console.warn('[agent-message] Falha ao ler auto_create_lead_on_inbound no plan gate (fail-safe OFF):', { organization_id, error: planFlagError.message });
+        }
+        if (planFlagRow?.auto_create_lead_on_inbound === true) {
+          const normalizedPhone = normalizePhoneForSearch(from);
+          const result = await getOrCreateLead(supabase, {
+            organizationId: organization_id,
+            phone: from,
+            pushName: push_name,
+            origin: "whatsapp",
+          });
+          if (result?.created) {
+            console.log('[agent-message] Auto-created lead (plan denied, sem copilot):', { organization_id, phone: normalizedPhone });
+            await logRuntime({
+              organizationId: organization_id,
+              module: "copilot",
+              action: "auto_create_lead_on_inbound",
+              status: "success",
+              payloadSnapshot: { organization_id, phone: normalizedPhone, gate: "plan_denied" },
+            });
+          }
+          return new Response(
+            JSON.stringify({ skipped: true, reason: "lead_created_no_plan", organization_id }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
         console.log('[agent-message] Plan gate — org sem copilot:', { organization_id, plan: e.planName });
         return new Response(
           JSON.stringify({
