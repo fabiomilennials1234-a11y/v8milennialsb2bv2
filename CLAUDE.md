@@ -1,6 +1,6 @@
 # CLAUDE.md — Torque CRM
 
-SaaS B2B multi-tenant. Leads, pipelines, campanhas, automações IA. ~30 orgs ativas. ICP: fábricas/distribuidoras B2B. Domínio: `torquecrm.com.br`. Time: CTO (Gabriel) + 1 dev junior + 3 subagentes Claude Code.
+SaaS B2B multi-tenant. Leads, pipelines, campanhas, automações IA. ~30 orgs ativas. ICP: fábricas/distribuidoras B2B. Domínio: `torquecrm.com.br`. Time: CTO (Gabriel) + 1 dev junior + 7 subagentes Claude Code.
 
 ## Contexto JIT
 
@@ -16,19 +16,31 @@ Este doc é **mínimo**. Para detalhe, navegar via:
 - **AGENTS.md** raiz — spec agent-agnostic
 - **llms.txt** raiz — index curado pra LLMs
 
-## Subagentes (3)
+## Subagentes (7)
 
-Pipeline: `CTO → arquiteto → [design | engenheiro | ambos] → arquiteto (commit+push) → CTO`
+Entry point = **orchestrador** (coordenador). Ele classifica, roteia pelo ramo e segura o estado com loops de reprovação. Pipeline por ramo:
+
+```
+BUG      → diagnosticador → engenheiro → revisor → qa → arquiteto(versiona) → humano deploya
+FEATURE  → arquiteto(macro) → engenheiro (+design ‖) → revisor → qa → arquiteto(versiona) → humano
+REFACTOR → arquiteto(plano) → engenheiro → revisor → qa → arquiteto(versiona) → humano
+VISUAL   → design(spec) → engenheiro → revisor → qa → arquiteto(versiona) → humano
+TRIVIAL  → engenheiro → revisor → arquiteto(versiona)
+```
+
+Loops: revisor **REPROVA** ou qa **FALHA** → orchestrador re-despacha o engenheiro com feedback. Cap = **2 voltas** no mesmo ponto → escala CTO.
 
 | Subagente | Função | Skill |
 |-----------|--------|-------|
-| **arquiteto** | Entry/exit — sanity-check, arquitetura, roteamento, commit & push branch nova | `arquiteto` |
-| **design** | UI/UX completo — visual, interação, microcopy, motion (invoca `hm-design`) | `design` |
+| **orchestrador** | Entry + coordenador. grill-with-docs + grill-me, classifica, roteia, segura estado, aplica loops+cap | `orchestrador` |
+| **diagnosticador** | Causa-raiz de bug/regressão (reproduz→minimiza→localiza). Não implementa | `diagnosticador` |
+| **arquiteto** | Arquitetura macro (entrada) + versionamento/prep-PR (saída). Não roteia, não sobe prod | `arquiteto` |
 | **engenheiro** | Fullstack — TS/React/Deno + DB/RLS/RPC + tests + segurança + docs Obsidian/`.specs` + auto-QA | `engenheiro` |
+| **design** | UI/UX completo — visual, interação, microcopy, motion (invoca `hm-design`) | `design` |
+| **revisor** | Gate qualidade+segurança. Lógica + rubric segurança obrigatório em área frágil. APROVA/REPROVA | `revisor` |
+| **qa** | Teste end-to-end real (dirige o fluxo, observa). PASSA/FALHA (invoca `hm-qa`) | `qa` |
 
-**Roteamento**: Conversacional → arquiteto direto. Visual → design→engenheiro. Bug/refactor/schema/edge-fn → engenheiro. Feature UI completa → design+engenheiro paralelo. Decisão arquitetural → só arquiteto.
-
-**Regras**: arquiteto nunca implementa. engenheiro cobre Impl+DB+Tests+Security+Docs (pula o que não aplica). design invoca `hm-design`. Commit+push = responsabilidade do arquiteto. Tasks sensíveis (auth/PII/RLS/multi-tenant) = seção Segurança obrigatória. Default: dev. Prod: só com pedido explícito.
+**Regras**: orchestrador coordena, nunca implementa/versiona. arquiteto desenha macro + versiona, nunca roteia. diagnosticador/revisor/qa nunca implementam — apontam; correção é do engenheiro. engenheiro cobre Impl+DB+Tests+Security+Docs. Áreas frágeis (Copilot/WhatsApp/Uazapi/Permissões/RLS/multi-tenant/PII/payment) = rubric de segurança obrigatório e bloqueante no revisor. Commit+push = arquiteto; **prod = humano** (arquiteto só prepara PR). Default deploy: dev. Prod: só com pedido explícito.
 
 ## Agent skills
 
