@@ -21,6 +21,15 @@ export async function assertOrgFeature(
     p_org_id: organizationId,
     p_feature_key: feature,
   });
-  if (error) throw error;
+  // PostgrestError é um objeto plano, NÃO uma instância de Error. Repassá-lo com
+  // `throw error` faz todo `err instanceof Error ? err.message : "Erro interno"`
+  // rio abaixo cair no literal genérico — foi o que escondeu por 9 dias que a RPC
+  // org_has_feature não existia em prod (PGRST202). Normalizar aqui preserva a
+  // mensagem real no runtime_logs e no toast do usuário.
+  if (error) {
+    throw new Error(
+      `org_has_feature falhou (${error.code ?? "sem code"}): ${error.message}`,
+    );
+  }
   if (data !== true) throw new FeatureLockedError(feature);
 }
