@@ -18,6 +18,7 @@ fora dos triviais.**
 - `whatsapp-client.ts` — adapter provider-agnostic (Uazapi atual)
 - `whatsapp-providers/` — implementations por provider
 - `instance-write-guard.ts` — gate vínculo 1:1 user→instância
+- `whatsapp-device-name.ts` — rótulo de dispositivo por org enviado no init (#1167)
 
 ### Copilot
 - `copilot/` — submódulos do agent-engine refactor 2026-04-27
