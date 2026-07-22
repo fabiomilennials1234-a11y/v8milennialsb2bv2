@@ -89,23 +89,42 @@ export function assessReach(reading: ReachLimit | null | undefined): ReachVerdic
   return { exhausted: headroom <= 0, headroom, limit: reading };
 }
 
+/** A cached reading. Plain data — never holds a client or a request context. */
+export interface ReachCacheEntry {
+  value: ReachLimit | null;
+  expiresAt: number;
+}
+
 /**
  * Wraps a fetcher with a short per-instance TTL cache.
  *
- * Without it the gate becomes its own source of provider traffic — the problem
- * it exists to reduce. The cache lives on the returned source rather than at
- * module level so each caller (and each test) gets an isolated instance.
+ * The `store` is INJECTED rather than owned. Production passes a module-level
+ * Map so readings survive across requests inside a warm isolate — a cache the
+ * source owned would be rebuilt per request and never hit, which defeats the
+ * point. Tests pass a fresh Map and get full isolation.
  *
- * Failures are returned as `null` and are NOT cached: caching a blip would
- * extend one bad read into a whole blind window.
+ * Injecting the store is also what keeps the module-level state honest: what
+ * outlives a request is a map of plain readings, not a Supabase client or an
+ * instance row. `_shared/CLAUDE.md` forbids exactly the latter.
+ *
+ * The fetcher closes over whatever it needs. It receives the instance id only
+ * so the cache key and the fetch argument cannot drift apart.
+ *
+ * Failures return `null` and are NOT cached: caching a blip would extend one
+ * bad read into a whole blind window. A caller that knows a negative is
+ * durable (an unsupported provider) can seed the store itself.
  */
 export function cachedReachLimitSource(
   fetchLimits: (instanceId: string) => Promise<ReachLimit | null>,
-  opts: { ttlMs: number; now?: () => number },
+  opts: {
+    ttlMs: number;
+    store?: Map<string, ReachCacheEntry>;
+    now?: () => number;
+  },
 ): ReachLimitSource {
   const { ttlMs } = opts;
   const now = opts.now ?? (() => Date.now());
-  const cache = new Map<string, { value: ReachLimit | null; expiresAt: number }>();
+  const cache = opts.store ?? new Map<string, ReachCacheEntry>();
 
   return {
     async get(instanceId: string): Promise<ReachLimit | null> {
