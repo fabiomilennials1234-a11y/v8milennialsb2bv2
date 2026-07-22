@@ -8,6 +8,7 @@ import { useCanDo } from "@/modules/identity";
 import { normalizePhone } from "@/lib/normalizePhone";
 import { useIdentity } from "@/modules/identity";
 import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platform/lib/optimistic-lock";
+import { applyLeadListFilters } from "../lib/lead-list-filters";
 
 export type Lead = Tables<"leads">;
 export type LeadInsert = TablesInsert<"leads">;
@@ -20,12 +21,16 @@ export interface LeadsFilterParams {
   searchQuery?: string;
   filterOrigin?: string;
   filterRating?: string;
+  filterQualification?: string;
   filterUf?: string;
 }
 
 /**
- * Apply shared filters to a Supabase query builder.
+ * Apply shared filters (tenancy + list filters) to a Supabase query builder.
  * Used by both useLeads and useLeadsCount to ensure consistency.
+ *
+ * A semântica dos filtros visíveis vive em `applyLeadListFilters`
+ * (`../lib/lead-list-filters`) — fonte única compartilhada com a exportação.
  */
 function applyLeadsFilters(
   query: any,
@@ -35,28 +40,7 @@ function applyLeadsFilters(
   query = query
     .eq("organization_id", organizationId)
     .or("is_shadow.is.null,is_shadow.eq.false");
-
-  const search = filters.searchQuery?.trim();
-  if (search) {
-    const pattern = `%${search}%`;
-    query = query.or(`name.ilike.${pattern},company.ilike.${pattern},email.ilike.${pattern}`);
-  }
-
-  if (filters.filterOrigin && filters.filterOrigin !== "all") {
-    query = query.eq("origin", filters.filterOrigin);
-  }
-
-  if (filters.filterUf) {
-    query = query.eq("uf", filters.filterUf);
-  }
-
-  if (filters.filterRating && filters.filterRating !== "all") {
-    if (filters.filterRating === "high") query = query.gte("rating", 7);
-    else if (filters.filterRating === "medium") query = query.gte("rating", 4).lt("rating", 7);
-    else if (filters.filterRating === "low") query = query.lt("rating", 4);
-  }
-
-  return query;
+  return applyLeadListFilters(query, filters);
 }
 
 /**
@@ -65,13 +49,13 @@ function applyLeadsFilters(
  * Retorna até LEADS_PAGE_SIZE leads por página.
  */
 export function useLeads(params: LeadsFilterParams = {}) {
-  const { page = 0, searchQuery, filterOrigin, filterRating, filterUf } = params;
+  const { page = 0, searchQuery, filterOrigin, filterRating, filterQualification, filterUf } = params;
   const { organizationId, isReady } = useOrganization();
 
   useRealtimeSubscription("leads", ["leads"]);
 
   return useQuery({
-    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterRating, filterUf],
+    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf],
     queryFn: async () => {
       if (!organizationId) {
         console.warn("[useLeads] No organization_id available - returning empty array");
@@ -95,7 +79,7 @@ export function useLeads(params: LeadsFilterParams = {}) {
           )
         `);
 
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterUf });
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf });
 
       const { data, error } = await query
         .order("created_at", { ascending: false })
@@ -113,11 +97,11 @@ export function useLeads(params: LeadsFilterParams = {}) {
  * Hook para contar total de leads (para paginação) — COM OS MESMOS FILTROS
  */
 export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
-  const { searchQuery, filterOrigin, filterRating, filterUf } = filters;
+  const { searchQuery, filterOrigin, filterRating, filterQualification, filterUf } = filters;
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
-    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterRating, filterUf],
+    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterRating, filterQualification, filterUf],
     queryFn: async () => {
       if (!organizationId) return 0;
 
@@ -125,7 +109,7 @@ export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
         .from("leads")
         .select("*", { count: "exact", head: true });
 
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterUf });
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf });
 
       const { count, error } = await query;
       if (error) throw error;

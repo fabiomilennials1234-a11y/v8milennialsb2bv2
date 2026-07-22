@@ -57,6 +57,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLeads, useLeadsCount, useCreateLead, useUpdateLead, useDeleteLead, LEADS_PAGE_SIZE, type Lead } from "../hooks/useLeads";
 import { ExportLeadsModal } from "../components/leads/ExportLeadsModal";
 import { ImportHistoryPanel } from "../components/leads/ImportHistoryPanel";
+import { QUALIFICATION_TIER_CONFIG } from "../components/lead-detail/modal/qualification-config";
+import { QUALIFICATION_TIERS } from "../components/lead-detail/modal/types";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "../components/lead-detail";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { useCanDo } from "@/modules/identity";
@@ -174,12 +176,14 @@ type LeadsFilterState = {
   searchQuery: string;
   filterOrigin: string;
   filterRating: string;
+  filterQualification: string;
 };
 
 const DEFAULT_LEADS_FILTERS: LeadsFilterState = {
   searchQuery: "",
   filterOrigin: "all",
   filterRating: "all",
+  filterQualification: "all",
 };
 
 function LeadsInner() {
@@ -190,6 +194,7 @@ function LeadsInner() {
   );
 
   const { searchQuery, filterOrigin, filterRating } = filterState;
+  const filterQualification = filterState.filterQualification ?? "all";
 
   const setSearchQuery = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, searchQuery: v })),
@@ -201,6 +206,10 @@ function LeadsInner() {
   );
   const setFilterRating = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, filterRating: v })),
+    [setFilterState]
+  );
+  const setFilterQualification = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterQualification: v })),
     [setFilterState]
   );
 
@@ -232,9 +241,9 @@ function LeadsInner() {
   const [page, setPage] = useState(0);
   // Filtro por estado (?uf=) — deep-link vindo da aba Mapa do Comando
   const ufFilter = searchParams.get("uf")?.toUpperCase() || undefined;
-  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterUf: ufFilter };
+  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter };
   const { data: leads = [], isLoading } = useLeads(filterParams);
-  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterUf: ufFilter });
+  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter });
   const { data: teamMembers = [] } = useTeamMembers();
   const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
@@ -301,7 +310,7 @@ function LeadsInner() {
   // Reset para página 0 quando filtros mudam
   useEffect(() => {
     setPage(0);
-  }, [searchQuery, filterOrigin, filterRating]);
+  }, [searchQuery, filterOrigin, filterRating, filterQualification]);
 
   const stats = useMemo(() => {
     const total = totalLeads ?? leads.length;
@@ -535,6 +544,26 @@ function LeadsInner() {
             <SelectItem value="high">Alta (7-10)</SelectItem>
             <SelectItem value="medium">Média (4-6)</SelectItem>
             <SelectItem value="low">Baixa (0-3)</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filterQualification} onValueChange={setFilterQualification}>
+          <SelectTrigger className="w-[170px]">
+            <SelectValue placeholder="Qualificação" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas Qualificações</SelectItem>
+            {QUALIFICATION_TIERS.map((tier) => {
+              const cfg = QUALIFICATION_TIER_CONFIG[tier];
+              const Icon = cfg.icon;
+              return (
+                <SelectItem key={tier} value={tier}>
+                  <span className="flex items-center gap-2">
+                    <Icon className={cn("w-3.5 h-3.5", cfg.colorClass)} />
+                    {cfg.label}
+                  </span>
+                </SelectItem>
+              );
+            })}
           </SelectContent>
         </Select>
         <SavedViewsDropdown
@@ -782,7 +811,11 @@ function LeadsInner() {
         )}
       </div>
 
-      <ExportLeadsModal open={isExportModalOpen} onOpenChange={setIsExportModalOpen} />
+      <ExportLeadsModal
+        open={isExportModalOpen}
+        onOpenChange={setIsExportModalOpen}
+        listFilters={{ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter }}
+      />
 
       <Dialog open={isImportHistoryOpen} onOpenChange={setIsImportHistoryOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">

@@ -3,9 +3,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useExportLeads } from "../../hooks/useExportLeads";
+import { useExportLeads, type ExportListFilters } from "../../hooks/useExportLeads";
 import { toast } from "sonner";
-import { FileDown, Loader2, FileSpreadsheet, FileText } from "lucide-react";
+import { FileDown, Loader2, FileSpreadsheet, FileText, Filter } from "lucide-react";
 import { useCanDo } from "@/modules/identity";
 const EXPORT_LIMITS = [
   { value: 100, label: "Os 100 mais recentes" },
@@ -20,13 +20,28 @@ type ExportFormat = "csv" | "xlsx";
 
 interface ExportLeadsContentProps {
   onDone?: () => void;
+  /** Filtros ativos da lista de leads — quando presentes, a exportação os aplica. */
+  listFilters?: ExportListFilters;
 }
 
-export function ExportLeadsContent({ onDone }: ExportLeadsContentProps) {
+/** Há algum filtro de lista efetivamente ativo (≠ do estado padrão)? */
+function hasActiveListFilters(f?: ExportListFilters): boolean {
+  if (!f) return false;
+  return (
+    (f.searchQuery?.trim()?.length ?? 0) > 0 ||
+    (!!f.filterOrigin && f.filterOrigin !== "all") ||
+    (!!f.filterRating && f.filterRating !== "all") ||
+    (!!f.filterQualification && f.filterQualification !== "all") ||
+    !!f.filterUf
+  );
+}
+
+export function ExportLeadsContent({ onDone, listFilters }: ExportLeadsContentProps) {
   const [format, setFormat] = useState<ExportFormat>("xlsx");
   const [limit, setLimit] = useState<number>(5000);
   const { exportLeads, isExporting } = useExportLeads();
   const { allowed: canExport } = useCanDo("export_leads");
+  const filtersActive = hasActiveListFilters(listFilters);
 
   const handleExport = async () => {
     if (!canExport) {
@@ -37,6 +52,7 @@ export function ExportLeadsContent({ onDone }: ExportLeadsContentProps) {
       const { count } = await exportLeads({
         format,
         limit: limit === 50000 ? 50_000 : limit,
+        listFilters,
       });
       toast.success(`${count} leads exportados com sucesso.`);
       onDone?.();
@@ -88,6 +104,12 @@ export function ExportLeadsContent({ onDone }: ExportLeadsContentProps) {
           ))}
         </RadioGroup>
       </div>
+      {filtersActive && (
+        <div className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+          <Filter className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+          <span>Os filtros ativos da lista serão aplicados à exportação.</span>
+        </div>
+      )}
       <p className="text-xs text-muted-foreground">
         O arquivo inclui todos os dados: lead (nome, empresa, contato, prioridade, origem, UTMs, datas),
         etapa e datas de cada pipe (WhatsApp, Confirmação, Propostas), valores, responsáveis e notas.
@@ -117,9 +139,11 @@ export function ExportLeadsContent({ onDone }: ExportLeadsContentProps) {
 interface ExportLeadsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Filtros ativos da lista de leads — aplicados à exportação. */
+  listFilters?: ExportListFilters;
 }
 
-export function ExportLeadsModal({ open, onOpenChange }: ExportLeadsModalProps) {
+export function ExportLeadsModal({ open, onOpenChange, listFilters }: ExportLeadsModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -129,7 +153,7 @@ export function ExportLeadsModal({ open, onOpenChange }: ExportLeadsModalProps) 
             Exportar leads
           </DialogTitle>
         </DialogHeader>
-        <ExportLeadsContent onDone={() => onOpenChange(false)} />
+        <ExportLeadsContent onDone={() => onOpenChange(false)} listFilters={listFilters} />
       </DialogContent>
     </Dialog>
   );
