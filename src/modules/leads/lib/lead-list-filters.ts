@@ -16,6 +16,8 @@ export interface LeadListFilterValues {
   searchQuery?: string;
   filterOrigin?: string;
   filterRating?: string;
+  /** Tier de qualificação, ou os sentinels `"all"` (sem filtro) e `"none"`
+   * (leads sem tier — `qualification_tier IS NULL`, ≠ do tier "desqualificado"). */
   filterQualification?: string;
   filterUf?: string;
 }
@@ -54,7 +56,13 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
   }
 
   if (filters.filterQualification && filters.filterQualification !== "all") {
-    q = q.eq("qualification_tier", filters.filterQualification);
+    // Sentinel "none" = leads sem tier (qualification_tier IS NULL). Distinto do
+    // tier real "desqualificado".
+    if (filters.filterQualification === "none") {
+      q = q.is("qualification_tier", null);
+    } else {
+      q = q.eq("qualification_tier", filters.filterQualification);
+    }
   }
 
   return q as Q;

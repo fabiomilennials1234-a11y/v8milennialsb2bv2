@@ -20,6 +20,7 @@ import {
   ChevronDown,
   FileDown,
   History,
+  CircleDashed,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -564,6 +565,12 @@ function LeadsInner() {
                 </SelectItem>
               );
             })}
+            <SelectItem value="none">
+              <span className="flex items-center gap-2">
+                <CircleDashed className="w-3.5 h-3.5 text-muted-foreground" />
+                Sem qualificação
+              </span>
+            </SelectItem>
           </SelectContent>
         </Select>
         <SavedViewsDropdown
