@@ -90,6 +90,33 @@ const MAX_RETRIES = 3;
 const CIRCUIT_BREAKER_THRESHOLD = 3;
 const CIRCUIT_BREAKER_COOLDOWN_MS = 120_000;
 
+/**
+ * Path prefixes whose writes ENQUEUE message delivery. Treated as replay-unsafe
+ * by default so a delivery endpoint added later inherits the safe behaviour.
+ */
+const DELIVERY_PATH_PREFIXES = ["/send/", "/sender/"] as const;
+
+/**
+ * The exceptions inside {@link DELIVERY_PATH_PREFIXES}: non-GET requests that do
+ * NOT enqueue delivery, so replaying them is safe.
+ *
+ * - `/sender/edit` sets state (pause/resume/stop) on an existing campaign.
+ *   Repeating it converges on the same result, and a failed pause is worse than
+ *   a double pause.
+ * - `/sender/listmessages` is a READ that happens to be a POST. It paginates a
+ *   campaign's per-message statuses and is the failure-sync source; dropping its
+ *   retry would let one transient 5xx abort a whole sync mid-pagination.
+ *
+ * Membership is by path because the delivery families are deny-by-default: an
+ * endpoint added later is capped at one attempt until someone deliberately
+ * lists it here. That direction is intentional — an unlisted read loses retry
+ * (degraded resilience), whereas an unlisted send would re-deliver to leads.
+ */
+const REPLAY_SAFE_DELIVERY_PATHS: readonly string[] = [
+  "/sender/edit",
+  "/sender/listmessages",
+];
+
 // ---------------------------------------------------------------------------
 // In-memory circuit breaker state (per token key, process-scoped)
 // ---------------------------------------------------------------------------
@@ -589,13 +616,9 @@ export class UazapiClient {
     const url = `${this.baseUrl}${path}`;
     const timeout = opts?.timeoutMs ?? this.timeoutMs;
 
-    // Message sends (`/send/*`) are NOT idempotent: Uazapi answers 500/timeout for
-    // some sends it actually delivered, so an internal retry re-delivers the
-    // message (SC Beauty "4× Bom dia" incident, 2026-07-07). Cap those at a single
-    // attempt — ambiguous failures surface once and the caller decides (it treats
-    // them as terminal). Reads/status/other writes keep the 3-attempt backoff.
-    const nonIdempotentSend = path.startsWith("/send/");
-    const maxAttempts = nonIdempotentSend ? 1 : MAX_RETRIES;
+    const maxAttempts = UazapiClient.isReplaySafe(method, path)
+      ? MAX_RETRIES
+      : 1;
 
     let lastError: unknown;
 
@@ -752,6 +775,29 @@ export class UazapiClient {
   private static circuitGroup(path: string): string {
     if (path.startsWith("/send/media")) return "media";
     return "default";
+  }
+
+  /**
+   * Whether a failed request may be replayed by the internal retry loop.
+   *
+   * Uazapi answers 500/timeout for delivery work it has actually accepted, so
+   * replaying that work re-delivers it. For `/send/*` the cost is one duplicate
+   * message (SC Beauty "4× Bom dia" incident, 2026-07-07). For
+   * `/sender/advanced` it is the ENTIRE campaign — the whole recipient list
+   * goes out twice — and it is also our heaviest request, so it is the most
+   * likely to time out after the provider already took the job.
+   *
+   * Ambiguous delivery failures therefore surface once and the caller decides;
+   * it treats them as terminal.
+   *
+   * GETs are always safe. Within the delivery families the default is unsafe,
+   * with {@link REPLAY_SAFE_DELIVERY_PATHS} naming the exceptions.
+   */
+  private static isReplaySafe(method: string, path: string): boolean {
+    if (method === "GET") return true;
+    const isDelivery = DELIVERY_PATH_PREFIXES.some((p) => path.startsWith(p));
+    if (!isDelivery) return true;
+    return REPLAY_SAFE_DELIVERY_PATHS.includes(path);
   }
 
   private async backoff(attempt: number): Promise<void> {
