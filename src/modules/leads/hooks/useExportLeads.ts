@@ -2,6 +2,7 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";
+import { applyLeadListFilters, type LeadListFilterValues } from "../lib/lead-list-filters";
 const BATCH_SIZE = 500;
 
 /** Cabeçalhos completos: lead + pipe Qualificação + pipe Confirmação + pipe Propostas */
@@ -73,6 +74,10 @@ export interface ExportStageFilter {
   customPipelineId?: string;
 }
 
+/** Filtros ativos da lista de leads (busca, origem, rating, qualificação, UF).
+ * Mesma semântica de `applyLeadListFilters` — reaproveita a fonte única. */
+export type ExportListFilters = LeadListFilterValues;
+
 export interface ExportLeadsOptions {
   format: ExportFormat;
   /** Limite de leads (os mais recentes). Se não informado, exporta até 10.000. */
@@ -81,6 +86,9 @@ export interface ExportLeadsOptions {
   stageFilter?: ExportStageFilter;
   /** Título legível da etapa — usado apenas para compor o nome do arquivo. */
   stageTitle?: string;
+  /** Filtros ativos da lista — aplicados à exportação para espelhar o que o
+   * usuário vê na tela (busca, origem, rating, qualificação, UF). */
+  listFilters?: ExportListFilters;
 }
 
 export interface UseExportLeadsResult {
@@ -204,6 +212,12 @@ export function useExportLeads(): UseExportLeadsResult {
 
       if (stageLeadIds) {
         leadsQuery = leadsQuery.in("id", stageLeadIds);
+      }
+
+      // Espelha os filtros ativos da lista (busca, origem, rating, qualificação,
+      // UF) — mesma semântica da tela via helper compartilhado.
+      if (options.listFilters) {
+        leadsQuery = applyLeadListFilters(leadsQuery, options.listFilters);
       }
 
       const { data: leads, error: leadsError } = await leadsQuery
