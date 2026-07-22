@@ -49,10 +49,11 @@ import {
   ATTACHMENTS_PER_TICKET,
   AttachmentGallery,
   AttachmentPicker,
-  attachmentCapacity,
+  draftAttachmentCapacity,
+  groupByComment,
+  uploadAll,
   useTicketAttachments,
   useUploadTicketAttachment,
-  type TicketAttachment,
 } from "@/modules/platform";
 import { useTicketChannel } from "@/modules/platform/hooks/useTicketChannel";
 import { useMasterAuth } from "../hooks/useMasterAuth";
@@ -580,19 +581,11 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
       setBody("");
       setFiles([]);
 
-      const falhas: string[] = [];
-      for (const file of anexos) {
-        try {
-          await upload.mutateAsync({
-            ticketId: ticket.id,
-            file,
-            commentId: comment.id,
-            internal: interno,
-          });
-        } catch {
-          falhas.push(file.name);
-        }
-      }
+      const falhas = await uploadAll(upload.mutateAsync, anexos, {
+        ticketId: ticket.id,
+        commentId: comment.id,
+        internal: interno,
+      });
       if (falhas.length > 0) {
         toast.error(`Não deu para anexar: ${falhas.join(", ")}.`);
       }
@@ -601,14 +594,8 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
     }
   }
 
-  const porComentario = new Map<string | null, TicketAttachment[]>();
-  for (const a of attachments) {
-    const atual = porComentario.get(a.commentId) ?? [];
-    atual.push(a);
-    porComentario.set(a.commentId, atual);
-  }
-
-  const capacidade = attachmentCapacity(attachments, null);
+  const porComentario = groupByComment(attachments);
+  const capacidade = draftAttachmentCapacity(attachments, files.length);
 
   return (
     <div className="grid gap-6 px-6 py-5 lg:grid-cols-[1fr_320px]">
@@ -618,7 +605,11 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
             <p className="whitespace-pre-wrap text-sm leading-relaxed">{ticket.description}</p>
             {/* O que o cliente anexou ao abrir: pertence ao Chamado, não a um
                 turno da conversa. */}
-            <AttachmentGallery attachments={porComentario.get(null) ?? []} />
+            <AttachmentGallery
+              attachments={porComentario.get(null) ?? []}
+              canDelete
+              ticketId={ticket.id}
+            />
           </div>
         )}
 
@@ -639,7 +630,12 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
                 </p>
               )}
               <p className="whitespace-pre-wrap leading-relaxed">{c.body}</p>
-              <AttachmentGallery attachments={porComentario.get(c.id) ?? []} className="mt-2" />
+              <AttachmentGallery
+                attachments={porComentario.get(c.id) ?? []}
+                className="mt-2"
+                canDelete
+                ticketId={ticket.id}
+              />
               <p className="mt-1.5 text-[11px] text-muted-foreground">
                 {formatDistanceToNow(new Date(c.created_at), { addSuffix: true, locale: ptBR })}
               </p>
@@ -662,7 +658,7 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
             files={files}
             onChange={setFiles}
             disabled={createComment.isPending || upload.isPending || !capacidade.ok}
-            remaining={ATTACHMENTS_PER_TICKET - attachments.length}
+            remaining={ATTACHMENTS_PER_TICKET - attachments.length - files.length}
             label={isInternal ? "Anexar à nota" : "Anexar"}
           />
           {isInternal && files.length > 0 && (

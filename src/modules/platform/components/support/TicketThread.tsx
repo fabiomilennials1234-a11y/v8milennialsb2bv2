@@ -23,12 +23,16 @@ import {
   type TicketMessageAuthor,
 } from "@/modules/platform/lib/ticket-author";
 import {
-  attachmentCapacity,
+  uploadAll,
   useTicketAttachments,
   useUploadTicketAttachment,
   type TicketAttachment,
 } from "@/modules/platform/hooks/useTicketAttachments";
-import { ATTACHMENTS_PER_TICKET } from "@/modules/platform/lib/support-attachments";
+import {
+  ATTACHMENTS_PER_TICKET,
+  draftAttachmentCapacity,
+  groupByComment,
+} from "@/modules/platform/lib/support-attachments";
 import { StatusDot } from "./StatusDot";
 import { AttachmentGallery } from "./AttachmentGallery";
 import { AttachmentPicker } from "./AttachmentPicker";
@@ -76,14 +80,10 @@ export function TicketThread({ ticketId, onBack }: Props) {
 
       // Depois do comentário, porque a linha do anexo referencia o `comment_id`.
       // Um anexo que falhe não desfaz a mensagem — ela é o que importava.
-      const falhas: string[] = [];
-      for (const file of anexos) {
-        try {
-          await upload.mutateAsync({ ticketId, file, commentId: comment.id });
-        } catch {
-          falhas.push(file.name);
-        }
-      }
+      const falhas = await uploadAll(upload.mutateAsync, anexos, {
+        ticketId,
+        commentId: comment.id,
+      });
       if (falhas.length > 0) {
         toast.error(`Não deu para anexar: ${falhas.join(", ")}. Tente enviar de novo.`);
       }
@@ -92,15 +92,9 @@ export function TicketThread({ ticketId, onBack }: Props) {
     }
   }
 
-  const porComentario = new Map<string | null, TicketAttachment[]>();
-  for (const a of attachments) {
-    const atual = porComentario.get(a.commentId) ?? [];
-    atual.push(a);
-    porComentario.set(a.commentId, atual);
-  }
-
-  const capacidade = attachmentCapacity(attachments, null);
-  const restam = ATTACHMENTS_PER_TICKET - attachments.length;
+  const porComentario = groupByComment(attachments);
+  const capacidade = draftAttachmentCapacity(attachments, files.length);
+  const restam = ATTACHMENTS_PER_TICKET - attachments.length - files.length;
 
   if (isLoading || !ticket) {
     return (

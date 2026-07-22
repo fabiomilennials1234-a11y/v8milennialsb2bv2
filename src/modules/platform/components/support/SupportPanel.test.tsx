@@ -28,7 +28,11 @@ vi.mock("@/modules/platform/hooks/useSupportTickets", () => ({
 vi.mock("@/modules/platform/hooks/useTicketAttachments", () => ({
   useTicketAttachments: () => ({ data: [] }),
   useUploadTicketAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  attachmentCapacity: () => ({ ok: true }),
+  useDeleteTicketAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  draftAttachmentCapacity: () => ({ ok: true }),
+  groupByComment: () => new Map(),
+  uploadAll: async () => [],
+  ATTACHMENTS_QUERY_KEY: "support-ticket-attachments",
 }));
 
 const toastError = vi.fn();

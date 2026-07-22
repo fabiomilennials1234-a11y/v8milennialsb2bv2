@@ -20,10 +20,11 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { ATTACHMENTS_QUERY_KEY } from "./useTicketAttachments";
 import type { SupportTicketComment } from "./useSupportTickets";
 
 const COMMENTS_KEY = "support-ticket-comments";
-const ATTACHMENTS_KEY = "support-ticket-attachments";
+const ATTACHMENTS_KEY = ATTACHMENTS_QUERY_KEY;
 
 export function useTicketChannel(ticketId: string | undefined | null) {
   const queryClient = useQueryClient();

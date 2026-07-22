@@ -15,8 +15,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  ATTACHMENTS_PER_COMMENT,
-  ATTACHMENTS_PER_TICKET,
   SIGNED_URL_TTL_SECONDS,
   SUPPORT_ATTACHMENTS_BUCKET,
   attachmentPath,
@@ -24,7 +22,9 @@ import {
   validateAttachment,
 } from "@/modules/platform/lib/support-attachments";
 
-const KEY = "support-ticket-attachments";
+/** Exportada: `useTicketChannel` invalida esta mesma chave. */
+export const ATTACHMENTS_QUERY_KEY = "support-ticket-attachments";
+const KEY = ATTACHMENTS_QUERY_KEY;
 
 /**
  * A tabela é nova; `types.ts` só a conhece depois que a migration for aplicada e
@@ -41,6 +41,7 @@ interface AttachmentRow {
   is_internal: boolean;
   author_user_id: string | null;
   created_at: string;
+  purged_at: string | null;
 }
 
 export interface TicketAttachment {
@@ -56,7 +57,15 @@ export interface TicketAttachment {
   createdAt: string;
   /** Imagem tem miniatura; o resto é card e baixa. */
   previewable: boolean;
-  /** Assinada, morre em 5 minutos. Se vazar depois disso, é link morto. */
+  /**
+   * Quando a retenção levou o arquivo. A linha fica: a thread continua dizendo
+   * que houve uma evidência ali e que ela expirou (ADR-0022, 9).
+   */
+  purgedAt: string | null;
+  /**
+   * Assinada, morre em 5 minutos. Se vazar depois disso, é link morto. Vazia
+   * quando o arquivo já foi removido pela retenção.
+   */
   signedUrl: string;
 }
 
@@ -76,12 +85,18 @@ export function useTicketAttachments(ticketId: string | null) {
       const rows = (data ?? []) as unknown as AttachmentRow[];
       if (rows.length === 0) return [];
 
-      const { data: signed, error: signError } = await supabase.storage
-        .from(SUPPORT_ATTACHMENTS_BUCKET)
-        .createSignedUrls(
-          rows.map((r) => r.path),
-          SIGNED_URL_TTL_SECONDS,
-        );
+      // Assinar o que a retenção já levou seria pedir URL para arquivo que não
+      // existe mais.
+      const vivos = rows.filter((r) => !r.purged_at);
+
+      const { data: signed, error: signError } = vivos.length
+        ? await supabase.storage
+            .from(SUPPORT_ATTACHMENTS_BUCKET)
+            .createSignedUrls(
+              vivos.map((r) => r.path),
+              SIGNED_URL_TTL_SECONDS,
+            )
+        : { data: [], error: null };
 
       if (signError) throw signError;
 
@@ -91,9 +106,9 @@ export function useTicketAttachments(ticketId: string | null) {
 
       return rows.flatMap((row) => {
         const url = urlByPath.get(row.path);
-        // Sem URL, não há o que mostrar: a policy recusou, ou o arquivo já saiu
-        // pela retenção enquanto a linha ainda não.
-        if (!url) return [];
+        // Sem URL e sem marca de retenção, a policy recusou: não há o que
+        // mostrar. Com a marca, a linha vira lápide e continua na thread.
+        if (!url && !row.purged_at) return [];
 
         const previewable = isPreviewable(row.mime);
 
@@ -109,10 +124,15 @@ export function useTicketAttachments(ticketId: string | null) {
             authorUserId: row.author_user_id,
             createdAt: row.created_at,
             previewable,
+            purgedAt: row.purged_at,
             // Não-imagem baixa, nunca abre inline: um PDF renderizado no visor
             // executa o JavaScript que carrega. E `download` devolve ao arquivo
             // o nome real, que o caminho não podia carregar.
-            signedUrl: previewable ? url : `${url}&download=${encodeURIComponent(row.filename)}`,
+            signedUrl: !url
+              ? ""
+              : previewable
+                ? url
+                : `${url}&download=${encodeURIComponent(row.filename)}`,
           },
         ];
       });
@@ -183,22 +203,56 @@ export function useUploadTicketAttachment() {
 }
 
 /**
- * Os tetos conferidos antes de subir.
+ * Remoção de um Anexo — só master, como o Chamado.
  *
- * O trigger é quem garante — isto evita gastar 25 MB de upload para o banco
- * recusar depois, deixando um objeto órfão que o cliente não tem permissão de
- * remover.
+ * A linha vai **antes** do objeto. Sem transação entre Postgres e Storage, uma
+ * das duas pode sobrar: falha depois da linha deixa arquivo órfão que ninguém
+ * lista (custa bytes, invisível); a ordem inversa deixaria linha apontando para
+ * nada, que o master vê como anexo quebrado. Quando o resíduo é inevitável, ele
+ * fica do lado que ninguém lê (ADR-0022, 8).
  */
-export function attachmentCapacity(
-  existing: TicketAttachment[],
-  commentId: string | null,
-): { ok: true } | { ok: false; reason: string } {
-  if (existing.length >= ATTACHMENTS_PER_TICKET) {
-    return { ok: false, reason: `Este chamado já tem ${ATTACHMENTS_PER_TICKET} anexos.` };
+export function useDeleteTicketAttachment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, path }: { id: string; path: string; ticketId: string }) => {
+      const { error } = await supabase.from(TABLE as never).delete().eq("id", id);
+      if (error) throw error;
+
+      const { error: objectError } = await supabase.storage
+        .from(SUPPORT_ATTACHMENTS_BUCKET)
+        .remove([path]);
+
+      // A linha já saiu: o anexo sumiu para quem olha. Um arquivo órfão não
+      // justifica dizer ao master que a remoção falhou.
+      if (objectError) {
+        console.warn("[support] anexo removido da tabela, objeto ficou no bucket", objectError);
+      }
+    },
+    onSuccess: (_r, { ticketId }) => {
+      queryClient.invalidateQueries({ queryKey: [KEY, ticketId] });
+    },
+  });
+}
+
+/**
+ * Sobe a fila de arquivos de uma mensagem e devolve os que falharam.
+ *
+ * Um anexo que não sobe **não** desfaz a mensagem nem o Chamado: eles são o
+ * pedido de ajuda, o arquivo apenas o ilustrava (ADR-0022, 2).
+ */
+export async function uploadAll(
+  upload: (input: UploadAttachmentInput) => Promise<unknown>,
+  files: File[],
+  base: Omit<UploadAttachmentInput, "file">,
+): Promise<string[]> {
+  const falhas: string[] = [];
+  for (const file of files) {
+    try {
+      await upload({ ...base, file });
+    } catch {
+      falhas.push(file.name);
+    }
   }
-  const noComentario = existing.filter((a) => a.commentId === commentId).length;
-  if (noComentario >= ATTACHMENTS_PER_COMMENT) {
-    return { ok: false, reason: `São no máximo ${ATTACHMENTS_PER_COMMENT} anexos por mensagem.` };
-  }
-  return { ok: true };
+  return falhas;
 }
