@@ -51,8 +51,10 @@ Se tocou em paths sensíveis, descrever em uma linha o que mudou e como foi vali
 
 - [ ] Sem mudanças de schema
 - [ ] Migration nova — nome do arquivo: `supabase/migrations/...`
-- [ ] Aplicada em DEV (`bcfadphgsibjzivtbjvc`): sim / não
+- [ ] Validada em branch efêmera (dev foi aposentado em 2026-07-22): sim / não / **sem ambiente**
 - [ ] Aplicada em PROD (`jsjsmuncfkbsbzqzqhfq`): **NÃO sem autorização explícita do CTO**
+- [ ] Se aplicada em prod: versão gravada no ledger confere com o nome do arquivo? Se não, **declare o drift**
+- [ ] Se não houve ambiente de validação: **declare o desvio no corpo do PR**, com o que substituiu o QA
 
 ## Edge functions
 

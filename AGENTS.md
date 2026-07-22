@@ -166,7 +166,9 @@ Push em branch nova sempre. Nunca direto em `main`/`develop`.
 - Frontend: push `main` → Docker → EasyPanel (VPS Hostinger)
 - Edge functions: `supabase functions deploy <fn> --project-ref <ref>`
 - Migrations: `supabase db push --linked --project-ref <ref>`
-- Project refs: prod `jsjsmuncfkbsbzqzqhfq` · dev `bcfadphgsibjzivtbjvc`
+- Project ref: prod `jsjsmuncfkbsbzqzqhfq`. Dev **aposentado** em 2026-07-22 —
+  validação em branch efêmera a partir de prod, ver `CLAUDE.md` § Ambientes
+  (bloqueio ativo: depende do baseline das migrations)
 
 ## Vault
 

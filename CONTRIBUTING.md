@@ -210,10 +210,17 @@ Marcar checkbox de segurança no template e descrever em uma linha:
 
 Default = **dev**. Deploy em produção exige **pedido explícito do CTO na sessão**.
 
-- Edge functions DEV: `supabase functions deploy <fn> --project-ref bcfadphgsibjzivtbjvc`
 - Edge functions PROD: **NÃO sem autorização**.
-- Migrations DEV: `supabase db push --linked --project-ref bcfadphgsibjzivtbjvc`
 - Migrations PROD: **NÃO sem autorização**.
+
+⚠️ O projeto dev foi **aposentado** em 2026-07-22 (estava 404 migrations atrás).
+O alvo de validação passou a ser **branch efêmera do Supabase a partir de prod** —
+descartável, sempre encerrada após o teste. Ver `CLAUDE.md` § Ambientes.
+
+**Bloqueio ativo:** a branch replaya as migrations do repo do zero e o repo não
+replaya (840 migrations, morre em jan/2026). Enquanto o baseline não for feito,
+**não existe ambiente de validação** e mudança de risco vai pra prod com rollback
+engatilhado e validação imediata.
 
 ---
 

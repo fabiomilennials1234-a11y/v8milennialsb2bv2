@@ -50,7 +50,7 @@ owner: gabriel
 | `supabase gen types typescript --project-id <ref>` | Regen types |
 | `supabase functions logs <fn> --project-ref <ref>` | Logs realtime |
 
-Project refs: prod `jsjsmuncfkbsbzqzqhfq` | dev `bcfadphgsibjzivtbjvc`.
+Project ref: prod `jsjsmuncfkbsbzqzqhfq`. Dev **aposentado** em 2026-07-22 — validação em branch efêmera a partir de prod (bloqueada até o baseline das migrations). Ver `CLAUDE.md` raiz § Ambientes.
 Org Milennials: `6030520a-2ca7-477d-be89-55758e2cd808`.
 
 ## Restrições críticas

@@ -40,21 +40,20 @@ curl -X POST http://127.0.0.1:54321/functions/v1/<nome> \
   -d '{"...": "..."}'
 ```
 
-### 3. Deploy DEV
+### 3. Deploy DEV — ⚠️ não existe mais
 
-```bash
-supabase functions deploy <nome> --project-ref bcfadphgsibjzivtbjvc
-```
+O projeto dev foi **aposentado** em 2026-07-22 (estava 404 migrations atrás). Não
+há mais um alvo de deploy intermediário: edge function vai direto pra prod, e prod
+é botão do CTO.
 
-Output esperado:
-```
-Deployed Function <nome> on project bcfadphgsibjzivtbjvc.
-```
+⚠️ **Cuidado com o drift de bundle.** O deploy manual empacota `_shared` do working
+tree — deployar de uma branch atrasada **reverte** o que está na `main` em prod.
+Confirme que está em `origin/main` atualizada antes de deployar.
 
 ### 4. Verificar logs
 
 ```bash
-supabase functions logs <nome> --project-ref bcfadphgsibjzivtbjvc
+supabase functions logs <nome> --project-ref jsjsmuncfkbsbzqzqhfq
 ```
 
 ## Passos — Deploy em PROD

@@ -72,8 +72,28 @@ npm run lint             # ESLint
 ```
 
 Deploy edge functions: `supabase functions deploy <fn> --project-ref <ref>`
-- Prod: `jsjsmuncfkbsbzqzqhfq` | Dev: `bcfadphgsibjzivtbjvc`
+- Prod: `jsjsmuncfkbsbzqzqhfq`
 - Frontend: push main → builds Docker image em ghcr.io (`:latest` + `:sha-<short>`) → **EasyPanel (VPS Hostinger) puxa `:latest` automaticamente**. Merge em main = deploy de frontend em prod. Edge functions + migrations continuam manuais.
+
+## Ambientes — servidor dev APOSENTADO (decisão CTO 2026-07-22)
+
+O projeto dev `bcfadphgsibjzivtbjvc` está **aposentado**. Não use, não deploye, não referencie. Estava 404 migrations atrás de prod e o token de acesso nem o enxerga.
+
+**Padrão novo: branch efêmera do Supabase a partir de prod.**
+
+```bash
+# criar (via MCP create_branch ou CLI) → testar → SEMPRE encerrar
+```
+
+Regras, sem exceção:
+1. **Branch é descartável.** Criou pra testar, terminou o teste, **encerra na hora**. Custo é **$0.01344/hora** (~$9,70/mês se esquecer de pé). Branch órfã = cobrança à toa.
+2. **Nunca deixe branch viva entre sessões.** Se precisar de novo amanhã, cria de novo — é barato criar, caro esquecer.
+3. **Sempre confira `list_branches` antes de criar** — pode já ter uma esquecida.
+4. Prod continua sendo **botão do humano**. Branch é pra validar antes, não pra virar ambiente permanente.
+
+⚠️ **BLOQUEIO ATIVO — leia antes de tentar.** Branch replaya as migrations do repo do zero, e **o repo não replaya**: são 840 migrations e o replay morre em jan/2026. A única branch existente (`main`) está em `MIGRATIONS_FAILED` desde 2026-03-11 por isso. Criar branch hoje falha do mesmo jeito.
+
+**Pré-requisito pra destravar (uma vez só):** baseline do histórico — `supabase db dump` do schema de prod → vira migration `0001` → as 840 antigas movidas pra `supabase/migrations/archive/`. Depois disso branch sobe em segundos e espelha prod. Enquanto o baseline não for feito, **não existe ambiente de validação** e mudança de risco vai pra prod com rollback engatilhado e validação imediata.
 
 Org Milennials: `6030520a-2ca7-477d-be89-55758e2cd808`
 
