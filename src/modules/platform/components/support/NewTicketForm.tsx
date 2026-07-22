@@ -20,6 +20,8 @@ import {
   type TicketImpacto,
   type TicketTipo,
 } from "@/modules/platform/lib/support-ticket-draft";
+import { useUploadTicketAttachment } from "@/modules/platform/hooks/useTicketAttachments";
+import { AttachmentPicker } from "./AttachmentPicker";
 
 const TIPO_ICONS: Record<TicketTipo, typeof AlertTriangle> = {
   bug: AlertTriangle,
@@ -55,8 +57,12 @@ export function NewTicketForm({
 }: Props) {
   const [draft, setDraft] = useState<TicketDraft>(emptyTicketDraft());
   const [submitted, setSubmitted] = useState(false);
+  // Os arquivos esperam em memória: o caminho no bucket começa pelo id do
+  // Chamado, que só existe depois do INSERT (ADR-0022, 2).
+  const [files, setFiles] = useState<File[]>([]);
   const createTicket = useCreateSupportTicket();
   const captureSupportContext = useCaptureSupportContext();
+  const upload = useUploadTicketAttachment();
 
   // Envio padrão (org do contexto). Só usado quando nenhum `submit` é injetado.
   const submitFn =
@@ -69,7 +75,7 @@ export function NewTicketForm({
       return { id: ticket.id };
     });
 
-  const pending = isSubmitting || createTicket.isPending;
+  const pending = isSubmitting || createTicket.isPending || upload.isPending;
 
   const errors = ticketDraftErrors(draft);
   // Erros só aparecem depois da primeira tentativa. Gritar com quem ainda não
@@ -89,7 +95,27 @@ export function NewTicketForm({
       // erros deste browser. Nada aqui expoe conteudo. (Screenshot e outra
       // conversa, com aviso explicito — fatia #1025.)
       const ticket = await submitFn(draft);
-      toast.success("Chamado aberto. A gente te responde por aqui.");
+
+      // Depois do INSERT, porque o caminho depende do id. Um anexo que falha
+      // **não** desfaz o Chamado: ele é o pedido de ajuda; o arquivo apenas o
+      // ilustrava (ADR-0022, 2).
+      const falhas: string[] = [];
+      for (const file of files) {
+        try {
+          await upload.mutateAsync({ ticketId: ticket.id, file, commentId: null });
+        } catch {
+          falhas.push(file.name);
+        }
+      }
+
+      if (falhas.length > 0) {
+        toast.warning(
+          `Chamado aberto, mas não deu para anexar: ${falhas.join(", ")}. Envie na conversa.`,
+          { duration: 8000 },
+        );
+      } else {
+        toast.success("Chamado aberto. A gente te responde por aqui.");
+      }
       onCreated(ticket.id);
     } catch (err) {
       // O trigger no banco recusa a sexta abertura da hora. A mensagem oferece a
@@ -206,6 +232,17 @@ export function NewTicketForm({
             })}
           </div>
           {has("impacto_missing") && <FieldError>{DRAFT_ERROR_LABELS.impacto_missing}</FieldError>}
+        </fieldset>
+
+        <fieldset className="space-y-2.5">
+          <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Anexos{" "}
+            <span className="normal-case tracking-normal text-muted-foreground/60">(opcional)</span>
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Print da tela, planilha, PDF — o que mostra o problema. Até 25 MB cada.
+          </p>
+          <AttachmentPicker files={files} onChange={setFiles} disabled={pending} />
         </fieldset>
       </div>
 

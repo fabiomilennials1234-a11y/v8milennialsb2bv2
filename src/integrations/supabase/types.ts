@@ -899,6 +899,65 @@ export type Database = {
         }
         Relationships: []
       }
+      auth_rate_limits: {
+        Row: {
+          created_at: string
+          endpoint: string
+          id: string
+          ip: string
+          request_count: number
+          window_start: string
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          id?: string
+          ip: string
+          request_count?: number
+          window_start?: string
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          id?: string
+          ip?: string
+          request_count?: number
+          window_start?: string
+        }
+        Relationships: []
+      }
+      automation_instance_daily_usage: {
+        Row: {
+          created_at: string
+          instance_id: string
+          sent: number
+          updated_at: string
+          usage_date: string
+        }
+        Insert: {
+          created_at?: string
+          instance_id: string
+          sent?: number
+          updated_at?: string
+          usage_date: string
+        }
+        Update: {
+          created_at?: string
+          instance_id?: string
+          sent?: number
+          updated_at?: string
+          usage_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_instance_daily_usage_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_jobs: {
         Row: {
           action_type: string
@@ -4221,7 +4280,7 @@ export type Database = {
           intent_detection: Json | null
           is_active: boolean | null
           is_default: boolean | null
-          llm_model: string | null
+          llm_model: string
           llm_temperature_mode: string | null
           main_objective: string
           max_conversation_turns: number | null
@@ -4298,7 +4357,7 @@ export type Database = {
           intent_detection?: Json | null
           is_active?: boolean | null
           is_default?: boolean | null
-          llm_model?: string | null
+          llm_model?: string
           llm_temperature_mode?: string | null
           main_objective: string
           max_conversation_turns?: number | null
@@ -4375,7 +4434,7 @@ export type Database = {
           intent_detection?: Json | null
           is_active?: boolean | null
           is_default?: boolean | null
-          llm_model?: string | null
+          llm_model?: string
           llm_temperature_mode?: string | null
           main_objective?: string
           max_conversation_turns?: number | null
@@ -7113,6 +7172,66 @@ export type Database = {
           },
         ]
       }
+      gestor_organizations: {
+        Row: {
+          created_at: string
+          gestor_id: string
+          id: string
+          organization_id: string
+        }
+        Insert: {
+          created_at?: string
+          gestor_id: string
+          id?: string
+          organization_id: string
+        }
+        Update: {
+          created_at?: string
+          gestor_id?: string
+          id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gestor_organizations_gestor_id_fkey"
+            columns: ["gestor_id"]
+            isOneToOne: false
+            referencedRelation: "gestores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gestor_organizations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gestores: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          notes: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       goals: {
         Row: {
           created_at: string
@@ -8374,6 +8493,7 @@ export type Database = {
           deleted_at: string | null
           deleted_by: string | null
           email: string | null
+          excluded_from_metrics: boolean
           faturamento: string | null
           id: string
           import_batch_id: string | null
@@ -8387,7 +8507,7 @@ export type Database = {
           normalized_phone: string | null
           notes: string | null
           organization_id: string | null
-          origin: string
+          origin: string | null
           phone: string | null
           phone_digits: string | null
           pipe_whatsapp: string | null
@@ -8429,6 +8549,7 @@ export type Database = {
           deleted_at?: string | null
           deleted_by?: string | null
           email?: string | null
+          excluded_from_metrics?: boolean
           faturamento?: string | null
           id?: string
           import_batch_id?: string | null
@@ -8442,7 +8563,7 @@ export type Database = {
           normalized_phone?: string | null
           notes?: string | null
           organization_id?: string | null
-          origin: string
+          origin?: string | null
           phone?: string | null
           phone_digits?: string | null
           pipe_whatsapp?: string | null
@@ -8484,6 +8605,7 @@ export type Database = {
           deleted_at?: string | null
           deleted_by?: string | null
           email?: string | null
+          excluded_from_metrics?: boolean
           faturamento?: string | null
           id?: string
           import_batch_id?: string | null
@@ -8497,7 +8619,7 @@ export type Database = {
           normalized_phone?: string | null
           notes?: string | null
           organization_id?: string | null
-          origin?: string
+          origin?: string | null
           phone?: string | null
           phone_digits?: string | null
           pipe_whatsapp?: string | null
@@ -9697,6 +9819,7 @@ export type Database = {
           encryption_key_id: string
           organization_id: string
           updated_at: string
+          webhook_secret_hash: string | null
         }
         Insert: {
           app_key_ciphertext: string
@@ -9708,6 +9831,7 @@ export type Database = {
           encryption_key_id?: string
           organization_id: string
           updated_at?: string
+          webhook_secret_hash?: string | null
         }
         Update: {
           app_key_ciphertext?: string
@@ -9719,6 +9843,7 @@ export type Database = {
           encryption_key_id?: string
           organization_id?: string
           updated_at?: string
+          webhook_secret_hash?: string | null
         }
         Relationships: [
           {
@@ -10293,6 +10418,9 @@ export type Database = {
           quick_blast_max_leads: number
           sandbox_created_at: string | null
           sandbox_source_org_id: string | null
+          send_governor_cold_gate_enabled: boolean
+          send_governor_mode: string
+          send_governor_warmup_enabled: boolean
           slug: string
           subscription_expires_at: string | null
           subscription_plan: string | null
@@ -10333,6 +10461,9 @@ export type Database = {
           quick_blast_max_leads?: number
           sandbox_created_at?: string | null
           sandbox_source_org_id?: string | null
+          send_governor_cold_gate_enabled?: boolean
+          send_governor_mode?: string
+          send_governor_warmup_enabled?: boolean
           slug: string
           subscription_expires_at?: string | null
           subscription_plan?: string | null
@@ -10373,6 +10504,9 @@ export type Database = {
           quick_blast_max_leads?: number
           sandbox_created_at?: string | null
           sandbox_source_org_id?: string | null
+          send_governor_cold_gate_enabled?: boolean
+          send_governor_mode?: string
+          send_governor_warmup_enabled?: boolean
           slug?: string
           subscription_expires_at?: string | null
           subscription_plan?: string | null
@@ -10484,6 +10618,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      password_reset_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          token_hash: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          token_hash: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          token_hash?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       payment_history: {
         Row: {
@@ -12265,12 +12426,14 @@ export type Database = {
       runtime_logs: {
         Row: {
           action: string
+          actor_type: string | null
           completion_tokens: number | null
           created_at: string
           duration_ms: number | null
           entity_id: string | null
           entity_type: string | null
           error_message: string | null
+          gestor_id: string | null
           id: string
           llm_model: string | null
           module: string
@@ -12285,12 +12448,14 @@ export type Database = {
         }
         Insert: {
           action: string
+          actor_type?: string | null
           completion_tokens?: number | null
           created_at?: string
           duration_ms?: number | null
           entity_id?: string | null
           entity_type?: string | null
           error_message?: string | null
+          gestor_id?: string | null
           id?: string
           llm_model?: string | null
           module: string
@@ -12305,12 +12470,14 @@ export type Database = {
         }
         Update: {
           action?: string
+          actor_type?: string | null
           completion_tokens?: number | null
           created_at?: string
           duration_ms?: number | null
           entity_id?: string | null
           entity_type?: string | null
           error_message?: string | null
+          gestor_id?: string | null
           id?: string
           llm_model?: string | null
           module?: string
@@ -13179,6 +13346,63 @@ export type Database = {
         }
         Relationships: []
       }
+      support_ticket_attachments: {
+        Row: {
+          author_user_id: string | null
+          comment_id: string | null
+          created_at: string
+          filename: string
+          id: string
+          is_internal: boolean
+          mime: string
+          path: string
+          purged_at: string | null
+          size_bytes: number
+          ticket_id: string
+        }
+        Insert: {
+          author_user_id?: string | null
+          comment_id?: string | null
+          created_at?: string
+          filename: string
+          id?: string
+          is_internal?: boolean
+          mime: string
+          path: string
+          purged_at?: string | null
+          size_bytes: number
+          ticket_id: string
+        }
+        Update: {
+          author_user_id?: string | null
+          comment_id?: string | null
+          created_at?: string
+          filename?: string
+          id?: string
+          is_internal?: boolean
+          mime?: string
+          path?: string
+          purged_at?: string | null
+          size_bytes?: number
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_ticket_attachments_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "support_ticket_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_ticket_attachments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       support_ticket_comments: {
         Row: {
           author_user_id: string | null
@@ -13220,9 +13444,11 @@ export type Database = {
       support_tickets: {
         Row: {
           assigned_master_user_id: string | null
+          author_gestor_id: string | null
           author_user_id: string | null
           awaiting_customer_ms: number
           awaiting_since: string | null
+          closed_at: string | null
           created_at: string
           defect_url: string | null
           description: string | null
@@ -13243,9 +13469,11 @@ export type Database = {
         }
         Insert: {
           assigned_master_user_id?: string | null
+          author_gestor_id?: string | null
           author_user_id?: string | null
           awaiting_customer_ms?: number
           awaiting_since?: string | null
+          closed_at?: string | null
           created_at?: string
           defect_url?: string | null
           description?: string | null
@@ -13266,9 +13494,11 @@ export type Database = {
         }
         Update: {
           assigned_master_user_id?: string | null
+          author_gestor_id?: string | null
           author_user_id?: string | null
           awaiting_customer_ms?: number
           awaiting_since?: string | null
+          closed_at?: string | null
           created_at?: string
           defect_url?: string | null
           description?: string | null
@@ -13293,6 +13523,13 @@ export type Database = {
             columns: ["assigned_master_user_id"]
             isOneToOne: false
             referencedRelation: "master_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_tickets_author_gestor_id_fkey"
+            columns: ["author_gestor_id"]
+            isOneToOne: false
+            referencedRelation: "gestores"
             referencedColumns: ["id"]
           },
           {
@@ -15135,6 +15372,54 @@ export type Database = {
           },
         ]
       }
+      whatsapp_instance_reputation: {
+        Row: {
+          ban_signal_count_24h: number
+          instance_id: string
+          last_ban_signal_at: string | null
+          organization_id: string
+          quarantine_until: string | null
+          state: string
+          updated_at: string
+          warmup_started_at: string | null
+        }
+        Insert: {
+          ban_signal_count_24h?: number
+          instance_id: string
+          last_ban_signal_at?: string | null
+          organization_id: string
+          quarantine_until?: string | null
+          state?: string
+          updated_at?: string
+          warmup_started_at?: string | null
+        }
+        Update: {
+          ban_signal_count_24h?: number
+          instance_id?: string
+          last_ban_signal_at?: string | null
+          organization_id?: string
+          quarantine_until?: string | null
+          state?: string
+          updated_at?: string
+          warmup_started_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_instance_reputation_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: true
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_instance_reputation_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_instance_secrets: {
         Row: {
           created_at: string
@@ -16516,6 +16801,15 @@ export type Database = {
           status: Database["public"]["Enums"]["lead_visibility_status"]
         }[]
       }
+      check_auth_rate_limit: {
+        Args: {
+          p_endpoint: string
+          p_ip: string
+          p_max: number
+          p_window: string
+        }
+        Returns: boolean
+      }
       check_cron_job_health: { Args: never; Returns: Json }
       check_oraculo_limit: { Args: { p_user_id: string }; Returns: Json }
       check_rate_limit: {
@@ -16600,6 +16894,10 @@ export type Database = {
               isSetofReturn: true
             }
           }
+      claim_password_reset_token: {
+        Args: { p_token_hash: string }
+        Returns: string
+      }
       claim_pending_ai_actions: {
         Args: { batch_size?: number; per_org_cap?: number }
         Returns: {
@@ -17281,8 +17579,10 @@ export type Database = {
         }[]
       }
       get_my_admin_organization_ids: { Args: never; Returns: string[] }
+      get_my_gestor_organization_ids: { Args: never; Returns: string[] }
       get_my_org_ids: { Args: never; Returns: string[] }
       get_my_organization_ids: { Args: never; Returns: string[] }
+      get_my_team_admin_organization_ids: { Args: never; Returns: string[] }
       get_my_team_member_ids: { Args: never; Returns: string[] }
       get_next_best_actions: {
         Args: { p_limit?: number; p_org_id?: string }
@@ -17722,6 +18022,10 @@ export type Database = {
         Args: { column_name: string; row_id: string; table_name: string }
         Returns: undefined
       }
+      increment_automation_daily_usage: {
+        Args: { p_count: number; p_instance_id: string; p_usage_date: string }
+        Returns: number
+      }
       increment_blast_daily_usage: {
         Args: { p_count: number; p_org_id: string; p_usage_date: string }
         Returns: number
@@ -17947,6 +18251,10 @@ export type Database = {
       org_get_features_and_limits: { Args: { p_org_id: string }; Returns: Json }
       org_get_seat_usage: { Args: { p_org_id: string }; Returns: Json }
       org_get_subscription_status: { Args: { p_org_id: string }; Returns: Json }
+      org_has_feature: {
+        Args: { p_feature_key: string; p_org_id: string }
+        Returns: boolean
+      }
       org_resolve_all_quotas: { Args: { p_org_id: string }; Returns: Json }
       org_resolve_quota: {
         Args: { p_org_id: string; p_resource_key: string }
@@ -17968,10 +18276,15 @@ export type Database = {
         }[]
       }
       purge_expired_rate_limits: { Args: never; Returns: undefined }
+      purge_expired_support_attachments: { Args: never; Returns: number }
       purge_lead: { Args: { p_lead_id: string }; Returns: undefined }
       purge_runtime_logs: { Args: never; Returns: undefined }
       recalc_upsell_client_metrics: {
         Args: { p_client_id: string }
+        Returns: undefined
+      }
+      record_ban_signal: {
+        Args: { p_code: number; p_instance_id: string }
         Returns: undefined
       }
       record_oraculo_usage: {
@@ -18062,6 +18375,14 @@ export type Database = {
           p_reason?: string
         }
         Returns: string
+      }
+      set_instance_reputation: {
+        Args: {
+          p_instance_id: string
+          p_quarantine_until: string
+          p_state: string
+        }
+        Returns: undefined
       }
       set_meta_cloud_credentials: {
         Args: {
@@ -18195,7 +18516,7 @@ export type Database = {
       copilot_v2_model_id:
         | "google/gemini-2.5-flash"
         | "anthropic/claude-haiku-4-5"
-        | "anthropic/claude-sonnet-4-6"
+        | "openai/gpt-4.1-mini"
       copilot_v2_queue_status:
         | "pending"
         | "processing"
@@ -18433,7 +18754,7 @@ export const Constants = {
       copilot_v2_model_id: [
         "google/gemini-2.5-flash",
         "anthropic/claude-haiku-4-5",
-        "anthropic/claude-sonnet-4-6",
+        "openai/gpt-4.1-mini",
       ],
       copilot_v2_queue_status: [
         "pending",

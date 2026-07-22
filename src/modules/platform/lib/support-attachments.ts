@@ -1,31 +1,112 @@
 /**
- * support-attachments — o print que o cliente anexa a um Chamado.
+ * support-attachments — o arquivo que acompanha um Chamado.
  *
  * O anexo típico é uma captura da tela do CRM. Nela aparecem nome, telefone,
  * empresa e CNPJ dos **leads do nosso cliente** — dado dos clientes dele, do
- * qual somos operadores de LGPD.
+ * qual somos operadores de LGPD. Desde ADR-0022 também entram PDF e planilha,
+ * que carregam a mesma PII em volume maior.
  *
  * Por isso o bucket é privado e a leitura sai por URL assinada de vida curta,
  * autorizada no servidor. O `help-media` é público: um link eterno e
  * irrevogável. Não se reusa um bucket público por conveniência (ADR-0018).
  *
  * O caminho começa pelo id do Chamado — é dele que a policy do Storage deriva
- * quem pode ler. E o nome original do arquivo é descartado: `Proposta Fulano da
- * Silva.png` colocaria PII na URL assinada e nos logs do Storage.
+ * quem pode ler. O nome original do arquivo **não** entra no caminho: `Proposta
+ * Fulano da Silva.png` colocaria PII na URL assinada e nos logs do Storage,
+ * lugares que a RLS não alcança. Ele vive numa coluna, sob policy (ADR-0022, 3).
  */
 
 export const SUPPORT_ATTACHMENTS_BUCKET = "support-attachments";
 
-/** Uma captura de tela cabe folgada. Um vídeo não é evidência, é um problema. */
-export const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+/** Um export de alguns milhares de leads em xlsx bate 8–12 MB. */
+export const ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;
 
 /**
- * Só imagem. Um anexo executável num bucket de suporte é um vetor, não uma
- * evidência — e `text/html` num bucket servido por URL assinada é XSS.
+ * A allowlist é escolhida por **o que é perigoso servir**, não por o que é útil
+ * enviar. O `allowed_mime_types` do bucket é conferido contra o `file.type` que
+ * o browser declara — forjável. O que ele fixa de verdade é o `Content-Type`
+ * com que o arquivo será servido depois: um `.exe` renomeado entra, e é
+ * justamente por ser servido como `image/png` que ele não executa.
+ *
+ * Fora, e não negociável: `text/html` e `image/svg+xml` rodam JavaScript na
+ * origem do Storage; `.xlsm`/`.docm` carregam VBA (o vetor real de Office, e um
+ * MIME distinto do formato inerte); arquivo compactado e executável.
  */
-export const ATTACHMENT_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"] as const;
+/**
+ * Um registro por tipo aceito, e é ele que responde tudo que se pergunta sobre
+ * um MIME: se tem miniatura, que ícone usa, se merece aviso antes de abrir.
+ *
+ * Antes isso eram três cascatas separadas em dois arquivos, mais a lista na
+ * migration: aceitar um formato novo custava quatro edições, e a quarta era a
+ * que se esquecia.
+ */
+export type AttachmentKind = "imagem" | "pdf" | "planilha" | "documento" | "texto";
+
+interface AttachmentFormat {
+  kind: AttachmentKind;
+  /** Imagem abre inline; o resto baixa. */
+  previewable: boolean;
+  /**
+   * Célula começando em `=` executa fórmula ao abrir no Excel — e quem abre é
+   * quem tem acesso a todas as organizações. Risco aceito conscientemente; o
+   * aviso é a contrapartida (ADR-0022).
+   */
+  avisaFormula?: boolean;
+}
+
+export const ATTACHMENT_FORMATS: Record<string, AttachmentFormat> = {
+  "image/png": { kind: "imagem", previewable: true },
+  "image/jpeg": { kind: "imagem", previewable: true },
+  "image/webp": { kind: "imagem", previewable: true },
+  "image/gif": { kind: "imagem", previewable: true },
+  "application/pdf": { kind: "pdf", previewable: false },
+  "text/csv": { kind: "planilha", previewable: false, avisaFormula: true },
+  "text/plain": { kind: "texto", previewable: false },
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+    kind: "planilha",
+    previewable: false,
+  },
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+    kind: "documento",
+    previewable: false,
+  },
+};
+
+export const ATTACHMENT_MIME_TYPES = Object.keys(ATTACHMENT_FORMATS);
+
+/** Espelha o CHECK do banco. O teto existe para o nome não quebrar o layout. */
+export const FILENAME_MAX_LENGTH = 200;
+
+/** Espelham o trigger. O do comentário é sobre a thread continuar legível. */
+export const ATTACHMENTS_PER_COMMENT = 5;
+export const ATTACHMENTS_PER_TICKET = 20;
 
 export type AttachmentCheck = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Caracteres de controle (C0/C1, incluindo quebra de linha e tab) e os
+ * controles bidi do Unicode.
+ *
+ * O bidi é o que importa aqui: `nota‮gnp.exe` aparece na tela do master
+ * como `notaexe.png` — o nome mente sobre o que o arquivo é, para quem tem
+ * acesso a todas as organizações.
+ */
+// eslint-disable-next-line no-control-regex
+const HOSTILE_FILENAME =
+  /[\u0000-\u001F\u007F-\u009F\u200E\u200F\u202A-\u202E\u2066-\u2069]/;
+
+export function validateFilename(filename: string): AttachmentCheck {
+  if (filename.trim().length === 0) {
+    return { ok: false, reason: "O arquivo está sem nome." };
+  }
+  if (filename.length > FILENAME_MAX_LENGTH) {
+    return { ok: false, reason: `O nome do arquivo passa de ${FILENAME_MAX_LENGTH} caracteres.` };
+  }
+  if (HOSTILE_FILENAME.test(filename)) {
+    return { ok: false, reason: "O nome do arquivo tem caracteres que não são aceitos." };
+  }
+  return { ok: true };
+}
 
 export function validateAttachment(file: File): AttachmentCheck {
   if (file.size === 0) {
@@ -35,10 +116,29 @@ export function validateAttachment(file: File): AttachmentCheck {
     const mb = Math.round(ATTACHMENT_MAX_BYTES / (1024 * 1024));
     return { ok: false, reason: `O arquivo passa de ${mb} MB.` };
   }
-  if (!(ATTACHMENT_MIME_TYPES as readonly string[]).includes(file.type)) {
-    return { ok: false, reason: "Anexe uma imagem (PNG, JPG, WEBP ou GIF)." };
+  if (!ATTACHMENT_FORMATS[file.type]) {
+    return { ok: false, reason: "Anexe imagem, PDF, planilha, documento ou texto." };
   }
-  return { ok: true };
+  // O nome viaja junto e o banco vai recusar: melhor o usuário saber agora.
+  return validateFilename(file.name);
+}
+
+export function isPreviewable(mime: string): boolean {
+  return ATTACHMENT_FORMATS[mime]?.previewable ?? false;
+}
+
+export function attachmentKind(mime: string): AttachmentKind | null {
+  return ATTACHMENT_FORMATS[mime]?.kind ?? null;
+}
+
+export function avisaFormula(mime: string): boolean {
+  return ATTACHMENT_FORMATS[mime]?.avisaFormula ?? false;
+}
+
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
 }
 
 function extensionOf(filename: string): string {
@@ -47,14 +147,33 @@ function extensionOf(filename: string): string {
   return filename.slice(dot + 1).toLowerCase();
 }
 
+/** O segmento que carrega a visibilidade. Ver `isInternalPath`. */
+const INTERNAL_SEGMENT = "internal";
+
 /**
- * `<ticketId>/<uuid>.<ext>`. O primeiro segmento sustenta a autorização; o resto
- * não carrega nada do usuário.
+ * `<ticketId>/<uuid>.<ext>`, ou `<ticketId>/internal/<uuid>.<ext>` quando o
+ * anexo acompanha uma nota interna.
+ *
+ * O primeiro segmento sustenta a autorização; o resto não carrega nada do
+ * usuário. A visibilidade mora no **caminho** e não na linha porque a policy do
+ * Storage decide antes de qualquer tabela ser lida — o arquivo sobe antes de a
+ * linha existir, e uma policy que depende dessa ordem não é uma policy
+ * (ADR-0022, 6).
  */
-export function attachmentPath(ticketId: string, filename: string): string {
+export function attachmentPath(
+  ticketId: string,
+  filename: string,
+  opts: { internal?: boolean } = {},
+): string {
   const ext = extensionOf(filename);
   const name = crypto.randomUUID();
-  return ext ? `${ticketId}/${name}.${ext}` : `${ticketId}/${name}`;
+  const folder = opts.internal ? `${ticketId}/${INTERNAL_SEGMENT}` : ticketId;
+  return ext ? `${folder}/${name}.${ext}` : `${folder}/${name}`;
+}
+
+/** Só o segundo segmento decide — um arquivo chamado `internal.png` não conta. */
+export function isInternalPath(path: string): boolean {
+  return path.split("/")[1] === INTERNAL_SEGMENT;
 }
 
 export function ticketIdFromPath(path: string): string | null {
@@ -64,3 +183,51 @@ export function ticketIdFromPath(path: string): string | null {
 
 /** A URL assinada morre em cinco minutos. Se vazar depois disso, é link morto. */
 export const SIGNED_URL_TTL_SECONDS = 300;
+
+/**
+ * As funções puras abaixo tomam só o que precisam ler, não o Anexo inteiro:
+ * assim moram aqui, longe do cliente do Supabase, e são testáveis sem mock.
+ */
+export interface CountableAttachment {
+  id: string;
+}
+export interface GroupableAttachment {
+  commentId: string | null;
+}
+
+/**
+ * Os tetos conferidos antes de subir, para a mensagem que está sendo escrita.
+ *
+ * O teto por mensagem vale sobre os arquivos **em fila** — o comentário ainda
+ * não existe, então ele não tem anexo nenhum. Medi-lo contra os anexos de
+ * `comment_id NULL` contava os da abertura do Chamado, e um Chamado aberto com
+ * cinco arquivos travava toda resposta seguinte.
+ *
+ * O trigger é quem garante; isto evita gastar 25 MB de upload para o banco
+ * recusar depois, deixando um objeto órfão que só o master pode remover.
+ */
+export function draftAttachmentCapacity(
+  existing: readonly CountableAttachment[],
+  staged: number,
+): { ok: true } | { ok: false; reason: string } {
+  if (existing.length + staged >= ATTACHMENTS_PER_TICKET) {
+    return { ok: false, reason: `Este chamado já tem ${ATTACHMENTS_PER_TICKET} anexos.` };
+  }
+  if (staged >= ATTACHMENTS_PER_COMMENT) {
+    return { ok: false, reason: `São no máximo ${ATTACHMENTS_PER_COMMENT} anexos por mensagem.` };
+  }
+  return { ok: true };
+}
+
+/** A thread mostra cada anexo junto do turno a que ele pertence. */
+export function groupByComment<T extends GroupableAttachment>(
+  attachments: readonly T[],
+): Map<string | null, T[]> {
+  const porComentario = new Map<string | null, T[]>();
+  for (const a of attachments) {
+    const atual = porComentario.get(a.commentId) ?? [];
+    atual.push(a);
+    porComentario.set(a.commentId, atual);
+  }
+  return porComentario;
+}

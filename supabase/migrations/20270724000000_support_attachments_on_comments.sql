@@ -1,0 +1,510 @@
+-- ============================================================
+-- Chamado: o Anexo passa a pender do Comentário. Ver ADR-0022.
+--
+-- O que muda, e por quê:
+--
+-- 1. Existia um único destinatário — o cliente anexava um print, o staff olhava.
+--    Agora os dois anexam, e uma pilha achatada no pé da thread deixa de ser
+--    legível: o print do master ("clica aqui") cai no mesmo monte dos três
+--    prints do cliente ("quebrou aqui"), sem autor e sem ordem. O Comentário já
+--    é a unidade da conversa; é nele que a evidência pendura.
+--
+-- 2. O anexo da **abertura** não tem Comentário para pendurar — o
+--    `description` do Chamado é coluna, não comentário. `comment_id IS NULL` é
+--    honesto: essa evidência é do Chamado, na mesma condição do `support_context`,
+--    capturada no mesmo instante.
+--
+-- 3. O nome original do arquivo volta a existir, **numa coluna**. O motivo de
+--    descartá-lo nunca foi o nome: era o *caminho*, que viaja na URL assinada e
+--    nos logs do Storage, onde a RLS não alcança. Uma coluna está sob a mesma
+--    policy que já protege o corpo do Comentário, que carrega PII bem pior.
+--
+-- 4. A visibilidade do anexo interno mora no **caminho** (`<tid>/internal/<uuid>`),
+--    não na linha. A policy do Storage decide antes de qualquer tabela ser lida,
+--    e o arquivo sobe antes de a linha existir — uma policy que depende dessa
+--    ordem não é uma policy, é uma esperança. Por isso `is_internal` do
+--    Comentário passa a ser imutável: se ele virasse depois do upload, caminho e
+--    banco discordariam em silêncio, e a discordância favorece o vazamento.
+--
+-- 5. Retenção de 90 dias após `fechado`. O bucket guarda nome, telefone e CNPJ
+--    dos **leads do nosso cliente** — titulares que nunca ouviram falar da
+--    Torque e dos quais somos operadores. Minimização não é coletar de menos, é
+--    descartar quando a finalidade acaba; e essa acaba numa data.
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- Bucket: teto e tipos
+--
+-- A allowlist é escolhida por o que é perigoso **servir**, não por o que é útil
+-- enviar. O `allowed_mime_types` é conferido contra o `Content-Type` declarado
+-- pelo cliente, que é forjável; o que ele fixa de verdade é como o arquivo será
+-- servido depois. Um `.exe` renomeado entra — e é justamente por ser servido
+-- como `image/png` que ele não executa.
+--
+-- Fora, e não negociável: `text/html` e `image/svg+xml` executam JavaScript na
+-- origem do Storage (o vetor que ADR-0018 já nomeia); `.xlsm`/`.docm` carregam
+-- VBA, e são MIME distintos dos formatos inertes, então barrar um não custa o
+-- outro; arquivo compactado e executável.
+-- ------------------------------------------------------------
+UPDATE storage.buckets
+   SET public = false,                 -- privado. Nunca mude isto.
+       file_size_limit = 26214400,     -- 25 MB
+       allowed_mime_types = ARRAY[
+         'image/png',
+         'image/jpeg',
+         'image/webp',
+         'image/gif',
+         'application/pdf',
+         'text/csv',
+         'text/plain',
+         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+         'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+       ]
+ WHERE id = 'support-attachments';
+
+-- ------------------------------------------------------------
+-- `is_internal` imutável
+--
+-- Pré-requisito da decisão 4: a visibilidade está gravada no caminho do arquivo,
+-- que é imutável. Se a coluna pudesse virar, as duas verdades divergiriam.
+--
+-- Já é imutável de fato — o app só escreve `is_internal` no INSERT. Travar
+-- custa nada e fecha a divergência.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.support_comment_visibility_is_final()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.is_internal IS DISTINCT FROM OLD.is_internal THEN
+    RAISE EXCEPTION 'a visibilidade de um comentario nao muda depois de criado (ADR-0022)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_support_comment_visibility_is_final ON public.support_ticket_comments;
+CREATE TRIGGER trg_support_comment_visibility_is_final
+  BEFORE UPDATE ON public.support_ticket_comments
+  FOR EACH ROW EXECUTE FUNCTION public.support_comment_visibility_is_final();
+
+-- ------------------------------------------------------------
+-- A tabela
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.support_ticket_attachments (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id      UUID NOT NULL REFERENCES public.support_tickets(id) ON DELETE CASCADE,
+  -- NULL = veio na abertura do Chamado, quando ainda não havia Comentário.
+  comment_id     UUID REFERENCES public.support_ticket_comments(id) ON DELETE CASCADE,
+  path           TEXT NOT NULL UNIQUE,
+  -- Cru, com o hostil barrado na entrada. Sanear na escrita destruiria o nome
+  -- real; sanear na exibição é uma regra que vale enquanto alguém lembra dela,
+  -- e o painel do master é só o primeiro a renderizar isto.
+  filename       TEXT NOT NULL
+                   CHECK (length(btrim(filename)) > 0)
+                   CHECK (length(filename) <= 200)
+                   -- Controle C0/C1 e os overrides bidi do Unicode: `exe` mais
+                   -- RLO aparece na tela como `gnp.exe`, e quem lê é o master.
+                   -- `[[:cntrl:]]` pega C0/C1; os escapes \uXXXX pegam os
+                   -- controles bidi. Escapes, e nao os caracteres literais:
+                   -- byte de controle cru no texto do SQL quebra o protocolo
+                   -- de wire do Postgres ("invalid message format").
+                   CHECK (filename !~ '[[:cntrl:]]')
+                   CHECK (filename !~ E'[\u200E\u200F\u202A-\u202E\u2066-\u2069]'),
+  mime           TEXT NOT NULL,
+  size_bytes     BIGINT NOT NULL CHECK (size_bytes > 0 AND size_bytes <= 26214400),
+  -- Espelha o Comentário. Validado contra ele por trigger; imutável porque o
+  -- Comentário é.
+  is_internal    BOOLEAN NOT NULL DEFAULT false,
+  author_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Preenchido quando a retenção leva o arquivo. A linha **sobrevive**: a
+  -- thread mostra que houve uma evidência ali e que ela expirou, em vez de a
+  -- conversa perder o pedaço em silêncio. Só o arquivo vai embora — é dele que
+  -- a LGPD trata, não do fato de ter existido.
+  purged_at      TIMESTAMPTZ
+);
+
+COMMENT ON TABLE public.support_ticket_attachments IS
+  'Anexo de um Chamado. Pende do Comentario; comment_id NULL = veio na abertura. Ver ADR-0022.';
+COMMENT ON COLUMN public.support_ticket_attachments.path IS
+  'Caminho no bucket. `<ticketId>/<uuid>.<ext>` ou `<ticketId>/internal/<uuid>.<ext>`. A autorizacao deriva daqui.';
+COMMENT ON COLUMN public.support_ticket_attachments.filename IS
+  'Nome original, cru. Nunca entra no caminho: la ele viajaria na URL assinada e nos logs do Storage.';
+COMMENT ON COLUMN public.support_ticket_attachments.author_user_id IS
+  'Nullable: o anexo pertence ao Chamado e sobrevive ao autor, como o proprio Chamado.';
+
+CREATE INDEX IF NOT EXISTS idx_support_attachments_ticket
+  ON public.support_ticket_attachments (ticket_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_support_attachments_comment
+  ON public.support_ticket_attachments (comment_id) WHERE comment_id IS NOT NULL;
+
+-- ------------------------------------------------------------
+-- Backfill dos anexos que já estão no bucket
+--
+-- A listagem deixa de sair do Storage e passa a sair desta tabela. Todo arquivo
+-- enviado sob o modelo antigo não tem linha — e sumiria da thread do cliente e
+-- do painel do staff no instante em que esta migration subisse. Em produção
+-- havia um, num Chamado **aberto**, em `aguardando_cliente`: exatamente a
+-- evidência que o suporte estava esperando.
+--
+-- O que se recupera do Storage: caminho, mime, tamanho e data. O que não existe
+-- em lugar nenhum é o **nome original** — o modelo antigo o descartava de
+-- propósito, e nenhuma coluna o guardou. Daí `anexo.<ext>`: um rótulo honesto,
+-- em vez de inventar um nome que ninguém escreveu.
+--
+-- `author_user_id` fica NULL pelo mesmo motivo: o Storage não registra quem
+-- subiu, e chutar o autor do Chamado seria adivinhação apresentada como fato.
+--
+-- `comment_id` NULL é a leitura certa, não um remendo: sob o modelo antigo o
+-- anexo pertencia ao Chamado, que é precisamente o que NULL significa aqui.
+-- ------------------------------------------------------------
+INSERT INTO public.support_ticket_attachments
+  (ticket_id, comment_id, path, filename, mime, size_bytes, is_internal, author_user_id, created_at)
+SELECT
+  t.id,
+  NULL,
+  o.name,
+  'anexo' || coalesce(nullif(regexp_replace(o.name, '^.*(\.[A-Za-z0-9]+)$', '\1'), o.name), ''),
+  coalesce(o.metadata->>'mimetype', 'application/octet-stream'),
+  greatest(coalesce((o.metadata->>'size')::bigint, 1), 1),
+  split_part(o.name, '/', 2) = 'internal',
+  NULL,
+  o.created_at
+  FROM storage.objects o
+  JOIN public.support_tickets t
+    ON t.id::text = split_part(o.name, '/', 1)
+ WHERE o.bucket_id = 'support-attachments'
+ON CONFLICT (path) DO NOTHING;
+
+-- ------------------------------------------------------------
+-- Coerência entre linha, Comentário e caminho
+--
+-- Três verdades precisam concordar: o `is_internal` da linha, o do Comentário
+-- que ela acompanha, e o segmento `internal/` do caminho. Um CHECK não cruza
+-- tabelas; um trigger cruza.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.support_attachment_is_coherent()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+-- DEFINER: a guarda precisa enxergar o Comentário mesmo quando quem insere não
+-- pode lê-lo. Como invoker, uma nota interna seria invisível para o cliente e a
+-- checagem de visibilidade passaria batido — a guarda protegeria justamente
+-- quem ela deveria conter.
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  comment_ticket   UUID;
+  comment_internal BOOLEAN;
+  path_internal    BOOLEAN;
+BEGIN
+  IF NEW.comment_id IS NOT NULL THEN
+    SELECT ticket_id, is_internal INTO comment_ticket, comment_internal
+      FROM public.support_ticket_comments WHERE id = NEW.comment_id;
+
+    IF comment_ticket IS DISTINCT FROM NEW.ticket_id THEN
+      RAISE EXCEPTION 'o comentario do anexo pertence a outro chamado'
+        USING ERRCODE = 'check_violation';
+    END IF;
+
+    IF comment_internal IS DISTINCT FROM NEW.is_internal THEN
+      RAISE EXCEPTION 'a visibilidade do anexo nao bate com a do comentario'
+        USING ERRCODE = 'check_violation';
+    END IF;
+  ELSIF NEW.is_internal THEN
+    -- Não há nota interna sem Comentário: a abertura é sempre do cliente.
+    RAISE EXCEPTION 'anexo interno exige um comentario interno'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- O caminho é a fonte que a policy do Storage consulta. Se ele discordar da
+  -- linha, é o caminho que vale — e é por isso que ele não pode discordar.
+  path_internal := split_part(NEW.path, '/', 2) = 'internal';
+  IF path_internal IS DISTINCT FROM NEW.is_internal THEN
+    RAISE EXCEPTION 'o caminho do anexo nao corresponde a sua visibilidade'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF split_part(NEW.path, '/', 1) <> NEW.ticket_id::text THEN
+    RAISE EXCEPTION 'o caminho do anexo nao comeca pelo chamado'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_support_attachment_is_coherent ON public.support_ticket_attachments;
+CREATE TRIGGER trg_support_attachment_is_coherent
+  BEFORE INSERT ON public.support_ticket_attachments
+  FOR EACH ROW EXECUTE FUNCTION public.support_attachment_is_coherent();
+
+-- ------------------------------------------------------------
+-- Tetos de volume
+--
+-- Em trigger, não em policy, pelo mesmo motivo do rate limit de chamados
+-- (20270120000000): um INSERT barrado por RLS volta 200 com zero linhas, e a
+-- recusa precisa ser barulhenta.
+--
+-- O teto por comentário não é sobre custo de armazenamento — é sobre a thread
+-- continuar legível para quem tria quarenta chamados no dia. Vale igual para o
+-- staff: um master que precisa de seis prints numa resposta devia estar
+-- escrevendo um artigo da Central de Ajuda.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.support_attachment_within_limits()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+-- DEFINER pelo mesmo motivo do rate limit de chamados (20270120000000): como
+-- invoker, o `count(*)` passa pela RLS, que esconde as linhas internas de quem
+-- não é master. O cliente contaria menos anexos do que existem e furaria o
+-- teto. Um limite que só vale para quem enxerga tudo não é um limite.
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  no_chamado   INTEGER;
+  no_comentario INTEGER;
+BEGIN
+  SELECT count(*) INTO no_chamado
+    FROM public.support_ticket_attachments WHERE ticket_id = NEW.ticket_id;
+
+  IF no_chamado >= 20 THEN
+    RAISE EXCEPTION 'este chamado ja tem 20 anexos'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT count(*) INTO no_comentario
+    FROM public.support_ticket_attachments
+   WHERE ticket_id = NEW.ticket_id
+     AND comment_id IS NOT DISTINCT FROM NEW.comment_id;
+
+  IF no_comentario >= 5 THEN
+    RAISE EXCEPTION 'sao no maximo 5 anexos por mensagem'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_support_attachment_within_limits ON public.support_ticket_attachments;
+CREATE TRIGGER trg_support_attachment_within_limits
+  BEFORE INSERT ON public.support_ticket_attachments
+  FOR EACH ROW EXECUTE FUNCTION public.support_attachment_within_limits();
+
+-- ------------------------------------------------------------
+-- RLS da tabela — espelha `support_ticket_comments`
+-- ------------------------------------------------------------
+ALTER TABLE public.support_ticket_attachments ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS support_attachments_row_select ON public.support_ticket_attachments;
+CREATE POLICY support_attachments_row_select ON public.support_ticket_attachments
+  FOR SELECT TO authenticated
+  USING (
+    public.is_master_user()
+    OR (is_internal = false AND public.can_read_support_ticket(ticket_id))
+  );
+
+DROP POLICY IF EXISTS support_attachments_row_insert ON public.support_ticket_attachments;
+CREATE POLICY support_attachments_row_insert ON public.support_ticket_attachments
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    author_user_id = auth.uid()
+    AND public.can_read_support_ticket(ticket_id)
+    AND (is_internal = false OR public.is_master_user())
+  );
+
+-- Anexo não se edita: trocar o conteúdo apagaria a evidência que ele é.
+-- Sem policy de UPDATE, ninguém atualiza.
+
+DROP POLICY IF EXISTS support_attachments_row_delete ON public.support_ticket_attachments;
+CREATE POLICY support_attachments_row_delete ON public.support_ticket_attachments
+  FOR DELETE TO authenticated
+  USING (public.is_master_user());
+
+GRANT SELECT, INSERT, DELETE ON public.support_ticket_attachments TO authenticated;
+
+-- ------------------------------------------------------------
+-- Autorização do objeto no Storage — agora com o ramo interno
+--
+-- Continua derivada do caminho e continua devolvendo `false` em vez de levantar:
+-- a policy é avaliada sobre toda linha de `storage.objects` que o planner
+-- resolver olhar, e um cast inline explodiria ao topar com um objeto de outro
+-- bucket cuja primeira pasta não é um uuid — levando junto a listagem daquele
+-- bucket.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.can_read_support_attachment(object_name TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  ticket_id UUID;
+BEGIN
+  BEGIN
+    ticket_id := split_part(object_name, '/', 1)::uuid;
+  EXCEPTION WHEN OTHERS THEN
+    RETURN false;
+  END;
+
+  -- Anexo de nota interna. O cliente pode ler o Chamado, e leria este arquivo
+  -- se a pergunta fosse só sobre o Chamado — a nota ficaria escondida enquanto
+  -- a evidência dela vazava.
+  IF split_part(object_name, '/', 2) = 'internal' THEN
+    RETURN public.is_master_user() AND public.can_read_support_ticket(ticket_id);
+  END IF;
+
+  RETURN public.can_read_support_ticket(ticket_id);
+END;
+$$;
+
+COMMENT ON FUNCTION public.can_read_support_attachment(TEXT) IS
+  'Autoriza um objeto de support-attachments pelo caminho: 1o segmento e o Chamado, 2o segmento `internal` exige master. Devolve false, nunca levanta, para nao quebrar a listagem de outros buckets.';
+
+REVOKE ALL ON FUNCTION public.can_read_support_attachment(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.can_read_support_attachment(TEXT) TO authenticated;
+
+-- As policies de Storage não mudam de forma: a mesma função agora recusa o ramo
+-- interno para quem não é master, tanto na leitura quanto na escrita.
+
+-- ------------------------------------------------------------
+-- Marco de fechamento
+--
+-- A retenção conta a partir de `fechado`, e não havia como saber quando isso
+-- aconteceu. `fechado` é terminal e chega **só** pelo cron, então o marco é
+-- exato — não é uma aproximação de `resolved_at + 7 dias`.
+-- ------------------------------------------------------------
+ALTER TABLE public.support_tickets ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
+
+COMMENT ON COLUMN public.support_tickets.closed_at IS
+  'Quando o chamado foi fechado. Marco da retencao de anexos (ADR-0022, 9).';
+
+-- Os já fechados: `fechado` chegava 7 dias depois de `resolvido`, pelo cron.
+UPDATE public.support_tickets
+   SET closed_at = resolved_at + interval '7 days'
+ WHERE status = 'fechado' AND closed_at IS NULL AND resolved_at IS NOT NULL;
+
+-- ------------------------------------------------------------
+-- Retenção: 90 dias após `fechado`
+--
+-- Apagar a linha de `storage.objects` por SQL **não** apaga o arquivo no
+-- armazenamento — o servidor de Storage é quem o gerencia. Uma retenção que
+-- fizesse só isso perderia a referência e deixaria a planilha com os leads do
+-- cliente no bucket: pior que não ter retenção, porque parece resolvida.
+--
+-- Então a remoção sai pela API de Storage via pg_net, no molde que o repo já
+-- usa para chamar serviço de dentro do Postgres. Sem edge function nova — ADR-0018
+-- recusou uma a mais, e um cron diário não justifica a superfície.
+--
+-- Se a chave não estiver configurada, a função **não apaga nada** e avisa: sumir
+-- com as linhas deixando os arquivos seria exatamente o estrago que ela existe
+-- para evitar.
+-- ------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'net' AND p.proname = 'http_delete'
+  ) THEN
+    RAISE EXCEPTION 'pg_net sem net.http_delete: a retencao de anexos nao teria como remover o arquivo';
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.purge_expired_support_attachments()
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_base_url    TEXT := current_setting('app.settings.supabase_url', true);
+  v_service_key TEXT := current_setting('app.service_role_key', true);
+  v_removidos   INTEGER := 0;
+  r             RECORD;
+BEGIN
+  IF v_base_url IS NULL OR v_service_key IS NULL THEN
+    RAISE WARNING '[support_attachments] app.settings.supabase_url ou app.service_role_key ausente: retencao pulada';
+    RETURN 0;
+  END IF;
+
+  FOR r IN
+    SELECT a.id, a.path
+      FROM public.support_ticket_attachments a
+      JOIN public.support_tickets t ON t.id = a.ticket_id
+     WHERE t.status = 'fechado'
+       AND t.closed_at IS NOT NULL
+       AND t.closed_at < now() - interval '90 days'
+       AND a.purged_at IS NULL
+     LIMIT 500
+  LOOP
+    PERFORM net.http_delete(
+      url     := v_base_url || '/storage/v1/object/support-attachments/' || r.path,
+      headers := jsonb_build_object('Authorization', 'Bearer ' || v_service_key)
+    );
+
+    -- A linha fica, marcada. A thread continua dizendo que houve uma evidência
+    -- ali e que ela expirou; o que a LGPD exige descartar é o arquivo, não o
+    -- fato de ele ter existido.
+    UPDATE public.support_ticket_attachments SET purged_at = now() WHERE id = r.id;
+    v_removidos := v_removidos + 1;
+  END LOOP;
+
+  RETURN v_removidos;
+END;
+$$;
+
+COMMENT ON FUNCTION public.purge_expired_support_attachments() IS
+  'Remove anexos 90 dias apos o chamado fechar. O arquivo sai pela API de Storage (apagar storage.objects por SQL nao apaga o arquivo). Lotes de 500. Ver ADR-0022.';
+
+REVOKE ALL ON FUNCTION public.purge_expired_support_attachments() FROM PUBLIC, anon, authenticated;
+
+-- ------------------------------------------------------------
+-- O fechamento passa a carimbar `closed_at` e a chamar a retenção.
+--
+-- Um segundo passo no job que já roda, não infra nova.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.close_resolved_support_tickets()
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  fechados INTEGER;
+BEGIN
+  PERFORM set_config('torque.support_clock', 'on', true);
+
+  WITH alvo AS (
+    SELECT id FROM public.support_tickets
+     WHERE status = 'resolvido'
+       AND resolved_at IS NOT NULL
+       AND resolved_at < now() - interval '7 days'
+     LIMIT 1000
+  )
+  UPDATE public.support_tickets t
+     SET status = 'fechado',
+         closed_at = now()
+    FROM alvo
+   WHERE t.id = alvo.id;
+
+  GET DIAGNOSTICS fechados = ROW_COUNT;
+
+  PERFORM set_config('torque.support_clock', 'off', true);
+
+  -- A retenção é independente do que fechou hoje: ela olha os fechados há 90
+  -- dias. Roda no mesmo job por não merecer um cron próprio.
+  PERFORM public.purge_expired_support_attachments();
+
+  RETURN fechados;
+END;
+$$;
+
+COMMENT ON FUNCTION public.close_resolved_support_tickets() IS
+  'Fecha os chamados resolvidos ha mais de 7 dias e dispara a retencao de anexos. Lotes de 1000. Ver ADR-0018 e ADR-0022.';
+
+REVOKE ALL ON FUNCTION public.close_resolved_support_tickets() FROM PUBLIC, anon, authenticated;
