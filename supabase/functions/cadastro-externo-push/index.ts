@@ -92,46 +92,12 @@ Deno.serve(
       } = await supabaseUser.auth.getUser();
       if (authError || !user) return respond({ error: "Usuário não autenticado" });
 
-      // ── Resolve org ID ────────────────────────────────────
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
         auth: { persistSession: false },
       });
 
-      const { data: memberRow } = await supabaseAdmin
-        .from("team_members")
-        .select("organization_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      organizationId = memberRow?.organization_id ?? undefined;
-
-      // ── External API config ───────────────────────────────
-      const apiKey = Deno.env.get("CADASTRO_EXTERNO_API_KEY");
-      const apiUrl = Deno.env.get("CADASTRO_EXTERNO_URL");
-      if (!apiKey || !apiUrl) {
-        return respond({ error: "Integração não configurada (env vars ausentes)" });
-      }
-
-      // Feature gate — org must have external_cadastro on their plan
-      if (!organizationId) {
-        return new Response(
-          JSON.stringify({ error: "feature_locked", feature: "external_cadastro" }),
-          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-      try {
-        await assertOrgFeature(supabaseAdmin, organizationId, "external_cadastro");
-      } catch (e) {
-        if (e instanceof FeatureLockedError) {
-          return new Response(
-            JSON.stringify({ error: "feature_locked", feature: "external_cadastro" }),
-            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
-        }
-        throw e;
-      }
-
       // ── Parse body ────────────────────────────────────────
+      // Lido ANTES de resolver a org: a org vem da proposta, não do usuário.
       const body: PushPayload = await req.json();
       const {
         pipe_proposta_id,
@@ -152,6 +118,75 @@ Deno.serve(
 
       if (!pipe_proposta_id || !nome_cliente || !cnpj) {
         return respond({ error: "Campos obrigatórios ausentes (pipe_proposta_id, nome_cliente, cnpj)" });
+      }
+
+      // ── Resolve org ID ────────────────────────────────────
+      // A org vem da PROPOSTA, não do usuário. Derivar de team_members por
+      // user_id assume "1 usuário = 1 org", o que é falso para master e para
+      // qualquer conta multi-org: `.maybeSingle()` com N linhas devolve erro e
+      // data null, o organizationId virava undefined e a chamada morria no 403
+      // de feature_locked — sem log, porque o 403 retorna antes de logRuntime.
+      // Derivar do recurso também impede que o cliente escolha a org.
+      const { data: proposta, error: propostaError } = await supabaseAdmin
+        .from("pipe_propostas")
+        .select("organization_id")
+        .eq("id", pipe_proposta_id)
+        .maybeSingle();
+
+      if (propostaError) {
+        throw new Error(
+          `Falha ao resolver a proposta (${propostaError.code ?? "sem code"}): ${propostaError.message}`,
+        );
+      }
+      if (!proposta?.organization_id) {
+        return respond({ error: "Proposta não encontrada" });
+      }
+      // `organizationId` é o `let` do escopo externo (usado pelo catch para
+      // logar); a const local carrega o tipo estreitado para as chamadas abaixo.
+      const orgId: string = proposta.organization_id;
+      organizationId = orgId;
+
+      // O usuário precisa ser membro da org DONA da proposta — sem isto, a
+      // resolução acima viraria um IDOR: qualquer usuário autenticado poderia
+      // empurrar cadastros usando o id de proposta de outra organização.
+      const { data: membership, error: membershipError } = await supabaseAdmin
+        .from("team_members")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("organization_id", orgId)
+        .limit(1)
+        .maybeSingle();
+
+      if (membershipError) {
+        throw new Error(
+          `Falha ao validar acesso (${membershipError.code ?? "sem code"}): ${membershipError.message}`,
+        );
+      }
+      if (!membership) {
+        return new Response(
+          JSON.stringify({ error: "forbidden", message: "Sem acesso a esta organização" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // ── External API config ───────────────────────────────
+      const apiKey = Deno.env.get("CADASTRO_EXTERNO_API_KEY");
+      const apiUrl = Deno.env.get("CADASTRO_EXTERNO_URL");
+      if (!apiKey || !apiUrl) {
+        return respond({ error: "Integração não configurada (env vars ausentes)" });
+      }
+
+      // Feature gate — org must have external_cadastro on their plan
+      try {
+        await assertOrgFeature(supabaseAdmin, orgId, "external_cadastro");
+      } catch (e) {
+        if (e instanceof FeatureLockedError) {
+          return new Response(
+            JSON.stringify({ error: "feature_locked", feature: "external_cadastro" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        throw e;
       }
 
       // ── 1. Search for existing client by CNPJ ────────────
@@ -271,7 +306,7 @@ Deno.serve(
         cliente_id: createData.cliente_id,
         message: createData.message || "Cliente cadastrado com sucesso",
         produtos_criados: createData.produtos_criados,
-      }, 201);
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro interno";
       await logRuntime({
