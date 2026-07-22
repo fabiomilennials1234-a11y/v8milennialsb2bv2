@@ -19,26 +19,6 @@ import { assertOrgFeature, FeatureLockedError } from "../_shared/assert-org-feat
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// Product name mapping: CRM product name → external API slug
-const PRODUCT_SLUG_MAP: Record<string, string> = {
-  "millennials growth": "millennials-growth",
-  "millennials outbound": "millennials-outbound",
-  "millennials paddock": "millennials-paddock",
-  "torque crm": "torque-crm",
-  "millennials hunting": "millennials-hunting",
-};
-
-function mapProductNameToSlug(name: string): string | null {
-  const normalized = name.trim().toLowerCase();
-  // Exact match first
-  if (PRODUCT_SLUG_MAP[normalized]) return PRODUCT_SLUG_MAP[normalized];
-  // Partial match
-  for (const [key, slug] of Object.entries(PRODUCT_SLUG_MAP)) {
-    if (normalized.includes(key) || key.includes(normalized)) return slug;
-  }
-  return null;
-}
-
 interface PushPayload {
   pipe_proposta_id: string;
   nome_cliente: string;
