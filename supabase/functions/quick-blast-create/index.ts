@@ -169,8 +169,11 @@ Deno.serve(
         await logRuntime({
           organizationId: orgId,
           module: "campaign",
-          action: "blocked",
-          status: "error",
+          action: "skipped",
+          // A policy refusal is not a failure: the system worked exactly as
+          // designed. `logger.ts` offers this status precisely so deliberate
+          // refusals do not pollute the error signal.
+          status: "skipped",
           entityType: "whatsapp_instances",
           entityId: instance_id,
           payloadSnapshot: {

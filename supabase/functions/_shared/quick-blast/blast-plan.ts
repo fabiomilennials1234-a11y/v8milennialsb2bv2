@@ -560,6 +560,11 @@ export interface ReleaseBlastPlanLotResult {
   skippedReplied: number;
   completed: boolean;
   error?: string;
+  /** Numbers held back by WhatsApp's reach ceiling this run (#1168). Empty when
+   *  none were. Lets the cron's runtime log distinguish a lot deferred for
+   *  reach from one deferred for budget, and is the calibration signal from the
+   *  highest-volume path. */
+  reachBlockedInstances?: string[];
 }
 
 /**
@@ -693,6 +698,10 @@ export async function releaseBlastPlanLot(
 
   let sent = 0;
   let deferredRows: PlanRecipientRow[] = [];
+  // Numbers held back by WhatsApp's ceiling this run. Without this a lot
+  // deferred for reach is indistinguishable from one deferred for budget —
+  // and this cron is precisely where nobody is watching to tell them apart.
+  const reachBlocked: string[] = [];
 
   const multiNumber = !!deps.instanceUsageSource && kept.some((r) => r.instance_id);
   if (multiNumber) {
@@ -709,10 +718,15 @@ export async function releaseBlastPlanLot(
       }
       const cap = resolveInstanceCap((inst as { daily_blast_cap?: number | null }).daily_blast_cap);
       const used = await deps.instanceUsageSource!.getUsedToday(instanceId, todayDate, cap);
-      const allowed = Math.max(
-        0,
-        Math.min(rows.length, cap - used, await reachClamp(deps, instanceId)),
-      );
+      // Local headroom first. Only ask the provider when this number could
+      // actually send — same principle the Quick Blast gate follows: never
+      // spend a network read to refuse what the ledgers already refused.
+      const localAllowed = Math.max(0, Math.min(rows.length, cap - used));
+      let allowed = localAllowed;
+      if (localAllowed > 0 && (await reachClamp(deps, instanceId)) === 0) {
+        allowed = 0;
+        reachBlocked.push(instanceId);
+      }
       const toSendRows = rows.slice(0, allowed);
       deferredRows.push(...rows.slice(allowed));
       if (toSendRows.length > 0) {
@@ -741,8 +755,15 @@ export async function releaseBlastPlanLot(
       numberRemaining = Math.max(0, cap - used);
     }
     // WhatsApp's own ceiling clamps the same headroom the daily caps do, so an
-    // exhausted number defers its lot instead of burning itself further.
-    numberRemaining = Math.min(numberRemaining, await reachClamp(deps, instance.id));
+    // exhausted number defers its lot instead of burning itself further. Only
+    // consulted when the local ledgers left room — see the multi-number branch.
+    if (
+      Math.min(remaining, numberRemaining) > 0 &&
+      (await reachClamp(deps, instance.id)) === 0
+    ) {
+      numberRemaining = 0;
+      reachBlocked.push(instance.id);
+    }
     const slice = selectLotSlice({
       pendingCount: kept.length,
       remainingBudget: Math.min(remaining, numberRemaining),
@@ -782,7 +803,7 @@ export async function releaseBlastPlanLot(
     next_release_date: completed ? null : addDaysIso(todayDate, 1),
   });
 
-  return { ok: true, sent, deferred, skippedRecency, skippedReplied, completed };
+  return { ok: true, sent, deferred, skippedRecency, skippedReplied, completed, reachBlockedInstances: reachBlocked };
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

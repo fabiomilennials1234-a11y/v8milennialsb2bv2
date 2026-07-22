@@ -152,6 +152,12 @@ Deno.serve(
             skipped_recency: result.skippedRecency,
             skipped_replied: result.skippedReplied,
             completed: result.completed,
+            // Which numbers WhatsApp held back this run (#1168). Without it a
+            // lot deferred for reach reads exactly like one deferred for
+            // budget — and this cron is where nobody is watching to tell them
+            // apart. It is also the calibration signal from the highest-volume
+            // path: the same numbers, day after day.
+            reach_blocked_instances: result.reachBlockedInstances ?? [],
           },
         });
       } catch (e) {
