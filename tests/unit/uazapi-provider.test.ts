@@ -239,7 +239,7 @@ describe("UazapiProvider.createInstance", () => {
   }
 
   it("calls initInstance on /instance/init with admintoken header", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonRes(200, INSTANCE_INIT_RESPONSE));
+    vi.mocked(fetch).mockImplementation(() => Promise.resolve(jsonRes(200, INSTANCE_INIT_RESPONSE)));
 
     const rpc = makeRpc({ data: null, error: null });
     const provider = makeProvider({ rpc });
@@ -252,8 +252,63 @@ describe("UazapiProvider.createInstance", () => {
     expect(headers["admintoken"]).toBe("admin-token-xyz");
   });
 
+  it("sends a systemName derived from the organization", async () => {
+    // Without it every Instance of every Organization reaches WhatsApp under
+    // the provider's default device label — from the platform's side all our
+    // tenants look like the same device, which is the correlation we want gone.
+    vi.mocked(fetch).mockImplementation(() =>
+      Promise.resolve(jsonRes(200, INSTANCE_INIT_RESPONSE))
+    );
+
+    const provider = makeProvider({ rpc: makeRpc({ data: null, error: null }) });
+    await provider.createInstance(makeCreateInput());
+
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    const body = JSON.parse(init?.body as string);
+    expect(body.systemName).toBeTypeOf("string");
+    expect(body.systemName.length).toBeGreaterThan(0);
+    expect(body.systemName).not.toContain("org-uuid-456");
+  });
+
+  it("sends different systemNames for different organizations", async () => {
+    vi.mocked(fetch).mockImplementation(() =>
+      Promise.resolve(jsonRes(200, INSTANCE_INIT_RESPONSE))
+    );
+    const provider = makeProvider({ rpc: makeRpc({ data: null, error: null }) });
+
+    await provider.createInstance({ ...makeCreateInput(), organization_id: "org-aaa" });
+    const first = JSON.parse(
+      vi.mocked(fetch).mock.calls[0][1]?.body as string
+    ).systemName;
+
+    vi.mocked(fetch).mockClear();
+    await provider.createInstance({ ...makeCreateInput(), organization_id: "org-bbb" });
+    const second = JSON.parse(
+      vi.mocked(fetch).mock.calls[0][1]?.body as string
+    ).systemName;
+
+    expect(first).not.toBe(second);
+  });
+
+  it("still creates the Instance when the label cannot be derived", async () => {
+    // Graceful degradation: an underivable label omits the field and the
+    // provider default applies. It must never block provisioning.
+    vi.mocked(fetch).mockImplementation(() =>
+      Promise.resolve(jsonRes(200, INSTANCE_INIT_RESPONSE))
+    );
+
+    const provider = makeProvider({ rpc: makeRpc({ data: null, error: null }) });
+
+    await expect(
+      provider.createInstance({ ...makeCreateInput(), organization_id: "" })
+    ).resolves.toBeDefined();
+
+    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    expect(body.systemName).toBeUndefined();
+  });
+
   it("calls set_uazapi_credentials RPC with correct parameters", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonRes(200, INSTANCE_INIT_RESPONSE));
+    vi.mocked(fetch).mockImplementation(() => Promise.resolve(jsonRes(200, INSTANCE_INIT_RESPONSE)));
 
     const rpc = makeRpc({ data: null, error: null });
     const provider = makeProvider({ rpc });
@@ -273,7 +328,7 @@ describe("UazapiProvider.createInstance", () => {
   });
 
   it("throws when RPC returns error", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonRes(200, INSTANCE_INIT_RESPONSE));
+    vi.mocked(fetch).mockImplementation(() => Promise.resolve(jsonRes(200, INSTANCE_INIT_RESPONSE)));
 
     const rpc = makeRpc({ data: null, error: { message: "constraint violation" } });
     const provider = makeProvider({ rpc });
@@ -284,7 +339,7 @@ describe("UazapiProvider.createInstance", () => {
   });
 
   it("returns CreateInstanceResult with provider_instance_id and provider_token", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonRes(200, INSTANCE_INIT_RESPONSE));
+    vi.mocked(fetch).mockImplementation(() => Promise.resolve(jsonRes(200, INSTANCE_INIT_RESPONSE)));
 
     const rpc = makeRpc({ data: null, error: null });
     const provider = makeProvider({ rpc });

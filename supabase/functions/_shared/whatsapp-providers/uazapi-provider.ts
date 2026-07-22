@@ -11,6 +11,7 @@
 
 import { UazapiClient } from "../uazapi-client.ts";
 import { extractOwnerNumber } from "../whatsapp-owner.ts";
+import { deriveDeviceName } from "../whatsapp-device-name.ts";
 import type {
   CreateInstanceInput,
   CreateInstanceResult,
@@ -117,6 +118,11 @@ export class UazapiProvider implements WhatsAppProvider {
 
     const resp = await this.client.initInstance({
       name: input.instance_name,
+      // Linked-device label WhatsApp shows for this number. Derived per
+      // Organization so our tenants do not all pair as the same device
+      // (#1167). Undefined when underivable — the field is then omitted and
+      // the provider default applies, never a shared literal.
+      systemName: deriveDeviceName(input.organization_id),
       adminField01: input.organization_id,
       adminField02: input.instance_id,
       webhookUrl,
