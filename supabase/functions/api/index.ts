@@ -18,6 +18,7 @@ import { apiResource } from "../_shared/api/responses.ts";
 import { handleApiRequest, type ApiRoute } from "../_shared/api/router.ts";
 import { getLead, getLeadTimeline, listLeads } from "../_shared/api/routes/leads.ts";
 import { listCustomFields, listPipelines, listTags } from "../_shared/api/routes/catalogs.ts";
+import { createLeads } from "../_shared/api/routes/leads-create.ts";
 import {
   addLeadTags,
   moveLeadStage,
@@ -44,6 +45,7 @@ const routes: ApiRoute[] = [
       ),
   },
   { method: "GET", pattern: "/api/v1/leads", scope: "lead:read", handler: listLeads },
+  { method: "POST", pattern: "/api/v1/leads", scope: "lead:ingest", handler: createLeads },
   { method: "GET", pattern: "/api/v1/leads/{id}", scope: "lead:read", handler: getLead },
   { method: "GET", pattern: "/api/v1/leads/{id}/timeline", scope: "lead:read", handler: getLeadTimeline },
   { method: "GET", pattern: "/api/v1/pipelines", scope: "pipeline:read", handler: listPipelines },

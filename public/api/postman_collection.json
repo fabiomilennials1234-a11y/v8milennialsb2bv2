@@ -141,6 +141,39 @@
       }
     },
     {
+      "name": "POST Criar leads (lote)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/leads",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads"
+          ],
+          "query": []
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"update_existing\": false,\n  \"origin\": \"site\",\n  \"leads\": [\n    {\n      \"name\": \"João Silva\",\n      \"phone\": \"+5511999999999\",\n      \"email\": \"joao@empresa.com\",\n      \"company\": \"Empresa A\",\n      \"tags\": [\n        \"Ouro\"\n      ],\n      \"custom_fields\": {\n        \"segmento\": \"Metalurgia\",\n        \"porte\": \"Médio\"\n      },\n      \"pipeline\": {\n        \"pipe\": \"pos-venda\",\n        \"stage\": \"onboarding\"\n      }\n    },\n    {\n      \"name\": \"Maria Santos\",\n      \"phone\": \"+5521988887777\",\n      \"pipeline\": {\n        \"pipe\": \"whatsapp\",\n        \"stage\": \"novo_lead\"\n      }\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
       "name": "GET Lead 360",
       "request": {
         "method": "GET",

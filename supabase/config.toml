@@ -12,7 +12,9 @@ enable_signup = false
 [auth.email]
 enable_confirmations = true
 
-# import-leads: autenticação via apikey; organization_id validado internamente
+# import-leads: JWT do usuário logado, validado no próprio handler (auth.getUser).
+# NÃO aceita API Key — o comentário anterior dizia "apikey" e estava errado.
+# verify_jwt=false só para o handler poder devolver o 401 já com CORS.
 [functions.import-leads]
 verify_jwt = false
 

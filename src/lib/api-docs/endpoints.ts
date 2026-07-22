@@ -465,16 +465,18 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         id: "import-leads",
-        name: "Import Leads",
-        description: "Importação em lote de leads via CSV/XLSX ou JSON array",
+        name: "Import Leads (interno)",
+        description: "Uso interno do importador de arquivos da própria plataforma. NÃO é um endpoint público: exige a sessão (JWT) de um usuário logado e não aceita API Key. Para importar leads por integração, use POST /api/v1/leads.",
         category: "leads",
         version: "v1",
         method: "POST",
         path: "/functions/v1/import-leads",
+        deprecated: true,
+        deprecation_notice: "Endpoint interno — chamadas externas recebem 401. Use POST /api/v1/leads, que aceita API Key escopada, campos personalizados e funis personalizados.",
         auth: {
-          type: "api-key",
-          header: "X-Webhook-Key",
-          description: "Chave de API fornecida pelo administrador do sistema.",
+          type: "bearer",
+          header: "Authorization",
+          description: "JWT do usuário logado. A organização é derivada do token — o organization_id do corpo é ignorado. Não existe autenticação por API Key aqui.",
         },
         parameters: [
           { name: "organization_id", type: "uuid", required: true, description: "UUID da organização." },

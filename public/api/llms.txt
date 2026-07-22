@@ -29,6 +29,22 @@ Resposta (exemplo): `{"data":[{"id":"f21072f1-…","name":"Nairde","company":"Va
 Nota: Listas retornam { data, next_cursor, has_more }. Pagine passando next_cursor de volta em ?cursor=. Erros: { error: { code, message, details? } }.
 Nota: Ordenação fixa: created_at desc, id desc.
 
+## POST /api/v1/leads
+Cria leads em lote (até 500 por requisição), com tags, campos personalizados e colocação em funil — inclusive funis personalizados. Escopo: lead:ingest (lead:write também satisfaz).
+
+Parâmetros:
+- `leads` (object[], obrigatório): Array de leads (1 a 500). Você também pode enviar o array direto no corpo, sem envelope — útil no n8n/Make.
+- `update_existing` (boolean): Se true, procura lead existente por telefone (só dígitos) e depois por email dentro da organização e atualiza em vez de duplicar. Só sobrescreve os campos que você enviar. Default false = sempre cria.
+- `origin` (string): Origem padrão aplicada aos leads do lote que não trouxerem origin próprio.
+
+Resposta (exemplo): `{"created":2,"updated":0,"failed":0,"results":[{"status":"created","lead_id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","warning":null},{"status":"created","lead_id":"b2c3d4e5-f6a7-8901-bcde-f12345678901","warning":null}]}`
+
+Nota: O lote não é tudo-ou-nada: um item inválido é rejeitado sozinho e os demais entram normalmente. Sempre confira results.
+Nota: Um item precisa de ao menos um entre name, phone e email. Item sem nenhum dos três volta como failed/missing_identity.
+Nota: warning preenchido significa lead criado com sucesso mas SEM ter entrado no funil pedido — normalmente slug ou etapa digitada errado. Confira em GET /api/v1/pipelines.
+Nota: A organização vem sempre da API Key. organization_id enviado no corpo é ignorado.
+Nota: Funil personalizado dispara os mesmos workflows e checklists que a entrada manual pela interface.
+
 ## GET /api/v1/leads/{id}
 Retorna um lead completo: tier, tags, custom fields (valores), responsáveis e posições em todos os pipes (com vendido/valor). 404 se não existir na org. Escopo: lead:read.
 
