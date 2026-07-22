@@ -10,7 +10,8 @@
 --
 -- Asserts:
 --   (a) estrutura + grants: funções existem; EXECUTE só p/ authenticated
---       (REVOKE FROM PUBLIC → anon NÃO executa)
+--       (REVOKE FROM PUBLIC + REVOKE FROM anon explícito → anon NÃO executa);
+--       índice composite idx_leads_org_name_trgm existe
 --   (b) find casa por phone / email (case-insensitive) / name (trigram),
 --       1 linha por par (a.id < b.id), ignora deleted_at
 --   (c) MULTI-TENANT: org explícita validada (assert_org_access) — membro de
@@ -24,7 +25,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(22);
+SELECT plan(23);
 
 -- ---------------------------------------------------------------------------
 -- (a) Estrutura + grants
@@ -43,7 +44,12 @@ SELECT ok(
 SELECT ok(
   NOT has_function_privilege('anon', 'public.find_duplicate_leads(uuid)', 'EXECUTE')
   AND NOT has_function_privilege('anon', 'public.merge_leads(uuid,uuid)', 'EXECUTE'),
-  '(a) anon NÃO executa (REVOKE FROM PUBLIC) — sem enumerar PII');
+  '(a) anon NÃO executa (REVOKE FROM PUBLIC + REVOKE FROM anon explícito) — sem enumerar PII');
+
+-- [FIX-2] índice do match por nome = COMPOSITE idx_leads_org_name_trgm
+-- (organization_id, name gin_trgm_ops), não mais o single-col idx_leads_name_trgm.
+SELECT has_index('public', 'leads', 'idx_leads_org_name_trgm',
+  '(a) índice composite idx_leads_org_name_trgm existe (perf do match por nome)');
 
 -- ---------------------------------------------------------------------------
 -- Fixtures: 2 orgs, 2 usuários/membros, leads com duplicatas plantadas.
