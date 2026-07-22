@@ -23,12 +23,26 @@ Pipeline: `CTO → arquiteto → [design | engenheiro | ambos] → arquiteto (co
 | Subagente | Função | Skill |
 |-----------|--------|-------|
 | **arquiteto** | Entry/exit — sanity-check, arquitetura, roteamento, commit & push branch nova | `arquiteto` |
-| **design** | UI/UX completo — visual, interação, microcopy, motion (invoca `hm-designer`) | `design` |
+| **design** | UI/UX completo — visual, interação, microcopy, motion (invoca `hm-design`) | `design` |
 | **engenheiro** | Fullstack — TS/React/Deno + DB/RLS/RPC + tests + segurança + docs Obsidian/`.specs` + auto-QA | `engenheiro` |
 
 **Roteamento**: Conversacional → arquiteto direto. Visual → design→engenheiro. Bug/refactor/schema/edge-fn → engenheiro. Feature UI completa → design+engenheiro paralelo. Decisão arquitetural → só arquiteto.
 
-**Regras**: arquiteto nunca implementa. engenheiro cobre Impl+DB+Tests+Security+Docs (pula o que não aplica). design invoca `hm-designer`. Commit+push = responsabilidade do arquiteto. Tasks sensíveis (auth/PII/RLS/multi-tenant) = seção Segurança obrigatória. Default: dev. Prod: só com pedido explícito.
+**Regras**: arquiteto nunca implementa. engenheiro cobre Impl+DB+Tests+Security+Docs (pula o que não aplica). design invoca `hm-design`. Commit+push = responsabilidade do arquiteto. Tasks sensíveis (auth/PII/RLS/multi-tenant) = seção Segurança obrigatória. Default: dev. Prod: só com pedido explícito.
+
+## Agent skills
+
+### Issue tracker
+
+Issues e PRDs vivem no GitHub (`fabiomilennials1234-a11y/v8milennialsb2bv2`), via `gh` CLI; PRD/épico leva label `prd` e as fatias referenciam ele. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Vocabulário canônico sem overrides — `needs-triage`, `needs-info`, `ready-for-agent` (já existe no repo), `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` (21 ADRs) na raiz, mais os sub-`CLAUDE.md` por BC e o vault Obsidian. See `docs/agents/domain.md`.
 
 ## Stack
 
