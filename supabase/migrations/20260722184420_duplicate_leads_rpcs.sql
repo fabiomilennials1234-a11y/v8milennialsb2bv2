@@ -1,5 +1,11 @@
 -- =====================================================================
--- 20270725000000_duplicate_leads_rpcs.sql
+-- 20260722184420_duplicate_leads_rpcs.sql
+--
+-- ⚠️ APLICADO EM PROD (jsjsmuncfkbsbzqzqhfq) — ledger 20260722184420.
+--    O filename bate com a versão gravada em schema_migrations (renomeado de
+--    20270725000000 pós-apply). O apply live pegou 3 bugs corrigidos direto em
+--    prod; este arquivo reflete EXATAMENTE o estado real de prod (ver notas
+--    [FIX-1/2/3] abaixo). NÃO reintroduzir o SQL antigo.
 --
 -- Página /duplicados (src/modules/leads/pages/Duplicates.tsx) estava
 -- QUEBRADA em TODAS as orgs: o hook useDuplicateLeads.ts chamava duas RPCs
@@ -19,10 +25,18 @@
 --     (anon herda EXECUTE via GRANT TO PUBLIC) + GRANT EXECUTE só authenticated.
 --
 -- PERFORMANCE:
---   * find usa o operador `%` (trigram, indexável) com threshold 0.6 fixado no
---     nível da função; a similaridade exata só entra na projeção. Índice GIN
---     idx_leads_name_trgm (parcial deleted_at IS NULL) evita o nested-loop N²
---     que estourava statement_timeout na maior org (3906 leads ativos).
+--   * find usa o operador `%` (trigram, indexável) como PRÉ-FILTRO + um teto
+--     exato `similarity(a.name,b.name) >= 0.6` no WHERE; a similaridade exata
+--     também entra na projeção (round 2 casas). Ver [FIX-1].
+--   * [FIX-2] Índice = COMPOSITE btree_gin `idx_leads_org_name_trgm` sobre
+--     (organization_id, name gin_trgm_ops), parcial `WHERE deleted_at IS NULL`.
+--     Motivo: GIN trgm PURO em (name) NÃO acelera o self-join `a.name % b.name`
+--     — o índice trgm só serve `col % <constante>`, não `col % col`. Com o
+--     composite (org, name), o inner scan do nested-loop vira index-driven
+--     (filtra pela org via btree_gin e usa trgm no name). EXPLAIN live na org de
+--     1380 leads: 3279ms → 931ms. Exige `btree_gin` (opclass de igualdade p/
+--     colunas escalares dentro de índice GIN). O single-col `idx_leads_name_trgm`
+--     foi DROPADO em prod por redundância.
 --
 -- MERGE — pre-dedupe DATA-DRIVEN:
 --   O passo 5 re-aponta TODAS as FKs de leads.id genericamente. Antes, tabelas
@@ -44,13 +58,27 @@
 -- pg_trgm já habilitada (20260940000000). Defensivo, no-op se existe.
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
--- Índice trigram para o match por nome. Parcial (só leads vivos) para ficar
--- enxuto. Não-concorrente: em prod, se o CTO preferir evitar o lock breve na
--- tabela grande, criar CONCURRENTLY out-of-band ANTES do apply (IF NOT EXISTS
--- torna esta linha no-op).
-CREATE INDEX IF NOT EXISTS idx_leads_name_trgm
-  ON public.leads USING gin (name gin_trgm_ops)
+-- [FIX-2] btree_gin: dá opclass de igualdade a colunas escalares (uuid) DENTRO
+-- de um índice GIN, permitindo o composite (organization_id, name gin_trgm_ops).
+-- Sem ela o CREATE INDEX composite falha. No-op se já existe.
+CREATE EXTENSION IF NOT EXISTS btree_gin;
+
+-- [FIX-2] Índice COMPOSITE btree_gin para o match por nome. (organization_id,
+-- name gin_trgm_ops), parcial (só leads vivos). Faz o inner scan do self-join
+-- `a.name % b.name` virar index-driven (o trgm puro em (name) só acelera
+-- `col % constante`, não o self-join). EXPLAIN live 3279ms→931ms (org 1380 leads).
+--
+-- Não-concorrente aqui (CREATE INDEX IF NOT EXISTS) p/ replay em dev funcionar
+-- DENTRO da migration. Em PROD foi criado CONCURRENTLY out-of-band ANTES do
+-- apply → o IF NOT EXISTS torna esta linha no-op (sem lock na `leads` grande).
+CREATE INDEX IF NOT EXISTS idx_leads_org_name_trgm
+  ON public.leads USING gin (organization_id, name gin_trgm_ops)
   WHERE deleted_at IS NULL;
+
+-- [FIX-2] O single-col `idx_leads_name_trgm` (versão antiga desta migration)
+-- ficou redundante e foi DROPADO em prod. Defensivo p/ replay: em dev fresh ele
+-- nunca existiu (IF EXISTS → no-op); onde existia, é removido.
+DROP INDEX IF EXISTS public.idx_leads_name_trgm;
 
 -- ---------------------------------------------------------------------
 -- find_duplicate_leads(p_organization_id)
@@ -77,7 +105,11 @@ LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public, extensions
-SET pg_trgm.similarity_threshold = '0.6'
+-- [FIX-1] SEM `SET pg_trgm.similarity_threshold` — o role de migration do
+-- Supabase levanta `permission denied` ao setar esse GUC no nível da função.
+-- Em vez do GUC, o branch de nome filtra explícito: `a.name % b.name`
+-- (pré-filtro indexável, usa o threshold default 0.3) E `similarity(...) >= 0.6`
+-- (teto exato). Mesmo resultado, sem depender do GUC.
 AS $$
 BEGIN
   -- Não confia no caller: valida acesso à org (membro/master/service_role).
@@ -123,8 +155,11 @@ BEGIN
 
     UNION ALL
 
-    -- (3) nome similar (trigram, indexável via `%` + threshold 0.6). A
-    -- similaridade exata só entra na projeção.
+    -- (3) nome similar. [FIX-1] `a.name % b.name` = pré-filtro indexável
+    -- (threshold default 0.3, casa o índice composite) + `similarity(...) >= 0.6`
+    -- = teto exato (substitui o GUC pg_trgm.similarity_threshold que dava
+    -- permission denied no role de migration). A similaridade exata entra também
+    -- na projeção (round 2 casas).
     SELECT
       a.id, a.name, a.phone, a.email, a.company,
       b.id, b.name, b.phone, b.email, b.company,
@@ -136,6 +171,7 @@ BEGIN
       ON b.organization_id = a.organization_id
      AND a.id < b.id
      AND a.name % b.name
+     AND similarity(a.name, b.name) >= 0.6
      AND b.deleted_at IS NULL
      AND length(btrim(b.name)) >= 4
     WHERE a.organization_id = p_organization_id
@@ -321,10 +357,18 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------
--- Grants: fecha PUBLIC (anon herda via PUBLIC) e libera só authenticated.
+-- Grants: fecha PUBLIC e libera só authenticated.
 -- ---------------------------------------------------------------------
 REVOKE ALL ON FUNCTION public.find_duplicate_leads(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.merge_leads(uuid, uuid)    FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION public.find_duplicate_leads(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.merge_leads(uuid, uuid)    TO authenticated;
+
+-- [FIX-3] REVOKE explícito de anon. No Supabase, `anon` recebe EXECUTE via
+-- ALTER DEFAULT PRIVILEGES direto (não via PUBLIC) → `REVOKE FROM PUBLIC` é
+-- no-op pra anon, que ficaria com EXECUTE e poderia enumerar PII. Precisa do
+-- revoke explícito. (Gotcha recorrente do projeto — ver
+-- reference_anon_execute_via_public_grant.)
+REVOKE EXECUTE ON FUNCTION public.find_duplicate_leads(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.merge_leads(uuid, uuid)    FROM anon;

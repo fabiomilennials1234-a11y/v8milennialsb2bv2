@@ -16,7 +16,7 @@ export interface DuplicateGroup {
   similarity: number;
 }
 
-// Args das RPCs (migration 20270725000000_duplicate_leads_rpcs.sql).
+// Args das RPCs (migration 20260722184420_duplicate_leads_rpcs.sql).
 interface FindDuplicateLeadsArgs {
   p_organization_id: string;
 }
@@ -25,13 +25,8 @@ interface MergeLeadsArgs {
   p_merge_lead_id: string;
 }
 
-// NOTA: `find_duplicate_leads` e `merge_leads` foram adicionadas na migration
-// 20270725000000. Enquanto src/integrations/supabase/types.ts não for
-// regenerado pós-apply (`supabase gen types typescript --project-id <ref>`),
-// os nomes dessas RPCs não existem no union tipado do client — daí o
-// `as never` no nome (padrão do repo p/ RPC fora dos types gerados). Os
-// args e o retorno seguem fortemente tipados (MergeLeadsArgs / DuplicateGroup).
-// Remover os `as never` após regenerar os types.
+// `find_duplicate_leads` e `merge_leads` aplicadas em prod (migration
+// 20260722184420) e presentes em types.ts (regenerado) — RPCs tipadas.
 
 export function useDuplicateLeads() {
   const { organizationId } = useOrganization();
@@ -41,7 +36,7 @@ export function useDuplicateLeads() {
       // org validada server-side (assert_org_access) — "frontend nunca envia
       // org" = não CONFIAR nela; aqui é enviada E validada na RPC.
       const args: FindDuplicateLeadsArgs = { p_organization_id: organizationId! };
-      const { data, error } = await supabase.rpc("find_duplicate_leads" as never, args as never);
+      const { data, error } = await supabase.rpc("find_duplicate_leads", args);
       if (error) throw error;
       return (data ?? []) as DuplicateGroup[];
     },
@@ -57,7 +52,7 @@ export function useMergeLeads() {
         p_keep_lead_id: params.keep_id,
         p_merge_lead_id: params.merge_id,
       };
-      const { error } = await supabase.rpc("merge_leads" as never, args as never);
+      const { error } = await supabase.rpc("merge_leads", args);
       if (error) throw error;
     },
     onSuccess: () => {

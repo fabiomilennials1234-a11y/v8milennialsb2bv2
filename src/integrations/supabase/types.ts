@@ -17108,6 +17108,23 @@ export type Database = {
         Returns: undefined
       }
       export_lead_data: { Args: { p_lead_id: string }; Returns: Json }
+      find_duplicate_leads: {
+        Args: { p_organization_id: string }
+        Returns: {
+          lead_a_company: string
+          lead_a_email: string
+          lead_a_id: string
+          lead_a_name: string
+          lead_a_phone: string
+          lead_b_company: string
+          lead_b_email: string
+          lead_b_id: string
+          lead_b_name: string
+          lead_b_phone: string
+          match_type: string
+          similarity: number
+        }[]
+      }
       find_leads_no_reply: {
         Args: { p_cutoff: string; p_limit?: number; p_organization_id: string }
         Returns: {
@@ -18218,6 +18235,10 @@ export type Database = {
       mcp_exec_readonly_sql: {
         Args: { p_max_rows?: number; p_sql: string }
         Returns: Json
+      }
+      merge_leads: {
+        Args: { p_keep_lead_id: string; p_merge_lead_id: string }
+        Returns: undefined
       }
       metric_period_bounds: {
         Args: {
