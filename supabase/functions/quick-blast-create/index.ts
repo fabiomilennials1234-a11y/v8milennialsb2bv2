@@ -162,6 +162,25 @@ Deno.serve(
       );
 
       if (!result.ok) {
+        // A refusal carries the most valuable calibration reading there is
+        // (#1168): what WhatsApp reported at the exact moment an account hit a
+        // ceiling. Logging only successes would record every case except the
+        // one worth studying. Kept best-effort — never blocks the response.
+        await logRuntime({
+          organizationId: orgId,
+          module: "campaign",
+          action: "blocked",
+          status: "error",
+          entityType: "whatsapp_instances",
+          entityId: instance_id,
+          payloadSnapshot: {
+            reason: result.error ?? "blast_failed",
+            skipped: result.skipped,
+            remaining: result.remaining,
+            reach: result.reachLimit ?? null,
+          },
+        });
+
         return jsonResponse(400, {
           error: result.error ?? "blast_failed",
           skipped: result.skipped,
