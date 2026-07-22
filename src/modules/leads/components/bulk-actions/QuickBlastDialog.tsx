@@ -18,6 +18,7 @@ import { useWhatsAppInstances } from "@/modules/communication";
 import { useQuickBlast } from "@/modules/leads/hooks/useQuickBlast";
 import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
 import { UpgradeModal } from "@/shared/components/UpgradeModal";
+import { blastErrorMessage } from "@/modules/leads/lib/blast-error-messages";
 
 interface QuickBlastDialogProps {
   open: boolean;
@@ -174,7 +175,8 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
       onOpenChange(false);
       onDone?.();
     } catch (e) {
-      toast.error((e as Error).message ?? "Falha ao iniciar disparo");
+      // The backend answers with a machine code; translate it before showing.
+      toast.error(blastErrorMessage((e as Error).message));
     }
   }
 

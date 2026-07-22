@@ -39,6 +39,7 @@ import { planBlast } from "./blast-planner.ts";
 import { assignRecipientsToNumbers } from "./blast-plan-distribution.ts";
 import { resolveInstanceCap, type InstanceUsageSource } from "./instance-budget.ts";
 import { nextValidSendTime, type QuietWindow } from "./quiet-hours.ts";
+import { assessReach, type ReachLimitSource } from "../whatsapp-reach-limit.ts";
 
 // ── Frozen per-recipient snapshot ────────────────────────────────────────────
 
@@ -137,6 +138,16 @@ export interface BlastPlanDeps {
   /** Per-number daily ledger (ADR-0015). Required for multi-number plans (the
    *  edge fn always injects it); absent for legacy single-number plans/tests. */
   instanceUsageSource?: InstanceUsageSource;
+  /** WhatsApp's own reach ceiling for the sending number (#1168).
+   *
+   *  Here the response to an exhausted ceiling is to DEFER the lot, not to
+   *  refuse it: the releaser is a cron with nobody watching, and a plan whose
+   *  remaining lots simply move to tomorrow is the behaviour the elastic-
+   *  duration design already expects. Refusing would strand recipients.
+   *
+   *  Fail-open like everywhere else this gate appears — absent seam or unknown
+   *  reading never holds a lot back. */
+  reachLimitSource?: ReachLimitSource;
   /** Resolves the full whatsapp_instances row by id for the releaser, which only
    *  has the persisted instance_id (the in-memory `instance` is not a column).
    *  Tests inject `plan.instance` inline so they need not provide this. Returns
@@ -549,6 +560,11 @@ export interface ReleaseBlastPlanLotResult {
   skippedReplied: number;
   completed: boolean;
   error?: string;
+  /** Numbers held back by WhatsApp's reach ceiling this run (#1168). Empty when
+   *  none were. Lets the cron's runtime log distinguish a lot deferred for
+   *  reach from one deferred for budget, and is the calibration signal from the
+   *  highest-volume path. */
+  reachBlockedInstances?: string[];
 }
 
 /**
@@ -557,6 +573,33 @@ export interface ReleaseBlastPlanLotResult {
  * marks sent/skipped, defers the remainder forward, and completes the plan when
  * its membership is exhausted.
  */
+/**
+ * Reach allowance expressed as a headroom clamp for one sending number.
+ *
+ * Returns 0 when WhatsApp clearly says the number is at its ceiling, and
+ * Infinity otherwise — including for an absent seam, an unknown reading, or a
+ * throwing source. Callers `Math.min` it into the headroom they already
+ * compute, so an exhausted number defers its rows through the SAME path the
+ * daily caps already use. No new branch, no stranded recipients.
+ *
+ * It deliberately does NOT clamp to the reported headroom. That counter tracks
+ * NEW CONTACTS reached, which is not one-to-one with messages sent — a lot
+ * aimed largely at known contacts would be throttled for no reason. Only a
+ * fully exhausted ceiling is unambiguous enough to act on.
+ */
+async function reachClamp(
+  deps: BlastPlanDeps,
+  instanceId: string,
+): Promise<number> {
+  if (!deps.reachLimitSource) return Number.POSITIVE_INFINITY;
+  try {
+    const verdict = assessReach(await deps.reachLimitSource.get(instanceId));
+    return verdict.exhausted ? 0 : Number.POSITIVE_INFINITY;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
 export async function releaseBlastPlanLot(
   deps: BlastPlanDeps,
   params: ReleaseBlastPlanLotParams,
@@ -655,6 +698,10 @@ export async function releaseBlastPlanLot(
 
   let sent = 0;
   let deferredRows: PlanRecipientRow[] = [];
+  // Numbers held back by WhatsApp's ceiling this run. Without this a lot
+  // deferred for reach is indistinguishable from one deferred for budget —
+  // and this cron is precisely where nobody is watching to tell them apart.
+  const reachBlocked: string[] = [];
 
   const multiNumber = !!deps.instanceUsageSource && kept.some((r) => r.instance_id);
   if (multiNumber) {
@@ -671,7 +718,15 @@ export async function releaseBlastPlanLot(
       }
       const cap = resolveInstanceCap((inst as { daily_blast_cap?: number | null }).daily_blast_cap);
       const used = await deps.instanceUsageSource!.getUsedToday(instanceId, todayDate, cap);
-      const allowed = Math.max(0, Math.min(rows.length, cap - used));
+      // Local headroom first. Only ask the provider when this number could
+      // actually send — same principle the Quick Blast gate follows: never
+      // spend a network read to refuse what the ledgers already refused.
+      const localAllowed = Math.max(0, Math.min(rows.length, cap - used));
+      let allowed = localAllowed;
+      if (localAllowed > 0 && (await reachClamp(deps, instanceId)) === 0) {
+        allowed = 0;
+        reachBlocked.push(instanceId);
+      }
       const toSendRows = rows.slice(0, allowed);
       deferredRows.push(...rows.slice(allowed));
       if (toSendRows.length > 0) {
@@ -698,6 +753,16 @@ export async function releaseBlastPlanLot(
       );
       const used = await deps.instanceUsageSource.getUsedToday(instance.id, todayDate, cap);
       numberRemaining = Math.max(0, cap - used);
+    }
+    // WhatsApp's own ceiling clamps the same headroom the daily caps do, so an
+    // exhausted number defers its lot instead of burning itself further. Only
+    // consulted when the local ledgers left room — see the multi-number branch.
+    if (
+      Math.min(remaining, numberRemaining) > 0 &&
+      (await reachClamp(deps, instance.id)) === 0
+    ) {
+      numberRemaining = 0;
+      reachBlocked.push(instance.id);
     }
     const slice = selectLotSlice({
       pendingCount: kept.length,
@@ -738,7 +803,7 @@ export async function releaseBlastPlanLot(
     next_release_date: completed ? null : addDaysIso(todayDate, 1),
   });
 
-  return { ok: true, sent, deferred, skippedRecency, skippedReplied, completed };
+  return { ok: true, sent, deferred, skippedRecency, skippedReplied, completed, reachBlockedInstances: reachBlocked };
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

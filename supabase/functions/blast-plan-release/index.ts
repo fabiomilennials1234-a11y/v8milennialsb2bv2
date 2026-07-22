@@ -33,6 +33,7 @@ import { blastPlanStore } from "../_shared/quick-blast/blast-plan-store.ts";
 import { releaseBlastPlanLot } from "../_shared/quick-blast/blast-plan.ts";
 import { instanceDailyUsageSource } from "../_shared/quick-blast/instance-budget.ts";
 import { buildPostSendMover } from "../_shared/quick-blast/post-send-target.ts";
+import { providerReachLimitSource } from "../_shared/whatsapp-reach-limit-source.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -108,7 +109,26 @@ Deno.serve(
           ? buildPostSendMover(supabase, plan.organization_id, plan.post_send_target)
           : undefined;
         const result = await releaseBlastPlanLot(
-          { store, usageSource, instanceUsageSource, dispatch: dispatchFor(supabase), activitySource, instanceResolver, onRecipientsSent },
+          {
+            store,
+            usageSource,
+            instanceUsageSource,
+            dispatch: dispatchFor(supabase),
+            activitySource,
+            instanceResolver,
+            onRecipientsSent,
+            // WhatsApp's own reach ceiling (#1168). A number at its ceiling
+            // defers its lot to tomorrow instead of burning itself further —
+            // this cron is the highest-volume path and runs unattended.
+            reachLimitSource: {
+              get: (instanceId: string) =>
+                instanceResolver(instanceId).then((inst) =>
+                  inst
+                    ? providerReachLimitSource(supabase, inst as any).get(instanceId)
+                    : null
+                ),
+            },
+          },
           { planId: plan.id!, dailyBudget, now },
         );
         if (!result.ok) {
@@ -132,6 +152,12 @@ Deno.serve(
             skipped_recency: result.skippedRecency,
             skipped_replied: result.skippedReplied,
             completed: result.completed,
+            // Which numbers WhatsApp held back this run (#1168). Without it a
+            // lot deferred for reach reads exactly like one deferred for
+            // budget — and this cron is where nobody is watching to tell them
+            // apart. It is also the calibration signal from the highest-volume
+            // path: the same numbers, day after day.
+            reach_blocked_instances: result.reachBlockedInstances ?? [],
           },
         });
       } catch (e) {
