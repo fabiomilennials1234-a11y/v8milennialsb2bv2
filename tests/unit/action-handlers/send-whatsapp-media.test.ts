@@ -37,6 +37,7 @@ import {
   sendWhatsAppImage,
   sendWhatsAppSticker,
   sendWhatsAppDocument,
+  sendWhatsAppVideo,
 } from "../../../supabase/functions/_shared/action-handlers/send-whatsapp-media";
 import { sendMediaViaInstance } from "../../../supabase/functions/_shared/whatsapp-dispatch";
 
@@ -244,5 +245,67 @@ describe("sendWhatsAppDocument", () => {
       file: "https://cdn.test/proposta.pdf",
       filename: "Proposta Comercial.pdf",
     });
+  });
+});
+
+// ── Video ──
+describe("sendWhatsAppVideo", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns error when leadId is null", async () => {
+    const { input } = makeInput({ videoUrl: "https://cdn.test/demo.mp4" }, { leadId: null });
+    const result = await sendWhatsAppVideo(input);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("leadId");
+  });
+
+  it("returns error when no video URL configured", async () => {
+    const { input } = makeInput({});
+    const result = await sendWhatsAppVideo(input);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("video URL");
+  });
+
+  it("returns error when lead has no phone", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("whatsapp_instances", [WA_INSTANCE]);
+    mockTable("whatsapp_messages", []);
+    mockTable("leads", [{ ...LEAD, phone: null }]);
+
+    const result = await sendWhatsAppVideo({
+      supabase: sb,
+      organizationId: "org-1",
+      leadId: "lead-1",
+      conversationId: null,
+      params: { videoUrl: "https://cdn.test/demo.mp4", whatsappInstanceId: "inst-1" },
+      executionContext: {},
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("phone");
+  });
+
+  it("sends video successfully", async () => {
+    const { input } = makeInput({ videoUrl: "https://cdn.test/demo.mp4" });
+    const result = await sendWhatsAppVideo(input);
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("video sent");
+  });
+
+  it("forwards type=video + resolved caption to the provider (legacy path)", async () => {
+    const { input } = makeInput({
+      videoUrl: "https://cdn.test/demo.mp4",
+      videoCaption: "Olha isso, {{nome}}!",
+    });
+    const result = await sendWhatsAppVideo(input);
+    expect(result.success).toBe(true);
+    expect(sendMediaViaInstance).toHaveBeenCalledTimes(1);
+    const mediaArg = (sendMediaViaInstance as unknown as import("vitest").Mock).mock.calls[0][3];
+    expect(mediaArg).toMatchObject({
+      type: "video",
+      file: "https://cdn.test/demo.mp4",
+    });
+    // videoCaption resolves Template Variables, exactly like imageCaption.
+    expect(mediaArg.caption).toContain("Test Lead");
+    expect(mediaArg.caption).not.toContain("{{nome}}");
   });
 });

@@ -25,6 +25,8 @@ const CURATED_ACTION_CHECK: Record<string, (c: Record<string, unknown>) => strin
   ) => (c.templateId ? null : "send_whatsapp_template requires templateId"),
   send_whatsapp_document: (c) =>
     c.documentUrl ? null : "send_whatsapp_document requires documentUrl",
+  send_whatsapp_video: (c) =>
+    c.videoUrl ? null : "send_whatsapp_video requires videoUrl",
   send_to_number: (c) => {
     const phones = Array.isArray(c.notifyPhones)
       ? c.notifyPhones.filter((p) => typeof p === "string" && p.trim())

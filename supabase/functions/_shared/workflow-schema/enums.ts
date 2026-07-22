@@ -50,6 +50,7 @@ export const ACTION_TYPES = [
   "send_whatsapp_message",
   "send_whatsapp_audio",
   "send_whatsapp_image",
+  "send_whatsapp_video",
   "send_whatsapp_sticker",
   "send_whatsapp_document",
   "send_whatsapp_template",

@@ -115,6 +115,22 @@ describe("send_whatsapp_message — dispatch by messageType", () => {
     expect(result.message).toContain("image");
   });
 
+  it("messageType 'video' sends a WhatsApp video via the existing handler", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("leads", [LEAD]);
+    mockTable("whatsapp_instances", [WA_INSTANCE]);
+    mockTable("whatsapp_messages", []);
+    mockTable("lead_history", []);
+
+    const result = await executeWorkflowAction({
+      supabase: sb, organizationId: "org-1", leadId: "lead-1",
+      nodeData: { actionType: "send_whatsapp_message", messageType: "video", videoUrl: "https://cdn.test/demo.mp4", videoCaption: "Veja {{nome}}" },
+      executionContext: {},
+    });
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("video");
+  });
+
   it("messageType 'audio' sends a WhatsApp audio via the existing handler", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD]);

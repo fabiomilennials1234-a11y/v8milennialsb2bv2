@@ -410,6 +410,7 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
         at === "send_whatsapp" ||
         at === "send_whatsapp_audio" ||
         at === "send_whatsapp_image" ||
+        at === "send_whatsapp_video" ||
         at === "send_whatsapp_sticker" ||
         at === "send_whatsapp_document" ||
         at === "send_whatsapp_template" ||
@@ -455,6 +456,11 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
             Imagem PNG ou WebP. Recomendado 512×512px com fundo transparente.
           </p>
         </div>
+      )}
+
+      {/* Send WhatsApp (Vídeo) */}
+      {at === "send_whatsapp_video" && (
+        <WhatsAppVideoPanel data={data} onUpdate={onUpdate} />
       )}
 
       {/* Send WhatsApp (Documento) */}
@@ -1184,6 +1190,7 @@ function TagSelectorField({
 const MESSAGE_TYPE_OPTIONS: { value: MessageType; label: string }[] = [
   { value: "texto", label: "Texto" },
   { value: "imagem", label: "Imagem" },
+  { value: "video", label: "Vídeo" },
   { value: "audio", label: "Áudio" },
   { value: "sticker", label: "Sticker" },
   { value: "menu", label: "Menu" },
@@ -1222,6 +1229,7 @@ function UnifiedMessagePanel({
 
       {mt === "texto" && <WhatsAppTextPanel data={data} onUpdate={onUpdate} aiMode />}
       {mt === "imagem" && <WhatsAppImagePanel data={data} onUpdate={onUpdate} />}
+      {mt === "video" && <WhatsAppVideoPanel data={data} onUpdate={onUpdate} />}
       {mt === "audio" && <WhatsAppAudioPanel data={data} onUpdate={onUpdate} />}
       {mt === "sticker" && (
         <div className="space-y-2">
@@ -1599,6 +1607,170 @@ function WhatsAppImagePanel({
           value={data.imageCaption || ""}
           onChange={(e) => onUpdate({ imageCaption: e.target.value })}
           placeholder="Confira nosso catálogo, {{nome}}!"
+          rows={2}
+        />
+        <p className="text-xs text-muted-foreground">
+          Variáveis: {"{{"} nome {"}}"}, {"{{"} empresa {"}}"} ...
+        </p>
+      </div>
+    </>
+  );
+}
+
+function WhatsAppVideoPanel({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const { organizationId } = useOrganization();
+  const [isUploading, setIsUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      const { validateWorkflowVideoFile, buildWorkflowAssetPath } = await import(
+        "@/lib/workflow-image-upload"
+      );
+
+      const validation = validateWorkflowVideoFile(file);
+      if (!validation.valid) {
+        toast.error(validation.error!);
+        return;
+      }
+      if (!organizationId) {
+        toast.error("Organização não encontrada");
+        return;
+      }
+
+      setIsUploading(true);
+      try {
+        const path = buildWorkflowAssetPath(organizationId, file.name);
+        const { data: uploaded, error } = await supabase.storage
+          .from("media")
+          .upload(path, file, {
+            // Always mp4 — the validator rejects everything else, so we never
+            // want an empty browser type to reach the bucket's mime allowlist.
+            contentType: "video/mp4",
+            upsert: false,
+          });
+
+        if (error) throw new Error(error.message);
+
+        const { data: urlData } = supabase.storage
+          .from("media")
+          .getPublicUrl(uploaded.path);
+
+        if (!urlData?.publicUrl) throw new Error("Erro ao obter URL do vídeo");
+
+        onUpdate({ videoUrl: urlData.publicUrl, videoMode: "upload" });
+        toast.success("Vídeo enviado!");
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Erro ao enviar vídeo";
+        toast.error(message);
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [organizationId, onUpdate],
+  );
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+    e.target.value = "";
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
+
+  const removeVideo = () => {
+    onUpdate({ videoUrl: undefined });
+  };
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Vídeo</Label>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="video/mp4,.mp4"
+          className="hidden"
+          onChange={handleInputChange}
+        />
+
+        {data.videoUrl ? (
+          <div className="relative group rounded-lg border overflow-hidden bg-muted/30">
+            <video
+              src={data.videoUrl}
+              controls
+              preload="metadata"
+              className="w-full max-h-40 object-contain"
+            />
+            <div className="absolute inset-x-0 top-0 flex justify-end gap-2 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => inputRef.current?.click()}
+                disabled={isUploading}
+              >
+                <Upload className="h-3.5 w-3.5 mr-1" />
+                Trocar
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={removeVideo}
+                disabled={isUploading}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                Remover
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 cursor-pointer transition-colors",
+              dragOver
+                ? "border-primary bg-primary/5"
+                : "border-muted-foreground/25 hover:border-muted-foreground/50",
+              isUploading && "pointer-events-none opacity-60",
+            )}
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+          >
+            <Upload className="h-8 w-8 text-muted-foreground/50" />
+            <p className="text-xs text-muted-foreground text-center">
+              {isUploading ? "Enviando..." : "Clique ou arraste um vídeo aqui"}
+            </p>
+            <p className="text-[10px] text-muted-foreground/60">
+              MP4 apenas — máx. 16MB
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label>Legenda (opcional)</Label>
+        <Textarea
+          value={data.videoCaption || ""}
+          onChange={(e) => onUpdate({ videoCaption: e.target.value })}
+          placeholder="Olha esse vídeo, {{nome}}!"
           rows={2}
         />
         <p className="text-xs text-muted-foreground">

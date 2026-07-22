@@ -9,6 +9,7 @@
  *   send_whatsapp            → messageType "texto"
  *   send_whatsapp_audio      → messageType "audio"
  *   send_whatsapp_image      → messageType "imagem"
+ *   send_whatsapp_video      → messageType "video"
  *   send_whatsapp_sticker    → messageType "sticker"
  *   send_whatsapp_menu       → messageType "menu"
  *   send_whatsapp_pix_button → messageType "pix"
@@ -22,6 +23,7 @@ const LEGACY_TO_MESSAGE_TYPE: Record<string, MessageType> = {
   send_whatsapp: "texto",
   send_whatsapp_audio: "audio",
   send_whatsapp_image: "imagem",
+  send_whatsapp_video: "video",
   send_whatsapp_sticker: "sticker",
   send_whatsapp_menu: "menu",
   send_whatsapp_pix_button: "pix",

@@ -38,6 +38,7 @@ describe("upgradeLegacyMessageNodeData", () => {
   });
 
   it("converts sticker / menu / pix_button to their message types", () => {
+    expect(upgradeLegacyMessageNodeData(action("send_whatsapp_video")).messageType).toBe("video");
     expect(upgradeLegacyMessageNodeData(action("send_whatsapp_sticker")).messageType).toBe("sticker");
     expect(upgradeLegacyMessageNodeData(action("send_whatsapp_menu")).messageType).toBe("menu");
     expect(upgradeLegacyMessageNodeData(action("send_whatsapp_pix_button")).messageType).toBe("pix");
