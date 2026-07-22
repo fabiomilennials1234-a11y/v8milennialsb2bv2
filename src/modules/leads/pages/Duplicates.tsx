@@ -9,6 +9,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Search,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,7 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export default function Duplicates() {
-  const { data: duplicates, isLoading, refetch } = useDuplicateLeads();
+  const { data: duplicates, isLoading, isError, error, refetch } = useDuplicateLeads();
   const mergeMutation = useMergeLeads();
 
   const [search, setSearch] = useState("");
@@ -97,6 +98,17 @@ export default function Duplicates() {
       {isLoading ? (
         <div className="flex items-center justify-center py-24">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : isError ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <AlertTriangle className="mb-3 h-10 w-10 text-destructive/70" />
+          <p className="text-sm font-medium">Nao foi possivel carregar as duplicatas</p>
+          <p className="mt-1 max-w-md text-xs text-muted-foreground">
+            {(error as Error)?.message ?? "Erro inesperado ao buscar duplicatas."}
+          </p>
+          <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()}>
+            Tentar novamente
+          </Button>
         </div>
       ) : !filtered.length ? (
         <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
