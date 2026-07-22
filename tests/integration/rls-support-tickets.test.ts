@@ -105,6 +105,10 @@ describe.skipIf(shouldSkip)('RLS: Chamado (support_tickets)', () => {
         author_user_id: masterUserId,
         body: 'Provavelmente o stage_cap. Nao mostrar ao cliente.',
         is_internal: true,
+        // `CHECK (NOT is_internal OR from_staff)`, de 20270124000000: nota
+        // interna e' sempre do staff. Sem isto o fixture viola o CHECK e
+        // derruba o beforeAll da suite inteira.
+        from_staff: true,
       })
       .select('id')
       .single();
