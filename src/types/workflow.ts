@@ -47,6 +47,7 @@ export type WorkflowNodeType =
 export type MessageType =
   | "texto"
   | "imagem"
+  | "video"
   | "audio"
   | "sticker"
   | "menu"
@@ -58,6 +59,7 @@ export type WorkflowActionType =
   | "send_whatsapp"
   | "send_whatsapp_audio"
   | "send_whatsapp_image"
+  | "send_whatsapp_video"
   | "send_whatsapp_sticker"
   | "send_whatsapp_document"
   | "send_whatsapp_template"
@@ -324,6 +326,13 @@ export interface ActionNodeData {
   // Send WhatsApp (imagem)
   imageUrl?: string;
   imageCaption?: string;
+  // Send WhatsApp (vídeo — MP4, até 16MB)
+  videoUrl?: string;
+  videoCaption?: string;
+  /** Reservado p/ biblioteca de vídeos futura — sem UI hoje (sempre "upload"). */
+  videoMode?: "upload" | "library";
+  /** Reservado p/ biblioteca de vídeos futura — sem UI hoje. */
+  videoSourceId?: string;
   // Send WhatsApp (figurinha)
   stickerUrl?: string;
   // Send WhatsApp (documento — PDF/DOC, até 16MB)
@@ -739,6 +748,7 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   send_whatsapp: "Enviar WhatsApp (Texto)",
   send_whatsapp_audio: "Enviar WhatsApp (Áudio)",
   send_whatsapp_image: "Enviar WhatsApp (Imagem)",
+  send_whatsapp_video: "Enviar WhatsApp (Vídeo)",
   send_whatsapp_sticker: "Enviar WhatsApp (Figurinha)",
   send_whatsapp_document: "Enviar WhatsApp (Documento)",
   send_whatsapp_template: "Enviar Template WhatsApp",
@@ -852,6 +862,7 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
       "send_whatsapp",
       "send_whatsapp_audio",
       "send_whatsapp_image",
+      "send_whatsapp_video",
       "send_whatsapp_sticker",
       "send_whatsapp_document",
       "send_whatsapp_template",
@@ -916,6 +927,7 @@ const LEGACY_WHATSAPP_SEND_ACTIONS: WorkflowActionType[] = [
   "send_whatsapp",
   "send_whatsapp_audio",
   "send_whatsapp_image",
+  "send_whatsapp_video",
   "send_whatsapp_sticker",
   "send_whatsapp_menu",
   "send_whatsapp_pix_button",
@@ -924,7 +936,7 @@ const LEGACY_WHATSAPP_SEND_ACTIONS: WorkflowActionType[] = [
 /**
  * Categorias do picker conforme a flag do node unificado.
  * - OFF (default / fail-closed): lista legada, exatamente como antes.
- * - ON: os 6 envios viram a única entrada `send_whatsapp_message`.
+ * - ON: os 7 envios viram a única entrada `send_whatsapp_message`.
  * Os labels legados seguem em ACTION_LABELS para nós já salvos.
  */
 export function getActionCategories(unifiedEnabled: boolean): ActionCategory[] {

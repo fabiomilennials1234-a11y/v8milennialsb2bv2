@@ -23,13 +23,14 @@ describe("getActionCategories", () => {
     expect(getActionCategories(false)).toBe(ACTION_CATEGORIES);
   });
 
-  it("ON: collapses the six sends into send_whatsapp_message", () => {
+  it("ON: collapses the seven sends into send_whatsapp_message", () => {
     const actions = comunicacao(true);
     expect(actions).toContain("send_whatsapp_message");
     for (const legacy of [
       "send_whatsapp",
       "send_whatsapp_audio",
       "send_whatsapp_image",
+      "send_whatsapp_video",
       "send_whatsapp_sticker",
       "send_whatsapp_menu",
       "send_whatsapp_pix_button",

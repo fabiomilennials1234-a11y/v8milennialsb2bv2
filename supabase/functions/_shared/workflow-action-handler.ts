@@ -15,7 +15,7 @@ import { addTag as sharedAddTag, removeTag as sharedRemoveTag } from "./action-h
 import { updateLeadField as sharedUpdateLeadField, updateCustomField as sharedUpdateCustomField, updateRating as sharedUpdateRating } from "./action-handlers/lead-field-operations.ts";
 import { duplicateToPipe as sharedDuplicateToPipe, removeFromPipe as sharedRemoveFromPipe, markAsLost as sharedMarkAsLost } from "./action-handlers/pipe-operations.ts";
 import { sendWhatsApp as sharedSendWhatsApp } from "./action-handlers/send-whatsapp.ts";
-import { sendWhatsAppAudio as sharedSendWhatsAppAudio, sendWhatsAppImage as sharedSendWhatsAppImage, sendWhatsAppSticker as sharedSendWhatsAppSticker, sendWhatsAppDocument as sharedSendWhatsAppDocument } from "./action-handlers/send-whatsapp-media.ts";
+import { sendWhatsAppAudio as sharedSendWhatsAppAudio, sendWhatsAppImage as sharedSendWhatsAppImage, sendWhatsAppSticker as sharedSendWhatsAppSticker, sendWhatsAppDocument as sharedSendWhatsAppDocument, sendWhatsAppVideo as sharedSendWhatsAppVideo } from "./action-handlers/send-whatsapp-media.ts";
 import { sendWhatsAppTemplate as sharedSendWhatsAppTemplate, sendWhatsAppMenu as sharedSendWhatsAppMenu, sendWhatsAppPixButton as sharedSendWhatsAppPixButton } from "./action-handlers/send-whatsapp-rich.ts";
 import { sendMetaMessage as sharedSendMetaMessage, sendSemiAutomatic as sharedSendSemiAutomatic } from "./action-handlers/send-meta.ts";
 import { sendToNumber as sharedSendToNumber } from "./action-handlers/send-to-number.ts";
@@ -302,6 +302,9 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
     case "send_whatsapp_image":
       result = await sharedSendWhatsAppImage(toActionInput(ctx));
       break;
+    case "send_whatsapp_video":
+      result = await sharedSendWhatsAppVideo(toActionInput(ctx));
+      break;
     case "send_whatsapp_sticker":
       result = await sharedSendWhatsAppSticker(toActionInput(ctx));
       break;
@@ -331,6 +334,7 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
           (ctx.nodeData.semiAutoMessage as string) ||
           (ctx.nodeData.messageTemplate as string) ||
           (ctx.nodeData.imageCaption as string) ||
+          (ctx.nodeData.videoCaption as string) ||
           "";
         result = await sharedSendSemiAutomatic(semiInput);
         break;
@@ -358,6 +362,9 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
         }
         case "imagem":
           result = await sharedSendWhatsAppImage(toActionInput(ctx));
+          break;
+        case "video":
+          result = await sharedSendWhatsAppVideo(toActionInput(ctx));
           break;
         case "audio":
           result = await sharedSendWhatsAppAudio(toActionInput(ctx));

@@ -47,6 +47,35 @@ export function validateWorkflowDocumentFile(
   return { valid: true };
 }
 
+const MAX_VIDEO_SIZE = 16 * 1024 * 1024; // 16MB — WhatsApp limit
+
+// MP4 only. WhatsApp does not deliver webm at all, and iPhone .mov is usually
+// HEVC, which also fails downstream — accepting either would only turn a
+// visible upload error into a silent delivery failure. No transcoding here.
+const ALLOWED_VIDEO_TYPES = ["video/mp4"];
+
+export function validateWorkflowVideoFile(
+  file: File,
+): { valid: boolean; error?: string } {
+  // Fall back to the extension ONLY when the browser reports no type at all.
+  // A declared non-mp4 type always loses: trusting the extension over it would
+  // let a renamed .webm/.mov through, which is exactly the silent failure this
+  // check exists to prevent.
+  const typeOk = ALLOWED_VIDEO_TYPES.includes(file.type);
+  const extFallbackOk = !file.type && /\.mp4$/i.test(file.name);
+  if (!typeOk && !extFallbackOk) {
+    return {
+      valid: false,
+      error:
+        "Selecione um vídeo MP4. O WhatsApp não entrega .webm, e .mov de iPhone costuma falhar no envio.",
+    };
+  }
+  if (file.size > MAX_VIDEO_SIZE) {
+    return { valid: false, error: "Vídeo excede o limite de 16MB do WhatsApp" };
+  }
+  return { valid: true };
+}
+
 export function buildWorkflowAssetPath(orgId: string, filename: string): string {
   const ext = filename.includes(".")
     ? filename.split(".").pop()!.toLowerCase()

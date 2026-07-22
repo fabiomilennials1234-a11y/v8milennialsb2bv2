@@ -1,5 +1,6 @@
 /**
- * send_whatsapp_audio / send_whatsapp_image / send_whatsapp_sticker action handlers.
+ * send_whatsapp_audio / send_whatsapp_image / send_whatsapp_video /
+ * send_whatsapp_sticker / send_whatsapp_document action handlers.
  * Extracted from workflow-action-handler.ts. Shared pattern: media via WhatsApp.
  */
 
@@ -181,6 +182,80 @@ export async function sendWhatsAppImage(input: ActionInput): Promise<ActionResul
   }
 
   return { success: true, message: "WhatsApp image sent" };
+}
+
+// ─── Video (MP4 — até 16MB) ────────────────────────────────────────────────
+
+export async function sendWhatsAppVideo(input: ActionInput): Promise<ActionResult> {
+  const { supabase, organizationId, leadId, params, executionContext } = input;
+
+  if (!leadId) {
+    return { success: false, error: "leadId is required for sendWhatsAppVideo" };
+  }
+
+  const videoUrl = params.videoUrl as string;
+  if (!videoUrl) return { success: false, error: "No video URL configured", retryable: false };
+
+  const wa = await getWhatsAppInstance(
+    supabase, organizationId,
+    params.whatsappInstanceId as string | undefined,
+    leadId,
+  );
+  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  await enforceWhatsAppRateLimit(supabase, wa.instanceId);
+
+  const phone = await getLeadPhone(supabase, leadId);
+  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
+
+  const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
+  if (recipientBlock) return recipientBlock;
+
+  const caption = (params.videoCaption as string) || "";
+  const resolvedCaption = await resolveVariables(supabase, leadId, caption, executionContext);
+
+  // Content-hash dedup backstop (fail-open) keyed on the video URL + caption.
+  const videoDedup = await reserveSendOrSkip({ supabase, orgId: organizationId, phone, content: `video:${videoUrl}|${resolvedCaption}`, source: "workflow" });
+  if (videoDedup.duplicate) return { success: true, message: "WhatsApp video skipped (duplicate within window)" };
+
+  const trackId = buildTrackId(params);
+
+  // Gateway dual-path
+  const gwResult = await sendMessage(supabase, {
+    organization_id: organizationId,
+    phone,
+    content: resolvedCaption || null,
+    message_type: "video",
+    source: "workflow",
+    media_url: videoUrl,
+    caption: resolvedCaption || undefined,
+    instance_id: wa.instanceId,
+    lead_id: leadId,
+    track_id: trackId,
+    triggered_by: "workflow",
+  });
+
+  if (!gwResult.delegated) {
+    // Legacy path
+    const { sendMediaViaInstance } = await import("../whatsapp-dispatch.ts");
+    const sendResult = await sendMediaViaInstance(
+      supabase,
+      wa.instance,
+      phone,
+      { type: "video", file: videoUrl, caption: resolvedCaption },
+      { trackSource: "workflow-action", trackId: params._executionId as string | undefined },
+    );
+
+    if (!sendResult.success) {
+      const error = `Video send failed: ${sendResult.error}`;
+      return { success: false, error, retryable: isRetryableSendFailure(error) };
+    }
+  } else if (!gwResult.success) {
+    console.error("[send-whatsapp-media] Gateway video send failed:", gwResult.error);
+    const error = `Video send failed: ${gwResult.error}`;
+    return { success: false, error, retryable: isRetryableSendFailure(error) };
+  }
+
+  return { success: true, message: "WhatsApp video sent" };
 }
 
 // ─── Sticker ───────────────────────────────────────────────────────────────
