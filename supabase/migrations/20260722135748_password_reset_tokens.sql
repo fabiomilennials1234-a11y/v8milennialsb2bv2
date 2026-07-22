@@ -1,5 +1,14 @@
 -- ============================================================================
--- 20270107000000_password_reset_tokens.sql
+-- 20260722135748_password_reset_tokens.sql
+--
+-- (Ex-20270107000000, renumerado na faxina A2 — 2026-07-22 — pra resolver a
+--  colisão de prefixo com 3 outras migrations. SQL idêntico; nunca havia sido
+--  aplicado em prod → forgot/reset-password quebrados.
+--  ✅ APLICADO EM PROD via apply_migration em 2026-07-22, gravado no ledger
+--  sob esta versão (20260722135748). Arquivo alinhado ao ledger.
+--  ⚠️ DEV (bcfadphgsibjzivtbjvc) inacessível via MCP → aplicar via CLI:
+--     psql "$DEV_DB_URL" -f este_arquivo
+--     supabase migration repair --status applied 20260722135748 --project-ref bcfadphgsibjzivtbjvc)
 --
 -- Self-hosted "esqueci minha senha" (password reset) infrastructure.
 --
