@@ -44,7 +44,16 @@ import {
   groupByDefect,
   normalizeDefectUrl,
 } from "@/modules/platform/lib/defect-url";
-import { AttachmentStrip } from "@/modules/platform/components/support/AttachmentStrip";
+// Cross-module passa pelo barrel: `@/modules/platform`, nunca caminho interno.
+import {
+  ATTACHMENTS_PER_TICKET,
+  AttachmentGallery,
+  AttachmentPicker,
+  attachmentCapacity,
+  useTicketAttachments,
+  useUploadTicketAttachment,
+  type TicketAttachment,
+} from "@/modules/platform";
 import { useTicketChannel } from "@/modules/platform/hooks/useTicketChannel";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 import {
@@ -538,8 +547,11 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
   const { data: comments = [] } = useMasterTicketComments(ticket.id);
   useTicketChannel(ticket.id); // customer's reply lands live while the thread is open
   const createComment = useCreateStaffComment();
+  const { data: attachments = [] } = useTicketAttachments(ticket.id);
+  const upload = useUploadTicketAttachment();
   const [body, setBody] = useState("");
   const [isInternal, setIsInternal] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
 
   // Opening the Chamado is the act of reading it — clear its unread badge.
   const markRead = useMarkMasterRepliesRead();
@@ -553,26 +565,61 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
 
   async function send() {
     if (!body.trim() || !user?.id) return;
+    const anexos = files;
+    // A visibilidade do anexo é a do comentário que ele acompanha, e ela é
+    // gravada no caminho do arquivo — por isso é lida aqui, no envio, e nunca
+    // muda depois (ADR-0022, 6).
+    const interno = isInternal;
     try {
-      await createComment.mutateAsync({
+      const comment = await createComment.mutateAsync({
         ticketId: ticket.id,
         body,
-        isInternal,
+        isInternal: interno,
         authorUserId: user.id,
       });
       setBody("");
+      setFiles([]);
+
+      const falhas: string[] = [];
+      for (const file of anexos) {
+        try {
+          await upload.mutateAsync({
+            ticketId: ticket.id,
+            file,
+            commentId: comment.id,
+            internal: interno,
+          });
+        } catch {
+          falhas.push(file.name);
+        }
+      }
+      if (falhas.length > 0) {
+        toast.error(`Não deu para anexar: ${falhas.join(", ")}.`);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Não deu para enviar.");
     }
   }
 
+  const porComentario = new Map<string | null, TicketAttachment[]>();
+  for (const a of attachments) {
+    const atual = porComentario.get(a.commentId) ?? [];
+    atual.push(a);
+    porComentario.set(a.commentId, atual);
+  }
+
+  const capacidade = attachmentCapacity(attachments, null);
+
   return (
     <div className="grid gap-6 px-6 py-5 lg:grid-cols-[1fr_320px]">
       <div className="space-y-4">
         {ticket.description && (
-          <p className="whitespace-pre-wrap rounded-lg border border-border/50 bg-background/50 p-3 text-sm leading-relaxed">
-            {ticket.description}
-          </p>
+          <div className="space-y-2 rounded-lg border border-border/50 bg-background/50 p-3">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed">{ticket.description}</p>
+            {/* O que o cliente anexou ao abrir: pertence ao Chamado, não a um
+                turno da conversa. */}
+            <AttachmentGallery attachments={porComentario.get(null) ?? []} />
+          </div>
         )}
 
         <div className="space-y-3">
@@ -592,6 +639,7 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
                 </p>
               )}
               <p className="whitespace-pre-wrap leading-relaxed">{c.body}</p>
+              <AttachmentGallery attachments={porComentario.get(c.id) ?? []} className="mt-2" />
               <p className="mt-1.5 text-[11px] text-muted-foreground">
                 {formatDistanceToNow(new Date(c.created_at), { addSuffix: true, locale: ptBR })}
               </p>
@@ -610,6 +658,21 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
             placeholder={isInternal ? "Nota interna (o cliente não vê)…" : "Responder ao cliente…"}
             className={cn("resize-none", isInternal && "border-amber-500/40")}
           />
+          <AttachmentPicker
+            files={files}
+            onChange={setFiles}
+            disabled={createComment.isPending || upload.isPending || !capacidade.ok}
+            remaining={ATTACHMENTS_PER_TICKET - attachments.length}
+            label={isInternal ? "Anexar à nota" : "Anexar"}
+          />
+          {isInternal && files.length > 0 && (
+            <p className="text-[11px] text-amber-500">
+              Estes arquivos entram como nota interna — o cliente não os vê.
+            </p>
+          )}
+          {!capacidade.ok && (
+            <p className="text-[11px] text-muted-foreground">{capacidade.reason}</p>
+          )}
           <div className="flex items-center gap-2">
             <Button
               type="button"
@@ -624,9 +687,9 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
               size="sm"
               className="ml-auto gap-1.5"
               onClick={send}
-              disabled={!body.trim() || createComment.isPending}
+              disabled={!body.trim() || createComment.isPending || upload.isPending}
             >
-              {createComment.isPending ? (
+              {createComment.isPending || upload.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
               ) : (
                 <Send className="h-3.5 w-3.5" aria-hidden />
@@ -660,9 +723,6 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
         )}
 
         <DefectField ticket={ticket} />
-
-        {/* O staff vê o print, mas não anexa: a evidência é do cliente. */}
-        <AttachmentStrip ticketId={ticket.id} canAttach={false} />
 
         {clientErrors.length > 0 && (
           <div className="space-y-1.5">

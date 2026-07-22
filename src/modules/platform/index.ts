@@ -99,6 +99,8 @@ export { FeatureLock, FeatureRoute, FeatureLockedScreen } from "./components/fea
 export { NewTicketForm } from "./components/support/NewTicketForm";
 export { TicketThread } from "./components/support/TicketThread";
 export { StatusDot } from "./components/support/StatusDot";
+export { AttachmentGallery } from "./components/support/AttachmentGallery";
+export { AttachmentPicker } from "./components/support/AttachmentPicker";
 
 // Lib — Feature Unlock
 export { computeFeatureUnlockPlan } from "./lib/feature-unlock";

@@ -23,6 +23,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { SupportTicketComment } from "./useSupportTickets";
 
 const COMMENTS_KEY = "support-ticket-comments";
+const ATTACHMENTS_KEY = "support-ticket-attachments";
 
 export function useTicketChannel(ticketId: string | undefined | null) {
   const queryClient = useQueryClient();
@@ -54,6 +55,14 @@ export function useTicketChannel(ticketId: string | undefined | null) {
               );
             },
           );
+
+          // Os anexos do comentário nascem alguns milissegundos depois dele — a
+          // linha precisa do `comment_id`, então o comentário é anunciado
+          // primeiro. Se este refetch ganhar a corrida, o anexo aparece na
+          // próxima busca: chega tarde, não se perde. Publicar a tabela de
+          // anexos no realtime custaria uma segunda assinatura por thread aberta
+          // para fechar uma janela de milissegundos (ADR-0022).
+          void queryClient.invalidateQueries({ queryKey: [ATTACHMENTS_KEY, ticketId] });
         },
       )
       .subscribe();

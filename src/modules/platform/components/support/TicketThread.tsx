@@ -22,8 +22,16 @@ import {
   ticketMessageAuthor,
   type TicketMessageAuthor,
 } from "@/modules/platform/lib/ticket-author";
+import {
+  attachmentCapacity,
+  useTicketAttachments,
+  useUploadTicketAttachment,
+  type TicketAttachment,
+} from "@/modules/platform/hooks/useTicketAttachments";
+import { ATTACHMENTS_PER_TICKET } from "@/modules/platform/lib/support-attachments";
 import { StatusDot } from "./StatusDot";
-import { AttachmentStrip } from "./AttachmentStrip";
+import { AttachmentGallery } from "./AttachmentGallery";
+import { AttachmentPicker } from "./AttachmentPicker";
 
 interface Props {
   ticketId: string;
@@ -38,7 +46,10 @@ export function TicketThread({ ticketId, onBack }: Props) {
   const createComment = useCreateSupportTicketComment();
   const markRead = useMarkSupportRepliesRead();
   const reopen = useReopenSupportTicket();
+  const { data: attachments = [] } = useTicketAttachments(ticketId);
+  const upload = useUploadTicketAttachment();
   const [body, setBody] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
 
   // Abrir o thread e o ato de ler. Pedir um clique em "marcar como lido" seria
   // pedir ao usuario que confirmasse que leu o que ja esta na tela dele.
@@ -53,15 +64,43 @@ export function TicketThread({ ticketId, onBack }: Props) {
   const closed = ticket?.status === "fechado";
   const resolved = ticket?.status === "resolvido";
 
+  // O anexo acompanha um Comentário, nunca o substitui: um turno que é só uma
+  // planilha e nenhuma palavra transfere toda a interpretação para quem tria.
   async function handleSend() {
     if (!body.trim()) return;
+    const anexos = files;
     try {
-      await createComment.mutateAsync({ ticketId, body });
+      const comment = await createComment.mutateAsync({ ticketId, body });
       setBody("");
+      setFiles([]);
+
+      // Depois do comentário, porque a linha do anexo referencia o `comment_id`.
+      // Um anexo que falhe não desfaz a mensagem — ela é o que importava.
+      const falhas: string[] = [];
+      for (const file of anexos) {
+        try {
+          await upload.mutateAsync({ ticketId, file, commentId: comment.id });
+        } catch {
+          falhas.push(file.name);
+        }
+      }
+      if (falhas.length > 0) {
+        toast.error(`Não deu para anexar: ${falhas.join(", ")}. Tente enviar de novo.`);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Não deu para enviar.");
     }
   }
+
+  const porComentario = new Map<string | null, TicketAttachment[]>();
+  for (const a of attachments) {
+    const atual = porComentario.get(a.commentId) ?? [];
+    atual.push(a);
+    porComentario.set(a.commentId, atual);
+  }
+
+  const capacidade = attachmentCapacity(attachments, null);
+  const restam = ATTACHMENTS_PER_TICKET - attachments.length;
 
   if (isLoading || !ticket) {
     return (
@@ -97,6 +136,9 @@ export function TicketThread({ ticketId, onBack }: Props) {
             author={ticketMessageAuthor(false, ticket.author_user_id, user?.id)}
             body={ticket.description}
             at={ticket.created_at}
+            /* O anexo da abertura não tem Comentário a que pertencer: ele é do
+               Chamado, como o Support Context. */
+            attachments={porComentario.get(null) ?? []}
           />
         )}
 
@@ -113,6 +155,7 @@ export function TicketThread({ ticketId, onBack }: Props) {
             author={ticketMessageAuthor(c.from_staff, c.author_user_id, user?.id)}
             body={c.body}
             at={c.created_at}
+            attachments={porComentario.get(c.id) ?? []}
           />
         ))}
 
@@ -121,8 +164,6 @@ export function TicketThread({ ticketId, onBack }: Props) {
             Ainda não há mensagens neste chamado.
           </p>
         )}
-
-        <AttachmentStrip ticketId={ticketId} canAttach={!closed} />
       </div>
 
       {closed ? (
@@ -156,39 +197,60 @@ export function TicketThread({ ticketId, onBack }: Props) {
           </Button>
         </div>
       ) : (
-        <div className="flex items-end gap-2 border-t border-border/50 bg-muted/20 px-6 py-4">
-          <Textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                void handleSend();
-              }
-            }}
-            rows={2}
-            placeholder="Responder…"
-            className="resize-none"
+        <div className="space-y-2 border-t border-border/50 bg-muted/20 px-6 py-4">
+          <div className="flex items-end gap-2">
+            <Textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  void handleSend();
+                }
+              }}
+              rows={2}
+              /* Pedir uma frase não é pedir uma redação — mas sem ela quem tria
+                 recebe um arquivo e nenhuma pista. */
+              placeholder={files.length > 0 ? "O que tem nesse arquivo?" : "Responder…"}
+              className="resize-none"
+            />
+            <Button
+              size="icon"
+              onClick={handleSend}
+              disabled={!body.trim() || createComment.isPending || upload.isPending}
+              aria-label="Enviar resposta"
+            >
+              {createComment.isPending || upload.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Send className="h-4 w-4" aria-hidden />
+              )}
+            </Button>
+          </div>
+          <AttachmentPicker
+            files={files}
+            onChange={setFiles}
+            disabled={createComment.isPending || upload.isPending || !capacidade.ok}
+            remaining={restam}
           />
-          <Button
-            size="icon"
-            onClick={handleSend}
-            disabled={!body.trim() || createComment.isPending}
-            aria-label="Enviar resposta"
-          >
-            {createComment.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            ) : (
-              <Send className="h-4 w-4" aria-hidden />
-            )}
-          </Button>
+          {!capacidade.ok && <p className="text-[11px] text-muted-foreground">{capacidade.reason}</p>}
         </div>
       )}
     </div>
   );
 }
 
-function Bubble({ author, body, at }: { author: TicketMessageAuthor; body: string; at: string }) {
+function Bubble({
+  author,
+  body,
+  at,
+  attachments = [],
+}: {
+  author: TicketMessageAuthor;
+  body: string;
+  at: string;
+  attachments?: TicketAttachment[];
+}) {
   const fromOrg = isFromOrganization(author);
   return (
     <div className={cn("flex", fromOrg ? "justify-end" : "justify-start")}>
@@ -203,6 +265,7 @@ function Bubble({ author, body, at }: { author: TicketMessageAuthor; body: strin
         >
           {body}
         </div>
+        <AttachmentGallery attachments={attachments} />
         <p className={cn("text-[11px] text-muted-foreground", fromOrg ? "text-right" : "text-left")}>
           {TICKET_AUTHOR_LABELS[author]} ·{" "}
           {formatDistanceToNow(new Date(at), { addSuffix: true, locale: ptBR })}

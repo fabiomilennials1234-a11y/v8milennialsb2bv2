@@ -22,11 +22,13 @@ vi.mock("@/modules/platform/hooks/useSupportTickets", () => ({
   useReopenSupportTicket: () => ({ mutate: reopen, isPending: false }),
 }));
 
-// O thread renderiza a tira de anexos, que fala com o Storage. Ela tem testes
-// proprios em AttachmentStrip.test.tsx.
+// O thread mostra os anexos de cada mensagem, e isso fala com o Storage.
+// `attachmentCapacity` e funcao pura e tem teste proprio; aqui ela so precisa
+// existir, porque o mock substitui o modulo inteiro.
 vi.mock("@/modules/platform/hooks/useTicketAttachments", () => ({
   useTicketAttachments: () => ({ data: [] }),
   useUploadTicketAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  attachmentCapacity: () => ({ ok: true }),
 }));
 
 const toastError = vi.fn();
