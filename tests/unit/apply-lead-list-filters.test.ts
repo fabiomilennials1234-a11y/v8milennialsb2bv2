@@ -7,15 +7,17 @@ interface Recorder {
   eqs: Array<[string, unknown]>;
   gtes: Array<[string, unknown]>;
   lts: Array<[string, unknown]>;
+  iss: Array<[string, unknown]>;
   ors: string[];
 }
 
 function makeBuilder() {
-  const rec: Recorder = { eqs: [], gtes: [], lts: [], ors: [] };
+  const rec: Recorder = { eqs: [], gtes: [], lts: [], iss: [], ors: [] };
   const builder: Record<string, unknown> = {
     eq(col: string, val: unknown) { rec.eqs.push([col, val]); return builder; },
     gte(col: string, val: unknown) { rec.gtes.push([col, val]); return builder; },
     lt(col: string, val: unknown) { rec.lts.push([col, val]); return builder; },
+    is(col: string, val: unknown) { rec.iss.push([col, val]); return builder; },
     or(expr: string) { rec.ors.push(expr); return builder; },
   };
   return { builder, rec };
@@ -41,12 +43,29 @@ describe("applyLeadListFilters — qualificação", () => {
     const { builder, rec } = makeBuilder();
     applyLeadListFilters(builder, { filterQualification: "all" });
     expect(rec.eqs.find(([c]) => c === "qualification_tier")).toBeUndefined();
+    expect(rec.iss.find(([c]) => c === "qualification_tier")).toBeUndefined();
   });
 
   it("NÃO filtra quando qualificação é undefined", () => {
     const { builder, rec } = makeBuilder();
     applyLeadListFilters(builder, {});
     expect(rec.eqs.find(([c]) => c === "qualification_tier")).toBeUndefined();
+    expect(rec.iss.find(([c]) => c === "qualification_tier")).toBeUndefined();
+  });
+
+  it("sentinel 'none' filtra por IS NULL (sem tier), não por .eq", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { filterQualification: "none" });
+    expect(rec.iss).toContainEqual(["qualification_tier", null]);
+    // não deve virar um .eq('qualification_tier', 'none')
+    expect(rec.eqs.find(([c]) => c === "qualification_tier")).toBeUndefined();
+  });
+
+  it("'desqualificado' (tier real) usa .eq, não IS NULL — distinto de 'none'", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { filterQualification: "desqualificado" });
+    expect(rec.eqs).toContainEqual(["qualification_tier", "desqualificado"]);
+    expect(rec.iss.find(([c]) => c === "qualification_tier")).toBeUndefined();
   });
 });
 
