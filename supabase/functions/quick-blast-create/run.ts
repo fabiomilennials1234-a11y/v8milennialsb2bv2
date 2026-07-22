@@ -30,6 +30,11 @@ import {
   instanceDailyUsageSource,
   type InstanceUsageSource,
 } from "../_shared/quick-blast/instance-budget.ts";
+import {
+  assessReach,
+  type ReachLimit,
+  type ReachLimitSource,
+} from "../_shared/whatsapp-reach-limit.ts";
 
 export interface QuickBlastDeps {
   // `rpc` is needed by the default daily-budget usage source (atomic ledger
@@ -60,6 +65,16 @@ export interface QuickBlastDeps {
    *  ledger the Blast Plan paths consume, extended to the avulso Quick Blast.
    *  Injected for tests; defaults to a read over `supabaseAdmin` when omitted. */
   instanceUsageSource?: InstanceUsageSource;
+  /** WhatsApp's own reach allowance for the sending number (#1168) — the
+   *  platform's opinion, not one of our ledgers.
+   *
+   *  Two deliberate differences from the sources above. It is FAIL-OPEN: an
+   *  unknown reading never refuses a send (see whatsapp-reach-limit.ts for why
+   *  the asymmetry is intentional). And it has NO default resolved here —
+   *  omitting it skips the gate entirely, so the core stays free of provider
+   *  and network concerns and every existing test keeps passing untouched.
+   *  The edge function injects the production source. */
+  reachLimitSource?: ReachLimitSource;
 }
 
 export interface QuickBlastParams {
@@ -113,6 +128,11 @@ export interface QuickBlastResult {
    *  remaining budget" to render "X de Y — N acima do teto diário". */
   remaining?: number;
   error?: string;
+  /** Raw reach reading, when one was taken (#1168). Bubbles up so the edge
+   *  function can record it in `runtime_logs` — the core does no logging IO.
+   *  This is the evidence that lets the internal caps be calibrated against
+   *  what WhatsApp actually reports, instead of against a guess. */
+  reachLimit?: ReachLimit | null;
 }
 
 const EMPTY_SKIPPED = {
@@ -274,6 +294,36 @@ export async function runQuickBlast(
     return { ok: false, count: 0, skipped, remaining: effectiveRemaining, error: "no_recipients" };
   }
 
+  // WhatsApp's own ceiling for this number (#1168). Deliberately the LAST gate:
+  // it is a network read, so the provider is only consulted once a send is
+  // actually about to happen — never to refuse something the local ledgers
+  // would have refused anyway, and never for an empty audience.
+  //
+  // Fail-open: an unknown reading yields `exhausted: false` and the blast goes
+  // ahead. See whatsapp-reach-limit.ts for why this guard inverts the
+  // fail-closed convention of the ledgers above.
+  // The try/catch is not redundant with the source's own error handling: it
+  // makes fail-open a property of the GATE rather than a promise every
+  // implementation has to keep. A hand-rolled source that throws must not be
+  // able to take a blast down.
+  let reachReading: ReachLimit | null = null;
+  try {
+    reachReading = (await deps.reachLimitSource?.get(params.instance.id)) ?? null;
+  } catch {
+    reachReading = null;
+  }
+  const reach = assessReach(reachReading);
+  if (reach.exhausted) {
+    return {
+      ok: false,
+      count: 0,
+      skipped,
+      remaining: effectiveRemaining,
+      error: "wa_reach_limit_reached",
+      reachLimit: reach.limit,
+    };
+  }
+
   const { sender_job_id, uazapi_sender_id } = await dispatch(params.instance, {
     recipients: recipients.map((r) => ({
       number: r.number,
@@ -328,7 +378,18 @@ export async function runQuickBlast(
     // logging is best-effort; the blast already dispatched
   }
 
-  return { ok: true, sender_job_id, uazapi_sender_id, count: recipients.length, skipped, remaining: effectiveRemaining };
+  // `reachLimit` rides along on success too: the calibration signal is most
+  // useful for blasts that WENT OUT, since those are the ones that move the
+  // provider's counter.
+  return {
+    ok: true,
+    sender_job_id,
+    uazapi_sender_id,
+    count: recipients.length,
+    skipped,
+    remaining: effectiveRemaining,
+    reachLimit: reach.limit,
+  };
 }
 
 /** The calendar day the messages actually LEAVE the chip: the scheduled date
