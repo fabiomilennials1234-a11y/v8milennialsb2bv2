@@ -14,6 +14,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import {
   SIGNED_URL_TTL_SECONDS,
   SUPPORT_ATTACHMENTS_BUCKET,
@@ -26,23 +27,7 @@ import {
 export const ATTACHMENTS_QUERY_KEY = "support-ticket-attachments";
 const KEY = ATTACHMENTS_QUERY_KEY;
 
-/**
- * A tabela é nova; `types.ts` só a conhece depois que a migration for aplicada e
- * os tipos regenerados. Até lá o formato mora aqui.
- */
-interface AttachmentRow {
-  id: string;
-  ticket_id: string;
-  comment_id: string | null;
-  path: string;
-  filename: string;
-  mime: string;
-  size_bytes: number;
-  is_internal: boolean;
-  author_user_id: string | null;
-  created_at: string;
-  purged_at: string | null;
-}
+type AttachmentRow = Tables<"support_ticket_attachments">;
 
 export interface TicketAttachment {
   id: string;
@@ -69,20 +54,20 @@ export interface TicketAttachment {
   signedUrl: string;
 }
 
-const TABLE = "support_ticket_attachments";
+const TABLE = "support_ticket_attachments" as const;
 
 export function useTicketAttachments(ticketId: string | null) {
   return useQuery({
     queryKey: [KEY, ticketId],
     queryFn: async (): Promise<TicketAttachment[]> => {
       const { data, error } = await supabase
-        .from(TABLE as never)
+        .from(TABLE)
         .select("*")
         .eq("ticket_id", ticketId!)
         .order("created_at", { ascending: true });
 
       if (error) throw error;
-      const rows = (data ?? []) as unknown as AttachmentRow[];
+      const rows: AttachmentRow[] = data ?? [];
       if (rows.length === 0) return [];
 
       // Assinar o que a retenção já levou seria pedir URL para arquivo que não
@@ -182,7 +167,7 @@ export function useUploadTicketAttachment() {
 
       if (uploadError) throw uploadError;
 
-      const { error: rowError } = await supabase.from(TABLE as never).insert({
+      const { error: rowError } = await supabase.from(TABLE).insert({
         ticket_id: ticketId,
         comment_id: commentId,
         path,
@@ -191,7 +176,7 @@ export function useUploadTicketAttachment() {
         size_bytes: file.size,
         is_internal: internal,
         author_user_id: user.id,
-      } as never);
+      });
 
       if (rowError) throw rowError;
       return path;
@@ -216,7 +201,7 @@ export function useDeleteTicketAttachment() {
 
   return useMutation({
     mutationFn: async ({ id, path }: { id: string; path: string; ticketId: string }) => {
-      const { error } = await supabase.from(TABLE as never).delete().eq("id", id);
+      const { error } = await supabase.from(TABLE).delete().eq("id", id);
       if (error) throw error;
 
       const { error: objectError } = await supabase.storage
