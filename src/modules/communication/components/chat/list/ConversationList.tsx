@@ -142,6 +142,27 @@ export function ConversationList({
     [currentTeamMemberId, resolveContactVendorId, waitingHumanLeadIds],
   );
 
+  // Índice pipelineId → (stageKey → rótulo), pra mostrar a etapa na linha.
+  const stageLabelIndex = useMemo(() => {
+    const idx = new Map<string, Map<string, string>>();
+    for (const f of funnelOptions) {
+      const inner = new Map<string, string>();
+      for (const s of f.stages) inner.set(s.stageKey, s.label);
+      idx.set(f.pipelineId, inner);
+    }
+    return idx;
+  }, [funnelOptions]);
+
+  // Etapa do primeiro funil em que o lead está (com rótulo resolvido).
+  const stageLabelFor = useCallback(
+    (c: ChatContact): string | null => {
+      const first = c.funnels?.[0];
+      if (!first) return null;
+      return stageLabelIndex.get(first.pipelineId)?.get(first.stageKey) ?? null;
+    },
+    [stageLabelIndex],
+  );
+
   // ── Desktop: engine puro. Mobile: header próprio (all/unread/groups + vendedor).
   const filteredContacts = useMemo(() => {
     if (!isMobile) {
@@ -388,6 +409,7 @@ export function ConversationList({
                     onDelete={onDelete}
                     onAddTag={onAddTag}
                     onRemoveTag={onRemoveTag}
+                    stageLabel={stageLabelFor(contact)}
                   />
                 </div>
               );
@@ -422,6 +444,7 @@ export function ConversationList({
                   onDelete={onDelete}
                   onAddTag={onAddTag}
                   onRemoveTag={onRemoveTag}
+                  stageLabel={stageLabelFor(contact)}
                 />
               ),
             )}

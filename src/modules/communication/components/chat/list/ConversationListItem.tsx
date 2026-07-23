@@ -231,6 +231,8 @@ export interface ConversationListItemProps {
   onDelete: (phone: string) => void;
   onAddTag: (phone: string, tagId: string) => void;
   onRemoveTag: (conversationId: string, tagId: string) => void;
+  /** Rótulo da etapa atual do lead (primeiro funil), resolvido pela lista. */
+  stageLabel?: string | null;
 }
 
 export function ConversationListItem({
@@ -247,6 +249,7 @@ export function ConversationListItem({
   onDelete,
   onAddTag,
   onRemoveTag,
+  stageLabel,
 }: ConversationListItemProps) {
   const displayName = contactDisplayName(contact);
   const avatarGradient = getAvatarGradient(
@@ -339,6 +342,14 @@ export function ConversationListItem({
           </div>
           <div className="flex items-center justify-between gap-2 mt-0.5">
             <p className="text-[12px] text-muted-foreground/60 truncate flex-1 min-w-0 flex items-center gap-1">
+              {stageLabel && (
+                <span
+                  className="text-[10px] leading-none px-1.5 py-0.5 rounded shrink-0 bg-muted text-muted-foreground/90 whitespace-nowrap"
+                  title={`Etapa: ${stageLabel}`}
+                >
+                  {stageLabel}
+                </span>
+              )}
               {contact.last_message_direction === "outgoing" && contact.last_message_sent_source === "workflow" && (
                 <Zap className="h-2.5 w-2.5 text-[#a78bfa] shrink-0" />
               )}
