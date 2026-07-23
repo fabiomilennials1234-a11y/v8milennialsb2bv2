@@ -28,12 +28,12 @@ Runbook para validar Meta Chat FASE 0 contra a sandbox real da Meta. Pré-requis
    supabase db push --linked
    ```
 
-   > Nota: dev `bcfadphgsibjzivtbjvc` tem ~28 migrations não aplicadas em relação a prod (ver memory `project_dev_baseline_divergent`). `db push --include-all` pode falhar — se for o caso, aplicar somente as migrations FASE 0 via Supabase Management API (curl/python com token `sbp_*`, User-Agent header obrigatório, ver memory `reference_supabase_mgmt_api`).
+   > ⚠️ Nota **desatualizada** desde 2026-07-22: o projeto dev foi aposentado (chegou a 404 migrations atrás). Não há alvo intermediário — ver `CLAUDE.md` raiz § Ambientes.
 
 2. **Deploy da edge function de enriquecimento**
 
    ```bash
-   supabase functions deploy meta-conversation-profile --project-ref bcfadphgsibjzivtbjvc
+   supabase functions deploy meta-conversation-profile --project-ref jsjsmuncfkbsbzqzqhfq
    ```
 
 3. **Inbound real (Instagram)**

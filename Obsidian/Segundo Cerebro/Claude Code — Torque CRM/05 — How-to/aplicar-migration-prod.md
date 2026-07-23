@@ -16,13 +16,25 @@ owner: gabriel
 
 ## Pré-flight
 
-### 1. Migration está em DEV há quanto tempo?
+### 1. Onde a migration foi validada?
+
+O projeto dev foi **aposentado** em 2026-07-22, então a regra antiga de "24h em dev
+com tráfego real" não existe mais. O alvo é branch efêmera a partir de prod — hoje
+**bloqueada** até o baseline das migrations (ver `CLAUDE.md` raiz § Ambientes).
+
+Enquanto não houver ambiente, aplicar em prod exige, sem exceção:
+
+1. **Rollback capturado em arquivo e testado executando** — antes de qualquer escrita
+2. **Baseline medido no próprio prod antes de aplicar** — para provar o estado inicial
+3. Verificação imediata após a escrita, com o rollback engatilhado
+4. **Declarar o desvio no PR**, dizendo o que substituiu o QA
 
 ```bash
-supabase migration list --project-ref bcfadphgsibjzivtbjvc
+supabase migration list --project-ref jsjsmuncfkbsbzqzqhfq
 ```
 
-Mínimo recomendado: 24h em dev com tráfego real antes de prod.
+⚠️ Compare a versão gravada no ledger com o nome do arquivo. Divergiu, é drift —
+registre e **não reaplique achando que falta**.
 
 ### 2. Migration é reversível?
 

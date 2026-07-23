@@ -69,10 +69,11 @@ import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase
 type Lead = Tables<"leads">;
 ```
 
-Nunca edite `src/integrations/supabase/types.ts` manualmente. Regenere (default = dev; prod só com pedido explícito do CTO):
-`supabase gen types typescript --project-id bcfadphgsibjzivtbjvc > src/integrations/supabase/types.ts`
+Nunca edite `src/integrations/supabase/types.ts` manualmente. Regenere:
+`supabase gen types typescript --project-id jsjsmuncfkbsbzqzqhfq > src/integrations/supabase/types.ts`
 
-Refs: dev `bcfadphgsibjzivtbjvc` | prod `jsjsmuncfkbsbzqzqhfq`.
+Ref: prod `jsjsmuncfkbsbzqzqhfq`. Dev foi **aposentado** em 2026-07-22 — não use,
+não deploye, não referencie. Regen sai de prod porque é o único schema vivo.
 
 ### Realtime
 `useRealtimeSubscription(table, queryKeys)` filtra por `organization_id`, debounce 2s.

@@ -86,7 +86,7 @@ npx vitest run tests/integration/agent-message.test.ts  # se existir
 ## Logs
 
 ```bash
-supabase functions logs agent-message --project-ref bcfadphgsibjzivtbjvc
+supabase functions logs agent-message --project-ref jsjsmuncfkbsbzqzqhfq
 ```
 
 Tags em `runtime_logs`: `copilot.agent_id`, `copilot.org_id`, `copilot.conversation_id`.

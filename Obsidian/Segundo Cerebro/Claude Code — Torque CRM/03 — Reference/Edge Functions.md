@@ -42,7 +42,7 @@ Deno.serve(withErrorBoundary('nome-da-funcao', async (req) => {
 ## Project refs
 
 - Prod: `jsjsmuncfkbsbzqzqhfq`
-- Dev: `bcfadphgsibjzivtbjvc`
+- ~~Dev~~ — **aposentado** em 2026-07-22. Não use, não deploye, não referencie.
 
 Deploy: `supabase functions deploy <fn> --project-ref <ref>`
 

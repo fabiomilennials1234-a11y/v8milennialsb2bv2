@@ -110,22 +110,25 @@ Ver [`03 — Reference/Cron Jobs`](../../Obsidian/Segundo%20Cerebro/Claude%20Cod
 ## Listar migrations aplicadas
 
 ```bash
-# Dev
-supabase migration list --project-ref bcfadphgsibjzivtbjvc
-
-# Prod
-supabase migration list --project-ref jsjsmuncfkbsbzqzqhfq
+supabase migration list --project-ref jsjsmuncfkbsbzqzqhfq   # prod
 ```
+
+⚠️ **Compare o nome do arquivo com a versão gravada no ledger.** Aplicar em prod
+grava a versão do momento, que pode não bater com o prefixo do arquivo — e como o
+repo usa prefixos `2027` fictícios, a versão real (`2026…`) ordena ABAIXO delas.
+Divergiu, é drift: registre no PR e **não reaplique achando que falta**.
 
 ## Apply
 
 ```bash
-# Dev
-supabase db push --linked --project-ref bcfadphgsibjzivtbjvc
-
 # Prod — SÓ COM AUTORIZAÇÃO CTO
 supabase db push --linked --project-ref jsjsmuncfkbsbzqzqhfq
 ```
+
+Dev foi **aposentado** em 2026-07-22. O alvo de validação é branch efêmera a partir
+de prod — hoje **bloqueada** até o baseline das migrations. Ver `CLAUDE.md` raiz
+§ Ambientes. Sem ambiente, mudança de risco vai pra prod com rollback capturado e
+testado ANTES da escrita, e baseline medido no alvo.
 
 ## Regen types após apply
 

@@ -62,7 +62,10 @@ Frontend: push `main` → Docker → EasyPanel (VPS Hostinger).
 Edge functions: `supabase functions deploy <fn> --project-ref <ref>`.
 Migrations: `supabase db push --linked --project-ref <ref>`.
 
-Project refs: `jsjsmuncfkbsbzqzqhfq` (prod) · `bcfadphgsibjzivtbjvc` (dev).
+Project ref: `jsjsmuncfkbsbzqzqhfq` (prod). O projeto dev foi **aposentado** em
+2026-07-22 — validação agora é em branch efêmera do Supabase a partir de prod.
+Ver `CLAUDE.md` § Ambientes (há um bloqueio ativo: o baseline das migrations é
+pré-requisito).
 
 ## Time
 
