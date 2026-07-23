@@ -281,16 +281,37 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
   const { filter, patch, clearFilter, unreadCount, waitingHumanCount } = props;
   const [menuOpen, setMenuOpen] = useState(false);
   const [autoOpen, setAutoOpen] = useState<DimKey | null>(null);
+  // Dimensões "mostradas" mas ainda sem valor — precisam existir como chip antes
+  // do usuário escolher um valor. Sem isso, escolher "Funil" no menu não abre nada
+  // (o chip só nasceria depois de ter valor, e o valor só se define pelo chip).
+  const [shown, setShown] = useState<Set<DimKey>>(new Set());
 
-  const activeDims = useMemo(() => DIM_META.filter((d) => isDimActive(d.key, filter)), [filter]);
+  const activeDims = useMemo(
+    () => DIM_META.filter((d) => isDimActive(d.key, filter) || shown.has(d.key)),
+    [filter, shown],
+  );
   const activeCount = countActiveFilters(filter);
+
+  const dropShown = (key: DimKey) =>
+    setShown((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+
+  const removeDim = (key: DimKey) => {
+    resetDim(key, patch);
+    dropShown(key);
+  };
 
   const handlePickDimension = (dim: (typeof DIM_META)[number]) => {
     setMenuOpen(false);
     if (dim.toggle) {
       patch({ [dim.key]: true } as Partial<InboxFilterState>);
     } else {
-      setAutoOpen(dim.key); // abre o editor do chip recém-criado
+      setShown((prev) => new Set(prev).add(dim.key)); // cria o chip
+      setAutoOpen(dim.key); // e abre o editor dele
     }
   };
 
@@ -378,7 +399,7 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
                   </span>
                   <button
                     type="button"
-                    onClick={() => resetDim(d.key, patch)}
+                    onClick={() => removeDim(d.key)}
                     aria-label={`Remover filtro ${d.label}`}
                     className="flex h-full items-center border-l border-primary/15 px-1.5 text-muted-foreground hover:text-foreground"
                   >
@@ -392,7 +413,15 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
                 key={d.key}
                 className="inline-flex items-center overflow-hidden rounded-lg border border-primary/25 bg-primary/10 text-xs font-medium"
               >
-                <Popover defaultOpen={autoOpen === d.key} onOpenChange={(o) => !o && setAutoOpen(null)}>
+                <Popover
+                  defaultOpen={autoOpen === d.key}
+                  onOpenChange={(o) => {
+                    if (o) return;
+                    setAutoOpen(null);
+                    // Fechou sem escolher valor → some o chip vazio.
+                    if (!isDimActive(d.key, filter)) dropShown(d.key);
+                  }}
+                >
                   <PopoverTrigger asChild>
                     <button type="button" className="flex items-center gap-1.5 py-1.5 pl-2.5 pr-1.5 text-foreground">
                       <span className="text-muted-foreground">{d.label}:</span>
@@ -409,7 +438,7 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
                 </Popover>
                 <button
                   type="button"
-                  onClick={() => resetDim(d.key, patch)}
+                  onClick={() => removeDim(d.key)}
                   aria-label={`Remover filtro ${d.label}`}
                   className="flex h-full items-center border-l border-primary/15 px-1.5 text-muted-foreground hover:text-foreground"
                 >
@@ -421,7 +450,7 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
           {activeCount >= 2 && (
             <button
               type="button"
-              onClick={clearFilter}
+              onClick={() => { clearFilter(); setShown(new Set()); }}
               className="rounded-md px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               Limpar tudo
