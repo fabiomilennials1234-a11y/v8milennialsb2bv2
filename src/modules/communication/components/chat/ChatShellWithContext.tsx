@@ -58,6 +58,9 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useAuth } from "@/modules/identity";
 import { useLeadResponsibleMap } from "@/modules/communication/hooks/chat/useLeadResponsibleMap";
+import { useLeadInboxMeta } from "@/modules/communication/hooks/chat/useLeadInboxMeta";
+import { useInboxFunnelOptions } from "@/modules/communication/hooks/chat/useInboxFunnelOptions";
+import { useInboxFilterState } from "@/modules/communication/hooks/chat/useInboxFilterState";
 import {
   useArchiveConversation,
   useUnarchiveConversation,
@@ -565,16 +568,16 @@ export function ChatShellWithContext() {
       : false;
 
   // ── Filtros / Busca ─────────────────────────────────────────────────────────
+  // Busca e tab são efêmeros (não persistem). As dimensões do filtro vivem em
+  // useInboxFilterState (persistido por org+usuário, escopado pela chave).
   const [searchQuery, setSearchQuery] = useState("");
-  const [showOnlyWithLead, setShowOnlyWithLead] = useState(false);
-  const [showOnlyWaitingHuman, setShowOnlyWaitingHuman] = useState(false);
   const [activeTab, setActiveTab] = useState<ConversationTab>("active");
+  const { filter, patch, toggleMulti, clearFilter } = useInboxFilterState();
 
   // ── Filtro por vendedor ─────────────────────────────────────────────────────
   // Conversa não tem vendedor próprio: deriva do responsável do lead
   // (leads.responsible_id). "all" = todos; "mine" = do usuário; "unassigned" =
   // sem vendedor (só admin/master); <id> = de um vendedor específico.
-  const [vendorFilter, setVendorFilter] = useState<string>("all");
   const responsibleMembers = useResponsibleMembers();
   const vendorOptions = useMemo(
     () => responsibleMembers.map((m) => ({ id: m.id, name: m.name })),
@@ -590,10 +593,18 @@ export function ChatShellWithContext() {
       c.lead_id ? leadResponsibleMap.get(c.lead_id) ?? null : null,
     [leadResponsibleMap],
   );
-  // Reseta pra "Todos" ao trocar de org (evita filtrar por id de outra org).
-  useEffect(() => {
-    setVendorFilter("all");
-  }, [organizationId]);
+
+  // ── Enrichment do inbox: funis (+ etapa) e qualificação por lead ─────────────
+  const inboxMeta = useLeadInboxMeta(leadIds, organizationId);
+  const funnelOptions = useInboxFunnelOptions();
+  const enrichedContacts = useMemo(
+    () =>
+      contacts.map((c) => {
+        const m = c.lead_id ? inboxMeta.get(c.lead_id) : undefined;
+        return m ? { ...c, funnels: m.funnels, qualification_tier: m.qualificationTier } : c;
+      }),
+    [contacts, inboxMeta],
+  );
 
   // ── Archive / Delete / Tags ─────────────────────────────────────────────────
   const archiveConversation = useArchiveConversation();
@@ -683,7 +694,7 @@ export function ChatShellWithContext() {
       <ShellComponent
         list={
           <ConversationList
-            contacts={contacts}
+            contacts={enrichedContacts}
             selectedPhone={selectedPhone}
             onSelectContact={handleSelectContact}
             searchQuery={searchQuery}
@@ -692,10 +703,6 @@ export function ChatShellWithContext() {
             instances={instances}
             selectedInstanceId={selectedInstanceId}
             onSelectInstance={setSelectedInstanceId}
-            showOnlyWithLead={showOnlyWithLead}
-            onToggleShowOnlyWithLead={() => setShowOnlyWithLead((v) => !v)}
-            showOnlyWaitingHuman={showOnlyWaitingHuman}
-            onToggleShowOnlyWaitingHuman={() => setShowOnlyWaitingHuman((v) => !v)}
             waitingHumanCount={waitingHumanCount}
             waitingHumanLeadIds={waitingHumanLeadIds}
             activeTab={activeTab}
@@ -710,8 +717,11 @@ export function ChatShellWithContext() {
             onAddTag={handleAddTag}
             onRemoveTag={handleRemoveTag}
             density={density}
-            vendorFilter={vendorFilter}
-            onVendorFilterChange={setVendorFilter}
+            filter={filter}
+            patch={patch}
+            toggleMulti={toggleMulti}
+            clearFilter={clearFilter}
+            funnelOptions={funnelOptions}
             vendorOptions={vendorOptions}
             resolveContactVendorId={resolveContactVendorId}
             currentTeamMemberId={teamMember?.id ?? null}
