@@ -36,12 +36,8 @@ supabase gen types typescript --project-id jsjsmuncfkbsbzqzqhfq \
   > src/integrations/supabase/types.ts
 ```
 
-Ou DEV se quer pegar migrations ainda não em prod:
-
-```bash
-supabase gen types typescript --project-id bcfadphgsibjzivtbjvc \
-  > src/integrations/supabase/types.ts
-```
+⚠️ Só existe prod. O projeto dev foi **aposentado** em 2026-07-22 e o schema dele
+estava 404 migrations atrás — regenerar de lá produzia tipos falsos.
 
 ### 3. Diff
 

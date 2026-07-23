@@ -70,7 +70,7 @@ SELECT cron.unschedule('whatsapp_media_retention');
 
 ## Refs
 
-- Deploy da edge fn: `05 — How-to/deploy-edge-function.md` (dev `bcfadphgsibjzivtbjvc`, prod `jsjsmuncfkbsbzqzqhfq`)
+- Deploy da edge fn: `05 — How-to/deploy-edge-function.md` (prod `jsjsmuncfkbsbzqzqhfq`; dev aposentado em 2026-07-22)
 - Não confundir com `whatsapp-media-retry` (cron 2min) que RESGATA mídia da CDN
   antes de expirar (~14d). Retenção (>30d) não corre com o retry.
 - Áreas frágeis WhatsApp: `06 — Features/Chat/`
