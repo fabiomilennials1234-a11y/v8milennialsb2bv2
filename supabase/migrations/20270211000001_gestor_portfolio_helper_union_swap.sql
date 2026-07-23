@@ -1,9 +1,16 @@
 -- 20270211000001_gestor_portfolio_helper_union_swap.sql
 -- S1 #1137 — Gestor de Portfólio: SWAP HITL-GATED (ADR-0021).
 --
--- ⛔ NÃO APLICADO. Este é o passo de risco cross-tenant: redefine os DOIS helpers
---    quentes usados por quase toda policy RLS de ~30 orgs. Aplicar SOMENTE após
---    review de segurança humano (gate HITL do S1) e autorização CTO explícita.
+-- ✅ APLICADO EM PROD (jsjsmuncfkbsbzqzqhfq). Confirmado ao vivo via
+--    pg_get_functiondef em 2026-07-22 (fatia #1209): get_my_organization_ids() e
+--    get_my_admin_organization_ids() já carregam o `UNION
+--    get_my_gestor_organization_ids()` em produção.
+--
+--    O aviso "⛔ NÃO APLICADO" que ficava aqui era ESTADO ANTIGO e induziu erro:
+--    um agente que confiasse no cabeçalho concluiria que o gestor não existe em
+--    prod. Confie no banco, não no cabeçalho. Este é o passo de risco
+--    cross-tenant (redefine os DOIS helpers quentes usados por quase toda policy
+--    RLS de ~30 orgs) — mantido documentado por isso.
 --
 -- Validação feita em 2026-07-19 contra o schema REAL de prod via MCP:
 --   • Aritmética da união provada (before=[membro], after=[membro ∪ gestor];
