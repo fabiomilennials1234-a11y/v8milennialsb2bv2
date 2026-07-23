@@ -6,10 +6,14 @@
  * C23: virtualização para >50 contatos via @tanstack/react-virtual.
  * Lista plana (sem grouping) → estimateSize via CSS var --chat-list-row-height.
  * Mobile fallback: render plain sempre.
+ *
+ * Filtro (2026-07): desktop usa o modelo Linear (InboxFilterBar + chips) sobre o
+ * engine puro `lib/inboxFilter.ts`. Mobile mantém seu header próprio (all/unread/
+ * groups) compartilhando só o filtro de vendedor.
  */
-import { useRef, useCallback, useState } from "react";
+import { useRef, useCallback, useMemo, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Loader2, Search, Filter, UserPlus, MessageSquare, Archive, Settings, Users } from "lucide-react";
+import { Loader2, Search, MessageSquare, Archive, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -26,7 +30,14 @@ import type { ChatContact, WhatsAppInstanceForUser } from "@/modules/communicati
 import { ConversationListItem, contactDisplayName } from "./ConversationListItem";
 import { MobileConversationRow } from "./MobileConversationRow";
 import { MobileChatListHeader, type MobileChatFilter } from "./MobileChatListHeader";
+import { InboxFilterBar } from "./InboxFilterBar";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
+import {
+  applyInboxFilters,
+  type InboxFilterState,
+  type InboxFilterContext,
+} from "@/modules/communication/lib/inboxFilter";
+import type { FunnelOption } from "@/modules/communication/hooks/chat/useInboxFunnelOptions";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -53,12 +64,6 @@ interface ConversationListProps {
   instances?: WhatsAppInstanceForUser[];
   selectedInstanceId?: string | null;
   onSelectInstance?: (instanceId: string) => void;
-  showOnlyWithLead: boolean;
-  onToggleShowOnlyWithLead: () => void;
-  showOnlyWaitingHuman: boolean;
-  onToggleShowOnlyWaitingHuman: () => void;
-  waitingHumanCount: number;
-  waitingHumanLeadIds?: Set<string>;
   activeTab: "active" | "archived";
   onTabChange: (tab: "active" | "archived") => void;
   onArchive: (phone: string) => void;
@@ -73,18 +78,18 @@ interface ConversationListProps {
   onOpenInstances?: () => void;
   /** Modo de densidade para altura estimada dos itens. */
   density?: DensityMode;
-  // ─── Filtro por vendedor ────────────────────────────────────────────────────
-  /** Valor atual: "all" | "mine" | "unassigned" | <teamMemberId>. */
-  vendorFilter: string;
-  onVendorFilterChange: (value: string) => void;
-  /** Vendedores selecionáveis (membros ativos da org). */
+  // ─── Filtro (modelo Linear) ─────────────────────────────────────────────────
+  filter: InboxFilterState;
+  patch: (partial: Partial<InboxFilterState>) => void;
+  toggleMulti: (key: "funnels" | "stages" | "tags" | "tiers", value: string) => void;
+  clearFilter: () => void;
+  funnelOptions: FunnelOption[];
   vendorOptions: { id: string; name: string }[];
-  /** Resolve a qual vendedor (team_member id) a conversa pertence — via lead. */
   resolveContactVendorId: (contact: ChatContact) => string | null;
-  /** team_member id do usuário logado — habilita a opção "Minhas conversas". */
   currentTeamMemberId: string | null;
-  /** Só admin/master enxerga a opção "Não atribuídas". */
   canSeeUnassigned: boolean;
+  waitingHumanLeadIds?: Set<string>;
+  waitingHumanCount: number;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -99,12 +104,6 @@ export function ConversationList({
   instances,
   selectedInstanceId,
   onSelectInstance,
-  showOnlyWithLead,
-  onToggleShowOnlyWithLead,
-  showOnlyWaitingHuman,
-  onToggleShowOnlyWaitingHuman,
-  waitingHumanCount,
-  waitingHumanLeadIds,
   activeTab,
   onTabChange,
   onArchive,
@@ -118,63 +117,66 @@ export function ConversationList({
   onRemoveTag,
   onOpenInstances,
   density = "comfortable",
-  vendorFilter,
-  onVendorFilterChange,
+  filter,
+  patch,
+  toggleMulti,
+  clearFilter,
+  funnelOptions,
   vendorOptions,
   resolveContactVendorId,
   currentTeamMemberId,
   canSeeUnassigned,
+  waitingHumanLeadIds,
+  waitingHumanCount,
 }: ConversationListProps) {
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const { isMobile } = useViewport();
-  const [showGroups, setShowGroups] = useState(false);
   const [mobileFilter, setMobileFilter] = useState<MobileChatFilter>("all");
 
-  const filteredContacts = contacts.filter((c) => {
-    // Filtro por vendedor (aplica em mobile e desktop). "all" = sem filtro.
-    if (vendorFilter !== "all") {
-      const vendorId = resolveContactVendorId(c);
-      if (vendorFilter === "mine") {
-        if (vendorId !== currentTeamMemberId) return false;
-      } else if (vendorFilter === "unassigned") {
-        if (vendorId) return false;
-      } else if (vendorId !== vendorFilter) {
-        return false;
-      }
-    }
-    // Mobile filter mapping
-    if (isMobile) {
-      if (mobileFilter === "groups") {
-        if (!c.is_group) return false;
-      } else if (mobileFilter === "unread") {
-        if (c.is_group) return false;
-        if (c.unread_count <= 0) return false;
-      } else {
-        if (c.is_group) return false;
-      }
-      if (c.archived_at) return false;
-    } else {
-      if (showGroups) {
-        if (!c.is_group) return false;
-      } else {
-        if (c.is_group) return false;
-      }
-      if (showOnlyWithLead && !c.lead_id) return false;
-      if (showOnlyWaitingHuman && !(c.lead_id && waitingHumanLeadIds?.has(c.lead_id))) return false;
-      if (activeTab === "active" && c.archived_at) return false;
-      if (activeTab === "archived" && !c.archived_at) return false;
-    }
-    const name = contactDisplayName(c).toLowerCase();
-    return (
-      c.phone_number.includes(searchQuery) ||
-      name.includes(searchQuery.toLowerCase())
-    );
-  });
+  const filterCtx: InboxFilterContext = useMemo(
+    () => ({
+      currentTeamMemberId,
+      resolveVendorId: resolveContactVendorId,
+      waitingHumanLeadIds: waitingHumanLeadIds ?? new Set<string>(),
+    }),
+    [currentTeamMemberId, resolveContactVendorId, waitingHumanLeadIds],
+  );
 
-  const activeCount = contacts.filter((c) => !c.is_group && !c.archived_at).length;
-  const archivedCount = contacts.filter((c) => !c.is_group && !!c.archived_at).length;
-  const groupCount = contacts.filter((c) => c.is_group).length;
-  const unreadCount = contacts.filter((c) => !c.is_group && !c.archived_at && c.unread_count > 0).length;
+  // ── Desktop: engine puro. Mobile: header próprio (all/unread/groups + vendedor).
+  const filteredContacts = useMemo(() => {
+    if (!isMobile) {
+      return applyInboxFilters(contacts, filter, filterCtx, { searchQuery, tab: activeTab });
+    }
+    const search = searchQuery.toLowerCase();
+    return contacts.filter((c) => {
+      if (filter.vendor !== "all") {
+        const vendorId = resolveContactVendorId(c);
+        if (filter.vendor === "mine") { if (vendorId !== currentTeamMemberId) return false; }
+        else if (filter.vendor === "unassigned") { if (vendorId) return false; }
+        else if (vendorId !== filter.vendor) return false;
+      }
+      if (mobileFilter === "groups") { if (!c.is_group) return false; }
+      else if (mobileFilter === "unread") { if (c.is_group || c.unread_count <= 0) return false; }
+      else if (c.is_group) return false;
+      if (c.archived_at) return false;
+      const name = contactDisplayName(c).toLowerCase();
+      return c.phone_number.includes(searchQuery) || name.includes(search);
+    });
+  }, [isMobile, contacts, filter, filterCtx, searchQuery, activeTab, mobileFilter, resolveContactVendorId, currentTeamMemberId]);
+
+  // Contagens reagem ao filtro aplicado (menos a própria tab).
+  const activeCount = useMemo(
+    () => (isMobile ? filteredContacts.length : applyInboxFilters(contacts, filter, filterCtx, { searchQuery, tab: "active" }).length),
+    [isMobile, filteredContacts.length, contacts, filter, filterCtx, searchQuery],
+  );
+  const archivedCount = useMemo(
+    () => applyInboxFilters(contacts, filter, filterCtx, { searchQuery, tab: "archived" }).length,
+    [contacts, filter, filterCtx, searchQuery],
+  );
+  const unreadCount = useMemo(
+    () => contacts.filter((c) => !c.is_group && !c.archived_at && c.unread_count > 0).length,
+    [contacts],
+  );
 
   const shouldVirtualize = filteredContacts.length > VIRTUALIZE_THRESHOLD;
 
@@ -204,7 +206,6 @@ export function ConversationList({
           instanceName={selectedInst?.instance_name ?? "WhatsApp"}
           instanceConnected={selectedInst?.status === "connected"}
           onOpenInstanceSelector={() => {
-            // Cycle through instances on mobile (simple pill tap)
             if (instances && instances.length > 1 && onSelectInstance) {
               const idx = instances.findIndex((i) => i.id === selectedInstanceId);
               const next = instances[(idx + 1) % instances.length];
@@ -216,8 +217,8 @@ export function ConversationList({
           activeFilter={mobileFilter}
           onFilterChange={setMobileFilter}
           unreadCount={unreadCount}
-          vendorFilter={vendorFilter}
-          onVendorFilterChange={onVendorFilterChange}
+          vendorFilter={filter.vendor}
+          onVendorFilterChange={(value) => patch({ vendor: value })}
           vendorOptions={vendorOptions}
           currentTeamMemberId={currentTeamMemberId}
           canSeeUnassigned={canSeeUnassigned}
@@ -283,101 +284,22 @@ export function ConversationList({
           />
         </div>
 
-        {/* ─── Filtro por vendedor ─────────────────────────────────────────── */}
-        <div className="mt-2">
-          <Select value={vendorFilter} onValueChange={onVendorFilterChange}>
-            <SelectTrigger
-              className={cn(
-                "h-9 w-full bg-background",
-                vendorFilter !== "all" && "border-primary/50 text-primary",
-              )}
-            >
-              <span className="flex items-center gap-2 min-w-0">
-                <Users className="w-3.5 h-3.5 shrink-0" />
-                <SelectValue placeholder="Vendedor" />
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os vendedores</SelectItem>
-              {currentTeamMemberId && (
-                <SelectItem value="mine">Minhas conversas</SelectItem>
-              )}
-              {vendorOptions.map((v) => (
-                <SelectItem key={v.id} value={v.id}>
-                  {v.name}
-                </SelectItem>
-              ))}
-              {canSeeUnassigned && (
-                <SelectItem value="unassigned">Não atribuídas</SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-        </div>
+        {/* ─── Filtro (modelo Linear) ──────────────────────────────────────── */}
+        <InboxFilterBar
+          filter={filter}
+          patch={patch}
+          toggleMulti={toggleMulti}
+          clearFilter={clearFilter}
+          unreadCount={unreadCount}
+          waitingHumanCount={waitingHumanCount}
+          funnelOptions={funnelOptions}
+          vendorOptions={vendorOptions}
+          currentTeamMemberId={currentTeamMemberId}
+          canSeeUnassigned={canSeeUnassigned}
+          allTags={allTags}
+        />
 
-        <div className="flex items-center justify-between mt-2">
-          <p className="text-xs text-muted-foreground">Total: {filteredContacts.length}</p>
-          <button
-            type="button"
-            onClick={onToggleShowOnlyWithLead}
-            className={cn(
-              "flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors",
-              showOnlyWithLead
-                ? "bg-primary/15 text-primary font-medium"
-                : "text-muted-foreground hover:bg-muted",
-            )}
-            title={
-              showOnlyWithLead ? "Mostrando apenas com lead" : "Clique para filtrar só com lead"
-            }
-          >
-            <Filter className="w-3 h-3" />
-            {showOnlyWithLead ? "Com lead" : "Todos"}
-          </button>
-          <button
-            type="button"
-            onClick={onToggleShowOnlyWaitingHuman}
-            className={cn(
-              "flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors",
-              showOnlyWaitingHuman
-                ? "bg-amber-500/15 text-amber-600 font-medium"
-                : "text-muted-foreground hover:bg-muted",
-            )}
-            title={
-              showOnlyWaitingHuman
-                ? "Mostrando apenas aguardando humano"
-                : "Filtrar aguardando humano"
-            }
-          >
-            <UserPlus className="w-3 h-3" />
-            Humano
-            {waitingHumanCount > 0 && (
-              <span className="bg-amber-500 text-white text-[10px] rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 tabular-nums">
-                {waitingHumanCount}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowGroups((v) => !v)}
-            className={cn(
-              "flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors",
-              showGroups
-                ? "bg-sky-500/15 text-sky-500 font-medium"
-                : "text-muted-foreground hover:bg-muted",
-            )}
-            title={showGroups ? "Mostrando apenas grupos" : "Mostrar grupos"}
-          >
-            <Users className="w-3 h-3" />
-            Grupos
-            {groupCount > 0 && (
-              <span className={cn(
-                "text-[10px] rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 tabular-nums",
-                showGroups ? "bg-sky-500 text-white" : "bg-muted-foreground/20 text-muted-foreground",
-              )}>
-                {groupCount}
-              </span>
-            )}
-          </button>
-        </div>
+        <p className="mt-2 text-xs text-muted-foreground">Total: {filteredContacts.length}</p>
 
         <div className="flex mt-2 bg-muted rounded-md p-0.5">
           <button

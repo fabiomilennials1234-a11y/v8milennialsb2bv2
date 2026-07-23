@@ -92,6 +92,8 @@ async function fetchContactsForInstance(
         archived_at: null,
         tags: [],
         is_group: false,
+        funnels: [],
+        qualification_tier: null,
       });
     } else {
       if (new Date(msg.timestamp) > new Date(existing.last_message_time)) {

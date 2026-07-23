@@ -100,6 +100,8 @@ export function useWhatsAppContacts(instanceId: string | null) {
             archived_at: r.archived_at,
             tags: [],
             is_group: r.is_group === true,
+            funnels: [],
+            qualification_tier: null,
           } as ChatContact;
         });
 
@@ -199,6 +201,8 @@ export function useWhatsAppContacts(instanceId: string | null) {
             archived_at: null,
             tags: [],
             is_group: (msg as any).is_group === true,
+            funnels: [],
+            qualification_tier: null,
           });
         } else {
           if (msg.lead_id && !existing.lead_id) {

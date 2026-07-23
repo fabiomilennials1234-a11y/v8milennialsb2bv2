@@ -69,6 +69,16 @@ export interface ChatContact {
   tags: ChatContactTag[];
   /** True quando o "contato" representa um grupo do WhatsApp (remote_jid @g.us). */
   is_group: boolean;
+  /**
+   * Funis em que o lead está + etapa atual em cada um. Enriquecido pela camada de
+   * dados (useLeadInboxMeta) a partir de pipeline_entries. Lead pode estar em
+   * vários funis ao mesmo tempo. **Opcional**: só o inbox principal (/chat)
+   * enriquece — outros consumidores (bubble, meta) deixam undefined, e o engine
+   * trata como "sem funil".
+   */
+  funnels?: { pipelineId: string; stageKey: string }[];
+  /** qualification_tier do lead (diamante/ouro/prata/bronze/desqualificado). Opcional — ver funnels. */
+  qualification_tier?: string | null;
 }
 
 /** Instância de WhatsApp que o usuário pode acessar (para seletor de inbox) */
