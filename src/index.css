@@ -219,6 +219,86 @@
     --sidebar-background: 36 12% 7%;
     --sidebar-foreground: 45 20% 90%;
   }
+
+  /* ─── Superfície TV — parede vista a 3m, ambiente iluminado ─────────
+     Issue #1223 · spec: docs/design-tv-composable-widgets.md §2
+
+     Escopo de tema, NÃO paleta paralela: redeclara os MESMOS nomes de
+     token que `.dark` já usa, com valores recalibrados para distância e
+     brilho alto. Isto existe para substituir a paleta hardcoded de
+     src/modules/analytics/components/tv/ (#f8f5e7 / #8a857a / #ed9326 /
+     rgba(255,255,255,0.0x)), que hoje é um sistema paralelo
+     não-tematizável — nenhum arquivo daquele diretório usa hsl(var(--…)). */
+  [data-surface="tv"] {
+    color-scheme: dark;
+
+    /* Fundo mais profundo que o app: TV tem brilho alto e a sala tem luz
+       ambiente. 9% do app "lava" em parede; 7% segura o preto. */
+    --background:         36 12% 7%;
+    --foreground:         45 20% 95%;
+
+    /* Superfície do widget — sólida (sem blur; ver spec §2.3). */
+    --card:               35 10% 11%;
+    --card-foreground:    45 20% 95%;
+
+    /* Elevação do hero: +3% de L. A 3m, sombra não lê; luminância lê. */
+    --popover:            35 10% 14%;
+    --popover-foreground: 45 20% 95%;
+
+    /* Borda VISÍVEL. O border-white/5 de hoje some a 3m e a grid vira sopa. */
+    --border:             40 8% 20%;
+    --input:              40 8% 20%;
+
+    --muted:              35 9% 15%;
+    --muted-foreground:   40 8% 62%;   /* 62% vs 56% do app: +contraste p/ distância */
+
+    --primary:            47 100% 50%; /* gold — inalterado, é a marca */
+    --primary-foreground: 30 18% 12%;
+
+    --success:            142 62% 52%; /* +L vs app: verde escuro some em parede */
+    --destructive:          0 72% 60%;
+    --warning:             38 92% 58%;
+
+    /* ─── Escala tipográfica — cinco degraus, só cinco ────────────────
+       Tokens NOVOS: o repo não tinha escala tipográfica tokenizada, e na
+       TV isso degenerou em 14+ tamanhos distintos.
+
+       Fluida: `vw` como unidade porque a TV é sempre fullscreen — a
+       viewport É a tela, então vw mantém o tamanho FÍSICO constante em
+       qualquer resolução.
+
+       Piso de 36px em --tv-value não é arbitrário: regra de sinalização
+       (altura de caractere ≈ distância ÷ 200) exige ~15mm a 3m; numa TV
+       55" a 1920px isso é ~24px de altura-de-x, que em Inter
+       (x-height ≈ 0.727em) pede font-size ≈ 33px. **Confirmado por prova
+       ocular** na #1223 — era a única parte da spec vinda de cálculo e
+       não de observação.
+
+       O piso vale para VIEWPORT DE PAREDE (>= 1280px). Abaixo disso é
+       degradação deliberada para modo janela, onde ninguém está a 3m —
+       contrato diferente, critério diferente.
+
+       TETOS (corrigidos na #1223): a primeira versão usava 5.5vw/6rem e
+       saturava em ~1745px, então de 1920 a 4K a escala NÃO crescia. Numa
+       mesma parede de 55", 96px valem 5% da largura a 1920 e só 2,5% a
+       3840 — metade do tamanho físico, o oposto do que o `vw` existe para
+       garantir. O teto lutava contra o próprio mecanismo. Agora cada teto
+       é o DOBRO do valor de 1920, alcançado exatamente a 3840.
+
+       Dois orçamentos de distância, como o Apple TV:
+         3m   → --tv-hero, --tv-value        (a sala inteira consome)
+         1,5m → --tv-label, --tv-meta        (para quem se aproxima)
+
+       --tv-label e --tv-meta têm razão 1,14 e são quase o mesmo tamanho:
+       INTENCIONAL. Distinguem-se por peso, caixa e tracking, não por
+       escala. Abrir esse intervalo roubaria contraste do salto que
+       importa, que é --tv-value-sm → --tv-label. Não "conserte". */
+    --tv-hero:     clamp(3.5rem,    5vw,     12rem);   /* 56 →  96 @1920 → 192 @4K */
+    --tv-value:    clamp(2.25rem,   2.9vw,   7rem);    /* 36 →  56 @1920 → 112 @4K */
+    --tv-value-sm: clamp(1.5rem,    1.875vw, 4.5rem);  /* 24 →  36 @1920 →  72 @4K */
+    --tv-label:    clamp(0.75rem,   0.83vw,  2rem);    /* 12 →  16 @1920 →  32 @4K */
+    --tv-meta:     clamp(0.6875rem, 0.73vw,  1.75rem); /* 11 →  14 @1920 →  28 @4K */
+  }
 }
 
 @layer base {
