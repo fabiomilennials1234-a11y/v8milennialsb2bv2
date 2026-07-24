@@ -1,0 +1,438 @@
+<meta charset="utf-8">
+<title>TV Comercial Torque — biblioteca de widgets</title>
+<style>
+  :root{
+    --bg:#0a0a0a; --card:#141210; --card2:#17140f; --line:#26221c; --line2:rgba(255,255,255,.12);
+    --cream:#f8f5e7; --muted:#8a857a; --muted2:#5f5b52;
+    --amber:#ed9326; --gold:#ffd400; --amber-dim:rgba(237,147,38,.14);
+    --blue:#3b82f6; --green:#4ade80; --red:#f87171; --purple:#a855f7; --cyan:#22d3ee;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(1200px 700px at 80% -10%,rgba(237,147,38,.05),transparent 60%),var(--bg);
+    color:var(--cream);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Inter,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;background-attachment:fixed;overflow-x:hidden;
+  }
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;
+    background-image:radial-gradient(circle at 1px 1px,rgba(255,255,255,.028) 1px,transparent 0);background-size:24px 24px}
+  .wrap{position:relative;z-index:1;padding:20px 26px 60px;max-width:1500px;margin:0 auto}
+  .tabnum{font-variant-numeric:tabular-nums}
+
+  /* HEADER */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:22px}
+  .brand{display:flex;align-items:center;gap:14px}
+  .logo{width:40px;height:40px;flex:none}
+  .brand .wm{font-weight:800;letter-spacing:.14em;font-size:19px}
+  .brand .sub{border-left:1px solid var(--line2);padding-left:14px}
+  .brand .sub h1{font-size:18px;font-weight:700;letter-spacing:-.01em}
+  .brand .sub p{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+  .segbtns{display:flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px}
+  .segbtns button{border:none;background:none;color:var(--muted);font-weight:700;font-size:13.5px;padding:9px 18px;border-radius:9px;cursor:pointer;transition:.16s;font-family:inherit}
+  .segbtns button.on{background:linear-gradient(180deg,rgba(237,147,38,.92),rgba(214,120,20,.92));color:#1a1206;box-shadow:0 4px 14px rgba(237,147,38,.25)}
+
+  h2.sec{font-size:22px;font-weight:800;letter-spacing:-.02em;margin-bottom:4px}
+  p.lead{font-size:13.5px;color:var(--muted);max-width:640px;line-height:1.5;margin-bottom:22px}
+  p.lead b{color:var(--cream)}
+
+  /* ============ GALERIA DE ESTILOS ============ */
+  .metricbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px}
+  .mtab{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:11px;background:var(--card);
+    border:1px solid var(--line);color:var(--muted);font-weight:600;font-size:13px;cursor:pointer;transition:.16s;font-family:inherit}
+  .mtab:hover{border-color:var(--line2);color:var(--cream)}
+  .mtab.on{background:var(--amber-dim);border-color:rgba(237,147,38,.4);color:var(--gold)}
+  .mtab .d{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.7}
+
+  .galhead{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
+  .galhead h3{font-size:16px;font-weight:800}
+  .galhead span{font-size:12.5px;color:var(--muted)}
+
+  .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .style{background:linear-gradient(160deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:16px;
+    padding:6px;cursor:pointer;transition:.18s;position:relative;overflow:hidden}
+  .style:hover{border-color:rgba(237,147,38,.45);transform:translateY(-2px)}
+  .style.sel{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 10px 30px rgba(237,147,38,.14)}
+  .style .canvas{height:186px;border-radius:12px;background:#0c0a07;padding:16px;position:relative;overflow:hidden;display:flex;flex-direction:column}
+  .style .foot{display:flex;align-items:center;justify-content:space-between;padding:11px 12px 8px}
+  .style .foot .nm{font-size:13px;font-weight:700}
+  .style .foot .use{font-size:11.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:5px}
+  .style.sel .foot .use{color:var(--gold)}
+  .style .tick{position:absolute;top:14px;right:14px;width:24px;height:24px;border-radius:50%;background:var(--gold);color:#1a1206;
+    display:none;place-items:center;font-size:14px;font-weight:800;z-index:2}
+  .style.sel .tick{display:grid}
+
+  .clbl{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:700}
+  .cbase{font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:.07em;margin-top:auto}
+
+  /* style: número grande */
+  .st-num .big{font-size:46px;font-weight:800;letter-spacing:-.03em;color:var(--gold);margin-top:14px;line-height:1}
+  .st-num .delta{font-size:12px;color:var(--green);margin-top:6px;font-weight:600}
+
+  /* style: com tendência (sparkline) */
+  .st-trend .big{font-size:34px;font-weight:800;color:var(--cream);margin-top:6px;letter-spacing:-.02em}
+  .spark{margin-top:auto;height:52px;position:relative}
+  .spark svg{position:absolute;inset:0;width:100%;height:100%}
+
+  /* style: gauge */
+  .st-gauge{align-items:center;justify-content:center}
+  .gauge{width:150px;height:82px;position:relative;margin:auto}
+  .gauge svg{width:150px;height:82px}
+  .gauge .gv{position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:26px;font-weight:800;color:var(--gold)}
+
+  /* style: termômetro mini */
+  .st-thermo{flex-direction:row;gap:14px;align-items:stretch}
+  .st-thermo .scale{display:flex;flex-direction:column;justify-content:space-between;font-size:9px;color:var(--muted2);text-align:right}
+  .mtube{width:22px;border-radius:14px;background:#0e0b06;border:1px solid rgba(237,147,38,.16);position:relative;overflow:hidden}
+  .mtube i{position:absolute;left:0;right:0;bottom:0;height:66%;background:linear-gradient(0deg,#ff8a00,#ffd400);box-shadow:0 0 20px 3px rgba(255,170,0,.4)}
+  .st-thermo .info{display:flex;flex-direction:column;justify-content:center;gap:3px}
+  .st-thermo .info b{font-size:30px;font-weight:800;color:var(--gold);letter-spacing:-.02em;line-height:1}
+  .st-thermo .info small{font-size:11px;color:var(--muted)}
+
+  /* style: barra progresso */
+  .st-bar .big{font-size:32px;font-weight:800;color:var(--cream);margin-top:6px}
+  .pbar{margin-top:14px;height:12px;border-radius:8px;background:rgba(255,255,255,.05);overflow:hidden}
+  .pbar i{display:block;height:100%;width:66%;border-radius:8px;background:linear-gradient(90deg,#ed9326,#ffd400)}
+  .st-bar .pct{margin-top:8px;font-size:11px;color:var(--muted);display:flex;justify-content:space-between}
+
+  /* style: split funil/carteira */
+  .st-split .row{display:flex;align-items:center;gap:10px;margin-top:12px}
+  .st-split .row .rl{font-size:11px;color:var(--muted);width:54px}
+  .st-split .row .rb{flex:1;height:9px;border-radius:6px;background:rgba(255,255,255,.05);overflow:hidden}
+  .st-split .row .rb i{display:block;height:100%;border-radius:6px}
+  .st-split .row .rv{font-size:12px;font-weight:700;width:56px;text-align:right;font-variant-numeric:tabular-nums}
+  .st-split .tot{margin-top:14px;padding-top:10px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);display:flex;justify-content:space-between}
+  .st-split .tot b{color:var(--gold);font-size:15px;font-weight:800}
+
+  /* ranking styles */
+  .st-pod{align-items:center;justify-content:flex-end;flex-direction:row;gap:12px;padding-bottom:22px}
+  .st-pod .p{display:flex;flex-direction:column;align-items:center;gap:5px}
+  .st-pod .ring{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:15px}
+  .st-pod .p1 .ring{width:54px;height:54px;background:radial-gradient(circle at 40% 35%,#ffe27a,#ed9326);color:#1a1206;box-shadow:0 0 20px rgba(255,190,0,.4)}
+  .st-pod .p2 .ring{background:radial-gradient(circle at 40% 35%,#d8d8e0,#8a8a98);color:#1a1a1a}
+  .st-pod .p3 .ring{background:radial-gradient(circle at 40% 35%,#e0a56a,#a5673a);color:#1a1206}
+  .st-pod .nm{font-size:10px;color:var(--cream);font-weight:600}
+  .st-list .lr{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12px}
+  .st-list .lr .rk{width:16px;color:var(--muted2);font-weight:800}
+  .st-list .lr .nm{flex:1;color:var(--cream)}
+  .st-list .lr .vv{color:var(--green);font-weight:700;font-variant-numeric:tabular-nums}
+  .st-bars2 .br{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:11px}
+  .st-bars2 .br .nn{width:64px;color:var(--muted)}
+  .st-bars2 .br .bb{flex:1;height:14px;border-radius:5px;background:linear-gradient(90deg,#ed9326,#ffd400);position:relative}
+  .st-bars2 .br .bb b{position:absolute;right:6px;top:50%;transform:translateY(-50%);color:#1a1206;font-size:10px;font-weight:800}
+
+  /* funnel styles */
+  .st-fbar{gap:9px}
+  .st-fbar .fr{}
+  .st-fbar .fr .fl{display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);margin-bottom:3px}
+  .st-fbar .fr .fb{height:16px;border-radius:5px;background:rgba(255,255,255,.04);position:relative;overflow:hidden}
+  .st-fbar .fr .fb i{position:absolute;left:0;top:0;bottom:0;border-radius:5px;display:flex;align-items:center;padding:0 7px;font-size:9.5px;font-weight:800;color:#fff}
+  .st-ftrap{align-items:center;justify-content:center;padding:10px}
+  .st-ftrap .lvl{border-radius:4px;margin:2px 0;height:20px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:800}
+
+  /* conversion styles */
+  .st-donut{align-items:center;justify-content:center}
+  .donut{width:110px;height:110px;border-radius:50%;position:relative;
+    background:conic-gradient(var(--green) 0 8.8%,rgba(255,255,255,.06) 8.8% 100%)}
+  .donut::after{content:"";position:absolute;inset:14px;border-radius:50%;background:#0c0a07}
+  .donut b{position:absolute;inset:0;display:grid;place-items:center;font-size:22px;font-weight:800;color:var(--green);z-index:1}
+
+  /* PARTS common in canvas */
+  .flowtag{position:absolute;bottom:12px;left:16px;font-size:8.5px;color:var(--muted2);text-transform:uppercase;letter-spacing:.06em}
+
+  .hintbox{display:flex;align-items:center;gap:12px;margin-top:26px;padding:15px 18px;border-radius:14px;
+    background:rgba(237,147,38,.08);border:1px solid rgba(237,147,38,.24);color:#f4d9a8;font-size:13.5px;line-height:1.5}
+  .hintbox b{color:var(--gold)}
+  .hintbox .em{font-size:22px}
+
+  /* ============ MINHA TV (preview compacto) ============ */
+  #view-tv{display:none}
+  .tvstage{display:grid;grid-template-columns:250px 1fr;gap:14px;align-items:start}
+  .card{background:linear-gradient(160deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:14px;padding:15px;position:relative}
+  .card .h{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .card .h .t{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700}
+  .card .h .meta{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .meta-card{background:linear-gradient(180deg,#1a1509,#120e07);border:1px solid rgba(237,147,38,.16);border-radius:14px;
+    padding:16px 14px;display:flex;flex-direction:column;align-items:center}
+  .meta-tag{display:inline-flex;gap:6px;padding:6px 13px;border-radius:18px;background:var(--amber-dim);border:1px solid rgba(237,147,38,.3);color:var(--gold);font-size:11px;font-weight:700}
+  .meta-box{margin-top:12px;text-align:center;background:linear-gradient(180deg,rgba(255,212,0,.16),rgba(237,147,38,.06));border:1px solid rgba(255,212,0,.28);border-radius:11px;padding:10px 20px}
+  .meta-box b{font-size:23px;font-weight:800;color:var(--gold)}
+  .meta-box span{display:block;font-size:9px;color:#c9a24a;letter-spacing:.12em;margin-top:1px}
+  .tvthermo{display:flex;gap:12px;margin:16px 0;width:100%;padding:0 6px;height:230px}
+  .tvthermo .scale{display:flex;flex-direction:column;justify-content:space-between;font-size:9px;color:var(--muted2);text-align:right}
+  .tvtube{position:relative;flex:1;max-width:30px;margin:0 auto;border-radius:16px;background:#0e0b06;border:1px solid rgba(237,147,38,.16);overflow:visible}
+  .tvtube .tf{position:absolute;left:0;right:0;bottom:0;height:33%;border-radius:0 0 16px 16px;background:linear-gradient(0deg,#ff8a00,#ffd400);box-shadow:0 0 26px 4px rgba(255,170,0,.42)}
+  .tvtube .tb{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(33% - 22px);width:46px;height:46px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#ffd400,#ff8a00);display:grid;place-items:center;box-shadow:0 0 26px 5px rgba(255,160,0,.5);border:2px solid rgba(255,220,120,.5)}
+  .tvtube .tb b{font-size:12px;font-weight:800;color:#2a1a02}.tvtube .tb span{font-size:6px;color:#5a3a06;font-weight:700}
+  .tvtube .tg{position:absolute;left:calc(100% + 8px);bottom:56%;background:var(--card);border:1px solid rgba(237,147,38,.3);color:var(--gold);font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;white-space:nowrap}
+  .meta-alert{width:100%;text-align:center;background:rgba(248,113,113,.09);border:1px solid rgba(248,113,113,.22);border-radius:10px;padding:9px;color:var(--red);font-weight:700;font-size:13px}
+  .meta-foot{font-size:11px;color:var(--muted);margin-top:8px}.meta-foot b{color:var(--cream)}
+  .tvright{display:grid;grid-template-columns:repeat(6,1fr);gap:14px}
+  .tk{grid-column:span 1;background:linear-gradient(160deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:12px;padding:13px}
+  .tk .kl{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+  .tk .kv{font-size:27px;font-weight:800;margin-top:8px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .b6{grid-column:span 6}.b3{grid-column:span 3}.b2{grid-column:span 2}.b4{grid-column:span 4}
+  .fb-row{margin-bottom:11px}.fb-row .fbh{display:flex;justify-content:space-between;font-size:11px;color:var(--cream);margin-bottom:5px}
+  .fb-row .fbb{height:22px;border-radius:7px;background:rgba(255,255,255,.03);position:relative;overflow:hidden}
+  .fb-row .fbb i{position:absolute;left:0;top:0;bottom:0;border-radius:7px;display:flex;align-items:center;padding:0 9px;font-size:11px;font-weight:800;color:#fff}
+  .fb-row .fbb .rv{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:700}
+  .podium2{display:flex;justify-content:center;align-items:flex-end;gap:16px;margin-top:8px}
+  .pd{display:flex;flex-direction:column;align-items:center;gap:5px}
+  .pd .cr{font-size:15px}.pd .rg{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:18px}
+  .pd.f1 .rg{width:60px;height:60px;background:radial-gradient(circle at 40% 35%,#ffe27a,#ed9326);color:#1a1206;box-shadow:0 0 22px rgba(255,190,0,.4)}
+  .pd.f2 .rg{background:radial-gradient(circle at 40% 35%,#d8d8e0,#8a8a98);color:#1a1a1a}
+  .pd .nn{font-size:11px;font-weight:700}.pd .ss{font-size:10px;color:var(--muted)}
+  .live{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:16px;background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.3);color:var(--red);font-size:9px;font-weight:800}
+  .live i{width:5px;height:5px;border-radius:50%;background:var(--red);animation:blink 1.2s infinite}
+  @keyframes blink{50%{opacity:.25}}
+  .editchip{position:absolute;top:9px;right:9px;font-size:10px;color:var(--gold);background:rgba(20,16,10,.9);border:1px dashed rgba(237,147,38,.45);border-radius:7px;padding:3px 8px;opacity:0;transition:.15s;z-index:4;pointer-events:none}
+  .card:hover .editchip,.meta-card:hover .editchip{opacity:1}
+
+  /* pré-vendas / closers / leads na Minha TV */
+  .pv3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .pvc{border-radius:11px;padding:12px;border:1px solid var(--line)}
+  .pvc.blue{background:linear-gradient(180deg,rgba(59,130,246,.10),rgba(59,130,246,.02));border-color:rgba(59,130,246,.22)}
+  .pvc.green{background:linear-gradient(180deg,rgba(74,222,128,.10),rgba(74,222,128,.02));border-color:rgba(74,222,128,.2)}
+  .pvc.amber{background:linear-gradient(180deg,rgba(237,147,38,.10),rgba(237,147,38,.02));border-color:rgba(237,147,38,.22)}
+  .pvc .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:var(--muted)}
+  .pvc .n{font-size:26px;font-weight:800;margin:3px 0 9px;line-height:1;font-variant-numeric:tabular-nums}
+  .pvc.blue .n{color:#6ba5ff}.pvc.green .n{color:var(--green)}.pvc.amber .n{color:var(--amber)}
+  .pvc .r{display:flex;justify-content:space-between;font-size:11.5px;padding:4px 0;border-top:1px solid var(--line);color:var(--muted)}
+  .pvc .r:first-of-type{border-top:none}.pvc .r b{color:var(--cream);font-weight:600;font-variant-numeric:tabular-nums}
+  .ctab{width:100%}
+  .ctab .ch,.ctab .cr{display:grid;grid-template-columns:1.5fr .5fr .8fr .4fr;gap:6px;align-items:center;font-variant-numeric:tabular-nums}
+  .ctab .ch{font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:.05em;padding:0 6px 7px;font-weight:700}
+  .ctab .cr{padding:9px 6px;border-radius:9px;font-size:12px;margin-bottom:5px}
+  .ctab .cr.lead{background:linear-gradient(90deg,rgba(255,212,0,.09),transparent);border:1px solid rgba(255,212,0,.22)}
+  .ctab .cr .who{display:flex;align-items:center;gap:8px;color:var(--cream);font-weight:600}
+  .cav{width:22px;height:22px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:10px;font-weight:800}
+  .cav.g{background:radial-gradient(circle at 40% 35%,#ffd400,#ed9326);color:#1a1206}
+  .cav.b{background:radial-gradient(circle at 40% 35%,#7db3ff,#3b82f6);color:#fff}
+  .ctab .cr .grn{color:var(--green);font-weight:700}.ctab .cr .gp{color:var(--gold);font-weight:700}
+  .leadbig{font-size:40px;font-weight:800;letter-spacing:-.03em;line-height:.9;color:var(--cream)}
+  .leadbig span{font-size:13px;color:var(--muted);font-weight:600;margin-left:6px}
+  .lbars{display:flex;align-items:flex-end;gap:5px;height:70px;margin:14px 0 6px}
+  .lbars .b{flex:1;border-radius:4px 4px 0 0;background:linear-gradient(180deg,#4ade80,#22a35a);opacity:.9}
+  .orow{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:12.5px}
+  .orow .on{flex:1;color:var(--cream)}.orow .mini{width:58px;height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden}
+  .orow .mini i{display:block;height:100%;background:var(--green);border-radius:3px}
+  .orow .oc{color:var(--green);font-weight:700;width:26px;text-align:right;font-variant-numeric:tabular-nums}
+
+  /* pódio 3 níveis com degraus */
+  .podium3{display:flex;justify-content:center;align-items:flex-end;gap:10px;margin-top:10px}
+  .p3{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .p3 .medal{font-size:16px}
+  .p3 .rg{border-radius:50%;display:grid;place-items:center;font-weight:800}
+  .p3.g1 .rg{width:56px;height:56px;font-size:19px;background:radial-gradient(circle at 40% 35%,#ffe27a,#ed9326);color:#1a1206;box-shadow:0 0 22px rgba(255,190,0,.4);border:2px solid rgba(255,220,120,.6)}
+  .p3.g2 .rg{width:46px;height:46px;font-size:16px;background:radial-gradient(circle at 40% 35%,#d8d8e0,#8a8a98);color:#1a1a1a}
+  .p3.g3 .rg{width:42px;height:42px;font-size:15px;background:radial-gradient(circle at 40% 35%,#e0a56a,#a5673a);color:#1a1206}
+  .p3 .nn{font-size:10.5px;font-weight:700;color:var(--cream)}
+  .p3 .step{border-radius:6px 6px 0 0;width:66px;display:grid;place-items:center;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--cream);
+    background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));border:1px solid var(--line);border-bottom:none}
+  .p3.g1 .step{height:56px;background:linear-gradient(180deg,rgba(237,147,38,.22),rgba(237,147,38,.05));border-color:rgba(237,147,38,.4);color:var(--gold)}
+  .p3.g2 .step{height:42px}.p3.g3 .step{height:30px}
+
+  .wm-badge{position:fixed;right:16px;bottom:12px;z-index:6;font-size:11px;color:var(--muted2);background:rgba(10,10,10,.75);padding:4px 10px;border-radius:8px;border:1px solid var(--line);backdrop-filter:blur(4px)}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+
+<div class="wrap">
+  <!-- HEADER -->
+  <div class="top">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <path d="M24 3 41.2 13v20L24 43 6.8 33V13L24 3Z" fill="none" stroke="#ed9326" stroke-width="2.4"/>
+        <path d="M24 12 33 17.2v9.6L24 32 15 26.8v-9.6L24 12Z" fill="#ed9326"/>
+        <circle cx="24" cy="22" r="3.4" fill="#0a0a0a"/>
+      </svg>
+      <div class="wm">TORQUE</div>
+      <div class="sub"><h1>Monte sua TV</h1><p>Comercial · Milennials</p></div>
+    </div>
+    <div class="segbtns">
+      <button id="btn-gal" class="on" onclick="show('gal')">🎨 Biblioteca de widgets</button>
+      <button id="btn-tv" onclick="show('tv')">📺 Minha TV</button>
+    </div>
+  </div>
+
+  <!-- ============ VIEW: GALERIA DE ESTILOS ============ -->
+  <div id="view-gal">
+    <h2 class="sec">Cada número, do seu jeito</h2>
+    <p class="lead">O mesmo dado — <b>receita, funil, ranking, meta</b> — em vários estilos de widget. Você escolhe qual entra na sua parede. Nada é fixo: monta, troca o estilo, arrasta. A conta é feita sozinha sobre o seu funil e a sua carteira.</p>
+
+    <!-- metric selector -->
+    <div class="metricbar">
+      <button class="mtab on" data-m="receita" onclick="pickMetric(this)"><span class="d"></span>Receita</button>
+      <button class="mtab" data-m="ranking" onclick="pickMetric(this)"><span class="d"></span>Ranking de closers</button>
+      <button class="mtab" data-m="funil" onclick="pickMetric(this)"><span class="d"></span>Funil de vendas</button>
+      <button class="mtab" data-m="conversao" onclick="pickMetric(this)"><span class="d"></span>Conversão</button>
+    </div>
+
+    <div class="galhead"><h3 id="gal-title">Receita no período</h3><span id="gal-sub">6 estilos · escolha um para a sua parede</span></div>
+    <div class="gallery" id="gallery"></div>
+
+    <div class="hintbox"><span class="em">🧩</span><div>Escolheu os estilos? Vá para <b>Minha TV</b> — os widgets aparecem já montados, no visual Torque de sempre. Depois é só <b>arrastar para reorganizar</b> ou trocar o estilo quando quiser.</div></div>
+  </div>
+
+  <!-- ============ VIEW: MINHA TV ============ -->
+  <div id="view-tv">
+    <h2 class="sec">Minha TV</h2>
+    <p class="lead">A parede montada com os estilos que você escolheu — o visual Torque que o time já conhece. <b>Passe o mouse</b> num widget para trocar o estilo ou arrastar.</p>
+    <div class="tvstage">
+      <!-- termômetro (estilo escolhido: termômetro) -->
+      <div class="meta-card"><span class="editchip">🧩 trocar estilo</span>
+        <span class="meta-tag">◎ Meta de Julho</span>
+        <div class="meta-box"><b class="tabnum">R$ 260,0K</b><span>META DO MÊS</span></div>
+        <div class="tvthermo">
+          <div class="scale"><span>260K</span><span>195K</span><span>130K</span><span>65K</span><span>0</span></div>
+          <div class="tvtube"><div class="tf"></div><div class="tg">R$ 86,5K</div>
+            <div class="tb"><div style="text-align:center"><b>33%</b><br><span>ATINGIDO</span></div></div></div>
+        </div>
+        <div class="meta-alert">↓ R$ 98,0K atrás</div>
+        <div class="meta-foot">Falta <b>R$ 173,5K</b> para a meta</div>
+      </div>
+
+      <div class="tvright">
+        <div class="tk"><div class="kl">Reuniões</div><div class="kv" style="color:#6ba5ff">24</div></div>
+        <div class="tk"><div class="kl">Conversão</div><div class="kv" style="color:#6ba5ff">45%</div></div>
+        <div class="tk"><div class="kl">No-Show</div><div class="kv" style="color:var(--red)">38%</div></div>
+        <div class="tk"><div class="kl">Ticket recorr.</div><div class="kv" style="color:#c084fc">17K</div></div>
+        <div class="tk"><div class="kl">Ticket projeto</div><div class="kv" style="color:var(--muted2)">—</div></div>
+        <div class="tk"><div class="kl">Leads</div><div class="kv" style="color:var(--cyan)">104</div></div>
+
+        <!-- funil (estilo escolhido: barras gradiente) -->
+        <div class="card b4"><span class="editchip">🧩 trocar estilo</span>
+          <div class="h"><div class="t">▽ Funil de Vendas</div></div>
+          <div class="fb-row"><div class="fbh"><span>Reuniões Marcadas</span><span>&nbsp;</span></div><div class="fbb"><i style="width:100%;background:linear-gradient(90deg,#2563eb,#3b82f6)">68</i></div></div>
+          <div class="fb-row"><div class="fbh"><span>Comparecidas</span><span style="color:var(--muted)">50%</span></div><div class="fbb"><i style="width:70%;background:linear-gradient(90deg,#0891b2,#22d3ee)">34</i></div></div>
+          <div class="fb-row"><div class="fbh"><span>Marcando R2</span><span style="color:var(--muted)">47%</span></div><div class="fbb"><i style="width:40%;background:linear-gradient(90deg,#d97706,#f59e0b)">16</i></div></div>
+          <div class="fb-row"><div class="fbh"><span>R2 Marcadas</span><span style="color:var(--muted)">38%</span></div><div class="fbb"><i style="width:22%;background:linear-gradient(90deg,#dc2626,#f87171)">6</i></div></div>
+          <div class="fb-row"><div class="fbh"><span>Vendido</span><span style="color:var(--muted)">100%</span></div><div class="fbb"><i style="width:22%;background:linear-gradient(90deg,#16a34a,#4ade80)">6</i><span class="rv" style="color:var(--green)">R$ 86,5K</span></div></div>
+        </div>
+
+        <!-- ranking (estilo escolhido: pódio 3 níveis) -->
+        <div class="card b2"><span class="editchip">🧩 trocar</span>
+          <div class="h"><div class="t">🏆 Corrida SDRs</div><span class="live"><i></i>LIVE</span></div>
+          <div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:4px">3 participantes · 9d restantes</div>
+          <div class="podium3">
+            <div class="p3 g2"><div class="medal">🥈</div><div class="rg">B</div><div class="nn">Vend. B</div><div class="step">14</div></div>
+            <div class="p3 g1"><div class="medal">👑</div><div class="rg">A</div><div class="nn">Vend. A</div><div class="step">17</div></div>
+            <div class="p3 g3"><div class="medal">🥉</div><div class="rg">C</div><div class="nn">Vend. C</div><div class="step">10</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px">
+            <div style="border-radius:10px;padding:9px;text-align:center;font-size:10px;font-weight:700;background:rgba(180,120,60,.14);border:1px solid rgba(180,120,60,.3);color:#e0a56a">🍫 CHOCOLATE</div>
+            <div style="border-radius:10px;padding:9px;text-align:center;font-size:10px;font-weight:700;background:rgba(74,222,128,.13);border:1px solid rgba(74,222,128,.28);color:var(--green)">💸 PIX</div>
+          </div>
+        </div>
+
+        <!-- PRÉ-VENDAS -->
+        <div class="card b3"><span class="editchip">🧩 trocar estilo</span>
+          <div class="h"><div class="t">👥 Pré-vendas</div><div class="meta">2 semanas</div></div>
+          <div class="pv3">
+            <div class="pvc blue"><div class="k">Marcadas</div><div class="n">48</div>
+              <div class="r">Vend. A <b>17</b></div><div class="r">Vend. B <b>14</b></div><div class="r">Vend. C <b>13</b></div></div>
+            <div class="pvc green"><div class="k">Compareceu</div><div class="n">24</div>
+              <div class="r">Vend. A <b>11</b></div><div class="r">Vend. B <b>10</b></div><div class="r">Vend. C <b>3</b></div></div>
+            <div class="pvc amber"><div class="k">No-Show</div><div class="n">15</div>
+              <div class="r">Vend. C <b>7</b></div><div class="r">Vend. A <b>5</b></div><div class="r">Vend. B <b>2</b></div></div>
+          </div>
+        </div>
+
+        <!-- CLOSERS -->
+        <div class="card b3"><span class="editchip">🧩 trocar estilo</span>
+          <div class="h"><div class="t">🏆 Closers</div><div class="meta">Ticket · %</div></div>
+          <div class="ctab">
+            <div class="ch"><span>Closer</span><span>Vend.</span><span>Ticket</span><span>%</span></div>
+            <div class="cr lead"><span class="who"><span class="cav g">A</span>Vendedor A</span><span>4</span><span class="grn">R$ 45,5K</span><span class="gp">25%</span></div>
+            <div class="cr"><span class="who"><span class="cav b">B</span>Vendedor B</span><span>14</span><span class="grn">R$ 43,3K</span><span class="gp">29%</span></div>
+            <div class="cr"><span class="who"><span class="cav b">C</span>Vendedor C</span><span>9</span><span class="grn">R$ 21,0K</span><span class="gp">19%</span></div>
+          </div>
+        </div>
+
+        <!-- NOVOS LEADS -->
+        <div class="card b6"><span class="editchip">🧩 trocar estilo</span>
+          <div class="h"><div class="t">👤 Novos Leads</div><div class="meta">Últimas 2 semanas</div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:center">
+            <div>
+              <div class="leadbig">104<span>LEADS</span></div>
+              <div class="lbars" id="lbars"></div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted2)"><span>07/08</span><span>07/22</span></div>
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:9px">★ Top origens</div>
+              <div class="orow"><span class="on">Meta Ads</span><span class="mini"><i style="width:100%"></i></span><span class="oc">79</span></div>
+              <div class="orow"><span class="on">Instagram</span><span class="mini"><i style="width:26%"></i></span><span class="oc">12</span></div>
+              <div class="orow"><span class="on">Ligação</span><span class="mini"><i style="width:14%"></i></span><span class="oc">6</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wm-badge">exemplo · não são seus números</div>
+
+<script>
+  // ---- galeria: estilos por métrica ----
+  var flow='<div class="flowtag">base: fechamentos · jul · Funil + Carteira</div>';
+  var STYLES={
+    receita:{title:'Receita no período',sub:'6 estilos · escolha um para a sua parede',items:[
+      {nm:'Número grande',sel:true,html:'<div class="clbl">Receita · Total</div><div class="big">R$ 1,34 mi</div><div class="delta">↑ 18,2% vs. período anterior</div>'+flow},
+      {nm:'Com tendência',html:'<div class="clbl">Receita · Total</div><div class="big">R$ 1,34 mi</div><div class="spark"><svg viewBox="0 0 200 52" preserveAspectRatio="none"><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4ade80" stop-opacity=".4"/><stop offset="1" stop-color="#4ade80" stop-opacity="0"/></linearGradient></defs><path d="M0 44 L28 40 L56 42 L84 30 L112 33 L140 20 L168 24 L200 8 L200 52 L0 52Z" fill="url(#sg)"/><path d="M0 44 L28 40 L56 42 L84 30 L112 33 L140 20 L168 24 L200 8" fill="none" stroke="#4ade80" stroke-width="2"/><circle cx="200" cy="8" r="3.5" fill="#4ade80"/></svg></div>'+flow},
+      {nm:'Velocímetro',html:'<div class="clbl">Receita vs. meta</div><div class="st-gauge" style="flex:1;display:flex"><div class="gauge"><svg viewBox="0 0 150 82"><path d="M12 78 A63 63 0 0 1 138 78" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="12" stroke-linecap="round"/><path d="M12 78 A63 63 0 0 1 116 33" fill="none" stroke="#ed9326" stroke-width="12" stroke-linecap="round"/></svg><div class="gv">66%</div></div></div>'+flow,cls:'st-gauge'},
+      {nm:'Termômetro',html:'<div class="clbl">Receita vs. meta</div><div class="st-thermo" style="flex:1;display:flex;margin-top:10px"><div class="scale"><span>Meta</span><span></span><span>0</span></div><div class="mtube"><i></i></div><div class="info"><b>R$ 1,34 mi</b><small>66% da meta</small></div></div>'+flow,cls:'st-thermo'},
+      {nm:'Barra de progresso',html:'<div class="clbl">Receita vs. meta</div><div class="big">R$ 1,34 mi</div><div class="pbar"><i></i></div><div class="pct"><span>66% da meta</span><span>meta R$ 2,0 mi</span></div>'+flow,cls:'st-bar'},
+      {nm:'Funil + Carteira',html:'<div class="clbl">Receita por origem</div><div class="st-split" style="flex:1"><div class="row"><span class="rl">Funil</span><span class="rb"><i style="width:62%;background:linear-gradient(90deg,#2563eb,#3b82f6)"></i></span><span class="rv">R$ 834K</span></div><div class="row"><span class="rl">Carteira</span><span class="rb"><i style="width:38%;background:linear-gradient(90deg,#16a34a,#4ade80)"></i></span><span class="rv">R$ 512K</span></div><div class="tot"><span>Total</span><b>R$ 1,34 mi</b></div></div>'+flow,cls:'st-split'},
+    ]},
+    ranking:{title:'Ranking de closers',sub:'3 estilos · escolha um',items:[
+      {nm:'Pódio',sel:true,html:'<div class="clbl">Closers · jul</div><div class="st-pod" style="flex:1;display:flex"><div class="p p2"><div class="ring">B</div><div class="nm">Vend. B</div></div><div class="p p1"><div style="font-size:14px">👑</div><div class="ring">A</div><div class="nm">Vend. A</div></div><div class="p p3"><div class="ring">C</div><div class="nm">Vend. C</div></div></div>'+flow,cls:'st-pod'},
+      {nm:'Lista ordenada',html:'<div class="clbl">Closers · jul</div><div class="st-list" style="margin-top:8px"><div class="lr"><span class="rk">1</span><span class="nm">Vendedor A</span><span class="vv">R$ 45,5K</span></div><div class="lr"><span class="rk">2</span><span class="nm">Vendedor B</span><span class="vv">R$ 43,3K</span></div><div class="lr"><span class="rk">3</span><span class="nm">Vendedor C</span><span class="vv">R$ 21,0K</span></div><div class="lr" style="border:none"><span class="rk">4</span><span class="nm">Vendedor D</span><span class="vv">R$ 12,8K</span></div></div>'+flow,cls:'st-list'},
+      {nm:'Barras',html:'<div class="clbl">Closers · jul</div><div class="st-bars2" style="margin-top:10px"><div class="br"><span class="nn">Vend. A</span><span class="bb" style="max-width:100%"><b>45,5K</b></span></div><div class="br"><span class="nn">Vend. B</span><span class="bb" style="max-width:95%"><b>43,3K</b></span></div><div class="br"><span class="nn">Vend. C</span><span class="bb" style="max-width:46%"><b>21K</b></span></div></div>'+flow,cls:'st-bars2'},
+    ]},
+    funil:{title:'Funil de vendas',sub:'3 estilos · escolha um',items:[
+      {nm:'Barras por etapa',sel:true,html:'<div class="clbl">Funil · jul</div><div class="st-fbar" style="flex:1;display:flex;flex-direction:column;justify-content:center"><div class="fr"><div class="fl"><span>Marcadas</span><span>68</span></div><div class="fb"><i style="width:100%;background:linear-gradient(90deg,#2563eb,#3b82f6)"></i></div></div><div class="fr"><div class="fl"><span>Compareceu</span><span>34</span></div><div class="fb"><i style="width:70%;background:linear-gradient(90deg,#0891b2,#22d3ee)"></i></div></div><div class="fr"><div class="fl"><span>Vendido</span><span>6</span></div><div class="fb"><i style="width:22%;background:linear-gradient(90deg,#16a34a,#4ade80)"></i></div></div></div>'+flow,cls:'st-fbar'},
+      {nm:'Funil trapézio',html:'<div class="clbl">Funil · jul</div><div class="st-ftrap" style="flex:1;display:flex;flex-direction:column;justify-content:center"><div class="lvl" style="width:100%;background:linear-gradient(90deg,#2563eb,#3b82f6)">Marcadas · 68</div><div class="lvl" style="width:74%;background:linear-gradient(90deg,#0891b2,#22d3ee)">Compareceu · 34</div><div class="lvl" style="width:48%;background:linear-gradient(90deg,#d97706,#f59e0b)">R2 · 16</div><div class="lvl" style="width:26%;background:linear-gradient(90deg,#16a34a,#4ade80)">Vendido · 6</div></div>'+flow,cls:'st-ftrap'},
+      {nm:'Conversão %',html:'<div class="clbl">Conversão total</div><div class="st-gauge" style="flex:1;display:flex"><div class="donut"><b>8,8%</b></div></div>'+flow,cls:'st-donut'},
+    ]},
+    conversao:{title:'Conversão',sub:'3 estilos · escolha um',items:[
+      {nm:'Rosca',sel:true,html:'<div class="clbl">Conversão · lead→venda</div><div class="st-gauge" style="flex:1;display:flex"><div class="donut"><b>8,8%</b></div></div>'+flow,cls:'st-donut'},
+      {nm:'Número grande',html:'<div class="clbl">Conversão · lead→venda</div><div class="big" style="color:var(--green)">8,8%</div><div class="delta" style="color:var(--red)">↓ 1,2pp vs. anterior</div>'+flow,cls:'st-num'},
+      {nm:'Velocímetro',html:'<div class="clbl">Conversão · lead→venda</div><div class="st-gauge" style="flex:1;display:flex"><div class="gauge"><svg viewBox="0 0 150 82"><path d="M12 78 A63 63 0 0 1 138 78" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="12" stroke-linecap="round"/><path d="M12 78 A63 63 0 0 1 30 46" fill="none" stroke="#4ade80" stroke-width="12" stroke-linecap="round"/></svg><div class="gv" style="color:var(--green)">8,8%</div></div></div>'+flow,cls:'st-gauge'},
+    ]},
+  };
+
+  function renderGallery(m){
+    var data=STYLES[m];
+    document.getElementById('gal-title').textContent=data.title;
+    document.getElementById('gal-sub').textContent=data.sub;
+    var g=document.getElementById('gallery');
+    g.innerHTML=data.items.map(function(it,i){
+      return '<div class="style'+(it.sel?' sel':'')+'" onclick="selStyle(this)">'+
+        '<div class="tick">✓</div>'+
+        '<div class="canvas '+(it.cls||'st-num')+'">'+it.html+'</div>'+
+        '<div class="foot"><span class="nm">'+it.nm+'</span><span class="use">'+(it.sel?'✓ Na sua parede':'Usar este')+'</span></div>'+
+      '</div>';
+    }).join('');
+  }
+  function pickMetric(el){
+    document.querySelectorAll('.mtab').forEach(function(t){t.classList.remove('on')});
+    el.classList.add('on');
+    renderGallery(el.dataset.m);
+  }
+  function selStyle(el){
+    el.parentNode.querySelectorAll('.style').forEach(function(s){s.classList.remove('sel');s.querySelector('.use').textContent='Usar este'});
+    el.classList.add('sel');el.querySelector('.use').textContent='✓ Na sua parede';
+  }
+  function show(v){
+    document.getElementById('view-gal').style.display=v==='gal'?'block':'none';
+    document.getElementById('view-tv').style.display=v==='tv'?'block':'none';
+    document.getElementById('btn-gal').classList.toggle('on',v==='gal');
+    document.getElementById('btn-tv').classList.toggle('on',v==='tv');
+    window.scrollTo(0,0);
+  }
+  renderGallery('receita');
+
+  // barras dos leads na Minha TV
+  var lh=[38,52,44,36,66,48,52,44,60,58,30,72,80,50];
+  var lb=document.getElementById('lbars');
+  if(lb){lh.forEach(function(h){var b=document.createElement('div');b.className='b';b.style.height=Math.max(h,6)+'%';lb.appendChild(b);});}
+</script>

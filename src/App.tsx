@@ -92,6 +92,11 @@ const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./modules/workflo
 
 const NotFound = lazy(() => lazyRetry(() => import("@/modules/platform/pages/NotFound")));
 const Landing = lazy(() => lazyRetry(() => import("@/modules/marketing/pages/Landing")));
+// #1223 — página de calibração da escala tipográfica da TV. Instrumento de
+// medição com valores estáticos, não tela de produto: sem auth e sem dado, para
+// que a escala possa ser julgada na parede sem depender de sessão ou seed.
+// Removível quando #1218–#1221 fecharem.
+const TvTypeScale = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TvTypeScale")));
 const Signup = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Signup")));
 const ResetPassword = lazy(() => lazyRetry(() => import("@/modules/identity/pages/ResetPassword")));
 
@@ -243,6 +248,9 @@ function AppRoutes() {
       {/* Signup dedicado — renderiza a página (honra ?plan vindo do pricing) em vez de redirecionar p/ /auth e perder o plano */}
       <Route path="/signup" element={<Signup />} />
       <Route path="/privacidade" element={<Privacidade />} />
+      {/* #1223 — calibração da escala tipográfica da TV. Pública de propósito:
+          é instrumento de medição com valores fictícios, não expõe dado algum. */}
+      <Route path="/tv-type-scale" element={<TvTypeScale />} />
       {/* Área do Gestor (ADR-0021 §5): hub do Gestor de Portfólio. GestorRoute
           nega não-gestor; requireOrganization=false porque o Gestor não tem
           team_member/org ao chegar no hub. */}

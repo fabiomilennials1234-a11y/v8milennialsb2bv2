@@ -122,3 +122,12 @@ export * from "./hooks/useTVKPIs";
 
 export * from "./hooks/useFunnelHealth";
 export * from "./lib/funnel-health-stages";
+
+// ────────────────────────────────────────────────────────────────────────
+// Hooks — Métricas Montáveis, Camada 2 (#1194 / ADR-0023)
+// Catálogo fechado + motor + snapshot. v1 liga SÓ a TV.
+// ────────────────────────────────────────────────────────────────────────
+
+export * from "./hooks/useMetricCatalog";
+export * from "./hooks/useMetricMeasure";
+export * from "./hooks/useDashboardSnapshot";
