@@ -39,7 +39,7 @@ const PERIOD_LABEL: Record<CommandPeriod, string> = {
 
 export default function Dashboard() {
   useAuth();
-  const { orgType, isLoading: orgLoading } = useOrganization();
+  const { orgType, timezone, isLoading: orgLoading } = useOrganization();
   const { data: userRole } = useUserRole();
   const role = userRole?.role;
   const { isLoading: teamMemberLoading } = useCurrentTeamMember();
@@ -75,8 +75,10 @@ export default function Dashboard() {
   }, [setOraculoOpen, oraculoEnabled]);
 
   const range = useMemo(
-    () => computePeriodRange(period, selectedMonth, selectedYear, customRange),
-    [period, selectedMonth, selectedYear, customRange],
+    // Fuso da org corta "Hoje"/"Semana" na fronteira de dia org-local; undefined
+    // cai no fuso do browser (default do helper) enquanto o metadado não resolve.
+    () => computePeriodRange(period, selectedMonth, selectedYear, customRange, timezone ?? undefined),
+    [period, selectedMonth, selectedYear, customRange, timezone],
   );
 
   const subtitle = useMemo(() => {

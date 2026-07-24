@@ -5,6 +5,13 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
 import { startOfUTCDay, endOfUTCDay } from "@/modules/analytics/lib/utc-day";
+import {
+  zonedDayStart,
+  zonedDayEnd,
+  zonedDateParts,
+  zonedDayStartOfYMD,
+  zonedDayEndOfYMD,
+} from "@/modules/analytics/lib/zoned-day";
 
 export type CommandPeriod = "today" | "week" | "month" | "quarter" | "custom";
 
@@ -68,12 +75,19 @@ const MONTH_SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "se
  * Calcula o intervalo do período + intervalo equivalente anterior (pros deltas).
  * `month`/`year` só são usados quando period === "month" (navegação de meses).
  * `customRange` só é usado quando period === "custom" (intervalo livre).
+ *
+ * `timeZone` (fuso da org, ex. America/Sao_Paulo) só afeta `today`/`week`: eles
+ * cortam a fronteira do dia no wall-clock da org (DST-safe), pra não contar um
+ * lead de 21:00–23:59 BRT (= 00:00–03:00 UTC) no dia errado. `month`/`quarter`/
+ * `custom` permanecem em UTC (mantêm paridade byte-a-byte com useDashboardMetrics).
+ * Default = fuso do browser — sanidade antes do metadado da org resolver.
  */
 export function computePeriodRange(
   period: CommandPeriod,
   month: number,
   year: number,
   customRange?: CommandCustomRange | null,
+  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
 ): PeriodRange {
   const now = new Date();
 
@@ -102,26 +116,38 @@ export function computePeriodRange(
   }
 
   if (period === "today") {
-    const start = startOfUTCDay(now);
-    const end = endOfUTCDay(now);
-    const yest = new Date(now); yest.setDate(now.getDate() - 1);
+    // Fronteiras no fuso da org (DST-safe). "Ontem" = data org-local − 1 dia,
+    // computada via componentes de calendário (não −24h, que erra sob DST).
+    const start = zonedDayStart(now, timeZone);
+    const end = zonedDayEnd(now, timeZone);
+    const { y, m, d } = zonedDateParts(now, timeZone);
+    const yest = new Date(Date.UTC(y, m - 1, d));
+    yest.setUTCDate(yest.getUTCDate() - 1);
     return {
       start, end,
-      prevStart: startOfUTCDay(yest), prevEnd: endOfUTCDay(yest),
+      prevStart: zonedDayStartOfYMD(yest.getUTCFullYear(), yest.getUTCMonth() + 1, yest.getUTCDate(), timeZone),
+      prevEnd: zonedDayEndOfYMD(yest.getUTCFullYear(), yest.getUTCMonth() + 1, yest.getUTCDate(), timeZone),
       dayOfPeriod: 1, daysTotal: 1, prevLabel: "ontem",
     };
   }
 
   if (period === "week") {
-    // Semana ISO: segunda → domingo
-    const dow = (now.getDay() + 6) % 7; // 0 = segunda
-    const monday = new Date(now); monday.setDate(now.getDate() - dow);
-    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
-    const prevMonday = new Date(monday); prevMonday.setDate(monday.getDate() - 7);
-    const prevSunday = new Date(monday); prevSunday.setDate(monday.getDate() - 1);
+    // Semana ISO: segunda → domingo, em datas org-local (dow derivado do fuso da
+    // org, não do browser). Cada borda → instante UTC via helpers zoned (DST-safe).
+    const { y, m, d, weekdayMon0 } = zonedDateParts(now, timeZone);
+    const dow = weekdayMon0; // 0 = segunda
+    // Aritmética de calendário sobre a data org-local (UTC-midnight como contador).
+    const monday = new Date(Date.UTC(y, m - 1, d)); monday.setUTCDate(monday.getUTCDate() - dow);
+    const sunday = new Date(monday); sunday.setUTCDate(monday.getUTCDate() + 6);
+    const prevMonday = new Date(monday); prevMonday.setUTCDate(monday.getUTCDate() - 7);
+    const prevSunday = new Date(monday); prevSunday.setUTCDate(monday.getUTCDate() - 1);
+    const ymd = (dt: Date): [number, number, number] =>
+      [dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate()];
     return {
-      start: startOfUTCDay(monday), end: endOfUTCDay(sunday),
-      prevStart: startOfUTCDay(prevMonday), prevEnd: endOfUTCDay(prevSunday),
+      start: zonedDayStartOfYMD(...ymd(monday), timeZone),
+      end: zonedDayEndOfYMD(...ymd(sunday), timeZone),
+      prevStart: zonedDayStartOfYMD(...ymd(prevMonday), timeZone),
+      prevEnd: zonedDayEndOfYMD(...ymd(prevSunday), timeZone),
       dayOfPeriod: dow + 1, daysTotal: 7, prevLabel: "semana passada",
     };
   }
