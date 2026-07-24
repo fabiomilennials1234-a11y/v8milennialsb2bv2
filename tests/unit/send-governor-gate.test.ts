@@ -60,6 +60,7 @@ function makeDeps(st: State, overrides: Record<string, unknown> = {}) {
     evaluateSend,
     recordDecision: vi.fn(async () => {}),
     incrementAutomationUsage: vi.fn(async () => {}),
+    recordBanSignal: vi.fn(async () => {}),
     ...overrides,
   } as any;
 }
@@ -222,5 +223,229 @@ describe("telemetry gating", () => {
     expect(doSend).toHaveBeenCalledTimes(1);
     // an inert org keeps zero governor footprint — no ledger write either.
     expect(deps.incrementAutomationUsage).not.toHaveBeenCalled();
+  });
+});
+
+/** Build a UazapiError-shaped throw, exactly as UazapiClient.request() raises
+ *  on a 4xx (the 463 status survives from the provider to the gate unmasked). */
+function uazapiError(
+  status: number,
+  extra: { provider_code?: string | number; message?: string; raw?: unknown } = {},
+) {
+  return {
+    status,
+    provider_code: extra.provider_code,
+    message: extra.message ?? "provider rejected",
+    raw: extra.raw ?? {},
+  };
+}
+
+describe("PR-1a — reputation feed on a failed send (P3 disjuntor input)", () => {
+  it("feeds record_ban_signal with the numeric code on a 463 and re-throws the ORIGINAL error", async () => {
+    const original = uazapiError(463, { message: "temporarily restricted" });
+    const doSend = vi.fn(async () => {
+      throw original;
+    });
+    // 'off' would still feed — the feed is not gated by mode (it's the choke,
+    // and a would-be-off org still burned a real 463). Use a live mode anyway.
+    const deps = makeDeps(state({ mode: "shadow" }));
+    await expect(governSend(DB, ctx(), doSend, deps)).rejects.toBe(original);
+    expect(deps.recordBanSignal).toHaveBeenCalledTimes(1);
+    expect(deps.recordBanSignal).toHaveBeenCalledWith(DB, "inst-1", 463);
+    expect(doSend).toHaveBeenCalledTimes(1);
+    // a failed send never increments the success ledger.
+    expect(deps.incrementAutomationUsage).not.toHaveBeenCalled();
+  });
+
+  it("feeds a 429 (real rate-limit) exactly once", async () => {
+    const err = uazapiError(429);
+    const doSend = vi.fn(async () => {
+      throw err;
+    });
+    const deps = makeDeps(state({ mode: "shadow" }));
+    await expect(governSend(DB, ctx(), doSend, deps)).rejects.toBe(err);
+    expect(deps.recordBanSignal).toHaveBeenCalledTimes(1);
+    expect(deps.recordBanSignal).toHaveBeenCalledWith(DB, "inst-1", 429);
+    expect(doSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT feed a 403 — transient 'Invalid token' noise, excluded from the PR-1a feed", async () => {
+    // 403 ∈ classifyBanSignal's set but NOT the gate's conservative feed set:
+    // an HGE-style transient 'Invalid token' must never quarantine a number.
+    const err = uazapiError(403, { message: "Invalid token" });
+    const doSend = vi.fn(async () => {
+      throw err;
+    });
+    const deps = makeDeps(state({ mode: "shadow" }));
+    await expect(governSend(DB, ctx(), doSend, deps)).rejects.toBe(err);
+    expect(deps.recordBanSignal).not.toHaveBeenCalled();
+    expect(doSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT feed a 500 whose BODY looks ban-ish ('rate limited') — status, not body, gates the feed", async () => {
+    // classifyBanSignal(500, ...) WOULD return isBanSignal via the body match;
+    // the gate must ignore that and feed ONLY on a strong status (463/429), so a
+    // server error can never masquerade as a ban and over-count the feed.
+    const err = uazapiError(500, {
+      message: "rate limited",
+      raw: { error: "rate limited, please try again later" },
+    });
+    const doSend = vi.fn(async () => {
+      throw err;
+    });
+    const deps = makeDeps(state({ mode: "shadow" }));
+    await expect(governSend(DB, ctx(), doSend, deps)).rejects.toBe(err);
+    expect(deps.recordBanSignal).not.toHaveBeenCalled();
+    expect(doSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("feeds even when the org is 'off' — the feed is mode-independent (an off number still burned a real 463)", async () => {
+    // The feed lives in the doSend catch, UNconditional on mode/governed: a
+    // would-be-off org that just burned a real 463 must still record it, else
+    // PR-1b would flip enforce blind. off keeps zero DECISION footprint (no
+    // recordDecision / no ledger) but the reputation feed still fires.
+    const err = uazapiError(463);
+    const doSend = vi.fn(async () => {
+      throw err;
+    });
+    const deps = makeDeps(state({ mode: "off" }));
+    await expect(governSend(DB, ctx(), doSend, deps)).rejects.toBe(err);
+    expect(deps.recordBanSignal).toHaveBeenCalledTimes(1);
+    expect(deps.recordBanSignal).toHaveBeenCalledWith(DB, "inst-1", 463);
+    expect(deps.recordDecision).not.toHaveBeenCalled();
+    expect(deps.incrementAutomationUsage).not.toHaveBeenCalled();
+  });
+
+  it("does NOT feed a STRING status ('463') — extractStatusCode only trusts a numeric status", async () => {
+    // The real UazapiError always carries a numeric `status`; a string status is
+    // a hypothetical non-Uazapi thrower. We keep it conservative: string status
+    // with no numeric provider_code → undefined code → no feed. (Contrast: a
+    // string provider_code "463" IS coerced — see the test below.)
+    const err = { status: "463", message: "restricted" };
+    const doSend = vi.fn(async () => {
+      throw err;
+    });
+    const deps = makeDeps(state({ mode: "shadow" }));
+    await expect(governSend(DB, ctx(), doSend, deps)).rejects.toBe(err);
+    expect(deps.recordBanSignal).not.toHaveBeenCalled();
+  });
+
+  it("derives a numeric code from a string provider_code when status is absent", async () => {
+    const err = { provider_code: "463", message: "restricted" };
+    const doSend = vi.fn(async () => {
+      throw err;
+    });
+    const deps = makeDeps(state({ mode: "shadow" }));
+    await expect(governSend(DB, ctx(), doSend, deps)).rejects.toBe(err);
+    expect(deps.recordBanSignal).toHaveBeenCalledTimes(1);
+    expect(deps.recordBanSignal).toHaveBeenCalledWith(DB, "inst-1", 463);
+  });
+
+  it("does NOT feed on a non-ban error (500, no ban-ish body) and re-throws it", async () => {
+    const err = uazapiError(500, { message: "Uazapi server error 500" });
+    const doSend = vi.fn(async () => {
+      throw err;
+    });
+    const deps = makeDeps(state({ mode: "shadow" }));
+    await expect(governSend(DB, ctx(), doSend, deps)).rejects.toBe(err);
+    expect(deps.recordBanSignal).not.toHaveBeenCalled();
+    expect(doSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT feed a plain network error with no numeric code", async () => {
+    const err = new Error("network unreachable");
+    const doSend = vi.fn(async () => {
+      throw err;
+    });
+    const deps = makeDeps(state({ mode: "shadow" }));
+    await expect(governSend(DB, ctx(), doSend, deps)).rejects.toBe(err);
+    expect(deps.recordBanSignal).not.toHaveBeenCalled();
+  });
+
+  it("is FAIL-SOFT: a throwing recordBanSignal never masks the send error nor double-sends", async () => {
+    const original = uazapiError(463);
+    const doSend = vi.fn(async () => {
+      throw original;
+    });
+    const deps = makeDeps(state({ mode: "shadow" }), {
+      recordBanSignal: vi.fn(async () => {
+        throw new Error("rpc down");
+      }),
+    });
+    // the ORIGINAL 463 propagates, not the feed error.
+    await expect(governSend(DB, ctx(), doSend, deps)).rejects.toBe(original);
+    expect(doSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT feed a manual send even on a 463 (a human must never quarantine a number)", async () => {
+    const err = uazapiError(463);
+    const doSend = vi.fn(async () => {
+      throw err;
+    });
+    const deps = makeDeps(state({ mode: "shadow" }));
+    await expect(
+      governSend(DB, ctx({ category: "manual" }), doSend, deps),
+    ).rejects.toBe(err);
+    expect(deps.recordBanSignal).not.toHaveBeenCalled();
+    expect(doSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT feed when the sending number is unknown (no instanceId to attribute)", async () => {
+    const err = uazapiError(463);
+    const doSend = vi.fn(async () => {
+      throw err;
+    });
+    const deps = makeDeps(state({ mode: "shadow" }));
+    await expect(
+      governSend(DB, ctx({ instanceId: null }), doSend, deps),
+    ).rejects.toBe(err);
+    expect(deps.recordBanSignal).not.toHaveBeenCalled();
+  });
+
+  it("does NOT feed on a successful send", async () => {
+    const doSend = vi.fn(async () => "SENT");
+    const deps = makeDeps(state({ mode: "shadow" }));
+    await governSend(DB, ctx(), doSend, deps);
+    expect(deps.recordBanSignal).not.toHaveBeenCalled();
+  });
+});
+
+describe("doSend runs EXACTLY ONCE on every path", () => {
+  it("once on allow-success", async () => {
+    const doSend = vi.fn(async () => "SENT");
+    await governSend(DB, ctx(), doSend, makeDeps(state({ mode: "shadow" })));
+    expect(doSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("once on a ban throw (feed path)", async () => {
+    const err = uazapiError(463);
+    const doSend = vi.fn(async () => {
+      throw err;
+    });
+    await expect(
+      governSend(DB, ctx(), doSend, makeDeps(state({ mode: "shadow" }))),
+    ).rejects.toBe(err);
+    expect(doSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("once on a non-ban throw", async () => {
+    const err = uazapiError(500, { message: "server error" });
+    const doSend = vi.fn(async () => {
+      throw err;
+    });
+    await expect(
+      governSend(DB, ctx(), doSend, makeDeps(state({ mode: "shadow" }))),
+    ).rejects.toBe(err);
+    expect(doSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("zero on an enforce block (no send to feed)", async () => {
+    const doSend = vi.fn(async () => "SENT");
+    const deps = makeDeps(
+      state({ mode: "enforce", reputation: "quarantined", quarantineUntil: "2026-07-21T14:00:00.000Z" }),
+    );
+    await governSend(DB, ctx(), doSend, deps);
+    expect(doSend).not.toHaveBeenCalled();
+    expect(deps.recordBanSignal).not.toHaveBeenCalled();
   });
 });

@@ -12,8 +12,17 @@
  *  - FAIL-OPEN: ANY error in the governor (state read, evaluation, telemetry)
  *    falls through to `doSend`. The governor is never a single point of failure.
  *  - `doSend` runs EXACTLY ONCE. It is intentionally OUTSIDE the governor's own
- *    try/catch, so a throw from `doSend` propagates to the caller unchanged and
- *    can NEVER trigger a second (double) send.
+ *    state/eval try/catch, so a throw from `doSend` propagates to the caller
+ *    unchanged and can NEVER trigger a second (double) send. Its OWN catch only
+ *    feeds the reputation signal (below) and re-raises the original error.
+ *  - REPUTATION FEED (P3): when `doSend` throws a STRONG ban status (463 or 429
+ *    — see FEED_BAN_STATUSES; 403 and body-only matches are deliberately NOT
+ *    fed), the gate — the single choke every automation send passes — is the one
+ *    place that captures it and drives the reputation state machine via
+ *    `record_ban_signal`. Best-effort / fail-soft: it can never change the send
+ *    outcome, the original error is re-raised untouched, manual sends are exempt.
+ *    This is the EXCLUSIVE feed; the UazapiClient's own token-hash telemetry
+ *    path stays dormant (no double-count).
  *  - The automation usage ledger increments ONLY after a real successful send.
  */
 
@@ -28,6 +37,7 @@ import type {
 import { evaluateSend } from "./core.ts";
 import {
   incrementAutomationUsage,
+  recordBanSignal,
   recordDecision,
   resolveGovernorState,
 } from "./io.ts";
@@ -40,6 +50,7 @@ export interface GovernSendDeps {
   evaluateSend: typeof evaluateSend;
   recordDecision: typeof recordDecision;
   incrementAutomationUsage: typeof incrementAutomationUsage;
+  recordBanSignal: typeof recordBanSignal;
 }
 
 const defaultDeps: GovernSendDeps = {
@@ -47,7 +58,97 @@ const defaultDeps: GovernSendDeps = {
   evaluateSend,
   recordDecision,
   incrementAutomationUsage,
+  recordBanSignal,
 };
+
+/** Pull a numeric provider status code out of a thrown send error. The Uazapi
+ *  client throws a structured `UazapiError { status:number, provider_code?, … }`
+ *  on every 4xx/5xx/timeout, so `status` is the primary (and 463 survives here
+ *  intact — the provider/adapter never masks it). `provider_code` is a numeric
+ *  fallback for hypothetical non-Uazapi throwers; a non-numeric provider_code
+ *  (e.g. "circuit_breaker_open") is ignored. Returns undefined when no numeric
+ *  code is present (e.g. a plain network Error). */
+function extractStatusCode(err: unknown): number | undefined {
+  if (err === null || typeof err !== "object") return undefined;
+  const e = err as { status?: unknown; provider_code?: unknown };
+  if (typeof e.status === "number" && Number.isFinite(e.status)) return e.status;
+  const pc = e.provider_code;
+  if (typeof pc === "number" && Number.isFinite(pc)) return pc;
+  if (typeof pc === "string" && /^\d+$/.test(pc)) return Number(pc);
+  return undefined;
+}
+
+/**
+ * The conservative allowlist of provider HTTP statuses that feed the P3
+ * reputation state machine. LOCAL to the gate and deliberately NARROWER than the
+ * shared `classifyBanSignal` set (which also includes 403 and matches ban-ish
+ * response BODIES). The feed is what PR-1b's enforce flip will read, so a false
+ * positive here would quarantine a HEALTHY number — the bar is "status-attested
+ * strong ban", nothing softer.
+ *
+ *  - 463 — Meta/WhatsApp temporary restriction. The exact signal behind the
+ *    chip-burn incidents (Elvéra, Bennedita Pan) this disjuntor exists for.
+ *  - 429 — a real provider rate-limit ("you are sending too fast").
+ *
+ * NOT 403: in the HGE logs 403 is a transient 'Invalid token' with no observed
+ * correlation to a real ban; feeding it would inflate ban_signal_count_24h and,
+ * once enforce is on, quarantine a healthy number on noise.
+ * NOT a body-only match: a 500/400 whose body happens to contain
+ * "rate/block/spam/forbidden" is a server/validation error wearing a ban's
+ * clothes — trusting the body would let it over-count the feed. The shared
+ * `classifyBanSignal` keeps its body heuristic for the coarse, count-only
+ * token-hash telemetry path; the enforce-grade feed demands a strong status.
+ *
+ * If evidence later shows 403 (or a body pattern) correlates with real bans,
+ * WIDENING this set is a deliberate data decision for PR-1b — never a silent
+ * change here. Keeping it tight is what keeps the PR-1a shadow clean, and a
+ * clean shadow is the input that decides the enforce flip.
+ */
+const FEED_BAN_STATUSES: ReadonlySet<number> = new Set([463, 429]);
+
+/**
+ * Feed the P3 reputation state machine from a FAILED send — the anti-ban
+ * disjuntor's ONLY input. This runs at the single choke point (the gate),
+ * inside the catch of a send that already threw, so:
+ *  - the send did NOT happen (we are on the error path);
+ *  - it is best-effort / fail-soft (never throws — a feed failure can NEVER
+ *    change the send outcome; see the module contract);
+ *  - it is EXCLUSIVE to the gate — the UazapiClient's own token-hash telemetry
+ *    path stays dormant (its `instanceId` is undefined), so no double-count.
+ *
+ * Decision rule: feed ONLY when the send error's own NUMERIC status is in the
+ * conservative allowlist (FEED_BAN_STATUSES = {463, 429}). We deliberately do
+ * NOT reuse `classifyBanSignal`'s generic `isBanSignal` for the feed: that also
+ * fires on 403 and on a ban-ish body under a non-ban status (e.g. a 500 whose
+ * body says "rate limited"), both of which would pollute the enforce feed. The
+ * shared classifier stays untouched (other consumers still rely on it).
+ *
+ * Guards: only with a trusted `ctx.instanceId` (a real id to attribute the
+ * signal to) AND a non-manual category (a human send must never quarantine a
+ * number). The instance id comes from the caller's job/auth context, never a
+ * request body; `record_ban_signal` (SECURITY DEFINER, service_role only)
+ * resolves the org internally.
+ */
+async function feedBanSignalBestEffort(
+  deps: GovernSendDeps,
+  supabaseAdmin: GovernorSupabaseClient,
+  ctx: GovernorContext,
+  err: unknown,
+): Promise<void> {
+  try {
+    if (!ctx.instanceId || ctx.category === "manual") return;
+    // Gate the feed on the STRONG numeric status alone (not the shared body-aware
+    // classifier). extractStatusCode reads err.status / err.provider_code; a
+    // non-numeric status (e.g. the string "463") yields undefined and is dropped
+    // — the real UazapiError always carries a numeric status, so a string status
+    // is a hypothetical we keep on the conservative side.
+    const code = extractStatusCode(err);
+    if (typeof code !== "number" || !FEED_BAN_STATUSES.has(code)) return;
+    await deps.recordBanSignal(supabaseAdmin, ctx.instanceId, code);
+  } catch {
+    // fail-soft — the ban-signal feed can NEVER change the send outcome.
+  }
+}
 
 /** Hard ceiling on how long state resolution may sit in front of a send. A slow
  *  or hanging DB must NEVER delay the WhatsApp send: on timeout we fail-open
@@ -153,8 +254,17 @@ export async function governSend<T>(
 
   // ── Allow (incl. shadow + fail-open): send EXACTLY ONCE, outside the guard ─
   // A throw here propagates to the caller (current semantics) and can never be
-  // double-executed by the governor's own error handling.
-  const result = await doSend();
+  // double-executed by the governor's own error handling. On a throw we feed the
+  // reputation state machine at this single choke (best-effort, fail-soft) and
+  // re-raise the ORIGINAL error unchanged — the caller sees exactly what it saw
+  // before. doSend still runs exactly once (the catch never re-invokes it).
+  let result: T;
+  try {
+    result = await doSend();
+  } catch (err) {
+    await feedBanSignalBestEffort(deps, supabaseAdmin, ctx, err);
+    throw err;
+  }
 
   // ── Post-send side effects (NEVER in front of delivery) ───────────────────
   // Telemetry + ledger run only after the message is out. Awaited (not fire-
