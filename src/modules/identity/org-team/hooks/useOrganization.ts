@@ -13,6 +13,8 @@ export interface OrganizationContext {
   teamMemberId: string | null;
   role: string | null;
   orgType: OrgType | null;
+  /** Fuso da org (IANA, ex. "America/Sao_Paulo"). Usado por cortes de dia org-local. */
+  timezone: string | null;
   isLoading: boolean;
   isReady: boolean;
   error: Error | null;
@@ -30,11 +32,11 @@ export function useOrganization(): OrganizationContext {
       if (!orgId) return null;
       const { data, error } = await supabase
         .from("organizations")
-        .select("org_type")
+        .select("org_type, timezone")
         .eq("id", orgId)
         .single();
       if (error) throw error;
-      return data as { org_type: OrgType } | null;
+      return data as { org_type: OrgType; timezone: string | null } | null;
     },
     enabled: !!orgId,
     staleTime: 5 * 60 * 1000, // 5 minutos — org_type não muda
@@ -52,6 +54,7 @@ export function useOrganization(): OrganizationContext {
     teamMemberId: teamMember?.id ?? null,
     role: teamMember?.role ?? null,
     orgType: orgData?.org_type ?? null,
+    timezone: orgData?.timezone ?? null,
     isLoading,
     isReady,
     error: teamError as Error | null,
