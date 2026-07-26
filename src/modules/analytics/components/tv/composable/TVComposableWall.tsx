@@ -1,6 +1,9 @@
 import { useMemo } from "react";
 import { TVGrid, TVGridCell } from "./TVGrid";
 import { WidgetFrame, type WidgetWeight } from "./WidgetFrame";
+import { TVWidgetBody } from "./TVWidgetBody";
+import { resolveChartType } from "@/modules/analytics/lib/tv-chart-type";
+import { headValueFromMeasure } from "@/modules/analytics/lib/tv-series";
 import { useDashboardPages } from "@/modules/analytics/hooks/useComposableDashboard";
 import { useDashboardSnapshot, type DashboardWidgetSnapshot } from "@/modules/analytics/hooks/useDashboardSnapshot";
 import { useMetricCatalog } from "@/modules/analytics/hooks/useMetricCatalog";
@@ -92,6 +95,13 @@ export function TVComposableWall({ period = "month" as const }: { period?: "day"
         const isLegacy = w.measure_kind === "legacy";
         const m = w.measure;
 
+        // Tipo de gráfico: derivado do recorte (#1218). O corpo legado entra na
+        // #1219; por ora a célula legada segue sem corpo (número/frame só).
+        const chartType = isLegacy ? "number" : resolveChartType(w.recorte_id);
+        // Valor de cabeça: escalar do motor, ou soma da série (§1② — todo formato
+        // tem valor de cabeça). empty_reason é honrado no WidgetFrame.
+        const headValue = isLegacy ? null : headValueFromMeasure(m);
+
         return (
           <TVGridCell
             key={w.widget_id}
@@ -101,7 +111,7 @@ export function TVComposableWall({ period = "month" as const }: { period?: "day"
             <WidgetFrame
               eyebrow={buildEyebrow(w, labels)}
               weight={(w.weight ?? "secondary") as WidgetWeight}
-              value={isLegacy ? null : m?.value ?? null}
+              value={headValue}
               formatId={w.format_id}
               state={errored ? "error" : loading ? "loading" : "ready"}
               // Célula legada: âncora estática; o corpo legado entra na #1219.
@@ -111,7 +121,11 @@ export function TVComposableWall({ period = "month" as const }: { period?: "day"
               recorteLabel={w.recorte_id ? labels.recorte[w.recorte_id] : undefined}
               stream={(w.filters as { stream?: string } | undefined)?.stream}
               emptyReason={m?.empty_reason}
-            />
+            >
+              {!errored && !isLegacy && (
+                <TVWidgetBody chartType={chartType} measure={m} formatId={w.format_id} />
+              )}
+            </WidgetFrame>
           </TVGridCell>
         );
       })}
