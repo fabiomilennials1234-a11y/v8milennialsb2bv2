@@ -5996,6 +5996,182 @@ export type Database = {
           },
         ]
       }
+      dashboard_pages: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          draft: Json | null
+          id: string
+          organization_id: string
+          position: number
+          rotation_seconds: number
+          surface: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          draft?: Json | null
+          id?: string
+          organization_id: string
+          position?: number
+          rotation_seconds?: number
+          surface: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          draft?: Json | null
+          id?: string
+          organization_id?: string
+          position?: number
+          rotation_seconds?: number
+          surface?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dashboard_pages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dashboard_widgets: {
+        Row: {
+          created_at: string
+          den_measure_id: string | null
+          eyebrow_override: string | null
+          filters: Json
+          format_id: string | null
+          grid_col: number
+          grid_h: number
+          grid_row: number
+          grid_w: number
+          id: string
+          measure_id: string | null
+          measure_kind: string
+          num_measure_id: string | null
+          organization_id: string
+          page_id: string
+          pinned: boolean
+          position: number
+          recorte_id: string | null
+          renderer_id: string | null
+          updated_at: string
+          weight: string
+        }
+        Insert: {
+          created_at?: string
+          den_measure_id?: string | null
+          eyebrow_override?: string | null
+          filters?: Json
+          format_id?: string | null
+          grid_col?: number
+          grid_h?: number
+          grid_row?: number
+          grid_w?: number
+          id?: string
+          measure_id?: string | null
+          measure_kind?: string
+          num_measure_id?: string | null
+          organization_id: string
+          page_id: string
+          pinned?: boolean
+          position?: number
+          recorte_id?: string | null
+          renderer_id?: string | null
+          updated_at?: string
+          weight?: string
+        }
+        Update: {
+          created_at?: string
+          den_measure_id?: string | null
+          eyebrow_override?: string | null
+          filters?: Json
+          format_id?: string | null
+          grid_col?: number
+          grid_h?: number
+          grid_row?: number
+          grid_w?: number
+          id?: string
+          measure_id?: string | null
+          measure_kind?: string
+          num_measure_id?: string | null
+          organization_id?: string
+          page_id?: string
+          pinned?: boolean
+          position?: number
+          recorte_id?: string | null
+          renderer_id?: string | null
+          updated_at?: string
+          weight?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dashboard_widgets_den_measure_id_fkey"
+            columns: ["den_measure_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_measures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dashboard_widgets_format_id_fkey"
+            columns: ["format_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_formats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dashboard_widgets_measure_id_fkey"
+            columns: ["measure_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_measures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dashboard_widgets_num_measure_id_fkey"
+            columns: ["num_measure_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_measures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dashboard_widgets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dashboard_widgets_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dashboard_widgets_recorte_id_fkey"
+            columns: ["recorte_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_recortes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dashboard_widgets_renderer_id_fkey"
+            columns: ["renderer_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_renderers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dashboards: {
         Row: {
           created_at: string
@@ -9542,6 +9718,202 @@ export type Database = {
           },
         ]
       }
+      metric_catalog_formats: {
+        Row: {
+          id: string
+          label: string
+          sort: number
+        }
+        Insert: {
+          id: string
+          label: string
+          sort?: number
+        }
+        Update: {
+          id?: string
+          label?: string
+          sort?: number
+        }
+        Relationships: []
+      }
+      metric_catalog_measure_formats: {
+        Row: {
+          format_id: string
+          measure_id: string
+        }
+        Insert: {
+          format_id: string
+          measure_id: string
+        }
+        Update: {
+          format_id?: string
+          measure_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metric_catalog_measure_formats_format_id_fkey"
+            columns: ["format_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_formats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metric_catalog_measure_formats_measure_id_fkey"
+            columns: ["measure_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_measures"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      metric_catalog_measure_recortes: {
+        Row: {
+          measure_id: string
+          recorte_id: string
+        }
+        Insert: {
+          measure_id: string
+          recorte_id: string
+        }
+        Update: {
+          measure_id?: string
+          recorte_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metric_catalog_measure_recortes_measure_id_fkey"
+            columns: ["measure_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_measures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metric_catalog_measure_recortes_recorte_id_fkey"
+            columns: ["recorte_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_recortes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      metric_catalog_measures: {
+        Row: {
+          anchor: string
+          description: string | null
+          id: string
+          label: string
+          sort: number
+          unit: string
+        }
+        Insert: {
+          anchor: string
+          description?: string | null
+          id: string
+          label: string
+          sort?: number
+          unit: string
+        }
+        Update: {
+          anchor?: string
+          description?: string | null
+          id?: string
+          label?: string
+          sort?: number
+          unit?: string
+        }
+        Relationships: []
+      }
+      metric_catalog_ratios: {
+        Row: {
+          den_measure_id: string
+          format_id: string
+          id: string
+          label: string
+          num_measure_id: string
+          sort: number
+        }
+        Insert: {
+          den_measure_id: string
+          format_id: string
+          id: string
+          label: string
+          num_measure_id: string
+          sort?: number
+        }
+        Update: {
+          den_measure_id?: string
+          format_id?: string
+          id?: string
+          label?: string
+          num_measure_id?: string
+          sort?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metric_catalog_ratios_den_measure_id_fkey"
+            columns: ["den_measure_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_measures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metric_catalog_ratios_format_id_fkey"
+            columns: ["format_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_formats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metric_catalog_ratios_num_measure_id_fkey"
+            columns: ["num_measure_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_measures"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      metric_catalog_recortes: {
+        Row: {
+          id: string
+          label: string
+          sort: number
+        }
+        Insert: {
+          id: string
+          label: string
+          sort?: number
+        }
+        Update: {
+          id?: string
+          label?: string
+          sort?: number
+        }
+        Relationships: []
+      }
+      metric_catalog_renderers: {
+        Row: {
+          description: string | null
+          id: string
+          is_legacy: boolean
+          label: string
+          sort: number
+        }
+        Insert: {
+          description?: string | null
+          id: string
+          is_legacy?: boolean
+          label: string
+          sort?: number
+        }
+        Update: {
+          description?: string | null
+          id?: string
+          is_legacy?: boolean
+          label?: string
+          sort?: number
+        }
+        Relationships: []
+      }
       mkt_origin_config: {
         Row: {
           created_at: string | null
@@ -10397,6 +10769,8 @@ export type Database = {
           billing_override_by: string | null
           billing_override_reason: string | null
           capture_groups: boolean
+          carteira_emits_revenue_enabled: boolean
+          composable_metrics_enabled: boolean
           confirmacao_overdue_days: number
           copilot_engine_version: string
           created_at: string | null
@@ -10440,6 +10814,8 @@ export type Database = {
           billing_override_by?: string | null
           billing_override_reason?: string | null
           capture_groups?: boolean
+          carteira_emits_revenue_enabled?: boolean
+          composable_metrics_enabled?: boolean
           confirmacao_overdue_days?: number
           copilot_engine_version?: string
           created_at?: string | null
@@ -10483,6 +10859,8 @@ export type Database = {
           billing_override_by?: string | null
           billing_override_reason?: string | null
           capture_groups?: boolean
+          carteira_emits_revenue_enabled?: boolean
+          composable_metrics_enabled?: boolean
           confirmacao_overdue_days?: number
           copilot_engine_version?: string
           created_at?: string | null
@@ -12509,8 +12887,10 @@ export type Database = {
           id: string
           lead_id: string
           organization_id: string
-          pipeline_id: string
+          origin_record_id: string | null
+          pipeline_id: string | null
           pre_sale_responsible_id: string | null
+          producer: string
           revenue_stream: string
           reversed_event_id: string | null
           sale_responsible_id: string | null
@@ -12518,7 +12898,7 @@ export type Database = {
           sold_at: string
           source: string
           stage_event_id: string | null
-          stage_key: string
+          stage_key: string | null
         }
         Insert: {
           actor?: string | null
@@ -12528,8 +12908,10 @@ export type Database = {
           id?: string
           lead_id: string
           organization_id: string
-          pipeline_id: string
+          origin_record_id?: string | null
+          pipeline_id?: string | null
           pre_sale_responsible_id?: string | null
+          producer?: string
           revenue_stream: string
           reversed_event_id?: string | null
           sale_responsible_id?: string | null
@@ -12537,7 +12919,7 @@ export type Database = {
           sold_at?: string
           source?: string
           stage_event_id?: string | null
-          stage_key: string
+          stage_key?: string | null
         }
         Update: {
           actor?: string | null
@@ -12547,8 +12929,10 @@ export type Database = {
           id?: string
           lead_id?: string
           organization_id?: string
-          pipeline_id?: string
+          origin_record_id?: string | null
+          pipeline_id?: string | null
           pre_sale_responsible_id?: string | null
+          producer?: string
           revenue_stream?: string
           reversed_event_id?: string | null
           sale_responsible_id?: string | null
@@ -12556,7 +12940,7 @@ export type Database = {
           sold_at?: string
           source?: string
           stage_event_id?: string | null
-          stage_key?: string
+          stage_key?: string | null
         }
         Relationships: [
           {
@@ -16603,6 +16987,63 @@ export type Database = {
       }
     }
     Functions: {
+      _fn_seed_default_dashboard_unchecked: {
+        Args: { p_org_id: string }
+        Returns: Json
+      }
+      _metric_leaf: {
+        Args: {
+          p_end: string
+          p_filters: Json
+          p_measure_id: string
+          p_org_id: string
+          p_period: string
+          p_recorte: string
+          p_ref: string
+          p_start: string
+        }
+        Returns: Json
+      }
+      _metric_leaf_leads_criados: {
+        Args: {
+          p_bounds: unknown
+          p_filters: Json
+          p_org_id: string
+          p_recorte: string
+          p_tz: string
+        }
+        Returns: Json
+      }
+      _metric_leaf_meetings: {
+        Args: {
+          p_bounds: unknown
+          p_event_type: string
+          p_filters: Json
+          p_org_id: string
+          p_recorte: string
+          p_tz: string
+        }
+        Returns: Json
+      }
+      _metric_leaf_sales: {
+        Args: {
+          p_agg: string
+          p_bounds: unknown
+          p_filters: Json
+          p_org_id: string
+          p_recorte: string
+          p_tz: string
+        }
+        Returns: Json
+      }
+      _metric_leaf_stage_duration: {
+        Args: { p_filters: Json; p_org_id: string; p_recorte: string }
+        Returns: Json
+      }
+      _metric_leaf_stage_snapshot: {
+        Args: { p_filters: Json; p_org_id: string; p_recorte: string }
+        Returns: Json
+      }
       _resolve_plan_base_for_resource: {
         Args: { p_org_id: string; p_resource_key: string }
         Returns: number
@@ -17141,8 +17582,40 @@ export type Database = {
         }
         Returns: number
       }
+      fn_backfill_carteira_orders: {
+        Args: {
+          p_dry_run?: boolean
+          p_exclude_ids?: string[]
+          p_org_id?: string
+        }
+        Returns: {
+          carteira: number
+          emitidos: number
+          excluidos: number
+          ja_existiam: number
+          novo_negocio: number
+          pedidos_avaliados: number
+          sem_lead: number
+          valor_emitido: number
+        }[]
+      }
       fn_backfill_parse_sale_value: { Args: { p_raw: string }; Returns: number }
       fn_backfill_state_sales: { Args: never; Returns: number }
+      fn_composable_metrics_enabled: {
+        Args: { p_org_id: string }
+        Returns: boolean
+      }
+      fn_dashboard_snapshot: {
+        Args: {
+          p_end?: string
+          p_org_id: string
+          p_page_id: string
+          p_period?: string
+          p_ref?: string
+          p_start?: string
+        }
+        Returns: Json
+      }
       fn_funnel_flow_step: {
         Args: {
           p_cohort_size: number
@@ -17152,6 +17625,44 @@ export type Database = {
         }
         Returns: Json
       }
+      fn_metric_catalog: { Args: never; Returns: Json }
+      fn_metric_measure: {
+        Args: {
+          p_end?: string
+          p_filters?: Json
+          p_measure_ref: Json
+          p_org_id: string
+          p_period?: string
+          p_recorte: string
+          p_ref?: string
+          p_start?: string
+        }
+        Returns: Json
+      }
+      fn_publish_dashboard_page: {
+        Args: { p_org_id: string; p_page_id: string }
+        Returns: Json
+      }
+      fn_reetiqueta_funnel_streams: {
+        Args: { p_dry_run?: boolean; p_org_id?: string }
+        Returns: {
+          avaliadas: number
+          ja_corrigidas: number
+          para_carteira: number
+          para_novo: number
+          reescritas: number
+          valor_movido: number
+        }[]
+      }
+      fn_rollback_carteira_backfill: {
+        Args: { p_org_id?: string }
+        Returns: number
+      }
+      fn_rollback_reetiqueta_funnel: {
+        Args: { p_org_id?: string }
+        Returns: number
+      }
+      fn_seed_default_dashboard: { Args: { p_org_id: string }; Returns: Json }
       generate_api_key: {
         Args: { p_created_by: string; p_name: string; p_org_id: string }
         Returns: Json
@@ -18249,6 +18760,15 @@ export type Database = {
           p_start?: string
         }
         Returns: unknown
+      }
+      metric_revenue_stream: {
+        Args: {
+          p_exclude_sale_event_id?: string
+          p_lead_id: string
+          p_org_id: string
+          p_sold_at: string
+        }
+        Returns: string
       }
       metric_stage_role: {
         Args: {

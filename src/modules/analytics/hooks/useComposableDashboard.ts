@@ -15,14 +15,13 @@ export function useComposableMetricsEnabled() {
   return useQuery({
     queryKey: ["composable-metrics-enabled", organizationId],
     queryFn: async (): Promise<boolean> => {
-      // `as any`: a coluna entrou na #1194 e types.ts ainda não foi regenerado.
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("organizations")
         .select("composable_metrics_enabled")
         .eq("id", organizationId!)
         .maybeSingle();
       if (error) return false;
-      return Boolean((data as { composable_metrics_enabled?: boolean } | null)?.composable_metrics_enabled);
+      return Boolean(data?.composable_metrics_enabled);
     },
     enabled: isReady && !!organizationId,
     staleTime: 5 * 60 * 1000,
@@ -46,16 +45,14 @@ export function useDashboardPages(surface: "tv" | "command" = "tv") {
   return useQuery({
     queryKey: ["dashboard-pages", organizationId, surface],
     queryFn: async (): Promise<DashboardPage[]> => {
-      // `as any`: dashboard_pages entrou na #1194 e types.ts (auto-gerado) ainda
-      // não foi regenerado. Mesmo padrão dos hooks que chamam RPC nova.
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("dashboard_pages")
         .select("id,title,position,rotation_seconds")
         .eq("organization_id", organizationId!)
         .eq("surface", surface)
         .order("position", { ascending: true });
       if (error) throw new Error(`Dashboard pages failed: ${error.message}`);
-      return (data ?? []) as DashboardPage[];
+      return data ?? [];
     },
     enabled: isReady && !!organizationId,
     staleTime: 5 * 60 * 1000,
