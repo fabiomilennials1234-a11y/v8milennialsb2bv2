@@ -18,17 +18,21 @@ Este doc é **mínimo**. Para detalhe, navegar via:
 
 ## Subagentes (7)
 
-Entry point = **orchestrador** (coordenador). Ele classifica, roteia pelo ramo e segura o estado com loops de reprovação. Pipeline por ramo:
+Entry point = **orchestrador** (coordenador). Ele classifica, roteia pelo ramo, custodia o Context Packet e segura o estado com loops de reprovação. Pipeline por ramo (`‖` = paralelo, mesma mensagem):
 
 ```
-BUG      → diagnosticador → engenheiro → revisor → qa → arquiteto(versiona) → humano deploya
-FEATURE  → arquiteto(macro) → engenheiro (+design ‖) → revisor → qa → arquiteto(versiona) → humano
-REFACTOR → arquiteto(plano) → engenheiro → revisor → qa → arquiteto(versiona) → humano
-VISUAL   → design(spec) → engenheiro → revisor → qa → arquiteto(versiona) → humano
+BUG      → diagnosticador → engenheiro → [revisor ‖ qa] → arquiteto(versiona) → humano deploya
+FEATURE  → arquiteto(macro) → engenheiro (+design ‖) → [revisor ‖ qa] → arquiteto(versiona) → humano
+REFACTOR → arquiteto(plano) → engenheiro → [revisor ‖ qa] → arquiteto(versiona) → humano
+VISUAL   → design(spec) → engenheiro → [revisor ‖ qa] → arquiteto(versiona) → humano
 TRIVIAL  → engenheiro → revisor → arquiteto(versiona)
 ```
 
-Loops: revisor **REPROVA** ou qa **FALHA** → orchestrador re-despacha o engenheiro com feedback. Cap = **2 voltas** no mesmo ponto → escala CTO.
+**Fan-out revisor ‖ qa**: leituras independentes do mesmo diff, despachadas juntas. Pré-condição = `lint`+`test:unit`+`build` verdes no output do engenheiro. Serializa (revisor primeiro) só se build vermelho, RLS/multi-tenant/permissões não revisado, payment/efeito externo irreversível, ou migration destrutiva. Junção: `APROVA+PASSA` → arquiteto; qualquer `REPROVA`/`FALHA` → engenheiro em **uma** volta com os dois feedbacks fundidos. REPROVA de segurança bloqueia mesmo com QA PASSA.
+
+**Context Packet** (`.claude/skills/_shared/context-packet.md`): subagentes não compartilham contexto, então o CP é o estado que viaja com a task — `Mapa verificado`, `Achados`, `Descartado`, `Comandos que valem`, `Aberto`. Todo brief carrega o CP **verbatim**; cada papel devolve `CP-v(N+1)`; o orchestrador propaga e funde. Sem CP, cada hop re-explora o repo do zero (medido: 197 leituras para 19 edições numa sessão).
+
+Loops: revisor **REPROVA** ou qa **FALHA** → orchestrador re-despacha o engenheiro com feedback. Uma rodada de fan-out = **uma** volta. Cap = **2 voltas** no mesmo ponto → escala CTO.
 
 | Subagente | Função | Skill |
 |-----------|--------|-------|

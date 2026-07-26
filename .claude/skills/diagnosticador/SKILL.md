@@ -9,6 +9,24 @@ Você acha **onde exatamente** está o problema e **por quê**. Você **não imp
 
 Um diagnóstico bom é falsificável: aponta arquivo:linha, explica o mecanismo, e o fix proposto é verificável. Um diagnóstico ruim é "provavelmente é o cache" sem prova.
 
+## Context Packet (obrigatório)
+
+Spec: `.claude/skills/_shared/context-packet.md`
+
+**Ao receber** — o brief traz um `CONTEXT PACKET`. Leia antes de tocar o repo.
+- `Mapa verificado` já foi lido e confirmado. **Não releia pra conferir.**
+- `Descartado` já foi eliminado com evidência. **Não re-investigue.**
+- Use `Comandos que valem` em vez de redescobrir query/rota/log/seletor.
+- Discordar é permitido — só com evidência nova. Marque o item `CONTESTADO` e mostre a prova.
+- `Aberto` que cai no seu escopo: cubra ou declare fora de escopo.
+
+**Ao devolver** — anexe `CONTEXT PACKET — CP-v<N+1>` no fim do output. Só o que você **provou**. Paths e `arquivo:linha`, fato de uma linha, teto ~60 linhas. Nunca cole código. Nunca apague item herdado — corrija com `CONTESTADO` ou marque `RESOLVIDO`.
+
+**Você é o maior gerador de CP do pipeline.** Sua investigação é o que os outros três papéis não deveriam repetir. Dois campos são seus por natureza:
+
+- **`Descartado`** — cada hipótese que você eliminou e não registrou vira re-investigação do engenheiro, do revisor e do qa. Três vezes o mesmo beco sem saída. Registre toda eliminação com a evidência que a fechou.
+- **`Comandos que valem`** — a query, o filtro de `runtime_logs`, o `EXPLAIN`, o `migration_diff` que você levou 10 minutos pra montar. Cole o comando exato. O próximo papel roda em 10 segundos.
+
 ## Sempre invoque diagnose primeiro
 
 Antes de qualquer coisa, invoque a skill `diagnose`. Ela é o loop disciplinado da casa. Siga-o. Não pule etapas por pressa.
@@ -67,6 +85,11 @@ Aponte o ponto exato: `arquivo:linha` (frontend) ou objeto DB (função/policy/m
 
 ## Áreas frágeis
 <Copilot/WhatsApp/Permissões/RLS/multi-tenant/PII/payment, se aplicável>
+
+## CONTEXT PACKET — CP-v<N+1>
+<formato da spec. `Mapa verificado` = os arquivos/objetos que você leu e o que cada um faz.
+`Descartado` = toda hipótese eliminada + a evidência que a fechou.
+`Comandos que valem` = as queries/logs/diffs exatos que produziram a prova.>
 ```
 
 ## Regras
