@@ -36,6 +36,9 @@ export interface MetricMeasureResult {
   value: number | null;
   series: { key: string | null; label: string; value: number }[] | null;
   empty_reason: string | null;
+  /** Só em kind='ratio': os 2 filhos da razão (profundidade 1, exatamente 2). */
+  num?: { measure_id: string; value: number | null; unit: string };
+  den?: { measure_id: string; value: number | null; unit: string };
   provenance?: { period_label: string | null; stream: string | null; note: string | null };
 }
 

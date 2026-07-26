@@ -10,12 +10,19 @@ import type { MetricMeasureResult, MetricPeriod } from "./useMetricMeasure";
 
 export interface DashboardWidgetSnapshot {
   widget_id: string;
+  /** 'legacy' = célula reservada: o motor reconhece o renderer mas não avalia medida. */
+  measure_kind?: "leaf" | "ratio" | "legacy";
+  /** Só em measure_kind='legacy'. Resolvido no front para um componente legado. */
+  renderer_id?: string | null;
   weight?: "hero" | "primary" | "secondary";
-  format_id?: string;
+  format_id?: string | null;
+  recorte_id?: string | null;
   eyebrow_override?: string | null;
   grid?: { col: number; row: number; w: number; h: number };
   pinned?: boolean;
-  measure?: MetricMeasureResult;
+  filters?: Record<string, string> | null;
+  /** null em célula legada — não há medida a avaliar. */
+  measure?: MetricMeasureResult | null;
   error?: "unavailable"; // widget quebrado isolado, não derruba a página
 }
 

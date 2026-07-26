@@ -299,6 +299,22 @@
     --tv-label:    clamp(0.75rem,   0.83vw,  2rem);    /* 12 →  16 @1920 →  32 @4K */
     --tv-meta:     clamp(0.6875rem, 0.73vw,  1.75rem); /* 11 →  14 @1920 →  28 @4K */
   }
+
+  /* Carregamento de valor na parede (#1207, spec §5.1).
+     SÓ o valor pulsa — o frame, o eyebrow e a proveniência já estão na tela,
+     porque vêm da configuração e não do dado.
+     SEM shimmer: o sweep de brilho a 3m lê como flicker. E numa TV que refaz
+     fetch a cada 30s, skeleton de tela inteira pisca a sala. */
+  @keyframes tv-value-pulse {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 0.7; }
+  }
+  .tv-value-loading {
+    animation: tv-value-pulse 2s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tv-value-loading { animation: none; opacity: 0.55; }
+  }
 }
 
 @layer base {
