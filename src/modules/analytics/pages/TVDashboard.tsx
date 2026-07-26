@@ -25,6 +25,8 @@ import { Button } from "@/components/ui/button";
 import torqueLogo from "@/assets/torque-logo.png";
 import { TVRankingSimple } from "@/modules/analytics/components/tv/TVRankingSimple";
 import { generateTVConfig } from "@/modules/platform/lib/tv-config-from-quiz";
+import { useComposableMetricsEnabled } from "@/modules/analytics/hooks/useComposableDashboard";
+import { TVComposableShell } from "@/modules/analytics/components/tv/composable/TVComposableShell";
 import { useOnboarding } from "@/modules/platform/hooks/useOnboarding";
 
 const formatCurrency = (value: number) => {
@@ -36,9 +38,22 @@ const formatCurrency = (value: number) => {
 export default function TVDashboard() {
   return (
     <TVPeriodProvider>
-      <TVDashboardInner />
+      <TVDashboardRouter />
     </TVPeriodProvider>
   );
+}
+
+/**
+ * Gate da flag (#1207). DESLIGADA = a TV de hoje, byte a byte — `TVDashboardInner`
+ * nem sequer muda de caminho. LIGADA = a TV montável.
+ *
+ * Enquanto a flag não resolve, renderiza a TV legada: a parede nunca pisca para
+ * um estado intermediário, e a falha de leitura da flag degrada para o legado.
+ */
+function TVDashboardRouter() {
+  const { data: composableEnabled } = useComposableMetricsEnabled();
+  if (composableEnabled === true) return <TVComposableShell />;
+  return <TVDashboardInner />;
 }
 
 function TVDashboardInner() {

@@ -131,3 +131,13 @@ export * from "./lib/funnel-health-stages";
 export * from "./hooks/useMetricCatalog";
 export * from "./hooks/useMetricMeasure";
 export * from "./hooks/useDashboardSnapshot";
+
+// Casca da TV montável (#1207): grid 12×6, WidgetFrame, painel semeado.
+export * from "./hooks/useComposableDashboard";
+export * from "./lib/tv-metric-format";
+export * from "./lib/tv-provenance";
+export * from "./lib/tv-density";
+export { WidgetFrame } from "./components/tv/composable/WidgetFrame";
+export { TVGrid, TVGridCell } from "./components/tv/composable/TVGrid";
+export { TVComposableWall } from "./components/tv/composable/TVComposableWall";
+export { TVComposableShell } from "./components/tv/composable/TVComposableShell";

@@ -26,14 +26,23 @@ export interface MetricCatalogRatio {
   unit: "percent" | "currency" | "ratio";
 }
 
+export interface MetricCatalogRenderer {
+  id: string;
+  label: string;
+  description: string | null;
+  /** Célula reservada (legado): o Composer NÃO deve oferecê-la como composível. */
+  is_legacy: boolean;
+}
+
 export interface MetricCatalog {
   measures: MetricCatalogMeasure[];
   recortes: { id: string; label: string }[];
   formats: { id: string; label: string }[];
   ratios: MetricCatalogRatio[];
+  renderers: MetricCatalogRenderer[];
 }
 
-const EMPTY: MetricCatalog = { measures: [], recortes: [], formats: [], ratios: [] };
+const EMPTY: MetricCatalog = { measures: [], recortes: [], formats: [], ratios: [], renderers: [] };
 
 export function useMetricCatalog() {
   return useQuery({

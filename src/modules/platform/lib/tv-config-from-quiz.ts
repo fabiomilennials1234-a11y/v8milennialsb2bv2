@@ -2,6 +2,21 @@
  * Maps onboarding quiz answers to TV Dashboard configuration.
  * Controls which KPIs, blocks, and labels appear on the TV.
  * Keeps all conditional logic out of the TVDashboard component.
+ *
+ * @deprecated (#1207) A derivação passou a viver em SQL, em
+ * `public.fn_seed_default_dashboard(uuid)` — fonte ÚNICA daqui pra frente, e é
+ * dela que o painel montável é semeado.
+ *
+ * Este arquivo continua vivo SÓ enquanto houver org com a flag
+ * `organizations.composable_metrics_enabled` DESLIGADA: nesse caso a TV legada
+ * (`TVDashboard` → `TVDashboardInner`) ainda o consome. Não é duplicação
+ * permanente — é relocação com prazo de morte.
+ *
+ * REMOÇÃO AGENDADA: quando a flag estiver ON em todas as orgs, apagar este
+ * arquivo junto com a TV legada. Decisão do arquiteto em
+ * `.specs/project/decisao-1207-celula-legada-e-semeadura.md` (decisão 2).
+ *
+ * NÃO adicione regra nova aqui. Regra nova vai para a função SQL.
  */
 
 import type { OnboardingAnswers } from "@/modules/platform/hooks/useOnboarding";
