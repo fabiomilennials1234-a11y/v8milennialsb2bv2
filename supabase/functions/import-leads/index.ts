@@ -1093,6 +1093,10 @@ async function importToCustomPipeline(
             utm_medium: lead.utm_medium,
             utm_content: lead.utm_content,
             utm_term: lead.utm_term,
+            // Cliente de base carregado em funil custom, não lead novo — fora
+            // da métrica de leads do Dashboard (get_dashboard_metrics). Só o
+            // lead CRIADO aqui é marcado; lead existente atualizado não.
+            excluded_from_metrics: true,
           };
 
           const { data: newLead, error: leadError } = await supabase
