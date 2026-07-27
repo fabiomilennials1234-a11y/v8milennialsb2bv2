@@ -38,6 +38,7 @@ import type {
   UazapiSendTextInput,
   UazapiNumberCheck,
 } from "./uazapi-types.ts";
+import { buildPixButtonBody } from "./uazapi-pix.ts";
 
 // ---------------------------------------------------------------------------
 // Sender status mapping — Uazapi vocabulary → app canonical enum
@@ -291,10 +292,12 @@ export class UazapiClient {
   async sendPixButton(
     input: UazapiSendPixButtonInput
   ): Promise<UazapiMessageResponse> {
+    // Mapeia pros nomes de campo que a Uazapi exige (pixKey/pixType/pixName) —
+    // mandar `pixkey`/`pixkeyType`/`merchantName` dava "Missing required fields".
     return this.request<UazapiMessageResponse>(
       "POST",
       "/send/pix-button",
-      input
+      buildPixButtonBody(input)
     );
   }
 
