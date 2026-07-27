@@ -69,9 +69,10 @@ export function useChatBubbleContactsRealtime(
       const isCurrentConversation =
         !!currentActive && normalizePhone(currentActive) === normPhone;
 
-      const contactsQueryKey = chatQueryKeys.contacts(organizationId, msgInstanceId);
+      // Prefixo: patcha todas as variantes filtradas da instância (issue #1277).
+      const contactsQueryKey = chatQueryKeys.contactsPrefix(organizationId, msgInstanceId);
 
-      queryClient.setQueryData<ChatContact[]>(contactsQueryKey, (prev) => {
+      queryClient.setQueriesData<ChatContact[]>({ queryKey: contactsQueryKey }, (prev) => {
         if (!prev) return prev;
 
         const existingIdx = prev.findIndex(

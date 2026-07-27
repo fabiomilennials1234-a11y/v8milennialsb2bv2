@@ -13,7 +13,9 @@
  * - Sempre tipar como readonly tuple (TanStack Query exige imutabilidade
  *   estrutural pra cache key resolution).
  * - NÃO incluir flags de UI (filtros locais, sort) — essas são concerns de
- *   `select` ou de queries derivadas.
+ *   `select` ou de queries derivadas. Exceção: filtro que o SERVIDOR aplica
+ *   (issue #1277) muda o resultado da query, então faz parte da identidade dela
+ *   e entra na key. Filtro que só o cliente aplica continua fora.
  */
 export const chatQueryKeys = {
   /** Mensagens de uma conversa específica em uma instância. */
@@ -29,8 +31,13 @@ export const chatQueryKeys = {
       instanceId ?? null,
     ] as const,
 
-  /** Lista de contatos (sidebar) de uma instância. */
-  contacts: (
+  /**
+   * Prefixo da lista de contatos, sem o recorte de filtro. É por aqui que
+   * patches de realtime e invalidações alcançam TODAS as variantes filtradas da
+   * mesma instância — use com `setQueriesData`/`invalidateQueries`, nunca com
+   * `setQueryData` (que exige key exata e erraria toda variante).
+   */
+  contactsPrefix: (
     organizationId: string | null | undefined,
     instanceId: string | null | undefined,
   ) =>
@@ -38,6 +45,25 @@ export const chatQueryKeys = {
       "whatsapp_contacts",
       organizationId ?? null,
       instanceId ?? null,
+    ] as const,
+
+  /**
+   * Lista de contatos (sidebar) de uma instância.
+   *
+   * `filterKey` identifica o recorte que a RPC aplicou server-side (issue
+   * #1277) — sem ele, duas listas com filtros diferentes colidiriam no cache.
+   * `""` é a lista sem filtro, compartilhada com command palette e bolha.
+   */
+  contacts: (
+    organizationId: string | null | undefined,
+    instanceId: string | null | undefined,
+    filterKey?: string,
+  ) =>
+    [
+      "whatsapp_contacts",
+      organizationId ?? null,
+      instanceId ?? null,
+      filterKey ?? "",
     ] as const,
 
   /** Contagem lightweight de unread para badge global (ChatBubbleContext). */
@@ -87,6 +113,7 @@ export const chatQueryKeys = {
 export type ChatQueryKey =
   | ReturnType<typeof chatQueryKeys.messages>
   | ReturnType<typeof chatQueryKeys.contacts>
+  | ReturnType<typeof chatQueryKeys.contactsPrefix>
   | ReturnType<typeof chatQueryKeys.unreadBadge>
   | ReturnType<typeof chatQueryKeys.leadWhatsAppInstance>
   | ReturnType<typeof chatQueryKeys.chatDeepLink>

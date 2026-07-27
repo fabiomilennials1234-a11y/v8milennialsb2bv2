@@ -11,6 +11,10 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { chatQueryKeys } from "./shared/queryKeys";
 import type { ChatContact, ChatContactTag } from "./types";
 import {
+  UNFILTERED_PAGE_LIMIT,
+  type InboxServerFilter,
+} from "@/modules/communication/lib/inboxFilterServer";
+import {
   useWhatsAppRealtimeFallback,
   FALLBACK_POLL_INTERVAL_MS,
   JOINED_BACKSTOP_POLL_INTERVAL_MS,
@@ -43,14 +47,25 @@ function getLastSeenMap(): Record<string, number> {
 /**
  * Hook para listar contatos/conversas do WhatsApp de uma instância (inbox por número).
  * Se instanceId for null, não retorna conversas — usuário deve escolher um número primeiro.
+ *
+ * `serverFilter` (issue #1277) empurra as dimensões do filtro do inbox pra RPC,
+ * que as aplica ANTES do LIMIT. Sem ele a página de 500 mais recentes era todo o
+ * universo que o filtro do cliente enxergava. Omitir mantém o comportamento e a
+ * queryKey de antes — é o que fazem command palette e bolha de chat.
  */
-export function useWhatsAppContacts(instanceId: string | null) {
+export function useWhatsAppContacts(
+  instanceId: string | null,
+  serverFilter?: InboxServerFilter,
+) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
   const { shouldPoll } = useWhatsAppRealtimeFallback(organizationId);
 
+  const filterArgs = serverFilter?.args ?? null;
+  const pageLimit = serverFilter?.limit ?? UNFILTERED_PAGE_LIMIT;
+
   return useQuery({
-    queryKey: chatQueryKeys.contacts(organizationId, instanceId),
+    queryKey: chatQueryKeys.contacts(organizationId, instanceId, serverFilter?.cacheKey),
     queryFn: async () => {
       if (!organizationId || !instanceId) return [];
 
@@ -67,7 +82,12 @@ export function useWhatsAppContacts(instanceId: string | null) {
       if (useServerList) {
         const { data: rows, error: rpcError } = await supabase.rpc(
           "get_whatsapp_conversation_list",
-          { p_org: organizationId, p_instance: instanceId, p_limit: 500 } as any
+          {
+            p_org: organizationId,
+            p_instance: instanceId,
+            p_limit: pageLimit,
+            ...(filterArgs ?? {}),
+          } as any
         );
         if (rpcError) throw rpcError;
 
@@ -150,6 +170,9 @@ export function useWhatsAppContacts(instanceId: string | null) {
         return contacts;
       }
 
+      // ── Escape hatch (v3_server_contacts='0'): monta a lista de whatsapp_messages ──
+      // Não empurra `serverFilter`: aqui o universo já são todas as conversas com
+      // mensagem recente, então o filtro do cliente sozinho não trunca.
       // Query 1: mensagens recentes (limitadas) + metadados de conversas em paralelo
       const [{ data: msgData, error: msgError }, { data: convMeta }] = await Promise.all([
         supabase
