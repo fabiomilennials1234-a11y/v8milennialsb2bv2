@@ -404,17 +404,11 @@ async function processPipeQueue(
           continue;
         }
 
-        // Rate limit check
-        const { data: rateCheck } = await supabase.rpc("check_whatsapp_rate_limit", {
-          p_organization_id: orgId,
-          p_instance_id: instance.id,
-        });
-        if (rateCheck?.[0] && !rateCheck[0].can_send) {
-          console.log(`[pipe-rule-dispatch][${pipeType}] Rate limit exceeded, stopping`);
-          if (jobId) await failJob(supabase, jobId, "Rate limit exceeded — reagendado automaticamente");
-          break;
-        }
-
+        // Throttle/reputação: Send Governor (#1156) governa TODO envio via
+        // sendTextViaInstance->governSend. O pré-check check_whatsapp_rate_limit
+        // chamava RPC inexistente em prod (fail-open, nunca barrava) e era
+        // contador hora/dia redundante ao governor. Removido (Lanterna #diag;
+        // confirmado vs #1243). O jitter delay_min/max_ms segue no send path.
         const isAudio = template.message_type === "audio" && template.audio_url && String(template.audio_url).trim().length > 0;
         const timeVars = getTimeBasedVariables();
         const messageContent = isAudio ? "[Áudio]" : replaceVariables(template.content || "", {
@@ -467,12 +461,8 @@ async function processPipeQueue(
             console.warn("[pipe-rule-dispatch] chat sync error:", chatSyncErr);
           }
 
-          try {
-            await supabase.rpc("increment_whatsapp_rate_limit", {
-              p_organization_id: orgId,
-              p_instance_id: instance.id,
-            });
-          } catch (_) { /* ignore */ }
+          // increment_whatsapp_rate_limit removido: RPC ausente em prod, só
+          // alimentava o contador do check redundante. Governor não usa.
 
           try {
             await supabase.rpc("increment", {

@@ -271,29 +271,12 @@ async function processBatch(
 
   console.log("[semi-automatic-dispatch] Found", filteredLeads.length, "leads to dispatch");
 
-  // Verificar rate limit
-  const { data: rateLimitCheck } = await supabase.rpc("check_whatsapp_rate_limit", {
-    p_organization_id: organizationId,
-    p_instance_id: whatsappInstance.id,
-  });
-
-  if (rateLimitCheck && !rateLimitCheck[0]?.can_send) {
-    console.log("[semi-automatic-dispatch] Rate limit exceeded, rescheduling batch");
-    // Reagendar para próxima hora
-    const nextSchedule = new Date();
-    nextSchedule.setHours(nextSchedule.getHours() + 1, 0, 0, 0);
-
-    await supabase
-      .from("campaign_dispatch_batches")
-      .update({
-        status: "scheduled",
-        scheduled_at: nextSchedule.toISOString(),
-        started_at: null,
-      })
-      .eq("id", batch.id);
-
-    return { success: false, sent: 0, failed: 0, skipped: filteredLeads.length };
-  }
+  // Throttle/reputação: Send Governor (#1156) governa TODO envio via
+  // sendTextViaInstance->governSend. O pré-check check_whatsapp_rate_limit
+  // (contador hora/dia) chamava RPC inexistente em prod — data null -> a
+  // condição `rateLimitCheck && ...` era falsa -> NUNCA reagendava, sempre
+  // seguia. Ou seja o reschedule-de-batch já era morto na prática. Removido
+  // (Lanterna #diag; confirmado vs #1243); o governor gateia cada send.
 
   // Processar leads
   let sent = 0;
@@ -373,11 +356,8 @@ async function processBatch(
           sent_at: new Date().toISOString(),
         });
 
-        // Incrementar rate limit
-        await supabase.rpc("increment_whatsapp_rate_limit", {
-          p_organization_id: organizationId,
-          p_instance_id: whatsappInstance.id,
-        });
+        // increment_whatsapp_rate_limit removido: RPC ausente em prod, só
+        // alimentava o contador do check redundante. Governor não usa.
 
         // Incrementar times_used do template
         await supabase.rpc("increment", {

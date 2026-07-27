@@ -10,6 +10,8 @@
  * copilot/dispatcher, process-copilot-followups.
  */
 
+import { logRuntime } from "./logger.ts";
+
 export type SendSource =
   | "manual"
   | "copilot"
@@ -195,8 +197,23 @@ export async function reserveSendOrSkip(args: {
     }
     return { duplicate: false };
   } catch (err) {
-    // Fail-open: never block a send because dedup infra failed.
-    console.warn("[send-dedup] reserve failed, sending anyway (fail-open):", err instanceof Error ? err.message : err);
+    // Fail-open POR DESIGN: nunca derrubar um envio porque a infra de dedup
+    // falhou. MAS o fail-open tem que GRITAR — este exato caminho ficou MESES
+    // silencioso (a tabela send_dedup_log nunca existiu em prod, todo reserve
+    // caía aqui, e o único sinal era um console.warn que ninguém lê). Um alerta
+    // ALTO em runtime_logs (status=error) faz a quebra permanente aparecer no
+    // painel de observabilidade em vez de virar silêncio de novo.
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn("[send-dedup] reserve failed, sending anyway (fail-open):", msg);
+    await logRuntime({
+      organizationId: args.orgId,
+      module: "outbound",
+      action: "dedup_reserve_fail_open",
+      status: "error",
+      errorMessage: msg,
+      // sem conteúdo/telefone cru no log — só o suficiente para diagnosticar.
+      payloadSnapshot: { source: args.source, has_idempotency_key: Boolean(args.idempotencyKey) },
+    });
     return { duplicate: false };
   }
 }
