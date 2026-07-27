@@ -20,7 +20,14 @@ const textSizeClasses = {
 } as const;
 
 interface UserAvatarProps {
-  name: string;
+  /**
+   * Nullable de propósito: quase todo call site alimenta este componente com
+   * nome vindo de RPC, onde `name` é `string | null` (ex.: get_ranking_data).
+   * Tipar como `string` fazia o TS mentir — o erro de atribuição existia, mas
+   * estava suprimido pelo .tsc-baseline.json — e estourava `null.split(" ")`
+   * em runtime, derrubando a página inteira do Ranking.
+   */
+  name: string | null | undefined;
   avatarUrl?: string | null;
   size?: keyof typeof sizeClasses;
   className?: string;
@@ -34,16 +41,19 @@ export function UserAvatar({
   className,
   fallbackClassName,
 }: UserAvatarProps) {
-  const initials = name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const safeName = name?.trim() ?? "";
+  const initials =
+    safeName
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((n) => n[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "?";
 
   return (
     <Avatar className={cn(sizeClasses[size], className)}>
-      <AvatarImage src={avatarUrl || ""} alt={name} />
+      <AvatarImage src={avatarUrl || ""} alt={safeName} />
       <AvatarFallback
         className={cn(
           textSizeClasses[size],
