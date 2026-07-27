@@ -95,9 +95,11 @@ export function TVComposableWall({ period = "month" as const }: { period?: "day"
         const isLegacy = w.measure_kind === "legacy";
         const m = w.measure;
 
-        // Tipo de gráfico: derivado do recorte (#1218). O corpo legado entra na
-        // #1219; por ora a célula legada segue sem corpo (número/frame só).
-        const chartType = isLegacy ? "number" : resolveChartType(w.recorte_id);
+        // Estilo (#1253): widget_style escolhido VENCE; null → deriva do recorte.
+        // Célula legada remanescente (multi-medida, v2) segue sem corpo.
+        const chartType = isLegacy ? "number" : resolveChartType(w.recorte_id, w.widget_style);
+        // value_format ?? format_id enquanto durar o EXPAND (#1253); DROP é o S7.
+        const valueFormat = w.value_format ?? w.format_id;
         // Valor de cabeça: escalar do motor, ou soma da série (§1② — todo formato
         // tem valor de cabeça). empty_reason é honrado no WidgetFrame.
         const headValue = isLegacy ? null : headValueFromMeasure(m);
@@ -112,7 +114,7 @@ export function TVComposableWall({ period = "month" as const }: { period?: "day"
               eyebrow={buildEyebrow(w, labels)}
               weight={(w.weight ?? "secondary") as WidgetWeight}
               value={headValue}
-              formatId={w.format_id}
+              formatId={valueFormat}
               state={errored ? "error" : loading ? "loading" : "ready"}
               // Célula legada: âncora estática; o corpo legado entra na #1219.
               anchor={isLegacy ? LEGACY_ANCHOR[w.renderer_id ?? ""] : m?.anchor}
@@ -123,7 +125,7 @@ export function TVComposableWall({ period = "month" as const }: { period?: "day"
               emptyReason={m?.empty_reason}
             >
               {!errored && !isLegacy && (
-                <TVWidgetBody chartType={chartType} measure={m} formatId={w.format_id} />
+                <TVWidgetBody chartType={chartType} measure={m} formatId={valueFormat} styleVariant={w.style_variant} />
               )}
             </WidgetFrame>
           </TVGridCell>
