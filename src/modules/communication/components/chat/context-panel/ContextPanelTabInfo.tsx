@@ -9,12 +9,13 @@
  * Nada além disso. Sem Jornada, Copilot toggle ou CTA ficha — residem em
  * outros lugares do produto.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AtSign,
   Check,
   Copy,
   FileText,
+  GitBranch,
   Loader2,
   Phone,
   Plus,
@@ -50,6 +51,13 @@ import { useResponsibleMembers } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { LeadCustomFields } from "@/modules/leads";
 import { AddCustomFieldPopover } from "@/modules/leads";
+import {
+  ResponsibleSlot,
+  QualificationSlot,
+  type QualificationTier,
+} from "@/modules/leads";
+import { memberById, memberName, tierLabel } from "./contextPanelInfoHelpers";
+import { ContextPanelFunnels } from "./ContextPanelFunnels";
 
 const SOURCE_OPTIONS: Array<{ value: string; label: string; dot: string }> = [
   { value: "whatsapp", label: "WhatsApp", dot: "hsl(142 71% 45%)" },
@@ -74,7 +82,14 @@ type LeadShape = {
   rating?: number | null;
   responsible_id?: string | null;
   organization_id?: string | null;
+  updated_at?: string | null;
   responsible?: { id?: string; name?: string } | null;
+  /** Modelo novo de responsáveis (substitui responsible_id no painel). */
+  pre_sale_responsible_id?: string | null;
+  sale_responsible_id?: string | null;
+  /** Tiers de (pré-)qualificação. */
+  qualification_tier?: string | null;
+  pre_qualification_tier?: string | null;
   lead_tags?: Array<{ tag: { id: string; name: string; color: string } }>;
 };
 
@@ -105,6 +120,11 @@ export function ContextPanelTabInfo({
       <div className="flex flex-col">
         <SectionHeader icon={User} label="Campos padrão do sistema" />
         <StandardFields lead={lead} />
+
+        <SectionHeader icon={GitBranch} label="Funis do lead" />
+        <div className="px-4 pb-4">
+          <ContextPanelFunnels leadId={activeLeadId} />
+        </div>
 
         <SectionHeader icon={Sparkles} label="Campos personalizados" />
         <CustomFieldsBlock leadId={activeLeadId} />
@@ -147,6 +167,7 @@ function SectionHeader({
 function StandardFields({ lead }: { lead: LeadShape }) {
   const { mutate: updateLead, isPending: saving } = useUpdateLead();
   const responsibleMembers = useResponsibleMembers();
+  const leadId = lead.id ?? null;
 
   const save = (patch: Record<string, unknown>) => {
     if (!lead.id) return;
@@ -234,57 +255,37 @@ function StandardFields({ lead }: { lead: LeadShape }) {
         </Select>
       </FieldRow>
 
-      {/* Responsável (select com avatar) */}
-      <FieldRow label="Responsável">
-        <Select
-          value={lead.responsible_id ?? lead.responsible?.id ?? "__unassigned__"}
-          onValueChange={(v) =>
-            save({ responsible_id: v === "__unassigned__" ? null : v })
-          }
-          disabled={saving}
-        >
-          <SelectTrigger
-            className={cn(
-              "h-7 gap-1.5 text-[13px] px-2",
-              "border-transparent hover:border-border/60 focus:border-border",
-              "bg-transparent hover:bg-muted/20",
-              "transition-colors shadow-none",
-            )}
-          >
-            <SelectValue placeholder="—">
-              {lead.responsible?.name ? (
-                <span className="inline-flex items-center gap-1.5 min-w-0">
-                  <Avatar className="h-4 w-4 shrink-0">
-                    <AvatarFallback className="text-[8px] bg-primary/15 text-primary font-bold">
-                      {lead.responsible.name.slice(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="truncate">{lead.responsible.name}</span>
-                </span>
-              ) : (
-                <span className="text-muted-foreground/60">Sem responsável</span>
-              )}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__unassigned__" className="text-[13px] text-muted-foreground">
-              Sem responsável
-            </SelectItem>
-            {responsibleMembers.map((m) => (
-              <SelectItem key={m.id} value={m.id} className="text-[13px]">
-                <span className="inline-flex items-center gap-1.5">
-                  <Avatar className="h-4 w-4 shrink-0">
-                    <AvatarFallback className="text-[8px] bg-primary/15 text-primary font-bold">
-                      {m.name.slice(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  {m.name}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </FieldRow>
+      {/* Responsáveis: Pré-venda + Vendas (modelo novo, reusa ResponsibleSlot) */}
+      {leadId && (
+        <>
+          <FieldRow label="Pré-venda">
+            <ResponsibleValue
+              name={memberName(responsibleMembers, lead.pre_sale_responsible_id)}
+            >
+              <ResponsibleSlot
+                leadId={leadId}
+                field="pre_sale_responsible_id"
+                label="Pré-venda"
+                currentMember={memberById(responsibleMembers, lead.pre_sale_responsible_id)}
+                expectedUpdatedAt={lead.updated_at ?? null}
+              />
+            </ResponsibleValue>
+          </FieldRow>
+          <FieldRow label="Vendas">
+            <ResponsibleValue
+              name={memberName(responsibleMembers, lead.sale_responsible_id)}
+            >
+              <ResponsibleSlot
+                leadId={leadId}
+                field="sale_responsible_id"
+                label="Vendas"
+                currentMember={memberById(responsibleMembers, lead.sale_responsible_id)}
+                expectedUpdatedAt={lead.updated_at ?? null}
+              />
+            </ResponsibleValue>
+          </FieldRow>
+        </>
+      )}
 
       {/* Rating (5 estrelas) */}
       <FieldRow label="Rating">
@@ -295,10 +296,48 @@ function StandardFields({ lead }: { lead: LeadShape }) {
         />
       </FieldRow>
 
+      {/* Qualificação + Pré-qualificação (reusa QualificationSlot) */}
+      {leadId && (
+        <>
+          <FieldRow label="Pré-qualificação">
+            <ResponsibleValue name={tierLabel(lead.pre_qualification_tier)}>
+              <QualificationSlot
+                leadId={leadId}
+                field="pre_qualification_tier"
+                label="Pré-qualificação"
+                current={(lead.pre_qualification_tier as QualificationTier | null) ?? null}
+              />
+            </ResponsibleValue>
+          </FieldRow>
+          <FieldRow label="Qualificação">
+            <ResponsibleValue name={tierLabel(lead.qualification_tier)}>
+              <QualificationSlot
+                leadId={leadId}
+                field="qualification_tier"
+                label="Qualificação"
+                current={(lead.qualification_tier as QualificationTier | null) ?? null}
+              />
+            </ResponsibleValue>
+          </FieldRow>
+        </>
+      )}
+
       {/* Tags */}
       <FieldRow label="Tags" align="start">
         <TagsEditor lead={lead} />
       </FieldRow>
+    </div>
+  );
+}
+
+/** Envolve um slot (avatar/ícone) com o nome/tier atual à esquerda, no padrão FieldRow. */
+function ResponsibleValue({ name, children }: { name: string | null; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      <span className={cn("text-[13px] truncate", name ? "text-foreground" : "text-muted-foreground/60")}>
+        {name ?? "—"}
+      </span>
+      {children}
     </div>
   );
 }
