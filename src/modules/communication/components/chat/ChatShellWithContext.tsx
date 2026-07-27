@@ -61,6 +61,7 @@ import { useLeadResponsibleMap } from "@/modules/communication/hooks/chat/useLea
 import { useLeadInboxMeta } from "@/modules/communication/hooks/chat/useLeadInboxMeta";
 import { useInboxFunnelOptions } from "@/modules/communication/hooks/chat/useInboxFunnelOptions";
 import { useInboxFilterState } from "@/modules/communication/hooks/chat/useInboxFilterState";
+import { toServerFilter } from "@/modules/communication/lib/inboxFilterServer";
 import {
   useArchiveConversation,
   useUnarchiveConversation,
@@ -459,9 +460,25 @@ export function ChatShellWithContext() {
     [instances, selectedInstanceId],
   );
 
+  // ── Filtro do inbox ─────────────────────────────────────────────────────────
+  // Declarado antes dos contatos porque as dimensões vão junto na busca: a RPC
+  // aplica o recorte ANTES do LIMIT (issue #1277), senão o filtro só enxergaria
+  // a página de conversas mais recentes. Busca e tab seguem efêmeros e locais.
+  const { filter, patch, toggleMulti, clearFilter } = useInboxFilterState();
+  const { isMobile } = useViewport();
+
+  // Mobile tem header próprio (all/unread/groups + vendedor) e ignora o resto do
+  // estado persistido — empurrar essas dimensões pro servidor sumiria com
+  // conversa que a UI mobile deveria mostrar. Lá o recorte fica só no cliente.
+  const serverFilter = useMemo(
+    () => (isMobile ? undefined : toServerFilter(filter, teamMember?.id ?? null)),
+    [isMobile, filter, teamMember?.id],
+  );
+
   // ── Contatos ────────────────────────────────────────────────────────────────
   const { data: contacts = [], isLoading: contactsLoading } = useWhatsAppContacts(
     selectedInstanceId,
+    serverFilter,
   );
 
   // ── Conversa selecionada ────────────────────────────────────────────────────
@@ -517,8 +534,9 @@ export function ChatShellWithContext() {
     (phone: string, instanceId: string) => {
       const norm = normalizePhone(phone);
       if (!norm) return;
-      queryClient.setQueryData<ChatContact[]>(
-        chatQueryKeys.contacts(organizationId, instanceId),
+      // Prefixo: zera o badge em todas as variantes filtradas (issue #1277).
+      queryClient.setQueriesData<ChatContact[]>(
+        { queryKey: chatQueryKeys.contactsPrefix(organizationId, instanceId) },
         (old) =>
           old?.map((c) =>
             c.phone_number === phone ? { ...c, unread_count: 0 } : c,
@@ -572,7 +590,6 @@ export function ChatShellWithContext() {
   // useInboxFilterState (persistido por org+usuário, escopado pela chave).
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<ConversationTab>("active");
-  const { filter, patch, toggleMulti, clearFilter } = useInboxFilterState();
 
   // ── Filtro por vendedor ─────────────────────────────────────────────────────
   // Conversa não tem vendedor próprio: deriva do responsável do lead
@@ -667,8 +684,7 @@ export function ChatShellWithContext() {
   // ── mountTime estável (capturado uma vez no mount) ───────────────────────────
   const mountTimeRef = useRef(Date.now());
 
-  // ── Viewport: mobile <768px usa MobileChatLayout ─────────────────────────────
-  const { isMobile } = useViewport();
+  // ── Viewport: mobile <768px usa MobileChatLayout (isMobile lido lá em cima) ──
   const ShellComponent = isMobile ? MobileChatLayout : ChatShell;
 
   // ── Loading state ────────────────────────────────────────────────────────────

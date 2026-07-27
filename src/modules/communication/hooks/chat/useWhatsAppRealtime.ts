@@ -76,13 +76,14 @@ export function useWhatsAppMessagesRealtime(
 
       // ── Patch lista de contatos (sidebar) ─────────────────────────────────
       if (currentInstanceId) {
-        const contactsQueryKey = chatQueryKeys.contacts(
+        // Prefixo: patcha todas as variantes filtradas da instância (issue #1277).
+        const contactsQueryKey = chatQueryKeys.contactsPrefix(
           organizationId,
           currentInstanceId,
         );
 
         if (eventType === "INSERT" || eventType === "UPDATE") {
-          queryClient.setQueryData<ChatContact[]>(contactsQueryKey, (prev) => {
+          queryClient.setQueriesData<ChatContact[]>({ queryKey: contactsQueryKey }, (prev) => {
             if (!prev) return prev;
 
             const normPhone = normalizePhone(messagePhone);
