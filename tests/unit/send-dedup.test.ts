@@ -1,144 +1,60 @@
 /**
- * send-dedup — idempotência atômica em todo caminho de send.
+ * send-dedup — dedup atômica POR CONTAGEM em todo caminho de send (#1156).
  *
- * Behaviors testadas via interface pública:
- * - normalizeContent: lowercase, whitespace collapse, strip emoji ZWJ
- * - hashContent: sha256 determinístico do conteúdo normalizado
- * - getDefaultWindow: TTL por SendSource
- * - tryReserveSend: dedup atômica via Supabase (race-free)
+ * O núcleo (`tryReserveSend`) delega a atomicidade ao RPC `fn_reserve_send`
+ * (UPSERT com reset-por-gap no Postgres) e decide `ok`/`duplicate` pelo
+ * `hit_count` devolvido, contra o limiar por source. Aqui mockamos o RPC e
+ * exercemos o CONTRATO de contagem + o mapa de source + os gates de flag.
  *
- * Race condition + RLS + cleanup cron testados em
- * tests/integration/send-dedup.test.ts.
+ * Race real + reset-por-gap no SQL + RLS vivem em pgTAP
+ * (supabase/tests/send_dedup_reserve.test.sql) e no integration.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 
-/**
- * In-memory fake of `send_dedup_log` that respects the unique constraints
- * declared in the migration. Used to drive the behavioral contract of
- * `tryReserveSend` without needing a live Postgres in unit tests.
- *
- * Real race-condition coverage lives in tests/integration/send-dedup.test.ts.
- */
-type DedupRow = {
-  id: string;
-  org_id: string;
-  phone: string;
-  content_hash: string;
-  source: string;
-  idempotency_key: string | null;
-  expires_at: string;
-  reserved_at: string;
-};
+// logRuntime é chamado no fail-open de reserveSendOrSkip — espionamos.
+vi.mock("../../supabase/functions/_shared/logger.ts", () => ({
+  logRuntime: vi.fn(async () => {}),
+}));
 
-function createFakeSupabase(opts: { now?: () => Date } = {}) {
-  const rows = new Map<string, DedupRow>(); // key: unique id
-  const now = opts.now ?? (() => new Date());
-
-  function activeRowMatching(predicate: (r: DedupRow) => boolean): DedupRow | undefined {
-    const t = now().toISOString();
-    for (const r of rows.values()) {
-      if (r.expires_at <= t) continue;
-      if (predicate(r)) return r;
-    }
-    return undefined;
-  }
-
-  const client = {
-    from(table: string) {
-      if (table !== "send_dedup_log") throw new Error(`fake only supports send_dedup_log, got ${table}`);
-      return {
-        insert(row: Omit<DedupRow, "id" | "reserved_at"> & Partial<Pick<DedupRow, "id" | "reserved_at">>) {
-          const insertRow: DedupRow = {
-            id: row.id ?? crypto.randomUUID(),
-            reserved_at: row.reserved_at ?? now().toISOString(),
-            ...row,
-          } as DedupRow;
-
-          // Idempotency-key unique partial
-          if (insertRow.idempotency_key) {
-            const idkHit = activeRowMatching((r) =>
-              r.org_id === insertRow.org_id && r.idempotency_key === insertRow.idempotency_key
-            );
-            if (idkHit) {
-              return {
-                select: () => ({
-                  maybeSingle: async () => ({ data: null, error: null }),
-                }),
-              };
-            }
-          }
-
-          // Content+phone+source unique partial (only when idempotency_key null)
-          if (!insertRow.idempotency_key) {
-            const contentHit = activeRowMatching((r) =>
-              r.idempotency_key === null &&
-              r.org_id === insertRow.org_id &&
-              r.phone === insertRow.phone &&
-              r.content_hash === insertRow.content_hash &&
-              r.source === insertRow.source
-            );
-            if (contentHit) {
-              return {
-                select: () => ({
-                  maybeSingle: async () => ({ data: null, error: null }),
-                }),
-              };
-            }
-          }
-
-          rows.set(insertRow.id, insertRow);
-          return {
-            select: () => ({
-              maybeSingle: async () => ({ data: insertRow, error: null }),
-            }),
-          };
-        },
-        select() {
-          // Generic chain: collects .eq() filters and .gt('expires_at', t)
-          // until .maybeSingle() resolves. Order/limit are no-ops (we already
-          // filter to active rows; tests don't depend on ordering specifics).
-          const eqFilters: Array<[keyof DedupRow, unknown]> = [];
-          let gtExpiresAt: string | null = null;
-          const chain: any = {
-            eq(col: keyof DedupRow, val: unknown) {
-              eqFilters.push([col, val]);
-              return chain;
-            },
-            gt(col: keyof DedupRow, val: string) {
-              if (col === "expires_at") gtExpiresAt = val;
-              return chain;
-            },
-            order() { return chain; },
-            limit() { return chain; },
-            async maybeSingle() {
-              const hit = activeRowMatching((r) => {
-                for (const [c, v] of eqFilters) {
-                  if (r[c] !== v) return false;
-                }
-                if (gtExpiresAt && !(r.expires_at > gtExpiresAt)) return false;
-                return true;
-              });
-              return { data: hit ?? null, error: null };
-            },
-          };
-          return chain;
-        },
-      };
-    },
-  };
-
-  return { client, rows };
-}
-
+import { logRuntime } from "../../supabase/functions/_shared/logger.ts";
 import {
   normalizeContent,
   hashContent,
   getDefaultWindow,
+  deriveSendSource,
+  dedupBarAt,
+  conversationalDedupEnabled,
   tryReserveSend,
   reserveSendOrSkip,
   type SendSource,
 } from "../../supabase/functions/_shared/send-dedup.ts";
+
+/** Deno.env stub (node vitest não tem Deno). Reconstruído a cada teste. */
+let envMap: Record<string, string>;
+beforeEach(() => {
+  envMap = {};
+  vi.stubGlobal("Deno", { env: { get: (k: string) => envMap[k] } });
+  vi.clearAllMocks();
+});
+
+/**
+ * Cliente Supabase fake: só `.rpc(fn, args)`. `handler` recebe os args e devolve
+ * `{ data, error }` — modela o `fn_reserve_send` (retorna hit_count).
+ */
+function rpcClient(handler: (fn: string, args: any) => { data: any; error: any }) {
+  const calls: Array<{ fn: string; args: any }> = [];
+  const client = {
+    rpc: async (fn: string, args: any) => {
+      calls.push({ fn, args });
+      return handler(fn, args);
+    },
+  };
+  return { client, calls };
+}
+
+/** Atalho: rpc que sempre devolve o mesmo hit_count. */
+const constHit = (hit: number) => rpcClient(() => ({ data: hit, error: null }));
 
 describe("normalizeContent", () => {
   it("lowercases and trims", () => {
@@ -147,7 +63,7 @@ describe("normalizeContent", () => {
 
   it("collapses internal whitespace and strips zero-width joiners", () => {
     const a = "Oi‍Filipe!"; // ZWJ entre palavras
-    const b = "Oi  Filipe!  ";   // espaços extra
+    const b = "Oi  Filipe!  ";
     expect(normalizeContent(a)).toBe("oifilipe!");
     expect(normalizeContent(b)).toBe("oi filipe!");
   });
@@ -162,189 +78,192 @@ describe("hashContent", () => {
   });
 
   it("differs for different content", async () => {
-    const a = await hashContent("Oi Filipe!");
-    const b = await hashContent("Oi Marcos!");
-    expect(a).not.toBe(b);
+    expect(await hashContent("Oi Filipe!")).not.toBe(await hashContent("Oi Marcos!"));
   });
 });
 
 describe("getDefaultWindow", () => {
-  it("returns shortest window for manual (operador esperado clica rápido)", () => {
+  it("manual = 10s (operador clica rápido, janela curta)", () => {
     expect(getDefaultWindow("manual")).toBe(10);
   });
-
-  it("returns mass_send 24h (template diário não repete em janela)", () => {
+  it("copilot e copilot_v2 = 300s (cobre loop lento do Bertin ~150s)", () => {
+    expect(getDefaultWindow("copilot")).toBe(300);
+    expect(getDefaultWindow("copilot_v2")).toBe(300);
+  });
+  it("mass_send = 24h", () => {
     expect(getDefaultWindow("mass_send")).toBe(86_400);
   });
-
-  it("covers every SendSource", () => {
-    const sources: SendSource[] = ["manual", "copilot", "workflow", "mass_send", "followup"];
-    for (const s of sources) {
-      expect(getDefaultWindow(s)).toBeGreaterThan(0);
-    }
+  it("cobre todo SendSource", () => {
+    const sources: SendSource[] = ["manual", "copilot", "copilot_v2", "workflow", "mass_send", "followup"];
+    for (const s of sources) expect(getDefaultWindow(s)).toBeGreaterThan(0);
   });
 });
 
-describe("tryReserveSend — behavior contract", () => {
-  it("first call for (org, phone, hash, source) reserves and returns ok", async () => {
-    const { client } = createFakeSupabase();
-    const hash = await hashContent("Oi Filipe!");
-    const result = await tryReserveSend({
-      supabase: client as any,
-      orgId: "org-1",
-      phone: "+5511937347373",
-      contentHash: hash,
-      source: "manual",
-    });
-    expect(result.kind).toBe("ok");
+describe("deriveSendSource — fronteira trackSource → enum fechado", () => {
+  it("mapeia a classe copilot* (5 trackSource) pro eixo conversacional", () => {
+    expect(deriveSendSource("copilot")).toBe("copilot");
+    expect(deriveSendSource("copilot_v2")).toBe("copilot_v2");
+    expect(deriveSendSource("copilot-followup")).toBe("copilot");
+    expect(deriveSendSource("copilot-outbound")).toBe("copilot");
+    expect(deriveSendSource("copilot-outbound-audio")).toBe("copilot");
+  });
+  it("mapeia os self-sources", () => {
+    expect(deriveSendSource("workflow")).toBe("workflow");
+    expect(deriveSendSource("mass_send")).toBe("mass_send");
+    expect(deriveSendSource("followup")).toBe("followup");
+    expect(deriveSendSource("manual")).toBe("manual");
+  });
+  it("fora-de-escopo e desconhecido → null (chamador PULA o dedup, nunca classifica errado)", () => {
+    expect(deriveSendSource("carteira_bulk")).toBeNull();
+    expect(deriveSendSource("dispatch-router-mass")).toBeNull();
+    expect(deriveSendSource("portfolio_alert")).toBeNull();
+    expect(deriveSendSource("qualquer-coisa-nova")).toBeNull();
+    expect(deriveSendSource(null)).toBeNull();
+    expect(deriveSendSource(undefined)).toBeNull();
+    expect(deriveSendSource("")).toBeNull();
+  });
+});
+
+describe("dedupBarAt — limiar por FREQUÊNCIA", () => {
+  it("copilot/copilot_v2 = 3 (permite 2 acks legítimos, barra a 3ª)", () => {
+    expect(dedupBarAt("copilot")).toBe(3);
+    expect(dedupBarAt("copilot_v2")).toBe(3);
+  });
+  it("demais = 2 (repetir literal em workflow/mass é bug)", () => {
+    expect(dedupBarAt("workflow")).toBe(2);
+    expect(dedupBarAt("mass_send")).toBe(2);
+    expect(dedupBarAt("manual")).toBe(2);
+    expect(dedupBarAt("followup")).toBe(2);
+  });
+  it("eixo copilot é env-tunável (SEND_DEDUP_COPILOT_BAR_AT)", () => {
+    envMap.SEND_DEDUP_COPILOT_BAR_AT = "5";
+    expect(dedupBarAt("copilot")).toBe(5);
+  });
+  it("env inválido (< 2 ou não-inteiro) cai no default 3", () => {
+    envMap.SEND_DEDUP_COPILOT_BAR_AT = "1";
+    expect(dedupBarAt("copilot")).toBe(3);
+    envMap.SEND_DEDUP_COPILOT_BAR_AT = "abc";
+    expect(dedupBarAt("copilot")).toBe(3);
+  });
+});
+
+describe("conversationalDedupEnabled — kill-switch + allowlist", () => {
+  it("default OFF (flag ausente) → false (comportamento byte-a-byte de hoje)", () => {
+    expect(conversationalDedupEnabled("org-x")).toBe(false);
+  });
+  it("ENABLED=true sem allowlist → true pra qualquer org", () => {
+    envMap.SEND_DEDUP_CONVERSATIONAL_ENABLED = "true";
+    expect(conversationalDedupEnabled("org-x")).toBe(true);
+  });
+  it("ENABLED=true com allowlist → só as orgs listadas (canário)", () => {
+    envMap.SEND_DEDUP_CONVERSATIONAL_ENABLED = "true";
+    envMap.SEND_DEDUP_CONVERSATIONAL_ORGS = " org-a , org-b ";
+    expect(conversationalDedupEnabled("org-a")).toBe(true);
+    expect(conversationalDedupEnabled("org-b")).toBe(true);
+    expect(conversationalDedupEnabled("org-c")).toBe(false);
+  });
+  it("ENABLED != 'true' ignora allowlist → false", () => {
+    envMap.SEND_DEDUP_CONVERSATIONAL_ENABLED = "1";
+    envMap.SEND_DEDUP_CONVERSATIONAL_ORGS = "org-a";
+    expect(conversationalDedupEnabled("org-a")).toBe(false);
+  });
+});
+
+describe("tryReserveSend — contrato de contagem (via fn_reserve_send)", () => {
+  const base = {
+    orgId: "org-1",
+    phone: "+5511937347373",
+    contentHash: "deadbeef",
+  };
+
+  it("hit_count 1 (1ª ocorrência) → ok", async () => {
+    const { client } = constHit(1);
+    const r = await tryReserveSend({ supabase: client as any, ...base, source: "copilot" });
+    expect(r.kind).toBe("ok");
   });
 
-  it("second call within window returns duplicate with firstSentAt + ttlSeconds", async () => {
-    // Reproduz padrão Bertin: "Oi Filipe!" 12x em 30min via composer.
-    // Janela manual=10s → 2ª call em <10s deve ser bloqueada.
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-05-21T19:59:38Z"));
-
-    const { client } = createFakeSupabase({ now: () => new Date() });
-    const hash = await hashContent("Oi Filipe!");
-    const args = {
-      supabase: client as any,
-      orgId: "org-1",
-      phone: "+5511937347373",
-      contentHash: hash,
-      source: "manual" as const,
-    };
-
-    const first = await tryReserveSend(args);
-    expect(first.kind).toBe("ok");
-
-    // +3s — within manual window of 10s
-    vi.setSystemTime(new Date("2026-05-21T19:59:41Z"));
-    const second = await tryReserveSend(args);
-    expect(second.kind).toBe("duplicate");
-    if (second.kind === "duplicate") {
-      expect(second.firstSentAt).toBe("2026-05-21T19:59:38.000Z");
-      expect(second.ttlSeconds).toBeGreaterThan(0);
-      expect(second.ttlSeconds).toBeLessThanOrEqual(10);
-    }
-
-    vi.useRealTimers();
+  it("copilot permite a 2ª (hit=2 < bar 3) → ok", async () => {
+    const { client } = constHit(2);
+    const r = await tryReserveSend({ supabase: client as any, ...base, source: "copilot" });
+    expect(r.kind).toBe("ok");
   });
 
-  it("re-reserves after window expires (manual=10s)", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-05-21T19:59:38Z"));
-
-    const { client } = createFakeSupabase({ now: () => new Date() });
-    const hash = await hashContent("Oi Filipe!");
-    const args = {
-      supabase: client as any,
-      orgId: "org-1",
-      phone: "+5511937347373",
-      contentHash: hash,
-      source: "manual" as const,
-    };
-
-    const first = await tryReserveSend(args);
-    expect(first.kind).toBe("ok");
-
-    // +20s — past 10s window
-    vi.setSystemTime(new Date("2026-05-21T19:59:58Z"));
-    const third = await tryReserveSend(args);
-    expect(third.kind).toBe("ok");
-
-    vi.useRealTimers();
+  it("copilot barra a 3ª (hit=3 >= bar 3) → duplicate com ttlSeconds da janela", async () => {
+    const { client } = constHit(3);
+    const r = await tryReserveSend({ supabase: client as any, ...base, source: "copilot" });
+    expect(r.kind).toBe("duplicate");
+    if (r.kind === "duplicate") expect(r.ttlSeconds).toBe(300);
   });
 
-  it("replays idempotencyKey within window as ok (retry the same logical send)", async () => {
-    // Frontend gera UUID por click; em retry de rede o mesmo UUID volta. Não
-    // pode bloquear como duplicate — caller declarou intent de reenviar o
-    // mesmo logical send.
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-05-21T19:59:38Z"));
-
-    const { client } = createFakeSupabase({ now: () => new Date() });
-    const hash = await hashContent("Oi Filipe!");
-    const idk = "550e8400-e29b-41d4-a716-446655440000";
-    const args = {
-      supabase: client as any,
-      orgId: "org-1",
-      phone: "+5511937347373",
-      contentHash: hash,
-      source: "manual" as const,
-      idempotencyKey: idk,
-    };
-
-    const first = await tryReserveSend(args);
-    expect(first.kind).toBe("ok");
-
-    vi.setSystemTime(new Date("2026-05-21T19:59:41Z"));
-    const replay = await tryReserveSend(args);
-    expect(replay.kind).toBe("ok");
-
-    vi.useRealTimers();
-  });
-
-  // The in-memory fake models a conflict as {data:null, error:null}. Real
-  // supabase-js returns a 23505 error object on a unique violation — the ORIGINAL
-  // module threw on it (bug: it treated the dedup signal as a fatal error). These
-  // drive that real shape directly.
-  it("treats a real 23505 unique violation as duplicate (not a thrown error)", async () => {
-    const sb = {
-      from: () => ({
-        insert: () => ({ select: () => ({ maybeSingle: async () => ({ data: null, error: { code: "23505", message: "duplicate key" } }) }) }),
-        select: () => {
-          const chain: any = {};
-          for (const m of ["eq", "gt", "order", "limit"]) chain[m] = () => chain;
-          chain.maybeSingle = async () => ({ data: { reserved_at: "2026-07-03T10:00:00Z", expires_at: "2026-07-03T10:05:00Z" }, error: null });
-          return chain;
-        },
-      }),
-    } as any;
-    const r = await tryReserveSend({ supabase: sb, orgId: "o", phone: "p", contentHash: "h", source: "workflow" });
+  it("workflow barra já na 2ª (bar 2)", async () => {
+    const { client } = constHit(2);
+    const r = await tryReserveSend({ supabase: client as any, ...base, source: "workflow" });
     expect(r.kind).toBe("duplicate");
   });
 
-  it("throws on a non-23505 infra error so the caller can fail-open", async () => {
-    const sb = {
-      from: () => ({
-        insert: () => ({ select: () => ({ maybeSingle: async () => ({ data: null, error: { code: "42P01", message: "relation does not exist" } }) }) }),
-      }),
-    } as any;
+  it("idk presente: barra a 2ª ocorrência do MESMO idk (replay literal), independente do source", async () => {
+    const dup = constHit(2);
+    const rDup = await tryReserveSend({ supabase: dup.client as any, ...base, source: "copilot", idempotencyKey: "log-1:0" });
+    expect(rDup.kind).toBe("duplicate"); // bar 2 mesmo sendo copilot
+
+    const ok = constHit(1);
+    const rOk = await tryReserveSend({ supabase: ok.client as any, ...base, source: "copilot", idempotencyKey: "log-1:0" });
+    expect(rOk.kind).toBe("ok"); // 1ª do idk sempre passa (chunk distinto)
+  });
+
+  it("passa idk e ttl override pro RPC (p_idempotency_key / p_ttl_seconds)", async () => {
+    const { client, calls } = constHit(1);
+    await tryReserveSend({ supabase: client as any, ...base, source: "copilot", idempotencyKey: "k", windowSeconds: 42 });
+    expect(calls[0].fn).toBe("fn_reserve_send");
+    expect(calls[0].args.p_idempotency_key).toBe("k");
+    expect(calls[0].args.p_ttl_seconds).toBe(42);
+    expect(calls[0].args.p_source).toBe("copilot");
+  });
+
+  it("erro de infra do RPC → LANÇA (caller faz fail-open)", async () => {
+    const { client } = rpcClient(() => ({ data: null, error: { message: "relation does not exist" } }));
     await expect(
-      tryReserveSend({ supabase: sb, orgId: "o", phone: "p", contentHash: "h", source: "workflow" }),
-    ).rejects.toThrow(/send-dedup insert failed/);
+      tryReserveSend({ supabase: client as any, ...base, source: "workflow" }),
+    ).rejects.toThrow(/send-dedup reserve failed/);
   });
 });
 
-describe("reserveSendOrSkip — fail-open wrapper", () => {
-  it("not-duplicate on a fresh reserve", async () => {
-    const { client } = createFakeSupabase();
-    const r = await reserveSendOrSkip({ supabase: client, orgId: "o", phone: "p", content: "Olá!", source: "workflow" });
+describe("reserveSendOrSkip — wrapper fail-open", () => {
+  it("hit=1 → não duplicate", async () => {
+    const { client } = constHit(1);
+    const r = await reserveSendOrSkip({ supabase: client, orgId: "o", phone: "p", content: "Olá!", source: "copilot" });
     expect(r.duplicate).toBe(false);
   });
 
-  it("duplicate=true on the second identical send within the window", async () => {
-    const { client } = createFakeSupabase();
-    const a = { supabase: client, orgId: "o", phone: "p", content: "Mesma msg", source: "workflow" as const };
-    expect((await reserveSendOrSkip(a)).duplicate).toBe(false);
-    expect((await reserveSendOrSkip(a)).duplicate).toBe(true);
+  it("hit atinge o limiar → duplicate", async () => {
+    const { client } = constHit(3);
+    const r = await reserveSendOrSkip({ supabase: client, orgId: "o", phone: "p", content: "Oi Filipe!", source: "copilot" });
+    expect(r.duplicate).toBe(true);
   });
 
-  it("FAILS OPEN (duplicate=false) when the dedup infra errors — never drops a real send", async () => {
-    const sb = {
-      from: () => ({
-        insert: () => ({ select: () => ({ maybeSingle: async () => ({ data: null, error: { code: "42P01", message: "no table" } }) }) }),
-      }),
-    } as any;
-    const r = await reserveSendOrSkip({ supabase: sb, orgId: "o", phone: "p", content: "hi", source: "workflow" });
+  it("FAIL-OPEN (duplicate=false) + GRITA via logRuntime quando a infra erra", async () => {
+    const { client } = rpcClient(() => ({ data: null, error: { message: "no rpc" } }));
+    const r = await reserveSendOrSkip({ supabase: client, orgId: "o", phone: "p", content: "hi", source: "workflow" });
     expect(r.duplicate).toBe(false);
+    expect(logRuntime).toHaveBeenCalledTimes(1);
+    const arg = (logRuntime as any).mock.calls[0][0];
+    expect(arg.action).toBe("dedup_reserve_fail_open");
+    expect(arg.status).toBe("error");
+    // nunca conteúdo/telefone cru no log
+    expect(JSON.stringify(arg)).not.toContain("hi");
   });
 
-  it("never dedups empty/whitespace content (no reservation attempted)", async () => {
-    const from = vi.fn();
-    const r = await reserveSendOrSkip({ supabase: { from } as any, orgId: "o", phone: "p", content: "   ", source: "workflow" });
+  it("nunca dedupa conteúdo vazio/whitespace (não chama o RPC)", async () => {
+    const rpc = vi.fn();
+    const r = await reserveSendOrSkip({ supabase: { rpc } as any, orgId: "o", phone: "p", content: "   ", source: "workflow" });
     expect(r.duplicate).toBe(false);
-    expect(from).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("orgId ou phone ausente → não dedupa (não chama o RPC)", async () => {
+    const rpc = vi.fn();
+    expect((await reserveSendOrSkip({ supabase: { rpc } as any, orgId: "", phone: "p", content: "x", source: "workflow" })).duplicate).toBe(false);
+    expect((await reserveSendOrSkip({ supabase: { rpc } as any, orgId: "o", phone: "", content: "x", source: "workflow" })).duplicate).toBe(false);
+    expect(rpc).not.toHaveBeenCalled();
   });
 });

@@ -169,7 +169,7 @@ async function sendReply(supabase: any, orgId: string, canonicalPhone: string, t
   // through to the send. supabase here is the service-role client (bypasses RLS).
   const governed = await governSend(
     supabase,
-    { orgId, instanceId: instance.id, category: "automation", recipientPhone: number, trackSource: "copilot_v2" },
+    { orgId, instanceId: instance.id, category: "automation", recipientPhone: number, trackSource: "copilot_v2", content: text },
     () => provider.sendText({ number, text, trackSource: "copilot_v2" }),
   );
   // Forward-safe: unreachable in SHADOW (the send always runs). Under a future

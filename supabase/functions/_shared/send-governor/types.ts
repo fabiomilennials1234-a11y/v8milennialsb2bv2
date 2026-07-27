@@ -42,7 +42,10 @@ export type GovernorDecisionReason =
   | "quarantined"      // P3 disjuntor tripped
   | "per_number_cap"   // P1/P2 per-number daily cap reached
   | "cold_contact"     // P4 cold-contact gate
-  | "allowed";         // evaluated, nothing tripped
+  | "allowed"          // evaluated, nothing tripped
+  | "dedup_conversational"; // #1156 — conteúdo idêntico repetido (loop travado)
+                            // barrado no choke ANTES do provider. Não é decisão
+                            // de reputação; é dedup por frequência (send-dedup).
 
 /**
  * GovernorContext — the request facts the CALLER (wiring) knows at the send
@@ -61,6 +64,12 @@ export interface GovernorContext {
   recipientPhone?: string | null;
   /** Optional provider trackSource, for deriveCategory when category is implicit. */
   trackSource?: string | null;
+  /** #1156 — texto do envio, para o dedup conversacional DENTRO do governSend
+   *  (hasheado, nunca logado cru). Ausente → dedup pula (fail-open). */
+  content?: string | null;
+  /** #1156 — chave de idempotência por mensagem lógica + índice de chunk. Faz
+   *  chunks distintos da MESMA reply não colidirem no dedup de conteúdo. */
+  idempotencyKey?: string | null;
 }
 
 /**

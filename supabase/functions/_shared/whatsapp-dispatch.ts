@@ -301,7 +301,7 @@ export async function sendTextViaInstance(
   instance: WhatsAppInstance,
   phoneNumber: string,
   text: string,
-  opts: { trackSource?: string; trackId?: string; delay?: number; replyId?: string } = {}
+  opts: { trackSource?: string; trackId?: string; delay?: number; replyId?: string; idempotencyKey?: string } = {}
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
@@ -310,6 +310,7 @@ export async function sendTextViaInstance(
     // Send Governor (SHADOW seam). doSend runs exactly once; in shadow/off it
     // ALWAYS runs and `governed` is exactly the provider response (shape byte-
     // for-byte preserved). isSkippedSend is dormant here (only enforce skips).
+    // content/idempotencyKey alimentam o dedup conversacional DENTRO do governSend (#1156).
     const governed = await governSend(
       supabaseAdmin,
       {
@@ -318,6 +319,8 @@ export async function sendTextViaInstance(
         category: deriveCategory(opts.trackSource),
         recipientPhone: phone,
         trackSource: opts.trackSource,
+        content: text,
+        idempotencyKey: opts.idempotencyKey,
       },
       () =>
         provider.sendText({
@@ -346,7 +349,7 @@ export async function sendAudioViaInstance(
   instance: WhatsAppInstance,
   phoneNumber: string,
   audioUrl: string,
-  opts: { trackSource?: string; trackId?: string } = {}
+  opts: { trackSource?: string; trackId?: string; idempotencyKey?: string } = {}
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
@@ -361,6 +364,8 @@ export async function sendAudioViaInstance(
         category: deriveCategory(opts.trackSource),
         recipientPhone: phone,
         trackSource: opts.trackSource,
+        content: audioUrl,
+        idempotencyKey: opts.idempotencyKey,
       },
       () =>
         provider.sendMedia({
@@ -394,7 +399,7 @@ export async function sendMenuViaInstance(
     footer?: string;
     selectableCount?: number;
   },
-  opts: { trackSource?: string; trackId?: string; delay?: number } = {}
+  opts: { trackSource?: string; trackId?: string; delay?: number; idempotencyKey?: string } = {}
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
@@ -416,6 +421,8 @@ export async function sendMenuViaInstance(
         category: deriveCategory(opts.trackSource),
         recipientPhone: phone,
         trackSource: opts.trackSource,
+        content: menu.text,
+        idempotencyKey: opts.idempotencyKey,
       },
       () =>
         sendMenu({
@@ -453,7 +460,7 @@ export async function sendPixButtonViaInstance(
     merchantName: string;
     text?: string;
   },
-  opts: { trackSource?: string; trackId?: string; delay?: number } = {}
+  opts: { trackSource?: string; trackId?: string; delay?: number; idempotencyKey?: string } = {}
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
@@ -475,6 +482,8 @@ export async function sendPixButtonViaInstance(
         category: deriveCategory(opts.trackSource),
         recipientPhone: phone,
         trackSource: opts.trackSource,
+        content: pix.text ?? "",
+        idempotencyKey: opts.idempotencyKey,
       },
       () =>
         sendPixButton({
@@ -511,7 +520,7 @@ export async function sendMediaViaInstance(
     filename?: string;
     caption?: string;
   },
-  opts: { trackSource?: string; trackId?: string } = {}
+  opts: { trackSource?: string; trackId?: string; idempotencyKey?: string } = {}
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
@@ -526,6 +535,8 @@ export async function sendMediaViaInstance(
         category: deriveCategory(opts.trackSource),
         recipientPhone: phone,
         trackSource: opts.trackSource,
+        content: media.caption && media.caption.trim().length > 0 ? media.caption : media.file,
+        idempotencyKey: opts.idempotencyKey,
       },
       () =>
         provider.sendMedia({

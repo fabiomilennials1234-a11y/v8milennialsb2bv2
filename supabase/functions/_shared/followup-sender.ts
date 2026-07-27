@@ -90,6 +90,10 @@ export async function sendFollowupMessage(
   let allSent = true;
   let chunksSent = 0;
   let canceled = false;
+  // #1156 — chave lógica ESTÁVEL entre retries (lead+rule). Sem id de firing nos
+  // params; followup é template (ruleId → conteúdo estável por rule) e phone-scoped
+  // via leadId. Retry do mesmo followup reusa o idk → hit=2 → barAt=2 → idempotente.
+  const dedupNonce = `${leadId}:${ruleId}`;
   for (let i = 0; i < chunks.length; i++) {
     try {
       await provider.setPresence(normalizedPhone, "composing");
@@ -132,6 +136,11 @@ export async function sendFollowupMessage(
           category: "automation",
           recipientPhone: normalizedPhone,
           trackSource: "copilot-followup",
+          content: chunks[i],
+          // idk só em multi-chunk: chunks distintos da MESMA mensagem lógica não
+          // colidem entre si (não mutila). Single-chunk fica sem idk → cai no
+          // dedup por conteúdo (pega loop). Nonce por-chamada (mensagem lógica).
+          idempotencyKey: chunks.length > 1 ? `fu:${dedupNonce}:${i}` : undefined,
         },
         () =>
           provider.sendText({
@@ -141,9 +150,9 @@ export async function sendFollowupMessage(
             trackId: ruleId,
           }),
       );
-      // Forward-safe: unreachable in SHADOW (send always runs). Under a future
-      // enforce mode a block/defer stops the remaining chunks (avoids a partial
-      // message) and reports the followup as not fully sent.
+      // Skip = enforce block/defer OU dedup conversacional (#1156, alcançável já
+      // em shadow/off quando a flag está ON). Para os chunks restantes (evita
+      // mensagem parcial) e reporta o followup como não totalmente enviado.
       if (isSkippedSend(governed)) {
         console.log(
           "[followup-sender] governor skipped chunk",
