@@ -20,6 +20,10 @@ export interface LeadListFilterValues {
    * (leads sem tier — `qualification_tier IS NULL`, ≠ do tier "desqualificado"). */
   filterQualification?: string;
   filterUf?: string;
+  /** Instante ISO (inclusive) — limite inferior de `created_at`. */
+  createdFrom?: string;
+  /** Instante ISO (inclusive) — limite superior de `created_at`. */
+  createdTo?: string;
 }
 
 /**
@@ -53,6 +57,18 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
     if (filters.filterRating === "high") q = q.gte("rating", 7);
     else if (filters.filterRating === "medium") q = q.gte("rating", 4).lt("rating", 7);
     else if (filters.filterRating === "low") q = q.lt("rating", 4);
+  }
+
+  // Janela de criação (deep-link do card "Leads" do Comando). Os limites chegam
+  // como instantes ISO absolutos já cortados na fronteira de dia do fuso da org
+  // (`computePeriodRange`/`zoned-day`), então aqui é comparação direta de
+  // timestamptz — mesma semântica do `get_dashboard_metrics` (`>=` / `<=`), o que
+  // faz a lista bater com o número do card.
+  if (filters.createdFrom) {
+    q = q.gte("created_at", filters.createdFrom);
+  }
+  if (filters.createdTo) {
+    q = q.lte("created_at", filters.createdTo);
   }
 
   if (filters.filterQualification && filters.filterQualification !== "all") {
