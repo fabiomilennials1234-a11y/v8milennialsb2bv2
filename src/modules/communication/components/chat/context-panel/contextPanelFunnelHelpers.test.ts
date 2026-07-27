@@ -3,6 +3,7 @@ import {
   isTerminalRole,
   terminalKind,
   toFunnelRows,
+  availableFunnelsToAdd,
   type FunnelCardRow,
 } from "./contextPanelFunnelHelpers";
 import type { PipelineStatus } from "@/modules/leads";
@@ -29,6 +30,7 @@ const standard = (over: Partial<Extract<PipelineStatus, { type: "standard" }>> =
     pipeType: "qualificacao",
     label: "Qualificação",
     color: "#6366f1",
+    pipelineDbId: "pl-opp",
     pipeId: "entry-1",
     currentStage: "novo",
     currentStageLabel: "Novo",
@@ -77,5 +79,42 @@ describe("toFunnelRows", () => {
     expect(rows[0].label).toBe("Pós-venda");
     expect(rows[0].entryId).toBe("centry-9");
     expect(rows[0].stages[0].key).toBe("s1");
+  });
+});
+
+describe("availableFunnelsToAdd", () => {
+  it("lista só funis sem entry, com pipeline_id + primeira etapa", () => {
+    const notIn = standard({ pipeId: null, pipelineDbId: "pl-orc", label: "Orçamentos" });
+    const alreadyIn = standard({ pipeId: "e1", pipelineDbId: "pl-opp" });
+    const rows = availableFunnelsToAdd([notIn, alreadyIn], [
+      { pipe_type: "whatsapp", display_name: "Oportunidades" },
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].pipelineId).toBe("pl-orc");
+    expect(rows[0].firstStageKey).toBe("novo");
+  });
+
+  it("exclui upsell (pipelineDbId null) e funil sem etapas", () => {
+    const upsell = standard({ pipeType: "upsell", pipeId: null, pipelineDbId: null });
+    const noStages = standard({ pipeId: null, pipelineDbId: "pl-x", stages: [] });
+    expect(availableFunnelsToAdd([upsell, noStages])).toHaveLength(0);
+  });
+
+  it("custom sem entry entra pelo próprio nome", () => {
+    const custom = {
+      type: "custom",
+      pipelineId: "cp-2",
+      pipelineName: "Reativação",
+      pipelineColor: "#fb7185",
+      pipelineIcon: "star",
+      entryId: null,
+      currentStageId: null,
+      currentStageName: null,
+      stages: [{ id: "start", name: "Início", color: "#fb7185", position: 0, role: "open" }],
+    } as PipelineStatus;
+    const rows = availableFunnelsToAdd([custom]);
+    expect(rows[0].pipelineId).toBe("cp-2");
+    expect(rows[0].label).toBe("Reativação");
+    expect(rows[0].firstStageKey).toBe("start");
   });
 });

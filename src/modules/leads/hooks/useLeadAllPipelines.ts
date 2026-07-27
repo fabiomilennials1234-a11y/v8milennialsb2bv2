@@ -10,6 +10,8 @@ export interface StandardPipelineStatus {
   pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell";
   label: string;
   color: string;
+  /** id do pipeline (tabela pipelines) — alvo do add. Null p/ upsell (legacy). */
+  pipelineDbId: string | null;
   pipeId: string | null;
   currentStage: string | null;
   currentStageLabel: string | null;
@@ -126,6 +128,7 @@ export function useLeadAllPipelines(leadId: string | null) {
           pipeType,
           label,
           color,
+          pipelineDbId: pipeline?.id ?? null,
           pipeId: entry?.id || null,
           currentStage: entry?.stage_key || null,
           currentStageLabel: stages.find((s) => s.id === entry?.stage_key)?.label || null,
@@ -139,6 +142,7 @@ export function useLeadAllPipelines(leadId: string | null) {
         pipeType: "upsell",
         label: "Carteira",
         color: "#3b82f6",
+        pipelineDbId: null, // upsell é tabela legacy própria — não adicionável via pipeline_entries
         pipeId: pipeUpsell?.id || null,
         currentStage: pipeUpsell?.status || null,
         currentStageLabel: getStages("upsell").find((s) => s.id === pipeUpsell?.status)?.label || null,

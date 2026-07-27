@@ -10,7 +10,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { GitBranch, ChevronDown, Check, Loader2 } from "lucide-react";
+import { GitBranch, ChevronDown, Check, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -25,13 +25,19 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useLeadAllPipelines } from "@/modules/leads";
-import { useMovePipelineEntry, usePipelineDisplayConfig } from "@/modules/pipelines";
+import {
+  useMovePipelineEntry,
+  useCreatePipelineEntry,
+  usePipelineDisplayConfig,
+} from "@/modules/pipelines";
 import {
   toFunnelRows,
+  availableFunnelsToAdd,
   isTerminalRole,
   terminalKind,
   type FunnelCardRow,
   type FunnelStageView,
+  type AddableFunnel,
 } from "./contextPanelFunnelHelpers";
 
 interface ContextPanelFunnelsProps {
@@ -49,8 +55,14 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
   const { data: pipelines = [], isLoading } = useLeadAllPipelines(leadId);
   const { data: displayConfig = [] } = usePipelineDisplayConfig();
   const moveEntry = useMovePipelineEntry();
+  const createEntry = useCreatePipelineEntry();
 
   const rows = useMemo(() => toFunnelRows(pipelines, displayConfig), [pipelines, displayConfig]);
+  const available = useMemo(
+    () => availableFunnelsToAdd(pipelines, displayConfig),
+    [pipelines, displayConfig],
+  );
+  const [addOpen, setAddOpen] = useState(false);
 
   // Overlay otimista: entryId → stageKey pendente até o refetch refletir.
   const [pending, setPending] = useState<Record<string, string>>({});
@@ -102,6 +114,64 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
     doMove(row.entryId, stage.key);
   };
 
+  const doAdd = (funnel: AddableFunnel) => {
+    setAddOpen(false);
+    // Responsável fica no LEAD (não assinala a entry) — sem round-robin; os
+    // workflows de stage_changed/entrada disparam normalmente (paridade kanban).
+    createEntry.mutate(
+      {
+        pipeline_id: funnel.pipelineId,
+        lead_id: leadId,
+        stage_key: funnel.firstStageKey,
+        deal_id: null,
+        assigned_to: null,
+        notes: null,
+        metadata: {},
+        closed_at: null,
+      } as Parameters<typeof createEntry.mutate>[0],
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
+          toast.success(`Adicionado a ${funnel.label}`);
+        },
+        onError: () => toast.error("Falha ao adicionar ao funil"),
+      },
+    );
+  };
+
+  const addButton =
+    available.length > 0 ? (
+      <Popover open={addOpen} onOpenChange={setAddOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/60 px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-foreground"
+          >
+            {createEntry.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+            Adicionar a um funil
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-56 p-1">
+          <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+            Adicionar a
+          </p>
+          <div className="flex flex-col gap-0.5">
+            {available.map((f) => (
+              <button
+                key={f.pipelineId}
+                type="button"
+                onClick={() => doAdd(f)}
+                className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors hover:bg-muted"
+              >
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: f.color }} />
+                <span className="min-w-0 flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+    ) : null;
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-6">
@@ -115,6 +185,7 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
       <div className="flex flex-col items-center gap-2 py-6 text-center">
         <GitBranch className="h-7 w-7 text-muted-foreground/30" />
         <p className="text-xs text-muted-foreground">Lead não está em nenhum funil</p>
+        {addButton && <div className="w-full pt-1">{addButton}</div>}
       </div>
     );
   }
@@ -196,6 +267,8 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
           </div>
         );
       })}
+
+      {addButton}
 
       {/* Confirmação de etapa terminal (registra/estorna receita + comissão) */}
       <AlertDialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}>

@@ -50,6 +50,54 @@ interface DisplayConfigLike {
   is_visible?: boolean;
 }
 
+export interface AddableFunnel {
+  /** pipeline_id (tabela pipelines) — alvo do insert em pipeline_entries. */
+  pipelineId: string;
+  label: string;
+  color: string;
+  /** primeira etapa do funil (destino do lead ao entrar). */
+  firstStageKey: string;
+}
+
+/**
+ * Funis em que o lead ainda NÃO está e que dá pra adicionar pelo chat: precisa
+ * de pipeline_id resolvível (exclui upsell legacy) e ao menos uma etapa. Rótulo
+ * de sistema vem do display config; custom usa o nome próprio.
+ */
+export function availableFunnelsToAdd(
+  pipelines: PipelineStatus[],
+  displayConfig: DisplayConfigLike[] = [],
+): AddableFunnel[] {
+  const labelByType = new Map(displayConfig.map((c) => [c.pipe_type, c.display_name]));
+  const out: AddableFunnel[] = [];
+
+  for (const p of pipelines) {
+    const firstStageKey = p.stages[0]?.id;
+    if (!firstStageKey) continue;
+
+    if (p.type === "standard") {
+      if (p.pipeId) continue; // lead já está
+      if (!p.pipelineDbId) continue; // upsell legacy — não adicionável
+      const displayType = PIPE_TYPE_TO_DISPLAY[p.pipeType] ?? p.pipeType;
+      out.push({
+        pipelineId: p.pipelineDbId,
+        label: labelByType.get(displayType) ?? p.label,
+        color: p.color,
+        firstStageKey,
+      });
+    } else {
+      if (p.entryId) continue; // lead já está
+      out.push({
+        pipelineId: p.pipelineId,
+        label: p.pipelineName,
+        color: p.pipelineColor,
+        firstStageKey,
+      });
+    }
+  }
+  return out;
+}
+
 /**
  * Normaliza os pipelines do lead em linhas do card. Só funis onde o lead tem
  * entry (pipeId/entryId não-nulo). Rótulo de sistema vem do display config.
