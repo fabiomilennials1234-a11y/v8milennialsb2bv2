@@ -20,6 +20,14 @@ export interface DashboardWidgetSnapshot {
   renderer_id?: string | null;
   weight?: "hero" | "primary" | "secondary";
   format_id?: string | null;
+  /** Formatação de número do #1253 (EXPAND de format_id). Ler value_format ?? format_id. */
+  value_format?: string | null;
+  /** Estilo visual escolhido (#1253). null → derivado do recorte. */
+  widget_style?: string | null;
+  /** Param do estilo (#1253): ranking podium|list, progress tube|bar|radial. */
+  style_variant?: string | null;
+  /** Cor de identidade (#1253). Canal visual é S6; aqui só transita. */
+  accent_hue?: string | null;
   recorte_id?: string | null;
   eyebrow_override?: string | null;
   grid?: { col: number; row: number; w: number; h: number };

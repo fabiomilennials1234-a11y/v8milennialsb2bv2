@@ -21,6 +21,9 @@ export interface RawMeasure {
   value?: number | null;
   series?: MetricSeriesPoint[] | null;
   empty_reason?: string | null;
+  /** Alvo/meta para o formato Progresso (#1253). O motor NÃO serve isto no S1
+   *  (decisão Cais mode b) — fica ausente e o Progresso degrada para Número. */
+  target?: number | null;
 }
 
 /** Rótulo do bucket de excedente. Uma categoria, não "e outros 12". */

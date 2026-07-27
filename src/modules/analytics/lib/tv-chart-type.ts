@@ -1,39 +1,50 @@
 /**
- * Escolha do tipo de gráfico de um widget (#1218).
+ * Escolha do tipo de gráfico de um widget (#1218 / #1253).
  *
- * O tipo de gráfico (número/barra/linha/donut/…) é uma dimensão SEPARADA do
- * catálogo — `format_id` no schema é FORMATO DE NÚMERO (currency/integer/…),
- * não tipo de gráfico. A escolha do tipo é da composição (spec §9: a frase
- * "[Receita] por [closer] em [barra]") e vai viver no Composer.
- *
- * v1 (sem coluna no banco): DERIVA do recorte, que é o sinal disponível. É
- * acréscimo, não retrabalho — quando o Composer trouxer uma coluna `chart_type`,
- * ela entra aqui como override e a derivação vira o default.
+ * O estilo visual é uma dimensão SEPARADA do catálogo de número (`value_format`/
+ * `format_id` = currency/integer/…). A partir do #1253 ele é uma COLUNA
+ * (`widget_style`) que o cliente escolhe — quando presente, VENCE; quando `null`,
+ * DERIVA do recorte (o mecanismo de sempre). Explícito vence, derivação é o
+ * default: os dois se compõem, não competem (Vitral §1.2).
  */
 
-export type TvChartType = "number" | "bar" | "line" | "donut";
+export type TvChartType =
+  | "number"
+  | "bar"
+  | "line"
+  | "donut"
+  | "ranking"
+  | "progress"
+  | "funnel";
+
+const STYLES: ReadonlySet<string> = new Set<TvChartType>([
+  "number", "bar", "line", "donut", "ranking", "progress", "funnel",
+]);
 
 /** Recortes que são séries temporais → linha. */
 const TEMPORAL = new Set(["tempo"]);
 
-/** Recortes categóricos → barra por padrão (donut é escolha explícita do Composer). */
+/** Recortes categóricos → barra por padrão (donut/ranking são escolha explícita). */
 const CATEGORICAL = new Set(["closer", "sdr", "origem", "tag", "produto", "stream", "etapa", "pipeline"]);
 
 /**
- * Deriva o tipo de gráfico a partir do recorte.
- *   total       → number (só o valor de cabeça, sem corpo)
- *   tempo       → line
- *   categórico  → bar
- *
- * `explicit` (futuro, do Composer) sempre vence — barra vs donut para o mesmo
- * recorte categórico é escolha do cliente (§3.3), não derivável.
+ * Derivação a partir do recorte (o default do #1218): total→number, tempo→line,
+ * categórico→bar. É o que faz "adicionar widget e já vir bom" sem escolher nada.
  */
-export function resolveChartType(recorteId?: string | null, explicit?: string | null): TvChartType {
-  if (explicit === "bar" || explicit === "line" || explicit === "donut" || explicit === "number") {
-    return explicit;
-  }
+export function deriveStyle(recorteId?: string | null): TvChartType {
   if (!recorteId || recorteId === "total") return "number";
   if (TEMPORAL.has(recorteId)) return "line";
   if (CATEGORICAL.has(recorteId)) return "bar";
   return "number";
+}
+
+/**
+ * Estilo efetivo do widget: `widget_style ?? deriveStyle(recorte)` (Vitral §1.2).
+ * `explicit` (widget_style do #1253) sempre vence; qualquer valor fora dos 7
+ * formatos cai na derivação (nunca erro — mesma doutrina da galeria: incompatível
+ * é ausente, não exceção).
+ */
+export function resolveChartType(recorteId?: string | null, explicit?: string | null): TvChartType {
+  if (explicit && STYLES.has(explicit)) return explicit as TvChartType;
+  return deriveStyle(recorteId);
 }
