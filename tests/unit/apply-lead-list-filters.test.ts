@@ -7,16 +7,18 @@ interface Recorder {
   eqs: Array<[string, unknown]>;
   gtes: Array<[string, unknown]>;
   lts: Array<[string, unknown]>;
+  ltes: Array<[string, unknown]>;
   iss: Array<[string, unknown]>;
   ors: string[];
 }
 
 function makeBuilder() {
-  const rec: Recorder = { eqs: [], gtes: [], lts: [], iss: [], ors: [] };
+  const rec: Recorder = { eqs: [], gtes: [], lts: [], ltes: [], iss: [], ors: [] };
   const builder: Record<string, unknown> = {
     eq(col: string, val: unknown) { rec.eqs.push([col, val]); return builder; },
     gte(col: string, val: unknown) { rec.gtes.push([col, val]); return builder; },
     lt(col: string, val: unknown) { rec.lts.push([col, val]); return builder; },
+    lte(col: string, val: unknown) { rec.ltes.push([col, val]); return builder; },
     is(col: string, val: unknown) { rec.iss.push([col, val]); return builder; },
     or(expr: string) { rec.ors.push(expr); return builder; },
   };
@@ -136,5 +138,68 @@ describe("applyLeadListFilters — demais filtros (guardas de regressão)", () =
     expect(rec.eqs).toContainEqual(["origin", "meta_ads"]);
     expect(rec.eqs).toContainEqual(["qualification_tier", "diamante"]);
     expect(rec.gtes).toContainEqual(["rating", 7]);
+  });
+});
+
+/**
+ * Janela de criação — deep-link "Ver leads do período" do card Leads do Comando.
+ * Os limites são instantes ABSOLUTOS (ISO com Z), já cortados na fronteira de dia
+ * do fuso da org por `computePeriodRange`/`zoned-day`. O filtro precisa aplicá-los
+ * verbatim, com a mesma semântica inclusiva da RPC `get_dashboard_metrics`
+ * (`>= p_start_date` / `<= p_end_date`) — senão a lista não bate com o card.
+ */
+describe("applyLeadListFilters — janela de criação (created_at)", () => {
+  const FROM = "2026-07-27T03:00:00.000Z"; // 27/07 00:00 BRT
+  const TO = "2026-07-28T02:59:59.999Z"; // 27/07 23:59 BRT
+
+  it("createdFrom vira .gte('created_at', …) com o instante verbatim", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { createdFrom: FROM });
+    expect(rec.gtes).toContainEqual(["created_at", FROM]);
+  });
+
+  it("createdTo vira .lte('created_at', …) — inclusivo, igual à RPC", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { createdTo: TO });
+    expect(rec.ltes).toContainEqual(["created_at", TO]);
+  });
+
+  it("os dois juntos formam a janela fechada do dia org-local", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { createdFrom: FROM, createdTo: TO });
+    expect(rec.gtes).toContainEqual(["created_at", FROM]);
+    expect(rec.ltes).toContainEqual(["created_at", TO]);
+  });
+
+  it("ausentes: nenhum filtro de created_at (lista completa, como antes)", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { filterOrigin: "meta_ads" });
+    expect(rec.gtes.find(([c]) => c === "created_at")).toBeUndefined();
+    expect(rec.ltes.find(([c]) => c === "created_at")).toBeUndefined();
+  });
+
+  it("não colide com o rating (que também usa gte/lt em outra coluna)", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { createdFrom: FROM, createdTo: TO, filterRating: "medium" });
+    expect(rec.gtes).toContainEqual(["created_at", FROM]);
+    expect(rec.gtes).toContainEqual(["rating", 4]);
+    expect(rec.lts).toContainEqual(["rating", 7]);
+    expect(rec.ltes).toContainEqual(["created_at", TO]);
+  });
+
+  it("combina com os demais filtros da lista sem se anular", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, {
+      createdFrom: FROM,
+      createdTo: TO,
+      filterOrigin: "meta_ads",
+      filterQualification: "diamante",
+      searchQuery: "acme",
+    });
+    expect(rec.gtes).toContainEqual(["created_at", FROM]);
+    expect(rec.ltes).toContainEqual(["created_at", TO]);
+    expect(rec.eqs).toContainEqual(["origin", "meta_ads"]);
+    expect(rec.eqs).toContainEqual(["qualification_tier", "diamante"]);
+    expect(rec.ors[0]).toContain("name.ilike.%acme%");
   });
 });

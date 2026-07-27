@@ -85,8 +85,6 @@ import { usePipeOps } from "../pipe-ops";
 import { getPipelineTypeName } from "@/contracts/pipe";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { useOrganization } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
 
@@ -187,6 +185,34 @@ const DEFAULT_LEADS_FILTERS: LeadsFilterState = {
   filterQualification: "all",
 };
 
+/**
+ * Normaliza um instante vindo da query string (`?from=`/`?to=`). Devolve
+ * `undefined` se ausente ou não-parseável — URL adulterada não pode virar um
+ * `gte("created_at", "lixo")` que derruba a listagem inteira.
+ */
+function parseInstantParam(raw: string | null): string | undefined {
+  if (!raw) return undefined;
+  const ms = Date.parse(raw);
+  return Number.isNaN(ms) ? undefined : new Date(ms).toISOString();
+}
+
+/**
+ * Formata um instante no fuso da org (`organizations.timezone`), não no do
+ * browser. Sem isso a lista rotula um lead de 21:30 BRT com a data do dia
+ * seguinte pra quem acessa de outro fuso, e o número da lista deixa de bater
+ * com o do card do Comando — que corta o dia no fuso da org (ver `zoned-day.ts`).
+ */
+function formatDayInTz(value: string | Date, timeZone?: string | null): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  try {
+    return date.toLocaleDateString("pt-BR", timeZone ? { timeZone } : undefined);
+  } catch {
+    // IANA que o Intl do runtime rejeita (mesma divergência Postgres/ICU tratada
+    // em zoned-day.ts) — degrada pro fuso do browser em vez de quebrar a página.
+    return date.toLocaleDateString("pt-BR");
+  }
+}
+
 function LeadsInner() {
   const { openLead } = useLeadSheet();
   const [filterState, setFilterState] = usePersistedState(
@@ -227,7 +253,7 @@ function LeadsInner() {
   const { allowed: canCreateLead } = useCanDo("create_lead");
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState<LeadFormData>(initialFormData);
-  const { organizationId } = useOrganization();
+  const { organizationId, timezone: orgTimezone } = useOrganization();
   useEffect(() => { trackModuleVisit("leads", organizationId); }, []);
 
   // #313 — deep link via mention notification:
@@ -242,9 +268,23 @@ function LeadsInner() {
   const [page, setPage] = useState(0);
   // Filtro por estado (?uf=) — deep-link vindo da aba Mapa do Comando
   const ufFilter = searchParams.get("uf")?.toUpperCase() || undefined;
-  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter };
+  // Janela de criação (?from=&to=) — deep-link do card "Leads" do Comando.
+  // Os limites já vêm cortados na fronteira de dia do fuso da org por
+  // `computePeriodRange`, então a lista reproduz exatamente a contagem do card.
+  const createdFrom = parseInstantParam(searchParams.get("from"));
+  const createdTo = parseInstantParam(searchParams.get("to"));
+  const hasCreatedRange = !!createdFrom || !!createdTo;
+  const clearCreatedRange = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("from");
+      next.delete("to");
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo };
   const { data: leads = [], isLoading } = useLeads(filterParams);
-  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter });
+  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo });
   const { data: teamMembers = [] } = useTeamMembers();
   const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
@@ -311,7 +351,7 @@ function LeadsInner() {
   // Reset para página 0 quando filtros mudam
   useEffect(() => {
     setPage(0);
-  }, [searchQuery, filterOrigin, filterRating, filterQualification]);
+  }, [searchQuery, filterOrigin, filterRating, filterQualification, createdFrom, createdTo]);
 
   const stats = useMemo(() => {
     const total = totalLeads ?? leads.length;
@@ -583,6 +623,31 @@ function LeadsInner() {
         />
       </div>
 
+      {/* Chip da janela de criação — sem isso o deep-link do Comando filtra a
+          lista silenciosamente e o usuário lê "sumiram leads". */}
+      {hasCreatedRange && (
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="gap-1.5 py-1 pl-2.5 pr-1.5 font-medium">
+            <Calendar className="h-3.5 w-3.5" />
+            {createdFrom && createdTo
+              ? formatDayInTz(createdFrom, orgTimezone) === formatDayInTz(createdTo, orgTimezone)
+                ? `Criados em ${formatDayInTz(createdFrom, orgTimezone)}`
+                : `Criados entre ${formatDayInTz(createdFrom, orgTimezone)} e ${formatDayInTz(createdTo, orgTimezone)}`
+              : createdFrom
+                ? `Criados a partir de ${formatDayInTz(createdFrom, orgTimezone)}`
+                : `Criados até ${formatDayInTz(createdTo!, orgTimezone)}`}
+            <button
+              type="button"
+              onClick={clearCreatedRange}
+              aria-label="Remover filtro de período"
+              className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-background/80"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </Badge>
+        </div>
+      )}
+
       {/* Table (desktop) / Card list (mobile) */}
       <div className={cn("rounded-lg overflow-hidden", !isMobile && "border border-border")}>
         {isMobile ? (
@@ -650,7 +715,7 @@ function LeadsInner() {
                   )}
                   <div className="mt-2 border-t border-border/60 pt-2">
                     <span className="text-[11px] text-muted-foreground">
-                      {format(new Date(lead.created_at), "dd/MM/yyyy", { locale: ptBR })}
+                      {formatDayInTz(lead.created_at, orgTimezone)}
                     </span>
                   </div>
                 </div>
@@ -754,7 +819,7 @@ function LeadsInner() {
                   </TableCell>
                   <TableCell>
                     <span className="text-xs text-muted-foreground">
-                      {format(new Date(lead.created_at), "dd/MM/yyyy", { locale: ptBR })}
+                      {formatDayInTz(lead.created_at, orgTimezone)}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -821,7 +886,7 @@ function LeadsInner() {
       <ExportLeadsModal
         open={isExportModalOpen}
         onOpenChange={setIsExportModalOpen}
-        listFilters={{ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter }}
+        listFilters={{ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo }}
       />
 
       <Dialog open={isImportHistoryOpen} onOpenChange={setIsImportHistoryOpen}>

@@ -86,6 +86,15 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
   const { data: overdueFollowUps } = useFollowUps({ dateFilter: "overdue", showCompleted: false });
   const overdueCount = overdueFollowUps?.length ?? 0;
 
+  // "Ver leads do período" precisa levar o período junto — sem isso a lista abre
+  // com os leads todos e o número do card fica impossível de conferir. As bordas
+  // são as MESMAS que foram pra RPC (já cortadas no fuso da org), então a
+  // contagem da lista reproduz exatamente o valor exibido aqui.
+  const leadsPeriodLink = useMemo(
+    () => `/leads?from=${encodeURIComponent(range.start.toISOString())}&to=${encodeURIComponent(range.end.toISOString())}`,
+    [range.start, range.end],
+  );
+
   const faturamentoGoal = useMemo(
     () => teamGoals?.find((g) => g.type === "faturamento" && g.target_value > 0),
     [teamGoals],
@@ -190,7 +199,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
           label="Leads" value={m?.totalLeads ?? 0} format="int"
           delta={m && p ? deltaBadge(m.totalLeads, p.totalLeads) : undefined}
           caption={`${p?.totalLeads ?? 0} ${range.prevLabel}`}
-          quickActionLabel="Ver leads do período →" quickActionTo="/leads" delay={0.14}
+          quickActionLabel="Ver leads do período →" quickActionTo={leadsPeriodLink} delay={0.14}
         />
       </div>
       <div className="col-span-1 md:col-span-2">
