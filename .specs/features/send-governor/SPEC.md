@@ -74,9 +74,25 @@ Seam único por camada, **sem dupla-governança**:
 - PII: `recipient_hash` em runtime_logs = HMAC-SHA256(env `SEND_GOVERNOR_HASH_SALT`, telefone) truncado 16 hex. Sem salt → loga `null` (nunca pseudônimo reversível). Corrigido de FNV-1a 32-bit (reversível) na revisão.
 - REVOKE FROM PUBLIC (não anon — no-op conhecido). `has_function_privilege` a verificar pós-apply.
 
+## PR-1a — feed de reputação no gate (comportamento-neutro)
+
+**Status:** implementado (branch `feat/send-governor-pr1a-ban-feed`). Só o feed; enforce continua fora (PR-1b, CTO-gated).
+
+O feed do disjuntor P3 estava dormante: `governSend` fazia `doSend()` e propagava o throw sem nunca capturar o 463 pra alimentar `whatsapp_instance_reputation` (0 linhas em prod). PR-1a fecha esse furo **no choke único**:
+
+- `gate.ts::governSend` agora envolve `doSend()` num try/catch próprio. No throw: extrai o code numérico (`err.status ?? err.provider_code` via `extractStatusCode`) e, **se e só se** o status forte estiver no allowlist conservador **`FEED_BAN_STATUSES = {463, 429}`** (local ao gate), chama `deps.recordBanSignal(supabaseAdmin, ctx.instanceId, code)` → RPC `record_ban_signal` → grava/atualiza a linha de reputação. Depois **re-lança o erro ORIGINAL intacto**.
+- Guardas: só com `ctx.instanceId` presente E `ctx.category !== 'manual'`.
+- **Feed conservador 463/429 — NÃO 403/corpo (polish pós-revisão adversarial):** o gate decide o feed pelo **status numérico do allowlist**, não pelo `isBanSignal` genérico de `classifyBanSignal` (que é compartilhado com o sink token-hash e ficou **intacto**). Dois furos de qualidade-de-dado fechados: **(a) 403 excluído** — nos logs HGE é `Invalid token` transitório, sem correlação observada com ban real; alimentá-lo inflaria `ban_signal_count_24h` e, no enforce, quarentenaria número saudável no ruído; **(b) match só-por-corpo ignorado** — um 500/400 cujo corpo contém `rate/block/spam/forbidden` é erro de servidor/validação, não ban; confiar no corpo super-contaria o feed. Motivo do rigor: o shadow do PR-1a é **o insumo que decide o flip enforce (PR-1b)** — feed sujo = decisão errada. **Ampliar o conjunto (incluir 403 ou um padrão de corpo) é decisão de dados do PR-1b, nunca mudança silenciosa aqui.**
+- **Status como string:** `extractStatusCode` só confia num `status` **numérico** (o `UazapiError` real sempre carrega um). Um `status:"463"` string (thrower hipotético não-Uazapi) → `undefined` → **não alimenta** (conservador). Um `provider_code` string `"463"` continua coerçido como fallback defensivo. Escolha documentada em teste.
+- **Invariantes preservadas**: `doSend` roda exatamente 1× (o catch nunca re-invoca); fail-open intacto (feed é best-effort/fail-soft — nunca muda o desfecho do envio, erro original inalterado); feed **exclusivo do gate** — o `feedReputationBestEffort` do `UazapiClient` fica dormante (instanceId undefined lá), sem double-count; **mode-independente** — o feed roda mesmo em `mode:'off'` (número que queimou um 463 real precisa registrar, senão o PR-1b flipa cego), enquanto `recordDecision`/ledger seguem gated por `governed`.
+- **Propagação do 463 confirmada**: `UazapiClient.request()` lança `UazapiError { status:463, provider_code, message, raw }` no ramo 4xx; `UazapiProvider.sendText/sendMedia` não capturam → o status chega ao gate intacto. Nenhum fix de propagação foi necessário.
+- **Comportamento-neutro**: com enforce OFF (default), a única mudança observável é 1 linha em `whatsapp_instance_reputation` por 463/429 de automação. Envio, ledger e telemetria de decisão seguem idênticos.
+
+**Nota pra PR-1b (enforce):** quando `send_governor_mode='enforce'`, um 463 em um chip passa a `quarantined` por 24h e o core (regra 3) passa a **bloquear automação E mass** naquele número — incluindo respostas do **Copilot** (categoria `automation`) por 24h. Intencional (anti-ban): humano ainda responde manual (isento), e o skip é logado com `reason='quarantined'`. Quarentena expira no read (recover implícito).
+
 ## Fronteiras de escopo (PR-0)
 
-- **Feed da tabela de reputação DORMANTE.** `record_ban_signal` só dispara quando `UazapiClientConfig.instanceId` está threaded — undefined em todos construction sites hoje. Em PR-0 só o `runtime_logs` event captura sinais; a tabela `whatsapp_instance_reputation` não é populada. Threading do instanceId = **PR-1 (P3)**, junto com o enforcement.
+- **Feed da tabela de reputação:** DORMANTE em PR-0; **wired no gate em PR-1a** (acima). Em PR-0 só o `runtime_logs` event capturava sinais. O threading de `instanceId` no `UazapiClient` (feed pela camada física) segue **não** feito e dormante por design — o feed vive no gate, não no client.
 - **Ledger conta por-chunk** (smart-split): N chunks = N incrementos. Semântica defensável (cada chunk = 1 msg WhatsApp real), mas o cap "por-número" trip mais cedo que a intuição. Calibrar antes de enforce.
 - **Cold gate** (`resolveIsColdContact`) valida só "sem inbound prévio"; a metade "sem tag opt-in" não foi implementada (schema sem convenção). Revisar antes de habilitar P4.
 
