@@ -1,4 +1,8 @@
--- 20260727120000_inbox_filter_server_side.sql
+-- 20260727140241_inbox_filter_server_side.sql
+--
+-- APLICADA EM PROD em 2026-07-27 (ledger: 20260727140241). O prefixo do arquivo
+-- foi alinhado à versão que o ledger gravou — sem isso, um `db push` futuro
+-- veria a migration como pendente e a reaplicaria.
 --
 -- Issue #1277 — o filtro do inbox WhatsApp só enxergava as 500 conversas mais
 -- recentes: o recorte era 100% client-side, aplicado DEPOIS do LIMIT da RPC.
