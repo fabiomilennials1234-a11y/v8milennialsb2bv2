@@ -63,6 +63,11 @@ describe("toFunnelRows", () => {
     expect(rows).toHaveLength(0);
   });
 
+  it("exclui upsell/Carteira (pipelineDbId null) mesmo com pipeId — é tabela legacy", () => {
+    const upsell = standard({ pipeType: "upsell", pipeId: "upsell-legacy-id", pipelineDbId: null });
+    expect(toFunnelRows([upsell])).toHaveLength(0);
+  });
+
   it("mapeia custom pipeline pelo entryId + nome próprio", () => {
     const custom = {
       type: "custom",

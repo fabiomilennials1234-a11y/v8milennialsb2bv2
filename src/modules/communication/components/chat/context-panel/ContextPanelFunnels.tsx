@@ -24,7 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useLeadAllPipelines } from "@/modules/leads";
+import { useLeadAllPipelines, useLeadActionGates } from "@/modules/leads";
 import {
   useMovePipelineEntry,
   useCreatePipelineEntry,
@@ -56,6 +56,10 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
   const { data: displayConfig = [] } = usePipelineDisplayConfig();
   const moveEntry = useMovePipelineEntry();
   const createEntry = useCreatePipelineEntry();
+  // Mesma permissão do kanban (paridade — nada burla o gate no chat).
+  const gates = useLeadActionGates(leadId);
+  const canMove = gates.canMoveMeeting.allowed;
+  const canAdd = gates.canAddToPipe.allowed;
 
   const rows = useMemo(() => toFunnelRows(pipelines, displayConfig), [pipelines, displayConfig]);
   const available = useMemo(
@@ -105,6 +109,7 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
   };
 
   const onPickStage = (row: FunnelCardRow, stage: FunnelStageView) => {
+    if (!canMove) return; // sem permissão (UI já desabilitada — guarda defensiva)
     const currentKey = pending[row.entryId] ?? row.currentStageKey;
     if (stage.key === currentKey) return; // já está nela
     if (isTerminalRole(stage.role)) {
@@ -115,6 +120,7 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
   };
 
   const doAdd = (funnel: AddableFunnel) => {
+    if (!canAdd) return; // guarda defensiva (UI desabilitada)
     setAddOpen(false);
     // Responsável fica no LEAD (não assinala a entry) — sem round-robin; os
     // workflows de stage_changed/entrada disparam normalmente (paridade kanban).
@@ -140,7 +146,7 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
   };
 
   const addButton =
-    available.length > 0 ? (
+    available.length > 0 && canAdd ? (
       <Popover open={addOpen} onOpenChange={setAddOpen}>
         <PopoverTrigger asChild>
           <button
@@ -213,12 +219,15 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
               <PopoverTrigger asChild>
                 <button
                   type="button"
+                  disabled={!canMove}
                   className={cn(
                     "inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold transition-opacity",
                     isMoving && "opacity-60",
+                    !canMove && "cursor-not-allowed opacity-50",
                   )}
                   style={{ background: `${row.color}22`, color: row.color }}
                   aria-label={`Etapa em ${row.label}: ${current?.label ?? "—"}`}
+                  title={canMove ? undefined : "Sem permissão para mover etapa"}
                 >
                   <span className="h-1.5 w-1.5 rounded-full" style={{ background: row.color }} />
                   {current?.label ?? "—"}

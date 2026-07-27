@@ -68,7 +68,7 @@ export function availableFunnelsToAdd(
   pipelines: PipelineStatus[],
   displayConfig: DisplayConfigLike[] = [],
 ): AddableFunnel[] {
-  const labelByType = new Map(displayConfig.map((c) => [c.pipe_type, c.display_name]));
+  const cfgByType = new Map(displayConfig.map((c) => [c.pipe_type, c]));
   const out: AddableFunnel[] = [];
 
   for (const p of pipelines) {
@@ -79,9 +79,11 @@ export function availableFunnelsToAdd(
       if (p.pipeId) continue; // lead já está
       if (!p.pipelineDbId) continue; // upsell legacy — não adicionável
       const displayType = PIPE_TYPE_TO_DISPLAY[p.pipeType] ?? p.pipeType;
+      const cfg = cfgByType.get(displayType);
+      if (cfg && cfg.is_visible === false) continue; // funil escondido pela org
       out.push({
         pipelineId: p.pipelineDbId,
-        label: labelByType.get(displayType) ?? p.label,
+        label: cfg?.display_name ?? p.label,
         color: p.color,
         firstStageKey,
       });
@@ -112,6 +114,10 @@ export function toFunnelRows(
   for (const p of pipelines) {
     if (p.type === "standard") {
       if (!p.pipeId) continue; // lead não está neste funil
+      // Upsell/Carteira é tabela legacy própria (pipeId = upsell.id, NÃO
+      // pipeline_entries.id) — mover via useMovePipelineEntry escreveria no id
+      // errado. pipelineDbId null marca esses; fora do card.
+      if (!p.pipelineDbId) continue;
       const displayType = PIPE_TYPE_TO_DISPLAY[p.pipeType] ?? p.pipeType;
       rows.push({
         key: p.pipeType,
