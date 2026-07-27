@@ -37,7 +37,7 @@ const CATALOG = {
     { id: "etapa", label: "Etapa" },
   ],
   formats: [],
-  ratios: [],
+  ratios: [{ num: "receita", den: "num_vendas", label: "Ticket médio" }],
   renderers: [],
 };
 
@@ -58,7 +58,7 @@ const SNAPSHOT: DashboardSnapshot = {
     {
       widget_id: "b", measure_kind: "ratio", recorte_id: "total", widget_style: null,
       format_id: "currency_brl", value_format: "currency_brl", weight: "primary",
-      grid: { col: 9, row: 1, w: 2, h: 1 }, filters: {},
+      grid: { col: 9, row: 0, w: 2, h: 1 }, filters: {},
       measure: { kind: "ratio", unit: "currency", currency: "BRL", value: 14411.33,
         num: { measure_id: "receita", value: 86468, unit: "currency" },
         den: { measure_id: "num_vendas", value: 6, unit: "count" } } as any,
@@ -68,17 +68,30 @@ const SNAPSHOT: DashboardSnapshot = {
     {
       widget_id: "c", measure_kind: "leaf", recorte_id: "etapa", widget_style: null,
       format_id: "integer", value_format: "integer", weight: "primary",
-      grid: { col: 0, row: 2, w: 5, h: 3 }, filters: {},
+      grid: { col: 3, row: 0, w: 5, h: 3 }, filters: {},
       measure: { kind: "leaf", measure_id: "leads_na_etapa", unit: "count", recorte: "total", value: 2151, series: null } as any,
     },
     // D — FALLBACK CRU (RED assert 3): num/den SEM label no catálogo → "leads_criados / reunioes_marcadas".
     {
       widget_id: "d", measure_kind: "ratio", recorte_id: "total", widget_style: null,
       format_id: "percent_1", value_format: "percent_1", weight: "secondary",
-      grid: { col: 9, row: 2, w: 2, h: 1 }, filters: {},
+      grid: { col: 9, row: 1, w: 2, h: 1 }, filters: {},
       measure: { kind: "ratio", unit: "percent", value: 12.5,
         num: { measure_id: "leads_criados", value: 6, unit: "count" },
         den: { measure_id: "reunioes_marcadas", value: 48, unit: "count" } } as any,
+    },
+    // E — FUNIL (P2): ordem preservada, taxa entre etapas, rampa quente. Não re-ordena por volume.
+    {
+      widget_id: "e", measure_kind: "leaf", recorte_id: "etapa", widget_style: "funnel", style_variant: "bars",
+      format_id: "integer", value_format: "integer", weight: "primary",
+      grid: { col: 3, row: 3, w: 5, h: 3 }, filters: {},
+      measure: { kind: "leaf", measure_id: "leads_na_etapa", unit: "count", recorte: "etapa", value: null,
+        series: [
+          { key: "novo", label: "Novo", value: 1000 },
+          { key: "contato", label: "Contato", value: 620 },
+          { key: "proposta", label: "Proposta", value: 240 },
+          { key: "ganho", label: "Ganho", value: 90 },
+        ] } as any,
     },
   ],
 };
@@ -117,7 +130,7 @@ export default function TvWallPreview() {
           A parede renderiza standalone quando o layout assenta (o gate NÃO é o
           shell de auth — é o TIMING; o spec espera fonts.ready + geometria estável
           antes de medir). Tamanho fixo 1920x1080 pro Playwright fotografar. */}
-      <div data-surface="tv" data-testid="tv-wall-root" className="dark" style={{ width: 1920, height: 1080, overflow: "hidden", background: "hsl(var(--background))" }}>
+      <div data-surface="tv" data-testid="tv-wall-root" className="dark" style={{ width: "100vw", height: "100vh", overflow: "hidden", background: "hsl(var(--background))" }}>
         <TVComposableWall period="month" />
       </div>
     </QueryClientProvider>

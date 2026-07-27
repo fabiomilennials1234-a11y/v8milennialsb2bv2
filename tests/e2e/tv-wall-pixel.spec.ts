@@ -30,7 +30,7 @@ test.describe("TV parede — harness de pixel", () => {
 
     // 1) os 4 cards montaram.
     await page.waitForSelector('[data-testid="tv-card"]', { timeout: 20000 });
-    await page.waitForFunction(() => document.querySelectorAll('[data-testid="tv-card"]').length === 4, { timeout: 20000 });
+    await page.waitForFunction(() => document.querySelectorAll('[data-testid="tv-card"]').length === 5, { timeout: 20000 });
 
     // 2) FONTES carregadas de verdade (fallback é mais estreita → mede sem
     //    truncar). Espera o status virar 'loaded', não só a promise ready.
@@ -93,7 +93,7 @@ test.describe("TV parede — harness de pixel", () => {
 
     console.log("[PIXEL HARNESS]", JSON.stringify(report, null, 2));
 
-    expect(report.cardCount, "a parede montou os 4 widgets do fixture").toBe(4);
+    expect(report.cardCount, "a parede montou os 5 widgets do fixture").toBe(5);
     // ASSERT 1 — truncamento (RED: A "R$ 86 mil", B valor+eyebrow, D eyebrow).
     expect(report.truncated, `valor/eyebrow truncados: ${report.truncated.join(" | ") || "nenhum"}`).toEqual([]);
     // ASSERT 2 — card vazio (RED: A escalar em grid h=4, >60% de vão).
