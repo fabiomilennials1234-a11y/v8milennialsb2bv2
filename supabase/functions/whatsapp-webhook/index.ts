@@ -769,6 +769,11 @@ export async function triggerReactions(
 
         let chunksSent = 0;
         let canceledMidDelivery = false;
+        // #1156 — id da INBOUND (estável entre retries). NÃO crypto.randomUUID: nonce
+        // por-chamada re-gerava a cada retry → idk novo → reply inteira reenviada e o
+        // barAt=2 do idk virava código morto. Com o id persistido, o retry do chunk i
+        // reusa o mesmo idk → conflito → hit=2 → barAt=2 dispara → retry idempotente.
+        const dedupNonce = persisted.message_id;
         for (let i = 0; i < parts.length; i++) {
           const text = parts[i]?.trim();
           if (!text) continue;
@@ -799,7 +804,12 @@ export async function triggerReactions(
 
           const sendResult = await sendTextViaInstance(
             supabase, fullInstance, persisted.phone_number, text,
-            { trackSource: "copilot" },
+            {
+              trackSource: "copilot",
+              // idk só multi-chunk: chunks distintos da MESMA reply não colidem
+              // no dedup por conteúdo. Single-chunk sem idk → pega loop. #1156.
+              idempotencyKey: parts.length > 1 ? `wh:${dedupNonce}:${i}` : undefined,
+            },
           );
 
           const msgId = sendResult.messageId

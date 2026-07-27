@@ -148,6 +148,9 @@ export async function sendOutboundDispatch(
 
       let firstMessageId: string | undefined;
       let chunksSent = 0;
+      // #1156 — id do DISPATCH (estável entre retries): retry da MESMA dispatch reusa
+      // o idk → hit=2 → barAt=2 → idempotente. Nonce por-chamada reenviaria no retry.
+      const dedupNonce = dispatchId;
       for (let i = 0; i < chunks.length; i++) {
         try {
           await provider.setPresence(phone, "composing");
@@ -187,6 +190,10 @@ export async function sendOutboundDispatch(
               category: "automation",
               recipientPhone: phone,
               trackSource: "copilot-outbound",
+              content: chunks[i],
+              // idk só multi-chunk: chunks distintos da MESMA reply não colidem.
+              // Single-chunk sem idk → dedup por conteúdo (pega loop). #1156.
+              idempotencyKey: chunks.length > 1 ? `ob:${dedupNonce}:${i}` : undefined,
             },
             () =>
               provider.sendText({
@@ -196,8 +203,8 @@ export async function sendOutboundDispatch(
                 trackId: dispatchId,
               }),
           );
-          // Forward-safe: never taken in shadow (the send always runs). Under a
-          // future enforce block/defer, stop the chunk loop and report partial.
+          // Skip = enforce block/defer OU dedup conversacional (#1156, alcançável
+          // já em shadow/off com a flag ON). Para o loop de chunks e reporta parcial.
           if (isSkippedSend(governed)) {
             return {
               ok: chunksSent > 0,

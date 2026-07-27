@@ -36,6 +36,14 @@ import type {
 } from "./types.ts";
 import { evaluateSend } from "./core.ts";
 import {
+  conversationalDedupEnabled,
+  deriveSendSource,
+  getDefaultWindow,
+  hashContent,
+  reserveSendOrSkip,
+} from "../send-dedup.ts";
+import { logRuntime } from "../logger.ts";
+import {
   incrementAutomationUsage,
   recordBanSignal,
   recordDecision,
@@ -202,6 +210,22 @@ function makeSkipped(decision: GovernorDecision): SkippedSend {
  * @param doSend        the actual send; runs exactly once when allowed.
  * @param deps          internal/testing injection point (defaults to real io).
  */
+// "loga 1×": trackSource fora do vocabulário do dedup é logado uma vez por valor
+// distinto (não a cada send) — visibilidade sem floodar o runtime_logs. Um valor
+// que aparece aqui = caminho que o dedup NÃO cobre; sinal pra mapear ou justificar.
+const _loggedUnknownDedupSources = new Set<string>();
+function logUnknownDedupSource(orgId: string, trackSource: string): void {
+  if (_loggedUnknownDedupSources.has(trackSource)) return;
+  _loggedUnknownDedupSources.add(trackSource);
+  void logRuntime({
+    organizationId: orgId,
+    module: "outbound",
+    action: "dedup_source_unknown",
+    status: "skipped",
+    payloadSnapshot: { track_source: trackSource },
+  });
+}
+
 export async function governSend<T>(
   supabaseAdmin: GovernorSupabaseClient,
   ctx: GovernorContext,
@@ -250,6 +274,60 @@ export async function governSend<T>(
       }
     }
     return makeSkipped(decision);
+  }
+
+  // ── Dedup conversacional (#1156) — gate PRÉ-send, no choke único ──────────
+  // Roda no ramo allow (governor não bloqueou), ANTES do doSend E do accounting
+  // pós-send. Como mora aqui dentro, cobre TODOS os callers diretos de governSend
+  // (copilot-v2-worker, dispatch-router, followup-sender, outbound-sender +
+  // helpers do whatsapp-dispatch) — o v2 chamava governSend direto e bypassava
+  // o fix que morava nas closures. Suprimir aqui, antes do incrementAutomationUsage,
+  // também evita que a duplicata conte como uso (over-count que o Crivo apontou).
+  //
+  // FAIL-OPEN total: sem content, source desconhecido, kill-switch OFF, ou erro
+  // de infra → NÃO barra, segue pro doSend. Nunca dropa por hiccup.
+  if (ctx.content && ctx.recipientPhone && conversationalDedupEnabled(ctx.orgId)) {
+    const source = deriveSendSource(ctx.trackSource);
+    if (source) {
+      try {
+        const { duplicate, ttlSeconds } = await reserveSendOrSkip({
+          supabase: supabaseAdmin,
+          orgId: ctx.orgId,
+          phone: ctx.recipientPhone,
+          content: ctx.content,
+          source,
+          idempotencyKey: ctx.idempotencyKey ?? undefined,
+        });
+        if (duplicate) {
+          const phoneHash = await hashContent(ctx.recipientPhone);
+          await logRuntime({
+            organizationId: ctx.orgId,
+            module: "outbound",
+            action: "dedup_skip",
+            status: "skipped",
+            payloadSnapshot: {
+              source,
+              phone_hash: phoneHash,
+              ttl: ttlSeconds ?? getDefaultWindow(source),
+              chunk: Boolean(ctx.idempotencyKey),
+            },
+          });
+          return {
+            __governorSkipped: true,
+            action: "block",
+            reason: "dedup_conversational",
+            category: ctx.category,
+          } as unknown as T | SkippedSend;
+        }
+      } catch (err) {
+        // Fail-open: qualquer erro no dedup → segue enviando (reserveSendOrSkip
+        // já é fail-open; este catch é belt-and-braces).
+        console.warn("[governSend] dedup gate error, sending anyway:", err instanceof Error ? err.message : err);
+      }
+    } else if (ctx.trackSource) {
+      // trackSource fora do vocabulário → pula dedup (fail-open), loga 1×.
+      logUnknownDedupSource(ctx.orgId, ctx.trackSource);
+    }
   }
 
   // ── Allow (incl. shadow + fail-open): send EXACTLY ONCE, outside the guard ─

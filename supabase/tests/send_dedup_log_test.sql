@@ -106,6 +106,64 @@ SELECT is((SELECT count(*)::int FROM ins), 1,
   '(XORG) dedup é por org — a mesma msg em outra org não colide (chave inclui org_id)');
 
 -- ===========================================================================
+-- (HITCOUNT) fn_reserve_send — dedup por CONTAGEM com reset-por-gap (#1156)
+-- ===========================================================================
+-- Coluna + default (exigência da Bancada: 1º send responde hit_count=1, nunca 0/null).
+SELECT has_column('public', 'send_dedup_log', 'hit_count', '(STRUCT) coluna hit_count existe');
+SELECT col_default_is('public', 'send_dedup_log', 'hit_count', '1', '(STRUCT) hit_count default 1');
+
+-- Caminho de CONTEÚDO (idk NULL): mesma chave incrementa 1→2→3. É o discriminador
+-- de FREQUÊNCIA — o caller barra copilot na 3ª, workflow na 2ª.
+SELECT is(
+  public.fn_reserve_send('deadbeef-0000-4000-8000-00000000000a', '5511955550000', 'hc_hash', 'copilot', NULL, 300),
+  1, '(HITCOUNT) 1ª ocorrência devolve hit_count=1 (INSERT)');
+SELECT is(
+  public.fn_reserve_send('deadbeef-0000-4000-8000-00000000000a', '5511955550000', 'hc_hash', 'copilot', NULL, 300),
+  2, '(HITCOUNT) 2ª idêntica com gap<janela incrementa pra 2 (copilot ainda passa)');
+SELECT is(
+  public.fn_reserve_send('deadbeef-0000-4000-8000-00000000000a', '5511955550000', 'hc_hash', 'copilot', NULL, 300),
+  3, '(HITCOUNT) 3ª idêntica incrementa pra 3 (caller barra copilot aqui — bar-at-3)');
+
+-- RESET-POR-GAP: semeia uma linha JÁ vencida (ttl negativo → expires_at no passado);
+-- a próxima chamada vê o gap > janela e RESETA o contador a 1 (janela nova, não
+-- balde acumulado — auto-cura o atraso do cron de limpeza).
+SELECT public.fn_reserve_send('deadbeef-0000-4000-8000-00000000000a', '5511955559999', 'gap_hash', 'copilot', NULL, -1);
+SELECT is(
+  public.fn_reserve_send('deadbeef-0000-4000-8000-00000000000a', '5511955559999', 'gap_hash', 'copilot', NULL, 300),
+  1, '(RESET-GAP) linha vencida reseta hit_count a 1 (não conta como 2ª ocorrência)');
+
+-- Caminho IDK (chunking): chunks distintos da MESMA reply têm idk distinto → cada um
+-- insere (hit=1) → envia (NÃO mutila). Só replay LITERAL do mesmo idk incrementa.
+SELECT is(
+  public.fn_reserve_send('deadbeef-0000-4000-8000-00000000000a', '5511955558888', 'chunk_hash', 'copilot', 'logA:0', 300),
+  1, '(IDK) chunk idk#0 → hit 1 (envia)');
+SELECT is(
+  public.fn_reserve_send('deadbeef-0000-4000-8000-00000000000a', '5511955558888', 'chunk_hash', 'copilot', 'logA:1', 300),
+  1, '(IDK) chunk idk#1 da MESMA reply (idk distinto) → hit 1 (chunking não mutila)');
+SELECT is(
+  public.fn_reserve_send('deadbeef-0000-4000-8000-00000000000a', '5511955558888', 'chunk_hash', 'copilot', 'logA:0', 300),
+  2, '(IDK) replay literal do MESMO idk#0 → hit 2 (caller barra a 2ª do idk)');
+
+-- copilot_v2 entra no vocabulário fechado (o worker vivo que bypassava o dedup).
+SELECT lives_ok(
+  $$ SELECT public.fn_reserve_send('deadbeef-0000-4000-8000-00000000000a', '5511955557777', 'v2_hash', 'copilot_v2', NULL, 300) $$,
+  '(CHECK) source copilot_v2 aceito na CHECK (worker copilot-v2 coberto)');
+
+-- ACL (BLOQUEANTE de segurança, volta 2): fn_reserve_send é SECURITY DEFINER e
+-- bypassa a RLS; o corpo NÃO autoriza (p_org_id vem do parâmetro). Portanto é
+-- SYSTEM-ONLY — só service_role. Conceder a authenticated abriria supressão/escrita
+-- cross-tenant (user da org A passa p_org_id=org B). anon E authenticated negados.
+SELECT is(
+  has_function_privilege('anon', 'public.fn_reserve_send(uuid,text,text,text,text,integer)', 'EXECUTE'),
+  false, '(ACL) anon NÃO executa fn_reserve_send');
+SELECT is(
+  has_function_privilege('authenticated', 'public.fn_reserve_send(uuid,text,text,text,text,integer)', 'EXECUTE'),
+  false, '(ACL) authenticated NÃO executa fn_reserve_send (fecha cross-tenant DoS — volta 2)');
+SELECT is(
+  has_function_privilege('service_role', 'public.fn_reserve_send(uuid,text,text,text,text,integer)', 'EXECUTE'),
+  true, '(ACL) service_role executa fn_reserve_send (único caller: edge via governSend)');
+
+-- ===========================================================================
 -- (RLS) isolamento por tenant PROVADO COMO authenticated — não como postgres
 -- ===========================================================================
 -- Método (lição que já mordeu 3× no épico): superuser bypassa RLS e dá falso
