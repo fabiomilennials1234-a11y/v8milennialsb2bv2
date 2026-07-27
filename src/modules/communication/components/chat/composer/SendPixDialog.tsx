@@ -52,14 +52,17 @@ export function SendPixDialog({ open, onOpenChange, instanceId, phoneNumber }: P
     if (!numAmount || numAmount <= 0) { toast.error("Valor inválido"); return; }
     setSending(true);
     try {
+      // O botão Pix (Uazapi) não carrega valor — só a chave. Foldar o valor no
+      // texto acompanhante garante que o cliente VÊ quanto pagar, não só a chave.
+      const messageText = `${text.trim() || "Pagamento Pix"}\n💰 R$ ${numAmount.toFixed(2)} — ${merchantName.trim()}`;
       const result = await sendPixButton(instanceId, phoneNumber, pixkey.trim(), merchantName.trim(), numAmount, {
         pixkeyType,
-        text: text.trim() || undefined,
+        text: messageText,
       });
       const orgId = teamMember?.organization_id;
       if (orgId) {
         const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
-        const content = `${text.trim() || "Pagamento Pix"}\n💰 R$ ${numAmount.toFixed(2)} — ${merchantName.trim()}`;
+        const content = messageText;
         await supabase.from("whatsapp_messages").upsert({
           organization_id: orgId,
           instance_id: instanceId,
