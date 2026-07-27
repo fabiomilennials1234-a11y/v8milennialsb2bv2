@@ -8,6 +8,10 @@ import type { MetricMeasureResult, MetricPeriod } from "./useMetricMeasure";
 // Snapshot de PÁGINA inteira via fn_dashboard_snapshot — 1 round-trip, erro
 // isolado por widget. É o caminho da TV (poll 30s). v1 liga SÓ a TV.
 
+// PONTE MANTIDA (por quê): fn_dashboard_snapshot retorna jsonb — o types.ts
+// gerado tipa o retorno como Json genérico, não como esta forma estruturada.
+// Estas interfaces são o CONTRATO do payload jsonb (não um bridge de tabela);
+// os campos espelham colunas de dashboard_widgets mas o transporte é jsonb.
 export interface DashboardWidgetSnapshot {
   widget_id: string;
   /** 'legacy' = célula reservada: o motor reconhece o renderer mas não avalia medida. */
@@ -58,13 +62,16 @@ export function useDashboardSnapshot({
     queryKey: ["dashboard-snapshot", organizationId, pageId, period, ref, start, end],
     queryFn: async (): Promise<DashboardSnapshot | null> => {
       if (!pageId) return null;
-      const { data, error } = await supabase.rpc("fn_dashboard_snapshot" as any, {
-        p_org_id: organizationId,
+      // organizationId é não-nulo aqui (enabled: !!organizationId); os params
+      // opcionais de data usam undefined (a RPC tem DEFAULT NULL) — a assinatura
+      // gerada não aceita null.
+      const { data, error } = await supabase.rpc("fn_dashboard_snapshot", {
+        p_org_id: organizationId!,
         p_page_id: pageId,
         p_period: period,
-        p_ref: ref,
-        p_start: start,
-        p_end: end,
+        p_ref: ref ?? undefined,
+        p_start: start ?? undefined,
+        p_end: end ?? undefined,
       });
       if (error) {
         if (isMissingSchemaError(error)) return null; // migration ainda não em prod
