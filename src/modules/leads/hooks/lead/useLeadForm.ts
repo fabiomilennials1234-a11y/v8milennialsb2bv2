@@ -8,7 +8,7 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useUpdateLead } from "../useLeads";
-import { useLogLeadAction } from "../useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import type { LeadContactFormData } from "../../components/lead/info/LeadContactInfo";
 
 interface Lead {

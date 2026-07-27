@@ -29,7 +29,7 @@ vi.mock("@/modules/leads/hooks/useTags", () => ({
   useCreateTag: () => ({ mutateAsync: vi.fn().mockResolvedValue({ id: "tag-new", name: "Nova" }) }),
 }));
 
-vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({
+vi.mock("@/shared/hooks/useLogLeadAction", () => ({
   useLogLeadAction: () => vi.fn(),
 }));
 

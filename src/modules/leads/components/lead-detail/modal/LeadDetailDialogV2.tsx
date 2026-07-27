@@ -11,7 +11,7 @@ import { useLeadSheet } from "../hooks/useLeadSheet";
 import { useLeadDetail } from "../hooks/useLeadDetail";
 import { useLeadDetailRealtime } from "../hooks/useLeadDetailRealtime";
 import { useToggleLeadAI, useDeleteLead } from "../../../hooks/useLeads";
-import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { toast } from "sonner";
 import { LeadModalHeader } from "./header/LeadModalHeader";
 import { LeadModalToolbar } from "./LeadModalToolbar";

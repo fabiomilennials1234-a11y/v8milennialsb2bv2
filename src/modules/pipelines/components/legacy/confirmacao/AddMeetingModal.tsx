@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { useLeads, useUpdateLead } from "@/modules/leads";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useCreatePipeConfirmacao, PipeConfirmacaoStatus } from "@/modules/pipelines/hooks/legacy/usePipeConfirmacao";
-import { useLogLeadAction } from "@/modules/leads";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useGoogleCalendarStatus } from "@/modules/integrations/hooks/useGoogleCalendar";
 import { useCalendarSharing } from "@/modules/integrations/hooks/useGoogleCalendarSharing";
 import { useAuth } from "@/modules/identity";

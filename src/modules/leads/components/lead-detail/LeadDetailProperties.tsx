@@ -7,7 +7,7 @@ import { LeadChecklistSection } from "../leads/LeadChecklistSection";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { useUpdateLead } from "../../hooks/useLeads";
-import { useLogLeadAction } from "../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import {
   useLeadCustomFields,
   useLeadCustomFieldValues,

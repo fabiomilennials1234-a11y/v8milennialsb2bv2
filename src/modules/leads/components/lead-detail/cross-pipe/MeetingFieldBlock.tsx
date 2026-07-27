@@ -16,7 +16,7 @@ import {
 } from "@/contracts/pipe";
 import type { Tables } from "@/integrations/supabase/types";
 import { usePipeOps } from "../../../pipe-ops";
-import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { CompareceuModal } from "../../leads/funnel-contexts/modals/CompareceuModal";
 import { cn } from "@/lib/utils";
 

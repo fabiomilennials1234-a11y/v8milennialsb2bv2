@@ -41,7 +41,7 @@ import {
 import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/modules/identity";
 import { type PipeConfirmacaoStatus, confirmacaoStatusColumns as statusColumns } from "@/contracts/pipe";
 import { usePipeOps } from "../../../pipe-ops";
-import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useDeleteLead } from "../../../hooks/useLeads";
 import { useResponsibleMembers } from "@/modules/identity";
 import { CompareceuModal } from "./modals/CompareceuModal";

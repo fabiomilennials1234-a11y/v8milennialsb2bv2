@@ -3,7 +3,7 @@ import { Plus, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUpdateLead } from "../../../../hooks/useLeads";
-import { useLogLeadAction } from "../../../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useLeadActionGates } from "../../hooks/useLeadActionGates";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";

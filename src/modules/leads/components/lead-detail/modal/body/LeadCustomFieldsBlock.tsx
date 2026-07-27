@@ -18,7 +18,7 @@ import {
   useSaveCustomFieldValue,
   type CustomField,
 } from "../../../../hooks/useLeadCustomFields";
-import { useLogLeadAction } from "../../../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_VISIBLE = 5;

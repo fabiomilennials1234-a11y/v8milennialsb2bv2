@@ -15,19 +15,14 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreateWorkflow } from "@/modules/workflows/hooks/useWorkflows";
-import { FUNIL_A_TEMPLATES, FUNIL_B_TEMPLATES } from "@/modules/workflows/lib/funnelTemplates";
+import { FUNIL_A_TEMPLATES, FUNIL_B_TEMPLATES } from "@/contracts/workflows/funnel-templates";
 import { toast } from "sonner";
+import type { WorkflowTemplate } from "@/contracts/workflows/workflow-template";
 
-export interface WorkflowTemplate {
-  id: string;
-  name: string;
-  description: string | null;
-  category: string;
-  definition: Record<string, unknown>;
-  tags: string[];
-  popularity: number;
-  is_system: boolean;
-}
+// Reexportado por compatibilidade: a interface agora é contrato compartilhado
+// (`@/contracts/workflows/workflow-template`), porque o provisionamento de org
+// em `identity` também consome os templates. Importe de lá em código novo.
+export type { WorkflowTemplate };
 
 const CATEGORY_LABELS: Record<string, string> = {
   general: "Geral",

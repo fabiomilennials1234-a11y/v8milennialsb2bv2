@@ -56,7 +56,7 @@ vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useResponsibleMembers: () => [],
 }));
 
-vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({
+vi.mock("@/shared/hooks/useLogLeadAction", () => ({
   useLogLeadAction: () => vi.fn(),
 }));
 

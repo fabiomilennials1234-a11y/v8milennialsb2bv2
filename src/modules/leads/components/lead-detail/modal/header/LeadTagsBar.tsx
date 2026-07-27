@@ -15,7 +15,7 @@ import {
   useAddLeadTag,
   useRemoveLeadTag,
 } from "../../../../hooks/lead/useLeadTagsAttached";
-import { useLogLeadAction } from "../../../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { cn } from "@/lib/utils";
 
 /**

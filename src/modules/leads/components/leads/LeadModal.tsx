@@ -26,7 +26,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/modules/identity";
 import { useCreateLead, useUpdateLead } from "../../hooks/useLeads";
 import { useLeadOrigins } from "../../hooks/useLeadOrigins";
-import { useLogLeadAction } from "../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import {
   useLeadCustomFields,
   useLeadCustomFieldValues,

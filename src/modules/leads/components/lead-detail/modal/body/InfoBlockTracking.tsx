@@ -13,7 +13,7 @@ import { LEAD_TRACKING_FIELDS } from "./info-field-config";
 import { ORIGIN_COLORS } from "../../../leads/LeadCard";
 import { useLeadOrigins } from "../../../../hooks/useLeadOrigins";
 import { useUpdateLead } from "../../../../hooks/useLeads";
-import { useLogLeadAction } from "../../../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 

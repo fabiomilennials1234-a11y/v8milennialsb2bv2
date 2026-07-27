@@ -24,7 +24,7 @@ import { usePipeOps } from "../../../pipe-ops";
 import { useActiveProducts } from "@/modules/carteira/hooks/useProducts";
 import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
 import { useCadastroExternoEnabled } from "@/modules/marketing/hooks/useCadastroExterno";
-import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 
 type PipeProposta = Tables<"pipe_propostas">;
 import { ProductCombobox } from "@/modules/carteira/components/proposal/ProductCombobox";

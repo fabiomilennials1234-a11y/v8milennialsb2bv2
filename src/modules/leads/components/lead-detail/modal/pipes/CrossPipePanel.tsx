@@ -12,7 +12,7 @@ import {
 } from "../../../../hooks/useLeadAllPipelines";
 import { usePipeOps } from "../../../../pipe-ops";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
-import { useLogLeadAction } from "../../../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useLeadActionGates } from "../../hooks/useLeadActionGates";
 import { MeetingFieldBlock } from "../../cross-pipe/MeetingFieldBlock";
 import { BudgetFieldBlock } from "../../cross-pipe/BudgetFieldBlock";

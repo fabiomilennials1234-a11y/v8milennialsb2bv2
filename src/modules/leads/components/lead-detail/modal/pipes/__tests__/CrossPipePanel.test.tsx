@@ -48,7 +48,7 @@ const pipeOpsPort = {
   usePipePropostaByLeadId: () => ({ data: null, isLoading: false }) as never,
 };
 
-vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/shared/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 
 const gatesMock = vi.fn(() => ({
   canAddToPipe: { allowed: true, isLoading: false },

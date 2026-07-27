@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { LeadScoreBadge } from "@/modules/leads";
 import { useLeadScoresMap } from "@/modules/leads";
 import { useToggleLeadAI } from "@/modules/leads";
-import { useLogLeadAction } from "@/modules/leads";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 // Badge de agendamento usa prop hasScheduledMessages passada pelo pipe pai

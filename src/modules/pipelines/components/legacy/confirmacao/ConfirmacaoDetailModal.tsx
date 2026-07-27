@@ -55,7 +55,7 @@ import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/modules/ident
 import { useUpdatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus, statusColumns } from "@/modules/pipelines/hooks/legacy/usePipeConfirmacao";
 import { useCreatePipeProposta } from "@/modules/pipelines/hooks/legacy/usePipePropostas";
 import { useLeadHistory } from "@/modules/leads";
-import { useLogLeadAction } from "@/modules/leads";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useDeleteLead } from "@/modules/leads";
 import { useResponsibleMembers } from "@/modules/identity";
 import { CompareceuModal } from "@/modules/leads";

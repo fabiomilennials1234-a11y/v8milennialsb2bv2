@@ -45,7 +45,7 @@ vi.mock("@/modules/leads/hooks/useLeadCustomFields", () => ({
   useSaveCustomFieldValue: () => ({ mutateAsync: saveSpy, isPending: false }),
 }));
 
-vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({
+vi.mock("@/shared/hooks/useLogLeadAction", () => ({
   useLogLeadAction: () => vi.fn(),
 }));
 

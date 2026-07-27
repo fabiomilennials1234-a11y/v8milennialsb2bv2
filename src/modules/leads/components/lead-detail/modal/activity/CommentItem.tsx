@@ -6,7 +6,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useDeleteLeadComment, useUpdateLeadComment } from "../../hooks/useLeadComments";
-import { useLogLeadAction } from "../../../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useAuth } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
 import { formatDistanceToNow } from "date-fns";
