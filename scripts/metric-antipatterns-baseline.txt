@@ -1,3 +1,4 @@
+20260101000000_baseline_prod_schema.sql
 20260311000000_get_ranking_data_rpc.sql
 20260314000000_get_ranking_data_add_goal_and_metas_rpc.sql
 20260319000002_analytics_commercial_rpc.sql

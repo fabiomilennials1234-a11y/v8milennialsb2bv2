@@ -89,7 +89,7 @@ BEGIN
     END;
     v_currency := COALESCE(NULLIF(upper(v_meta->>'currency'), ''), 'BRL');
     IF v_currency !~ '^[A-Z]{3}$' THEN v_currency := 'BRL'; END IF;
-    SELECT COALESCE(l.sale_responsible_id, l.closer_id), l.pre_sale_responsible_id
+    SELECT COALESCE(l.sale_responsible_id, l.closer_id), l.pre_sale_responsible_id -- metric-lint-allow: expressão herdada, preservada byte-a-byte pelo #1203 (que só troca o etiquetamento de revenue_stream). Trocar pela chave canônica muda atribuição de venda em prod e é dívida própria — ver #1285.
       INTO v_sale_resp, v_pre_resp
     FROM public.leads l WHERE l.id = NEW.lead_id AND l.organization_id = NEW.organization_id;
 
