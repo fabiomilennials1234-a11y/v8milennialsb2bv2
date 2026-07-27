@@ -1,5 +1,6 @@
 import { memo, useState } from "react";
 import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -63,7 +64,10 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
   // filtro de data pra todo o Comando. Origem é filtro local, ortogonal.
   const [origins, setOrigins] = useState<string[]>([]);
 
-  const { data, isLoading } = useFunnelHealth({ start: range.start, end: range.end }, origins);
+  const { data, isLoading, isError, error, refetch } = useFunnelHealth(
+    { start: range.start, end: range.end },
+    origins,
+  );
   const [openStage, setOpenStage] = useState<StageKey | null>(null);
   const { openLead } = useLeadSheet();
 
@@ -71,6 +75,23 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
   const originsLabel = origins
     .map((o) => ORIGIN_LABELS[o as keyof typeof ORIGIN_LABELS] ?? o)
     .join(" + ");
+
+  // Query falhou e não há dado em cache → mostra o erro. Antes caía no skeleton
+  // abaixo e a aba ficava carregando pra sempre: foi assim que um overload
+  // fantasma de get_funnel_health (erro 42725) virou tela morta e silenciosa.
+  if (isError && !data) {
+    return (
+      <div className="mt-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+        <p className="font-medium">Erro ao carregar a saúde do funil</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {error instanceof Error ? error.message : "Verifique a conexão e tente de novo."}
+        </p>
+        <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
+          Tentar de novo
+        </Button>
+      </div>
+    );
+  }
 
   if (isLoading || !data) {
     return (
@@ -119,6 +140,13 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
 
   return (
     <TooltipProvider delayDuration={150}>
+      {/* Falhou mas há dado anterior em cache (keepPreviousData): mantém a tela
+          e avisa que os números podem estar defasados. */}
+      {isError && (
+        <div className="mt-4 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-2.5 text-xs text-destructive">
+          Não foi possível atualizar os dados — mostrando o último resultado carregado.
+        </div>
+      )}
       <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
         <SaudeOriginFilter value={origins} onChange={setOrigins} />
       </div>
