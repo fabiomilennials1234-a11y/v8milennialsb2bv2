@@ -13,7 +13,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? 'github' : 'html',
   use: {
-    baseURL: 'http://localhost:8080',
+    baseURL: process.env.PW_BASE_URL || 'http://localhost:8080',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -29,7 +29,20 @@ export default defineConfig({
         storageState: authFile,
       },
       dependencies: ['setup'],
-      testIgnore: '**/auth.setup.ts',
+      // O harness de pixel é SEM-AUTH de propósito (roda no projeto 'pixel');
+      // não pode passar pelo setup/storageState do chromium.
+      testIgnore: ['**/auth.setup.ts', '**/tv-wall-pixel.spec.ts'],
+    },
+    {
+      // Harness de pixel da parede (#1254 acabamento): dev-only, /tv-wall-preview
+      // renderiza sem auth → SEM dependency 'setup' e SEM storageState. 1920x1080.
+      name: 'pixel',
+      testMatch: '**/tv-wall-pixel.spec.ts',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1920, height: 1080 },
+        storageState: undefined,
+      },
     },
   ],
   webServer: {

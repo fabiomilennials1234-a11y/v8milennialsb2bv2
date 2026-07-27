@@ -36,9 +36,11 @@ describe("tv-metric-format (spec §2.6b, §5.1/§5.2)", () => {
     expect(isEmptyReason(null)).toBe(false);
   });
 
-  it("moeda encurta para a parede a partir de mil/milhão", () => {
+  it("moeda encurta para a parede §2.6b (≥10 mil, 1 decimal)", () => {
     expect(formatMetricValue(1_312_840.55, "currency_brl")).toBe("R$ 1,3 mi");
-    expect(formatMetricValue(412_000, "currency_brl")).toBe("R$ 412 mil");
+    expect(formatMetricValue(412_000, "currency_brl")).toBe("R$ 412,0 mil");
+    expect(formatMetricValue(14_411.33, "currency_brl")).toBe("R$ 14,4 mil"); // o ticket do print do CTO
+    expect(formatMetricValue(9_999, "currency_brl")).toContain("9.999"); // <10 mil → cheio
     expect(formatMetricValue(850, "currency_brl")).toContain("850");
   });
 

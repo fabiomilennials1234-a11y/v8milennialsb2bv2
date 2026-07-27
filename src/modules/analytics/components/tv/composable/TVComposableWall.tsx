@@ -24,6 +24,8 @@ interface CatalogLabels {
   measure: Record<string, string>;
   recorte: Record<string, string>;
   renderer: Record<string, string>;
+  /** Razões NOMEADAS: chave `${num}|${den}` → label do catálogo ('Ticket médio'). #1254 acabamento §2.1. */
+  ratio: Record<string, string>;
 }
 
 /**
@@ -46,13 +48,19 @@ function buildEyebrow(w: DashboardWidgetSnapshot, labels: CatalogLabels): string
   }
 
   const m = w.measure;
-  const base =
-    m?.kind === "ratio"
-      ? // Razão: nomeia pelo par, que é o que o usuário montou.
-        `${labels.measure[m.num?.measure_id ?? ""] ?? m.num?.measure_id ?? ""} / ${
-          labels.measure[m.den?.measure_id ?? ""] ?? m.den?.measure_id ?? ""
-        }`
-      : labels.measure[m?.measure_id ?? ""] ?? m?.measure_id ?? "";
+  let base: string;
+  if (m?.kind === "ratio") {
+    // §2.1/§2.2: razão NOMEADA (preset) → label do catálogo ('Ticket médio').
+    // Razão ad-hoc → compõe com "por" ('Vendas por lead'). NUNCA "/", nunca id cru.
+    const num = m.num?.measure_id ?? "";
+    const den = m.den?.measure_id ?? "";
+    const named = labels.ratio[`${num}|${den}`];
+    base = named
+      ? named
+      : `${labels.measure[num] ?? num} por ${labels.measure[den] ?? den}`;
+  } else {
+    base = labels.measure[m?.measure_id ?? ""] ?? m?.measure_id ?? "";
+  }
 
   const eff = effectiveRecorte(w);
   const recorte = eff && eff !== "total" ? labels.recorte[eff] ?? eff : null;
@@ -79,10 +87,15 @@ export function TVComposableWall({ period = "month" as const }: { period?: "day"
     const measure: Record<string, string> = {};
     const recorte: Record<string, string> = {};
     const renderer: Record<string, string> = {};
+    const ratio: Record<string, string> = {};
     catalog?.measures?.forEach((m) => (measure[m.id] = m.label));
     catalog?.recortes?.forEach((r) => (recorte[r.id] = r.label));
     catalog?.renderers?.forEach((r) => (renderer[r.id] = r.label));
-    return { measure, recorte, renderer };
+    // Presets de razão: (num,den) → label nomeado do catálogo ('Ticket médio').
+    catalog?.ratios?.forEach((r) => {
+      if (r.num && r.den && r.label) ratio[`${r.num}|${r.den}`] = r.label;
+    });
+    return { measure, recorte, renderer, ratio };
   }, [catalog]);
 
   // Teto de densidade (§6.4). O excedente não é escondido em silêncio: o motor
@@ -137,7 +150,9 @@ export function TVComposableWall({ period = "month" as const }: { period?: "day"
               stream={(w.filters as { stream?: string } | undefined)?.stream}
               emptyReason={m?.empty_reason}
             >
-              {!errored && !isLegacy && (
+              {/* Corpo só p/ formatos com gráfico. 'number' (incl. progresso
+                  degradado) não passa children → WidgetFrame centra o valor (§1.1). */}
+              {!errored && !isLegacy && chartType !== "number" && (
                 <TVWidgetBody chartType={chartType} measure={m} formatId={valueFormat} styleVariant={w.style_variant} />
               )}
             </WidgetFrame>

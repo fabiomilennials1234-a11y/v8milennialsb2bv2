@@ -49,6 +49,7 @@ export function WidgetFrame({
 
   return (
     <div
+      data-testid="tv-card"
       className={cn(
         // Superfície SÓLIDA — sem blur (§2.6): a 3m o blur vira mancha.
         "flex h-full min-w-0 flex-col rounded-xl bg-card p-5",
@@ -62,6 +63,7 @@ export function WidgetFrame({
     >
       {/* ① Eyebrow — vem da configuração, não do dado: nunca precisa esperar. */}
       <div
+        data-testid="tv-eyebrow"
         className="shrink-0 truncate font-semibold uppercase text-muted-foreground"
         style={{ fontSize: "var(--tv-label)", letterSpacing: "0.08em" }}
         title={eyebrow}
@@ -69,31 +71,39 @@ export function WidgetFrame({
         {eyebrow}
       </div>
 
-      {/* ② Valor de cabeça + delta, colados. Delta sem o número que ele modifica é ruído. */}
-      <div className="mt-2 flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-        {loading ? (
-          // Só o valor pulsa. SEM shimmer — o sweep a 3m lê como flicker.
-          // Regra dura: nunca mostrar 0 durante carregamento. Zero é um dado.
-          <span
-            aria-hidden
-            className="tv-value-loading inline-block rounded bg-muted"
-            style={{ width: "4ch", height: "0.8em", fontSize: typeScaleForWeight(weight) }}
-          />
-        ) : (
-          <span
-            className="min-w-0 truncate font-semibold leading-none text-foreground"
-            style={{ fontSize: typeScaleForWeight(weight) }}
-          >
-            {/* empty_reason do motor vence o número: 0 com no_rows é ausência,
-                não dado (AC #7). resolveHeadValue devolve null → formata como —. */}
-            {formatMetricValue(errored ? null : resolveHeadValue(value, provenance.emptyReason), formatId)}
-          </span>
-        )}
-        {!loading && !errored && delta}
+      {/* ②③ Valor de cabeça CENTRALIZADO verticalmente entre o eyebrow e a
+          proveniência (§1.1): o bloco vive numa região flex-1 com justify-center.
+          Sem corpo (número/escalar), o valor fica no CENTRO óptico da célula — mata
+          o vão de 70% do card alto. Com corpo (gráfico), o content flex-1 preenche
+          e o valor sobe naturalmente. Delta colado ao valor. */}
+      <div className="flex min-h-0 flex-1 flex-col justify-center">
+        <div className="flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          {loading ? (
+            // Só o valor pulsa. SEM shimmer — o sweep a 3m lê como flicker.
+            <span
+              aria-hidden
+              className="tv-value-loading inline-block rounded bg-muted"
+              style={{ width: "4ch", height: "0.8em", fontSize: typeScaleForWeight(weight) }}
+            />
+          ) : (
+            // Número NUNCA reticencia nem quebra linha (§3.2): sem `truncate`,
+            // `whitespace-nowrap`. A moeda compacta (§2.6b) garante que caiba.
+            <span
+              data-testid="tv-value"
+              className="min-w-0 whitespace-nowrap font-semibold leading-none text-foreground"
+              style={{ fontSize: typeScaleForWeight(weight) }}
+            >
+              {/* empty_reason do motor vence o número: 0 com no_rows é ausência,
+                  não dado (AC #7). resolveHeadValue devolve null → formata como —. */}
+              {formatMetricValue(errored ? null : resolveHeadValue(value, provenance.emptyReason), formatId)}
+            </span>
+          )}
+          {!loading && !errored && delta}
+        </div>
+        {/* Corpo — só p/ formatos com gráfico. `children` ausente (número) → região
+            fica só com o valor → justify-center centra. */}
+        {children ? <div data-testid="tv-content" className="mt-3 min-h-0 flex-1 overflow-hidden">{children}</div> : null}
       </div>
-
-      {/* ③ Corpo — varia entre os 7 formatos. Vazio nesta fatia (casca). */}
-      {children ? <div className="mt-3 min-h-0 flex-1 overflow-hidden">{children}</div> : <div className="flex-1" />}
 
       {/* ④ Proveniência — obrigatória, sempre visível. */}
       <ProvenanceLine

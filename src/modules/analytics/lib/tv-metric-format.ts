@@ -22,9 +22,13 @@ const nf = (opts: Intl.NumberFormatOptions) => new Intl.NumberFormat("pt-BR", op
  * Abaixo de 1.000 mantém o valor cheio — encurtar aí perde precisão sem ganhar leitura.
  */
 function formatCurrencyForWall(value: number): string {
+  // Widgets §2.6b: moeda compacta a partir de ≥10 mil, 1 decimal (`R$ 14,4 mil`).
+  // Antes cortava em 1.000 com 0 decimais (`R$ 14 mil`) — divergência da regra
+  // escrita que o Vitral apontou (fonte única de formatação tem que bater c/ spec).
   const abs = Math.abs(value);
-  if (abs >= 1_000_000) return `R$ ${nf({ maximumFractionDigits: 1 }).format(value / 1_000_000)} mi`;
-  if (abs >= 1_000) return `R$ ${nf({ maximumFractionDigits: 0 }).format(value / 1_000)} mil`;
+  const oneDec = { minimumFractionDigits: 1, maximumFractionDigits: 1 };
+  if (abs >= 1_000_000) return `R$ ${nf(oneDec).format(value / 1_000_000)} mi`;
+  if (abs >= 10_000) return `R$ ${nf(oneDec).format(value / 1_000)} mil`;
   return nf({ style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(value);
 }
 
