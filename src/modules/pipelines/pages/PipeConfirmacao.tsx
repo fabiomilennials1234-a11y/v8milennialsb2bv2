@@ -47,7 +47,7 @@ import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportS
 import { useConfirmacaoOverdueDays } from "@/modules/identity";
 import { format, isToday, startOfWeek, endOfWeek, isPast, startOfDay, endOfDay, addDays, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useLogLeadAction } from "@/modules/leads";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";

@@ -5,7 +5,7 @@ import { useLeadSheet } from "./hooks/useLeadSheet";
 import { useLeadDetail } from "./hooks/useLeadDetail";
 import type { DrawerVariant } from "./legacy/drawer-variant";
 import { useToggleLeadAI, useDeleteLead } from "../../hooks/useLeads";
-import { useLogLeadAction } from "../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { LeadDetailHeader } from "./LeadDetailHeader";

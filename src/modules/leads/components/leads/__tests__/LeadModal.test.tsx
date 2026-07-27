@@ -48,7 +48,7 @@ vi.mock("@/modules/leads/hooks/useLeads", () => ({
   useUpdateLead: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }),
 }));
 
-vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({
+vi.mock("@/shared/hooks/useLogLeadAction", () => ({
   useLogLeadAction: () => vi.fn(),
 }));
 

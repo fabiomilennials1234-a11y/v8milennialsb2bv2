@@ -56,7 +56,7 @@ import { type PipePropostasStatus, propostasStatusColumns as statusColumns } fro
 import { usePipeOps } from "../../../pipe-ops";
 import { useActiveProducts } from "@/modules/carteira/hooks/useProducts";
 import { useTeamMembers } from "@/modules/identity";
-import { useLogLeadAction } from "../../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useDeleteLead } from "../../../hooks/useLeads";
 import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
 import { TinyErpOrderStatus } from "@/modules/carteira/components/proposal/TinyErpOrderStatus";

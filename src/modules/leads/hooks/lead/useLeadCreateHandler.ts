@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreateLeadFromWhatsApp } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { useUpdateLead } from "../useLeads";
-import { useLogLeadAction } from "../useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import type { CreateLeadPayload } from "../../components/lead/create/LeadCreateForm";
 
 interface UseLeadCreateHandlerOptions {

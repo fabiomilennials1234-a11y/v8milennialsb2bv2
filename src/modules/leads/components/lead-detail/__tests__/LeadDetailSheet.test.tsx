@@ -37,7 +37,7 @@ vi.mock("../../../hooks/useLeads", () => ({
   useDeleteLead: () => ({ mutateAsync: vi.fn() }),
 }));
 
-vi.mock("../../../hooks/useLogLeadAction", () => ({
+vi.mock("@/shared/hooks/useLogLeadAction", () => ({
   useLogLeadAction: () => vi.fn(),
 }));
 

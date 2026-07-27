@@ -59,8 +59,10 @@ export {
 } from "./hooks/useWorkflowTemplates";
 
 // Templates-base de sistema por funil (auto-gerados das pastas Funil A/ e Funil B/).
-// Consumidos por `identity` para semear automações ao criar uma org com modelo de funil.
-export { FUNIL_A_TEMPLATES, FUNIL_B_TEMPLATES } from "./lib/funnelTemplates";
+// Mudaram de casa: viraram `@/contracts/workflows/funnel-templates`. `identity`
+// os consome para semear automações ao criar uma org, e importá-los pelo barril
+// daqui obrigava identity a arrastar os hooks de workflows — que por sua vez
+// dependem de identity, fechando o ciclo. Não reexportamos de propósito.
 
 // ────────────────────────────────────────────────────────────────────────
 // Hooks — Stage <-> Workflow bindings (cross-module from pipelines/campaigns)

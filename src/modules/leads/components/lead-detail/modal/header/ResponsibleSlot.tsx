@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Input } from "@/components/ui/input";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useUpdateLead } from "../../../../hooks/useLeads";
-import { useLogLeadAction } from "../../../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useOptimisticConflictHandler } from "@/shared/hooks/useOptimisticConflictHandler";
 import { useLeadActionGates } from "../../hooks/useLeadActionGates";
 import { toast } from "sonner";

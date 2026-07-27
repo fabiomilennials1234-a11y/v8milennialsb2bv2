@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { InfoFieldRow } from "./InfoFieldRow";
 import { LEAD_INFO_FIELDS } from "./info-field-config";
 import { useUpdateLead } from "../../../../hooks/useLeads";
-import { useLogLeadAction } from "../../../../hooks/useLogLeadAction";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLeadCustomFields, useLeadCustomFieldValues, useSaveCustomFieldValue } from "../../../../hooks/useLeadCustomFields";
 import { Tag as TagIcon } from "lucide-react";

@@ -8,7 +8,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
-import { FUNIL_A_TEMPLATES, FUNIL_B_TEMPLATES } from "@/modules/workflows";
+import { FUNIL_A_TEMPLATES, FUNIL_B_TEMPLATES } from "@/contracts/workflows/funnel-templates";
 import { toast } from "sonner";
 
 /**
@@ -89,7 +89,7 @@ async function cloneFunnelStages(sourceOrgId: string, targetOrgId: string) {
 
 /**
  * Automações-base de cada funil — os mesmos templates de sistema exibidos em
- * Automações → Templates. Fonte única: `workflows/lib/funnelTemplates.ts`
+ * Automações → Templates. Fonte única: `@/contracts/workflows/funnel-templates`
  * (auto-gerado das pastas `Funil A/` e `Funil B/`).
  */
 const FUNNEL_WORKFLOW_TEMPLATES: Record<

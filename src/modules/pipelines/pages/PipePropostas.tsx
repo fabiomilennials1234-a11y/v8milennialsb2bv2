@@ -78,7 +78,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ProductAnalyticsChart } from "@/modules/carteira/components/proposal/ProductAnalyticsChart";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useLogLeadAction } from "@/modules/leads";
+import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/modules/identity";

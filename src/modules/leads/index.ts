@@ -129,8 +129,12 @@ export { useBatchedLeadMetrics } from "./hooks/useBatchedLeadMetrics";
 export type { LeadMetrics } from "./hooks/useBatchedLeadMetrics";
 
 // ── Hooks: action logging ──────────────────────────────────────────────────
-export { useLogLeadAction, logLeadActionDirect } from "./hooks/useLogLeadAction";
-export type { LeadActionType, LeadActionTier } from "./hooks/useLogLeadAction";
+// Mudou de casa: `useLogLeadAction` virou `@/shared/hooks/useLogLeadAction`.
+// Não depende de nada de `leads` (só supabase, analytics e identity) e é usado
+// por 4 bounded contexts — morar aqui obrigava communication, engagement e
+// pipelines a importarem o barril inteiro de leads só pra registrar uma ação,
+// fechando ciclos entre módulos. Importe do caminho novo; não reexportamos
+// daqui de propósito, pra não deixar duas portas pro mesmo hook.
 
 // ── Hooks: Quick Blast (Disparo engine — reused by the pipelines Disparo wizard)
 export { useQuickBlast, useQuickBlastPreview } from "./hooks/useQuickBlast";
