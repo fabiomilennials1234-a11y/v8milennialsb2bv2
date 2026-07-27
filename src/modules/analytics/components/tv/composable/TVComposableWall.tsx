@@ -26,7 +26,18 @@ interface CatalogLabels {
   renderer: Record<string, string>;
 }
 
-/** Eyebrow = a pergunta. Gerada de medida + recorte, com override curto opcional. */
+/**
+ * Recorte EFETIVO do widget (#1254 S2): o motor estampa `measure.recorte`, que
+ * pode diferir do `recorte_id` pedido quando ele DEGRADA (etapa-sem-pipeline →
+ * total). O front reporta a decisão do motor, não a intenção do widget — senão a
+ * tela mostra "por Etapa" sobre um valor que é o total de N funis (mentira).
+ */
+function effectiveRecorte(w: DashboardWidgetSnapshot): string | null | undefined {
+  const fromEngine = (w.measure as { recorte?: string | null } | null | undefined)?.recorte;
+  return fromEngine ?? w.recorte_id;
+}
+
+/** Eyebrow = a pergunta. Gerada de medida + recorte EFETIVO, com override curto. */
 function buildEyebrow(w: DashboardWidgetSnapshot, labels: CatalogLabels): string {
   if (w.eyebrow_override) return w.eyebrow_override;
 
@@ -43,7 +54,8 @@ function buildEyebrow(w: DashboardWidgetSnapshot, labels: CatalogLabels): string
         }`
       : labels.measure[m?.measure_id ?? ""] ?? m?.measure_id ?? "";
 
-  const recorte = w.recorte_id && w.recorte_id !== "total" ? labels.recorte[w.recorte_id] ?? w.recorte_id : null;
+  const eff = effectiveRecorte(w);
+  const recorte = eff && eff !== "total" ? labels.recorte[eff] ?? eff : null;
   return recorte ? `${base} por ${recorte}` : base;
 }
 
@@ -95,9 +107,10 @@ export function TVComposableWall({ period = "month" as const }: { period?: "day"
         const isLegacy = w.measure_kind === "legacy";
         const m = w.measure;
 
-        // Estilo (#1253): widget_style escolhido VENCE; null → deriva do recorte.
-        // Célula legada remanescente (multi-medida, v2) segue sem corpo.
-        const chartType = isLegacy ? "number" : resolveChartType(w.recorte_id, w.widget_style);
+        // Estilo (#1253): widget_style escolhido VENCE; null → deriva do recorte
+        // EFETIVO (#1254 — se o motor degradou etapa→total, a derivação vira
+        // 'number', não 'bar' de corpo vazio). Legado (multi-medida, v2) sem corpo.
+        const chartType = isLegacy ? "number" : resolveChartType(effectiveRecorte(w), w.widget_style);
         // value_format ?? format_id enquanto durar o EXPAND (#1253); DROP é o S7.
         const valueFormat = w.value_format ?? w.format_id;
         // Valor de cabeça: escalar do motor, ou soma da série (§1② — todo formato
