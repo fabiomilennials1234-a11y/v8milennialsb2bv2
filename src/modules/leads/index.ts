@@ -216,6 +216,9 @@ export {
   useLeadSheet,
 } from "./components/lead-detail";
 export { LeadDetailMobileTabs } from "./components/lead-detail/modal/LeadDetailMobileTabs";
+// Slots de responsável/qualificação — reusados fora do modal (ex.: painel do chat).
+export { ResponsibleSlot } from "./components/lead-detail/modal/header/ResponsibleSlot";
+export { QualificationSlot } from "./components/lead-detail/modal/header/QualificationSlot";
 
 // ── Components: card / modal / score badge ─────────────────────────────────
 export {
