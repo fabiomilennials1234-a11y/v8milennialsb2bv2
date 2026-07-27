@@ -61,6 +61,7 @@ const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Dupl
 const Configuracoes = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Configuracoes")));
 const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
 const TvRenderersDemo = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TvRenderersDemo")));
+const TvWallPreview = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TvWallPreview")));
 const DisparosPanel = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/DisparosPanel")));
 const NovoDisparo = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/NovoDisparo")));
 const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));
@@ -256,6 +257,10 @@ function AppRoutes() {
           dev-only (a página nega em produção): AID DE QA para validar leitura a
           3m sem sessão de banco. Remover antes do merge (ou o Cais decide). */}
       <Route path="/tv-renderers-demo" element={<TvRenderersDemo />} />
+      {/* #1254 acabamento — HARNESS DE PIXEL: a TVComposableWall REAL montada com
+          snapshot-fixture (grid+WidgetFrame+buildEyebrow reais). Dev-only (nega em
+          prod). Prova os 3 defeitos de parede que as demos de renderer perdiam. */}
+      <Route path="/tv-wall-preview" element={<TvWallPreview />} />
       {/* Área do Gestor (ADR-0021 §5): hub do Gestor de Portfólio. GestorRoute
           nega não-gestor; requireOrganization=false porque o Gestor não tem
           team_member/org ao chegar no hub. */}

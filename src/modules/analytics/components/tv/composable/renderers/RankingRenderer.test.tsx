@@ -25,8 +25,8 @@ describe("RankingRenderer (#1253 §2.1 #4)", () => {
     // Posições 1,2,3 presentes.
     expect(screen.getByText("1")).toBeTruthy();
     expect(screen.getByText("3")).toBeTruthy();
-    // Valor do líder formatado (R$ 50 mil).
-    expect(screen.getByText(/R\$\s?50\s?mil/)).toBeTruthy();
+    // Valor do líder formatado §2.6b (R$ 50,0 mil).
+    expect(screen.getByText(/R\$\s?50,0\s?mil/)).toBeTruthy();
   });
 
   it("lista: mostra até 6, numerada", () => {
