@@ -78,8 +78,8 @@ Aguarde o build terminar (pode levar alguns minutos). Quando o status ficar verd
 
 ## Atualizar o app (novo deploy)
 
-- **Manual:** no EasyPanel, abra o App e clique em **Redeploy** / **Deploy**.
-- **Automático:** se tiver configurado **webhook do GitHub** no EasyPanel, cada `git push` no branch configurado pode disparar um novo deploy.
+- **Manual:** no EasyPanel, abra o App e clique em **Redeploy** / **Deploy**. **← É ASSIM QUE ESTE REPO FUNCIONA.**
+- **Automático:** *opção genérica do EasyPanel* — se houver **webhook do GitHub** configurado, cada `git push` dispara deploy. **Este repo NÃO usa isso.** O deploy é **desacoplado de propósito**: `push main` só constrói/publica a imagem no ghcr.io; subir prod é o Redeploy manual acima. Fonte: `.github/workflows/docker-image.yml:56-60`. Não confundir a opção genérica com o setup real.
 
 ---
 

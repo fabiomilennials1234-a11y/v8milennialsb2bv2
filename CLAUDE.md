@@ -77,27 +77,31 @@ npm run lint             # ESLint
 
 Deploy edge functions: `supabase functions deploy <fn> --project-ref <ref>`
 - Prod: `jsjsmuncfkbsbzqzqhfq`
-- Frontend: push main → builds Docker image em ghcr.io (`:latest` + `:sha-<short>`) → **EasyPanel (VPS Hostinger) puxa `:latest` automaticamente**. Merge em main = deploy de frontend em prod. Edge functions + migrations continuam manuais.
+- Frontend: push main → **constrói e publica** a imagem Docker em ghcr.io (`:latest` + `:sha-<short>`). **O deploy NÃO é automático: merge em main NÃO deploya frontend.** Pra subir prod, **Redeploy MANUAL na UI do EasyPanel** (ele puxa `:latest` do ghcr.io). O desacoplamento é **INTENCIONAL** — evita push acidental de prod em merge de rotina; **não é bug, não "conserte"**. Fonte: `.github/workflows/docker-image.yml:56-60` (comentário explícito) + `docs/DEPLOY_EASYPANEL.md`. Edge functions + migrations também manuais.
+  > Correção 2026-07-27: a versão anterior afirmava "EasyPanel puxa `:latest` automaticamente / merge = deploy" — **falso**, custou meses (4 memórias registram "falta redeploy front EasyPanel" como pendência recorrente, sempre a mesma causa redescoberta). Doc que mente é pior que doc que falta.
 
 ## Ambientes — servidor dev APOSENTADO (decisão CTO 2026-07-22)
 
 O projeto dev `bcfadphgsibjzivtbjvc` está **aposentado**. Não use, não deploye, não referencie. Estava 404 migrations atrás de prod e o token de acesso nem o enxerga.
 
-**Padrão novo: branch efêmera do Supabase a partir de prod.**
-
-```bash
-# criar (via MCP create_branch ou CLI) → testar → SEMPRE encerrar
-```
+**Ambiente de validação CANÔNICO (decisão CTO 2026-07-27): branch efêmera de prod. Docker FORA.** Runbook completo: `.specs/project/runbook-validacao-local.md`.
 
 Regras, sem exceção:
-1. **Branch é descartável.** Criou pra testar, terminou o teste, **encerra na hora**. Custo é **$0.01344/hora** (~$9,70/mês se esquecer de pé). Branch órfã = cobrança à toa.
-2. **Nunca deixe branch viva entre sessões.** Se precisar de novo amanhã, cria de novo — é barato criar, caro esquecer.
-3. **Sempre confira `list_branches` antes de criar** — pode já ter uma esquecida.
-4. Prod continua sendo **botão do humano**. Branch é pra validar antes, não pra virar ambiente permanente.
+1. **Branch é descartável.** Criou pra testar, terminou o teste, **encerra na hora** (`delete_branch`). Custo **$0.01344/hora**. Branch órfã = cobrança à toa.
+2. **Nunca deixe branch viva entre sessões.** Cria de novo amanhã — barato criar, caro esquecer.
+3. **`list_branches` antes de criar** — nunca duas.
+4. Prod é **botão do humano**. Branch valida antes; não vira ambiente permanente.
 
-⚠️ **BLOQUEIO ATIVO — leia antes de tentar.** Branch replaya as migrations do repo do zero, e **o repo não replaya**: são 840 migrations e o replay morre em jan/2026. A única branch existente (`main`) está em `MIGRATIONS_FAILED` desde 2026-03-11 por isso. Criar branch hoje falha do mesmo jeito.
+✅ **BASELINE FEITO (#1233, 2026-07-23) — o "bloqueio 840" morreu.** Ledger de prod reconciliado = **18 linhas** (baseline + ativas, bate 1:1 com o repo); as 840 antigas em `supabase/migrations/archive/` (não reaplicar). O texto anterior ("BLOQUEIO ATIVO, MIGRATIONS_FAILED, baseline não feito") era **stale e falso** — mesmo veneno do #1212/#1223.
 
-**Pré-requisito pra destravar (uma vez só):** baseline do histórico — `supabase db dump` do schema de prod → vira migration `0001` → as 840 antigas movidas pra `supabase/migrations/archive/`. Depois disso branch sobe em segundos e espelha prod. Enquanto o baseline não for feito, **não existe ambiente de validação** e mudança de risco vai pra prod com rollback engatilhado e validação imediata.
+⚠️ **A branch precisa de `db push` do repo, não só `create_branch`:** a linha do baseline no ledger é **marcador de 189 chars** (não o dump), então `create_branch` replaya sobre schema vazio; o `db push` do repo aplica o baseline real (1.8 MB). Passo-a-passo no runbook.
+
+### 🔒 GUARDA MECÂNICA de escrita — `db push` NÃO é seguro na mão
+Um `db push` com URL/ref errado escreve em PROD (já aconteceu). Defesa por desenho, não disciplina:
+- **Checkout NÃO-LINKADO por padrão.** Provado: `supabase db push` bare → `Cannot find project ref`. Linkar = ato deliberado e temporário, desfeito ao fim. **1ª linha.**
+- **Toda escrita via `scripts/db-push-branch.sh`** — recusa a URL se contiver o ref de prod (`jsjsmuncfkbsbzqzqhfq`), roda `--dry-run`, exige confirmação, aborta se o push tocar dado real ("1 org promovida").
+- **MCP Supabase em `read_only`** — só leitura + `create/list/delete_branch`; escrita (`execute_sql`/`apply_migration`) negada. Escrita de QA = `psql` na branch (`supabase/qa-seed/`), nunca MCP.
+- **Migration = só schema** (guarda F4): `DO`/backfill de dado de cliente não entra no apply; assim URL errada vira erro de schema recuperável, não mudança de dado.
 
 Org Milennials: `6030520a-2ca7-477d-be89-55758e2cd808`
 
