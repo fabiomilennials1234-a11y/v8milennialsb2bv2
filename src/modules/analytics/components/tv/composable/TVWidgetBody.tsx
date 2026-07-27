@@ -3,6 +3,7 @@ import { LineRenderer } from "./renderers/LineRenderer";
 import { DonutRenderer } from "./renderers/DonutRenderer";
 import { RankingRenderer } from "./renderers/RankingRenderer";
 import { ProgressRenderer } from "./renderers/ProgressRenderer";
+import { FunnelRenderer } from "./renderers/FunnelRenderer";
 import { seriesState, headValueFromMeasure, type MetricSeriesPoint, type RawMeasure } from "@/modules/analytics/lib/tv-series";
 import type { TvChartType } from "@/modules/analytics/lib/tv-chart-type";
 
@@ -55,8 +56,12 @@ export function TVWidgetBody({ chartType, measure, formatId, styleVariant }: TVW
       return <DonutRenderer series={series} formatId={formatId} />;
     case "ranking":
       return <RankingRenderer series={series} formatId={formatId} variant={styleVariant} />;
+    case "funnel":
+      // Funil PRESERVA a ordem de estágio da série (não re-ordena por volume).
+      // A ordenação por estágio é do dado/motor (map §1: "ordem de estágio no
+      // motor, hoje val-desc") — deferida; o renderer honra a ordem recebida.
+      return <FunnelRenderer series={series} formatId={formatId} variant={styleVariant} />;
     default:
-      // funnel (S5) e desconhecidos: sem corpo por ora.
       return null;
   }
 }

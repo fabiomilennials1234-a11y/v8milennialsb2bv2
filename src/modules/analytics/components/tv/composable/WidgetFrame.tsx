@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { ProvenanceLine } from "./ProvenanceLine";
 import { formatMetricValue, resolveHeadValue, typeScaleForWeight } from "@/modules/analytics/lib/tv-metric-format";
+import { useFitToWidth } from "@/modules/analytics/lib/use-fit-to-width";
 import type { ProvenanceInput } from "@/modules/analytics/lib/tv-provenance";
 
 export type WidgetWeight = "hero" | "primary" | "secondary";
@@ -46,6 +47,8 @@ export function WidgetFrame({
 }: WidgetFrameProps) {
   const errored = state === "error";
   const loading = state === "loading";
+  // fit-to-width (§3.3): o valor encolhe até caber, piso 36px, nunca reticência/quebra.
+  const valueRef = useFitToWidth<HTMLSpanElement>(typeScaleForWeight(weight));
 
   return (
     <div
@@ -89,9 +92,9 @@ export function WidgetFrame({
             // Número NUNCA reticencia nem quebra linha (§3.2): sem `truncate`,
             // `whitespace-nowrap`. A moeda compacta (§2.6b) garante que caiba.
             <span
+              ref={valueRef}
               data-testid="tv-value"
               className="min-w-0 whitespace-nowrap font-semibold leading-none text-foreground"
-              style={{ fontSize: typeScaleForWeight(weight) }}
             >
               {/* empty_reason do motor vence o número: 0 com no_rows é ausência,
                   não dado (AC #7). resolveHeadValue devolve null → formata como —. */}

@@ -128,7 +128,15 @@ export function TVComposableWall({ period = "month" as const }: { period?: "day"
         const valueFormat = w.value_format ?? w.format_id;
         // Valor de cabeça: escalar do motor, ou soma da série (§1② — todo formato
         // tem valor de cabeça). empty_reason é honrado no WidgetFrame.
-        const headValue = isLegacy ? null : headValueFromMeasure(m);
+        // FUNIL é NÃO-ADITIVO (#1293 volta 1): somar etapas não significa nada — o
+        // mesmo lead passa por várias. O head é a ENTRADA (topo = 1ª etapa), não a
+        // soma. Remendo local; a cura definitiva é agregação declarada no catálogo
+        // (sum/avg/first/none) do #1249 — quando aquela fatia rodar, isto sai daqui.
+        const headValue = isLegacy
+          ? null
+          : chartType === "funnel"
+            ? (Array.isArray(m?.series) && m!.series!.length > 0 ? (m!.series![0].value ?? null) : null)
+            : headValueFromMeasure(m);
 
         return (
           <TVGridCell
