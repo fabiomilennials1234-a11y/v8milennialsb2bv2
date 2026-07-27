@@ -298,6 +298,36 @@
     --tv-value-sm: clamp(1.5rem,    1.875vw, 4.5rem);  /* 24 →  36 @1920 →  72 @4K */
     --tv-label:    clamp(0.75rem,   0.83vw,  2rem);    /* 12 →  16 @1920 →  32 @4K */
     --tv-meta:     clamp(0.6875rem, 0.73vw,  1.75rem); /* 11 →  14 @1920 →  28 @4K */
+
+    /* ─── Séries de gráfico (#1218, spec §2.5) ──────────────────────────────
+       Duas rampas, escolhidas pela NATUREZA do dado, não pelo gosto. */
+
+    /* ORDINAL — barra, funil, ranking. O dado tem ordem → a cor tem ordem.
+       Mono-gold decrescente em L e S; a 3m lê como "intensidade". */
+    --metric-ramp-1: 47 100% 50%;
+    --metric-ramp-2: 45  78% 44%;
+    --metric-ramp-3: 42  56% 38%;
+    --metric-ramp-4: 40  36% 32%;
+    --metric-ramp-5: 38  20% 27%;
+
+    /* CATEGÓRICO — donut por origem/tag/produto/stream. Sem ordem → hues
+       distintos. Redefinição consciente de --chart-* DENTRO do escopo TV: no
+       app --chart-2 é literalmente --success e --chart-4 ~ --destructive, o que
+       pintaria categoria de verde-"bom"/vermelho-"ruim" sem o dado dizer isso
+       (bug de sistema pré-existente, fora desta fatia — só corrijo aqui dentro).
+       Evita 142° (success) e 0° (destructive). */
+    --chart-1: 47 100% 50%;   /* gold      */
+    --chart-2: 205 90% 60%;   /* azure     */
+    --chart-3: 271 65% 68%;   /* violeta   */
+    --chart-4: 25  85% 58%;   /* âmbar-laranja */
+    --chart-5: 190 70% 52%;   /* teal      */
+
+    /* ─── Motion (#1218, spec §2.7) — uma curva só, não uma terceira variante. */
+    --tv-ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+    --tv-dur-instant: 50ms;
+    --tv-dur-fast:    150ms;
+    --tv-dur-base:    250ms;
+    --tv-dur-slow:    400ms;
   }
 
   /* Carregamento de valor na parede (#1207, spec §5.1).

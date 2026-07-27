@@ -139,5 +139,12 @@ export * from "./lib/tv-provenance";
 export * from "./lib/tv-density";
 export { WidgetFrame } from "./components/tv/composable/WidgetFrame";
 export { TVGrid, TVGridCell } from "./components/tv/composable/TVGrid";
+// Renderers (#1218): barra, linha, donut + seletor de corpo.
+export * from "./lib/tv-series";
+export * from "./lib/tv-chart-type";
+export { TVWidgetBody } from "./components/tv/composable/TVWidgetBody";
+export { BarRenderer } from "./components/tv/composable/renderers/BarRenderer";
+export { LineRenderer } from "./components/tv/composable/renderers/LineRenderer";
+export { DonutRenderer } from "./components/tv/composable/renderers/DonutRenderer";
 export { TVComposableWall } from "./components/tv/composable/TVComposableWall";
 export { TVComposableShell } from "./components/tv/composable/TVComposableShell";

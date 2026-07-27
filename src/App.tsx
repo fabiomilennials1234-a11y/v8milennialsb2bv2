@@ -60,6 +60,7 @@ const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash
 const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
 const Configuracoes = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Configuracoes")));
 const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
+const TvRenderersDemo = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TvRenderersDemo")));
 const DisparosPanel = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/DisparosPanel")));
 const NovoDisparo = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/NovoDisparo")));
 const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));
@@ -251,6 +252,10 @@ function AppRoutes() {
       {/* #1223 — calibração da escala tipográfica da TV. Pública de propósito:
           é instrumento de medição com valores fictícios, não expõe dado algum. */}
       <Route path="/tv-type-scale" element={<TvTypeScale />} />
+      {/* #1218 — demo dos renderers (barra/linha/donut) com fixtures. Pública e
+          dev-only (a página nega em produção): AID DE QA para validar leitura a
+          3m sem sessão de banco. Remover antes do merge (ou o Cais decide). */}
+      <Route path="/tv-renderers-demo" element={<TvRenderersDemo />} />
       {/* Área do Gestor (ADR-0021 §5): hub do Gestor de Portfólio. GestorRoute
           nega não-gestor; requireOrganization=false porque o Gestor não tem
           team_member/org ao chegar no hub. */}
