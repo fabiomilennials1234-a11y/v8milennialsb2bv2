@@ -40,6 +40,7 @@ import {
   POISON_DROP_LOG_SAMPLE,
 } from "./poison-denylist.ts";
 import { extractQuotedText } from "./quoted-text.ts";
+import { extractInteractiveSelection } from "./interactive-reply.ts";
 
 // ============================================================================
 // Config
@@ -425,25 +426,14 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
   };
   const messageType = MESSAGE_TYPE_MAP[rawType] ?? rawType;
 
-  // Interactive menu responses — extract selected choice to the content
-  // column so downstream (agent-message) sees the choice as if it were
-  // a plain text reply from the lead.
-  const isButtonResponse =
-    messageType === "buttonResponse" ||
-    messageType === "buttonResponseMessage";
-  const isListResponse =
-    messageType === "listResponse" || messageType === "listResponseMessage";
-
+  // Interactive menu responses — extract selected choice to the content column
+  // so downstream (agent-message) sees the choice as if it were a plain text
+  // reply. Uazapi manda essa resposta como type:"text" + text:"" com a escolha
+  // em content.selectedDisplayText / buttonOrListid — ver extractInteractiveSelection.
   let content = data.text ?? data.caption ?? data.body ?? data.content?.text ?? null;
-  if ((isButtonResponse || isListResponse) && !content) {
-    content =
-      data.selected ??
-      data.selectedDisplayText ??
-      data.selectedButtonId ??
-      data.selectedRowId ??
-      data.buttonResponse?.selectedDisplayText ??
-      data.listResponse?.title ??
-      null;
+  if (!content || (typeof content === "string" && !content.trim())) {
+    const selection = extractInteractiveSelection(data);
+    if (selection) content = selection;
   }
   if (messageType === "location" && !content) {
     const lat = data.degreesLatitude ?? data.latitude ?? data.content?.degreesLatitude;
