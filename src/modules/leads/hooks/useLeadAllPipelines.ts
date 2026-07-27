@@ -13,7 +13,7 @@ export interface StandardPipelineStatus {
   pipeId: string | null;
   currentStage: string | null;
   currentStageLabel: string | null;
-  stages: { id: string; label: string; color: string }[];
+  stages: { id: string; label: string; color: string; role?: string | null }[];
 }
 
 export interface CustomPipelineStatus {
@@ -25,7 +25,7 @@ export interface CustomPipelineStatus {
   entryId: string | null;
   currentStageId: string | null;
   currentStageName: string | null;
-  stages: { id: string; name: string; color: string; position: number }[];
+  stages: { id: string; name: string; color: string; position: number; role?: string | null }[];
 }
 
 export type PipelineStatus = StandardPipelineStatus | CustomPipelineStatus;
@@ -69,7 +69,7 @@ export function useLeadAllPipelines(leadId: string | null) {
           .eq("organization_id", orgId),
         supabase
           .from("pipeline_stages")
-          .select("pipeline_type, stage_key, name, color, position")
+          .select("pipeline_type, stage_key, name, color, position, stage_role")
           .eq("organization_id", orgId)
           .eq("is_active", true)
           .order("position", { ascending: true }),
@@ -79,7 +79,7 @@ export function useLeadAllPipelines(leadId: string | null) {
           .eq("is_active", true),
         supabase
           .from("custom_pipeline_stages")
-          .select("id, pipeline_id, name, color, position, stage_key")
+          .select("id, pipeline_id, name, color, position, stage_key, stage_role")
           .eq("organization_id", orgId)
           .eq("is_active", true)
           .order("position", { ascending: true }),
@@ -96,10 +96,10 @@ export function useLeadAllPipelines(leadId: string | null) {
       const pipelines = (allPipelines ?? []) as { id: string; slug: string; type: string; name: string; color: string; icon: string }[];
 
       // Build stage lookup
-      const stagesByDbType = new Map<string, { id: string; label: string; color: string }[]>();
+      const stagesByDbType = new Map<string, { id: string; label: string; color: string; role: string | null }[]>();
       (dynamicStages || []).forEach((s) => {
         const arr = stagesByDbType.get(s.pipeline_type) || [];
-        arr.push({ id: s.stage_key, label: s.name, color: s.color || "#64748b" });
+        arr.push({ id: s.stage_key, label: s.name, color: s.color || "#64748b", role: (s as { stage_role?: string | null }).stage_role ?? null });
         stagesByDbType.set(s.pipeline_type, arr);
       });
 
@@ -167,7 +167,7 @@ export function useLeadAllPipelines(leadId: string | null) {
           entryId: entry?.id || null,
           currentStageId: currentStage?.id || null,
           currentStageName: currentStage?.name || null,
-          stages: stages.map((s) => ({ id: s.id, name: s.name, color: s.color, position: s.position })),
+          stages: stages.map((s) => ({ id: s.id, name: s.name, color: s.color ?? "#64748b", position: s.position ?? 0, role: (s as { stage_role?: string | null }).stage_role ?? null })),
         });
       }
 

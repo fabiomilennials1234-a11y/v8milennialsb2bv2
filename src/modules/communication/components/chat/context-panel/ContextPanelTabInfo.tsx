@@ -15,6 +15,7 @@ import {
   Check,
   Copy,
   FileText,
+  GitBranch,
   Loader2,
   Phone,
   Plus,
@@ -56,6 +57,7 @@ import {
   type QualificationTier,
 } from "@/modules/leads";
 import { memberById, memberName, tierLabel } from "./contextPanelInfoHelpers";
+import { ContextPanelFunnels } from "./ContextPanelFunnels";
 
 const SOURCE_OPTIONS: Array<{ value: string; label: string; dot: string }> = [
   { value: "whatsapp", label: "WhatsApp", dot: "hsl(142 71% 45%)" },
@@ -118,6 +120,11 @@ export function ContextPanelTabInfo({
       <div className="flex flex-col">
         <SectionHeader icon={User} label="Campos padrão do sistema" />
         <StandardFields lead={lead} />
+
+        <SectionHeader icon={GitBranch} label="Funis do lead" />
+        <div className="px-4 pb-4">
+          <ContextPanelFunnels leadId={activeLeadId} />
+        </div>
 
         <SectionHeader icon={Sparkles} label="Campos personalizados" />
         <CustomFieldsBlock leadId={activeLeadId} />
