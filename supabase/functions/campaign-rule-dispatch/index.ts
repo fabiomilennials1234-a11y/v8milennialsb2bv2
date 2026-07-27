@@ -339,16 +339,12 @@ async function processCampaignQueue(
           continue;
         }
 
-        // Rate limit check
-        const { data: rateCheck } = await supabase.rpc("check_whatsapp_rate_limit", {
-          p_organization_id: campanha.organization_id,
-          p_instance_id: instance.id,
-        });
-        if (rateCheck?.[0] && !rateCheck[0].can_send) {
-          console.log(`[campaign-rule-dispatch][${campanhaId}] Rate limit exceeded, stopping campaign`);
-          break;
-        }
-
+        // Throttle/reputação: o Send Governor (#1156) governa TODO envio via
+        // sendTextViaInstance->governSend (whatsapp-dispatch). O pré-check
+        // check_whatsapp_rate_limit era contador hora/dia VELHO, redundante e
+        // — pior — chamava uma RPC que nunca existiu em prod (data null ->
+        // fail-open -> nunca barrava). Removido (Lanterna #diag; confirmado
+        // contra #1243). Reviver seria double-throttle sobre o choke único.
         const isAudio = template.message_type === "audio" && template.audio_url && String(template.audio_url).trim().length > 0;
         const isImage = template.message_type === "image" && template.image_url && String(template.image_url).trim().length > 0;
         const isDocument = template.message_type === "document" && template.document_url && String(template.document_url).trim().length > 0;
@@ -424,15 +420,9 @@ async function processCampaignQueue(
             console.warn("[campaign-rule-dispatch] chat sync error:", chatSyncErr);
           }
 
-          try {
-            const { error: rlErr } = await supabase.rpc("increment_whatsapp_rate_limit", {
-              p_organization_id: campanha.organization_id,
-              p_instance_id: instance.id,
-            });
-            if (rlErr) console.warn("[campaign-rule-dispatch] increment_whatsapp_rate_limit failed:", rlErr);
-          } catch (e) {
-            console.warn("[campaign-rule-dispatch] increment_whatsapp_rate_limit error:", e);
-          }
+          // increment_whatsapp_rate_limit removido junto com o pré-check: a RPC
+          // não existe em prod e o contador (whatsapp_rate_tracking) só servia
+          // ao check redundante. O governor não depende dele.
 
           try {
             await supabase.rpc("increment", {
