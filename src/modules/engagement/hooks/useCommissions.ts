@@ -174,14 +174,14 @@ async function overlayCommissionLedger(
   year: number,
 ): Promise<CanonicalCommission | null> {
   const period = monthPeriodArgs(month, year);
-  const { data, error } = await supabase.rpc("get_commission_ledger" as never, {
+  const { data, error } = await supabase.rpc("get_commission_ledger", {
     p_org_id: organizationId,
     p_period: period.p_period,
     p_ref: period.p_ref,
     p_start: period.p_start,
     p_end: period.p_end,
     p_filter_member_id: teamMemberId,
-  } as never);
+  });
 
   if (error) {
     // RPC ausente (migration pendente) → mantém o cálculo legado on-the-fly.

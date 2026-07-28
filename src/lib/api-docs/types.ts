@@ -13,7 +13,7 @@ export interface ApiEndpoint {
   description: string;
   category: "webhooks" | "internal" | "leads" | "partner" | "rest-api";
   version: string;
-  method: "GET" | "POST" | "PUT" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   auth: {
     type: "api-key" | "bearer" | "none";
