@@ -57,17 +57,19 @@ async function ensureDefaultStagesInDb(organizationId: string) {
 }
 
 /**
- * Constrói o fallback em memória com o MESMO shape de `pipeline_stages`.
+ * Constrói o fallback em memória de etapas padrão, satisfazendo `PipelineStage`.
  *
- * Antes, o fallback era um objeto inline com um subconjunto das colunas. Como
- * o outro ramo do `queryFn` devolve `PipelineStage`, o TS inferia união
- * `PipelineStage | {shape reduzido}` e todo consumidor que lesse um campo
- * ausente do shape reduzido quebrava — eram 7 dos erros de tipo que travavam
- * o CI (`target_pipeline_id`/`target_stage_id` em PipeWhatsapp, PipeConfirmacao,
- * PipePropostas e o cast em PipeOpsProvider).
+ * Antes, o fallback era um objeto inline com 10 das colunas. Como o outro ramo
+ * do `queryFn` devolve `PipelineStage`, o TS inferia união
+ * `PipelineStage | {shape reduzido}` e todo consumidor que lesse campo ausente
+ * do shape reduzido quebrava — eram 7 dos erros de tipo que travavam o CI
+ * (`target_pipeline_id`/`target_stage_id` em PipeWhatsapp, PipeConfirmacao,
+ * PipePropostas, mais o cast de PipeOpsProvider).
  *
- * Preencher as colunas ausentes com null é honesto: são etapas que não existem
- * no banco, então não têm id de destino, SLA nem papel revisado.
+ * O shape segue o **contrato** `PipelineStage` (`@/contracts/pipe`), que é mais
+ * estrito que a tabela: `organization_id`/`created_at`/`updated_at` são
+ * não-nulos e as colunas de SLA nem existem nele. Copiar o shape da TABELA aqui
+ * foi o erro das duas tentativas anteriores.
  */
 function buildFallbackStages(
   pipelineType: PipelineType,
@@ -75,9 +77,14 @@ function buildFallbackStages(
 ): PipelineStage[] {
   // Anotar o retorno do callback (e não só o da função) faz o tipo fluir por
   // contexto para dentro do literal — sem isso `stage_role: "open"` alarga para
-  // `string` e não satisfaz o enum `stage_role` da coluna.
+  // `string` e não satisfaz o enum `StageRole`.
+  const syntheticTimestamp = new Date(0).toISOString();
   return DEFAULT_STAGES[pipelineType].map((stage, index): PipelineStage => ({
     id: stage.id,
+    // Etapa sintética, nunca persistida: sem org dona, e timestamp de epoch
+    // sinaliza "não veio do banco" sem fingir uma data plausível.
+    organization_id: organizationId ?? "",
+    pipeline_type: pipelineType,
     stage_key: stage.id,
     name: stage.title,
     color: stage.color,
@@ -85,33 +92,24 @@ function buildFallbackStages(
     is_active: true,
     is_final_positive: stage.is_final_positive ?? false,
     is_final_negative: stage.is_final_negative ?? false,
+    // NOT NULL, default 'open' no banco. `ensureDefaultStagesInDb` não escreve
+    // este campo, então a linha real destas mesmas etapas também nasce 'open'.
+    // won/lost é papel governado (ADR-0017 §1), nunca derivado de is_final_*.
+    stage_role: "open",
+    suggested_stage_role: null,
+    stage_role_suggested_at: null,
+    stage_role_suggestion_source: null,
+    stage_role_reviewed_at: null,
+    stage_role_reviewed_by: null,
+    auto_move_min_days: null,
+    auto_move_max_days: null,
     target_pipe_type: stage.target_pipe_type ?? null,
     target_stage_key: stage.target_stage_key ?? null,
-    organization_id: organizationId,
-    pipeline_type: pipelineType,
-    // Não existem no banco — sem destino resolvido, sem SLA, sem papel revisado.
     target_pipeline_id: null,
     target_stage_id: null,
     checklist_template_id: null,
-    auto_move_min_days: null,
-    auto_move_max_days: null,
-    max_days_in_stage: null,
-    default_probability: null,
-    sla_action: null,
-    sla_escalate_to: null,
-    sla_hours: null,
-    // NOT NULL no banco, default 'open'. `ensureDefaultStagesInDb` não escreve
-    // este campo, então a linha real dessas mesmas etapas também nasce 'open' —
-    // o fallback espelha o banco em vez de inventar. won/lost é papel governado
-    // (ADR-0017 §1), nunca derivado automaticamente de is_final_*.
-    stage_role: "open",
-    suggested_stage_role: null,
-    stage_role_reviewed_at: null,
-    stage_role_reviewed_by: null,
-    stage_role_suggested_at: null,
-    stage_role_suggestion_source: null,
-    created_at: null,
-    updated_at: null,
+    created_at: syntheticTimestamp,
+    updated_at: syntheticTimestamp,
   }));
 }
 
