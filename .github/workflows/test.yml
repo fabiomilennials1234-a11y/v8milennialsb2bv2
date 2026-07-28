@@ -157,7 +157,12 @@ jobs:
           node-version: '24'
       - uses: denoland/setup-deno@v1
         with:
-          deno-version: v1.x
+          # v2.x, não v1.x: supabase/functions/deno.lock está na versão 5 desde
+          # 2026-06-29, formato que só o Deno 2 lê. Com v1.x o job morria em
+          # "Unsupported lockfile version '5'" antes de rodar um teste — e isso
+          # passou despercebido porque o job ficou `skipped` por 100+ runs
+          # (o `quality` falhava antes e ele nunca era alcançado).
+          deno-version: v2.x
       - run: npm run test:edge
       - run: npm run test:edge:coverage
       - name: Upload edge coverage artifact

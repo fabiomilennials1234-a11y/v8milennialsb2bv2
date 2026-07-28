@@ -268,17 +268,34 @@ verify_jwt = false
 [functions.elevenlabs-proxy]
 verify_jwt = false
 
+# ─── FUNÇÕES VIVAS EM PROD, SEM CÓDIGO NESTE REPO ─────────────────────────────
+# checkout-create-payment (v46), checkout-provision-org (v47) e asaas-webhook
+# (v46) estão ACTIVE em prod (verificado via list_edge_functions em 2026-07-28),
+# mas o código-fonte nunca foi versionado aqui — só existe no projeto Supabase.
+#
+# Os blocos abaixo ficam COMENTADOS porque `supabase start` aborta ao ler uma
+# função declarada sem index.ts no disco:
+#   failed to read file: open supabase/functions/asaas-webhook/index.ts
+# Isso derrubava Integration Tests, E2E e RLS Invariants (pgTAP) ANTES de subir
+# o banco — os 3 jobs nunca chegaram a rodar um teste sequer.
+#
+# NAO crie index.ts stub para "resolver". Um deploy de stub por cima de
+# checkout-create-payment derruba o fluxo de pagamento em produção.
+#
+# Ao recuperar o código para o repo: descomente o bloco correspondente.
+# Contexto: supabase/functions/CLAUDE.md, seção de discrepâncias config x disco.
+
 # checkout-create-payment: JWT validado internamente (user auth via Bearer token)
-[functions.checkout-create-payment]
-verify_jwt = false
+# [functions.checkout-create-payment]
+# verify_jwt = false
 
 # checkout-provision-org: autenticação via X-Internal-Api-Key ou service_role Bearer
-[functions.checkout-provision-org]
-verify_jwt = false
+# [functions.checkout-provision-org]
+# verify_jwt = false
 
 # asaas-webhook: autenticação via asaas-access-token header
-[functions.asaas-webhook]
-verify_jwt = false
+# [functions.asaas-webhook]
+# verify_jwt = false
 
 # sz-chat-webhook: recebe webhooks do SZChat (Fortics); autenticação via x-webhook-secret header
 [functions.sz-chat-webhook]
