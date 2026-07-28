@@ -199,14 +199,25 @@ export async function deleteMessage(
   });
 }
 
+/**
+ * Marca mensagens como lidas no WhatsApp (tique azul para o contato).
+ *
+ * Aceita lote: o endpoint `/message/markread` da Uazapi recebe `id` como ARRAY.
+ * Mandar string crua devolvia 400 `Invalid payload` — por isso nenhum read
+ * receipt saía do CRM. O `message_id` composto que guardamos
+ * (`<owner>:<ID>`) é aceito pelo provedor, não precisa converter.
+ */
 export async function markMessageRead(
   instanceId: string,
-  messageId: string,
-  number: string
+  messageIds: string | string[]
 ): Promise<void> {
+  const ids = (Array.isArray(messageIds) ? messageIds : [messageIds]).filter(
+    (id) => typeof id === "string" && id.length > 0
+  );
+  if (ids.length === 0) return;
   await callProxy("markRead", {
     instance_id: instanceId,
-    payload: { message_id: messageId, number },
+    payload: { message_ids: ids },
   });
 }
 

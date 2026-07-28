@@ -41,6 +41,11 @@ import {
 } from "./poison-denylist.ts";
 import { extractQuotedText } from "./quoted-text.ts";
 import { extractInteractiveSelection } from "./interactive-reply.ts";
+import {
+  buildMessageIdCandidates,
+  extractRawMessageIds,
+  mapReceiptStatus,
+} from "./message-id.ts";
 
 // ============================================================================
 // Config
@@ -178,6 +183,13 @@ type ResolvedInstance = {
   id: string;
   organization_id: string;
   instance_name: string;
+  /**
+   * Número dono da linha. É o prefixo do `message_id` composto que gravamos
+   * (`<phone_number>:<ID>`) — bate em 100% das linhas do prod (32.637/32.637 em
+   * 24h), enquanto `raw_payload->>'owner'` falta em algumas. Ver
+   * `buildMessageIdCandidates`.
+   */
+  phone_number: string | null;
 };
 
 async function resolveInstance(
@@ -194,7 +206,7 @@ async function resolveInstance(
 
   const { data: inst } = await supabase
     .from("whatsapp_instances")
-    .select("id, organization_id, instance_name")
+    .select("id, organization_id, instance_name, phone_number")
     .eq("id", data.instance_id)
     .maybeSingle();
 
@@ -218,7 +230,7 @@ async function resolveInstanceByToken(
 
   const { data: inst } = await supabase
     .from("whatsapp_instances")
-    .select("id, organization_id, instance_name")
+    .select("id, organization_id, instance_name, phone_number")
     .eq("id", data.instance_id)
     .maybeSingle();
 
@@ -1064,14 +1076,56 @@ async function handleMessagesUpdateEvent(
   instance: ResolvedInstance,
   data: any
 ) {
-  const messageId = data.id ?? data.messageid ?? data.key?.id;
-  if (!messageId) return;
+  const rawIds = extractRawMessageIds(data);
+  if (rawIds.length === 0) return;
+
+  const messageIds = [
+    ...new Set(
+      rawIds.flatMap((id) =>
+        buildMessageIdCandidates(id, instance.phone_number, data.owner),
+      ),
+    ),
+  ];
+
+  // ── ReadReceipt → status ──────────────────────────────────────────────────
+  // Só vale para mensagens NOSSAS (outgoing): um receipt com IsFromMe=true é o
+  // operador lendo a mensagem do contato, e gravar isso sobrescreveria o
+  // `received` da linha incoming.
+  const receiptStatus = mapReceiptStatus(data.status);
+  if (receiptStatus && data.fromMe !== true) {
+    const { data: touched, error } = await supabase
+      .from("whatsapp_messages")
+      .update({ status: receiptStatus })
+      .in("message_id", messageIds)
+      .eq("instance_id", instance.id)
+      .eq("direction", "outgoing")
+      .select("id");
+
+    // Falha silenciosa foi exatamente o que escondeu esse bug: 0 linhas afetadas
+    // não é erro no PostgREST, então o handler logava `success` gravando nada.
+    // `error` = falha real de banco (alerta). `skipped` = receipt de mensagem que
+    // não temos (legítimo: anterior à instância, ou enviada fora do CRM) — fica
+    // contável sem poluir o stream de erro.
+    if (error || !touched || touched.length === 0) {
+      await logRuntime({
+        organizationId: instance.organization_id,
+        module: "webhook",
+        action: "uazapi_receipt_unmatched",
+        status: error ? "error" : "skipped",
+        errorMessage: error?.message ?? "no_row_matched",
+        payloadSnapshot: {
+          instance_id: instance.id,
+          message_ids: messageIds,
+          receipt_status: receiptStatus,
+        },
+      });
+    }
+  }
 
   const update: Record<string, unknown> = {};
-  if (data.status) update.status = String(data.status).toLowerCase();
   if (data.edited) update.edited = true;
   if (data.deleted) {
-    update.status = "deleted";
+    // NÃO gravar status='deleted': viola whatsapp_messages_status_check.
     update.deleted_at = new Date().toISOString();
   }
 
@@ -1088,8 +1142,9 @@ async function handleMessagesUpdateEvent(
     const { data: current } = await supabase
       .from("whatsapp_messages")
       .select("reactions")
-      .eq("message_id", messageId)
+      .in("message_id", messageIds)
       .eq("instance_id", instance.id)
+      .limit(1)
       .maybeSingle();
     const existing: any[] = Array.isArray(current?.reactions)
       ? (current!.reactions as any[])
@@ -1117,7 +1172,7 @@ async function handleMessagesUpdateEvent(
   await supabase
     .from("whatsapp_messages")
     .update(update)
-    .eq("message_id", messageId)
+    .in("message_id", messageIds)
     .eq("instance_id", instance.id);
 }
 
@@ -1477,8 +1532,16 @@ Deno.serve(
                 const ev = payload.event;
                 updateData = {
                   id: ev.MessageIDs?.[0] ?? ev.messageid,
+                  // MessageIDs é array: um receipt pode cobrir várias mensagens.
+                  ids: Array.isArray(ev.MessageIDs) ? ev.MessageIDs : undefined,
                   status: ev.Type ?? ev.type,
                   chatid: ev.chatid ?? ev.Chat,
+                  // IsFromMe distingue "o contato leu a minha" (false) de "eu li a
+                  // dele" (true) — sem isso o receipt sobrescreve linha incoming.
+                  fromMe: ev.IsFromMe ?? ev.isFromMe,
+                  // Fallback do prefixo do message_id composto quando a instância
+                  // ainda não tem phone_number gravado.
+                  owner: payload.owner,
                 };
               }
               await handleMessagesUpdateEvent(supabase, instance, updateData ?? payload);

@@ -382,8 +382,8 @@ export class UazapiProvider implements WhatsAppProvider {
     await this.client.deleteForAll(messageId, number);
   }
 
-  async markRead(messageId: string, number: string): Promise<void> {
-    await this.client.markRead(messageId, number);
+  async markRead(messageIds: string | string[]): Promise<void> {
+    await this.client.markRead(messageIds);
   }
 
   async listChats(type: "all" | "individual" | "group" = "all"): Promise<Array<{ id: string; name?: string; isGroup?: boolean; lastMessageTimestamp?: number }>> {
