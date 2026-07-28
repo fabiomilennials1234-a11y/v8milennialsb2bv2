@@ -73,7 +73,10 @@ function buildFallbackStages(
   pipelineType: PipelineType,
   organizationId: string | null,
 ): PipelineStage[] {
-  return DEFAULT_STAGES[pipelineType].map((stage, index) => ({
+  // Anotar o retorno do callback (e não só o da função) faz o tipo fluir por
+  // contexto para dentro do literal — sem isso `stage_role: "open"` alarga para
+  // `string` e não satisfaz o enum `stage_role` da coluna.
+  return DEFAULT_STAGES[pipelineType].map((stage, index): PipelineStage => ({
     id: stage.id,
     stage_key: stage.id,
     name: stage.title,
