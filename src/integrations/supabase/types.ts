@@ -116,6 +116,241 @@ export type Database = {
         }
         Relationships: []
       }
+      _backup_stage_faxina_20260727: {
+        Row: {
+          auto_move_max_days: number | null
+          auto_move_min_days: number | null
+          backed_up_at: string | null
+          checklist_template_id: string | null
+          color: string | null
+          created_at: string | null
+          default_probability: number | null
+          id: string | null
+          is_active: boolean | null
+          is_final_negative: boolean | null
+          is_final_positive: boolean | null
+          max_days_in_stage: number | null
+          name: string | null
+          organization_id: string | null
+          pipeline_type: string | null
+          position: number | null
+          sla_action: string | null
+          sla_escalate_to: string | null
+          sla_hours: number | null
+          stage_key: string | null
+          stage_role: Database["public"]["Enums"]["stage_role"] | null
+          stage_role_reviewed_at: string | null
+          stage_role_reviewed_by: string | null
+          stage_role_suggested_at: string | null
+          stage_role_suggestion_source: string | null
+          suggested_stage_role: Database["public"]["Enums"]["stage_role"] | null
+          target_pipe_type: string | null
+          target_pipeline_id: string | null
+          target_stage_id: string | null
+          target_stage_key: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          auto_move_max_days?: number | null
+          auto_move_min_days?: number | null
+          backed_up_at?: string | null
+          checklist_template_id?: string | null
+          color?: string | null
+          created_at?: string | null
+          default_probability?: number | null
+          id?: string | null
+          is_active?: boolean | null
+          is_final_negative?: boolean | null
+          is_final_positive?: boolean | null
+          max_days_in_stage?: number | null
+          name?: string | null
+          organization_id?: string | null
+          pipeline_type?: string | null
+          position?: number | null
+          sla_action?: string | null
+          sla_escalate_to?: string | null
+          sla_hours?: number | null
+          stage_key?: string | null
+          stage_role?: Database["public"]["Enums"]["stage_role"] | null
+          stage_role_reviewed_at?: string | null
+          stage_role_reviewed_by?: string | null
+          stage_role_suggested_at?: string | null
+          stage_role_suggestion_source?: string | null
+          suggested_stage_role?:
+            | Database["public"]["Enums"]["stage_role"]
+            | null
+          target_pipe_type?: string | null
+          target_pipeline_id?: string | null
+          target_stage_id?: string | null
+          target_stage_key?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          auto_move_max_days?: number | null
+          auto_move_min_days?: number | null
+          backed_up_at?: string | null
+          checklist_template_id?: string | null
+          color?: string | null
+          created_at?: string | null
+          default_probability?: number | null
+          id?: string | null
+          is_active?: boolean | null
+          is_final_negative?: boolean | null
+          is_final_positive?: boolean | null
+          max_days_in_stage?: number | null
+          name?: string | null
+          organization_id?: string | null
+          pipeline_type?: string | null
+          position?: number | null
+          sla_action?: string | null
+          sla_escalate_to?: string | null
+          sla_hours?: number | null
+          stage_key?: string | null
+          stage_role?: Database["public"]["Enums"]["stage_role"] | null
+          stage_role_reviewed_at?: string | null
+          stage_role_reviewed_by?: string | null
+          stage_role_suggested_at?: string | null
+          stage_role_suggestion_source?: string | null
+          suggested_stage_role?:
+            | Database["public"]["Enums"]["stage_role"]
+            | null
+          target_pipe_type?: string | null
+          target_pipeline_id?: string | null
+          target_stage_id?: string | null
+          target_stage_key?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      _backup_wf_executions_faxina_20260727: {
+        Row: {
+          backed_up_at: string | null
+          chain_depth: number | null
+          completed_at: string | null
+          context: Json | null
+          current_node_id: string | null
+          error: string | null
+          id: string | null
+          lead_id: string | null
+          loop_counters: Json | null
+          next_run_at: string | null
+          organization_id: string | null
+          retry_of: string | null
+          started_at: string | null
+          status: string | null
+          trigger_dedup_key: string | null
+          triggered_by_execution_id: string | null
+          updated_at: string | null
+          workflow_id: string | null
+        }
+        Insert: {
+          backed_up_at?: string | null
+          chain_depth?: number | null
+          completed_at?: string | null
+          context?: Json | null
+          current_node_id?: string | null
+          error?: string | null
+          id?: string | null
+          lead_id?: string | null
+          loop_counters?: Json | null
+          next_run_at?: string | null
+          organization_id?: string | null
+          retry_of?: string | null
+          started_at?: string | null
+          status?: string | null
+          trigger_dedup_key?: string | null
+          triggered_by_execution_id?: string | null
+          updated_at?: string | null
+          workflow_id?: string | null
+        }
+        Update: {
+          backed_up_at?: string | null
+          chain_depth?: number | null
+          completed_at?: string | null
+          context?: Json | null
+          current_node_id?: string | null
+          error?: string | null
+          id?: string | null
+          lead_id?: string | null
+          loop_counters?: Json | null
+          next_run_at?: string | null
+          organization_id?: string | null
+          retry_of?: string | null
+          started_at?: string | null
+          status?: string | null
+          trigger_dedup_key?: string | null
+          triggered_by_execution_id?: string | null
+          updated_at?: string | null
+          workflow_id?: string | null
+        }
+        Relationships: []
+      }
+      _backup_workflows_faxina_20260727: {
+        Row: {
+          backed_up_at: string | null
+          created_at: string | null
+          created_by: string | null
+          definition: Json | null
+          description: string | null
+          enrollment_criteria: Json | null
+          id: string | null
+          is_active: boolean | null
+          loop_limit: number | null
+          name: string | null
+          organization_id: string | null
+          re_enrollment_cooldown_days: number | null
+          re_enrollment_enabled: boolean | null
+          re_enrollment_max_times: number | null
+          trigger_config: Json | null
+          trigger_type: string | null
+          updated_at: string | null
+          wrapper_for: string | null
+          wrapper_source_id: string | null
+        }
+        Insert: {
+          backed_up_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          definition?: Json | null
+          description?: string | null
+          enrollment_criteria?: Json | null
+          id?: string | null
+          is_active?: boolean | null
+          loop_limit?: number | null
+          name?: string | null
+          organization_id?: string | null
+          re_enrollment_cooldown_days?: number | null
+          re_enrollment_enabled?: boolean | null
+          re_enrollment_max_times?: number | null
+          trigger_config?: Json | null
+          trigger_type?: string | null
+          updated_at?: string | null
+          wrapper_for?: string | null
+          wrapper_source_id?: string | null
+        }
+        Update: {
+          backed_up_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          definition?: Json | null
+          description?: string | null
+          enrollment_criteria?: Json | null
+          id?: string | null
+          is_active?: boolean | null
+          loop_limit?: number | null
+          name?: string | null
+          organization_id?: string | null
+          re_enrollment_cooldown_days?: number | null
+          re_enrollment_enabled?: boolean | null
+          re_enrollment_max_times?: number | null
+          trigger_config?: Json | null
+          trigger_type?: string | null
+          updated_at?: string | null
+          wrapper_for?: string | null
+          wrapper_source_id?: string | null
+        }
+        Relationships: []
+      }
       _lead_duplicates_audit: {
         Row: {
           detected_at: string | null
@@ -5996,6 +6231,38 @@ export type Database = {
           },
         ]
       }
+      dashboard_composition_backup: {
+        Row: {
+          id: string
+          organization_id: string
+          reason: string
+          snapshot: Json
+          taken_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          reason: string
+          snapshot: Json
+          taken_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          reason?: string
+          snapshot?: Json
+          taken_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dashboard_composition_backup_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dashboard_pages: {
         Row: {
           created_at: string
@@ -6045,6 +6312,7 @@ export type Database = {
       }
       dashboard_widgets: {
         Row: {
+          accent_hue: string | null
           created_at: string
           den_measure_id: string | null
           eyebrow_override: string | null
@@ -6064,10 +6332,14 @@ export type Database = {
           position: number
           recorte_id: string | null
           renderer_id: string | null
+          style_variant: string | null
           updated_at: string
+          value_format: string | null
           weight: string
+          widget_style: string | null
         }
         Insert: {
+          accent_hue?: string | null
           created_at?: string
           den_measure_id?: string | null
           eyebrow_override?: string | null
@@ -6087,10 +6359,14 @@ export type Database = {
           position?: number
           recorte_id?: string | null
           renderer_id?: string | null
+          style_variant?: string | null
           updated_at?: string
+          value_format?: string | null
           weight?: string
+          widget_style?: string | null
         }
         Update: {
+          accent_hue?: string | null
           created_at?: string
           den_measure_id?: string | null
           eyebrow_override?: string | null
@@ -6110,8 +6386,11 @@ export type Database = {
           position?: number
           recorte_id?: string | null
           renderer_id?: string | null
+          style_variant?: string | null
           updated_at?: string
+          value_format?: string | null
           weight?: string
+          widget_style?: string | null
         }
         Relationships: [
           {
@@ -6168,6 +6447,27 @@ export type Database = {
             columns: ["renderer_id"]
             isOneToOne: false
             referencedRelation: "metric_catalog_renderers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dashboard_widgets_style_variant_fk"
+            columns: ["widget_style", "style_variant"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_style_variants"
+            referencedColumns: ["style_id", "variant"]
+          },
+          {
+            foreignKeyName: "dashboard_widgets_value_format_fkey"
+            columns: ["value_format"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_formats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dashboard_widgets_widget_style_fkey"
+            columns: ["widget_style"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_widget_styles"
             referencedColumns: ["id"]
           },
         ]
@@ -8673,6 +8973,7 @@ export type Database = {
           faturamento: string | null
           id: string
           import_batch_id: string | null
+          interest: string | null
           is_shadow: boolean | null
           meta_ad_id: string | null
           meta_adset_id: string | null
@@ -8684,6 +8985,7 @@ export type Database = {
           notes: string | null
           organization_id: string | null
           origin: string | null
+          origin_detail: string | null
           phone: string | null
           phone_digits: string | null
           pipe_whatsapp: string | null
@@ -8729,6 +9031,7 @@ export type Database = {
           faturamento?: string | null
           id?: string
           import_batch_id?: string | null
+          interest?: string | null
           is_shadow?: boolean | null
           meta_ad_id?: string | null
           meta_adset_id?: string | null
@@ -8740,6 +9043,7 @@ export type Database = {
           notes?: string | null
           organization_id?: string | null
           origin?: string | null
+          origin_detail?: string | null
           phone?: string | null
           phone_digits?: string | null
           pipe_whatsapp?: string | null
@@ -8785,6 +9089,7 @@ export type Database = {
           faturamento?: string | null
           id?: string
           import_batch_id?: string | null
+          interest?: string | null
           is_shadow?: boolean | null
           meta_ad_id?: string | null
           meta_adset_id?: string | null
@@ -8796,6 +9101,7 @@ export type Database = {
           notes?: string | null
           organization_id?: string | null
           origin?: string | null
+          origin_detail?: string | null
           phone?: string | null
           phone_digits?: string | null
           pipe_whatsapp?: string | null
@@ -9539,6 +9845,92 @@ export type Database = {
           },
         ]
       }
+      meta_conversations: {
+        Row: {
+          archived_at: string | null
+          channel: Database["public"]["Enums"]["channel_type"]
+          created_at: string
+          external_user_id: string
+          external_username: string | null
+          id: string
+          last_inbound_at: string | null
+          last_message_at: string | null
+          last_message_preview: string | null
+          lead_id: string | null
+          meta_page_id: string
+          organization_id: string
+          profile_pic_expires_at: string | null
+          profile_pic_url: string | null
+          unread_count: number
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          channel: Database["public"]["Enums"]["channel_type"]
+          created_at?: string
+          external_user_id: string
+          external_username?: string | null
+          id?: string
+          last_inbound_at?: string | null
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          lead_id?: string | null
+          meta_page_id: string
+          organization_id: string
+          profile_pic_expires_at?: string | null
+          profile_pic_url?: string | null
+          unread_count?: number
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          channel?: Database["public"]["Enums"]["channel_type"]
+          created_at?: string
+          external_user_id?: string
+          external_username?: string | null
+          id?: string
+          last_inbound_at?: string | null
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          lead_id?: string | null
+          meta_page_id?: string
+          organization_id?: string
+          profile_pic_expires_at?: string | null
+          profile_pic_url?: string | null
+          unread_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_conversations_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_conversations_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_compat"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_conversations_meta_page_id_fkey"
+            columns: ["meta_page_id"]
+            isOneToOne: false
+            referencedRelation: "meta_pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_conversations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meta_leadgen_configs: {
         Row: {
           assign_to_campaign_id: string | null
@@ -9796,6 +10188,36 @@ export type Database = {
           },
         ]
       }
+      metric_catalog_measure_styles: {
+        Row: {
+          measure_id: string
+          style_id: string
+        }
+        Insert: {
+          measure_id: string
+          style_id: string
+        }
+        Update: {
+          measure_id?: string
+          style_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metric_catalog_measure_styles_measure_id_fkey"
+            columns: ["measure_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_measures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metric_catalog_measure_styles_style_id_fkey"
+            columns: ["style_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_widget_styles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       metric_catalog_measures: {
         Row: {
           anchor: string
@@ -9909,6 +10331,56 @@ export type Database = {
           description?: string | null
           id?: string
           is_legacy?: boolean
+          label?: string
+          sort?: number
+        }
+        Relationships: []
+      }
+      metric_catalog_style_variants: {
+        Row: {
+          label: string
+          sort: number
+          style_id: string
+          variant: string
+        }
+        Insert: {
+          label: string
+          sort?: number
+          style_id: string
+          variant: string
+        }
+        Update: {
+          label?: string
+          sort?: number
+          style_id?: string
+          variant?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metric_catalog_style_variants_style_id_fkey"
+            columns: ["style_id"]
+            isOneToOne: false
+            referencedRelation: "metric_catalog_widget_styles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      metric_catalog_widget_styles: {
+        Row: {
+          description: string | null
+          id: string
+          label: string
+          sort: number
+        }
+        Insert: {
+          description?: string | null
+          id: string
+          label: string
+          sort?: number
+        }
+        Update: {
+          description?: string | null
+          id?: string
           label?: string
           sort?: number
         }
@@ -13424,6 +13896,50 @@ export type Database = {
             columns: ["whatsapp_instance_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      send_dedup_log: {
+        Row: {
+          content_hash: string
+          expires_at: string
+          hit_count: number
+          id: string
+          idempotency_key: string | null
+          org_id: string
+          phone: string
+          reserved_at: string
+          source: string
+        }
+        Insert: {
+          content_hash: string
+          expires_at: string
+          hit_count?: number
+          id?: string
+          idempotency_key?: string | null
+          org_id: string
+          phone: string
+          reserved_at?: string
+          source: string
+        }
+        Update: {
+          content_hash?: string
+          expires_at?: string
+          hit_count?: number
+          id?: string
+          idempotency_key?: string | null
+          org_id?: string
+          phone?: string
+          reserved_at?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "send_dedup_log_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -16987,6 +17503,10 @@ export type Database = {
       }
     }
     Functions: {
+      _fn_reseed_legacy_to_native_unchecked: {
+        Args: { p_org_id: string }
+        Returns: Json
+      }
       _fn_seed_default_dashboard_unchecked: {
         Args: { p_org_id: string }
         Returns: Json
@@ -17047,6 +17567,10 @@ export type Database = {
       _resolve_plan_base_for_resource: {
         Args: { p_org_id: string; p_resource_key: string }
         Returns: number
+      }
+      _stage_key_label: {
+        Args: { p_org_id: string; p_pipeline_id: string; p_stage_key: string }
+        Returns: string
       }
       acquire_copilot_lock: {
         Args: { p_organization_id: string; p_phone: string }
@@ -17284,57 +17808,31 @@ export type Database = {
           claimed_id: string
         }[]
       }
-      claim_copilot_batch:
-        | {
-            Args: { p_batch_key: string }
-            Returns: {
-              attempts: number
-              batch_key: string | null
-              claimed_at: string | null
-              conversation_id: string | null
-              created_at: string
-              id: string
-              last_error: string | null
-              message_id: string
-              next_attempt_at: string | null
-              organization_id: string
-              phone: string
-              processed_at: string | null
-              queued_at: string
-              status: string
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "copilot_message_queue"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
-        | {
-            Args: { p_batch_key: string; p_lease_seconds?: number }
-            Returns: {
-              attempts: number
-              batch_key: string | null
-              claimed_at: string | null
-              conversation_id: string | null
-              created_at: string
-              id: string
-              last_error: string | null
-              message_id: string
-              next_attempt_at: string | null
-              organization_id: string
-              phone: string
-              processed_at: string | null
-              queued_at: string
-              status: string
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "copilot_message_queue"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
+      claim_copilot_batch: {
+        Args: { p_batch_key: string; p_lease_seconds?: number }
+        Returns: {
+          attempts: number
+          batch_key: string | null
+          claimed_at: string | null
+          conversation_id: string | null
+          created_at: string
+          id: string
+          last_error: string | null
+          message_id: string
+          next_attempt_at: string | null
+          organization_id: string
+          phone: string
+          processed_at: string | null
+          queued_at: string
+          status: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "copilot_message_queue"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       claim_password_reset_token: {
         Args: { p_token_hash: string }
         Returns: string
@@ -17653,6 +18151,17 @@ export type Database = {
           reescritas: number
           valor_movido: number
         }[]
+      }
+      fn_reserve_send: {
+        Args: {
+          p_content_hash: string
+          p_idempotency_key: string
+          p_org_id: string
+          p_phone: string
+          p_source: string
+          p_ttl_seconds: number
+        }
+        Returns: number
       }
       fn_rollback_carteira_backfill: {
         Args: { p_org_id?: string }
@@ -18174,12 +18683,10 @@ export type Database = {
         Args: { p_org_id: string; p_page?: number; p_page_size?: number }
         Returns: Json
       }
-      get_phone_ai_status:
-        | { Args: { p_phone: string }; Returns: Json }
-        | {
-            Args: { p_organization_id?: string; p_phone: string }
-            Returns: Json
-          }
+      get_phone_ai_status: {
+        Args: { p_organization_id?: string; p_phone: string }
+        Returns: Json
+      }
       get_pipeline_page: {
         Args: {
           p_calor_max?: number
@@ -18473,9 +18980,20 @@ export type Database = {
       get_whatsapp_conversation_list: {
         Args: {
           p_before?: string
+          p_funnels?: string[]
           p_instance: string
+          p_lead_presence?: string
           p_limit?: number
+          p_needs_human?: boolean
           p_org: string
+          p_source?: string
+          p_stages?: string[]
+          p_tags?: string[]
+          p_tiers?: string[]
+          p_unassigned?: boolean
+          p_unread?: boolean
+          p_vendor_id?: string
+          p_waiting?: boolean
         }
         Returns: {
           archived_at: string
@@ -18633,6 +19151,10 @@ export type Database = {
         Args: { p_agent_id: string; p_instance_id: string }
         Returns: undefined
       }
+      link_meta_conversation_to_lead: {
+        Args: { p_conversation_id: string; p_lead_id: string }
+        Returns: undefined
+      }
       list_expired_whatsapp_media: {
         Args: { p_limit?: number; p_older_than_days?: number }
         Returns: Json
@@ -18652,6 +19174,10 @@ export type Database = {
       }
       mark_conversation_read: {
         Args: { p_instance_id: string; p_normalized_phone: string }
+        Returns: undefined
+      }
+      mark_meta_conversation_read: {
+        Args: { p_conversation_id: string }
         Returns: undefined
       }
       master_add_user: {
@@ -18976,16 +19502,14 @@ export type Database = {
         Args: { p_disabled: boolean; p_lead_id: string }
         Returns: Json
       }
-      toggle_phone_ai:
-        | { Args: { p_disabled: boolean; p_phone: string }; Returns: Json }
-        | {
-            Args: {
-              p_disabled: boolean
-              p_organization_id?: string
-              p_phone: string
-            }
-            Returns: Json
-          }
+      toggle_phone_ai: {
+        Args: {
+          p_disabled: boolean
+          p_organization_id?: string
+          p_phone: string
+        }
+        Returns: Json
+      }
       track_recent_view: {
         Args: {
           p_entity_id: string
