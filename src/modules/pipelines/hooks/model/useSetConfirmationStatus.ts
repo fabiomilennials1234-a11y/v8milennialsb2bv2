@@ -7,12 +7,10 @@
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/modules/identity";
 import type { ConfirmationStatus } from "../../lib/confirmation-button";
 
 export function useSetConfirmationStatus() {
   const qc = useQueryClient();
-  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async ({ entryId, status }: { entryId: string; status: ConfirmationStatus }) => {

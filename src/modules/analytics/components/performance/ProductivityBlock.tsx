@@ -18,7 +18,6 @@ import {
   Calendar as CalendarIcon,
 } from "lucide-react";
 import type { DateRange as RDPDateRange } from "react-day-picker";
-import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";

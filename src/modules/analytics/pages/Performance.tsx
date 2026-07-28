@@ -984,7 +984,6 @@ export default function Performance() {
   });
   const currentFaturamento = metrics?.vendaTotal || 0;
   const currentClientes = metrics?.novosClientes || 0;
-  const currentReunioes = meetingGoals.realizadas?.current ?? (metrics?.reunioesComparecidas || 0);
 
   const faturamentoProgress = faturamentoGoal 
     ? (currentFaturamento / faturamentoGoal.target_value) * 100 
