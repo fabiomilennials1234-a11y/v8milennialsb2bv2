@@ -40,6 +40,8 @@ export function _resetReadReceiptCache(): void {
 export interface AutoReadReceiptMessage {
   message_id: string | null;
   direction: string;
+  /** Guarda por mensagem — vale mesmo quando o chamador não sabe se é grupo. */
+  is_group?: boolean | null;
 }
 
 export function useAutoReadReceipt(params: {
@@ -69,6 +71,7 @@ export function useAutoReadReceipt(params: {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       if (m.direction !== "incoming") continue;
+      if (m.is_group) continue;
       if (!m.message_id) continue;
       const chave = `${instanceId}:${m.message_id}`;
       if (jaEnviados.has(chave)) continue;

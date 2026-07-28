@@ -9,6 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { ImagePreviewModal } from "@/modules/communication/components/chat/media/ImagePreviewModal";
 import { useWhatsAppMessages } from "@/modules/communication/hooks/chat/useWhatsAppMessages";
+import { useAutoReadReceipt } from "@/modules/communication/hooks/chat/useAutoReadReceipt";
 import { useFailedMessages, useRetryMessage } from "@/modules/communication/hooks/chat/useWhatsAppSend";
 // TODO Etapa D: deprecate after rollout — substituído por useLeadWriteInstance
 import { useCanReplyOnInstanceByName } from "@/modules/communication/hooks/useWhatsAppInstanceAllowedMembers";
@@ -37,6 +38,15 @@ export function ChatBubbleThread({
 }: ChatBubbleThreadProps) {
   const messagesQuery = useWhatsAppMessages(phoneNumber, instanceId);
   const failedMessages = useFailedMessages(phoneNumber, instanceId);
+
+  // Tique azul também pela bolha: `onMarkAsRead` abaixo só zera o badge interno
+  // do CRM. A guarda de grupo é por mensagem (is_group), então não depende de a
+  // bolha saber o tipo da conversa.
+  useAutoReadReceipt({
+    instanceId,
+    phone: phoneNumber,
+    messages: messagesQuery.data,
+  });
   const retryMessage = useRetryMessage();
   const { canReply } = useCanReplyOnInstanceByName(instanceName);
   const queryClient = useQueryClient();
