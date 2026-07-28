@@ -3,21 +3,16 @@ import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { motion } from "framer-motion";
 import {
-  Fuel,
   Search,
-  Filter,
   Star,
   Phone,
   Mail,
   Building,
   Calendar,
-  Tag,
   MoreHorizontal,
   Plus,
   X,
   Edit2,
-  Eye,
-  ChevronDown,
   FileDown,
   History,
   CircleDashed,
