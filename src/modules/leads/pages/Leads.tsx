@@ -26,13 +26,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  LeadListRow,
+  LeadListHeader,
+  LEAD_LIST_MIN_WIDTH,
+  type LeadListItem,
+} from "../components/leads/LeadListRow";
+import { useLeadsCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
 import {
   Select,
   SelectContent,
@@ -298,6 +297,9 @@ function LeadsInner() {
   const responsibleMembers = useResponsibleMembers();
   const bulk = useBulkSelection();
   const allLeadIds = useMemo(() => leads.map((l: Lead) => l.id), [leads]);
+
+  // Cluster "Dados" da lista — números de carteira (upsell_clients) em lote.
+  const { data: carteiraMetrics } = useLeadsCarteiraMetrics(allLeadIds);
   const { isMobile } = useViewport();
 
   // ── Pipe/funnel selection for new leads ──
@@ -648,8 +650,8 @@ function LeadsInner() {
         </div>
       )}
 
-      {/* Table (desktop) / Card list (mobile) */}
-      <div className={cn("rounded-lg overflow-hidden", !isMobile && "border border-border")}>
+      {/* Lista de cartões (desktop) / Card list (mobile) */}
+      <div className="rounded-lg">
         {isMobile ? (
           <div className="space-y-2.5 py-0.5">
             {isLoading ? (
@@ -723,136 +725,70 @@ function LeadsInner() {
             )}
           </div>
         ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[40px]">
-                <Checkbox
-                  checked={allLeadIds.length > 0 && allLeadIds.every(id => bulk.isSelected(id))}
-                  onCheckedChange={() => bulk.selectAll(allLeadIds)}
-                />
-              </TableHead>
-              <TableHead>Lead</TableHead>
-              <TableHead>Contato</TableHead>
-              <TableHead>Origem</TableHead>
-              <TableHead>Rating</TableHead>
-              <TableHead>Responsável</TableHead>
-              <TableHead>Criado em</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell colSpan={8}>
-                    <Skeleton className="h-10 w-full" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : leads.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+          <div className="overflow-x-auto pb-1">
+            <div className={LEAD_LIST_MIN_WIDTH}>
+              <LeadListHeader
+                selectAll={
+                  <Checkbox
+                    checked={allLeadIds.length > 0 && allLeadIds.every(id => bulk.isSelected(id))}
+                    onCheckedChange={() => bulk.selectAll(allLeadIds)}
+                    aria-label="Selecionar todos os leads da página"
+                  />
+                }
+              />
+              {isLoading ? (
+                <div className="space-y-2.5">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Skeleton key={i} className="h-[70px] w-full rounded-lg" />
+                  ))}
+                </div>
+              ) : leads.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-card py-10 text-center text-sm text-muted-foreground">
                   Nenhum lead encontrado
-                </TableCell>
-              </TableRow>
-            ) : (
-              leads.map((lead: Lead) => (
-                <TableRow key={lead.id} className={cn("cursor-pointer hover:bg-muted/50", bulk.isSelected(lead.id) && "bg-primary/5")} onClick={() => openLead(lead.id)}>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Checkbox
-                      checked={bulk.isSelected(lead.id)}
-                      onCheckedChange={() => bulk.toggle(lead.id)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{lead.name}</p>
-                      {lead.company && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Building className="w-3 h-3" />
-                          {lead.company}
-                        </p>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      {lead.email && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Mail className="w-3 h-3" />
-                          {lead.email}
-                        </p>
-                      )}
-                      {lead.phone && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Phone className="w-3 h-3" />
-                          {lead.phone}
-                        </p>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={originColors[lead.origin] || originColors.outro}>
-                      {originLabels[lead.origin] || lead.origin}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <StarRating rating={lead.rating || 0} readonly />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-0.5">
-                      {lead.pre_sale_responsible?.name && (
-                        <Badge variant="outline" className="text-xs border-blue-500/30 text-blue-400">
-                          {lead.pre_sale_responsible.name}
-                        </Badge>
-                      )}
-                      {lead.sale_responsible?.name && (
-                        <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-400">
-                          {lead.sale_responsible.name}
-                        </Badge>
-                      )}
-                      {!lead.pre_sale_responsible?.name && !lead.sale_responsible?.name && (
-                        <span className="text-muted-foreground text-xs">-</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-xs text-muted-foreground">
-                      {formatDayInTz(lead.created_at, orgTimezone)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleOpenDialog(lead)}>
-                          <Edit2 className="w-4 h-4 mr-2" />
-                          Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setLeadToDelete(lead);
-                            setDeleteConfirmOpen(true);
-                          }}
-                          className="text-destructive focus:text-destructive"
-                          disabled={!canDeleteLead}
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+                </div>
+              ) : (
+                leads.map((lead: Lead) => (
+                  <LeadListRow
+                    key={lead.id}
+                    lead={lead as LeadListItem}
+                    metrics={carteiraMetrics?.[lead.id]}
+                    selected={bulk.isSelected(lead.id)}
+                    onToggleSelect={() => bulk.toggle(lead.id)}
+                    onOpen={() => openLead(lead.id)}
+                    createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
+                    originLabel={originLabels[lead.origin] || lead.origin}
+                    originClassName={originColors[lead.origin] || originColors.outro}
+                    actions={
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleOpenDialog(lead)}>
+                            <Edit2 className="w-4 h-4 mr-2" />
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setLeadToDelete(lead);
+                              setDeleteConfirmOpen(true);
+                            }}
+                            className="text-destructive focus:text-destructive"
+                            disabled={!canDeleteLead}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    }
+                  />
+                ))
+              )}
+            </div>
+          </div>
         )}
 
         {/* Paginação */}
