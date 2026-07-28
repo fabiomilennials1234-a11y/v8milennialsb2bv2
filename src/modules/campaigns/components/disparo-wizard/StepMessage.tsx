@@ -26,7 +26,6 @@ import {
 import { Loader2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { StepHeader } from "./StepHeader";
 import type { DisparoDraft } from "./wizard-machine";

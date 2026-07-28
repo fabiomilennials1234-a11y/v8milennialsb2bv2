@@ -57,6 +57,63 @@ async function ensureDefaultStagesInDb(organizationId: string) {
 }
 
 /**
+ * Constrói o fallback em memória de etapas padrão, satisfazendo `PipelineStage`.
+ *
+ * Antes, o fallback era um objeto inline com 10 das colunas. Como o outro ramo
+ * do `queryFn` devolve `PipelineStage`, o TS inferia união
+ * `PipelineStage | {shape reduzido}` e todo consumidor que lesse campo ausente
+ * do shape reduzido quebrava — eram 7 dos erros de tipo que travavam o CI
+ * (`target_pipeline_id`/`target_stage_id` em PipeWhatsapp, PipeConfirmacao,
+ * PipePropostas, mais o cast de PipeOpsProvider).
+ *
+ * O shape segue o **contrato** `PipelineStage` (`@/contracts/pipe`), que é mais
+ * estrito que a tabela: `organization_id`/`created_at`/`updated_at` são
+ * não-nulos e as colunas de SLA nem existem nele. Copiar o shape da TABELA aqui
+ * foi o erro das duas tentativas anteriores.
+ */
+function buildFallbackStages(
+  pipelineType: PipelineType,
+  organizationId: string | null,
+): PipelineStage[] {
+  // Anotar o retorno do callback (e não só o da função) faz o tipo fluir por
+  // contexto para dentro do literal — sem isso `stage_role: "open"` alarga para
+  // `string` e não satisfaz o enum `StageRole`.
+  const syntheticTimestamp = new Date(0).toISOString();
+  return DEFAULT_STAGES[pipelineType].map((stage, index): PipelineStage => ({
+    id: stage.id,
+    // Etapa sintética, nunca persistida: sem org dona, e timestamp de epoch
+    // sinaliza "não veio do banco" sem fingir uma data plausível.
+    organization_id: organizationId ?? "",
+    pipeline_type: pipelineType,
+    stage_key: stage.id,
+    name: stage.title,
+    color: stage.color,
+    position: index,
+    is_active: true,
+    is_final_positive: stage.is_final_positive ?? false,
+    is_final_negative: stage.is_final_negative ?? false,
+    // NOT NULL, default 'open' no banco. `ensureDefaultStagesInDb` não escreve
+    // este campo, então a linha real destas mesmas etapas também nasce 'open'.
+    // won/lost é papel governado (ADR-0017 §1), nunca derivado de is_final_*.
+    stage_role: "open",
+    suggested_stage_role: null,
+    stage_role_suggested_at: null,
+    stage_role_suggestion_source: null,
+    stage_role_reviewed_at: null,
+    stage_role_reviewed_by: null,
+    auto_move_min_days: null,
+    auto_move_max_days: null,
+    target_pipe_type: stage.target_pipe_type ?? null,
+    target_stage_key: stage.target_stage_key ?? null,
+    target_pipeline_id: null,
+    target_stage_id: null,
+    checklist_template_id: null,
+    created_at: syntheticTimestamp,
+    updated_at: syntheticTimestamp,
+  }));
+}
+
+/**
  * Hook para buscar etapas de um pipeline específico
  */
 export function usePipelineStages(pipelineType: PipelineType) {
@@ -67,35 +124,13 @@ export function usePipelineStages(pipelineType: PipelineType) {
 
   return useQuery({
     queryKey: ["pipeline_stages", pipelineType, organizationId],
-    queryFn: async () => {
+    queryFn: async (): Promise<PipelineStage[]> => {
       if (!organizationId) {
         // Retornar etapas padrão se não houver organização
-        return DEFAULT_STAGES[pipelineType].map((stage, index) => ({
-          id: stage.id,
-          stage_key: stage.id,
-          name: stage.title,
-          color: stage.color,
-          position: index,
-          is_active: true,
-          is_final_positive: stage.is_final_positive ?? false,
-          is_final_negative: stage.is_final_negative ?? false,
-          target_pipe_type: stage.target_pipe_type ?? null,
-          target_stage_key: stage.target_stage_key ?? null,
-        }));
+        return buildFallbackStages(pipelineType, null);
       }
 
-      const fallbackStages = DEFAULT_STAGES[pipelineType].map((stage, index) => ({
-        id: stage.id,
-        stage_key: stage.id,
-        name: stage.title,
-        color: stage.color,
-        position: index,
-        is_active: true,
-        is_final_positive: stage.is_final_positive ?? false,
-        is_final_negative: stage.is_final_negative ?? false,
-        target_pipe_type: stage.target_pipe_type ?? null,
-        target_stage_key: stage.target_stage_key ?? null,
-      }));
+      const fallbackStages = buildFallbackStages(pipelineType, organizationId);
 
       try {
         // Garantir que etapas padrão existam no banco (uma vez por sessão).

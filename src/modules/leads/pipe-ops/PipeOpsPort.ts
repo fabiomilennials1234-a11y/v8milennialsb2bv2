@@ -24,7 +24,7 @@ import type {
   UseQueryResult,
   UseMutationResult,
 } from "@tanstack/react-query";
-import type { Tables, TablesUpdate } from "@/integrations/supabase/types";
+import type { Tables } from "@/integrations/supabase/types";
 import type {
   PipelineType,
   PipelineStage,
@@ -47,19 +47,24 @@ type PipePropostaInsert = Partial<PipePropostaRow> & { lead_id: string };
 
 // Variáveis das mutations de update — espelham as assinaturas reais dos hooks
 // de pipelines (preservadas para não mudar comportamento dos call sites).
-type PipeWhatsappUpdateVars = TablesUpdate<"pipe_whatsapp"> & {
+//
+// `Partial<Row>` e não `TablesUpdate<>`: pipe_whatsapp/confirmacao/propostas são
+// VIEWS, e o gerador de types só emite Row para view — TablesUpdate aceita
+// apenas `keyof Tables`. Mesmo padrão que os Inserts acima já usavam, e
+// semanticamente equivalente: payload de update é linha parcial.
+type PipeWhatsappUpdateVars = Partial<PipeWhatsappRow> & {
   id: string;
   leadId?: string;
   sdrId?: string | null;
   expectedUpdatedAt?: string;
 };
-type PipeConfirmacaoUpdateVars = TablesUpdate<"pipe_confirmacao"> & {
+type PipeConfirmacaoUpdateVars = Partial<PipeConfirmacaoRow> & {
   id: string;
   leadId?: string;
   assignedTo?: string | null;
   expectedUpdatedAt?: string;
 };
-type PipePropostaUpdateVars = TablesUpdate<"pipe_propostas"> & {
+type PipePropostaUpdateVars = Partial<PipePropostaRow> & {
   id: string;
   leadId?: string;
   closerId?: string | null;

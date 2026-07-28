@@ -7,8 +7,6 @@
  *   const result = await myFunction(sb, ...);
  */
 
-import { vi } from 'vitest';
-
 type MockData = Record<string, unknown>[];
 
 interface ChainResult {
@@ -61,12 +59,8 @@ export function createMockSupabase() {
     let orderField: string | null = null;
     let orderAsc = true;
     let limitCount: number | null = null;
-    let selectFields: string = '*';
     let selectOpts: { count?: string; head?: boolean } | null = null;
-    let isInsert = false;
-    let insertData: unknown = null;
     let insertError: { code: string; message: string } | null = null;
-    let isDelete = false;
     let isUpdate = false;
     let updateData: Record<string, unknown> = {};
 
@@ -152,8 +146,7 @@ export function createMockSupabase() {
     };
 
     const chain: any = {
-      select: (fields?: string, opts?: { count?: string; head?: boolean }) => {
-        selectFields = fields || '*';
+      select: (_fields?: string, opts?: { count?: string; head?: boolean }) => {
         if (opts) selectOpts = opts;
         return chain;
       },
@@ -177,8 +170,6 @@ export function createMockSupabase() {
       // `.returns<T>()` is a type-only helper on the real client; pass through.
       returns: () => chain,
       insert: (rows: unknown) => {
-        isInsert = true;
-        insertData = rows;
         if (insertErrors[tableName]) {
           insertError = insertErrors[tableName];
           return chain;
@@ -196,8 +187,6 @@ export function createMockSupabase() {
         return chain;
       },
       upsert: (rows: unknown, opts?: unknown) => {
-        isInsert = true;
-        insertData = rows;
         const arr = Array.isArray(rows) ? rows : [rows];
         if (!insertedRows[tableName]) insertedRows[tableName] = [];
         if (!upsertOpts[tableName]) upsertOpts[tableName] = [];
@@ -207,7 +196,7 @@ export function createMockSupabase() {
         data = withIds;
         return chain;
       },
-      not: (field: string, op: string, value: unknown) => {
+      not: (_field: string, _op: string, _value: unknown) => {
         // For simplicity, not() is a no-op filter in mock
         return chain;
       },
@@ -215,7 +204,7 @@ export function createMockSupabase() {
         filters.push({ field, op: 'in', value: values });
         return chain;
       },
-      delete: () => { isDelete = true; return chain; },
+      delete: () => chain,
       single: () => {
         if (insertError) return Promise.resolve({ data: null, error: insertError });
         const result = applyUpdateIfPending();
@@ -343,7 +332,7 @@ export function createMockSupabase() {
 
   const sb = {
     from: (table: string) => createChain(table),
-    rpc: (name: string, params?: unknown) => {
+    rpc: (name: string, _params?: unknown) => {
       return Promise.resolve({
         data: rpcResults[name] ?? null,
         error: rpcResults[name] !== undefined ? null : { message: 'RPC not mocked' },

@@ -136,6 +136,33 @@ async function overlayCanonicalSales(
 }
 
 /** Enriched sales-ranking row consumed by TopPerformers / RankingTable / RankingPodium. */
+/**
+ * Superset estrutural das duas listas de ranking que este hook devolve.
+ *
+ * `salesRanking` traz `conversions`; `meetingsRanking` traz
+ * `meetings`/`meetingsBooked`/`goalBooked`. Nenhum tem o campo do outro, então
+ * um ternário entre eles vira união e ler campo exclusivo é erro de tipo — era
+ * a causa de 4 dos erros que travavam o CI (Performance e RankingTable).
+ *
+ * Os campos divergentes entram opcionais: os dois shapes são atribuíveis a
+ * este sem cast. `name` continua nullable porque vem do banco assim — quem
+ * renderiza resolve o fallback, o tipo não mente pela conveniência da UI.
+ */
+export interface RankingSourceEntry {
+  id: string;
+  name: string | null;
+  role: string;
+  value: number;
+  goal?: number;
+  goalProgress: number;
+  position: number;
+  conversions?: number;
+  meetings?: number;
+  meetingsBooked?: number;
+  goalBooked?: number;
+  goalBookedProgress?: number;
+}
+
 interface SalesRankingEntry {
   id: string;
   name: string | null;

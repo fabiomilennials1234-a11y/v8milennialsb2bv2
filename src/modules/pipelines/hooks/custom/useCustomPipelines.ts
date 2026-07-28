@@ -349,7 +349,9 @@ export function useCustomPipeStageCounts(
       const { data, error } = await supabase.rpc("get_custom_pipeline_stage_counts", {
         p_pipeline_id: pipelineId,
         p_org_id: organizationId,
-        p_search: search,
+        // `search` chega `string | null` (null = sem filtro); o arg da RPC é
+        // opcional (`string | undefined`). Ambos significam "sem filtro".
+        p_search: search ?? undefined,
       });
 
       if (error) throw error;

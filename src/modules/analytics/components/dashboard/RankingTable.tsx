@@ -1,6 +1,6 @@
 import { memo, useState } from "react";
 import { motion } from "framer-motion";
-import { useRankingData } from "@/modules/analytics/hooks/useDashboardMetrics";
+import { useRankingData, type RankingSourceEntry } from "@/modules/analytics/hooks/useDashboardMetrics";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -25,7 +25,9 @@ function RankingTableBase({ month, year }: Props) {
 
   const closers = rankingData?.salesRanking || [];
   const sdrs = rankingData?.meetingsRanking || [];
-  const items = tab === "closers" ? closers : sdrs;
+  // Superset estrutural dos dois rankings — sem ele o ternário vira união e
+  // `item.conversions` (só em closers) não compila.
+  const items: RankingSourceEntry[] = tab === "closers" ? closers : sdrs;
 
   return (
     <Card>
@@ -64,8 +66,9 @@ function RankingTableBase({ month, year }: Props) {
                 {items.map((item, i) => {
                   const isMe = item.id === currentTeamMember?.id;
                   const Icon = i < 3 ? positionIcons[i] : null;
-                  const ticketMedio = tab === "closers" && item.conversions > 0
-                    ? item.value / item.conversions : 0;
+                  const conversions = item.conversions ?? 0;
+                  const ticketMedio = tab === "closers" && conversions > 0
+                    ? item.value / conversions : 0;
 
                   return (
                     <motion.tr
@@ -79,23 +82,23 @@ function RankingTableBase({ month, year }: Props) {
                         {Icon ? <Icon className={cn("w-4 h-4", positionColors[i])} /> : <span className="text-muted-foreground">{item.position}</span>}
                       </td>
                       <td className="py-2.5 font-medium">{item.name}{isMe && <span className="text-xs text-primary ml-1">(você)</span>}</td>
-                      <td className="py-2.5">{tab === "closers" ? fmt(item.value) : (item as any).meetings ?? 0}</td>
+                      <td className="py-2.5">{tab === "closers" ? fmt(item.value) : item.meetings ?? 0}</td>
                       <td className="py-2.5">
                         {tab === "closers" ? (
-                          item.conversions
+                          conversions
                         ) : (
                           <span>
-                            {(item as any).meetingsBooked ?? 0}
+                            {item.meetingsBooked ?? 0}
                             <span className="ml-2 inline-block rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                              {(item as any).goalBooked > 0
-                                ? `meta ${(item as any).goalBooked} · ${(item as any).goalBookedProgress}%`
+                              {(item.goalBooked ?? 0) > 0
+                                ? `meta ${item.goalBooked} · ${item.goalBookedProgress ?? 0}%`
                                 : "sem meta"}
                             </span>
                           </span>
                         )}
                       </td>
                       {tab === "closers" && <td className="py-2.5">{fmt(ticketMedio)}</td>}
-                      <td className="py-2.5">{tab === "closers" ? fmt(item.goal) : item.goal}</td>
+                      <td className="py-2.5">{tab === "closers" ? fmt(item.goal ?? 0) : item.goal ?? 0}</td>
                       <td className="py-2.5">
                         <div className="flex items-center gap-2">
                           <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">

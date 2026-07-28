@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, Plus, Calendar as CalendarIcon, User, Building2,
+  Search, Plus, Calendar as CalendarIcon,
   DollarSign, Loader2, TrendingUp, Package,
   BarChart3, MessageCircle, Settings2,
   MoreVertical, Trash2, LayoutGrid, Send

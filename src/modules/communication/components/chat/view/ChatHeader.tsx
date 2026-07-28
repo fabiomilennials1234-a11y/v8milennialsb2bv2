@@ -240,8 +240,11 @@ export function ChatHeader({
 
       {/* TakeoverControls — FSM IA↔humano (C30) — desktop only */}
       <div className="hidden md:block">
+        {/* `conversationId` chega `string | null | undefined` (null = conversa
+            sem registro ainda). TakeoverControls aceita `string | undefined` —
+            normaliza no ponto de passagem em vez de afrouxar a prop do filho. */}
         <TakeoverControls
-          conversationId={conversationId}
+          conversationId={conversationId ?? undefined}
           onOpenTimeline={onOpenTimeline}
         />
       </div>

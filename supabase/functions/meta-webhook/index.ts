@@ -219,11 +219,12 @@ async function saveIncomingMessage(
   const isOutgoing = data.senderId === data.pageId;
   const direction = isOutgoing ? "outgoing" : "incoming";
 
-  // Buscar pagina para obter organization_id
+  // Buscar pagina para obter organization_id.
+  // `id` alimenta meta_conversations.meta_page_id (FK).
   const pageColumn = data.channel === "instagram" ? "instagram_account_id" : "page_id";
   const { data: page, error: pageError } = await supabase
     .from("meta_pages")
-    .select("organization_id, page_id")
+    .select("id, organization_id, page_id")
     .eq(pageColumn, data.pageId)
     .eq("is_active", true)
     .single();
@@ -247,12 +248,17 @@ async function saveIncomingMessage(
     }
   }
 
+  // O interlocutor humano: em mensagem outgoing o sender é a própria página,
+  // então quem identifica a conversa é o recipient. É a mesma chave gravada em
+  // channel_messages.sender_id e em meta_conversations.external_user_id.
+  const externalUserId = isOutgoing ? data.recipientId : data.senderId;
+
   // Buscar lead associado pelo sender_id (via mensagens anteriores ou meta_sender_id no lead)
   let leadId: string | null = null;
   const { data: existingMsg } = await supabase
     .from("channel_messages")
     .select("lead_id")
-    .eq("sender_id", isOutgoing ? data.recipientId : data.senderId)
+    .eq("sender_id", externalUserId)
     .eq("organization_id", page.organization_id)
     .not("lead_id", "is", null)
     .limit(1)
@@ -261,6 +267,18 @@ async function saveIncomingMessage(
   if (existingMsg?.lead_id) {
     leadId = existingMsg.lead_id;
   }
+
+  // A Meta reentrega evento. O upsert de channel_messages absorve isso pelo
+  // onConflict, mas o contador de não-lidas da conversa não pode incrementar
+  // duas vezes pela mesma mensagem — daí checar ANTES de gravar.
+  const { data: alreadySaved } = await supabase
+    .from("channel_messages")
+    .select("id")
+    .eq("external_id", data.externalId)
+    .eq("channel", data.channel)
+    .eq("organization_id", page.organization_id)
+    .maybeSingle();
+  const isRedelivery = !!alreadySaved;
 
   // Salvar mensagem
   const { error: insertError } = await supabase
@@ -271,7 +289,7 @@ async function saveIncomingMessage(
         channel: data.channel,
         page_id: page.page_id,
         external_id: data.externalId,
-        sender_id: isOutgoing ? data.recipientId : data.senderId,
+        sender_id: externalUserId,
         direction,
         message_type: messageType,
         content,
@@ -286,8 +304,32 @@ async function saveIncomingMessage(
 
   if (insertError) {
     console.error(`[meta-webhook] Error saving message:`, insertError);
-  } else {
-    console.log(`[meta-webhook] Saved ${data.channel} message ${data.externalId} (${direction})`);
+    // Sem mensagem gravada, não mexe na conversa — o inbox ficaria apontando
+    // pra uma mensagem que não existe.
+    return;
+  }
+
+  console.log(`[meta-webhook] Saved ${data.channel} message ${data.externalId} (${direction})`);
+
+  // Mantém a linha de meta_conversations, que é o que a aba Atendimento Meta
+  // lista. Sem isso a mensagem existe em channel_messages e a conversa nunca
+  // aparece na UI.
+  const { error: convError } = await supabase.rpc("upsert_meta_conversation", {
+    p_organization_id: page.organization_id,
+    p_meta_page_id: page.id,
+    p_channel: data.channel,
+    p_external_user_id: externalUserId,
+    p_direction: direction,
+    p_message_at: new Date(data.timestamp).toISOString(),
+    p_preview: content,
+    p_lead_id: leadId,
+    p_bump_unread: !isRedelivery,
+  });
+
+  if (convError) {
+    // Não derruba o handler: a mensagem já está salva e é o dado que não pode
+    // ser perdido. A conversa se recompõe na próxima mensagem.
+    console.error(`[meta-webhook] Error upserting meta_conversation:`, convError);
   }
 }
 

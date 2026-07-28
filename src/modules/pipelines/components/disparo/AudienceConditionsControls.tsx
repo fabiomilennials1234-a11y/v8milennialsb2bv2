@@ -3,7 +3,6 @@ import { Check, ChevronDown, Filter, Tag as TagIcon, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { QUALIFICATION_TIERS, QUALIFICATION_TIER_CONFIG } from "@/modules/leads";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   Command,

@@ -43,9 +43,7 @@ export function useSeedDemoData() {
   return useMutation({
     mutationFn: async () => {
       if (!organizationId) throw new Error("organizationId ausente");
-      const { data, error } = await supabase.rpc("seed_demo_data" as "get_org_member_stats", {
-        p_org_id: organizationId,
-      } as unknown as Parameters<typeof supabase.rpc>[1]);
+      const { data, error } = await supabase.rpc("seed_demo_data", { p_org_id: organizationId });
       if (error) {
         if (error.code === "42501") throw new Error("Apenas administradores podem popular dados demo.");
         throw error;
@@ -77,9 +75,7 @@ export function useRemoveDemoData() {
   return useMutation({
     mutationFn: async () => {
       if (!organizationId) throw new Error("organizationId ausente");
-      const { data, error } = await supabase.rpc("remove_demo_data" as "get_org_member_stats", {
-        p_org_id: organizationId,
-      } as unknown as Parameters<typeof supabase.rpc>[1]);
+      const { data, error } = await supabase.rpc("remove_demo_data", { p_org_id: organizationId });
       if (error) {
         if (error.code === "42501") throw new Error("Apenas administradores podem remover dados demo.");
         throw error;
