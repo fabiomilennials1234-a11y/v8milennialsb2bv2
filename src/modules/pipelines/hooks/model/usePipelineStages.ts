@@ -57,6 +57,58 @@ async function ensureDefaultStagesInDb(organizationId: string) {
 }
 
 /**
+ * Constrói o fallback em memória com o MESMO shape de `pipeline_stages`.
+ *
+ * Antes, o fallback era um objeto inline com um subconjunto das colunas. Como
+ * o outro ramo do `queryFn` devolve `PipelineStage`, o TS inferia união
+ * `PipelineStage | {shape reduzido}` e todo consumidor que lesse um campo
+ * ausente do shape reduzido quebrava — eram 7 dos erros de tipo que travavam
+ * o CI (`target_pipeline_id`/`target_stage_id` em PipeWhatsapp, PipeConfirmacao,
+ * PipePropostas e o cast em PipeOpsProvider).
+ *
+ * Preencher as colunas ausentes com null é honesto: são etapas que não existem
+ * no banco, então não têm id de destino, SLA nem papel revisado.
+ */
+function buildFallbackStages(
+  pipelineType: PipelineType,
+  organizationId: string | null,
+): PipelineStage[] {
+  return DEFAULT_STAGES[pipelineType].map((stage, index) => ({
+    id: stage.id,
+    stage_key: stage.id,
+    name: stage.title,
+    color: stage.color,
+    position: index,
+    is_active: true,
+    is_final_positive: stage.is_final_positive ?? false,
+    is_final_negative: stage.is_final_negative ?? false,
+    target_pipe_type: stage.target_pipe_type ?? null,
+    target_stage_key: stage.target_stage_key ?? null,
+    organization_id: organizationId,
+    pipeline_type: pipelineType,
+    // Não existem no banco — sem destino resolvido, sem SLA, sem papel revisado.
+    target_pipeline_id: null,
+    target_stage_id: null,
+    checklist_template_id: null,
+    auto_move_min_days: null,
+    auto_move_max_days: null,
+    max_days_in_stage: null,
+    default_probability: null,
+    sla_action: null,
+    sla_escalate_to: null,
+    sla_hours: null,
+    stage_role: null,
+    suggested_stage_role: null,
+    stage_role_reviewed_at: null,
+    stage_role_reviewed_by: null,
+    stage_role_suggested_at: null,
+    stage_role_suggestion_source: null,
+    created_at: null,
+    updated_at: null,
+  }));
+}
+
+/**
  * Hook para buscar etapas de um pipeline específico
  */
 export function usePipelineStages(pipelineType: PipelineType) {
@@ -67,35 +119,13 @@ export function usePipelineStages(pipelineType: PipelineType) {
 
   return useQuery({
     queryKey: ["pipeline_stages", pipelineType, organizationId],
-    queryFn: async () => {
+    queryFn: async (): Promise<PipelineStage[]> => {
       if (!organizationId) {
         // Retornar etapas padrão se não houver organização
-        return DEFAULT_STAGES[pipelineType].map((stage, index) => ({
-          id: stage.id,
-          stage_key: stage.id,
-          name: stage.title,
-          color: stage.color,
-          position: index,
-          is_active: true,
-          is_final_positive: stage.is_final_positive ?? false,
-          is_final_negative: stage.is_final_negative ?? false,
-          target_pipe_type: stage.target_pipe_type ?? null,
-          target_stage_key: stage.target_stage_key ?? null,
-        }));
+        return buildFallbackStages(pipelineType, null);
       }
 
-      const fallbackStages = DEFAULT_STAGES[pipelineType].map((stage, index) => ({
-        id: stage.id,
-        stage_key: stage.id,
-        name: stage.title,
-        color: stage.color,
-        position: index,
-        is_active: true,
-        is_final_positive: stage.is_final_positive ?? false,
-        is_final_negative: stage.is_final_negative ?? false,
-        target_pipe_type: stage.target_pipe_type ?? null,
-        target_stage_key: stage.target_stage_key ?? null,
-      }));
+      const fallbackStages = buildFallbackStages(pipelineType, organizationId);
 
       try {
         // Garantir que etapas padrão existam no banco (uma vez por sessão).
