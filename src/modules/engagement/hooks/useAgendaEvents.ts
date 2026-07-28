@@ -45,16 +45,11 @@ export function useAgendaEvents(startDate?: Date, endDate?: Date) {
     queryFn: async () => {
       if (!organizationId || !startDate || !endDate) return [];
 
-      // RPC is brand new — types not regenerated yet.
-      // Cast to bypass TS strict check on the function name.
-      const { data, error } = await supabase.rpc(
-        "get_agenda_events" as "get_org_member_stats",
-        {
-          p_organization_id: organizationId,
-          p_start: startDate.toISOString(),
-          p_end: endDate.toISOString(),
-        } as unknown as Parameters<typeof supabase.rpc>[1],
-      );
+      const { data, error } = await supabase.rpc("get_agenda_events", {
+        p_organization_id: organizationId,
+        p_start: startDate.toISOString(),
+        p_end: endDate.toISOString(),
+      });
 
       if (error) {
         // Dev-environment drift fallback: get_agenda_events UNIONs several

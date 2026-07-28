@@ -133,7 +133,7 @@ export function ChatComposer({
       if (!leadId) return null;
       const { data } = await supabase
         .from("leads")
-        .select("name, company, email, phone, source, interest, segment, campaign_name")
+        .select("name, company, email, phone, origin, interest, segment, utm_campaign")
         .eq("id", leadId)
         .maybeSingle();
       return data;
@@ -165,10 +165,12 @@ export function ChatComposer({
       company: leadForTemplates?.company ?? undefined,
       email: leadForTemplates?.email ?? undefined,
       phone: leadForTemplates?.phone ?? phoneNumber ?? undefined,
-      source: leadForTemplates?.source ?? undefined,
+      // LeadContext.source/campaign_name são nomes do view-model de template;
+      // as colunas reais são leads.origin e leads.utm_campaign.
+      source: leadForTemplates?.origin ?? undefined,
       interest: leadForTemplates?.interest ?? undefined,
       segment: leadForTemplates?.segment ?? undefined,
-      campaign_name: leadForTemplates?.campaign_name ?? undefined,
+      campaign_name: leadForTemplates?.utm_campaign ?? undefined,
     };
     const attendantCtx: AttendantContext = { name: teamMember?.name ?? undefined };
     const resolved = resolveVariables(template.body, leadCtx, attendantCtx);
