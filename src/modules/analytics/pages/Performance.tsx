@@ -51,6 +51,7 @@ import { AchievementBadge, BadgeType } from "@/modules/engagement/components/gam
 import { CelebrationEffect } from "@/modules/engagement/components/gamification/CelebrationEffect";
 import { useTeamGoals, useGoals, useCreateGoal, useUpdateGoal, Goal } from "@/modules/engagement/hooks/useGoals";
 import { useAwards, useCreateAward, useUpdateAward, useDeleteAward, Award as AwardType } from "@/modules/engagement/hooks/useAwards";
+import type { RankingSourceEntry } from "@/modules/analytics/hooks/useDashboardMetrics";
 import { useDashboardMetrics, useRankingData } from "@/modules/analytics/hooks/useDashboardMetrics";
 import { MovimentacoesPanel } from "@/modules/analytics/components/performance/MovimentacoesPanel";
 import { useTeamMembers, isVirtualTeamMember, type TeamMember } from "@/modules/identity";
@@ -94,6 +95,7 @@ const positionStyles = {
 };
 
 // ============ INTERFACES ============
+
 interface RankingUser {
   id: string;
   name: string;
@@ -864,12 +866,18 @@ export default function Performance() {
   );
 
   // Calculated data — somente membros visíveis da organização
+  // `name` vem nullable do banco e `RankingUser` exige string porque é o que a
+  // UI renderiza. O fallback é resolvido AQUI, na fronteira — não afrouxando o
+  // tipo da UI nem fingindo que o banco garante nome.
+  const toRankingUsers = (entries: RankingSourceEntry[]): RankingUser[] =>
+    entries.map((u) => ({ ...u, name: u.name ?? "Sem nome" }));
+
   const closers: RankingUser[] = useMemo(
-    () => filterVisibleRanking(rankingData?.salesRanking, visibleMemberIds),
+    () => toRankingUsers(filterVisibleRanking(rankingData?.salesRanking, visibleMemberIds)),
     [rankingData, visibleMemberIds]
   );
   const sdrs: RankingUser[] = useMemo(
-    () => filterVisibleRanking(rankingData?.meetingsRanking, visibleMemberIds),
+    () => toRankingUsers(filterVisibleRanking(rankingData?.meetingsRanking, visibleMemberIds)),
     [rankingData, visibleMemberIds]
   );
 
@@ -918,7 +926,12 @@ export default function Performance() {
   const competitionRanking = useMemo(() => {
     if (!activeCompetition || participants.length === 0) return [];
 
-    const source = activeCompetition.metric_type === "sales"
+    // salesRanking e meetingsRanking têm shapes diferentes (um traz
+    // `conversions`, outro `meetings`/`meetingsBooked`). Sem um tipo comum, o
+    // ternário produz união e ler qualquer campo exclusivo quebra. Este é o
+    // superset estrutural: os campos divergentes entram opcionais, e os
+    // dois shapes são atribuíveis a ele sem cast.
+    const source: RankingSourceEntry[] = activeCompetition.metric_type === "sales"
       ? (rankingData?.salesRanking ?? [])
       : (rankingData?.meetingsRanking ?? []);
 

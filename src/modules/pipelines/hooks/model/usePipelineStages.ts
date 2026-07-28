@@ -97,7 +97,11 @@ function buildFallbackStages(
     sla_action: null,
     sla_escalate_to: null,
     sla_hours: null,
-    stage_role: null,
+    // NOT NULL no banco, default 'open'. `ensureDefaultStagesInDb` não escreve
+    // este campo, então a linha real dessas mesmas etapas também nasce 'open' —
+    // o fallback espelha o banco em vez de inventar. won/lost é papel governado
+    // (ADR-0017 §1), nunca derivado automaticamente de is_final_*.
+    stage_role: "open",
     suggested_stage_role: null,
     stage_role_reviewed_at: null,
     stage_role_reviewed_by: null,
