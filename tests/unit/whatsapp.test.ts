@@ -56,4 +56,46 @@ describe("formatPhoneForWhatsApp", () => {
   it("handles short phone with 55 prefix", () => {
     expect(formatPhoneForWhatsApp("551198765432")).toBe("5511998765432");
   });
+
+  // ── Regressão do chamado Mapila Alimentos (2026-07-29) ────────────────────
+  // O código antigo concatenava "55" em qualquer coisa com 11 dígitos. Um
+  // número que não pode ser celular BR virava um destino inexistente, e a
+  // Uazapi respondia 500 "the number ... is not on WhatsApp" — que chegava no
+  // operador como "Edge Function returned a non-2xx status code".
+
+  it("rejects an 11-digit number whose subscriber part does not start with 9", () => {
+    // Lead "Beto Maia": +14796612277 virava 5514796612277 e falhava na Uazapi
+    expect(formatPhoneForWhatsApp("+14796612277")).toBeNull();
+  });
+
+  it("rejects a number with a non-existent area code", () => {
+    // DDD 20 não existe no Brasil
+    expect(formatPhoneForWhatsApp("20987654321")).toBeNull();
+  });
+
+  it("rejects a truncated number that used to pass as 11 digits", () => {
+    expect(formatPhoneForWhatsApp("+55886130205")).toBeNull();
+  });
+
+  // ── DDD 55 (Santa Maria/RS) ───────────────────────────────────────────────
+  // O código antigo decepava o "55" como se fosse sempre código de país,
+  // sobrava 9 dígitos, caía no guard de tamanho e retornava null. 40 leads em
+  // 13 orgs nunca conseguiram receber mensagem por causa disso.
+
+  it("treats a leading 55 as area code when the length says it is local", () => {
+    expect(formatPhoneForWhatsApp("55999998888")).toBe("5555999998888");
+  });
+
+  it("still treats a leading 55 as country code when the length requires it", () => {
+    expect(formatPhoneForWhatsApp("5555999998888")).toBe("5555999998888");
+  });
+
+  it("handles DDD 55 written with an explicit country code", () => {
+    expect(formatPhoneForWhatsApp("+55 (55) 99999-8888")).toBe("5555999998888");
+  });
+
+  it("is idempotent for an already-formatted number", () => {
+    const once = formatPhoneForWhatsApp("11987654321");
+    expect(formatPhoneForWhatsApp(once!)).toBe(once);
+  });
 });
