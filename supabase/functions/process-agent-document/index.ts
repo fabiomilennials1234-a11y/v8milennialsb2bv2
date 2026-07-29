@@ -20,16 +20,25 @@ const PDF_CHUNK_THRESHOLD_BYTES = 5 * 1024 * 1024; // 5MB
 // Historico: era 8MB porque o split materializava TODOS os sub-PDFs de uma vez
 // (documento original parseado + soma de todos os batches vivos ao mesmo tempo).
 // `openPdfBatchStream` passou a produzir um batch por vez, entao o pico caiu pra
-// documento original + UM sub-PDF, e o teto subiu pra 15MB — o que cobre
-// catalogo B2B tipico. Isolate Deno tem ~150MB de heap; o payload multimodal e
-// os buffers de rede consomem o resto, entao 15MB continua sendo margem, nao
-// limite teorico. Acima disso o caminho certo e worker dedicado com split por
-// range de paginas direto do storage (roadmap), nao subir esta constante.
-const PDF_MAX_BYTES = 15 * 1024 * 1024; // 15MB
+// documento original + UM sub-PDF.
+//
+// 25MB e decisao de produto (CTO, 2026-07-29): cobrir o catalogo B2B inteiro
+// sem obrigar o cliente a fatiar o arquivo. Duas coisas precisam acompanhar
+// esta constante, senao o teto e so nominal:
+//   - `storage.buckets.file_size_limit` do bucket agent-documents — o upload
+//     morreria antes, com 413 (migration 20270729000001);
+//   - `MAX_DOCUMENT_SIZE` em PlaygroundKnowledge.tsx (gate do cliente).
+const PDF_MAX_BYTES = 25 * 1024 * 1024; // 25MB
 
 // Configuração do chunking
 const PDF_PAGES_PER_BATCH = 3;
-const PDF_MAX_PAGES = 150;
+
+// Teto de paginas. Na pratica morde antes do teto de bytes: cada batch de 3
+// paginas e UMA chamada sequencial ao modelo de visao, entao 300 paginas = 100
+// chamadas em serie. E ai, nao em heap, que o processamento em background
+// esbarra no wall clock do isolate. Documento acima disso falha com erro
+// explicito de paginas em vez de travar calado.
+const PDF_MAX_PAGES = 300;
 
 // Modelos via OpenAI
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
