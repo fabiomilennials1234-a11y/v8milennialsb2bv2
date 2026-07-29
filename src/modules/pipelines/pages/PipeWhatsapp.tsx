@@ -1,6 +1,13 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
-import { Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List, BarChart3, Send } from "lucide-react";
+import { Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List, BarChart3, Send, MoreHorizontal } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -431,7 +438,11 @@ function PipeWhatsappInner() {
   }, [pipeData, metricsRange]);
 
   // Handle status change from drag-and-drop
-  const handleStatusChange = async (itemId: string, newStatus: string) => {
+  // Envolvida em useCallback: sem isso a identidade mudava a cada render e
+  // arrastava consigo as dependências de `handleMobileMove`. O ESLint reclamava
+  // citando o número da linha na mensagem, então qualquer edição neste arquivo
+  // reabria o aviso como se fosse novo.
+  const handleStatusChange = useCallback(async (itemId: string, newStatus: string) => {
     const item = pipeData?.find(p => p.id === itemId);
     if (!item) return;
 
@@ -516,7 +527,16 @@ function PipeWhatsappInner() {
       toast.error("Erro ao atualizar status");
       console.error(error);
     }
-  };
+  }, [
+    createPipeProposta,
+    logAction,
+    organizationId,
+    pipeData,
+    pipelineStages,
+    queryClient,
+    statusColumns,
+    updatePipeWhatsapp,
+  ]);
 
   const handleMobileMove = useCallback(
     async (leadId: string, newStageKey: string) => {
@@ -603,35 +623,50 @@ function PipeWhatsappInner() {
         }
         actions={
           <>
-            <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
-            <AutoCreateLeadToggle />
             <Button
               size="sm"
               variant="ghost"
-              className="h-9 px-2"
-              aria-label="Configurações do funil"
+              className="h-9"
               onClick={() => setIsSettingsOpen(true)}
             >
-              <Settings2 className="w-4 h-4" />
+              <Settings2 className="w-4 h-4 mr-2" />
+              Configurações
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9 border-primary/30 text-foreground hover:border-primary/60 hover:bg-primary/5"
-              onClick={handleOpenDisparoStage}
-            >
-              <Send className="w-4 h-4 mr-2 text-primary" />
-              Disparo
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9"
-              onClick={() => setIsCreateLeadModalOpen(true)}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Lead
-            </Button>
+
+            {/* O protótipo enxuga a faixa pra seis controles. Disparo, Novo Lead,
+                período e auto-criar não somem — descem pro overflow. Tirar
+                capacidade em nome de layout seria trocar um problema por outro. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-9 px-2"
+                  aria-label="Mais ações do funil"
+                  data-testid="funnel-overflow"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <div className="px-2 py-1.5">
+                  <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleOpenDisparoStage}>
+                  <Send className="w-4 h-4 mr-2 text-primary" />
+                  Disparo
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsCreateLeadModalOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Novo lead
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <div className="px-2 py-1.5">
+                  <AutoCreateLeadToggle />
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         }
         primaryAction={
@@ -641,7 +676,7 @@ function PipeWhatsappInner() {
             onClick={() => setIsOpportunityModalOpen(true)}
           >
             <Plus className="w-4 h-4 mr-2" />
-            Nova Oportunidade
+            Novo negócio
           </Button>
         }
         chips={
@@ -694,6 +729,7 @@ function PipeWhatsappInner() {
           onStatusChange={handleStatusChange}
           disabled={!canMovePipe}
           onDeleteAllLeads={(stageId, stageTitle) => setStageToDelete({ id: stageId, title: stageTitle })}
+          onCreateInColumn={() => setIsOpportunityModalOpen(true)}
           onExportStage={(stageId, stageTitle) => {
             const col = columns.find((c) => c.id === stageId);
             setStageToExport({ id: stageId, title: stageTitle, count: col?.items.length ?? 0 });

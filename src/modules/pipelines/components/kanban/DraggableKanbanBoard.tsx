@@ -56,6 +56,8 @@ interface DraggableKanbanBoardProps<T extends DraggableItem> {
   onDeleteAllLeads?: (stageId: string, stageTitle: string) => void;
   /** When provided, the column header three-dots menu shows "Exportar leads desta etapa" */
   onExportStage?: (stageId: string, stageTitle: string) => void;
+  /** Quando fornecido, cada coluna ganha o rodapé "+ Novo negócio" da etapa. */
+  onCreateInColumn?: (stageId: string, stageTitle: string) => void;
   /** When true, drag-and-drop is disabled (permission denied) */
   disabled?: boolean;
 }
@@ -68,6 +70,7 @@ function DroppableColumn<T extends DraggableItem>({
   renderColumnExtra,
   onDeleteAllLeads,
   onExportStage,
+  onCreateInColumn,
 }: {
   column: KanbanColumn<T>;
   children: React.ReactNode;
@@ -76,6 +79,7 @@ function DroppableColumn<T extends DraggableItem>({
   renderColumnExtra?: (column: KanbanColumn<T>) => React.ReactNode;
   onDeleteAllLeads?: (stageId: string, stageTitle: string) => void;
   onExportStage?: (stageId: string, stageTitle: string) => void;
+  onCreateInColumn?: (stageId: string, stageTitle: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
@@ -89,27 +93,28 @@ function DroppableColumn<T extends DraggableItem>({
       transition={{ duration: 0.3 }}
       data-stage={column.id}
       className={cn(
-        "kanban-column min-w-[320px] max-w-[360px] flex-shrink-0 flex flex-col transition-all duration-200",
+        // Coluna é superfície própria (protótipo `.specs/mockups/funis-redesign/`):
+        // o board deixa de ser fundo liso e cada etapa ganha contorno, o que dá
+        // alvo visível pro arrasto e separa etapa cheia de etapa vazia.
+        "kanban-column w-[292px] min-w-[292px] max-w-[292px] flex-shrink-0 flex flex-col",
+        "rounded-xl bg-muted/25 overflow-hidden transition-all duration-200",
         isOver && "ring-2 ring-primary/50 bg-primary/5",
         className
       )}
     >
-      <div className="flex items-center justify-between mb-4 shrink-0">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-3 h-3 rounded-full"
-            style={{ backgroundColor: column.color }}
-          />
-          <h3 className="font-semibold text-sm">{column.title}</h3>
-          <span className="bg-muted text-muted-foreground text-xs font-medium px-2 py-0.5 rounded-full">
-            {column.totalCount ?? column.items.length}
-          </span>
-          {renderColumnExtra && renderColumnExtra(column)}
-        </div>
-        <div className="flex items-center gap-1">
-          <button className="p-1.5 rounded-lg hover:bg-background transition-colors">
-            <Plus className="w-4 h-4 text-muted-foreground" />
-          </button>
+      <div className="flex items-center gap-2 shrink-0 px-3 pt-3 pb-2">
+        <div
+          className="size-2.5 shrink-0 rounded-full"
+          style={{ backgroundColor: column.color }}
+        />
+        <h3 className="text-[12.5px] font-semibold tracking-[-0.01em] truncate">
+          {column.title}
+        </h3>
+        <span className="rounded-full bg-muted px-1.5 py-px text-[10.5px] font-semibold tabular-nums text-muted-foreground">
+          {column.totalCount ?? column.items.length}
+        </span>
+        {renderColumnExtra && renderColumnExtra(column)}
+        <div className="ml-auto flex items-center gap-1">
           {(onExportStage || onDeleteAllLeads) ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -153,7 +158,7 @@ function DroppableColumn<T extends DraggableItem>({
 
       {renderColumnFooter && renderColumnFooter(column)}
 
-      <div className="space-y-3 min-h-[100px] overflow-y-auto flex-1 min-h-0">
+      <div className="flex-1 min-h-[100px] space-y-2 overflow-y-auto px-2.5 pb-2.5">
         {children}
         {column.hasMore && column.onLoadMore && (
           <LoadMoreSentinel onLoadMore={column.onLoadMore} isFetching={column.isFetchingMore ?? false} />
@@ -164,6 +169,26 @@ function DroppableColumn<T extends DraggableItem>({
           </div>
         )}
       </div>
+
+      {/* Criar direto na etapa. Substitui o "+" que existia no cabeçalho e não
+          tinha handler nenhum — afordância que prometia e não fazia. */}
+      {onCreateInColumn && (
+        <button
+          type="button"
+          onClick={() => onCreateInColumn(column.id, column.title)}
+          data-testid={`column-create-${column.id}`}
+          className={cn(
+            "mx-2.5 mb-2.5 flex shrink-0 items-center justify-center gap-1.5",
+            "rounded-lg border border-dashed border-border px-2 py-2",
+            "text-[11.5px] font-medium text-muted-foreground",
+            "transition-colors duration-150 hover:border-primary hover:text-primary",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
+        >
+          <Plus className="size-3.5" aria-hidden />
+          Novo negócio
+        </button>
+      )}
     </motion.div>
   );
 }
@@ -239,6 +264,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
   renderColumnExtra,
   onDeleteAllLeads,
   onExportStage,
+  onCreateInColumn,
   disabled,
 }: DraggableKanbanBoardProps<T>) {
   const [activeItem, setActiveItem] = useState<T | null>(null);
@@ -376,6 +402,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
             renderColumnExtra={renderColumnExtra}
             onDeleteAllLeads={onDeleteAllLeads}
             onExportStage={onExportStage}
+            onCreateInColumn={onCreateInColumn}
           >
             <SortableContext
               items={column.items.map((item) => item.id)}
