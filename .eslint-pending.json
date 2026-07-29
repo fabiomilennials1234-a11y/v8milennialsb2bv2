@@ -1,0 +1,8 @@
+{
+  "count": 1,
+  "generatedFrom": "node ./node_modules/eslint/bin/eslint.js . --format json --cache --cache-location .eslintcache",
+  "note": "Problemas novos vs .eslint-baseline.json ainda nao corrigidos. TETO: so encolhe.",
+  "errors": [
+    "src/modules/pipelines/pages/PipeWhatsapp.tsx|react-hooks/exhaustive-deps|The 'handleStatusChange' function makes the dependencies of useCallback Hook (at line 526) change on every render. To fix this, wrap the definition of 'handleStatusChange' in its own useCallback() Hook."
+  ]
+}
