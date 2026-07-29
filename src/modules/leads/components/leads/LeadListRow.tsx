@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import type { Lead } from "../../hooks/useLeads";
 import type { LeadCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
+import type { LeadDeal } from "../../hooks/useLeadsDeals";
 
 /**
  * Linha da lista de leads — cartão solto, não célula de tabela.
@@ -29,19 +30,11 @@ export interface LeadTagRef {
 }
 
 /**
- * Um negócio vinculado ao lead. Ainda não há origem de dados — `deals` está
- * vazia em produção e a coluna renderiza o estado "sem negócio" pra todo mundo.
- * O contrato já fica de pé pra fatia 2 ligar sem mexer no layout.
+ * Um negócio vinculado ao lead. A fonte é `useLeadsDeals`, que lê
+ * `pipeline_entries` — card de funil **é** o negócio enquanto `deals` não está
+ * acesa (decisão D1). Alias mantido para os call sites antigos.
  */
-export interface LeadDealRef {
-  id: string;
-  title: string;
-  funnelName: string;
-  funnelColor: string;
-  stageName: string;
-  value: number;
-  won?: boolean;
-}
+export type LeadDealRef = LeadDeal;
 
 /** `Lead` + os joins que `useLeads` traz em runtime mas o tipo gerado não cobre. */
 export type LeadListItem = Lead & {
@@ -270,9 +263,9 @@ export function LeadListRow({
                 key={deal.id}
                 className={cn(
                   "inline-flex max-w-full items-center gap-2 rounded-md border px-2.5 py-0.5 text-[12.5px]",
-                  deal.won
-                    ? "border-success/45 bg-success/10"
-                    : "border-border bg-muted/70",
+                  deal.outcome === "won" && "border-success/45 bg-success/10",
+                  deal.outcome === "lost" && "border-destructive/35 bg-destructive/5",
+                  deal.outcome === "open" && "border-border bg-muted/70",
                 )}
               >
                 <span
@@ -280,12 +273,27 @@ export function LeadListRow({
                   style={{ background: deal.funnelColor }}
                 />
                 <span className="truncate">{deal.title}</span>
-                <span className="text-muted-foreground">
-                  {deal.won ? "vendido" : deal.stageName.toLowerCase()}
+                <span
+                  className={cn(
+                    "truncate text-muted-foreground",
+                    deal.outcome === "lost" && "text-destructive/80",
+                  )}
+                >
+                  {deal.stageName.toLowerCase()}
                 </span>
-                <span className={cn("font-semibold tabular-nums", deal.won && "text-success")}>
-                  {formatBRL(deal.value)}
-                </span>
+                {/* Valor só aparece quando existe — a maioria dos negócios de
+                    qualificação não tem `sale_value`, e "R$ 0,00" em toda linha
+                    vira ruído que esconde o número que importa. */}
+                {deal.value > 0 && (
+                  <span
+                    className={cn(
+                      "font-semibold tabular-nums",
+                      deal.outcome === "won" && "text-success",
+                    )}
+                  >
+                    {formatBRL(deal.value)}
+                  </span>
+                )}
               </span>
             ))}
           </div>

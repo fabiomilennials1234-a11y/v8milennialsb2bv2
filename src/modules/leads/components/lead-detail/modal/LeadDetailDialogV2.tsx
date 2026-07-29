@@ -244,7 +244,7 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
         <Tabs value={mobileTab} onValueChange={setMobileTab} className="flex-1 min-h-0 flex flex-col">
           <TabsList className="mx-3 mt-2 grid grid-cols-3" data-testid="lead-modal-mobile-tabs">
             <TabsTrigger value="info" data-testid="tab-info">Info</TabsTrigger>
-            <TabsTrigger value="pipes" data-testid="tab-pipes">Pipes</TabsTrigger>
+            <TabsTrigger value="pipes" data-testid="tab-pipes">Negócios</TabsTrigger>
             <TabsTrigger value="atividade" data-testid="tab-atividade">Atividade</TabsTrigger>
           </TabsList>
           <TabsContent value="info" className="flex-1 min-h-0 overflow-y-auto m-0">

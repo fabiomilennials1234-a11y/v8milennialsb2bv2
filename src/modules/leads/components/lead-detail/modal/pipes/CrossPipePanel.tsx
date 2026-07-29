@@ -18,7 +18,13 @@ import { MeetingFieldBlock } from "../../cross-pipe/MeetingFieldBlock";
 import { BudgetFieldBlock } from "../../cross-pipe/BudgetFieldBlock";
 import { ActionPill, type ActionPillType } from "./ActionPill";
 import { ActionPanel } from "./ActionPanel";
-import { OtherPipesStrip, type InactivePipeDescriptor } from "./OtherPipesStrip";
+import {
+  NewDealDialog,
+  type NewDealOption,
+  type NewDealValues,
+} from "./NewDealDialog";
+import { DealMeta } from "./DealMeta";
+import { useLeadsDeals } from "../../../../hooks/useLeadsDeals";
 import { StageRail, type StageRailPipe } from "./StageRail";
 import { useCrossPipeMove } from "./useCrossPipeMove";
 import {
@@ -30,11 +36,17 @@ import {
 } from "./pipeRanking";
 
 /**
- * CrossPipePanel — replaces LeadCrossPipeAccordion. Three horizontal zones:
+ * CrossPipePanel — a seção **Negócios** do lead. Três zonas horizontais:
  *
- *   A. StageRails        — one row per pipe the lead is currently in
- *   B. ActionPills + Panel — meeting/budget summary chips + expanded editor
- *   C. OtherPipesStrip   — dashed chips for pipes the lead is *not* in
+ *   A. StageRails        — uma linha por negócio (= card de funil), com valor,
+ *                          tempo parado e ponte pro board em `DealMeta`
+ *   B. ActionPills + Panel — chips de reunião/orçamento + editor expandido
+ *   C. NewDealDialog     — a única porta de criação de negócio (decisão D1)
+ *
+ * Vocabulário: **card de funil É o negócio** enquanto `deals` não está acesa
+ * (0 linhas em prod). O backfill 1:1 da fatia 2 só torna literal o que esta
+ * seção já mostra — nenhuma mudança visual no dia da migração. Ver
+ * `useLeadsDeals` e o doc `08 — Backlog/em-progresso/lead-negocio-separacao-fluxo-e2e`.
  *
  * Goal: collapse the ~200px tall accordion down to ~140-180px in the
  * typical 2-pipe case while keeping every action one click away.
@@ -107,6 +119,9 @@ export const CrossPipePanel = memo(function CrossPipePanel({
   const { usePipeConfirmacaoByLeadId, usePipePropostaByLeadId, useAddLeadToCustomPipe, useRemoveLeadFromCustomPipe, MergedMeetingEditor } = usePipeOps();
   const { hasFeature } = useOrgFeatures();
   const { data: pipelines = [], isLoading } = useLeadAllPipelines(leadId);
+  // Metadados do negócio (valor, tempo parado, funil-alvo) — mesma fonte que a
+  // coluna "Negócios" da lista, então as duas telas contam a mesma coisa.
+  const { data: dealsByLead } = useLeadsDeals(leadId ? [leadId] : []);
   const { data: confirmacaoData } = usePipeConfirmacaoByLeadId(leadId);
   const { data: propostaData } = usePipePropostaByLeadId(leadId);
   const addStandardMutation = useAddLeadToStandardPipe();
@@ -239,6 +254,14 @@ export const CrossPipePanel = memo(function CrossPipePanel({
     return list;
   }, [activeSystem, activeCustom]);
 
+  // `recordId` do rail é o id da `pipeline_entries` (system e custom), a mesma
+  // chave que `useLeadsDeals` devolve — casa 1:1 sem tradução.
+  const dealByEntryId = useMemo(() => {
+    const map = new Map<string, NonNullable<typeof dealsByLead>[string][number]>();
+    for (const deal of dealsByLead?.[leadId] ?? []) map.set(deal.id, deal);
+    return map;
+  }, [dealsByLead, leadId]);
+
   // ─── Rail focus (which rail is expanded) ───────────────────────────
   // Single-expand: at most one rail is expanded at a time. When 2+ rails
   // are active, the others render as compact chips. Persisted per user+lead
@@ -280,62 +303,78 @@ export const CrossPipePanel = memo(function CrossPipePanel({
 
   // ─── Add handlers ──────────────────────────────────────────────────
   const handleAddSystem = useCallback(
-    async (pipe: StandardPipelineStatus) => {
+    async (pipe: StandardPipelineStatus, values?: NewDealValues) => {
       if (!pipe.stages.length) {
-        toast.error("Pipe sem stages configuradas");
-        return;
+        toast.error("Funil sem etapas configuradas");
+        throw new Error("Funil sem etapas configuradas");
       }
-      const stageId = pipe.stages[0].id;
+      const stageId = values?.stageId || pipe.stages[0].id;
       try {
         await addStandardMutation.mutateAsync({
           leadId,
           pipeType: pipe.pipeType,
           stageId,
+          ownerId: values?.ownerId ?? null,
+          saleValue: values?.saleValue ?? null,
+          meetingDate: values?.meetingDate ?? null,
+          notes: values?.notes ?? null,
         });
         void logAction({
           leadId,
           action: "pipe_added",
-          description: `Adicionado a ${pipe.label}`,
-          metadata: { pipe_type: pipe.pipeType, stage_key: stageId },
+          description: `Negócio aberto em ${pipe.label}`,
+          metadata: {
+            pipe_type: pipe.pipeType,
+            stage_key: stageId,
+            owner_id: values?.ownerId ?? null,
+            sale_value: values?.saleValue ?? null,
+          },
         });
-        toast.success(`Adicionado a ${pipe.label}`);
+        toast.success(`Negócio aberto em ${pipe.label}`);
         if (pipe.pipeType === "confirmacao") forceExpand("meeting");
         else if (pipe.pipeType === "propostas") forceExpand("budget");
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Erro ao adicionar";
+        const msg = err instanceof Error ? err.message : "Erro ao criar negócio";
         toast.error(msg);
+        // Repropaga: o modal segura o rascunho digitado em vez de fechar como
+        // se tivesse dado certo.
+        throw err;
       }
     },
     [addStandardMutation, leadId, logAction, forceExpand],
   );
 
   const handleAddCustom = useCallback(
-    async (pipe: CustomPipelineStatus) => {
+    async (pipe: CustomPipelineStatus, values?: NewDealValues) => {
       if (!pipe.stages.length) {
-        toast.error("Pipe sem stages configuradas");
-        return;
+        toast.error("Funil sem etapas configuradas");
+        throw new Error("Funil sem etapas configuradas");
       }
-      const stageId = pipe.stages[0].id;
+      const stageId = values?.stageId || pipe.stages[0].id;
       try {
         await addCustomMutation.mutateAsync({
           lead_id: leadId,
           pipeline_id: pipe.pipelineId,
           stage_id: stageId,
+          ...(values?.ownerId ? { assigned_to: values.ownerId } : {}),
+          ...(values?.notes ? { notes: values.notes } : {}),
         });
         void logAction({
           leadId,
           action: "pipe_added",
-          description: `Adicionado a ${pipe.pipelineName}`,
+          description: `Negócio aberto em ${pipe.pipelineName}`,
           metadata: {
             pipe_type: "custom",
             pipeline_id: pipe.pipelineId,
             stage_id: stageId,
+            owner_id: values?.ownerId ?? null,
           },
         });
-        toast.success(`Adicionado a ${pipe.pipelineName}`);
+        toast.success(`Negócio aberto em ${pipe.pipelineName}`);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Erro ao adicionar";
+        const msg = err instanceof Error ? err.message : "Erro ao criar negócio";
         toast.error(msg);
+        throw err;
       }
     },
     [addCustomMutation, leadId, logAction],
@@ -377,36 +416,37 @@ export const CrossPipePanel = memo(function CrossPipePanel({
     [removeStandardMutation, leadId, logAction, expanded, persistExpanded],
   );
 
-  // ─── Inactive descriptors for strip ────────────────────────────────
-  const inactive: InactivePipeDescriptor[] = useMemo(() => {
-    const out: InactivePipeDescriptor[] = [];
+  // ─── Funis disponíveis para abrir um negócio ───────────────────────
+  // Cada funil em que o lead ainda não está é um negócio possível. O modal só
+  // mostra os campos que aquele funil sabe gravar (valor em Propostas, reunião
+  // em Confirmação) — ver `NewDealDialog`.
+  const dealOptions: NewDealOption[] = useMemo(() => {
+    const out: NewDealOption[] = [];
     for (const p of inactiveSystem) {
       out.push({
         key: `sys:${p.pipeType}`,
-        label: p.label,
-        shortLabel: SYSTEM_PIPE_SHORT_LABEL[p.pipeType] ?? p.label,
-        isAdding: addStandardMutation.isPending,
-        onAdd: () => handleAddSystem(p),
+        label: SYSTEM_PIPE_SHORT_LABEL[p.pipeType] ?? p.label,
+        color: p.color,
+        stages: p.stages.map((s) => ({ id: s.id, label: s.label })),
+        supportsValue: p.pipeType === "propostas",
+        supportsMeeting: p.pipeType === "confirmacao",
         disabled: !canAddToPipe.allowed,
         disabledReason: canAddToPipe.reason ?? "Sem permissão",
-        testId: `inactive-pipe-chip-sys-${p.pipeType}`,
       });
     }
     if (upsellPipe && !upsellActive) {
+      // Carteira não é negócio novo: é consequência de venda fechada. Fica
+      // visível e travado em vez de sumir, pra explicar a regra.
       const hasClosedSale = propostaData?.status === "vendido";
       out.push({
         key: "sys:upsell",
-        label: upsellPipe.label,
-        shortLabel: SYSTEM_PIPE_SHORT_LABEL.upsell,
-        isAdding: addStandardMutation.isPending,
-        onAdd: () => handleAddSystem(upsellPipe),
+        label: SYSTEM_PIPE_SHORT_LABEL.upsell,
+        color: upsellPipe.color,
+        stages: upsellPipe.stages.map((s) => ({ id: s.id, label: s.label })),
         disabled: !canAddToPipe.allowed || !hasClosedSale,
         disabledReason: !canAddToPipe.allowed
           ? canAddToPipe.reason ?? "Sem permissão"
-          : !hasClosedSale
-            ? "Disponível só quando há venda fechada"
-            : undefined,
-        testId: "inactive-pipe-chip-sys-upsell",
+          : "Disponível só quando há venda fechada",
       });
     }
     const sortedCustoms = [...inactiveCustom].sort((a, b) =>
@@ -416,12 +456,10 @@ export const CrossPipePanel = memo(function CrossPipePanel({
       out.push({
         key: `custom:${p.pipelineId}`,
         label: p.pipelineName,
-        shortLabel: p.pipelineName,
-        isAdding: addCustomMutation.isPending,
-        onAdd: () => handleAddCustom(p),
+        color: p.pipelineColor,
+        stages: p.stages.map((s) => ({ id: s.id, label: s.name })),
         disabled: !canAddToPipe.allowed,
         disabledReason: canAddToPipe.reason ?? "Sem permissão",
-        testId: `inactive-pipe-chip-custom-${p.pipelineId}`,
       });
     }
     return out;
@@ -431,13 +469,29 @@ export const CrossPipePanel = memo(function CrossPipePanel({
     upsellPipe,
     upsellActive,
     propostaData?.status,
-    addStandardMutation.isPending,
-    addCustomMutation.isPending,
     canAddToPipe.allowed,
     canAddToPipe.reason,
-    handleAddSystem,
-    handleAddCustom,
   ]);
+
+  const handleCreateDeal = useCallback(
+    async (option: NewDealOption, values: NewDealValues) => {
+      if (option.key.startsWith("custom:")) {
+        const pipelineId = option.key.slice("custom:".length);
+        const pipe = inactiveCustom.find((p) => p.pipelineId === pipelineId);
+        if (!pipe) throw new Error("Funil não encontrado");
+        await handleAddCustom(pipe, values);
+        return;
+      }
+      const pipeType = option.key.slice("sys:".length);
+      const pipe =
+        pipeType === "upsell"
+          ? upsellPipe
+          : inactiveSystem.find((p) => p.pipeType === pipeType);
+      if (!pipe) throw new Error("Funil não encontrado");
+      await handleAddSystem(pipe, values);
+    },
+    [inactiveCustom, inactiveSystem, upsellPipe, handleAddCustom, handleAddSystem],
+  );
 
   // ─── Loading ────────────────────────────────────────────────────────
   if (isLoading) {
@@ -450,15 +504,29 @@ export const CrossPipePanel = memo(function CrossPipePanel({
     );
   }
 
-  // ─── Total empty (no active, no inactive) ──────────────────────────
-  if (rails.length === 0 && inactive.length === 0) {
+  // ─── Sem negócio ────────────────────────────────────────────────────
+  // O lead existe, ninguém abriu negócio ainda. Depois do D1 este é o estado
+  // normal de entrada — o ingest cria lead e para por aí —, então o vazio
+  // precisa oferecer a ação, não só informar a ausência.
+  if (rails.length === 0) {
     return (
       <div
         className="rounded-xl border border-dashed border-border/40 bg-muted/10 p-6 text-center"
         data-testid="cross-pipe-panel-empty"
       >
         <Layers className="w-6 h-6 mx-auto text-muted-foreground/60 mb-2" />
-        <p className="text-sm text-muted-foreground">Sem pipes ainda</p>
+        <p className="text-sm text-muted-foreground">Nenhum negócio ainda</p>
+        <p className="mt-0.5 text-[11.5px] text-muted-foreground/70">
+          O lead está na base. Abrir um negócio é o que o coloca num funil.
+        </p>
+        <div className="mt-3 flex justify-center">
+          <NewDealDialog
+            options={dealOptions}
+            isCreating={addStandardMutation.isPending || addCustomMutation.isPending}
+            onCreate={handleCreateDeal}
+            size="md"
+          />
+        </div>
       </div>
     );
   }
@@ -472,29 +540,51 @@ export const CrossPipePanel = memo(function CrossPipePanel({
 
   return (
     <div className={cn("space-y-3")} data-testid="cross-pipe-panel">
+      {/* Cabeçalho — conta os negócios e carrega a única porta de criação. */}
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="flex items-baseline gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+          Negócios
+          <span className="text-[11px] tabular-nums text-muted-foreground/60">
+            {rails.length}
+          </span>
+        </h3>
+        <NewDealDialog
+          options={dealOptions}
+          isCreating={addStandardMutation.isPending || addCustomMutation.isPending}
+          onCreate={handleCreateDeal}
+        />
+      </div>
+
       {/* Zone A — StageRails (single-expand, collapsed chips for others) */}
       {rails.length > 0 && (
         <div
           className="space-y-1.5"
           data-testid="stage-rails"
           role="region"
-          aria-label="Pipes do lead"
+          aria-label="Negócios do lead"
         >
           {rails.map((rail) => {
             const key = railKey(rail);
             const isExpanded = key === expandedRailKey;
             return (
-              <StageRail
-                key={key}
-                pipe={rail}
-                pendingStageKey={move.pendingStageKey}
-                recentlyMovedStageKey={move.recentlyMovedStageKey}
-                disabled={!canMoveMeeting.allowed}
-                disabledReason={movePipeDisabledReason}
-                onMove={move.move}
-                mode={isExpanded ? "expanded" : "collapsed"}
-                onExpand={() => handleExpandRail(rail)}
-              />
+              <div key={key} className="flex items-center gap-1">
+                <div className="min-w-0 flex-1">
+                  <StageRail
+                    pipe={rail}
+                    pendingStageKey={move.pendingStageKey}
+                    recentlyMovedStageKey={move.recentlyMovedStageKey}
+                    disabled={!canMoveMeeting.allowed}
+                    disabledReason={movePipeDisabledReason}
+                    onMove={move.move}
+                    mode={isExpanded ? "expanded" : "collapsed"}
+                    onExpand={() => handleExpandRail(rail)}
+                  />
+                </div>
+                <DealMeta
+                  deal={dealByEntryId.get(rail.recordId)}
+                  fallbackLabel={rail.shortLabel}
+                />
+              </div>
             );
           })}
         </div>
@@ -568,8 +658,11 @@ export const CrossPipePanel = memo(function CrossPipePanel({
         </div>
       )}
 
-      {/* Zone C — Other pipes strip */}
-      {inactive.length > 0 && <OtherPipesStrip inactive={inactive} />}
+      {/* Zone C — a criação mora no cabeçalho (`NewDealDialog`). O strip de
+          chips pontilhados saiu junto com `OtherPipesStrip`/`InactivePipeChip`:
+          com negócio nascendo só de clique, "adicionar a um pipe" virou a ação
+          principal e não podia seguir como rodapé de um clique só, sem etapa,
+          sem dono e sem valor. */}
 
       {/* Hidden but accessible: custom pipe remove via kebab is handled by
           ActionPanel which today only renders for confirmação/propostas.

@@ -27,6 +27,7 @@ import {
   type LeadListItem,
 } from "../components/leads/LeadListRow";
 import { useLeadsCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
+import { useLeadsDeals } from "../hooks/useLeadsDeals";
 import {
   Select,
   SelectContent,
@@ -295,6 +296,8 @@ function LeadsInner() {
 
   // Cluster "Dados" da lista — números de carteira (upsell_clients) em lote.
   const { data: carteiraMetrics } = useLeadsCarteiraMetrics(allLeadIds);
+  // Coluna "Negócios" — card de funil é o negócio (D1). Ver `useLeadsDeals`.
+  const { data: leadDeals } = useLeadsDeals(allLeadIds);
   const { isMobile } = useViewport();
 
   // ── Pipe/funnel selection for new leads ──
@@ -747,6 +750,7 @@ function LeadsInner() {
                     key={lead.id}
                     lead={lead as LeadListItem}
                     metrics={carteiraMetrics?.[lead.id]}
+                    deals={leadDeals?.[lead.id]}
                     selected={bulk.isSelected(lead.id)}
                     onToggleSelect={() => bulk.toggle(lead.id)}
                     onOpen={() => openLead(lead.id)}

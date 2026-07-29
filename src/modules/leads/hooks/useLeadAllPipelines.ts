@@ -184,6 +184,22 @@ export function useLeadAllPipelines(leadId: string | null) {
 // ─── Mutation: add lead to a standard pipeline ────────────────
 // Writes to legacy tables → sync triggers push to pipeline_entries
 
+export interface AddLeadToStandardPipeVars {
+  leadId: string;
+  pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell";
+  stageId: string;
+  /**
+   * Dono do negócio (`team_members.id`). Ausente = quem está criando, que era
+   * o comportamento único antes do modal de novo negócio existir.
+   */
+  ownerId?: string | null;
+  /** Só `propostas` tem coluna de valor. */
+  saleValue?: number | null;
+  /** Só `confirmacao` — os lembretes D-5/D-3/D-1 dependem deste carimbo. */
+  meetingDate?: string | null;
+  notes?: string | null;
+}
+
 export function useAddLeadToStandardPipe() {
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
@@ -193,16 +209,21 @@ export function useAddLeadToStandardPipe() {
       leadId,
       pipeType,
       stageId,
-    }: {
-      leadId: string;
-      pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell";
-      stageId: string;
-    }) => {
+      ownerId,
+      saleValue,
+      meetingDate,
+      notes,
+    }: AddLeadToStandardPipeVars) => {
       if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
 
       // Virtual master team_members carry a non-UUID id ("master-virtual-<uuid>")
       // and must never be written into uuid FK columns (responsible_id/sdr_id/closer_id).
-      const memberId = isVirtualTeamMember(teamMember.id) ? null : teamMember.id;
+      const currentMemberId = isVirtualTeamMember(teamMember.id) ? null : teamMember.id;
+      // Mesmo guard vale pro dono escolhido no modal: master virtual não é FK.
+      const chosenOwnerId =
+        ownerId && !isVirtualTeamMember(ownerId) ? ownerId : null;
+      const memberId = chosenOwnerId ?? currentMemberId;
+      const trimmedNotes = notes?.trim() ? notes.trim() : null;
 
       if (pipeType === "qualificacao") {
         const { error } = await supabase.from("pipe_whatsapp").insert({
@@ -210,6 +231,7 @@ export function useAddLeadToStandardPipe() {
           status: stageId,
           responsible_id: memberId,
           sdr_id: memberId,
+          notes: trimmedNotes,
           organization_id: teamMember.organization_id,
         });
         if (error) throw error;
@@ -219,6 +241,8 @@ export function useAddLeadToStandardPipe() {
           status: stageId,
           responsible_id: memberId,
           sdr_id: memberId,
+          meeting_date: meetingDate ?? null,
+          notes: trimmedNotes,
           organization_id: teamMember.organization_id,
         });
         if (error) throw error;
@@ -228,6 +252,8 @@ export function useAddLeadToStandardPipe() {
           status: stageId,
           responsible_id: memberId,
           closer_id: memberId,
+          sale_value: saleValue ?? null,
+          notes: trimmedNotes,
           organization_id: teamMember.organization_id,
         });
         if (error) throw error;
