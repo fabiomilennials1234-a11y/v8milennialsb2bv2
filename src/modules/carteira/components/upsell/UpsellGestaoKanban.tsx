@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Settings, Plus, MoreHorizontal } from "lucide-react";
@@ -6,8 +7,6 @@ import { usePipelineStages, stagesToColumns, type PipelineStage } from "@/module
 import { useUpsellClients, useUpdateUpsellClient } from "@/modules/carteira/hooks/useUpsellClients";
 import { useUpsellOrders } from "@/modules/carteira/hooks/useUpsellOrders";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
-import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { NewOrderModal } from "@/modules/carteira/components/client/NewOrderModal";
 import { PipeSettingsDialog } from "@/modules/pipelines";
 import { ImportUpsellClientsContent } from "./ImportUpsellClientsContent";
@@ -38,7 +37,7 @@ function UpsellGestaoKanbanInner({ searchQuery, filterPotencial }: UpsellGestaoK
   const createAcaoDoDia = useCreateAcaoDoDia();
   const updateLead = useUpdateLead();
   const { isAdmin } = useIdentity();
-  const { openLead } = useLeadSheet();
+  const navigate = useNavigate();
 
   const [quickSaleClientId, setQuickSaleClientId] = useState<string>();
   const [quickSaleClientName, setQuickSaleClientName] = useState("");
@@ -115,7 +114,7 @@ function UpsellGestaoKanbanInner({ searchQuery, filterPotencial }: UpsellGestaoK
 
   const openDetail = (client: any) => {
     const leadId = (client as any).lead_id || client?.lead?.id;
-    if (leadId) openLead(leadId);
+    if (leadId) navigate(`/leads?lead=${leadId}`);
   };
 
   return (
@@ -261,10 +260,6 @@ function UpsellGestaoKanbanInner({ searchQuery, filterPotencial }: UpsellGestaoK
 
 export function UpsellGestaoKanban(props: UpsellGestaoKanbanProps) {
   return (
-    <LeadPanelProvider>
-      <LeadPanelLayout panel={<LeadDetailSheet />}>
         <UpsellGestaoKanbanInner {...props} />
-      </LeadPanelLayout>
-    </LeadPanelProvider>
   );
 }

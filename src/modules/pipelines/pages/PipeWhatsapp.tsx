@@ -41,7 +41,7 @@ import { useUserRole, useFeaturePermission } from "@/modules/identity";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
+import { DealPanelProvider, useDealSheet, DealDetailDialog } from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { LeadModal } from "@/modules/leads";
 import { CreateOpportunityModal } from "@/modules/pipelines/components/kanban/CreateOpportunityModal";
@@ -158,7 +158,7 @@ function PipeWhatsappInner() {
   // launched from the bulk-bar with a kanban selection seeded.
   const [disparoSource, setDisparoSource] = useState<DisparoSource>("estagio");
   const [disparoManualIds, setDisparoManualIds] = useState<string[]>([]);
-  const { openLead } = useLeadSheet();
+  const { openDeal } = useDealSheet();
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
@@ -410,8 +410,8 @@ function PipeWhatsappInner() {
 
   const handleMobileLeadClick = useCallback((leadId: string) => {
     const item = pipeData?.find((p) => p.lead_id === leadId);
-    if (item) openLead(item.lead_id, item.id);
-  }, [pipeData, openLead]);
+    if (item) openDeal(item.id, item.lead_id);
+  }, [pipeData, openDeal]);
 
   // Count "ghost leads" — rows do pipe que o usuário enxerga mas cujo join
   // com `leads` retornou null. Indica divergência entre RLS do pipe e de
@@ -745,7 +745,7 @@ function PipeWhatsappInner() {
               onClick={() => {
                 const item = pipeData?.find(p => p.id === card.id);
                 if (item) {
-                  openLead(item.lead_id, item.id);
+                  openDeal(item.id, item.lead_id);
                 }
               }}
               onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}
@@ -768,7 +768,7 @@ function PipeWhatsappInner() {
           onRowClick={(card) => {
             const item = pipeData?.find(p => p.id === card.id);
             if (item) {
-              openLead(item.lead_id, item.id);
+              openDeal(item.id, item.lead_id);
             }
           }}
           selectedIds={bulk.selectedIds}
@@ -937,10 +937,10 @@ function PipeWhatsappInner() {
 
 export default function PipeWhatsapp() {
   return (
-    <LeadPanelProvider>
-      <LeadPanelLayout panel={<LeadDetailSheet />}>
+    <DealPanelProvider>
+      <LeadPanelLayout panel={<DealDetailDialog />}>
         <PipeWhatsappInner />
       </LeadPanelLayout>
-    </LeadPanelProvider>
+    </DealPanelProvider>
   );
 }

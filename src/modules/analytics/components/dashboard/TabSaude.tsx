@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { memo, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,6 @@ import {
   type StageKey,
 } from "@/modules/analytics/lib/funnel-health-stages";
 import { format } from "date-fns";
-import { LeadPanelProvider, LeadDetailSheet, useLeadSheet } from "@/modules/leads";
 import { FunnelStageLeadsSheet } from "./FunnelStageLeadsSheet";
 import { SaudeOriginFilter } from "./SaudeOriginFilter";
 import { ORIGIN_LABELS } from "@/modules/analytics/hooks/useMktOriginConfig";
@@ -60,6 +60,7 @@ function fmtDays(v: number | null | undefined) {
 }
 
 function TabSaudeBase({ range }: { range: PeriodRange }) {
+  const navigate = useNavigate();
   // Data vem do período GLOBAL do CommandHeader (via prop `range`) — um único
   // filtro de data pra todo o Comando. Origem é filtro local, ortogonal.
   const [origins, setOrigins] = useState<string[]>([]);
@@ -69,8 +70,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
     origins,
   );
   const [openStage, setOpenStage] = useState<StageKey | null>(null);
-  const { openLead } = useLeadSheet();
-
+  
   const periodLabel = `de ${format(range.start, "dd/MM")} a ${format(range.end, "dd/MM")}`;
   const originsLabel = origins
     .map((o) => ORIGIN_LABELS[o as keyof typeof ORIGIN_LABELS] ?? o)
@@ -504,7 +504,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
         onClose={() => setOpenStage(null)}
         onOpenLead={(id) => {
           setOpenStage(null);
-          openLead(id);
+          navigate(`/leads?lead=${id}`);
         }}
       />
     </TooltipProvider>
@@ -513,10 +513,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
 
 function TabSaudeWithProviders({ range }: { range: PeriodRange }) {
   return (
-    <LeadPanelProvider>
       <TabSaudeBase range={range} />
-      <LeadDetailSheet />
-    </LeadPanelProvider>
   );
 }
 

@@ -55,7 +55,7 @@ import { useTeamMembers, useResponsibleMembers } from "@/modules/identity";
 import { CreateProposalModal } from "@/modules/carteira/components/proposal/CreateProposalModal";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
+import { DealPanelProvider, useDealSheet, DealDetailDialog } from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import {
   AnalyticsPanel,
@@ -234,7 +234,7 @@ function PipePropostasInner() {
       membroDefaultApplied: true,
     }));
   }, [teamMemberId, isAdmin, isMaster, filterState.membroDefaultApplied, setFilterState]);
-  const { openLead } = useLeadSheet();
+  const { openDeal } = useDealSheet();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDisparoOpen, setIsDisparoOpen] = useState(false);
@@ -528,9 +528,9 @@ function PipePropostasInner() {
   const handleMobileLeadClick = useCallback(
     (entryId: string) => {
       const item = pipeData?.find((p) => p.id === entryId);
-      if (item) openLead(item.lead_id || item.lead?.id, item.id);
+      if (item) openDeal(item.id, item.lead_id || item.lead?.id);
     },
-    [pipeData, openLead],
+    [pipeData, openDeal],
   );
   const handleMobileMove = (entryId: string, stageKey: string) => {
     handleStatusChange(entryId, stageKey);
@@ -1309,7 +1309,7 @@ function PipePropostasInner() {
                   onClick={() => {
                     const item = pipeData?.find(p => p.id === card.id);
                     if (item) {
-                      openLead(item.lead_id || item.lead?.id, item.id);
+                      openDeal(item.id, item.lead_id || item.lead?.id);
                     }
                   }}
                   onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}
@@ -1673,10 +1673,10 @@ function PipePropostasInner() {
 
 export default function PipePropostas() {
   return (
-    <LeadPanelProvider>
-      <LeadPanelLayout panel={<LeadDetailSheet />}>
+    <DealPanelProvider>
+      <LeadPanelLayout panel={<DealDetailDialog />}>
         <PipePropostasInner />
       </LeadPanelLayout>
-    </LeadPanelProvider>
+    </DealPanelProvider>
   );
 }

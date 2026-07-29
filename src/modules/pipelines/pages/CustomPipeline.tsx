@@ -43,7 +43,7 @@ import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modu
 import { matchesQualificationFilters } from "@/modules/pipelines/lib/kanbanFilterParams";
 import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";
 import { useViewport } from "@/shared/hooks/use-viewport";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
+import { DealPanelProvider, useDealSheet, DealDetailDialog } from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { AddLeadToPipeModal } from "@/modules/pipelines/components/custom/AddLeadToPipeModal";
 import { CustomPipeSettingsDialog } from "@/modules/pipelines/components/custom/CustomPipeSettingsDialog";
@@ -67,7 +67,7 @@ function CustomPipelinePageInner() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
 
-  const { openLead } = useLeadSheet();
+  const { openDeal } = useDealSheet();
   const [searchQuery, setSearchQuery] = useState("");
   const [qualificationTier, setQualificationTier] = useState<string[]>([]);
   const [preQualificationTier, setPreQualificationTier] = useState<string[]>([]);
@@ -140,9 +140,9 @@ function CustomPipelinePageInner() {
   const handleMobileLeadClick = useCallback(
     (entryId: string) => {
       const entry = entries.find((e) => e.id === entryId);
-      if (entry) openLead(entry.lead_id, entry.id);
+      if (entry) openDeal(entry.id, entry.lead_id);
     },
-    [entries, openLead],
+    [entries, openDeal],
   );
   const handleMobileMove = useCallback(
     (entryId: string, stageId: string) => {
@@ -285,7 +285,7 @@ function CustomPipelinePageInner() {
             tierFilterActive={tierFilterActive}
             onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
             onClickEntry={(entry) => {
-              openLead(entry.lead_id, entry.id);
+              openDeal(entry.id, entry.lead_id);
             }}
           />
         )
@@ -394,10 +394,10 @@ function CustomPipelinePageInner() {
 
 export default function CustomPipelinePage() {
   return (
-    <LeadPanelProvider>
-      <LeadPanelLayout panel={<LeadDetailSheet />}>
+    <DealPanelProvider>
+      <LeadPanelLayout panel={<DealDetailDialog />}>
         <CustomPipelinePageInner />
       </LeadPanelLayout>
-    </LeadPanelProvider>
+    </DealPanelProvider>
   );
 }
