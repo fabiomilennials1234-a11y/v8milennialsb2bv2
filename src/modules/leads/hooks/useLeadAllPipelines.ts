@@ -184,6 +184,46 @@ export function useLeadAllPipelines(leadId: string | null) {
 // ─── Mutation: add lead to a standard pipeline ────────────────
 // Writes to legacy tables → sync triggers push to pipeline_entries
 
+/**
+ * Recusa dono que não é da org. Função pura de dados — sem React, de propósito:
+ * importar o barril `@/modules/identity` num componente de board arrasta um
+ * grafo grande e estourou o orçamento de 5s dos testes vizinhos.
+ *
+ * As policies dos pipes validam `organization_id` da linha, nunca o org do
+ * membro referenciado; a FK garante que o uuid existe, não de quem ele é. Ver
+ * M6 em `08 — Backlog/em-progresso/lead-negocio-migrations-db` — o conserto
+ * definitivo é no banco, isto é defesa em profundidade.
+ */
+export async function assertMemberInOrg(
+  memberId: string,
+  organizationId: string,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("team_members")
+    .select("id")
+    .eq("id", memberId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Responsável não pertence a esta organização");
+}
+
+export interface AddLeadToStandardPipeVars {
+  leadId: string;
+  pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell";
+  stageId: string;
+  /**
+   * Dono do negócio (`team_members.id`). Ausente = quem está criando, que era
+   * o comportamento único antes do modal de novo negócio existir.
+   */
+  ownerId?: string | null;
+  /** Só `propostas` tem coluna de valor. */
+  saleValue?: number | null;
+  /** Só `confirmacao` — os lembretes D-5/D-3/D-1 dependem deste carimbo. */
+  meetingDate?: string | null;
+  notes?: string | null;
+}
+
 export function useAddLeadToStandardPipe() {
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
@@ -193,16 +233,38 @@ export function useAddLeadToStandardPipe() {
       leadId,
       pipeType,
       stageId,
-    }: {
-      leadId: string;
-      pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell";
-      stageId: string;
-    }) => {
+      ownerId,
+      saleValue,
+      meetingDate,
+      notes,
+    }: AddLeadToStandardPipeVars) => {
       if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
 
       // Virtual master team_members carry a non-UUID id ("master-virtual-<uuid>")
       // and must never be written into uuid FK columns (responsible_id/sdr_id/closer_id).
-      const memberId = isVirtualTeamMember(teamMember.id) ? null : teamMember.id;
+      const currentMemberId = isVirtualTeamMember(teamMember.id) ? null : teamMember.id;
+      // Mesmo guard vale pro dono escolhido no modal: master virtual não é FK.
+      const chosenOwnerId =
+        ownerId && !isVirtualTeamMember(ownerId) ? ownerId : null;
+
+      /**
+       * Dono escolhido tem que ser da MESMA org.
+       *
+       * As policies dos pipes checam `organization_id` da linha — nenhuma valida
+       * o org do membro referenciado em `responsible_id`/`sdr_id`/`closer_id`. A
+       * FK garante que o uuid existe, não de quem ele é. Sem esta checagem, um
+       * `ownerId` de outra org entra numa linha desta org, e qualquer join que
+       * resolve responsável → `team_members.name` passa a exibir o nome de um
+       * membro de fora — vazamento cross-tenant, além de atribuição suja.
+       *
+       * Guarda de cliente é defesa em profundidade, não a última: o conserto
+       * definitivo é no banco (CHECK/trigger comparando as orgs). Registrado em
+       * `08 — Backlog/em-progresso/lead-negocio-migrations-db`.
+       */
+      if (chosenOwnerId) await assertMemberInOrg(chosenOwnerId, teamMember.organization_id);
+
+      const memberId = chosenOwnerId ?? currentMemberId;
+      const trimmedNotes = notes?.trim() ? notes.trim() : null;
 
       if (pipeType === "qualificacao") {
         const { error } = await supabase.from("pipe_whatsapp").insert({
@@ -210,6 +272,7 @@ export function useAddLeadToStandardPipe() {
           status: stageId,
           responsible_id: memberId,
           sdr_id: memberId,
+          notes: trimmedNotes,
           organization_id: teamMember.organization_id,
         });
         if (error) throw error;
@@ -219,6 +282,8 @@ export function useAddLeadToStandardPipe() {
           status: stageId,
           responsible_id: memberId,
           sdr_id: memberId,
+          meeting_date: meetingDate ?? null,
+          notes: trimmedNotes,
           organization_id: teamMember.organization_id,
         });
         if (error) throw error;
@@ -228,6 +293,8 @@ export function useAddLeadToStandardPipe() {
           status: stageId,
           responsible_id: memberId,
           closer_id: memberId,
+          sale_value: saleValue ?? null,
+          notes: trimmedNotes,
           organization_id: teamMember.organization_id,
         });
         if (error) throw error;

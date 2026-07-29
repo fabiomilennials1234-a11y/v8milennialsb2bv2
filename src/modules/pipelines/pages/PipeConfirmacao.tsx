@@ -38,7 +38,7 @@ import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from 
 import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/MetricsPeriodSelector";
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
+import { DealPanelProvider, useDealSheet, DealDetailDialog } from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
 import { MeetingTimeline } from "@/modules/pipelines/components/legacy/confirmacao/MeetingTimeline";
@@ -262,7 +262,7 @@ function PipeConfirmacaoInner() {
     }));
   }, [teamMemberId, isAdmin, isMaster, filterState.membroDefaultApplied, setFilterState]);
 
-  const { openLead } = useLeadSheet();
+  const { openDeal } = useDealSheet();
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -714,7 +714,7 @@ function PipeConfirmacaoInner() {
   const handleCardClick = (card: LeadCardData) => {
     const item = pipeData?.find(p => p.id === card.id);
     if (item) {
-      openLead(item.lead_id, item.id);
+      openDeal(item.id, item.lead_id);
     }
   };
 
@@ -917,7 +917,7 @@ function PipeConfirmacaoInner() {
         <MeetingTimeline
           meetings={pipeData || []}
           onMeetingClick={(meeting) => {
-            openLead(meeting.lead_id, meeting.id);
+            openDeal(meeting.id, meeting.lead_id);
           }}
         />
       )}
@@ -1055,10 +1055,10 @@ export default function PipeConfirmacao() {
   if (hasFeature("merged_opportunity_funnel")) return <Navigate to="/funis" replace />;
 
   return (
-    <LeadPanelProvider>
-      <LeadPanelLayout panel={<LeadDetailSheet />}>
+    <DealPanelProvider>
+      <LeadPanelLayout panel={<DealDetailDialog />}>
         <PipeConfirmacaoInner />
       </LeadPanelLayout>
-    </LeadPanelProvider>
+    </DealPanelProvider>
   );
 }

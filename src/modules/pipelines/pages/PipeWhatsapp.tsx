@@ -1,8 +1,13 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
-import { motion } from "framer-motion";
-import { Search, Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List, BarChart3, Send } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List, BarChart3, Send, MoreHorizontal } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -30,6 +35,7 @@ import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from 
 import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/MetricsPeriodSelector";
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
 import { PipeWhatsappAnalytics } from "@/modules/pipelines/components/shared/PipeWhatsappAnalytics";
+import { FunnelControlBar } from "../components/shared/FunnelControlBar";
 import { PipeViewToggle } from "@/modules/pipelines/components/shared/PipeViewToggle";
 import { AutoCreateLeadToggle } from "@/modules/pipelines/components/shared/AutoCreateLeadToggle";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/modules/pipelines/hooks/model/usePipelineStages";
@@ -41,7 +47,7 @@ import { useUserRole, useFeaturePermission } from "@/modules/identity";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
+import { DealPanelProvider, useDealSheet, DealDetailDialog } from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { LeadModal } from "@/modules/leads";
 import { CreateOpportunityModal } from "@/modules/pipelines/components/kanban/CreateOpportunityModal";
@@ -158,7 +164,7 @@ function PipeWhatsappInner() {
   // launched from the bulk-bar with a kanban selection seeded.
   const [disparoSource, setDisparoSource] = useState<DisparoSource>("estagio");
   const [disparoManualIds, setDisparoManualIds] = useState<string[]>([]);
-  const { openLead } = useLeadSheet();
+  const { openDeal } = useDealSheet();
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
@@ -410,8 +416,8 @@ function PipeWhatsappInner() {
 
   const handleMobileLeadClick = useCallback((leadId: string) => {
     const item = pipeData?.find((p) => p.lead_id === leadId);
-    if (item) openLead(item.lead_id, item.id);
-  }, [pipeData, openLead]);
+    if (item) openDeal(item.id, item.lead_id);
+  }, [pipeData, openDeal]);
 
   // Count "ghost leads" — rows do pipe que o usuário enxerga mas cujo join
   // com `leads` retornou null. Indica divergência entre RLS do pipe e de
@@ -432,7 +438,11 @@ function PipeWhatsappInner() {
   }, [pipeData, metricsRange]);
 
   // Handle status change from drag-and-drop
-  const handleStatusChange = async (itemId: string, newStatus: string) => {
+  // Envolvida em useCallback: sem isso a identidade mudava a cada render e
+  // arrastava consigo as dependências de `handleMobileMove`. O ESLint reclamava
+  // citando o número da linha na mensagem, então qualquer edição neste arquivo
+  // reabria o aviso como se fosse novo.
+  const handleStatusChange = useCallback(async (itemId: string, newStatus: string) => {
     const item = pipeData?.find(p => p.id === itemId);
     if (!item) return;
 
@@ -517,7 +527,16 @@ function PipeWhatsappInner() {
       toast.error("Erro ao atualizar status");
       console.error(error);
     }
-  };
+  }, [
+    createPipeProposta,
+    logAction,
+    organizationId,
+    pipeData,
+    pipelineStages,
+    queryClient,
+    statusColumns,
+    updatePipeWhatsapp,
+  ]);
 
   const handleMobileMove = useCallback(
     async (leadId: string, newStageKey: string) => {
@@ -566,22 +585,16 @@ function PipeWhatsappInner() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <motion.h1
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold"
-          >
-            Funil de Qualificação
-          </motion.h1>
-          <p className="text-muted-foreground mt-1">
-            Arraste os cards para alterar o status • Agendado → move para Confirmação
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 [&>*]:shrink-0">
+      {/* Faixa única de controles — Modelo 1 do protótipo `.specs/mockups/funis-redesign/`.
+          Substitui o cabeçalho de cinco fileiras (título, período, busca+views+filtros,
+          chips e indicador de período) que empurrava o board pra baixo da dobra. */}
+      <FunnelControlBar
+        funnelKey="sys:whatsapp"
+        funnelLabel="Qualificação"
+        funnelColor="#3b82f6"
+        search={searchTerm}
+        onSearchChange={setSearchTerm}
+        views={
           <PipeViewToggle
             value={viewMode}
             onChange={setViewMode}
@@ -592,71 +605,89 @@ function PipeWhatsappInner() {
               { value: "analytics", icon: BarChart3, label: "Analytics" },
             ]}
           />
-          <AutoCreateLeadToggle />
-          <Button size="sm" variant="outline" onClick={() => setIsSettingsOpen(true)}>
-            <Settings2 className="w-4 h-4 mr-2" />
-            Configurações
-          </Button>
+        }
+        filters={
+          viewMode !== "analytics" ? (
+            <>
+              <SavedViewsDropdown
+                entityType="pipe_whatsapp"
+                currentFilters={filterState}
+                defaultFilters={DEFAULT_WHATSAPP_FILTERS}
+                onApplyFilters={(f) => setFilterState(() => f)}
+                activeViewId={activeViewId}
+                onActiveViewChange={handleActiveViewChange}
+              />
+              <KanbanFilterPanel sections={filterSections} onClearAll={handleClearAllFilters} />
+            </>
+          ) : null
+        }
+        actions={
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-9"
+              onClick={() => setIsSettingsOpen(true)}
+            >
+              <Settings2 className="w-4 h-4 mr-2" />
+              Configurações
+            </Button>
+
+            {/* O protótipo enxuga a faixa pra seis controles. Disparo, Novo Lead,
+                período e auto-criar não somem — descem pro overflow. Tirar
+                capacidade em nome de layout seria trocar um problema por outro. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-9 px-2"
+                  aria-label="Mais ações do funil"
+                  data-testid="funnel-overflow"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <div className="px-2 py-1.5">
+                  <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleOpenDisparoStage}>
+                  <Send className="w-4 h-4 mr-2 text-primary" />
+                  Disparo
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsCreateLeadModalOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Novo lead
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <div className="px-2 py-1.5">
+                  <AutoCreateLeadToggle />
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+        primaryAction={
           <Button
             size="sm"
-            variant="outline"
-            className="border-primary/30 text-foreground hover:border-primary/60 hover:bg-primary/5"
-            onClick={handleOpenDisparoStage}
+            className="h-9 gradient-gold"
+            onClick={() => setIsOpportunityModalOpen(true)}
           >
-            <Send className="w-4 h-4 mr-2 text-primary" />
-            Disparo
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setIsCreateLeadModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
-            Novo Lead
+            Novo negócio
           </Button>
-          <Button size="sm" className="gradient-gold" onClick={() => setIsOpportunityModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Nova Oportunidade
-          </Button>
-        </div>
-      </div>
+        }
+        chips={
+          viewMode !== "analytics" ? (
+            <FilterChips sections={filterSections} onClearAll={handleClearAllFilters} />
+          ) : null
+        }
+      />
 
       {/* Ghost leads (RLS divergente entre pipe e leads) */}
       <GhostLeadsBanner pipeType="whatsapp" ghostCount={ghostLeadsCount} />
-
-      {/* Período (segue para a coorte do Funil de Saúde no Analytics) */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
-      </div>
-
-      {/* Filters — ocultos no modo Analytics (são específicos do board) */}
-      {viewMode !== "analytics" && (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar lead, empresa, telefone..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <SavedViewsDropdown
-              entityType="pipe_whatsapp"
-              currentFilters={filterState}
-              defaultFilters={DEFAULT_WHATSAPP_FILTERS}
-              onApplyFilters={(f) => setFilterState(() => f)}
-              activeViewId={activeViewId}
-              onActiveViewChange={handleActiveViewChange}
-            />
-            <KanbanFilterPanel
-              sections={filterSections}
-              onClearAll={handleClearAllFilters}
-            />
-          </div>
-          <FilterChips
-            sections={filterSections}
-            onClearAll={handleClearAllFilters}
-          />
-        </div>
-      )}
 
       {/* Period filter indicator — aparece quando um período está selecionado */}
       {viewMode !== "analytics" && metricsRange && (
@@ -698,6 +729,7 @@ function PipeWhatsappInner() {
           onStatusChange={handleStatusChange}
           disabled={!canMovePipe}
           onDeleteAllLeads={(stageId, stageTitle) => setStageToDelete({ id: stageId, title: stageTitle })}
+          onCreateInColumn={() => setIsOpportunityModalOpen(true)}
           onExportStage={(stageId, stageTitle) => {
             const col = columns.find((c) => c.id === stageId);
             setStageToExport({ id: stageId, title: stageTitle, count: col?.items.length ?? 0 });
@@ -745,7 +777,7 @@ function PipeWhatsappInner() {
               onClick={() => {
                 const item = pipeData?.find(p => p.id === card.id);
                 if (item) {
-                  openLead(item.lead_id, item.id);
+                  openDeal(item.id, item.lead_id);
                 }
               }}
               onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}
@@ -768,7 +800,7 @@ function PipeWhatsappInner() {
           onRowClick={(card) => {
             const item = pipeData?.find(p => p.id === card.id);
             if (item) {
-              openLead(item.lead_id, item.id);
+              openDeal(item.id, item.lead_id);
             }
           }}
           selectedIds={bulk.selectedIds}
@@ -937,10 +969,10 @@ function PipeWhatsappInner() {
 
 export default function PipeWhatsapp() {
   return (
-    <LeadPanelProvider>
-      <LeadPanelLayout panel={<LeadDetailSheet />}>
+    <DealPanelProvider>
+      <LeadPanelLayout panel={<DealDetailDialog />}>
         <PipeWhatsappInner />
       </LeadPanelLayout>
-    </LeadPanelProvider>
+    </DealPanelProvider>
   );
 }

@@ -85,7 +85,7 @@ export const FEATURES: FeatureMeta[] = [
   { key: "chat", label: "Chat", description: "Chat e mensagens WhatsApp", icon: "Zap", category: "modules", sidebarPath: "/chat" },
   { key: "funnels", label: "Funis", description: "Pipelines de qualificação, confirmação e propostas", icon: "GitBranch", category: "modules", sidebarPath: "/funis" },
   { key: "review", label: "Revisão", description: "Revisão e follow-ups", icon: "Wrench", category: "modules", sidebarPath: "/follow-ups" },
-  { key: "leads", label: "Combustível", description: "Gestão de leads e contatos", icon: "Fuel", category: "modules", sidebarPath: "/leads" },
+  { key: "leads", label: "Leads", description: "Fonte de verdade do lead — ficha, contatos, negócios e carteira", icon: "Fuel", category: "modules", sidebarPath: "/leads" },
   { key: "commissions", label: "Comissões", description: "Comissões e pagamentos", icon: "DollarSign", category: "modules", sidebarPath: "/comissoes" },
   { key: "performance", label: "Pódio", description: "Performance, ranking e metas", icon: "Trophy", category: "modules", sidebarPath: "/performance" },
   { key: "marketing", label: "Marketing", description: "Marketing e análises", icon: "BarChart2", category: "modules", sidebarPath: "/marketing" },

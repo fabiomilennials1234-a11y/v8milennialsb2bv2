@@ -13,7 +13,9 @@
  *
  * Drill-down (#944): clicking a plan card opens BlastPlanRecipientsSheet (the
  * frozen audience — Enviados / Pulados / Aguardando); clicking a lead there
- * closes the sheet and opens the LeadDetailSheet (same mechanics as TabSaude).
+ * closes the sheet and navigates to `/leads?lead=<id>` (same mechanics as
+ * TabSaude). Desde 2026-07-29 o modal do lead só monta na aba Leads — no funil
+ * o card abre o modal do negócio.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -24,7 +26,6 @@ import {
   type BlastPlanStatus,
 } from "@/modules/campaigns/hooks/useBlastPlans";
 import { useOrganization } from "@/modules/identity";
-import { LeadPanelProvider, LeadDetailSheet, useLeadSheet } from "@/modules/leads";
 import { trackModuleVisit } from "@/lib/analytics";
 import { BlastPlanCard } from "@/modules/campaigns/components/BlastPlanCard";
 import { BlastPlanRecipientsSheet } from "@/modules/campaigns/components/BlastPlanRecipientsSheet";
@@ -68,8 +69,7 @@ const RECIPE: { icon: React.ElementType; title: string; body: string }[] = [
 function DisparosPanelBase() {
   const navigate = useNavigate();
   const { organizationId } = useOrganization();
-  const { openLead } = useLeadSheet();
-  useEffect(() => {
+    useEffect(() => {
     trackModuleVisit("disparos", organizationId);
   }, [organizationId]);
 
@@ -218,7 +218,7 @@ function DisparosPanelBase() {
           // Mesma mecânica do drill-down da aba Saúde: fecha o sheet do disparo
           // e abre a ficha completa do lead por cima.
           setOpenPlan(null);
-          openLead(id);
+          navigate(`/leads?lead=${id}`);
         }}
       />
     </div>
@@ -227,9 +227,6 @@ function DisparosPanelBase() {
 
 export default function DisparosPanel() {
   return (
-    <LeadPanelProvider>
       <DisparosPanelBase />
-      <LeadDetailSheet />
-    </LeadPanelProvider>
   );
 }

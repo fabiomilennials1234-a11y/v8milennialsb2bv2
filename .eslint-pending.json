@@ -1,0 +1,6 @@
+{
+  "count": 0,
+  "generatedFrom": "node ./node_modules/eslint/bin/eslint.js . --format json --cache --cache-location .eslintcache",
+  "note": "Problemas novos vs .eslint-baseline.json ainda nao corrigidos. TETO: so encolhe.",
+  "errors": []
+}

@@ -220,6 +220,12 @@ export {
   useLeadSheet,
 } from "./components/lead-detail";
 export { LeadDetailMobileTabs } from "./components/lead-detail/modal/LeadDetailMobileTabs";
+
+// ── Components: deal-detail (modal do negócio — decisão CTO 2026-07-29) ────
+// O card do funil abre o NEGÓCIO; o modal do lead abre só na aba Leads.
+export { DealDetailDialog } from "./components/deal-detail/DealDetailDialog";
+export { DealPanelProvider } from "./components/deal-detail/DealPanelProvider";
+export { useDealSheet } from "./components/deal-detail/deal-sheet-context";
 // Slots de responsável/qualificação — reusados fora do modal (ex.: painel do chat).
 export { ResponsibleSlot } from "./components/lead-detail/modal/header/ResponsibleSlot";
 export { QualificationSlot } from "./components/lead-detail/modal/header/QualificationSlot";

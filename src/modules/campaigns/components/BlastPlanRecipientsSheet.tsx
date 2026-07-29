@@ -2,7 +2,8 @@
  * BlastPlanRecipientsSheet — drill-down v1 da audiência congelada de um Blast
  * Plan (#944 / PRD #941). Mesma mecânica do drill-down de leads por etapa da
  * aba Saúde (FunnelStageLeadsSheet): sheet lateral, busca client-side, clique
- * no lead fecha o sheet e abre o LeadDetailSheet via LeadPanelProvider.
+ * no lead fecha o sheet e navega pra `/leads?lead=<id>`. O modal do lead só
+ * monta na aba Leads desde 2026-07-29 (no funil, o card abre o negócio).
  *
  * Tabs = Blast Recipient Status: Enviados (`sent`) / Falha na entrega
  * (`failed`, motivo por lead — ADR-0016/#948) / Pulados (`skipped`, motivo por
