@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Torque — aba de Funis (protótipo)</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23191714'/%3E%3Crect x='6' y='8' width='5' height='16' rx='2' fill='%23ffc800'/%3E%3Crect x='13.5' y='8' width='5' height='11' rx='2' fill='%23ed8b21'/%3E%3Crect x='21' y='8' width='5' height='7' rx='2' fill='%23979187'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<svg class="sprite" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18l-7 8v6l-4 2v-8Z"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="5" cy="12" r=".7"/><circle cx="12" cy="12" r=".7"/><circle cx="19" cy="12" r=".7"/></symbol>
+  <symbol id="i-build" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 8h1M14 8h1M9 12h1M14 12h1M10 21v-4h4v4"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4Z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v2.2M12 19.3v2.2M21.5 12h-2.2M4.7 12H2.5M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6M18.7 18.7l-1.6-1.6M6.9 6.9 5.3 5.3"/></symbol>
+  <symbol id="i-money" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 10v4M18 10v4"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="m3 8 9 5 9-5M12 13v8"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14v18l-4-3-3 3-3-3-4 3Z"/><path d="M9 8h6M9 12h4"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 18a9 9 0 1 1 17 0"/><path d="m12 14 4-4"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.5"/><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M6 7.5v9M8.5 5H13a2.5 2.5 0 0 1 2.5 2.5V10"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5.5 5.5L20 7"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 22 20H2Z"/><path d="M12 10v4M12 17.2v.1"/></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1.2 3.4-.8 5-2.2 6.6C8.2 10.4 7 12 7 14.2 7 17.9 9.9 21 12 21s5-3.1 5-6.8c0-3-2.1-4.7-3.3-6.4C12.6 6.3 12 4.2 12 2Z"/></symbol>
+  <symbol id="i-comment" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Z"/></symbol>
+  <symbol id="i-checksq" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="m8 12 3 3 5-6"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3 4v5h5M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-whats" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a9.9 9.9 0 0 0-8.5 15L2 22l5.2-1.4A9.9 9.9 0 1 0 12 2Zm5.6 14.1c-.2.7-1.2 1.3-1.9 1.4-.5.1-1.2.2-3.5-.7-2.9-1.2-4.8-4.2-5-4.4-.1-.2-1.1-1.5-1.1-2.9s.7-2 1-2.3c.2-.3.5-.4.7-.4h.5c.2 0 .4 0 .6.5l.8 2c.1.2.1.4 0 .5l-.4.5-.3.3c-.1.1-.2.3-.1.5.1.2.6 1.1 1.4 1.8 1 .9 1.8 1.2 2 1.3.2.1.4.1.5-.1l.7-.9c.2-.2.3-.2.5-.1l2 .9c.2.1.4.2.4.3.1.2.1.7-.1 1.3Z"/></symbol>
+  <symbol id="i-fone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h3l2 5-2.5 1.5a12 12 0 0 0 5 5L15 12l5 2v3a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4 5.2 2 2 0 0 1 6 3Z"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.6 5.7 6.2.7-4.6 4.2 1.2 6.1L12 16.8 6.6 19.7l1.2-6.1L3.2 9.4l6.2-.7Z"/></symbol>
+  <symbol id="i-kanban" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="14" rx="1.5"/><rect x="9.5" y="3" width="5" height="18" rx="1.5"/><rect x="16" y="3" width="5" height="10" rx="1.5"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><rect x="4" y="11" width="4" height="7" rx="1"/><rect x="10" y="6" width="4" height="12" rx="1"/><rect x="16" y="14" width="4" height="4" rx="1"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5"/><path d="M4 20h16"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12.5V4a1 1 0 0 1 1-1h8.5L21 11.5 12.5 20Z"/><circle cx="7.5" cy="7.5" r="1.3"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16m0 0-5-5m5 5-5 5"/><path d="M4 5v14"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 10.5 13.5M21 3l-6.5 18-4-8-8-4Z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-sort" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16m0 0-3.5-3.5M7 20l3.5-3.5"/><path d="M14 7h7M14 12h5M14 17h3"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16Z"/><path d="m14.5 5.5 4 4"/></symbol>
+</svg>
+
+<div class="app">
+
+  <!-- Top nav do Torque -->
+  <nav class="tn">
+    <!-- Logo real do produto: src/assets/torque-icon.png + wordmark no hover,
+         mesma mecânica do TopNavigation.tsx (gira 360° e ganha brilho dourado). -->
+    <a class="tn-logo" href="#" title="Central de Comando" aria-label="Torque — Central de Comando">
+      <img class="tn-ic" src="torque-icon.png" alt="Torque" width="32" height="32">
+      <span class="tn-word"><img src="torque-logo.png" alt="" aria-hidden="true"></span>
+    </a>
+    <button class="tn-item" type="button">Comando</button>
+    <button class="tn-item" type="button">Chat</button>
+    <button class="tn-item" type="button">Disparos</button>
+    <button class="tn-item on" type="button" aria-current="page">Funis</button>
+    <button class="tn-item" type="button">Carteira</button>
+    <button class="tn-item" type="button">Agenda</button>
+    <button class="tn-item" type="button">Ranking</button>
+    <button class="tn-item" type="button">Mais</button>
+    <span class="tn-right"><span class="tn-av">LM</span></span>
+  </nav>
+
+  <!-- Modelo 1 — faixa única de controles -->
+  <div class="bar">
+    <div class="pop-wrap">
+      <button class="pick" id="btn-pick" type="button" title="Trocar de funil"
+              aria-haspopup="listbox" aria-expanded="false" aria-controls="menu-funis">
+        <span class="sw" id="pick-sw" style="background:#3b82f6"></span>
+        <span id="pick-nome">Qualificação</span>
+        <svg class="ic"><use href="#i-chev"/></svg>
+      </button>
+      <div class="menu menu--funis" id="menu-funis" role="listbox" aria-label="Escolher funil" hidden></div>
+    </div>
+
+    <span class="spacer"></span>
+
+    <label class="srch">
+      <svg><use href="#i-search"/></svg>
+      <input id="busca" type="search" placeholder="Buscar lead, empresa, telefone…" aria-label="Buscar">
+    </label>
+
+    <div class="pop-wrap">
+      <button class="ctl" id="btn-views" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="menu-views">
+        <svg id="ic-vista"><use href="#i-kanban"/></svg> Views
+      </button>
+      <div class="menu menu--views" id="menu-views" role="menu" aria-label="Visualizações salvas" hidden></div>
+    </div>
+
+    <div class="pop-wrap">
+      <button class="ctl" id="btn-filtros" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="menu-filtros">
+        <svg><use href="#i-filter"/></svg> Filtros <span class="cnt" id="cnt-filtros" hidden>0</span>
+      </button>
+      <div class="menu menu--filtros" id="menu-filtros" role="dialog" aria-label="Filtros" hidden></div>
+    </div>
+
+    <button class="ctl" id="btn-cfg" type="button"><svg><use href="#i-gear"/></svg> Configurações</button>
+    <button class="ctl ctl--gold" type="button"><svg><use href="#i-plus"/></svg> Novo negócio</button>
+  </div>
+
+  <div class="chips-bar" id="chips" hidden></div>
+
+  <div class="board" id="board"></div>
+
+  <div class="vazio-geral" id="vazio-geral" hidden>
+    <svg><use href="#i-search"/></svg>
+    <p>Nenhum negócio com esses filtros.</p>
+  </div>
+
+  <!-- Barra de ação em massa — só aparece com algo selecionado -->
+  <div class="selbar" id="selbar" hidden role="toolbar" aria-label="Ações em massa"></div>
+</div>
+
+<!-- ═══════════════ Ficha do lead — estrutura do LeadDetailDialogV2 ═══════════════
+     Desktop não tem abas: grid 7/5. Esquerda = CrossPipePanel + Info,
+     direita = Checklist + Histórico & comentários. -->
+<div class="ov" id="ov-ficha" hidden role="dialog" aria-modal="true" aria-labelledby="f-nome">
+  <div class="sheet sheet--ficha">
+
+    <!-- A. Header (LeadModalHeader) -->
+    <div class="lm-head">
+      <div class="lm-id">
+        <span class="lm-av" id="f-av"></span>
+        <div class="lm-id-txt">
+          <h2 class="lm-nome" id="f-nome"></h2>
+          <div class="lm-meta" id="f-meta"></div>
+        </div>
+      </div>
+
+      <div class="lm-slots">
+        <div class="slot-grp">
+          <div class="slot-t">Responsáveis</div>
+          <div class="slots" id="f-resp"></div>
+        </div>
+        <div class="slot-grp">
+          <div class="slot-t">Qualificação</div>
+          <div class="slots" id="f-qual"></div>
+        </div>
+      </div>
+
+      <button class="sh-x" data-fechar type="button" aria-label="Fechar"><svg><use href="#i-x"/></svg></button>
+    </div>
+
+    <div class="lm-tags" id="f-tags"></div>
+
+    <!-- B. Toolbar (LeadModalToolbar) -->
+    <div class="lm-tools">
+      <button class="tool" type="button"><svg><use href="#i-whats"/></svg> WhatsApp</button>
+      <button class="tool" type="button"><svg><use href="#i-fone"/></svg> Ligar</button>
+      <button class="tool" type="button"><svg><use href="#i-mail"/></svg> Email</button>
+      <button class="tool" type="button"><svg><use href="#i-clock"/></svg> Follow-up</button>
+      <span class="tool-ia">
+        <span class="sw-t sw-t--mini" role="switch" aria-checked="true" aria-label="IA ativa"></span> IA
+      </span>
+      <button class="tool tool--kb" type="button" aria-label="Mais ações"><svg><use href="#i-dots"/></svg></button>
+    </div>
+
+    <!-- C. Corpo -->
+    <div class="lm-body">
+      <div class="lm-left">
+        <section id="f-pipes"></section>
+        <section id="f-info"></section>
+      </div>
+      <div class="lm-right">
+        <section id="f-check"></section>
+        <section id="f-hist"></section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ Configurações do funil ═══════════════ -->
+<div class="ov" id="ov-cfg" hidden role="dialog" aria-modal="true" aria-labelledby="c-nome">
+  <div class="sheet sheet--cfg">
+
+    <div class="sh-head">
+      <div>
+        <div class="sh-title" id="c-nome">Configurações</div>
+        <div class="sh-sub" id="c-tipo"></div>
+      </div>
+      <button class="sh-x" data-fechar type="button" aria-label="Fechar"><svg><use href="#i-x"/></svg></button>
+    </div>
+
+    <div class="cfg-tabs" id="c-tabs" role="tablist"></div>
+
+    <div class="cfg-body" id="c-body"></div>
+
+    <div class="sh-foot">
+      <span class="nota-rodape">Protótipo: as mudanças valem só nesta aba do navegador.</span>
+      <button class="ctl" data-fechar type="button">Fechar</button>
+      <button class="ctl ctl--gold" data-fechar type="button"><svg><use href="#i-check"/></svg> Salvar</button>
+    </div>
+  </div>
+</div>
+
+<datalist id="catalogo">
+  <option value="Compressor parafuso 50L"></option>
+  <option value="Compressor pistão 20L"></option>
+  <option value="Manutenção preventiva"></option>
+  <option value="Contrato de suporte"></option>
+  <option value="Instalação e setup"></option>
+  <option value="Treinamento de operação"></option>
+  <option value="Kit de filtros (12 un)"></option>
+  <option value="Mangueira alta pressão 10m"></option>
+</datalist>
+
+<div class="proto"><b>Protótipo</b> · dados fictícios · não fala com o Torque</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
