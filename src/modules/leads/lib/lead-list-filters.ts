@@ -13,6 +13,7 @@
 /** Valores dos filtros da lista de leads aplicáveis a uma query. Todos opcionais;
  * o sentinel `"all"` (e vazio/undefined) significa "sem filtro". */
 export interface LeadListFilterValues {
+  /** Busca livre — casa contra nome, empresa, e-mail e telefone. */
   searchQuery?: string;
   filterOrigin?: string;
   filterRating?: string;
@@ -24,6 +25,23 @@ export interface LeadListFilterValues {
   createdFrom?: string;
   /** Instante ISO (inclusive) — limite superior de `created_at`. */
   createdTo?: string;
+}
+
+/**
+ * Mínimo de dígitos para o termo ser tratado como busca de telefone. Abaixo
+ * disso ("21", "9") o `ilike` casaria com praticamente toda a base e a busca
+ * por nome com número no meio ("Loja 21") viraria ruído.
+ */
+const MIN_PHONE_SEARCH_DIGITS = 4;
+
+/**
+ * Extrai a sequência de dígitos de um termo de busca, ou `null` quando o termo
+ * não parece um telefone. Só os dígitos entram na query — o que também os torna
+ * seguros de interpolar no `or()` do PostgREST (nenhum caractere estrutural).
+ */
+function extractSearchDigits(search: string): string | null {
+  const digits = search.replace(/\D/g, "");
+  return digits.length >= MIN_PHONE_SEARCH_DIGITS ? digits : null;
 }
 
 /**
@@ -42,7 +60,24 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
   const search = filters.searchQuery?.trim();
   if (search) {
     const pattern = `%${search}%`;
-    q = q.or(`name.ilike.${pattern},company.ilike.${pattern},email.ilike.${pattern}`);
+    const clauses = [
+      `name.ilike.${pattern}`,
+      `company.ilike.${pattern}`,
+      `email.ilike.${pattern}`,
+      `phone.ilike.${pattern}`,
+    ];
+
+    // Telefone é digitado com máscara ("(21) 99999-8888", "21 99999 8888") mas
+    // gravado cru em `normalized_phone` ("5521999998888"). Comparar o texto
+    // digitado contra a coluna normalizada nunca casaria, então extraímos os
+    // dígitos e casamos por substring — o que também torna a busca parcial
+    // (só o final do número, sem DDD) funcionar.
+    const digits = extractSearchDigits(search);
+    if (digits) {
+      clauses.push(`normalized_phone.ilike.%${digits}%`);
+    }
+
+    q = q.or(clauses.join(","));
   }
 
   if (filters.filterOrigin && filters.filterOrigin !== "all") {

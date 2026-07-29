@@ -11,6 +11,24 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { track } from "@/lib/analytics";
 import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
 import type { WhatsAppMessage, FailedMessage } from "./types";
+import { makeOptimisticId, promoteOptimisticMessage } from "./shared/optimistic-messages";
+
+/**
+ * Lê o id do provider carimbado em `_localMessage` pelo mutationFn.
+ *
+ * Devolve `undefined` também para o fallback `local_…` — esse id é inventado
+ * pelo cliente quando a resposta do envio não traz um, e não casa com a linha
+ * que o webhook grava. Promover a bolha com ele criaria a duplicata que este
+ * caminho existe pra evitar; melhor deixá-la otimista e o casamento por
+ * conteúdo resolver.
+ */
+function readProviderMessageId(data: unknown): string | undefined {
+  const local = (data as { _localMessage?: { messageId?: unknown } } | null | undefined)
+    ?._localMessage;
+  const id = local?.messageId;
+  if (typeof id !== "string" || id.startsWith("local_")) return undefined;
+  return id;
+}
 
 // ─── Helpers privados ────────────────────────────────────────────────────────
 
@@ -238,11 +256,12 @@ export function useSendWhatsAppMessage() {
         ["whatsapp_messages", orgId, phone, instId]
       );
 
+      const optimisticId = makeOptimisticId();
       const optimisticMsg: WhatsAppMessage = {
-        id: `optimistic_${Date.now()}`,
+        id: optimisticId,
         organization_id: orgId || "",
         instance_id: instId || null,
-        message_id: `optimistic_${Date.now()}`,
+        message_id: optimisticId,
         remote_jid: `${phone}@s.whatsapp.net`,
         phone_number: phone,
         direction: "outgoing",
@@ -262,7 +281,7 @@ export function useSendWhatsAppMessage() {
         (old) => [...(old || []), optimisticMsg]
       );
 
-      return { previousMessages };
+      return { previousMessages, optimisticId };
     },
     onError: (err, variables, context) => {
       if (context?.previousMessages) {
@@ -290,7 +309,18 @@ export function useSendWhatsAppMessage() {
         },
       ]);
     },
-    onSuccess: () => {
+    onSuccess: (data, variables, context) => {
+      // Carimba o id real do provider na bolha otimista assim que ele chega.
+      // A partir daí o dedupe por message_id do realtime reconhece a linha do
+      // webhook e não anexa uma segunda bolha.
+      const realMessageId = readProviderMessageId(data);
+      if (context?.optimisticId && realMessageId) {
+        queryClient.setQueryData<WhatsAppMessage[]>(
+          ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
+          (old) => promoteOptimisticMessage(old, context.optimisticId, realMessageId),
+        );
+      }
+
       if (teamMember?.organization_id) {
         track({ event: "message_sent", organizationId: teamMember.organization_id, entityType: "conversation" });
       }
@@ -431,7 +461,9 @@ export function useSendWhatsAppMedia() {
       }, { onConflict: "message_id,instance_id", ignoreDuplicates: false })
         .then(({ error: e }) => { if (e) console.warn("[send] media upsert fallback failed:", e.message); });
 
-      return data;
+      // `_localMessage` carrega o id real do provider até o onSuccess, que o usa
+      // pra promover a bolha otimista. Mesmo contrato do envio de texto.
+      return { ...(data as Record<string, unknown>), _localMessage: { messageId } };
     },
     onMutate: async (variables) => {
       const orgId = teamMember?.organization_id;
@@ -444,11 +476,12 @@ export function useSendWhatsAppMedia() {
         ["whatsapp_messages", orgId, phone, instId]
       );
 
+      const optimisticId = makeOptimisticId();
       const optimisticMsg: WhatsAppMessage = {
-        id: `optimistic_${Date.now()}`,
+        id: optimisticId,
         organization_id: orgId || "",
         instance_id: instId || null,
-        message_id: `optimistic_${Date.now()}`,
+        message_id: optimisticId,
         remote_jid: `${phone}@s.whatsapp.net`,
         phone_number: phone,
         direction: "outgoing",
@@ -468,7 +501,17 @@ export function useSendWhatsAppMedia() {
         (old) => [...(old || []), optimisticMsg]
       );
 
-      return { previousMessages };
+      return { previousMessages, optimisticId };
+    },
+    onSuccess: (data, variables, context) => {
+      // Mesma promoção do envio de texto — ver comentário lá.
+      const realMessageId = readProviderMessageId(data);
+      if (context?.optimisticId && realMessageId) {
+        queryClient.setQueryData<WhatsAppMessage[]>(
+          ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
+          (old) => promoteOptimisticMessage(old, context.optimisticId, realMessageId),
+        );
+      }
     },
     onError: (err, variables, context) => {
       if (context?.previousMessages) {

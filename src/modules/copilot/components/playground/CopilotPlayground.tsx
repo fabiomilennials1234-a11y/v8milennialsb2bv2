@@ -238,6 +238,7 @@ function playgroundToAgentPayload(data: PlaygroundData, conexaoState?: ConexaoSt
         ),
         handoffNotifyPhones: data.handoffNotifyPhones,
         handoffNotifyInstructions: data.handoffNotifyInstructions,
+        knowledgeLinks: data.links,
       },
       custom_instructions: sectionsToFlatText(data),
       // Handoff WhatsApp Notification
@@ -408,6 +409,7 @@ export function CopilotPlayground() {
         description: d.description || "",
         sendWhen: d.send_when || "",
       })),
+      links: Array.isArray(wd.knowledgeLinks) ? wd.knowledgeLinks : [],
     }));
 
     // Load conexao state from agent
@@ -1012,6 +1014,11 @@ function createWizardDataFromPlayground(data: PlaygroundData, conexaoState?: Con
     // Structured data for round-trip (edit mode)
     promptSections: data.promptSections,
     toolInstructions,
+    // Links da base de conhecimento. Diferente dos documentos, links não têm
+    // arquivo nem linha em `copilot_agent_documents` — sem persistir aqui eles
+    // só existiriam dentro do texto do system prompt e sumiriam da UI ao
+    // reabrir o agente.
+    knowledgeLinks: data.links,
     // Conexao fields
     ...(conexaoState ? {
       whatsappInstanceId: conexaoState.whatsappInstanceId,
