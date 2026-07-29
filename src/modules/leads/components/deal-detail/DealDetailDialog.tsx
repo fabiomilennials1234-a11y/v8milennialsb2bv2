@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import { X, ArrowUpRight, Layers } from "lucide-react";
 import { Link } from "react-router-dom";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
@@ -17,12 +17,15 @@ import { useLeadActionGates } from "../lead-detail/hooks/useLeadActionGates";
 import { LeadActivityColumn } from "../lead-detail/modal/activity/LeadActivityColumn";
 import { LeadModalSkeleton } from "../lead-detail/modal/LeadModalSkeleton";
 import { StageRail, type StageRailPipe } from "../lead-detail/modal/pipes/StageRail";
+import { ActionPill, type ActionPillType } from "../lead-detail/modal/pipes/ActionPill";
+import { ActionPanel } from "../lead-detail/modal/pipes/ActionPanel";
 import { useCrossPipeMove } from "../lead-detail/modal/pipes/useCrossPipeMove";
 import { MeetingFieldBlock } from "../lead-detail/cross-pipe/MeetingFieldBlock";
 import { BudgetFieldBlock } from "../lead-detail/cross-pipe/BudgetFieldBlock";
 import { usePipeOps } from "../../pipe-ops";
 import {
   useLeadAllPipelines,
+  useRemoveLeadFromStandardPipe,
   type CustomPipelineStatus,
   type PipelineStatus,
   type StandardPipelineStatus,
@@ -58,6 +61,32 @@ const SYSTEM_SHORT_LABEL: Record<string, string> = {
 /** Etapas em que o funil mergeado (ADR-0004) guarda a reunião na entry whatsapp. */
 const MERGED_MEETING_STAGES = ["agendado", "remarcar", "compareceu", "nao_compareceu"];
 
+/**
+ * Recursos que o negócio expõe como *action pill*.
+ *
+ * **Esta função é a costura** para a proposta de "recursos por funil" do
+ * protótipo `.specs/mockups/funis-redesign/` — quando existir configuração por
+ * funil, ela passa a ler dali em vez de deduzir do tipo do pipe. A mecânica
+ * pill → painel já é a definitiva; só a origem da lista muda.
+ *
+ * Hoje a lista sai do que o banco **consegue guardar**, não do que seria bonito
+ * oferecer:
+ * - `confirmacao` → reunião (`pipe_confirmacao.meeting_date`)
+ * - `propostas` → orçamento (`pipe_propostas.sale_value` + itens)
+ * - `qualificacao` com funil mergeado (ADR-0004) → reunião mora na entry whatsapp
+ * - **custom → nada.** `custom_pipe_entries` não tem `metadata jsonb`, e
+ *   `pipe_proposta_items.pipe_proposta_id` referencia `pipeline_entries(id)` —
+ *   outro espaço de ids. Não é escolha de design, é trava de schema; ligar pill
+ *   aqui daria campo que salva no vazio. Levantamento do protótipo, itens 1 e 2.
+ */
+function dealPills(pipe: PipelineStatus, mergedMeeting: boolean): ActionPillType[] {
+  if (!isStandard(pipe)) return [];
+  if (pipe.pipeType === "confirmacao") return ["meeting"];
+  if (pipe.pipeType === "propostas") return ["budget"];
+  if (pipe.pipeType === "qualificacao" && mergedMeeting) return ["meeting"];
+  return [];
+}
+
 function isStandard(p: PipelineStatus): p is StandardPipelineStatus {
   return p.type === "standard";
 }
@@ -77,8 +106,16 @@ function DealContent({ onClose, isMobile }: { onClose: () => void; isMobile: boo
   const { data: dealsByLead } = useLeadsDeals(leadId ? [leadId] : []);
   const { data: confirmacaoData } = usePipeConfirmacaoByLeadId(leadId ?? "");
   const { data: propostaData } = usePipePropostaByLeadId(leadId ?? "");
-  const { canMoveMeeting } = useLeadActionGates(leadId ?? "");
+  const { canMoveMeeting, canRemoveFromPipe } = useLeadActionGates(leadId ?? "");
   const move = useCrossPipeMove(leadId ?? "");
+  const removeStandard = useRemoveLeadFromStandardPipe();
+
+  /**
+   * `null` = ninguém tocou → abre a primeira pill. `"none"` = fechado de
+   * propósito. Derivar em vez de sincronizar por efeito evita o formulário se
+   * reabrindo sozinho quando qualquer dependência troca de identidade.
+   */
+  const [pillChoice, setPillChoice] = useState<ActionPillType | "none" | null>(null);
 
   /** O pipe a que esta entry pertence — system e custom guardam o id em campos distintos. */
   const pipe = useMemo(() => {
@@ -149,13 +186,27 @@ function DealContent({ onClose, isMobile }: { onClose: () => void; isMobile: boo
   }
 
   const organizationId = lead.organization_id ?? "";
-  const isConfirmacao = isStandard(pipe) && pipe.pipeType === "confirmacao";
-  const isPropostas = isStandard(pipe) && pipe.pipeType === "propostas";
   const mergedMeeting =
     isStandard(pipe) &&
     pipe.pipeType === "qualificacao" &&
     hasFeature("merged_opportunity_funnel") &&
     MERGED_MEETING_STAGES.includes(pipe.currentStage ?? "");
+
+  const pills = dealPills(pipe, mergedMeeting);
+  const activePill: ActionPillType | null =
+    pillChoice === null ? pills[0] ?? null : pillChoice === "none" ? null : pillChoice;
+
+  const pillValue = (type: ActionPillType) =>
+    type === "meeting"
+      ? confirmacaoData?.meeting_date ?? deal?.meetingDate ?? null
+      : propostaData?.sale_value ?? (deal?.value || null);
+
+  /** Remover o negócio = tirar o card do funil. Só funil system tem a mutation. */
+  const handleRemove = async () => {
+    if (!isStandard(pipe) || !pipe.pipeId) return;
+    await removeStandard.mutateAsync({ pipeId: pipe.pipeId, pipeType: pipe.pipeType });
+    onClose();
+  };
 
   const dealPane = (
     <div className="flex flex-col gap-4 px-6 py-5">
@@ -174,9 +225,11 @@ function DealContent({ onClose, isMobile }: { onClose: () => void; isMobile: boo
         />
       </div>
 
-      {deal && (deal.value > 0 || deal.daysInStage != null) && (
+      {/* Valor só aparece aqui quando NÃO há pill de orçamento — dois números
+          do mesmo dinheiro na mesma tela é como eles passam a divergir. */}
+      {deal && ((deal.value > 0 && !pills.includes("budget")) || deal.daysInStage != null) && (
         <div className="flex items-center gap-5 px-1">
-          {deal.value > 0 && (
+          {deal.value > 0 && !pills.includes("budget") && (
             <div className="flex flex-col">
               <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground/70">
                 Valor
@@ -209,31 +262,54 @@ function DealContent({ onClose, isMobile }: { onClose: () => void; isMobile: boo
         </div>
       )}
 
-      {mergedMeeting && entryId && (
-        <MergedMeetingEditor
-          entryId={entryId}
-          leadId={lead.id}
-          currentMeetingDate={null}
-          locked={!canMoveMeeting.allowed}
-        />
-      )}
+      {pills.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2" data-testid="deal-action-pills">
+            {pills.map((type) => (
+              <ActionPill
+                key={type}
+                type={type}
+                value={pillValue(type)}
+                isOpen={activePill === type}
+                onToggle={() => setPillChoice(activePill === type ? "none" : type)}
+              />
+            ))}
+          </div>
 
-      {isConfirmacao && (
-        <MeetingFieldBlock
-          leadId={lead.id}
-          organizationId={organizationId}
-          pipeData={confirmacaoData ?? null}
-          locked={!canMoveMeeting.allowed}
-        />
-      )}
-
-      {isPropostas && (
-        <BudgetFieldBlock
-          leadId={lead.id}
-          organizationId={organizationId}
-          pipeData={propostaData ?? null}
-          locked={!canMoveMeeting.allowed}
-        />
+          {activePill && (
+            <ActionPanel
+              pipeLabel={rail.shortLabel}
+              canRemove={canRemoveFromPipe.allowed && isStandard(pipe)}
+              onRemove={handleRemove}
+              isRemoving={removeStandard.isPending}
+            >
+              {activePill === "meeting" && mergedMeeting && entryId ? (
+                <MergedMeetingEditor
+                  entryId={entryId}
+                  leadId={lead.id}
+                  currentMeetingDate={null}
+                  locked={!canMoveMeeting.allowed}
+                />
+              ) : activePill === "meeting" ? (
+                <MeetingFieldBlock
+                  leadId={lead.id}
+                  organizationId={organizationId}
+                  pipeData={confirmacaoData ?? null}
+                  locked={!canMoveMeeting.allowed}
+                  bare
+                />
+              ) : (
+                <BudgetFieldBlock
+                  leadId={lead.id}
+                  organizationId={organizationId}
+                  pipeData={propostaData ?? null}
+                  locked={!canMoveMeeting.allowed}
+                  bare
+                />
+              )}
+            </ActionPanel>
+          )}
+        </div>
       )}
     </div>
   );

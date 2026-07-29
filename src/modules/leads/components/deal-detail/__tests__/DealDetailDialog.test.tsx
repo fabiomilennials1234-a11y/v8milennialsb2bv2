@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { useEffect } from "react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { DealDetailDialog } from "../DealDetailDialog";
@@ -50,8 +51,13 @@ vi.mock("../../lead-detail/modal/pipes/useCrossPipeMove", () => ({
 }));
 
 const allPipelinesMock = vi.fn();
+const removeStandardMutate = vi.fn().mockResolvedValue({});
 vi.mock("../../../hooks/useLeadAllPipelines", () => ({
   useLeadAllPipelines: () => allPipelinesMock(),
+  useRemoveLeadFromStandardPipe: () => ({
+    mutateAsync: removeStandardMutate,
+    isPending: false,
+  }),
 }));
 
 const dealsMock = vi.fn();
@@ -114,10 +120,17 @@ beforeEach(() => {
   dealsMock.mockReturnValue({ data: { "lead-1": [DEAL] } });
 });
 
-/** Abre o modal no negócio pedido assim que monta. */
+/**
+ * Abre o modal no negócio pedido assim que monta.
+ *
+ * Em efeito, não durante o render: `setState` na fase de render torna a ordem de
+ * commit indeterminada e fez os testes falharem de forma intermitente.
+ */
 function OpenOnMount({ entryId, leadId }: { entryId: string; leadId: string }) {
-  const { openDeal, isOpen } = useDealSheet();
-  if (!isOpen) openDeal(entryId, leadId);
+  const { openDeal } = useDealSheet();
+  useEffect(() => {
+    openDeal(entryId, leadId);
+  }, [openDeal, entryId, leadId]);
   return null;
 }
 
@@ -166,16 +179,67 @@ describe("DealDetailDialog — o card do funil abre o negócio", () => {
     );
   });
 
-  it("mostra valor e tempo na etapa quando existem", () => {
+  it("mostra o tempo na etapa", () => {
     renderDeal();
     expect(screen.getByText("3d")).toBeInTheDocument();
-    expect(screen.getByText(/40[.,]000|40\.000/)).toBeInTheDocument();
   });
 
-  it("abre o editor de orçamento em Propostas", () => {
+  it("não repete o valor fora da pill — dois números do mesmo dinheiro divergem", () => {
     renderDeal();
+    expect(screen.getByTestId("action-pill-budget")).toHaveTextContent(/40/);
+    // O bloco solto de "Valor" some quando existe pill de orçamento.
+    expect(screen.queryByText("Valor")).not.toBeInTheDocument();
+  });
+});
+
+describe("DealDetailDialog — action pills por funil", () => {
+  it("Propostas expõe orçamento, já aberto, e não reunião", () => {
+    renderDeal();
+    expect(screen.getByTestId("action-pill-budget")).toBeInTheDocument();
+    expect(screen.queryByTestId("action-pill-meeting")).not.toBeInTheDocument();
     expect(screen.getByTestId("budget-block")).toBeInTheDocument();
     expect(screen.queryByTestId("meeting-block")).not.toBeInTheDocument();
+  });
+
+  it("clicar na pill fecha o painel e clicar de novo reabre", () => {
+    renderDeal();
+    const pill = screen.getByTestId("action-pill-budget");
+    fireEvent.click(pill);
+    expect(screen.queryByTestId("budget-block")).not.toBeInTheDocument();
+    fireEvent.click(pill);
+    expect(screen.getByTestId("budget-block")).toBeInTheDocument();
+  });
+
+  it("Confirmação expõe reunião", () => {
+    allPipelinesMock.mockReturnValue({
+      data: [{ ...PROPOSTAS_PIPE, pipeType: "confirmacao", label: "Confirmação" }],
+      isLoading: false,
+    });
+    renderDeal();
+    expect(screen.getByTestId("action-pill-meeting")).toBeInTheDocument();
+    expect(screen.getByTestId("meeting-block")).toBeInTheDocument();
+  });
+
+  it("funil custom não expõe pill — `custom_pipe_entries` não tem metadata", () => {
+    allPipelinesMock.mockReturnValue({
+      data: [
+        {
+          type: "custom",
+          pipelineId: "pl-c",
+          pipelineName: "Reativação",
+          pipelineColor: "#8b5cf6",
+          entryId: "entry-1",
+          currentStageId: "st-1",
+          currentStageName: "Primeiro contato",
+          stages: [{ id: "st-1", name: "Primeiro contato", color: "#fff", position: 0 }],
+        },
+      ],
+      isLoading: false,
+    });
+    renderDeal();
+    expect(screen.queryByTestId("deal-action-pills")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("budget-block")).not.toBeInTheDocument();
+    expect(screen.getByTestId("deal-stage-rail")).toBeInTheDocument();
   });
 });
 
