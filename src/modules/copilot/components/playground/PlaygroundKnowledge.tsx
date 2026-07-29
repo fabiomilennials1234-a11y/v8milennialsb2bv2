@@ -127,6 +127,11 @@ export function PlaygroundKnowledge({
 
   // Handle file upload
   const MAX_MEDIA_SIZE = 20 * 1024 * 1024; // 20MB Gemini inline limit
+  // Espelha PDF_MAX_BYTES da edge function process-agent-document. Sem este
+  // gate o arquivo sobe inteiro pro storage (que aceita 20MB) e so falha depois,
+  // no processamento — o usuario esperava o upload inteiro de um catalogo pra
+  // receber erro no fim.
+  const MAX_DOCUMENT_SIZE = 15 * 1024 * 1024; // 15MB
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
@@ -140,6 +145,15 @@ export function PlaygroundKnowledge({
         if (isMediaType(fileType) && file.size > MAX_MEDIA_SIZE) {
           toast.error(`${file.name} excede 20MB`, {
             description: `Arquivos de ${fileType === "image" ? "imagem" : "video"} devem ter no maximo 20MB.`,
+          });
+          continue;
+        }
+
+        // Size validation for documents (PDF, DOC, TXT)
+        if (!isMediaType(fileType) && file.size > MAX_DOCUMENT_SIZE) {
+          toast.error(`${file.name} excede 15MB`, {
+            description:
+              "Documentos devem ter no maximo 15MB. Divida o catalogo em partes e envie cada uma separadamente.",
           });
           continue;
         }
@@ -270,7 +284,7 @@ export function PlaygroundKnowledge({
               Arraste arquivos aqui ou clique para selecionar
             </p>
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              PDF, DOC, TXT, imagens (PNG, JPG) e videos (MP4, MOV)
+              PDF, DOC, TXT (ate 15MB), imagens (PNG, JPG) e videos (MP4, MOV) ate 20MB
             </p>
             <input
               ref={fileInputRef}
