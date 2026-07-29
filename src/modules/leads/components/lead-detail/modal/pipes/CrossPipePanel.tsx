@@ -3,6 +3,7 @@ import { Layers } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
+  assertMemberInOrg,
   useAddLeadToStandardPipe,
   useLeadAllPipelines,
   useRemoveLeadFromStandardPipe,
@@ -352,11 +353,15 @@ export const CrossPipePanel = memo(function CrossPipePanel({
       }
       const stageId = values?.stageId || pipe.stages[0].id;
       try {
+        // Mesma guarda do caminho system: `custom_pipe_entries` valida o
+        // `organization_id` da LINHA, nunca o org de `assigned_to`.
+        const ownerInOrg = values?.ownerId ?? null;
+        if (ownerInOrg) await assertMemberInOrg(ownerInOrg, _organizationId);
         await addCustomMutation.mutateAsync({
           lead_id: leadId,
           pipeline_id: pipe.pipelineId,
           stage_id: stageId,
-          ...(values?.ownerId ? { assigned_to: values.ownerId } : {}),
+          ...(ownerInOrg ? { assigned_to: ownerInOrg } : {}),
           ...(values?.notes ? { notes: values.notes } : {}),
         });
         void logAction({
@@ -377,7 +382,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
         throw err;
       }
     },
-    [addCustomMutation, leadId, logAction],
+    [addCustomMutation, leadId, logAction, _organizationId],
   );
 
   // ─── Remove handlers ───────────────────────────────────────────────

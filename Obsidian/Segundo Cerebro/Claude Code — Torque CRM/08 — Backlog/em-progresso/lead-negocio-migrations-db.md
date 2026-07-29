@@ -361,6 +361,82 @@ pagamento.
 
 ---
 
+## M6 — 🔴 Validar o org do responsável (achado do `/security-rubric`, 2026-07-29)
+
+**O que foi medido:** as policies de `custom_pipe_entries` checam **apenas
+`organization_id` da linha**; os `pipe_*` são views e não têm policy própria.
+Nenhuma valida o org do membro referenciado em `responsible_id`, `sdr_id`,
+`closer_id`, `sale_responsible_id`, `pre_sale_responsible_id` ou `assigned_to`.
+A FK garante que o uuid **existe**, não **de quem ele é**.
+
+**Consequência, medida e não suposta.** `team_members` tem SELECT org-scoped
+(`get_my_organization_ids()` + linha própria + master), então o usuário **não
+lê** o membro de fora: o join volta vazio e o responsável aparece **em branco**.
+Não é vazamento de nome pelo caminho normal — é **atribuição órfã**, com métrica
+por membro subcontando essas linhas.
+
+O risco de vazamento existe pelo caminho que **bypassa RLS**: RPC
+`SECURITY DEFINER` ou edge function com `service_role` (que tem
+`BYPASSRLS=true` em prod) resolvendo esse nome numa resposta devolvida à org
+errada. Auditar os RPCs de métrica por responsável antes de considerar fechado.
+
+**Já existe em produção** (medido 2026-07-29):
+
+| | |
+|---|---|
+| Linhas | **1.091** em `pipeline_entries` |
+| Org das entries | Maria Bonita (`aad53078-…`) |
+| Org do membro apontado | Mapila Alimentos (`17c46b69-…`) |
+| Membro | `d72db961-…`, ainda ativo |
+| Criadas em | **todas em 2026-05-06** — um único evento de import/backfill |
+| Funis / membros distintos | 1 e 1 |
+
+Um dia só, um membro só: tem cara de import que reusou id de outra org, não de
+exploração.
+
+**Não é buraco novo** — é sistêmico e vale pra todo caminho que aceita
+responsável escolhido no cliente (o drawer do lead já fazia isso). O modal de
+novo negócio adicionou mais uma porta, e por isso ganhou guarda de cliente em
+`useAddLeadToStandardPipe` + `CrossPipePanel`. **Guarda de cliente é defesa em
+profundidade, não a última linha:** quem monta a chamada direto com o próprio
+token passa por cima dela.
+
+Conserto no banco (uma das duas formas):
+
+```sql
+-- (a) trigger genérico, aplicado nas tabelas que carregam responsável
+CREATE OR REPLACE FUNCTION public.fn_assert_member_same_org()
+ RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE v_bad uuid;
+BEGIN
+  SELECT m.id INTO v_bad
+  FROM public.team_members m
+  WHERE m.id IN (NEW.responsible_id, NEW.sdr_id, NEW.closer_id)
+    AND m.organization_id <> NEW.organization_id
+  LIMIT 1;
+
+  IF v_bad IS NOT NULL THEN
+    RAISE EXCEPTION 'team_member % pertence a outra organização', v_bad;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+```
+
+> ⚠️ **Medir antes de acender.** Se já existir linha violando (troca de org de
+> membro no passado, import antigo), o trigger passa a recusar `UPDATE` nessas
+> linhas e quebra fluxo em produção. Rodar o inventário primeiro:
+>
+> ```sql
+> SELECT count(*) FROM public.pipeline_entries pe
+> JOIN public.team_members m ON m.id = pe.assigned_to
+> WHERE m.organization_id <> pe.organization_id;
+> ```
+
+---
+
 ## Pré-requisitos de ambiente
 
 > [!danger] O servidor de dev está APOSENTADO
