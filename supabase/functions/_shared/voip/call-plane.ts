@@ -76,6 +76,7 @@ export type AuthorizeResult =
   | {
     ok: true;
     callId: string;
+    tcCallId: string;
     peer: string;
     leadId: string | null;
     tokens: { start: string; media: string; ctl: string };
@@ -96,7 +97,7 @@ function digitsOnly(v: string | null | undefined): string {
 
 export type RenewCtlResult =
   | { ok: true; ctl: string; expiresAt: number }
-  | { ok: false; code: "call_not_found" | "call_ended" | "not_operator" };
+  | { ok: false; code: "call_not_found" | "call_ended" | "not_operator" | "no_tc_call_id" };
 
 /**
  * Renova SÓ a credencial de encerrar, para uma chamada que já existe.
@@ -116,7 +117,7 @@ export async function renewCallControlToken(
 ): Promise<RenewCtlResult> {
   const { data: call } = await args.supabaseAdmin
     .from("voip_calls")
-    .select("id, organization_id, tc_session_id, peer_phone, lead_id, operator_user_id, status")
+    .select("id, organization_id, tc_session_id, tc_call_id, peer_phone, lead_id, operator_user_id, status")
     .eq("id", args.callId)
     .maybeSingle();
 
@@ -130,13 +131,20 @@ export async function renewCallControlToken(
     return { ok: false, code: "not_operator" };
   }
 
+  // Sem id de rede não há o que assinar: o cid tem que ser a mesma string que
+  // vai no path, senão callIDFor recusa com 404 e o operador não consegue
+  // desligar a própria ligação.
+  if (!call.tc_call_id) {
+    return { ok: false, code: "no_tc_call_id" };
+  }
+
   const t = await signCallToken({
     act: ["call.end"],
     ttlSeconds: TTL_CTL_SECONDS,
     org: caller.orgId,
     sub: caller.userId,
     sid: args.tcSessionId,
-    cid: call.id,
+    cid: call.tc_call_id,
     peer: call.peer_phone,
     lead: call.lead_id,
   });
@@ -292,16 +300,52 @@ export async function authorizeCallAndMint(
     return deny("reserve_failed");
   }
 
-  const result = reserved as { ok: boolean; code?: string; call_id?: string; retry_after_ms?: number };
+  const result = reserved as {
+    ok: boolean;
+    code?: string;
+    call_id?: string;
+    tc_call_id?: string;
+    retry_after_ms?: number;
+  };
   if (!result.ok) {
     return deny((result.code ?? "reserve_failed") as DenyCode, result.retry_after_ms);
   }
 
   const callId = result.call_id!;
+  const tcCallId = result.tc_call_id;
+
+  // Fail-closed. Assinar sem id de rede produz um token que a VPS recusa por
+  // formato, e o sintoma chega como "a chamada não completa" em vez de como
+  // erro de contrato. A reserva já foi feita, então o log tem que registrar
+  // para a linha órfã ser explicável depois.
+  if (!tcCallId) {
+    await logRuntime({
+      organizationId: caller.orgId,
+      module: "voip",
+      action: "reserve_sem_tc_call_id",
+      status: "error",
+      entityType: "voip_call",
+      entityId: callId,
+    });
+    return deny("reserve_failed");
+  }
 
   // 6. SÓ ENTÃO assina. Nada acima pode ser pulado para chegar aqui.
+  //
+  // O cid é o id de REDE, não o uuid da linha. São coisas diferentes: o uuid
+  // identifica o registro no ledger; o cid é o que a VPS conhece, o que
+  // validCallID valida, e o que vai no path das rotas de accept, end, reject e
+  // webrtc — onde callIDFor compara os dois.
   const startAct = direction === "outbound" ? "call.start" : "call.accept";
-  const common = { sc: "call" as const, org: caller.orgId, sub: caller.userId, sid: tcSessionId, cid: callId, peer, lead: leadId };
+  const common = {
+    sc: "call" as const,
+    org: caller.orgId,
+    sub: caller.userId,
+    sid: tcSessionId,
+    cid: tcCallId,
+    peer,
+    lead: leadId,
+  };
 
   const [start, media, ctl] = await Promise.all([
     signCallToken({ ...common, act: [startAct], ttlSeconds: TTL_START_SECONDS }),
@@ -327,6 +371,7 @@ export async function authorizeCallAndMint(
   return {
     ok: true,
     callId,
+    tcCallId,
     peer,
     leadId,
     tokens: { start: start.token, media: media.token, ctl: ctl.token },

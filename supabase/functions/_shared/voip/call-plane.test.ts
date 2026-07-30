@@ -1,5 +1,5 @@
-import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { authorizeCallAndMint } from "./call-plane.ts";
+import { assert, assertEquals, assertMatch } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { authorizeCallAndMint, renewCallControlToken } from "./call-plane.ts";
 import { __resetKeyCacheForTests } from "./internal/sign.ts";
 import type { Caller } from "./caller.ts";
 
@@ -142,7 +142,11 @@ const permissiveEngine = {
   member_feature_permissions: () => null,
 };
 
-const okReserve = () => ({ ok: true, call_id: CALL, token_jti: "jti-1" });
+// O id de rede que a reserva passa a cunhar. 32 chars de [0-9A-F] — o formato
+// exato que validCallID aceita do outro lado.
+const TC_CALL = "D1111111111111111111111111111111";
+
+const okReserve = () => ({ ok: true, call_id: CALL, tc_call_id: TC_CALL, token_jti: "jti-1" });
 
 // ---------------------------------------------------------------------------
 // Casos
@@ -470,4 +474,102 @@ Deno.test("chamada de entrada já encerrada não é atendível", async () => {
 
   assert(!res.ok);
   assertEquals(res.code, "call_not_answerable");
+});
+
+// O arquivo inteiro não tinha UMA asserção sobre o cid — por isso a suíte ficou
+// verde enquanto, em produção, todo token de chamada era recusado por formato.
+Deno.test("o cid assinado é o id de rede, não o uuid da linha", async () => {
+  await setupSigningKey();
+
+  const db = stubClient({
+    tables: {
+      voip_sessions: openSession,
+      leads: ownedLead,
+      consent_records: grantedConsent,
+      ...permissiveEngine,
+    },
+    rpc: okReserve,
+  });
+
+  const res = await authorizeCallAndMint(memberCaller(), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    direction: "outbound",
+    leadId: LEAD,
+  });
+
+  assert(res.ok, `esperava autorização, veio ${JSON.stringify(res)}`);
+
+  // O uuid continua identificando a linha do ledger.
+  assertEquals(res.callId, CALL);
+  // E o id de rede é o que vai para a VPS.
+  assertEquals(res.tcCallId, TC_CALL);
+
+  // A asserção que importa: callIDFor compara o cid da claim com o id do path,
+  // e o path é montado a partir do tc_call_id.
+  for (const tok of [res.tokens.start, res.tokens.media, res.tokens.ctl]) {
+    const c = decodeClaims(tok);
+    assertEquals(c.cid, TC_CALL, "o cid tem que ser o id de rede");
+    assertMatch(c.cid as string, /^[0-9A-F]{32}$/, "o cid tem que passar no validCallID da VPS");
+  }
+});
+
+Deno.test("recusa sem assinar quando a reserva não devolve tc_call_id", async () => {
+  await setupSigningKey();
+
+  // Fail-closed. Assinar sem id de rede produz token que a VPS recusa por
+  // formato, e o sintoma chega como "a chamada não completa" em vez de erro de
+  // contrato.
+  const db = stubClient({
+    tables: {
+      voip_sessions: openSession,
+      leads: ownedLead,
+      consent_records: grantedConsent,
+      ...permissiveEngine,
+    },
+    rpc: () => ({ ok: true, call_id: CALL, token_jti: "jti-1" }),
+  });
+
+  const res = await authorizeCallAndMint(memberCaller(), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    direction: "outbound",
+    leadId: LEAD,
+  });
+
+  assertEquals(res.ok, false);
+  assertEquals((res as { code?: string }).code, "reserve_failed");
+});
+
+// renewCallControlToken é o outro chamador de signCallToken. Sem este teste, o
+// caminho de desligar continuaria com o uuid no cid e tomando 401 — e o defeito
+// só apareceria ao vivo, no portão.
+Deno.test("renewCallControlToken também assina o cid com o id de rede", async () => {
+  await setupSigningKey();
+
+  const db = stubClient({
+    tables: {
+      voip_calls: () => ({
+        id: CALL,
+        organization_id: ORG,
+        tc_session_id: "tc-sess",
+        tc_call_id: TC_CALL,
+        peer_phone: "5548991005289",
+        lead_id: LEAD,
+        operator_user_id: USER,
+        status: "connected",
+      }),
+      ...permissiveEngine,
+    },
+  });
+
+  const res = await renewCallControlToken(memberCaller(), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    callId: CALL,
+  });
+
+  assert(res.ok, `esperava renovação, veio ${JSON.stringify(res)}`);
+  assertMatch(decodeClaims(res.ctl).cid as string, /^[0-9A-F]{32}$/);
+  assertEquals(decodeClaims(res.ctl).cid, TC_CALL);
 });
