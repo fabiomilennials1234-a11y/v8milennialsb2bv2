@@ -60,6 +60,7 @@ Criar `supabase/tests/voip_gate_test.sql`:
 
 ```sql
 BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgtap;
 SELECT plan(4);
 
 SELECT has_column('public', 'organizations', 'voice_sessions_cap',
@@ -84,8 +85,17 @@ ROLLBACK;
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
-Run: `supabase test db --db-url "$SUPABASE_DB_URL"`
-Expected: FAIL — a coluna `voice_sessions_cap` não existe.
+O banco local do Supabase já está de pé nesta máquina, na porta 54322, com o
+schema carregado. Rode **só este arquivo**, não `supabase test db`: a suíte
+inteira tem 17 arquivos herdados vermelhos por motivo alheio a esta tarefa, e o
+vermelho deles esconderia o seu.
+
+```bash
+PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres \
+  -f supabase/tests/voip_gate_test.sql
+```
+
+Expected: FAIL — `column "voice_sessions_cap" does not exist`.
 
 - [ ] **Step 3: Escrever a migration**
 
@@ -133,15 +143,45 @@ UPDATE public.subscription_plans
  WHERE NOT (features ? 'voice_calls');
 ```
 
-- [ ] **Step 4: Rodar o teste e confirmar que passa**
+- [ ] **Step 4: Aplicar a migration no banco local e rodar o teste**
 
-Run: `supabase test db --db-url "$SUPABASE_DB_URL"`
-Expected: PASS, 4/4.
+```bash
+PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres \
+  -f supabase/migrations/20270730000004_voip_gate_e_teto_por_org.sql
+PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres \
+  -f supabase/tests/voip_gate_test.sql
+```
+
+Expected: as quatro linhas do teste saem `ok`, e a última é `# Looks like you
+planned 4 tests` sem nenhum `not ok`.
 
 - [ ] **Step 5: Planta — provar que a asserção morde**
 
-Rodar num banco descartável: comentar a linha do `UPDATE ... subscription_plans`, aplicar de novo e rodar o teste.
-Expected: FAIL em `todo plano declara voice_calls`. Descomentar e confirmar verde de novo.
+Sem esta prova, um teste verde não significa nada. Derrube a chave em uma linha
+e confirme que o teste acusa:
+
+```bash
+PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -c \
+  "UPDATE public.subscription_plans SET features = features - 'voice_calls' WHERE id = (SELECT id FROM public.subscription_plans LIMIT 1)"
+PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres \
+  -f supabase/tests/voip_gate_test.sql
+```
+
+Expected: `not ok` em `todo plano declara voice_calls`.
+
+Depois restaure e confirme o verde de novo:
+
+```bash
+PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -c \
+  "UPDATE public.subscription_plans SET features = features || jsonb_build_object('voice_calls', false) WHERE NOT (features ? 'voice_calls')"
+PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres \
+  -f supabase/tests/voip_gate_test.sql
+```
+
+Expected: nenhum `not ok`.
+
+**Não aplique nada em produção.** O banco de produção é responsabilidade do
+controlador desta sessão, fora do escopo desta tarefa.
 
 - [ ] **Step 6: Commit**
 
@@ -884,14 +924,52 @@ export function useVoiceSessionsCap() {
 }
 ```
 
-Acrescentar ao teste do Step 1:
+O mock do Step 1 precisa distinguir as duas tabelas, porque o encadeamento é
+diferente: `voip_sessions` termina em `.order()`, `organizations` em
+`.maybeSingle()`. Substituir o `vi.mock` do cliente por:
 
 ```ts
-it("useVoiceSessionsCap cai no padrão 10 quando não acha a linha", async () => {
-  // ...com o mock de organizations devolvendo { data: null, error: null }
-  // o hook resolve para 10, não para 0.
+let orgRow: { voice_sessions_cap: number } | null = { voice_sessions_cap: 4 };
+
+vi.mock("@/integrations/supabase/client", () => ({
+  supabase: {
+    from: (table: string) => {
+      if (table === "organizations") {
+        return {
+          select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: orgRow, error: null }) }) }),
+        };
+      }
+      return {
+        select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: rows, error: null }) }) }),
+      };
+    },
+  },
+}));
+```
+
+E acrescentar os dois testes do teto:
+
+```ts
+describe("useVoiceSessionsCap", () => {
+  it("lê o teto da organização", async () => {
+    orgRow = { voice_sessions_cap: 4 };
+    const { result } = renderHook(() => useVoiceSessionsCap(), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBe(4);
+  });
+
+  it("cai no padrão 10 quando não acha a linha, e não em zero", async () => {
+    // Zero trancaria a tela inteira por causa de uma leitura que falhou.
+    orgRow = null;
+    const { result } = renderHook(() => useVoiceSessionsCap(), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBe(10);
+  });
 });
 ```
+
+Importar `useVoiceSessionsCap` junto de `useVoipSessions` no topo do arquivo de
+teste.
 
 Exportar no barrel `src/modules/communication/index.ts`:
 
