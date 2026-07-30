@@ -1,0 +1,525 @@
+import { assert, assertEquals } from "@std/assert";
+import type { Caller } from "../_shared/voip/caller.ts";
+import { createSession, forwardSessionAction, resolveSessionCap, voiceFeatureOn } from "./index.ts";
+
+Deno.test("teto vem da organização, não de constante", () => {
+  assertEquals(resolveSessionCap({ voice_sessions_cap: 3 }), 3);
+});
+
+Deno.test("teto 0 significa nenhum número de voz", () => {
+  assertEquals(resolveSessionCap({ voice_sessions_cap: 0 }), 0);
+});
+
+Deno.test("organização sem linha cai no padrão 10", () => {
+  assertEquals(resolveSessionCap(null), 10);
+});
+
+Deno.test("feature ausente no plano é desligada, não liberada", () => {
+  assertEquals(voiceFeatureOn({}), false);
+  assertEquals(voiceFeatureOn({ voice_calls: false }), false);
+  assertEquals(voiceFeatureOn({ voice_calls: true }), true);
+});
+
+// ─── Fiação do handler ───────────────────────────────────────────────────────
+//
+// As quatro funções acima são puras; nada garante que o handler as CHAMA na
+// ordem certa, que os updates de `voice_calls_enabled` carregam o filtro de
+// organização, ou que os dois ramos de desligamento disparam. Os testes
+// abaixo exercitam `createSession`/`forwardSessionAction` de ponta a ponta
+// com um `db` falso — sem rede, sem VPS real, sem chave de assinatura de
+// verdade (a barreira do choke reprova qualquer arquivo fora de
+// `_shared/voip/` que cite o nome da variável de ambiente da chave).
+
+interface RecordedCall {
+  table: string;
+  ops: Array<{ op: string; args: unknown[] }>;
+}
+
+type Script = Record<string, { data?: unknown; error?: unknown; count?: number }>;
+
+/**
+ * Fake mínimo do query builder do supabase-js. `.from(table)` abre uma cadeia
+ * que registra cada chamada em `ops`; o terminal — explícito
+ * (`.maybeSingle()`/`.insert()`/`.upsert()`) ou implícito (`await` direto no
+ * builder, como a contagem e os updates) — resolve olhando `script` pela
+ * chave `table:terminal`. Chave ausente cai num `{ data: null, error: null }`
+ * neutro: suficiente para os ramos que o teste em questão não exercita de
+ * propósito.
+ */
+function fakeDb(script: Script = {}) {
+  const calls: RecordedCall[] = [];
+
+  function chain(table: string) {
+    const ops: RecordedCall["ops"] = [];
+    calls.push({ table, ops });
+    const record = (op: string, args: unknown[]) => ops.push({ op, args });
+    const resolve = (terminal: string) =>
+      Promise.resolve(script[`${table}:${terminal}`] ?? { data: null, error: null });
+
+    // deno-lint-ignore no-explicit-any
+    const builder: any = {
+      select(...a: unknown[]) {
+        record("select", a);
+        return builder;
+      },
+      eq(...a: unknown[]) {
+        record("eq", a);
+        return builder;
+      },
+      neq(...a: unknown[]) {
+        record("neq", a);
+        return builder;
+      },
+      order(...a: unknown[]) {
+        record("order", a);
+        return builder;
+      },
+      maybeSingle() {
+        record("maybeSingle", []);
+        return resolve("maybeSingle");
+      },
+      insert(...a: unknown[]) {
+        record("insert", a);
+        return resolve("insert");
+      },
+      upsert(...a: unknown[]) {
+        record("upsert", a);
+        return resolve("upsert");
+      },
+      update(...a: unknown[]) {
+        record("update", a);
+        return builder;
+      },
+      delete(...a: unknown[]) {
+        record("delete", a);
+        return builder;
+      },
+      // Cobre `await db.from(...).update(...).eq().eq()` sem terminal
+      // explícito — mesmo caso da contagem de sessões e dos dois updates de
+      // `voice_calls_enabled`.
+      then(onFulfilled: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) {
+        const terminal = ops.some((o) => o.op === "update")
+          ? "update"
+          : ops.some((o) => o.op === "delete")
+          ? "delete"
+          : "select";
+        return resolve(terminal).then(onFulfilled, onRejected);
+      },
+    };
+    return builder;
+  }
+
+  return {
+    calls,
+    from(table: string) {
+      return chain(table);
+    },
+    rpc(name: string, args: unknown) {
+      calls.push({ table: `rpc:${name}`, ops: [{ op: "rpc", args: [args] }] });
+      return Promise.resolve(script[`rpc:${name}`] ?? { data: null, error: null });
+    },
+  };
+}
+
+/** `Caller` é opaco (só `resolveCaller()` fabrica um) — o cast é o escape hatch de teste, não uma forma de produção de contorná-lo. */
+function fakeCaller(overrides: Partial<{ orgId: string; userId: string }> = {}): Caller {
+  return {
+    orgId: "org-1",
+    userId: "user-1",
+    teamMemberId: "member-1",
+    role: "admin",
+    isMaster: false,
+    isGestor: false,
+    ...overrides,
+  } as unknown as Caller;
+}
+
+/** `signAdminToken`/`callVps` reais exigem chave Ed25519 e rede — os fakes fecham o ciclo sem nenhum dos dois. */
+// deno-lint-ignore no-explicit-any
+function fakeVoipDeps(callVpsResult: any = { ok: true, status: 200, data: { session: { id: "tc-sess-fake" } } }) {
+  const vpsCalls: unknown[][] = [];
+  // `logRuntime` real escreve em `runtime_logs`. Injetado pelo mesmo motivo
+  // que `callVps`: sem isto não há como provar que uma falha de escrita
+  // silenciosa deixou rastro.
+  const logs: Array<Record<string, unknown>> = [];
+  return {
+    vpsCalls,
+    logs,
+    deps: {
+      // deno-lint-ignore no-explicit-any
+      signAdminToken: async (...args: any[]) => {
+        void args;
+        return { token: "fake-token", jti: "fake-jti", expiresAt: 0 };
+      },
+      // deno-lint-ignore no-explicit-any
+      callVps: async (...args: any[]): Promise<any> => {
+        vpsCalls.push(args);
+        return callVpsResult;
+      },
+      // deno-lint-ignore no-explicit-any
+      logRuntime: (entry: any) => {
+        logs.push(entry);
+        return Promise.resolve();
+      },
+    },
+  };
+}
+
+/** Plano com a voz liberada — o caminho feliz do gate comercial. */
+const VOZ_LIBERADA = { data: { features: { voice_calls: true }, plan_name: "pro" } };
+/** Plano sem a voz — o gate tem que recusar. */
+const VOZ_BLOQUEADA = { data: { features: { voice_calls: false }, plan_name: "starter" } };
+
+function findCall(calls: RecordedCall[], table: string, op: string): RecordedCall | undefined {
+  return calls.find((c) => c.table === table && c.ops.some((o) => o.op === op));
+}
+
+function hasOpWithArgs(call: RecordedCall | undefined, op: string, args: unknown[]): boolean {
+  return !!call?.ops.some((o) => o.op === op && JSON.stringify(o.args) === JSON.stringify(args));
+}
+
+Deno.test("createSession: feature desligada recusa 403 e não chama a VPS nem escreve", async () => {
+  const db = fakeDb({
+    "whatsapp_instances:maybeSingle": { data: { id: "inst-1", organization_id: "org-1" } },
+    "organizations:maybeSingle": { data: { voice_sessions_cap: 10 } },
+    "rpc:org_get_features_and_limits": { data: { features: { voice_calls: false }, plan_name: "starter" } },
+  });
+  const { deps, vpsCalls } = fakeVoipDeps();
+
+  const res = await createSession(db, fakeCaller(), { whatsapp_instance_id: "inst-1" }, {}, deps);
+  const body = await res.json();
+
+  assertEquals(res.status, 403);
+  assertEquals(body.code, "voice_feature_off");
+  assertEquals(vpsCalls.length, 0, "VPS não deveria ser chamada quando a feature está desligada");
+  assertEquals(findCall(db.calls, "voip_sessions", "insert"), undefined, "não deveria inserir sessão órfã sem a feature");
+});
+
+Deno.test("createSession: teto atingido recusa 409 e não chama a VPS nem escreve", async () => {
+  const db = fakeDb({
+    "whatsapp_instances:maybeSingle": { data: { id: "inst-1", organization_id: "org-1" } },
+    "organizations:maybeSingle": { data: { voice_sessions_cap: 1 } },
+    "rpc:org_get_features_and_limits": { data: { features: { voice_calls: true }, plan_name: "pro" } },
+    "voip_sessions:select": { count: 1 },
+  });
+  const { deps, vpsCalls } = fakeVoipDeps();
+
+  const res = await createSession(db, fakeCaller(), { whatsapp_instance_id: "inst-1" }, {}, deps);
+  const body = await res.json();
+
+  assertEquals(res.status, 409);
+  assertEquals(body.code, "session_cap_reached");
+  assertEquals(vpsCalls.length, 0, "VPS não deveria ser chamada quando o teto já foi atingido");
+  assertEquals(findCall(db.calls, "voip_sessions", "insert"), undefined, "não deveria inserir sessão além do teto");
+});
+
+Deno.test("createSession: sucesso liga voice_calls_enabled=true filtrado por organização", async () => {
+  const db = fakeDb({
+    "whatsapp_instances:maybeSingle": { data: { id: "inst-1", organization_id: "org-1" } },
+    "organizations:maybeSingle": { data: { voice_sessions_cap: 10 } },
+    "rpc:org_get_features_and_limits": { data: { features: { voice_calls: true }, plan_name: "pro" } },
+    "voip_sessions:select": { count: 0 },
+    "voip_sessions:insert": { error: null },
+  });
+  const { deps } = fakeVoipDeps({ ok: true, status: 200, data: { session: { id: "tc-sess-1" } } });
+
+  const res = await createSession(db, fakeCaller(), { whatsapp_instance_id: "inst-1" }, {}, deps);
+  assertEquals(res.status, 200);
+
+  const update = findCall(db.calls, "whatsapp_instances", "update");
+  assert(hasOpWithArgs(update, "update", [{ voice_calls_enabled: true }]), "esperava update({voice_calls_enabled:true})");
+  assert(hasOpWithArgs(update, "eq", ["organization_id", "org-1"]), "update tem que filtrar por organization_id");
+});
+
+Deno.test("logoutSession: desliga voice_calls_enabled=false filtrado por organização", async () => {
+  const db = fakeDb({
+    "voip_sessions:maybeSingle": { data: { whatsapp_instance_id: "inst-1" } },
+    "rpc:org_get_features_and_limits": VOZ_LIBERADA,
+  });
+  const { deps } = fakeVoipDeps({ ok: true, status: 200, data: {} });
+
+  const res = await forwardSessionAction(db, fakeCaller(), "logoutSession", "tc-sess-1", {}, {}, deps);
+  assertEquals(res.status, 200);
+
+  const update = findCall(db.calls, "whatsapp_instances", "update");
+  assert(hasOpWithArgs(update, "update", [{ voice_calls_enabled: false }]), "esperava update({voice_calls_enabled:false})");
+  assert(hasOpWithArgs(update, "eq", ["organization_id", "org-1"]), "update tem que filtrar por organization_id");
+});
+
+Deno.test("deleteSession: desliga voice_calls_enabled=false filtrado por organização", async () => {
+  const db = fakeDb({
+    "voip_sessions:maybeSingle": { data: { whatsapp_instance_id: "inst-1" } },
+    "rpc:org_get_features_and_limits": VOZ_LIBERADA,
+  });
+  const { deps } = fakeVoipDeps({ ok: true, status: 200, data: {} });
+
+  const res = await forwardSessionAction(db, fakeCaller(), "deleteSession", "tc-sess-1", {}, {}, deps);
+  assertEquals(res.status, 200);
+
+  const update = findCall(db.calls, "whatsapp_instances", "update");
+  assert(hasOpWithArgs(update, "update", [{ voice_calls_enabled: false }]), "esperava update({voice_calls_enabled:false})");
+  assert(hasOpWithArgs(update, "eq", ["organization_id", "org-1"]), "update tem que filtrar por organization_id");
+});
+
+// ─── Repasse de `code` do corpo de erro da VPS ──────────────────────────────
+//
+// `VpsResult` carregava só `error: string` — qualquer `code` que a VPS
+// mandasse no corpo era descartado em silêncio dentro de `callVps`, e
+// `forwardSessionAction`/`createSession` só devolviam `{ error }`. Uma recusa
+// codificada da VPS (ex.: o futuro código de limite de aparelhos do
+// WhatsApp) chegaria ao cliente como texto cru, sem chave para a tabela de
+// tradução procurar. Fixture usa "device_limit_reached" porque é o caso que
+// motivou o conserto — não porque a VPS já emite esse código hoje.
+
+Deno.test("forwardSessionAction: repassa o code da VPS quando ela manda um", async () => {
+  const db = fakeDb({
+    "voip_sessions:maybeSingle": { data: { whatsapp_instance_id: "inst-1" } },
+    "rpc:org_get_features_and_limits": VOZ_LIBERADA,
+  });
+  const { deps } = fakeVoipDeps({
+    ok: false,
+    status: 409,
+    error: "device already has 4 linked devices",
+    code: "device_limit_reached",
+  });
+
+  const res = await forwardSessionAction(db, fakeCaller(), "pairSession", "tc-sess-1", {}, {}, deps);
+  const body = await res.json();
+
+  assertEquals(res.status, 409);
+  assertEquals(body.code, "device_limit_reached");
+});
+
+Deno.test("forwardSessionAction: sem code no VpsResult, resposta não inventa um", async () => {
+  const db = fakeDb({
+    "voip_sessions:maybeSingle": { data: { whatsapp_instance_id: "inst-1" } },
+    "rpc:org_get_features_and_limits": VOZ_LIBERADA,
+  });
+  const { deps } = fakeVoipDeps({ ok: false, status: 502, error: "falha de rede" });
+
+  const res = await forwardSessionAction(db, fakeCaller(), "pairSession", "tc-sess-1", {}, {}, deps);
+  const body = await res.json();
+
+  assertEquals(res.status, 502);
+  assertEquals(body.code, undefined);
+  assertEquals(body.error, "falha de rede");
+});
+
+Deno.test("createSession: repassa o code da VPS quando a criação em si é recusada", async () => {
+  const db = fakeDb({
+    "whatsapp_instances:maybeSingle": { data: { id: "inst-1", organization_id: "org-1" } },
+    "organizations:maybeSingle": { data: { voice_sessions_cap: 10 } },
+    "rpc:org_get_features_and_limits": { data: { features: { voice_calls: true }, plan_name: "pro" } },
+    "voip_sessions:select": { count: 0 },
+  });
+  const { deps } = fakeVoipDeps({
+    ok: false,
+    status: 409,
+    error: "device already has 4 linked devices",
+    code: "device_limit_reached",
+  });
+
+  const res = await createSession(db, fakeCaller(), { whatsapp_instance_id: "inst-1" }, {}, deps);
+  const body = await res.json();
+
+  assertEquals(res.status, 409);
+  assertEquals(body.code, "device_limit_reached");
+});
+
+// ─── Gate comercial nas ações de forward (I2) ────────────────────────────────
+//
+// O gate `voice_calls` só existia em `createSession`. `forwardSessionAction` —
+// pairSession, logoutSession, deleteSession, adoptSession — não tinha gate
+// nenhum: derrubar a feature sumia com o cartão do catálogo e deixava as ações
+// abertas para quem chamasse a função direto. Gate que só uma ação respeita não
+// é kill-switch.
+//
+// A assimetria é deliberada e está testada nas duas direções: PARear e ADOTar
+// criam ou reativam capacidade de voz e são barrados; DESLIGAR e APAGAR seguem
+// passando, porque com o gate no chão o cartão some da tela e desligar é a
+// única saída que sobra para quem já está ligado.
+
+Deno.test("pairSession: feature desligada recusa 403 e não chama a VPS", async () => {
+  const db = fakeDb({
+    "voip_sessions:maybeSingle": { data: { whatsapp_instance_id: "inst-1" } },
+    "rpc:org_get_features_and_limits": VOZ_BLOQUEADA,
+  });
+  const { deps, vpsCalls } = fakeVoipDeps();
+
+  const res = await forwardSessionAction(db, fakeCaller(), "pairSession", "tc-sess-1", {}, {}, deps);
+  const body = await res.json();
+
+  assertEquals(res.status, 403);
+  assertEquals(body.code, "voice_feature_off");
+  assertEquals(vpsCalls.length, 0, "VPS não deveria ser chamada com a feature desligada");
+});
+
+Deno.test("adoptSession: feature desligada recusa 403 e não chama a VPS nem escreve", async () => {
+  const db = fakeDb({
+    "organizations:maybeSingle": { data: { voice_sessions_cap: 10 } },
+    "rpc:org_get_features_and_limits": VOZ_BLOQUEADA,
+  });
+  const { deps, vpsCalls } = fakeVoipDeps();
+
+  const res = await forwardSessionAction(
+    db, fakeCaller(), "adoptSession", "tc-sess-1", { whatsapp_instance_id: "inst-1" }, {}, deps,
+  );
+  const body = await res.json();
+
+  assertEquals(res.status, 403);
+  assertEquals(body.code, "voice_feature_off");
+  assertEquals(vpsCalls.length, 0, "VPS não deveria ser chamada com a feature desligada");
+  assertEquals(findCall(db.calls, "voip_sessions", "upsert"), undefined, "não deveria adotar sessão sem a feature");
+});
+
+Deno.test("logoutSession: NÃO é barrado pelo gate — desligar é a saída do cliente", async () => {
+  const db = fakeDb({
+    "voip_sessions:maybeSingle": { data: { whatsapp_instance_id: "inst-1" } },
+    "rpc:org_get_features_and_limits": VOZ_BLOQUEADA,
+  });
+  const { deps, vpsCalls } = fakeVoipDeps({ ok: true, status: 200, data: {} });
+
+  const res = await forwardSessionAction(db, fakeCaller(), "logoutSession", "tc-sess-1", {}, {}, deps);
+
+  assertEquals(res.status, 200);
+  assertEquals(vpsCalls.length, 1, "desligar tem que chegar na VPS mesmo com o gate no chão");
+});
+
+Deno.test("deleteSession: NÃO é barrado pelo gate — apagar é a saída do cliente", async () => {
+  const db = fakeDb({
+    "voip_sessions:maybeSingle": { data: { whatsapp_instance_id: "inst-1" } },
+    "rpc:org_get_features_and_limits": VOZ_BLOQUEADA,
+  });
+  const { deps, vpsCalls } = fakeVoipDeps({ ok: true, status: 200, data: {} });
+
+  const res = await forwardSessionAction(db, fakeCaller(), "deleteSession", "tc-sess-1", {}, {}, deps);
+
+  assertEquals(res.status, 200);
+  assertEquals(vpsCalls.length, 1, "apagar tem que chegar na VPS mesmo com o gate no chão");
+});
+
+// `adoptSession` fazia upsert sem contar vaga nenhuma: era o caminho por onde
+// o teto de D3 vazava inteiro.
+Deno.test("adoptSession: teto atingido recusa 409 e não chama a VPS nem escreve", async () => {
+  const db = fakeDb({
+    "organizations:maybeSingle": { data: { voice_sessions_cap: 1 } },
+    "rpc:org_get_features_and_limits": VOZ_LIBERADA,
+    "voip_sessions:select": { count: 1 },
+  });
+  const { deps, vpsCalls } = fakeVoipDeps();
+
+  const res = await forwardSessionAction(
+    db, fakeCaller(), "adoptSession", "tc-sess-1", { whatsapp_instance_id: "inst-1" }, {}, deps,
+  );
+  const body = await res.json();
+
+  assertEquals(res.status, 409);
+  assertEquals(body.code, "session_cap_reached");
+  assertEquals(vpsCalls.length, 0, "VPS não deveria ser chamada além do teto");
+  assertEquals(findCall(db.calls, "voip_sessions", "upsert"), undefined, "não deveria adotar além do teto");
+});
+
+// Adotar uma sessão que JÁ tem linha no CRM não pode contar ela mesma como
+// vaga ocupada — senão a organização no teto nunca conseguiria reconciliar o
+// que já é dela.
+Deno.test("adoptSession: a contagem do teto exclui a própria sessão adotada", async () => {
+  const db = fakeDb({
+    "organizations:maybeSingle": { data: { voice_sessions_cap: 10 } },
+    "rpc:org_get_features_and_limits": VOZ_LIBERADA,
+    "voip_sessions:select": { count: 0 },
+  });
+  const { deps } = fakeVoipDeps({ ok: true, status: 200, data: {} });
+
+  await forwardSessionAction(
+    db, fakeCaller(), "adoptSession", "tc-sess-1", { whatsapp_instance_id: "inst-1" }, {}, deps,
+  );
+
+  const contagem = db.calls.find((c) =>
+    c.table === "voip_sessions" && c.ops.some((o) => o.op === "neq" && o.args[0] === "status")
+  );
+  assert(
+    hasOpWithArgs(contagem, "neq", ["tc_session_id", "tc-sess-1"]),
+    "a contagem tem que excluir a sessão que está sendo adotada",
+  );
+});
+
+// ─── Leitura do teto falha fechada (I8) ──────────────────────────────────────
+//
+// Desestruturar só `data` fazia a organização com `voice_sessions_cap = 0` —
+// que a migration documenta como "sem direito a número de voz" — virar teto 10
+// quando o SELECT falhasse. O limite mais restritivo virava o mais permissivo
+// por um erro descartado.
+
+Deno.test("createSession: erro ao ler o teto recusa em vez de cair no padrão 10", async () => {
+  const db = fakeDb({
+    "whatsapp_instances:maybeSingle": { data: { id: "inst-1", organization_id: "org-1" } },
+    "organizations:maybeSingle": { error: { message: "conexão perdida" } },
+    "rpc:org_get_features_and_limits": VOZ_LIBERADA,
+    "voip_sessions:select": { count: 0 },
+  });
+  const { deps, vpsCalls } = fakeVoipDeps();
+
+  const res = await createSession(db, fakeCaller(), { whatsapp_instance_id: "inst-1" }, {}, deps);
+
+  assertEquals(res.status, 500);
+  assertEquals(vpsCalls.length, 0, "sem saber o teto, não se cria sessão");
+  assertEquals(findCall(db.calls, "voip_sessions", "insert"), undefined, "sem saber o teto, não se escreve");
+});
+
+// ─── Updates de voice_calls_enabled deixam rastro (I9) ───────────────────────
+//
+// Sem checar o erro, uma falha no update deixava o cliente vendo sucesso e o
+// número num estado que ninguém consegue explicar depois — habilitado sem
+// sessão, ou pareado sem habilitação, e sem uma linha de log para reconstruir.
+
+Deno.test("createSession: falha ao ligar voice_calls_enabled é registrada", async () => {
+  const db = fakeDb({
+    "whatsapp_instances:maybeSingle": { data: { id: "inst-1", organization_id: "org-1" } },
+    "organizations:maybeSingle": { data: { voice_sessions_cap: 10 } },
+    "rpc:org_get_features_and_limits": VOZ_LIBERADA,
+    "voip_sessions:select": { count: 0 },
+    "voip_sessions:insert": { error: null },
+    "whatsapp_instances:update": { error: { message: "update recusado" } },
+  });
+  const { deps, logs } = fakeVoipDeps({ ok: true, status: 200, data: { session: { id: "tc-sess-1" } } });
+
+  await createSession(db, fakeCaller(), { whatsapp_instance_id: "inst-1" }, {}, deps);
+
+  const falha = logs.find((l) => l.action === "voice_calls_enable_failed");
+  assert(falha, "esperava log de falha ao ligar voice_calls_enabled");
+  assertEquals(falha!.status, "error");
+  assertEquals(falha!.organizationId, "org-1");
+});
+
+Deno.test("logoutSession: falha ao desligar voice_calls_enabled é registrada", async () => {
+  const db = fakeDb({
+    "voip_sessions:maybeSingle": { data: { whatsapp_instance_id: "inst-1" } },
+    "rpc:org_get_features_and_limits": VOZ_LIBERADA,
+    "whatsapp_instances:update": { error: { message: "update recusado" } },
+  });
+  const { deps, logs } = fakeVoipDeps({ ok: true, status: 200, data: {} });
+
+  await forwardSessionAction(db, fakeCaller(), "logoutSession", "tc-sess-1", {}, {}, deps);
+
+  const falha = logs.find((l) => l.action === "voice_calls_disable_failed");
+  assert(falha, "esperava log de falha ao desligar voice_calls_enabled");
+  assertEquals(falha!.status, "error");
+  assertEquals(falha!.organizationId, "org-1");
+});
+
+Deno.test("createSession: sucesso não registra falha nenhuma de voice_calls_enabled", async () => {
+  const db = fakeDb({
+    "whatsapp_instances:maybeSingle": { data: { id: "inst-1", organization_id: "org-1" } },
+    "organizations:maybeSingle": { data: { voice_sessions_cap: 10 } },
+    "rpc:org_get_features_and_limits": VOZ_LIBERADA,
+    "voip_sessions:select": { count: 0 },
+    "voip_sessions:insert": { error: null },
+    "whatsapp_instances:update": { error: null },
+  });
+  const { deps, logs } = fakeVoipDeps({ ok: true, status: 200, data: { session: { id: "tc-sess-1" } } });
+
+  await createSession(db, fakeCaller(), { whatsapp_instance_id: "inst-1" }, {}, deps);
+
+  assertEquals(logs.find((l) => l.action === "voice_calls_enable_failed"), undefined);
+  assert(logs.some((l) => l.action === "session_created"), "o log de sucesso continua saindo");
+});

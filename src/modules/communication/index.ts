@@ -250,3 +250,27 @@ export {
   prefetchChatData,
 } from "./lib/chatPrefetch";
 export type { PrefetchChatDataParams } from "./lib/chatPrefetch";
+
+// Chamada de voz (TorqueCalls, S14). O provider vive na raiz do app porque a
+// chamada tem que sobreviver ao fechamento da tela que a originou.
+export { VoiceCallProvider, useVoiceCallContext } from "./components/voice/VoiceCallProvider";
+export { VoiceCallButton } from "./components/voice/VoiceCallButton";
+export { useVoipSession } from "./hooks/useVoipSession";
+export type { VoipSession } from "./hooks/useVoipSession";
+// `useVoipSessions` (plural, tela de integração) tem sua própria interface
+// local `VoipSession` — mesmo nome do tipo acima, formato diferente (camelCase
+// + whatsappInstanceId). Re-exportar sob o mesmo nome colidiria no barrel
+// (TS2308), então sai como `VoipSessionSummary`.
+export { useVoipSessions, useVoiceSessionsCap } from "./hooks/useVoipSessions";
+export type { VoipSession as VoipSessionSummary } from "./hooks/useVoipSessions";
+export { useVoiceCall } from "./hooks/useVoiceCall";
+export type { CallPhase, VoiceCallState } from "./hooks/useVoiceCall";
+export { CALL_DENY_MESSAGES, CallDeniedError } from "./lib/torquecallsApi";
+export { VoicePairingDialog } from "./components/voice/VoicePairingDialog";
+export {
+  createVoiceSession,
+  logoutVoiceSession,
+  pairVoiceSession,
+  VoiceControlError,
+  VOICE_CONTROL_MESSAGES,
+} from "./lib/torquecallsApi";

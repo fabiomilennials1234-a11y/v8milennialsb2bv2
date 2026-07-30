@@ -1,0 +1,365 @@
+/**
+ * torquecalls-signal — plano de SINALIZAÇÃO da chamada de voz (S12).
+ *
+ * É o único caller de `authorizeCallAndMint`. Essa lista é fechada e verificável:
+ * `scripts/test-voip-choke.sh` reprova o build se aparecer um segundo.
+ *
+ * Ações:
+ *   streamToken  — credencial de 60s para o browser abrir o SSE de eventos
+ *   startCall    — discar para um lead (passa pelo choke)
+ *   acceptCall   — atender chamada de entrada (passa pelo choke)
+ *   rejectCall   — recusar chamada de entrada
+ *   endCall      — encerrar chamada em curso
+ *   renewCtl     — renovar só a credencial de encerrar
+ *
+ * O corpo da requisição NÃO carrega organização, operador nem telefone. Os dois
+ * primeiros vêm do `Caller` opaco; o terceiro é derivado do lead pelo choke.
+ * Um `lead_id` legítimo com um número arbitrário no corpo era o último caminho
+ * de ataque que sobrevivia ao desenho.
+ */
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
+import { logRuntime } from "../_shared/logger.ts";
+import { canUserAccessFeature } from "../_shared/permission_engine.ts";
+import { adminClient, type Caller, isOrgAdmin, resolveCaller } from "../_shared/voip/caller.ts";
+import { authorizeCallAndMint, renewCallControlToken } from "../_shared/voip/call-plane.ts";
+import { signStreamToken, STREAM_TTL_SECONDS } from "../_shared/voip/tokens.ts";
+import { callVps, publicVpsUrl } from "../_shared/voip/vps.ts";
+
+type Action =
+  | "streamToken"
+  | "startCall"
+  | "acceptCall"
+  | "rejectCall"
+  | "endCall"
+  | "renewCtl";
+
+function json(status: number, body: unknown, headers: Record<string, string>): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...headers, "Content-Type": "application/json" },
+  });
+}
+
+Deno.serve(
+  withErrorBoundary("torquecalls-signal", async (req: Request) => {
+    const cors = withSecurityHeaders(
+      getCorsHeaders(req.headers.get("Origin") ?? undefined) as Record<string, string>,
+    );
+
+    if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+    if (req.method !== "POST") return json(405, { error: "Method not allowed" }, cors);
+
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return json(400, { error: "Invalid JSON body" }, cors);
+    }
+
+    const action = body.action as Action | undefined;
+    const supabaseAdmin = adminClient();
+
+    const resolved = await resolveCaller(
+      req,
+      supabaseAdmin,
+      typeof body.organization_id === "string" ? body.organization_id : undefined,
+    );
+    if (!resolved.ok) return json(resolved.status, { error: resolved.error }, cors);
+    const caller = resolved.caller;
+
+    const sid = typeof body.tc_session_id === "string" ? body.tc_session_id : "";
+    if (!sid) return json(400, { error: "tc_session_id obrigatório" }, cors);
+
+    switch (action) {
+      case "streamToken":
+        return await streamToken(supabaseAdmin, caller, sid, body, cors);
+      case "startCall":
+        return await startCall(supabaseAdmin, caller, sid, body, cors);
+      case "acceptCall":
+        return await acceptCall(supabaseAdmin, caller, sid, body, cors);
+      case "rejectCall":
+      case "endCall":
+        return await terminate(supabaseAdmin, caller, sid, action, body, cors);
+      case "renewCtl":
+        return await renewCtl(supabaseAdmin, caller, sid, body, cors);
+      default:
+        return json(400, { error: "Missing or unknown action" }, cors);
+    }
+  }),
+);
+
+// deno-lint-ignore no-explicit-any
+type Admin = any;
+
+/** A sessão pertence à org do chamador? Validado no momento da emissão, sempre. */
+async function ownedSession(db: Admin, sid: string, orgId: string) {
+  const { data } = await db
+    .from("voip_sessions")
+    .select("tc_session_id, status")
+    .eq("tc_session_id", sid)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  return data as { tc_session_id: string; status: string } | null;
+}
+
+/**
+ * Credencial do stream de eventos.
+ *
+ * O `sid` pedido é conferido contra `voip_sessions` AQUI, no instante da
+ * emissão — não na VPS. Sem isso, pedir o histórico de uma sessão de outra
+ * organização seria só saber o id dela.
+ *
+ * `vis` é decidido pelo CRM porque a VPS não tem como avaliar
+ * `can_see_lead_by_permissions`: ela recebe o veredito, não a regra.
+ */
+async function streamToken(
+  db: Admin,
+  caller: Caller,
+  sid: string,
+  body: Record<string, unknown>,
+  cors: Record<string, string>,
+) {
+  if (!await ownedSession(db, sid, caller.orgId)) {
+    return json(404, { error: "Sessão não encontrada" }, cors);
+  }
+
+  const canSeeAll = isOrgAdmin(caller) ||
+    await canUserAccessFeature(db, caller.userId, caller.orgId, "leads.view_all");
+
+  // O QR de pareamento é CREDENCIAL: quem o lê pareia o WhatsApp da organização.
+  // Só sai para quem pode gerenciar sessão.
+  let pairSid: string | undefined;
+  if (body.pair === true) {
+    const canManage = isOrgAdmin(caller) ||
+      await canUserAccessFeature(db, caller.userId, caller.orgId, "voip.session.manage");
+    if (!canManage) return json(403, { error: "Sem permissão para parear" }, cors);
+    pairSid = sid;
+  }
+
+  const stream = await signStreamToken({
+    org: caller.orgId,
+    sub: caller.userId,
+    sid,
+    vis: canSeeAll ? "org" : "own",
+    pairSid,
+  });
+
+  return json(200, {
+    token: stream.token,
+    expires_at: stream.expiresAt,
+    // O cliente renova antes de expirar: o TTL curto É a revogação, e por isso
+    // não existe denylist em nenhuma fatia deste desenho.
+    renew_in_ms: Math.floor(STREAM_TTL_SECONDS * 0.75) * 1000,
+    vps_url: publicVpsUrl(),
+  }, cors);
+}
+
+async function startCall(
+  db: Admin,
+  caller: Caller,
+  sid: string,
+  body: Record<string, unknown>,
+  cors: Record<string, string>,
+) {
+  const leadId = typeof body.lead_id === "string" ? body.lead_id : null;
+
+  const authorized = await authorizeCallAndMint(caller, {
+    supabaseAdmin: db,
+    tcSessionId: sid,
+    direction: "outbound",
+    leadId,
+  });
+
+  if (!authorized.ok) return denied(caller, authorized, cors);
+
+  // A VPS resolve o JID via IsOnWhatsApp a partir dos dígitos. Quem escolheu os
+  // dígitos foi o choke, lendo o lead — não quem chamou esta função.
+  const started = await callVps<{ call?: { callId?: string } }>(
+    "POST",
+    `/api/sessions/${encodeURIComponent(sid)}/calls`,
+    { token: authorized.tokens.start, body: { phone: authorized.peer } },
+  );
+
+  if (!started.ok) {
+    await releaseReservation(db, authorized.callId, started.error);
+    return json(started.status, { error: started.error, code: "vps_refused" }, cors);
+  }
+
+  const tcCallId = started.data?.call?.callId ?? null;
+  if (tcCallId) {
+    await db.from("voip_calls")
+      .update({ tc_call_id: tcCallId, status: "ringing", ringing_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", authorized.callId);
+  }
+
+  return json(200, {
+    call_id: authorized.callId,
+    tc_call_id: tcCallId,
+    peer: authorized.peer,
+    media: authorized.tokens.media,
+    ctl: authorized.tokens.ctl,
+    vps_url: publicVpsUrl(),
+  }, cors);
+}
+
+async function acceptCall(
+  db: Admin,
+  caller: Caller,
+  sid: string,
+  body: Record<string, unknown>,
+  cors: Record<string, string>,
+) {
+  const callId = typeof body.call_id === "string" ? body.call_id : null;
+  if (!callId) return json(400, { error: "call_id obrigatório" }, cors);
+
+  const authorized = await authorizeCallAndMint(caller, {
+    supabaseAdmin: db,
+    tcSessionId: sid,
+    direction: "inbound",
+    existingCallId: callId,
+  });
+
+  if (!authorized.ok) return denied(caller, authorized, cors);
+
+  const { data: row } = await db.from("voip_calls").select("tc_call_id").eq("id", callId).maybeSingle();
+  const tcCallId = row?.tc_call_id;
+  if (!tcCallId) return json(409, { error: "Chamada sem id de rede", code: "no_tc_call_id" }, cors);
+
+  const accepted = await callVps(
+    "POST",
+    `/api/sessions/${encodeURIComponent(sid)}/calls/${encodeURIComponent(tcCallId)}/accept`,
+    { token: authorized.tokens.start, body: {} },
+  );
+
+  if (!accepted.ok) return json(accepted.status, { error: accepted.error, code: "vps_refused" }, cors);
+
+  return json(200, {
+    call_id: authorized.callId,
+    tc_call_id: tcCallId,
+    peer: authorized.peer,
+    media: authorized.tokens.media,
+    ctl: authorized.tokens.ctl,
+    vps_url: publicVpsUrl(),
+  }, cors);
+}
+
+/**
+ * Encerrar e recusar NÃO passam pelo choke: quem já está na chamada tem o `ctl`,
+ * emitido no momento da autorização e válido por 30 minutos justamente para que
+ * desligar não dependa da rede do CRM. Aqui é o caminho de reserva, para quando
+ * o cliente perdeu o token — e por isso exige ser o operador da chamada.
+ */
+async function terminate(
+  db: Admin,
+  caller: Caller,
+  sid: string,
+  action: "endCall" | "rejectCall",
+  body: Record<string, unknown>,
+  cors: Record<string, string>,
+) {
+  const callId = typeof body.call_id === "string" ? body.call_id : null;
+  if (!callId) return json(400, { error: "call_id obrigatório" }, cors);
+
+  const { data: call } = await db
+    .from("voip_calls")
+    .select("id, organization_id, tc_call_id, operator_user_id, status")
+    .eq("id", callId)
+    .maybeSingle();
+
+  if (!call || call.organization_id !== caller.orgId) {
+    return json(404, { error: "Chamada não encontrada" }, cors);
+  }
+  if (!isOrgAdmin(caller) && call.operator_user_id && call.operator_user_id !== caller.userId) {
+    return json(403, { error: "Chamada de outro operador" }, cors);
+  }
+  if (!call.tc_call_id) return json(409, { error: "Chamada sem id de rede" }, cors);
+
+  const path = action === "endCall"
+    ? `/api/sessions/${encodeURIComponent(sid)}/calls/${encodeURIComponent(call.tc_call_id)}`
+    : `/api/sessions/${encodeURIComponent(sid)}/calls/${encodeURIComponent(call.tc_call_id)}/reject`;
+
+  const ctl = await renewCallControlToken(caller, {
+    supabaseAdmin: db,
+    tcSessionId: sid,
+    callId: call.id,
+  });
+  if (!ctl.ok) return json(409, { error: ctl.code, code: ctl.code }, cors);
+
+  const res = await callVps(action === "endCall" ? "DELETE" : "POST", path, {
+    token: ctl.ctl,
+    body: action === "endCall" ? undefined : {},
+  });
+
+  if (!res.ok) return json(res.status, { error: res.error }, cors);
+
+  // O estado final autoritativo vem pelo webhook (S11). Aqui só antecipamos o
+  // que o operador acabou de mandar, para a tela não ficar mentindo.
+  await db.from("voip_calls").update({
+    status: "ended",
+    end_reason: action === "endCall" ? "user_ended" : "rejected",
+    ended_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq("id", callId).neq("status", "ended");
+
+  return json(200, { ok: true }, cors);
+}
+
+async function renewCtl(
+  db: Admin,
+  caller: Caller,
+  sid: string,
+  body: Record<string, unknown>,
+  cors: Record<string, string>,
+) {
+  const callId = typeof body.call_id === "string" ? body.call_id : null;
+  if (!callId) return json(400, { error: "call_id obrigatório" }, cors);
+
+  const renewed = await renewCallControlToken(caller, {
+    supabaseAdmin: db,
+    tcSessionId: sid,
+    callId,
+  });
+
+  if (!renewed.ok) {
+    const status = renewed.code === "call_not_found" ? 404 : renewed.code === "not_operator" ? 403 : 409;
+    return json(status, { error: renewed.code, code: renewed.code }, cors);
+  }
+
+  return json(200, { ctl: renewed.ctl, expires_at: renewed.expiresAt }, cors);
+}
+
+async function releaseReservation(db: Admin, callId: string, reason: string) {
+  // A VPS recusou: a reserva não pode ficar segurando cota até o reaper passar.
+  await db.from("voip_calls").update({
+    status: "expired",
+    end_reason: `vps_refused:${reason}`.slice(0, 200),
+    ended_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq("id", callId).eq("status", "authorized");
+}
+
+function denied(
+  caller: Caller,
+  result: { ok: false; code: string; retryAfterMs?: number },
+  cors: Record<string, string>,
+): Response {
+  const status = result.code === "permission_denied" || result.code === "not_lead_owner"
+    ? 403
+    : result.code === "consent_missing"
+    ? 412
+    : result.code === "session_not_found" || result.code === "lead_not_found"
+    ? 404
+    : 409;
+
+  logRuntime({
+    organizationId: caller.orgId,
+    module: "voip",
+    action: "call_denied",
+    status: "error",
+    payloadSnapshot: { code: result.code, user_id: caller.userId },
+  });
+
+  return json(status, { error: result.code, code: result.code, retry_after_ms: result.retryAfterMs }, cors);
+}

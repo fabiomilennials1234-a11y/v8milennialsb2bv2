@@ -186,6 +186,7 @@ export type RuntimeLogModule =
   | "support"
   | "sz_chat"
   | "tts"
+  | "voip"
   | "webhook"
   | "whatsapp"
   | "workflow";

@@ -60,6 +60,18 @@
 #      dispatches system vs custom via the real join keys (custom_pipeline_stages
 #      .pipeline_id + stage_key), so custom-funnel sales finally emit sale_events
 #      (R3 killer at the resolver) + won/lost money guard on custom (FIX-4 reuse).
+#  15. voip_foundation_test.sql      — fundação TorqueCalls (S8/S9): desenho (C)
+#      (kill-switch em whatsapp_instances, sem voip_call_policies), reserva
+#      atômica fail-closed, consentimento de voz fora do alcance do membro,
+#      fronteira do lead em voip_calls exercida como `authenticated`.
+#  16. voip_gate_test.sql           — as DUAS chaves da voz (spec 2026-07-30):
+#      teto por organização (`organizations.voice_sessions_cap`, com 0 = sem
+#      direito) e o gate comercial `voice_calls` no catálogo `feature_flags` —
+#      o que a FK de `organization_features` exige para conceder a voz a UMA
+#      organização, e o que faz o override chegar ao gate do servidor via
+#      `org_get_features_and_limits`. Estava no repositório sem nunca ter sido
+#      registrado aqui: suite que não roda não prova nada.
+#
 #  14. assert_org_access_test.sql     — gate de tenancy dos leitores SECURITY
 #      DEFINER (#1209): membro ATIVO passa, membro DESATIVADO é BLOQUEADO (o
 #      furo: lia receita/ranking/comissão da org que o desativou), master e
@@ -112,12 +124,14 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/tv_reseed_s1_test.sql" \
     "$SCRIPT_DIR/tv_s2_stage_label_scope_test.sql" \
     "$SCRIPT_DIR/parity_p1_measures_test.sql" \
-    "$SCRIPT_DIR/send_dedup_log_test.sql"
+    "$SCRIPT_DIR/send_dedup_log_test.sql" \
+    "$SCRIPT_DIR/voip_foundation_test.sql" \
+    "$SCRIPT_DIR/voip_gate_test.sql"
 }
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces

@@ -35,6 +35,7 @@ export type FeatureKey =
   | "white_label"
   // Integrations
   | "external_cadastro"
+  | "voice_calls"
   // Funnels v2
   | "funnels_custom"
   | "carteira"
@@ -114,6 +115,7 @@ export const FEATURES: FeatureMeta[] = [
   { key: "api_access", label: "Acesso API", description: "Acesso à API pública", icon: "Code", category: "advanced" },
   { key: "white_label", label: "White Label", description: "Personalização completa de marca", icon: "Palette", category: "advanced" },
   { key: "external_cadastro", label: "Cadastro Externo", description: "Cadastro automático de clientes no sistema externo", icon: "UserPlus", category: "advanced" },
+  { key: "voice_calls", label: "TorqueCalls (Voz)", description: "Chamada de voz pelo WhatsApp direto no CRM, sem sair da conversa", icon: "Phone", category: "advanced" },
   // Funnels v2
   { key: "funnels_custom", label: "Funis Customizados", description: "Criar funis personalizados", icon: "GitBranch", category: "modules" },
   { key: "carteira", label: "Carteira", description: "Gestão de carteira de clientes", icon: "TrendingUp", category: "modules", sidebarPath: "/upsell" },
