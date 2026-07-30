@@ -266,17 +266,39 @@ Expected: PASS, 4/4.
 Em `createSession`, logo depois da checagem de tenant da instância, inserir:
 
 ```ts
-  const { data: plan } = await db
+  const { data: org } = await db
     .from("organizations")
-    .select("voice_sessions_cap, subscription_plans(features)")
+    .select("voice_sessions_cap")
     .eq("id", caller.orgId)
     .maybeSingle();
 
+  // A feature vem da MESMA fonte que o cliente usa (OrgFeaturesContext chama
+  // esta RPC). Ler por `plan_id` seria mais direto e estava errado: o trigger
+  // que sincroniza `plan_id` só age quando ele é NULL, e o Master troca plano
+  // escrevendo `subscription_plan` (texto). Em produção 7 de 95 organizações
+  // têm os dois divergentes — num downgrade, o gate liberaria voz para quem
+  // não paga mais. A RPC resolve por `subscription_plan` e não tem esse furo.
+  const { data: fl, error: flErr } = await db.rpc("org_get_features_and_limits", {
+    p_org_id: caller.orgId,
+  });
+  if (flErr) return json(500, { error: flErr.message }, cors);
+
+  const flags = (fl as { features?: Record<string, unknown>; plan_name?: string } | null);
+  // `plan_name === "master"` é o único ramo que a RPC devolve para master, e
+  // master nunca vê lock — mesma convenção do frontend.
+  const liberado = flags?.plan_name === "master" || voiceFeatureOn(flags?.features);
+
   // Gate de interface não é gate. A mesma feature que esconde o cartão no
   // catálogo precisa recusar aqui, senão basta chamar a função direto.
-  if (!voiceFeatureOn((plan as { subscription_plans?: { features?: Record<string, unknown> } })?.subscription_plans?.features)) {
+  if (!liberado) {
     return json(403, { error: "Chamada de voz não está no plano desta organização", code: "voice_feature_off" }, cors);
   }
+```
+
+O teto continua vindo da coluna, agora do objeto `org`:
+
+```ts
+  const cap = resolveSessionCap(org as { voice_sessions_cap?: number | null } | null);
 ```
 
 E trocar a comparação do teto:
