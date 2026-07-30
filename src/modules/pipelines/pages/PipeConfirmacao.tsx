@@ -905,6 +905,7 @@ function PipeConfirmacaoInner() {
             <LeadCard
               lead={card}
               variant="confirmacao"
+              density="compact"
               selected={bulk.isSelected(card.leadId || "")}
               onSelect={(e) => {
                 const lid = card.leadId || "";

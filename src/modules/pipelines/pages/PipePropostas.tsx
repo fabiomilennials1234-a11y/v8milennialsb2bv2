@@ -1341,6 +1341,7 @@ function PipePropostasInner() {
                 <LeadCard
                   lead={card}
                   variant="propostas"
+                  density="compact"
                   selected={bulk.isSelected(card.leadId || "")}
                   onSelect={(e) => {
                     const lid = card.leadId || "";

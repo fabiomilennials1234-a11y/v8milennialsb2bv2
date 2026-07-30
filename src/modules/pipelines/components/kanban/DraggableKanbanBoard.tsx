@@ -125,7 +125,10 @@ function DroppableColumn<T extends DraggableItem>({
         // Coluna é superfície própria (protótipo `.specs/mockups/funis-redesign/`):
         // o board deixa de ser fundo liso e cada etapa ganha contorno, o que dá
         // alvo visível pro arrasto e separa etapa cheia de etapa vazia.
-        "kanban-column w-[292px] min-w-[292px] max-w-[292px] flex-shrink-0 flex flex-col",
+        // `p-0` anula o `p-4` que `.kanban-column` aplica no CSS global. O
+        // recheio agora é por faixa (cabeçalho `px-3`, corpo `px-2.5`); somados
+        // davam 26px de cada lado e o card caía pra 240px dentro de 292px.
+        "kanban-column w-[292px] min-w-[292px] max-w-[292px] flex-shrink-0 flex flex-col p-0",
         "rounded-xl bg-muted/25 overflow-hidden transition-all duration-200",
         isOver && "ring-2 ring-primary/50 bg-primary/5",
         className
