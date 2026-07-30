@@ -6,6 +6,7 @@ import {
   Plug,
   Search,
   ChevronRight,
+  Phone,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,16 +26,19 @@ import { TinyErpSettings } from "./TinyErpSettings";
 import { OmieSettings } from "./OmieSettings";
 import { ElevenLabsSettings } from "./ElevenLabsSettings";
 import { WhatsAppSettings } from "./WhatsAppSettings";
+import { TorqueCallsSettings } from "./TorqueCallsSettings";
 
 // Hooks de status
 import { useMetaConnectionStatusByType } from "@/modules/communication/hooks/useMetaConnection";
 import { useGoogleCalendarStatus } from "@/modules/integrations/hooks/useGoogleCalendar";
 import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
 import { useOmieStatus } from "@/modules/integrations";
-import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
+import { useWhatsAppInstances, useVoipSessions } from "@/modules/communication";
 import { useOrganization } from "@/modules/identity";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import type { FeatureKey } from "@/modules/platform/lib/feature-registry";
 
 // ─── Brand Logos (SVG inline para visual premium) ───────
 
@@ -130,6 +134,18 @@ function ElevenLabsLogo() {
   );
 }
 
+// TorqueCalls é produto próprio (não uma marca externa) — por isso, ao
+// contrário dos logos acima, usa o token `primary` do tema em vez de um hex
+// de marca. Cor literal aqui seria bug (CLAUDE.md), e uma marca de terceiro
+// não existe para copiar.
+function TorqueCallsLogo() {
+  return (
+    <div className="flex h-full w-full items-center justify-center rounded-xl bg-primary">
+      <Phone className="h-6 w-6 text-primary-foreground" />
+    </div>
+  );
+}
+
 // ─── Types ──────────────────────────────────────────────
 
 type IntegrationCategory = "messaging" | "crm" | "calendar" | "ai" | "marketing";
@@ -144,6 +160,8 @@ interface IntegrationDef {
   features: string[];
   /** ID do componente de settings a renderizar no modal */
   settingsId: string;
+  /** Quando presente, o cartão só aparece se a organização tiver a feature. */
+  featureKey?: FeatureKey;
 }
 
 const CATEGORY_LABELS: Record<IntegrationCategory, string> = {
@@ -168,6 +186,17 @@ const INTEGRATIONS: IntegrationDef[] = [
     logo: <WhatsAppLogo />,
     features: ["Múltiplas instâncias", "QR Code", "Disparos automatizados", "Chat integrado"],
     settingsId: "whatsapp",
+  },
+  {
+    id: "torquecalls",
+    name: "TorqueCalls",
+    description: "Ligue por WhatsApp direto do CRM, sem sair da conversa.",
+    longDescription: "Ative chamada de voz num número de WhatsApp que você já conectou. O vendedor liga pelo chat do lead, e a ligação sai pelo próprio WhatsApp da empresa.",
+    category: "messaging",
+    logo: <TorqueCallsLogo />,
+    features: ["Chamada pelo chat", "Usa o número que já existe", "Histórico no lead"],
+    settingsId: "torquecalls",
+    featureKey: "voice_calls",
   },
   {
     id: "facebook",
@@ -240,6 +269,7 @@ function useIntegrationStatuses() {
   const { data: tinyStatus } = useTinyErpStatus();
   const { data: omieStatus } = useOmieStatus();
   const { data: whatsappInstances = [] } = useWhatsAppInstances();
+  const { data: voipSessions = [] } = useVoipSessions();
   const { organizationId } = useOrganization();
 
   const { data: orgData } = useQuery({
@@ -260,12 +290,21 @@ function useIntegrationStatuses() {
   const connectedInstances = whatsappInstances.filter(
     (i: any) => i.status === "connected" || i.status === "open"
   );
+  // "closed" é sessão morta — mesma regra do teto na tela de settings, não
+  // conta como voz ativa aqui também.
+  const activeVoiceSessions = voipSessions.filter((s) => s.status !== "closed");
 
   return {
     whatsapp: {
       connected: connectedInstances.length > 0,
       detail: connectedInstances.length > 0
         ? `${connectedInstances.length} instância(s)`
+        : undefined,
+    },
+    torquecalls: {
+      connected: activeVoiceSessions.length > 0,
+      detail: activeVoiceSessions.length > 0
+        ? `${activeVoiceSessions.length} número(s) com voz`
         : undefined,
     },
     facebook: {
@@ -442,6 +481,8 @@ function getSettingsComponent(settingsId: string): React.FC | null {
   switch (settingsId) {
     case "whatsapp":
       return WhatsAppSettings;
+    case "torquecalls":
+      return TorqueCallsSettings;
     case "facebook":
       return FacebookSettings;
     case "instagram":
@@ -466,11 +507,20 @@ export default function IntegrationsCatalog() {
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState<IntegrationCategory | "all">("all");
   const statuses = useIntegrationStatuses();
+  const { hasFeature } = useOrgFeatures();
 
-  const connectedCount = Object.values(statuses).filter((s) => s.connected).length;
-  const totalCount = INTEGRATIONS.length;
+  // Gate de interface — o servidor já checa a mesma feature em torquecalls-control;
+  // isto só evita mostrar um cartão que o plano da organização não paga.
+  const visibleIntegrations = INTEGRATIONS.filter(
+    (i) => !i.featureKey || hasFeature(i.featureKey),
+  );
 
-  const filtered = INTEGRATIONS.filter((i) => {
+  const connectedCount = visibleIntegrations.filter(
+    (i) => statuses[i.id as keyof StatusMap]?.connected,
+  ).length;
+  const totalCount = visibleIntegrations.length;
+
+  const filtered = visibleIntegrations.filter((i) => {
     const matchesSearch =
       search === "" ||
       i.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -479,7 +529,7 @@ export default function IntegrationsCatalog() {
     return matchesSearch && matchesCategory;
   });
 
-  const selected = INTEGRATIONS.find((i) => i.id === selectedId);
+  const selected = visibleIntegrations.find((i) => i.id === selectedId);
   const showGrouped = filterCategory !== "all";
 
   return (
