@@ -2,13 +2,19 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, Plus, Calendar as CalendarIcon,
+  Plus, Calendar as CalendarIcon,
   DollarSign, Loader2, TrendingUp, Package,
   BarChart3, MessageCircle, Settings2,
-  MoreVertical, Trash2, LayoutGrid, Send
+  MoreVertical, MoreHorizontal, Trash2, LayoutGrid, Send
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -39,9 +45,14 @@ import { useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } fro
 import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
 import { usePipePropostasMetrics } from "@/modules/pipelines/hooks/config/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
-import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/MetricsPeriodSelector";
+import {
+  getStalledBucket,
+  STALLED_ALL,
+  STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES,
+} from "@/modules/pipelines/lib/stalled-buckets";
+import { FunnelControlBar } from "@/modules/pipelines/components/shared/FunnelControlBar";
+import { FunnelViewsMenu } from "@/modules/pipelines/components/shared/FunnelViewsMenu";
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
-import { PipeViewToggle } from "@/modules/pipelines/components/shared/PipeViewToggle";
 import { AutoCreateLeadToggle } from "@/modules/pipelines/components/shared/AutoCreateLeadToggle";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/modules/leads";
 import { usePipelineStages, stagesToColumns } from "@/modules/pipelines/hooks/model/usePipelineStages";
@@ -88,7 +99,6 @@ import { useIdentity } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
-import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { DisparoWizard, type DisparoBoardFilter, type DisparoSource } from "@/modules/pipelines/components/disparo";
 import { useLossReasons } from "@/modules/pipelines/hooks/config/useLossReasons";
 import { useSearchParams } from "react-router-dom";
@@ -159,6 +169,10 @@ type PropostasFilterState = {
   filterQualificationTier: string[];
   filterPreQualificationTier: string[];
   filterScheduled: boolean;
+  /** Data de criação. Saiu do cabeçalho pro painel de Filtros (protótipo). */
+  periodState: MetricsPeriodState;
+  /** Dias na etapa atual — id de `STALLED_BUCKETS`, ou "all". */
+  filterStalled: string;
   viewMode: "kanban" | "analytics";
   // Marca se já aplicamos o default "me" para membros (one-shot por usuário).
   // Depois de true, respeitamos a escolha manual do usuário.
@@ -176,6 +190,8 @@ const DEFAULT_PROPOSTAS_FILTERS: PropostasFilterState = {
   filterQualificationTier: [],
   filterPreQualificationTier: [],
   filterScheduled: false,
+  periodState: createInitialPeriodState(),
+  filterStalled: STALLED_ALL,
   viewMode: "kanban",
   membroDefaultApplied: false,
 };
@@ -186,7 +202,16 @@ function PipePropostasInner() {
     DEFAULT_PROPOSTAS_FILTERS
   );
 
-  const { searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterScheduled, viewMode } = filterState;
+  const { searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterScheduled, periodState, filterStalled, viewMode } = filterState;
+
+  const setPeriodState = useCallback(
+    (v: MetricsPeriodState) => setFilterState((f) => ({ ...f, periodState: v })),
+    [setFilterState]
+  );
+  const setFilterStalled = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterStalled: v })),
+    [setFilterState]
+  );
 
   const setSearchTerm = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, searchTerm: v })),
@@ -215,6 +240,8 @@ function PipePropostasInner() {
       filterQualificationTier: [],
       filterPreQualificationTier: [],
       filterScheduled: false,
+      periodState: createInitialPeriodState(),
+      filterStalled: STALLED_ALL,
     }));
   }, [setFilterState]);
 
@@ -290,7 +317,6 @@ function PipePropostasInner() {
 
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
-  const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
   const [drilldownMetric, setDrilldownMetric] = useState<MetricType | null>(null);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
@@ -303,6 +329,10 @@ function PipePropostasInner() {
   // D1 / SQL-I3: gate won-transitions behind a required sale_value.
   const saleGuard = useSaleValueGuard(pipelineStages);
   const periodRange = useMemo(() => getDateRange(periodState), [periodState]);
+  const stalledBucket = useMemo(
+    () => (STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES ? getStalledBucket(filterStalled) : null),
+    [filterStalled],
+  );
   const { stageData, allItems: pipeData, isLoading } = usePaginatedPipeline(
     "propostas",
     pipelineStages,
@@ -324,6 +354,8 @@ function PipePropostasInner() {
       periodAfter: periodRange?.startStr ?? undefined,
       periodBefore: periodRange?.endStr ?? undefined,
       closedStatusKeys: periodRange ? [...PROPOSTAS_CLOSED_STATUS_KEYS] : undefined,
+      stalledMinDays: stalledBucket?.minDays ?? null,
+      stalledMaxDays: stalledBucket?.maxDays ?? null,
     }
   );
   const refetch = useCallback(() => {}, []);
@@ -358,6 +390,14 @@ function PipePropostasInner() {
 
   // Build declarative sections for KanbanFilterPanel
   const filterSections: FilterSectionConfig[] = useMemo(() => [
+    // Os dois filtros de tempo do redesenho: "criado" é entrada, "parado" é a
+    // etapa atual. Independentes de propósito, combináveis.
+    { type: "created-period", value: periodState, onChange: setPeriodState },
+    // "Parado há" só entra com a migration 20270729000010 aplicada — ver
+    // STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES.
+    ...(STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES
+      ? [{ type: "stalled-days", value: filterStalled, onChange: setFilterStalled } as const]
+      : []),
     { type: "responsible", value: filterResponsible, onChange: (v: string) => setFilterState((f) => ({ ...f, filterResponsible: v })), members: responsibleMembers },
     { type: "origin-multi", value: filterOrigin, onChange: (v: string[]) => setFilterState((f) => ({ ...f, filterOrigin: v })) },
     { type: "tags", value: filterTags, onChange: (v: string[]) => setFilterState((f) => ({ ...f, filterTags: v })), tags: orgTags },
@@ -367,7 +407,7 @@ function PipePropostasInner() {
     { type: "calor", value: filterCalor, onChange: (v: string) => setFilterState((f) => ({ ...f, filterCalor: v })) },
     { type: "priority", value: filterPriority, onChange: (v: string) => setFilterState((f) => ({ ...f, filterPriority: v })) },
     { type: "scheduled", value: filterScheduled, onChange: (v: boolean) => setFilterState((f) => ({ ...f, filterScheduled: v })) },
-  ], [filterResponsible, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterProductType, filterCalor, filterPriority, filterScheduled, responsibleMembers, orgTags, setFilterState]);
+  ], [periodState, filterStalled, filterResponsible, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterProductType, filterCalor, filterPriority, filterScheduled, responsibleMembers, orgTags, setFilterState, setPeriodState, setFilterStalled]);
 
   // Board filter handed to the Disparo "Filtro ativo" source. Mirrors EXACTLY
   // the dimensions usePaginatedPipeline resolves server-side (search,
@@ -1110,45 +1150,80 @@ function PipePropostasInner() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">
-            Gestão de Propostas
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            {pipeData?.length || 0} propostas • Arraste para alterar status
-          </p>
-        </div>
-        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 [&>*]:shrink-0">
-          <PipeViewToggle
-            value={viewMode}
-            onChange={setViewMode}
-            layoutId="pipe-propostas-view-indicator"
-            options={[
+      {/* Faixa única de controles — Modelo 1 do protótipo
+          `.specs/mockups/funis-redesign/`, o mesmo componente dos outros funis. */}
+      <FunnelControlBar
+        funnelKey="sys:propostas"
+        funnelLabel="Propostas"
+        funnelColor="#f59e0b"
+        search={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Buscar proposta, empresa, telefone…"
+        views={
+          <FunnelViewsMenu
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            viewOptions={[
               { value: "kanban", icon: LayoutGrid, label: "Kanban" },
               { value: "analytics", icon: BarChart3, label: "Analytics" },
             ]}
+            entityType="pipe_propostas"
+            currentFilters={filterState}
+            defaultFilters={DEFAULT_PROPOSTAS_FILTERS}
+            onApplyFilters={(f) => setFilterState(() => f)}
+            activeViewId={activeViewId}
+            onActiveViewChange={handleActiveViewChange}
           />
-          <AutoCreateLeadToggle />
-          <Button variant="outline" className="gap-2" onClick={() => setIsSettingsOpen(true)}>
-            <Settings2 className="w-4 h-4" />
-            Configurações
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2 border-primary/30 text-foreground hover:border-primary/60 hover:bg-primary/5"
-            onClick={handleOpenDisparoStage}
-          >
-            <Send className="w-4 h-4 text-primary" />
-            Disparo
-          </Button>
-          <Button className="gap-2" onClick={() => setIsCreateModalOpen(true)}>
-            <Plus className="w-4 h-4" />
+        }
+        filters={
+          viewMode !== "analytics" ? (
+            <KanbanFilterPanel sections={filterSections} onClearAll={handleClearAllFilters} />
+          ) : null
+        }
+        actions={
+          <>
+            <Button size="sm" variant="ghost" className="h-9" onClick={() => setIsSettingsOpen(true)}>
+              <Settings2 className="w-4 h-4 mr-2" />
+              Configurações
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-9 px-2"
+                  aria-label="Mais ações do funil"
+                  data-testid="funnel-overflow"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuItem onClick={handleOpenDisparoStage}>
+                  <Send className="w-4 h-4 mr-2 text-primary" />
+                  Disparo
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <div className="px-2 py-1.5">
+                  <AutoCreateLeadToggle />
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+        primaryAction={
+          <Button size="sm" className="h-9 gradient-gold" onClick={() => setIsCreateModalOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
             Nova Proposta
           </Button>
-        </div>
-      </div>
+        }
+        chips={
+          viewMode !== "analytics" ? (
+            <FilterChips sections={filterSections} onClearAll={handleClearAllFilters} />
+          ) : null
+        }
+      />
 
       <PipeSettingsDialog
         open={isSettingsOpen}
@@ -1159,9 +1234,6 @@ function PipePropostasInner() {
 
       {/* Ghost leads (RLS divergente entre pipe e leads) */}
       <GhostLeadsBanner pipeType="propostas" ghostCount={ghostLeadsCount} />
-
-      {/* Período das métricas */}
-      <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
 
       {/* Summary Cards — só no modo Analytics */}
       {viewMode === "analytics" && (
@@ -1237,37 +1309,6 @@ function PipePropostasInner() {
                 </Button>
               </div>
             )}
-
-            {/* Filters */}
-            <div className="flex flex-col gap-3 mb-6">
-              <div className="flex items-center gap-3">
-                <div className="relative flex-1 min-w-[200px] max-w-sm">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar proposta..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-                <SavedViewsDropdown
-                  entityType="pipe_propostas"
-                  currentFilters={filterState}
-                  defaultFilters={DEFAULT_PROPOSTAS_FILTERS}
-                  onApplyFilters={(f) => setFilterState(() => f)}
-                  activeViewId={activeViewId}
-                  onActiveViewChange={handleActiveViewChange}
-                />
-                <KanbanFilterPanel
-                  sections={filterSections}
-                  onClearAll={handleClearAllFilters}
-                />
-              </div>
-              <FilterChips
-                sections={filterSections}
-                onClearAll={handleClearAllFilters}
-              />
-            </div>
 
             {/* Kanban Board with Drag-and-Drop (desktop) / List View (mobile) */}
             {isMobile ? (

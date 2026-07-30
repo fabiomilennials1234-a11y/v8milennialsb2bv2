@@ -13,6 +13,8 @@ import {
   Columns3,
   Gem,
   Sparkles,
+  CalendarRange,
+  Hourglass,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +41,29 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import type { DateRange as RDPDateRange } from "react-day-picker";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import {
+  applyPeriodShortcut,
+  createInitialPeriodState,
+  getDateRange,
+  matchPeriodShortcut,
+  revivePeriodState,
+  type MetricsPeriodState,
+  type PeriodShortcut,
+} from "@/lib/metrics-period";
+import {
+  STALLED_ALL,
+  STALLED_BUCKETS,
+  stalledBucketLabel,
+} from "@/modules/pipelines/lib/stalled-buckets";
 import { cn } from "@/lib/utils";
 
 // ─── Origin labels (shared source of truth) ────��────────────────────────────
@@ -95,7 +120,28 @@ export type FilterSectionConfig =
   | { type: "status-multi"; value: string[]; onChange: (v: string[]) => void; options: { id: string; title: string; color: string }[] }
   | { type: "qualification-tier"; value: string[]; onChange: (v: string[]) => void }
   | { type: "pre-qualification-tier"; value: string[]; onChange: (v: string[]) => void }
-  | { type: "scheduled"; value: boolean; onChange: (v: boolean) => void };
+  | { type: "scheduled"; value: boolean; onChange: (v: boolean) => void }
+  /** Data de criação do lead. Voltou do cabeçalho pro painel — é aqui que compõe com o resto. */
+  | { type: "created-period"; value: MetricsPeriodState; onChange: (v: MetricsPeriodState) => void }
+  /** Dias na etapa atual — "quem está encalhado?". Ver `lib/stalled-buckets`. */
+  | { type: "stalled-days"; value: string; onChange: (v: string) => void }
+  /**
+   * Escolha única genérica, pra dimensão que só um funil tem — a faixa de tempo
+   * da reunião em Confirmação é o primeiro caso. Existe pra esse tipo de filtro
+   * ter casa no painel em vez de virar mais uma fileira de botões no cabeçalho,
+   * que é justamente o que o Modelo 1 veio desfazer. `allValue` é o valor que
+   * significa "sem filtro" (não conta no badge nem vira chip).
+   */
+  | {
+      type: "single-choice";
+      id: string;
+      label: string;
+      value: string;
+      onChange: (v: string) => void;
+      options: { value: string; label: string }[];
+      allValue?: string;
+      icon?: React.ElementType;
+    };
 
 // Ordered tier labels for chips (canonical labels come from the leads module).
 function tierChipLabel(value: string[]): string {
@@ -134,6 +180,18 @@ export function countActiveFilters(sections: FilterSectionConfig[]): number {
         break;
       case "scheduled":
         if (section.value) count++;
+        break;
+      case "created-period":
+        // "Geral" e uma seleção pela metade (só a data inicial) não filtram
+        // nada — getDateRange devolve null nos dois casos, então contar aqui
+        // acenderia o badge sem nenhum card sair da tela.
+        if (getDateRange(section.value)) count++;
+        break;
+      case "stalled-days":
+        if (section.value && section.value !== STALLED_ALL) count++;
+        break;
+      case "single-choice":
+        if (section.value !== (section.allValue ?? "all")) count++;
         break;
     }
   }
@@ -292,10 +350,58 @@ export function getFilterChips(sections: FilterSectionConfig[]): FilterChipData[
         }
         break;
       }
+      case "created-period": {
+        const range = getDateRange(section.value);
+        if (range) {
+          chips.push({
+            id: "created-period",
+            label: `Criados: ${formatRangeLabel(range)}`,
+            onRemove: () => section.onChange(createInitialPeriodState()),
+          });
+        }
+        break;
+      }
+      case "stalled-days": {
+        if (section.value && section.value !== STALLED_ALL) {
+          chips.push({
+            id: "stalled-days",
+            label: `Parado há: ${stalledBucketLabel(section.value)}`,
+            onRemove: () => section.onChange(STALLED_ALL),
+          });
+        }
+        break;
+      }
+      case "single-choice": {
+        const allValue = section.allValue ?? "all";
+        if (section.value !== allValue) {
+          const opt = section.options.find((o) => o.value === section.value);
+          chips.push({
+            id: section.id,
+            label: `${section.label}: ${opt?.label ?? section.value}`,
+            onRemove: () => section.onChange(allValue),
+          });
+        }
+        break;
+      }
     }
   }
 
   return chips;
+}
+
+/**
+ * Rótulo curto do intervalo. Lê os componentes da string ISO em vez de
+ * `new Date(...)` porque `getDateRange` devolve as pontas já normalizadas em
+ * UTC — reidratar pro fuso local jogaria a data um dia pra trás no Brasil.
+ */
+function formatRangeLabel(range: { startStr: string; endStr: string }): string {
+  const fmt = (iso: string) => {
+    const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+    return format(new Date(y, m - 1, d), "dd MMM", { locale: ptBR });
+  };
+  const start = fmt(range.startStr);
+  const end = fmt(range.endStr);
+  return start === end ? start : `${start} – ${end}`;
 }
 
 // ─── Component ───────────────────���──────────────────────────────────────────
@@ -664,7 +770,182 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
           />
         </div>
       );
+
+    case "single-choice": {
+      const allValue = section.allValue ?? "all";
+      return (
+        <FilterSectionWrapper icon={section.icon ?? Clock} label={section.label}>
+          <div className="flex flex-wrap gap-1.5">
+            {section.options.map((opt) => {
+              const active = section.value === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => section.onChange(active ? allValue : opt.value)}
+                  className={cn(
+                    "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                    active
+                      ? "border-primary/50 bg-primary/10 text-primary"
+                      : "border-border/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                  )}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </FilterSectionWrapper>
+      );
+    }
+
+    case "created-period":
+      return (
+        <FilterSectionWrapper icon={CalendarRange} label="Criados no período">
+          <CreatedPeriodSection value={section.value} onChange={section.onChange} />
+        </FilterSectionWrapper>
+      );
+
+    case "stalled-days":
+      return (
+        <FilterSectionWrapper icon={Hourglass} label="Parado há">
+          <div className="grid grid-cols-1 gap-1.5">
+            {[{ id: STALLED_ALL, label: "Qualquer tempo" }, ...STALLED_BUCKETS].map(
+              (bucket) => {
+                const checked = (section.value || STALLED_ALL) === bucket.id;
+                return (
+                  <button
+                    key={bucket.id}
+                    type="button"
+                    aria-pressed={checked}
+                    onClick={() => section.onChange(bucket.id)}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors",
+                      "hover:bg-muted/50",
+                      checked && "bg-primary/5 text-primary",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "size-2 shrink-0 rounded-full",
+                        checked ? "bg-primary" : "bg-muted-foreground/30",
+                      )}
+                    />
+                    {bucket.label}
+                  </button>
+                );
+              },
+            )}
+          </div>
+        </FilterSectionWrapper>
+      );
   }
+}
+
+// ─── Sub-component: created-period (atalhos + intervalo livre) ───────────────
+const PERIOD_SHORTCUTS: { id: PeriodShortcut; label: string }[] = [
+  { id: "7d", label: "7 dias" },
+  { id: "30d", label: "30 dias" },
+  { id: "90d", label: "90 dias" },
+  { id: "month", label: "Este mês" },
+];
+
+function CreatedPeriodSection({
+  value,
+  onChange,
+}: {
+  value: MetricsPeriodState;
+  onChange: (v: MetricsPeriodState) => void;
+}) {
+  const activeShortcut = matchPeriodShortcut(value);
+  const range = getDateRange(value);
+  // O Calendar chama métodos de Date direto — o estado pode ter vindo do
+  // localStorage ou de uma view salva, onde as datas viraram string.
+  const custom = revivePeriodState(value).customRange;
+  // Nada de data futura: o filtro é sobre leads que já entraram.
+  const today = new Date();
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-1.5">
+        {PERIOD_SHORTCUTS.map((shortcut) => {
+          const active = activeShortcut === shortcut.id;
+          return (
+            <button
+              key={shortcut.id}
+              type="button"
+              aria-pressed={active}
+              onClick={() =>
+                // Clicar no atalho que já vale desliga — sem isso o único jeito
+                // de voltar pra "todos" seria o chip, que vive noutra tela.
+                onChange(
+                  active
+                    ? createInitialPeriodState()
+                    : applyPeriodShortcut(shortcut.id, value),
+                )
+              }
+              className={cn(
+                "rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
+                active
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : "border-border/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+              )}
+            >
+              {shortcut.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(
+              "w-full justify-start gap-2 text-xs font-normal",
+              range && !activeShortcut && "border-primary/50 text-primary",
+            )}
+          >
+            <CalendarRange className="size-3.5 shrink-0" />
+            {range && !activeShortcut
+              ? formatRangeLabel(range)
+              : custom?.from && !custom.to
+                ? "Selecione a data final…"
+                : "Escolher datas"}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0 z-[60]" align="start">
+          <Calendar
+            mode="range"
+            selected={custom?.from ? { from: custom.from, to: custom.to } : undefined}
+            onSelect={(r: RDPDateRange | undefined) =>
+              onChange({
+                ...value,
+                period: "custom",
+                customRange: r?.from ? { from: r.from, to: r.to } : null,
+              })
+            }
+            disabled={{ after: today }}
+            numberOfMonths={1}
+            locale={ptBR}
+            defaultMonth={custom?.from ?? today}
+          />
+        </PopoverContent>
+      </Popover>
+
+      {range && (
+        <button
+          type="button"
+          onClick={() => onChange(createInitialPeriodState())}
+          className="text-[11px] text-muted-foreground transition-colors hover:text-destructive"
+        >
+          Limpar período
+        </button>
+      )}
+    </div>
+  );
 }
 
 // ─── Sub-component: qualification-tier multi-select (shared by both tier rows) ─

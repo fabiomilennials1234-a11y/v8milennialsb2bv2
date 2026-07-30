@@ -1,9 +1,14 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
-import { motion } from "framer-motion";
-import { Search, Plus, Calendar, LayoutGrid, List, BarChart3, Settings2, X, Send } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Plus, Calendar, LayoutGrid, List, BarChart3, Settings2, Send, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,11 +36,16 @@ import { useResponsibleMembers } from "@/modules/identity";
 import { LeadModal } from "@/modules/leads";
 import { AddMeetingModal } from "@/modules/pipelines/components/legacy/confirmacao/AddMeetingModal";
 import { RescheduleModal } from "@/modules/pipelines/components/legacy/confirmacao/RescheduleModal";
-import { PipeViewToggle } from "@/modules/pipelines/components/shared/PipeViewToggle";
+import { FunnelControlBar } from "@/modules/pipelines/components/shared/FunnelControlBar";
+import { FunnelViewsMenu } from "@/modules/pipelines/components/shared/FunnelViewsMenu";
 import { AutoCreateLeadToggle } from "@/modules/pipelines/components/shared/AutoCreateLeadToggle";
 import { PipeConfirmacaoAnalytics } from "@/modules/pipelines/components/shared/PipeConfirmacaoAnalytics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
-import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/MetricsPeriodSelector";
+import {
+  getStalledBucket,
+  STALLED_ALL,
+  STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES,
+} from "@/modules/pipelines/lib/stalled-buckets";
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
 import { DealPanelProvider, useDealSheet, DealDetailDialog } from "@/modules/leads";
@@ -50,7 +60,6 @@ import { ptBR } from "date-fns/locale";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { useOrganization } from "@/modules/identity";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission } from "@/modules/identity";
@@ -58,7 +67,6 @@ import { useIdentity } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
-import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { DisparoWizard, type DisparoBoardFilter, type DisparoSource } from "@/modules/pipelines/components/disparo";
 import { useSearchParams, Navigate } from "react-router-dom";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
@@ -164,6 +172,10 @@ type ConfirmacaoFilterState = {
   selectedQualificationTier: string[];
   selectedPreQualificationTier: string[];
   selectedResponsibleId: string;
+  /** Data de criação. Saiu do cabeçalho pro painel de Filtros (protótipo). */
+  periodState: MetricsPeriodState;
+  /** Dias na etapa atual — id de `STALLED_BUCKETS`, ou "all". */
+  filterStalled: string;
   viewMode: "kanban" | "timeline" | "analytics";
   membroDefaultApplied?: boolean;
 };
@@ -178,6 +190,8 @@ const DEFAULT_CONFIRMACAO_FILTERS: ConfirmacaoFilterState = {
   selectedQualificationTier: [],
   selectedPreQualificationTier: [],
   selectedResponsibleId: "all",
+  periodState: createInitialPeriodState(),
+  filterStalled: STALLED_ALL,
   viewMode: "kanban",
   membroDefaultApplied: false,
 };
@@ -198,6 +212,8 @@ function PipeConfirmacaoInner() {
     selectedQualificationTier,
     selectedPreQualificationTier,
     selectedResponsibleId,
+    periodState,
+    filterStalled,
     viewMode,
   } = filterState;
 
@@ -235,6 +251,14 @@ function PipeConfirmacaoInner() {
   );
   const setSelectedResponsibleId = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, selectedResponsibleId: v })),
+    [setFilterState]
+  );
+  const setPeriodState = useCallback(
+    (v: MetricsPeriodState) => setFilterState((f) => ({ ...f, periodState: v })),
+    [setFilterState]
+  );
+  const setFilterStalled = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterStalled: v })),
     [setFilterState]
   );
   const setViewMode = useCallback(
@@ -281,7 +305,6 @@ function PipeConfirmacaoInner() {
   const [isProcessingCompareceu, setIsProcessingCompareceu] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
-  const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
 
@@ -292,6 +315,10 @@ function PipeConfirmacaoInner() {
   const overdueDays = useConfirmacaoOverdueDays();
   const { data: pipelineStages = [] } = usePipelineStages("confirmacao");
   const metricsRange = useMemo(() => getDateRange(periodState), [periodState]);
+  const stalledBucket = useMemo(
+    () => (STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES ? getStalledBucket(filterStalled) : null),
+    [filterStalled],
+  );
   // Time bucket → generic server params (meeting-date range, or overdue =
   // stale updated_at excluding compareceu/perdido). Mirrors the legacy client
   // logic; timezone math stays here so the RPC only does range comparisons.
@@ -338,6 +365,8 @@ function PipeConfirmacaoInner() {
       scheduled: filterScheduled || undefined,
       periodAfter: metricsRange?.startStr ?? undefined,
       periodBefore: metricsRange?.endStr ?? undefined,
+      stalledMinDays: stalledBucket?.minDays ?? null,
+      stalledMaxDays: stalledBucket?.maxDays ?? null,
       ...timeParams,
     }
   );
@@ -388,6 +417,23 @@ function PipeConfirmacaoInner() {
 
   // Build declarative sections for KanbanFilterPanel (Sheet filters)
   const filterSections: FilterSectionConfig[] = useMemo(() => [
+    // Os dois filtros de tempo do redesenho, mais a faixa de reunião que antes
+    // era uma fileira de botões solta no cabeçalho — todo filtro num lugar só.
+    { type: "created-period", value: periodState, onChange: setPeriodState },
+    // "Parado há" só entra com a migration 20270729000010 aplicada — ver
+    // STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES.
+    ...(STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES
+      ? [{ type: "stalled-days", value: filterStalled, onChange: setFilterStalled } as const]
+      : []),
+    {
+      type: "single-choice",
+      id: "time-bucket",
+      label: "Reunião",
+      value: timeFilter,
+      onChange: setTimeFilter as (v: string) => void,
+      options: timeOptions.filter((o) => o.value !== "all"),
+      allValue: "all",
+    },
     { type: "responsible", value: selectedResponsibleId, onChange: setSelectedResponsibleId, members: responsibleMembers },
     { type: "origin-single", value: originFilter, onChange: setOriginFilter as (v: string) => void },
     { type: "tags", value: selectedTags, onChange: setSelectedTags, tags: orgTags },
@@ -396,7 +442,7 @@ function PipeConfirmacaoInner() {
     { type: "urgency", value: urgencyFilter, onChange: setUrgencyFilter as (v: string) => void },
     { type: "status-multi", value: selectedStatuses, onChange: setSelectedStatuses, options: statusColumns },
     { type: "scheduled", value: filterScheduled, onChange: setFilterScheduled },
-  ], [selectedResponsibleId, originFilter, selectedTags, selectedQualificationTier, selectedPreQualificationTier, urgencyFilter, selectedStatuses, filterScheduled, responsibleMembers, orgTags, statusColumns, setSelectedResponsibleId, setOriginFilter, setSelectedTags, setSelectedQualificationTier, setSelectedPreQualificationTier, setUrgencyFilter, setSelectedStatuses]);
+  ], [periodState, filterStalled, timeFilter, selectedResponsibleId, originFilter, selectedTags, selectedQualificationTier, selectedPreQualificationTier, urgencyFilter, selectedStatuses, filterScheduled, responsibleMembers, orgTags, statusColumns, setPeriodState, setFilterStalled, setTimeFilter, setSelectedResponsibleId, setOriginFilter, setSelectedTags, setSelectedQualificationTier, setSelectedPreQualificationTier, setUrgencyFilter, setSelectedStatuses]);
 
   const handleClearAllFilters = useCallback(() => {
     setOriginFilter("all" as OriginFilter);
@@ -408,7 +454,9 @@ function PipeConfirmacaoInner() {
     setSelectedPreQualificationTier([]);
     setSelectedResponsibleId("all");
     setFilterScheduled(false);
-  }, [setOriginFilter, setTimeFilter, setUrgencyFilter, setSelectedStatuses, setSelectedTags, setSelectedQualificationTier, setSelectedPreQualificationTier, setSelectedResponsibleId]);
+    setPeriodState(createInitialPeriodState());
+    setFilterStalled(STALLED_ALL);
+  }, [setOriginFilter, setTimeFilter, setUrgencyFilter, setSelectedStatuses, setSelectedTags, setSelectedQualificationTier, setSelectedPreQualificationTier, setSelectedResponsibleId, setPeriodState, setFilterStalled]);
 
   // Board filter handed to the Disparo "Filtro ativo" source. Mirrors EXACTLY
   // the dimensions usePaginatedPipeline resolves server-side (search,
@@ -724,52 +772,84 @@ function PipeConfirmacaoInner() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <motion.h1
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold"
-          >
-            Confirmação de Reunião
-          </motion.h1>
-          <p className="text-muted-foreground mt-1">
-            Arraste os cards para alterar o status • Compareceu → move para Propostas
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <PipeViewToggle
-            value={viewMode}
-            onChange={setViewMode}
-            layoutId="pipe-confirmacao-view-indicator"
-            options={[
+      {/* Faixa única de controles — Modelo 1 do protótipo
+          `.specs/mockups/funis-redesign/`, o mesmo componente que Qualificação
+          usa. O cabeçalho anterior gastava três fileiras (título + seis botões,
+          seletor de período, busca + faixas de tempo + views + filtros) antes do
+          board aparecer. Disparo e auto-criar descem pro overflow em vez de
+          sumir; as faixas de tempo viraram uma seção do painel de Filtros. */}
+      <FunnelControlBar
+        funnelKey="sys:confirmacao"
+        funnelLabel="Confirmação"
+        funnelColor="#22c55e"
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        views={
+          <FunnelViewsMenu
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            viewOptions={[
               { value: "kanban", icon: LayoutGrid, label: "Kanban" },
               { value: "timeline", icon: List, label: "Timeline" },
               { value: "analytics", icon: BarChart3, label: "Analytics" },
             ]}
+            entityType="pipe_confirmacao"
+            currentFilters={filterState}
+            defaultFilters={DEFAULT_CONFIRMACAO_FILTERS}
+            onApplyFilters={(f) => setFilterState(() => f)}
+            activeViewId={activeViewId}
+            onActiveViewChange={handleActiveViewChange}
           />
-          <AutoCreateLeadToggle />
-          <Button size="sm" variant="outline" onClick={() => setIsSettingsOpen(true)}>
-            <Settings2 className="w-4 h-4 mr-2" />
-            Configurações
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-primary/30 text-foreground hover:border-primary/60 hover:bg-primary/5"
-            onClick={handleOpenDisparoStage}
-          >
-            <Send className="w-4 h-4 mr-2 text-primary" />
-            Disparo
-          </Button>
-          <Button size="sm" className="gradient-gold" onClick={() => setIsMeetingModalOpen(true)}>
+        }
+        filters={
+          viewMode !== "analytics" ? (
+            <KanbanFilterPanel sections={filterSections} onClearAll={handleClearAllFilters} />
+          ) : null
+        }
+        actions={
+          <>
+            <Button size="sm" variant="ghost" className="h-9" onClick={() => setIsSettingsOpen(true)}>
+              <Settings2 className="w-4 h-4 mr-2" />
+              Configurações
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-9 px-2"
+                  aria-label="Mais ações do funil"
+                  data-testid="funnel-overflow"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuItem onClick={handleOpenDisparoStage}>
+                  <Send className="w-4 h-4 mr-2 text-primary" />
+                  Disparo
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <div className="px-2 py-1.5">
+                  <AutoCreateLeadToggle />
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+        primaryAction={
+          <Button size="sm" className="h-9 gradient-gold" onClick={() => setIsMeetingModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Nova Reunião
           </Button>
-        </div>
-      </div>
+        }
+        chips={
+          viewMode !== "analytics" ? (
+            <FilterChips sections={filterSections} onClearAll={handleClearAllFilters} />
+          ) : null
+        }
+      />
 
       <PipeSettingsDialog
         open={isSettingsOpen}
@@ -780,74 +860,6 @@ function PipeConfirmacaoInner() {
 
       {/* Ghost leads (RLS divergente entre pipe e leads) */}
       <GhostLeadsBanner pipeType="confirmacao" ghostCount={ghostLeadsCount} />
-
-      {/* Período das métricas */}
-      <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
-
-      {/* Filters — ocultos no Analytics (são específicos do board) */}
-      {viewMode !== "analytics" && (
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col sm:flex-row gap-3">
-          {/* Search */}
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar lead, empresa..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-9"
-            />
-            {searchQuery && (
-              <button
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                onClick={() => setSearchQuery("")}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          {/* Quick Time Filters (inline, not in Sheet) */}
-          <div className="flex gap-2 flex-wrap">
-            {timeOptions.map((option) => (
-              <Button
-                key={option.value}
-                variant={timeFilter === option.value ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setTimeFilter(option.value)}
-                className={cn(
-                  "transition-all",
-                  timeFilter === option.value && "ring-1 ring-primary/30"
-                )}
-              >
-                {option.value === "overdue" && timeFilter === option.value && (
-                  <span className="w-2 h-2 rounded-full bg-destructive mr-1.5 animate-pulse" />
-                )}
-                {option.label}
-              </Button>
-            ))}
-          </div>
-
-          {/* Filter Panel Button */}
-          <SavedViewsDropdown
-            entityType="pipe_confirmacao"
-            currentFilters={filterState}
-            defaultFilters={DEFAULT_CONFIRMACAO_FILTERS}
-            onApplyFilters={(f) => setFilterState(() => f)}
-            activeViewId={activeViewId}
-            onActiveViewChange={handleActiveViewChange}
-          />
-          <KanbanFilterPanel
-            sections={filterSections}
-            onClearAll={handleClearAllFilters}
-          />
-        </div>
-        <FilterChips
-          sections={filterSections}
-          onClearAll={handleClearAllFilters}
-        />
-      </div>
-      )}
 
       {/* Period filter indicator — aparece quando um período está selecionado (apenas no kanban) */}
       {viewMode === "kanban" && metricsRange && (

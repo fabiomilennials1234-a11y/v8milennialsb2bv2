@@ -1,7 +1,12 @@
 import { useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,7 +20,7 @@ import {
 import {
   Settings2,
   Plus,
-  Search,
+  MoreHorizontal,
   Loader2,
   AlertTriangle,
   Trash2,
@@ -48,6 +53,13 @@ import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelL
 import { AddLeadToPipeModal } from "@/modules/pipelines/components/custom/AddLeadToPipeModal";
 import { CustomPipeSettingsDialog } from "@/modules/pipelines/components/custom/CustomPipeSettingsDialog";
 import { DisparoWizard } from "../components/disparo";
+import { FunnelControlBar } from "@/modules/pipelines/components/shared/FunnelControlBar";
+import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
+import {
+  getStalledBucket,
+  matchesStalledBucket,
+  STALLED_ALL,
+} from "@/modules/pipelines/lib/stalled-buckets";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 import { useFeaturePermission } from "@/modules/identity";
@@ -71,6 +83,8 @@ function CustomPipelinePageInner() {
   const [searchQuery, setSearchQuery] = useState("");
   const [qualificationTier, setQualificationTier] = useState<string[]>([]);
   const [preQualificationTier, setPreQualificationTier] = useState<string[]>([]);
+  const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
+  const [filterStalled, setFilterStalled] = useState<string>(STALLED_ALL);
   const [showAddLead, setShowAddLead] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [removeEntryId, setRemoveEntryId] = useState<string | null>(null);
@@ -93,28 +107,58 @@ function CustomPipelinePageInner() {
   // servidor). Aplicado às entries carregadas ANTES de alimentar o kanban e a
   // lista mobile, e propagado como `tierFilterActive` pro kanban derivar o
   // badge da contagem client-side (o RPC de count não conhece tier).
-  const tierFilterActive = qualificationTier.length > 0 || preQualificationTier.length > 0;
-  const tieredEntries = useMemo(
-    () =>
-      tierFilterActive
-        ? entries.filter((e) =>
-            matchesQualificationFilters(e.lead, qualificationTier, preQualificationTier),
-          )
-        : entries,
-    [entries, tierFilterActive, qualificationTier, preQualificationTier],
-  );
+  const periodRange = useMemo(() => getDateRange(periodState), [periodState]);
+  const stalledBucket = useMemo(() => getStalledBucket(filterStalled), [filterStalled]);
+
+  // `tierFilterActive` continua significando "a contagem da coluna precisa ser
+  // derivada no cliente" — agora vale pra qualquer um dos filtros client-side,
+  // não só o de qualificação, senão o badge voltaria a contar o que a tela não
+  // mostra.
+  const tierFilterActive =
+    qualificationTier.length > 0 ||
+    preQualificationTier.length > 0 ||
+    !!periodRange ||
+    !!stalledBucket;
+
+  const tieredEntries = useMemo(() => {
+    if (!tierFilterActive) return entries;
+    const periodStart = periodRange ? new Date(periodRange.startStr).getTime() : null;
+    const periodEnd = periodRange ? new Date(periodRange.endStr).getTime() : null;
+    const now = new Date();
+    return entries.filter((e) => {
+      if (!matchesQualificationFilters(e.lead, qualificationTier, preQualificationTier)) {
+        return false;
+      }
+      if (periodStart !== null && periodEnd !== null) {
+        // Comparação por timestamp, não por string: o Postgres devolve
+        // "+00:00" e o range sai como "Z" — lexicograficamente eles não se
+        // ordenam, mesmo apontando pro mesmo instante.
+        const created = e.created_at ? new Date(e.created_at).getTime() : NaN;
+        if (Number.isNaN(created) || created < periodStart || created > periodEnd) return false;
+      }
+      return matchesStalledBucket(
+        (e as { stage_changed_at?: string | null }).stage_changed_at ?? e.created_at,
+        stalledBucket,
+        now,
+      );
+    });
+  }, [entries, tierFilterActive, qualificationTier, preQualificationTier, periodRange, stalledBucket]);
 
   const filterSections: FilterSectionConfig[] = useMemo(
     () => [
+      { type: "created-period", value: periodState, onChange: setPeriodState },
+      { type: "stalled-days", value: filterStalled, onChange: setFilterStalled },
       { type: "qualification-tier", value: qualificationTier, onChange: setQualificationTier },
       { type: "pre-qualification-tier", value: preQualificationTier, onChange: setPreQualificationTier },
     ],
-    [qualificationTier, preQualificationTier],
+    [periodState, filterStalled, qualificationTier, preQualificationTier],
   );
 
   const handleClearFilters = useCallback(() => {
     setQualificationTier([]);
     setPreQualificationTier([]);
+    setPeriodState(createInitialPeriodState());
+    setFilterStalled(STALLED_ALL);
   }, []);
 
   // ── Mobile: lista por stage (PipelineListView) em vez do kanban drag-drop ──
@@ -200,71 +244,79 @@ function CustomPipelinePageInner() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <div
-            className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-            style={{ backgroundColor: `${pipeline.color}20` }}
-          >
-            <PipeIcon className="w-5 h-5" style={{ color: pipeline.color }} />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold truncate">{pipeline.name}</h1>
-            {pipeline.description && (
-              <p className="text-sm text-muted-foreground truncate">{pipeline.description}</p>
+      {/* Faixa única de controles — Modelo 1 do protótipo
+          `.specs/mockups/funis-redesign/`, o mesmo componente dos funis do
+          sistema. Substitui o par cabeçalho + fileira de busca/filtros.
+          A contagem de leads virou chip ao lado do nome: era informação, não
+          controle, e ocupava um canto da fileira que deixou de existir. */}
+      <FunnelControlBar
+        funnelKey={`custom:${pipeline.id}`}
+        funnelLabel={pipeline.name}
+        funnelColor={pipeline.color}
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        filters={
+          <>
+            {/* O ícone é escolha do usuário ao criar o funil — o FunnelSwitcher
+                só carrega o ponto de cor, então ele fica aqui pra identidade do
+                funil não sumir com o cabeçalho antigo. */}
+            <PipeIcon
+              className="hidden size-4 shrink-0 sm:block"
+              style={{ color: pipeline.color }}
+              aria-hidden
+            />
+            {stages.length > 0 && (
+              <>
+                <span className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:inline">
+                  {tieredEntries.length} {tieredEntries.length === 1 ? "lead" : "leads"}
+                </span>
+                <KanbanFilterPanel sections={filterSections} onClearAll={handleClearFilters} />
+              </>
             )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 [&>*]:shrink-0">
-          {stages.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-primary/30 text-foreground hover:border-primary/60 hover:bg-primary/5"
-              onClick={() => setIsDisparoOpen(true)}
-            >
-              <Send className="w-4 h-4 mr-2 text-primary" />
-              Disparo
+          </>
+        }
+        actions={
+          <>
+            <Button size="sm" variant="ghost" className="h-9" onClick={() => setShowSettings(true)}>
+              <Settings2 className="w-4 h-4 mr-2" />
+              Configurações
             </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowSettings(true)}
-          >
-            <Settings2 className="w-4 h-4 mr-2" />
-            Configurações
-          </Button>
-          <Button size="sm" onClick={() => setShowAddLead(true)}>
+
+            {stages.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-9 px-2"
+                    aria-label="Mais ações do funil"
+                    data-testid="funnel-overflow"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-60">
+                  <DropdownMenuItem onClick={() => setIsDisparoOpen(true)}>
+                    <Send className="w-4 h-4 mr-2 text-primary" />
+                    Disparo
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </>
+        }
+        primaryAction={
+          <Button size="sm" className="h-9 gradient-gold" onClick={() => setShowAddLead(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Adicionar Lead
           </Button>
-        </div>
-      </div>
+        }
+        chips={<FilterChips sections={filterSections} onClearAll={handleClearFilters} />}
+      />
 
-      {/* Stats + Search + Filtros */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar lead, empresa, telefone..."
-              className="pl-9"
-            />
-          </div>
-          {stages.length > 0 && (
-            <KanbanFilterPanel sections={filterSections} onClearAll={handleClearFilters} />
-          )}
-          <div className="text-sm text-muted-foreground ml-auto shrink-0">
-            {tieredEntries.length} {tieredEntries.length === 1 ? "lead" : "leads"} no funil
-          </div>
-        </div>
-        <FilterChips sections={filterSections} onClearAll={handleClearFilters} />
-      </div>
+      {pipeline.description && (
+        <p className="-mt-2 truncate text-sm text-muted-foreground">{pipeline.description}</p>
+      )}
 
       {/* Kanban */}
       {stages.length > 0 ? (
