@@ -1293,6 +1293,38 @@ export function useVoicePairing() {
    * organização — e o cliente veria "limite atingido" logo depois de falhar
    * ao conectar o primeiro número.
    */
+  // A abertura do stream é extraída porque `start` e `retry` precisam dela.
+  // Sem isso, `retry` pedia QR novo com o stream já morto: o backend emitia o
+  // código e não havia mais ninguém ouvindo, então o estado ficava preso em
+  // `aguardando-qr` para sempre, sem erro nenhum. Falha silenciosa é o modo que
+  // este projeto mais paga caro.
+  const openStream = useCallback(async (tcSessionId: string) => {
+    abortRef.current?.abort();
+    const stream = await requestStreamToken({ tcSessionId, pair: true });
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setStatus("aguardando-qr");
+
+    void subscribeSessionEvents({
+      vpsUrl: stream.vpsUrl,
+      token: stream.token,
+      onEvent: handleEvent,
+      signal: controller.signal,
+    })
+      .then(() => {
+        // O stream terminou sozinho sem o pareamento ter concluído. Sem este
+        // ramo o estado ficaria parado esperando um evento que não vem mais.
+        if (controller.signal.aborted) return;
+        setStatus((atual) => (atual === "pareado" ? atual : "falhou"));
+        setError((atual) => atual ?? "A conexão com o servidor de voz caiu. Tente de novo.");
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setStatus("falhou");
+        setError("A conexão com o servidor de voz caiu. Tente de novo.");
+      });
+  }, [handleEvent]);
+
   const retry = useCallback(async () => {
     const tcSessionId = sessionRef.current;
     // Falhou antes de a sessão existir (gate, teto, rede): aí sim é caso de
