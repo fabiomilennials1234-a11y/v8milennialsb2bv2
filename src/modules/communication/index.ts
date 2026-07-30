@@ -266,3 +266,11 @@ export type { VoipSession as VoipSessionSummary } from "./hooks/useVoipSessions"
 export { useVoiceCall } from "./hooks/useVoiceCall";
 export type { CallPhase, VoiceCallState } from "./hooks/useVoiceCall";
 export { CALL_DENY_MESSAGES, CallDeniedError } from "./lib/torquecallsApi";
+export { VoicePairingDialog } from "./components/voice/VoicePairingDialog";
+export {
+  createVoiceSession,
+  logoutVoiceSession,
+  pairVoiceSession,
+  VoiceControlError,
+  VOICE_CONTROL_MESSAGES,
+} from "./lib/torquecallsApi";
