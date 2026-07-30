@@ -164,7 +164,12 @@ export async function canUserPerformAction(params: {
     // Reconhece como admin, EXCETO nos carve-outs (roster/billing do cliente).
     // Resolve o gestores.id real (não só booleano) para atribuir a ação do
     // gestor ao ator real na trilha (ADR-0021 §7), inclusive numa negação.
-    const gestorCtx = await getActiveGestorForOrg(supabase, userId, organizationId);
+    // Cast de TIPO, não de comportamento. `GestorAuthClient` é um contrato
+    // estrutural mínimo; casar o SupabaseClient inteiro contra ele estoura o
+    // limite de profundidade do compilador (TS2589) e era o único erro que
+    // impedia `deno check` neste arquivo.
+    const gestorClient = supabase as unknown as Parameters<typeof getActiveGestorForOrg>[0];
+    const gestorCtx = await getActiveGestorForOrg(gestorClient, userId, organizationId);
     if (gestorCtx) {
       if (GESTOR_DENIED_ACTIONS.has(action)) {
         await logDenied(userId, organizationId, action, "gestor_carveout", gestorCtx.gestorId);
@@ -278,7 +283,12 @@ export async function canUserAccessFeature(
     // 2b. Gestor de Portfólio: admin operacional na org vinculada, exceto
     // features de roster/billing (carve-out ADR-0021 §3).
     if (isGestorDeniedFeature(featureKey)) return false;
-    return isActiveGestorForOrg(supabase, userId, organizationId);
+    // Mesmo cast de tipo do sítio acima (TS2589).
+    return isActiveGestorForOrg(
+      supabase as unknown as Parameters<typeof isActiveGestorForOrg>[0],
+      userId,
+      organizationId,
+    );
   }
 
   // 3. Admin sempre pode
