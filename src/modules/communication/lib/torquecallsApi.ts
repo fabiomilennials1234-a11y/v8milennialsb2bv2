@@ -128,15 +128,73 @@ export async function endCall(args: { tcSessionId: string; callId: string }): Pr
   await signal("endCall", { tc_session_id: args.tcSessionId, call_id: args.callId });
 }
 
+/**
+ * Mensagens das recusas do plano de controle. Sem esta tabela o cliente vê o
+ * código cru — e "session_cap_reached" não diz a ninguém o que fazer.
+ */
+export const VOICE_CONTROL_MESSAGES: Record<string, string> = {
+  voice_feature_off:
+    "A chamada de voz não está incluída no plano desta organização.",
+  session_cap_reached:
+    "Limite de números com voz atingido. Desconecte um número antes de ligar outro.",
+  session_orphaned:
+    "O número foi criado no servidor de voz mas não ficou registrado aqui. Tente de novo — o sistema vai adotar o que já existe.",
+  device_limit_reached:
+    "Este WhatsApp já tem 4 aparelhos conectados, que é o limite do próprio WhatsApp. Desconecte um aparelho no celular e tente de novo.",
+};
+
+export class VoiceControlError extends Error {
+  constructor(public code: string, message?: string) {
+    super(message ?? VOICE_CONTROL_MESSAGES[code] ?? "Não foi possível concluir a operação.");
+    this.name = "VoiceControlError";
+  }
+}
+
+async function control<T>(action: string, body: Record<string, unknown> = {}): Promise<T> {
+  const { data, error } = await supabase.functions.invoke("torquecalls-control", {
+    body: { action, ...body },
+  });
+  if (error) {
+    const code = (data as { code?: string } | null)?.code ?? "unknown";
+    throw new VoiceControlError(code, (data as { error?: string } | null)?.error);
+  }
+  return data as T;
+}
+
+export async function createVoiceSession(args: {
+  whatsappInstanceId: string;
+  name?: string;
+}): Promise<{ tcSessionId: string }> {
+  const data = await control<{ tc_session_id: string }>("createSession", {
+    whatsapp_instance_id: args.whatsappInstanceId,
+    name: args.name ?? "TorqueCalls",
+  });
+  return { tcSessionId: data.tc_session_id };
+}
+
+/** Pede um QR novo para uma sessão que já existe, sem criar outra. */
+export async function pairVoiceSession(args: { tcSessionId: string }): Promise<void> {
+  await control("pairSession", { tc_session_id: args.tcSessionId });
+}
+
+export async function logoutVoiceSession(args: { tcSessionId: string }): Promise<void> {
+  await control("logoutSession", { tc_session_id: args.tcSessionId });
+}
+
 export async function requestStreamToken(args: {
   tcSessionId: string;
+  /** Só true quando a tela precisa do QR — o servidor exige permissão extra. */
+  pair?: boolean;
 }): Promise<StreamTokenResult> {
   const raw = await signal<{
     token: string;
     expires_at: number;
     renew_in_ms: number;
     vps_url: string;
-  }>("streamToken", { tc_session_id: args.tcSessionId });
+  }>("streamToken", {
+    tc_session_id: args.tcSessionId,
+    ...(args.pair ? { pair: true } : {}),
+  });
 
   return {
     token: raw.token,
