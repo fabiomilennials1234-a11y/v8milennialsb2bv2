@@ -20,7 +20,14 @@ jobs:
       - name: Security audit
         run: npm audit --audit-level=high
         continue-on-error: true
-      - run: npm run lint
+      # ESLint ratchet, não `npm run lint` cru: o repo tem 0 errors e ~29k
+      # warnings herdados. O comando cru sai 0 mas imprime 29.142 linhas
+      # terminadas em "✖ 29142 problems" — que subagente do harness lia como
+      # vermelho, recusando o fan-out por dívida que a branch não criou.
+      # O ratchet reprova só o INTRODUZIDO (errors e warnings) e imprime o
+      # herdado como informativo, com teto de 20 linhas.
+      - name: ESLint ratchet (no new lint problems vs baseline)
+        run: npm run lint:ratchet
       - name: Dep-cruise ratchet (no new violations vs baseline)
         run: npm run lint:deps:check
       - name: Migration version lint (no new duplicate version prefixes)

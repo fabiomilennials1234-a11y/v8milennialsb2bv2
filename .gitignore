@@ -110,3 +110,6 @@ scripts/recovery/
 /_*.py
 /_*.sql
 /_*.md
+
+# ESLint cache — ratchet local (scripts/lint-ratchet.cjs). Nunca commitado.
+.eslintcache
