@@ -156,9 +156,136 @@ type Admin = any;
 interface VoipDeps {
   signAdminToken: typeof signAdminToken;
   callVps: typeof callVps;
+  /** Injetado pelo mesmo motivo: escrita real em `runtime_logs`. */
+  logRuntime: typeof logRuntime;
 }
 
-const defaultVoipDeps: VoipDeps = { signAdminToken, callVps };
+const defaultVoipDeps: VoipDeps = { signAdminToken, callVps, logRuntime };
+
+/**
+ * Gate comercial da voz. Devolve a resposta de recusa, ou `null` quando pode
+ * seguir.
+ *
+ * A feature vem da MESMA fonte que o cliente usa (OrgFeaturesContext chama
+ * esta RPC). Ler por `plan_id` seria mais direto e estava errado: o trigger
+ * que sincroniza `plan_id` só age quando ele é NULL, e o Master troca plano
+ * escrevendo `subscription_plan` (texto). Em produção 7 de 95 organizações
+ * têm os dois divergentes — num downgrade, o gate liberaria voz para quem
+ * não paga mais. A RPC resolve por `subscription_plan` e não tem esse furo.
+ */
+async function voiceFeatureDenied(
+  db: Admin,
+  orgId: string,
+  cors: Record<string, string>,
+): Promise<Response | null> {
+  const { data: fl, error: flErr } = await db.rpc("org_get_features_and_limits", {
+    p_org_id: orgId,
+  });
+  if (flErr) return json(500, { error: flErr.message }, cors);
+
+  const flags = fl as { features?: Record<string, unknown>; plan_name?: string } | null;
+  // `plan_name === "master"` é o único ramo que a RPC devolve para master, e
+  // master nunca vê lock — mesma convenção do frontend.
+  const liberado = flags?.plan_name === "master" || voiceFeatureOn(flags?.features);
+  if (liberado) return null;
+
+  // Gate de interface não é gate. A mesma feature que esconde o cartão no
+  // catálogo precisa recusar aqui, senão basta chamar a função direto.
+  return json(403, {
+    error: "Chamada de voz não está no plano desta organização",
+    code: "voice_feature_off",
+  }, cors);
+}
+
+/**
+ * Teto durável de sessões por organização. Devolve a resposta de recusa, ou
+ * `null` quando há vaga.
+ *
+ * Conta linha no Postgres, não em memória: limitador em isolate de edge
+ * function não existe — cada cold start começa do zero e N isolates
+ * concorrentes multiplicam o teto.
+ *
+ * `exceptSid` existe para a adoção: a sessão que está sendo adotada não pode
+ * contar como vaga ocupada contra ela mesma, senão a organização no teto nunca
+ * conseguiria reconciliar uma linha que já é dela.
+ */
+async function sessionCapDenied(
+  db: Admin,
+  orgId: string,
+  cors: Record<string, string>,
+  exceptSid?: string,
+): Promise<Response | null> {
+  // O erro NÃO pode ser descartado. Uma organização com `voice_sessions_cap = 0`
+  // — que a migration documenta como "sem direito a número de voz" — viraria
+  // teto 10 num SELECT que falhou: o limite mais restritivo virando o mais
+  // permissivo, exatamente ao contrário do que um teto existe para fazer.
+  const { data: org, error: orgErr } = await db
+    .from("organizations")
+    .select("voice_sessions_cap")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (orgErr) return json(500, { error: orgErr.message }, cors);
+
+  // `closed` não ocupa vaga.
+  let query = db
+    .from("voip_sessions")
+    .select("tc_session_id", { count: "exact", head: true })
+    .eq("organization_id", orgId)
+    .neq("status", "closed");
+  if (exceptSid) query = query.neq("tc_session_id", exceptSid);
+
+  const { count, error: countErr } = await query;
+  if (countErr) return json(500, { error: countErr.message }, cors);
+
+  const cap = resolveSessionCap(org as { voice_sessions_cap?: number | null } | null);
+  if ((count ?? 0) >= cap) {
+    return json(409, {
+      error: `Limite de ${cap} números de voz por organização atingido`,
+      code: "session_cap_reached",
+    }, cors);
+  }
+  return null;
+}
+
+/**
+ * Liga ou desliga a chave do cliente, e RECLAMA quando não consegue.
+ *
+ * Sem checar o erro, uma falha aqui deixava o cliente vendo sucesso e o número
+ * num estado que ninguém consegue explicar depois — habilitado sem sessão, ou
+ * pareado sem habilitação — e sem uma linha de log para reconstruir o que
+ * aconteceu.
+ *
+ * A falha NÃO derruba a resposta de propósito: no desligamento a VPS já
+ * encerrou, e devolver erro faria o cliente repetir uma ação já concluída lá;
+ * na criação a sessão já existe, e falhar aqui a deixaria órfã. Em ambos os
+ * casos a segunda tranca (`voip_sessions.status = 'open'`) continua valendo, e
+ * o rastro é o que permite consertar depois.
+ */
+async function setVoiceCallsEnabled(
+  db: Admin,
+  deps: VoipDeps,
+  args: { instanceId: string; orgId: string; enabled: boolean; userId: string; sid?: string },
+): Promise<void> {
+  const { error } = await db
+    .from("whatsapp_instances")
+    .update({ voice_calls_enabled: args.enabled })
+    .eq("id", args.instanceId)
+    .eq("organization_id", args.orgId);
+
+  if (!error) return;
+
+  await deps.logRuntime({
+    organizationId: args.orgId,
+    module: "voip",
+    action: args.enabled ? "voice_calls_enable_failed" : "voice_calls_disable_failed",
+    status: "error",
+    errorMessage: error.message,
+    entityType: "whatsapp_instance",
+    entityId: args.instanceId,
+    triggeredBy: args.userId,
+    payloadSnapshot: { tc_session_id: args.sid ?? null },
+  });
+}
 
 async function sessionBelongsToOrg(db: Admin, sid: string, orgId: string): Promise<boolean> {
   const { data } = await db
@@ -208,7 +335,7 @@ export async function createSession(
     .maybeSingle();
 
   if (!instance || instance.organization_id !== caller.orgId) {
-    await logRuntime({
+    await deps.logRuntime({
       organizationId: caller.orgId,
       module: "voip",
       action: "cross_tenant_attempt",
@@ -223,49 +350,11 @@ export async function createSession(
     return json(404, { error: "Instância não encontrada" }, cors);
   }
 
-  const { data: org } = await db
-    .from("organizations")
-    .select("voice_sessions_cap")
-    .eq("id", caller.orgId)
-    .maybeSingle();
+  const semFeature = await voiceFeatureDenied(db, caller.orgId, cors);
+  if (semFeature) return semFeature;
 
-  // A feature vem da MESMA fonte que o cliente usa (OrgFeaturesContext chama
-  // esta RPC). Ler por `plan_id` seria mais direto e estava errado: o trigger
-  // que sincroniza `plan_id` só age quando ele é NULL, e o Master troca plano
-  // escrevendo `subscription_plan` (texto). Em produção 7 de 95 organizações
-  // têm os dois divergentes — num downgrade, o gate liberaria voz para quem
-  // não paga mais. A RPC resolve por `subscription_plan` e não tem esse furo.
-  const { data: fl, error: flErr } = await db.rpc("org_get_features_and_limits", {
-    p_org_id: caller.orgId,
-  });
-  if (flErr) return json(500, { error: flErr.message }, cors);
-
-  const flags = (fl as { features?: Record<string, unknown>; plan_name?: string } | null);
-  // `plan_name === "master"` é o único ramo que a RPC devolve para master, e
-  // master nunca vê lock — mesma convenção do frontend.
-  const liberado = flags?.plan_name === "master" || voiceFeatureOn(flags?.features);
-
-  // Gate de interface não é gate. A mesma feature que esconde o cartão no
-  // catálogo precisa recusar aqui, senão basta chamar a função direto.
-  if (!liberado) {
-    return json(403, { error: "Chamada de voz não está no plano desta organização", code: "voice_feature_off" }, cors);
-  }
-
-  // Teto durável: conta linha no Postgres. `closed` não ocupa vaga.
-  const { count, error: countErr } = await db
-    .from("voip_sessions")
-    .select("tc_session_id", { count: "exact", head: true })
-    .eq("organization_id", caller.orgId)
-    .neq("status", "closed");
-
-  if (countErr) return json(500, { error: countErr.message }, cors);
-  const cap = resolveSessionCap(org as { voice_sessions_cap?: number | null } | null);
-  if ((count ?? 0) >= cap) {
-    return json(409, {
-      error: `Limite de ${cap} números de voz por organização atingido`,
-      code: "session_cap_reached",
-    }, cors);
-  }
+  const semVaga = await sessionCapDenied(db, caller.orgId, cors);
+  if (semVaga) return semVaga;
 
   const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : "TorqueCalls";
 
@@ -306,7 +395,7 @@ export async function createSession(
   });
 
   if (insertErr) {
-    await logRuntime({
+    await deps.logRuntime({
       organizationId: caller.orgId,
       module: "voip",
       action: "session_orphaned_on_vps",
@@ -332,12 +421,15 @@ export async function createSession(
   // chave desligada para sempre. Ligada cedo demais ela é inofensiva: a
   // segunda tranca (`voip_sessions.status = 'open'`) ainda recusa a ligação
   // com `session_not_open`. Quando o S11 chegar, mova para lá.
-  await db.from("whatsapp_instances")
-    .update({ voice_calls_enabled: true })
-    .eq("id", instanceId)
-    .eq("organization_id", caller.orgId);
+  await setVoiceCallsEnabled(db, deps, {
+    instanceId,
+    orgId: caller.orgId,
+    enabled: true,
+    userId: caller.userId,
+    sid: tcSessionId,
+  });
 
-  await logRuntime({
+  await deps.logRuntime({
     organizationId: caller.orgId,
     module: "voip",
     action: "session_created",
@@ -366,6 +458,30 @@ export async function forwardSessionAction(
   cors: Record<string, string>,
   deps: VoipDeps = defaultVoipDeps,
 ) {
+  // ─── Gate comercial, com assimetria deliberada ─────────────────────────────
+  //
+  // `pairSession` e `adoptSession` CRIAM ou REATIVAM capacidade de voz — são
+  // porta de entrada tanto quanto `createSession`, e sem gate aqui bastava
+  // chamar a função direto para contornar o kill-switch inteiro.
+  //
+  // `logoutSession` e `deleteSession` ficam DE FORA de propósito. O gate é
+  // justamente a chave que a gente derruba, e derrubá-la some com o cartão do
+  // catálogo: barrar o desligamento junto trancaria o cliente com um número
+  // ligado, uma vaga ocupada no teto e nenhuma saída pela tela. Quem já está
+  // ligado tem que continuar podendo desligar.
+  if (action === "pairSession" || action === "adoptSession") {
+    const semFeature = await voiceFeatureDenied(db, caller.orgId, cors);
+    if (semFeature) return semFeature;
+  }
+
+  // Adotar cria linha nova em `voip_sessions` (upsert) e escapava do teto
+  // inteiro — era o caminho por onde D3 vazava. `sid` sai da contagem porque
+  // adotar uma sessão que já tem linha não pode contar ela mesma como vaga.
+  if (action === "adoptSession") {
+    const semVaga = await sessionCapDenied(db, caller.orgId, cors, sid);
+    if (semVaga) return semVaga;
+  }
+
   const admin = await deps.signAdminToken({
     act: ACTION_TO_ADMIN_ACT[action],
     org: caller.orgId,
@@ -396,10 +512,13 @@ export async function forwardSessionAction(
       .eq("organization_id", caller.orgId)
       .maybeSingle();
     if (sess?.whatsapp_instance_id) {
-      await db.from("whatsapp_instances")
-        .update({ voice_calls_enabled: false })
-        .eq("id", sess.whatsapp_instance_id)
-        .eq("organization_id", caller.orgId);
+      await setVoiceCallsEnabled(db, deps, {
+        instanceId: sess.whatsapp_instance_id,
+        orgId: caller.orgId,
+        enabled: false,
+        userId: caller.userId,
+        sid,
+      });
     }
   }
 
@@ -426,7 +545,7 @@ export async function forwardSessionAction(
     }
   }
 
-  await logRuntime({
+  await deps.logRuntime({
     organizationId: caller.orgId,
     module: "voip",
     action: `session_${action}`,
