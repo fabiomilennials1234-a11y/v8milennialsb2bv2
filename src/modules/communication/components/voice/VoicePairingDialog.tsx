@@ -88,10 +88,20 @@ export function VoicePairingDialog({
             </>
           )}
 
+          {/* A cópia para onde o conhecimento para. O `auth-state` prova que o
+              APARELHO foi vinculado; ele não prova que a voz está utilizável.
+              A sessão segue `pending`/`pairing` no CRM, e ligar continua sendo
+              recusado com `session_not_open` até o webhook do S11 — que não
+              existe neste repositório — promover para `open`. Dizer "voz
+              ativada" aqui era prometer o que o sistema recusa dois cliques
+              depois. */}
           {status === "pareado" && (
             <>
               <CheckCircle2 className="h-8 w-8 text-success" aria-hidden="true" />
-              <p className="text-sm font-medium">Voz ativada em {instanceName}.</p>
+              <p className="text-sm font-medium">Aparelho conectado em {instanceName}.</p>
+              <p className="max-w-sm text-center text-sm text-muted-foreground">
+                A voz fica disponível assim que o servidor confirmar a conexão.
+              </p>
               <Button onClick={() => onOpenChange(false)}>Concluir</Button>
             </>
           )}

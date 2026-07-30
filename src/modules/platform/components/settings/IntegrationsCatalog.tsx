@@ -290,9 +290,16 @@ function useIntegrationStatuses() {
   const connectedInstances = whatsappInstances.filter(
     (i: any) => i.status === "connected" || i.status === "open"
   );
-  // "closed" é sessão morta — mesma regra do teto na tela de settings, não
-  // conta como voz ativa aqui também.
-  const activeVoiceSessions = voipSessions.filter((s) => s.status !== "closed");
+  // `open`, e não `!== "closed"`. Este badge é EXIBIÇÃO, e exibição segue o
+  // que o resto do sistema exige para deixar ligar: `fn_voip_call_reserve` e
+  // `call-plane.ts` recusam qualquer sessão que não esteja `open`, com
+  // `session_not_open`.
+  //
+  // O predicado `!== "closed"` continua certo — mas para o TETO, em
+  // `TorqueCallsSettings`, onde a pergunta é outra: sessão `pending` já ocupa
+  // websocket e memória na VPS. Os dois predicados divergem de propósito; ver
+  // o comentário longo lá.
+  const activeVoiceSessions = voipSessions.filter((s) => s.status === "open");
 
   return {
     whatsapp: {

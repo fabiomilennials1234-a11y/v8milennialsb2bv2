@@ -13,9 +13,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 let voiceCallsEnabled = false;
-// Sessão de voz sempre "aberta": existe pra provar que o badge de conectadas
-// NÃO conta o TorqueCalls enquanto o cartão está escondido pela feature.
-const voipSessionsData = [
+// Sessão de voz "aberta" por padrão: existe pra provar que o badge de
+// conectadas NÃO conta o TorqueCalls enquanto o cartão está escondido pela
+// feature. Um dos testes troca o status para provar a outra ponta.
+let voipSessionsData = [
   { tcSessionId: "tc-1", name: "Comercial", jid: "5548...", status: "open", whatsappInstanceId: "i-1" },
 ];
 
@@ -82,6 +83,9 @@ function render() {
 
 beforeEach(() => {
   voiceCallsEnabled = false;
+  voipSessionsData = [
+    { tcSessionId: "tc-1", name: "Comercial", jid: "5548...", status: "open", whatsappInstanceId: "i-1" },
+  ];
 });
 
 describe("IntegrationsCatalog — gate por feature", () => {
@@ -124,5 +128,19 @@ describe("IntegrationsCatalog — gate por feature", () => {
     voiceCallsEnabled = true;
     render();
     expect(screen.getByText(/1\/8 conectadas/)).toBeInTheDocument();
+  });
+
+  // Mesmo defeito da tela de settings, na outra superfície: o badge dizia
+  // "conectado" para uma sessão que nasce `pending` no `createSession` e que
+  // NADA neste repositório promove para `open`. O cliente que abre o modal do
+  // QR e desiste via o TorqueCalls marcado como conectado no catálogo.
+  it("sessão pending não conta como conectada — o catálogo não promete voz que não existe", () => {
+    voiceCallsEnabled = true;
+    voipSessionsData = [
+      { tcSessionId: "tc-1", name: "Comercial", jid: "5548...", status: "pending", whatsappInstanceId: "i-1" },
+    ];
+    render();
+    expect(screen.getByText("TorqueCalls")).toBeInTheDocument();
+    expect(screen.getByText(/0\/8 conectadas/)).toBeInTheDocument();
   });
 });

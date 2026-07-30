@@ -57,12 +57,19 @@ describe("VoicePairingDialog", () => {
     expect(screen.getByText(/4 aparelhos conectados/i)).toBeInTheDocument();
   });
 
-  it("confirma o pareamento", () => {
+  // "Voz ativada em Comercial" era mentira: o pareamento do APARELHO conclui,
+  // mas a sessão segue `pending`/`pairing` no CRM, e ligar continua recusado
+  // com `session_not_open` até o webhook do S11 (que não existe neste
+  // repositório) promover para `open`. A cópia tem que parar onde o
+  // conhecimento do cliente para.
+  it("confirma o aparelho conectado sem prometer que a voz já funciona", () => {
     pairing.status = "pareado";
     pairing.qr = null;
     pairing.error = null;
     renderDialog();
-    expect(screen.getByText(/voz ativada/i)).toBeInTheDocument();
+    expect(screen.getByText(/aparelho conectado/i)).toBeInTheDocument();
+    expect(screen.getByText(/assim que o servidor confirmar/i)).toBeInTheDocument();
+    expect(screen.queryByText(/voz ativada/i)).not.toBeInTheDocument();
   });
 
   it("chama retry, nunca start, no botão de tentar de novo", () => {

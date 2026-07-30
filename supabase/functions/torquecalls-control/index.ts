@@ -324,6 +324,14 @@ export async function createSession(
   // Sem isto o cliente pareia com sucesso e toda ligação continua recusada
   // com `voice_calls_disabled`, na raiz de fn_voip_call_reserve. Era o elo
   // que faltava para a voz sair do estado "construída e nunca ligada".
+  //
+  // PROVISÓRIO, e deliberadamente fora do lugar: a spec pede que a chave do
+  // cliente acompanhe o PAREAMENTO, não a criação da sessão. Não existe evento
+  // de pareamento no servidor — o webhook que o traria é o S11, que não existe
+  // neste repositório —, então ligar aqui é a única opção que não deixa a
+  // chave desligada para sempre. Ligada cedo demais ela é inofensiva: a
+  // segunda tranca (`voip_sessions.status = 'open'`) ainda recusa a ligação
+  // com `session_not_open`. Quando o S11 chegar, mova para lá.
   await db.from("whatsapp_instances")
     .update({ voice_calls_enabled: true })
     .eq("id", instanceId)

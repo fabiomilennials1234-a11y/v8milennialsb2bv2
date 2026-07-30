@@ -26,13 +26,33 @@ export function TorqueCallsSettings() {
   const [pairing, setPairing] = useState<{ id: string; name: string } | null>(null);
   const [desconectando, setDesconectando] = useState<string | null>(null);
 
-  // "closed" é sessão morta — não ocupa vaga no teto, senão desconectar nunca
-  // liberaria espaço pro cliente ligar voz em outro número.
-  const ativos = sessions.filter((s) => s.status !== "closed").length;
+  // ─── Dois predicados, diferentes DE PROPÓSITO ──────────────────────────────
+  //
+  // TETO = `status !== "closed"`. Uma sessão `pending` já abriu websocket com o
+  // WhatsApp e come memória na VPS (~10 MiB medidos): ela ocupa vaga real mesmo
+  // sem servir para nada ainda. Só `closed` é sessão morta, senão desconectar
+  // nunca liberaria espaço.
+  //
+  // EXIBIÇÃO de "voz ativa" = `status === "open"`. É o que o RESTO do sistema
+  // exige para deixar ligar: `fn_voip_call_reserve` e
+  // `_shared/voip/call-plane.ts` recusam com `session_not_open`, e
+  // `useVoipSession` (que alimenta o botão de ligar no chat) só enxerga `open`.
+  //
+  // Não unifique os dois. Estreitar o teto para `open` deixaria o cliente criar
+  // sessões `pending` sem limite; alargar a exibição para `!== "closed"` faz a
+  // tela afirmar um sucesso que o sistema recusa — que é exatamente o defeito
+  // que esta linha conserta.
+  //
+  // Hoje NADA neste repositório promove `pending`/`pairing` para `open`: quem
+  // faria isso é o webhook do S11, que não existe aqui. Por isso
+  // "Aguardando confirmação" é, por enquanto, o estado em que o número fica —
+  // e é por isso que ele precisa de saída própria.
+  const ocupandoVaga = sessions.filter((s) => s.status !== "closed");
+  const ativos = ocupandoVaga.length;
   const noTeto = ativos >= cap;
 
   const sessionDe = (instanceId: string) =>
-    sessions.find((s) => s.whatsappInstanceId === instanceId && s.status !== "closed");
+    ocupandoVaga.find((s) => s.whatsappInstanceId === instanceId);
 
   async function desconectar(tcSessionId: string) {
     setDesconectando(tcSessionId);
@@ -74,7 +94,15 @@ export function TorqueCallsSettings() {
               <div className="flex shrink-0 items-center gap-2">
                 {sessao ? (
                   <>
-                    <Badge variant="outline">Voz ativa</Badge>
+                    {sessao.status === "open" ? (
+                      <Badge variant="outline" className="border-success/40 text-success">
+                        Voz ativa
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="border-warning/40 text-warning">
+                        Aguardando confirmação
+                      </Badge>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
