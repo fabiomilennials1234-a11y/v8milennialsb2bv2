@@ -7,7 +7,9 @@ import {
 import {
   __resetKeyCacheForTests,
   publicKeyBase64,
-  signVoipToken,
+  signAdminToken,
+  signCallToken,
+  signStreamToken,
 } from "./sign.ts";
 
 function b64urlToBytes(s: string): Uint8Array {
@@ -41,7 +43,6 @@ async function installKey(): Promise<void> {
 }
 
 const ARGS = {
-  sc: "call" as const,
   act: ["call.start"],
   ttlSeconds: 15,
   org: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
@@ -54,7 +55,7 @@ const ARGS = {
 Deno.test("o token assinado VERIFICA com a chave pública que o runbook publica", async () => {
   await installKey();
 
-  const { token } = await signVoipToken(ARGS);
+  const { token } = await signCallToken(ARGS);
   const [h, p, s] = token.split(".");
 
   const pub = await crypto.subtle.importKey(
@@ -80,7 +81,7 @@ Deno.test("o token assinado VERIFICA com a chave pública que o runbook publica"
 Deno.test("assinatura adulterada não verifica", async () => {
   await installKey();
 
-  const { token } = await signVoipToken(ARGS);
+  const { token } = await signCallToken(ARGS);
   const [h, p, s] = token.split(".");
 
   const forged = JSON.parse(new TextDecoder().decode(b64urlToBytes(p)));
@@ -109,7 +110,7 @@ Deno.test("assinatura adulterada não verifica", async () => {
 Deno.test("header traz alg EdDSA e kid, e o kid é configurável por ambiente", async () => {
   await installKey();
 
-  const first = await signVoipToken(ARGS);
+  const first = await signCallToken(ARGS);
   const header = JSON.parse(
     new TextDecoder().decode(b64urlToBytes(first.token.split(".")[0])),
   );
@@ -120,7 +121,7 @@ Deno.test("header traz alg EdDSA e kid, e o kid é configurável por ambiente", 
   Deno.env.set("TORQUECALLS_SIGNING_KID", "tc2");
   __resetKeyCacheForTests();
 
-  const second = await signVoipToken(ARGS);
+  const second = await signCallToken(ARGS);
   const header2 = JSON.parse(
     new TextDecoder().decode(b64urlToBytes(second.token.split(".")[0])),
   );
@@ -134,7 +135,7 @@ Deno.test("sem chave, o assinador recusa em vez de emitir token inútil", async 
   __resetKeyCacheForTests();
 
   await assertRejects(
-    () => signVoipToken(ARGS),
+    () => signCallToken(ARGS),
     Error,
     "TORQUECALLS_SIGNING_SK ausente",
   );
@@ -147,7 +148,7 @@ Deno.test("chave em formato errado é recusada com o tamanho no erro", async () 
   Deno.env.set("TORQUECALLS_ENV", "test");
   __resetKeyCacheForTests();
 
-  await assertRejects(() => signVoipToken(ARGS), Error, "32 bytes");
+  await assertRejects(() => signCallToken(ARGS), Error, "32 bytes");
   assertThrows(() => publicKeyBase64(), Error, "formato inesperado");
 });
 
@@ -155,10 +156,89 @@ Deno.test("aud e env são obrigatórios — token de dev não pode discar em pro
   await installKey();
   Deno.env.delete("TORQUECALLS_AUDIENCE");
 
-  await assertRejects(() => signVoipToken(ARGS), Error, "TORQUECALLS_AUDIENCE ausente");
+  await assertRejects(() => signCallToken(ARGS), Error, "TORQUECALLS_AUDIENCE ausente");
 
   Deno.env.set("TORQUECALLS_AUDIENCE", "calls.torquecrm.com.br");
   Deno.env.delete("TORQUECALLS_ENV");
-  await assertRejects(() => signVoipToken(ARGS), Error, "TORQUECALLS_ENV ausente");
+  await assertRejects(() => signCallToken(ARGS), Error, "TORQUECALLS_ENV ausente");
   Deno.env.set("TORQUECALLS_ENV", "test");
+});
+
+// ─── tc-admin ───────────────────────────────────────────────────────────────
+
+Deno.test("tc-admin vive 30s, carrega uma ação só e nunca escopo call", async () => {
+  await installKey();
+
+  const t = await signAdminToken({
+    act: "session.create",
+    org: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    sub: "11111111-1111-1111-1111-111111111111",
+  });
+  const c = JSON.parse(new TextDecoder().decode(b64urlToBytes(t.token.split(".")[1])));
+
+  assertEquals(c.sc, "admin");
+  assertEquals(c.act, ["session.create"]);
+  assertEquals(c.exp - c.iat, 30);
+  assertEquals(c.org, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+  // Sem cid/peer: credencial de sessão não descreve chamada nenhuma.
+  assertEquals("cid" in c, false);
+  assertEquals("peer" in c, false);
+});
+
+Deno.test("tc-admin global usa all=true booleano, não org='*'", async () => {
+  await installKey();
+
+  const t = await signAdminToken({ act: "session.list", all: true, sub: "u1" });
+  const c = JSON.parse(new TextDecoder().decode(b64urlToBytes(t.token.split(".")[1])));
+
+  // String mágica em claim é bug esperando acontecer: uma org que se chamasse
+  // "*" viraria autoridade global. Booleano não tem esse problema.
+  assertEquals(c.all, true);
+  assertEquals("org" in c, false);
+});
+
+Deno.test("tc-admin sem org e sem all é recusado", async () => {
+  await installKey();
+  await assertRejects(
+    () => signAdminToken({ act: "session.list", sub: "u1" }),
+    Error,
+    "exige org ou all=true",
+  );
+});
+
+// ─── tc-stream ──────────────────────────────────────────────────────────────
+
+Deno.test("tc-stream vive 60s e carrega o veredito de visibilidade", async () => {
+  await installKey();
+
+  const t = await signStreamToken({
+    org: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    sub: "11111111-1111-1111-1111-111111111111",
+    sid: "tc-sess",
+    vis: "own",
+  });
+  const c = JSON.parse(new TextDecoder().decode(b64urlToBytes(t.token.split(".")[1])));
+
+  assertEquals(c.sc, "stream");
+  assertEquals(c.act, ["events.read"]);
+  assertEquals(c.exp - c.iat, 60);
+  // A VPS recebe o VEREDITO, não a regra: ela não tem como avaliar
+  // can_see_lead_by_permissions.
+  assertEquals(c.vis, "own");
+  assertEquals("pair_sid" in c, false);
+});
+
+Deno.test("pair_sid só aparece quando pedido — o QR é credencial", async () => {
+  await installKey();
+
+  const t = await signStreamToken({
+    org: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    sub: "u1",
+    sid: "tc-sess",
+    vis: "org",
+    pairSid: "tc-sess",
+  });
+  const c = JSON.parse(new TextDecoder().decode(b64urlToBytes(t.token.split(".")[1])));
+
+  assertEquals(c.pair_sid, "tc-sess");
 });

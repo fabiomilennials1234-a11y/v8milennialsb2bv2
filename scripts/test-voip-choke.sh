@@ -99,14 +99,44 @@ fi
 #    Um segundo caller dentro de _shared/voip/ passaria despercebido nos dois
 #    testes acima e já teria fundido o governor.
 # ---------------------------------------------------------------------------
-SIGN_CALLERS="$(grep -rlE "signVoipToken\s*\(" --include='*.ts' "$VOIP_DIR" 2>/dev/null \
+SIGN_CALLERS="$(grep -rlE "signCallToken\s*\(" --include='*.ts' "$VOIP_DIR" 2>/dev/null \
   | grep -v "/internal/sign\.ts$" | grep -v "\.test\.ts$" || true)"
 EXPECTED_CALLER="${VOIP_DIR}/call-plane.ts"
 if [ "$SIGN_CALLERS" != "$EXPECTED_CALLER" ]; then
-  fail "signVoipToken deveria ser chamado só por call-plane.ts; encontrado:"
+  fail "signCallToken deveria ser chamado só por call-plane.ts; encontrado:"
   echo "${SIGN_CALLERS:-<nenhum>}" | sed "s|${REPO_ROOT}/|      |"
 else
-  pass "signVoipToken só é chamado por call-plane.ts (o governor)"
+  pass "signCallToken só é chamado por call-plane.ts (o governor)"
+fi
+
+# ---------------------------------------------------------------------------
+# 3b. A porta pública do pacote não pode vazar o minter de chamada.
+#     `tokens.ts` existe para as edge functions cunharem tc-admin e tc-stream.
+#     No dia em que ele reexportar signCallToken, qualquer função do projeto
+#     passa a discar sem governor — e os testes acima continuariam verdes,
+#     porque a chamada estaria "dentro de _shared/voip/".
+# ---------------------------------------------------------------------------
+# Comentários são descartados antes da busca: o próprio arquivo EXPLICA que não
+# exporta o minter, e um casador de texto ingênuo acusaria a explicação.
+if grep -vE '^[[:space:]]*(\*|//|/\*)' "${VOIP_DIR}/tokens.ts" 2>/dev/null | grep -q "signCallToken"; then
+  fail "tokens.ts menciona signCallToken — a porta pública não pode expor o minter de chamada"
+else
+  pass "tokens.ts não expõe o minter de escopo call"
+fi
+
+# ---------------------------------------------------------------------------
+# 3c. Lista fechada de callers do choke. Hoje: torquecalls-signal e mais nada.
+#     Caller novo (nó de discagem no workflow, copilot ligando, campanha) é
+#     bem-vindo — mas entra por aqui, conscientemente, não por descuido.
+# ---------------------------------------------------------------------------
+CHOKE_CALLERS="$(grep -rlE "authorizeCallAndMint" --include='*.ts' "$FUNCTIONS_DIR" 2>/dev/null \
+  | grep -v "/_shared/voip/" | sort || true)"
+EXPECTED_CHOKE_CALLERS="${FUNCTIONS_DIR}/torquecalls-signal/index.ts"
+if [ "$CHOKE_CALLERS" != "$EXPECTED_CHOKE_CALLERS" ]; then
+  fail "callers de authorizeCallAndMint fora da lista fechada:"
+  echo "${CHOKE_CALLERS:-<nenhum>}" | sed "s|${REPO_ROOT}/|      |"
+else
+  pass "só torquecalls-signal chama o choke"
 fi
 
 # ---------------------------------------------------------------------------

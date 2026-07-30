@@ -23,7 +23,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { canUserAccessFeature } from "../permission_engine.ts";
 import { logRuntime } from "../logger.ts";
 import { type Caller, isOrgAdmin } from "./caller.ts";
-import { signVoipToken } from "./internal/sign.ts";
+import { signCallToken } from "./internal/sign.ts";
 
 /** Validade de cada credencial. Três tokens, não um com três ações. */
 const TTL_START_SECONDS = 15;
@@ -92,6 +92,56 @@ function deny(code: DenyCode, retryAfterMs?: number): AuthorizeResult {
 /** Dígitos, sem máscara. O teto por destino conta sobre isto. */
 function digitsOnly(v: string | null | undefined): string {
   return (v ?? "").replace(/\D/g, "");
+}
+
+export type RenewCtlResult =
+  | { ok: true; ctl: string; expiresAt: number }
+  | { ok: false; code: "call_not_found" | "call_ended" | "not_operator" };
+
+/**
+ * Renova SÓ a credencial de encerrar, para uma chamada que já existe.
+ *
+ * Não passa pelo governor de propósito: a chamada já foi autorizada e já ocupa
+ * cota. Fazer a renovação disputar o teto derrubaria uma chamada em curso por
+ * causa de um limite que ela mesma preenche.
+ *
+ * Mora aqui, e não na edge function, porque assinar escopo `call` é privilégio
+ * deste arquivo — é o que `scripts/test-voip-choke.sh` verifica. O poder é
+ * estreito por construção: emite apenas `call.end`, para uma chamada viva, do
+ * operador que a atende (ou de um admin da org).
+ */
+export async function renewCallControlToken(
+  caller: Caller,
+  args: { supabaseAdmin: SupabaseClient; tcSessionId: string; callId: string },
+): Promise<RenewCtlResult> {
+  const { data: call } = await args.supabaseAdmin
+    .from("voip_calls")
+    .select("id, organization_id, tc_session_id, peer_phone, lead_id, operator_user_id, status")
+    .eq("id", args.callId)
+    .maybeSingle();
+
+  if (!call || call.organization_id !== caller.orgId || call.tc_session_id !== args.tcSessionId) {
+    return { ok: false, code: "call_not_found" };
+  }
+  if (call.status === "ended" || call.status === "expired") {
+    return { ok: false, code: "call_ended" };
+  }
+  if (!isOrgAdmin(caller) && call.operator_user_id && call.operator_user_id !== caller.userId) {
+    return { ok: false, code: "not_operator" };
+  }
+
+  const t = await signCallToken({
+    act: ["call.end"],
+    ttlSeconds: TTL_CTL_SECONDS,
+    org: caller.orgId,
+    sub: caller.userId,
+    sid: args.tcSessionId,
+    cid: call.id,
+    peer: call.peer_phone,
+    lead: call.lead_id,
+  });
+
+  return { ok: true, ctl: t.token, expiresAt: t.expiresAt };
 }
 
 export async function authorizeCallAndMint(
@@ -254,9 +304,9 @@ export async function authorizeCallAndMint(
   const common = { sc: "call" as const, org: caller.orgId, sub: caller.userId, sid: tcSessionId, cid: callId, peer, lead: leadId };
 
   const [start, media, ctl] = await Promise.all([
-    signVoipToken({ ...common, act: [startAct], ttlSeconds: TTL_START_SECONDS }),
-    signVoipToken({ ...common, act: ["call.media"], ttlSeconds: TTL_MEDIA_SECONDS }),
-    signVoipToken({ ...common, act: ["call.end"], ttlSeconds: TTL_CTL_SECONDS }),
+    signCallToken({ ...common, act: [startAct], ttlSeconds: TTL_START_SECONDS }),
+    signCallToken({ ...common, act: ["call.media"], ttlSeconds: TTL_MEDIA_SECONDS }),
+    signCallToken({ ...common, act: ["call.end"], ttlSeconds: TTL_CTL_SECONDS }),
   ]);
 
   await logRuntime({

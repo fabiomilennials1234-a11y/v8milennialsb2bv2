@@ -274,6 +274,15 @@ verify_jwt = false
 # aborta ao tentar empacotar uma função inexistente — o que derrubou RLS
 # Invariants, Integration Tests e E2E Tests no CI desde então.
 
+# torquecalls-control / torquecalls-signal: verify_jwt=false libera o preflight
+# OPTIONS; o JWT é validado dentro, por resolveCaller, que também resolve a
+# organização. Ver docs/adr/0024-torquecalls-voice-call-plane.md.
+[functions.torquecalls-control]
+verify_jwt = false
+
+[functions.torquecalls-signal]
+verify_jwt = false
+
 # sz-chat-webhook: recebe webhooks do SZChat (Fortics); autenticação via x-webhook-secret header
 [functions.sz-chat-webhook]
 verify_jwt = false

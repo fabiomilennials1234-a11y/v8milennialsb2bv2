@@ -4,18 +4,16 @@
  *
  * REGRA ESTRUTURAL (ADR-0024 §4)
  * -----------------------------
- * A VPS recusa requisição sem token de escopo `call`. Token de escopo `call` só
- * existe se alguém o assinou. Se a ÚNICA função capaz de assinar for a que roda
- * o governor, então "passar pelo governor" e "obter autoridade" são a mesma
- * operação — não existe caller a instrumentar, porque não existe caller que
- * consiga falar com a VPS sem passar por lá.
+ * A VPS recusa requisição sem token. Token de escopo `call` só existe se alguém
+ * o assinou. Se a ÚNICA função capaz de assinar escopo `call` for a que roda o
+ * governor, então "passar pelo governor" e "obter autoridade para discar" são a
+ * mesma operação — não existe caller a instrumentar.
  *
- * Por isso este arquivo mora em `internal/` e só pode ser importado de dentro de
- * `_shared/voip/`. `scripts/test-voip-choke.sh` reprova o build se alguém
- * importar daqui de fora, ou se qualquer outro arquivo ler a variável de
- * ambiente. A lição é do Send Governor: proteção nas closures dos helpers não é
- * proteção no choke, e o caller que ninguém enumerou (`copilot-v2-worker`)
- * atravessou.
+ * Por isso `signCallToken` é separado de `signAdminToken` e `signStreamToken`:
+ * a restrição estreita é sobre DISCAR, não sobre falar com a VPS. Listar sessão
+ * e abrir stream de eventos não consomem minuto nem geram risco de ban, e
+ * amarrá-los ao governor só tornaria a regra grande demais para ser respeitada.
+ * `scripts/test-voip-choke.sh` prova que só `call-plane.ts` chama `signCallToken`.
  *
  * ASSIMETRIA
  * ----------
@@ -28,28 +26,7 @@
 const GO_PRIVATE_KEY_BYTES = 64;
 const SEED_BYTES = 32;
 
-export type VoipScope = "call";
-
-export interface SignArgs {
-  /** Escopo da credencial. Hoje só `call` — admin e stream são outras fatias. */
-  sc: VoipScope;
-  /** Ações que este token autoriza na VPS. Uma rota, uma ação. */
-  act: readonly string[];
-  /** Validade em segundos a partir de agora. */
-  ttlSeconds: number;
-  /** Organização dona da chamada. Nunca vem do corpo da requisição. */
-  org: string;
-  /** Operador (auth.users.id). */
-  sub: string;
-  /** Sessão do TorqueCalls. */
-  sid: string;
-  /** Id da chamada no ledger do CRM (voip_calls.id). */
-  cid: string;
-  /** Destino, só dígitos. Derivado do lead no servidor. */
-  peer: string;
-  /** Lead vinculado, quando existe. */
-  lead?: string | null;
-}
+export type VoipScope = "call" | "admin" | "stream";
 
 export interface SignedToken {
   token: string;
@@ -81,9 +58,9 @@ function bytesFromB64(b64: string): Uint8Array {
 function requireEnv(name: string): string {
   const v = Deno.env.get(name);
   if (!v) {
-    // Fail-closed e ruidoso. Um assinador que "funciona" sem chave é pior do que
-    // um que não sobe: ele emitiria tokens que a VPS não aceita, e o sintoma
-    // apareceria como chamada que não completa, não como erro de configuração.
+    // Fail-closed e ruidoso. Um assinador que "funciona" sem chave é pior que um
+    // que não sobe: emitiria tokens que a VPS recusa, e o sintoma apareceria
+    // como chamada que não completa, não como erro de configuração.
     throw new Error(`voip/sign: ${name} ausente — o choke não pode assinar`);
   }
   return v;
@@ -100,16 +77,13 @@ async function getKey(): Promise<{ key: CryptoKey; kid: string }> {
     );
   }
 
-  const seed = raw.slice(0, SEED_BYTES);
-  const pub = raw.slice(SEED_BYTES);
-
   cachedKey = await crypto.subtle.importKey(
     "jwk",
     {
       kty: "OKP",
       crv: "Ed25519",
-      d: b64urlFromBytes(seed),
-      x: b64urlFromBytes(pub),
+      d: b64urlFromBytes(raw.slice(0, SEED_BYTES)),
+      x: b64urlFromBytes(raw.slice(SEED_BYTES)),
       key_ops: ["sign"],
       ext: false,
     },
@@ -135,16 +109,19 @@ export function publicKeyBase64(): string {
 }
 
 /**
- * Assina um JWS compacto EdDSA.
- *
- * `aud` é o host EXATO da VPS e `env` carimba o ambiente: token de dev não disca
- * em prod nem por acidente nem por cópia de secret.
+ * Núcleo da assinatura. `aud` é o host EXATO da VPS e `env` carimba o ambiente:
+ * token de dev não disca em prod nem por acidente nem por cópia de secret.
  */
-export async function signVoipToken(args: SignArgs): Promise<SignedToken> {
+async function signJWS(
+  sc: VoipScope,
+  act: readonly string[],
+  ttlSeconds: number,
+  claims: Record<string, unknown>,
+): Promise<SignedToken> {
   const { key, kid } = await getKey();
 
   const now = Math.floor(Date.now() / 1000);
-  const exp = now + args.ttlSeconds;
+  const exp = now + ttlSeconds;
   const jti = crypto.randomUUID();
 
   const header = { alg: "EdDSA", typ: "JWT", kid };
@@ -155,15 +132,10 @@ export async function signVoipToken(args: SignArgs): Promise<SignedToken> {
     iat: now,
     exp,
     jti,
-    sc: args.sc,
-    act: [...args.act],
-    org: args.org,
-    sub: args.sub,
-    sid: args.sid,
-    cid: args.cid,
-    peer: args.peer,
+    sc,
+    act: [...act],
+    ...claims,
   };
-  if (args.lead) payload.lead = args.lead;
 
   const signingInput = `${b64urlFromString(JSON.stringify(header))}.${
     b64urlFromString(JSON.stringify(payload))
@@ -178,6 +150,110 @@ export async function signVoipToken(args: SignArgs): Promise<SignedToken> {
   );
 
   return { token: `${signingInput}.${b64urlFromBytes(sig)}`, jti, expiresAt: exp };
+}
+
+// ─── (A) tc-call ────────────────────────────────────────────────────────────
+// Escopo restrito. Só `_shared/voip/call-plane.ts` chama — é o que fecha o choke.
+
+export interface CallTokenArgs {
+  act: readonly string[];
+  ttlSeconds: number;
+  /** Organização dona da chamada. Nunca vem do corpo da requisição. */
+  org: string;
+  /** Operador (auth.users.id). */
+  sub: string;
+  /** Sessão do TorqueCalls. */
+  sid: string;
+  /** Id da chamada no ledger do CRM (voip_calls.id). */
+  cid: string;
+  /** Destino, só dígitos. Derivado do lead no servidor. */
+  peer: string;
+  lead?: string | null;
+}
+
+export function signCallToken(args: CallTokenArgs): Promise<SignedToken> {
+  const claims: Record<string, unknown> = {
+    org: args.org,
+    sub: args.sub,
+    sid: args.sid,
+    cid: args.cid,
+    peer: args.peer,
+  };
+  if (args.lead) claims.lead = args.lead;
+  return signJWS("call", args.act, args.ttlSeconds, claims);
+}
+
+// ─── (B) tc-admin ───────────────────────────────────────────────────────────
+// Server-to-server, 30 s, NUNCA chega ao browser. Nasce em torquecalls-control e
+// morre na mesma requisição.
+
+export const ADMIN_TTL_SECONDS = 30;
+
+export type AdminAction =
+  | "session.list"
+  | "session.create"
+  | "session.delete"
+  | "session.pair"
+  | "session.logout"
+  | "session.adopt"
+  | "session.policy";
+
+export interface AdminTokenArgs {
+  act: AdminAction;
+  /** Organização alvo. Obrigatória salvo quando `all` — não existe org="*" mágica. */
+  org?: string;
+  /** Alcance global, para inventário e adoção de sessão órfã. Booleano, não string. */
+  all?: boolean;
+  /** Sessão alvo. Obrigatória em delete/pair/logout/adopt/policy. */
+  sid?: string;
+  /** Quem pediu, só para trilha. */
+  sub: string;
+}
+
+// `async` de propósito: a validação abaixo é síncrona, e uma função que devolve
+// Promise mas às vezes estoura ANTES de devolvê-la não pode ser tratada com
+// `.catch()`. Contrato uniforme vale mais que um microssegundo.
+export async function signAdminToken(args: AdminTokenArgs): Promise<SignedToken> {
+  if (!args.all && !args.org) {
+    throw new Error("voip/sign: tc-admin exige org ou all=true");
+  }
+  const claims: Record<string, unknown> = { sub: args.sub };
+  if (args.all) claims.all = true;
+  else claims.org = args.org;
+  if (args.sid) claims.sid = args.sid;
+  return signJWS("admin", [args.act], ADMIN_TTL_SECONDS, claims);
+}
+
+// ─── (C) tc-stream ──────────────────────────────────────────────────────────
+// Vai ao browser. TTL curto É a revogação — por isso não existe denylist em
+// lugar nenhum deste desenho. O cliente renova antes de expirar.
+
+export const STREAM_TTL_SECONDS = 60;
+
+export interface StreamTokenArgs {
+  org: string;
+  sub: string;
+  /** Filtro por sessão. Validado contra voip_sessions ANTES de assinar. */
+  sid?: string;
+  /**
+   * `org` = enxerga chamada de qualquer lead da organização; `own` = só as
+   * próprias. Decidido pelo CRM a partir de leads.view_all, porque a VPS não
+   * tem como avaliar can_see_lead_by_permissions.
+   */
+  vis: "org" | "own";
+  /** Sessão em pareamento, para receber o QR. Só com voip.session.manage. */
+  pairSid?: string;
+}
+
+export function signStreamToken(args: StreamTokenArgs): Promise<SignedToken> {
+  const claims: Record<string, unknown> = {
+    org: args.org,
+    sub: args.sub,
+    vis: args.vis,
+  };
+  if (args.sid) claims.sid = args.sid;
+  if (args.pairSid) claims.pair_sid = args.pairSid;
+  return signJWS("stream", ["events.read"], STREAM_TTL_SECONDS, claims);
 }
 
 /** Só para teste: descarta a chave em cache entre casos. */
