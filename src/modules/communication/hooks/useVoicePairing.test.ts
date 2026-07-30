@@ -7,7 +7,31 @@ import type { SessionEvent } from "@/modules/communication/lib/torquecallsEvents
 const createVoiceSession = vi.fn();
 const pairVoiceSession = vi.fn();
 const requestStreamToken = vi.fn();
-let emit: (e: SessionEvent) => void = () => {};
+
+/**
+ * Cada chamada a `subscribeSessionEvents` (uma por stream aberto) devolve uma
+ * promise CONTROLÁVEL, não uma que nunca resolve nem rejeita. Um mock que
+ * nunca resolve nem rejeita esconde exatamente o bug que esta rodada de teste
+ * existe pra provar: `retry` reabrindo o stream depois que o anterior caiu ou
+ * terminou sozinho. `streams` guarda um handle por chamada, na ordem em que
+ * aconteceram — os testes usam `streams.at(-1)` pra mirar no mais recente.
+ */
+interface StreamHandle {
+  onEvent: (e: SessionEvent) => void;
+  resolve: () => void;
+  reject: (err: unknown) => void;
+}
+let streams: StreamHandle[] = [];
+
+const subscribeSessionEvents = vi.fn((args: { onEvent: (e: SessionEvent) => void }) => {
+  return new Promise<void>((resolve, reject) => {
+    streams.push({ onEvent: args.onEvent, resolve, reject });
+  });
+});
+
+function emit(event: SessionEvent) {
+  streams.at(-1)?.onEvent(event);
+}
 
 vi.mock("@/modules/communication/lib/torquecallsApi", () => ({
   createVoiceSession: (...a: unknown[]) => createVoiceSession(...a),
@@ -18,10 +42,7 @@ vi.mock("@/modules/communication/lib/torquecallsApi", () => ({
 }));
 
 vi.mock("@/modules/communication/lib/torquecallsEvents", () => ({
-  subscribeSessionEvents: (args: { onEvent: (e: SessionEvent) => void }) => {
-    emit = args.onEvent;
-    return new Promise<void>(() => {}); // stream fica aberto
-  },
+  subscribeSessionEvents: (args: { onEvent: (e: SessionEvent) => void }) => subscribeSessionEvents(args),
 }));
 
 import { useVoicePairing } from "./useVoicePairing";
@@ -40,6 +61,8 @@ beforeEach(() => {
   requestStreamToken.mockReset().mockResolvedValue({
     token: "tk", expiresAt: 0, renewInMs: 50_000, vpsUrl: "https://calls.example",
   });
+  subscribeSessionEvents.mockClear();
+  streams = [];
 });
 
 describe("useVoicePairing", () => {
@@ -103,5 +126,76 @@ describe("useVoicePairing", () => {
 
     expect(pairVoiceSession).toHaveBeenCalledWith({ tcSessionId: "tc-1" });
     expect(createVoiceSession).not.toHaveBeenCalled();
+  });
+
+  it("o stream caindo depois do QR na tela leva a falhou", async () => {
+    const { result } = renderHook(() => useVoicePairing(), { wrapper });
+    await act(async () => { await result.current.start("inst-1"); });
+    act(() => emit({ type: "session-qr", sessionId: "tc-1", qr: "codigo" }));
+    await waitFor(() => expect(result.current.status).toBe("qr-na-tela"));
+
+    act(() => { streams.at(-1)?.reject(new Error("conexão caiu")); });
+    await waitFor(() => expect(result.current.status).toBe("falhou"));
+  });
+
+  it("retry a partir de falhou reabre o stream: session-qr depois volta pra tela", async () => {
+    const { result } = renderHook(() => useVoicePairing(), { wrapper });
+    await act(async () => { await result.current.start("inst-1"); });
+    act(() => emit({ type: "session-qr", sessionId: "tc-1", qr: "codigo" }));
+    await waitFor(() => expect(result.current.status).toBe("qr-na-tela"));
+
+    // O stream original morre sem nenhum pareamento ter concluído.
+    act(() => { streams.at(-1)?.reject(new Error("conexão caiu")); });
+    await waitFor(() => expect(result.current.status).toBe("falhou"));
+
+    expect(subscribeSessionEvents).toHaveBeenCalledTimes(1);
+
+    await act(async () => { await result.current.retry(); });
+
+    // Este é o teste que prova o CRITICAL consertado: sem `openStream` dentro
+    // de `retry`, esta segunda chamada nunca acontece e nenhum evento volta a
+    // ser ouvido.
+    expect(subscribeSessionEvents).toHaveBeenCalledTimes(2);
+
+    act(() => emit({ type: "session-qr", sessionId: "tc-1", qr: "novo-codigo" }));
+    await waitFor(() => expect(result.current.status).toBe("qr-na-tela"));
+    expect(result.current.qr).toBe("novo-codigo");
+  });
+
+  it("o stream terminando sozinho sem parear leva a falhou, não trava em aguardando-qr", async () => {
+    const { result } = renderHook(() => useVoicePairing(), { wrapper });
+    await act(async () => { await result.current.start("inst-1"); });
+    await waitFor(() => expect(result.current.status).toBe("aguardando-qr"));
+
+    act(() => { streams.at(-1)?.resolve(); });
+    await waitFor(() => expect(result.current.status).toBe("falhou"));
+  });
+
+  it("cancelar no meio da criação da sessão não deixa o hook seguir em frente", async () => {
+    let releaseCreate: ((v: { tcSessionId: string }) => void) | null = null;
+    createVoiceSession.mockImplementation(
+      () => new Promise<{ tcSessionId: string }>((resolve) => { releaseCreate = resolve; }),
+    );
+
+    const { result } = renderHook(() => useVoicePairing(), { wrapper });
+
+    let startPromise!: Promise<void>;
+    act(() => { startPromise = result.current.start("inst-1"); });
+    await waitFor(() => expect(result.current.status).toBe("criando"));
+
+    act(() => result.current.cancel());
+    expect(result.current.status).toBe("ocioso");
+
+    // `createVoiceSession` só resolve DEPOIS do cancel — é a janela em que
+    // nada existia pra abortar. A continuação de `start` tem que se abandonar
+    // sozinha em vez de ressuscitar o fluxo cancelado.
+    await act(async () => {
+      releaseCreate?.({ tcSessionId: "tc-1" });
+      await startPromise;
+    });
+
+    expect(result.current.status).toBe("ocioso");
+    expect(result.current.qr).toBeNull();
+    expect(requestStreamToken).not.toHaveBeenCalled();
   });
 });
