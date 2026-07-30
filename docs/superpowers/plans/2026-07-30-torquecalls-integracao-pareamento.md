@@ -715,16 +715,66 @@ export class VoiceControlError extends Error {
   }
 }
 
+/**
+ * Extrai o corpo de uma recusa do `functions.invoke`.
+ *
+ * Quando a edge function responde com status de erro, o client devolve
+ * `data: null` e põe a resposta HTTP crua em `error.context` — um `Response`
+ * ainda não lido. Ler `data?.code` nesse caminho devolve `undefined` **sempre**,
+ * e todo código de recusa vira "unknown": o cliente veria a mensagem genérica
+ * em vez de "desconecte um número antes de ligar outro". O padrão correto já
+ * existe no repositório, em `useOmie.ts` (`extractFunctionError`).
+ *
+ * Aceita `Response` por instância ou por presença de `.json()` para não depender
+ * do ambiente ter a classe global — o teste roda em jsdom.
+ */
+export async function readInvokeErrorBody(
+  error: unknown,
+): Promise<{ code?: string; error?: string; retry_after_ms?: number } | null> {
+  const ctx = (error as { context?: unknown } | null)?.context;
+  if (!ctx) return null;
+  const asResponse = ctx as { json?: () => Promise<unknown>; text?: () => Promise<string> };
+  if (typeof asResponse.json !== "function") return null;
+  try {
+    return (await asResponse.json()) as { code?: string; error?: string; retry_after_ms?: number };
+  } catch {
+    try {
+      const text = typeof asResponse.text === "function" ? await asResponse.text() : "";
+      return text ? (JSON.parse(text) as { code?: string }) : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
 async function control<T>(action: string, body: Record<string, unknown> = {}): Promise<T> {
   const { data, error } = await supabase.functions.invoke("torquecalls-control", {
     body: { action, ...body },
   });
   if (error) {
-    const code = (data as { code?: string } | null)?.code ?? "unknown";
-    throw new VoiceControlError(code, (data as { error?: string } | null)?.error);
+    const parsed = await readInvokeErrorBody(error);
+    throw new VoiceControlError(parsed?.code ?? "unknown", parsed?.error);
   }
   return data as T;
 }
+```
+
+**O `signal()` que já existe no arquivo tem o mesmo defeito** e precisa do mesmo
+conserto: ele faz `(error as { context?: { body?: unknown } }).context` e passa
+`ctx?.body` para `readErrorBody`. Mas `error.context` **é** o `Response`, e
+`Response.body` é um `ReadableStream` — `readErrorBody` cai no ramo
+`typeof body === "object"` e devolve o stream como se fosse `{ code }`, então
+`parsed?.code` é `undefined` e o `CallDeniedError` nunca é lançado a partir de
+uma recusa HTTP. Troque o corpo do `if (error)` do `signal()` por:
+
+```ts
+    const parsed = await readInvokeErrorBody(error);
+    if (parsed?.code) throw new CallDeniedError(parsed.code, parsed.retry_after_ms);
+    throw new Error(error.message ?? "Falha ao falar com o serviço de chamadas");
+```
+
+e apague o `readErrorBody` antigo, que fica sem uso. Deixar metade certa é pior
+que as duas erradas: o próximo a ler acha que o padrão do arquivo é o quebrado.
 
 export async function createVoiceSession(args: {
   whatsappInstanceId: string;
