@@ -34,7 +34,15 @@ export type PermissionAction =
   | "view_lead"
   | "send_message"
   | "manage_team"
-  | "manage_copilot";
+  | "manage_copilot"
+  // TorqueCalls (S9). Toda ação precisa de mapeamento explícito em
+  // ACTION_TO_FEATURE — o passo 8 do canUserPerformAction é deny-by-default,
+  // então ação nova sem mapa nega todo membro não-admin com
+  // `permission_not_defined` e a feature sobe inerte.
+  | "start_call"
+  | "answer_call"
+  | "dial_manual_number"
+  | "manage_voip_session";
 
 export interface PermissionResult {
   allowed: boolean;
@@ -57,6 +65,10 @@ const ACTION_TO_MATRIX: Record<PermissionAction, { resource: string; action: str
   send_message:     null, // Usa feature_permissions
   manage_team:      null, // Usa feature_permissions
   manage_copilot:   null, // Usa feature_permissions
+  start_call:          null, // Usa feature_permissions (voip.call.start)
+  answer_call:         null, // Usa feature_permissions (voip.call.answer)
+  dial_manual_number:  null, // Usa feature_permissions (voip.call.dial_manual)
+  manage_voip_session: null, // Usa feature_permissions (voip.session.manage)
 };
 
 // Mapeamento de ação legada para feature_key no novo sistema
@@ -65,7 +77,31 @@ const ACTION_TO_FEATURE: Partial<Record<PermissionAction, string>> = {
   manage_team:    "team.view",
   manage_copilot: "copilot.create",
   send_message:   "whatsapp.send_messages",
+  // TorqueCalls (S9) — semeadas em 20270730000000_torquecalls_voip_foundation.sql.
+  // `voip.session.manage` tem is_admin_only = true, então checkFeaturePermission
+  // devolve false para qualquer membro: só admin/master/gestor passa, na etapa 3.
+  start_call:          "voip.call.start",
+  answer_call:         "voip.call.answer",
+  dial_manual_number:  "voip.call.dial_manual",
+  manage_voip_session: "voip.session.manage",
 };
+
+/**
+ * Ações de voz e o feature_key que as governa. Exportado para o teste que
+ * garante que nenhuma ação `*_call` / `voip` escape do mapa acima e caia no
+ * fallback deny-by-default sem ninguém perceber.
+ */
+export const VOIP_ACTIONS: readonly PermissionAction[] = [
+  "start_call",
+  "answer_call",
+  "dial_manual_number",
+  "manage_voip_session",
+] as const;
+
+/** Espelho de leitura do mapa, para teste. Não usar em caminho de decisão. */
+export function featureKeyForAction(action: PermissionAction): string | undefined {
+  return ACTION_TO_FEATURE[action];
+}
 
 // Mapeamento de ação → legacy org permission_key. Após consolidação PRD #408
 // (migration 20261032000002), checkOrgPermission() resolve via feature_permissions
