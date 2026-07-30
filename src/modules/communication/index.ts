@@ -250,3 +250,13 @@ export {
   prefetchChatData,
 } from "./lib/chatPrefetch";
 export type { PrefetchChatDataParams } from "./lib/chatPrefetch";
+
+// Chamada de voz (TorqueCalls, S14). O provider vive na raiz do app porque a
+// chamada tem que sobreviver ao fechamento da tela que a originou.
+export { VoiceCallProvider, useVoiceCallContext } from "./components/voice/VoiceCallProvider";
+export { VoiceCallButton } from "./components/voice/VoiceCallButton";
+export { useVoipSession } from "./hooks/useVoipSession";
+export type { VoipSession } from "./hooks/useVoipSession";
+export { useVoiceCall } from "./hooks/useVoiceCall";
+export type { CallPhase, VoiceCallState } from "./hooks/useVoiceCall";
+export { CALL_DENY_MESSAGES, CallDeniedError } from "./lib/torquecallsApi";
