@@ -42,12 +42,63 @@ describe("createVoiceSession", () => {
     });
   });
 
+  // Asserir só `{ code }` era um verde falso: passava igual com a mensagem
+  // crua do servidor no lugar da traduzida, que é exatamente o defeito que
+  // deixava `VOICE_CONTROL_MESSAGES` inteira sem uso. A asserção que vale é a
+  // MENSAGEM — como o teste de `signal()` mais abaixo já fazia.
   it("traduz o código do erro em vez de vazar o cru", async () => {
     invoke.mockResolvedValue(
       httpErrorInvokeResult(409, { error: "Limite atingido", code: "session_cap_reached" }),
     );
     await expect(createVoiceSession({ whatsappInstanceId: "inst-1" }))
-      .rejects.toMatchObject({ code: "session_cap_reached" });
+      .rejects.toMatchObject({
+        code: "session_cap_reached",
+        message: VOICE_CONTROL_MESSAGES.session_cap_reached,
+      });
+  });
+
+  // O servidor SEMPRE manda `error` no corpo, então "texto do servidor vence"
+  // significava "tabela nunca usada". Aqui o texto do servidor é o pior caso
+  // real: jargão interno que o cliente não tem como interpretar.
+  it("a tabela vence o texto do servidor — jargão de servidor não chega ao cliente", async () => {
+    invoke.mockResolvedValue(
+      httpErrorInvokeResult(500, {
+        error: "Sessão criada na VPS mas não registrada no CRM",
+        code: "session_orphaned",
+      }),
+    );
+    await expect(createVoiceSession({ whatsappInstanceId: "inst-1" }))
+      .rejects.toMatchObject({
+        code: "session_orphaned",
+        message: VOICE_CONTROL_MESSAGES.session_orphaned,
+      });
+  });
+
+  // Precedência invertida não pode virar mordaça: para código que a tabela não
+  // conhece, o texto do servidor ainda é a melhor informação disponível.
+  it("código desconhecido cai no texto do servidor, não numa genérica", async () => {
+    invoke.mockResolvedValue(
+      httpErrorInvokeResult(409, {
+        error: "Este WhatsApp já tem 4 aparelhos conectados.",
+        code: "device_limit_reached",
+      }),
+    );
+    await expect(createVoiceSession({ whatsappInstanceId: "inst-1" }))
+      .rejects.toMatchObject({
+        code: "device_limit_reached",
+        message: "Este WhatsApp já tem 4 aparelhos conectados.",
+      });
+  });
+
+  // Sem código E sem texto sobra só a genérica — mas ela é o último recurso,
+  // não o primeiro.
+  it("sem code e sem texto, a genérica", async () => {
+    invoke.mockResolvedValue(httpErrorInvokeResult(500, {}));
+    await expect(createVoiceSession({ whatsappInstanceId: "inst-1" }))
+      .rejects.toMatchObject({
+        code: "unknown",
+        message: "Não foi possível concluir a operação.",
+      });
   });
 
   it("é uma VoiceControlError de verdade, não um Error genérico", async () => {

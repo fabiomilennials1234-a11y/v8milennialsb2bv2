@@ -168,8 +168,24 @@ export const VOICE_CONTROL_MESSAGES: Record<string, string> = {
 };
 
 export class VoiceControlError extends Error {
-  constructor(public code: string, message?: string) {
-    super(message ?? VOICE_CONTROL_MESSAGES[code] ?? "Não foi possível concluir a operação.");
+  /**
+   * A tabela vem PRIMEIRO, e o texto do servidor é só o que sobra.
+   *
+   * A ordem invertida (`serverMessage ?? tabela`) deixava a tabela inteira sem
+   * uso: o servidor **sempre** manda `error` no corpo, então o `??` nunca
+   * chegava a olhar para `VOICE_CONTROL_MESSAGES`. Em `session_orphaned` o
+   * cliente lia, literalmente, "Sessão criada na VPS mas não registrada no
+   * CRM" — jargão de infraestrutura na cara de quem só queria ligar a voz.
+   *
+   * O fallback continua existindo porque código que a tabela não conhece
+   * (`device_limit_reached` e os que a VPS ainda vai inventar) tem no texto do
+   * servidor a melhor informação disponível; trocar isso por uma genérica
+   * seria perder informação em vez de traduzir.
+   */
+  constructor(public code: string, serverMessage?: string) {
+    super(
+      VOICE_CONTROL_MESSAGES[code] ?? serverMessage ?? "Não foi possível concluir a operação.",
+    );
     this.name = "VoiceControlError";
   }
 }
