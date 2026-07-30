@@ -78,6 +78,18 @@
 #      grava na linha — mais anti-regressão dos disjuntores de
 #      20270730000003 (a versão vigente, não a da fundação).
 #
+#  18. voip_sweep_stuck_calls_test.sql — o varredor de chamada sem evento
+#      terminal (20270730000007): roda o comando LITERAL de cron.job (não uma
+#      cópia reescrita) e prova ringing > 2min recolhido / ringing recente
+#      intocado / connected > 2h recolhido / connected recente intocado, e que
+#      o operador recolhido volta a reservar via
+#      idx_voip_calls_one_live_per_operator.
+#
+#  19. voip_reserve_inbound_requires_tc_call_id_test.sql — achado I1
+#      (20270730000008): atender chamada de entrada sem tc_call_id devolve
+#      call_not_answerable SEM gravar operator_user_id (negativa pura); controle
+#      positivo com tc_call_id prova que o predicado, e não outra coisa, nega.
+#
 #  14. assert_org_access_test.sql     — gate de tenancy dos leitores SECURITY
 #      DEFINER (#1209): membro ATIVO passa, membro DESATIVADO é BLOQUEADO (o
 #      furo: lia receita/ranking/comissão da org que o desativou), master e
@@ -133,12 +145,14 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/send_dedup_log_test.sql" \
     "$SCRIPT_DIR/voip_foundation_test.sql" \
     "$SCRIPT_DIR/voip_gate_test.sql" \
-    "$SCRIPT_DIR/voip_call_id_provenance_test.sql"
+    "$SCRIPT_DIR/voip_call_id_provenance_test.sql" \
+    "$SCRIPT_DIR/voip_sweep_stuck_calls_test.sql" \
+    "$SCRIPT_DIR/voip_reserve_inbound_requires_tc_call_id_test.sql"
 }
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces
