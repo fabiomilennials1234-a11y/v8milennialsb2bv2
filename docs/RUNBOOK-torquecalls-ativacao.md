@@ -87,6 +87,18 @@ curl -s -X POST https://jsjsmuncfkbsbzqzqhfq.supabase.co/functions/v1/torquecall
 
 ---
 
+### Chave em uso (gerada e aplicada em 2026-07-30)
+
+A privada está nos segredos do Supabase e **não existe em mais lugar nenhum** —
+`secrets list` mostra digest, não valor. A pública fica registrada aqui porque
+é ela que a VPS precisa, e derivá-la de novo exigiria a privada:
+
+```
+TORQUECALLS_TOKEN_PUBKEY=tc1:Yy8olykAFXM1zTWly9C15raWKsGfC88K5NhefK_jGUo
+```
+
+---
+
 ## 4. VPS — variáveis e imagem
 
 Só quando o PR #16 (S5) estiver mergeado e a imagem reconstruída. **Antes disso a VPS ignora o token** e os passos 5–8 já funcionam.
@@ -183,6 +195,37 @@ select public.fn_voip_consent_record(
   '<telefone do lead>'
 );
 ```
+
+---
+
+## 8b. A VPS precisa estar alcançável PELA INTERNET
+
+Descoberto ao executar os passos 2 e 3, e reordena o plano.
+
+`torquecalls-signal` roda na nuvem do Supabase, não na sua máquina. Quando ela
+disca, faz `POST` na VPS — e hoje a VPS **não responde de fora**: `443` e `8080`
+dão timeout, e o túnel SSH só serve ao SEU navegador.
+
+Medido em 2026-07-30: `calls.torquecrm.com.br` resolve para `46.202.148.241`,
+mas nenhuma das duas portas responde.
+
+O desenho dizia "expor porta pública é o último passo". Continua certo como
+ordem de RISCO, mas a perna CRM→VPS não é opcional: sem ela o `startCall`
+sempre devolve `vps_refused`. Duas saídas:
+
+**(a) Expor com TLS pelo EasyPanel.** O domínio já aponta para a VPS e o
+Traefik do EasyPanel é quem termina TLS. É o caminho previsto, e agora que a S5
+exige credencial assinada em toda rota, a porta aberta não é mais porta aberta.
+
+**(b) Passar a discagem para o navegador.** O token `start` já vai para o
+cliente; ele poderia fazer o `POST` de discagem em vez da edge function. O
+choke continua íntegro — sem passar pelo governor não existe token — e o
+Supabase deixa de precisar alcançar a VPS. Custa uma mudança em
+`torquecalls-signal` e no hook.
+
+**(a) é a recomendação**: (b) move para o navegador uma etapa que hoje é
+server-to-server, e cada coisa que o cliente passa a fazer é uma coisa a mais
+que ele pode deixar de fazer.
 
 ---
 
