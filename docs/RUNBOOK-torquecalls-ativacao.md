@@ -198,34 +198,68 @@ select public.fn_voip_consent_record(
 
 ---
 
-## 8b. A VPS precisa estar alcançável PELA INTERNET
-
-Descoberto ao executar os passos 2 e 3, e reordena o plano.
+## 8b. Expor a VPS — decisão (a), preparada em 2026-07-30
 
 `torquecalls-signal` roda na nuvem do Supabase, não na sua máquina. Quando ela
-disca, faz `POST` na VPS — e hoje a VPS **não responde de fora**: `443` e `8080`
-dão timeout, e o túnel SSH só serve ao SEU navegador.
+disca, faz `POST` na VPS — e o túnel SSH só serve ao SEU navegador. Sem essa
+perna, `startCall` sempre devolve `vps_refused`.
 
-Medido em 2026-07-30: `calls.torquecrm.com.br` resolve para `46.202.148.241`,
-mas nenhuma das duas portas responde.
+### O que já está pronto
 
-O desenho dizia "expor porta pública é o último passo". Continua certo como
-ordem de RISCO, mas a perna CRM→VPS não é opcional: sem ela o `startCall`
-sempre devolve `vps_refused`. Duas saídas:
+- O container foi conectado à rede overlay `easypanel` (attachable), então o
+  Traefik alcança `http://torquecalls-torquecalls-1:8080`. **Verificado**: a
+  requisição interna já responde.
+- A rota está escrita em `/etc/easypanel/traefik/config/torquecalls.yaml.disabled`,
+  YAML validado, sem colisão de router/service com o `main.yaml` e sem outro app
+  disputando o domínio.
 
-**(a) Expor com TLS pelo EasyPanel.** O domínio já aponta para a VPS e o
-Traefik do EasyPanel é quem termina TLS. É o caminho previsto, e agora que a S5
-exige credencial assinada em toda rota, a porta aberta não é mais porta aberta.
+O arquivo é SEPARADO de propósito: o EasyPanel regenera `main.yaml` e sobrescreve
+edição manual, mas o Traefik roda com `TRAEFIK_PROVIDERS_FILE_DIRECTORY=/data/config`
+— **diretório**, não arquivo — e `WATCH=true`. Um segundo arquivo ali é carregado
+junto e sobrevive à regeneração.
 
-**(b) Passar a discagem para o navegador.** O token `start` já vai para o
-cliente; ele poderia fazer o `POST` de discagem em vez da edge function. O
-choke continua íntegro — sem passar pelo governor não existe token — e o
-Supabase deixa de precisar alcançar a VPS. Custa uma mudança em
-`torquecalls-signal` e no hook.
+### A ordem que não dá para furar
 
-**(a) é a recomendação**: (b) move para o navegador uma etapa que hoje é
-server-to-server, e cada coisa que o cliente passa a fazer é uma coisa a mais
-que ele pode deixar de fazer.
+A imagem no ar é `sha-062d577`, herdada do espelho AstraCalls. Ela autentica por
+`WACALLS_API_KEY` — **uma chave global, sem noção de tenant** — e não entende o
+token assinado que o CRM manda. Expor essa imagem seria publicar a API errada, e
+o `startCall` do CRM levaria 401 de qualquer jeito.
+
+Então:
+
+1. **Mergear o PR #16** (S5) no repo `torquecalls`.
+2. Construir e publicar a imagem nova.
+3. Em `/opt/torquecalls/.env`, acrescentar as quatro variáveis do passo 4 e
+   trocar, na mesma janela:
+   ```
+   WACALLS_PUBLIC_IP=46.202.148.241      # era 127.0.0.1
+   ```
+   e publicar a porta de mídia no compose:
+   ```yaml
+   ports:
+     - "127.0.0.1:8080:8080"
+     - "50000:50000/udp"
+     - "50000:50000/tcp"
+   ```
+   Sem isso o navegador do vendedor até sinaliza, mas o áudio não passa: o ICE
+   precisa alcançar a VPS na 50000. A sessão do WhatsApp sobrevive ao recreate
+   (já foi observado aguentar 4 restarts).
+4. `docker compose up -d` e conferir `docker logs` — com a S5, faltar variável
+   impede o processo de subir.
+5. **Só então** ativar a rota:
+   ```bash
+   cd /etc/easypanel/traefik/config
+   mv torquecalls.yaml.disabled torquecalls.yaml
+   # o watch pega em segundos; não reinicie o Traefik
+   ```
+6. Verificar de fora:
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}\n" https://calls.torquecrm.com.br/api/sessions
+   # esperado: 401 (sem token) — e certificado válido, emitido pelo letsencrypt
+   ```
+
+Desfazer é `mv torquecalls.yaml torquecalls.yaml.disabled`. Nada do que o
+EasyPanel gerencia foi tocado.
 
 ---
 
