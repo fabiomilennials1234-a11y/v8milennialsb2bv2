@@ -150,15 +150,20 @@ info "violações plantadas viveram só em $PLANT_DIR (removido na saída)"
 #    não atravessam por parâmetro) só valem se alguém rodar o compilador. É aqui.
 # ---------------------------------------------------------------------------
 if command -v deno >/dev/null 2>&1; then
-  if (cd "$FUNCTIONS_DIR" && deno check \
+  # A saída do compilador é IMPRESSA em caso de falha. Engolir com >/dev/null
+  # transformou um "lockfile v5 não suportado" (problema de versão do runner) em
+  # "CHOKE DO VOIP VIOLADO" — a mensagem errada custa mais que o ruído.
+  CHECK_OUT="$(cd "$FUNCTIONS_DIR" && deno check \
     _shared/voip/types.test.ts \
     _shared/voip/call-plane.ts \
     _shared/voip/caller.ts \
-    _shared/voip/internal/sign.ts >/dev/null 2>&1); then
+    _shared/voip/internal/sign.ts 2>&1)" && CHECK_RC=0 || CHECK_RC=$?
+
+  if [ "$CHECK_RC" -eq 0 ]; then
     pass "barreiras de tipo do choke compilam (Caller opaco, org e peer fora do corpo)"
   else
-    fail "deno check reprovou o grafo do voip — rode dentro de supabase/functions para ver:"
-    echo "      deno check _shared/voip/types.test.ts"
+    fail "deno check reprovou o grafo do voip:"
+    echo "$CHECK_OUT" | sed 's/^/      /'
   fi
 else
   info "deno ausente — barreira de tipo não exercida nesta máquina"

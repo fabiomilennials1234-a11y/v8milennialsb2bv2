@@ -32,7 +32,7 @@ jobs:
       # (include: src/**) enxergam supabase/functions — a barreira é este script.
       - uses: denoland/setup-deno@v1
         with:
-          deno-version: v1.x
+          deno-version: v2.x
       - name: VoIP choke barrier (só o governor assina)
         run: bash scripts/test-voip-choke.sh
       - name: TSC ratchet (no new type errors vs baseline)
@@ -165,7 +165,7 @@ jobs:
           node-version: '24'
       - uses: denoland/setup-deno@v1
         with:
-          deno-version: v1.x
+          deno-version: v2.x
       - run: npm run test:edge
       - run: npm run test:edge:coverage
       - name: Upload edge coverage artifact
