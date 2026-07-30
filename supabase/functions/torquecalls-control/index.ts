@@ -146,6 +146,20 @@ Deno.serve(
 // deno-lint-ignore no-explicit-any
 type Admin = any;
 
+/**
+ * `signAdminToken`/`callVps` tocam credencial Ed25519 e rede real — nenhum dos
+ * dois é mockável por cima de um import ESM (binding somente-leitura). Injeção
+ * com default é o único jeito de testar o fio do gate/teto/enable-disable sem
+ * bater na VPS de verdade; o caminho servido nunca passa `voipDeps` e herda os
+ * módulos reais.
+ */
+interface VoipDeps {
+  signAdminToken: typeof signAdminToken;
+  callVps: typeof callVps;
+}
+
+const defaultVoipDeps: VoipDeps = { signAdminToken, callVps };
+
 async function sessionBelongsToOrg(db: Admin, sid: string, orgId: string): Promise<boolean> {
   const { data } = await db
     .from("voip_sessions")
@@ -172,11 +186,12 @@ async function listSessions(db: Admin, caller: Caller, cors: Record<string, stri
   return json(200, { sessions: data ?? [] }, cors);
 }
 
-async function createSession(
+export async function createSession(
   db: Admin,
   caller: Caller,
   body: Record<string, unknown>,
   cors: Record<string, string>,
+  deps: VoipDeps = defaultVoipDeps,
 ) {
   const instanceId = body.whatsapp_instance_id;
   if (typeof instanceId !== "string") {
@@ -208,15 +223,31 @@ async function createSession(
     return json(404, { error: "Instância não encontrada" }, cors);
   }
 
-  const { data: plan } = await db
+  const { data: org } = await db
     .from("organizations")
-    .select("voice_sessions_cap, subscription_plans(features)")
+    .select("voice_sessions_cap")
     .eq("id", caller.orgId)
     .maybeSingle();
 
+  // A feature vem da MESMA fonte que o cliente usa (OrgFeaturesContext chama
+  // esta RPC). Ler por `plan_id` seria mais direto e estava errado: o trigger
+  // que sincroniza `plan_id` só age quando ele é NULL, e o Master troca plano
+  // escrevendo `subscription_plan` (texto). Em produção 7 de 95 organizações
+  // têm os dois divergentes — num downgrade, o gate liberaria voz para quem
+  // não paga mais. A RPC resolve por `subscription_plan` e não tem esse furo.
+  const { data: fl, error: flErr } = await db.rpc("org_get_features_and_limits", {
+    p_org_id: caller.orgId,
+  });
+  if (flErr) return json(500, { error: flErr.message }, cors);
+
+  const flags = (fl as { features?: Record<string, unknown>; plan_name?: string } | null);
+  // `plan_name === "master"` é o único ramo que a RPC devolve para master, e
+  // master nunca vê lock — mesma convenção do frontend.
+  const liberado = flags?.plan_name === "master" || voiceFeatureOn(flags?.features);
+
   // Gate de interface não é gate. A mesma feature que esconde o cartão no
   // catálogo precisa recusar aqui, senão basta chamar a função direto.
-  if (!voiceFeatureOn((plan as { subscription_plans?: { features?: Record<string, unknown> } })?.subscription_plans?.features)) {
+  if (!liberado) {
     return json(403, { error: "Chamada de voz não está no plano desta organização", code: "voice_feature_off" }, cors);
   }
 
@@ -228,7 +259,7 @@ async function createSession(
     .neq("status", "closed");
 
   if (countErr) return json(500, { error: countErr.message }, cors);
-  const cap = resolveSessionCap(plan as { voice_sessions_cap?: number | null } | null);
+  const cap = resolveSessionCap(org as { voice_sessions_cap?: number | null } | null);
   if ((count ?? 0) >= cap) {
     return json(409, {
       error: `Limite de ${cap} números de voz por organização atingido`,
@@ -238,8 +269,8 @@ async function createSession(
 
   const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : "TorqueCalls";
 
-  const admin = await signAdminToken({ act: "session.create", org: caller.orgId, sub: caller.userId });
-  const created = await callVps<{ session?: { id?: string }; id?: string }>(
+  const admin = await deps.signAdminToken({ act: "session.create", org: caller.orgId, sub: caller.userId });
+  const created = await deps.callVps<{ session?: { id?: string }; id?: string }>(
     "POST",
     "/api/sessions",
     { token: admin.token, body: { name, organization_id: caller.orgId } },
@@ -308,15 +339,16 @@ const VPS_PATH: Record<string, (sid: string) => { method: "POST" | "DELETE"; pat
   adoptSession: (sid) => ({ method: "POST", path: `/api/sessions/${encodeURIComponent(sid)}/adopt` }),
 };
 
-async function forwardSessionAction(
+export async function forwardSessionAction(
   db: Admin,
   caller: Caller,
   action: Action,
   sid: string,
   body: Record<string, unknown>,
   cors: Record<string, string>,
+  deps: VoipDeps = defaultVoipDeps,
 ) {
-  const admin = await signAdminToken({
+  const admin = await deps.signAdminToken({
     act: ACTION_TO_ADMIN_ACT[action],
     org: caller.orgId,
     sub: caller.userId,
@@ -324,7 +356,7 @@ async function forwardSessionAction(
   });
 
   const route = VPS_PATH[action](sid);
-  const res = await callVps(route.method, route.path, {
+  const res = await deps.callVps(route.method, route.path, {
     token: admin.token,
     body: action === "adoptSession" ? { organization_id: caller.orgId } : {},
   });
