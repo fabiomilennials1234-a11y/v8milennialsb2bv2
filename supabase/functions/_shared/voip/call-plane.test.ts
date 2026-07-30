@@ -430,6 +430,7 @@ Deno.test("atender chamada de entrada não exige consentimento e usa act=call.ac
         peer_phone: "554891005289",
         lead_id: null,
         status: "ringing",
+        tc_call_id: TC_CALL,
       }),
       // Nenhuma linha de consentimento: quem ligou foi o outro lado.
       consent_records: () => null,
@@ -474,6 +475,41 @@ Deno.test("chamada de entrada já encerrada não é atendível", async () => {
 
   assert(!res.ok);
   assertEquals(res.code, "call_not_answerable");
+});
+
+// Achado I1 (metade TypeScript): a migration 20270730000008 já protege o banco
+// (o WHERE do UPDATE nega sem gravar operator_user_id), mas sem este pré-check
+// o pedido ainda ia até fn_voip_call_reserve para levar a mesma negativa — uma
+// ida inútil, e um `call_not_answerable` genérico que não diz por quê.
+Deno.test("atender chamada de entrada sem tc_call_id nega cedo, sem chamar a reserva", async () => {
+  await setupSigningKey();
+
+  const db = stubClient({
+    tables: {
+      voip_sessions: openSession,
+      voip_calls: () => ({
+        id: CALL,
+        organization_id: ORG,
+        peer_phone: "554891005289",
+        lead_id: null,
+        status: "ringing",
+        tc_call_id: null,
+      }),
+      ...permissiveEngine,
+    },
+    rpc: okReserve,
+  });
+
+  const res = await authorizeCallAndMint(memberCaller(), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    direction: "inbound",
+    existingCallId: CALL,
+  });
+
+  assert(!res.ok, `esperava negativa, veio ${JSON.stringify(res)}`);
+  assertEquals(res.code, "no_tc_call_id");
+  assertEquals(db.__calls.rpc.length, 0, "não deveria ter chamado fn_voip_call_reserve");
 });
 
 // O arquivo inteiro não tinha UMA asserção sobre o cid — por isso a suíte ficou
@@ -572,4 +608,38 @@ Deno.test("renewCallControlToken também assina o cid com o id de rede", async (
   assert(res.ok, `esperava renovação, veio ${JSON.stringify(res)}`);
   assertMatch(decodeClaims(res.ctl).cid as string, /^[0-9A-F]{32}$/);
   assertEquals(decodeClaims(res.ctl).cid, TC_CALL);
+});
+
+// Achado C2 (CRITICAL). A rota POST /calls/{id}/reject da VPS exige o ato
+// call.reject; terminate() em torquecalls-signal manda o token de
+// renewCallControlToken tanto para /reject quanto para o DELETE de encerrar.
+// Emitir só call.end fazia recusar chamada de entrada tomar 401 sempre — este
+// teste decodifica a credencial e prova que os DOIS atos saem juntos.
+Deno.test("renewCallControlToken emite call.end E call.reject — recusar chamada de entrada não pode ser 401", async () => {
+  await setupSigningKey();
+
+  const db = stubClient({
+    tables: {
+      voip_calls: () => ({
+        id: CALL,
+        organization_id: ORG,
+        tc_session_id: "tc-sess",
+        tc_call_id: TC_CALL,
+        peer_phone: "5548991005289",
+        lead_id: LEAD,
+        operator_user_id: USER,
+        status: "ringing",
+      }),
+      ...permissiveEngine,
+    },
+  });
+
+  const res = await renewCallControlToken(memberCaller(), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    callId: CALL,
+  });
+
+  assert(res.ok, `esperava renovação, veio ${JSON.stringify(res)}`);
+  assertEquals(decodeClaims(res.ctl).act, ["call.end", "call.reject"]);
 });

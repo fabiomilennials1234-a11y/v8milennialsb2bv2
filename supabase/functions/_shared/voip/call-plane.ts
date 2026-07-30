@@ -52,6 +52,7 @@ export type DenyCode =
   | "permission_denied"
   | "consent_missing"
   | "call_not_answerable"
+  | "no_tc_call_id"
   | "invalid_peer"
   | "invalid_direction"
   | "daily_cap_reached"
@@ -139,7 +140,14 @@ export async function renewCallControlToken(
   }
 
   const t = await signCallToken({
-    act: ["call.end"],
+    // Dois atos, não um. `terminate()` em torquecalls-signal usa ESTE token
+    // tanto para DELETE /calls/{id} (encerrar) quanto para POST
+    // /calls/{id}/reject (recusar chamada de entrada) — a VPS exige o ato
+    // `call.reject` na segunda rota, e só emitir `call.end` fazia recusar
+    // sempre 401. Terminar e recusar são o mesmo poder sobre a mesma chamada
+    // (mesmo operador, mesma linha, mesma janela de 30min): não é ampliação de
+    // privilégio, é fechar o contrato que faltava.
+    act: ["call.end", "call.reject"],
     ttlSeconds: TTL_CTL_SECONDS,
     org: caller.orgId,
     sub: caller.userId,
@@ -224,7 +232,7 @@ export async function authorizeCallAndMint(
 
     const { data: call } = await supabaseAdmin
       .from("voip_calls")
-      .select("id, organization_id, peer_phone, lead_id, status")
+      .select("id, organization_id, peer_phone, lead_id, status, tc_call_id")
       .eq("id", args.existingCallId)
       .maybeSingle();
 
@@ -233,6 +241,11 @@ export async function authorizeCallAndMint(
     if (call.status !== "ringing" && call.status !== "authorized") {
       return deny("call_not_answerable");
     }
+    // Sem id de rede a reserva (fn_voip_call_reserve, achado I1) já nega isto
+    // no WHERE do UPDATE, sem efeito colateral. Negar aqui também evita a ida
+    // inútil até o banco e dá um código que explica o motivo, em vez de um
+    // `call_not_answerable` genérico vindo da RPC.
+    if (!call.tc_call_id) return deny("no_tc_call_id");
 
     peer = digitsOnly(call.peer_phone);
     leadId = call.lead_id ?? null;
