@@ -20,7 +20,10 @@
 - Teto por organização: `organizations.voice_sessions_cap`, `integer NOT NULL DEFAULT 10`, `CHECK >= 0`. Aqui `0` significa zero mesmo.
 - Feature de gate: `voice_calls`, nasce **false** em todos os planos, verificada no cliente **e** no servidor.
 - Toda asserção de fronteira nasce com uma planta que a deixa vermelha.
-- Comandos: `npm run test:unit` (Vitest), `npm run lint`, `npm run build`.
+- Comandos: `npm run lint`, `npm run build`. Para rodar **um** arquivo de teste use
+  `npx vitest run <caminho>` — o script `test:unit` tem `tests/unit/ src/` fixo, então
+  `npm run test:unit -- <arquivo>` ignora o filtro e roda a suíte inteira, onde ~155 testes
+  já falham por motivo alheio a esta feature. O vermelho deles esconderia o seu.
 - As funções `torquecalls-*` existem **só em produção**. Deploy: `supabase functions deploy <fn> --project-ref jsjsmuncfkbsbzqzqhfq`.
 
 ## Correção à spec
@@ -482,7 +485,7 @@ describe("subscribeSessionEvents", () => {
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
-Run: `npm run test:unit -- src/modules/communication/lib/torquecallsEvents.test.ts`
+Run: `npx vitest run src/modules/communication/lib/torquecallsEvents.test.ts`
 Expected: FAIL — módulo não existe.
 
 - [ ] **Step 3: Implementar**
@@ -575,7 +578,7 @@ export async function subscribeSessionEvents(args: SubscribeArgs): Promise<void>
 
 - [ ] **Step 4: Rodar e confirmar que passa**
 
-Run: `npm run test:unit -- src/modules/communication/lib/torquecallsEvents.test.ts`
+Run: `npx vitest run src/modules/communication/lib/torquecallsEvents.test.ts`
 Expected: PASS, 5/5.
 
 - [ ] **Step 5: Planta — provar que o teste do chunk partido morde**
@@ -682,7 +685,7 @@ describe("VOICE_CONTROL_MESSAGES", () => {
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
-Run: `npm run test:unit -- src/modules/communication/lib/torquecallsApi.control.test.ts`
+Run: `npx vitest run src/modules/communication/lib/torquecallsApi.control.test.ts`
 Expected: FAIL — `createVoiceSession` não existe.
 
 - [ ] **Step 3: Implementar**
@@ -782,12 +785,12 @@ export async function requestStreamToken(args: {
 
 - [ ] **Step 4: Rodar e confirmar que passa**
 
-Run: `npm run test:unit -- src/modules/communication/lib/torquecallsApi.control.test.ts`
+Run: `npx vitest run src/modules/communication/lib/torquecallsApi.control.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Conferir que nada quebrou nos chamadores existentes**
 
-Run: `npm run test:unit -- src/modules/communication/` e `npm run lint`
+Run: `npx vitest run src/modules/communication/` e `npm run lint`
 Expected: PASS. `useVoiceCall` chama `requestStreamToken({ tcSessionId })` sem `pair`, que continua válido.
 
 - [ ] **Step 6: Commit**
@@ -860,7 +863,7 @@ describe("useVoipSessions", () => {
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
-Run: `npm run test:unit -- src/modules/communication/hooks/useVoipSessions.test.ts`
+Run: `npx vitest run src/modules/communication/hooks/useVoipSessions.test.ts`
 Expected: FAIL — módulo não existe.
 
 - [ ] **Step 3: Implementar**
@@ -1001,7 +1004,7 @@ export { useVoipSessions, useVoiceSessionsCap, type VoipSession } from "./hooks/
 
 - [ ] **Step 4: Rodar e confirmar que passa**
 
-Run: `npm run test:unit -- src/modules/communication/hooks/useVoipSessions.test.ts`
+Run: `npx vitest run src/modules/communication/hooks/useVoipSessions.test.ts`
 Expected: PASS, 2/2.
 
 - [ ] **Step 5: Commit**
@@ -1128,7 +1131,7 @@ describe("useVoicePairing", () => {
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
-Run: `npm run test:unit -- src/modules/communication/hooks/useVoicePairing.test.ts`
+Run: `npx vitest run src/modules/communication/hooks/useVoicePairing.test.ts`
 Expected: FAIL — módulo não existe.
 
 - [ ] **Step 3: Implementar**
@@ -1301,7 +1304,7 @@ com `const pairVoiceSession = vi.fn();` junto dos outros mocks e
 
 - [ ] **Step 4: Rodar e confirmar que passa**
 
-Run: `npm run test:unit -- src/modules/communication/hooks/useVoicePairing.test.ts`
+Run: `npx vitest run src/modules/communication/hooks/useVoicePairing.test.ts`
 Expected: PASS, 5/5.
 
 - [ ] **Step 5: Planta — provar que o filtro de sessão morde**
@@ -1403,7 +1406,7 @@ describe("VoicePairingDialog", () => {
 
 - [ ] **Step 3: Rodar e confirmar que falha**
 
-Run: `npm run test:unit -- src/modules/communication/components/voice/VoicePairingDialog.test.tsx`
+Run: `npx vitest run src/modules/communication/components/voice/VoicePairingDialog.test.tsx`
 Expected: FAIL — componente não existe.
 
 - [ ] **Step 4: Implementar**
@@ -1511,7 +1514,7 @@ export {
 
 - [ ] **Step 5: Rodar e confirmar que passa**
 
-Run: `npm run test:unit -- src/modules/communication/components/voice/VoicePairingDialog.test.tsx`
+Run: `npx vitest run src/modules/communication/components/voice/VoicePairingDialog.test.tsx`
 Expected: PASS, 4/4.
 
 - [ ] **Step 6: Commit**
@@ -1615,7 +1618,7 @@ function render(ui: React.ReactElement) {
 
 - [ ] **Step 3: Rodar e confirmar que falha**
 
-Run: `npm run test:unit -- src/modules/platform/components/settings/TorqueCallsSettings.test.tsx`
+Run: `npx vitest run src/modules/platform/components/settings/TorqueCallsSettings.test.tsx`
 Expected: FAIL — componente não existe.
 
 - [ ] **Step 4: Implementar**
@@ -1739,7 +1742,7 @@ export function TorqueCallsSettings() {
 
 - [ ] **Step 5: Rodar e confirmar que passa**
 
-Run: `npm run test:unit -- src/modules/platform/components/settings/TorqueCallsSettings.test.tsx`
+Run: `npx vitest run src/modules/platform/components/settings/TorqueCallsSettings.test.tsx`
 Expected: PASS, 3/3.
 
 - [ ] **Step 6: Entrar no catálogo, atrás da feature**
