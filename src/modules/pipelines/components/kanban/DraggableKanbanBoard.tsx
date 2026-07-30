@@ -19,15 +19,25 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { DraggableItem } from "@/contracts/pipe";
 import { motion } from "framer-motion";
-import { Plus, MoreHorizontal, Trash2, FileDown, Loader2 } from "lucide-react";
+import { Plus, MoreHorizontal, Trash2, FileDown, Loader2, ArrowUpDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import {
+  COLUMN_SORT_OPTIONS,
+  DEFAULT_COLUMN_SORT,
+  sortColumnItems,
+  type ColumnSortKey,
+} from "@/modules/pipelines/lib/column-sort";
 
 // `DraggableItem` tem definição canônica em contracts (quebra import direto
 // leads→pipelines). Re-exportado para manter a API pública inalterada.
@@ -62,6 +72,21 @@ interface DraggableKanbanBoardProps<T extends DraggableItem> {
   disabled?: boolean;
 }
 
+/**
+ * Aviso de que a ordenação só alcança o que já foi carregado.
+ *
+ * Sem ele, "Ordenar por valor" numa etapa com 100 cards mostraria o maior dos
+ * 20 primeiros como se fosse o maior da etapa — o mesmo tipo de meia-verdade
+ * que faz a soma por coluna errar acima de 20 cards.
+ */
+function PartialSortNotice() {
+  return (
+    <p className="mx-2.5 mb-1.5 shrink-0 text-[10.5px] leading-tight text-muted-foreground/80">
+      Ordena os cards já carregados — role até o fim pra incluir o resto.
+    </p>
+  );
+}
+
 function DroppableColumn<T extends DraggableItem>({
   column,
   children,
@@ -71,6 +96,8 @@ function DroppableColumn<T extends DraggableItem>({
   onDeleteAllLeads,
   onExportStage,
   onCreateInColumn,
+  sortKey,
+  onSortChange,
 }: {
   column: KanbanColumn<T>;
   children: React.ReactNode;
@@ -80,6 +107,8 @@ function DroppableColumn<T extends DraggableItem>({
   onDeleteAllLeads?: (stageId: string, stageTitle: string) => void;
   onExportStage?: (stageId: string, stageTitle: string) => void;
   onCreateInColumn?: (stageId: string, stageTitle: string) => void;
+  sortKey?: ColumnSortKey;
+  onSortChange?: (stageId: string, sortKey: ColumnSortKey) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
@@ -115,7 +144,7 @@ function DroppableColumn<T extends DraggableItem>({
         </span>
         {renderColumnExtra && renderColumnExtra(column)}
         <div className="ml-auto flex items-center gap-1">
-          {(onExportStage || onDeleteAllLeads) ? (
+          {(onExportStage || onDeleteAllLeads || onSortChange) ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                 <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
@@ -123,6 +152,36 @@ function DroppableColumn<T extends DraggableItem>({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {onSortChange && (
+                  <>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <ArrowUpDown className="w-4 h-4 mr-2" />
+                        Ordenar por
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent>
+                        {COLUMN_SORT_OPTIONS.map((opt) => (
+                          <DropdownMenuItem
+                            key={opt.key}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSortChange(column.id, opt.key);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "w-4 h-4 mr-2",
+                                sortKey === opt.key ? "opacity-100" : "opacity-0",
+                              )}
+                            />
+                            {opt.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 {onExportStage && (
                   <DropdownMenuItem
                     onClick={(e) => {
@@ -157,6 +216,8 @@ function DroppableColumn<T extends DraggableItem>({
       </div>
 
       {renderColumnFooter && renderColumnFooter(column)}
+
+      {sortKey && sortKey !== DEFAULT_COLUMN_SORT && column.hasMore && <PartialSortNotice />}
 
       <div className="flex-1 min-h-[100px] space-y-2 overflow-y-auto px-2.5 pb-2.5">
         {children}
@@ -268,6 +329,13 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
   disabled,
 }: DraggableKanbanBoardProps<T>) {
   const [activeItem, setActiveItem] = useState<T | null>(null);
+  // Ordenação por coluna: cada etapa guarda a sua. Fica no board (e não na
+  // página) porque é preferência de leitura da coluna, não recorte de dado —
+  // não entra nas visualizações salvas nem na URL.
+  const [sortByColumn, setSortByColumn] = useState<Record<string, ColumnSortKey>>({});
+  const handleSortChange = useCallback((stageId: string, sortKey: ColumnSortKey) => {
+    setSortByColumn((prev) => ({ ...prev, [stageId]: sortKey }));
+  }, []);
   const scrollRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
   const [scrollWidth, setScrollWidth] = useState(0);
@@ -393,31 +461,37 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
         onScroll={handleMainScroll}
         className="flex gap-4 overflow-x-auto overflow-y-hidden pb-4 max-h-[calc(100vh-220px)] scrollbar-hide"
       >
-        {columns.map((column) => (
-          <DroppableColumn
-            key={column.id}
-            column={column}
-            className={columnClassName}
-            renderColumnFooter={renderColumnFooter}
-            renderColumnExtra={renderColumnExtra}
-            onDeleteAllLeads={onDeleteAllLeads}
-            onExportStage={onExportStage}
-            onCreateInColumn={onCreateInColumn}
-          >
-            <SortableContext
-              items={column.items.map((item) => item.id)}
-              strategy={verticalListSortingStrategy}
+        {columns.map((column) => {
+          const columnSort = sortByColumn[column.id] ?? DEFAULT_COLUMN_SORT;
+          const sortedItems = sortColumnItems(column.items, columnSort);
+          return (
+            <DroppableColumn
+              key={column.id}
+              column={column}
+              className={columnClassName}
+              renderColumnFooter={renderColumnFooter}
+              renderColumnExtra={renderColumnExtra}
+              onDeleteAllLeads={onDeleteAllLeads}
+              onExportStage={onExportStage}
+              onCreateInColumn={onCreateInColumn}
+              sortKey={columnSort}
+              onSortChange={handleSortChange}
             >
-              {column.items.map((item) => (
-                <SortableCard
-                  key={item.id}
-                  item={item}
-                  renderCard={renderCard}
-                />
-              ))}
-            </SortableContext>
-          </DroppableColumn>
-        ))}
+              <SortableContext
+                items={sortedItems.map((item) => item.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {sortedItems.map((item) => (
+                  <SortableCard
+                    key={item.id}
+                    item={item}
+                    renderCard={renderCard}
+                  />
+                ))}
+              </SortableContext>
+            </DroppableColumn>
+          );
+        })}
       </div>
 
       <DragOverlay>

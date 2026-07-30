@@ -32,11 +32,15 @@ import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginat
 import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
 import { useQueryClient } from "@tanstack/react-query";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
-import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/MetricsPeriodSelector";
+import {
+  getStalledBucket,
+  STALLED_ALL,
+  STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES,
+} from "@/modules/pipelines/lib/stalled-buckets";
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
 import { PipeWhatsappAnalytics } from "@/modules/pipelines/components/shared/PipeWhatsappAnalytics";
 import { FunnelControlBar } from "../components/shared/FunnelControlBar";
-import { PipeViewToggle } from "@/modules/pipelines/components/shared/PipeViewToggle";
+import { FunnelViewsMenu } from "../components/shared/FunnelViewsMenu";
 import { AutoCreateLeadToggle } from "@/modules/pipelines/components/shared/AutoCreateLeadToggle";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
@@ -68,7 +72,6 @@ import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActio
 import { PipeTableView } from "@/modules/pipelines/components/kanban/PipeTableView";
 import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";
 import { useViewport } from "@/shared/hooks/use-viewport";
-import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { useSearchParams } from "react-router-dom";
 
 
@@ -94,6 +97,10 @@ type WhatsappFilterState = {
   filterQualificationTier: string[];
   filterPreQualificationTier: string[];
   filterScheduled: boolean;
+  /** Data de criação. Saiu do cabeçalho pro painel de Filtros (protótipo). */
+  periodState: MetricsPeriodState;
+  /** Dias na etapa atual — id de `STALLED_BUCKETS`, ou "all". */
+  filterStalled: string;
   viewMode: "kanban" | "list" | "analytics";
 };
 
@@ -105,6 +112,8 @@ const DEFAULT_WHATSAPP_FILTERS: WhatsappFilterState = {
   filterQualificationTier: [],
   filterPreQualificationTier: [],
   filterScheduled: false,
+  periodState: createInitialPeriodState(),
+  filterStalled: STALLED_ALL,
   viewMode: "kanban",
 };
 
@@ -114,7 +123,7 @@ function PipeWhatsappInner() {
     DEFAULT_WHATSAPP_FILTERS
   );
 
-  const { searchTerm, filterResponsible, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterScheduled, viewMode } = filterState;
+  const { searchTerm, filterResponsible, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterScheduled, periodState, filterStalled, viewMode } = filterState;
   const { isMobile } = useViewport();
 
   const setSearchTerm = useCallback(
@@ -143,6 +152,14 @@ function PipeWhatsappInner() {
   );
   const setFilterScheduled = useCallback(
     (v: boolean) => setFilterState((f) => ({ ...f, filterScheduled: v })),
+    [setFilterState]
+  );
+  const setPeriodState = useCallback(
+    (v: MetricsPeriodState) => setFilterState((f) => ({ ...f, periodState: v })),
+    [setFilterState]
+  );
+  const setFilterStalled = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterStalled: v })),
     [setFilterState]
   );
   const setViewMode = useCallback(
@@ -177,13 +194,15 @@ function PipeWhatsappInner() {
     sdrId: string | null;
     closerId: string | null;
   } | null>(null);
-  const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
-
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_whatsapp", organizationId); }, []);
 
   const { data: pipelineStages = [], isLoading: loadingStages } = usePipelineStages("whatsapp");
   const metricsRange = useMemo(() => getDateRange(periodState), [periodState]);
+  const stalledBucket = useMemo(
+    () => (STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES ? getStalledBucket(filterStalled) : null),
+    [filterStalled],
+  );
   const { stageData, allItems: pipeData, isLoading, organizationId: paginatedOrgId } = usePaginatedPipeline(
     "whatsapp",
     pipelineStages,
@@ -199,6 +218,8 @@ function PipeWhatsappInner() {
       scheduled: filterScheduled || undefined,
       periodAfter: metricsRange?.startStr ?? undefined,
       periodBefore: metricsRange?.endStr ?? undefined,
+      stalledMinDays: stalledBucket?.minDays ?? null,
+      stalledMaxDays: stalledBucket?.maxDays ?? null,
     }
   );
   const isError = false;
@@ -240,13 +261,22 @@ function PipeWhatsappInner() {
 
   // Build declarative sections for KanbanFilterPanel
   const filterSections: FilterSectionConfig[] = useMemo(() => [
+    // Os dois filtros de tempo abrem o painel e são independentes de propósito:
+    // "criado" é entrada, "parado" é a etapa atual. Um lead de maio pode ter se
+    // mexido ontem — por isso combinam em vez de competir.
+    { type: "created-period", value: periodState, onChange: setPeriodState },
+    // "Parado há" só entra com a migration 20270729000010 aplicada — ver
+    // STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES.
+    ...(STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES
+      ? [{ type: "stalled-days", value: filterStalled, onChange: setFilterStalled } as const]
+      : []),
     { type: "responsible", value: filterResponsible, onChange: setFilterResponsible, members: responsibleMembers },
     { type: "origin-single", value: filterOrigin, onChange: setFilterOrigin },
     { type: "tags", value: filterTags, onChange: setFilterTags, tags: orgTags },
     { type: "qualification-tier", value: filterQualificationTier, onChange: setFilterQualificationTier },
     { type: "pre-qualification-tier", value: filterPreQualificationTier, onChange: setFilterPreQualificationTier },
     { type: "scheduled", value: filterScheduled, onChange: setFilterScheduled },
-  ], [filterResponsible, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterScheduled, responsibleMembers, orgTags, setFilterResponsible, setFilterOrigin, setFilterTags, setFilterQualificationTier, setFilterPreQualificationTier, setFilterScheduled]);
+  ], [periodState, filterStalled, filterResponsible, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterScheduled, responsibleMembers, orgTags, setPeriodState, setFilterStalled, setFilterResponsible, setFilterOrigin, setFilterTags, setFilterQualificationTier, setFilterPreQualificationTier, setFilterScheduled]);
 
   const handleClearAllFilters = useCallback(() => {
     setFilterState((f) => ({
@@ -257,6 +287,8 @@ function PipeWhatsappInner() {
       filterQualificationTier: [],
       filterPreQualificationTier: [],
       filterScheduled: false,
+      periodState: createInitialPeriodState(),
+      filterStalled: STALLED_ALL,
     }));
   }, [setFilterState]);
 
@@ -595,30 +627,27 @@ function PipeWhatsappInner() {
         search={searchTerm}
         onSearchChange={setSearchTerm}
         views={
-          <PipeViewToggle
-            value={viewMode}
-            onChange={setViewMode}
-            layoutId="pipe-whatsapp-view-indicator"
-            options={[
+          /* Alternador + views salvas no mesmo gatilho (decisão 1 do protótipo).
+             Renderiza SEMPRE — em Analytics ele é o único caminho de volta. */
+          <FunnelViewsMenu
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            viewOptions={[
               { value: "kanban", icon: LayoutGrid, label: "Kanban" },
               { value: "list", icon: List, label: "Lista" },
               { value: "analytics", icon: BarChart3, label: "Analytics" },
             ]}
+            entityType="pipe_whatsapp"
+            currentFilters={filterState}
+            defaultFilters={DEFAULT_WHATSAPP_FILTERS}
+            onApplyFilters={(f) => setFilterState(() => f)}
+            activeViewId={activeViewId}
+            onActiveViewChange={handleActiveViewChange}
           />
         }
         filters={
           viewMode !== "analytics" ? (
-            <>
-              <SavedViewsDropdown
-                entityType="pipe_whatsapp"
-                currentFilters={filterState}
-                defaultFilters={DEFAULT_WHATSAPP_FILTERS}
-                onApplyFilters={(f) => setFilterState(() => f)}
-                activeViewId={activeViewId}
-                onActiveViewChange={handleActiveViewChange}
-              />
-              <KanbanFilterPanel sections={filterSections} onClearAll={handleClearAllFilters} />
-            </>
+            <KanbanFilterPanel sections={filterSections} onClearAll={handleClearAllFilters} />
           ) : null
         }
         actions={
@@ -649,10 +678,9 @@ function PipeWhatsappInner() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-60">
-                <div className="px-2 py-1.5">
-                  <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
-                </div>
-                <DropdownMenuSeparator />
+                {/* O seletor de período saiu daqui: virou a seção "Criados no
+                    período" do painel de Filtros, que é onde compõe com origem,
+                    responsável e tags em vez de agir sozinho. */}
                 <DropdownMenuItem onClick={handleOpenDisparoStage}>
                   <Send className="w-4 h-4 mr-2 text-primary" />
                   Disparo

@@ -64,6 +64,13 @@ export interface PaginatedFilters {
   qualificationTier?: string[];
   /** leads.pre_qualification_tier ∈ list (IA tier; empty/undefined = no filter) */
   preQualificationTier?: string[];
+  /**
+   * "Parado há": idade na etapa ATUAL, em dias completos, medida sobre
+   * COALESCE(stage_changed_at, entered_at, created_at). Distinto de
+   * periodAfter/Before, que olham a data de criação. Ver `lib/stalled-buckets`.
+   */
+  stalledMinDays?: number | null;
+  stalledMaxDays?: number | null;
 }
 
 export interface StageData {
@@ -99,6 +106,10 @@ export function sharedRpcParams(
   search: string,
   filters: PaginatedFilters
 ) {
+  const stalled = {
+    min: orNull(filters.stalledMinDays),
+    max: orNull(filters.stalledMaxDays),
+  };
   return {
     p_pipeline_slug: slug,
     p_org_id: orgId,
@@ -125,7 +136,38 @@ export function sharedRpcParams(
     p_scheduled: filters.scheduled ? true : null,
     p_qualification_tier: nonEmpty(filters.qualificationTier),
     p_pre_qualification_tier: nonEmpty(filters.preQualificationTier),
+    // "Parado há" entra na chamada SÓ quando está ativo — e isso é ordem de
+    // deploy, não estilo. O PostgREST resolve a função por nome + argumentos:
+    // mandar `p_stalled_min_days: null` contra um banco que ainda não recebeu a
+    // migration 20270729000010 devolve PGRST202 ("could not find the function
+    // ... in the schema cache") e derruba o board INTEIRO, não só o filtro.
+    // Omitindo, a chamada padrão continua idêntica à de hoje: o front pode
+    // subir antes da migration, e só quem escolhe uma faixa depende dela.
+    ...(stalled.min !== null || stalled.max !== null
+      ? { p_stalled_min_days: stalled.min, p_stalled_max_days: stalled.max }
+      : {}),
   };
+}
+
+/**
+ * Ponte de tipo até o regen de `src/integrations/supabase/types.ts`.
+ *
+ * `p_stalled_min_days` / `p_stalled_max_days` existem na migration
+ * `20270729000010_pipeline_page_stalled_days_filter.sql`, mas `types.ts` é
+ * gerado a partir do schema de PROD — enquanto a migration não for aplicada e os
+ * tipos regenerados, a assinatura conhecida pelo TS não tem esses campos. Editar
+ * `types.ts` na mão é proibido (arquivo auto-gerado), então a divergência mora
+ * aqui, num ponto só, em vez de virar `as any` espalhado.
+ *
+ * Os parâmetros seguem dentro de `sharedRpcParams` de propósito: é o objeto
+ * único que alimenta as DUAS RPCs, e é essa unicidade que garante que a
+ * contagem da coluna e os cards apliquem exatamente o mesmo recorte.
+ *
+ * Depois de `supabase gen types`, apague esta função e passe `sharedParams`
+ * direto — o TS volta a checar a forma inteira sozinho.
+ */
+function rpcArgs<T extends object>(params: T): never {
+  return params as unknown as never;
 }
 
 function useStageSlot(
@@ -144,12 +186,12 @@ function useStageSlot(
       filtersKey,
     ],
     queryFn: async ({ pageParam }) => {
-      const { data, error } = await supabase.rpc("get_pipeline_page", {
+      const { data, error } = await supabase.rpc("get_pipeline_page", rpcArgs({
         ...sharedParams,
         p_stage_id: stageKey!,
         p_page_size: PAGE_SIZE,
         p_cursor: pageParam ?? null,
-      });
+      }));
       if (error) throw error;
       return (data ?? []).map(flattenRpcEntry);
     },
@@ -218,6 +260,8 @@ export function usePaginatedPipeline(
       filters.scheduled,
       filters.qualificationTier,
       filters.preQualificationTier,
+      filters.stalledMinDays,
+      filters.stalledMaxDays,
     ]
   );
 
@@ -231,7 +275,7 @@ export function usePaginatedPipeline(
       if (!organizationId) return {};
       const { data, error } = await supabase.rpc(
         "get_pipeline_stage_counts",
-        sharedParams
+        rpcArgs(sharedParams)
       );
       if (error) throw error;
       const map: Record<string, number> = {};
