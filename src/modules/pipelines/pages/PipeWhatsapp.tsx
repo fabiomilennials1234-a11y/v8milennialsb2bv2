@@ -782,6 +782,7 @@ function PipeWhatsappInner() {
             <LeadCard
               lead={card}
               variant="whatsapp"
+              density="compact"
               extraActions={
                 <MergedFunnelCardActions
                   entryId={card.id}

@@ -211,6 +211,7 @@ export function CustomPipelineKanban({
         <LeadCard
           lead={card}
           variant="custom"
+          density="compact"
           showValue
           selected={bulk.isSelected(card.leadId || "")}
           onSelect={(e) => {

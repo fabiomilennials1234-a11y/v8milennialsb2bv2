@@ -20,6 +20,7 @@ import { LeadCardAvatar } from "./card/LeadCardAvatar";
 import { LeadCardLabels } from "./card/LeadCardLabels";
 import { LeadCardMetrics } from "./card/LeadCardMetrics";
 import { LeadCardCalor } from "./card/LeadCardCalor";
+import { LeadCardCompact } from "./card/LeadCardCompact";
 import { formatFaturamento } from "@/lib/format/faturamento";
 import { usePipeOpsOptional } from "../../pipe-ops";
 import { AddToFunilMenuItem, AddToFunilDialog } from "./AddToFunilDialog";
@@ -152,6 +153,20 @@ export interface LeadCardProps {
   onCalorChange?: (calor: number) => void;
   onQuickAction?: (title: string) => void;
   onInlineEdit?: (field: string, value: string) => void;
+  /**
+   * Densidade do card.
+   *
+   * `comfortable` (default) é o card histórico: seis blocos empilhados, ~250px
+   * de altura. `compact` é o do protótipo `.specs/mockups/funis-redesign/` —
+   * três linhas, ~100px, com o mesmo conteúdo redistribuído (avatares sobem
+   * pra linha do nome, tags viram marcador vertical, tempo vira badge,
+   * telefone e valor dividem uma linha).
+   *
+   * Fica em prop e não em variant porque densidade é decisão da SUPERFÍCIE
+   * (o board do funil quer densa; a carteira ainda não pediu), enquanto
+   * `variant` decide QUAIS campos existem. São eixos independentes.
+   */
+  density?: "comfortable" | "compact";
 }
 
 // ─── Date Indicator ──────────────────────────────────────
@@ -256,7 +271,8 @@ function formatCurrency(value: number): string {
 
 export const LeadCard = memo(function LeadCard({
   lead, variant, selected, onSelect, onClick, onRemove,
-  onCalorChange, onQuickAction, onInlineEdit, extraActions, ...overrides
+  onCalorChange, onQuickAction, onInlineEdit, extraActions,
+  density = "comfortable", ...overrides
 }: LeadCardProps) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [addFunilOpen, setAddFunilOpen] = useState(false);
@@ -305,6 +321,78 @@ export const LeadCard = memo(function LeadCard({
     (config.showContact && (lead.phone || lead.email)) ||
     (config.showValue && (lead.faturamento || lead.value != null)) ||
     (config.showDate && parsedDate);
+
+  // Itens do menu `…`. Extraídos porque as duas densidades oferecem as MESMAS
+  // ações — só muda o tamanho do gatilho.
+  const itensDoMenu = (
+    <>
+      {hasPhone && (
+        <DropdownMenuItem
+          onClick={(e) => openWhatsApp(lead.phone ?? undefined, e, lead.primaryInstanceId ?? undefined)}
+          onMouseEnter={openWhatsApp.prefetchRoute}
+          onFocus={openWhatsApp.prefetchRoute}
+          onMouseDown={() => openWhatsApp.prefetchData(lead.phone ?? undefined, lead.primaryInstanceId ?? undefined)}
+        >
+          <MessageCircle className="w-4 h-4 mr-2 text-[#25D366]" /> WhatsApp
+        </DropdownMenuItem>
+      )}
+      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScheduleOpen(true); }}>
+        <Clock className="w-4 h-4 mr-2" /> Agendar mensagem
+      </DropdownMenuItem>
+      {pipeOps && <AddToFunilMenuItem pipeOps={pipeOps} onSelect={() => setAddFunilOpen(true)} />}
+      {onRemove && (
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        >
+          <Trash2 className="w-4 h-4 mr-2" /> Remover do funil
+        </DropdownMenuItem>
+      )}
+    </>
+  );
+
+  const modais = (
+    <>
+      {scheduleOpen && (
+        <ScheduleMessageModal
+          open={scheduleOpen}
+          onOpenChange={setScheduleOpen}
+          leadId={lead.leadId || ""}
+          leadName={lead.name}
+          phoneNumber={lead.phone || ""}
+        />
+      )}
+      {pipeOps && addFunilOpen && (
+        <AddToFunilDialog
+          pipeOps={pipeOps}
+          leadId={lead.id}
+          open={addFunilOpen}
+          onOpenChange={setAddFunilOpen}
+        />
+      )}
+    </>
+  );
+
+  if (density === "compact") {
+    return (
+      <>
+        <LeadCardCompact
+          lead={lead}
+          config={config}
+          origin={origin}
+          urgency={urgency}
+          dateIndicator={dateIndicator}
+          parsedDate={parsedDate}
+          selected={selected}
+          onSelect={onSelect}
+          onClick={onClick}
+          menuItems={itensDoMenu}
+          extraActions={extraActions}
+        />
+        {modais}
+      </>
+    );
+  }
 
   return (
     <>
