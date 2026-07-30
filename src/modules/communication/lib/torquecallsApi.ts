@@ -75,8 +75,7 @@ async function signal<T>(action: string, body: Record<string, unknown>): Promise
   if (error) {
     // O corpo do erro carrega o código do governor; sem ele a UI só saberia
     // dizer "falhou", que é a mensagem que faz o vendedor abrir chamado.
-    const ctx = (error as { context?: { body?: unknown } }).context;
-    const parsed = await readErrorBody(ctx?.body);
+    const parsed = await readInvokeErrorBody(error);
     if (parsed?.code) throw new CallDeniedError(parsed.code, parsed.retry_after_ms);
     throw new Error(error.message ?? "Falha ao falar com o serviço de chamadas");
   }
@@ -87,18 +86,36 @@ async function signal<T>(action: string, body: Record<string, unknown>): Promise
   return data as T;
 }
 
-async function readErrorBody(
-  body: unknown,
-): Promise<{ code?: string; retry_after_ms?: number } | null> {
+/**
+ * Extrai o corpo de uma recusa do `functions.invoke`.
+ *
+ * Quando a edge function responde com status de erro, o client devolve
+ * `data: null` e põe a resposta HTTP crua em `error.context` — um `Response`
+ * ainda não lido. Ler `data?.code` nesse caminho devolve `undefined` **sempre**,
+ * e todo código de recusa vira "unknown": o cliente veria a mensagem genérica
+ * em vez de "desconecte um número antes de ligar outro". O padrão correto já
+ * existe no repositório, em `useOmie.ts` (`extractFunctionError`).
+ *
+ * Aceita `Response` por instância ou por presença de `.json()` para não depender
+ * do ambiente ter a classe global — o teste roda em jsdom.
+ */
+export async function readInvokeErrorBody(
+  error: unknown,
+): Promise<{ code?: string; error?: string; retry_after_ms?: number } | null> {
+  const ctx = (error as { context?: unknown } | null)?.context;
+  if (!ctx) return null;
+  const asResponse = ctx as { json?: () => Promise<unknown>; text?: () => Promise<string> };
+  if (typeof asResponse.json !== "function") return null;
   try {
-    if (!body) return null;
-    if (typeof body === "string") return JSON.parse(body);
-    if (body instanceof Response) return await body.json();
-    if (typeof body === "object") return body as { code?: string };
+    return (await asResponse.json()) as { code?: string; error?: string; retry_after_ms?: number };
   } catch {
-    return null;
+    try {
+      const text = typeof asResponse.text === "function" ? await asResponse.text() : "";
+      return text ? (JSON.parse(text) as { code?: string }) : null;
+    } catch {
+      return null;
+    }
   }
-  return null;
 }
 
 export async function startCall(args: {
@@ -131,6 +148,15 @@ export async function endCall(args: { tcSessionId: string; callId: string }): Pr
 /**
  * Mensagens das recusas do plano de controle. Sem esta tabela o cliente vê o
  * código cru — e "session_cap_reached" não diz a ninguém o que fazer.
+ *
+ * NÃO tem entrada para "4 aparelhos já vinculados" (o limite do próprio
+ * WhatsApp). Verificado: nenhum caminho hoje produz um código para esse caso.
+ * O rejeite acontece DEPOIS do QR ser escaneado — evento assíncrono da VPS,
+ * não resposta HTTP de `pairSession` — e nem o corpo de erro da VPS
+ * (`_shared/voip/vps.ts`) nem o `SessionEvent` do stream (`torquecallsEvents.ts`)
+ * carregam campo de código para essa rejeição. Colocar uma tradução aqui sem
+ * um código que a alcance seria só uma mensagem morta, dando a falsa
+ * confiança de que o caso já está tratado.
  */
 export const VOICE_CONTROL_MESSAGES: Record<string, string> = {
   voice_feature_off:
@@ -139,8 +165,6 @@ export const VOICE_CONTROL_MESSAGES: Record<string, string> = {
     "Limite de números com voz atingido. Desconecte um número antes de ligar outro.",
   session_orphaned:
     "O número foi criado no servidor de voz mas não ficou registrado aqui. Tente de novo — o sistema vai adotar o que já existe.",
-  device_limit_reached:
-    "Este WhatsApp já tem 4 aparelhos conectados, que é o limite do próprio WhatsApp. Desconecte um aparelho no celular e tente de novo.",
 };
 
 export class VoiceControlError extends Error {
@@ -155,8 +179,12 @@ async function control<T>(action: string, body: Record<string, unknown> = {}): P
     body: { action, ...body },
   });
   if (error) {
-    const code = (data as { code?: string } | null)?.code ?? "unknown";
-    throw new VoiceControlError(code, (data as { error?: string } | null)?.error);
+    // Mesma fronteira de `signal()`: com `error` setado, `data` vem `null` e o
+    // corpo real mora em `error.context`. Ler `data?.code` aqui devolvia
+    // "unknown" SEMPRE — nenhuma das três traduções desta tabela jamais
+    // disparava.
+    const parsed = await readInvokeErrorBody(error);
+    throw new VoiceControlError(parsed?.code ?? "unknown", parsed?.error);
   }
   return data as T;
 }
