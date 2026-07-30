@@ -243,3 +243,66 @@ Deno.test("deleteSession: desliga voice_calls_enabled=false filtrado por organiz
   assert(hasOpWithArgs(update, "update", [{ voice_calls_enabled: false }]), "esperava update({voice_calls_enabled:false})");
   assert(hasOpWithArgs(update, "eq", ["organization_id", "org-1"]), "update tem que filtrar por organization_id");
 });
+
+// ─── Repasse de `code` do corpo de erro da VPS ──────────────────────────────
+//
+// `VpsResult` carregava só `error: string` — qualquer `code` que a VPS
+// mandasse no corpo era descartado em silêncio dentro de `callVps`, e
+// `forwardSessionAction`/`createSession` só devolviam `{ error }`. Uma recusa
+// codificada da VPS (ex.: o futuro código de limite de aparelhos do
+// WhatsApp) chegaria ao cliente como texto cru, sem chave para a tabela de
+// tradução procurar. Fixture usa "device_limit_reached" porque é o caso que
+// motivou o conserto — não porque a VPS já emite esse código hoje.
+
+Deno.test("forwardSessionAction: repassa o code da VPS quando ela manda um", async () => {
+  const db = fakeDb({
+    "voip_sessions:maybeSingle": { data: { whatsapp_instance_id: "inst-1" } },
+  });
+  const { deps } = fakeVoipDeps({
+    ok: false,
+    status: 409,
+    error: "device already has 4 linked devices",
+    code: "device_limit_reached",
+  });
+
+  const res = await forwardSessionAction(db, fakeCaller(), "pairSession", "tc-sess-1", {}, {}, deps);
+  const body = await res.json();
+
+  assertEquals(res.status, 409);
+  assertEquals(body.code, "device_limit_reached");
+});
+
+Deno.test("forwardSessionAction: sem code no VpsResult, resposta não inventa um", async () => {
+  const db = fakeDb({
+    "voip_sessions:maybeSingle": { data: { whatsapp_instance_id: "inst-1" } },
+  });
+  const { deps } = fakeVoipDeps({ ok: false, status: 502, error: "falha de rede" });
+
+  const res = await forwardSessionAction(db, fakeCaller(), "pairSession", "tc-sess-1", {}, {}, deps);
+  const body = await res.json();
+
+  assertEquals(res.status, 502);
+  assertEquals(body.code, undefined);
+  assertEquals(body.error, "falha de rede");
+});
+
+Deno.test("createSession: repassa o code da VPS quando a criação em si é recusada", async () => {
+  const db = fakeDb({
+    "whatsapp_instances:maybeSingle": { data: { id: "inst-1", organization_id: "org-1" } },
+    "organizations:maybeSingle": { data: { voice_sessions_cap: 10 } },
+    "rpc:org_get_features_and_limits": { data: { features: { voice_calls: true }, plan_name: "pro" } },
+    "voip_sessions:select": { count: 0 },
+  });
+  const { deps } = fakeVoipDeps({
+    ok: false,
+    status: 409,
+    error: "device already has 4 linked devices",
+    code: "device_limit_reached",
+  });
+
+  const res = await createSession(db, fakeCaller(), { whatsapp_instance_id: "inst-1" }, {}, deps);
+  const body = await res.json();
+
+  assertEquals(res.status, 409);
+  assertEquals(body.code, "device_limit_reached");
+});

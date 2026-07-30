@@ -276,7 +276,17 @@ export async function createSession(
     { token: admin.token, body: { name, organization_id: caller.orgId } },
   );
 
-  if (!created.ok) return json(created.status, { error: created.error }, cors);
+  // Repassa o `code` da VPS quando ela mandar um — sem isto uma recusa
+  // codificada (ex.: limite de aparelhos do WhatsApp) chegaria ao cliente só
+  // como texto cru, e a tabela de tradução do cliente nunca teria como
+  // disparar por falta do código para procurar nela.
+  if (!created.ok) {
+    return json(
+      created.status,
+      { error: created.error, ...(created.code ? { code: created.code } : {}) },
+      cors,
+    );
+  }
 
   const tcSessionId = created.data?.session?.id ?? created.data?.id;
   if (!tcSessionId) {
@@ -361,7 +371,11 @@ export async function forwardSessionAction(
     body: action === "adoptSession" ? { organization_id: caller.orgId } : {},
   });
 
-  if (!res.ok) return json(res.status, { error: res.error }, cors);
+  // Mesmo repasse de `code` de `createSession`: pairSession/logoutSession/
+  // deleteSession/adoptSession passam pela mesma VPS e pelo mesmo VpsResult.
+  if (!res.ok) {
+    return json(res.status, { error: res.error, ...(res.code ? { code: res.code } : {}) }, cors);
+  }
 
   // Desliga o número antes de a linha de voip_sessions sumir (deleteSession)
   // ou virar closed (logoutSession) — depois disso o vínculo com a instância

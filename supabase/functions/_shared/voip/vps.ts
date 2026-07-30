@@ -17,7 +17,13 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 
 export type VpsResult<T> =
   | { ok: true; status: number; data: T }
-  | { ok: false; status: number; error: string };
+  // `code` é opcional de propósito: a VPS hoje só devolve `{ error }` cru na
+  // maioria dos caminhos (o pareamento com 4 aparelhos já vinculados é o
+  // exemplo — falha DEPOIS do QR ser escaneado, por evento assíncrono, e
+  // ainda sem código nenhum). Quando ela passar a mandar `code`, este tipo já
+  // sabe carregá-lo — sem isto o chamador teria descartado o campo mesmo que
+  // a VPS já o emitisse.
+  | { ok: false; status: number; error: string; code?: string };
 
 function baseUrl(): string {
   const url = Deno.env.get("TORQUECALLS_VPS_URL");
@@ -67,8 +73,17 @@ export async function callVps<T = unknown>(
     }
 
     if (!res.ok) {
-      const msg = (parsed as { error?: string } | null)?.error ?? `HTTP ${res.status}`;
-      return { ok: false, status: res.status, error: msg };
+      const errBody = parsed as { error?: string; code?: string } | null;
+      const msg = errBody?.error ?? `HTTP ${res.status}`;
+      // Repassa o code se a VPS mandou um — antes este campo era descartado
+      // em silêncio mesmo quando presente no corpo, e nenhum chamador tinha
+      // como saber a diferença entre "não veio" e "foi jogado fora aqui".
+      return {
+        ok: false,
+        status: res.status,
+        error: msg,
+        ...(typeof errBody?.code === "string" ? { code: errBody.code } : {}),
+      };
     }
 
     return { ok: true, status: res.status, data: parsed as T };
