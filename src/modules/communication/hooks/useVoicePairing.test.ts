@@ -108,6 +108,33 @@ describe("useVoicePairing", () => {
     expect(result.current.qr).toBeNull();
   });
 
+  // `sessionId` é OPCIONAL no tipo `SessionEvent`. O filtro antigo
+  // (`if (event.sessionId && ...) return`) só barrava evento que se
+  // identificasse — evento anônimo passava como se fosse meu. O stream é da
+  // organização INTEIRA: com dois admins pareando números diferentes ao mesmo
+  // tempo, um veria o QR do outro. QR é credencial; identidade ausente tem que
+  // ser tratada como identidade errada.
+  it("descarta evento SEM sessionId — identidade ausente não é a minha", async () => {
+    const { result } = renderHook(() => useVoicePairing(), { wrapper });
+    await act(async () => { await result.current.start("inst-1"); });
+    await waitFor(() => expect(result.current.status).toBe("aguardando-qr"));
+
+    act(() => emit({ type: "session-qr", qr: "qr-sem-dono" }));
+
+    expect(result.current.qr).toBeNull();
+    expect(result.current.status).toBe("aguardando-qr");
+  });
+
+  it("descarta auth-state SEM sessionId — não declara pareado por evento anônimo", async () => {
+    const { result } = renderHook(() => useVoicePairing(), { wrapper });
+    await act(async () => { await result.current.start("inst-1"); });
+    await waitFor(() => expect(result.current.status).toBe("aguardando-qr"));
+
+    act(() => emit({ type: "auth-state", paired: true }));
+
+    expect(result.current.status).toBe("aguardando-qr");
+  });
+
   it("mostra a mensagem traduzida quando a criação é recusada", async () => {
     const { VoiceControlError } = await import("@/modules/communication/lib/torquecallsApi");
     createVoiceSession.mockRejectedValue(new (VoiceControlError as any)("session_cap_reached", "Limite atingido."));

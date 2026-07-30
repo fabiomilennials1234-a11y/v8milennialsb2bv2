@@ -61,9 +61,14 @@ export function useVoicePairing() {
   }, []);
 
   const handleEvent = useCallback((event: SessionEvent) => {
-    // O stream é da organização inteira. Sem este filtro, o QR de outro
-    // número apareceria no modal errado.
-    if (event.sessionId && event.sessionId !== sessionRef.current) return;
+    // O stream é da organização INTEIRA, e `sessionId` é opcional no tipo.
+    // Por isso o filtro é fail-closed: só passa evento que se identifica E
+    // bate com a sessão corrente. A forma permissiva (`event.sessionId &&
+    // event.sessionId !== atual`) deixava evento anônimo passar como se fosse
+    // meu — com dois admins pareando números diferentes ao mesmo tempo, um
+    // veria o QR do outro. O QR é credencial: quem o lê pareia o WhatsApp da
+    // organização. Identidade ausente é identidade errada.
+    if (event.sessionId !== sessionRef.current) return;
 
     if (event.type === "session-qr" && typeof event.qr === "string") {
       setQr(event.qr);
