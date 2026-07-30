@@ -27,6 +27,8 @@ import {
   type LeadListItem,
 } from "../components/leads/LeadListRow";
 import { useLeadsCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
+import type { LeadCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
+import { useLeadsSalesMetrics } from "../hooks/useLeadsSalesMetrics";
 import { useLeadsDeals } from "../hooks/useLeadsDeals";
 import {
   Select,
@@ -296,8 +298,37 @@ function LeadsInner() {
 
   // Cluster "Dados" da lista — números de carteira (upsell_clients) em lote.
   const { data: carteiraMetrics } = useLeadsCarteiraMetrics(allLeadIds);
+  // Vendas ganhas no funil, de `sale_events` (ADR-0017). Ver `useLeadsSalesMetrics`.
+  const { data: salesMetrics } = useLeadsSalesMetrics(allLeadIds);
   // Coluna "Negócios" — card de funil é o negócio (D1). Ver `useLeadsDeals`.
   const { data: leadDeals } = useLeadsDeals(allLeadIds);
+
+  /**
+   * Cluster "Dados" — venda ganha no funil tem precedência sobre carteira.
+   *
+   * As duas fontes existem e medem coisas diferentes: `sale_events` são as
+   * vendas fechadas *aqui dentro*; `upsell_clients` é histórico de pedido vindo
+   * de ERP. Somar dobraria o número nas 12 orgs que têm ERP, então o lead que
+   * fechou venda no funil mostra a venda do funil, e o lead sem venda no funil
+   * continua mostrando a carteira — nunca os dois ao mesmo tempo.
+   *
+   * `segment` (ouro/prata/novo/resgate) só existe na carteira; é preservado.
+   */
+  const dataMetrics = useMemo(() => {
+    const out: Record<string, LeadCarteiraMetrics> = { ...(carteiraMetrics ?? {}) };
+    for (const [leadId, s] of Object.entries(salesMetrics ?? {})) {
+      out[leadId] = {
+        leadId,
+        lifetimeValue: s.totalValue,
+        avgTicket: s.avgTicket,
+        orderCount: s.saleCount,
+        reorderCycleDays: s.cycleDays,
+        daysSinceLastOrder: s.daysSinceLastSale,
+        segment: carteiraMetrics?.[leadId]?.segment ?? null,
+      };
+    }
+    return out;
+  }, [carteiraMetrics, salesMetrics]);
   const { isMobile } = useViewport();
 
   // ── Pipe/funnel selection for new leads ──
@@ -749,7 +780,7 @@ function LeadsInner() {
                   <LeadListRow
                     key={lead.id}
                     lead={lead as LeadListItem}
-                    metrics={carteiraMetrics?.[lead.id]}
+                    metrics={dataMetrics[lead.id]}
                     deals={leadDeals?.[lead.id]}
                     selected={bulk.isSelected(lead.id)}
                     onToggleSelect={() => bulk.toggle(lead.id)}
