@@ -1156,8 +1156,8 @@ export function ImportUpsellClientsContent({
                 {showErrors ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
               {showErrors && (
-                <ScrollArea className="max-h-48 px-3 pb-3">
-                  <div className="space-y-1">
+                <ScrollArea className="max-h-48">
+                  <div className="space-y-1 px-3 pb-3">
                     {result.errors.map((err, i) => (
                       <div key={i} className="text-xs text-muted-foreground flex gap-2">
                         <span className="text-red-500 font-mono shrink-0">
