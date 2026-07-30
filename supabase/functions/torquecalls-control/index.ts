@@ -28,8 +28,21 @@ import { adminClient, type Caller, isOrgAdmin, resolveCaller } from "../_shared/
 import { type AdminAction, signAdminToken } from "../_shared/voip/tokens.ts";
 import { callVps } from "../_shared/voip/vps.ts";
 
-/** Teto de sessões por organização. Uma por número; mais de duas é sintoma. */
-const MAX_SESSIONS_PER_ORG = 2;
+/** Padrão quando a organização não tem linha — mesmo default da coluna. */
+const DEFAULT_VOICE_SESSIONS_CAP = 10;
+
+export function resolveSessionCap(org: { voice_sessions_cap?: number | null } | null): number {
+  const cap = org?.voice_sessions_cap;
+  return typeof cap === "number" ? cap : DEFAULT_VOICE_SESSIONS_CAP;
+}
+
+/**
+ * Chave ausente é chave desligada. O contrário — tratar ausência como
+ * liberação — é como uma feature paga vaza para quem não comprou.
+ */
+export function voiceFeatureOn(features: Record<string, unknown> | null | undefined): boolean {
+  return features?.voice_calls === true;
+}
 
 type Action =
   | "listSessions"
@@ -195,6 +208,18 @@ async function createSession(
     return json(404, { error: "Instância não encontrada" }, cors);
   }
 
+  const { data: plan } = await db
+    .from("organizations")
+    .select("voice_sessions_cap, subscription_plans(features)")
+    .eq("id", caller.orgId)
+    .maybeSingle();
+
+  // Gate de interface não é gate. A mesma feature que esconde o cartão no
+  // catálogo precisa recusar aqui, senão basta chamar a função direto.
+  if (!voiceFeatureOn((plan as { subscription_plans?: { features?: Record<string, unknown> } })?.subscription_plans?.features)) {
+    return json(403, { error: "Chamada de voz não está no plano desta organização", code: "voice_feature_off" }, cors);
+  }
+
   // Teto durável: conta linha no Postgres. `closed` não ocupa vaga.
   const { count, error: countErr } = await db
     .from("voip_sessions")
@@ -203,9 +228,10 @@ async function createSession(
     .neq("status", "closed");
 
   if (countErr) return json(500, { error: countErr.message }, cors);
-  if ((count ?? 0) >= MAX_SESSIONS_PER_ORG) {
+  const cap = resolveSessionCap(plan as { voice_sessions_cap?: number | null } | null);
+  if ((count ?? 0) >= cap) {
     return json(409, {
-      error: `Limite de ${MAX_SESSIONS_PER_ORG} sessões de voz por organização atingido`,
+      error: `Limite de ${cap} números de voz por organização atingido`,
       code: "session_cap_reached",
     }, cors);
   }
@@ -254,6 +280,14 @@ async function createSession(
     }, cors);
   }
 
+  // Sem isto o cliente pareia com sucesso e toda ligação continua recusada
+  // com `voice_calls_disabled`, na raiz de fn_voip_call_reserve. Era o elo
+  // que faltava para a voz sair do estado "construída e nunca ligada".
+  await db.from("whatsapp_instances")
+    .update({ voice_calls_enabled: true })
+    .eq("id", instanceId)
+    .eq("organization_id", caller.orgId);
+
   await logRuntime({
     organizationId: caller.orgId,
     module: "voip",
@@ -296,6 +330,24 @@ async function forwardSessionAction(
   });
 
   if (!res.ok) return json(res.status, { error: res.error }, cors);
+
+  // Desliga o número antes de a linha de voip_sessions sumir (deleteSession)
+  // ou virar closed (logoutSession) — depois disso o vínculo com a instância
+  // não é mais consultável aqui.
+  if (action === "logoutSession" || action === "deleteSession") {
+    const { data: sess } = await db
+      .from("voip_sessions")
+      .select("whatsapp_instance_id")
+      .eq("tc_session_id", sid)
+      .eq("organization_id", caller.orgId)
+      .maybeSingle();
+    if (sess?.whatsapp_instance_id) {
+      await db.from("whatsapp_instances")
+        .update({ voice_calls_enabled: false })
+        .eq("id", sess.whatsapp_instance_id)
+        .eq("organization_id", caller.orgId);
+    }
+  }
 
   // Espelha o estado no CRM. A VPS é a fonte da conexão; o CRM é a fonte da
   // tenancy — e é ele que o resto do produto lê.
