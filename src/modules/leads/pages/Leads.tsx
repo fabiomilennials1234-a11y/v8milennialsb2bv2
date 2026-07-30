@@ -526,10 +526,10 @@ function LeadsInner() {
             animate={{ opacity: 1, x: 0 }}
             className="text-2xl font-bold"
           >
-            Tanque de Combustível
+            Leads
           </motion.h1>
           <p className="text-muted-foreground mt-1">
-            Gerencie todo o combustível da sua máquina de vendas
+            Todas as pessoas e empresas da sua operação — e os negócios de cada uma.
           </p>
         </div>
 
