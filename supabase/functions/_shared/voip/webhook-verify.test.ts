@@ -368,6 +368,49 @@ Deno.test("claim estrutural inválida é recusada", async () => {
   }
 });
 
+Deno.test("credencial AUSENTE é 401, não 500 — o tipo não protege esta linha", async () => {
+  // `req.headers.get("Authorization")` devolve `string | null`, e requisição sem
+  // Authorization é o caso mais comum que existe: varredura de porta, health
+  // check, chamada malfeita. Se isso estourar TypeError, a T8 responde 500 onde
+  // devia responder 401 — e some a distinção "config quebrada" × "token ruim",
+  // que é o motivo de este módulo separar `throw` de `null`.
+  //
+  // O compilador NÃO pega: este arquivo está fora do `deno check` do choke e
+  // `deno task test` roda com `--no-check`.
+  const k = await makePair();
+  install(k.entry);
+
+  const naoStrings: unknown[] = [null, undefined, 42, {}, [], true];
+  for (const v of naoStrings) {
+    const t = v as unknown as string;
+
+    assertEquals(
+      await verifyWebhook(t, BODY),
+      null,
+      `token ${String(v)} devia recusar limpo, não estourar`,
+    );
+    const r = await verifyWebhookDetailed(t, BODY);
+    assertEquals(r.ok === false ? r.reason : null, "malformed");
+
+    // O corpo tem o mesmo problema, com um sintoma PIOR — e por isso aqui se
+    // afere o MOTIVO, não só o `null`. Sem guarda, `TextEncoder().encode(null)`
+    // não estoura: ele hasheia a string "null" como se fosse o corpo, e a
+    // recusa sai como `body_hash_mismatch`. Aí manda o operador caçar defeito
+    // de serialização do payload quando o problema é que o chamador não passou
+    // um corpo. Recusar por `null` só, sem olhar o motivo, deixaria essa troca
+    // de diagnóstico passar despercebida.
+    const rb = await verifyWebhookDetailed(
+      await signEnvelope({ priv: k.priv, kid: k.kid }),
+      t,
+    );
+    assertEquals(
+      rb.ok === false ? rb.reason : null,
+      "malformed",
+      `corpo ${String(v)} devia dizer 'malformed', não culpar o hash do corpo`,
+    );
+  }
+});
+
 Deno.test("token malformado é recusado sem estourar", async () => {
   const k = await makePair();
   install(k.entry);
@@ -570,6 +613,30 @@ Deno.test("UM fixture só NÃO pegaria a chave de ordem 4 — por isso o auto-te
     pegou = await crypto.subtle.verify({ name: "Ed25519" }, key, forjada, sonda(i));
   }
   assert(pegou, "a bateria tem que pegar a chave de ordem 4 em algum ponto");
+});
+
+Deno.test("a chave de EXEMPLO do RFC 8032 recusa servir — a privada dela é pública", async () => {
+  // Terceira perna do auto-teste, sozinha.
+  //
+  // Esta chave é um ponto de ordem NORMAL: a bateria de sondas dá 0 acertos e
+  // ela passa batido pelas duas primeiras pernas. O tamanho está certo, o kid
+  // deriva certo, ela importa certo. Só que a privada correspondente
+  // (`9d61b19d…`) está impressa no RFC e em todo tutorial de Ed25519 — qualquer
+  // um assinaria evento para qualquer sessão.
+  //
+  // É um copiar-colar plausível: são os bytes que aparecem primeiro para quem
+  // abre um exemplo "só para testar se funciona" e esquece de trocar.
+  const pub = bytesFromHex(
+    "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+  );
+  install(`${await kidOf(pub)}:${b64urlFromBytes(pub)}`);
+
+  await assertRejects(
+    () => verifyWebhook("a.b.c", BODY),
+    Error,
+    "RFC 8032",
+    "a chave de exemplo do RFC tem que ser recusada na carga",
+  );
 });
 
 Deno.test("chave legítima NUNCA cai no auto-teste — o gate não pode ser flaky", async () => {

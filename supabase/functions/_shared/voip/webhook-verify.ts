@@ -293,14 +293,26 @@ async function assertKeyIsSound(kid: string, key: CryptoKey): Promise<void> {
     }
   }
 
-  // Assinatura legítima, de outra chave: tem que dar false. Pega o caso em que
-  // `verify` ignora a chave e olha só a assinatura.
+  // Terceira perna: uma assinatura VÁLIDA, mas de outra chave, tem que dar
+  // false. Pega dois defeitos que as duas primeiras deixam passar inteiros:
+  //
+  //   - um `verify` que ignora a chave e olha só a assinatura (a bateria acima
+  //     não veria: ela só produz `false`, que é o que um verify assim devolve
+  //     para a assinatura neutra, que é inválida de verdade);
+  //   - a própria chave do vetor do RFC 8032 configurada como se fosse a da
+  //     VPS. Ela é um ponto de ordem normal, então escapa da bateria — mas a
+  //     PRIVADA dela está publicada no RFC e em todo livro de criptografia.
+  //     Qualquer um assinaria evento para qualquer sessão. É um copiar-colar
+  //     plausível: são os bytes que aparecem primeiro em qualquer exemplo de
+  //     Ed25519 que alguém abra para "testar se funciona".
   if (
     await verifyRaw(key, bytesFromHex(RFC8032_SIGNATURE_HEX), new Uint8Array(0))
   ) {
     fail(
-      `auto-teste da chave ${kid}: assinatura válida de OUTRA chave foi aceita — ` +
-        "esta chave não está sendo levada em conta na verificação",
+      `auto-teste da chave ${kid}: assinatura válida de OUTRA chave foi aceita. ` +
+        "Ou a verificação não está levando esta chave em conta, ou o que foi " +
+        "configurado é a chave de exemplo do RFC 8032 — cuja privada é pública. " +
+        "Use a chave que a VPS imprime no boot.",
     );
   }
 }
@@ -466,6 +478,18 @@ export async function verifyWebhookDetailed(
 ): Promise<WebhookVerification> {
   // Antes de tocar no token: configuração ruim é 500, não 401.
   const { keys, audience, env } = await keySet();
+
+  // O TIPO NÃO PROTEGE ESTA LINHA. `headers.get()` devolve `string | null`, e
+  // requisição SEM Authorization é o caso mais comum de todos — varredura de
+  // porta, health check, chamada malfeita. Sem esta guarda, `null.trim()`
+  // levanta TypeError, a T8 responde 500 onde devia responder 401, e some
+  // justamente a distinção "config quebrada" × "token ruim" que este módulo
+  // existe para preservar. Pior: o arquivo está fora do `deno check` do choke e
+  // `deno task test` roda com `--no-check`, então o compilador não avisaria.
+  // Ausência de credencial é entrada malformada como qualquer outra.
+  if (typeof token !== "string" || typeof rawBody !== "string") {
+    return reject("malformed", `token=${typeof token} corpo=${typeof rawBody}`);
+  }
 
   // Tolerar o header inteiro poupa a T8 de um 401 universal e mudo no dia em que
   // alguém passar `req.headers.get("Authorization")` direto.
