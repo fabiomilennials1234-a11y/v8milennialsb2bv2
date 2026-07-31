@@ -50,6 +50,23 @@ function directive(csp: string, name: string): string {
   return m ? m[1] : "";
 }
 
+/**
+ * Confere a fonte como TOKEN da diretiva, não como substring dela.
+ *
+ * `includes()` aqui seria um teste que passa sem medir o que diz medir:
+ * `"https://calls.torquecrm.com.br.evil.com"` contém o nosso host, e a
+ * asserção ficaria verde com uma CSP que libera outro domínio. A diretiva é
+ * uma lista separada por espaços, então a comparação certa é por igualdade de
+ * item — e é assim que o navegador também a interpreta.
+ *
+ * O CodeQL apontou isto como `js/incomplete-url-substring-sanitization`, e
+ * estava certo: mesmo fora de um contexto de sanitização, a checagem por
+ * substring acerta por acidente.
+ */
+function hasSource(csp: string, name: string, source: string): boolean {
+  return directive(csp, name).trim().split(/\s+/).includes(source);
+}
+
 function metaCsp(): string {
   const m = indexHtml.match(/Content-Security-Policy"\s+content="([\s\S]*?)"/i);
   expect(m, "index.html precisa ter a meta CSP").toBeTruthy();
@@ -64,16 +81,20 @@ function nginxCsp(): string {
 
 describe("CSP permite o stream de eventos de voz", () => {
   it("libera o host da VPS no connect-src da meta tag (dev server)", () => {
-    expect(directive(metaCsp(), "connect-src")).toContain(VOICE_HOST);
+    expect(hasSource(metaCsp(), "connect-src", VOICE_HOST)).toBe(true);
   });
 
   it("libera o host da VPS no connect-src do nginx (produção)", () => {
-    expect(directive(nginxCsp(), "connect-src")).toContain(VOICE_HOST);
+    expect(hasSource(nginxCsp(), "connect-src", VOICE_HOST)).toBe(true);
   });
 
   it("mantém os dois em acordo — corrigir um só é o defeito que só aparece no deploy", () => {
-    const meta = directive(metaCsp(), "connect-src").includes(VOICE_HOST);
-    const nginx = directive(nginxCsp(), "connect-src").includes(VOICE_HOST);
-    expect(meta).toBe(nginx);
+    expect(hasSource(metaCsp(), "connect-src", VOICE_HOST))
+      .toBe(hasSource(nginxCsp(), "connect-src", VOICE_HOST));
+  });
+
+  it("não aceita um host que apenas CONTENHA o nosso — a checagem é por token", () => {
+    const impostor = "connect-src 'self' https://calls.torquecrm.com.br.evil.com;";
+    expect(hasSource(impostor, "connect-src", VOICE_HOST)).toBe(false);
   });
 });
