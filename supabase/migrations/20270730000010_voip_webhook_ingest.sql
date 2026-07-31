@@ -190,6 +190,13 @@ DECLARE
   v_tc_call text;
   v_reason  text;
   v_ts      timestamptz;
+
+  -- A faixa aceitável em MILISSEGUNDOS, não em timestamptz. Ver o bloco de
+  -- comentário em "Carimbo da VPS" mais abaixo: comparar depois de converter é
+  -- tarde demais.
+  v_ms      numeric;
+  v_ms_min  numeric;
+  v_ms_max  numeric;
 BEGIN
   IF p_event_jti IS NULL OR p_sid IS NULL OR p_payload IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'code', 'transition_refused',
@@ -204,6 +211,18 @@ BEGIN
   END IF;
 
   v_type := p_payload->>'type';
+
+  -- CARIMBO DA VPS: a faixa é testada em MILISSEGUNDOS, antes de converter.
+  --
+  -- to_timestamp() LEVANTA 22008 (`timestamp out of range`) para valores fora da
+  -- faixa do tipo, e a exceção aborta a transação INTEIRA — o jti nem chega a
+  -- ser reservado e a entrega vira 500. Converter primeiro e comparar depois
+  -- fazia o guard falhar aberto exatamente nos extremos que ele existe para
+  -- rejeitar. Provado contra o banco local com `endedAt: 1753900000000000000`
+  -- (o que sai de trocar UnixMilli() por UnixNano() no Go — erro de unidade de
+  -- UMA linha) e com `-999999999999999999`.
+  v_ms_min := extract(epoch from now() - c_ts_past)   * 1000;
+  v_ms_max := extract(epoch from now() + c_ts_future) * 1000;
 
   -- FOR UPDATE serializa os eventos DESTA sessão. Sem ele, duas entregas
   -- concorrentes leem a mesma marca d'água, ambas passam no teste de ordem e
@@ -257,33 +276,85 @@ BEGIN
   -- `state` é a autoridade; `paired` viaja junto no payload mas é derivado dele
   -- e não decide nada aqui — dois campos decidindo o mesmo estado é como se
   -- inventa um estado que nenhum dos dois descreve.
+  --
+  -- SÃO CINCO ESTADOS, NÃO TRÊS. Além de `qr`/`open`/`logged_out`, a VPS emite
+  -- `connecting` (session.go:170, de events.Disconnected) e `failed`
+  -- (session.go:190/192, de ConnectFailure e StreamReplaced). O broker manda os
+  -- dois ao CRM sem filtro nenhum (broker.go:230). Cair no ELSE seria 409 a cada
+  -- reconexão — e, pior, descartaria `failed`, que é o sinal de sessão morta,
+  -- enquanto o CRM seguiria marcando a sessão como `open`. Divergência de estado
+  -- é exatamente o que o S11 existe para acabar.
+  --
+  -- POR QUE OS DOIS CAEM EM ESTADOS QUE JÁ EXISTEM, e não em valores novos do
+  -- CHECK: a interface (TorqueCallsSettings.tsx) tem TRÊS renderizações e só
+  -- três — `open` vira "Voz ativa"; qualquer outro valor com linha presente vira
+  -- "Aguardando confirmação" + "Desconectar"; SEM linha viva (isto é, `closed`)
+  -- vira o botão "Ativar voz", que é a ação de repareamento. Um valor novo no
+  -- CHECK, hoje, seria renderizado como "Aguardando confirmação" — que para
+  -- `failed` é uma mentira (a sessão não aguarda nada, está morta) e ainda
+  -- comeria vaga do teto para sempre. Promover `connecting`/`failed` a valor de
+  -- primeira classe é decisão de INTERFACE, de uma fatia com tela junto; aqui a
+  -- escolha é pelo estado que produz a ação CERTA.
+  --
+  --   `connecting` (transitório, o whatsmeow reconecta sozinho) → `pending`.
+  --     Sai de `open`, então fn_voip_call_reserve passa a recusar com
+  --     `session_not_open` — que é o ponto inteiro do evento existir: o
+  --     comentário do Go (session.go:166) diz que sem ele "o CRM continuaria
+  --     autorizando chamada para um número desconectado, e o sintoma apareceria
+  --     só na ligação que não completa". Fail-closed vence churn de badge.
+  --     Mantém a vaga do teto e NÃO exige ação humana; a volta é automática,
+  --     porque `pending` + `open` → `open` já está na matriz.
+  --     NÃO vai para `quarantined`: lá esta própria RPC devolve `session_inert`,
+  --     e a sessão ficaria surda a todo evento seguinte. NÃO vai para `pairing`:
+  --     seria afirmar que existe um QR na tela.
+  --
+  --   `failed` (terminal, exige repareamento) → `closed`. É o ÚNICO valor que
+  --     faz a interface oferecer "Ativar voz" e devolver a vaga do teto. O Go
+  --     distingue `failed` de `logged_out` de propósito (em `failed` a
+  --     credencial pode seguir válida — só esta conexão caiu sem plano de
+  --     volta), mas hoje o remédio dos dois é o mesmo: Pair() gera device novo e
+  --     QR. A distinção é preservada onde ela ainda serve para alguma coisa —
+  --     `runtime_logs` — em vez de num valor de status que a tela não sabe
+  --     renderizar diferente.
   IF v_type = 'auth-state' THEN
     v_state := p_payload->>'state';
 
     v_next := CASE v_session.status
       WHEN 'pending' THEN CASE v_state
-                            WHEN 'qr' THEN 'pairing' WHEN 'open' THEN 'open'
-                            WHEN 'logged_out' THEN 'closed' ELSE NULL END
+                            WHEN 'qr' THEN 'pairing'  WHEN 'open' THEN 'open'
+                            WHEN 'logged_out' THEN 'closed'
+                            WHEN 'connecting' THEN 'pending'
+                            WHEN 'failed'     THEN 'closed'  ELSE NULL END
       WHEN 'pairing' THEN CASE v_state
-                            WHEN 'qr' THEN 'pairing' WHEN 'open' THEN 'open'
-                            WHEN 'logged_out' THEN 'closed' ELSE NULL END
+                            WHEN 'qr' THEN 'pairing'  WHEN 'open' THEN 'open'
+                            WHEN 'logged_out' THEN 'closed'
+                            -- no-op: durante o pareamento, Disconnected é ruído
+                            -- normal. Rebaixar para `pending` derrubaria o QR
+                            -- que está na tela.
+                            WHEN 'connecting' THEN 'pairing'
+                            WHEN 'failed'     THEN 'closed'  ELSE NULL END
       -- `open` + `qr` é recusa: sessão viva não volta para a tela de pareamento
       -- por um evento atrasado. Quem desloga emite `logged_out`.
       WHEN 'open'    THEN CASE v_state
-                            WHEN 'qr' THEN NULL      WHEN 'open' THEN 'open'
-                            WHEN 'logged_out' THEN 'closed' ELSE NULL END
+                            WHEN 'qr' THEN NULL       WHEN 'open' THEN 'open'
+                            WHEN 'logged_out' THEN 'closed'
+                            WHEN 'connecting' THEN 'pending'
+                            WHEN 'failed'     THEN 'closed'  ELSE NULL END
       -- `closed` + `open` é recusa: reabrir exige parear de novo, e o pareamento
-      -- passa por `qr`.
+      -- passa por `qr`. `connecting` pela mesma razão — não é sinal de
+      -- pareamento, e não pode ser o caminho de volta de uma sessão encerrada.
       WHEN 'closed'  THEN CASE v_state
-                            WHEN 'qr' THEN 'pairing' WHEN 'open' THEN NULL
-                            WHEN 'logged_out' THEN 'closed' ELSE NULL END
+                            WHEN 'qr' THEN 'pairing'  WHEN 'open' THEN NULL
+                            WHEN 'logged_out' THEN 'closed'
+                            WHEN 'connecting' THEN NULL
+                            WHEN 'failed'     THEN 'closed'  ELSE NULL END
       ELSE NULL
     END;
 
     IF v_next IS NULL THEN
       RETURN jsonb_build_object(
         'ok', false, 'code', 'transition_refused',
-        'detail', CASE WHEN v_state IN ('qr','open','logged_out')
+        'detail', CASE WHEN v_state IN ('qr','open','logged_out','connecting','failed')
                        THEN 'state_transition_refused' ELSE 'unknown_state' END,
         'from', v_session.status, 'to', v_state);
     END IF;
@@ -292,6 +363,28 @@ BEGIN
       UPDATE public.voip_sessions
          SET status = v_next, updated_at = now()
        WHERE id = v_session.id;
+
+      -- Os dois estados que o CHECK de voip_sessions não sabe representar
+      -- deixam rastro, senão a informação some no mapeamento.
+      IF v_state = 'failed' THEN
+        INSERT INTO public.runtime_logs
+          (organization_id, module, action, status, entity_type, entity_id, payload_snapshot)
+        VALUES (v_session.organization_id, 'voip', 'webhook_sessao_falhou', 'error',
+                'voip_session', v_session.id,
+                jsonb_build_object('tc_session_id', p_sid, 'status_anterior', v_session.status,
+                                   'status_novo', v_next,
+                                   'motivo', 'ConnectFailure/StreamReplaced na VPS — exige repareamento',
+                                   'seq_epoch', p_epoch, 'seq', p_seq));
+      ELSIF v_state = 'connecting' THEN
+        INSERT INTO public.runtime_logs
+          (organization_id, module, action, status, entity_type, entity_id, payload_snapshot)
+        VALUES (v_session.organization_id, 'voip', 'webhook_sessao_reconectando', 'success',
+                'voip_session', v_session.id,
+                jsonb_build_object('tc_session_id', p_sid, 'status_anterior', v_session.status,
+                                   'status_novo', v_next,
+                                   'motivo', 'Disconnected na VPS — chamada suspensa até voltar open',
+                                   'seq_epoch', p_epoch, 'seq', p_seq));
+      END IF;
     END IF;
 
     RETURN jsonb_build_object('ok', true, 'code', 'applied',
@@ -352,13 +445,12 @@ BEGIN
                                   'detail', 'call_already_terminal');
       END IF;
 
-      v_ts := CASE
-        WHEN jsonb_typeof(p_payload->'startedAt') = 'number'
-         AND to_timestamp((p_payload->>'startedAt')::numeric / 1000.0)
-             BETWEEN now() - c_ts_past AND now() + c_ts_future
-        THEN to_timestamp((p_payload->>'startedAt')::numeric / 1000.0)
-        ELSE now()
-      END;
+      -- Faixa testada em milissegundos, ANTES de to_timestamp. Ver o bloco
+      -- "CARIMBO DA VPS" no topo do corpo.
+      v_ms := CASE WHEN jsonb_typeof(p_payload->'startedAt') = 'number'
+                   THEN (p_payload->>'startedAt')::numeric ELSE NULL END;
+      v_ts := CASE WHEN v_ms IS NOT NULL AND v_ms BETWEEN v_ms_min AND v_ms_max
+                   THEN to_timestamp(v_ms / 1000.0) ELSE now() END;
 
       -- A fase só anda para frente. Um `ringing` atrasado depois do `connected`
       -- rebaixaria o status e o varredor voltaria a mirar a linha (2 min contra
@@ -471,13 +563,12 @@ BEGIN
       v_reason := 'unknown';
     END IF;
 
-    v_ts := CASE
-      WHEN jsonb_typeof(p_payload->'endedAt') = 'number'
-       AND to_timestamp((p_payload->>'endedAt')::numeric / 1000.0)
-           BETWEEN now() - c_ts_past AND now() + c_ts_future
-      THEN to_timestamp((p_payload->>'endedAt')::numeric / 1000.0)
-      ELSE now()
-    END;
+    -- Faixa testada em milissegundos, ANTES de to_timestamp. Ver o bloco
+    -- "CARIMBO DA VPS" no topo do corpo.
+    v_ms := CASE WHEN jsonb_typeof(p_payload->'endedAt') = 'number'
+                 THEN (p_payload->>'endedAt')::numeric ELSE NULL END;
+    v_ts := CASE WHEN v_ms IS NOT NULL AND v_ms BETWEEN v_ms_min AND v_ms_max
+                 THEN to_timestamp(v_ms / 1000.0) ELSE now() END;
 
     IF v_call.status NOT IN ('ended','expired') THEN
       UPDATE public.voip_calls

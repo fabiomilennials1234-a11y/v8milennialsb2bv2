@@ -19,7 +19,19 @@ CREATE EXTENSION IF NOT EXISTS pgtap;
 --     restart, e é o ponto inteiro de existir epoch. Comparar só `seq` faria o
 --     CRM descartar tudo depois de um restart.
 --
---  3. A CORRIDA COM O VARREDOR, que é REAL: `voip-sweep-stuck-calls` fecha
+--  3. OS CINCO ESTADOS DE SESSÃO, não três. A VPS emite `connecting`
+--     (session.go:170) e `failed` (session.go:190/192) além de
+--     `qr`/`open`/`logged_out`, e o broker manda os dois ao CRM sem filtro
+--     (broker.go:230). Descartar `failed` é o pior caso: é o sinal de sessão
+--     morta, e o CRM seguiria marcando a sessão como `open` — a divergência de
+--     estado que o S11 existe para acabar.
+--
+--  4. CARIMBO DE TEMPO DA VPS. `to_timestamp` LEVANTA para valor fora da faixa
+--     do tipo, e a exceção aborta a transação inteira antes de o jti ser
+--     reservado. A faixa tem que ser testada em milissegundos, antes de
+--     converter.
+--
+--  5. A CORRIDA COM O VARREDOR, que é REAL: `voip-sweep-stuck-calls` fecha
 --     `ringing` parado há mais de 2 minutos com `end_reason =
 --     'no_terminal_event'` — 4 das 7 chamadas de produção hoje foram fechadas
 --     por ele. Um `connected` entregue depois encontra a linha já `ended`.
@@ -27,7 +39,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap;
 --     quem fechou foi o OPERADOR. E só é possível quando o operador não tem
 --     outra chamada viva, porque `idx_voip_calls_one_live_per_operator` é
 --     UNIQUE parcial e a escrita estouraria.
-SELECT plan(48);
+SELECT plan(64);
 
 -- ===========================================================================
 -- ESTRUTURA
@@ -151,7 +163,18 @@ VALUES
   ('b1111111-1111-1111-1111-111111111111', 'b2222222-2222-2222-2222-222222222222',
    'sess-wh-user',  'fechada pelo operador',       'open'),
   ('b1111111-1111-1111-1111-111111111111', 'b2222222-2222-2222-2222-222222222222',
-   'sess-wh-busy',  'operador já ocupado',         'open');
+   'sess-wh-busy',  'operador já ocupado',         'open'),
+  -- A célula `closed` + `open` é nomeada pelo brief e não tinha teste: trocar o
+  -- NULL por 'open' naquela linha deixava a suíte inteira verde.
+  ('b1111111-1111-1111-1111-111111111111', 'b2222222-2222-2222-2222-222222222222',
+   'sess-wh-closed', 'sessão encerrada',           'closed'),
+  -- Os dois estados que a VPS emite e que o brief original não listava.
+  ('b1111111-1111-1111-1111-111111111111', 'b2222222-2222-2222-2222-222222222222',
+   'sess-wh-conn',  'reconectando (transitório)',  'open'),
+  ('b1111111-1111-1111-1111-111111111111', 'b2222222-2222-2222-2222-222222222222',
+   'sess-wh-fail',  'falha terminal',              'open'),
+  ('b1111111-1111-1111-1111-111111111111', 'b2222222-2222-2222-2222-222222222222',
+   'sess-wh-ts',    'carimbo fora de faixa',       'open');
 
 -- De volta ao runtime real ANTES das asserções: o que se mede tem que ser o
 -- comportamento com triggers ligados. voip_calls não tem trigger não-interno
@@ -197,7 +220,19 @@ VALUES
   ('c0000001-0000-0000-0000-000000000006', 'b1111111-1111-1111-1111-111111111111',
    'sess-wh-busy', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA06', 'b0000001-0000-0000-0000-000000000002',
    '5548991005289', 'outbound', 'connected', NULL,
-   now() - interval '1 minute', now() - interval '1 minute', now() - interval '50 seconds', NULL);
+   now() - interval '1 minute', now() - interval '1 minute', now() - interval '50 seconds', NULL),
+
+  -- Alvos do carimbo fora de faixa: uma recebe endedAt em NANOssegundos, a outra
+  -- startedAt absurdamente negativo.
+  ('c0000001-0000-0000-0000-000000000007', 'b1111111-1111-1111-1111-111111111111',
+   'sess-wh-ts', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA07', NULL,
+   '5548991005289', 'outbound', 'ringing', NULL,
+   now() - interval '30 seconds', now() - interval '28 seconds', NULL, NULL),
+
+  ('c0000001-0000-0000-0000-000000000008', 'b1111111-1111-1111-1111-111111111111',
+   'sess-wh-ts', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA08', NULL,
+   '5548991005289', 'outbound', 'authorized', NULL,
+   now() - interval '10 seconds', NULL, NULL, NULL);
 
 -- ===========================================================================
 -- EXECUÇÃO
@@ -257,6 +292,65 @@ INSERT INTO ev VALUES ('qr_em_open_estado', (
   SELECT jsonb_build_object('status', s.status)
     FROM public.voip_sessions s WHERE s.tc_session_id = 'sess-wh-auth'));
 
+-- --- a célula `closed` + `open` (sess-wh-closed) ---------------------------
+-- Reabrir exige parear de novo, e o pareamento passa por `qr`.
+INSERT INTO ev VALUES ('closed_open', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000014', 'sess-wh-closed', 1, 1, now(),
+  '{"type":"auth-state","sessionId":"sess-wh-closed","paired":true,"state":"open"}'::jsonb));
+
+INSERT INTO ev VALUES ('closed_open_estado', (
+  SELECT jsonb_build_object('status', s.status)
+    FROM public.voip_sessions s WHERE s.tc_session_id = 'sess-wh-closed'));
+
+-- `connecting` também não é caminho de volta de sessão encerrada.
+INSERT INTO ev VALUES ('closed_connecting', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000015', 'sess-wh-closed', 1, 2, now(),
+  '{"type":"auth-state","sessionId":"sess-wh-closed","paired":false,"state":"connecting"}'::jsonb));
+
+INSERT INTO ev VALUES ('closed_connecting_estado', (
+  SELECT jsonb_build_object('status', s.status)
+    FROM public.voip_sessions s WHERE s.tc_session_id = 'sess-wh-closed'));
+
+-- --- `connecting`: transitório, mas tem que tirar a sessão de `open` -------
+-- session.go:170 emite isto em events.Disconnected. O comentário do Go
+-- (session.go:166) diz por quê: sem sair de `open`, "o CRM continuaria
+-- autorizando chamada para um número desconectado".
+INSERT INTO ev VALUES ('connecting', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000016', 'sess-wh-conn', 1, 1, now(),
+  '{"type":"auth-state","sessionId":"sess-wh-conn","paired":false,"state":"connecting"}'::jsonb));
+
+INSERT INTO ev VALUES ('connecting_estado', (
+  SELECT jsonb_build_object('status', s.status)
+    FROM public.voip_sessions s WHERE s.tc_session_id = 'sess-wh-conn'));
+
+-- Segundo `connecting` seguido: no-op silencioso. Uma rede que pisca não pode
+-- virar enxurrada em runtime_logs.
+INSERT INTO ev VALUES ('connecting_repetido', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000017', 'sess-wh-conn', 1, 2, now(),
+  '{"type":"auth-state","sessionId":"sess-wh-conn","paired":false,"state":"connecting"}'::jsonb));
+
+INSERT INTO ev VALUES ('connecting_repetido_estado', (
+  SELECT jsonb_build_object(
+           'status', (SELECT s.status FROM public.voip_sessions s
+                       WHERE s.tc_session_id = 'sess-wh-conn'),
+           'logs',   (SELECT count(*) FROM public.runtime_logs l
+                       WHERE l.module = 'voip'
+                         AND l.action = 'webhook_sessao_reconectando'
+                         AND l.entity_id = (SELECT s.id FROM public.voip_sessions s
+                                             WHERE s.tc_session_id = 'sess-wh-conn')))));
+
+-- --- `failed`: terminal, exige repareamento --------------------------------
+-- session.go:190/192, de ConnectFailure e StreamReplaced. `closed` é o ÚNICO
+-- estado que faz TorqueCallsSettings.tsx oferecer "Ativar voz" (o repareamento)
+-- e devolver a vaga do teto.
+INSERT INTO ev VALUES ('failed', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000018', 'sess-wh-fail', 1, 1, now(),
+  '{"type":"auth-state","sessionId":"sess-wh-fail","paired":false,"state":"failed"}'::jsonb));
+
+INSERT INTO ev VALUES ('failed_estado', (
+  SELECT jsonb_build_object('status', s.status)
+    FROM public.voip_sessions s WHERE s.tc_session_id = 'sess-wh-fail'));
+
 -- --- ciclo de vida da chamada (sess-wh-call) -------------------------------
 INSERT INTO ev VALUES ('connected', public.fn_voip_apply_vps_event(
   'e0000000-0000-0000-0000-000000000020', 'sess-wh-call', 1, 1, now(),
@@ -287,6 +381,31 @@ INSERT INTO ev VALUES ('motivo_forjado', public.fn_voip_apply_vps_event(
 INSERT INTO ev VALUES ('motivo_forjado_linha', (
   SELECT to_jsonb(c) FROM public.voip_calls c
    WHERE c.tc_call_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA02'));
+
+-- --- carimbo de tempo fora de faixa (sess-wh-ts) ---------------------------
+-- 1753900000000000000 é o que sai de trocar UnixMilli() por UnixNano() no Go:
+-- erro de unidade de UMA linha. Convertido cru, to_timestamp levanta 22008
+-- (`timestamp out of range`), a transação inteira aborta, o jti NÃO chega a ser
+-- reservado e a entrega vira 500 — o guard de faixa falhava aberto exatamente
+-- nos extremos que ele existe para rejeitar.
+INSERT INTO ev VALUES ('ts_nanos', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000040', 'sess-wh-ts', 1, 1, now(),
+  '{"type":"call-ended","sessionId":"sess-wh-ts","id":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA07",
+    "reason":"user_ended","endedAt":1753900000000000000}'::jsonb));
+
+INSERT INTO ev VALUES ('ts_nanos_linha', (
+  SELECT to_jsonb(c) FROM public.voip_calls c
+   WHERE c.tc_call_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA07'));
+
+INSERT INTO ev VALUES ('ts_negativo', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000041', 'sess-wh-ts', 1, 2, now(),
+  '{"type":"call-status","sessionId":"sess-wh-ts","id":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA08",
+    "status":"ringing","direction":"inbound","peer":"5548991005289",
+    "startedAt":-999999999999999999}'::jsonb));
+
+INSERT INTO ev VALUES ('ts_negativo_linha', (
+  SELECT to_jsonb(c) FROM public.voip_calls c
+   WHERE c.tc_call_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA08'));
 
 -- --- a corrida com o varredor ---------------------------------------------
 INSERT INTO ev VALUES ('ressuscita', public.fn_voip_apply_vps_event(
@@ -354,6 +473,84 @@ SELECT is((SELECT r->>'code' FROM ev WHERE nome = 'qr_em_open'), 'transition_ref
 
 SELECT is((SELECT r->>'status' FROM ev WHERE nome = 'qr_em_open_estado'), 'open',
   'a recusa do qr deixa a sessão open intacta');
+
+-- --- a célula que faltava e os dois estados que o brief não listava --------
+
+SELECT is((SELECT r->>'code' FROM ev WHERE nome = 'closed_open'), 'transition_refused',
+  'auth-state open numa sessão closed é recusado — reabrir passa por qr');
+
+SELECT is((SELECT r->>'status' FROM ev WHERE nome = 'closed_open_estado'), 'closed',
+  'a recusa deixa a sessão closed intacta');
+
+SELECT is((SELECT r->>'code' FROM ev WHERE nome = 'closed_connecting'), 'transition_refused',
+  'connecting numa sessão closed é recusado — não é caminho de volta');
+
+SELECT is((SELECT r->>'status' FROM ev WHERE nome = 'closed_connecting_estado'), 'closed',
+  'e a sessão segue closed');
+
+SELECT is((SELECT r->>'code' FROM ev WHERE nome = 'connecting'), 'applied',
+  'auth-state connecting é aplicado, não recusado com unknown_state');
+
+-- O ponto INTEIRO de o Go emitir connecting: tirar a sessão de `open` para
+-- fn_voip_call_reserve parar de autorizar chamada para um número desconectado.
+SELECT is((SELECT r->>'status' FROM ev WHERE nome = 'connecting_estado'), 'pending',
+  'connecting tira a sessão de open (vira pending) — deixa de ser chamável');
+
+SELECT ok(
+  EXISTS (SELECT 1 FROM public.runtime_logs l
+           WHERE l.module = 'voip'
+             AND l.action = 'webhook_sessao_reconectando'
+             AND l.entity_type = 'voip_session'),
+  'a suspensão por connecting deixa rastro em runtime_logs');
+
+SELECT ok(
+  (SELECT r->>'status' = 'pending' AND (r->>'logs')::int = 1
+     FROM ev WHERE nome = 'connecting_repetido_estado'),
+  'connecting repetido é no-op silencioso — rede que pisca não vira enxurrada de log');
+
+SELECT is((SELECT r->>'code' FROM ev WHERE nome = 'failed'), 'applied',
+  'auth-state failed é aplicado — é o sinal de sessão morta, não pode ser descartado');
+
+-- `closed` é o único valor que faz TorqueCallsSettings.tsx trocar
+-- "Aguardando confirmação" por "Ativar voz" e devolver a vaga do teto.
+SELECT is((SELECT r->>'status' FROM ev WHERE nome = 'failed_estado'), 'closed',
+  'failed leva a sessão a closed — o estado em que a tela oferece repareamento');
+
+SELECT ok(
+  EXISTS (SELECT 1 FROM public.runtime_logs l
+           WHERE l.module = 'voip'
+             AND l.action = 'webhook_sessao_falhou'
+             AND l.status = 'error'
+             AND l.entity_type = 'voip_session'),
+  'failed deixa rastro próprio — a distinção que o Go faz contra logged_out não se perde');
+
+-- --- carimbo fora de faixa ------------------------------------------------
+
+SELECT is((SELECT r->>'code' FROM ev WHERE nome = 'ts_nanos'), 'applied',
+  'endedAt em NANOssegundos não estoura a transação');
+
+SELECT ok(
+  (SELECT (r->>'ended_at')::timestamptz > now() - interval '1 minute'
+      AND (r->>'ended_at')::timestamptz <= now()
+      AND r->>'status' = 'ended'
+     FROM ev WHERE nome = 'ts_nanos_linha'),
+  'carimbo fora de faixa cai para o relógio do CRM, e a linha fecha assim mesmo');
+
+-- A prova de que a transação SOBREVIVEU: com o guard falhando aberto, o 22008
+-- abortava tudo e esta linha não existia.
+SELECT ok(
+  EXISTS (SELECT 1 FROM public.voip_webhook_events
+           WHERE event_jti = 'e0000000-0000-0000-0000-000000000040'),
+  'o jti do evento com carimbo absurdo foi reservado — nada abortou');
+
+SELECT is((SELECT r->>'code' FROM ev WHERE nome = 'ts_negativo'), 'applied',
+  'startedAt absurdamente negativo não estoura a transação');
+
+SELECT ok(
+  (SELECT (r->>'ringing_at')::timestamptz > now() - interval '1 minute'
+      AND r->>'status' = 'ringing'
+     FROM ev WHERE nome = 'ts_negativo_linha'),
+  'o ringing_at gravado é o relógio do CRM, não lixo do outro lado');
 
 SELECT is((SELECT r->>'code' FROM ev WHERE nome = 'connected'), 'applied',
   'call-status connected é aplicado');
