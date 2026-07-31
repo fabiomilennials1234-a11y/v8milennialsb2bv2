@@ -306,12 +306,66 @@ Deno.test("admin alcança lead de qualquer um da org", async () => {
   assert(res.ok, `admin deveria passar, veio ${JSON.stringify(res)}`);
 });
 
-Deno.test("nega sem consentimento de voz", async () => {
+// Desde 2026-07-31, por decisão do CTO, o padrão é assumir todo lead
+// consentido: `organizations.require_voice_consent` nasce `false`. A trava não
+// foi apagada — os dois testes seguintes provam os DOIS lados, e é isso que
+// impede a decisão de virar remoção silenciosa da proteção.
+Deno.test("sem a exigência ligada, autoriza mesmo sem consentimento nenhum", async () => {
   await setupSigningKey();
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
       leads: ownedLead,
+      organizations: () => ({ require_voice_consent: false }),
+      consent_records: () => null,
+      ...permissiveEngine,
+    },
+    rpc: okReserve,
+  });
+
+  const res = await authorizeCallAndMint(memberCaller(), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    direction: "outbound",
+    leadId: LEAD,
+  });
+
+  assert(res.ok, `deveria autorizar, veio ${JSON.stringify(res)}`);
+});
+
+Deno.test("org sem linha legível NÃO vira trava silenciosa", async () => {
+  await setupSigningKey();
+  // Ausência resolve para "não exige" — mesmo default da coluna. Se isto
+  // invertesse, uma leitura falha derrubaria a voz da organização inteira sem
+  // que ninguém soubesse por quê.
+  const db = stubClient({
+    tables: {
+      voip_sessions: openSession,
+      leads: ownedLead,
+      organizations: () => null,
+      consent_records: () => null,
+      ...permissiveEngine,
+    },
+    rpc: okReserve,
+  });
+
+  const res = await authorizeCallAndMint(memberCaller(), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    direction: "outbound",
+    leadId: LEAD,
+  });
+
+  assert(res.ok, `ausência de linha deveria liberar, veio ${JSON.stringify(res)}`);
+});
+
+Deno.test("com a exigência LIGADA, nega sem consentimento de voz", async () => {
+  await setupSigningKey();
+  const db = stubClient({
+    tables: {
+      voip_sessions: openSession,
+      leads: ownedLead,
+      organizations: () => ({ require_voice_consent: true }),
       consent_records: () => null,
       ...permissiveEngine,
     },
@@ -329,15 +383,18 @@ Deno.test("nega sem consentimento de voz", async () => {
   assertEquals(res.code, "consent_missing");
 });
 
-Deno.test("consentimento com source='manual' não conta", async () => {
+Deno.test("com a exigência ligada, consentimento com source='manual' não conta", async () => {
   await setupSigningKey();
 
   // A tabela devolve a linha SÓ quando o filtro de source inclui 'manual' —
-  // isto é, o teste falha se o choke parar de restringir a origem.
+  // isto é, o teste falha se o choke parar de restringir a origem. Continua
+  // valendo para quem liga a exigência: 'manual' é o vendedor afirmando o
+  // consentimento do lead, o que não é consentimento.
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
       leads: ownedLead,
+      organizations: () => ({ require_voice_consent: true }),
       consent_records: (f) =>
         Array.isArray(f.source) && (f.source as string[]).includes("manual")
           ? { id: "consent-manual" }
