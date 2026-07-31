@@ -67,6 +67,10 @@ console.log(ciano(`→ arquivo: ${arquivo} (${sql.split(/\r?\n/).length} linhas)
 
 const client = new pg.Client({ connectionString: dbUrl, ssl: { rejectUnauthorized: false } });
 
+// Um seed que faz RAISE NOTICE para relatar o que construiu ficava mudo aqui, e
+// mudo é indistinguível de não ter rodado. Descoberto com supabase/qa-seed/m4-fixture.sql.
+client.on("notice", (n) => console.log(`   ${n.message}`));
+
 try {
   await client.connect();
   // Sem parâmetros → protocolo simples → múltiplos comandos permitidos.
