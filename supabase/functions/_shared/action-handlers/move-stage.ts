@@ -4,6 +4,54 @@ import type { PipeSlug } from "../pipeline-adapter.ts";
 
 const STANDARD_PIPES = ["whatsapp", "confirmacao", "propostas", "upsell_base", "upsell_gestao", "campanha"];
 
+/** Teto de linhas lidas por `(pipeline_id, lead_id)` — espelha `PIPELINE_ENTRY_READ_CAP`. */
+const CUSTOM_PIPE_ENTRY_READ_CAP = 50;
+
+/**
+ * Lê TODAS as entries de `(pipeline_id, lead_id)` em `custom_pipe_entries` e
+ * devolve a corrente, tolerando N linhas.
+ *
+ * Este caminho é o do Copilot e dos workflows — roda sem ninguém olhando, o que
+ * torna o defeito pior aqui do que na UI. Antes do M1 o par era único; depois
+ * dele, `.maybeSingle()` com N linhas zera `data` e devolve PGRST116, o código
+ * lia "não existe" e INSERIA outra: duplicador determinístico, automático.
+ *
+ * Regra do corrente: primeiro ABERTO; se todos fechados, o mais recente — a mesma
+ * de `readActiveCustomPipeEntry` (`src/modules/pipelines/lib/stageTransition.ts`)
+ * e de `pickActiveEntry` (`../pipeline-adapter.ts`), de propósito: se o Copilot e
+ * o kanban discordarem sobre QUAL negócio é o corrente, a tela mostra um e a
+ * automação move outro.
+ *
+ * "Aberto" vem do papel da etapa: `custom_pipe_entries` não tem `closed_at`.
+ * Nunca mover um negócio GANHO para fora da etapa de ganho — é o que dispara
+ * `sale_reversed`, que é irreversível (decisão G do CTO).
+ */
+async function readActiveCustomPipeEntry(
+  supabase: ActionInput["supabase"],
+  pipelineId: string,
+  leadId: string,
+): Promise<{ id: string } | null> {
+  const { data, error } = await supabase
+    .from("custom_pipe_entries")
+    .select("id, stage:custom_pipeline_stages(stage_role)")
+    .eq("lead_id", leadId)
+    .eq("pipeline_id", pipelineId)
+    .order("stage_changed_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false, nullsFirst: false })
+    .order("id", { ascending: false })
+    .limit(CUSTOM_PIPE_ENTRY_READ_CAP);
+
+  // Falha de leitura NÃO pode virar "não existe": aqui isso criaria um negócio
+  // duplicado a cada erro transitório, sem ninguém para desfazer.
+  if (error) throw error;
+
+  const rows = (data ?? []) as Array<{ id: string; stage: { stage_role: string } | null }>;
+  const isClosed = (row: (typeof rows)[number]) =>
+    row.stage?.stage_role === "won" || row.stage?.stage_role === "lost";
+
+  return rows.find((row) => !isClosed(row)) ?? rows[0] ?? null;
+}
+
 export async function moveStage(input: ActionInput): Promise<ActionResult> {
   const { supabase, organizationId, leadId, params } = input;
 
@@ -93,12 +141,7 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
         return { success: false, error: `Etapa customizada ${targetStage} não encontrada no pipeline ${customPipelineId}` };
       }
 
-      const { data: existingEntry } = await supabase
-        .from("custom_pipe_entries")
-        .select("id")
-        .eq("lead_id", leadId)
-        .eq("pipeline_id", customPipelineId)
-        .maybeSingle();
+      const existingEntry = await readActiveCustomPipeEntry(supabase, customPipelineId, leadId);
 
       const now = new Date().toISOString();
       if (existingEntry) {
@@ -120,9 +163,11 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
       // Auto-transition on is_final_positive
       if (stageRow.is_final_positive) {
         if (stageRow.target_pipeline_id && stageRow.target_stage_id) {
-          const { data: targetEntry } = await supabase
-            .from("custom_pipe_entries").select("id")
-            .eq("lead_id", leadId).eq("pipeline_id", stageRow.target_pipeline_id).maybeSingle();
+          const targetEntry = await readActiveCustomPipeEntry(
+            supabase,
+            stageRow.target_pipeline_id,
+            leadId,
+          );
           if (targetEntry) {
             await supabase.from("custom_pipe_entries")
               .update({ stage_id: stageRow.target_stage_id, stage_changed_at: now })

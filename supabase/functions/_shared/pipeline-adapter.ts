@@ -151,7 +151,7 @@ async function readPipeEntries(
     .select("*")
     .eq("pipeline_id", pipelineId)
     .eq("lead_id", leadId)
-    .order("closed_at", { ascending: true, nullsFirst: true })
+    .order("closed_at", { ascending: false, nullsFirst: true })
     .order("stage_changed_at", { ascending: false })
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
@@ -247,6 +247,30 @@ export async function getPipeEntry(
   return pickActiveEntry(read.rows);
 }
 
+/**
+ * Versão em lote de `getPipeEntry`: devolve **no máximo uma entry por lead** —
+ * a mesma que `pickActiveEntry` escolheria (aberta > mais recente).
+ *
+ * **Por que achatar aqui, e não deixar para o chamador.** Os dois consumidores
+ * (`calculate-lead-score/index.ts:145-153` e
+ * `process-copilot-followups/index.ts:213-214`) já reduzem o array a um
+ * `Map<lead_id, entry>` — e faziam isso com regras OPOSTAS: o primeiro com
+ * `if (!map.has(id))` (primeiro da lista vence), o segundo com
+ * `new Map(rows.map(...))` (último da lista vence). Enquanto o unique garantia
+ * uma linha por `(pipeline_id, lead_id)` a divergência era invisível. Depois do
+ * M1, o mesmo lote passaria a fazer o score ler um negócio e o follow-up ler
+ * outro, nenhum dos dois necessariamente o corrente. Devolvendo já achatado,
+ * primeiro-vence e último-vence colapsam na MESMA linha — e é a mesma que
+ * `getPipeEntry` e `upsertPipeEntry` usam, que é o ponto: kanban, score,
+ * follow-up e Copilot têm de concordar sobre qual negócio é o corrente.
+ *
+ * O `ORDER BY` espelha `readPipeEntries` porque `pickActiveEntry` só implementa
+ * o passo 1 do critério — os desempates vêm da ordenação (ver o contrato lá).
+ *
+ * Sem `LIMIT` de propósito: o teto de `readPipeEntries` é por
+ * `(pipeline_id, lead_id)`; aqui um corte truncaria leads inteiros do lote, o
+ * que seria pior (dado faltando em silêncio) do que ler algumas linhas a mais.
+ */
 export async function getPipeEntriesByLeads(
   supabase: SupabaseClient,
   leadIds: string[],
@@ -262,13 +286,40 @@ export async function getPipeEntriesByLeads(
     .from("pipeline_entries")
     .select("*")
     .eq("pipeline_id", pipelineId)
-    .in("lead_id", leadIds);
+    .in("lead_id", leadIds)
+    .order("closed_at", { ascending: false, nullsFirst: true })
+    .order("stage_changed_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
 
   if (error) {
     console.warn("[pipeline-adapter] getPipeEntriesByLeads error:", error);
     return [];
   }
-  return (data || []) as PipelineEntry[];
+
+  // Agrupa preservando a ordem do SQL — `pickActiveEntry` depende dela.
+  const byLead = new Map<string, PipelineEntry[]>();
+  for (const row of (data || []) as PipelineEntry[]) {
+    const group = byLead.get(row.lead_id);
+    if (group) group.push(row);
+    else byLead.set(row.lead_id, [row]);
+  }
+
+  const picked: PipelineEntry[] = [];
+  let leadsComMaisDeUma = 0;
+  for (const group of byLead.values()) {
+    if (group.length > 1) leadsComMaisDeUma++;
+    const entry = pickActiveEntry(group);
+    if (entry) picked.push(entry);
+  }
+
+  if (leadsComMaisDeUma > 0) {
+    console.warn(
+      `[pipeline-adapter] getPipeEntriesByLeads: ${leadsComMaisDeUma} de ${byLead.size} lead(s) com mais de uma entry em pipeline=${pipelineId}; devolvendo a escolhida por pickActiveEntry (aberta > mais recente).`,
+    );
+  }
+
+  return picked;
 }
 
 export async function upsertPipeEntry(

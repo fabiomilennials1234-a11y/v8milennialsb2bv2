@@ -59,7 +59,7 @@ async function readActivePipelineEntry(pipelineId: string, leadId: string) {
     .select("*")
     .eq("pipeline_id", pipelineId)
     .eq("lead_id", leadId)
-    .order("closed_at", { ascending: true, nullsFirst: true })
+    .order("closed_at", { ascending: false, nullsFirst: true })
     .order("stage_changed_at", { ascending: false })
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
