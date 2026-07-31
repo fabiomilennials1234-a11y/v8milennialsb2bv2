@@ -283,6 +283,13 @@ verify_jwt = false
 [functions.torquecalls-signal]
 verify_jwt = false
 
+# torquecalls-webhook: quem chama é a VPS, não um navegador — não há JWT de
+# usuário para verificar. A autenticação é o envelope JWS assinado em Ed25519
+# pela VPS, conferido em _shared/voip/webhook-verify.ts ANTES de qualquer ida ao
+# banco. verify_jwt=true aqui recusaria 100% do tráfego legítimo.
+[functions.torquecalls-webhook]
+verify_jwt = false
+
 # sz-chat-webhook: recebe webhooks do SZChat (Fortics); autenticação via x-webhook-secret header
 [functions.sz-chat-webhook]
 verify_jwt = false

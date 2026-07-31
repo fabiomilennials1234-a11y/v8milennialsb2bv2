@@ -178,6 +178,14 @@ info "violações plantadas viveram só em $PLANT_DIR (removido na saída)"
 # 5. BARREIRA DE TIPO — `deno task test` roda com `--no-check`, então as
 #    asserções de `_shared/voip/types.test.ts` (o Caller é opaco; org e telefone
 #    não atravessam por parâmetro) só valem se alguém rodar o compilador. É aqui.
+#
+#    O sentido VPS → CRM (`webhook-verify.ts` e o endpoint que o consome) entrou
+#    nesta lista em 2026-07-31. Antes disso os dois rodavam em CI pelos testes,
+#    mas com `--no-check`: o compilador nunca os enxergava, e essa cegueira
+#    deixou passar um `TypeError` (`null.trim()` em requisição sem
+#    `Authorization`) onde o contrato manda 401 — a diferença entre "token ruim"
+#    e "configuração quebrada", que é justamente o que o verificador existe para
+#    preservar. Arquivo do voip fora do `deno check` é arquivo sem portão.
 # ---------------------------------------------------------------------------
 if command -v deno >/dev/null 2>&1; then
   # A saída do compilador é IMPRESSA em caso de falha. Engolir com >/dev/null
@@ -187,7 +195,11 @@ if command -v deno >/dev/null 2>&1; then
     _shared/voip/types.test.ts \
     _shared/voip/call-plane.ts \
     _shared/voip/caller.ts \
-    _shared/voip/internal/sign.ts 2>&1)" && CHECK_RC=0 || CHECK_RC=$?
+    _shared/voip/internal/sign.ts \
+    _shared/voip/webhook-verify.ts \
+    _shared/voip/webhook-verify.test.ts \
+    torquecalls-webhook/index.ts \
+    torquecalls-webhook/webhook-ingest.test.ts 2>&1)" && CHECK_RC=0 || CHECK_RC=$?
 
   if [ "$CHECK_RC" -eq 0 ]; then
     pass "barreiras de tipo do choke compilam (Caller opaco, org e peer fora do corpo)"
