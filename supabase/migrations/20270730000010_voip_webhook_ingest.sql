@@ -44,6 +44,31 @@
 -- O varredor recolhe `ringing` justamente porque tocar por 2 minutos já é
 -- anormal. Um `ringing` atrasado rearmaria a mesma armadilha sem provar que a
 -- chamada está viva. `connected` é a única afirmação inequívoca de vida.
+--
+-- A NUMERAÇÃO É ORDENADA; A ENTREGA NÃO É
+-- ----------------------------------------
+-- O Go cunha `(epoch, seq)` sob mutex, então a ordem de EMISSÃO é correta. Mas
+-- `webhookSender.send` despacha cada entrega num `go func()` próprio
+-- (webhook.go:74), por conexões distintas e sem fila: dois eventos emitidos com
+-- milissegundos de diferença chegam na ordem que a rede quiser. Descartar o
+-- evento de seq menor apagaria PARA SEMPRE o `connected` que chegasse depois do
+-- `ended` — e `connected_at` é a medição que esta fatia existe para preencher
+-- (hoje: 7 chamadas em produção, ZERO com carimbo).
+--
+-- A resposta tem duas metades, e as duas estão abaixo:
+--
+--   1. A marca d'água passa a ser POR ENTIDADE (seção 2). A maior parte da
+--      perda não era reordenação de verdade — era a chamada A sendo descartada
+--      por causa da chamada B, que divide a mesma sessão.
+--
+--   2. O que ainda perder a corrida contra a PRÓPRIA entidade cai na FAIXA
+--      TARDIA (seção 3.4) em vez de no lixo: não avança a marca d'água, NUNCA
+--      escreve `status` — retrocesso de estado segue barrado —, e só preenche o
+--      carimbo que está NULO e que só aquele evento carrega.
+--
+-- O anti-replay não é afrouxado por nada disso: a reserva do `jti` acontece
+-- ANTES do teste de ordem, então a faixa tardia roda no máximo UMA vez por
+-- envelope. Envelope repetido devolve `replay` e nunca chega lá.
 
 -- ===========================================================================
 -- 1. voip_webhook_events — a reserva do jti (anti-replay)
@@ -108,23 +133,55 @@ GRANT SELECT ON public.voip_webhook_events TO authenticated;
 GRANT ALL    ON public.voip_webhook_events TO service_role;
 
 -- ===========================================================================
--- 2. Marca d'água de ordem, por sessão
+-- 2. Marca d'água de ordem, POR ENTIDADE
 -- ===========================================================================
 --
 -- `epoch` sobe a cada restart da VPS; `seq` é monotônico dentro do epoch. Por
 -- isso EPOCH MAIOR COM SEQ MENOR É ACEITO — é exatamente o caso do restart, e é
 -- o ponto inteiro de existir epoch. Comparar só `seq` faria o CRM descartar
 -- todos os eventos após um restart até a VPS reemitir mais de `last_seq` eventos.
+--
+-- POR QUE POR ENTIDADE, E NÃO POR SESSÃO
+-- --------------------------------------
+-- O `(epoch, seq)` é cunhado por SESSÃO no Go (`seqKeeper.next`), mas os eventos
+-- descrevem entidades DIFERENTES: a sessão (`auth-state`) e cada chamada
+-- (`call-status`/`call-ended`). Uma sessão é uma instância de WhatsApp e serve a
+-- organização inteira — `idx_voip_calls_one_live_per_operator` limita UMA
+-- chamada viva por OPERADOR, não por sessão, então N chamadas simultâneas na
+-- mesma sessão é o caso NORMAL, não o excepcional.
+--
+-- Com uma marca d'água só, o evento da chamada A era descartado porque um
+-- evento da chamada B, com seq maior, tinha chegado antes. Isso não é "fora de
+-- ordem" — é interleaving, e não há nada de errado nele. Uma marca d'água por
+-- entidade compara apenas eventos que de fato se ordenam entre si, e encolhe a
+-- janela de reordenação real para os 3-4 eventos de UMA chamada
+-- (`starting` → `ringing` → `connected` → `call-ended`).
+--
+-- Consequência deliberada: `voip_sessions.last_seq*` passa a ser a marca d'água
+-- dos eventos DE SESSÃO apenas. Ela não é mais tocada por evento de chamada.
 
 ALTER TABLE public.voip_sessions ADD COLUMN IF NOT EXISTS last_seq_epoch bigint NOT NULL DEFAULT 0;
 ALTER TABLE public.voip_sessions ADD COLUMN IF NOT EXISTS last_seq       bigint NOT NULL DEFAULT 0;
+ALTER TABLE public.voip_calls    ADD COLUMN IF NOT EXISTS last_seq_epoch bigint NOT NULL DEFAULT 0;
+ALTER TABLE public.voip_calls    ADD COLUMN IF NOT EXISTS last_seq       bigint NOT NULL DEFAULT 0;
 
 COMMENT ON COLUMN public.voip_sessions.last_seq_epoch IS
-  'Epoch do último evento VPS→CRM aplicado nesta sessão. Sobe a cada restart da '
-  'VPS. Ordem = (last_seq_epoch, last_seq) lexicográfico.';
+  'Epoch do último evento DE SESSÃO (auth-state) VPS→CRM aplicado. Sobe a cada '
+  'restart da VPS. Ordem = (last_seq_epoch, last_seq) lexicográfico. Evento de '
+  'CHAMADA não move esta coluna — a marca d''água dele é a de voip_calls.';
 
 COMMENT ON COLUMN public.voip_sessions.last_seq IS
-  'Seq do último evento VPS→CRM aplicado nesta sessão, dentro do epoch corrente.';
+  'Seq do último evento DE SESSÃO VPS→CRM aplicado, dentro do epoch corrente.';
+
+COMMENT ON COLUMN public.voip_calls.last_seq_epoch IS
+  'Epoch do último evento VPS→CRM aplicado NESTA chamada. Separado da marca '
+  'd''água da sessão porque uma sessão carrega N chamadas simultâneas e um '
+  'contador só fazia a chamada B descartar os eventos da chamada A.';
+
+COMMENT ON COLUMN public.voip_calls.last_seq IS
+  'Seq do último evento VPS→CRM aplicado NESTA chamada, dentro do epoch '
+  'corrente. Evento que perde para esta marca d''água cai na faixa tardia de '
+  'fn_voip_apply_vps_event: preenche carimbo NULO, nunca muda status.';
 
 -- ===========================================================================
 -- 3. fn_voip_apply_vps_event — a aplicação
@@ -190,6 +247,10 @@ DECLARE
   v_tc_call text;
   v_reason  text;
   v_ts      timestamptz;
+
+  -- true quando o evento perdeu a corrida contra a marca d'água DA PRÓPRIA
+  -- entidade. Não é motivo para descartar: é motivo para entrar na faixa tardia.
+  v_late    boolean;
 
   -- A faixa aceitável em MILISSEGUNDOS, não em timestamptz. Ver o bloco de
   -- comentário em "Carimbo da VPS" mais abaixo: comparar depois de converter é
@@ -258,18 +319,6 @@ BEGIN
     RETURN jsonb_build_object('ok', true, 'code', 'replay');
   END IF;
 
-  -- Epoch maior com seq menor É ACEITO. Ver seção 2.
-  IF NOT (p_epoch > v_session.last_seq_epoch
-          OR (p_epoch = v_session.last_seq_epoch AND p_seq > v_session.last_seq)) THEN
-    RETURN jsonb_build_object('ok', true, 'code', 'out_of_order');
-  END IF;
-
-  UPDATE public.voip_sessions
-     SET last_seq_epoch = p_epoch,
-         last_seq       = p_seq,
-         updated_at     = now()
-   WHERE id = v_session.id;
-
   -- =========================================================================
   -- auth-state
   -- =========================================================================
@@ -317,6 +366,27 @@ BEGIN
   --     `runtime_logs` — em vez de num valor de status que a tela não sabe
   --     renderizar diferente.
   IF v_type = 'auth-state' THEN
+    -- Ordem contra a marca d'água DA SESSÃO. Epoch maior com seq menor É
+    -- ACEITO — ver seção 2.
+    --
+    -- NÃO há faixa tardia para `auth-state`, e é decisão: o payload de sessão
+    -- não carrega carimbo nenhum que só ele traga. A única coisa que ele
+    -- afirma é o `state`, e aplicar um `state` velho É o retrocesso de estado —
+    -- exatamente o que a marca d'água existe para barrar (`open` já aplicado e
+    -- um `connecting` atrasado rebaixaria a sessão para `pending`, cortando
+    -- chamada de uma sessão viva).
+    IF NOT (p_epoch > v_session.last_seq_epoch
+            OR (p_epoch = v_session.last_seq_epoch AND p_seq > v_session.last_seq)) THEN
+      RETURN jsonb_build_object('ok', true, 'code', 'out_of_order',
+                                'detail', 'session_watermark');
+    END IF;
+
+    UPDATE public.voip_sessions
+       SET last_seq_epoch = p_epoch,
+           last_seq       = p_seq,
+           updated_at     = now()
+     WHERE id = v_session.id;
+
     v_state := p_payload->>'state';
 
     v_next := CASE v_session.status
@@ -424,6 +494,154 @@ BEGIN
       RETURN jsonb_build_object('ok', true, 'code', 'applied',
                                 'detail', 'call_not_found');
     END IF;
+
+    -- Ordem contra a marca d'água DESTA CHAMADA. Ver seção 2.
+    v_late := NOT (p_epoch > v_call.last_seq_epoch
+                   OR (p_epoch = v_call.last_seq_epoch AND p_seq > v_call.last_seq));
+
+    IF NOT v_late THEN
+      -- Só `updated_at` fica de fora: bump de marca d'água não é mudança de
+      -- estado, e quem lê `updated_at` está perguntando quando a chamada mudou.
+      UPDATE public.voip_calls
+         SET last_seq_epoch = p_epoch,
+             last_seq       = p_seq
+       WHERE id = v_call.id;
+    END IF;
+  END IF;
+
+  -- =========================================================================
+  -- 3.4 FAIXA TARDIA — o evento que perdeu a corrida contra a própria chamada
+  -- =========================================================================
+  --
+  -- Só se chega aqui com a marca d'água por entidade já aplicada, então isto é
+  -- reordenação DE VERDADE: dois eventos da MESMA chamada trocaram de lugar na
+  -- rede. O caso que importa é `connected` (seq menor) chegando depois de
+  -- `call-ended` (seq maior) — provado em banco, e o resultado antigo era
+  -- `connected_at` NULO para sempre.
+  --
+  -- AS TRÊS REGRAS DESTA FAIXA, e nenhuma delas é negociável:
+  --
+  --   1. NÃO avança a marca d'água. O evento atrasado não pode fazer o evento
+  --      corrente parecer velho.
+  --   2. NUNCA escreve `status` nem ressuscita. Retrocesso de estado continua
+  --      barrado — quem fechou a linha foi um evento AUTORITATIVO da VPS com
+  --      seq maior, não o chute do varredor. (A ressurreição do varredor segue
+  --      no caminho normal: o varredor não move marca d'água nenhuma, então o
+  --      `connected` atrasado dele chega EM ORDEM e cai no ramo de sempre.)
+  --   3. Só preenche o que está NULO e que só aquele evento carrega. Nada de
+  --      sobrescrever informação que já chegou.
+  --
+  -- `end_reason` é a única exceção à regra 3, e é a mesma exceção que o caminho
+  -- normal já abre em `sweeper_reason_corrected`: um motivo VERDADEIRO substitui
+  -- um marcador de ignorância (`unknown`/`no_terminal_event`), nunca uma causa
+  -- de verdade.
+  --
+  -- Deixa rastro SEMPRE, pela mesma razão que a ressurreição deixa: entrega
+  -- fora de ordem é um fato operacional sobre a rede entre a VPS e o CRM, e o
+  -- endpoint não registra `applied`.
+  IF v_late THEN
+    IF v_type = 'call-status' THEN
+      v_status := p_payload->>'status';
+
+      IF v_status = 'connected' AND v_call.connected_at IS NULL THEN
+        -- O payload de `call-status` NÃO carrega `connectedAt` (broker.go:323),
+        -- então o instante de recepção é a única estimativa disponível — e num
+        -- evento atrasado ela é grosseira POR CIMA. `ended_at` é o teto duro:
+        -- sem o LEAST, `connected_at > ended_at` produzia duração NEGATIVA
+        -- (medido: -00:00:01.999797). LEAST ignora NULL, então chamada ainda
+        -- aberta usa now() puro.
+        UPDATE public.voip_calls
+           SET connected_at = LEAST(now(), v_call.ended_at),
+               updated_at   = now()
+         WHERE id = v_call.id;
+
+        INSERT INTO public.runtime_logs
+          (organization_id, module, action, status, entity_type, entity_id, payload_snapshot)
+        VALUES (v_call.organization_id, 'voip', 'webhook_carimbo_tardio', 'success',
+                'voip_call', v_call.id,
+                jsonb_build_object('tc_session_id', p_sid, 'tc_call_id', v_tc_call,
+                                   'carimbo', 'connected_at',
+                                   'motivo', 'connected entregue DEPOIS de evento com seq maior',
+                                   'status_da_linha', v_call.status,
+                                   'seq_epoch', p_epoch, 'seq', p_seq,
+                                   'marca_epoch', v_call.last_seq_epoch,
+                                   'marca_seq', v_call.last_seq));
+
+        RETURN jsonb_build_object('ok', true, 'code', 'applied',
+                                  'detail', 'late_connected_at');
+      END IF;
+
+      IF v_status = 'ringing' AND v_call.ringing_at IS NULL THEN
+        -- Aqui existe carimbo próprio no payload (`startedAt`), e ele é melhor
+        -- que now(). Mesma faixa em milissegundos do caminho normal.
+        v_ms := CASE WHEN jsonb_typeof(p_payload->'startedAt') = 'number'
+                     THEN (p_payload->>'startedAt')::numeric ELSE NULL END;
+        v_ts := CASE WHEN v_ms IS NOT NULL AND v_ms BETWEEN v_ms_min AND v_ms_max
+                     THEN to_timestamp(v_ms / 1000.0) ELSE now() END;
+
+        UPDATE public.voip_calls
+           SET ringing_at = LEAST(v_ts, v_call.connected_at, v_call.ended_at),
+               updated_at = now()
+         WHERE id = v_call.id;
+
+        INSERT INTO public.runtime_logs
+          (organization_id, module, action, status, entity_type, entity_id, payload_snapshot)
+        VALUES (v_call.organization_id, 'voip', 'webhook_carimbo_tardio', 'success',
+                'voip_call', v_call.id,
+                jsonb_build_object('tc_session_id', p_sid, 'tc_call_id', v_tc_call,
+                                   'carimbo', 'ringing_at',
+                                   'status_da_linha', v_call.status,
+                                   'seq_epoch', p_epoch, 'seq', p_seq));
+
+        RETURN jsonb_build_object('ok', true, 'code', 'applied',
+                                  'detail', 'late_ringing_at');
+      END IF;
+    END IF;
+
+    IF v_type = 'call-ended' THEN
+      v_reason := COALESCE(NULLIF(p_payload->>'reason', ''), 'unknown');
+      IF NOT (v_reason = ANY (c_end_reasons)) THEN
+        v_reason := 'unknown';
+      END IF;
+
+      v_ms := CASE WHEN jsonb_typeof(p_payload->'endedAt') = 'number'
+                   THEN (p_payload->>'endedAt')::numeric ELSE NULL END;
+      v_ts := CASE WHEN v_ms IS NOT NULL AND v_ms BETWEEN v_ms_min AND v_ms_max
+                   THEN to_timestamp(v_ms / 1000.0) ELSE now() END;
+
+      -- Alcançável quando a VPS emite `call-status status=ended` (seq maior) e
+      -- o `call-ended` que traz a CAUSA chega depois. Sem isto o ledger ficaria
+      -- com `unknown` tendo a causa verdadeira em mãos.
+      IF v_call.ended_at IS NULL
+         OR v_call.end_reason IS NULL
+         OR v_call.end_reason IN ('unknown', 'no_terminal_event') THEN
+        UPDATE public.voip_calls
+           SET ended_at   = COALESCE(v_call.ended_at,
+                                     GREATEST(v_ts, v_call.connected_at)),
+               end_reason = CASE WHEN v_call.end_reason IS NULL
+                                   OR v_call.end_reason IN ('unknown', 'no_terminal_event')
+                                 THEN v_reason ELSE v_call.end_reason END,
+               updated_at = now()
+         WHERE id = v_call.id;
+
+        INSERT INTO public.runtime_logs
+          (organization_id, module, action, status, entity_type, entity_id, payload_snapshot)
+        VALUES (v_call.organization_id, 'voip', 'webhook_carimbo_tardio', 'success',
+                'voip_call', v_call.id,
+                jsonb_build_object('tc_session_id', p_sid, 'tc_call_id', v_tc_call,
+                                   'carimbo', 'end_reason',
+                                   'motivo_anterior', v_call.end_reason,
+                                   'motivo_novo', v_reason,
+                                   'seq_epoch', p_epoch, 'seq', p_seq));
+
+        RETURN jsonb_build_object('ok', true, 'code', 'applied',
+                                  'detail', 'late_end_stamp', 'end_reason', v_reason);
+      END IF;
+    END IF;
+
+    -- Atrasado e sem nada que só ele carregue: o desfecho de sempre.
+    RETURN jsonb_build_object('ok', true, 'code', 'out_of_order',
+                              'detail', 'call_watermark');
   END IF;
 
   -- =========================================================================
@@ -570,10 +788,18 @@ BEGIN
     v_ts := CASE WHEN v_ms IS NOT NULL AND v_ms BETWEEN v_ms_min AND v_ms_max
                  THEN to_timestamp(v_ms / 1000.0) ELSE now() END;
 
+    -- GREATEST com connected_at: `ended_at` vem do relógio da VPS (`endedAt` no
+    -- payload) e `connected_at` do relógio do CRM (o instante de recepção — o
+    -- payload de `call-status` não traz carimbo). Dois relógios diferentes no
+    -- MESMO cálculo de duração é como nasce chamada com duração negativa, e não
+    -- precisa de relógio errado para acontecer: basta a entrega do `connected`
+    -- demorar mais que a própria chamada durou (cold start do isolate). Medido
+    -- em banco antes da correção: -00:00:01.999797. GREATEST ignora NULL, então
+    -- chamada que nunca conectou segue usando `v_ts` puro.
     IF v_call.status NOT IN ('ended','expired') THEN
       UPDATE public.voip_calls
          SET status     = 'ended',
-             ended_at   = COALESCE(ended_at, v_ts),
+             ended_at   = COALESCE(ended_at, GREATEST(v_ts, v_call.connected_at)),
              end_reason = v_reason,
              updated_at = now()
        WHERE id = v_call.id;
@@ -587,7 +813,9 @@ BEGIN
     IF v_call.end_reason = 'no_terminal_event' THEN
       UPDATE public.voip_calls
          SET end_reason = v_reason,
-             ended_at   = v_ts,
+             -- Mesmo GREATEST do ramo acima: o carimbo do varredor está sendo
+             -- substituído pelo da VPS, e ele não pode cair antes do connect.
+             ended_at   = GREATEST(v_ts, v_call.connected_at),
              updated_at = now()
        WHERE id = v_call.id;
       RETURN jsonb_build_object('ok', true, 'code', 'applied',
@@ -609,10 +837,15 @@ GRANT EXECUTE ON FUNCTION public.fn_voip_apply_vps_event(uuid, text, bigint, big
 
 COMMENT ON FUNCTION public.fn_voip_apply_vps_event(uuid, text, bigint, bigint, timestamptz, jsonb) IS
   'Aplica UM evento assinado da VPS: anti-replay pelo jti, ordem por '
-  '(epoch, seq), transição de sessão e escrita no ledger de chamada — tudo numa '
-  'transação. A organização sai de voip_sessions pelo tc_session_id, NUNCA do '
-  'corpo. Devolve {ok, code, detail?}; ok=false só em transition_refused. '
-  'service_role apenas — chamada por torquecalls-webhook.';
+  '(epoch, seq) POR ENTIDADE (sessão para auth-state, chamada para '
+  'call-status/call-ended), transição de sessão e escrita no ledger de chamada '
+  '— tudo numa transação. A organização sai de voip_sessions pelo '
+  'tc_session_id, NUNCA do corpo. Evento de chamada que perde para a marca '
+  'd''água da própria chamada NÃO é descartado: cai na faixa tardia, que '
+  'preenche carimbo NULO (connected_at/ringing_at/ended_at, e end_reason quando '
+  'o vigente é unknown/no_terminal_event) e NUNCA escreve status. Devolve '
+  '{ok, code, detail?}; ok=false só em transition_refused. service_role apenas '
+  '— chamada por torquecalls-webhook.';
 
 -- ===========================================================================
 -- 4. Limpeza da tabela de reserva

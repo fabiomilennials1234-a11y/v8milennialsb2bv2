@@ -26,10 +26,12 @@
 -- corrente. Se o webhook for religado logo depois, os envelopes ainda válidos
 -- (TTL de 300 s) poderiam ser aplicados uma segunda vez. Espere os 5 minutos.
 --
--- As colunas de marca d'água caem junto: mantê-las sem a RPC deixaria dois
--- inteiros que ninguém escreve nem lê, e o próximo agente gastaria um dia
--- descobrindo que são fósseis. Consequência de religar depois: a marca d'água
--- volta a 0 e os eventos vivos do epoch corrente são todos aceitos uma vez.
+-- As QUATRO colunas de marca d'água caem junto — duas em `voip_sessions`
+-- (eventos de sessão) e duas em `voip_calls` (eventos de chamada). Mantê-las sem
+-- a RPC deixaria quatro inteiros que ninguém escreve nem lê, e o próximo agente
+-- gastaria um dia descobrindo que são fósseis. Consequência de religar depois: a
+-- marca d'água volta a 0 e os eventos vivos do epoch corrente são todos aceitos
+-- uma vez.
 
 DO $cron$
 BEGIN
@@ -45,3 +47,5 @@ DROP TABLE IF EXISTS public.voip_webhook_events;
 
 ALTER TABLE public.voip_sessions DROP COLUMN IF EXISTS last_seq_epoch;
 ALTER TABLE public.voip_sessions DROP COLUMN IF EXISTS last_seq;
+ALTER TABLE public.voip_calls    DROP COLUMN IF EXISTS last_seq_epoch;
+ALTER TABLE public.voip_calls    DROP COLUMN IF EXISTS last_seq;

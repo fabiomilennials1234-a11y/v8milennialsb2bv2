@@ -39,7 +39,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap;
 --     quem fechou foi o OPERADOR. E só é possível quando o operador não tem
 --     outra chamada viva, porque `idx_voip_calls_one_live_per_operator` é
 --     UNIQUE parcial e a escrita estouraria.
-SELECT plan(64);
+SELECT plan(81);
 
 -- ===========================================================================
 -- ESTRUTURA
@@ -57,6 +57,15 @@ SELECT has_column('public'::name, 'voip_sessions'::name, 'last_seq_epoch'::name,
 
 SELECT has_column('public'::name, 'voip_sessions'::name, 'last_seq'::name,
   'voip_sessions ganhou a marca d''água de seq');
+
+-- A marca d'água é POR ENTIDADE (achado I-1). Sem estas duas colunas, uma
+-- sessão com N chamadas simultâneas divide um contador só, e o evento da
+-- chamada A é descartado por causa de um evento da chamada B.
+SELECT has_column('public'::name, 'voip_calls'::name, 'last_seq_epoch'::name,
+  'voip_calls ganhou a marca d''água de epoch (ordem por chamada)');
+
+SELECT has_column('public'::name, 'voip_calls'::name, 'last_seq'::name,
+  'voip_calls ganhou a marca d''água de seq (ordem por chamada)');
 
 SELECT ok(
   to_regprocedure('public.fn_voip_apply_vps_event(uuid,text,bigint,bigint,timestamptz,jsonb)') IS NOT NULL,
@@ -174,7 +183,12 @@ VALUES
   ('b1111111-1111-1111-1111-111111111111', 'b2222222-2222-2222-2222-222222222222',
    'sess-wh-fail',  'falha terminal',              'open'),
   ('b1111111-1111-1111-1111-111111111111', 'b2222222-2222-2222-2222-222222222222',
-   'sess-wh-ts',    'carimbo fora de faixa',       'open');
+   'sess-wh-ts',    'carimbo fora de faixa',       'open'),
+  -- Achado I-1: a numeração é ordenada, a ENTREGA não é.
+  ('b1111111-1111-1111-1111-111111111111', 'b2222222-2222-2222-2222-222222222222',
+   'sess-wh-late',  'entrega fora de ordem',       'open'),
+  ('b1111111-1111-1111-1111-111111111111', 'b2222222-2222-2222-2222-222222222222',
+   'sess-wh-multi', 'duas chamadas na sessão',     'open');
 
 -- De volta ao runtime real ANTES das asserções: o que se mede tem que ser o
 -- comportamento com triggers ligados. voip_calls não tem trigger não-interno
@@ -232,7 +246,49 @@ VALUES
   ('c0000001-0000-0000-0000-000000000008', 'b1111111-1111-1111-1111-111111111111',
    'sess-wh-ts', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA08', NULL,
    '5548991005289', 'outbound', 'authorized', NULL,
-   now() - interval '10 seconds', NULL, NULL, NULL);
+   now() - interval '10 seconds', NULL, NULL, NULL),
+
+  -- --- achado I-1: reordenação DENTRO da mesma chamada -------------------
+  -- AA10 recebe `call-ended` (seq 2) e SÓ DEPOIS o `connected` (seq 1). Era o
+  -- caso que deixava connected_at nulo para sempre.
+  ('c0000001-0000-0000-0000-000000000010', 'b1111111-1111-1111-1111-111111111111',
+   'sess-wh-late', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA10', NULL,
+   '5548991005289', 'outbound', 'ringing', NULL,
+   now() - interval '30 seconds', now() - interval '28 seconds', NULL, NULL),
+
+  -- AA11: `call-ended` depois de `call-ended`. Tem que continuar sem efeito.
+  ('c0000001-0000-0000-0000-000000000011', 'b1111111-1111-1111-1111-111111111111',
+   'sess-wh-late', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA11', NULL,
+   '5548991005289', 'outbound', 'ringing', NULL,
+   now() - interval '30 seconds', now() - interval '28 seconds', NULL, NULL),
+
+  -- AA14: `ringing` atrasado atrás do `connected`. Fase não retrocede, mas o
+  -- carimbo que só o `ringing` carrega não pode sumir.
+  ('c0000001-0000-0000-0000-000000000014', 'b1111111-1111-1111-1111-111111111111',
+   'sess-wh-late', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA14', NULL,
+   '5548991005289', 'outbound', 'authorized', NULL,
+   now() - interval '30 seconds', NULL, NULL, NULL),
+
+  -- AA15: M-1 puro, SEM reordenação. connected_at é relógio do CRM; o `endedAt`
+  -- do payload é relógio da VPS e chega ANTES dele. Sem o GREATEST a duração
+  -- fica negativa (medido: -00:00:01.999797).
+  ('c0000001-0000-0000-0000-000000000015', 'b1111111-1111-1111-1111-111111111111',
+   'sess-wh-late', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA15', NULL,
+   '5548991005289', 'outbound', 'connected', NULL,
+   now() - interval '30 seconds', now() - interval '28 seconds', now(), NULL),
+
+  -- --- achado I-1: duas chamadas dividindo UMA sessão --------------------
+  -- Com marca d'água por sessão, AA13 (seq 4) era descartada só porque AA12
+  -- (seq 5) tinha chegado antes. Não é reordenação: é interleaving.
+  ('c0000001-0000-0000-0000-000000000012', 'b1111111-1111-1111-1111-111111111111',
+   'sess-wh-multi', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA12', NULL,
+   '5548991005289', 'outbound', 'ringing', NULL,
+   now() - interval '30 seconds', now() - interval '28 seconds', NULL, NULL),
+
+  ('c0000001-0000-0000-0000-000000000013', 'b1111111-1111-1111-1111-111111111111',
+   'sess-wh-multi', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA13', NULL,
+   '5548991005289', 'outbound', 'ringing', NULL,
+   now() - interval '30 seconds', now() - interval '28 seconds', NULL, NULL);
 
 -- ===========================================================================
 -- EXECUÇÃO
@@ -435,6 +491,101 @@ INSERT INTO ev VALUES ('operador_ocupado_linha', (
   SELECT to_jsonb(c) FROM public.voip_calls c
    WHERE c.tc_call_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA05'));
 
+-- --- achado I-1: a entrega chega fora de ordem -----------------------------
+-- `now()` é transaction_timestamp() e vale o mesmo em toda a transação, então
+-- `endedAt = now() - 2s` é exatamente 2 s ANTES do instante que a RPC usa para
+-- carimbar `connected_at`. É o que torna a asserção de duração afiada: sem o
+-- clamp ela dá -2 s, com o clamp dá 0.
+
+-- AA10: o `call-ended` (seq 2) ganha a corrida...
+INSERT INTO ev VALUES ('tardio_fim_primeiro', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000050', 'sess-wh-late', 1, 2, now(),
+  jsonb_build_object('type','call-ended','sessionId','sess-wh-late',
+                     'id','AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA10',
+                     'reason','user_ended',
+                     'endedAt',(extract(epoch from now()) * 1000)::bigint - 2000)));
+
+-- ...e o `connected` (seq 1) chega DEPOIS. É a razão de existir da fatia:
+-- connected_at é a medição que hoje é 0 em 7 chamadas de produção.
+INSERT INTO ev VALUES ('tardio_connected', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000051', 'sess-wh-late', 1, 1, now(),
+  '{"type":"call-status","sessionId":"sess-wh-late","id":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA10",
+    "status":"connected","direction":"outbound","peer":"5548991005289"}'::jsonb));
+
+INSERT INTO ev VALUES ('tardio_connected_linha', (
+  SELECT to_jsonb(c) FROM public.voip_calls c
+   WHERE c.tc_call_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA10'));
+
+-- AA11: `call-ended` (seq 2) e depois OUTRO `call-ended` (seq 1, jti novo,
+-- motivo diferente). O segundo não pode ter efeito nenhum.
+INSERT INTO ev VALUES ('fim_primeiro', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000052', 'sess-wh-late', 1, 2, now(),
+  jsonb_build_object('type','call-ended','sessionId','sess-wh-late',
+                     'id','AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA11',
+                     'reason','declined',
+                     'endedAt',(extract(epoch from now()) * 1000)::bigint - 2000)));
+
+INSERT INTO ev VALUES ('fim_tardio', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000053', 'sess-wh-late', 1, 1, now(),
+  jsonb_build_object('type','call-ended','sessionId','sess-wh-late',
+                     'id','AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA11',
+                     'reason','timeout',
+                     'endedAt',(extract(epoch from now()) * 1000)::bigint)));
+
+INSERT INTO ev VALUES ('fim_tardio_linha', (
+  SELECT to_jsonb(c) FROM public.voip_calls c
+   WHERE c.tc_call_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA11'));
+
+-- AA14: `connected` (seq 3) e depois o `ringing` (seq 2).
+INSERT INTO ev VALUES ('conn_antes_ring', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000054', 'sess-wh-late', 1, 3, now(),
+  '{"type":"call-status","sessionId":"sess-wh-late","id":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA14",
+    "status":"connected","direction":"outbound","peer":"5548991005289"}'::jsonb));
+
+INSERT INTO ev VALUES ('tardio_ringing', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000055', 'sess-wh-late', 1, 2, now(),
+  jsonb_build_object('type','call-status','sessionId','sess-wh-late',
+                     'id','AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA14',
+                     'status','ringing','direction','outbound','peer','5548991005289',
+                     'startedAt',(extract(epoch from now()) * 1000)::bigint - 5000)));
+
+INSERT INTO ev VALUES ('tardio_ringing_linha', (
+  SELECT to_jsonb(c) FROM public.voip_calls c
+   WHERE c.tc_call_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA14'));
+
+-- AA15: M-1 sem reordenação nenhuma — só os dois relógios no mesmo cálculo.
+INSERT INTO ev VALUES ('m1_relogios', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000056', 'sess-wh-late', 1, 4, now(),
+  jsonb_build_object('type','call-ended','sessionId','sess-wh-late',
+                     'id','AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA15',
+                     'reason','user_ended',
+                     'endedAt',(extract(epoch from now()) * 1000)::bigint - 2000)));
+
+INSERT INTO ev VALUES ('m1_relogios_linha', (
+  SELECT to_jsonb(c) FROM public.voip_calls c
+   WHERE c.tc_call_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA15'));
+
+-- --- achado I-1: duas chamadas, uma sessão ---------------------------------
+INSERT INTO ev VALUES ('multi_alta', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000060', 'sess-wh-multi', 1, 5, now(),
+  '{"type":"call-status","sessionId":"sess-wh-multi","id":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA12",
+    "status":"connected","direction":"outbound","peer":"5548991005289"}'::jsonb));
+
+-- seq MENOR, mas de OUTRA chamada: não é fora de ordem coisa nenhuma.
+INSERT INTO ev VALUES ('multi_baixa', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000061', 'sess-wh-multi', 1, 4, now(),
+  '{"type":"call-status","sessionId":"sess-wh-multi","id":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA13",
+    "status":"connected","direction":"outbound","peer":"5548991005289"}'::jsonb));
+
+INSERT INTO ev VALUES ('multi_baixa_linha', (
+  SELECT to_jsonb(c) FROM public.voip_calls c
+   WHERE c.tc_call_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA13'));
+
+-- A marca d'água DE SESSÃO não pode ter sido movida por evento de chamada.
+INSERT INTO ev VALUES ('multi_sessao', (
+  SELECT jsonb_build_object('epoch', s.last_seq_epoch, 'seq', s.last_seq)
+    FROM public.voip_sessions s WHERE s.tc_session_id = 'sess-wh-multi'));
+
 -- ===========================================================================
 -- ASSERÇÕES
 -- ===========================================================================
@@ -623,6 +774,87 @@ SELECT ok(
   (SELECT r->>'status' = 'ended' AND r->>'end_reason' = 'no_terminal_event'
      FROM ev WHERE nome = 'operador_ocupado_linha'),
   'a linha recusada por operador ocupado não é alterada (o UNIQUE parcial estouraria)');
+
+-- ===========================================================================
+-- ACHADO I-1 — a numeração é ordenada, a ENTREGA não é
+-- ===========================================================================
+-- O emissor do Go despacha cada evento num `go func()` próprio (webhook.go:74),
+-- sem fila e sem retentativa. Dois eventos emitidos com milissegundos de
+-- diferença chegam na ordem que a rede quiser.
+
+-- --- o caso que a fatia inteira existe para resolver ------------------------
+SELECT is((SELECT r->>'code' FROM ev WHERE nome = 'tardio_connected'), 'applied',
+  'connected que chega DEPOIS do ended é consumido, não descartado');
+
+SELECT is((SELECT r->>'detail' FROM ev WHERE nome = 'tardio_connected'), 'late_connected_at',
+  'e ele é consumido pela faixa tardia, não pelo caminho normal');
+
+SELECT ok(
+  (SELECT (r->>'connected_at') IS NOT NULL FROM ev WHERE nome = 'tardio_connected_linha'),
+  'connected_at É GRAVADO mesmo com o connected chegando fora de ordem — a medição que hoje é 0 em 7');
+
+-- A outra metade da regra, e é ela que impede o remédio de virar doença.
+SELECT ok(
+  (SELECT r->>'status' = 'ended' AND r->>'end_reason' = 'user_ended'
+     FROM ev WHERE nome = 'tardio_connected_linha'),
+  'e o estado NÃO retrocede: a linha continua ended, com a causa que a VPS deu');
+
+-- M-1 sob reordenação: `connected_at` sai do relógio do CRM e `ended_at` do
+-- relógio da VPS. Sem o clamp isto dava -2 s.
+SELECT ok(
+  (SELECT (r->>'ended_at')::timestamptz >= (r->>'connected_at')::timestamptz
+     FROM ev WHERE nome = 'tardio_connected_linha'),
+  'a duração da chamada não fica NEGATIVA (connected_at é limitado por ended_at)');
+
+SELECT ok(
+  EXISTS (SELECT 1 FROM public.runtime_logs l
+           WHERE l.module = 'voip'
+             AND l.action = 'webhook_carimbo_tardio'
+             AND l.entity_id = 'c0000001-0000-0000-0000-000000000010'),
+  'o carimbo tardio deixa rastro — entrega fora de ordem é fato operacional');
+
+-- --- ended depois de ended: continua sem efeito nenhum ---------------------
+SELECT is((SELECT r->>'code' FROM ev WHERE nome = 'fim_tardio'), 'out_of_order',
+  'call-ended depois de call-ended é fora de ordem');
+
+SELECT ok(
+  (SELECT r->>'status' = 'ended' AND r->>'end_reason' = 'declined'
+     FROM ev WHERE nome = 'fim_tardio_linha'),
+  'e não tem efeito: a causa VERDADEIRA que chegou primeiro não é sobrescrita');
+
+SELECT ok(
+  (SELECT (r->>'ended_at')::timestamptz < now() - interval '1 second'
+     FROM ev WHERE nome = 'fim_tardio_linha'),
+  'nem o carimbo de fim é remexido pelo retardatário');
+
+-- --- ringing atrasado: fase não volta, carimbo não some --------------------
+SELECT is((SELECT r->>'detail' FROM ev WHERE nome = 'tardio_ringing'), 'late_ringing_at',
+  'ringing atrasado atrás do connected também cai na faixa tardia');
+
+SELECT ok(
+  (SELECT r->>'status' = 'connected' AND (r->>'ringing_at') IS NOT NULL
+     FROM ev WHERE nome = 'tardio_ringing_linha'),
+  'ringing_at é preenchido SEM rebaixar a chamada de connected para ringing');
+
+-- --- M-1 puro, sem reordenação ---------------------------------------------
+SELECT ok(
+  (SELECT (r->>'ended_at')::timestamptz >= (r->>'connected_at')::timestamptz
+     FROM ev WHERE nome = 'm1_relogios_linha'),
+  'endedAt da VPS anterior ao connected_at do CRM não produz duração negativa');
+
+-- --- duas chamadas dividindo uma sessão ------------------------------------
+SELECT is((SELECT r->>'code' FROM ev WHERE nome = 'multi_baixa'), 'applied',
+  'evento de seq MENOR de OUTRA chamada é aplicado — interleaving não é fora de ordem');
+
+SELECT ok(
+  (SELECT r->>'status' = 'connected' AND (r->>'connected_at') IS NOT NULL
+     FROM ev WHERE nome = 'multi_baixa_linha'),
+  'e ele aplica de verdade: a segunda chamada da sessão também carimba connected_at');
+
+SELECT ok(
+  (SELECT (r->>'epoch')::bigint = 0 AND (r->>'seq')::bigint = 0
+     FROM ev WHERE nome = 'multi_sessao'),
+  'evento de CHAMADA não move a marca d''água DA SESSÃO (senão auth-state seria a próxima vítima)');
 
 -- ===========================================================================
 -- ANTI-REGRESSÃO DO CONTRATO COM O ENDPOINT (T8)
