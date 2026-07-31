@@ -4,6 +4,7 @@ import { Phone, PhoneOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
+import { useOrganization } from "@/modules/identity";
 import {
   logoutVoiceSession,
   useVoiceSessionsCap,
@@ -20,6 +21,10 @@ import {
  */
 export function TorqueCallsSettings() {
   const queryClient = useQueryClient();
+  // Master abre esta tela sobre a org que tem selecionada (`selected_org_id`);
+  // sem mandar isso pra `logoutVoiceSession`, ele bateria no mesmo 400 que o
+  // pareamento — só que no botão "Desconectar" em vez de "Ativar voz".
+  const { organizationId } = useOrganization();
   const { data: instances = [], isLoading } = useWhatsAppInstances();
   const { data: sessions = [] } = useVoipSessions();
   const { data: cap = 10 } = useVoiceSessionsCap();
@@ -57,7 +62,7 @@ export function TorqueCallsSettings() {
   async function desconectar(tcSessionId: string) {
     setDesconectando(tcSessionId);
     try {
-      await logoutVoiceSession({ tcSessionId });
+      await logoutVoiceSession({ tcSessionId, organizationId: organizationId ?? undefined });
       // A lista e as instâncias mudam juntas: desconectar também desliga
       // `voice_calls_enabled` no servidor.
       await queryClient.invalidateQueries({ queryKey: ["voip_sessions"] });

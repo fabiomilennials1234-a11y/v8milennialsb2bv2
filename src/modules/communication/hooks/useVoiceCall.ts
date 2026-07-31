@@ -12,6 +12,7 @@
  * — gasta a cota, incomoda o cliente e conta como tentativa.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useOrganization } from "@/modules/identity";
 import {
   CallDeniedError,
   endCall as endCallRequest,
@@ -53,6 +54,10 @@ const INITIAL: VoiceCallState = {
 };
 
 export function useVoiceCall(tcSessionId: string | null) {
+  // Mesma exigência de `_shared/voip/caller.ts`: master não pertence a uma
+  // organização só, e sem este campo `startCall`/`endCall` voltam 400 pra
+  // qualquer master que tente discar.
+  const { organizationId } = useOrganization();
   const [state, setState] = useState<VoiceCallState>(INITIAL);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -134,7 +139,11 @@ export function useVoiceCall(tcSessionId: string | null) {
       setState((s) => ({ ...s, phase: "authorizing" }));
       let call;
       try {
-        call = await startCallRequest({ tcSessionId, leadId });
+        call = await startCallRequest({
+          tcSessionId,
+          leadId,
+          organizationId: organizationId ?? undefined,
+        });
       } catch (e) {
         if (e instanceof CallDeniedError) fail(e.message, e.code);
         else fail(e instanceof Error ? e.message : "Falha ao iniciar a chamada", null);
@@ -195,12 +204,16 @@ export function useVoiceCall(tcSessionId: string | null) {
         // A chamada JÁ foi autorizada e pode já estar tocando. Encerrar no
         // servidor é obrigatório aqui: abandonar o fluxo deixaria o telefone do
         // lead tocando sem ninguém do outro lado.
-        void endCallRequest({ tcSessionId, callId: call.callId }).catch(() => {});
+        void endCallRequest({
+          tcSessionId,
+          callId: call.callId,
+          organizationId: organizationId ?? undefined,
+        }).catch(() => {});
         fail(e instanceof Error ? e.message : "Falha ao estabelecer o áudio", "media_failed");
         return;
       }
     },
-    [tcSessionId, fail],
+    [tcSessionId, fail, organizationId],
   );
 
   const hangup = useCallback(async () => {
@@ -210,7 +223,7 @@ export function useVoiceCall(tcSessionId: string | null) {
 
     if (tcSessionId && callId) {
       try {
-        await endCallRequest({ tcSessionId, callId });
+        await endCallRequest({ tcSessionId, callId, organizationId: organizationId ?? undefined });
       } catch {
         // Encerrar no servidor falhou, mas a mídia local já caiu e o `ctl` de 30
         // minutos ainda vale. O reaper fecha a linha. Travar a tela num erro que
@@ -218,7 +231,7 @@ export function useVoiceCall(tcSessionId: string | null) {
       }
     }
     setState(INITIAL);
-  }, [state.callId, tcSessionId, teardown]);
+  }, [state.callId, tcSessionId, teardown, organizationId]);
 
   const toggleMute = useCallback(() => {
     const tracks = micRef.current?.getAudioTracks() ?? [];

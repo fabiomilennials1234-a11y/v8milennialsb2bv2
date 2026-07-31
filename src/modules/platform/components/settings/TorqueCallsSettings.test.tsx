@@ -28,6 +28,8 @@ vi.mock("@/modules/communication", () => ({
   VoicePairingDialog: () => null,
 }));
 
+vi.mock("@/modules/identity", () => ({ useOrganization: () => ({ organizationId: "org-1" }) }));
+
 import { TorqueCallsSettings } from "./TorqueCallsSettings";
 
 // O componente usa `useQueryClient` para invalidar as listas ao desconectar —
@@ -67,7 +69,7 @@ describe("TorqueCallsSettings", () => {
     const user = userEvent.setup();
     render(<TorqueCallsSettings />);
     await user.click(screen.getByRole("button", { name: /desconectar/i }));
-    expect(logoutVoiceSession).toHaveBeenCalledWith({ tcSessionId: "tc-1" });
+    expect(logoutVoiceSession).toHaveBeenCalledWith({ tcSessionId: "tc-1", organizationId: "org-1" });
   });
 
   // ─── O que "voz ativa" pode significar ────────────────────────────────────
@@ -110,7 +112,7 @@ describe("TorqueCallsSettings", () => {
     sessions = [{ ...sessaoAberta, status: "pending" }];
     render(<TorqueCallsSettings />);
     await user.click(screen.getByRole("button", { name: /desconectar/i }));
-    expect(logoutVoiceSession).toHaveBeenCalledWith({ tcSessionId: "tc-1" });
+    expect(logoutVoiceSession).toHaveBeenCalledWith({ tcSessionId: "tc-1", organizationId: "org-1" });
   });
 
   // O predicado do TETO é de propósito diferente do da EXIBIÇÃO: sessão

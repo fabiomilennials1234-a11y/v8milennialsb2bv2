@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useOrganization } from "@/modules/identity";
 import {
   createVoiceSession,
   pairVoiceSession,
@@ -23,6 +24,12 @@ export type PairingStatus =
  */
 export function useVoicePairing() {
   const queryClient = useQueryClient();
+  // Master opera várias organizações; sem isto `createSession`/`pairSession`/
+  // `streamToken` voltam 400 "Master must provide organization_id" e o botão
+  // "Ativar voz" não funciona pra nenhum master, de nenhuma org (ver
+  // `_shared/voip/caller.ts`). Admin comum manda o mesmo campo, mas o servidor
+  // ignora — a org dele já vem de `team_members`.
+  const { organizationId } = useOrganization();
   const [status, setStatus] = useState<PairingStatus>("ocioso");
   const [qr, setQr] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +106,11 @@ export function useVoicePairing() {
     // que já morreu) para nunca deixar dois vivos ao mesmo tempo.
     abortRef.current?.abort();
 
-    const stream = await requestStreamToken({ tcSessionId, pair: true });
+    const stream = await requestStreamToken({
+      tcSessionId,
+      pair: true,
+      organizationId: organizationId ?? undefined,
+    });
     // Cancelado/desmontado enquanto esperava o token: não há mais tela para
     // atualizar, e criar o controller agora ressuscitaria um fluxo morto.
     if (generationRef.current !== generation) return;
@@ -129,7 +140,7 @@ export function useVoicePairing() {
         setStatus("falhou");
         setError("A conexão com o servidor de voz caiu. Tente de novo.");
       });
-  }, [handleEvent]);
+  }, [handleEvent, organizationId]);
 
   const start = useCallback(async (whatsappInstanceId: string) => {
     const generation = ++generationRef.current;
@@ -138,7 +149,10 @@ export function useVoicePairing() {
     setQr(null);
     setStatus("criando");
     try {
-      const { tcSessionId } = await createVoiceSession({ whatsappInstanceId });
+      const { tcSessionId } = await createVoiceSession({
+        whatsappInstanceId,
+        organizationId: organizationId ?? undefined,
+      });
       if (generationRef.current !== generation) return; // cancelado enquanto a sessão era criada
       sessionRef.current = tcSessionId;
       await openStream(tcSessionId, generation);
@@ -151,7 +165,7 @@ export function useVoicePairing() {
           : "Não foi possível iniciar o pareamento.",
       );
     }
-  }, [openStream]);
+  }, [openStream, organizationId]);
 
   /**
    * Tentar de novo NÃO recria a sessão. Se recriasse, três tentativas
@@ -181,7 +195,7 @@ export function useVoicePairing() {
       // `abortRef` existir para abortar). Sem este retorno, `pairVoiceSession`
       // ainda pediria QR novo pro backend depois que o operador já desistiu.
       if (generationRef.current !== generation) return;
-      await pairVoiceSession({ tcSessionId });
+      await pairVoiceSession({ tcSessionId, organizationId: organizationId ?? undefined });
     } catch (err) {
       if (generationRef.current !== generation) return;
       setStatus("falhou");
@@ -189,7 +203,7 @@ export function useVoicePairing() {
         err instanceof VoiceControlError ? err.message : "Não foi possível gerar outro código.",
       );
     }
-  }, [start, openStream]);
+  }, [start, openStream, organizationId]);
 
   return { status, qr, error, start, retry, cancel };
 }
