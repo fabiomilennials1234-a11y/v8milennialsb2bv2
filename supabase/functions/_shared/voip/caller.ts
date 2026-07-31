@@ -40,10 +40,13 @@ export function isOrgAdmin(caller: Caller): boolean {
 }
 
 export function adminClient(): SupabaseClient {
+  // `autoRefreshToken: false`: `persistSession` sozinho não impede o auth-js de
+  // armar um `setInterval` de 30 s por cliente, que ninguém desarma. Ver
+  // `_shared/supabase-admin.ts`.
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    { auth: { persistSession: false } },
+    { auth: { persistSession: false, autoRefreshToken: false } },
   );
 }
 
@@ -68,7 +71,12 @@ export async function resolveCaller(
   const supabaseUser = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } },
+    {
+      global: { headers: { Authorization: authHeader } },
+      // O JWT já vem pronto no cabeçalho: não há sessão a renovar, e o ticker
+      // de 30 s do auth-js nunca é desarmado.
+      auth: { persistSession: false, autoRefreshToken: false },
+    },
   );
 
   const { data: userData, error: userErr } = await supabaseUser.auth.getUser(

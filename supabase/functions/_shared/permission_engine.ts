@@ -122,7 +122,12 @@ const ACTION_TO_ORG_PERMISSION: Partial<Record<PermissionAction, string>> = {
 function getServiceClient(): SupabaseClient {
   const url = Deno.env.get("SUPABASE_URL")!;
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  return createClient(url, key, { auth: { persistSession: false } });
+  // `autoRefreshToken: false`: `persistSession` sozinho não impede o auth-js de
+  // armar um `setInterval` de 30 s por cliente, que ninguém desarma. Ver
+  // `_shared/supabase-admin.ts`.
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
 
 // ─── canUserPerformAction ────────────────────────────────

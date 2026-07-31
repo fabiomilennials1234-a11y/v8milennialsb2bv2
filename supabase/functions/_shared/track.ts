@@ -39,7 +39,12 @@ export async function trackEvent(params: TrackEventParams): Promise<void> {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!supabaseUrl || !serviceRoleKey) return;
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    // Sem `autoRefreshToken: false` o auth-js arma um `setInterval` de 30 s por
+    // cliente e ninguém o desarma; `trackEvent` cria um por chamada. Ver
+    // `_shared/supabase-admin.ts`, que já é a referência desta configuração.
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
     await supabase.from("usage_events").insert({
       organization_id: params.organizationId,

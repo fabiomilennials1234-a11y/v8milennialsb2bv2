@@ -118,7 +118,11 @@ export async function generateTtsAudio(
     // Upload to Supabase Storage
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // `autoRefreshToken: false`: senão o auth-js arma um `setInterval` de 30 s
+    // por cliente e ninguém o desarma. Ver `_shared/supabase-admin.ts`.
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
     const uuid = crypto.randomUUID();
     const storagePath = `tts-audio/${organizationId}/${uuid}.mp3`;
