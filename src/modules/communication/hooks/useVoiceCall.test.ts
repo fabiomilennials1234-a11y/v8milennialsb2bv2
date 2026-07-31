@@ -26,6 +26,17 @@ vi.mock("@/modules/communication/lib/torquecallsEvents", () => ({
 
 vi.mock("@/modules/identity", () => ({ useOrganization: () => ({ organizationId: "org-1" }) }));
 
+// O tom em si é provado em `lib/voiceRingback.test.ts`, sobre o buffer gerado.
+// O que ESTE arquivo prova é o gatilho: quando ele começa e — o que importa
+// mais — que ele para em TODO caminho de saída. Oscilador vazado toca para
+// sempre, e ninguém tem como calá-lo depois.
+const ringbackStop = vi.fn();
+const startRingback = vi.fn(() => ({ stop: ringbackStop }));
+
+vi.mock("@/modules/communication/lib/voiceRingback", () => ({
+  startRingback: () => startRingback(),
+}));
+
 // O caminho de áudio real precisa de AudioWorklet, que o jsdom não tem — e
 // encenar Web Audio aqui provaria só que a encenação funciona. O que ESTE
 // arquivo testa é o ciclo de vida que o hook controla: quando a captura sobe,
@@ -632,6 +643,80 @@ describe("useVoiceCall", () => {
     unmount();
 
     expect(streams[0].signal.aborted).toBe(true);
+  });
+
+  // ─── Tom de chamada (ringback) ──────────────────────────────────────────────
+  // Só passou a ser possível depois que a fase veio do stream: antes não havia
+  // um `ringing` confiável para amarrar o som — a fase virava `active` sozinha
+  // assim que a mídia subia, com o telefone do lead ainda tocando.
+
+  it("toca o tom enquanto o telefone toca", async () => {
+    await callInRinging();
+
+    expect(startRingback).toHaveBeenCalledTimes(1);
+    expect(ringbackStop).not.toHaveBeenCalled();
+  });
+
+  it("não toca antes de o telefone tocar", async () => {
+    const track = fakeTrack();
+    installMedia(async () => ({ getTracks: () => [track], getAudioTracks: () => [track] }));
+    startCallRequest.mockRejectedValueOnce(new CallDeniedError("consent_missing"));
+
+    const { result } = renderHook(() => useVoiceCall(SESSION));
+    await act(async () => {
+      await result.current.start(LEAD);
+    });
+
+    // Tom antes da autorização anunciaria uma ligação que o governor ainda pode
+    // recusar — e ele recusa muitas.
+    expect(startRingback).not.toHaveBeenCalled();
+  });
+
+  it("cala no instante em que a pessoa atende", async () => {
+    await callInRinging();
+
+    await emit({ type: "call-status", sessionId: SESSION, id: TC_CALL_ID, status: "connected" });
+
+    // Qualquer atraso aqui é vivido como defeito: a pessoa já está falando e o
+    // operador ainda ouve o tom por cima dela.
+    expect(ringbackStop).toHaveBeenCalled();
+  });
+
+  it("cala quando o outro lado desliga", async () => {
+    await callInRinging();
+
+    await emit({ type: "call-ended", sessionId: SESSION, id: TC_CALL_ID, reason: "declined" });
+
+    expect(ringbackStop).toHaveBeenCalled();
+  });
+
+  it("cala quando o operador desliga antes de atenderem", async () => {
+    const { result } = await callInRinging();
+
+    await act(async () => {
+      await result.current.hangup();
+    });
+
+    expect(ringbackStop).toHaveBeenCalled();
+  });
+
+  it("cala quando a mídia morre", async () => {
+    const { pc } = await callInRinging();
+
+    await act(async () => {
+      pc.connectionState = "failed";
+      pc.onconnectionstatechange?.();
+    });
+
+    expect(ringbackStop).toHaveBeenCalled();
+  });
+
+  it("cala no desmonte do componente", async () => {
+    const { unmount } = await callInRinging();
+
+    unmount();
+
+    expect(ringbackStop).toHaveBeenCalled();
   });
 
   it("não disca quando o stream de eventos não sobe", async () => {

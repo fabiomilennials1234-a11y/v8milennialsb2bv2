@@ -63,6 +63,7 @@ import {
   startPcmAudio,
   type PcmAudioSession,
 } from "@/modules/communication/lib/voicePcmSession";
+import { startRingback } from "@/modules/communication/lib/voiceRingback";
 
 /** Rótulo exigido pela VPS. Qualquer outro é ignorado por ela, em silêncio. */
 const PCM_CHANNEL_LABEL = "pcm";
@@ -232,6 +233,30 @@ export function useVoiceCall(tcSessionId: string | null) {
   }, []);
 
   useEffect(() => teardown, [teardown]);
+
+  /**
+   * Tom de chamada no fone do operador, enquanto o telefone do lead toca.
+   *
+   * A forma importa mais que o som. Isto é um efeito amarrado à FASE, então a
+   * limpeza do React cala o tom em toda saída de `ringing` — atenderam,
+   * recusaram, deu timeout, o operador desligou, a mídia morreu, o componente
+   * desmontou. Nenhum desses casos precisou ser lembrado ou listado: parar é
+   * consequência de sair da fase, não uma chamada que alguém tem que colocar em
+   * seis lugares e manter em seis lugares. Tom vazado toca para sempre.
+   *
+   * E "cala no instante em que atende" sai de graça: a limpeza roda no mesmo
+   * commit em que a fase vira `active`, antes da pintura. Não há atraso onde o
+   * cliente já está falando e o operador ainda ouve o tom por cima.
+   *
+   * Este gatilho só existe porque a fase agora vem do stream da VPS. Com a fase
+   * derivada do `connectionState`, `ringing` durava os milissegundos entre o SDP
+   * e a mídia subir — o tom mal começaria antes de ser cortado.
+   */
+  useEffect(() => {
+    if (state.phase !== "ringing") return;
+    const tone = startRingback();
+    return () => tone.stop();
+  }, [state.phase]);
 
   // Cronômetro da chamada. Roda só quando há mídia de pé.
   useEffect(() => {
