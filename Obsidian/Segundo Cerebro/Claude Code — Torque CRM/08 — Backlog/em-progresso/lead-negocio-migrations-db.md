@@ -644,6 +644,68 @@ permite, em tese, apontar para negócio de outro tenant. Vale issue própria.
 
 ## M4 — Backfill dos ~36,5 mil cards
 
+> [!success] ✅ ESCRITO, EXECUTADO E PROVADO EM BRANCH EFÊMERA (2026-07-31)
+> O SQL abaixo deixou de ser plano. O artefato vive em:
+>
+> | Arquivo | O quê |
+> |---|---|
+> | `scripts/backfill-lead-negocio-m4.sql` | o SQL, sem `BEGIN/COMMIT` (a transação é do runner) |
+> | `scripts/backfill-lead-negocio-m4.mjs` | runner: recusa prod, exige `--org`, **dry-run é o padrão** |
+> | `supabase/qa-seed/m4-fixture.sql` | fixture de QA com um caso por guarda |
+>
+> **Não virou migration de propósito** — guarda F4 da CLAUDE.md: migration é só
+> schema. O M4 escreve dado de cliente em três tabelas.
+>
+> **Medido em prod, leitura apenas, 2026-07-31 (re-medição):** a prova de 1:1 roda
+> como `SELECT` puro e deu **36.767 linhas para 36.767 cards, 0 fantasma**, com
+> **219** nascendo ganhos e **35** com `stage_key` órfão. Pré-condição 0b org a
+> org: **só a Basic4u aborta** (o card `dd91cd35`). Milennials: 2.358 cards, 914
+> custom, 86 ganhos, 0 órfãos, 132 de drift `pipe_whatsapp`, 36 de
+> `stage_changed_at`.
+>
+> **Provado por contrafactual na branch, não por argumento:** sem o passo 1b a
+> guarda 3e aborta com a fingerprint de `leads.pipe_whatsapp` mudando; com fonte e
+> espelho divergindo a 0b aborta antes de escrever; e o join velho
+> `(organization_id, stage_key)` produz 9 linhas para 8 cards na fixture — 1
+> fantasma — enquanto o join do M4 dá 0 e o "remédio óbvio" `ps.pipeline_type =
+> p.type` casa **zero** etapas. Apply real: 8 negócios / 8 cards, 2 ganhos (um em
+> funil custom), órfão com `won = false`, org vizinha intocada, 2 negócios do mesmo
+> lead no mesmo funil. Re-execução acha 0 alvos: idempotente.
+
+> [!danger] 🔴 São QUATRO gatilhos escapando do bounce, não um — esta seção dizia um
+> O texto abaixo trata `enforce_closed_at_on_final_stage` como o único efeito
+> colateral do bounce. Lido no catálogo em 2026-07-31: o `ON CONFLICT (id) DO
+> UPDATE` do `sync_custom_pipe_to_entries` menciona **`stage_key`**, e no
+> PostgreSQL **mencionar a coluna basta** para acordar um gatilho `UPDATE OF
+> <coluna>` — mudar o valor não é exigido. São **seis** gatilhos nessa condição em
+> `pipeline_entries`:
+>
+> | Gatilho | Guarda interna | Efeito no bounce |
+> |---|---|---|
+> | `trg_pipeline_entries_stage_event_update` | `WHEN old.stage_key IS DISTINCT` | inerte |
+> | `trg_log_pipeline_stage_change_history` | `WHEN old.stage_key IS DISTINCT` | inerte |
+> | `trg_workflow_pipeline_stage_changed` | `WHEN old.stage_key IS DISTINCT` | inerte |
+> | `trg_apply_stage_checklist_pipeline` | `IF NEW.stage_key IS NOT DISTINCT` | inerte — **não estava listado** |
+> | `trg_pipeline_entries_dispatch` | `IF OLD.stage_key IS DISTINCT` | inerte — **não estava listado**, e ele faz `net.http_post` |
+> | `trg_meeting_events_capture` | 3 ramos, os 3 exigem mudança | inerte — coberto só pela contagem 3c |
+> | `trg_enforce_closed_at` | **não compara com OLD** | guarda 3g |
+>
+> Some-se `trigger_workflow_custom_pipe_stage_change`, que é `AFTER UPDATE ON
+> custom_pipe_entries` **sem lista de colunas** — o `SET deal_id` do gatilho
+> reverso o acorda, e ele só é inerte por `IF OLD.stage_id IS DISTINCT FROM
+> NEW.stage_id`.
+>
+> **Os seis são inertes por VALOR, e o valor só não muda porque a pré-condição 0b
+> garante.** Sem 0b, um backfill de `deal_id` **agenda disparo de WhatsApp**
+> (`scheduled_pipe_messages`), cria checklist e dispara workflow. A 0b deixa de ser
+> higiene e passa a ser a única coisa entre o backfill e um envio em massa.
+>
+> Conserto adotado no artefato: guarda **3c-bis**, que fecha a classe pelo
+> **efeito** em vez do nome — conta `checklists`, `scheduled_pipe_messages`,
+> `workflow_executions` e `webhook_deliveries` antes e depois, e aborta se qualquer
+> uma mexer. Fechar pelo nome já falhou duas vezes nesta feature (o
+> `trg_sync_whatsapp_stage_to_lead` foi a primeira).
+
 **O corte foi decidido (2026-07-30, decisão A): tudo vira negócio**, a faxina vira
 relatório, e a execução acontece **só em branch efêmera**. O critério "nunca conversou"
 foi medido e descartado: pegaria 14.296 cards (39%) mas esvaziaria orgs reais (Dolce
