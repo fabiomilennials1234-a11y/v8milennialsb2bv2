@@ -26,17 +26,27 @@
  *
  * ORDEM DAS BARREIRAS
  * -------------------
- *   1. Rajada em memória, por isolate — antes de ler byte de corpo.
- *   2. Teto de tamanho do corpo, medido nos BYTES lidos (o `content-length`
+ *   1. Rajada em memória, por isolate — antes de olhar método ou corpo.
+ *   2. Método. Depois da rajada, para que GET em loop consuma ficha em vez de
+ *      escapar do limitador.
+ *   3. Teto de tamanho do corpo, medido nos BYTES lidos (o `content-length`
  *      é palavra do chamador; ele é conferido, mas não é a barreira).
- *   3. ASSINATURA, antes de qualquer consulta ao banco. Ed25519 custa
+ *   4. ASSINATURA, antes de qualquer consulta ao banco. Ed25519 custa
  *      microssegundos; consultar o Postgres com payload não autenticado é o que
  *      vira amplificação. O `checkRateLimitPersistent` do projeto falha ABERTO
  *      em erro de banco (`_shared/auth.ts`), então ele não podia ser a única
  *      barreira — e nem sequer é usado aqui, porque ele mesmo é uma ida ao
  *      banco por requisição não autenticada.
- *   4. Só então a RPC. `openAdmin` é uma FÁBRICA justamente para que essa ordem
- *      seja verificável em teste: nada abre cliente de banco antes do passo 3.
+ *   5. Só então a RPC. `openAdmin` é uma FÁBRICA justamente para que essa ordem
+ *      seja verificável em teste: nada abre cliente de banco antes do passo 4.
+ *
+ * AS DUAS RECUSAS SEM LINHA EM `runtime_logs` — 429 e 405, e só elas
+ * ------------------------------------------------------------------
+ * As duas ficam de fora pela MESMA razão, e a razão é que registrá-las seria a
+ * amplificação que elas existem para impedir: uma linha de banco por pacote do
+ * atacante. O 429 registra uma vez por janela por endereço; o 405 fica coberto
+ * por ele, porque o limitador roda acima. Toda outra recusa — 401, 413, 400,
+ * 409, 500 — gera uma linha, com ação própria por motivo.
  *
  * O CORPO É LIDO UMA VEZ, CRU
  * ---------------------------
@@ -95,7 +105,7 @@ const BURST_WINDOW_MS = 60_000;
  * limite. Estourado o teto, o mapa é varrido e — se ainda estourar — zerado.
  * Zerar afrouxa a CONTAGEM, nunca a assinatura, que é a barreira de verdade.
  */
-const BURST_MAX_TRACKED = 4096;
+export const BURST_MAX_TRACKED = 4096;
 
 /** Os três eventos cabem em centenas de bytes. 64 KiB é folga de 100×. */
 const BODY_LIMIT_BYTES = 64 * 1024;
@@ -105,10 +115,10 @@ const BODY_LIMIT_BYTES = 64 * 1024;
  * token, pré-assinatura) e o verificador não impõe teto. Sem este corte, uma
  * `aud` de um megabyte vira uma linha de um megabyte em `runtime_logs`.
  */
-const MAX_DETAIL_CHARS = 160;
+export const MAX_DETAIL_CHARS = 160;
 
 /** `x-forwarded-for` também é palavra do chamador. Mesmo tratamento. */
-const MAX_IP_CHARS = 64;
+export const MAX_IP_CHARS = 64;
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -199,6 +209,18 @@ function clientIp(req: Request): string {
 /** Só para teste: zera o contador entre casos. */
 export function __resetBurstForTests(): void {
   burst.clear();
+}
+
+/**
+ * Só para teste: quantos endereços o mapa guarda agora.
+ *
+ * Existe porque `BURST_MAX_TRACKED` é invisível de fora — o comportamento que
+ * ele protege (o mapa não cresce sem limite) não muda nenhuma resposta HTTP, e
+ * sem esta janela um teste não conseguiria distinguir a guarda presente da
+ * guarda removida.
+ */
+export function __burstSizeForTests(): number {
+  return burst.size;
 }
 
 /**
@@ -310,11 +332,11 @@ export async function handleVpsEvent(
   req: Request,
   openAdmin: () => Admin,
 ): Promise<Response> {
-  // Sem OPTIONS: quem chama é a VPS. OPTIONS cai aqui como qualquer outro
-  // método e leva 405, que é a resposta honesta.
-  if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
-
   // ── 1. rajada ─────────────────────────────────────────────────────────────
+  //
+  // ANTES do teste de método, de propósito. Requisição com método errado também
+  // consome ficha: se o 405 viesse primeiro, uma enxurrada de GET escaparia
+  // inteira do limitador — e é justamente o tráfego que mais barato é de gerar.
   const ip = clip(clientIp(req), MAX_IP_CHARS) ?? "unknown";
   const gate = takeBurstToken(ip, Date.now());
   if (!gate.allowed) {
@@ -331,7 +353,20 @@ export async function handleVpsEvent(
     return json(429, { error: "rate_limited" });
   }
 
-  // ── 2. teto de tamanho + leitura ÚNICA do corpo cru ──────────────────────
+  // ── 2. método ─────────────────────────────────────────────────────────────
+  //
+  // Sem OPTIONS: quem chama é a VPS, não um navegador. OPTIONS cai aqui como
+  // qualquer outro método e leva 405, que é a resposta honesta.
+  //
+  // A SEGUNDA — E ÚLTIMA — RECUSA SEM LINHA EM `runtime_logs`, e pela mesma
+  // razão que o 429: o limitador de rajada roda ACIMA desta linha, então método
+  // errado em loop já é barrado e já é registrado, uma vez por janela por
+  // endereço. Logar aqui a cada requisição reabriria exatamente a amplificação
+  // que o 429 fecha — cada GET de um varredor de porta viraria um INSERT. Todas
+  // as outras recusas (401, 413, 400, 409, 500) geram uma linha cada.
+  if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
+
+  // ── 3. teto de tamanho + leitura ÚNICA do corpo cru ──────────────────────
   const body = await readBodyCapped(req, BODY_LIMIT_BYTES);
   if (!body.ok) {
     await logRuntime({
@@ -348,7 +383,7 @@ export async function handleVpsEvent(
   }
   const raw = body.raw;
 
-  // ── 3. assinatura, ANTES de qualquer ida ao banco ────────────────────────
+  // ── 4. assinatura, ANTES de qualquer ida ao banco ────────────────────────
   //
   // O verificador LANÇA quando a configuração está quebrada e RECUSA quando o
   // token é ruim. Confundir os dois faz "chave pública ausente" virar 401 —
@@ -434,7 +469,7 @@ export async function handleVpsEvent(
     return json(400, { error: "invalid_payload" });
   }
 
-  // ── 4. a RPC ─────────────────────────────────────────────────────────────
+  // ── 5. a RPC ─────────────────────────────────────────────────────────────
   const db = openAdmin();
   const { data, error } = await db.rpc("fn_voip_apply_vps_event", {
     p_event_jti: claims.jti,

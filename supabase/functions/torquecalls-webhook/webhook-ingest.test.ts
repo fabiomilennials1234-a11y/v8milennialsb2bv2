@@ -17,10 +17,14 @@
 import { assert, assertEquals, assertNotEquals } from "@std/assert";
 import { __resetWebhookKeysForTests } from "../_shared/voip/webhook-verify.ts";
 import {
+  __burstSizeForTests,
   __resetBurstForTests,
   type Admin,
   BURST_MAX_PER_IP,
+  BURST_MAX_TRACKED,
   handleVpsEvent,
+  MAX_DETAIL_CHARS,
+  MAX_IP_CHARS,
 } from "./index.ts";
 
 // ─── utilitários ────────────────────────────────────────────────────────────
@@ -162,6 +166,60 @@ function fakeDb(reply: { data?: unknown; error?: unknown } = {}) {
 }
 
 const APPLIED = { ok: true, code: "applied", detail: "ended" };
+
+/**
+ * Captura as linhas que `logRuntime` REALMENTE manda para `runtime_logs`.
+ *
+ * `logRuntime` abre o próprio cliente a partir do ambiente e insere direto —
+ * não há parâmetro para injetar nada. A única costura honesta é o `fetch` que o
+ * supabase-js usa por baixo: o que passa por aqui são os bytes que sairiam para
+ * o banco, depois do `redactSecrets`, que é exatamente o que se quer medir.
+ *
+ * Sem isto, um teste de truncamento só consegue afirmar que a ENTRADA era
+ * grande — nunca que a SAÍDA é pequena, que é a propriedade que importa.
+ */
+async function captureRuntimeLogs<T>(
+  run: () => Promise<T>,
+): Promise<{ result: T; rows: Record<string, unknown>[] }> {
+  const rows: Record<string, unknown>[] = [];
+  const fetchReal = globalThis.fetch;
+  const urlReal = Deno.env.get("SUPABASE_URL");
+  const keyReal = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  Deno.env.set("SUPABASE_URL", "http://runtime-logs.invalido");
+  Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "chave-de-teste");
+
+  globalThis.fetch = ((input: URL | Request | string, init?: RequestInit) => {
+    const href = typeof input === "string"
+      ? input
+      : input instanceof URL
+      ? input.href
+      : input.url;
+
+    if (href.includes("runtime_logs")) {
+      const cru = typeof init?.body === "string" ? init.body : "";
+      try {
+        const parsed = JSON.parse(cru);
+        for (const row of Array.isArray(parsed) ? parsed : [parsed]) rows.push(row);
+      } catch {
+        rows.push({ __corpo_nao_json: cru });
+      }
+    }
+    return Promise.resolve(
+      new Response("[]", { status: 201, headers: { "Content-Type": "application/json" } }),
+    );
+  }) as typeof fetch;
+
+  try {
+    return { result: await run(), rows };
+  } finally {
+    globalThis.fetch = fetchReal;
+    if (urlReal === undefined) Deno.env.delete("SUPABASE_URL");
+    else Deno.env.set("SUPABASE_URL", urlReal);
+    if (keyReal === undefined) Deno.env.delete("SUPABASE_SERVICE_ROLE_KEY");
+    else Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", keyReal);
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. AS TRÊS REJEIÇÕES DO PASSO 3 DO BRIEF
@@ -514,20 +572,126 @@ Deno.test("sem CORS e sem OPTIONS — quem chama é a VPS, não um navegador", a
   }
 });
 
-Deno.test("o detalhe da recusa é truncado antes de virar log", async () => {
+Deno.test("método errado em loop é barrado pela rajada — 429 vence 405", async () => {
   const k = await makePair();
   install(k.entry);
+  const db = fakeDb();
+  const ip = { "x-forwarded-for": "203.0.113.99" };
 
-  // `aud` é string do atacante, lida ANTES da assinatura valer, e o
-  // verificador a devolve inteira em `detail`. Sem teto, uma aud de um
-  // megabyte vira uma linha de um megabyte em runtime_logs.
-  const enorme = "X".repeat(50_000);
-  const token = await signEnvelope({ priv: k.priv, kid: k.kid, claims: { aud: enorme } });
+  // O 405 é uma das duas recusas que NÃO geram linha em runtime_logs, e a
+  // justificativa escrita no arquivo é que o limitador roda ACIMA dele. Se
+  // alguém trocar a ordem, a justificativa vira mentira e uma enxurrada de GET
+  // passa a escapar do limitador inteira. Este teste é o que amarra as duas
+  // coisas: enquanto ele for verde, a declaração no comentário é verdadeira.
+  let ultimo = 0;
+  for (let i = 0; i <= BURST_MAX_PER_IP; i++) {
+    const res = await handleVpsEvent(
+      new Request("http://localhost/torquecalls-webhook", { method: "GET", headers: ip }),
+      db.open,
+    );
+    ultimo = res.status;
+    await res.body?.cancel();
+  }
 
-  const res = await handleVpsEvent(post(GO_BODY, token), fakeDb().open);
-  assertEquals(res.status, 401);
+  assertEquals(ultimo, 429, "GET em loop tem que consumir ficha, não escapar pelo 405");
+});
 
-  // O corte em si é conferido pela função pura, exercitada aqui pela via que a
-  // produção usa: se `clip` sumisse, este envelope levaria 50 KB ao banco.
-  assert(token.length > 40_000, "o envelope de teste precisa mesmo ser enorme");
+// ═══════════════════════════════════════════════════════════════════════════
+// 8. O QUE CHEGA A `runtime_logs`
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// A versão anterior deste teste media o TOKEN, não o log — e ficava verde com o
+// `clip` removido por inteiro. Media que a entrada era grande, nunca que a
+// saída era pequena. Estes exigem os bytes que realmente saem para o banco.
+
+Deno.test({
+  name: "detalhe e endereço chegam TRUNCADOS ao runtime_logs",
+  // Este é o único teste em que `logRuntime` chega até o `createClient` de
+  // verdade (os outros saem cedo, sem SUPABASE_URL no ambiente). E o
+  // `createClient` de `_shared/logger.ts` não passa `autoRefreshToken: false`,
+  // então o auth-js arma um `setInterval` que ninguém desarma — medido com
+  // `--trace-leaks`: `B._startAutoRefresh`, auth-js 2.105.4. O vazamento é do
+  // logger, não deste teste, e `_shared/logger.ts` está fora do escopo desta
+  // tarefa (vira issue própria). Os sanitizadores ficam desligados AQUI e só
+  // aqui — os outros 18 testes seguem com eles ligados.
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    const k = await makePair();
+    install(k.entry);
+
+    // Os dois campos que o atacante controla e que o verificador devolve
+    // inteiros, pré-assinatura e sem teto: `aud` (vira `detail`) e o
+    // `x-forwarded-for` (vira `source_ip`). Sem corte, uma requisição de um
+    // atacante vira uma linha de 100 KB em runtime_logs — de graça, e sem ele
+    // precisar de credencial nenhuma.
+    const audEnorme = "A".repeat(50_000);
+    const ipEnorme = "9".repeat(50_000);
+    const token = await signEnvelope({ priv: k.priv, kid: k.kid, claims: { aud: audEnorme } });
+
+    const { result, rows } = await captureRuntimeLogs(() =>
+      handleVpsEvent(post(GO_BODY, token, { "x-forwarded-for": ipEnorme }), fakeDb().open)
+    );
+
+    assertEquals(result.status, 401);
+    assertEquals(rows.length, 1, "a recusa tem que ter gerado exatamente uma linha");
+
+    const snapshot = rows[0].payload_snapshot as Record<string, unknown>;
+    assertEquals(snapshot.motivo, "wrong_audience");
+
+    const detalhe = String(snapshot.detalhe);
+    const ip = String(snapshot.source_ip);
+
+    assertEquals(
+      detalhe.length,
+      MAX_DETAIL_CHARS + `…[+${50_000 - MAX_DETAIL_CHARS}]`.length,
+      `detalhe chegou com ${detalhe.length} caracteres`,
+    );
+    assertEquals(
+      ip.length,
+      MAX_IP_CHARS + `…[+${50_000 - MAX_IP_CHARS}]`.length,
+      `source_ip chegou com ${ip.length} caracteres`,
+    );
+
+    // O corte tem que preservar o começo (é o que serve ao diagnóstico) e dizer
+    // quanto foi cortado (senão "A×160" é indistinguível de uma aud legítima).
+    assert(detalhe.startsWith("AAAA"), "o começo do valor original tem que sobreviver");
+    assert(detalhe.endsWith(`[+${50_000 - MAX_DETAIL_CHARS}]`), "o corte tem que se declarar");
+
+    // A rede que pega qualquer campo novo que alguém acrescente sem teto.
+    const linha = JSON.stringify(rows[0]);
+    assert(
+      linha.length < 1_000,
+      `a linha inteira foi para o banco com ${linha.length} bytes — algum campo escapou do corte`,
+    );
+  },
+});
+
+Deno.test("o mapa do limitador não cresce sem limite dentro do isolate", async () => {
+  const k = await makePair();
+  install(k.entry);
+  const db = fakeDb();
+
+  // Endereço forjado por requisição é o ataque contra o PRÓPRIO limitador: cada
+  // um novo é uma entrada nova no mapa, e o mapa vive no isolate. Sem a guarda
+  // de BURST_MAX_TRACKED, a memória sobe até o isolate morrer — e nenhuma
+  // resposta HTTP muda enquanto isso, que é por que este teste precisa olhar o
+  // tamanho do mapa diretamente.
+  const enderecos = BURST_MAX_TRACKED * 2;
+  for (let i = 0; i < enderecos; i++) {
+    const res = await handleVpsEvent(
+      post("{}", undefined, {
+        "x-forwarded-for": `10.${(i >> 16) & 255}.${(i >> 8) & 255}.${i & 255}`,
+      }),
+      db.open,
+    );
+    await res.body?.cancel();
+  }
+
+  assert(
+    __burstSizeForTests() <= BURST_MAX_TRACKED + 1,
+    `${enderecos} endereços distintos deixaram ${__burstSizeForTests()} entradas no mapa; ` +
+      `o teto é ${BURST_MAX_TRACKED + 1}`,
+  );
+  assertEquals(db.opened(), 0, "nada disso chega perto do banco");
 });
