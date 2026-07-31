@@ -394,6 +394,17 @@ BEGIN
              updated_at = now()
        WHERE id = p_existing_call_id
          AND organization_id = p_organization_id
+         -- AUTORIZAR POR UMA CHAVE E AGIR POR OUTRA: o gate acima resolve a
+         -- instância a partir de `p_tc_session_id`, uma string que o CHAMADOR
+         -- nomeia. Sem amarrar o UPDATE à mesma sessão, atender uma chamada que
+         -- chegou numa instância RESTRITA era só nomear a sessão de uma
+         -- instância ABERTA: o gate aprovava sobre a instância errada, este
+         -- UPDATE achava a chamada certa por `id`, e o forasteiro virava
+         -- operator_user_id dela — com os três tokens assinados.
+         --
+         -- A irmã `renewCallControlToken` (call-plane.ts) já conferia
+         -- `tc_session_id`; a assimetria entre as duas era omissão, não decisão.
+         AND tc_session_id = p_tc_session_id
          AND status IN ('ringing','authorized')
          AND tc_call_id IS NOT NULL
       RETURNING id, tc_call_id INTO v_call_id, v_tc_call_id;

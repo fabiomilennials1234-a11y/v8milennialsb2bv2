@@ -575,6 +575,7 @@ Deno.test("atender chamada de ENTRADA também passa pelo gate de instância", as
       voip_calls: () => ({
         id: CALL,
         organization_id: ORG,
+        tc_session_id: "tc-sess",
         peer_phone: "554891005289",
         lead_id: null,
         status: "ringing",
@@ -597,6 +598,45 @@ Deno.test("atender chamada de ENTRADA também passa pelo gate de instância", as
 
   assert(!res.ok);
   assertEquals(res.code, "not_instance_member");
+});
+
+Deno.test("atender chamada de OUTRA sessão é recusado — autorizar e agir usam a mesma chave", async () => {
+  await setupSigningKey();
+  // O gate de instância aprova, porque a SESSÃO nomeada é de uma instância que
+  // este operador pode usar. A chamada, porém, chegou por outra sessão — ou
+  // seja, por outra instância. Se o pedido seguisse, a autorização teria sido
+  // dada sobre a instância errada.
+  const db = stubClient({
+    tables: {
+      voip_sessions: openSession,
+      voip_calls: () => ({
+        id: CALL,
+        organization_id: ORG,
+        tc_session_id: "tc-sess-de-outra-instancia",
+        peer_phone: "554891005289",
+        lead_id: null,
+        status: "ringing",
+        tc_call_id: TC_CALL,
+      }),
+      ...permissiveEngine,
+    },
+    rpc: okReserve,
+  });
+
+  const res = await authorizeCallAndMint(memberCaller(), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    direction: "inbound",
+    existingCallId: CALL,
+  });
+
+  assert(!res.ok);
+  assertEquals(res.code, "call_not_answerable");
+  assertEquals(
+    db.__calls.rpc.filter((c: Record<string, unknown>) => c.name === "fn_voip_call_reserve").length,
+    0,
+    "não pode chegar à reserva com a chamada de outra sessão",
+  );
 });
 
 Deno.test("repassa a negativa do governor sem assinar nada", async () => {
@@ -647,6 +687,7 @@ Deno.test("atender chamada de entrada não exige consentimento e usa act=call.ac
       voip_calls: () => ({
         id: CALL,
         organization_id: ORG,
+        tc_session_id: "tc-sess",
         peer_phone: "554891005289",
         lead_id: null,
         status: "ringing",
@@ -678,6 +719,7 @@ Deno.test("chamada de entrada já encerrada não é atendível", async () => {
       voip_calls: () => ({
         id: CALL,
         organization_id: ORG,
+        tc_session_id: "tc-sess",
         peer_phone: "554891005289",
         lead_id: null,
         status: "ended",
@@ -711,6 +753,7 @@ Deno.test("atender chamada de entrada sem tc_call_id nega cedo, sem chamar a res
       voip_calls: () => ({
         id: CALL,
         organization_id: ORG,
+        tc_session_id: "tc-sess",
         peer_phone: "554891005289",
         lead_id: null,
         status: "ringing",

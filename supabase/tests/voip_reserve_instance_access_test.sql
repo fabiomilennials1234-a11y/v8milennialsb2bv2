@@ -18,7 +18,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap;
 -- A regra é a MESMA do inbox (`useWhatsAppInstancesForUser`): instância sem
 -- ninguém em `whatsapp_instance_allowed_members` é aberta à org; com lista, só a
 -- lista; master, gestor e admin bypassam.
-SELECT plan(30);
+SELECT plan(33);
 
 -- ===========================================================================
 -- ANTI-REGRESSÃO — o que a recriação da função NÃO pode ter perdido
@@ -100,7 +100,8 @@ INSERT INTO auth.users (id, email) VALUES
   ('7b000000-0000-0000-0000-000000000005', 'inativo@voip.test'),   -- INATIVO, na lista
   ('7b000000-0000-0000-0000-000000000006', 'master@voip.test'),    -- master de plataforma
   ('7b000000-0000-0000-0000-000000000007', 'gestor@voip.test'),    -- gestor de portfólio
-  ('7b000000-0000-0000-0000-000000000008', 'outraorg@voip.test');  -- ativo em OUTRA org
+  ('7b000000-0000-0000-0000-000000000008', 'outraorg@voip.test'),  -- ativo em OUTRA org
+  ('7b000000-0000-0000-0000-000000000009', 'nalista2@voip.test');  -- na lista, sem chamada viva
 
 INSERT INTO public.organizations (id, name, slug) VALUES
   ('77777777-7777-7777-7777-777777777777', 'Org Voz Acesso', 'org-voz-acesso'),
@@ -134,12 +135,19 @@ INSERT INTO public.team_members (id, organization_id, user_id, name, role, is_ac
    '7b000000-0000-0000-0000-000000000005', 'Membro Inativo', 'member', false),
   -- Ativo, mas na org VIZINHA.
   ('7c000000-0000-0000-0000-000000000008', '77777777-7777-7777-7777-777777777778',
-   '7b000000-0000-0000-0000-000000000008', 'Membro Outra Org', 'member', true);
+   '7b000000-0000-0000-0000-000000000008', 'Membro Outra Org', 'member', true),
+  -- Segundo membro da lista, mantido SEM chamada viva de propósito: o controle
+  -- positivo do atendimento precisa de um operador livre, senão esbarraria em
+  -- idx_voip_calls_one_live_per_operator e devolveria operator_busy — negativa
+  -- pelo motivo errado.
+  ('7c000000-0000-0000-0000-000000000009', '77777777-7777-7777-7777-777777777777',
+   '7b000000-0000-0000-0000-000000000009', 'Membro Na Lista 2', 'member', true);
 
 -- A lista da instância restrita: o membro "na lista" e o INATIVO.
 INSERT INTO public.whatsapp_instance_allowed_members (whatsapp_instance_id, team_member_id) VALUES
   ('7a000000-0000-0000-0000-000000000002', '7c000000-0000-0000-0000-000000000002'),
-  ('7a000000-0000-0000-0000-000000000002', '7c000000-0000-0000-0000-000000000005');
+  ('7a000000-0000-0000-0000-000000000002', '7c000000-0000-0000-0000-000000000005'),
+  ('7a000000-0000-0000-0000-000000000002', '7c000000-0000-0000-0000-000000000009');
 
 INSERT INTO public.master_users (user_id, is_active)
 VALUES ('7b000000-0000-0000-0000-000000000006', true);
@@ -398,6 +406,64 @@ SELECT ok(
   (SELECT operator_user_id FROM public.voip_calls
     WHERE peer_phone = '5548991005287') IS NULL,
   'SEM EFEITO COLATERAL: a recusa no atendimento não grava operator_user_id'
+);
+
+-- ===========================================================================
+-- AUTORIZAR POR UMA CHAVE E AGIR POR OUTRA
+-- ===========================================================================
+-- O gate resolve a instância a partir de `p_tc_session_id` — uma string que o
+-- CHAMADOR nomeia. O UPDATE do atendimento casava por `id = p_existing_call_id
+-- AND organization_id`, SEM a sessão. Quem quisesse atender uma chamada que
+-- chegou numa instância restrita bastava nomear a sessão de uma instância
+-- aberta: o gate aprovava sobre a instância errada, o UPDATE achava a chamada
+-- certa, e o forasteiro virava operator_user_id dela — com os três tokens
+-- assinados.
+--
+-- A irmã `renewCallControlToken` (call-plane.ts) já conferia `tc_session_id`. A
+-- assimetria entre as duas é o que denuncia a omissão.
+--
+-- A correção amarra a chave que AUTORIZA à chave que AGE: o UPDATE passa a
+-- exigir `tc_session_id = p_tc_session_id`.
+CREATE TEMP TABLE r_atende_por_fora AS
+SELECT public.fn_voip_call_reserve(
+  '77777777-7777-7777-7777-777777777777'::uuid,
+  '7b000000-0000-0000-0000-000000000003'::uuid,   -- forasteiro
+  'sess-aberta',                                  -- <<< sessão da instância ABERTA
+  '5548991005287',
+  NULL, 'inbound', NULL,
+  -- ...mas a chamada é a que nasceu na instância RESTRITA.
+  (SELECT id FROM public.voip_calls WHERE peer_phone = '5548991005287')
+) AS r;
+
+SELECT isnt(
+  (SELECT (r ->> 'ok')::boolean FROM r_atende_por_fora),
+  true,
+  'atender nomeando a sessão de OUTRA instância é RECUSADO (autorizar e agir usam a mesma chave)'
+);
+
+SELECT ok(
+  (SELECT operator_user_id FROM public.voip_calls
+    WHERE peer_phone = '5548991005287') IS NULL,
+  'SEM EFEITO COLATERAL: a chamada da instância restrita não ganha dono por sessão emprestada'
+);
+
+-- CONTROLE POSITIVO. Sem ele, a asserção acima passaria vacuamente se o
+-- atendimento tivesse simplesmente parado de funcionar. Um membro DA LISTA,
+-- nomeando a sessão CERTA, atende e vira o operador.
+CREATE TEMP TABLE r_atende_certo AS
+SELECT public.fn_voip_call_reserve(
+  '77777777-7777-7777-7777-777777777777'::uuid,
+  '7b000000-0000-0000-0000-000000000009'::uuid,   -- na lista, e sem chamada viva
+  'sess-restrita', '5548991005287',
+  NULL, 'inbound', NULL,
+  (SELECT id FROM public.voip_calls WHERE peer_phone = '5548991005287')
+) AS r;
+
+SELECT is(
+  (SELECT operator_user_id FROM public.voip_calls
+    WHERE peer_phone = '5548991005287'),
+  '7b000000-0000-0000-0000-000000000009'::uuid,
+  'quem está na lista atende pela sessão CERTA e vira o operador'
 );
 
 SELECT * FROM finish();

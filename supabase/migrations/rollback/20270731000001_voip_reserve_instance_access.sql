@@ -10,6 +10,12 @@
 -- explícita de vendedores em `whatsapp_instance_allowed_members` (189 linhas em
 -- produção). O front pode até esconder o botão — o gate de servidor deixa passar.
 --
+-- Este rollback também desfaz a amarração `tc_session_id = p_tc_session_id` no
+-- WHERE do UPDATE de atendimento. Isso é correto e não reabre furo de
+-- autorização: aquela amarração existe porque o GATE resolve a instância a
+-- partir da sessão que o chamador nomeia — sem gate, não há autorização a
+-- desviar. As duas coisas entram juntas e saem juntas, de propósito.
+--
 -- Se o motivo do rollback for "alguém foi barrado indevidamente", prefira
 -- ESVAZIAR a lista daquela instância (`DELETE FROM
 -- whatsapp_instance_allowed_members WHERE whatsapp_instance_id = ...`): pela

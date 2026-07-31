@@ -277,12 +277,22 @@ export async function authorizeCallAndMint(
 
     const { data: call } = await supabaseAdmin
       .from("voip_calls")
-      .select("id, organization_id, peer_phone, lead_id, status, tc_call_id")
+      .select("id, organization_id, tc_session_id, peer_phone, lead_id, status, tc_call_id")
       .eq("id", args.existingCallId)
       .maybeSingle();
 
     if (!call) return deny("call_not_answerable");
     if (call.organization_id !== caller.orgId) return deny("session_org_mismatch");
+    // A chamada tem que pertencer à SESSÃO nomeada. O gate de instância (1b)
+    // resolveu a instância a partir de `tcSessionId`; se a chamada viesse de
+    // outra sessão, a autorização teria sido dada sobre a instância errada —
+    // nomear a sessão de uma instância aberta para atender uma chamada que
+    // chegou numa instância restrita. `renewCallControlToken` já fazia esta
+    // conferência; a assimetria entre as duas era o buraco.
+    //
+    // `fn_voip_call_reserve` também amarra isto no WHERE do UPDATE, que é o gate
+    // real. Aqui é a negativa antecipada, com o código que explica o motivo.
+    if (call.tc_session_id !== tcSessionId) return deny("call_not_answerable");
     if (call.status !== "ringing" && call.status !== "authorized") {
       return deny("call_not_answerable");
     }
