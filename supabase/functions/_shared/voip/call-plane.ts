@@ -267,22 +267,44 @@ export async function authorizeCallAndMint(
   // 4. Consentimento de voz — só no outbound. Quem ligou para nós já consentiu
   //    no ato. `source` restrito porque 'manual' é o vendedor afirmando o
   //    consentimento do lead, o que não é consentimento.
+  //    CONDICIONAL desde 2026-07-31, por decisão do CTO: o default é assumir
+  //    todo lead consentido, e a exigência volta ligando
+  //    `organizations.require_voice_consent`. A trava não foi apagada — ela
+  //    continua inteira aqui e em `fn_voip_call_reserve`, que é o gate real;
+  //    esta consulta apenas evita a ida até o banco e devolve um código que
+  //    explica o motivo.
+  //
+  //    O que motivou: a regra nunca teve produtor. `fn_voip_consent_record` é
+  //    service_role-only e não tem um único chamador; o hook do front grava
+  //    `source: 'manual'`, que o gate exclui de propósito. Produção tinha ZERO
+  //    linhas de `voice_call_whatsapp` — a trava era total na prática, e
+  //    nenhuma ligação de saída era autorizável por caminho de produto.
   let consentRecordId: string | null = null;
   if (direction === "outbound") {
-    const { data: consent } = await supabaseAdmin
-      .from("consent_records")
-      .select("id")
-      .eq("organization_id", caller.orgId)
-      .eq("lead_id", leadId)
-      .eq("consent_type", "voice_call_whatsapp")
-      .eq("granted", true)
-      .is("revoked_at", null)
-      .in("source", ["form", "api", "webhook"])
-      .limit(1)
+    const { data: org } = await supabaseAdmin
+      .from("organizations")
+      .select("require_voice_consent")
+      .eq("id", caller.orgId)
       .maybeSingle();
 
-    if (!consent) return deny("consent_missing");
-    consentRecordId = consent.id;
+    // Ausência resolve para "não exige" — mesmo default da coluna. Uma org sem
+    // linha legível não pode virar trava silenciosa.
+    if (org?.require_voice_consent === true) {
+      const { data: consent } = await supabaseAdmin
+        .from("consent_records")
+        .select("id")
+        .eq("organization_id", caller.orgId)
+        .eq("lead_id", leadId)
+        .eq("consent_type", "voice_call_whatsapp")
+        .eq("granted", true)
+        .is("revoked_at", null)
+        .in("source", ["form", "api", "webhook"])
+        .limit(1)
+        .maybeSingle();
+
+      if (!consent) return deny("consent_missing");
+      consentRecordId = consent.id;
+    }
   }
 
   // 5. Reserva atômica: kill-switch da instância, teto diário, concorrência da
