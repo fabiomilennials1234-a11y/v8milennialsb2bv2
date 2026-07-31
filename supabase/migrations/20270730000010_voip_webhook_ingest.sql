@@ -609,9 +609,21 @@ BEGIN
       v_ts := CASE WHEN v_ms IS NOT NULL AND v_ms BETWEEN v_ms_min AND v_ms_max
                    THEN to_timestamp(v_ms / 1000.0) ELSE now() END;
 
-      -- Alcançável quando a VPS emite `call-status status=ended` (seq maior) e
-      -- o `call-ended` que traz a CAUSA chega depois. Sem isto o ledger ficaria
-      -- com `unknown` tendo a causa verdadeira em mãos.
+      -- GUARDA DEFENSIVA, NÃO CAMINHO VIVO — e o comentário diz isso de
+      -- propósito, porque a versão anterior dele afirmava o contrário.
+      --
+      -- Contra o Go de hoje este ramo é INALCANÇÁVEL: `call-ended` é sempre o
+      -- último evento de uma chamada. `OnStateChange` retorna cedo em
+      -- `IsEnded()` depois de chamar `endCall` (session.go:67-70), e `endCall`
+      -- apaga a chamada do registro (broker.go:391) — então nenhum
+      -- `call-status` é emitido depois, e nada de uma chamada tem seq maior que
+      -- o `call-ended` dela.
+      --
+      -- Fica porque a alternativa é pior: se o Go passar a emitir qualquer
+      -- evento depois do fim (um `call-status status=ended`, por exemplo), sem
+      -- este ramo a causa VERDADEIRA chegaria atrasada e o ledger congelaria em
+      -- `unknown` com ela em mãos. Custa três linhas e não tem efeito colateral
+      -- — as mesmas travas do resto da faixa valem aqui.
       IF v_call.ended_at IS NULL
          OR v_call.end_reason IS NULL
          OR v_call.end_reason IN ('unknown', 'no_terminal_event') THEN

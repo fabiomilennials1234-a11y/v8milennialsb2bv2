@@ -39,7 +39,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap;
 --     quem fechou foi o OPERADOR. E só é possível quando o operador não tem
 --     outra chamada viva, porque `idx_voip_calls_one_live_per_operator` é
 --     UNIQUE parcial e a escrita estouraria.
-SELECT plan(81);
+SELECT plan(87);
 
 -- ===========================================================================
 -- ESTRUTURA
@@ -288,7 +288,17 @@ VALUES
   ('c0000001-0000-0000-0000-000000000013', 'b1111111-1111-1111-1111-111111111111',
    'sess-wh-multi', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA13', NULL,
    '5548991005289', 'outbound', 'ringing', NULL,
-   now() - interval '30 seconds', now() - interval '28 seconds', NULL, NULL);
+   now() - interval '30 seconds', now() - interval '28 seconds', NULL, NULL),
+
+  -- AA16: chamada que JÁ conectou, com connected_at de 30 s atrás. Um
+  -- `connected` tardio não pode reescrever carimbo preenchido (regra 3 da faixa
+  -- tardia) — reescrever moveria o carimbo para `now()` e inventaria uma
+  -- duração de chamada que não aconteceu.
+  ('c0000001-0000-0000-0000-000000000016', 'b1111111-1111-1111-1111-111111111111',
+   'sess-wh-late', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA16', NULL,
+   '5548991005289', 'outbound', 'connected', NULL,
+   now() - interval '40 seconds', now() - interval '35 seconds',
+   now() - interval '30 seconds', NULL);
 
 -- ===========================================================================
 -- EXECUÇÃO
@@ -516,6 +526,16 @@ INSERT INTO ev VALUES ('tardio_connected_linha', (
   SELECT to_jsonb(c) FROM public.voip_calls c
    WHERE c.tc_call_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA10'));
 
+-- REGRA 1 da faixa tardia, medida por consequência e não só pela coluna: se o
+-- evento tardio (seq 1) tivesse avançado a marca d'água, ela teria REBOBINADO
+-- de 2 para 1 — e este seq 2, que a marca correta ainda barra, passaria a ser
+-- aceito como se fosse novidade. Com a marca intacta ele é tardio, cai na faixa
+-- e não acha carimbo a preencher (ringing_at veio da semente).
+INSERT INTO ev VALUES ('rebobina_sonda', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000057', 'sess-wh-late', 1, 2, now(),
+  '{"type":"call-status","sessionId":"sess-wh-late","id":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA10",
+    "status":"ringing","direction":"outbound","peer":"5548991005289"}'::jsonb));
+
 -- AA11: `call-ended` (seq 2) e depois OUTRO `call-ended` (seq 1, jti novo,
 -- motivo diferente). O segundo não pode ter efeito nenhum.
 INSERT INTO ev VALUES ('fim_primeiro', public.fn_voip_apply_vps_event(
@@ -552,6 +572,38 @@ INSERT INTO ev VALUES ('tardio_ringing', public.fn_voip_apply_vps_event(
 INSERT INTO ev VALUES ('tardio_ringing_linha', (
   SELECT to_jsonb(c) FROM public.voip_calls c
    WHERE c.tc_call_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA14'));
+
+-- REGRA 3 no sítio do `ringing`: agora que ringing_at está preenchido, um
+-- SEGUNDO ringing atrasado (startedAt 60 s atrás) não pode reescrevê-lo.
+INSERT INTO ev VALUES ('ring_ja_preenchido', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000058', 'sess-wh-late', 1, 1, now(),
+  jsonb_build_object('type','call-status','sessionId','sess-wh-late',
+                     'id','AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA14',
+                     'status','ringing','direction','outbound','peer','5548991005289',
+                     'startedAt',(extract(epoch from now()) * 1000)::bigint - 60000)));
+
+INSERT INTO ev VALUES ('ring_ja_preenchido_linha', (
+  SELECT to_jsonb(c) FROM public.voip_calls c
+   WHERE c.tc_call_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA14'));
+
+-- --- REGRA 3 no sítio do `connected` (AA16, connected_at já preenchido) -----
+-- Primeiro o fim (seq 7) para que o `connected` seguinte seja tardio...
+INSERT INTO ev VALUES ('conn_cheio_fim', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-000000000059', 'sess-wh-late', 1, 7, now(),
+  jsonb_build_object('type','call-ended','sessionId','sess-wh-late',
+                     'id','AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA16',
+                     'reason','user_ended',
+                     'endedAt',(extract(epoch from now()) * 1000)::bigint)));
+
+-- ...e agora o `connected` atrasado (seq 6) sobre um carimbo que JÁ existe.
+INSERT INTO ev VALUES ('conn_cheio_tardio', public.fn_voip_apply_vps_event(
+  'e0000000-0000-0000-0000-00000000005a', 'sess-wh-late', 1, 6, now(),
+  '{"type":"call-status","sessionId":"sess-wh-late","id":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA16",
+    "status":"connected","direction":"outbound","peer":"5548991005289"}'::jsonb));
+
+INSERT INTO ev VALUES ('conn_cheio_linha', (
+  SELECT to_jsonb(c) FROM public.voip_calls c
+   WHERE c.tc_call_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA16'));
 
 -- AA15: M-1 sem reordenação nenhuma — só os dois relógios no mesmo cálculo.
 INSERT INTO ev VALUES ('m1_relogios', public.fn_voip_apply_vps_event(
@@ -812,6 +864,36 @@ SELECT ok(
              AND l.action = 'webhook_carimbo_tardio'
              AND l.entity_id = 'c0000001-0000-0000-0000-000000000010'),
   'o carimbo tardio deixa rastro — entrega fora de ordem é fato operacional');
+
+-- --- REGRA 1: a faixa tardia NÃO avança a marca d'água ---------------------
+-- Sem estas duas, trocar `IF NOT v_late` por `IF true` passa verde: a marca
+-- rebobina de 2 para 1 e o próximo evento velho entra como se fosse novo.
+SELECT ok(
+  (SELECT (r->>'last_seq_epoch')::bigint = 1 AND (r->>'last_seq')::bigint = 2
+     FROM ev WHERE nome = 'tardio_connected_linha'),
+  'o evento tardio NÃO rebobina a marca d''água da chamada (fica no seq 2 que já passou)');
+
+SELECT is((SELECT r->>'code' FROM ev WHERE nome = 'rebobina_sonda'), 'out_of_order',
+  'e a marca intacta segue barrando o seq 2 — que uma marca rebobinada aceitaria');
+
+-- --- REGRA 3: a faixa tardia só preenche o que está NULO -------------------
+-- Sem estas quatro, remover o `IS NULL` de qualquer um dos dois sítios passa
+-- verde, e um carimbo real é substituído por `now()`.
+SELECT is((SELECT r->>'code' FROM ev WHERE nome = 'conn_cheio_tardio'), 'out_of_order',
+  'connected tardio sobre connected_at JÁ preenchido não tem o que preencher');
+
+SELECT ok(
+  (SELECT (r->>'connected_at')::timestamptz < now() - interval '20 seconds'
+     FROM ev WHERE nome = 'conn_cheio_linha'),
+  'e o connected_at verdadeiro (30 s atrás) NÃO é reescrito com now()');
+
+SELECT is((SELECT r->>'code' FROM ev WHERE nome = 'ring_ja_preenchido'), 'out_of_order',
+  'ringing tardio sobre ringing_at JÁ preenchido também não tem o que preencher');
+
+SELECT ok(
+  (SELECT (r->>'ringing_at')::timestamptz > now() - interval '30 seconds'
+     FROM ev WHERE nome = 'ring_ja_preenchido_linha'),
+  'e o ringing_at existente NÃO é recuado para o startedAt do retardatário');
 
 -- --- ended depois de ended: continua sem efeito nenhum ---------------------
 SELECT is((SELECT r->>'code' FROM ev WHERE nome = 'fim_tardio'), 'out_of_order',

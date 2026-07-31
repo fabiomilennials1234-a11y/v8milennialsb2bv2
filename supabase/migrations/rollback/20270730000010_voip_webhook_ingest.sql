@@ -1,8 +1,9 @@
 -- ROLLBACK pareado de 20270730000010_voip_webhook_ingest.sql
 --
 -- Remove a aplicação do evento assinado da VPS: a RPC, a tabela de reserva de
--- jti, o job de limpeza dela e as duas colunas de marca d'água em
--- `voip_sessions`.
+-- jti, o job de limpeza dela e as QUATRO colunas de marca d'água — duas em
+-- `voip_sessions` (eventos de sessão) e duas em `voip_calls` (eventos de
+-- chamada).
 --
 -- ANTES DE RODAR ISTO, SAIBA O QUE ACONTECE
 -- -----------------------------------------
