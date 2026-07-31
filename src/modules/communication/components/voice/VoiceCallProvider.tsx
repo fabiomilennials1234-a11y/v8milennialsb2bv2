@@ -48,9 +48,12 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
   const value = useMemo<VoiceCallContextValue>(
     () => ({
       available: !!session?.tc_session_id,
-      // `failed` não conta como ocupado: o vendedor precisa poder tentar de novo
-      // sem antes fechar um aviso.
-      busy: state.phase !== "idle" && state.phase !== "failed",
+      // `failed` e `ended` não contam como ocupado: os dois são cartões de
+      // aviso sobre uma chamada que NÃO existe mais, e o vendedor precisa poder
+      // discar de novo sem antes fechá-los. Foi exatamente isso que o CTO viveu
+      // — a chamada morreu, a fase ficou presa, e o botão respondia "Você já
+      // está em uma chamada" para uma chamada que já tinha acabado.
+      busy: state.phase !== "idle" && state.phase !== "failed" && state.phase !== "ended",
       startCall,
     }),
     [session?.tc_session_id, state.phase, startCall],

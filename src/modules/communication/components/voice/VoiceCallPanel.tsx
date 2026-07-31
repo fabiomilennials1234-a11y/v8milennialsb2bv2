@@ -10,7 +10,7 @@
  * Chamada é a única superfície do produto em que o usuário não pode "conferir
  * depois" — ou ele entende agora, ou já falou com a pessoa errada.
  */
-import { Mic, MicOff, PhoneOff, Loader2, AlertTriangle } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Loader2, AlertTriangle, PhoneMissed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { VoiceCallState } from "@/modules/communication/hooks/useVoiceCall";
@@ -57,6 +57,36 @@ export function VoiceCallPanel({
   onDismiss,
 }: VoiceCallPanelProps) {
   if (state.phase === "idle") return null;
+
+  // A chamada terminou por decisão de fora — o outro lado desligou, não
+  // atendeu, ou a mídia caiu. A tela da chamada sai (não há mais chamada), mas o
+  // MOTIVO fica: "recusou" e "não atendeu" levam o vendedor a próximos passos
+  // opostos, e fechar tudo em silêncio apagaria justamente essa diferença.
+  // Encerrar assim NÃO conta como ocupado — dá para discar de novo agora.
+  if (state.phase === "ended") {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="fixed bottom-6 right-6 z-50 w-[320px] rounded-xl border border-border/60 bg-card shadow-2xl"
+      >
+        <div className="flex items-start gap-3 p-4">
+          <PhoneMissed className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-foreground">
+              {leadName || formatPeer(state.peer) || "Chamada"}
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{state.endReason}</p>
+          </div>
+        </div>
+        <div className="flex justify-end border-t border-border/40 px-4 py-2.5">
+          <Button variant="ghost" size="sm" onClick={onDismiss}>
+            Entendi
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (state.phase === "failed") {
     return (
