@@ -2,7 +2,7 @@
 
 Da fundação até um vendedor clicar e falar. Ver `docs/adr/0024-torquecalls-voice-call-plane.md` para o porquê de cada peça.
 
-**Estado ao escrever isto:** S8/S9 já em produção; S10, S12 e S14 no PR #1317; S5 no PR #16 do repo `torquecalls`. `voice_calls_enabled = false` nas 137 instâncias — nada disca até o passo 6.
+**Estado ao escrever isto:** S8/S9 já em produção; S10, S12 e S14 no PR #1317; S5 no PR #16 do repo `torquecalls`; S11 (webhook VPS→CRM) na branch `feat/torquecalls-s11-webhook` aqui e no PR #20 do repo Go — as duas metades sobem juntas ou nenhuma. `voice_calls_enabled = false` nas 137 instâncias — nada disca até o passo 6.
 
 **Tempo:** ~30 min, sendo um passo humano (ler o QR).
 
@@ -68,13 +68,17 @@ supabase secrets set --project-ref jsjsmuncfkbsbzqzqhfq \
 
 ---
 
-## 3. Deployar as duas edge functions
+## 3. Deployar as duas edge functions do sentido CRM→VPS
 
 ```bash
 cd ~/Dev/wt-torquecalls-s8
 supabase functions deploy torquecalls-signal  --project-ref jsjsmuncfkbsbzqzqhfq
 supabase functions deploy torquecalls-control --project-ref jsjsmuncfkbsbzqzqhfq
 ```
+
+> A terceira função, `torquecalls-webhook`, é do sentido **VPS→CRM** e **não** entra
+> aqui: ela exige migration e segredos ANTES do deploy. Ver a seção 8c, que tem
+> ordem própria.
 
 **Verificação** — sem sessão nenhuma, a resposta certa é uma recusa limpa, não um 500:
 
@@ -263,6 +267,158 @@ EasyPanel gerencia foi tocado.
 
 ---
 
+## 8c. Webhook VPS→CRM (S11) — a ordem que não dá para furar
+
+Sem esta perna a VPS liga e o áudio passa, mas o CRM não fica sabendo de nada:
+`voip_calls` só avança pelo que o operador faz na tela. Medido em produção antes
+da S11: **7 chamadas registradas, ZERO com `connected_at`** — sem esse carimbo não
+existe duração de chamada, taxa de atendimento nem base de comissão.
+
+> **A chave deste sentido nasce na VPS, não aqui.** No sentido CRM→VPS (passo 1) a
+> privada é do Supabase e a VPS só verifica. Aqui é o INVERSO: a VPS gera e guarda
+> a privada (ao lado do arquivo do banco dela) e o CRM só recebe a pública. Uma
+> ponta comprometida nunca consegue cunhar no lugar da outra.
+
+### A ordem
+
+Fora dela **todo** evento vira 500, e o sintoma na VPS é
+`webhook: CRM devolveu erro status=500` — que se lê como "o CRM está passando mal",
+não como "falta configurar". Pior: falta de segredo derruba até requisição **sem**
+credencial, porque o verificador carrega a chave na primeira linha, antes de olhar
+o token.
+
+**1. Migration** `20270730000010_voip_webhook_ingest.sql`
+
+Cria `voip_webhook_events` (anti-replay), as marcas d'água de ordem e a RPC
+`fn_voip_apply_vps_event`. Sem ela a verificação passa e o `db.rpc` devolve erro do
+PostgREST → 500.
+
+`db push` **não funciona neste projeto** — aplique o arquivo e insira a linha do
+ledger à mão. Confira depois:
+
+```sql
+select to_regprocedure('public.fn_voip_apply_vps_event(uuid,text,bigint,bigint,timestamptz,jsonb)') is not null as rpc_existe;
+select version from supabase_migrations.schema_migrations where version = '20270730000010';
+```
+
+**2. Os DOIS segredos novos no Supabase**
+
+São **dois**, não três: `TORQUECALLS_ENV` já foi posto no passo 2 e vale para os
+dois sentidos.
+
+```bash
+supabase secrets set --project-ref jsjsmuncfkbsbzqzqhfq \
+  TORQUECALLS_WEBHOOK_PUBKEY='<kid:base64url — do log de boot da VPS>' \
+  TORQUECALLS_WEBHOOK_AUDIENCE='torquecrm.com.br'
+```
+
+| Segredo | De onde sai o valor |
+|---|---|
+| `TORQUECALLS_WEBHOOK_PUBKEY` | Do **log de boot da VPS**. Suba o binário novo **sem** `TORQUECALLS_WEBHOOK_URL` e ele imprime `chave de webhook ativa kid=... TORQUECALLS_WEBHOOK_PUBKEY=tc1:...`. Copie literal. Aceita duas separadas por vírgula, para rotação. |
+| `TORQUECALLS_WEBHOOK_AUDIENCE` | Escolha sua, mas **idêntica byte a byte** à da VPS. Use o host do **CRM**. |
+
+> ### ⚠️ A armadilha que mais custa: dois `AUDIENCE` com sentidos INVERTIDOS
+>
+> | Variável | Vale o host de | Sentido | Já existia? |
+> |---|---|---|---|
+> | `TORQUECALLS_AUDIENCE` | a **VPS** (`calls.torquecrm.com.br`) | CRM → VPS | sim, desde o passo 2 |
+> | `TORQUECALLS_WEBHOOK_AUDIENCE` | o **CRM** (`torquecrm.com.br`) | VPS → CRM | **nova** |
+>
+> Nomes adjacentes, significados opostos. Trocar um pelo outro **não** degrada: dá
+> 401 `wrong_audience` em 100% do tráfego, nos dois sentidos. Se a voz parar logo
+> depois de mexer em segredo, é aqui que se olha primeiro.
+
+**3. Deployar a edge function** — e só depois dos passos 1 e 2:
+
+```bash
+cd ~/Dev/wt-voip-callstate            # a regra do topo do runbook vale aqui também
+git log --oneline -1                  # tem que ser o commit da S11
+supabase functions deploy torquecalls-webhook --project-ref jsjsmuncfkbsbzqzqhfq
+```
+
+`verify_jwt=false` está no `config.toml` de propósito: quem chama é a VPS, não um
+navegador, e a autenticação é o envelope assinado.
+
+**Verificação** — a resposta certa para uma requisição sem envelope é **401**, não 500.
+Um 500 aqui significa exatamente que os passos 1 ou 2 não foram feitos:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -X POST \
+  https://jsjsmuncfkbsbzqzqhfq.supabase.co/functions/v1/torquecalls-webhook \
+  -H "Content-Type: application/json" -d '{}'
+# esperado: 401   |   500 = segredo faltando ou migration não aplicada
+```
+
+**4. Só então apontar a VPS.** Em `/opt/torquecalls/.env`:
+
+```
+TORQUECALLS_WEBHOOK_URL=https://jsjsmuncfkbsbzqzqhfq.supabase.co/functions/v1/torquecalls-webhook
+TORQUECALLS_WEBHOOK_AUDIENCE=torquecrm.com.br
+```
+
+```bash
+docker compose -f /opt/torquecalls/docker-compose.yml up -d
+docker logs --tail 30 torquecalls | grep webhook
+# esperado: "webhook para o CRM ativo audience=torquecrm.com.br"
+```
+
+> Faltar `TORQUECALLS_WEBHOOK_AUDIENCE` **não** derruba o processo — de propósito, o
+> webhook é best-effort e não vale pôr a voz em ciclo de reinício por um canal
+> lateral. O binário sobe com o webhook **DESLIGADO** e loga
+> `TORQUECALLS_WEBHOOK_URL configurada mas ... ausente: webhook para o CRM DESLIGADO`.
+> Não confunda "subiu" com "está entregando": confira a linha de log acima.
+
+### Teto de TTL: 300 s acoplado entre as duas pontas
+
+`webhookTTL = 300s` na VPS (`webhooksign.go`) e `MAX_ENVELOPE_TTL_SECONDS = 300` no
+CRM (`_shared/voip/webhook-verify.ts`), e o teste é `exp - iat > 300` — **margem
+ZERO**.
+
+> **Subir o TTL na VPS antes do CRM causa apagão total**, não degradação: todo
+> envelope passa a ser recusado com 401 `ttl_too_long`. Para mudar o teto, a ordem é
+> **CRM primeiro** (deploy com o número maior), VPS depois. Para baixar, o inverso.
+
+### Verificar que está entregando
+
+```sql
+-- o carimbo que a fatia existe para produzir
+select tc_call_id, status, ringing_at, connected_at, ended_at, end_reason,
+       ended_at - connected_at as duracao
+from voip_calls order by authorized_at desc limit 10;
+
+-- a sessão promovida pela própria VPS, e a marca d'água andando
+select tc_session_id, status, last_seq_epoch, last_seq from voip_sessions;
+
+-- envelopes aceitos na janela de dedup (60 min)
+select count(*) from voip_webhook_events;
+
+-- o que merece olho humano
+select action, status, payload_snapshot, created_at
+from runtime_logs
+where module = 'voip' and action like 'webhook%'
+order by created_at desc limit 20;
+```
+
+| Sinal em `runtime_logs` | Leitura |
+|---|---|
+| `webhook_carimbo_tardio` | entrega chegou fora de ordem e o carimbo foi salvo assim mesmo. Ruído esperado em baixo volume; **enxurrada** disso = rede entre VPS e CRM ruim. |
+| `webhook_chamada_ressuscitada` | o varredor fechou a linha antes de o `connected` chegar — a entrega está mais lenta que os 2 min dele. |
+| `webhook_chamada_desconhecida` | evento de chamada que o CRM não registrou. Volume disso = falta registrar a chamada de ENTRADA. |
+| `webhook_transicao_recusada` | **a única que merece investigação.** É a saída com `ok=false`. |
+| `webhook_sessao_falhou` | `ConnectFailure`/`StreamReplaced` na VPS: a sessão morreu e exige repareamento (passo 7). |
+
+### Desligar
+
+```
+TORQUECALLS_WEBHOOK_URL=      # vazia na VPS, e o emissor fica inerte
+```
+
+É a primeira linha a mexer num incidente do webhook, e é o que tem que vir **antes**
+do rollback da migration — na ordem inversa, o rollback troca "sem transição
+autoritativa" por "sem transição autoritativa **e** com rajada de 500".
+
+---
+
 ## 9. Front
 
 Merge **não** deploya. Depois do merge do PR #1317, subir a imagem nova pelo EasyPanel, à mão.
@@ -321,6 +477,6 @@ O rollback do banco é `supabase/migrations/rollback/20270730000000_torquecalls_
 
 ## O que ainda não existe
 
-- **Webhook VPS→CRM (S11/S13).** A chamada funciona e o áudio também, mas o CRM não fica sabendo que tocou, atendeu ou encerrou por conta própria: `voip_calls` só avança pelo que o operador faz na tela, e `call_logs` não é escrito. É a próxima fatia.
+- **`call_logs` a partir do webhook (S13).** A S11 (seção 8c) já faz o CRM saber que a chamada tocou, atendeu e encerrou — `voip_calls` deixou de depender só do que o operador faz na tela. O que ainda falta é a projeção disso em `call_logs`.
 - **Porta pública.** Tudo acima roda por túnel SSH. Expor é o último passo, por decisão de desenho.
 - **Chamada de entrada.** Toca na VPS, mas sem `session.policy` uma org com a voz desligada continuaria tocando. Vai junto com o webhook.
