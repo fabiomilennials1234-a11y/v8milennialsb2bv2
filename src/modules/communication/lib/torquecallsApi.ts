@@ -170,15 +170,38 @@ export async function startCall(args: {
   };
 }
 
+/**
+ * Códigos que significam "essa chamada já acabou" — e portanto que encerrar
+ * conseguiu o que queria.
+ *
+ * `call_not_found`: a linha não está mais no ledger do CRM.
+ * `call_ended`: está, e já com status final (`renewCallControlToken` recusa
+ * renovar o `ctl` de uma chamada encerrada, que é como este código nasce).
+ */
+const ALREADY_ENDED_CODES = new Set(["call_not_found", "call_ended"]);
+
+/**
+ * Encerrar o que já acabou é sucesso.
+ *
+ * Sem esta distinção, o outro lado desligar primeiro fazia o clique em Desligar
+ * virar exceção, e a única defesa possível do chamador era um `catch` cego —
+ * que engole junto o que IMPORTA (rede caída, chamada de outro operador). A
+ * decisão mora aqui, uma vez, em vez de espalhada por quem chama.
+ */
 export async function endCall(args: {
   tcSessionId: string;
   callId: string;
   organizationId?: string;
 }): Promise<void> {
-  await signal(
-    "endCall",
-    withOrg({ tc_session_id: args.tcSessionId, call_id: args.callId }, args.organizationId),
-  );
+  try {
+    await signal(
+      "endCall",
+      withOrg({ tc_session_id: args.tcSessionId, call_id: args.callId }, args.organizationId),
+    );
+  } catch (e) {
+    if (e instanceof CallDeniedError && ALREADY_ENDED_CODES.has(e.code)) return;
+    throw e;
+  }
 }
 
 /**

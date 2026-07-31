@@ -217,3 +217,41 @@ describe("signal() — mesma fronteira de invoke, mesmo conserto", () => {
       .rejects.toMatchObject({ code: "operator_busy", message: "Você já está em uma chamada." });
   });
 });
+
+/**
+ * Desligar o que já acabou é sucesso, não erro.
+ *
+ * Defeito vivido em produção (2026-07-30): o outro lado desligava, o operador
+ * clicava em Desligar e a tela ficava em "Encerrando…". Quem já não existe não
+ * pode ser encerrado de novo — e transformar isso em exceção obriga todo
+ * chamador a um `catch` cego, que engole junto os erros que IMPORTAM (rede
+ * caída, permissão negada). A distinção mora aqui, uma vez.
+ */
+describe("endCall — encerrar chamada que já não existe", () => {
+  it("não lança quando a chamada não é encontrada (404)", async () => {
+    const { endCall } = await import("./torquecallsApi");
+    invoke.mockResolvedValue(
+      httpErrorInvokeResult(404, { error: "Chamada não encontrada", code: "call_not_found" }),
+    );
+    await expect(endCall({ tcSessionId: "tc-1", callId: "call-1" })).resolves.toBeUndefined();
+  });
+
+  it("não lança quando a chamada já estava encerrada (409 call_ended)", async () => {
+    const { endCall } = await import("./torquecallsApi");
+    invoke.mockResolvedValue(
+      httpErrorInvokeResult(409, { error: "call_ended", code: "call_ended" }),
+    );
+    await expect(endCall({ tcSessionId: "tc-1", callId: "call-1" })).resolves.toBeUndefined();
+  });
+
+  // O contraponto que impede o conserto de virar um `catch {}` disfarçado: uma
+  // recusa que o operador PODE resolver continua chegando até ele.
+  it("continua lançando no que não é 'já acabou'", async () => {
+    const { endCall, CallDeniedError } = await import("./torquecallsApi");
+    invoke.mockResolvedValue(
+      httpErrorInvokeResult(403, { error: "Chamada de outro operador", code: "not_operator" }),
+    );
+    await expect(endCall({ tcSessionId: "tc-1", callId: "call-1" }))
+      .rejects.toBeInstanceOf(CallDeniedError);
+  });
+});

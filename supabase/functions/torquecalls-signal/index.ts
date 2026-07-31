@@ -288,12 +288,17 @@ async function terminate(
     .maybeSingle();
 
   if (!call || call.organization_id !== caller.orgId) {
-    return json(404, { error: "Chamada não encontrada" }, cors);
+    // `code` legível por máquina: sem ele o cliente não conseguia distinguir
+    // "já acabou" de "deu ruim" e ficava preso em "Encerrando…". Continua 404
+    // e continua sem revelar se a chamada existe em outra organização.
+    return json(404, { error: "Chamada não encontrada", code: "call_not_found" }, cors);
   }
   if (!isOrgAdmin(caller) && call.operator_user_id && call.operator_user_id !== caller.userId) {
-    return json(403, { error: "Chamada de outro operador" }, cors);
+    return json(403, { error: "Chamada de outro operador", code: "not_operator" }, cors);
   }
-  if (!call.tc_call_id) return json(409, { error: "Chamada sem id de rede" }, cors);
+  if (!call.tc_call_id) {
+    return json(409, { error: "Chamada sem id de rede", code: "no_tc_call_id" }, cors);
+  }
 
   const path = action === "endCall"
     ? `/api/sessions/${encodeURIComponent(sid)}/calls/${encodeURIComponent(call.tc_call_id)}`
@@ -311,7 +316,18 @@ async function terminate(
     body: action === "endCall" ? undefined : {},
   });
 
-  if (!res.ok) return json(res.status, { error: res.error }, cors);
+  // 404 da VPS é "essa chamada não existe mais lá" — que é o desfecho pedido,
+  // não uma falha. Acontece toda vez que o outro lado desliga primeiro: a VPS
+  // purga a chamada e o DELETE chega tarde.
+  //
+  // Devolver erro aqui era o que deixava a linha PRESA. A escrita abaixo é a
+  // única coisa que fecha `voip_calls` enquanto o webhook de fim de chamada
+  // (S11) não existe, e ela ficava do lado errado do early return: a linha
+  // seguia aberta segurando a cota, e a tentativa seguinte do mesmo operador
+  // voltava `operator_busy` até o reaper passar.
+  if (!res.ok && res.status !== 404) {
+    return json(res.status, { error: res.error }, cors);
+  }
 
   // O estado final autoritativo vem pelo webhook (S11). Aqui só antecipamos o
   // que o operador acabou de mandar, para a tela não ficar mentindo.
@@ -322,7 +338,7 @@ async function terminate(
     updated_at: new Date().toISOString(),
   }).eq("id", callId).neq("status", "ended");
 
-  return json(200, { ok: true }, cors);
+  return json(200, { ok: true, already_ended: !res.ok }, cors);
 }
 
 async function renewCtl(
