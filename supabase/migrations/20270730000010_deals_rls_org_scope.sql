@@ -90,10 +90,14 @@
 -- lixeira sem service_role". **A alegação era falsa** — fica registrada aqui pra
 -- ninguém reintroduzir a omissão achando que compra alguma coisa:
 --   (a) O Postgres aplica a policy de SELECT também ao UPDATE e ao DELETE sempre
---       que o comando precisa ler a linha existente (Table 5.1, nota [a] de
---       `ddl-rowsecurity`: "if read access is required to the existing or new row
---       — for example, a WHERE or RETURNING clause that refers to columns from
---       the relation"). O PostgREST SEMPRE emite `WHERE`. Ou seja: `deals_select`
+--       que o comando precisa ler a linha existente. Fonte (conferida em
+--       2026-07-31, PG 17): `sql-createpolicy`, Table 297 "Policies Applied by
+--       Command Type", nota [a], verbatim: "If read access is required to either
+--       the existing or new row (for example, a WHERE or RETURNING clause that
+--       refers to columns from the relation)." — uma versão anterior deste
+--       arquivo citava "Table 5.1 de ddl-rowsecurity", que não existe nessa
+--       página; a tabela mora na referência de CREATE POLICY.
+--       O PostgREST SEMPRE emite `WHERE`. Ou seja: `deals_select`
 --       já escondia o negócio da lixeira do próprio UPDATE, e o "caminho de
 --       restauração" que a omissão dizia preservar nunca existiu por ali.
 --       O que ela entregava de fato era o contrário: por qualquer caminho que NÃO
@@ -109,18 +113,58 @@
 --       owned by `postgres`, que tem `BYPASSRLS` — RLS não entra na conta desse
 --       caminho, com ou sem guarda na policy.
 --
--- O `WITH CHECK` de `deals_update` fica **sem** a guarda de propósito — é a
--- única divergência de `leads` NESTA dimensão (lá o `WITH CHECK` é omitido, então
--- o Postgres reusa o `USING`, guarda inclusa). Assim a transição visível→lixeira
--- (`SET deleted_at = now()`) continua possível por UPDATE direto, caso a Fatia 2
--- mande o soft-delete de negócio pelo PostgREST antes de existir uma RPC
--- equivalente à `bulk_delete_leads`. Mexer em linha que JÁ está na lixeira, não.
+-- O `WITH CHECK` de `deals_update` REPETE a guarda. Não é assimetria — é o que
+-- deixa `deals` idêntica a `leads` nesta dimensão. Medido em prod (`pg_policies`,
+-- 2026-07-31): `leads_update_by_responsibility_and_permissions` tem
+-- `with_check = NULL` e `qual = ((deleted_at IS NULL) AND (organization_id IN
+-- (SELECT get_my_organization_ids())) AND (...))`; com `WITH CHECK` omitido o
+-- Postgres reusa o `USING`, então o `WITH CHECK` EFETIVO de `leads` tem a guarda.
+-- `master_all_leads` (que é `FOR ALL`, `with_check = NULL`, `qual` com
+-- `(deleted_at IS NULL)`) idem. Escrevemos explícito por causa da 4b e da regra 5
+-- da CLAUDE.md, mas o predicado é o mesmo que `leads` já roda hoje.
+--
+-- Uma versão anterior deste arquivo deixava o `WITH CHECK` frouxo, alegando que
+-- isso preservava a transição visível→lixeira (`SET deleted_at = now()`) por
+-- UPDATE direto. **Essa alegação também era falsa** — pela MESMA regra citada em
+-- (a) logo acima, que vale para a linha NOVA e não só pra velha: na Table 297, a
+-- linha `UPDATE` diz que a expressão `USING` da policy de SELECT faz "Filter
+-- existing row [a] & check new row [a]". Como `deals_select` exige
+-- `deleted_at IS NULL`, a linha RESULTANTE de um soft-delete reprova nessa
+-- checagem, e o `WITH CHECK` do UPDATE — frouxo ou não — não decide nada.
+-- Medido na branch efêmera de QA (PG 17.6, 2026-07-30) em tabela temporária
+-- dentro de transação abortada, nada persistido; a branch já foi encerrada, então
+-- o que fica aqui é o registro do resultado, não algo reproduzível deste repo:
+--     SELECT policy USING (deleted_at IS NULL)
+--     UPDATE policy USING (deleted_at IS NULL) WITH CHECK (true)
+--     UPDATE t SET deleted_at = now() WHERE id = 1;
+--        -> ERRO 42501 "new row violates row-level security policy"
+--     UPDATE t SET deleted_at = now();   -> PASSOU (sem `WHERE` nem `RETURNING`
+--        o comando não requer SELECT na relação, então a nota [a] não dispara)
+-- Ou seja: o único caminho que o `WITH CHECK` frouxo abria era o UPDATE sem
+-- `WHERE` nenhum — que o PostgREST não emite, e que numa tabela multi-tenant é o
+-- último que a gente quer aberto. Repetir a guarda fecha esse caminho e custa uma
+-- linha. NÃO custa a lixeira: ela já era inalcançável por UPDATE direto.
+--
+-- ── A verdade inconveniente que isso implica pra Fatia 2 ───────────────────
+-- Lixeira de negócio NÃO pode ser `.update({ deleted_at })` do client — vai
+-- devolver `42501 new row violates row-level security policy for table "deals"`,
+-- com ou sem a guarda no `WITH CHECK`. Tem que ser RPC `SECURITY DEFINER`, igual
+-- `leads`. E essas RPCs NÃO EXISTEM: medido em prod (`pg_proc` do schema
+-- `public`, 2026-07-31) há `bulk_delete_leads`, `restore_lead`,
+-- `restore_leads_bulk` e `purge_lead` (as quatro com `prosecdef = true`) e nenhuma
+-- equivalente pra negócio — as únicas funções que casam `%deal%` são os dois
+-- triggers (`fn_sync_deal_value_from_items`, `fn_deal_won_populate_lead_products`).
+-- Esta migration **não** cria essas RPCs: está fora do escopo dela. A Fatia 2
+-- precisa de `bulk_delete_deals` / `restore_deal` / `purge_deal` ANTES de
+-- qualquer UI de lixeira de negócio. Escrito aqui porque quem ler esta policy no
+-- futuro vai bater exatamente nesse 42501 e merece a pista.
 --
 -- Blast radius de acrescentar a guarda agora: zero — 0 linhas na tabela, zero
 -- `.from('deals')` no front, e os três triggers que escrevem em `deals`
 -- (`fn_sync_deal_value_from_items`, `fn_deal_won_populate_lead_products`,
 -- `update_updated_at`) são SECURITY DEFINER owned by `postgres`. Custo hoje: uma
--- linha em cada policy. Depois do apply, migration é imutável.
+-- linha no `USING` de cada uma das três policies que leem linha existente, mais
+-- uma no `WITH CHECK` do UPDATE. Depois do apply, migration é imutável.
 --
 -- Só schema e ACL: nenhum dado de cliente é lido, escrito ou movido.
 -- ============================================================================
@@ -173,12 +217,15 @@ CREATE POLICY "deals_update" ON public.deals
     )
   )
   WITH CHECK (
-    organization_id IN (SELECT public.get_my_organization_ids())
-    OR (SELECT public.is_master_user())
+    deleted_at IS NULL
+    AND (
+      organization_id IN (SELECT public.get_my_organization_ids())
+      OR (SELECT public.is_master_user())
+    )
   );
 
 COMMENT ON POLICY "deals_update" ON public.deals IS
-  'USING = negocio VIVO dentro do escopo (guarda de soft-delete igual leads_update_by_responsibility_and_permissions; restaurar e RPC SECURITY DEFINER, nao UPDATE direto). WITH CHECK sem a guarda de proposito: permite a transicao visivel->lixeira. WITH CHECK explicito e legibilidade: o Postgres ja reusa USING quando ele e omitido.';
+  'USING = negocio VIVO dentro do escopo de org, mais master. WITH CHECK repete a guarda: a linha RESULTANTE tambem precisa estar viva. Espelha leads_update_by_responsibility_and_permissions, que omite o WITH CHECK e por isso reusa o USING com a guarda dentro. Consequencia: soft-delete, restauracao e purga de negocio sao RPC SECURITY DEFINER (como bulk_delete_leads/restore_lead/purge_lead), nunca UPDATE direto do client — a policy de SELECT ja checa a linha nova quando o comando tem WHERE, entao UPDATE direto devolveria 42501 mesmo com WITH CHECK frouxo.';
 
 CREATE POLICY "deals_delete" ON public.deals
   FOR DELETE
@@ -268,14 +315,19 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- 4c-bis. E a guarda NÃO pode estar no `WITH CHECK` do UPDATE: com ela, gravar
-  --     `deleted_at = now()` (soft-delete por UPDATE direto) viraria violação de
-  --     RLS. A assimetria é deliberada — ver cabeçalho.
+  -- 4c-bis. A guarda TAMBÉM tem que estar no `WITH CHECK` do UPDATE: a linha
+  --     resultante precisa continuar viva. É o que iguala `deals` a `leads`, onde
+  --     o `WITH CHECK` é omitido e o Postgres reusa o `USING` com a guarda dentro.
+  --     ATENÇÃO ao ler o histórico: uma versão anterior desta checagem exigia o
+  --     OPOSTO — abortava a migration SE a guarda estivesse aqui — em nome de
+  --     preservar o soft-delete por UPDATE direto. Esse benefício não existe (a
+  --     policy de SELECT checa a linha nova; ver cabeçalho), e a checagem invertida
+  --     congelava a divergência de `leads` num arquivo imutável. Não reintroduza.
   SELECT with_check INTO v_qual
   FROM pg_policies
   WHERE schemaname = 'public' AND tablename = 'deals' AND policyname = 'deals_update';
-  IF v_qual IS NULL OR v_qual LIKE '%deleted_at IS NULL%' THEN
-    RAISE EXCEPTION 'FAIL: WITH CHECK de deals_update ausente ou com a guarda de soft-delete — mandar negocio para a lixeira por UPDATE ficaria impossivel.';
+  IF v_qual IS NULL OR v_qual NOT LIKE '%deleted_at IS NULL%' THEN
+    RAISE EXCEPTION 'FAIL: WITH CHECK de deals_update ausente ou sem a guarda de soft-delete — divergiria de leads, cujo WITH CHECK efetivo tem a guarda.';
   END IF;
 
   -- 4d. RLS continua ligada (policy sem RLS ligada é decoração).
@@ -306,10 +358,19 @@ BEGIN
   --     `is_master_user() = false` sem JWT. Isso é verdade ANTES e DEPOIS deste
   --     arquivo, e passaria idêntico se todos os CREATE POLICY fossem apagados —
   --     não provava nada sobre a migration.
-  --     O que 4e (catálogo) não pega: grant em COLUNA. `SELECT 1 FROM deals`
-  --     funciona com privilégio de UMA coluna, enquanto
-  --     `has_table_privilege(...,'SELECT')` continua false. A tentativa real
-  --     fecha esse vão.
+  --     O motivo declarado antes era "cobrir grant em COLUNA, que
+  --     `has_table_privilege(...,'SELECT')` não enxerga". A premissa sobre
+  --     `has_table_privilege` procede, mas o CENÁRIO não sobrevive ao `REVOKE`
+  --     deste arquivo — a justificativa estava superdimensionada. Doc de `REVOKE`
+  --     (PG 17, Notes), verbatim: "When revoking privileges on a table, the
+  --     corresponding column privileges (if any) are automatically revoked on
+  --     each column of the table, as well." E não há ACL de coluna em `deals`
+  --     hoje (medido em prod 2026-07-31: `pg_attribute.attacl` não-nulo em
+  --     `public.deals` = 0 linhas; em `public.leads`, também 0).
+  --     O que 4g vale de verdade, e por isso fica: é a única prova de EXECUÇÃO
+  --     ponta-a-ponta. Exercita `USAGE` no schema, membership de role e um
+  --     `REVOKE` que tenha errado o alvo — coisas que a leitura de catálogo da 4e
+  --     não distingue de um catálogo que só PARECE certo.
   --     Não conseguir assumir o role é SKIP, não FAIL: é fato sobre o role do
   --     apply, não sobre o alvo — e 4e continua sendo a trava dura.
   BEGIN
@@ -337,7 +398,7 @@ BEGIN
     RAISE NOTICE 'SKIP 4g: o role do apply (%) nao assumiu anon (sem membership ou SET LOCAL descartado); 4e segue como trava.', current_user;
   END IF;
 
-  RAISE NOTICE 'VALIDATION PASSED: 4 policies org-scoped com ramo de master, soft-delete guardado em SELECT/UPDATE/DELETE, anon sem grant.';
+  RAISE NOTICE 'VALIDATION PASSED: 4 policies org-scoped com ramo de master, guarda de soft-delete no USING de SELECT/UPDATE/DELETE e no WITH CHECK do UPDATE, anon sem grant.';
 END$$;
 
 -- ============================================================================

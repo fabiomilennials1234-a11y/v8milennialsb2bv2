@@ -197,7 +197,7 @@ flowchart TD
 | Etapa (`stage_key`) | propriedade do lead | propriedade do Negócio |
 | 2ª venda pro mesmo cliente | ❌ impossível (constraint) | ✅ 2º Negócio |
 | Métrica de pipeline | mistura curioso com proposta de R$ 40 mil | lead → negócio (qualificação) e negócio → ganho (venda), separados |
-| Carteira | módulo próprio no menu | faceta do lead na mesma tabela (fatia 2) |
+| Carteira | módulo próprio no menu | faceta do lead na mesma tabela — **fatia em aberto**: esta célula dizia "fatia 2" e o §6 deste mesmo doc diz "fatia 3". Quem decide é o CTO (`spec.md` §6c item 4); marcado em 2026-07-31 para não seguir respondendo sozinho |
 
 ### Bloqueio de schema — são TRÊS cadeados
 

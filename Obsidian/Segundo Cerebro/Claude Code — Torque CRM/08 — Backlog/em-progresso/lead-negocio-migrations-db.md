@@ -27,8 +27,8 @@ owner: CTO
 | Fato | Valor |
 |---|---|
 | `deals` | **0 linhas**, RLS ligada, 5 policies, colunas completas — **mas não é inerte: 2 gatilhos vivos** (`trg_deal_won_lead_products`, `update_deals_updated_at`) e satélites `deal_items`/`lead_products` (0 linhas cada). Ver M3 |
-| `pipeline_entries` | **36.507** linhas — 20.331 padrão (64 orgs) + 16.176 custom (24 orgs) *(re-medido 2026-07-30; era 36.497 em 07-29)* |
-| `custom_pipe_entries` | 16.177 — **espelhadas em `pipeline_entries` com a mesma PK** (16.177/16.177 casam por `id`). Somar as duas conta o mesmo card 2×. **Não tem `deal_id`** → M7 |
+| `pipeline_entries` | **36.709** linhas — 20.517 padrão (65 orgs) + 16.192 custom (24 orgs) *(re-medido 2026-07-31; era 36.507 em 07-30 e 36.497 em 07-29 — base viva, sobe alguns por dia)* |
+| `custom_pipe_entries` | 16.193 — **espelhadas em `pipeline_entries` com a mesma PK** (16.193/16.193 casam por `id`). Somar as duas conta o mesmo card 2×. **Não tem `deal_id`** → M7 |
 | `pipeline_entries` com `deal_id` | **0** |
 | `uq_pipeline_entries_pipeline_lead` | **viva** (1º cadeado) |
 | `idx_pipeline_entries_pipeline_lead` | **vivo** (unique parcial — 2º cadeado) |
@@ -57,7 +57,7 @@ flowchart LR
 M5 tem formato decidido (coluna em `leads`, decisão C) e nenhuma UI escrita.
 
 **M7 está numerado fora de ordem porque nasceu depois** (decisão F, 2026-07-30) — mas
-roda **antes do M4**, e sem ele o backfill deixa 16.176 cards custom sem negócio na tela
+roda **antes do M4**, e sem ele o backfill deixa 16.192 cards custom sem negócio na tela
 que os renderiza. O texto dele está posicionado imediatamente antes do M4.
 
 ---
@@ -74,8 +74,8 @@ existir da separação — continua impossível.
 > `UNIQUE (pipeline_id, lead_id)` — verificado em `pg_constraint` (2026-07-30).
 >
 > Dropar só a constraint de `pipeline_entries` não destrava nada. Dropar as duas de
-> `pipeline_entries` destrava **só os funis padrão**: 16.176 cards em 24 orgs vivem
-> em funil customizado, e a Milennials — org piloto — tem 913 deles. Sem o terceiro
+> `pipeline_entries` destrava **só os funis padrão**: 16.192 cards em 24 orgs vivem
+> em funil customizado, e a Milennials — org piloto — tem 914 deles. Sem o terceiro
 > drop, a decisão F (`deal_id` em `custom_pipe_entries`) não entrega recompra no
 > piloto.
 >
@@ -299,7 +299,7 @@ SET NULL` já está no lugar.
 > `lead_products` (0 linhas hoje). Nenhuma das duas era citada neste documento.
 >
 > A consequência prática está no M4: o gatilho é **AFTER UPDATE**, então negócio que
-> **nasce** com `won = true` (é o caso dos 215 do backfill) **não o dispara**. Ver a
+> **nasce** com `won = true` (é o caso dos 217 do backfill) **não o dispara**. Ver a
 > decisão explícita lá.
 >
 > *(Acrescentado em 2026-07-30: um documento que ensina "cuidado com gatilho que degrada
@@ -373,22 +373,55 @@ DROP POLICY IF EXISTS deals_delete ON public.deals;
 -- `deleted_at IS NULL` — deixá-la viva refura o soft-delete que deals_select guarda
 DROP POLICY IF EXISTS master_select_all_deals ON public.deals;
 
+-- A guarda de soft-delete entra no USING das TRÊS que leem linha existente
+-- (select/update/delete) e também no WITH CHECK do update. Não é zelo: sem ela em
+-- UPDATE/DELETE, a linha da lixeira continua alcançável por comando sem
+-- WHERE/RETURNING e por função SECURITY INVOKER — inclusive hard-delete.
 CREATE POLICY deals_select ON public.deals FOR SELECT
   USING (
     deleted_at IS NULL
-    AND (organization_id IN (SELECT get_my_organization_ids()) OR is_master_user())
+    AND (organization_id IN (SELECT get_my_organization_ids()) OR (SELECT is_master_user()))
   );
 
 CREATE POLICY deals_insert ON public.deals FOR INSERT
-  WITH CHECK (organization_id IN (SELECT get_my_organization_ids()) OR is_master_user());
+  WITH CHECK (organization_id IN (SELECT get_my_organization_ids()) OR (SELECT is_master_user()));
 
 CREATE POLICY deals_update ON public.deals FOR UPDATE
-  USING      (organization_id IN (SELECT get_my_organization_ids()) OR is_master_user())
-  WITH CHECK (organization_id IN (SELECT get_my_organization_ids()) OR is_master_user());
+  USING (
+    deleted_at IS NULL
+    AND (organization_id IN (SELECT get_my_organization_ids()) OR (SELECT is_master_user()))
+  )
+  WITH CHECK (
+    deleted_at IS NULL
+    AND (organization_id IN (SELECT get_my_organization_ids()) OR (SELECT is_master_user()))
+  );
 
 CREATE POLICY deals_delete ON public.deals FOR DELETE
-  USING (organization_id IN (SELECT get_my_organization_ids()) OR is_master_user());
+  USING (
+    deleted_at IS NULL
+    AND (organization_id IN (SELECT get_my_organization_ids()) OR (SELECT is_master_user()))
+  );
 ```
+
+> [!danger] 🔴 Este SQL estava atrás da migration já commitada — corrigido em 2026-07-31
+> A fonte de verdade é `supabase/migrations/20270730000010_deals_rls_org_scope.sql`
+> (linhas 187-241). O doc punha `deleted_at IS NULL` **só** em `deals_select`; a migration
+> põe no `USING` de select, update **e** delete, e também no `WITH CHECK` do update.
+>
+> Seguir a versão antiga deste doc faria `deals` nascer com **o mesmo furo de soft-delete
+> que o bloco acima acabou de denunciar na 5ª policy** — só que agora no UPDATE e no
+> DELETE. Não existe "caminho de restauração" a preservar: restaurar e purgar são RPC
+> `SECURITY DEFINER` (`restore_lead`, `restore_leads_bulk`, `purge_lead`, `bulk_delete_leads`),
+> nunca `UPDATE`/`DELETE` direto do client.
+>
+> **Consequência que a migration documenta e o M4 herda:** as RPCs equivalentes de negócio
+> **não existem** — medido em `pg_proc` (2026-07-31), as únicas funções que casam `%deal%`
+> são os dois triggers. A fatia 2 precisa de `bulk_delete_deals` / `restore_deal` /
+> `purge_deal` **antes** de qualquer UI de lixeira de negócio, senão o client bate
+> `42501 new row violates row-level security policy for table "deals"`.
+>
+> Também alinhado: `(SELECT is_master_user())` entre parênteses, como na migration — o
+> `InitPlan` avalia a função uma vez por query em vez de uma vez por linha.
 
 > [!warning] Decisão consciente: `deals` **não** herda o gate de responsabilidade de `leads`
 > Quem este SQL espelha é **`pipeline_entries`**, não `leads`. A diferença é de produto,
@@ -419,11 +452,25 @@ CREATE POLICY deals_delete ON public.deals FOR DELETE
 > policy causa **recursão infinita** quando o Realtime avalia `apply_rls()` — regra
 > já documentada na CLAUDE.md raiz.
 
-**Grants:** nada a fazer. Medido: `authenticated` já tem DML completo; `anon` tem
-SELECT, exatamente como `leads` e `pipeline_entries` — quem barra é a RLS.
-**Não repetir aqui o gotcha do `ALTER DEFAULT PRIVILEGES`:** conferir com
-`has_table_privilege('anon', 'public.deals', 'SELECT')` e garantir que nenhuma
-policy nova dê acesso a `anon`.
+**Grants: há o que fazer — `anon` sai.**
+
+```sql
+REVOKE ALL ON public.deals FROM PUBLIC;  -- no-op medido (não há linha de PUBLIC no ACL), mantido pela regra das duas metades
+REVOKE ALL ON public.deals FROM anon;
+```
+
+E a verificação **aborta** se `anon` continuar lendo (`has_table_privilege`). A RLS não é
+a única barreira: é a segunda. Tabela que vai carregar `value` e `notes` de venda não
+depende de um único predicado estar certo para não vazar.
+
+> [!warning] *(Corrigido em 2026-07-31)* Este bloco dizia **"Grants: nada a fazer… `anon`
+> tem SELECT, exatamente como `leads` e `pipeline_entries` — quem barra é a RLS."*
+> A migration commitada `20270730000010:243-245` faz o contrário: revoga de `PUBLIC` **e**
+> de `anon`, e a verificação dela aborta se `anon` ainda enxergar. "Copiar o que as outras
+> tabelas fazem" era copiar uma fraqueza herdada, não seguir um padrão.
+
+**O gotcha do `ALTER DEFAULT PRIVILEGES` continua valendo** — `REVOKE ... FROM PUBLIC`
+sozinho não fecha grant nominal. Daí os dois `REVOKE`, sempre.
 
 ### M3b — Matar a segunda verdade de posição
 
@@ -503,7 +550,7 @@ faltava era a verificação capaz de dizer isso; a antiga não teria dito a ning
 > `supabase/migrations/20270730000030_custom_pipe_entries_deal_id.sql` já resolve o
 > problema real; era o plano que estava atrás.)*
 
-**Por quê:** a decisão F do CTO. `custom_pipe_entries` não tem `deal_id`, são 16.176 cards
+**Por quê:** a decisão F do CTO. `custom_pipe_entries` não tem `deal_id`, são 16.193 cards
 em 24 orgs, e **é essa tabela que o kanban customizado lê**. Sem a coluna, todo funil
 custom fica fora do modelo de Negócio.
 
@@ -538,15 +585,46 @@ Profundidade máxima 3, convergente por construção. **Deliberadamente não usa
 profundidade descartaria **em silêncio** uma propagação legítima nascida dentro de outro
 gatilho (que é justamente o que o M4 faz).
 
-> [!warning] Recomendação ao M4 — backfillar pelo lado da FONTE, não do espelho
-> `trg_custom_pipe_entries_updated_at` é BEFORE UPDATE e carimba `updated_at = now()`
-> incondicionalmente. Backfill que passe pelo lado `pipeline_entries` faria o gatilho
-> reverso escrever nos 16.177 cards custom de uma vez, **zerando o sinal de "sem
-> interação"**.
+> [!danger] 🔴 A recomendação "backfillar pela FONTE" foi **RETIRADA** — as duas razões eram falsas
+> Esta seção recomendava ao M4 backfillar por `custom_pipe_entries`, alegando (a) que a
+> rota da fonte dispara o gatilho reverso **zero** vezes e por isso preserva `updated_at`,
+> e (b) que `stage_changed_at` **não é tocado em nenhuma das rotas**. As duas estão
+> refutadas com medição dentro da migration que esta própria seção cita
+> (`20270730000030:148-196`) — o doc é que ficou atrás do artefato.
 >
-> Backfillar `custom_pipe_entries.deal_id` e deixar o sync (a) levar o valor ao espelho
-> chega ao mesmo estado final disparando o reverso **zero** vezes. `stage_changed_at` não
-> é tocado em nenhuma das rotas, então o filtro "Parado há" sobrevive nas duas.
+> **(a) é falsa duas vezes.** O reverso **dispara** na rota da fonte: é o passo 2 do trace
+> "partindo da fonte", quatro linhas acima, neste mesmo documento — ele só não afeta linha
+> nenhuma, por G2. E o carimbo de `updated_at` **nunca dependeu dele**: são dois gatilhos
+> `BEFORE UPDATE`, sem `WHEN` e sem lista de colunas, um em cada tabela
+> (`trg_custom_pipe_entries_updated_at` → `update_updated_at_column()` e
+> `update_pipeline_entries_updated_at` → `update_updated_at()`), ambos incondicionais.
+> **Nenhuma rota preserva `updated_at`** — as duas carimbam as duas tabelas. A rota da
+> fonte não compra nada nesse quesito.
+>
+> **(b) é falsa.** `stage_changed_at = EXCLUDED.stage_changed_at` está no
+> `ON CONFLICT (id) DO UPDATE` do `sync_custom_pipe_to_entries` (lido com
+> `pg_get_functiondef` em prod), e **as duas rotas terminam no sync**. Medido 2026-07-31:
+> **370 dos 16.193 pares já divergem hoje, em 12 orgs** — o backfill reconcilia esses à
+> força e muda a "idade na etapa" que `useLeadsDeals`
+> (`src/modules/leads/hooks/useLeadsDeals.ts:105,175`) mostra na aba Negócios. *(Eram 367
+> em 2026-07-30.)* O filtro "Parado há" da `20270729000010` lê a mesma coluna mas o RPC
+> resolve só `p.type='system'`, então card custom não chega lá — **esse** filtro não é
+> afetado.
+>
+> **Rota decidida: pelo ESPELHO**, que é o que o SQL do M4 sempre fez. Justificativa
+> completa no bloco "Rota escolhida" da seção M4. Em resumo: 20.517 dos 36.709 cards são
+> `system` e não têm outra rota; para o card custom as duas rotas custam o mesmo (o sync
+> recalcula `stage_key` em toda escrita da fonte); e o `SET` do M4 é `deal_id` sozinho, que
+> é o segundo ramo da INVARIANTE desta migration.
+>
+> **O que o M4 paga por isso, declarado e conferido lá:** `updated_at` carimbado nas duas
+> tabelas; `stage_changed_at` reconciliado nos pares que já divergiam (guarda 3f prova que
+> foi só neles); `leads.pipe_whatsapp` protegido por `DISABLE TRIGGER` nominal + guarda 3e.
+>
+> *(Bloco reescrito em 2026-07-31. A versão anterior foi escrita contra um cabeçalho
+> superseded da `20270730000030` e contradizia o SQL do M4 duzentas linhas abaixo — quem
+> executasse recebia duas ordens mutuamente exclusivas, e o único SQL pronto implementava
+> a desaconselhada.)*
 
 **Verificação (embutida, aborta a transação):** coluna `uuid` nullable + FK
 `→ deals(id) ON DELETE SET NULL` + índice parcial + `sync` propagando `deal_id` **nos dois
@@ -572,11 +650,21 @@ foi medido e descartado: pegaria 14.296 cards (39%) mas esvaziaria orgs reais (D
 Rosa 918→8, HGE −85%). *(Este parágrafo dizia "depende do D3, ainda aberto" — estava
 stale.)*
 
-**Quantos são:** `pipeline_entries` tem ~36,5 mil linhas (20.331 em funis padrão / 64
-orgs + 16.176 em customizados / 24 orgs). **Não são 52.588 nem 39.613**: somar
-`custom_pipe_entries` conta o mesmo card duas vezes, porque o gatilho
+**Quantos são** (re-medido 2026-07-31): `pipeline_entries` tem **36.709** linhas —
+**20.517** em funis `type='system'` + **16.192** em `type='custom'`. **Não são 52.588 nem
+39.613**: somar `custom_pipe_entries` conta o mesmo card duas vezes, porque o gatilho
 `sync_custom_pipe_to_entries` espelha cada linha dela em `pipeline_entries` com a
-**mesma chave primária** (medido: 16.177 de 16.177 casam por `id`).
+**mesma chave primária** — **16.193 de 16.193 casam por `id`**.
+
+> [!note] O par 16.193 (fonte) × 16.192 (espelho em funil custom) fecha — e a diferença é o achado
+> Não é linha órfã. **Um** card de `custom_pipe_entries` tem espelho cujo `pipeline_id`
+> aponta para funil **`system`/`propostas`**, então ele cai na contagem de system, não na
+> de custom. É o card `dd91cd35-…` da Basic4u — mesmo `id`, mesma org, mesmo lead, mesmo
+> `created_at` nos dois lados, mas fonte no funil custom "Reativação" (`stage_key` que
+> resolve `novo`) e espelho em `propostas`/`vendido`. O `ON CONFLICT DO UPDATE` do sync
+> **não escreve `pipeline_id`**, então o espelho foi movido de funil depois de criado e a
+> fonte ficou para trás. É exatamente o par que a pré-condição 0b do SQL abaixo aborta —
+> registrado aqui para que o número ímpar não pareça erro de medição.
 
 > [!danger] 🔴 Backfillar `pipeline_entries` **não** cobre os dois mundos
 > Cobre `pipeline_entries`. O **kanban customizado lê `custom_pipe_entries`**
@@ -585,7 +673,7 @@ orgs + 16.176 em customizados / 24 orgs). **Não são 52.588 nem 39.613**: somar
 > `sync_custom_pipe_to_entries` é de **mão única** — copia custom → padrão — e seu
 > `ON CONFLICT (id) DO UPDATE` **não menciona `deal_id`**; não existe gatilho reverso.
 >
-> Efeito de rodar o M4 sozinho: os **16.176** cards custom (913 na **Milennials**, a org
+> Efeito de rodar o M4 sozinho: os **16.192** cards custom (914 na **Milennials**, a org
 > piloto) ganham negócio em `deals`, ganham `deal_id` no espelho — e seguem com `deal_id`
 > **NULL na tabela que a tela renderiza**. Duas verdades dentro do piloto, exatamente o
 > que a decisão F existe para evitar.
@@ -626,7 +714,7 @@ orgs + 16.176 em customizados / 24 orgs). **Não são 52.588 nem 39.613**: somar
 > | Efeito | Medido |
 > |---|---|
 > | Linhas que o `INSERT` emitiria | **39.164** |
-> | Cards reais | 36.497 |
+> | Cards reais | 36.497 *(base de 2026-07-29, quando o fantasma foi medido)* |
 > | **Negócios fantasma** (duplicados, sem card) | **2.667** |
 > | Cards que casam com etapas de `stage_role` **divergente** | **494** — o `won` sai a sorteio |
 >
@@ -643,6 +731,96 @@ orgs + 16.176 em customizados / 24 orgs). **Não são 52.588 nem 39.613**: somar
 > com etapa nula e **nenhum negócio marcado como ganho**.
 >
 > A coluna que fala o mesmo vocabulário é **`p.slug`**.
+
+> [!danger] 🔴 O `UPDATE` do M4 **escreve em `leads`** — e nenhuma guarda antiga via
+> `UPDATE public.pipeline_entries SET deal_id = …` parece uma escrita de uma coluna só. Não é.
+> `trg_sync_whatsapp_stage_to_lead` é (lido com `pg_get_triggerdef` em prod, 2026-07-31):
+>
+> ```
+> CREATE TRIGGER trg_sync_whatsapp_stage_to_lead
+>   AFTER INSERT OR DELETE OR UPDATE ON public.pipeline_entries
+>   FOR EACH ROW EXECUTE FUNCTION sync_pipeline_entry_to_lead_pipe_whatsapp()
+> ```
+>
+> **Sem lista de colunas e sem `WHEN`.** Um `SET deal_id = …` satisfaz isso igual a
+> qualquer outro `UPDATE`. A única proteção dentro da função é
+> `IF pg_trigger_depth() > 1 THEN RETURN`, e ela **não vale aqui**: o `UPDATE` do M4 é
+> statement de topo, roda em **profundidade 1**. A guarda blinda recursão, não backfill.
+>
+> Para todo card de funil `type='system'` / `slug='whatsapp'` a função executa
+> `UPDATE public.leads SET pipe_whatsapp = NEW.stage_key WHERE id = NEW.lead_id`.
+>
+> | Medido em prod, 2026-07-31 | |
+> |---|---|
+> | Cards alvo do backfill em funil `whatsapp` | **19.413** |
+> | Leads cujo `leads.pipe_whatsapp` **diverge** do `stage_key` do card | **1.885** |
+> | Orgs atingidas | **34** |
+> | Milennials (org piloto) | **133** de 1.138 cards whatsapp |
+> | Maiores: Basic4u 602 · Bella Itália 228 · Bertin 157 · Maria Bonita 157 · Coopeafamijf 131 | |
+> | `pipe_whatsapp` NULL virando valor | **0** (toda divergência é valor↔valor) |
+>
+> São **1.885 linhas de dado de cliente reescritas** por um backfill que anuncia escrever
+> só `deal_id`. E as quatro guardas da versão anterior **não olhavam `leads`**: 3a contava
+> negócios×cards, 3b só `lead_id IS NULL`, 3c `sale_events`/`meeting_events`/`lead_products`,
+> 3d o espelho custom. A transação commitava imprimindo `VALIDATION PASSED`.
+>
+> **Não é reconciliação boa que veio de brinde.** Qual dos dois lados está certo — o card
+> ou o lead — é pergunta de produto com 1.885 respostas, e ninguém a fez. O backfill do
+> `deal_id` não é o lugar de respondê-la em silêncio.
+>
+> **Segunda ponta, hoje dormente:** toda escrita em `leads` roda também
+> `enqueue_lead_webhooks`, que monta o payload e insere em `webhook_deliveries` **sem
+> comparar `OLD`/`NEW`** — qualquer `UPDATE` vira entrega. Hoje sairia **0**, mas só porque
+> `webhooks` tem **0 linhas ativas na base inteira** (medido 2026-07-31), incluindo 0 em
+> `lead.updated`. Isso é **acidente de configuração, não desenho**: a primeira org que ligar
+> um webhook de lead recebe 1.885 entregas de um backfill de `deal_id`. Com o gatilho
+> desligado no passo 1b, essa ponta não existe — não por sorte.
+>
+> **Conserto adotado abaixo:** desligar **esse gatilho, nominalmente**, em volta da escrita
+> (passos 1b e 2c), e uma guarda 3e que compara `md5` de `(id, pipe_whatsapp)` de todos os
+> leads da org antes×depois e **aborta** se um byte mudar. A divergência preexistente fica
+> onde está, visível, e sai como `RAISE NOTICE` de relatório no fim da transação — vira
+> script próprio, com revisão própria e a decisão de produto tomada por quem pode tomá-la.
+>
+> *(Descoberto em 2026-07-31, depois de a versão anterior deste bloco ter passado por
+> revisão. O gatilho estava listado no cabeçalho da `20270730000030` como "sai na primeira
+> linha por `pg_trigger_depth`" — verdade **para o bounce do sync**, que roda aninhado, e
+> falso para o `UPDATE` de topo do M4. A frase certa no contexto errado.)*
+
+> [!warning] Efeito colateral por dado, **não** por desenho: `enforce_closed_at_on_final_stage`
+> O bounce do sync (reverso → `custom_pipe_entries` → sync → espelho) menciona `stage_key`
+> no `SET`, o que satisfaz `trg_enforce_closed_at` (`BEFORE INSERT OR UPDATE OF stage_key`).
+> A função carimba `NEW.closed_at := NOW()` quando `stage_key IN ('vendido','perdido')` e
+> `closed_at IS NULL` — **mesmo com `stage_key` inalterado**, porque ela não compara com `OLD`.
+>
+> Medido em prod 2026-07-31: **29 cards custom** em estágio final, **0** deles com
+> `closed_at` nulo. Inerte **hoje, por dado**. Se algum funil custom passar a usar as chaves
+> `vendido`/`perdido` sem `closed_at`, o backfill carimba data de fechamento inventada. A
+> guarda 3g abaixo conta esses cards e aborta se não for 0 — barato, e o dia em que mudar
+> alguém fica sabendo antes, não depois.
+
+> [!warning] Rota escolhida: **pelo ESPELHO** (`pipeline_entries`) — e por que a
+> recomendação contrária do M7 caiu
+> O M7 recomendava backfillar pela **fonte** (`custom_pipe_entries`). Essa recomendação foi
+> **removida** (ver a seção M7, reescrita): os dois motivos que a sustentavam estão
+> refutados com medição dentro da própria `20270730000030:148-196`. Fica a rota do espelho,
+> agora como **escolha declarada**, por três razões:
+>
+> 1. **56% da base não tem outra rota.** 20.517 dos 36.709 cards são de funil `system`
+>    (medido 2026-07-31) e existem **só** em `pipeline_entries`. Backfillar "pela fonte"
+>    cobriria no máximo os 16.192 custom — seriam dois SQLs e duas superfícies de guarda.
+> 2. **Para o card custom as duas rotas custam o mesmo.** O `sync_custom_pipe_to_entries`
+>    **recalcula `stage_key` a partir de `custom_pipeline_stages` em toda escrita da fonte**
+>    (li o `pg_get_functiondef` em prod). Então tanto `UPDATE custom_pipe_entries` quanto o
+>    bounce vindo do espelho terminam no mesmo `ON CONFLICT DO UPDATE`, com os mesmos
+>    efeitos sobre `stage_key`, `stage_changed_at` e `updated_at`. A rota da fonte tem menos
+>    saltos; não tem menos efeito.
+> 3. **A rota do espelho respeita a INVARIANTE da `20270730000030`**, que diz: *"para card
+>    custom, escreva a FONTE, **ou** escreva `deal_id` SOZINHO no statement"*. O `SET` do M4
+>    é `deal_id` e nada mais — segundo ramo da invariante, satisfeito literalmente.
+>
+> A guarda 3d ("card custom com `deal_id` no espelho e NULL na fonte") depende do gatilho
+> reverso do M7, que é justamente o que a rota do espelho exercita. Coerente agora.
 
 Forma correta do backfill (medida, org por org, começando pela Milennials). São dois
 universos e cada um tem sua tabela de etapas — funil padrão em `pipeline_stages`,
@@ -670,14 +848,88 @@ BEGIN;
 --        dentro de $$…$$ — as guardas abaixo leem daqui.
 CREATE TEMP TABLE _param ON COMMIT DROP AS SELECT :'org'::uuid AS org;
 
--- ── 0b. Retrato do "antes". Só existe nesta transação; é contra ele que a
+-- ── 0b. PRÉ-CONDIÇÃO: fonte e espelho têm que concordar em `stage_key`.
+--        O bounce do sync reescreve `pipeline_entries.stage_key` com o valor
+--        RECALCULADO da fonte. Se os dois lados já divergem, o backfill não
+--        "propaga um vínculo": ele MOVE o card de etapa — e aí deixa de ser
+--        inerte. Acorda `fn_capture_pipeline_stage_event` (sem guarda nenhuma,
+--        grava em pipeline_stage_events / ADR-0017), `fn_log_pipeline_stage_change_history`
+--        (grava em lead_history justamente quando auth.uid() IS NULL, que é o
+--        contexto desta migration) e, se o espelho estiver num funil `system`,
+--        `trigger_workflow_pipeline_stage_changed` — que faz `net.http_post` para
+--        process-workflow-executions com `mode: fire_trigger`.
+--
+--        Medido em prod 2026-07-31: **1 par divergente na base inteira** —
+--        card dd91cd35-c66e-4b54-8e56-1c5aab4d498e, org **Basic4u**: fonte no funil
+--        custom "Reativação" resolvendo `novo`, espelho parado em `vendido` no funil
+--        **system `propostas`** com `closed_at` preenchido. Backfillar Basic4u sem
+--        reconciliar esse card: (a) desfaz uma venda (`vendido` → `novo`),
+--        (b) `enforce_closed_at_on_final_stage` zera o `closed_at`,
+--        (c) grava evento e histórico de um movimento que nunca aconteceu,
+--        (d) dispara os **4 workflows `stage_changed` ativos** da Basic4u (medido).
+--        Milennials (piloto) está limpa: 0 divergentes.
+DO $$
+DECLARE v_org uuid := (SELECT org FROM _param); v_div bigint;
+BEGIN
+  SELECT count(*) INTO v_div
+  FROM public.custom_pipe_entries c
+  JOIN public.pipeline_entries pe ON pe.id = c.id
+  LEFT JOIN public.custom_pipeline_stages cs ON cs.id = c.stage_id
+  WHERE c.organization_id = v_org
+    AND pe.deal_id IS NULL AND pe.lead_id IS NOT NULL
+    AND COALESCE(cs.stage_key, 'unknown') IS DISTINCT FROM pe.stage_key;
+
+  IF v_div > 0 THEN
+    RAISE EXCEPTION
+      'FAIL: % card(s) custom com stage_key divergente entre fonte e espelho. O bounce do sync MOVERIA o card de etapa, gravando pipeline_stage_events + lead_history e podendo disparar workflow. Reconcilie antes de backfillar esta org.', v_div;
+  END IF;
+  RAISE NOTICE 'Fonte e espelho concordam em stage_key: o bounce sera inerte.';
+END$$;
+
+-- ── 0c. Retrato do "antes". Só existe nesta transação; é contra ele que a
 --        guarda final compara. Nenhum destes números pode mudar.
+--        `leads_fp` é a peça que faltava: impressão digital de TODOS os
+--        `leads.pipe_whatsapp` da org. É contra ela que a guarda 3e prova que o
+--        backfill não reescreveu lead nenhum. Contagem não serviria — reescrever
+--        1.885 valores não muda contagem alguma.
 CREATE TEMP TABLE _antes ON COMMIT DROP AS
 SELECT (SELECT count(*) FROM public.sale_events    WHERE organization_id = (SELECT org FROM _param)) AS sale_events,
        (SELECT count(*) FROM public.meeting_events WHERE organization_id = (SELECT org FROM _param)) AS meeting_events,
        (SELECT count(*) FROM public.lead_products  WHERE organization_id = (SELECT org FROM _param)) AS lead_products,
+       -- ADR-0017: o caderno de etapas e o histórico do lead. O bounce alcança os
+       -- dois quando stage_key muda; 0b garante que não muda, 3c prova.
+       (SELECT count(*) FROM public.pipeline_stage_events WHERE organization_id = (SELECT org FROM _param)) AS pipeline_stage_events,
+       (SELECT count(*) FROM public.lead_history         WHERE organization_id = (SELECT org FROM _param)) AS lead_history,
        (SELECT count(*) FROM public.pipeline_entries
-         WHERE organization_id = (SELECT org FROM _param) AND lead_id IS NULL)                       AS cards_sem_lead;
+         WHERE organization_id = (SELECT org FROM _param) AND lead_id IS NULL)                       AS cards_sem_lead,
+       (SELECT md5(coalesce(string_agg(l.id::text || '=' || coalesce(l.pipe_whatsapp, '<null>'), ',' ORDER BY l.id), ''))
+          FROM public.leads l WHERE l.organization_id = (SELECT org FROM _param))                    AS leads_fp,
+       -- Quantos leads o gatilho REESCREVERIA se estivesse ligado. Não é guarda:
+       -- é o número que vai no relatório da org, para a decisão de produto que
+       -- este backfill deliberadamente NÃO toma.
+       (SELECT count(*) FROM public.pipeline_entries pe
+          JOIN public.pipelines p ON p.id = pe.pipeline_id
+          JOIN public.leads l ON l.id = pe.lead_id
+         WHERE p.type = 'system' AND p.slug = 'whatsapp'
+           AND pe.deal_id IS NULL AND pe.lead_id IS NOT NULL
+           AND pe.organization_id = (SELECT org FROM _param)
+           AND l.pipe_whatsapp IS DISTINCT FROM pe.stage_key)                                        AS wa_drift_preexistente;
+
+-- ── 0d. Snapshot de `stage_changed_at` do lado do espelho, só do alvo custom.
+--        O bounce sobrescreve essa coluna com o valor da FONTE. Medido em prod
+--        2026-07-31: 370 dos 16.193 pares já divergem hoje, em 12 orgs. O backfill
+--        reconcilia esses à força — é mutação DECLARADA, não acidente, e a guarda
+--        3f prova que mudou exatamente esse conjunto e nem uma linha a mais.
+--        Quem lê a coluna do lado do espelho: `useLeadsDeals`
+--        (src/modules/leads/hooks/useLeadsDeals.ts:105,175) — a "idade na etapa" da
+--        aba Negócios muda para esses pares. O kanban custom lê a FONTE, que não muda.
+CREATE TEMP TABLE _snap_scat ON COMMIT DROP AS
+SELECT pe.id, pe.stage_changed_at,
+       (pe.stage_changed_at IS DISTINCT FROM c.stage_changed_at) AS divergia_antes
+FROM public.custom_pipe_entries c
+JOIN public.pipeline_entries pe ON pe.id = c.id
+WHERE c.organization_id = (SELECT org FROM _param)
+  AND pe.deal_id IS NULL AND pe.lead_id IS NOT NULL;
 
 -- ── 1. GUARDA ANTES: o join tem que ser 1:1. Mesmo `WHERE` do `INSERT`.
 DO $$
@@ -701,6 +953,30 @@ BEGIN
   END IF;
   RAISE NOTICE 'Prova de 1:1 OK: % linhas = % cards.', v_linhas, v_cards;
 END$$;
+
+-- ── 1b. 🔴 Desligar NOMINALMENTE o gatilho que escreve em `leads` ───────────
+-- `trg_sync_whatsapp_stage_to_lead` é AFTER INSERT OR DELETE OR UPDATE, sem lista
+-- de colunas e sem WHEN: um `SET deal_id` o acorda. Sua única proteção é
+-- `pg_trigger_depth() > 1`, inoperante aqui porque o UPDATE abaixo é de topo.
+-- Sem esta linha ele reescreve `leads.pipe_whatsapp` (1.885 linhas / 34 orgs na
+-- base inteira, medido 2026-07-31) e nenhuma guarda percebe.
+--
+-- Por que DISABLE nominal e não `session_replication_role = replica`: replica
+-- desliga TUDO, inclusive `trg_sync_deal_id_to_custom_pipe_entry` e o sync — os
+-- 16.192 cards custom ficariam com `deal_id` NULL na fonte, que é exatamente o
+-- buraco que o M7 existe para fechar. Precisão importa: um gatilho, pelo nome.
+--
+-- Preço, dito por inteiro:
+--   • exige ser dono da tabela — `pipeline_entries` é de `postgres` (medido
+--     2026-07-31), e é como `postgres` que a migration roda;
+--   • pega ACCESS EXCLUSIVE em `pipeline_entries` até o COMMIT — leitura e escrita
+--     da tabela ficam bloqueadas durante o backfill inteiro;
+--   • enquanto desligado, NENHUMA escrita concorrente sincroniza `pipe_whatsapp`.
+-- As três coisas são aceitáveis por um motivo único e verificável: o M4 roda
+-- **só em branch efêmera**, sem tráfego (decisão A). Rodar isto num banco com
+-- gente dentro é outra conversa, e não está autorizada aqui.
+-- É transacional: se qualquer guarda abaixo abortar, o ROLLBACK religa sozinho.
+ALTER TABLE public.pipeline_entries DISABLE TRIGGER trg_sync_whatsapp_stage_to_lead;
 
 -- ── 2. A escrita
 -- 2a) um negócio por card existente (título herda o nome do funil)
@@ -746,6 +1022,13 @@ UPDATE public.pipeline_entries pe
   FROM novo
  WHERE pe.id = novo.entry_id;
 
+-- ── 2c. Religar. Fora de qualquer bloco condicional de propósito: se estivesse
+--        dentro de um DO com EXCEPTION, um erro poderia deixá-lo desligado numa
+--        transação que ainda commita. Aqui, ou esta linha roda, ou nada commita.
+--        A guarda 3h ainda confere o catálogo — cinto e suspensório, porque um
+--        gatilho de sincronização desligado em silêncio é dano permanente e mudo.
+ALTER TABLE public.pipeline_entries ENABLE TRIGGER trg_sync_whatsapp_stage_to_lead;
+
 -- ── 3. GUARDA DEPOIS: nada aqui é opcional, tudo aborta.
 DO $$
 DECLARE
@@ -754,6 +1037,9 @@ DECLARE
   v_deals   bigint;
   v_amarr   bigint;
   v_agora   bigint;
+  v_scat    bigint;
+  v_fp      text;
+  v_tgstate "char";
 BEGIN
   SELECT * INTO a FROM _antes;
 
@@ -789,7 +1075,18 @@ BEGIN
   END IF;
   SELECT count(*) INTO v_agora FROM public.lead_products WHERE organization_id = v_org;
   IF v_agora <> a.lead_products THEN
-    RAISE EXCEPTION 'FAIL: lead_products foi de % para % — ver a decisao sobre os 215 ganhos.', a.lead_products, v_agora;
+    RAISE EXCEPTION 'FAIL: lead_products foi de % para % — ver a decisao sobre os 217 ganhos.', a.lead_products, v_agora;
+  END IF;
+  -- ADR-0017: as DUAS tabelas que o bounce alcanca se stage_key mudar. A
+  -- pre-condicao 0b existe para que ele nao mude; estas duas provam. Ficaram de
+  -- fora da versao anterior desta guarda, que so olhava sale/meeting/lead_products.
+  SELECT count(*) INTO v_agora FROM public.pipeline_stage_events WHERE organization_id = v_org;
+  IF v_agora <> a.pipeline_stage_events THEN
+    RAISE EXCEPTION 'FAIL: pipeline_stage_events foi de % para % — o bounce moveu card de etapa (fn_capture_pipeline_stage_event nao tem guarda).', a.pipeline_stage_events, v_agora;
+  END IF;
+  SELECT count(*) INTO v_agora FROM public.lead_history WHERE organization_id = v_org;
+  IF v_agora <> a.lead_history THEN
+    RAISE EXCEPTION 'FAIL: lead_history foi de % para % — fn_log_pipeline_stage_change_history gravou movimento inventado (ela grava justamente quando auth.uid() IS NULL).', a.lead_history, v_agora;
   END IF;
 
   -- 3d. O espelho custom precisa ter recebido o vinculo (M7). A checagem de coluna vem
@@ -807,16 +1104,61 @@ BEGIN
     RAISE EXCEPTION 'FAIL: card custom com deal_id no espelho e NULL na fonte — o gatilho reverso do M7 nao esta no lugar.';
   END IF;
 
-  RAISE NOTICE 'VALIDATION PASSED: % negocios = % cards amarrados; lead_id intacto; sale/meeting/lead_products inalterados; espelho custom em dia.', v_deals, v_amarr;
+  -- 3e. 🔴 A GUARDA QUE FALTAVA: `leads` nao pode ter sido tocado.
+  --     Impressao digital, nao contagem: reescrever pipe_whatsapp em 1.885 linhas
+  --     nao muda contagem nenhuma. Esta guarda e a razao de existir do passo 1b.
+  SELECT md5(coalesce(string_agg(l.id::text || '=' || coalesce(l.pipe_whatsapp, '<null>'), ',' ORDER BY l.id), ''))
+    INTO v_fp FROM public.leads l WHERE l.organization_id = v_org;
+  IF v_fp IS DISTINCT FROM a.leads_fp THEN
+    RAISE EXCEPTION
+      'FAIL: leads.pipe_whatsapp MUDOU (fingerprint % -> %). O backfill escreveu em dado de cliente. Confira se trg_sync_whatsapp_stage_to_lead ficou ligado no passo 1b.',
+      a.leads_fp, v_fp;
+  END IF;
+
+  -- 3f. `stage_changed_at` do espelho: o bounce reconcilia com a FONTE. Mutacao
+  --     DECLARADA — mas so no conjunto que JA divergia. Uma linha a mais e bug.
+  SELECT count(*) INTO v_agora
+    FROM _snap_scat s JOIN public.pipeline_entries pe ON pe.id = s.id
+   WHERE pe.stage_changed_at IS DISTINCT FROM s.stage_changed_at;
+  SELECT count(*) INTO v_scat FROM _snap_scat WHERE divergia_antes;
+  IF v_agora <> v_scat THEN
+    RAISE EXCEPTION
+      'FAIL: stage_changed_at mudou em % card(s), mas so % divergiam da fonte antes. O bounce saiu do previsto.', v_agora, v_scat;
+  END IF;
+
+  -- 3g. `closed_at`: enforce_closed_at_on_final_stage carimba NOW() em card
+  --     'vendido'/'perdido' com closed_at NULL, sem comparar com OLD. Hoje sao 0
+  --     na base inteira — inerte por DADO, nao por desenho. No dia em que deixar
+  --     de ser, a transacao para aqui em vez de inventar data de fechamento.
+  SELECT count(*) INTO v_agora
+    FROM public.custom_pipe_entries c JOIN public.pipeline_entries pe ON pe.id = c.id
+   WHERE c.organization_id = v_org AND pe.stage_key IN ('vendido','perdido') AND pe.closed_at IS NULL;
+  IF v_agora <> 0 THEN
+    RAISE EXCEPTION 'FAIL: % card(s) custom em estagio final com closed_at NULL — o bounce carimbou/carimbaria data de fechamento inventada.', v_agora;
+  END IF;
+
+  -- 3h. O gatilho de `leads` voltou LIGADO ('O' = origin). Desligado em silencio
+  --     e pior que o problema original: pipe_whatsapp para de sincronizar para sempre.
+  SELECT t.tgenabled INTO v_tgstate FROM pg_trigger t
+   WHERE t.tgrelid = 'public.pipeline_entries'::regclass
+     AND t.tgname  = 'trg_sync_whatsapp_stage_to_lead' AND NOT t.tgisinternal;
+  IF v_tgstate IS DISTINCT FROM 'O' THEN
+    RAISE EXCEPTION 'FAIL: trg_sync_whatsapp_stage_to_lead ficou em estado % (esperado O). Religue antes de qualquer escrita.', coalesce(v_tgstate::text, 'AUSENTE');
+  END IF;
+
+  RAISE NOTICE 'VALIDATION PASSED: % negocios amarrados; lead_id intacto; leads.pipe_whatsapp byte-a-byte igual; sale/meeting/lead_products/pipeline_stage_events/lead_history inalterados; stage_changed_at mudou so nos % ja divergentes; gatilho de leads religado.', v_deals, v_scat;
+  RAISE NOTICE 'RELATORIO (nao e falha): % lead(s) desta org tem pipe_whatsapp divergente do card de whatsapp. Drift PREEXISTENTE, deliberadamente NAO reconciliado aqui — vira script proprio, com decisao propria sobre qual lado esta certo.', a.wa_drift_preexistente;
 END$$;
 
 COMMIT;
 ```
 
-Medido com este join (base inteira, 2026-07-30): **36.507 linhas para 36.507 cards —
-1:1, zero fantasma**, dos quais **215** nascem `won = true`. Resíduo conhecido: **35
-cards** (0,1%) com `stage_key` que não existe em etapa nenhuma — nascem com `won = false`,
-o que é o certo, e valem um relatório à parte.
+Medido com este join (base inteira, **re-medido 2026-07-31**): **36.709 linhas para 36.709
+cards — 1:1, zero fantasma**, dos quais **217** nascem `won = true`. Resíduo conhecido:
+**35 cards** (0,1%) com `stage_key` que não existe em etapa nenhuma — nascem com
+`won = false`, o que é o certo, e valem um relatório à parte. *(Em 2026-07-30 eram
+36.507 / 215 / 35. Base viva: o total sobe alguns por dia; o que não muda é a igualdade
+`linhas = cards`, que é o invariante — o número absoluto é retrato, não contrato.)*
 
 > [!note] Por que o 1:1 vale — o invariante é **unicidade**, não exclusividade mútua
 > Uma versão anterior explicava o 1:1 assim: *"os dois `LEFT JOIN` não se multiplicam
@@ -844,9 +1186,9 @@ o que é o certo, e valem um relatório à parte.
 da mesma transação. Não existe versão "conferir depois": ou os números batem e o `COMMIT`
 acontece, ou a transação aborta e nada foi escrito.
 
-> [!warning] Decisão explícita: o backfill **não** popula `lead_products` para os 215 ganhos
+> [!warning] Decisão explícita: o backfill **não** popula `lead_products` para os 217 ganhos
 > `trg_deal_won_lead_products` é **AFTER UPDATE** (`WHEN new.won = true AND old.won IS
-> DISTINCT FROM true`). Os 215 negócios que o backfill cria já **nascendo** com
+> DISTINCT FROM true`). Os 217 negócios que o backfill cria já **nascendo** com
 > `won = true` não passam por ele — negócio ganho pela UI depois do backfill passa.
 > Histórico e futuro divergem, e isso precisa estar escrito, não descoberto.
 >
@@ -959,7 +1301,7 @@ novo negócio adicionou mais uma porta, e por isso ganhou guarda de cliente em
 profundidade, não a última linha:** quem monta a chamada direto com o próprio
 token passa por cima dela.
 
-Conserto no banco (uma das duas formas):
+Conserto no banco — **gatilho genérico anexado a três tabelas**:
 
 > [!danger] 🔴 A versão anterior deste SQL quebrava no primeiro `INSERT` — HERDADO, corrigido agora
 > Ela lia `NEW.responsible_id`, `NEW.sdr_id` e `NEW.closer_id`. **Nenhuma dessas colunas
@@ -981,7 +1323,7 @@ Conserto no banco (uma das duas formas):
 > pior que SQL ausente, então foi trocado em vez de só marcado.)*
 
 ```sql
--- (a) gatilho genérico, aplicado nas tabelas que carregam responsável.
+-- Gatilho genérico, aplicado nas tabelas que carregam responsável.
 -- Genérico DE VERDADE: lê por `to_jsonb(NEW)` em vez de nomear campos, porque o
 -- conjunto de colunas muda por tabela e `NEW.<campo inexistente>` é erro de runtime,
 -- não NULL. `jsonb ->> 'chave ausente'` devolve NULL — a chave some do join sozinha.
@@ -1009,7 +1351,42 @@ BEGIN
   RETURN NEW;
 END;
 $function$;
+
+-- Função de gatilho sem CREATE TRIGGER não valida coisa nenhuma. As três tabelas
+-- que carregam coluna de responsável (medido em information_schema.columns,
+-- 2026-07-31 — a tabela logo acima lista quais colunas cada uma tem):
+CREATE TRIGGER trg_assert_member_same_org_pipeline_entries
+  BEFORE INSERT OR UPDATE ON public.pipeline_entries
+  FOR EACH ROW EXECUTE FUNCTION public.fn_assert_member_same_org();
+
+CREATE TRIGGER trg_assert_member_same_org_custom_pipe_entries
+  BEFORE INSERT OR UPDATE ON public.custom_pipe_entries
+  FOR EACH ROW EXECUTE FUNCTION public.fn_assert_member_same_org();
+
+CREATE TRIGGER trg_assert_member_same_org_leads
+  BEFORE INSERT OR UPDATE ON public.leads
+  FOR EACH ROW EXECUTE FUNCTION public.fn_assert_member_same_org();
 ```
+
+> [!danger] 🔴 `BEFORE INSERT OR UPDATE` — nunca `DELETE`
+> Em gatilho de `DELETE`, `NEW` **não é atribuído**, e `to_jsonb(NEW)` levanta erro em
+> runtime. Seria o mesmo modo de falha (`record "new" has no field …`) que a correção do
+> bloco acima acabou de matar, reintroduzido pela cláusula de evento.
+>
+> `BEFORE` e não `AFTER` porque a função existe para **recusar** a linha: recusar antes de
+> escrever é mais barato e não deixa o `AFTER` de outro gatilho rodar sobre uma escrita que
+> vai ser desfeita.
+>
+> *(Corrigido em 2026-07-31: o doc prometia "uma das duas formas" e só trazia a (a), e não
+> tinha `CREATE TRIGGER` nenhum no arquivo inteiro. Quem copiasse criava uma função órfã e
+> ficava achando que a validação estava no ar.)*
+
+> [!warning] Ordem obrigatória: **medir, limpar, só então acender**
+> Medido 2026-07-31: **1.091** linhas em `pipeline_entries` **e as mesmas 1.091** em
+> `custom_pipe_entries` (são cards custom — a fonte e o espelho contam o mesmo dado).
+> Com o gatilho no ar antes da limpeza, **todo `UPDATE` nessas linhas passa a falhar** —
+> inclusive o `UPDATE` do M4, que toca `custom_pipe_entries` pelo gatilho reverso. Acender
+> o M6 antes do M4 sem limpar trava o backfill da Maria Bonita.
 
 > ⚠️ **Medir antes de acender.** Se já existir linha violando (troca de org de
 > membro no passado, import antigo), o trigger passa a recusar `UPDATE` nessas
@@ -1082,7 +1459,7 @@ Sequência para validar:
   fantasma e nenhum erro aparece. **A prova é passo da transação**, não SELECT solto:
   guarda → escrita → guarda → `COMMIT`, com `RAISE EXCEPTION`
 - Não rodar o M4 sem o **M7** — `custom_pipe_entries` não tem `deal_id`, e é essa tabela
-  que o kanban customizado lê. Sem M7 o backfill deixa 16.176 cards (913 na Milennials)
+  que o kanban customizado lê. Sem M7 o backfill deixa 16.192 cards (914 na Milennials)
   com negócio criado e a tela sem enxergar nenhum
 - Não dropar só as 4 policies de `deals` no M3a — `master_select_all_deals` é a única sem
   `deleted_at IS NULL` e é PERMISSIVE (entra em `OR`): deixá-la viva refura o soft-delete

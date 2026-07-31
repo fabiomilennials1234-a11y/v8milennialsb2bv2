@@ -26,15 +26,76 @@ const realtimeHandlers: RealtimeHandlers = {
 };
 
 /**
- * Idempotent create for `pipeline_entries`.
+ * Teto de linhas lidas por `(pipeline_id, lead_id)` — espelha
+ * `PIPE_ENTRY_READ_CAP` em `supabase/functions/_shared/pipeline-adapter.ts`.
+ * Hoje irrelevante (o unique garante ≤1); depois do M1 evita leitura sem limite.
+ */
+const PIPELINE_ENTRY_READ_CAP = 50;
+
+/**
+ * Lê TODAS as entries de `(pipeline_id, lead_id)` e devolve a que representa o
+ * lead no funil — tolerando N linhas.
  *
- * `pipeline_entries` has `UNIQUE (pipeline_id, lead_id) WHERE lead_id IS NOT NULL`.
- * Multiple call sites (Kanban move, modals, auto-create on `compareceu`) can race
- * or repeat the create. To keep "Criar Proposta" idempotent we pre-check, then
- * fall back to fetching the existing row on a 23505 race.
+ * Por que não `.maybeSingle()`: com mais de uma linha o postgrest-js **zera o
+ * `data`** e devolve `PGRST116` — verificado na cópia instalada,
+ * `node_modules/@supabase/postgrest-js/dist/index.mjs:107-119`
+ * (`if (isMaybeSingle && method === "GET" && data.length > 1) { error = …; data = null; }`).
+ * O swallow que vira "vazio" (linha 137-141) só cobre `details` com `"0 rows"`,
+ * então "existem 2" era indistinguível de "não existe" — e a chamada seguinte
+ * inseria mais uma linha, virando duplicador determinístico (2 → 3 → 4).
  *
- * Returns `{ entry, created }` so the caller can decide whether to fire
- * follow-up automations (only on `created`).
+ * Critério de escolha (aberto primeiro, depois mais recente) e a medição que o
+ * sustenta estão documentados em `pickActiveEntry`, em
+ * `supabase/functions/_shared/pipeline-adapter.ts` — mesma regra dos dois lados
+ * de propósito: o kanban e o Copilot precisam concordar sobre QUAL negócio é o
+ * corrente, senão a UI mostra um e a automação move outro.
+ *
+ * Lança em erro de leitura em vez de devolver "não existe" (ver
+ * `findOrCreatePipelineEntry`).
+ */
+async function readActivePipelineEntry(pipelineId: string, leadId: string) {
+  const { data, error } = await supabase
+    .from("pipeline_entries")
+    .select("*")
+    .eq("pipeline_id", pipelineId)
+    .eq("lead_id", leadId)
+    .order("closed_at", { ascending: true, nullsFirst: true })
+    .order("stage_changed_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(PIPELINE_ENTRY_READ_CAP);
+
+  if (error) throw error;
+
+  const rows = data ?? [];
+  if (rows.length > 1) {
+    // Sinal explícito de "existem N" — o que `.maybeSingle()` apagava.
+    console.warn(
+      `[pipeline_entries] ${rows.length} entries para pipeline=${pipelineId} lead=${leadId}; usando a primeira ABERTA, ou a mais recente se todas estiverem fechadas.`,
+    );
+  }
+  return rows.find((r) => r.closed_at == null) ?? rows[0] ?? null;
+}
+
+/**
+ * Create idempotente para `pipeline_entries`.
+ *
+ * Hoje `pipeline_entries` tem DOIS cadeados sobre a mesma chave —
+ * `uq_pipeline_entries_pipeline_lead` (constraint) e
+ * `idx_pipeline_entries_pipeline_lead` (índice único parcial,
+ * `WHERE lead_id IS NOT NULL`). Vários call sites (mover no Kanban, modais,
+ * auto-create em `compareceu`) repetem ou correm o create; o pré-check evita o
+ * insert e o ramo 23505 recupera a corrida.
+ *
+ * ⚠️ **A idempotência aqui é best-effort e deixa de ter rede depois do M1.**
+ * Quem garante "no máximo um" hoje é o banco, não este código: o pré-check e o
+ * insert são duas viagens separadas, sem lock. Quando o M1 derrubar os cadeados,
+ * dois cliques concorrentes em "Criar Proposta" passam a criar dois negócios e
+ * nada os impede — o que, no modelo Lead ↔ Negócio, é o comportamento pretendido,
+ * não um bug. Esta função só garante que uma chamada SEQUENCIAL não duplique.
+ *
+ * Devolve `{ entry, created }` para o caller decidir se dispara automação de
+ * follow-up (só em `created`).
  */
 export async function findOrCreatePipelineEntry(params: {
   pipelineId: string;
@@ -47,12 +108,19 @@ export async function findOrCreatePipelineEntry(params: {
 }): Promise<{ entry: any; created: boolean }> {
   const { pipelineId, leadId, organizationId, stageKey, assignedTo, metadata, notes } = params;
 
-  const { data: existing } = await supabase
-    .from("pipeline_entries")
-    .select("*")
-    .eq("pipeline_id", pipelineId)
-    .eq("lead_id", leadId)
-    .maybeSingle();
+  // ⚠️ MUDANÇA DE COMPORTAMENTO — não é no-op, e é deliberada.
+  //
+  // Antes o erro era descartado (`const { data: existing } = …`), então falha de
+  // leitura virava "não existe" e seguia para o INSERT. Hoje o unique barra o
+  // estrago (23505 → ramo de recuperação abaixo); depois do M1 esse mesmo caminho
+  // criaria um negócio duplicado a cada falha transitória de leitura.
+  //
+  // Agora a falha propaga: a mutation falha, o usuário vê o erro e clica de novo.
+  // O delta observável hoje é estreito — só "leitura falhou E não existia entry",
+  // que antes criava a entry e agora levanta. Trocamos de propósito: negócio
+  // duplicado é permanente e aparece no kanban do cliente; create que falhou é
+  // visível, recuperável e o usuário reexecuta.
+  const existing = await readActivePipelineEntry(pipelineId, leadId);
 
   if (existing) return { entry: existing, created: false };
 
@@ -74,13 +142,15 @@ export async function findOrCreatePipelineEntry(params: {
 
   if (!error) return { entry: data, created: true };
 
+  // Recuperação de corrida: outro cliente inseriu entre o pré-check e este insert,
+  // e um dos dois uniques devolveu 23505. Continua load-bearing HOJE.
+  //
+  // Depois do M1 este ramo deixa de ser alcançável para `(pipeline_id, lead_id)`:
+  // sem unique não há 23505 — o insert passa e o segundo negócio é criado (que é a
+  // intenção do M1). Mantido porque o M1 ainda NÃO foi aplicado e removê-lo agora
+  // seria regressão real; continua correto caso outro unique entre na tabela.
   if ((error as { code?: string }).code === "23505") {
-    const { data: raced } = await supabase
-      .from("pipeline_entries")
-      .select("*")
-      .eq("pipeline_id", pipelineId)
-      .eq("lead_id", leadId)
-      .maybeSingle();
+    const raced = await readActivePipelineEntry(pipelineId, leadId);
     if (raced) return { entry: raced, created: false };
   }
 

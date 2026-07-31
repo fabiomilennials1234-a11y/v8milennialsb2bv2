@@ -4,9 +4,10 @@
 --
 -- ── POR QUE ────────────────────────────────────────────────────────────────
 -- `pipeline_entries` já ganhou `deal_id` (FK + índice parcial). Seu par custom,
--- `custom_pipe_entries`, não — e são 16.177 cards em 24 orgs (medido em prod
--- 2026-07-30). Sem a coluna, todo funil custom fica de fora do modelo de
--- Negócio.
+-- `custom_pipe_entries`, não — e são 16.193 cards em 24 orgs (medido em prod
+-- 2026-07-31; eram 16.177 no dia anterior — a tabela cresce, então todo número
+-- daqui é retrato datado, não invariante). Sem a coluna, todo funil custom fica
+-- de fora do modelo de Negócio.
 --
 -- ── A JUSTIFICATIVA ORIGINAL ESTAVA ERRADA, E O CONSERTO ÓBVIO DEIXA BURACO ──
 -- A leitura inicial era "custom_pipe_entries é uma tabela paralela, basta
@@ -15,8 +16,11 @@
 --   1. Não é paralela: `sync_custom_pipe_to_entries()` espelha
 --      custom_pipe_entries → pipeline_entries com a MESMA primary key
 --      (`INSERT (id, ...) VALUES (NEW.id, ...) ON CONFLICT (id) DO UPDATE`).
---      Medido em prod: 16.177 de 16.177 linhas têm par de `id` do outro lado,
---      e 0 divergem de organization_id. É espelho 1:1, não tabela irmã.
+--      Medido em prod 2026-07-31: 16.193 de 16.193 linhas têm par de `id` do
+--      outro lado, e 0 divergem de organization_id. É espelho 1:1 de CHAVE, não
+--      tabela irmã. Cuidado com o passo seguinte, que é onde a versão anterior
+--      deste cabeçalho escorregou: par de `id` 1:1 NÃO implica "mesmo funil dos
+--      dois lados". Ver o bloco PREMISSA DE PARIDADE.
 --
 --   2. O `ON CONFLICT ... DO UPDATE` desse sync NÃO menciona deal_id, e não
 --      existe trigger reverso. Então o backfill (M4), que popula
@@ -56,7 +60,11 @@
 --   2. deal_id mudou lá → G1 verdadeira, trigger reverso dispara.
 --   3. UPDATE ... WHERE deal_id IS DISTINCT FROM D → custom já está D → 0 linhas. PARA.
 --
--- Profundidade máxima 3, convergente por construção. Deliberadamente NÃO uso
+-- Profundidade máxima 3, convergente por construção. O passo 5 ganha ainda uma
+-- terceira condição no WHERE (`pipeline_id = NEW.pipeline_id`, justificada no
+-- bloco PREMISSA DE PARIDADE): ela só ESTREITA o UPDATE, nunca o alarga, então
+-- não entra na prova — no pior caso termina mais cedo, casando 0 linhas.
+-- Deliberadamente NÃO uso
 -- `pg_trigger_depth()` como trava: profundidade é proxy, não invariante — um
 -- teto por profundidade descartaria SILENCIOSAMENTE uma propagação legítima que
 -- nascesse dentro de outro trigger (exatamente o que o M4 pode fazer). Guarda
@@ -77,14 +85,26 @@
 --     → `set_pipeline_entry_stage_changed()` guarda em stage_key DISTINCT: no-op.
 --   • trg_pipeline_entries_stage_changed_at (BEFORE UPDATE, WHEN stage_key
 --     DISTINCT) → nem chega a disparar.
---   • trg_enforce_closed_at (BEFORE INSERT OR UPDATE OF stage_key) → dispara e
---     MUTA `closed_at` se stage_key for 'vendido'/'perdido' com closed_at NULL.
---     Medido em prod 2026-07-30: 0 cards custom nesse estado. Inerte por dado,
---     não por desenho — se um funil custom passar a usar essas chaves, muda.
+--   • trg_enforce_closed_at (BEFORE INSERT OR UPDATE OF stage_key) → dispara, e
+--     `enforce_closed_at_on_final_stage()` tem DOIS ramos, não um. A versão
+--     anterior deste cabeçalho mediu só o primeiro e vendeu "0 candidatos" como
+--     prova de inocuidade — medição do predicado errado. Os dois, agora medidos
+--     em prod 2026-07-31 sobre o stage_key que a FONTE resolve (é esse que o
+--     sync grava no espelho, e o OLD é o stage_key que o espelho tem hoje):
+--       – ramo 1, FECHAR (`NEW.stage_key IN ('vendido','perdido')` com closed_at
+--         NULL → closed_at := NOW()): 0 candidatos.
+--       – ramo 2, REABRIR (`NEW.stage_key NOT IN (...)` e OLD.stage_key IN (...)
+--         → closed_at := NULL): 1 candidato VIVO, com closed_at real — o card
+--         dd91cd35-c66e-4b54-8e56-1c5aab4d498e, espelho em 'vendido' com
+--         closed_at = 2026-06-09 e fonte resolvendo 'novo'. Escrita isolada de
+--         deal_id nele apagaria a data de fechamento de uma venda.
+--     Inerte por dado nos outros 16.192 pares, não por desenho. Esse 1 é o mesmo
+--     card do bloco PREMISSA DE PARIDADE, e é lá que a rota é fechada.
 --   • trg_pipeline_entries_dispatch (AFTER INSERT OR UPDATE OF stage_key)
 --     → `trigger_pipeline_entries_dispatch()` resolve slug só de pipeline
---     `type='system'`; funil custom devolve NULL e sai antes. Ainda exige
---     stage_key DISTINCT.
+--     `type='system'`, devolvendo NULL e saindo antes QUANDO o espelho é custom
+--     — o que vale para 16.192 dos 16.193 pares, não para os 16.193. Ainda exige
+--     stage_key DISTINCT. Para o par que sobra, ver PREMISSA DE PARIDADE.
 --   • trg_apply_stage_checklist_pipeline (AFTER INSERT OR UPDATE OF stage_key)
 --     → `apply_stage_checklist()` early-return se stage_key não mudou.
 --   • trg_meeting_events_capture (AFTER INSERT OR UPDATE OF stage_key, metadata)
@@ -98,9 +118,12 @@
 --     Como o sync sempre roda aninhado (depth ≥ 2), ele sai na primeira linha.
 --     Fora do aninhamento ainda exigiria pipeline `type='system'` slug 'whatsapp'.
 --   • trg_pipeline_entries_stage_event_update, trg_log_pipeline_stage_change_history
---     e trg_workflow_pipeline_stage_changed têm WHEN por stage_key DISTINCT: não
---     chegam a disparar aqui. (Ver o invariante abaixo — na escrita COMBINADA os
---     três disparam, e dois deles gravam.)
+--     e trg_workflow_pipeline_stage_changed têm WHEN por stage_key DISTINCT — o
+--     do stage_event exige TAMBÉM `new.lead_id IS NOT NULL` (imaterial: 0 pares
+--     custom sem lead, medido 2026-07-31). Em par EM PARIDADE não chegam a
+--     disparar. (Ver o invariante abaixo — na escrita COMBINADA os três disparam
+--     e dois gravam; e em par FORA de paridade eles disparam mesmo na escrita
+--     isolada, porque aí o stage_key muda de verdade — PREMISSA DE PARIDADE.)
 -- Fora do caminho de UPDATE, e por isso fora da conta: trg_pe_snapshot_responsibles
 -- e trg_pipeline_entries_stage_event_insert, ambos AFTER/BEFORE INSERT.
 -- Do lado custom, `trigger_workflow_custom_pipe_stage_change` (AFTER UPDATE sem
@@ -108,8 +131,11 @@
 -- escrita só de deal_id NÃO enfileira workflow. Isso importa muito — é a mesma
 -- classe do incidente em que mexer em custom_pipe_entries furou filtro de
 -- workflow e quase virou disparo em massa.
--- Conclusão, com o escopo explícito: numa escrita ISOLADA de deal_id, nenhum
--- envio, nenhum meeting_event, nenhum checklist, nenhum workflow nasce daqui.
+-- Conclusão, com o escopo E a premissa explícitos: numa escrita ISOLADA de
+-- deal_id, em par cujo espelho está no MESMO funil da fonte, nenhum envio,
+-- nenhum meeting_event, nenhum checklist, nenhum workflow nasce daqui. A
+-- premissa não é enfeite e não vale para 100% dos pares — bloco PREMISSA DE
+-- PARIDADE, abaixo.
 --
 -- ⚠️ INVARIANTE NOVO — ESCRITA COMBINADA EM CARD CUSTOM NÃO É SEGURA ─────────
 -- A inocuidade acima vale para `SET deal_id = ...` e nada mais. O trigger do
@@ -131,12 +157,16 @@
 --     e o held em 'compareceu'. Medido em prod: 28 cards custom parados em
 --     'agendado' e 5 em 'compareceu' — escrita combinada neles pode PARIR
 --     meeting_event.
--- Não acordam nem assim: dispatch e workflow (ambos resolvem slug com
--- `pip.type = 'system'` → NULL em funil custom).
+-- Não acordam nem assim — mas só porque o espelho é um funil custom. Os dois
+-- resolvem o slug com o filtro
+-- `pip.type = 'system'`, que devolve NULL para funil custom. Onde o espelho for
+-- system, os dois acordam; PREMISSA DE PARIDADE, logo abaixo.
 -- ⇒ REGRA que passa a valer depois desta migration: para card custom, escreva a
 --   FONTE (`custom_pipe_entries`), ou escreva `deal_id` SOZINHO no statement.
 --   Nunca deal_id junto de stage_key/assigned_to/notes/stage_changed_at em
---   `pipeline_entries`.
+--   `pipeline_entries`. E, nos DOIS casos, só depois do pré-flight de paridade
+--   do bloco seguinte: escrever a FONTE de um par fora de paridade dispara o
+--   sync direto, e nenhuma guarda desta migration alcança essa rota.
 -- Considerado e RECUSADO nesta fatia: pôr `WHERE` no `ON CONFLICT DO UPDATE` do
 -- sync para cortar o bounce quando nada muda. Resolveria mecanicamente, mas muda
 -- comportamento observável de uma função compartilhada — deixa de refrescar
@@ -144,6 +174,112 @@
 -- DO UPDATE vira no-op — e a segurança desta fatia inteira se apoia em "corpo
 -- VERBATIM + exatamente três acréscimos". Nenhum consumidor desses dois efeitos
 -- foi enumerado. Vale slice própria, não carona nesta.
+--
+-- ⚠️ PREMISSA DE PARIDADE — "par de `id`" NÃO É "espelho do mesmo funil" ──────
+-- Tudo acima se apoiava, sem dizer, numa premissa: se existe linha em
+-- `pipeline_entries` com o `id` de um card custom, então essa linha É o espelho
+-- custom daquele card. Isso não se deduz de nada, e é falso em prod. O
+-- `ON CONFLICT (id) DO UPDATE` do sync nunca reescreve `pipeline_id` — só
+-- stage_key/assigned_to/notes/stage_changed_at/updated_at (+ deal_id, a partir
+-- daqui). Logo, par que descasar de funil descasa PARA SEMPRE.
+--
+-- Medido em prod 2026-07-31, sobre os 16.193 pares:
+--   • 16.192 em paridade: mesmo pipeline_id dos dois lados, espelho de tipo
+--     `custom`, e stage_key do espelho igual ao que a fonte resolve.
+--   • 1 FORA de paridade: card dd91cd35-c66e-4b54-8e56-1c5aab4d498e, org
+--     163874dd-d05c-4ae2-811a-d6772b05dac5. Fonte no funil custom "Reativação",
+--     stage_key 'novo'. Espelho no funil "Propostas" —
+--     `type = 'system'`, slug 'propostas' — em stage_key 'vendido', com
+--     closed_at = 2026-06-09. Uma venda fechada.
+-- A query que produz esses números é o pré-flight no fim deste bloco. Confere
+-- por um segundo caminho, independente do join: `pipeline_entries` tem 20.524
+-- linhas em funil system e 20.523 sem par em `custom_pipe_entries`. A diferença
+-- de 1 é exatamente este card — uma entrada de funil system que TEM par custom.
+--
+-- O que aconteceria nesse par, não fosse a guarda do passo 5, numa escrita
+-- ISOLADA de deal_id no espelho (o statement do M4): o trigger reverso desce
+-- para a fonte, a fonte dispara o sync, e o sync grava stage_key 'novo' por cima
+-- de 'vendido' numa entrada de funil system. A partir daí, lido função por
+-- função no catálogo de prod — nenhum destes é hipótese:
+--   • enforce_closed_at_on_final_stage(), ramo 2 → closed_at := NULL. A data de
+--     fechamento some. `pipe_propostas` é VIEW sobre `pipeline_entries`, então o
+--     card também sai de `status = 'vendido'`; e
+--     src/modules/carteira/hooks/useMetricDrilldown.ts:94-96 filtra o drilldown
+--     de vendas justamente por `closed_at`. RECEITA não se perde — o caderno
+--     `sale_events` tem 1 evento para esse lead (medido) e é dele que a receita
+--     sai (ADR-0017). Perde-se o estado de fechado e a métrica de etapa.
+--   • fn_capture_pipeline_stage_event() (sem guarda nenhuma no corpo) → linha
+--     espúria 'vendido'→'novo' em `pipeline_stage_events`, o caderno de etapas
+--     do ADR-0017, num pipe system que o analytics lê. O entry tem 1 evento
+--     hoje; ganharia um segundo, falso. O WHEN do trigger também exige
+--     lead_id NOT NULL — satisfeito (0 pares custom sem lead, medido).
+--   • fn_log_pipeline_stage_change_history() → grava movimento invertido em
+--     `lead_history` quando auth.uid() IS NULL, que é exatamente o contexto do
+--     M4 (service_role/automação).
+--   • trigger_workflow_pipeline_stage_changed() → v_pipe_type resolve
+--     'propostas', NÃO NULL: não sai cedo, e emite `net.http_post` REAL para
+--     process-workflow-executions. As duas chaves de `cron_config` que ele exige
+--     existem E estão preenchidas (medido sem ler valor: não-NULL e não-vazias),
+--     então o `RETURN NEW` antecipado dele não salva — não é caminho morto.
+--   • trigger_pipeline_entries_dispatch() → também resolve 'propostas' e não sai
+--     cedo. Para uma camada adiante, e por CONFIGURAÇÃO do tenant: a org tem 0
+--     `pipe_dispatch_rules` e nenhuma stage 'novo' ativa no funil propostas.
+--   Inertes neste card por dado: checklist (o funil propostas da org não tem
+--   stage 'novo' ativa, então não há template a aplicar) e meeting_event ('novo'
+--   não é 'agendado' nem 'compareceu').
+-- E os 4 workflows stage_changed ativos da org filtram pipe_type "whatsapp" nas
+-- stages automacao/nutricao_infinita/apresentacao_marcada — nenhum casa
+-- propostas/'novo'. Ou seja: HOJE nada é enviado. Isso é inércia por
+-- CONFIGURAÇÃO DO TENANT, não por desenho — uma regra de disparo nova ou um
+-- workflow reapontado vira envio. Mesma classe do incidente citado acima em
+-- `trigger_workflow_custom_pipe_stage_change`. É a qualificação que este
+-- cabeçalho aplicava ao trg_enforce_closed_at e omitia aqui.
+--
+-- ⇒ DECISÃO DE DESENHO (mudou o SQL, não só o texto): o trigger reverso do passo
+--   5 passa a exigir `pipeline_id = NEW.pipeline_id` no WHERE. Custo medido: 0 —
+--   16.192 dos 16.193 pares já satisfazem, e nas 20.523 linhas de
+--   `pipeline_entries` SEM par custom (o grosso do M4) o UPDATE já casava 0
+--   linhas por causa do predicado de `id`. Benefício: a
+--   rota NOVA que esta migration cria (deal_id no espelho → bounce → sync)
+--   deixa de existir para par fora de paridade. O que ele NÃO compra — e precisa
+--   ficar escrito, porque metade da armadilha é achar que compra:
+--     (i)  não conserta o drift, que é HERDADO: mover esse card no kanban custom
+--          já hoje, ANTES desta migration, reescreve o espelho system do mesmo
+--          jeito. O sync é de mão única e sempre foi.
+--     (ii) não protege a rota PELA FONTE: `UPDATE custom_pipe_entries SET
+--          deal_id = ...` num par fora de paridade dispara o sync direto, sem
+--          passar pelo trigger reverso, e faz o estrago inteiro descrito acima.
+--          Por isso o pré-flight é obrigatório, e não opcional.
+--     (iii) para o par fora de paridade, deal_id escrito no espelho não desce
+--          para a fonte: o kanban custom daquele card não mostra o Negócio, e um
+--          movimento posterior propaga NULL da fonte por cima do vínculo. É
+--          perda detectável — é o estado que o passo 1b enxerga — e foi
+--          escolhida de propósito contra a alternativa, que é corromper data de
+--          venda e caderno de eventos. Não existe rota de graça aqui também.
+--
+-- ⇒ PRÉ-FLIGHT OBRIGATÓRIO DO M4 — rodar ANTES do backfill, por qualquer das
+--   duas rotas, e excluir ou reconciliar à mão o que sair (hoje: 1 linha):
+--     SELECT c.id, c.organization_id,
+--            c.pipeline_id  AS fonte_pipeline,
+--            pe.pipeline_id AS espelho_pipeline,
+--            p.type         AS espelho_type,
+--            COALESCE(s.stage_key,'unknown') AS fonte_stage,
+--            pe.stage_key   AS espelho_stage,
+--            pe.closed_at
+--       FROM public.custom_pipe_entries c
+--       JOIN public.pipeline_entries    pe ON pe.id = c.id
+--       LEFT JOIN public.custom_pipeline_stages s ON s.id = c.stage_id
+--       LEFT JOIN public.pipelines              p ON p.id = pe.pipeline_id
+--      WHERE pe.pipeline_id IS DISTINCT FROM c.pipeline_id
+--         OR p.type IS DISTINCT FROM 'custom'
+--         OR pe.stage_key IS DISTINCT FROM COALESCE(s.stage_key,'unknown');
+--   Isto NÃO virou passo com RAISE EXCEPTION nesta migration, de propósito: o
+--   drift é herdado, esta migration não escreve uma linha de dado, e o passo 5
+--   neutraliza a única rota que ela própria cria. Abortar aqui travaria uma
+--   fatia só-schema por causa de um card de maio que ela não piora. Também não
+--   virou RAISE NOTICE: aviso que ninguém lê é decoração, e a casa exige que
+--   verificação embutida ABORTE. Vale issue própria, junto da FK composta
+--   org+deal citada no fim.
 --
 -- ⚠️ EFEITO COLATERAL REAL, ASSUMIDO: NENHUMA ROTA PRESERVA `updated_at` ─────
 -- A causa NÃO é o trigger reverso — ele nunca foi a causa. São dois triggers de
@@ -153,7 +289,7 @@
 --       → `update_updated_at_column()`: `NEW.updated_at = NOW()`, incondicional.
 --   • pipeline_entries    → update_pipeline_entries_updated_at
 --       → `update_updated_at()`:        `NEW.updated_at = now()`, incondicional.
--- Consequência, rota por rota, para os 16.177 cards:
+-- Consequência, rota por rota, para os 16.193 cards:
 --   • Backfill pela FONTE (`UPDATE custom_pipe_entries SET deal_id`): carimba a
 --     fonte no BEFORE dela; o sync escreve o espelho e o BEFORE do espelho
 --     carimba o espelho também (por cima do `updated_at = EXCLUDED.updated_at`).
@@ -174,6 +310,17 @@
 --   em volta do backfill (exige ownership, pega ACCESS EXCLUSIVE e, enquanto
 --   desabilitados, NENHUMA escrita concorrente carimba), ou snapshot/restore de
 --   updated_at das duas tabelas. Não existe rota "de graça".
+--   E a receita do DISABLE é PARCIAL, não completa — melhor dizer aqui do que
+--   deixar descobrir depois: ela preserva sempre a FONTE, mas o ESPELHO só onde
+--   os dois lados já concordam. O `updated_at = EXCLUDED.updated_at` do
+--   ON CONFLICT DO UPDATE não depende de trigger nenhum: ele força
+--   `pipeline_entries.updated_at` ao valor da fonte toda vez que o sync roda,
+--   com os carimbos desabilitados ou não. Onde os dois divergem, a receita
+--   reescreve o espelho em vez de preservá-lo. Medido em prod 2026-07-31: 1 par
+--   diverge — o mesmo dd91cd35-…, fonte 2026-05-12 contra espelho 2026-06-09 —
+--   e é justamente o par fora de paridade, para o qual a guarda do passo 5 corta
+--   a rota pelo espelho mas não a rota pela fonte. Preservação completa dos dois
+--   lados: só snapshot/restore.
 --
 -- ⚠️ `stage_changed_at` É REESCRITO — a versão anterior deste cabeçalho afirmava
 -- que ele "não é tocado em nenhum dos caminhos". É falso: ele está no
@@ -182,16 +329,17 @@
 -- bounce sobrescreve
 -- `pipeline_entries.stage_changed_at` com o valor da FONTE, e as duas rotas de
 -- backfill terminam no sync — não há rota que escape dele. Medido em prod
--- 2026-07-30: 367 dos 16.177 pares JÁ divergem hoje, em 12 orgs, delta máximo de
--- 28 dias, nenhum envolvendo NULL. Um backfill reconcilia esses 367 à força.
+-- 2026-07-31: 370 dos 16.193 pares JÁ divergem hoje, em 12 orgs, delta absoluto
+-- máximo de 27,98 dias, nenhum envolvendo NULL. Um backfill reconcilia esses
+-- 370 à força.
 -- Quem lê a coluna do lado do espelho: `useLeadsDeals`
 -- (src/modules/leads/hooks/useLeadsDeals.ts:105 e :175) consulta
 -- `pipeline_entries` sem filtrar tipo de funil, então a "idade na etapa" da aba
--- Negócios muda para esses 367. O filtro "Parado há" da migration irmã
+-- Negócios muda para esses 370. O filtro "Parado há" da migration irmã
 -- (20270729000010:146-147) lê a mesma coluna, mas o RPC dele resolve só
 -- `p.type='system'` (linha 96 daquele arquivo), então card custom nunca chega
 -- lá — esse filtro NÃO é afetado.
--- ⇒ M4: ou assume os 367 como mutação declarada do backfill, ou snapshota
+-- ⇒ M4: ou assume os 370 como mutação declarada do backfill, ou snapshota
 --   `pipeline_entries.stage_changed_at` antes e restaura depois. O kanban custom
 --   lê a FONTE (`custom_pipe_entries`), que nenhuma das rotas altera.
 --
@@ -267,7 +415,8 @@ END$$;
 -- ── 1. Coluna ───────────────────────────────────────────────────────────────
 -- Nullable e sem DEFAULT de propósito: ADD COLUMN assim é operação de catálogo,
 -- não reescreve a tabela e não segura lock longo. `deal_id` NULL = card ainda
--- não promovido a Negócio, que é o estado de 100% das 16.177 linhas hoje.
+-- não promovido a Negócio, que é o estado de 100% das 16.193 linhas hoje
+-- (medido 2026-07-31: 0 linhas de pipeline_entries com deal_id preenchido).
 ALTER TABLE public.custom_pipe_entries
   ADD COLUMN IF NOT EXISTS deal_id uuid;
 
@@ -275,7 +424,8 @@ COMMENT ON COLUMN public.custom_pipe_entries.deal_id IS
   'Negócio (deals) vinculado a este card de funil custom. NULL = card ainda não '
   'virou Negócio. Espelhado em pipeline_entries.deal_id por '
   'sync_custom_pipe_to_entries(); escritas que cheguem pelo espelho descem de '
-  'volta por fn_sync_deal_id_to_custom_pipe_entry().';
+  'volta por fn_sync_deal_id_to_custom_pipe_entry(), que só desce quando fonte e '
+  'espelho estão no MESMO pipeline_id.';
 
 -- ── 1b. O espelho não pode já estar na frente da fonte ─────────────────────
 -- Roda só DEPOIS do ADD COLUMN, e não junto do passo 0, por um motivo concreto:
@@ -289,6 +439,13 @@ COMMENT ON COLUMN public.custom_pipe_entries.deal_id IS
 -- a propagar o NULL da fonte por cima do valor bom do espelho no próximo
 -- movimento de card — perda silenciosa de vínculo. Abortar e reconciliar é a
 -- única saída segura.
+-- A reconciliação sugerida na mensagem de erro carrega `AND pe.pipeline_id =
+-- c.pipeline_id` porque ela ESCREVE A FONTE, e escrever a fonte de um par fora
+-- de paridade dispara o sync, que reescreve o stage_key do espelho system (ver
+-- PREMISSA DE PARIDADE no cabeçalho). A versão anterior desta mensagem mandava
+-- reconciliar todos de uma vez — receita boa em 16.192 pares e destrutiva no
+-- 16.193º. Medido em prod 2026-07-31: 0 espelhos com deal_id, então hoje este
+-- passo passa e nada disso é exercido.
 DO $$
 DECLARE
   v_divergentes bigint;
@@ -302,8 +459,10 @@ BEGIN
   IF v_divergentes > 0 THEN
     RAISE EXCEPTION
       'FAIL: % card(s) custom com deal_id no espelho (pipeline_entries) e NULL na fonte (custom_pipe_entries) — backfill rodou fora de ordem. '
-      'Reconcilie antes: UPDATE public.custom_pipe_entries c SET deal_id = pe.deal_id FROM public.pipeline_entries pe '
-      'WHERE pe.id = c.id AND pe.deal_id IS NOT NULL AND c.deal_id IS DISTINCT FROM pe.deal_id;', v_divergentes;
+      'Reconcilie SO os pares em paridade de funil: UPDATE public.custom_pipe_entries c SET deal_id = pe.deal_id FROM public.pipeline_entries pe '
+      'WHERE pe.id = c.id AND pe.pipeline_id = c.pipeline_id AND pe.deal_id IS NOT NULL AND c.deal_id IS DISTINCT FROM pe.deal_id; '
+      'O predicado pe.pipeline_id = c.pipeline_id NAO e opcional: este UPDATE escreve a FONTE, e escrever a fonte de um par fora de paridade dispara o sync, '
+      'que reescreve o stage_key do espelho num funil system (apaga closed_at, gera evento falso). Pares fora de paridade exigem decisao manual — rode o pre-flight do cabecalho.', v_divergentes;
   END IF;
 
   RAISE NOTICE 'Fonte e espelho coerentes: 0 divergências de deal_id.';
@@ -405,7 +564,7 @@ BEGIN
 END;
 $function$;
 
--- ── 5. (b) Trigger reverso: espelho → fonte, só para deal_id ───────────────
+-- ── 5. (b) Trigger reverso: espelho → fonte, só para deal_id, só em paridade ─
 CREATE OR REPLACE FUNCTION public.fn_sync_deal_id_to_custom_pipe_entry()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -422,7 +581,8 @@ BEGIN
   --
   -- `organization_id = NEW.organization_id` é defesa em profundidade multi-tenant:
   -- a linha custom tem, por construção do sync, o mesmo id E o mesmo org do
-  -- espelho (medido em prod 2026-07-30: 0 divergências em 16.177 pares). A guarda
+  -- espelho (medido em prod 2026-07-31: 0 divergências de org em 16.193 pares —
+  -- divergência de FUNIL existe e é tratada no predicado seguinte). A guarda
   -- fica, mas sem maquiar o preço: se algum dia divergir, o modo de falha NÃO é
   -- "espelho desatualizado". O UPDATE casa 0 linhas em silêncio, a fonte fica
   -- NULL com o espelho vinculado — o estado exato que o passo 1b aborta — e no
@@ -437,14 +597,29 @@ BEGIN
   -- o aviso dispararia em volume de backfill e esconderia o caso raro em vez de
   -- revelá-lo. Sinal que grita sempre não é sinal.
   --
+  -- `pipeline_id = NEW.pipeline_id` é a guarda de PARIDADE, e é a razão de esta
+  -- função não ser um espelho literal da premissa "mesmo id ⇒ mesmo card". Sem
+  -- ela, escrever deal_id num espelho que descasou de funil faz o bounce
+  -- (reverso → fonte → sync) reescrever o stage_key daquele espelho com o valor
+  -- da FONTE. Quando o espelho é um funil system, isso apaga closed_at de venda
+  -- fechada, grava evento falso em pipeline_stage_events e acorda dispatch e
+  -- workflow. Medido em prod 2026-07-31: 1 par nesse estado (card
+  -- dd91cd35-c66e-4b54-8e56-1c5aab4d498e), 16.192 em paridade — o predicado
+  -- custa 0 linha de comportamento e fecha a rota. Ambas as colunas são NOT NULL
+  -- nas duas tabelas (verificado no catálogo), então não há semântica de NULL
+  -- escondida aqui. O que ele NÃO faz: não protege quem escreve direto na FONTE
+  -- (aquele caminho não passa por este trigger) e não conserta o drift, que é
+  -- herdado. Detalhe e pré-flight no cabeçalho, bloco PREMISSA DE PARIDADE.
+  --
   -- `deal_id IS DISTINCT FROM NEW.deal_id` é a guarda G2 da prova de terminação
   -- no cabeçalho: quando o valor já está sincronizado, 0 linhas são afetadas e
   -- nenhum trigger encadeia. NÃO REMOVER — sem ela, este trigger e o sync se
   -- alimentam mutuamente até estourar a pilha.
   UPDATE public.custom_pipe_entries
      SET deal_id = NEW.deal_id
-   WHERE id              = NEW.id
+   WHERE id = NEW.id
      AND organization_id = NEW.organization_id
+     AND pipeline_id = NEW.pipeline_id
      AND deal_id IS DISTINCT FROM NEW.deal_id;
 
   -- AFTER ... FOR EACH ROW: o retorno é ignorado pelo executor.
@@ -453,10 +628,12 @@ END;
 $function$;
 
 COMMENT ON FUNCTION public.fn_sync_deal_id_to_custom_pipe_entry() IS
-  'Desce pipeline_entries.deal_id para o card custom de mesmo id. Existe porque '
-  'o sync custom→espelho é de mão única e o kanban custom lê custom_pipe_entries. '
-  'Terminação garantida por dupla guarda IS DISTINCT FROM (ver cabeçalho da '
-  'migration 20270730000030).';
+  'Desce pipeline_entries.deal_id para o card custom de mesmo id, MESMA org e '
+  'MESMO pipeline_id. Existe porque o sync custom→espelho é de mão única e o '
+  'kanban custom lê custom_pipe_entries. Terminação garantida por dupla guarda '
+  'IS DISTINCT FROM; a exigência de pipeline_id igual impede que o bounce '
+  'reescreva o stage_key de um espelho que descasou de funil (1 par assim em '
+  'prod em 2026-07-31). Ver cabeçalho da migration 20270730000030.';
 
 DROP TRIGGER IF EXISTS trg_sync_deal_id_to_custom_pipe_entry ON public.pipeline_entries;
 
@@ -566,8 +743,10 @@ BEGIN
     RAISE EXCEPTION 'FAIL: trigger reverso sem guarda WHEN ... IS DISTINCT FROM (G1) — LAÇO INFINITO com o sync. Abortando: %', v_def;
   END IF;
 
-  -- 7f. Guarda G2 dentro da função. G1 sozinha já termina, mas as duas juntas
-  -- são o que torna a terminação independente de como o trigger foi recriado.
+  -- 7f. Os três predicados do WHERE da função: G2 (terminação), tenant e
+  -- paridade de funil. G1 sozinha já termina, mas G1+G2 tornam a terminação
+  -- independente de como o trigger foi recriado; a paridade não é sobre
+  -- terminação, é sobre não corromper espelho que descasou de funil.
   SELECT pg_get_functiondef(p.oid) INTO v_def
   FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
   WHERE n.nspname='public' AND p.proname='fn_sync_deal_id_to_custom_pipe_entry';
@@ -583,6 +762,13 @@ BEGIN
   END IF;
   IF v_def NOT LIKE '%AND organization_id = NEW.organization_id%' THEN
     RAISE EXCEPTION 'FAIL: fn_sync_deal_id_to_custom_pipe_entry() sem guarda de tenant no WHERE.';
+  END IF;
+  -- Guarda de paridade. Sem ela, escrever deal_id no espelho de um par que
+  -- descasou de funil faz o bounce reescrever o stage_key desse espelho — em
+  -- funil system isso apaga closed_at de venda e grava evento falso no caderno
+  -- do ADR-0017. É correção de comportamento, não estilo: falhar é o certo.
+  IF v_def NOT LIKE '%AND pipeline_id = NEW.pipeline_id%' THEN
+    RAISE EXCEPTION 'FAIL: fn_sync_deal_id_to_custom_pipe_entry() sem guarda de paridade de funil no WHERE — o bounce reescreveria stage_key de espelho fora de paridade (ver PREMISSA DE PARIDADE no cabeçalho).';
   END IF;
 
   -- 7g. anon não executa nenhuma das duas; authenticated executa as duas.
@@ -600,5 +786,5 @@ BEGIN
     END IF;
   END LOOP;
 
-  RAISE NOTICE 'VALIDATION PASSED: coluna+FK(SET NULL)+índice parcial criados; sync propaga deal_id nas duas vias; trigger reverso com guardas G1+G2 e escopo de tenant; anon sem EXECUTE.';
+  RAISE NOTICE 'VALIDATION PASSED: coluna+FK(SET NULL)+índice parcial criados; sync propaga deal_id nas duas vias; trigger reverso com guardas G1+G2, escopo de tenant e paridade de funil; anon sem EXECUTE.';
 END$$;

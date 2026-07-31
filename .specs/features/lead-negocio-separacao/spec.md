@@ -128,11 +128,13 @@ três delas mudaram de resposta por causa do que a medição mostrou.
   `custom_pipe_entries_pipeline_id_lead_id_key`. Sem dropar o terceiro, a decisão F não
   destrava nada.
 - **São ~36,5 mil cards distintos** — não 52.588 e não 39.613. `pipeline_entries` tem
-  36.497 linhas (20.322 em funis padrão / 64 orgs + 16.176 em customizados / 24 orgs) e
-  **já contém os cards customizados**: cada linha de `custom_pipe_entries` é espelhada em
+  **36.709 linhas (re-medido 2026-07-31: 20.517 em funis padrão + 16.192 em customizados)**
+  e **já contém os cards customizados**: cada linha de `custom_pipe_entries` é espelhada em
   `pipeline_entries` com a **mesma chave primária** (gatilho `sync_custom_pipe_to_entries`).
-  Medido: 16.177 de 16.177 casam por `id`. Somar as duas tabelas conta o mesmo card duas
-  vezes. (Base viva: os números oscilam por unidade entre leituras.)
+  Medido: **16.193 de 16.193** casam por `id`. Somar as duas tabelas conta o mesmo card
+  duas vezes. **Base viva — o total sobe alguns por dia; o invariante é `linhas = cards`
+  no join do backfill, não o número absoluto.** *(Em 2026-07-30 eram 36.507 = 20.331 +
+  16.176.)*
 - **Nenhum card está sem lead.** Zero linhas com `lead_id` nulo — o backfill cobre todos.
 
 ### Erratas — o que este documento afirmou de errado (corrigido em 2026-07-30)
@@ -148,6 +150,7 @@ meses, e correção sem marca faz o próximo redescobrir do zero.
 | "A regra de edição não valida o destino → dá pra empurrar o negócio pra outra empresa" | **Não dá.** Em policy de `UPDATE`, o PostgreSQL usa o `USING` como `WITH CHECK` quando este é omitido. Medido: **50 das 90** policies de `UPDATE` em `public` omitem — incluindo a de `leads` e a de `pipeline_entries`, que ninguém considera furadas | Confundiu "ausência de cláusula" com "ausência de checagem". O defeito real de `deals` é outro e continua valendo: `get_user_organization_id()` devolve só a primeira org e ignora master |
 | "T3 tem prazo de validade: a janela fecha quando a migração rodar" (§7) | Não há janela. O backfill **não escreve** as duas colunas de posição, que seguem 100% vazias depois dele. A ordem é dependência de **código** (aposentar `/negocios` primeiro), não relógio | Assumiu que "tabela com linhas" = "colunas com dado". Prazo inventado cria pressa numa migration irreversível |
 | "O botão Assumir já está na tela sem fazer nada" (§6b) | Não existe: zero ocorrências de `assumir`/`claim` em `src/modules/leads/**` | Veio do vault e nunca foi conferido no código. Muda o tamanho do trabalho: não é ligar fio, é desenhar a interação |
+| "36.497 linhas (20.322 em funis padrão + 16.176 em customizados)" | **36.709 = 20.517 + 16.192** (re-medido 2026-07-31). O par velho **nem fechava sozinho**: 20.322 + 16.176 = 36.498, não 36.497 | Os dois docs do vault foram re-medidos e carimbados em 2026-07-30; a spec — o documento que o CTO lê — ficou com o par velho. Mesma mecânica de sempre: corrigir num arquivo não mata a mentira nos outros. Errata numérica que não soma faz desconfiar da tabela inteira, com razão |
 | "Uma proposta marcada como vendida vira cliente de carteira — isso já está certo na estrutura" (§6c, item 3) | **Não vira.** `handle_proposta_vendida` tem **zero gatilhos** e **zero chamadores** (medido em prod e na branch de QA, 2026-07-30). As 738 linhas de `upsell_clients` (12 orgs) vêm do sync de ERP. Venda no funil → carteira é **feature nova**, fatia 3, com custo próprio | A correção foi escrita no fluxo E2E em 2026-07-30 e **não foi propagada para cá**. Corrigir a mentira num arquivo não a mata nos outros; era preciso varrer os três |
 
 ### Achado lateral, fora desta feature
