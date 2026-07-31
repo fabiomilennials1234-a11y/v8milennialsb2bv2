@@ -71,9 +71,13 @@ export function createEdgeFunction(config: EdgeFunctionConfig): (req: Request) =
         }
       }
 
+      // Um cliente POR REQUISIÇÃO. Sem `autoRefreshToken: false` o auth-js arma
+      // um `setInterval` de 30 s a cada um e ninguém o desarma — em isolate de
+      // vida longa isso acumula. Ver `_shared/supabase-admin.ts`.
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        { auth: { persistSession: false, autoRefreshToken: false } },
       );
 
       const ctx: HandlerContext = { req, supabase, body, headers: corsHeaders };

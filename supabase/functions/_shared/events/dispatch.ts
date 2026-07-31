@@ -22,8 +22,12 @@ export async function dispatchPending(
   options: DispatchOptions = {},
 ): Promise<DispatchResult> {
   const batchSize = options.batchSize ?? 50;
-  const supabase =
-    options.supabase ?? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  // `autoRefreshToken: false`: senão o auth-js arma um `setInterval` de 30 s por
+  // cliente e ninguém o desarma. Ver `_shared/supabase-admin.ts`.
+  const supabase = options.supabase ??
+    createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
   const result: DispatchResult = {
     scanned: 0,
