@@ -131,6 +131,52 @@ describe("requestStreamToken", () => {
   });
 });
 
+// Regressão ao vivo: `resolveCaller` (`_shared/voip/caller.ts`) recusa master
+// sem `organization_id` explícito com 400 "Master must provide
+// organization_id" — master não pertence a uma organização só, e o servidor
+// não tem como adivinhar qual. Antes deste conserto NENHUMA função do plano
+// (control OU signal) mandava o campo, então nenhum master conseguia ativar
+// voz pela tela. Os dois planos são cobertos aqui porque são dois clientes
+// HTTP diferentes (`torquecalls-control` e `torquecalls-signal`) — consertar
+// um e esquecer o outro deixaria metade do fluxo (ex.: parear funciona, mas
+// ligar continua 400) quebrada do mesmo jeito.
+describe("organization_id — o campo que master precisa e admin comum não", () => {
+  it("createVoiceSession (control) manda organization_id quando fornecido", async () => {
+    invoke.mockResolvedValue({ data: { tc_session_id: "tc-1" }, error: null });
+    await createVoiceSession({ whatsappInstanceId: "inst-1", organizationId: "org-9" });
+    expect(invoke.mock.calls[0][1].body).toMatchObject({ organization_id: "org-9" });
+  });
+
+  it("createVoiceSession (control) NÃO carrega a chave sem organizationId — admin comum não pode regredir", async () => {
+    invoke.mockResolvedValue({ data: { tc_session_id: "tc-1" }, error: null });
+    await createVoiceSession({ whatsappInstanceId: "inst-1" });
+    // `toHaveBeenCalledWith`/`toMatchObject` ignoram chave com valor
+    // `undefined` — não provariam nada aqui. A prova real é a chave AUSENTE
+    // do objeto, não só um valor vazio.
+    expect(Object.keys(invoke.mock.calls[0][1].body)).not.toContain("organization_id");
+  });
+
+  it("startCall (signal) manda organization_id quando fornecido", async () => {
+    const { startCall } = await import("./torquecallsApi");
+    invoke.mockResolvedValue({
+      data: { call_id: "c1", tc_call_id: "t1", peer: "554891005289", media: "m", ctl: "c", vps_url: "u" },
+      error: null,
+    });
+    await startCall({ tcSessionId: "tc-1", leadId: "lead-1", organizationId: "org-9" });
+    expect(invoke.mock.calls[0][1].body).toMatchObject({ organization_id: "org-9" });
+  });
+
+  it("startCall (signal) NÃO carrega a chave sem organizationId", async () => {
+    const { startCall } = await import("./torquecallsApi");
+    invoke.mockResolvedValue({
+      data: { call_id: "c1", tc_call_id: "t1", peer: "554891005289", media: "m", ctl: "c", vps_url: "u" },
+      error: null,
+    });
+    await startCall({ tcSessionId: "tc-1", leadId: "lead-1" });
+    expect(Object.keys(invoke.mock.calls[0][1].body)).not.toContain("organization_id");
+  });
+});
+
 describe("VOICE_CONTROL_MESSAGES", () => {
   it("cobre todos os códigos que a tela pode receber hoje", () => {
     for (const code of ["voice_feature_off", "session_cap_reached", "session_orphaned"]) {

@@ -45,6 +45,12 @@ vi.mock("@/modules/communication/lib/torquecallsEvents", () => ({
   subscribeSessionEvents: (args: { onEvent: (e: SessionEvent) => void }) => subscribeSessionEvents(args),
 }));
 
+// A org do master (ou a derivada de `team_members` pra admin comum) — o hook
+// não resolve isso sozinho, só repassa. "org-1" fixo é o suficiente pra
+// provar o repasse; qual hook resolve QUAL org é responsabilidade de
+// `useOrganization`, testada em `useCurrentTeamMember`/`useOrganization`.
+vi.mock("@/modules/identity", () => ({ useOrganization: () => ({ organizationId: "org-1" }) }));
+
 import { useVoicePairing } from "./useVoicePairing";
 
 // O hook chama `useQueryClient()` para invalidar `voip_sessions` e
@@ -151,8 +157,29 @@ describe("useVoicePairing", () => {
 
     await act(async () => { await result.current.retry(); });
 
-    expect(pairVoiceSession).toHaveBeenCalledWith({ tcSessionId: "tc-1" });
+    expect(pairVoiceSession).toHaveBeenCalledWith({ tcSessionId: "tc-1", organizationId: "org-1" });
     expect(createVoiceSession).not.toHaveBeenCalled();
+  });
+
+  // Regressão ao vivo (2026-07-30): master abria Integrações → TorqueCalls →
+  // "Ativar voz" e batia em 400 "Master must provide organization_id" porque
+  // nada neste hook mandava a org pro `torquecallsApi`. `resolveCaller`
+  // (`_shared/voip/caller.ts`) exige o campo pra master porque ele não
+  // pertence a uma organização só — e a exigência do servidor está certa, só
+  // faltava o front repassar o que `useOrganization()` já sabe.
+  it("repassa organizationId pra createVoiceSession e requestStreamToken — sem isso master nunca ativa voz", async () => {
+    const { result } = renderHook(() => useVoicePairing(), { wrapper });
+    await act(async () => { await result.current.start("inst-1"); });
+
+    expect(createVoiceSession).toHaveBeenCalledWith({
+      whatsappInstanceId: "inst-1",
+      organizationId: "org-1",
+    });
+    expect(requestStreamToken).toHaveBeenCalledWith({
+      tcSessionId: "tc-1",
+      pair: true,
+      organizationId: "org-1",
+    });
   });
 
   it("o stream caindo depois do QR na tela leva a falhou", async () => {

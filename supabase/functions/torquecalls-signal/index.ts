@@ -187,16 +187,35 @@ async function startCall(
     return json(started.status, { error: started.error, code: "vps_refused" }, cors);
   }
 
-  const tcCallId = started.data?.call?.callId ?? null;
-  if (tcCallId) {
-    await db.from("voip_calls")
-      .update({ tc_call_id: tcCallId, status: "ringing", ringing_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq("id", authorized.callId);
+  // A VPS ecoa o id que autorizamos. Divergência aqui é defeito de contrato, não
+  // dado a absorver: escrever o valor dela por cima faria o ledger e a
+  // credencial falarem de chamadas diferentes, que é exatamente o desencontro
+  // que esta fatia consertou.
+  const ecoado = started.data?.call?.callId ?? null;
+  if (ecoado && ecoado !== authorized.tcCallId) {
+    await logRuntime({
+      organizationId: caller.orgId,
+      module: "voip",
+      action: "vps_call_id_divergente",
+      status: "error",
+      entityType: "voip_call",
+      entityId: authorized.callId,
+      payloadSnapshot: { autorizado: authorized.tcCallId, ecoado },
+    });
   }
+
+  await db
+    .from("voip_calls")
+    .update({
+      status: "ringing",
+      ringing_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", authorized.callId);
 
   return json(200, {
     call_id: authorized.callId,
-    tc_call_id: tcCallId,
+    tc_call_id: authorized.tcCallId,
     peer: authorized.peer,
     media: authorized.tokens.media,
     ctl: authorized.tokens.ctl,

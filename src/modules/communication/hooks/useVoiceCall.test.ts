@@ -17,6 +17,8 @@ vi.mock("@/modules/communication/lib/torquecallsApi", async () => {
   };
 });
 
+vi.mock("@/modules/identity", () => ({ useOrganization: () => ({ organizationId: "org-1" }) }));
+
 import { CallDeniedError } from "@/modules/communication/lib/torquecallsApi";
 import { useVoiceCall } from "./useVoiceCall";
 
@@ -123,7 +125,11 @@ describe("useVoiceCall", () => {
     });
 
     await waitFor(() =>
-      expect(endCallRequest).toHaveBeenCalledWith({ tcSessionId: SESSION, callId: "call-1" }),
+      expect(endCallRequest).toHaveBeenCalledWith({
+        tcSessionId: SESSION,
+        callId: "call-1",
+        organizationId: "org-1",
+      }),
     );
     expect(result.current.state.phase).toBe("failed");
   });
@@ -150,7 +156,44 @@ describe("useVoiceCall", () => {
     expect(result.current.state.peer).toBe("554891005289");
     // O telefone só entra na requisição vindo do servidor: o hook nunca o lê do
     // lead nem o recebe por parâmetro.
-    expect(startCallRequest).toHaveBeenCalledWith({ tcSessionId: SESSION, leadId: LEAD });
+    expect(startCallRequest).toHaveBeenCalledWith({
+      tcSessionId: SESSION,
+      leadId: LEAD,
+      organizationId: "org-1",
+    });
+  });
+
+  // Regressão ao vivo (2026-07-30): master sem `organization_id` no corpo de
+  // `startCall`/`endCall` batia em 400 "Master must provide organization_id"
+  // (`_shared/voip/caller.ts`) ao tentar ligar pelo botão do chat. Este hook é
+  // quem o `VoiceCallButton` usa via `VoiceCallProvider` — sem o repasse aqui,
+  // o defeito reaparece neste botão mesmo depois de consertado no pareamento.
+  it("repassa organizationId pro endCall também no encerramento normal (hangup)", async () => {
+    const track = fakeTrack();
+    installMedia(async () => ({ getTracks: () => [track], getAudioTracks: () => [track] }));
+    startCallRequest.mockResolvedValueOnce({
+      callId: "call-1",
+      tcCallId: "0E65AD6F1122334455667788990011FF",
+      peer: "554891005289",
+      media: "m",
+      ctl: "c",
+      vpsUrl: "https://vps.test",
+    });
+    exchangeSdp.mockResolvedValueOnce("v=0 answer");
+
+    const { result } = renderHook(() => useVoiceCall(SESSION));
+    await act(async () => {
+      await result.current.start(LEAD);
+    });
+    await act(async () => {
+      await result.current.hangup();
+    });
+
+    expect(endCallRequest).toHaveBeenCalledWith({
+      tcSessionId: SESSION,
+      callId: "call-1",
+      organizationId: "org-1",
+    });
   });
 
   it("sem sessão de voz não pede microfone nem disca", async () => {

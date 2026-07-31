@@ -12,8 +12,33 @@
  *
  * O navegador não escolhe org, operador nem número de destino. Ele diz "ligar
  * para este lead" e recebe de volta o que pode fazer.
+ *
+ * Exceção deliberada: `organizationId`. Master não pertence a uma organização
+ * só — `resolveCaller` (`_shared/voip/caller.ts`) não tem como derivar UMA org
+ * dele, e por isso EXIGE `organization_id` explícito nesse caso (400 "Master
+ * must provide organization_id" senão). Admin comum não precisa mandar nada:
+ * o servidor deriva a org dele via `team_members`. Por isso todo argumento
+ * abaixo é opcional, e o corpo só carrega a chave quando o valor existe —
+ * mandar `organization_id: undefined` até funcionaria (o `JSON.stringify` do
+ * transporte descarta chave com valor `undefined`), mas deixaria o objeto em
+ * memória mentindo sobre o que a função decidiu enviar. Os testes deste
+ * arquivo verificam a AUSÊNCIA da chave, não só o valor — depender do
+ * `JSON.stringify` para isso seria testar um detalhe de serialização em vez
+ * da decisão que importa.
  */
 import { supabase } from "@/integrations/supabase/client";
+
+/**
+ * Inclui `organization_id` no corpo só quando o chamador o forneceu. Master
+ * multi-org tem que mandar; admin comum, cuja org o servidor deriva de
+ * `team_members`, não deve carregar a chave à toa.
+ */
+function withOrg(
+  body: Record<string, unknown>,
+  organizationId?: string,
+): Record<string, unknown> {
+  return organizationId ? { ...body, organization_id: organizationId } : body;
+}
 
 export interface StartCallResult {
   callId: string;
@@ -121,6 +146,7 @@ export async function readInvokeErrorBody(
 export async function startCall(args: {
   tcSessionId: string;
   leadId: string;
+  organizationId?: string;
 }): Promise<StartCallResult> {
   const raw = await signal<{
     call_id: string;
@@ -129,7 +155,10 @@ export async function startCall(args: {
     media: string;
     ctl: string;
     vps_url: string;
-  }>("startCall", { tc_session_id: args.tcSessionId, lead_id: args.leadId });
+  }>(
+    "startCall",
+    withOrg({ tc_session_id: args.tcSessionId, lead_id: args.leadId }, args.organizationId),
+  );
 
   return {
     callId: raw.call_id,
@@ -141,8 +170,15 @@ export async function startCall(args: {
   };
 }
 
-export async function endCall(args: { tcSessionId: string; callId: string }): Promise<void> {
-  await signal("endCall", { tc_session_id: args.tcSessionId, call_id: args.callId });
+export async function endCall(args: {
+  tcSessionId: string;
+  callId: string;
+  organizationId?: string;
+}): Promise<void> {
+  await signal(
+    "endCall",
+    withOrg({ tc_session_id: args.tcSessionId, call_id: args.callId }, args.organizationId),
+  );
 }
 
 /**
@@ -208,37 +244,57 @@ async function control<T>(action: string, body: Record<string, unknown> = {}): P
 export async function createVoiceSession(args: {
   whatsappInstanceId: string;
   name?: string;
+  organizationId?: string;
 }): Promise<{ tcSessionId: string }> {
-  const data = await control<{ tc_session_id: string }>("createSession", {
-    whatsapp_instance_id: args.whatsappInstanceId,
-    name: args.name ?? "TorqueCalls",
-  });
+  const data = await control<{ tc_session_id: string }>(
+    "createSession",
+    withOrg(
+      { whatsapp_instance_id: args.whatsappInstanceId, name: args.name ?? "TorqueCalls" },
+      args.organizationId,
+    ),
+  );
   return { tcSessionId: data.tc_session_id };
 }
 
 /** Pede um QR novo para uma sessão que já existe, sem criar outra. */
-export async function pairVoiceSession(args: { tcSessionId: string }): Promise<void> {
-  await control("pairSession", { tc_session_id: args.tcSessionId });
+export async function pairVoiceSession(args: {
+  tcSessionId: string;
+  organizationId?: string;
+}): Promise<void> {
+  await control(
+    "pairSession",
+    withOrg({ tc_session_id: args.tcSessionId }, args.organizationId),
+  );
 }
 
-export async function logoutVoiceSession(args: { tcSessionId: string }): Promise<void> {
-  await control("logoutSession", { tc_session_id: args.tcSessionId });
+export async function logoutVoiceSession(args: {
+  tcSessionId: string;
+  organizationId?: string;
+}): Promise<void> {
+  await control(
+    "logoutSession",
+    withOrg({ tc_session_id: args.tcSessionId }, args.organizationId),
+  );
 }
 
 export async function requestStreamToken(args: {
   tcSessionId: string;
   /** Só true quando a tela precisa do QR — o servidor exige permissão extra. */
   pair?: boolean;
+  organizationId?: string;
 }): Promise<StreamTokenResult> {
   const raw = await signal<{
     token: string;
     expires_at: number;
     renew_in_ms: number;
     vps_url: string;
-  }>("streamToken", {
-    tc_session_id: args.tcSessionId,
-    ...(args.pair ? { pair: true } : {}),
-  });
+  }>(
+    "streamToken",
+    withOrg(
+      { tc_session_id: args.tcSessionId, ...(args.pair ? { pair: true } : {}) },
+      args.organizationId,
+    ),
+  );
 
   return {
     token: raw.token,
