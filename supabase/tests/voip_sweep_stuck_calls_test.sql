@@ -69,6 +69,23 @@ INSERT INTO public.consent_records (organization_id, lead_id, consent_type, gran
 VALUES ('99999999-9999-9999-9999-999999999999', '77777777-7777-7777-7777-777777777777',
         'voice_call_whatsapp', true, 'form');
 
+-- Desde 20270731000001 a reserva pergunta se o operador pode usar a instância da
+-- sessão. Os quatro operadores precisam de vínculo real com a org: um
+-- `auth.users` solto é uma forma que produção não produz (`resolveCaller` exige
+-- membro ativo, ou master/gestor), e levaria `not_instance_member` antes de o
+-- varredor ter o que recolher. A instância não tem allowed_members, então o
+-- vínculo basta.
+INSERT INTO public.team_members (id, organization_id, user_id, name, role, is_active)
+VALUES
+  ('9c000000-0000-0000-0000-000000000001', '99999999-9999-9999-9999-999999999999',
+   'a0000001-0000-0000-0000-000000000001', 'Op Ringing Velho', 'member', true),
+  ('9c000000-0000-0000-0000-000000000002', '99999999-9999-9999-9999-999999999999',
+   'a0000001-0000-0000-0000-000000000002', 'Op Ringing Recente', 'member', true),
+  ('9c000000-0000-0000-0000-000000000003', '99999999-9999-9999-9999-999999999999',
+   'a0000001-0000-0000-0000-000000000003', 'Op Connected Velho', 'member', true),
+  ('9c000000-0000-0000-0000-000000000004', '99999999-9999-9999-9999-999999999999',
+   'a0000001-0000-0000-0000-000000000004', 'Op Connected Recente', 'member', true);
+
 SET LOCAL session_replication_role = origin;
 
 -- Quatro linhas, uma por operador/cenário. Sem trigger de INSERT em voip_calls

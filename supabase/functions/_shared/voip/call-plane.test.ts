@@ -97,6 +97,7 @@ const USER = "11111111-1111-1111-1111-111111111111";
 const TM = "b1111111-1111-1111-1111-111111111111";
 const LEAD = "c1111111-1111-1111-1111-111111111111";
 const CALL = "d1111111-1111-1111-1111-111111111111";
+const INSTANCE = "e1111111-1111-1111-1111-111111111111";
 
 // O cast é a prova pelo avesso do teste de tipo em types.test.ts: fora de
 // resolveCaller, só se produz um Caller mentindo para o compilador.
@@ -116,6 +117,9 @@ const openSession = () => ({
   tc_session_id: "tc-sess",
   organization_id: ORG,
   status: "open",
+  // A sessão é quem carrega a instância — é exatamente por isso que o vínculo
+  // usuário↔instância tem que ser checado aqui: o front escolhe a sessão.
+  whatsapp_instance_id: INSTANCE,
 });
 
 const ownedLead = () => ({
@@ -146,7 +150,23 @@ const permissiveEngine = {
 // exato que validCallID aceita do outro lado.
 const TC_CALL = "D1111111111111111111111111111111";
 
-const okReserve = () => ({ ok: true, call_id: CALL, tc_call_id: TC_CALL, token_jti: "jti-1" });
+/**
+ * O choke consulta DUAS RPCs: `fn_voip_can_use_instance` (o vínculo
+ * usuário↔instância) e `fn_voip_call_reserve` (o governor). Este envelope deixa
+ * o gate de instância PASSAR e delega o resto ao stub de reserva do teste — o
+ * padrão de produção hoje, onde a única instância com voz não tem lista de
+ * vendedores e portanto é aberta a toda a organização.
+ */
+const allowingInstance =
+  (reserve: () => unknown) => (name: string): unknown =>
+    name === "fn_voip_can_use_instance" ? true : reserve();
+
+const okReserve = allowingInstance(() => ({
+  ok: true,
+  call_id: CALL,
+  tc_call_id: TC_CALL,
+  token_jti: "jti-1",
+}));
 
 // ---------------------------------------------------------------------------
 // Casos
@@ -230,7 +250,12 @@ Deno.test("o número discado vem do lead, não do chamador — e normalizado", a
 
 Deno.test("nega outbound sem lead_id", async () => {
   await setupSigningKey();
-  const db = stubClient({ tables: { voip_sessions: openSession } });
+  const db = stubClient({
+    tables: { voip_sessions: openSession },
+    // Sem isto o gate de instância fail-closa antes de chegar ao lead — o que é
+    // o comportamento certo, mas não é o que ESTE teste mede.
+    rpc: allowingInstance(() => null),
+  });
 
   const res = await authorizeCallAndMint(memberCaller(), {
     supabaseAdmin: db,
@@ -441,12 +466,150 @@ Deno.test("nega quando o membro não tem voip.call.start", async () => {
   assertEquals(res.code, "permission_denied");
 });
 
+// ---------------------------------------------------------------------------
+// Vínculo usuário ↔ instância
+// ---------------------------------------------------------------------------
+// A sessão carrega a instância, e o `tc_session_id` vem do front. Sem este gate,
+// qualquer membro da org que conheça um id de sessão disca pelo número de
+// qualquer colega — esconder o botão na interface não fecha nada.
+
+Deno.test("nega quem não opera pela instância da sessão, sem chegar à reserva", async () => {
+  await setupSigningKey();
+  const db = stubClient({
+    tables: {
+      voip_sessions: openSession,
+      leads: ownedLead,
+      consent_records: grantedConsent,
+      ...permissiveEngine,
+    },
+    // Instância COM lista de vendedores da qual este operador não faz parte.
+    rpc: (name: string) =>
+      name === "fn_voip_can_use_instance"
+        ? false
+        : { ok: true, call_id: CALL, tc_call_id: TC_CALL, token_jti: "jti-1" },
+  });
+
+  const res = await authorizeCallAndMint(memberCaller(), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    direction: "outbound",
+    leadId: LEAD,
+  });
+
+  assert(!res.ok);
+  assertEquals(res.code, "not_instance_member");
+
+  // NEGATIVA PURA: a reserva nunca é chamada, então nada de cota consumida,
+  // nada de linha em voip_calls, nada de operador preso pelo UNIQUE parcial.
+  assertEquals(
+    db.__calls.rpc.filter((c: Record<string, unknown>) => c.name === "fn_voip_call_reserve").length,
+    0,
+    "a reserva não pode ser chamada depois da negativa de instância",
+  );
+});
+
+Deno.test("o gate pergunta pelo usuário do Caller e pela instância da SESSÃO", async () => {
+  await setupSigningKey();
+  const db = stubClient({
+    tables: {
+      voip_sessions: openSession,
+      leads: ownedLead,
+      consent_records: grantedConsent,
+      ...permissiveEngine,
+    },
+    rpc: okReserve,
+  });
+
+  await authorizeCallAndMint(memberCaller(), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    direction: "outbound",
+    leadId: LEAD,
+  });
+
+  const gate = db.__calls.rpc.find(
+    (c: Record<string, unknown>) => c.name === "fn_voip_can_use_instance",
+  );
+  assert(gate, "o gate de instância tem que ser consultado");
+  // Os dois argumentos são o ponto do desenho: a identidade vem do `Caller`
+  // opaco (nunca do corpo da requisição) e a instância vem da SESSÃO (nunca de
+  // um id de instância que o cliente escolheu).
+  assertEquals((gate.args as Record<string, unknown>).p_user_id, USER);
+  assertEquals((gate.args as Record<string, unknown>).p_instance_id, INSTANCE);
+});
+
+Deno.test("erro do gate de instância NEGA — fail-closed", async () => {
+  await setupSigningKey();
+  const db = stubClient({
+    tables: {
+      voip_sessions: openSession,
+      leads: ownedLead,
+      consent_records: grantedConsent,
+      ...permissiveEngine,
+    },
+    // `null` é o que um erro de RPC devolve no lugar do boolean. Um gate que
+    // interpretasse isso como "não negou, então pode" abriria o furo inteiro
+    // sempre que o banco tossisse.
+    rpc: (name: string) =>
+      name === "fn_voip_can_use_instance"
+        ? null
+        : { ok: true, call_id: CALL, tc_call_id: TC_CALL, token_jti: "jti-1" },
+  });
+
+  const res = await authorizeCallAndMint(memberCaller(), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    direction: "outbound",
+    leadId: LEAD,
+  });
+
+  assert(!res.ok);
+  assertEquals(res.code, "not_instance_member");
+});
+
+Deno.test("atender chamada de ENTRADA também passa pelo gate de instância", async () => {
+  await setupSigningKey();
+  const db = stubClient({
+    tables: {
+      voip_sessions: openSession,
+      voip_calls: () => ({
+        id: CALL,
+        organization_id: ORG,
+        peer_phone: "554891005289",
+        lead_id: null,
+        status: "ringing",
+        tc_call_id: TC_CALL,
+      }),
+      ...permissiveEngine,
+    },
+    rpc: (name: string) =>
+      name === "fn_voip_can_use_instance"
+        ? false
+        : { ok: true, call_id: CALL, tc_call_id: TC_CALL, token_jti: "jti-1" },
+  });
+
+  const res = await authorizeCallAndMint(memberCaller(), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    direction: "inbound",
+    existingCallId: CALL,
+  });
+
+  assert(!res.ok);
+  assertEquals(res.code, "not_instance_member");
+});
+
 Deno.test("repassa a negativa do governor sem assinar nada", async () => {
   await setupSigningKey();
 
   for (
     const [code, retry] of [
       ["voice_calls_disabled", undefined],
+      // O gate de instância vive nos DOIS lados. Se a recusa antecipada passar
+      // (por corrida: lista alterada entre a checagem e a reserva), quem nega é
+      // fn_voip_call_reserve — e o código tem que chegar íntegro ao operador,
+      // não virar `reserve_failed`.
+      ["not_instance_member", undefined],
       ["operator_busy", undefined],
       ["daily_cap_reached", undefined],
       ["org_concurrency_reached", 5000],
@@ -459,7 +622,7 @@ Deno.test("repassa a negativa do governor sem assinar nada", async () => {
         consent_records: grantedConsent,
         ...permissiveEngine,
       },
-      rpc: () => ({ ok: false, code, retry_after_ms: retry }),
+      rpc: allowingInstance(() => ({ ok: false, code, retry_after_ms: retry })),
     });
 
     const res = await authorizeCallAndMint(memberCaller(), {
@@ -521,6 +684,7 @@ Deno.test("chamada de entrada já encerrada não é atendível", async () => {
       }),
       ...permissiveEngine,
     },
+    rpc: allowingInstance(() => null),
   });
 
   const res = await authorizeCallAndMint(memberCaller(), {
@@ -566,7 +730,13 @@ Deno.test("atender chamada de entrada sem tc_call_id nega cedo, sem chamar a res
 
   assert(!res.ok, `esperava negativa, veio ${JSON.stringify(res)}`);
   assertEquals(res.code, "no_tc_call_id");
-  assertEquals(db.__calls.rpc.length, 0, "não deveria ter chamado fn_voip_call_reserve");
+  // Por NOME: o choke consulta o gate de instância antes disto, então contar
+  // todas as RPCs mediria a coisa errada.
+  assertEquals(
+    db.__calls.rpc.filter((c: Record<string, unknown>) => c.name === "fn_voip_call_reserve").length,
+    0,
+    "não deveria ter chamado fn_voip_call_reserve",
+  );
 });
 
 // O arquivo inteiro não tinha UMA asserção sobre o cid — por isso a suíte ficou
@@ -620,7 +790,7 @@ Deno.test("recusa sem assinar quando a reserva não devolve tc_call_id", async (
       consent_records: grantedConsent,
       ...permissiveEngine,
     },
-    rpc: () => ({ ok: true, call_id: CALL, token_jti: "jti-1" }),
+    rpc: allowingInstance(() => ({ ok: true, call_id: CALL, token_jti: "jti-1" })),
   });
 
   const res = await authorizeCallAndMint(memberCaller(), {
