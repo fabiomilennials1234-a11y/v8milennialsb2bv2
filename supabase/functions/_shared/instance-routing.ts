@@ -57,22 +57,32 @@ export type RoutingResult =
   | { ok: false; code: InstanceRoutingErrorCode; message: string };
 
 /**
- * Uma Instance está viva (segura para enviar) quando o webhook do provedor a
- * reporta conectada, o watchdog não registrou sessão morta, e ela não é Meta.
+ * Uma Instance está **viva** quando o webhook do provedor a reporta conectada e
+ * o watchdog não registrou sessão morta.
  *
  * `status` sozinho engana: congela em "connected" depois de um logout remoto
  * feito de outro aparelho. O veredito real é `session_dead_since`, gravado por
  * `whatsapp-session-watchdog`. Espelha `deriveInstanceStatus()` no front.
+ *
+ * Vivacidade é saúde de sessão e nada mais — o provedor é outro eixo, ver
+ * `isRoutableInstance`.
  */
 export function isInstanceLive(
   inst: Partial<RoutedInstance> | null | undefined,
 ): boolean {
   if (!inst) return false;
-  return (
-    CONNECTED.includes(String(inst.status)) &&
-    inst.session_dead_since == null &&
-    LEGACY_PROVIDERS.includes(String(inst.provider))
-  );
+  return CONNECTED.includes(String(inst.status)) && inst.session_dead_since == null;
+}
+
+/**
+ * **Roteável** = viva **e** de provedor legado. Um número Meta pode estar
+ * perfeitamente vivo e ainda assim nunca ser escolhido para um envio legado
+ * (isolamento de certificação).
+ */
+export function isRoutableInstance(
+  inst: Partial<RoutedInstance> | null | undefined,
+): boolean {
+  return isInstanceLive(inst) && LEGACY_PROVIDERS.includes(String(inst?.provider));
 }
 
 /**
@@ -149,7 +159,7 @@ export async function resolveRoutedInstance(
   // nunca tiveram o problema. Vem antes da política de propósito: instância
   // recriada deixa a thread apontando para a antiga, extinta, e a org
   // continuaria funcionando com o único número que tem.
-  const live = await listLive(supabase, organizationId);
+  const live = await listRoutable(supabase, organizationId);
   if (live.length === 1) return { ok: true, instance: live[0] };
   if (live.length === 0) return await noLiveInstance(supabase, organizationId);
 
@@ -270,8 +280,8 @@ async function loadInstance(
   return (data as RoutedInstance) ?? null;
 }
 
-/** As Instances vivas da Organization. */
-async function listLive(
+/** As Instances roteáveis da Organization. */
+async function listRoutable(
   supabase: SupabaseClient,
   organizationId: string,
 ): Promise<RoutedInstance[]> {
@@ -281,7 +291,7 @@ async function listLive(
     .eq("organization_id", organizationId)
     .in("provider", LEGACY_PROVIDERS)
     .in("status", CONNECTED);
-  return ((data as RoutedInstance[]) ?? []).filter(isInstanceLive);
+  return ((data as RoutedInstance[]) ?? []).filter(isRoutableInstance);
 }
 
 /**
