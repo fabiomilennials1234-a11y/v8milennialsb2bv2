@@ -24,6 +24,10 @@ interface OrgFieldSpec {
 /** Fields in ActionNodeData that reference org-specific resources */
 const ACTION_ORG_FIELDS: Record<string, OrgFieldSpec> = {
   whatsappInstanceId: { type: "whatsapp_instance", hintField: "whatsappInstanceName" },
+  // Recuo da Instance Routing Policy (ADR-0025). Também aponta para uma Instance
+  // da org de origem — sem entrar aqui, um workflow importado carregaria o id de
+  // outro tenant e o envio sairia por um número que não é do cliente.
+  fallbackInstanceId: { type: "whatsapp_instance", hintField: "fallbackInstanceName" },
   campaignId: { type: "campaign", hintField: "campaignName" },
   campaignStageId: { type: "campaign_stage", hintField: "campaignStageName" },
   campaignTemplateId: { type: "campaign_template", hintField: "campaignTemplateName" },

@@ -17,6 +17,7 @@ fora dos triviais.**
 ### WhatsApp
 - `whatsapp-client.ts` — adapter provider-agnostic (Uazapi atual)
 - `whatsapp-providers/` — implementations por provider
+- `instance-routing.ts` — **Instance Routing Policy** (ADR-0025): resolve de qual Instance o nó de mensagem do Workflow envia. `resolveRoutedInstance` é a costura única dos 11 pontos de envio (texto, mídia, rica, campanha, send_to_number), chamada por `action-handlers/whatsapp-helpers.getWhatsAppInstance`. Ordem: `fixed` → org com uma viva → `responsible` (RPC `get_lead_write_instance`) → `conversation` (última mensagem por `normalized_phone`, grupo fora, **nunca** por `lead_id`) → recuo do nó → falha. Instância não-viva (`session_dead_since`) **falha sem trocar de número**; erro vira `retryable: false` em `executeWorkflowAction`. Não afeta campanhas, regras de pipe, follow-ups, disparo em massa nem Copilot — esses seguem em `resolveDispatchContext`.
 - `instance-write-guard.ts` — gate vínculo 1:1 user→instância
 - `whatsapp-device-name.ts` — rótulo de dispositivo por org enviado no init (#1167)
 
