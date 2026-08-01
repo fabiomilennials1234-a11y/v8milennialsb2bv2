@@ -24,10 +24,20 @@ let numbers: CallableVoiceNumber[] = [];
 /** Cada `tcSessionId` que o `useVoiceCall` recebeu, na ordem dos renders. */
 let sessoesRecebidas: Array<string | null> = [];
 let fase: VoiceCallState["phase"] = "idle";
+/** Se o vendedor alcança o lead (SDR/closer/responsável, ou bypass). */
+let leadEhDele = true;
+/** Cada `leadId` que o `useCanCallLead` recebeu — `null` = "não perguntei". */
+let leadsPerguntados: Array<string | null | undefined> = [];
 const start = vi.fn();
 
 vi.mock("@/modules/communication/hooks/useVoipSession", () => ({
   useCallableVoiceNumbers: () => ({ numbers, isLoading: false }),
+  // A regra real vive em `useVoipSession.test.ts`, contra o banco dublê. Aqui o
+  // que está em julgamento é o BOTÃO: se ele pergunta, e se obedece a resposta.
+  useCanCallLead: (leadId: string | null | undefined) => {
+    leadsPerguntados.push(leadId);
+    return !!leadId && leadEhDele;
+  },
 }));
 
 vi.mock("@/modules/communication/hooks/useVoiceCall", () => ({
@@ -107,6 +117,8 @@ beforeEach(() => {
   numbers = [];
   sessoesRecebidas = [];
   fase = "idle";
+  leadEhDele = true;
+  leadsPerguntados = [];
   start.mockClear();
 });
 
@@ -147,6 +159,49 @@ describe("VoiceCallButton — quantos números o vendedor tem", () => {
     await user.click(botaoLigar());
     expect(start).toHaveBeenCalledWith("lead-1");
     expect(sessaoAtual()).toBe("tc-1");
+  });
+});
+
+describe("VoiceCallButton — o lead precisa ser dele", () => {
+  // O defeito: `leads.view_all` nasce `true`, o vendedor enxerga todo lead da
+  // organização, e em todos eles o botão aparecia — para tomar `not_lead_owner`
+  // (403) sem uma linha de explicação.
+  it("lead que não é dele: o botão some, mesmo com número ao alcance", () => {
+    numbers = [COMERCIAL];
+    leadEhDele = false;
+    montar();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("lead dele: o botão aparece normalmente", () => {
+    numbers = [COMERCIAL];
+    leadEhDele = true;
+    montar();
+    expect(botaoLigar()).toBeInTheDocument();
+  });
+
+  // Com dois números o botão é um grupo de duas metades. Nenhuma das duas pode
+  // sobreviver a um lead alheio.
+  it("lead que não é dele: some também o seletor de número", () => {
+    numbers = [COMERCIAL, SUPORTE];
+    leadEhDele = false;
+    montar();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  // O provider vive fora das rotas e o PR anterior derrubou o custo dele para
+  // 0-1 requisição. Perguntar "de quem é este lead" em organização sem voz
+  // devolveria o custo, e para esconder um botão que já estava escondido.
+  it("sem número ao alcance, nem chega a perguntar de quem é o lead", () => {
+    numbers = [];
+    montar();
+    expect(leadsPerguntados.every((id) => id === null)).toBe(true);
+  });
+
+  it("com número ao alcance, a pergunta é feita pelo lead da tela", () => {
+    numbers = [COMERCIAL];
+    montar();
+    expect(leadsPerguntados).toContain("lead-1");
   });
 });
 

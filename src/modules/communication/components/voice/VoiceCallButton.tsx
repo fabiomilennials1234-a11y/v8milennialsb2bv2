@@ -34,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useCanCallLead } from "@/modules/communication/hooks/useVoipSession";
 import { useVoiceCallContext } from "./VoiceCallProvider";
 
 interface VoiceCallButtonProps {
@@ -45,10 +46,22 @@ interface VoiceCallButtonProps {
 export function VoiceCallButton({ leadId, leadName, className }: VoiceCallButtonProps) {
   const voice = useVoiceCallContext();
 
+  // A pergunta só é feita quando JÁ existe número ao alcance. Sem esta condição,
+  // toda conversa aberta nas ~29 organizações sem voz pagaria uma consulta para
+  // esconder um botão que as outras condições já tinham escondido — e este
+  // provider vive fora das rotas.
+  const ehDele = useCanCallLead(voice.selected ? leadId : null);
+
   // Sem lead não há como ligar: o destino é derivado do lead no servidor, e é
   // essa derivação que sustenta consentimento, fronteira e teto por número.
   // Sem `selected` não há número ao alcance dele — é o que faz o botão sumir.
-  if (!voice.selected || !leadId) return null;
+  //
+  // E se o lead não for dele, o servidor recusa com `not_lead_owner` antes de
+  // discar — então o botão some, em vez de prometer. Some, e não vira aviso,
+  // porque o vendedor não teria o que fazer com o aviso: reatribuir lead é ato
+  // de admin, em outra tela. Um aviso permanente no cabeçalho de todo lead
+  // alheio seria ruído fixo na tela mais usada do dia.
+  if (!voice.selected || !leadId || !ehDele) return null;
 
   const titulo = voice.busy ? "Você já está em uma chamada" : "Ligar por WhatsApp";
   const discar = (e: React.MouseEvent) => {
