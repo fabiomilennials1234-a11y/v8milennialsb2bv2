@@ -79,7 +79,7 @@ describe("TorqueCallsSettings", () => {
   // é o webhook do S11, que não existe aqui. Enquanto isso, dizer "Voz ativa"
   // para uma sessão `pending` é a tela afirmando um sucesso que o sistema não
   // sustenta: `fn_voip_call_reserve` e `call-plane.ts` recusam com
-  // `session_not_open`, e `useVoipSession` nem mostra o botão de ligar.
+  // `session_not_open`, e `useCallableVoiceNumbers` nem mostra o botão de ligar.
   //
   // Pior: a linha `pending` já existe assim que o modal ABRE. O cliente que
   // desiste no meio do QR também via "Voz ativa".

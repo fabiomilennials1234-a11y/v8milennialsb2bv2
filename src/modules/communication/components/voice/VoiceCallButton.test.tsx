@@ -1,0 +1,243 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { CallableVoiceNumber } from "@/modules/communication/hooks/useVoipSession";
+import type { VoiceCallState } from "@/modules/communication/hooks/useVoiceCall";
+
+// Radix (dropdown + Popper) usa APIs de ponteiro e ResizeObserver que o jsdom
+// não implementa. Sem estes stubs o menu nem abre, e o teste da escolha viraria
+// um falso vermelho sobre o ambiente em vez de sobre o produto.
+beforeAll(() => {
+  const proto = Element.prototype as unknown as Record<string, unknown>;
+  proto.hasPointerCapture ??= () => false;
+  proto.setPointerCapture ??= () => {};
+  proto.releasePointerCapture ??= () => {};
+  proto.scrollIntoView ??= () => {};
+  (globalThis as Record<string, unknown>).ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+});
+
+let numbers: CallableVoiceNumber[] = [];
+/** Cada `tcSessionId` que o `useVoiceCall` recebeu, na ordem dos renders. */
+let sessoesRecebidas: Array<string | null> = [];
+let fase: VoiceCallState["phase"] = "idle";
+const start = vi.fn();
+
+vi.mock("@/modules/communication/hooks/useVoipSession", () => ({
+  useCallableVoiceNumbers: () => ({ numbers, isLoading: false }),
+}));
+
+vi.mock("@/modules/communication/hooks/useVoiceCall", () => ({
+  useVoiceCall: (tcSessionId: string | null) => {
+    sessoesRecebidas.push(tcSessionId);
+    return {
+      state: {
+        phase: fase,
+        error: null,
+        errorCode: null,
+        endReason: null,
+        callId: null,
+        peer: null,
+        muted: false,
+        elapsedSeconds: 0,
+      } satisfies VoiceCallState,
+      start,
+      hangup: vi.fn(),
+      toggleMute: vi.fn(),
+      dismiss: vi.fn(),
+    };
+  },
+}));
+
+// O painel monta WebRTC de verdade; aqui só o botão está em julgamento.
+vi.mock("./VoiceCallPanel", () => ({ VoiceCallPanel: () => null }));
+
+vi.mock("@/modules/identity", () => ({
+  useOrganization: () => ({ organizationId: "org-1", teamMemberId: "tm-1" }),
+}));
+
+import { VoiceCallProvider, useVoiceCallContext } from "./VoiceCallProvider";
+import { VoiceCallButton } from "./VoiceCallButton";
+
+const COMERCIAL: CallableVoiceNumber = {
+  tcSessionId: "tc-1",
+  instanceId: "i-1",
+  instanceName: "Comercial",
+};
+const SUPORTE: CallableVoiceNumber = {
+  tcSessionId: "tc-2",
+  instanceId: "i-2",
+  instanceName: "Suporte",
+};
+
+/** Mesma chave que `usePersistedState` monta: v8:ui:{tela}:{org}:{membro}. */
+const CHAVE = "v8:ui:voice-call-number:org-1:tm-1";
+
+function lembrar(tcSessionId: string) {
+  const agora = Date.now();
+  localStorage.setItem(
+    CHAVE,
+    JSON.stringify({
+      value: tcSessionId,
+      savedAt: new Date(agora).toISOString(),
+      expiresAt: new Date(agora + 86_400_000).toISOString(),
+    }),
+  );
+}
+
+function montar() {
+  return render(
+    <VoiceCallProvider>
+      <VoiceCallButton leadId="lead-1" leadName="Fábrica Silva" />
+    </VoiceCallProvider>,
+  );
+}
+
+/** O que o `useVoiceCall` está segurando no render mais recente. */
+const sessaoAtual = () => sessoesRecebidas[sessoesRecebidas.length - 1];
+
+const botaoLigar = () => screen.getByRole("button", { name: /^ligar$/i });
+const seletor = () => screen.queryByRole("button", { name: /trocar o número/i });
+
+beforeEach(() => {
+  localStorage.clear();
+  numbers = [];
+  sessoesRecebidas = [];
+  fase = "idle";
+  start.mockClear();
+});
+
+describe("VoiceCallButton — quantos números o vendedor tem", () => {
+  it("nenhum número ao alcance: o botão some inteiro", () => {
+    numbers = [];
+    montar();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  // Este é o caso de TODA a base hoje. A mudança não pode custar nada a ele.
+  it("um número: nada muda — botão simples, sem seletor, sem clique a mais", async () => {
+    numbers = [COMERCIAL];
+    const user = userEvent.setup();
+    montar();
+
+    expect(seletor()).not.toBeInTheDocument();
+    expect(screen.queryByText("Comercial")).not.toBeInTheDocument();
+
+    await user.click(botaoLigar());
+    expect(start).toHaveBeenCalledWith("lead-1");
+    expect(sessaoAtual()).toBe("tc-1");
+  });
+
+  it("dois números: o seletor aparece e diz por qual vai sair a ligação", () => {
+    numbers = [COMERCIAL, SUPORTE];
+    montar();
+    expect(seletor()).toBeInTheDocument();
+    expect(screen.getByText("Comercial")).toBeInTheDocument();
+  });
+
+  // O gesto de sempre — um clique, e disca — não pode ganhar um passo só
+  // porque a organização passou a ter dois números.
+  it("dois números: ligar continua a UM clique, pelo número mostrado", async () => {
+    numbers = [COMERCIAL, SUPORTE];
+    const user = userEvent.setup();
+    montar();
+    await user.click(botaoLigar());
+    expect(start).toHaveBeenCalledWith("lead-1");
+    expect(sessaoAtual()).toBe("tc-1");
+  });
+});
+
+describe("VoiceCallButton — a escolha do número chega até a chamada", () => {
+  it("escolher outro número troca a sessão por onde a ligação sai", async () => {
+    numbers = [COMERCIAL, SUPORTE];
+    const user = userEvent.setup();
+    montar();
+    expect(sessaoAtual()).toBe("tc-1");
+
+    await user.click(seletor()!);
+    await user.click(await screen.findByRole("menuitemradio", { name: "Suporte" }));
+
+    expect(sessaoAtual()).toBe("tc-2");
+    await user.click(botaoLigar());
+    expect(start).toHaveBeenCalledWith("lead-1");
+    expect(sessaoAtual()).toBe("tc-2");
+  });
+
+  it("a escolha do vendedor é lembrada na próxima montagem", () => {
+    numbers = [COMERCIAL, SUPORTE];
+    lembrar("tc-2");
+    montar();
+    expect(sessaoAtual()).toBe("tc-2");
+    expect(screen.getByText("Suporte")).toBeInTheDocument();
+  });
+
+  // O número saiu do alcance dele. Um alerta sobre isso não o ajuda a ligar.
+  it("escolha lembrada que sumiu da lista cai na primeira, sem avisar e sem quebrar", () => {
+    numbers = [COMERCIAL, SUPORTE];
+    lembrar("tc-que-sumiu");
+    montar();
+    expect(sessaoAtual()).toBe("tc-1");
+    expect(screen.getByText("Comercial")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("escolha lembrada de um número só dele não vaza para lista vazia", () => {
+    numbers = [];
+    lembrar("tc-2");
+    montar();
+    expect(sessaoAtual()).toBe(null);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+});
+
+describe("VoiceCallButton — durante a chamada", () => {
+  // Trocar o número no meio da chamada apontaria `hangup`/`endCall` para a
+  // sessão errada, e a linha ficaria aberta segurando a cota do operador.
+  it("em chamada, as duas metades ficam travadas", () => {
+    numbers = [COMERCIAL, SUPORTE];
+    fase = "active";
+    montar();
+    expect(botaoLigar()).toBeDisabled();
+    expect(seletor()).toBeDisabled();
+  });
+
+  it("chamada encerrada não trava: dá para discar de novo sem fechar aviso", () => {
+    numbers = [COMERCIAL, SUPORTE];
+    fase = "ended";
+    montar();
+    expect(botaoLigar()).not.toBeDisabled();
+    expect(seletor()).not.toBeDisabled();
+  });
+
+  // A trava do botão é o que o vendedor VÊ. Ela não prova que a troca está
+  // fechada: qualquer outra tela que pegue o contexto chama `selectNumber`
+  // direto, sem passar por atributo `disabled` nenhum. A guarda tem que estar
+  // no ponto por onde toda troca passa — e é isso que este teste prende.
+  it("a troca é recusada no provider, não só desabilitada no botão", async () => {
+    numbers = [COMERCIAL, SUPORTE];
+    fase = "active";
+    const user = userEvent.setup();
+
+    function OutraTela() {
+      const voice = useVoiceCallContext();
+      return (
+        <button type="button" onClick={() => voice.selectNumber(SUPORTE.tcSessionId)}>
+          trocar por fora
+        </button>
+      );
+    }
+
+    render(
+      <VoiceCallProvider>
+        <OutraTela />
+      </VoiceCallProvider>,
+    );
+
+    expect(sessaoAtual()).toBe("tc-1");
+    await user.click(screen.getByRole("button", { name: "trocar por fora" }));
+    expect(sessaoAtual()).toBe("tc-1");
+  });
+});
