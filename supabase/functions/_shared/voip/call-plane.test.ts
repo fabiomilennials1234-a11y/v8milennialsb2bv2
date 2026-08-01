@@ -60,22 +60,51 @@ interface StubSpec {
   rpc?: (name: string, args: Record<string, unknown>) => unknown;
 }
 
+/**
+ * Projeta a linha pelas colunas pedidas no `.select(...)`, como o PostgREST faz:
+ * o que não foi pedido NÃO volta.
+ *
+ * Sem isto o stub devolvia a linha inteira independentemente do `select`, e uma
+ * coluna removida da consulta ficava indetectável — o código lia um campo que a
+ * consulta real nunca teria trazido. Era um jeito de a suíte ficar verde sobre
+ * um `select` mutilado.
+ */
+function project(
+  row: Record<string, unknown> | null,
+  selected: string | null,
+): Record<string, unknown> | null {
+  if (!row || !selected || selected.includes("*")) return row;
+  const cols = selected.split(",").map((c) => c.trim()).filter(Boolean);
+  // Select com relacionamento embutido (`tabela(coluna)`) não é projetável
+  // coluna a coluna; devolve inteiro em vez de mentir.
+  if (cols.some((c) => c.includes("("))) return row;
+  const out: Record<string, unknown> = {};
+  for (const c of cols) out[c] = row[c];
+  return out;
+}
+
 function stubClient(spec: StubSpec) {
   const calls: { rpc: Record<string, unknown>[] } = { rpc: [] };
 
   const makeQuery = (table: string) => {
     const filters: Filters = {};
+    let selected: string | null = null;
     const chain: Record<string, unknown> = {};
     for (const m of ["select", "eq", "is", "in", "limit", "order", "neq"]) {
       chain[m] = (a?: unknown, b?: unknown) => {
-        if (m !== "select" && m !== "limit" && typeof a === "string") {
+        if (m === "select") {
+          if (typeof a === "string") selected = a;
+        } else if (m !== "limit" && typeof a === "string") {
           filters[a] = b;
         }
         return chain;
       };
     }
     chain.maybeSingle = () =>
-      Promise.resolve({ data: (spec.tables[table] ?? (() => null))(filters), error: null });
+      Promise.resolve({
+        data: project((spec.tables[table] ?? (() => null))(filters), selected),
+        error: null,
+      });
     chain.single = chain.maybeSingle;
     return chain;
   };
@@ -636,6 +665,57 @@ Deno.test("atender chamada de OUTRA sessão é recusado — autorizar e agir usa
     db.__calls.rpc.filter((c: Record<string, unknown>) => c.name === "fn_voip_call_reserve").length,
     0,
     "não pode chegar à reserva com a chamada de outra sessão",
+  );
+});
+
+// CONTROLE POSITIVO do atendimento. É a irmã da asserção 33 do pgTAP, que o
+// TypeScript não tinha.
+//
+// MUTANTE QUE ISTO MATA: remover `tc_session_id` do `.select(...)` da consulta a
+// `voip_calls`. Sem a coluna, `call.tc_session_id` fica indefinido, a comparação
+// com `tcSessionId` passa a ser SEMPRE verdadeira, e `authorizeCallAndMint`
+// recusa TODO atendimento. Não é furo de segurança — erra para o lado
+// restritivo — e é pior de diagnosticar: some a capacidade de atender, e o
+// sintoma chega como "ninguém consegue atender", que não aponta para um select.
+//
+// Só pega porque o stub agora projeta as colunas pedidas (ver `project`). Com o
+// stub devolvendo a linha inteira, este teste ficaria verde sobre o mutante.
+Deno.test("atender pela sessão CERTA devolve sucesso e os três tokens", async () => {
+  await setupSigningKey();
+  const db = stubClient({
+    tables: {
+      voip_sessions: openSession,
+      voip_calls: () => ({
+        id: CALL,
+        organization_id: ORG,
+        tc_session_id: "tc-sess",
+        peer_phone: "554891005289",
+        lead_id: null,
+        status: "ringing",
+        tc_call_id: TC_CALL,
+      }),
+      ...permissiveEngine,
+    },
+    rpc: okReserve,
+  });
+
+  const res = await authorizeCallAndMint(memberCaller(), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    direction: "inbound",
+    existingCallId: CALL,
+  });
+
+  assert(res.ok, `esperava sucesso, veio ${JSON.stringify(res)}`);
+  assertEquals(res.callId, CALL);
+  assertEquals(res.tcCallId, TC_CALL);
+  assert(res.tokens.start && res.tokens.media && res.tokens.ctl);
+  // E o token de início é o de ATENDER, não o de discar.
+  assertEquals(decodeClaims(res.tokens.start).act, ["call.accept"]);
+  // A reserva foi de fato consultada — o sucesso passou pelo governor.
+  assertEquals(
+    db.__calls.rpc.filter((c: Record<string, unknown>) => c.name === "fn_voip_call_reserve").length,
+    1,
   );
 });
 
