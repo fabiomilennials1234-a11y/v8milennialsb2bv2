@@ -23,6 +23,9 @@
 --
 -- IDEMPOTENTE: só toca nós cujo recuo ainda está vazio. Rodar de novo não
 -- sobrescreve nada, nem desfaz edição manual do operador.
+--
+-- EXECUTADO EM PRODUÇÃO em 2026-08-01: 131 nós, 27 automações, 7 organizações
+-- (0 → 131). Integridade conferida: nenhum nó perdeu `data` ou `id`.
 -- =============================================================================
 
 -- Tipos de ação que declaram política de roteamento. Espelha
@@ -152,7 +155,19 @@ order by nos_ativos desc, org;
 --     ),
 --     updated_at = now()
 -- from vencedora v
--- where v.organization_id = w.organization_id;
+-- where v.organization_id = w.organization_id
+--   -- Só workflows que TÊM nó elegível. Sem isto, toda automação da org seria
+--   -- reescrita idêntica e teria `updated_at` batido à toa.
+--   and exists (
+--     select 1 from jsonb_array_elements(coalesce(w.definition->'nodes','[]'::jsonb)) n
+--     where n->'data'->>'actionType' in (
+--             'send_whatsapp_message', 'send_whatsapp', 'send_whatsapp_audio',
+--             'send_whatsapp_image', 'send_whatsapp_video', 'send_whatsapp_sticker',
+--             'send_whatsapp_document', 'send_whatsapp_template', 'send_campaign_message'
+--           )
+--       and coalesce(n->'data'->>'whatsappInstanceId','') = ''
+--       and coalesce(n->'data'->>'fallbackInstanceId','') = ''
+--   );
 --
 -- -- Confira o total antes de confirmar. Esperado: igual ao `nos` do PASSO 1.
 -- select count(*) as nos_com_recuo
