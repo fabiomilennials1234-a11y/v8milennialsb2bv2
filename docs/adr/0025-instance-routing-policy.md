@@ -6,7 +6,7 @@
 
 Uma Organization com mais de uma Instance conectada não consegue prever de qual número a automação fala com o Lead.
 
-O WhatsApp Message Node (ADR-0012) oferece "Automático (primeira disponível)". Quem monta o funil lê isso como "o número que faz sentido para este Lead". No backend, a resolução consulta as Instances da Organization com status `open`/`connected` e pega **uma linha sem ordenação definida** — o Postgres devolve qualquer uma, e pode devolver outra na execução seguinte.
+O WhatsApp Message Node (ADR-0012) oferece "Automático (primeira disponível)". Quem monta o funil lê isso como "o número que faz sentido para este Lead". No backend, a resolução consulta as Instances vivas da Organization ordenadas por `last_connection_at` e **a primeira leva**. É determinístico, mas não tem nenhuma relação com o Lead — e a escolha muda sozinha assim que outro número reconecta.
 
 O efeito para o cliente final: o Lead escreve para o Número 1, entra no funil, e recebe a sequência pelo Número 2 — um número que ele nunca viu. A conversa se parte em duas threads e o número que disparou frio esquenta sozinho, vetor conhecido de bloqueio do WhatsApp.
 
@@ -31,9 +31,13 @@ Já existia um mecanismo vizinho: `instance-write-guard` + RPC `get_lead_write_i
 
 5. **O nó carrega um recuo explícito** — "Se não houver conversa, usar: [Instance]". Fecha o contrato dentro do próprio nó: as duas pernas da regra na mesma tela. Descartado depender do vínculo responsável→Instance (praticamente vazio em produção; a feature subiria inerte) e descartado derivar o vínculo por estatística (adivinhação decidindo, a cada envio e invisível, de qual número o cliente recebe — mesma família do defeito original).
 
-6. **Organization com exatamente uma Instance conectada usa essa Instance, sempre, antes de qualquer falha.** O defeito é escolher errado *entre várias* opções; com uma só não existe escolha errada. Sem isso, 242 nós ativos em 66 Organizations de um número regridiriam para consertar 49. A regra se auto-resolve: ao conectar o segundo número, a política estrita passa a valer sozinha, sem migração.
+6. **Organization com exatamente uma Instance viva usa essa Instance, sempre.** O defeito é escolher errado *entre várias* opções; com uma só não existe escolha errada. Sem isso, 242 nós ativos em 66 Organizations de um número regridiriam para consertar 49. A regra se auto-resolve: ao conectar o segundo número, a política estrita passa a valer sozinha, sem migração.
 
-7. **Instance resolvida fora de `open`/`connected` falha na hora**, com código próprio, **sem retentativa e sem trocar de número**. Trocar por causa de uma queda de dez minutos reintroduz o defeito. Avaliado segurar até 24h e recusado — recuperação é manual, pela tela Automações → Execuções, que já mostra o erro e oferece "Repetir a partir da falha".
+   **Este passo roda antes de a política resolver**, não depois. Não é substituição — não existe outro número para o qual trocar. E cobre o caso da Instance recriada: a Organization troca de número, o histórico segue apontando para a Instance extinta, e ela continua funcionando com o único número que tem. A política `fixed` é a exceção: quem nomeia um número está declarando que não aceita substituição, então ela resolve antes e falha se aquele número não estiver vivo.
+
+7. **Instance resolvida que não está viva falha na hora**, com código próprio, **sem retentativa e sem trocar de número**. Trocar por causa de uma queda de dez minutos reintroduz o defeito. Avaliado segurar até 24h e recusado — recuperação é manual, pela tela Automações → Execuções, que já mostra o erro e oferece "Repetir a partir da falha".
+
+   "Viva" é `status ∈ {open, connected}` **e** `session_dead_since IS NULL`. `status` sozinho engana: congela em `connected` depois de um logout remoto feito de outro aparelho, e o veredito real é o do `whatsapp-session-watchdog`. Instâncias Meta ficam fora da resolução legada (isolamento de certificação).
 
 8. **Escopo: apenas os nós de mensagem do Workflow.** Campanhas, regras de pipe, follow-ups, disparo em massa, mensagens agendadas e Copilot seguem resolvendo Instance como hoje. A fronteira já é física no código: os handlers do Workflow passam por uma função de resolução própria, os demais caminhos por `resolveDispatchContext`.
 
@@ -46,6 +50,10 @@ Já existia um mecanismo vizinho: `instance-write-guard` + RPC `get_lead_write_i
 - **A política é auto-reforçante — e isso corta nos dois sentidos.** Ela lê a mensagem mais recente, então uma mensagem torta vira a nova âncora e as automações seguintes herdam o erro. Como os outros caminhos de envio ficaram fora do escopo, eles podem contaminar a leitura. Vetor declarado e aceito; fecha em #1337 se `sent_source` for confiável (#1336, ainda não medido — as agregações sobre `whatsapp_messages` estouram o tempo em produção).
 
 - **Automação para durante queda de sessão.** Consequência direta da decisão 7. Torna obrigatório que a falha seja legível na tela de Execuções, distinguindo "a Instance caiu" de "nenhum número resolvido".
+
+- **A decisão 7 reverte uma correção que estava na `main`.** O código anterior, ao encontrar uma Instance fixada morta, **caía para a Instance viva mais recente da Organization** — comportamento adicionado porque a org `163874dd` acumulou 83 execuções falhas em 7 dias com um nó fixado numa instância Evolution extinta. Sob a decisão 7 esses envios voltam a falhar, agora com mensagem explícita, até que a org corrija o nó. O recuo declarado **não** socorre a política `fixed`: quem nomeia um número está declarando que não aceita substituição. Se essa troca não for desejada, a alternativa é deixar a `fixed` morta cair para o recuo do nó (nunca para a escolha do sistema) — mudança de três linhas, não revisitada aqui porque contraria a decisão tomada.
+
+- **`send_to_number` fica fora da política.** Os destinatários são números fixos, não o Lead: não há conversa a seguir nem responsável a consultar. O nó mantém só o seletor de número de saída. Sem número declarado, resolve apenas se a Organization tiver **uma** Instance viva; com duas ou mais, falha em vez de escolher. Exposição medida em produção: 7 nós, nenhum em Organization multi-instância.
 
 - **A flag `user_write_instance_strict` continua governando os caminhos fora deste escopo.** A política `responsible` é a expressão explícita e opcional do mesmo vínculo, dentro do nó.
 

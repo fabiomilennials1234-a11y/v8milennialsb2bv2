@@ -125,7 +125,10 @@ describe("sendWhatsApp action handler", () => {
       executionContext: {},
     });
     expect(result.success).toBe(false);
-    expect(result.error).toContain("instance");
+    // ADR-0025: a falha vai para a tela de Execuções, então é escrita em
+    // português e nomeia o motivo em vez do símbolo interno.
+    expect(result.error).toMatch(/nenhum número de WhatsApp conectado/i);
+    expect(result.retryable).toBe(false);
   });
 
   it("returns error when lead has no phone", async () => {

@@ -408,7 +408,11 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
       {/* WhatsApp Instance Selector (shared by all WhatsApp actions) */}
       {isInstanceRoutedAction(at) && (
-        <InstanceRoutingSelector data={data} onUpdate={onUpdate} />
+        <InstanceRoutingSelector
+          data={data}
+          onUpdate={onUpdate}
+          fixedOnly={at === "send_to_number"}
+        />
       )}
 
       {/* Unified "Enviar Mensagem" node (ADR-0012) */}

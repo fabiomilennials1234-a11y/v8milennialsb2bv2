@@ -19,9 +19,11 @@
  *    to the RECIPIENT's number with lead_id NULL (see persistChatHistory) so the
  *    notification shows up as the salesperson's own chat thread and never pollutes the
  *    lead's thread.
- *  - The FROM instance is the operator-selected one (params.whatsappInstanceId) or
- *    the org default — leadId is intentionally NOT passed to instance resolution so
- *    strict-write lead binding doesn't force the lead's responsible's instance.
+ *  - The FROM instance is the operator-selected one (params.whatsappInstanceId).
+ *    leadId is intentionally NOT passed to instance resolution: the recipients are
+ *    fixed numbers, so following the lead's conversation would be meaningless. With
+ *    no instance declared, only an org with a single live one resolves (ADR-0025);
+ *    two or more and the node fails instead of picking a number on its own.
  *
  * Retry-storm guard (review M1+L1): permanent failures are detected UP FRONT and
  * returned non-retryable so the executor doesn't hammer Uazapi with 5xx for ~6.5min
@@ -63,20 +65,6 @@ function resolveDestinations(raw: unknown): { valid: string[]; invalid: string[]
     valid.push(normalized);
   }
   return { valid, invalid };
-}
-
-/**
- * Live-session check, mirroring getWhatsAppInstance's org-default filter
- * (status ∈ {open,connected} AND session_dead_since IS NULL). The explicit
- * `whatsappInstanceId` path does NOT apply that filter, so an operator-pinned
- * instance that has since logged out must be caught here.
- */
-function isInstanceLive(
-  instance: { status?: string | null; session_dead_since?: string | null } | null | undefined,
-): boolean {
-  if (!instance) return false;
-  if (instance.session_dead_since != null) return false;
-  return instance.status === "open" || instance.status === "connected";
 }
 
 /**
@@ -148,29 +136,12 @@ export async function sendToNumber(input: ActionInput): Promise<ActionResult> {
     };
   }
 
-  // 2) FROM instance — operator-selected or org default. leadId NOT passed on
-  //    purpose (recipients are fixed numbers, not the lead).
-  const wa = await getWhatsAppInstance(
-    supabase,
-    organizationId,
-    params.whatsappInstanceId as string | undefined,
-    null,
-  );
-  // No instance at all → permanent for this run (none will appear on a 30s retry).
-  if (!wa) {
-    return { success: false, error: "WhatsApp instance not available", retryable: false };
-  }
-
-  // 2b) Dead-session guard (M1): a logged-out FROM instance makes Uazapi answer
-  //     every /send/text with 5xx → without this, the executor would retry 3×
-  //     (~6.5min) against a dead instance. Bail immediately, non-retryable.
-  if (!isInstanceLive(wa.instance)) {
-    return {
-      success: false,
-      error: "instância WhatsApp deslogada/indisponível",
-      retryable: false,
-    };
-  }
+  // 2) FROM instance. leadId NÃO é passado de propósito: os destinatários são
+  //    números fixos, não o lead — seguir a conversa dele não faria sentido aqui.
+  //    O dead-session guard (M1) agora vive dentro da resolução: instância
+  //    deslogada devolve falha não-retentável, sem tentativa de envio.
+  const wa = await getWhatsAppInstance(supabase, organizationId, params, null);
+  if (!wa.ok) return wa.failure;
 
   // 3) Resolve the message template against the lead.
   const template = (params.messageTemplate as string) || "";

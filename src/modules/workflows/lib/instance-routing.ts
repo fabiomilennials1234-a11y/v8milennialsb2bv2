@@ -101,6 +101,32 @@ export function instanceRoutingLabel(policy: InstanceRoutingPolicy): string {
   return POLICY_SPECS[policy].label;
 }
 
+/**
+ * Provedores que o envio legado do Workflow usa. Números Meta ficam de fora
+ * (isolamento de certificação) — precisa espelhar `LEGACY_PROVIDERS` do
+ * backend, senão o painel conta um número que o envio nunca vai usar.
+ */
+const LEGACY_PROVIDERS = ["uazapi", "evolution"];
+
+/**
+ * Uma Instance é elegível ao roteamento quando está conectada, sem sessão
+ * morta e não é Meta. Mesma definição de `isInstanceLive` em
+ * `supabase/functions/_shared/instance-routing.ts`: se o painel e o envio
+ * discordarem sobre quantos números vivos existem, o operador vê um campo de
+ * recuo que o backend ignora — ou não vê o que ele exige.
+ */
+export function isRoutableInstance(inst: {
+  status?: string | null;
+  session_dead_since?: string | null;
+  provider?: string | null;
+}): boolean {
+  return (
+    (inst.status === "connected" || inst.status === "open") &&
+    inst.session_dead_since == null &&
+    LEGACY_PROVIDERS.includes(String(inst.provider))
+  );
+}
+
 function isPolicy(value: unknown): value is InstanceRoutingPolicy {
   return typeof value === "string" && value in POLICY_SPECS;
 }

@@ -24,6 +24,7 @@ import {
   buildPolicyChange,
   describeRoutingPolicy,
   instanceRoutingLabel,
+  isRoutableInstance,
   policyUsesFallback,
   readRoutingPolicy,
   type InstanceRoutingFields,
@@ -52,15 +53,23 @@ function InstanceOptions({ instances }: { instances: ConnectedInstance[] }) {
 export function InstanceRoutingSelector({
   data,
   onUpdate,
+  fixedOnly = false,
 }: {
   data: InstanceRoutingFields;
   onUpdate: (patch: Partial<InstanceRoutingFields>) => void;
+  /**
+   * Nó cujos destinatários são números fixos, não o lead (`send_to_number`).
+   * Não há conversa a seguir nem responsável a consultar, então só o número de
+   * saída faz sentido — oferecer as políticas seria oferecer regra que não se
+   * aplica.
+   */
+  fixedOnly?: boolean;
 }) {
   const { data: instances, isLoading } = useWhatsAppInstances();
 
-  const connected = (instances || []).filter(
-    (i) => i.status === "connected" || i.status === "open",
-  );
+  // Mesma definição do backend: conectada, sem sessão morta e não-Meta. Contar
+  // diferente faria o painel prometer uma coisa e o envio fazer outra.
+  const connected = (instances || []).filter(isRoutableInstance);
 
   if (isLoading) {
     return (
@@ -85,6 +94,33 @@ export function InstanceRoutingSelector({
     );
   }
 
+  const nameOf = (id: string) =>
+    connected.find((i) => i.id === id)?.instance_name || "";
+
+  if (fixedOnly) {
+    return (
+      <div className="space-y-2">
+        <Label>Número de saída</Label>
+        <Select
+          value={data.whatsappInstanceId || ""}
+          onValueChange={(v) => onUpdate(buildFixedInstanceChange(v, nameOf(v)))}
+        >
+          <SelectTrigger aria-label="Número de saída">
+            <SelectValue placeholder="Selecione a instância" />
+          </SelectTrigger>
+          <SelectContent>
+            <InstanceOptions instances={connected} />
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          {connected.length === 1
+            ? "A organização tem um número conectado — a mensagem sai por ele."
+            : "Sem número escolhido, o envio falha em vez de escolher um sozinho."}
+        </p>
+      </div>
+    );
+  }
+
   const policy = readRoutingPolicy(data);
 
   // Com um número conectado só não existe escolha errada a proteger: o recuo
@@ -92,9 +128,6 @@ export function InstanceRoutingSelector({
   // que não existe.
   const single = connected.length === 1;
   const showFallback = policyUsesFallback(policy) && !single;
-
-  const nameOf = (id: string) =>
-    connected.find((i) => i.id === id)?.instance_name || "";
 
   return (
     <div className="space-y-4">

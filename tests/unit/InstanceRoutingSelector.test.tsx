@@ -17,10 +17,15 @@ let mockInstances: Array<{
   instance_name: string;
   phone_number: string | null;
   status: string;
+  provider?: string;
+  session_dead_since?: string | null;
 }> = [];
 let mockLoading = false;
 
-vi.mock("@/modules/communication/hooks/useWhatsAppInstances", () => ({
+// O componente importa via barrel (`@/modules/communication`), como manda o
+// CLAUDE.md. Mockar o caminho profundo não interceptaria nada.
+vi.mock("@/modules/communication", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   useWhatsAppInstances: () => ({ data: mockInstances, isLoading: mockLoading }),
 }));
 
@@ -33,9 +38,10 @@ beforeAll(() => {
     Element.prototype.releasePointerCapture ?? vi.fn();
 });
 
+const base = { provider: "uazapi", session_dead_since: null };
 const DOIS_NUMEROS = [
-  { id: "inst-1", instance_name: "Comercial 1", phone_number: "5511999990001", status: "connected" },
-  { id: "inst-2", instance_name: "Comercial 2", phone_number: "5511999990002", status: "open" },
+  { ...base, id: "inst-1", instance_name: "Comercial 1", phone_number: "5511999990001", status: "connected" },
+  { ...base, id: "inst-2", instance_name: "Comercial 2", phone_number: "5511999990002", status: "open" },
 ];
 
 const UM_NUMERO = [DOIS_NUMEROS[0]];
@@ -108,8 +114,23 @@ describe("campo de recuo", () => {
   it("instância desconectada não conta para o campo de recuo aparecer", () => {
     mockInstances = [
       DOIS_NUMEROS[0],
-      { id: "inst-3", instance_name: "Antigo", phone_number: null, status: "close" },
+      { ...base, id: "inst-3", instance_name: "Antigo", phone_number: null, status: "close" },
     ];
+    renderSelector({ instanceRoutingPolicy: "conversation" });
+    expect(screen.queryByRole("combobox", { name: /se não houver conversa/i })).not.toBeInTheDocument();
+  });
+
+  it("instância com sessão morta não conta — o backend também a ignora", () => {
+    mockInstances = [
+      DOIS_NUMEROS[0],
+      { ...DOIS_NUMEROS[1], session_dead_since: "2026-08-01T09:00:00Z" },
+    ];
+    renderSelector({ instanceRoutingPolicy: "conversation" });
+    expect(screen.queryByRole("combobox", { name: /se não houver conversa/i })).not.toBeInTheDocument();
+  });
+
+  it("instância Meta não conta — envio legado nunca sai por ela", () => {
+    mockInstances = [DOIS_NUMEROS[0], { ...DOIS_NUMEROS[1], provider: "meta" }];
     renderSelector({ instanceRoutingPolicy: "conversation" });
     expect(screen.queryByRole("combobox", { name: /se não houver conversa/i })).not.toBeInTheDocument();
   });
@@ -172,6 +193,35 @@ describe("gravação no nó", () => {
     expect(onUpdate).toHaveBeenCalledWith({
       fallbackInstanceId: "inst-2",
       fallbackInstanceName: "Comercial 2",
+    });
+  });
+});
+
+// ─── Nó de número fixo (send_to_number) ────────────────────────────────────
+
+describe("modo fixedOnly", () => {
+  it("não oferece política — não há conversa de lead a seguir", () => {
+    render(<InstanceRoutingSelector data={{}} onUpdate={vi.fn()} fixedOnly />);
+    expect(screen.queryByRole("combobox", { name: /enviar por/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /número de saída/i })).toBeInTheDocument();
+  });
+
+  it("não oferece recuo", () => {
+    render(<InstanceRoutingSelector data={{}} onUpdate={vi.fn()} fixedOnly />);
+    expect(screen.queryByRole("combobox", { name: /se não houver conversa/i })).not.toBeInTheDocument();
+  });
+
+  it("escolher o número grava a instância declarada", () => {
+    const onUpdate = vi.fn();
+    render(<InstanceRoutingSelector data={{}} onUpdate={onUpdate} fixedOnly />);
+
+    fireEvent.click(screen.getByRole("combobox", { name: /número de saída/i }));
+    fireEvent.click(screen.getByRole("option", { name: /comercial 2/i }));
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      instanceRoutingPolicy: "fixed",
+      whatsappInstanceId: "inst-2",
+      whatsappInstanceName: "Comercial 2",
     });
   });
 });
