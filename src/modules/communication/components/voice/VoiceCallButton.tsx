@@ -78,9 +78,14 @@ export function VoiceCallButton({ leadId, leadName, className }: VoiceCallButton
   }
 
   return (
+    // Sem `overflow-hidden`: o anel de foco dos botões é um `outline` com
+    // `outline-offset-2`, desenhado FORA da borda — recortá-lo apaga o foco de
+    // teclado, que o DESIGN.md §5 reprova. O `z-10` no foco é o que impede a
+    // metade vizinha de cobrir o anel. `rounded-lg` é o raio da família (§4),
+    // o mesmo do botão de um número só e do vizinho no cabeçalho.
     <div
       className={cn(
-        "inline-flex shrink-0 items-center overflow-hidden rounded-md border border-border",
+        "inline-flex shrink-0 items-center rounded-lg border border-border",
         className,
       )}
     >
@@ -89,7 +94,7 @@ export function VoiceCallButton({ leadId, leadName, className }: VoiceCallButton
         variant="ghost"
         size="sm"
         disabled={voice.busy}
-        className="rounded-none"
+        className="relative rounded-r-none focus-visible:z-10"
         title={titulo}
         onClick={discar}
         onPointerDown={naoVazar}
@@ -105,7 +110,7 @@ export function VoiceCallButton({ leadId, leadName, className }: VoiceCallButton
             variant="ghost"
             size="sm"
             disabled={voice.busy}
-            className="max-w-[9rem] rounded-none border-l border-border px-2 font-normal text-muted-foreground"
+            className="relative max-w-[9rem] rounded-l-none border-l border-border px-2 font-normal text-muted-foreground focus-visible:z-10"
             aria-label={`Trocar o número que vai ligar. Agora: ${voice.selected.instanceName}.`}
             onClick={(e) => e.stopPropagation()}
             onPointerDown={naoVazar}

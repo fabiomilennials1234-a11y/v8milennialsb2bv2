@@ -34,6 +34,9 @@ function project(row: Row, cols: string[]): Row {
   return out;
 }
 
+/** Toda consulta que chegou ao dublê, como `tabela:colunas`. */
+let consultas: string[] = [];
+
 function makeBuilder(table: string) {
   let cols: string[] | null = null;
   const filters: Array<(r: Row) => boolean> = [];
@@ -52,6 +55,7 @@ function makeBuilder(table: string) {
   const builder = {
     select(list: string) {
       cols = list.split(",").map((s) => s.trim());
+      consultas.push(`${table}:${cols.join(",")}`);
       return builder;
     },
     eq(col: string, value: unknown) {
@@ -84,6 +88,8 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 let currentMember: { id: string; organization_id: string; role: string } | null = null;
+/** `voip.call.start` — a mesma feature que `call-plane.ts` cobra no outbound. */
+let podeLigar = true;
 
 vi.mock("@/modules/identity", () => ({
   useCurrentTeamMember: () => ({ data: currentMember }),
@@ -92,6 +98,11 @@ vi.mock("@/modules/identity", () => ({
   useOrganization: () => ({
     organizationId: currentMember?.organization_id ?? null,
     teamMemberId: currentMember?.id ?? null,
+  }),
+  useCanDo: (acao: string) => ({
+    allowed: acao === "voip.call.start" ? podeLigar : true,
+    reason: "teste",
+    isLoading: false,
   }),
 }));
 
@@ -127,10 +138,21 @@ async function listar() {
 
 beforeEach(() => {
   currentMember = { id: "tm-1", organization_id: "org-1", role: "membro" };
+  podeLigar = true;
+  consultas = [];
   tables.whatsapp_instances = [];
   tables.whatsapp_instance_allowed_members = [];
   tables.voip_sessions = [];
 });
+
+/** Um número perfeito: ao alcance de todos, com voz e com sessão aberta. */
+function umNumeroPronto() {
+  tables.whatsapp_instances = [instancia({ id: "i-1", instance_name: "Comercial" })];
+  tables.voip_sessions = [sessao({ tc_session_id: "tc-1", whatsapp_instance_id: "i-1" })];
+}
+
+/** Só a consulta que monta a lista de instâncias permitidas. */
+const CONSULTA_DA_REGRA = "whatsapp_instances:id,instance_name,status,provider";
 
 describe("useCallableVoiceNumbers — a regra de acesso é a do inbox, não uma nova", () => {
   it("sem nenhum número com voz ao alcance, a lista é vazia (o botão some)", async () => {
@@ -234,6 +256,68 @@ describe("useCallableVoiceNumbers — só oferece o que o servidor aceitaria", (
   });
 });
 
+describe("useCallableVoiceNumbers — a permissão de ligar, a mesma do servidor", () => {
+  // `_shared/voip/call-plane.ts` cobra `voip.call.start` no outbound e recusa
+  // com `permission_denied`. A feature nasce com `default_value = true`, então
+  // um front sem esta checagem só fica errado no dia em que um admin desliga o
+  // toggle — que é o único dia em que o toggle importa.
+  it("sem a permissão de ligar, nenhum número aparece", async () => {
+    podeLigar = false;
+    umNumeroPronto();
+    const result = await listar();
+    expect(result.current.numbers).toEqual([]);
+  });
+
+  it("com a permissão, o mesmo dado devolve o número", async () => {
+    podeLigar = true;
+    umNumeroPronto();
+    const result = await listar();
+    expect(result.current.numbers.map((n) => n.instanceName)).toEqual(["Comercial"]);
+  });
+
+  it("sem a permissão, nem chega a consultar sessão de voz", async () => {
+    podeLigar = false;
+    umNumeroPronto();
+    await listar();
+    expect(consultas.filter((c) => c.startsWith("voip_sessions"))).toEqual([]);
+  });
+});
+
+describe("useCallableVoiceNumbers — o provider vive na raiz e não pode custar caro", () => {
+  // Sem sessão de voz aberta não existe número, e as outras duas consultas não
+  // teriam o que responder. Em ~29 das ~30 organizações é sempre este caso — e
+  // este provider está fora das rotas, então o custo cairia em toda página de
+  // todo usuário.
+  it("organização sem sessão aberta: uma consulta, e só", async () => {
+    tables.whatsapp_instances = [instancia({ id: "i-1", instance_name: "Comercial" })];
+    const result = await listar();
+    expect(result.current.numbers).toEqual([]);
+    expect(consultas).toEqual(["voip_sessions:tc_session_id,whatsapp_instance_id"]);
+  });
+
+  it("organização sem sessão aberta não monta a lista de instâncias permitidas", async () => {
+    tables.whatsapp_instances = [instancia({ id: "i-1", instance_name: "Comercial" })];
+    await listar();
+    expect(consultas).not.toContain(CONSULTA_DA_REGRA);
+  });
+
+  it("com sessão aberta, a regra de acesso é consultada normalmente", async () => {
+    umNumeroPronto();
+    const result = await listar();
+    expect(result.current.numbers).toHaveLength(1);
+    expect(consultas).toContain(CONSULTA_DA_REGRA);
+  });
+
+  // Um `useQuery` desligado fica em `pending` para sempre. Somá-lo ao
+  // `isLoading` prenderia o botão em "carregando" em quase toda a base.
+  it("sem voz na organização, o hook termina de carregar", async () => {
+    tables.whatsapp_instances = [instancia({ id: "i-1", instance_name: "Comercial" })];
+    const { result } = renderHook(() => useCallableVoiceNumbers(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.numbers).toEqual([]);
+  });
+});
+
 describe("useCallableVoiceNumbers — a ordem é decidida, não sorteada", () => {
   // O defeito original: `.limit(1)` sem ordenação. Com dois números, qual
   // atendia dependia do que o Postgres devolvesse primeiro.
@@ -250,13 +334,16 @@ describe("useCallableVoiceNumbers — a ordem é decidida, não sorteada", () =>
     expect(result.current.numbers.map((n) => n.instanceName)).toEqual(["Comercial", "Suporte"]);
   });
 
-  // Quem barra a outra organização é a lista de instâncias, que já nasce
-  // filtrada por org — não o filtro de org da consulta de sessões. Um
-  // `whatsapp_instance_id` só existe numa org, então sessão de fora nunca casa
-  // com instância de dentro. O filtro de org na consulta de sessões continua no
-  // código por dois motivos que este teste NÃO cobre e nem poderia: ele é o
-  // que faz a consulta usar `idx_voip_sessions_org (organization_id, status)`,
-  // e é defesa em profundidade se a interseção mudar de forma um dia.
+  // O que barra a outra organização EM PRODUÇÃO é a RLS `voip_sessions_select_org`,
+  // que filtra por `organization_id` — o mesmo campo do `.eq()` da consulta. O
+  // dublê não tem RLS, então aqui quem barra é a lista de instâncias.
+  //
+  // NÃO conclua daí que o `.eq("organization_id", ...)` da consulta de sessões
+  // é dispensável. Isso pressuporia que `voip_sessions.organization_id` sempre
+  // concorda com a organização da instância apontada, e o schema não garante
+  // isso: são dois FKs soltos, sem FK composta, sem CHECK e sem trigger que os
+  // amarre. O filtro fica, e é ele também que faz a consulta usar
+  // `idx_voip_sessions_org (organization_id, status)`.
   it("número de outra organização nunca entra na lista", async () => {
     tables.whatsapp_instances = [
       instancia({ id: "i-1", instance_name: "Comercial" }),

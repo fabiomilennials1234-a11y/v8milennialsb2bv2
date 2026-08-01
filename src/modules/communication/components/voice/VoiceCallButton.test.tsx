@@ -150,6 +150,21 @@ describe("VoiceCallButton — quantos números o vendedor tem", () => {
   });
 });
 
+describe("VoiceCallButton — o acabamento do grupo", () => {
+  // O anel de foco dos botões é um `outline` com `outline-offset-2`, desenhado
+  // FORA da borda: `overflow-hidden` no grupo o recorta e apaga o foco de
+  // teclado, que o DESIGN.md §5 lista como reprovação. E `--radius` é a família
+  // (§4) — `rounded-lg` é o raio do botão de um número só e do vizinho no
+  // cabeçalho; qualquer outro quebra a linha.
+  it("o grupo não recorta o anel de foco nem inventa raio próprio", () => {
+    numbers = [COMERCIAL, SUPORTE];
+    montar();
+    const grupo = botaoLigar().parentElement!;
+    expect(grupo.className).not.toMatch(/overflow-hidden/);
+    expect(grupo.className).toMatch(/\brounded-lg\b/);
+  });
+});
+
 describe("VoiceCallButton — a escolha do número chega até a chamada", () => {
   it("escolher outro número troca a sessão por onde a ligação sai", async () => {
     numbers = [COMERCIAL, SUPORTE];
