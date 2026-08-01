@@ -49,6 +49,13 @@ export type DenyCode =
   | "lead_org_mismatch"
   | "lead_without_phone"
   | "not_lead_owner"
+  /**
+   * O operador não opera por ESTA instância. Terceiro caso, distinto dos dois
+   * vizinhos: `voice_calls_disabled` é a instância sem voz, `permission_denied`
+   * é o usuário sem a feature de voz — aqui os dois existem, e o que falta é o
+   * vínculo entre este usuário e este número.
+   */
+  | "not_instance_member"
   | "permission_denied"
   | "consent_missing"
   | "call_not_answerable"
@@ -174,7 +181,7 @@ export async function authorizeCallAndMint(
   //    discaria pelo número da org B só sabendo o id da sessão.
   const { data: session } = await supabaseAdmin
     .from("voip_sessions")
-    .select("tc_session_id, organization_id, status")
+    .select("tc_session_id, organization_id, status, whatsapp_instance_id")
     .eq("tc_session_id", tcSessionId)
     .maybeSingle();
 
@@ -195,6 +202,44 @@ export async function authorizeCallAndMint(
     return deny("session_org_mismatch");
   }
   if (session.status !== "open") return deny("session_not_open");
+
+  // 1b. O operador opera por ESTE número? A sessão carrega a instância, então
+  //     sem esta pergunta qualquer membro da org que conheça um `tc_session_id`
+  //     disca pelo número de qualquer colega — e esconder o botão no front não
+  //     fecha nada, porque o gate é aqui.
+  //
+  //     A regra NÃO é reimplementada em TypeScript de propósito: quem responde é
+  //     `fn_voip_can_use_instance`, a MESMA função que `fn_voip_call_reserve`
+  //     consulta logo adiante. Duas cópias da regra é como se fabrica a
+  //     divergência entre o que a interface oferece e o que o servidor aceita.
+  //     Esta chamada só antecipa a negativa, para o operador receber um motivo
+  //     legível em vez de esperar a reserva.
+  //
+  //     Fail-closed: erro de RPC nega. Um gate que abre quando o banco tosse não
+  //     é gate.
+  if (session.whatsapp_instance_id) {
+    const { data: canUse, error: canUseErr } = await supabaseAdmin.rpc(
+      "fn_voip_can_use_instance",
+      { p_user_id: caller.userId, p_instance_id: session.whatsapp_instance_id },
+    );
+
+    if (canUseErr || canUse !== true) {
+      await logRuntime({
+        organizationId: caller.orgId,
+        module: "voip",
+        action: "instance_access_denied",
+        status: "error",
+        errorMessage: canUseErr?.message,
+        payloadSnapshot: {
+          user_id: caller.userId,
+          whatsapp_instance_id: session.whatsapp_instance_id,
+          tc_session_id: tcSessionId,
+          direction,
+        },
+      });
+      return deny("not_instance_member");
+    }
+  }
 
   // 2. Destino e lead — derivados no servidor, nunca recebidos.
   let leadId: string | null = args.leadId ?? null;
@@ -232,12 +277,22 @@ export async function authorizeCallAndMint(
 
     const { data: call } = await supabaseAdmin
       .from("voip_calls")
-      .select("id, organization_id, peer_phone, lead_id, status, tc_call_id")
+      .select("id, organization_id, tc_session_id, peer_phone, lead_id, status, tc_call_id")
       .eq("id", args.existingCallId)
       .maybeSingle();
 
     if (!call) return deny("call_not_answerable");
     if (call.organization_id !== caller.orgId) return deny("session_org_mismatch");
+    // A chamada tem que pertencer à SESSÃO nomeada. O gate de instância (1b)
+    // resolveu a instância a partir de `tcSessionId`; se a chamada viesse de
+    // outra sessão, a autorização teria sido dada sobre a instância errada —
+    // nomear a sessão de uma instância aberta para atender uma chamada que
+    // chegou numa instância restrita. `renewCallControlToken` já fazia esta
+    // conferência; a assimetria entre as duas era o buraco.
+    //
+    // `fn_voip_call_reserve` também amarra isto no WHERE do UPDATE, que é o gate
+    // real. Aqui é a negativa antecipada, com o código que explica o motivo.
+    if (call.tc_session_id !== tcSessionId) return deny("call_not_answerable");
     if (call.status !== "ringing" && call.status !== "authorized") {
       return deny("call_not_answerable");
     }

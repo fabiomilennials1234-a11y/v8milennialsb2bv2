@@ -55,6 +55,15 @@ INSERT INTO public.voip_sessions (organization_id, whatsapp_instance_id, tc_sess
 VALUES ('66666666-6666-6666-6666-666666666666', '55555555-5555-5555-5555-555555555555',
         'sess-entrada-teste', 'TorqueCalls', 'open');
 
+-- Desde 20270731000001 a reserva pergunta se o operador pode usar a instância
+-- da sessão. Um `auth.users` solto, sem linha em `team_members`, é uma forma que
+-- produção não produz — `resolveCaller` exige membro ativo (ou master/gestor) —
+-- e passaria a levar `not_instance_member` antes de chegar ao predicado que ESTE
+-- arquivo mede. A instância não tem allowed_members, então o vínculo basta.
+INSERT INTO public.team_members (id, organization_id, user_id, name, role, is_active)
+VALUES ('6c000000-0000-0000-0000-000000000001', '66666666-6666-6666-6666-666666666666',
+        'a0000002-0000-0000-0000-000000000001', 'Operador Entrada', 'member', true);
+
 SET LOCAL session_replication_role = origin;
 
 -- Duas linhas de entrada, ambas nascidas `ringing` sem operador — o estado real

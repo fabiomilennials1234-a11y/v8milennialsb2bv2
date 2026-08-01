@@ -13,10 +13,11 @@ export interface VoipSession {
 /**
  * Todas as sessões de voz da organização.
  *
- * `useVoipSession` (singular) devolve só a sessão aberta, porque o botão de
- * ligar no chat precisa de uma. A tela de integração precisa das outras
- * também: uma sessão `pending` é justamente a que está esperando o QR ser
- * escaneado, e sumir com ela deixaria o cliente sem saber o que aconteceu.
+ * `useCallableVoiceNumbers` devolve só os números por onde o vendedor logado
+ * pode ligar — sessão `open`, voz ligada e instância ao alcance dele. A tela de
+ * integração precisa do resto também: uma sessão `pending` é justamente a que
+ * está esperando o QR ser escaneado, e sumir com ela deixaria o cliente sem
+ * saber o que aconteceu.
  */
 export function useVoipSessions() {
   const { organizationId } = useOrganization();

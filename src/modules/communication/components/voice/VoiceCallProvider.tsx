@@ -8,23 +8,54 @@
  * desmontaria a `RTCPeerConnection` e derrubaria a ligação no meio.
  *
  * Por isso: um provider único, montado na raiz, e o botão só dispara uma ação.
+ *
+ * ─── Por que a ESCOLHA do número mora aqui, e não no botão ──────────────────
+ * Pelo mesmo motivo: `useVoiceCall` recebe o `tcSessionId` na assinatura, e é
+ * dele que saem `startCall`, `endCall` e o stream de eventos. Se a escolha
+ * morasse no botão, cada tela com um botão teria a sua própria — e a ligação
+ * aberta pela tela A seria encerrada com a sessão da tela B.
  */
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { useVoiceCall } from "@/modules/communication/hooks/useVoiceCall";
-import { useVoipSession } from "@/modules/communication/hooks/useVoipSession";
+import {
+  useCallableVoiceNumbers,
+  type CallableVoiceNumber,
+} from "@/modules/communication/hooks/useVoipSession";
+import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { VoiceCallPanel } from "./VoiceCallPanel";
 
+/**
+ * A preferência de número é do vendedor, não da sessão do navegador. Vale mais
+ * que o padrão de 24 h do `usePersistedState`: quem passa a sexta sem ligar não
+ * pode voltar na segunda com outro número selecionado. O TTL segue existindo
+ * para que um número aposentado não fique preso na memória do navegador para
+ * sempre.
+ */
+const PREFERENCIA_TELA = "voice-call-number";
+const PREFERENCIA_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
 interface VoiceCallContextValue {
-  /** true quando a organização tem número de voz conectado. */
-  available: boolean;
   /** true enquanto houver qualquer chamada em andamento. */
   busy: boolean;
+  /** Os números ao alcance dele, em ordem estável (por nome). */
+  numbers: CallableVoiceNumber[];
+  /**
+   * Por qual número a próxima ligação sai, e `null` quando não há nenhum ao
+   * alcance dele. Isto é o único "tem voz?" do contexto, de propósito: um
+   * `available: boolean` ao lado seria uma segunda resposta para a mesma
+   * pergunta, livre para discordar desta.
+   */
+  selected: CallableVoiceNumber | null;
+  /** Troca o número da próxima ligação. Ignorada durante uma chamada. */
+  selectNumber: (tcSessionId: string) => void;
   startCall: (lead: { id: string; name?: string | null }) => void;
 }
 
 const VoiceCallContext = createContext<VoiceCallContextValue>({
-  available: false,
   busy: false,
+  numbers: [],
+  selected: null,
+  selectNumber: () => {},
   startCall: () => {},
 });
 
@@ -33,9 +64,32 @@ export function useVoiceCallContext() {
 }
 
 export function VoiceCallProvider({ children }: { children: ReactNode }) {
-  const { data: session } = useVoipSession();
-  const { state, start, hangup, toggleMute, dismiss } = useVoiceCall(session?.tc_session_id ?? null);
+  const { numbers } = useCallableVoiceNumbers();
+  const [preferido, setPreferido] = usePersistedState<string | null>(
+    PREFERENCIA_TELA,
+    null,
+    { ttlMs: PREFERENCIA_TTL_MS },
+  );
+
+  // A última escolha DELE vale mais que a primeira da lista. Quando ela não
+  // está mais disponível, cai na primeira em silêncio: o número saiu do alcance
+  // dele, e um aviso sobre isso não o ajuda a ligar — só fica entre ele e a
+  // próxima ligação. A lista já vem ordenada por nome, então "a primeira" é
+  // sempre a mesma, e não o que o Postgres devolver primeiro.
+  const selected = useMemo(
+    () => numbers.find((n) => n.tcSessionId === preferido) ?? numbers[0] ?? null,
+    [numbers, preferido],
+  );
+
+  const { state, start, hangup, toggleMute, dismiss } = useVoiceCall(selected?.tcSessionId ?? null);
   const [leadName, setLeadName] = useState<string | null>(null);
+
+  // `failed` e `ended` não contam como ocupado: os dois são cartões de aviso
+  // sobre uma chamada que NÃO existe mais, e o vendedor precisa poder discar de
+  // novo sem antes fechá-los. Foi exatamente isso que o CTO viveu — a chamada
+  // morreu, a fase ficou presa, e o botão respondia "Você já está em uma
+  // chamada" para uma chamada que já tinha acabado.
+  const busy = state.phase !== "idle" && state.phase !== "failed" && state.phase !== "ended";
 
   const startCall = useCallback(
     (lead: { id: string; name?: string | null }) => {
@@ -45,18 +99,27 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
     [start],
   );
 
+  const selectNumber = useCallback(
+    (tcSessionId: string) => {
+      // A guarda mora AQUI, no ponto por onde toda troca passa, e não só no
+      // botão que a UI desabilita. Trocar o número no meio de uma chamada
+      // remontaria `useVoiceCall` com outra sessão: o `endCall` sairia pela
+      // sessão errada e a linha ficaria aberta segurando a cota do operador.
+      if (busy) return;
+      setPreferido(tcSessionId);
+    },
+    [busy, setPreferido],
+  );
+
   const value = useMemo<VoiceCallContextValue>(
     () => ({
-      available: !!session?.tc_session_id,
-      // `failed` e `ended` não contam como ocupado: os dois são cartões de
-      // aviso sobre uma chamada que NÃO existe mais, e o vendedor precisa poder
-      // discar de novo sem antes fechá-los. Foi exatamente isso que o CTO viveu
-      // — a chamada morreu, a fase ficou presa, e o botão respondia "Você já
-      // está em uma chamada" para uma chamada que já tinha acabado.
-      busy: state.phase !== "idle" && state.phase !== "failed" && state.phase !== "ended",
+      busy,
+      numbers,
+      selected,
+      selectNumber,
       startCall,
     }),
-    [session?.tc_session_id, state.phase, startCall],
+    [numbers, busy, selected, selectNumber, startCall],
   );
 
   return (

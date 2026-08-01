@@ -11,8 +11,14 @@ import type { WhatsAppInstanceForUser } from "./types";
  * Lista instâncias (exceto com status "error") às quais o usuário está vinculado.
  * Se a instância não tiver vendedores em whatsapp_instance_allowed_members, todos da org podem.
  * Caso contrário, só retorna instâncias em que o team_member do usuário está na lista.
+ *
+ * `options.enabled` existe para quem monta este hook FORA das rotas e não sabe
+ * de antemão se vai precisar da lista — hoje só o `VoiceCallProvider`, que vive
+ * na raiz do app e pagaria de 1 a 3 requisições em toda página, para todo
+ * usuário, numa feature que está inerte em quase toda a base. Quem já sabe que
+ * precisa da lista não passa nada: o padrão continua sendo ligado.
  */
-export function useWhatsAppInstancesForUser() {
+export function useWhatsAppInstancesForUser(options?: { enabled?: boolean }) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
   const teamMemberId = teamMember?.id;
@@ -71,7 +77,7 @@ export function useWhatsAppInstancesForUser() {
       }
       return result;
     },
-    enabled: !!organizationId && !!teamMemberId,
+    enabled: (options?.enabled ?? true) && !!organizationId && !!teamMemberId,
   });
 }
 

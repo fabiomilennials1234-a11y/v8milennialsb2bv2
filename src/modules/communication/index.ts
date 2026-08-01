@@ -255,12 +255,16 @@ export type { PrefetchChatDataParams } from "./lib/chatPrefetch";
 // chamada tem que sobreviver ao fechamento da tela que a originou.
 export { VoiceCallProvider, useVoiceCallContext } from "./components/voice/VoiceCallProvider";
 export { VoiceCallButton } from "./components/voice/VoiceCallButton";
-export { useVoipSession } from "./hooks/useVoipSession";
-export type { VoipSession } from "./hooks/useVoipSession";
-// `useVoipSessions` (plural, tela de integração) tem sua própria interface
-// local `VoipSession` — mesmo nome do tipo acima, formato diferente (camelCase
-// + whatsappInstanceId). Re-exportar sob o mesmo nome colidiria no barrel
-// (TS2308), então sai como `VoipSessionSummary`.
+// Quais números de voz ESTE vendedor pode usar. Substitui o antigo
+// `useVoipSession` (singular), que devolvia uma sessão qualquer da organização
+// sem perguntar de quem ela era.
+export { useCallableVoiceNumbers } from "./hooks/useVoipSession";
+export type { CallableVoiceNumber } from "./hooks/useVoipSession";
+// `useVoipSessions` (plural) é da TELA DE INTEGRAÇÃO e mostra o que o cliente
+// precisa administrar — inclusive `pending` e `closed`, que não servem para
+// ligar. Sai como `VoipSessionSummary` porque o nome do tipo local dele é
+// `VoipSession`, e um nome tão perto de "o número por onde eu ligo" convida ao
+// engano exato que esta separação existe para evitar.
 export { useVoipSessions, useVoiceSessionsCap } from "./hooks/useVoipSessions";
 export type { VoipSession as VoipSessionSummary } from "./hooks/useVoipSessions";
 export { useVoiceCall } from "./hooks/useVoiceCall";

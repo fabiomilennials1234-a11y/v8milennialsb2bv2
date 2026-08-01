@@ -41,7 +41,8 @@ export function TorqueCallsSettings() {
   // EXIBIÇÃO de "voz ativa" = `status === "open"`. É o que o RESTO do sistema
   // exige para deixar ligar: `fn_voip_call_reserve` e
   // `_shared/voip/call-plane.ts` recusam com `session_not_open`, e
-  // `useVoipSession` (que alimenta o botão de ligar no chat) só enxerga `open`.
+  // `useCallableVoiceNumbers` (que alimenta o botão de ligar no chat) só
+  // enxerga `open`.
   //
   // Não unifique os dois. Estreitar o teto para `open` deixaria o cliente criar
   // sessões `pending` sem limite; alargar a exibição para `!== "closed"` faz a

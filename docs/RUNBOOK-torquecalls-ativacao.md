@@ -454,10 +454,71 @@ from runtime_logs where module = 'voip' order by created_at desc limit 20;
 | `voice_calls_disabled` | passo 6 |
 | `session_not_open` | passo 7 — o pareamento não completou |
 | `consent_missing` | passo 8 |
+| `not_instance_member` | o operador não tem acesso àquela instância; ver seção 8d |
 | `not_lead_owner` | o lead não é do operador; use um lead dele ou entre como admin |
 | `lead_without_phone` | o lead não tem telefone utilizável |
 | `daily_cap_reached` | `daily_call_cap` na instância |
 | `operator_busy` | há chamada viva do mesmo operador; encerre antes |
+
+---
+
+## 8d. Quem pode ligar por qual número — a ordem que não dá para furar
+
+Antes desta perna, **qualquer membro da organização ligava por qualquer número dela**: a
+função que autoriza a chamada nunca perguntava se aquele usuário tinha acesso àquela
+instância. O inbox de mensagens já perguntava — são **189 vínculos vivos** em
+`whatsapp_instance_allowed_members`. A voz passou a usar a mesma regra:
+
+- instância **sem** ninguém na lista → **todos da organização** podem
+- instância **com** lista → **só quem está nela**
+- **admin e master bypassam**, e a tradução usuário→membro exige `is_active`
+
+### A ordem
+
+**1. Migration primeiro.** `20270731000001_voip_reserve_instance_access.sql`.
+
+**2. Só então as edge functions**, as duas na mesma janela:
+
+```bash
+supabase functions deploy torquecalls-signal --project-ref jsjsmuncfkbsbzqzqhfq
+```
+
+> **Furar a ordem derruba TODA ligação da plataforma.** A recusa antecipada em
+> `_shared/voip/call-plane.ts` é **fail-closed**: erro ao consultar o gate significa
+> negar. Contra o banco antigo — onde `fn_voip_can_use_instance` ainda não existe — o
+> erro é permanente, e **nenhum** operador consegue ligar, em nenhuma organização. Não é
+> hipótese: as 4 `voip_sessions` de produção têm `whatsapp_instance_id` preenchido, então
+> o gate roda em 100% das chamadas.
+>
+> O `torquecalls-signal` entra no deploy porque `not_instance_member` precisa sair como
+> **403**; sem ele a recusa chega ao vendedor como 409, no mesmo balde de "linha ocupada".
+>
+> E lembre que o deploy empacota o `_shared/` do **working tree**: deployar de branch
+> atrasada reverte em produção o que a `main` já tem.
+
+### Como verificar
+
+A mudança **nasce inerte**. Medido em produção: 189 linhas de `allowed_members` em 78
+instâncias, e **nenhuma delas tem voz**; a única instância com `voice_calls_enabled` no
+ambiente inteiro tem dono nulo e zero membros na lista. Ou seja — depois do deploy,
+**ninguém deve perder o botão**. Se alguém perder, foi a ordem que furou.
+
+```sql
+-- quem seria barrado hoje (esperado: nenhuma linha)
+select wi.instance_name, count(a.id) as membros_na_lista
+from whatsapp_instances wi
+left join whatsapp_instance_allowed_members a on a.whatsapp_instance_id = wi.id
+where wi.voice_calls_enabled
+group by wi.id, wi.instance_name
+having count(a.id) > 0;
+```
+
+Para restringir um número de voz a alguns vendedores, use a mesma tela do inbox — o
+vínculo é o mesmo registro. O botão "Ligar" some para quem ficar de fora, e o servidor
+recusa com `not_instance_member` mesmo que alguém forje o pedido.
+
+Com **dois ou mais** números de voz na organização, o botão vira dividido e o vendedor
+escolhe; a escolha fica lembrada no navegador dele. Com um número só, nada muda.
 
 ---
 
