@@ -1,5 +1,17 @@
 # Separação Lead ↔ Negócio — plano e decisões
 
+> ⚠️ **Leia [ADR-0023](../../../docs/adr/0023-negocio-is-the-funnel-unit.md) primeiro (2026-08-01).**
+> Uma sessão de grilling com o CTO fechou o modelo e **mudou quatro coisas deste
+> documento**: o Negócio *move* entre funis em vez de duplicar; a posição mora no
+> card com índice único; o título é derivado (`Negócio de mês/ano`), não herdado do
+> funil; e o backfill cria um negócio por **jornada**, não por card (926 a menos).
+> A Carteira deixou de ser módulo separado — supersede o ADR-0005.
+> Ordem de execução: [`plano-fatia-2.md`](./plano-fatia-2.md).
+>
+> As decisões A–F abaixo continuam válidas **exceto** onde o ADR-0023 diz o
+> contrário. As perguntas em aberto de §6c foram respondidas lá — não as reabra
+> a partir daqui.
+
 **Status:** fatia 1 entregue · fatia 2 em preparação · **nada aplicado em produção**
 **Nosso escopo:** tela de Leads · migração dos cards para negócios · a separação em si
 **Fora do nosso escopo:** o redesenho da aba de Funis → outro dev, briefing em `.specs/features/funis-redesign/spec.md`
