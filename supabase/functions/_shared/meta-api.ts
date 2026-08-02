@@ -4,6 +4,7 @@
  */
 
 import { createHmac } from "https://deno.land/std@0.177.0/node/crypto.ts";
+import { timingSafeCompare } from "./auth.ts";
 
 const GRAPH_API_VERSION = "v21.0";
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
@@ -41,6 +42,22 @@ export interface MetaLeadgenData {
   form_id: string;
   field_data: Array<{ name: string; values: string[] }>;
   created_time: string;
+}
+
+/**
+ * Envelope de coleção paginada do Graph API.
+ *
+ * Existe por causa de um ciclo de inferência real, não por preciosismo: nos dois
+ * laços de paginação o cursor (`url = data.paging?.next`) alimenta o `fetch` da
+ * volta seguinte. Sem anotação, `res.json()` devolve `any`, e para saber o tipo
+ * de `url` o compilador precisa de `data`, que precisa de `res`, que precisa de
+ * `url` — TS7022 em `res` e em `data`, quatro no arquivo. Anotar o envelope
+ * corta o ciclo num ponto onde o formato é conhecido e documentado pelo Meta.
+ */
+interface GraphCollection<T> {
+  data?: T[];
+  paging?: { next?: string | null };
+  error?: { message?: string };
 }
 
 export interface MetaMessagePayload {
@@ -144,7 +161,7 @@ export async function listPages(userAccessToken: string): Promise<MetaPageWithIn
 
   while (url) {
     const res = await fetch(url);
-    const data = await res.json();
+    const data: GraphCollection<MetaPage> = await res.json();
 
     if (data.error) {
       throw new Error(`Meta listPages error: ${data.error.message}`);
@@ -405,7 +422,7 @@ export async function listLeadForms(
 
   while (formsUrl) {
     const res = await fetch(formsUrl);
-    const data = await res.json();
+    const data: GraphCollection<{ id: string; name: string; status: string }> = await res.json();
 
     if (data.error) {
       throw new Error(`Meta listLeadForms error: ${data.error.message}`);
@@ -472,21 +489,18 @@ export function verifyWebhookSignature(
       .update(payload)
       .digest("hex");
 
-  // Timing-safe comparison to prevent timing attacks
-  const encoder = new TextEncoder();
-  const sigBuf = encoder.encode(signature);
-  const expectedBuf = encoder.encode(expectedSignature);
-  if (sigBuf.length !== expectedBuf.length) {
-    // Compare against expectedBuf to avoid leaking length info through timing
-    const dummy = new Uint8Array(expectedBuf.length);
-    try { crypto.subtle.timingSafeEqual(expectedBuf, dummy); } catch { /* ignore */ }
-    return false;
-  }
-  try {
-    return crypto.subtle.timingSafeEqual(sigBuf, expectedBuf);
-  } catch {
-    return false;
-  }
+  // Comparação de tempo constante — mesma primitiva de `_shared/auth.ts`.
+  //
+  // Aqui vivia `crypto.subtle.timingSafeEqual`, o MESMO defeito que o #1329
+  // corrigiu no auth.ts e que não foi varrido daqui: a função não existe neste
+  // runtime (extensão do Deno 1.x, removida no Deno 2 — medido: `typeof` devolve
+  // `undefined`). As duas chamadas lançavam `TypeError`, os dois `catch`
+  // engoliam, e `verifyWebhookSignature` devolvia `false` para TODA requisição —
+  // inclusive as legítimas. `meta-webhook` respondia 401 a todo evento do Meta.
+  //
+  // `timingSafeCompare` já trata o caso de comprimentos diferentes mantendo o
+  // laço, então o ramo do `dummy` sai junto: era só o que o antigo fazia.
+  return timingSafeCompare(signature, expectedSignature);
 }
 
 // ---------------------------------------------------------------------------

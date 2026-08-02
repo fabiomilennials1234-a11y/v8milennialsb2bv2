@@ -12,7 +12,12 @@
  * the corresponding `whatsapp_media_jobs` row deterministically.
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// `SupabaseClient` e NÃO `ReturnType<typeof createClient>`: `ReturnType`
+// instancia os genéricos nos *defaults declarados*, que no supabase-js 2.10x
+// viraram `Database = unknown` / `SchemaName = never`. Com isso `whatsapp_media_jobs`
+// resolvia para `never` e os três `.update()`/`.upsert()` deste arquivo eram erro
+// de tipo. `createClient(url, key)` devolve outra coisa (`<any, "public", …>`).
+import { type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const DEFAULT_TIMEOUT_MS = 25_000;
 
@@ -55,7 +60,7 @@ export function isWhatsAppCdnUrl(url: string | null | undefined): boolean {
  * multiple times for the same media without creating duplicate jobs.
  */
 export async function enqueueMediaJob(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   input: MediaJobInput,
 ): Promise<void> {
   try {
@@ -84,7 +89,7 @@ export async function enqueueMediaJob(
  * Best-effort — failure to stamp does not propagate.
  */
 export async function stampMediaJob(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   jobId: string | null,
   filter: { messageId: string; instanceId: string },
   result: MediaPersistResult,
@@ -123,7 +128,7 @@ export async function stampMediaJob(
 }
 
 async function currentAttempts(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   filter: { messageId: string; instanceId: string },
 ): Promise<number> {
   const { data } = await supabase
@@ -140,7 +145,7 @@ async function currentAttempts(
  * whatsapp_messages.media_url to point at the Storage public URL on success.
  */
 export async function downloadAndPersistMedia(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   uazapiBaseUrl: string,
   input: MediaJobInput,
   options: { timeoutMs?: number } = {},

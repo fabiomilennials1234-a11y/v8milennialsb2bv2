@@ -12,7 +12,12 @@ import {
   signStreamToken,
 } from "./sign.ts";
 
-function b64urlToBytes(s: string): Uint8Array {
+// `Uint8Array<ArrayBuffer>` e não `Uint8Array` pelado: desde o TS 5.7 o tipo é
+// genérico e `Uint8Array` sozinho vale `Uint8Array<ArrayBufferLike>`, que admite
+// `SharedArrayBuffer` e não satisfaz o `BufferSource` de `importKey`/`verify`.
+// Estas asserções são as que provam que a VPS aceitaria o token — deixá-las fora
+// do compilador é deixar o choke sem prova.
+function b64urlToBytes(s: string): Uint8Array<ArrayBuffer> {
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/") +
     "=".repeat((4 - (s.length % 4)) % 4);
   const bin = atob(b64);

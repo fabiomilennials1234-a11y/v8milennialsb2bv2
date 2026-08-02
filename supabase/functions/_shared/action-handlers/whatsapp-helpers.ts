@@ -279,11 +279,12 @@ export async function resolveVariables(
 
   const { data: lead } = await supabase
     .from("leads")
-    .select(
-      "name, company, email, phone, pipe_whatsapp, qualification_score, rating, " +
-      "sdr_id, closer_id, responsible_id, organization_id, " +
-      "faturamento, segment, urgency, notes, origin",
-    )
+    // Uma única string literal, não concatenação: `"a, " + "b"` tem tipo `string`
+    // em TypeScript (o compilador não junta literais com `+`), e o parser de
+    // tipos do postgrest-js só sabe ler um literal. Com `string` ele devolve
+    // `ParserError`, a linha vira `GenericStringError` e TODO acesso a coluna
+    // aqui embaixo virava um TS2339. O texto enviado ao servidor é idêntico.
+    .select("name, company, email, phone, pipe_whatsapp, qualification_score, rating, sdr_id, closer_id, responsible_id, organization_id, faturamento, segment, urgency, notes, origin")
     .eq("id", leadId)
     .maybeSingle();
 
@@ -446,9 +447,21 @@ export async function resolveVariables(
       .from("lead_tags")
       .select("tags(name)")
       .eq("lead_id", leadId);
+    // O parser de tipos do postgrest-js não conhece a cardinalidade do embed:
+    // sem o `Database` gerado ele chuta ARRAY para `tags(name)`. A relação é
+    // muitos-para-um (`lead_tags.tag_id → tags.id`) e o PostgREST devolve
+    // OBJETO — é o que este código sempre leu, e o que os testes deste arquivo
+    // encenam. A asserção corrige o palpite do parser; o `unknown` no meio é
+    // exigência do compilador, já que os dois formatos não se sobrepõem.
+    //
+    // Asserção e não `.returns<>()` de propósito: `.returns()` é método DE
+    // RUNTIME do builder, e chamá-lo só para ajustar tipo quebrou os três testes
+    // de `{{tag.X}}` (os dublês de teste não o implementam). Num módulo que 78
+    // funções importam, ajuste de tipo não deveria acrescentar chamada nenhuma.
+    const tagRows = (leadTags ?? []) as unknown as Array<{ tags: { name: string | null } | null }>;
     const tagNames = new Set(
-      (leadTags || [])
-        .map((lt: { tags?: { name?: string } | null }) => lt.tags?.name)
+      tagRows
+        .map((lt) => lt.tags?.name)
         .filter((n): n is string => Boolean(n)),
     );
     for (const match of tagMatches) {

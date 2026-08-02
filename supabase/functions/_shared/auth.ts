@@ -198,7 +198,11 @@ export function getClientIdentifier(req: Request): string {
  * Validates that organization_id belongs to authenticated user
  */
 export async function validateOrganizationAccess(
-  supabase: ReturnType<typeof import("https://esm.sh/@supabase/supabase-js@2").createClient>,
+  // `SupabaseClient` e não `ReturnType<typeof createClient>`: `ReturnType`
+  // instancia os genéricos nos defaults declarados, que no supabase-js 2.10x são
+  // `Database = unknown` / `SchemaName = never` — `team_members` viraria `never` e
+  // esta consulta deixaria de ser conferida justamente onde ela decide acesso.
+  supabase: import("https://esm.sh/@supabase/supabase-js@2").SupabaseClient,
   userId: string,
   organizationId: string
 ): Promise<boolean> {
