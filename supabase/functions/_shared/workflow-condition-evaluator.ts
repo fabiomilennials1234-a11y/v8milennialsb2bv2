@@ -231,5 +231,11 @@ export async function getLeadTags(
     .eq("lead_id", leadId);
 
   if (!tags || tags.length === 0) return "";
-  return tags.map((t: { tag: { name: string } | null }) => t.tag?.name || "").filter(Boolean).join(",");
+  // Sem o `Database` gerado, o parser de tipos do postgrest-js chuta ARRAY para
+  // o embed `tag:tags(name)`. A relação é muitos-para-um
+  // (`lead_tags.tag_id → tags.id`) e o PostgREST devolve OBJETO — que é o que
+  // este código lê. Asserção (e não `.returns<>()`, que é chamada de runtime no
+  // builder) para que o acerto seja só de tipo.
+  const tagRows = tags as unknown as Array<{ tag: { name: string | null } | null }>;
+  return tagRows.map((t) => t.tag?.name || "").filter(Boolean).join(",");
 }

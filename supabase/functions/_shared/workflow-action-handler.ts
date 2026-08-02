@@ -7,6 +7,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { ActionInput } from "./action-handlers/types.ts";
 import { getTimeBasedVariables } from "./time-variables.ts";
 import { getPipeEntry } from "./pipeline-adapter.ts";
 import { personalizationName, isPlaceholderLeadName, tidyEmptyVarGaps } from "./lead-name.ts";
@@ -29,13 +30,21 @@ import { markChecklistItem as sharedMarkChecklistItem } from "./action-handlers/
 import { sendCampaignMessage as sharedSendCampaignMessage } from "./action-handlers/send-campaign-message.ts";
 import { generateAiMessage as sharedGenerateAiMessage, summarizeConversation as sharedSummarizeConversation, evaluateConversation as sharedEvaluateConversation, queueScheduleMeeting as sharedQueueScheduleMeeting } from "./action-handlers/ai-operations.ts";
 
-export interface ActionResult {
+/**
+ * `type` e não `interface`, de propósito: só um alias de tipo ganha assinatura
+ * de índice implícita, e é ela que torna `ActionResult` atribuível a
+ * `Record<string, unknown>`. `sanitizeOutput`, no workflow-executor, recebe
+ * exatamente essa união para gravar `output_data` do passo — com `interface` a
+ * chamada era erro de tipo, embora enumerar as chaves de um `ActionResult` seja
+ * a coisa mais banal do mundo em runtime. Os campos são os mesmos.
+ */
+export type ActionResult = {
   success: boolean;
   message?: string;
   error?: string;
   data?: Record<string, unknown>;
   retryable?: boolean;
-}
+};
 
 interface ActionContext {
   supabase: SupabaseClient;
@@ -68,11 +77,12 @@ async function resolveVariables(
 
   const { data: lead } = await supabase
     .from("leads")
-    .select(
-      "name, company, email, phone, pipe_whatsapp, qualification_score, rating, " +
-      "sdr_id, closer_id, responsible_id, organization_id, " +
-      "faturamento, segment, urgency, notes, origin",
-    )
+    // Uma única string literal, não concatenação: `"a, " + "b"` tem tipo `string`
+    // em TypeScript (o compilador não junta literais com `+`), e o parser de
+    // tipos do postgrest-js só sabe ler um literal. Com `string` ele devolve
+    // `ParserError`, a linha vira `GenericStringError` e TODO acesso a coluna
+    // aqui embaixo virava um TS2339. O texto enviado ao servidor é idêntico.
+    .select("name, company, email, phone, pipe_whatsapp, qualification_score, rating, sdr_id, closer_id, responsible_id, organization_id, faturamento, segment, urgency, notes, origin")
     .eq("id", leadId)
     .maybeSingle();
 
@@ -270,7 +280,14 @@ async function logToHistory(
 
 // ─── Context → ActionInput adapter ─────────────────────────────────────────
 
-function toActionInput(ctx: ActionContext) {
+// Retorno anotado como `ActionInput` — que é o contrato que o adapter existe
+// para produzir e o que TODOS os handlers recebem. Sem a anotação, o spread de
+// `ctx.nodeData` (um `Record<string, unknown>`) num literal de objeto perde a
+// assinatura de índice, e `params` era inferido como
+// `{ _executionId: string | undefined }`: escrever `params.aiPrompt` ou
+// `params.semiAutoMessage` logo abaixo virava TS2339, sendo que em runtime a
+// chave sempre coube. Só a anotação faltava.
+function toActionInput(ctx: ActionContext): ActionInput {
   return {
     supabase: ctx.supabase,
     organizationId: ctx.organizationId,

@@ -10,13 +10,20 @@ import { getCorsHeaders } from "./cors.ts";
 import { withSecurityHeaders } from "./security-headers.ts";
 import { timingSafeCompare } from "./auth.ts";
 import { logError } from "./error-boundary.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 type AuthStrategy = "none" | "cron-secret" | "webhook-secret" | "jwt";
 
 interface HandlerContext {
   req: Request;
-  supabase: ReturnType<typeof createClient>;
+  // `SupabaseClient` e NÃO `ReturnType<typeof createClient>`. Os dois já foram
+  // sinônimos; não são mais. `ReturnType` instancia os genéricos nos *defaults
+  // declarados*, e no supabase-js 2.10x esses defaults viraram
+  // `Database = unknown` / `SchemaName = never` — o tipo resultante é
+  // `SupabaseClient<unknown, …, never, never, …>`, incompatível com o que
+  // `createClient(url, key)` realmente devolve (`<any, "public", "public", …>`).
+  // Toda tabela vira `never` e todo `.insert`/`.update` passa a ser erro.
+  supabase: SupabaseClient;
   body: unknown;
   headers: Record<string, string>;
 }
