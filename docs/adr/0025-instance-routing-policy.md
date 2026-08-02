@@ -51,7 +51,14 @@ Já existia um mecanismo vizinho: `instance-write-guard` + RPC `get_lead_write_i
 
 - **Automação para durante queda de sessão.** Consequência direta da decisão 7. Torna obrigatório que a falha seja legível na tela de Execuções, distinguindo "a Instance caiu" de "nenhum número resolvido".
 
-- **A decisão 7 reverte uma correção que estava na `main`.** O código anterior, ao encontrar uma Instance fixada morta, **caía para a Instance viva mais recente da Organization** — comportamento adicionado porque a org `163874dd` acumulou 83 execuções falhas em 7 dias com um nó fixado numa instância Evolution extinta. Sob a decisão 7 esses envios voltam a falhar, agora com mensagem explícita, até que a org corrija o nó. O recuo declarado **não** socorre a política `fixed`: quem nomeia um número está declarando que não aceita substituição. Se essa troca não for desejada, a alternativa é deixar a `fixed` morta cair para o recuo do nó (nunca para a escolha do sistema) — mudança de três linhas, não revisitada aqui porque contraria a decisão tomada.
+- **Pin obsoleto ≠ queda (emenda de 2026-08-02).** A decisão 7 revertia uma correção que estava na `main`: o código anterior, ao encontrar uma Instance fixada inutilizável, caía para a Instance viva mais recente da Organization. Medido em produção depois do rollout, o alcance era muito maior do que a única org conhecida (`163874dd`): **68 nós ativos em 16 organizações** apontavam para Instances inexistentes ou mortas, e Mapila e Labarr já falhavam por isso em 12h.
+
+  A emenda separa os dois casos, mantendo o princípio intacto — nunca sair por um número que ninguém declarou:
+
+  - Instance fixada **existe mas está fora do ar** → falha. É queda, quase sempre temporária. Decisão 7 preservada.
+  - Instance fixada **não existe mais** → o id morto no JSON não é declaração válida. O nó segue para o atalho de um número vivo e para o recuo declarado. **Não** cai para a conversa do Lead: quem escolheu `fixed` recusou justamente isso.
+
+  Resgata **44 nós em 3 organizações de um número vivo só** — Basic4u (35), Itatex (6), SC Beauty (3). As 11 organizações com **zero** número vivo não são regressão: não enviavam antes nem depois. Mapila (2 nós, 2 números vivos, sem recuo) segue falhando de propósito — escolher por ela seria o defeito de volta, e a mensagem de erro agora traz o id obsoleto para o operador corrigir.
 
 - **`send_to_number` fica fora da política.** Os destinatários são números fixos, não o Lead: não há conversa a seguir nem responsável a consultar. O nó mantém só o seletor de número de saída. Sem número declarado, resolve apenas se a Organization tiver **uma** Instance viva; com duas ou mais, falha em vez de escolher. Exposição medida em produção: 7 nós, nenhum em Organization multi-instância.
 
