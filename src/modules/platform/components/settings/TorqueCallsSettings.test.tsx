@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render as rtlRender, screen } from "@testing-library/react";
+import { render as rtlRender, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -44,6 +44,14 @@ beforeEach(() => {
   cap = 10;
   sessions = [sessaoAberta];
 });
+
+/** A linha (card) de um número, para consultar dentro dela em vez da página toda. */
+function linhaDoNumero(nome: string): HTMLElement {
+  const titulo = screen.getByText(nome);
+  const linha = titulo.closest("div.rounded-lg");
+  if (!linha) throw new Error(`linha do número ${nome} não encontrada`);
+  return linha as HTMLElement;
+}
 
 describe("TorqueCallsSettings", () => {
   it("lista os números e diz quais têm voz", () => {
@@ -125,12 +133,75 @@ describe("TorqueCallsSettings", () => {
     expect(screen.getByRole("button", { name: /ativar voz/i })).toBeDisabled();
   });
 
-  it("sessão closed não conta no teto nem aparece como estado do número", () => {
+  it("sessão closed não conta no teto", () => {
     sessions = [{ ...sessaoAberta, status: "closed" }];
     render(<TorqueCallsSettings />);
     expect(screen.getByText(/0 de 10/i)).toBeInTheDocument();
     expect(screen.queryByText("Voz ativa")).not.toBeInTheDocument();
     expect(screen.queryByText(/aguardando confirmação/i)).not.toBeInTheDocument();
+  });
+
+  // ─── #1342: a sessão que CAI ≠ a sessão que o cliente DESLIGOU ─────────────
+  //
+  // As duas terminam em `status = "closed"`, e até aqui a tela tratava as duas
+  // como ausência — o número voltava a parecer nunca-configurado. Isso escondia
+  // as duas coisas que o cliente precisa saber: que a voz caiu, e que ainda há
+  // o que limpar na VPS.
+  //
+  // O que separa uma da outra já está no dado: `logoutSession` desliga
+  // `voice_calls_enabled` junto com o fechamento (torquecalls-control), enquanto
+  // o webhook que aplica `failed` NÃO toca na chave — ela fica `true` sobre uma
+  // sessão morta. Essa divergência é exatamente o item 3 da issue, e em vez de
+  // apagá-la (o que destruiria a decisão comercial do admin) ela vira o sinal
+  // que distingue os dois fechamentos.
+
+  it("sessão que caiu (closed com a voz ainda ligada) diz que caiu, em vez de fingir que nunca existiu", () => {
+    sessions = [{ ...sessaoAberta, status: "closed" }]; // i-1 tem voice_calls_enabled: true
+    render(<TorqueCallsSettings />);
+    expect(screen.getByText(/voz interrompida/i)).toBeInTheDocument();
+    expect(screen.queryByText("Voz ativa")).not.toBeInTheDocument();
+  });
+
+  // O sintoma 2 da issue: o botão sumia justamente na sessão que precisava dele.
+  // É o único caminho pela tela para mandar a VPS soltar o que sobrou.
+  it("sessão que caiu mantém o Desconectar — é o único caminho de limpeza do cliente", async () => {
+    const user = userEvent.setup();
+    sessions = [{ ...sessaoAberta, status: "closed" }];
+    render(<TorqueCallsSettings />);
+    await user.click(screen.getByRole("button", { name: /desconectar/i }));
+    expect(logoutVoiceSession).toHaveBeenCalledWith({ tcSessionId: "tc-1", organizationId: "org-1" });
+  });
+
+  // E o repareamento continua na tela: limpar e reativar são ações diferentes, e
+  // quem caiu precisa das duas. A consulta é escopada à LINHA do número — a
+  // outra instância também tem um "Ativar voz", e uma busca na página inteira
+  // passaria mesmo se este número não tivesse nenhum.
+  it("sessão que caiu oferece também o caminho de volta, na própria linha", () => {
+    sessions = [{ ...sessaoAberta, status: "closed" }];
+    render(<TorqueCallsSettings />);
+    const linha = linhaDoNumero("Comercial");
+    expect(within(linha).getByRole("button", { name: /ativar voz/i })).toBeInTheDocument();
+    expect(within(linha).getByRole("button", { name: /desconectar/i })).toBeInTheDocument();
+  });
+
+  // O contrapeso: desconectar de propósito não pode virar alarme permanente.
+  // `logoutSession` já desligou a chave, então não há nada a limpar nem a
+  // consertar — e a tela volta a oferecer só "Ativar voz".
+  it("sessão desligada de propósito não vira alarme", () => {
+    sessions = [{ ...sessaoAberta, status: "closed", whatsappInstanceId: "i-2" }]; // i-2: voz desligada
+    render(<TorqueCallsSettings />);
+    expect(screen.queryByText(/voz interrompida/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /desconectar/i })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /ativar voz/i })).toHaveLength(2);
+  });
+
+  // A queda NÃO devolve a vaga do teto por si só — quem a devolve é o `closed`,
+  // e ele já está aplicado. Este caso existe para travar o predicado do teto no
+  // lugar: ele continua sendo `status !== "closed"`, e não passa a olhar a chave.
+  it("sessão que caiu continua fora do teto", () => {
+    cap = 1;
+    sessions = [{ ...sessaoAberta, status: "closed" }];
+    render(<TorqueCallsSettings />);
+    expect(screen.getByText(/0 de 1/i)).toBeInTheDocument();
   });
 });

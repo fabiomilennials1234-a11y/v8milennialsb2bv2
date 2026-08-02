@@ -60,6 +60,46 @@ export function TorqueCallsSettings() {
   const sessionDe = (instanceId: string) =>
     ocupandoVaga.find((s) => s.whatsappInstanceId === instanceId);
 
+  // ─── A sessão que CAIU não é a sessão que o cliente DESLIGOU ────────────────
+  //
+  // As duas terminam em `status = "closed"`, e a tela tratava as duas como
+  // ausência: o número voltava a parecer nunca-configurado. Isso escondia os
+  // dois fatos que o cliente precisa — que a voz caiu, e que ainda há o que
+  // limpar na VPS. E como só sessão não-fechada mostrava "Desconectar", o único
+  // caminho de limpeza sumia exatamente na sessão que precisava dele.
+  //
+  // O QUE SEPARA AS DUAS JÁ ESTÁ NO DADO, e é a chave comercial:
+  // `logoutSession` desliga `voice_calls_enabled` junto com o fechamento
+  // (torquecalls-control), enquanto o webhook que aplica `failed → closed`
+  // não toca nela — ela fica `true` sobre uma sessão morta.
+  //
+  // Essa divergência É o item 3 da issue ("a instância continua marcada como voz
+  // ligada"). A saída NÃO é apagá-la desligando a chave junto com a queda: essa
+  // chave é a decisão comercial do admin, e sobrescrevê-la por causa de um
+  // soquete que caiu apaga uma decisão humana com um fato de rede — depois disso
+  // ninguém distingue "o cliente desligou a voz" de "a conexão caiu ontem". Ela
+  // também não devolveria vaga nenhuma (o teto conta `status`, não a chave) nem
+  // travaria chamada nenhuma (`fn_voip_call_reserve` já recusa antes, por
+  // `session_not_open`). Custaria uma informação e não compraria nada.
+  //
+  // Então a chave para de ser só uma mentira e vira o SINAL que distingue os
+  // dois fechamentos — e a tela deriva o que mostra de "existe sessão viva?",
+  // que é o que a issue pede.
+  //
+  // Lida de forma defensiva: `voice_calls_enabled` existe em produção e vem no
+  // `select("*")` de `useWhatsAppInstances`, mas ainda NÃO está em
+  // `src/integrations/supabase/types.ts` (gerado de um prod mais velho) — o
+  // mesmo motivo que já força os casts em `useVoipSession.ts`. Ausente, o valor
+  // cai em `false`, que devolve o comportamento anterior em vez de inventar um
+  // alarme.
+  const vozLigadaNaInstancia = (inst: unknown): boolean =>
+    (inst as { voice_calls_enabled?: boolean }).voice_calls_enabled === true;
+
+  const sessaoQueCaiu = (instanceId: string, inst: unknown) =>
+    vozLigadaNaInstancia(inst)
+      ? sessions.find((s) => s.whatsappInstanceId === instanceId && s.status === "closed")
+      : undefined;
+
   async function desconectar(tcSessionId: string) {
     setDesconectando(tcSessionId);
     try {
@@ -91,6 +131,7 @@ export function TorqueCallsSettings() {
       <div className="space-y-2">
         {instances.map((inst) => {
           const sessao = sessionDe(inst.id);
+          const caiu = sessao ? undefined : sessaoQueCaiu(inst.id, inst);
           return (
             <div key={inst.id} className="flex items-center justify-between rounded-lg border p-3">
               <div className="min-w-0">
@@ -117,6 +158,35 @@ export function TorqueCallsSettings() {
                     >
                       <PhoneOff className="mr-2 h-4 w-4" />
                       Desconectar
+                    </Button>
+                  </>
+                ) : caiu ? (
+                  // A conexão morreu sozinha. Duas ações, porque são coisas
+                  // diferentes: "Desconectar" manda a VPS soltar o que sobrou da
+                  // sessão morta (é o único caminho do cliente para isso, e era
+                  // ele que sumia), e "Ativar voz" é o repareamento. A vaga do
+                  // teto já voltou com o `closed`, então reativar não esbarra em
+                  // `noTeto` por causa da própria sessão caída.
+                  <>
+                    <Badge variant="outline" className="border-destructive/40 text-destructive">
+                      Voz interrompida
+                    </Badge>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={desconectando === caiu.tcSessionId}
+                      onClick={() => void desconectar(caiu.tcSessionId)}
+                    >
+                      <PhoneOff className="mr-2 h-4 w-4" />
+                      Desconectar
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={noTeto}
+                      onClick={() => setPairing({ id: inst.id, name: inst.instance_name })}
+                    >
+                      <Phone className="mr-2 h-4 w-4" />
+                      Ativar voz
                     </Button>
                   </>
                 ) : (
