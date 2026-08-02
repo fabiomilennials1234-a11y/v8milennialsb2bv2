@@ -42,13 +42,25 @@ const CONNECTED = ["open", "connected"];
 /** Meta isolation (cert Rule 2): um número Meta nunca é escolhido para envio legado. */
 export const LEGACY_PROVIDERS = ["uazapi", "evolution"];
 
-/** A linha de `whatsapp_instances` que o provider precisa, mais o que a regra lê. */
+/**
+ * A linha de `whatsapp_instances` que o provider precisa, mais o que a regra lê.
+ *
+ * `organization_id` e o estreitamento de `provider` estão aqui porque a Instance
+ * resolvida é entregue DIRETO aos helpers de envio, que pedem um
+ * `WhatsAppInstance` — sem os dois campos declarados, os onze pontos de envio do
+ * Workflow eram erro de tipo (`organization_id` ausente, `provider` largo demais).
+ * Nada disso é promessa nova: as duas consultas que constroem este tipo fazem
+ * `select("*")` filtrado por `organization_id` e por `provider IN (LEGACY_PROVIDERS)`,
+ * então a coluna sempre veio preenchida e o provedor sempre foi um dos legados.
+ * O tipo é que omitia.
+ */
 export interface RoutedInstance {
   id: string;
+  organization_id: string;
   instance_name: string;
   status: string | null;
   session_dead_since: string | null;
-  provider: string | null;
+  provider: "evolution" | "uazapi";
   [column: string]: unknown;
 }
 
