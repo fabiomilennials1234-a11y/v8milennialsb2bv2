@@ -7,7 +7,7 @@
 -- `connected_at`, `ended_at` e `end_reason`, escritos pelo webhook assinado da
 -- VPS. Nada disso chega à tela. `call_logs` — a tabela que o produto usa para o
 -- histórico de ligação do lead — tinha UMA linha em produção, de 02/jun, vinda
--- do registro manual, contra 13 chamadas no ledger de voz.
+-- do registro manual, contra 14 chamadas no ledger de voz.
 --
 -- A tabela já foi desenhada para isto: `voip_call_id`, `voip_provider`,
 -- `duration_seconds`, `outcome`, `started_at`, `ended_at` já existem. O que
@@ -20,16 +20,21 @@
 --   1. `torquecalls-signal` (edge function, service_role) — UPDATE DIRETO na
 --      tabela no clique de desligar/recusar do operador, com
 --      `end_reason` = `user_ended` | `rejected`
---      (supabase/functions/torquecalls-signal/index.ts:334-340). Esta porta não
---      passa por RPC nenhuma, e é ela que produziu 9 das 13 linhas de produção.
+--      (supabase/functions/torquecalls-signal/index.ts:334-340). Esta porta NÃO
+--      passa por RPC nenhuma: escreve na tabela direto. É a maioria das 14
+--      linhas de produção — 8 a 10, dependendo de quantas o webhook fechou.
 --   2. `voip-sweep-stuck-calls` (pg_cron, migration 20270730000007) —
---      `end_reason = 'no_terminal_event'`. As outras 4 linhas de produção.
+--      `end_reason = 'no_terminal_event'`. 4 linhas de produção.
 --   3. `fn_voip_apply_vps_event` (webhook da VPS, migration 20270730000010).
+--      VIVA, mas ainda quase muda: só 2 das 14 chamadas têm `last_seq > 0` (ou
+--      seja, receberam evento da VPS), então ela fechou entre 0 e 2 delas.
+--      (`voip_webhook_events` não serve de contagem histórica: as linhas
+--      expiram na janela de dedup de 60 min.)
 --
--- Projetar dentro da RPC do webhook cobriria SÓ A TERCEIRA — e a terceira é a
--- que ainda não produziu uma única linha em produção. Metade das chamadas
--- ficaria fora do histórico e o buraco só apareceria semanas depois, quando
--- alguém perguntasse por que a ligação que ele fez ontem não está lá.
+-- Projetar dentro da RPC do webhook cobriria SÓ A TERCEIRA — a que fechou no
+-- máximo 2 das 14. As outras doze ficariam fora do histórico, e o buraco só
+-- apareceria semanas depois, quando alguém perguntasse por que a ligação que
+-- ele fez ontem não está lá.
 --
 -- Um gatilho em `voip_calls` cobre as três porque a invariante não é "o webhook
 -- aplicou um evento", é "esta chamada terminou". A quarta porta que alguém
@@ -129,7 +134,7 @@
 --
 -- SEM BACKFILL AQUI
 -- -----------------
--- As 13 chamadas já encerradas em produção NÃO são projetadas por esta
+-- As 14 chamadas já encerradas em produção NÃO são projetadas por esta
 -- migration. Migration é só schema: um `db push` disparado de um checkout
 -- atrasado re-roda todo `DO` de backfill que ela carregar, e já reescreveu dado
 -- de cliente nesta base. O backfill vive em
@@ -279,6 +284,33 @@ REVOKE ALL ON FUNCTION public.fn_voip_project_call_log(uuid)
 -- ===========================================================================
 -- 3. A FIAÇÃO
 -- ===========================================================================
+-- O `SECURITY DEFINER` DESTE WRAPPER É LOAD-BEARING. NÃO TROQUE POR INVOKER.
+--
+-- Parece hardening trocar um wrapper de três linhas para INVOKER — afinal quem
+-- escreve em `call_logs` é a outra função, e esta só repassa. Não é: trocar
+-- MATA A PORTA 1 em produção.
+--
+-- A cadeia exata, e ela tem DOIS regimes de privilégio diferentes:
+--
+--   1. Postgres NÃO checa EXECUTE ao DISPARAR um trigger — a checagem acontece
+--      uma vez, no `CREATE TRIGGER`. Por isso `service_role` consegue provocar
+--      este wrapper sem ter EXECUTE nele.
+--   2. Mas a chamada ANINHADA lá dentro é uma chamada de função COMUM, e essa
+--      CHECA EXECUTE do usuário corrente. E o REVOKE logo acima tirou EXECUTE
+--      de `fn_voip_project_call_log` de PUBLIC, anon, authenticated E
+--      service_role — de propósito, porque a projeção não é API.
+--
+-- Como INVOKER, o wrapper rodaria como `service_role` quando o UPDATE direto do
+-- torquecalls-signal disparasse o gatilho, e bateria em `permission denied for
+-- function fn_voip_project_call_log`. Como DEFINER, roda como o dono
+-- (`postgres`), que é dono da outra função também — e a cadeia fecha.
+--
+-- Isto foi medido: virando este wrapper para INVOKER, a suíte para em `ok=3`,
+-- exatamente na primeira asserção da porta 1.
+--
+-- O regime só não aparece nas portas 2 e 3 porque as duas já chegam como
+-- `postgres` (cron e RPC DEFINER). A porta 1 é a única com identidade
+-- diferente — e é a que fechou a maioria das chamadas de produção.
 CREATE OR REPLACE FUNCTION public.fn_voip_calls_project_call_log()
 RETURNS trigger
 LANGUAGE plpgsql

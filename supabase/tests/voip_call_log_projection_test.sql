@@ -12,16 +12,17 @@ CREATE EXTENSION IF NOT EXISTS pgtap;
 -- `call_logs` é a tabela que o produto usa para o histórico de ligação do lead.
 -- O S11 fez o CRM SABER o que acontece na chamada (`connected_at`, `ended_at`,
 -- `end_reason` em `voip_calls`), mas nada disso chegava à tela: medido em
--- produção, `call_logs` tinha UMA linha, de registro manual, contra 13 chamadas
+-- produção, `call_logs` tinha UMA linha, de registro manual, contra 14 chamadas
 -- no ledger de voz.
 --
 -- SÃO TRÊS PORTAS QUE FECHAM CHAMADA, NÃO DUAS
 -- --------------------------------------------
 --   1. `torquecalls-signal` (edge fn, service_role) — UPDATE direto na tabela
---      no clique de desligar/recusar. É a porta que produziu 9 das 13 linhas
---      de produção (`user_ended`), e ela NÃO passa por RPC nenhuma.
---   2. `voip-sweep-stuck-calls` (pg_cron, postgres) — `no_terminal_event`.
---   3. `fn_voip_apply_vps_event` (webhook da VPS, SECURITY DEFINER).
+--      no clique de desligar/recusar (`user_ended` | `rejected`). É a maioria
+--      das 14 linhas de produção — 8 a 10 —, e ela NÃO passa por RPC nenhuma.
+--   2. `voip-sweep-stuck-calls` (pg_cron, postgres) — `no_terminal_event`. 4.
+--   3. `fn_voip_apply_vps_event` (webhook da VPS, SECURITY DEFINER). Viva, mas
+--      só 2 das 14 chamadas receberam evento da VPS: fechou 0 a 2 delas.
 --
 -- Projetar dentro da RPC do webhook cobriria só a terceira. O gatilho em
 -- `voip_calls` cobre as três, e este arquivo exercita as três PELO CAMINHO
@@ -33,7 +34,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap;
 -- A VPS emite `cancelled` (dois L); o CHECK de `call_logs.outcome` aceita
 -- `canceled` (um L). Um mapeamento ingênuo é recusado pelo banco DENTRO da
 -- transação do webhook, que é a transação que não se quer derrubar.
-SELECT plan(44);
+SELECT plan(46);
 
 -- ===========================================================================
 -- (0) A CHAVE NATURAL EXISTE NO SCHEMA
@@ -114,7 +115,7 @@ VALUES ('13000000-0000-0000-0000-0000000000e1', '13000000-0000-0000-0000-0000000
 DO $seed_ops$
 DECLARE i int;
 BEGIN
-  FOR i IN 1..19 LOOP
+  FOR i IN 1..20 LOOP
     INSERT INTO auth.users (id, email)
     VALUES (('a0000013-0000-0000-0000-0000000000' || lpad(i::text, 2, '0'))::uuid,
             'op' || i || '@s13.test');
@@ -228,7 +229,14 @@ VALUES
 -- Rodar como `service_role` não é cerimônia: é a forma REAL desta porta. O
 -- gatilho tem que disparar para um papel que não é dono da função nem tem
 -- EXECUTE nela — se a projeção dependesse de privilégio de execução, a porta
--- mais usada em produção (9 das 13 linhas) seria justamente a que não projeta.
+-- mais usada em produção (8 a 10 das 14 linhas) seria justamente a que não
+-- projeta.
+--
+-- É TAMBÉM O QUE SEGURA O `SECURITY DEFINER` DO WRAPPER. Postgres não checa
+-- EXECUTE ao disparar trigger, mas a chamada ANINHADA de
+-- fn_voip_project_call_log lá dentro é chamada comum e CHECA — e o REVOKE tirou
+-- EXECUTE de service_role. Com o wrapper em INVOKER, esta asserção é a primeira
+-- a cair (`permission denied for function`). Medido.
 SET LOCAL ROLE service_role;
 
 UPDATE public.voip_calls
@@ -488,8 +496,26 @@ CREATE TEMP TABLE s13_marca AS
 SELECT id AS log_id FROM public.call_logs
  WHERE voip_call_id = 'c0000013-0000-0000-0000-000000000001';
 
+-- Conteúdo de humano plantado ANTES da reprojeção. `notes` e `recording_url`
+-- ficam de fora do `DO UPDATE` porque a projeção não os escreve — e não pode
+-- apagar o que alguém escreveu depois. Sem esta asserção a garantia é só uma
+-- promessa no comentário: o mutante que acrescenta as duas colunas ao
+-- `DO UPDATE` passava com a suíte inteira verde.
+UPDATE public.call_logs
+   SET notes = 'cliente pediu retorno na terça',
+       recording_url = 'https://exemplo.invalid/gravacao.mp3'
+ WHERE voip_call_id = 'c0000013-0000-0000-0000-000000000001';
+
 SELECT public.fn_voip_project_call_log('c0000013-0000-0000-0000-000000000001'::uuid);
 SELECT public.fn_voip_project_call_log('c0000013-0000-0000-0000-000000000001'::uuid);
+
+SELECT results_eq(
+  $$SELECT notes, recording_url FROM public.call_logs
+     WHERE voip_call_id = 'c0000013-0000-0000-0000-000000000001'$$,
+  $$VALUES ('cliente pediu retorno na terça'::text,
+            'https://exemplo.invalid/gravacao.mp3'::text)$$,
+  'reprojetar NÃO apaga notes nem recording_url — a projeção não estraga o que o humano escreveu'
+);
 
 SELECT is(
   (SELECT count(*)::int FROM public.call_logs
@@ -645,6 +671,31 @@ SELECT is(
 );
 
 -- ===========================================================================
+-- (9b) A LINHA QUE JÁ NASCE ENCERRADA — o gatilho de AFTER INSERT
+-- ===========================================================================
+-- Não existe caminho assim hoje: a reserva nasce `authorized`. O gatilho de
+-- INSERT está lá para a porta que alguém abrir amanhã (um backfill de chamada
+-- de entrada que o CRM só ficou sabendo depois), e fiação que nunca é exercida
+-- é fiação que ninguém sabe se funciona — o mutante que REMOVE este gatilho
+-- passava com a suíte inteira verde.
+INSERT INTO public.voip_calls
+  (id, organization_id, tc_session_id, tc_call_id, lead_id, operator_user_id,
+   peer_phone, direction, status, end_reason, authorized_at, ringing_at,
+   connected_at, ended_at)
+VALUES ('c0000013-0000-0000-0000-000000000020', '13000000-0000-0000-0000-000000000013',
+        'sess-s13-projecao', 'S13CALL000000000000000000000020', '13000000-0000-0000-0000-0000000000e1',
+        'a0000013-0000-0000-0000-000000000020', '5548991005289', 'inbound', 'ended',
+        'user_ended', now() - interval '5 minutes', now() - interval '5 minutes',
+        now() - interval '3 minutes', now() - interval '2 minutes');
+
+SELECT results_eq(
+  $$SELECT count(*)::int, max(outcome), max(duration_seconds)
+      FROM public.call_logs WHERE voip_call_id = 'c0000013-0000-0000-0000-000000000020'$$,
+  $$VALUES (1, 'connected'::text, 60)$$,
+  'linha que JÁ NASCE encerrada é projetada pelo gatilho de AFTER INSERT'
+);
+
+-- ===========================================================================
 -- (10) TODAS AS 9 SAÍDAS RESPEITAM O CHECK DO BANCO
 -- ===========================================================================
 -- Guarda de conjunto: qualquer motivo novo do vocabulário da VPS que caia num
@@ -661,8 +712,8 @@ SELECT is(
 
 SELECT is(
   (SELECT count(*)::int FROM public.call_logs WHERE voip_provider = 'torquecalls'),
-  17,
-  'dezessete chamadas encerradas, dezessete registros — nenhuma sobrou de fora'
+  18,
+  'dezoito chamadas encerradas, dezoito registros — nenhuma sobrou de fora'
 );
 
 SELECT * FROM finish();
