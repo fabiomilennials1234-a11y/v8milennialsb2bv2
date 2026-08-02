@@ -111,6 +111,19 @@
 #      grants do helper (nem anon nem authenticated executam) e a negativa PURA
 #      — sem linha em voip_calls e sem consumir cota.
 #
+#  22. voip_call_log_projection_test.sql — a chamada de voz vira registro no
+#      histórico do lead (20270801000000). Prova as TRÊS portas que fecham
+#      chamada, cada uma pelo caminho real: o UPDATE direto de
+#      torquecalls-signal rodando como `service_role`, o comando literal
+#      extraído de cron.job (varredor) e a RPC fn_voip_apply_vps_event
+#      (webhook). Cobre o mapeamento de `outcome` motivo a motivo — inclusive
+#      `cancelled` (dois L, da VPS) → `canceled` (um L, do CHECK), que sem
+#      tradução derruba a transação do webhook em produção —, duração ancorada
+#      em connected_at (nunca authorized_at) e NULA quando não houve conversa, e
+#      a idempotência por `voip_call_id`: varredor seguido de correção do
+#      webhook, carimbo tardio de connected_at e reentrega de envelope produzem
+#      UMA linha, com o mesmo id e sem eco em lead_history.
+#
 #  14. assert_org_access_test.sql     — gate de tenancy dos leitores SECURITY
 #      DEFINER (#1209): membro ATIVO passa, membro DESATIVADO é BLOQUEADO (o
 #      furo: lia receita/ranking/comissão da org que o desativou), master e
@@ -170,12 +183,13 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/voip_sweep_stuck_calls_test.sql" \
     "$SCRIPT_DIR/voip_reserve_inbound_requires_tc_call_id_test.sql" \
     "$SCRIPT_DIR/voip_webhook_ingest_test.sql" \
-    "$SCRIPT_DIR/voip_reserve_instance_access_test.sql"
+    "$SCRIPT_DIR/voip_reserve_instance_access_test.sql" \
+    "$SCRIPT_DIR/voip_call_log_projection_test.sql"
 }
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces

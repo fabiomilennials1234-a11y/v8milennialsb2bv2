@@ -17,7 +17,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useLogCall, OUTCOME_LABELS, type CallDirection, type CallOutcome } from "@/modules/engagement/hooks/useCallLogs";
+import {
+  useLogCall,
+  OUTCOME_LABELS,
+  MANUAL_OUTCOMES,
+  type CallDirection,
+  type ManualCallOutcome,
+} from "@/modules/engagement/hooks/useCallLogs";
 import { cn } from "@/lib/utils";
 
 interface LogCallModalProps {
@@ -33,14 +39,17 @@ const DIRECTION_OPTIONS: Array<{ value: CallDirection; label: string }> = [
   { value: "inbound", label: "Ligação recebida" },
 ];
 
-const OUTCOME_OPTIONS: Array<{ value: CallOutcome; label: string }> = (
-  Object.entries(OUTCOME_LABELS) as Array<[CallOutcome, string]>
-).map(([value, label]) => ({ value, label }));
+// A lista sai de MANUAL_OUTCOMES, não das chaves de OUTCOME_LABELS. O
+// dicionário de rótulos cobre os NOVE desfechos do banco (para exibir o que a
+// telefonia produz); o dropdown oferece só os seis que um humano observa —
+// "Falhou" e "Cancelada" são desfechos que só o sistema sabe determinar.
+const OUTCOME_OPTIONS: Array<{ value: ManualCallOutcome; label: string }> =
+  MANUAL_OUTCOMES.map((value) => ({ value, label: OUTCOME_LABELS[value] }));
 
 export function LogCallModal({ open, onOpenChange, leadId, leadName, phoneNumber }: LogCallModalProps) {
   const logCall = useLogCall();
   const [direction, setDirection] = useState<CallDirection>("outbound");
-  const [outcome, setOutcome] = useState<CallOutcome>("connected");
+  const [outcome, setOutcome] = useState<ManualCallOutcome>("connected");
   const [durationMin, setDurationMin] = useState("");
   const [notes, setNotes] = useState("");
   const [phone, setPhone] = useState(phoneNumber ?? "");
@@ -98,7 +107,7 @@ export function LogCallModal({ open, onOpenChange, leadId, leadName, phoneNumber
 
             <div className="space-y-1.5">
               <Label className="text-xs">Resultado</Label>
-              <Select value={outcome} onValueChange={(v) => setOutcome(v as CallOutcome)}>
+              <Select value={outcome} onValueChange={(v) => setOutcome(v as ManualCallOutcome)}>
                 <SelectTrigger className="h-9">
                   <SelectValue />
                 </SelectTrigger>
