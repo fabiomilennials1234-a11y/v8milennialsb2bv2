@@ -10,6 +10,7 @@ import { MessageList } from "@/modules/communication/components/chat/view/Messag
 import { ImagePreviewModal } from "@/modules/communication/components/chat/media/ImagePreviewModal";
 import { useWhatsAppMessages } from "@/modules/communication/hooks/chat/useWhatsAppMessages";
 import { useFailedMessages, useRetryMessage } from "@/modules/communication/hooks/chat/useWhatsAppSend";
+import { useConversationCalls } from "@/modules/communication/hooks/chat/useConversationCalls";
 // TODO Etapa D: deprecate after rollout — substituído por useLeadWriteInstance
 import { useCanReplyOnInstanceByName } from "@/modules/communication/hooks/useWhatsAppInstanceAllowedMembers";
 import { ChatBubbleComposer } from "./ChatBubbleComposer";
@@ -43,6 +44,8 @@ export function ChatBubbleThread({
   const { data: lead } = useLeadByPhone(phoneNumber);
   const leadId = lead?.id ?? null;
   const { state: writeInstanceState } = useLeadWriteInstance(leadId);
+  // Mesma linha do tempo da tela cheia — a bolha não conta outra história.
+  const { data: calls = [] } = useConversationCalls(phoneNumber, leadId);
   const [isLinkInstanceOpen, setIsLinkInstanceOpen] = useState(false);
 
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -77,6 +80,7 @@ export function ChatBubbleThread({
         messages={messagesQuery.data ?? []}
         transferEvents={[]}
         failedMessages={failedMessages}
+        calls={calls}
         isLoading={messagesQuery.isLoading}
         contactName={contactName}
         instanceName={instanceName}

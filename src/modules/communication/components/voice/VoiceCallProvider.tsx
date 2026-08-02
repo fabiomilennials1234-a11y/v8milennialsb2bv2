@@ -15,8 +15,18 @@
  * morasse no botão, cada tela com um botão teria a sua própria — e a ligação
  * aberta pela tela A seria encerrada com a sessão da tela B.
  */
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useVoiceCall } from "@/modules/communication/hooks/useVoiceCall";
+import { invalidateConversationCalls } from "@/modules/communication/hooks/chat/useConversationCalls";
 import {
   useCallableVoiceNumbers,
   type CallableVoiceNumber,
@@ -33,6 +43,14 @@ import { VoiceCallPanel } from "./VoiceCallPanel";
  */
 const PREFERENCIA_TELA = "voice-call-number";
 const PREFERENCIA_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+/**
+ * Janela entre o navegador ver a chamada encerrada e a linha existir em
+ * `call_logs` (evento do VPS → webhook → UPDATE em `voip_calls` → gatilho de
+ * projeção). Folga deliberada: buscar cedo demais devolve vazio e a ligação só
+ * apareceria na próxima troca de conversa.
+ */
+const PROJECAO_DA_LIGACAO_MS = 2500;
 
 interface VoiceCallContextValue {
   /** true enquanto houver qualquer chamada em andamento. */
@@ -90,6 +108,28 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
   // morreu, a fase ficou presa, e o botão respondia "Você já está em uma
   // chamada" para uma chamada que já tinha acabado.
   const busy = state.phase !== "idle" && state.phase !== "failed" && state.phase !== "ended";
+
+  // ── A ligação que acabou precisa aparecer na conversa ──
+  // `call_logs` só ganha a linha quando o gatilho do banco projeta a chamada
+  // encerrada, e isso acontece DEPOIS que o navegador já viu a fase virar
+  // `ended`. Invalidar na hora buscaria cedo demais e voltaria vazio — por isso
+  // a espera curta, que cobre o webhook + trigger.
+  //
+  // Custo: UMA requisição, e só para quem acabou de falar ao telefone. É a
+  // alternativa a pendurar um poll no chat, que cobraria de todo mundo o tempo
+  // inteiro por um evento que quase nunca acontece.
+  // O efeito é chaveado na FASE: só reexecuta quando ela muda, então chegar em
+  // `ended` dispara uma vez e repintura nenhuma repete. Não há guarda de
+  // transição além disso porque não haveria como provar que ela faz algo.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (state.phase !== "ended" && state.phase !== "failed") return;
+
+    const timer = setTimeout(() => {
+      void invalidateConversationCalls(queryClient);
+    }, PROJECAO_DA_LIGACAO_MS);
+    return () => clearTimeout(timer);
+  }, [state.phase, queryClient]);
 
   const startCall = useCallback(
     (lead: { id: string; name?: string | null }) => {

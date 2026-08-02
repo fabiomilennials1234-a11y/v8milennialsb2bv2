@@ -32,7 +32,9 @@ import { UnreadDivider } from "@/modules/communication/components/chat/UnreadDiv
 import { ScrollToBottomFab } from "@/modules/communication/components/chat/ScrollToBottomFab";
 import { MessagesAreaErrorBoundary } from "@/modules/communication/components/chat/MessagePrimitives";
 import { MessageBubble } from "@/modules/communication/components/chat/MessagePrimitives";
+import { CallMarker } from "@/modules/communication/components/chat/view/CallMarker";
 import type { WhatsAppMessage, FailedMessage } from "@/modules/communication/hooks/useWhatsAppChat";
+import type { ConversationCall } from "@/modules/communication/lib/conversationCallsQuery";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
 
 export interface TransferEvent {
@@ -46,6 +48,11 @@ export interface MessageListProps {
   messages: WhatsAppMessage[];
   transferEvents: TransferEvent[];
   failedMessages: FailedMessage[];
+  /**
+   * Ligações da conversa, intercaladas com as mensagens em ordem cronológica.
+   * Opcional: quem ainda não passa (mockups, telas sem voz) continua igual.
+   */
+  calls?: ConversationCall[];
   isLoading: boolean;
   contactName: string;
   instanceName: string;
@@ -76,18 +83,30 @@ const VIRTUALIZE_THRESHOLD = 100;
 const DESKTOP_OVERSCAN = 3;
 const MOBILE_OVERSCAN = 5;
 
+/**
+ * Identidade estável para "sem ligações". `calls ?? []` inline criaria um array
+ * novo a cada render e derrubaria o `useMemo` do timeline em toda passada —
+ * custo por render no caminho mais quente do produto.
+ */
+const NO_CALLS: ConversationCall[] = [];
+
 type TimelineItem =
   | ({ _type: "message" } & WhatsAppMessage & Partial<FailedMessage> & { message_type: string; content: string | null; media_url: string | null })
-  | ({ _type: "transfer" } & TransferEvent);
+  | ({ _type: "transfer" } & TransferEvent)
+  | ({ _type: "call"; timestamp: string; call: ConversationCall });
 
 function buildTimeline(
   messages: WhatsAppMessage[],
   transferEvents: TransferEvent[],
-  failedMessages: FailedMessage[]
+  failedMessages: FailedMessage[],
+  calls: ConversationCall[]
 ): TimelineItem[] {
   return [
     ...messages.map((m) => ({ ...m, _type: "message" as const })),
     ...transferEvents.map((e) => ({ ...e, _type: "transfer" as const })),
+    // `started_at` vira `timestamp` para entrar na MESMA ordenação das
+    // mensagens — a linha do tempo tem um relógio só.
+    ...calls.map((c) => ({ _type: "call" as const, timestamp: c.started_at, call: c })),
     ...failedMessages.map((f) => ({
       ...f,
       _type: "message" as const,
@@ -110,6 +129,47 @@ function buildTimeline(
   ].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()) as TimelineItem[];
 }
 
+/**
+ * Separador de data do item `index`.
+ *
+ * Vive fora do ramo de mensagem porque QUALQUER item pode abrir um dia. Quando
+ * uma ligação é o primeiro acontecimento da data, é ela quem tem de carregar a
+ * marca — senão a mensagem seguinte compara a própria data com a da ligação,
+ * acha igual, e o dia começa sem separador nenhum.
+ */
+function dateSeparatorFor(
+  timeline: TimelineItem[],
+  index: number,
+): { show: boolean; label: string; iso: string } {
+  const ts = timeline[index]?.timestamp;
+  const date = ts ? new Date(ts) : new Date();
+  const valid = !Number.isNaN(date.getTime());
+  if (!valid) return { show: false, label: "", iso: "" };
+
+  const current = format(date, "dd/MM/yyyy", { locale: ptBR });
+  const prevTs = index > 0 ? timeline[index - 1]?.timestamp : null;
+  const previous = prevTs ? format(new Date(prevTs), "dd/MM/yyyy", { locale: ptBR }) : "";
+
+  return {
+    show: current !== previous,
+    label: isToday(date) ? "Hoje" : isYesterday(date) ? "Ontem" : current,
+    iso: format(date, "yyyy-MM-dd"),
+  };
+}
+
+function DateSeparator({ label, iso }: { label: string; iso: string }) {
+  return (
+    <div className="flex justify-center py-3">
+      <time
+        dateTime={iso}
+        className="text-[11px] font-medium tracking-wider uppercase text-muted-foreground/40 bg-muted/30 px-3 py-1 rounded-full"
+      >
+        {label}
+      </time>
+    </div>
+  );
+}
+
 function estimateDensitySize(density: DensityMode): number {
   switch (density) {
     case "compact": return 64;
@@ -124,6 +184,7 @@ export function MessageList({
   messages,
   transferEvents,
   failedMessages,
+  calls,
   isLoading,
   contactName,
   instanceName,
@@ -144,8 +205,8 @@ export function MessageList({
   const { isMobile } = useViewport();
 
   const timeline = useMemo(
-    () => buildTimeline(messages, transferEvents, failedMessages),
-    [messages, transferEvents, failedMessages]
+    () => buildTimeline(messages, transferEvents, failedMessages, calls ?? NO_CALLS),
+    [messages, transferEvents, failedMessages, calls]
   );
 
   // Virtualiza tanto mobile quanto desktop acima do threshold.
@@ -247,6 +308,17 @@ export function MessageList({
   // ─── Render de item individual (shared entre virtualizado e plain) ──────────
 
   const renderTimelineItem = useCallback((item: TimelineItem, index: number) => {
+    // Ligação — marco na linha do tempo, não balão.
+    if (item._type === "call") {
+      const sep = dateSeparatorFor(timeline, index);
+      return (
+        <div key={`call-${item.call.id}`}>
+          {sep.show && <DateSeparator label={sep.label} iso={sep.iso} />}
+          <CallMarker call={item.call} />
+        </div>
+      );
+    }
+
     // Transfer event card
     if (item._type === "transfer") {
       return (
@@ -281,23 +353,9 @@ export function MessageList({
     // Normal message
     const message = item;
     const ts = message.timestamp;
-    const date = ts ? new Date(ts) : new Date();
-    const validDate = !Number.isNaN(date.getTime());
-    const msgDate = validDate ? format(date, "dd/MM/yyyy", { locale: ptBR }) : "";
 
-    // Date separator: check if previous item has different date
+    const sep = dateSeparatorFor(timeline, index);
     const prevItem = index > 0 ? timeline[index - 1] : null;
-    const prevDate = prevItem
-      ? (prevItem.timestamp ? format(new Date(prevItem.timestamp), "dd/MM/yyyy", { locale: ptBR }) : "")
-      : "";
-    const showDateSeparator = msgDate !== prevDate;
-    const dateLabel = validDate
-      ? isToday(date)
-        ? "Hoje"
-        : isYesterday(date)
-          ? "Ontem"
-          : format(date, "dd/MM/yyyy", { locale: ptBR })
-      : "";
 
     const safeKey = message.id || `msg-${index}-${ts || index}`;
 
@@ -323,16 +381,7 @@ export function MessageList({
 
     return (
       <div key={safeKey}>
-        {showDateSeparator && (
-          <div className="flex justify-center py-3">
-            <time
-              dateTime={validDate ? format(date, "yyyy-MM-dd") : ""}
-              className="text-[11px] font-medium tracking-wider uppercase text-muted-foreground/40 bg-muted/30 px-3 py-1 rounded-full"
-            >
-              {dateLabel}
-            </time>
-          </div>
-        )}
+        {sep.show && <DateSeparator label={sep.label} iso={sep.iso} />}
         {index === firstUnreadIndex && unreadCount > 0 && (
           <UnreadDivider count={unreadCount} />
         )}
