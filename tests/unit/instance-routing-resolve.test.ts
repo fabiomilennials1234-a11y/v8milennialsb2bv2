@@ -79,11 +79,52 @@ describe("política fixed", () => {
   });
 
   it("não atravessa a fronteira da organização", async () => {
+    // A instância de outra org é, para esta, inexistente — e com duas vivas
+    // aqui não há para onde recuar sem escolher sozinho.
     await expect(
       resolve({ instanceRoutingPolicy: "fixed", whatsappInstanceId: INST_ALHEIA.id }),
     ).resolves.toMatchObject({ ok: false, code: "no_instance_resolved" });
   });
 
+  // ── Pin obsoleto: a instância declarada não existe mais ──────────────────
+  // Configuração velha (instância recriada ou removida), não queda temporária.
+  // Medido em prod: 44 nós ativos em 3 orgs de um número vivo só — Basic4u
+  // (35), Itatex (6), SC Beauty (3). Falhar todos por causa de um id morto no
+  // JSON é pior do que usar o único número que a org tem.
+
+  it("pin inexistente numa org de um número vivo usa esse número", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_MORTA]);
+    const inst = await resolved({
+      instanceRoutingPolicy: "fixed",
+      whatsappInstanceId: "inst-que-sumiu",
+    });
+    expect(inst.id).toBe(INST_1.id);
+  });
+
+  it("pin inexistente com recuo declarado usa o recuo", async () => {
+    const inst = await resolved({
+      instanceRoutingPolicy: "fixed",
+      whatsappInstanceId: "inst-que-sumiu",
+      fallbackInstanceId: INST_2.id,
+    });
+    expect(inst.id).toBe(INST_2.id);
+  });
+
+  it("pin inexistente, duas vivas e sem recuo, falha — não escolhe sozinho", async () => {
+    await expect(
+      resolve({ instanceRoutingPolicy: "fixed", whatsappInstanceId: "inst-que-sumiu" }),
+    ).resolves.toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+
+  it("pin inexistente NÃO cai para a conversa do lead — o operador recusou isso", async () => {
+    mockTable("whatsapp_messages", [msg({ instance_id: INST_1.id })]);
+    await expect(
+      resolve({ instanceRoutingPolicy: "fixed", whatsappInstanceId: "inst-que-sumiu" }),
+    ).resolves.toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+
+  // Existe mas caiu é outra coisa: queda é quase sempre temporária, e trocar
+  // de número por dez minutos de instabilidade é o defeito de volta.
   it("instância declarada desconectada falha — nunca troca de número", async () => {
     await expect(
       resolve({

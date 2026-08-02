@@ -152,16 +152,24 @@ export async function resolveRoutedInstance(
   const { organizationId, leadId, node } = args;
   const policy = readRoutingPolicy(node);
 
-  // ── 1. fixed: o operador nomeou o número. Sem substituição, nunca. ────────
+  // ── 1. fixed: o operador nomeou o número. ────────────────────────────────
+  // A Instance existir e estar fora do ar é queda — quase sempre temporária —
+  // e trocar de número por causa dela reintroduz o defeito. Falha.
+  //
+  // A Instance **não existir mais** é outra coisa: é configuração velha, de
+  // instância recriada ou removida. O id morto no JSON não é uma declaração
+  // válida, então o nó segue para o atalho de um número vivo e para o recuo
+  // declarado — nunca para uma escolha do sistema, e nunca para a conversa do
+  // Lead, que o operador recusou ao escolher `fixed`.
+  //
+  // Medido em produção (2026-08-02): 44 nós ativos em 3 organizações de um
+  // número vivo só apontavam para instâncias inexistentes — Basic4u (35),
+  // Itatex (6), SC Beauty (3). Falhar todas por causa de um id obsoleto é pior
+  // do que usar o único número que a organização tem.
+  const pinnedId = str(node.whatsappInstanceId);
   if (policy === "fixed") {
-    const declared = await loadInstance(supabase, organizationId, str(node.whatsappInstanceId));
-    if (!declared) {
-      return fail(
-        "no_instance_resolved",
-        "O nó está configurado para um número fixo que não existe mais nesta organização.",
-      );
-    }
-    return checkLive(declared);
+    const declared = await loadInstance(supabase, organizationId, pinnedId);
+    if (declared) return checkLive(declared);
   }
 
   // ── 2. Uma Instance viva só: não há escolha errada a proteger. ───────────
@@ -175,18 +183,29 @@ export async function resolveRoutedInstance(
   if (live.length === 1) return { ok: true, instance: live[0] };
   if (live.length === 0) return await noLiveInstance(supabase, organizationId);
 
-  // ── 3. A política resolve. ───────────────────────────────────────────────
-  const resolved = policy === "responsible"
-    ? await resolveByResponsible(supabase, organizationId, leadId)
-    : await resolveByConversation(supabase, organizationId, leadId);
+  // ── 3. A política resolve. `fixed` não participa: quem nomeou um número
+  //       não quer que a conversa do Lead escolha por ele. ─────────────────
+  if (policy !== "fixed") {
+    const resolved = policy === "responsible"
+      ? await resolveByResponsible(supabase, organizationId, leadId)
+      : await resolveByConversation(supabase, organizationId, leadId);
 
-  if (resolved) return checkLive(resolved);
+    if (resolved) return checkLive(resolved);
+  }
 
   // ── 4. O recuo declarado no nó. ──────────────────────────────────────────
   const fallback = await loadInstance(supabase, organizationId, str(node.fallbackInstanceId));
   if (fallback) return checkLive(fallback);
 
   // ── 5. Sem resolução: falha em vez de sortear. ───────────────────────────
+  if (policy === "fixed") {
+    return fail(
+      "no_instance_resolved",
+      `O nó está configurado para um número fixo que não existe mais nesta organização${
+        pinnedId ? ` (${pinnedId})` : ""
+      }. Escolha outro número no nó.`,
+    );
+  }
   return fail(
     "no_instance_resolved",
     policy === "responsible"
