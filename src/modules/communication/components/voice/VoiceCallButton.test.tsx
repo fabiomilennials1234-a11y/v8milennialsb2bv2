@@ -1,5 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type React from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CallableVoiceNumber } from "@/modules/communication/hooks/useVoipSession";
 import type { VoiceCallState } from "@/modules/communication/hooks/useVoiceCall";
@@ -98,11 +100,25 @@ function lembrar(tcSessionId: string) {
   );
 }
 
+/**
+ * O provider é montado na raiz do app, DENTRO do QueryClientProvider — é de lá
+ * que ele invalida as ligações da conversa quando a chamada termina (S13).
+ * Montá-lo sem cliente aqui seria testá-lo num contexto que não existe.
+ */
+function comQueryClient(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>;
+}
+
 function montar() {
   return render(
-    <VoiceCallProvider>
-      <VoiceCallButton leadId="lead-1" leadName="Fábrica Silva" />
-    </VoiceCallProvider>,
+    comQueryClient(
+      <VoiceCallProvider>
+        <VoiceCallButton leadId="lead-1" leadName="Fábrica Silva" />
+      </VoiceCallProvider>,
+    ),
   );
 }
 
@@ -301,9 +317,11 @@ describe("VoiceCallButton — durante a chamada", () => {
     }
 
     render(
-      <VoiceCallProvider>
-        <OutraTela />
-      </VoiceCallProvider>,
+      comQueryClient(
+        <VoiceCallProvider>
+          <OutraTela />
+        </VoiceCallProvider>,
+      ),
     );
 
     expect(sessaoAtual()).toBe("tc-1");
