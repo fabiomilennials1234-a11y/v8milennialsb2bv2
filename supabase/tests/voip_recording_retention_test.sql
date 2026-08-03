@@ -6,7 +6,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
 -- Prova o expurgo de 90 dias e o reenfileiramento da busca que falhou
--- (20270804000000_voip_recording_retention.sql, Gravação S4 #1360).
+-- (20270804000001_voip_recording_retention.sql, Gravação S4 #1360).
 --
 -- A COSTURA É A REUSADA: função mais cron, na forma do
 -- `voip_sweep_stuck_calls_test.sql`. A diferença de desenho é imposta pelo
