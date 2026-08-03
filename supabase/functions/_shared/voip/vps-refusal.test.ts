@@ -169,3 +169,52 @@ Deno.test("o instante é o mesmo em ended_at e updated_at", () => {
   assertEquals(patch.ended_at, AGORA);
   assertEquals(patch.updated_at, AGORA);
 });
+
+// ─── atender: a corrida com o celular (E4) ──────────────────────────────────
+
+// A recusa que `doAccept` devolve quando `setOwner` não deu: a ligação já tem
+// dono — o celular do vendedor pegou, ou um colega atendeu primeiro pelo CRM.
+//
+// É o desfecho NORMAL da corrida que o ADR-0027 desenha de propósito, e não uma
+// falha. Sem código próprio ela caía em `vps_refused`, e quem clicou meio
+// segundo tarde lia "o serviço de chamadas recusou a ligação" — frase de defeito
+// para um sistema que funcionou, que faz o vendedor abrir chamado.
+Deno.test("a ligação que outro já atendeu tem código próprio", () => {
+  const codigo = vpsRefusalCode({
+    status: 409,
+    error: "claimed by another client",
+  });
+
+  assertEquals(codigo, "call_already_claimed");
+  assertNotEquals(codigo, "vps_refused");
+});
+
+Deno.test("a VPS com code para a ligação já atendida também é traduzida", () => {
+  assertEquals(
+    vpsRefusalCode({ status: 409, error: "seja lá o que for", code: "call_already_claimed" }),
+    "call_already_claimed",
+  );
+});
+
+// A chamada saiu do registro da sessão: o cliente desistiu. Para quem clicou em
+// atender o efeito é o mesmo — não é mais dele —, mas a CAUSA é outra, e por
+// isso o código é outro. Confundir as duas apagaria a diferença entre "alguém
+// atendeu" e "ninguém atendeu", que é a única informação que o gestor quer da
+// ligação perdida.
+Deno.test("a ligação que sumiu da VPS não é confundida com a que outro atendeu", () => {
+  const codigo = vpsRefusalCode({ status: 404, error: "no such call" });
+
+  assertEquals(codigo, "call_not_answerable");
+  assertNotEquals(codigo, "call_already_claimed");
+  assertNotEquals(codigo, "vps_refused");
+});
+
+// Controle: um 409 que NÃO é a corrida continua caindo no balde. O mapa só tira
+// causas de dentro dele, uma a uma — não abre a porta para tudo virar
+// "já foi atendida", que seria mentir sobre o que aconteceu.
+Deno.test("recusa de aceite sem causa conhecida continua em vps_refused", () => {
+  assertEquals(
+    vpsRefusalCode({ status: 409, error: "something else entirely" }),
+    "vps_refused",
+  );
+});

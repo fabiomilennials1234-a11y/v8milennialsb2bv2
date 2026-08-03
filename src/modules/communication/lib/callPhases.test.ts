@@ -28,6 +28,7 @@ const TODAS_AS_FASES = [
   "authorizing",
   "negotiating",
   "ringing",
+  "accepting",
   "active",
   "ending",
   "ended",
@@ -58,5 +59,20 @@ describe("partição das fases de chamada", () => {
 
   it("`idle` é repouso — é onde `hangup()` termina, e é o fim mais comum", () => {
     expect(FASES_DE_REPOUSO.has("idle")).toBe(true);
+  });
+
+  /**
+   * `accepting` é a fase que a E4 acrescentou, e a classificação dela é a
+   * decisão da fatia — não uma linha de manutenção.
+   *
+   * A chamada JÁ EXISTE quando esta fase começa: o cliente está na linha e o
+   * operador acabou de dizer que vai atender. No repouso, o provider trataria
+   * essa chamada viva como terminada — dispararia a atualização da conversa no
+   * meio dela, e o fim real ficaria mudo. É o mesmo defeito que fazia a ligação
+   * não aparecer quando o vendedor desligava, agora pelo outro lado da máquina.
+   */
+  it("`accepting` conta como chamada no ar — atender é entrar numa chamada viva", () => {
+    expect(FASES_EM_CURSO.has("accepting")).toBe(true);
+    expect(FASES_DE_REPOUSO.has("accepting")).toBe(false);
   });
 });

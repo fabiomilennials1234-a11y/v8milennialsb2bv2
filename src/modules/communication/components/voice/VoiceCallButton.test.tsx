@@ -52,7 +52,15 @@ vi.mock("@/modules/communication/hooks/useVoipSession", () => ({
  * elas fazem tem suíte própria em `useIncomingVoiceCalls.test.ts`.
  */
 vi.mock("@/modules/communication/hooks/useIncomingVoiceCalls", () => ({
-  useIncomingVoiceCalls: () => ({ calls: [], ringSilenced: false }),
+  useIncomingVoiceCalls: () => ({
+    calls: [],
+    ringSilenced: false,
+    dispensar: vi.fn(),
+    restaurar: vi.fn(),
+  }),
+  // Sem oferta atendida não há dígitos para resolver, e o hook real devolve
+  // `null` para telefone sem cadastro — que é 47% deles.
+  useIncomingCallerName: () => null,
 }));
 
 vi.mock("@/modules/communication/hooks/useVoiceCall", () => ({

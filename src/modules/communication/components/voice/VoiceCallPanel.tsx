@@ -36,6 +36,10 @@ const PHASE_LABEL: Record<string, string> = {
   authorizing: "Autorizando…",
   negotiating: "Preparando áudio…",
   ringing: "Chamando…",
+  // A ligação que ENTRA. "Atendendo…" e não "Liberando microfone…" porque o
+  // microfone é o meio: quem clicou quer saber que está entrando na conversa, e
+  // o diálogo de permissão do navegador já explica a si mesmo.
+  accepting: "Atendendo…",
   active: "Em chamada",
   ending: "Encerrando…",
 };

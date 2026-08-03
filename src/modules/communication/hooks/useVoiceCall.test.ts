@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const startCallRequest = vi.fn();
+const acceptCallRequest = vi.fn();
 const endCallRequest = vi.fn();
 const exchangeSdp = vi.fn();
 const requestStreamToken = vi.fn();
@@ -13,6 +14,7 @@ vi.mock("@/modules/communication/lib/torquecallsApi", async () => {
   return {
     ...actual,
     startCall: (...args: unknown[]) => startCallRequest(...args),
+    acceptCall: (...args: unknown[]) => acceptCallRequest(...args),
     endCall: (...args: unknown[]) => endCallRequest(...args),
     exchangeSdp: (...args: unknown[]) => exchangeSdp(...args),
     requestStreamToken: (...args: unknown[]) => requestStreamToken(...args),
@@ -735,5 +737,352 @@ describe("useVoiceCall", () => {
     expect(startCallRequest).not.toHaveBeenCalled();
     expect(result.current.state.errorCode).toBe("stream_failed");
     expect(track.stop).toHaveBeenCalled();
+  });
+});
+
+// ─── ATENDER: a máquina no sentido inverso (E4) ──────────────────────────────
+
+/**
+ * A sessão da OFERTA é DIFERENTE da sessão de discagem — e é assim de propósito.
+ *
+ * O vendedor pode ter dois números: disca por um e recebe pelo outro. Com os
+ * dois iguais no teste, trocar `offer.tcSessionId` por `tcSessionId` em
+ * `answer`/`hangup` seria a identidade, e o defeito de encerrar pela sessão
+ * errada — que deixa a linha aberta segurando a cota do operador até o reaper
+ * passar — atravessaria a suíte inteira sem ninguém ver.
+ */
+const SESSAO_DE_ENTRADA = "tc-sess-entrada";
+
+/** A oferta, do jeito que `useIncomingVoiceCalls` a entrega. */
+const OFERTA = {
+  tcSessionId: SESSAO_DE_ENTRADA,
+  tcCallId: "A1B2C3D40011223344556677889900FF",
+  // JID do WhatsApp: COM o DDI, SEM o nono dígito. O canônico é 51985960716.
+  peerDigits: "555185960716",
+};
+
+/** A resposta de `acceptCall` — mesma forma de `startCall`, é o mesmo choke. */
+const ACEITA = {
+  callId: "call-entrada-1",
+  tcCallId: OFERTA.tcCallId,
+  peer: "555185960716",
+  media: "m",
+  ctl: "c",
+  vpsUrl: "https://vps.test",
+};
+
+/** Atende uma oferta até a troca de SDP terminar. */
+async function callAnswered() {
+  const track = fakeTrack();
+  installMedia(async () => ({ getTracks: () => [track], getAudioTracks: () => [track] }));
+  const { pc, channel } = installPeerConnection();
+  acceptCallRequest.mockResolvedValueOnce(ACEITA);
+  exchangeSdp.mockResolvedValueOnce("v=0 answer");
+
+  const { result, unmount } = renderHook(() => useVoiceCall(SESSION));
+  let atendeu = false;
+  await act(async () => {
+    atendeu = await result.current.answer(OFERTA);
+  });
+  return { result, unmount, pc, channel, track, atendeu };
+}
+
+describe("useVoiceCall — atender a ligação que entra", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    endCallRequest.mockResolvedValue(undefined);
+    startPcmAudio.mockResolvedValue({ enqueue: vi.fn(), stop: pcmSessionStop });
+    installPeerConnection();
+    installStream();
+  });
+
+  /**
+   * O ÁUDIO liga: microfone, worklet de captura e o canal `pcm` que a VPS exige.
+   *
+   * Os três juntos, e não "a função de atender foi chamada": a chamada que
+   * conecta sem canal `pcm` é o pior defeito já medido neste fluxo — a tela diz
+   * "Em chamada", o cronômetro corre, e não há som em nenhum dos dois sentidos,
+   * sem erro em lado nenhum.
+   */
+  it("atender liga o áudio: microfone, captura e o canal `pcm`", async () => {
+    const { result, pc, channel } = await callAnswered();
+
+    expect(startPcmAudio).toHaveBeenCalledTimes(1);
+    expect(pc.createDataChannel).toHaveBeenCalledWith("pcm", { ordered: true, maxRetransmits: 0 });
+    expect(channel.binaryType).toBe("arraybuffer");
+    // A VPS manda 960 amostras por mensagem; sem este ouvinte a voz do cliente
+    // chega ao navegador e é jogada fora.
+    expect(typeof channel.onmessage).toBe("function");
+    expect(result.current.state.callId).toBe("call-entrada-1");
+  });
+
+  /**
+   * A ORDEM que inverte a máquina, e o invariante espelhado do da discagem.
+   *
+   * Discar pede microfone antes para não deixar o telefone do lead tocando sem
+   * ninguém. Atender pede antes por um motivo pior: dizer ao WhatsApp "atendi" e
+   * só então descobrir que não há microfone entrega ao cliente uma linha muda,
+   * encerra a corrida com o celular e queima a única chance de alguém atender.
+   */
+  it("NÃO diz ao WhatsApp que atendeu quando o microfone é negado", async () => {
+    installMedia(() => Promise.reject(new Error("NotAllowedError")));
+
+    const { result } = renderHook(() => useVoiceCall(SESSION));
+    let atendeu = true;
+    await act(async () => {
+      atendeu = await result.current.answer(OFERTA);
+    });
+
+    expect(acceptCallRequest).not.toHaveBeenCalled();
+    expect(atendeu).toBe(false);
+    expect(result.current.state.errorCode).toBe("mic_denied");
+  });
+
+  /**
+   * Controle positivo do caso acima. Sem ele, um `answer` que nunca chamasse
+   * `acceptCall` — porque quebrou, porque foi renomeado, porque um `return`
+   * subiu de lugar — passaria na asserção negativa pelo motivo errado.
+   */
+  it("com microfone liberado, o mesmo caminho DIZ que atendeu", async () => {
+    const { atendeu } = await callAnswered();
+
+    expect(atendeu).toBe(true);
+    expect(acceptCallRequest).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * A IDENTIDADE que sai daqui é a da oferta: a sessão por onde a ligação
+   * entrou e o id de REDE que o stream contou. O uuid do ledger o navegador não
+   * conhece — quem traduz é a edge function.
+   */
+  it("atende pela sessão da OFERTA, não pela de discagem", async () => {
+    await callAnswered();
+
+    expect(acceptCallRequest).toHaveBeenCalledWith({
+      tcSessionId: SESSAO_DE_ENTRADA,
+      tcCallId: OFERTA.tcCallId,
+      organizationId: "org-1",
+    });
+    expect(acceptCallRequest).not.toHaveBeenCalledWith(
+      expect.objectContaining({ tcSessionId: SESSION }),
+    );
+  });
+
+  /**
+   * E o SDP também. O token de mídia autoriza exatamente aquela chamada naquela
+   * sessão; trocar a sessão aqui devolveria 401 e a chamada conectaria muda.
+   */
+  it("troca o SDP pela sessão e pelo id de rede da oferta", async () => {
+    await callAnswered();
+
+    expect(exchangeSdp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tcSessionId: SESSAO_DE_ENTRADA,
+        tcCallId: OFERTA.tcCallId,
+        mediaToken: "m",
+      }),
+    );
+  });
+
+  /**
+   * DESLIGAR sai pela sessão da chamada — não pela preferência de discagem.
+   *
+   * O mutante é uma linha: usar `tcSessionId` em `hangup`. O efeito é o defeito
+   * mais caro deste fluxo: o `endCall` vai para a sessão que não tem a chamada,
+   * a linha fica aberta segurando a cota, e a próxima tentativa do vendedor
+   * volta `operator_busy` até o reaper passar.
+   */
+  it("desligar a ligação atendida sai pela sessão DELA", async () => {
+    const { result } = await callAnswered();
+
+    await act(async () => {
+      await result.current.hangup();
+    });
+
+    expect(endCallRequest).toHaveBeenCalledWith({
+      tcSessionId: SESSAO_DE_ENTRADA,
+      callId: "call-entrada-1",
+      organizationId: "org-1",
+    });
+  });
+
+  /**
+   * O `connected` chega ANTES da troca de SDP na entrada: a VPS aceita no
+   * WhatsApp dentro do próprio `POST /accept` (`doAccept` → `cm.AcceptCall`), e
+   * o evento sai enquanto o navegador ainda espera a resposta daquela
+   * requisição. Se `handleCallEvent` não promovesse a partir de `accepting`, o
+   * único `connected` que existe seria descartado — e a tela ficaria em
+   * "Atendendo…" durante a conversa inteira.
+   */
+  it("o `connected` que chega durante o aceite vira `active`", async () => {
+    const track = fakeTrack();
+    installMedia(async () => ({ getTracks: () => [track], getAudioTracks: () => [track] }));
+    installPeerConnection();
+
+    // A VPS publica `connected` no meio do aceite, como faz de verdade.
+    acceptCallRequest.mockImplementationOnce(async () => {
+      streams[0].emit({ type: "call-status", id: OFERTA.tcCallId, status: "connected" });
+      return ACEITA;
+    });
+    exchangeSdp.mockResolvedValueOnce("v=0 answer");
+
+    const { result } = renderHook(() => useVoiceCall(SESSION));
+    await act(async () => {
+      await result.current.answer(OFERTA);
+    });
+
+    // E a fase NÃO regride: o `setState` que vem depois do aceite não pode
+    // reescrever `active` por `negotiating`, senão a tela anuncia "Preparando
+    // áudio…" com as duas pessoas já falando.
+    expect(result.current.state.phase).toBe("active");
+  });
+
+  it("sem `connected`, a fase para em `negotiating` — nunca em `ringing`", async () => {
+    const { result } = await callAnswered();
+
+    // `ringing` é o telefone do LEAD tocando, e na entrada ninguém está
+    // esperando ser atendido. Cair ali ligaria o tom de chamada no fone do
+    // vendedor por cima de um cliente que já está na linha.
+    expect(result.current.state.phase).toBe("negotiating");
+    expect(startRingback).not.toHaveBeenCalled();
+  });
+
+  /**
+   * O TELEFONE é normalizado. O JID chega sem o nono dígito (`555185960716`);
+   * mostrado como veio, vira `(51) 8596-0716` — um número que não existe, que o
+   * vendedor não reconhece e não consegue retornar.
+   */
+  it("o telefone da entrada aparece na forma que o vendedor reconhece", async () => {
+    const { result } = await callAnswered();
+
+    expect(result.current.state.peer).toBe("51985960716");
+  });
+
+  /**
+   * A corrida com o celular, do lado de quem clicou meio segundo tarde.
+   *
+   * O aparelho toca junto e quem pegar primeiro leva — é o desenho do ADR-0027,
+   * não uma falha. A tela tem de dizer isso com uma frase que não manda o
+   * vendedor abrir chamado, e o microfone tem de ser solto: ele não está em
+   * chamada nenhuma.
+   */
+  it("atender depois do celular não quebra: frase própria e microfone solto", async () => {
+    const track = fakeTrack();
+    installMedia(async () => ({ getTracks: () => [track], getAudioTracks: () => [track] }));
+    acceptCallRequest.mockRejectedValueOnce(new CallDeniedError("call_already_claimed"));
+
+    const { result } = renderHook(() => useVoiceCall(SESSION));
+    let atendeu = true;
+    await act(async () => {
+      atendeu = await result.current.answer(OFERTA);
+    });
+
+    expect(atendeu).toBe(false);
+    expect(result.current.state.phase).toBe("failed");
+    expect(result.current.state.errorCode).toBe("call_already_claimed");
+    expect(result.current.state.error).toMatch(/já foi atendida/i);
+    // Sem isto o indicador de microfone do navegador fica aceso depois de uma
+    // chamada que ele nem chegou a atender.
+    expect(track.stop).toHaveBeenCalled();
+    expect(pcmSessionStop).toHaveBeenCalled();
+  });
+
+  /**
+   * O cliente desistiu enquanto o diálogo do microfone estava aberto.
+   *
+   * É o que faz `tcCallIdRef` ser preenchido ANTES de qualquer `await`: sem ele,
+   * o `call-ended` desta chamada não casa com nada e a tela fica pendurada
+   * esperando por uma ligação que já morreu.
+   */
+  it("o fim que chega durante o aceite derruba a tela e não negocia áudio", async () => {
+    const track = fakeTrack();
+    installMedia(async () => ({ getTracks: () => [track], getAudioTracks: () => [track] }));
+    const { pc } = installPeerConnection();
+
+    // O aceite fica em voo, que é a janela real: a VPS já aceitou do lado dela e
+    // a resposta HTTP ainda não voltou.
+    let liberarAceite!: (v: unknown) => void;
+    acceptCallRequest.mockImplementationOnce(
+      () => new Promise((r) => {
+        liberarAceite = r;
+      }),
+    );
+
+    const { result } = renderHook(() => useVoiceCall(SESSION));
+    let atender!: Promise<boolean>;
+    await act(async () => {
+      atender = result.current.answer(OFERTA);
+    });
+    await waitFor(() => expect(acceptCallRequest).toHaveBeenCalled());
+
+    // O cliente desistiu. Este evento só casa porque `tcCallIdRef` foi
+    // preenchido ANTES dos `await` — é o que este caso guarda.
+    await act(async () => {
+      streams[0].emit({ type: "call-ended", id: OFERTA.tcCallId, reason: "cancelled" });
+    });
+
+    expect(result.current.state.phase).toBe("ended");
+    expect(result.current.state.endReason).toMatch(/cancelada/i);
+
+    // E o aceite que volta DEPOIS não ressuscita nada: nenhum canal `pcm`,
+    // nenhuma troca de SDP, e o servidor é avisado para a linha não ficar presa.
+    let atendeu = true;
+    await act(async () => {
+      liberarAceite(ACEITA);
+      atendeu = await atender;
+    });
+
+    expect(atendeu).toBe(false);
+    expect(result.current.state.phase).toBe("ended");
+    expect(pc.createDataChannel).not.toHaveBeenCalled();
+    expect(exchangeSdp).not.toHaveBeenCalled();
+    expect(endCallRequest).toHaveBeenCalledWith({
+      tcSessionId: SESSAO_DE_ENTRADA,
+      callId: ACEITA.callId,
+      organizationId: "org-1",
+    });
+  });
+
+  /**
+   * Encerrar registra DURAÇÃO e DESFECHO — e os dois vêm da VPS, não do
+   * navegador. `endCall` também sai daqui: enquanto o `voip_calls` não é fechado
+   * pelo webhook, é este aviso que solta a cota do operador.
+   */
+  it("o fim vindo da VPS traz o motivo e avisa o servidor pela sessão certa", async () => {
+    const { result } = await callAnswered();
+
+    await act(async () => {
+      streams[0].emit({ type: "call-ended", id: OFERTA.tcCallId, reason: "user_ended" });
+    });
+
+    expect(result.current.state.phase).toBe("ended");
+    expect(result.current.state.endReason).toBe("Chamada encerrada.");
+    await waitFor(() =>
+      expect(endCallRequest).toHaveBeenCalledWith({
+        tcSessionId: SESSAO_DE_ENTRADA,
+        callId: "call-entrada-1",
+        organizationId: "org-1",
+      }),
+    );
+  });
+
+  /**
+   * Dois cliques em Atender não podem virar dois atendimentos: a VPS aceita um
+   * único canal `pcm` por chamada e recusa o segundo, e o segundo aceite
+   * derrubaria o primeiro.
+   */
+  it("dois cliques em Atender viram UM atendimento", async () => {
+    const track = fakeTrack();
+    installMedia(async () => ({ getTracks: () => [track], getAudioTracks: () => [track] }));
+    installPeerConnection();
+    acceptCallRequest.mockResolvedValue(ACEITA);
+    exchangeSdp.mockResolvedValue("v=0 answer");
+
+    const { result } = renderHook(() => useVoiceCall(SESSION));
+    await act(async () => {
+      await Promise.all([result.current.answer(OFERTA), result.current.answer(OFERTA)]);
+    });
+
+    expect(acceptCallRequest).toHaveBeenCalledTimes(1);
   });
 });

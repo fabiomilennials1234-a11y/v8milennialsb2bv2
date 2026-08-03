@@ -162,6 +162,32 @@ interface OfertaViva extends IncomingVoiceCall {
    * tê-la visto viva uma vez é que sumir da lista significa que acabou.
    */
   confirmada: boolean;
+  /**
+   * ESTE vendedor saiu da lista desta oferta — recusou, ou já a está atendendo.
+   *
+   * ─── Por que a oferta continua no estado, apenas marcada ────────────────────
+   * Porque tirá-la exigiria uma lápide paralela. A VPS RETRANSMITE `incoming`
+   * (é a razão de existir o dedupe por `mesmaChamada`), então uma oferta
+   * removida voltaria à tela sozinha em segundos, e evitar isso pediria um
+   * segundo conjunto, com um segundo ciclo de vida, que alguém teria de lembrar
+   * de limpar. Marcada, ela continua debaixo de toda a máquina que já existe: o
+   * `call-list` a reconcilia, o fim a remove, o encolhimento do alcance a leva
+   * junto. Uma estrutura, um ciclo de vida.
+   *
+   * ─── Recusar NÃO fala com a VPS, e isso é a decisão ─────────────────────────
+   * O ADR-0027, decisão 3, é literal: **"O CRM nunca recusa a oferta."** E aqui
+   * isso é mais que uma regra herdada — é a única leitura possível de uma oferta
+   * sem dono. O mesmo ADR põe "fila ou distribuição entre vendedores" FORA DE
+   * ESCOPO e registra que "todos da lista tocam ao mesmo tempo", junto com o
+   * celular. Um deles clicando "agora não" não fala pelos outros: `/reject` na
+   * VPS executa `cm.RejectCall(EndCallReasonDeclined)`, que derruba a ligação
+   * para os colegas que estavam prestes a atender E para o aparelho na mão dele.
+   *
+   * Recusar aqui é sair da lista, não encerrar a ligação. O cliente segue
+   * chamando, e se ninguém atender ele vira ligação perdida no histórico — que é
+   * a informação que o gestor quer (história 8 do PRD #1370).
+   */
+  dispensada: boolean;
 }
 
 interface UseIncomingVoiceCallsOptions {
@@ -183,6 +209,20 @@ export function useIncomingVoiceCalls(
   calls: IncomingVoiceCall[];
   /** O navegador barrou o toque. A tela TEM de dizer isso — ver `startTone`. */
   ringSilenced: boolean;
+  /** Tira a oferta da tela DESTE vendedor. Não fala com a VPS — ver `dispensada`. */
+  dispensar: (tcSessionId: string, tcCallId: string) => void;
+  /**
+   * Devolve à tela uma oferta dispensada, se ela ainda estiver viva.
+   *
+   * Existe por um caminho só, e ele é real: o atendimento dispensa a oferta no
+   * CLIQUE, para o toque calar e o cartão sair na hora — mas o atendimento pode
+   * falhar depois disso (o vendedor nega o microfone, o navegador não tem
+   * AudioWorklet). Nesse caso a ligação continua tocando de verdade, e engolir o
+   * cartão tiraria dele a chance de tentar de novo por um erro que ele mesmo
+   * pode corrigir. Se a chamada tiver morrido nesse meio tempo, ela já não está
+   * na lista e isto não faz nada — que é a resposta certa.
+   */
+  restaurar: (tcSessionId: string, tcCallId: string) => void;
 } {
   const { organizationId } = useOrganization();
   const [ofertas, setOfertas] = useState<OfertaViva[]>([]);
@@ -217,6 +257,26 @@ export function useIncomingVoiceCalls(
         : atual,
     );
   }, []);
+
+  /** Liga ou desliga a marca de "saí da lista desta oferta". */
+  const marcar = useCallback((tcSessionId: string, tcCallId: string, valor: boolean) => {
+    setOfertas((atual) =>
+      atual.some((o) => mesmaChamada(o, tcSessionId, tcCallId) && o.dispensada !== valor)
+        ? atual.map((o) =>
+          mesmaChamada(o, tcSessionId, tcCallId) ? { ...o, dispensada: valor } : o
+        )
+        : atual,
+    );
+  }, []);
+
+  const dispensar = useCallback(
+    (tcSessionId: string, tcCallId: string) => marcar(tcSessionId, tcCallId, true),
+    [marcar],
+  );
+  const restaurar = useCallback(
+    (tcSessionId: string, tcCallId: string) => marcar(tcSessionId, tcCallId, false),
+    [marcar],
+  );
 
   const aplicar = useCallback(
     (event: SessionEvent) => {
@@ -303,6 +363,7 @@ export function useIncomingVoiceCalls(
                   peerDigits: peerDigitsFromJid(peer),
                   offeredAt,
                   confirmada: false,
+                  dispensada: false,
                 },
               ],
         );
@@ -436,6 +497,17 @@ export function useIncomingVoiceCalls(
     };
   }, [assinatura, organizationId]);
 
+  // `confirmada` é assunto do reconciliador; quem consome a lista não deve nem
+  // saber que ela existe. `dispensada` some junto com a oferta: para quem já
+  // saiu da lista dela, ela deixou de existir.
+  const calls = useMemo<IncomingVoiceCall[]>(
+    () =>
+      ofertas
+        .filter((o) => !o.dispensada)
+        .map(({ confirmada: _confirmada, dispensada: _dispensada, ...publica }) => publica),
+    [ofertas],
+  );
+
   /**
    * UM tom para N ofertas.
    *
@@ -445,8 +517,12 @@ export function useIncomingVoiceCalls(
    * `start()` no lugar onde a oferta entra e um `stop()` em cada um dos quatro
    * lugares onde ela sai — é o que garante que ele CALA em todo caminho de
    * saída, inclusive no desmonte. Tom vazado toca para sempre.
+   *
+   * Conta a lista JÁ FILTRADA: recusar tem de calar o toque no clique. Contar
+   * `ofertas` faria a última oferta recusada seguir tocando para um cartão que
+   * não está mais na tela — a pior combinação possível.
    */
-  const deveTocar = ofertas.length > 0 && options?.ringEnabled !== false;
+  const deveTocar = calls.length > 0 && options?.ringEnabled !== false;
 
   useEffect(() => {
     if (!deveTocar) return;
@@ -460,15 +536,7 @@ export function useIncomingVoiceCalls(
     };
   }, [deveTocar]);
 
-  // `confirmada` é assunto do reconciliador; quem consome a lista não deve nem
-  // saber que ela existe.
-  const calls = useMemo<IncomingVoiceCall[]>(
-    () =>
-      ofertas.map(({ confirmada: _confirmada, ...publica }) => publica),
-    [ofertas],
-  );
-
-  return { calls, ringSilenced };
+  return { calls, ringSilenced, dispensar, restaurar };
 }
 
 /**
