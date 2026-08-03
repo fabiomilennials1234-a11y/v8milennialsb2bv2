@@ -45,11 +45,19 @@ function morrer(msg) {
 let dbUrl = "";
 let org = "";
 let commit = false;
+/**
+ * ADR-0023 decisão 11: os funis de sistema do mesmo lead são UMA jornada. Onde a
+ * jornada tem mais de um card, o de trás é APAGADO — é a única escrita
+ * destrutiva do backfill, e por isso não vem por padrão. Sem esta flag o SQL
+ * aborta dizendo quantos cards estariam em jogo.
+ */
+let fundirJornada = false;
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--db-url") dbUrl = args[++i] ?? "";
   else if (args[i] === "--org") org = args[++i] ?? "";
   else if (args[i] === "--commit") commit = true;
+  else if (args[i] === "--fundir-jornada") fundirJornada = true;
   else morrer(`argumento desconhecido: ${args[i]}`);
 }
 
@@ -111,6 +119,13 @@ try {
   // O uuid entra por bind parameter; o arquivo SQL lê daqui e nunca é reescrito.
   await client.query("CREATE TEMP TABLE _param (org uuid NOT NULL) ON COMMIT DROP");
   await client.query("INSERT INTO _param (org) VALUES ($1)", [org]);
+
+  // `SET LOCAL`: morre no fim da transação junto com tudo o mais. Literal fixo,
+  // nunca interpolação da linha de comando.
+  if (fundirJornada) {
+    await client.query("SET LOCAL torque.m4_fundir_jornada = 'on'");
+    console.log(amarelo("→ fusão de jornada LIGADA: card rebaixado será APAGADO"));
+  }
 
   // Sem parâmetros → protocolo simples → múltiplos comandos permitidos.
   await client.query(sql);

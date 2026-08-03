@@ -5,14 +5,18 @@ import { useOrganization } from "@/modules/identity";
 /**
  * Negócios do lead — fatia 1, lidos de `pipeline_entries`.
  *
- * Decisão do CTO (D1, 2026-07-29): **card de funil É o negócio**. A tabela
- * `deals` existe e está vazia (0 linhas em prod); acender ela é a fatia 2, e o
- * backfill 1:1 do D3 vai apenas tornar literal o que esta camada já mostra —
- * nenhuma mudança visual no dia da migração.
+ * A POSIÇÃO continua vindo de `pipeline_entries`, e é ela que define quantos
+ * negócios o lead tem — ADR-0023 decisão 5: a posição mora no card, `deals`
+ * carrega identidade e dinheiro. Ler a contagem de `deals` daria "sem negócio"
+ * para os leads vivos enquanto a tela ao lado exibe os cards; duas verdades
+ * brigando.
  *
- * Enquanto isso, um lead em 2 funis tem 2 negócios, e é isso que a lista e o
- * drawer contam. Ler `deals` aqui daria "sem negócio" para os 32.154 leads
- * vivos enquanto a tela ao lado exibe 39.402 cards — duas verdades brigando.
+ * O que mudou na fatia 2: o **título** deixou de ser o nome do funil e passa a
+ * vir de `deals.title` via `pipeline_entries.deal_id`, com o nome do funil como
+ * fallback para card ainda sem negócio (todos, enquanto o backfill do L3 não
+ * roda). O texto anterior aqui dizia que o backfill "vai apenas tornar literal o
+ * que esta camada já mostra, nenhuma mudança visual" — falso: o título muda, e
+ * é de propósito. "Qualificação" não distingue negócio nenhum.
  *
  * Multi-tenancy: filtra `organization_id` explicitamente além da RLS.
  */
@@ -21,10 +25,10 @@ import { useOrganization } from "@/modules/identity";
 export type DealOutcome = "open" | "won" | "lost";
 
 export interface LeadDeal {
-  /** id da `pipeline_entries` — vira `deal_id` na fatia 2. */
+  /** id da `pipeline_entries` — a POSIÇÃO. A identidade é `deals.id`. */
   id: string;
   leadId: string;
-  /** Nome do funil. É o título do negócio enquanto `deals.title` não existe. */
+  /** `deals.title` quando o card tem negócio; nome do funil como fallback. */
   title: string;
   funnelName: string;
   funnelColor: string;
@@ -102,7 +106,7 @@ export function useLeadsDeals(leadIds: string[]) {
       const [entriesRes, pipelinesRes, stagesRes, customStagesRes] = await Promise.all([
         supabase
           .from("pipeline_entries")
-          .select("id, lead_id, pipeline_id, stage_key, entered_at, stage_changed_at, metadata")
+          .select("id, lead_id, pipeline_id, stage_key, entered_at, stage_changed_at, metadata, deal_id")
           .eq("organization_id", organizationId)
           .in("lead_id", ids),
         supabase
@@ -127,6 +131,43 @@ export function useLeadsDeals(leadIds: string[]) {
       if (customStagesRes.error) throw customStagesRes.error;
 
       const pipelineById = new Map((pipelinesRes.data ?? []).map((p) => [p.id, p]));
+
+      /**
+       * Título do NEGÓCIO (ADR-0023 decisão 9).
+       *
+       * Antes daqui saía `title: pipeline.name` — o nome do funil. Isso é
+       * exatamente o que a decisão 9 rejeita: distingue nada, e produziria
+       * dezenas de milhares de negócios chamados "Qualificação". O título de
+       * verdade vive em `deals.title`, derivado na criação como
+       * `Negócio de <mês>/<ano>` e editável depois.
+       *
+       * Consulta separada, e não join no `select` acima, porque o vínculo é
+       * novo: enquanto o backfill do L3 não roda, `deal_id` é NULL em todas as
+       * 38.156 entries de prod. Com a lista vazia a query nem sai — o custo
+       * extra só aparece quando existe negócio de verdade para nomear.
+       *
+       * Fallback no nome do funil de propósito: card antigo, ainda sem negócio,
+       * continua se identificando como hoje em vez de aparecer sem nome.
+       */
+      const dealIds = Array.from(
+        new Set(
+          (entriesRes.data ?? [])
+            .map((e) => (e as { deal_id?: string | null }).deal_id)
+            .filter((id): id is string => !!id),
+        ),
+      );
+
+      const dealTitleById = new Map<string, string>();
+      if (dealIds.length > 0) {
+        const { data: dealRows, error: dealsError } = await supabase
+          .from("deals")
+          .select("id, title")
+          .in("id", dealIds);
+        if (dealsError) throw dealsError;
+        for (const d of dealRows ?? []) {
+          if (d.id && d.title) dealTitleById.set(d.id, d.title);
+        }
+      }
 
       // Stages de funil system são chaveadas por (pipeline_type, stage_key).
       const systemStage = new Map<string, { name: string; role: string | null }>();
@@ -174,10 +215,12 @@ export function useLeadsDeals(leadIds: string[]) {
         const metadata = asObject(raw.metadata);
         const stageChangedAt = raw.stage_changed_at ?? raw.entered_at ?? null;
 
+        const dealId = (raw as { deal_id?: string | null }).deal_id ?? null;
+
         const deal: LeadDeal = {
           id: raw.id,
           leadId: raw.lead_id,
-          title: pipeline.name ?? "Funil",
+          title: (dealId ? dealTitleById.get(dealId) : undefined) ?? pipeline.name ?? "Funil",
           funnelName: pipeline.name ?? "Funil",
           funnelColor: pipeline.color ?? FALLBACK_COLOR,
           pipelineId: raw.pipeline_id,
