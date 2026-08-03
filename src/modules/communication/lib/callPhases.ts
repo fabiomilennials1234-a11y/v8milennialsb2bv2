@@ -41,3 +41,32 @@ export const FASES_DE_REPOUSO: ReadonlySet<CallPhase> = new Set<CallPhase>([
   "ended",
   "failed",
 ]);
+
+/**
+ * A rede que impede a próxima fase de escapar — e ela vive AQUI, no arquivo de
+ * produção, não no teste.
+ *
+ * Duas tentativas anteriores não guardavam nada, e as duas pareciam guardar:
+ *
+ *  1. `as const satisfies readonly CallPhase[]` só checa que cada item É uma
+ *     fase. Nunca que TODAS as fases estão listadas.
+ *  2. `const x: FaltamClassificar[] = []` também passa sempre, porque array
+ *     vazio é atribuível a array de qualquer tipo — inclusive de `never`.
+ *
+ * O que funciona é obrigar o compilador a provar que o conjunto das fases não
+ * classificadas é vazio. `Exige<T extends never>` só aceita `never`; se alguém
+ * acrescentar uma fase ao union de `useVoiceCall` e esquecer de classificá-la
+ * aqui, `FASE_NAO_CLASSIFICADA` deixa de ser `never` e a COMPILAÇÃO REPROVA,
+ * nomeando a fase esquecida no erro. Provado plantando `"reconnecting"`:
+ * `error TS2344: Type '"reconnecting"' does not satisfy the constraint 'never'`.
+ *
+ * Por que isso merece uma rede: uma fase não classificada cai no repouso por
+ * omissão. O provider então trata uma chamada VIVA como terminada, dispara a
+ * atualização no meio dela, e o fim real fica mudo — o mesmo defeito que fazia
+ * a ligação não aparecer quando o vendedor desligava.
+ */
+type Exige<T extends never> = T;
+export type FASE_NAO_CLASSIFICADA = Exige<
+  Exclude<CallPhase, "idle" | "requesting_mic" | "authorizing" | "negotiating"
+    | "ringing" | "active" | "ending" | "ended" | "failed">
+>;

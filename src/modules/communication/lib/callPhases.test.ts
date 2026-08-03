@@ -14,8 +14,13 @@ import type { CallPhase } from "@/modules/communication/hooks/useVoiceCall";
 import { FASES_EM_CURSO, FASES_DE_REPOUSO } from "./callPhases";
 
 /**
- * Todas as fases de `CallPhase`. O `satisfies` faz o TypeScript reprovar a
- * compilação se uma fase nova entrar no union e não for listada aqui.
+ * Todas as fases de `CallPhase`.
+ *
+ * O `satisfies` sozinho NÃO basta, e a versão anterior deste comentário
+ * afirmava que sim: ele só verifica que cada item É um `CallPhase`, nunca que
+ * TODOS os `CallPhase` estão aqui. A rede que reprova a compilação é o
+ * `FASE_NAO_CLASSIFICADA` de `callPhases.ts`; esta lista serve ao teste de
+ * execução abaixo.
  */
 const TODAS_AS_FASES = [
   "idle",
