@@ -49,12 +49,27 @@ import { supabase } from "@/integrations/supabase/client";
 import { normalizePhone } from "@/lib/normalizePhone";
 
 /**
- * Colunas que a peça da conversa desenha. Deliberadamente SEM `notes` e
- * `recording_url`: a anotação comercial do vendedor não vai para o corpo da
- * thread, e o áudio não é reproduzido aqui.
+ * Colunas que a peça da conversa desenha.
+ *
+ * `notes` continua deliberadamente FORA: a anotação comercial do vendedor não
+ * vai para o corpo da thread.
+ *
+ * As três de gravação entraram na S3 (#1359), e a decisão anterior ("o áudio
+ * não é reproduzido aqui") foi revertida de propósito: a história 7 do PRD
+ * #1356 pede play NO HISTÓRICO, sem tirar o vendedor da tela em que ele está
+ * trabalhando — e a thread da conversa é essa tela.
+ *
+ * As TRÊS andam juntas e nenhuma é opcional:
+ *   recording_status         — sem ele, `recording_url` nulo volta a significar
+ *                              as duas coisas que a S2 separou (não houve
+ *                              gravação × ainda está vindo × falhou).
+ *   recording_url            — o caminho do objeto. Não é URL assinada.
+ *   recording_failure_reason — a causa, que é o que separa "falhou" de uma
+ *                              parede muda.
  */
 export const CONVERSATION_CALL_COLUMNS =
-  "id, lead_id, direction, outcome, duration_seconds, phone_number, started_at";
+  "id, lead_id, direction, outcome, duration_seconds, phone_number, started_at, " +
+  "recording_status, recording_url, recording_failure_reason";
 
 export interface ConversationCall {
   id: string;
@@ -71,6 +86,17 @@ export interface ConversationCall {
   duration_seconds: number | null;
   phone_number: string | null;
   started_at: string;
+  /**
+   * `null` | `processing` | `ready` | `failed` — CHECK no banco (S2, #1358).
+   * Fica como `string | null` pelo mesmo motivo de `outcome`: um valor novo no
+   * banco tem que degradar, não quebrar a thread. Quem interpreta é
+   * `callRecordingState`.
+   */
+  recording_status: string | null;
+  /** Caminho do objeto no bucket `call-recordings`. NÃO é URL assinada. */
+  recording_url: string | null;
+  /** Diagnóstico bruto do produtor quando `recording_status = 'failed'`. */
+  recording_failure_reason: string | null;
 }
 
 export interface FetchConversationCallsParams {

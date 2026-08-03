@@ -84,6 +84,10 @@ function call(over: Partial<ConversationCall> = {}): ConversationCall {
     duration_seconds: 220,
     phone_number: "48996458738",
     started_at: "2026-08-02T12:00:00.000Z",
+    // Ausência de gravação — o estado de 100% das ligações em produção hoje.
+    recording_status: null,
+    recording_url: null,
+    recording_failure_reason: null,
     ...over,
   };
 }

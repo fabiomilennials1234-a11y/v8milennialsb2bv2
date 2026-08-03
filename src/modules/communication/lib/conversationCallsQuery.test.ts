@@ -207,9 +207,12 @@ describe("fetchConversationCalls — identidade da conversa", () => {
         duration_seconds: 220,
         phone_number: "48996458738",
         started_at: "2026-08-02T19:23:23.000Z",
-        // Colunas que existem na tabela mas a conversa não usa:
+        recording_status: "ready",
+        recording_url: "org-1/call-1.opus",
+        recording_failure_reason: null,
+        // Coluna que existe na tabela e a conversa NÃO usa: a anotação
+        // comercial do vendedor não vai para o corpo da thread.
         notes: "SEGREDO COMERCIAL",
-        recording_url: "https://exemplo/gravacao.mp3",
       },
     ];
 
@@ -230,7 +233,45 @@ describe("fetchConversationCalls — identidade da conversa", () => {
     });
     // E o que ela não precisa não trafega.
     expect(res[0]).not.toHaveProperty("notes");
-    expect(res[0]).not.toHaveProperty("recording_url");
+  });
+
+  /**
+   * As três colunas de gravação, uma asserção por coluna.
+   *
+   * O dublê deste arquivo PROJETA a lista do `.select(...)`, então tirar
+   * qualquer uma delas do `CONVERSATION_CALL_COLUMNS` faz a propriedade sumir do
+   * resultado e derruba a asserção correspondente. Sem a projeção, o dublê
+   * devolveria a linha inteira e o mutante que apaga uma coluna do `.select`
+   * passaria verde — que é exatamente o defeito que esta base já pagou uma vez.
+   */
+  it("traz o ESTADO da gravação — sem ele, url vazia volta a significar três coisas", async () => {
+    rows = [{ id: "c", recording_status: "processing", recording_url: null, recording_failure_reason: null }];
+    const res = await fetchConversationCalls({
+      organizationId: "org-1",
+      phoneNumber: "5548996458738",
+      leadId: null,
+    });
+    expect(res[0]).toHaveProperty("recording_status", "processing");
+  });
+
+  it("traz o CAMINHO do objeto — é o que o player assina para tocar", async () => {
+    rows = [{ id: "c", recording_status: "ready", recording_url: "org-1/c.opus", recording_failure_reason: null }];
+    const res = await fetchConversationCalls({
+      organizationId: "org-1",
+      phoneNumber: "5548996458738",
+      leadId: null,
+    });
+    expect(res[0]).toHaveProperty("recording_url", "org-1/c.opus");
+  });
+
+  it("traz a CAUSA da falha — falha sem causa é parede muda", async () => {
+    rows = [{ id: "c", recording_status: "failed", recording_url: null, recording_failure_reason: "vps_timeout" }];
+    const res = await fetchConversationCalls({
+      organizationId: "org-1",
+      phoneNumber: "5548996458738",
+      leadId: null,
+    });
+    expect(res[0]).toHaveProperty("recording_failure_reason", "vps_timeout");
   });
 });
 
