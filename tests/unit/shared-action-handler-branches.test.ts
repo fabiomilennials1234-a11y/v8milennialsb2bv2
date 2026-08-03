@@ -212,10 +212,16 @@ describe("resolveVariables — template substitution", () => {
     setDenoEnv("EVOLUTION_API_URL", "https://evo");
     setDenoEnv("EVOLUTION_API_KEY", "key");
     okFetch();
-    // Configure getPipeEntry to return meeting date and sale value
-    vi.mocked(getPipeEntry)
-      .mockResolvedValueOnce({ metadata: { meeting_date: "2026-05-15T14:00:00Z" } } as any) // confirmacao
-      .mockResolvedValueOnce({ metadata: { sale_value: 5500.75 } } as any); // propostas
+    // Por slug, não por ordem de chamada: `resolveVariables` passou a ler também
+    // o funil WhatsApp (ADR-0023 §10, `{estagio}` vem do negócio), e a sequência
+    // posicional entregava a data de reunião para a chamada errada.
+    vi.mocked(getPipeEntry).mockImplementation((async (
+      _sb: unknown, _leadId: string, _orgId: string, slug: string,
+    ) => {
+      if (slug === "confirmacao") return { metadata: { meeting_date: "2026-05-15T14:00:00Z" } };
+      if (slug === "propostas") return { metadata: { sale_value: 5500.75 } };
+      return null;
+    }) as any);
     await executeWorkflowAction({
       supabase: setupSupabase(),
       organizationId: "org-1",

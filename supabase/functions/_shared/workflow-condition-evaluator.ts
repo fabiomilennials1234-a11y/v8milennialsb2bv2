@@ -6,6 +6,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getPipeEntry } from "./pipeline-adapter.ts";
 
 export interface ConditionParams {
   field: string;
@@ -22,7 +23,10 @@ interface LeadData {
   segment?: string;
   rating?: number;
   qualification_score?: number;
-  pipe_whatsapp?: string;
+  organization_id?: string;
+  // `pipe_whatsapp` saiu daqui de propósito (ADR-0023 §10): declará-la sinaliza
+  // campo suportado, e o valor congela depois do MOVE. O campo do editor é
+  // `stage`, resolvido pelo negócio logo abaixo.
   origin?: string;
   sdr_id?: string;
   closer_id?: string;
@@ -66,7 +70,20 @@ export async function evaluateCondition(
     // Special: tags field — returns comma-separated tag names
     fieldValue = await getLeadTags(supabase, leadId);
   } else if (field === "stage") {
-    fieldValue = leadData.pipe_whatsapp || "";
+    // ADR-0023 §10: a etapa é a do NEGÓCIO, não a da coluna espelho do lead.
+    //
+    // Este é o pior dos leitores de `leads.pipe_whatsapp`, e por isso o mais
+    // urgente: a partir do L2 o negócio SAI de Oportunidades por UPDATE, e o
+    // gatilho `sync_pipeline_entry_to_lead_pipe_whatsapp` resolve o slug por
+    // `NEW.pipeline_id` — que já é `propostas`. Ele não escreve, e a coluna
+    // CONGELA na última etapa de whatsapp em vez de esvaziar. Uma condição de
+    // automação comparando `stage` passaria a casar SEMPRE contra um estado que
+    // o negócio não ocupa mais. Não é envio faltando: é envio errado, repetido,
+    // sem nada na tela denunciando.
+    const waEntry = await getPipeEntry(
+      supabase, leadId, leadData.organization_id as string, "whatsapp",
+    );
+    fieldValue = waEntry?.stage_key || "";
   } else if (field === "score") {
     fieldValue = leadData.qualification_score ?? 0;
   } else if (field === "any_responsible") {
