@@ -17,6 +17,27 @@
  * `callPhases.test.ts` trava que os dois conjuntos cobrem `CallPhase` inteiro —
  * uma fase nova não pode cair no repouso por omissão e fazer uma chamada viva
  * parecer terminada.
+ *
+ * ── A ligação que ENTRA e ainda não foi atendida NÃO tem fase aqui ──
+ * E a ausência é decidida, não esquecida. `CallPhase` descreve UMA chamada que
+ * ESTE operador possui: `useVoiceCall` guarda um `tcCallIdRef`, um
+ * `RTCPeerConnection` e um microfone, todos no singular. Uma oferta de entrada
+ * não cabe em nenhuma das duas condições — ela não tem dono
+ * (`voip_calls.operator_user_id` nasce nulo, e é justamente por isso que o
+ * índice `idx_voip_calls_one_live_per_operator` a deixa coexistir com outras), e
+ * N delas podem estar tocando ao mesmo tempo.
+ *
+ * Classificá-la aqui obrigaria a escolher entre dois erros: em `FASES_EM_CURSO`,
+ * um estranho ligando para o número da empresa deixaria `busy === true` e
+ * tiraria do vendedor o botão de discar; em `FASES_DE_REPOUSO`, o provider
+ * trataria a oferta viva como terminada e dispararia a atualização da conversa
+ * no meio dela. As ofertas moram em `useIncomingVoiceCalls`, numa LISTA, que é a
+ * forma que corresponde ao fato.
+ *
+ * Quando alguém ATENDER (E4), aí sim a chamada passa a ter dono e entra nesta
+ * máquina — provavelmente pelas fases que já existem, porque atender é pedir
+ * microfone, autorizar e negociar, na mesma ordem. Se uma fase nova for
+ * necessária, é AQUI que o compilador vai cobrá-la.
  */
 import type { CallPhase } from "@/modules/communication/hooks/useVoiceCall";
 

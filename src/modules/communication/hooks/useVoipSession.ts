@@ -70,14 +70,28 @@ type VoiceReach = Record<string, string>;
 
 const SEM_VOZ: VoiceReach = {};
 
-export function useCallableVoiceNumbers(): {
+/**
+ * As quatro condições, com a permissão como PARÂMETRO.
+ *
+ * Só a permissão muda entre ligar e receber, e `_shared/voip/call-plane.ts` diz
+ * exatamente qual em cada direção (linha 325): `voip.call.start` na saída,
+ * `voip.call.answer` na entrada. As outras três — pertencer à instância, a
+ * instância ter voz ligada, existir sessão aberta — são a mesma pergunta nos
+ * dois sentidos, e é por isso que elas moram aqui uma vez só. Um segundo hook
+ * copiando as três para trocar a quarta seria a terceira definição da mesma
+ * regra, e é aí que a divergência nasce.
+ *
+ * As duas consultas compartilham `queryKey` entre os dois consumidores, então
+ * pedir as duas listas na mesma tela NÃO dobra requisição nenhuma: o react-query
+ * entrega a mesma consulta aos dois observadores.
+ */
+function useVoiceNumbersFor(featureKey: string): {
   numbers: CallableVoiceNumber[];
   isLoading: boolean;
 } {
   const { organizationId } = useOrganization();
-  // Mesma chave de feature que `_shared/voip/call-plane.ts` cobra no outbound.
   // `useCanDo` já dá o bypass de admin e master, como `canUserAccessFeature`.
-  const { allowed: podeLigar, isLoading: loadingPermissao } = useCanDo("voip.call.start");
+  const { allowed: podeLigar, isLoading: loadingPermissao } = useCanDo(featureKey);
 
   const { data: reach, isLoading: loadingVoice } = useQuery<VoiceReach>({
     queryKey: ["voip_voice_reach", organizationId],
@@ -150,6 +164,15 @@ export function useCallableVoiceNumbers(): {
   });
 
   const numbers = useMemo<CallableVoiceNumber[]>(() => {
+    // A permissão é conferida AQUI, e não só no `enabled` da consulta.
+    //
+    // Desde que existem dois consumidores desta função com chaves de feature
+    // diferentes, o `enabled: false` de um deles deixou de significar "sem
+    // dado": os dois compartilham `queryKey`, então basta o OUTRO ter permissão
+    // para a consulta rodar e o cache ficar quente — e um `useQuery` desligado
+    // devolve o cache do mesmo jeito. Sem esta linha, quem não pode ligar
+    // passaria a ver os números só porque pode atender.
+    if (!podeLigar) return [];
     if (!reach || !allowedInstances?.length) return [];
     // A ORDEM vem daqui, e é o conserto do `.limit(1)` sem `order by`:
     // `useWhatsAppInstancesForUser` já devolve ordenado por `instance_name`,
@@ -161,7 +184,7 @@ export function useCallableVoiceNumbers(): {
       out.push({ tcSessionId, instanceId: inst.id, instanceName: inst.instance_name });
     }
     return out;
-  }, [allowedInstances, reach]);
+  }, [allowedInstances, reach, podeLigar]);
 
   // `loadingInstances` entra sem condição de propósito. Uma consulta desligada
   // fica `pending`, mas `isLoading` no react-query v5 é `isPending && isFetching`
@@ -170,6 +193,45 @@ export function useCallableVoiceNumbers(): {
   // seria repetir uma condição que a biblioteca já aplica, e condição repetida
   // é condição livre para discordar da original.
   return { numbers, isLoading: loadingPermissao || loadingVoice || loadingInstances };
+}
+
+/** Por quais números este vendedor pode LIGAR. */
+export function useCallableVoiceNumbers() {
+  return useVoiceNumbersFor("voip.call.start");
+}
+
+/**
+ * Por quais números este vendedor deve RECEBER — e o gate inverte de papel.
+ *
+ * Mesma tabela (`whatsapp_instance_allowed_members`), pergunta diferente. Na
+ * saída o ADR-0025 pergunta "este vendedor pode usar este número?"; aqui ele
+ * responde "quem deve ser chamado?" — e é essa inversão que faz o gate funcionar
+ * quando ainda NÃO HÁ OPERADOR, que era a pergunta em aberto do desenho. A
+ * chamada de entrada nasce com `operator_user_id` nulo; não há a quem perguntar
+ * "é seu?".
+ *
+ * Não é o responsável pelo lead: 47% dos contatos não têm cadastro, e o número é
+ * da empresa. E lista vazia continua significando toda a organização, idêntico
+ * ao inbox — uma regra só no produto. (Medido em produção em 2026-08-03: 77 das
+ * 137 instâncias TÊM lista explícita, então o filtro não é decorativo; mas o
+ * único número com voz aberta hoje tem lista vazia, e por isso ele toca para os
+ * 4 membros ativos daquela organização.)
+ *
+ * ─── A diferença que importa em relação a `useCallableVoiceNumbers` ──────────
+ * A permissão. `voip.call.answer`, que é a que `call-plane.ts` cobra quando a
+ * direção é de entrada. Ela nasce `default_value = true` e hoje ninguém tem
+ * override — ou seja, o gate é inerte agora e só passa a valer no dia em que um
+ * admin desligar o toggle, que é o único dia em que o toggle importa.
+ *
+ * ─── E a que NÃO existe ─────────────────────────────────────────────────────
+ * `voice_calls_enabled` continua valendo, e isso é decisão do ADR-0027, não
+ * descuido: voz desligada **silencia o toque**. O que ela NÃO impede é o
+ * REGISTRO da ligação, e o registro não passa por aqui — ele é do webhook
+ * (E2/`fn_voip_apply_vps_event`), que nunca consulta a tela. Quem decide tocar
+ * precisa da lista E da chave; quem decide registrar, de nenhuma das duas.
+ */
+export function useAnswerableVoiceNumbers() {
+  return useVoiceNumbersFor("voip.call.answer");
 }
 
 /**

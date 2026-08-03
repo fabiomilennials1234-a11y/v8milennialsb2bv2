@@ -96,6 +96,8 @@ vi.mock("@/integrations/supabase/client", () => ({
 let currentMember: { id: string; organization_id: string; role: string } | null = null;
 /** `voip.call.start` — a mesma feature que `call-plane.ts` cobra no outbound. */
 let podeLigar = true;
+/** `voip.call.answer` — a que ele cobra quando a direção é de ENTRADA. */
+let podeAtender = true;
 
 vi.mock("@/modules/identity", () => ({
   useCurrentTeamMember: () => ({ data: currentMember }),
@@ -110,13 +112,25 @@ vi.mock("@/modules/identity", () => ({
     role: currentMember?.role ?? null,
   }),
   useCanDo: (acao: string) => ({
-    allowed: acao === "voip.call.start" ? podeLigar : true,
+    // As DUAS chaves são distinguidas de propósito. Um dublê que respondesse a
+    // mesma coisa para as duas deixaria passar o defeito exato desta fatia: o
+    // hook da entrada consultando a permissão da saída, e vice-versa.
+    allowed:
+      acao === "voip.call.start"
+        ? podeLigar
+        : acao === "voip.call.answer"
+          ? podeAtender
+          : true,
     reason: "teste",
     isLoading: false,
   }),
 }));
 
-import { useCallableVoiceNumbers, useCanCallLead } from "./useVoipSession";
+import {
+  useAnswerableVoiceNumbers,
+  useCallableVoiceNumbers,
+  useCanCallLead,
+} from "./useVoipSession";
 
 // JSX exige extensão .tsx neste projeto (o parser oxc do Vite rejeita `<Tag>`
 // em `.ts`); createElement mantém o arquivo alinhado com useVoipSessions.test.ts.
@@ -149,6 +163,7 @@ async function listar() {
 beforeEach(() => {
   currentMember = { id: "tm-1", organization_id: "org-1", role: "membro" };
   podeLigar = true;
+  podeAtender = true;
   consultas = [];
   tables.whatsapp_instances = [];
   tables.whatsapp_instance_allowed_members = [];
@@ -366,6 +381,202 @@ describe("useCallableVoiceNumbers — a ordem é decidida, não sorteada", () =>
     ];
     const result = await listar();
     expect(result.current.numbers.map((n) => n.tcSessionId)).toEqual(["tc-1"]);
+  });
+});
+
+// ─── useAnswerableVoiceNumbers — o gate inverte de papel ─────────────────────
+
+async function listarParaReceber() {
+  const { result } = renderHook(() => useAnswerableVoiceNumbers(), { wrapper });
+  await waitFor(() => expect(result.current.isLoading).toBe(false));
+  return result;
+}
+
+describe("useAnswerableVoiceNumbers — quem DEVE ser chamado", () => {
+  // A mesma tabela do inbox, com a pergunta invertida. Na saída o ADR-0025
+  // pergunta "este vendedor pode usar este número?"; na entrada responde "quem
+  // deve ser chamado?" — e é essa inversão que faz o gate funcionar quando ainda
+  // NÃO HÁ OPERADOR, que era a pergunta em aberto do desenho.
+  it("lista vazia toca para toda a organização — a mesma regra das mensagens", async () => {
+    umNumeroPronto();
+    const result = await listarParaReceber();
+    expect(result.current.numbers).toEqual([
+      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial" },
+    ]);
+  });
+
+  it("quem está NA lista do número recebe", async () => {
+    umNumeroPronto();
+    tables.whatsapp_instance_allowed_members = [
+      { whatsapp_instance_id: "i-1", team_member_id: "tm-1" },
+    ];
+    const result = await listarParaReceber();
+    expect(result.current.numbers.map((n) => n.instanceName)).toEqual(["Comercial"]);
+  });
+
+  it("quem está FORA da lista do número NÃO recebe", async () => {
+    umNumeroPronto();
+    tables.whatsapp_instance_allowed_members = [
+      { whatsapp_instance_id: "i-1", team_member_id: "tm-outro" },
+    ];
+    const result = await listarParaReceber();
+    expect(result.current.numbers).toEqual([]);
+  });
+
+  // Com um número restrito só, a lista permitida fica vazia e qualquer
+  // implementação que devolva cedo passa — inclusive uma que ignore a regra. Com
+  // DOIS, o filtro precisa acontecer de verdade.
+  it("com dois números, só recebe pelo que está ao alcance dele", async () => {
+    tables.whatsapp_instances = [
+      instancia({ id: "i-1", instance_name: "Comercial" }),
+      instancia({ id: "i-2", instance_name: "Do colega" }),
+    ];
+    tables.voip_sessions = [
+      sessao({ tc_session_id: "tc-1", whatsapp_instance_id: "i-1" }),
+      sessao({ tc_session_id: "tc-2", whatsapp_instance_id: "i-2" }),
+    ];
+    tables.whatsapp_instance_allowed_members = [
+      { whatsapp_instance_id: "i-2", team_member_id: "tm-outro" },
+    ];
+    const result = await listarParaReceber();
+    expect(result.current.numbers.map((n) => n.tcSessionId)).toEqual(["tc-1"]);
+  });
+
+  // ADR-0027: voz desligada SILENCIA o toque. O que ela não impede é o REGISTRO
+  // da ligação — e o registro não passa por aqui, é do webhook (E2). Quem decide
+  // tocar precisa da lista E da chave; quem decide registrar, de nenhuma das duas.
+  it("voz desligada no número NÃO toca", async () => {
+    tables.whatsapp_instances = [
+      instancia({ id: "i-1", instance_name: "Comercial", voice_calls_enabled: false }),
+    ];
+    tables.voip_sessions = [sessao({ tc_session_id: "tc-1", whatsapp_instance_id: "i-1" })];
+    const result = await listarParaReceber();
+    expect(result.current.numbers).toEqual([]);
+  });
+
+  it("sem sessão de voz aberta não há por onde receber", async () => {
+    tables.whatsapp_instances = [instancia({ id: "i-1", instance_name: "Comercial" })];
+    const result = await listarParaReceber();
+    expect(result.current.numbers).toEqual([]);
+  });
+
+  it("número de outra organização nunca toca aqui", async () => {
+    tables.whatsapp_instances = [
+      instancia({ id: "i-9", instance_name: "De outra empresa", organization_id: "org-9" }),
+    ];
+    tables.voip_sessions = [
+      sessao({ tc_session_id: "tc-9", whatsapp_instance_id: "i-9", organization_id: "org-9" }),
+    ];
+    const result = await listarParaReceber();
+    expect(result.current.numbers).toEqual([]);
+  });
+});
+
+describe("useAnswerableVoiceNumbers — a permissão da ENTRADA, não a da saída", () => {
+  // `call-plane.ts:325` escolhe a chave pela direção: `voip.call.start` na
+  // saída, `voip.call.answer` na entrada. Tocar para quem o servidor recusaria
+  // no atendimento é oferecer uma recusa — o defeito que este projeto já pagou
+  // caro para fechar do lado do botão de ligar.
+  it("sem `voip.call.answer`, nenhum número recebe", async () => {
+    podeAtender = false;
+    umNumeroPronto();
+    const result = await listarParaReceber();
+    expect(result.current.numbers).toEqual([]);
+  });
+
+  // A prova de que as duas chaves NÃO são a mesma: quem pode atender mas não
+  // pode discar continua recebendo.
+  it("quem pode atender mas NÃO pode ligar continua recebendo", async () => {
+    podeLigar = false;
+    podeAtender = true;
+    umNumeroPronto();
+    const result = await listarParaReceber();
+    expect(result.current.numbers.map((n) => n.instanceName)).toEqual(["Comercial"]);
+  });
+
+  /**
+   * O defeito que os DOIS consumidores criam juntos, e que nenhum dos dois teria
+   * sozinho.
+   *
+   * As duas listas compartilham `queryKey`. Desde que existem dois consumidores,
+   * `enabled: false` deixou de significar "sem dado": basta o OUTRO ter permissão
+   * para a consulta rodar, e um `useQuery` desligado devolve o cache do mesmo
+   * jeito. Sem uma checagem explícita da permissão no cálculo da lista, quem NÃO
+   * pode ligar passaria a ver os números só porque pode atender.
+   *
+   * Os dois hooks montam na MESMA árvore de propósito — é assim que eles vivem
+   * no `VoiceCallProvider`, e é a única montagem em que o defeito aparece.
+   */
+  it("o cache aquecido pela lista de RECEBER não libera a de LIGAR", async () => {
+    podeLigar = false;
+    podeAtender = true;
+    umNumeroPronto();
+
+    const { result } = renderHook(
+      () => ({
+        ligar: useCallableVoiceNumbers(),
+        receber: useAnswerableVoiceNumbers(),
+      }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.receber.numbers).toHaveLength(1));
+    expect(result.current.ligar.numbers).toEqual([]);
+  });
+
+  it("e o contrário também: quem só pode ligar não recebe", async () => {
+    podeLigar = true;
+    podeAtender = false;
+    umNumeroPronto();
+
+    const { result } = renderHook(
+      () => ({
+        ligar: useCallableVoiceNumbers(),
+        receber: useAnswerableVoiceNumbers(),
+      }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.ligar.numbers).toHaveLength(1));
+    expect(result.current.receber.numbers).toEqual([]);
+  });
+});
+
+describe("useAnswerableVoiceNumbers — o custo, num provider que vive fora das rotas", () => {
+  // As duas listas juntas não podem custar mais que uma. Elas compartilham
+  // `queryKey`, então o react-query entrega a MESMA consulta aos dois
+  // observadores — e este provider está em toda página, para todo usuário.
+  it("pedir as duas listas na mesma tela não dobra consulta nenhuma", async () => {
+    umNumeroPronto();
+
+    const { result } = renderHook(
+      () => ({
+        ligar: useCallableVoiceNumbers(),
+        receber: useAnswerableVoiceNumbers(),
+      }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.receber.numbers).toHaveLength(1));
+
+    expect(consultas.filter((c) => c.startsWith("voip_sessions"))).toHaveLength(1);
+    expect(consultas.filter((c) => c === CONSULTA_DA_REGRA)).toHaveLength(1);
+  });
+
+  // Em ~29 das ~30 organizações não existe sessão de voz aberta. Medido em
+  // produção em 2026-08-03: existe UMA em toda a plataforma. Nessas, receber tem
+  // de custar exatamente o que já custava.
+  it("organização sem voz: uma consulta, e só — igual à lista de ligar", async () => {
+    tables.whatsapp_instances = [instancia({ id: "i-1", instance_name: "Comercial" })];
+    const result = await listarParaReceber();
+    expect(result.current.numbers).toEqual([]);
+    expect(consultas).toEqual(["voip_sessions:tc_session_id,whatsapp_instance_id"]);
+  });
+
+  it("sem a permissão de atender, nem chega a consultar sessão de voz", async () => {
+    podeAtender = false;
+    umNumeroPronto();
+    await listarParaReceber();
+    expect(consultas.filter((c) => c.startsWith("voip_sessions"))).toEqual([]);
   });
 });
 
