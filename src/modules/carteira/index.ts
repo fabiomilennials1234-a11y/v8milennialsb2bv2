@@ -146,35 +146,10 @@ export type { GestaoRule, GestaoRuleInsert } from "./hooks/useUpsellGestaoRules"
 
 export { useAutoMoveUpsellClients } from "./hooks/useAutoMoveUpsellClients";
 
-// ────────────────────────────────────────────────────────────────────────
-// Hooks — Deal (legado — dedup pendente decisão CTO em slice 10+)
-// ────────────────────────────────────────────────────────────────────────
-
-export {
-  useDeals,
-  useDealKPIs,
-  useDeal,
-  useCreateDeal,
-  useUpdateDeal,
-  useDeleteDeal,
-  useMarkDealWon,
-  useMarkDealLost,
-} from "./hooks/useDeals";
-export type {
-  Deal,
-  DealItemRow,
-  DealsFilter,
-  DealKPIs,
-  DealInsert,
-} from "./hooks/useDeals";
-
-export {
-  useDealItems,
-  useCreateDealItem,
-  useUpdateDealItem,
-  useDeleteDealItem,
-} from "./hooks/useDealItems";
-export type { DealItemInsert, DealItemUpdate } from "./hooks/useDealItems";
+// Os hooks de Deal (`useDeals`, `useDealItems`) saíram junto com a rota
+// `/negocios` — ADR-0023 decisão 5. Eram o único leitor de `deals.pipeline_id`
+// e de `deals.stage_id`, as duas colunas que a fatia 2 dropa. Nenhum consumidor
+// deste barril importava símbolo Deal quando foram removidos.
 
 // ────────────────────────────────────────────────────────────────────────
 // Hooks — Product (CRUD + variants + materials + ranking)

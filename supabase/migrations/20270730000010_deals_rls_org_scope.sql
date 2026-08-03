@@ -1,10 +1,17 @@
 -- ============================================================================
 -- `deals`: escopo de org multi-org + ramo de master na RLS.
 --
--- Fatia 2 da separação Lead ↔ Negócio vai ACENDER esta tabela (hoje 0 linhas,
--- nenhum `from('deals')` no front, nenhuma edge function escrevendo). Enquanto
--- ela está vazia, consertar a RLS custa zero. Depois do primeiro negócio real,
--- custa incidente.
+-- Fatia 2 da separação Lead ↔ Negócio vai ACENDER esta tabela (hoje **0 linhas**,
+-- nenhuma edge function escrevendo). Enquanto ela está vazia, consertar a RLS
+-- custa zero. Depois do primeiro negócio real, custa incidente.
+--
+-- ⚠️ CORREÇÃO 2026-08-03, antes do apply: a versão anterior deste cabeçalho dizia
+-- "nenhum `from('deals')` no front". **Falso** — existem 10, todos em
+-- `src/modules/carteira/hooks/useDeals.ts`, o hook que serve a rota `/negocios`.
+-- O argumento continua de pé, mas pelo motivo certo: o blast radius é zero porque
+-- a TABELA está vazia, não porque ninguém a consulta. (O passo 3 do L2 apaga
+-- `/negocios` e esse hook junto, e aí a frase antiga vira verdade — mas ela foi
+-- escrita como fato medido quando não era.)
 --
 -- ── O defeito (medido em prod, 2026-07-30) ─────────────────────────────────
 -- As 5 policies da tabela escopam por `get_user_organization_id()`:
@@ -159,8 +166,9 @@
 -- qualquer UI de lixeira de negócio. Escrito aqui porque quem ler esta policy no
 -- futuro vai bater exatamente nesse 42501 e merece a pista.
 --
--- Blast radius de acrescentar a guarda agora: zero — 0 linhas na tabela, zero
--- `.from('deals')` no front, e os três triggers que escrevem em `deals`
+-- Blast radius de acrescentar a guarda agora: zero — **0 linhas na tabela** (a
+-- razão que sustenta o argumento sozinha; os 10 `.from('deals')` de
+-- `useDeals.ts` não alcançam linha nenhuma), e os três triggers que escrevem em `deals`
 -- (`fn_sync_deal_value_from_items`, `fn_deal_won_populate_lead_products`,
 -- `update_updated_at`) são SECURITY DEFINER owned by `postgres`. Custo hoje: uma
 -- linha no `USING` de cada uma das três policies que leem linha existente, mais

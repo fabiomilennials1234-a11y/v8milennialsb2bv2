@@ -21,7 +21,6 @@ export type FeatureKey =
   | "analytics"
   | "tv_dashboard"
   | "products"
-  | "deals"
   // Campaign types (legacy — deprecated, kept for backward compat)
   | "campaigns_manual"
   | "campaigns_semi"
@@ -98,7 +97,6 @@ export const FEATURES: FeatureMeta[] = [
     sidebarPath: "/analytics",
   },
   { key: "products", label: "Produtos", description: "Catálogo de produtos", icon: "Package", category: "modules", sidebarPath: "/produtos" },
-  { key: "deals", label: "Negócios", description: "Gestão de negócios com produtos, probabilidade e forecast", icon: "Briefcase", category: "modules", sidebarPath: "/negocios" },
   { key: "tv_dashboard", label: "TV Dashboard", description: "Dashboard para exibição em TV", icon: "Tv", category: "modules", sidebarPath: "/tv" },
   { key: "copilot", label: "Copilot", description: "Agente de IA conversacional", icon: "Bot", category: "modules", sidebarPath: "/copilot" },
   { key: "automations", label: "Automações", description: "Workflows de automação com triggers, condições e ações", icon: "Workflow", category: "modules", sidebarPath: "/automacoes" },
@@ -190,9 +188,8 @@ export const ROUTE_FEATURE_MAP: Record<string, FeatureKey> = {
   "/performance": "performance",
   "/comissoes": "commissions",
   "/tv": "tv_dashboard",
-  // catálogo / negócios
+  // catálogo
   "/produtos": "products",
-  "/negocios": "deals",
   // carteira
   "/upsell": "carteira",
   "/carteira/:clientId": "carteira",
