@@ -27,11 +27,12 @@ import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkfl
 import { usePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus } from "@/modules/pipelines/hooks/legacy/usePipeConfirmacao";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
+import { moverNegocio, invalidateAfterMove } from "@/modules/pipelines/lib/moverNegocio";
+import { usePipelineId } from "@/modules/pipelines/hooks/model/usePipelineEntries";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/modules/leads";
-import { useCreatePipeProposta } from "@/modules/pipelines/hooks/legacy/usePipePropostas";
 import { useResponsibleMembers } from "@/modules/identity";
 import { LeadModal } from "@/modules/leads";
 import { AddMeetingModal } from "@/modules/pipelines/components/legacy/confirmacao/AddMeetingModal";
@@ -381,7 +382,10 @@ function PipeConfirmacaoInner() {
   }, [pipeData]);
   const updatePipeConfirmacao = useUpdatePipeConfirmacao();
   const { allowed: canMovePipe } = useCanDo("move_pipe_record");
-  const createPipeProposta = useCreatePipeProposta();
+  // O funil de destino do "compareceu". A tela precisa do id porque o move é uma
+  // troca de `pipeline_id` — antes só o hook de criação conhecia esse id, e por
+  // isso a tela não tinha como mover, só como criar card novo.
+  const { data: propostasPipelineId } = usePipelineId("propostas");
   const createPipeConfirmacao = useCreatePipeConfirmacao();
   const deletePipeConfirmacao = useDeletePipeConfirmacao();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("confirmacao");
@@ -706,39 +710,77 @@ function PipeConfirmacaoInner() {
     }
   };
 
-  const handleCompareceuConfirm = async (sdrId: string | null, closerId: string | null) => {
+  /**
+   * ADR-0023 decisão 4: o negócio MOVE para Orçamentos, não é copiado para lá.
+   *
+   * O caminho de 95 organizações. Antes daqui saíam duas escritas — o UPDATE da
+   * origem e um `createPipeProposta` que INSERIA um card novo. A origem ficava
+   * em "compareceu" para sempre, e o mesmo negócio passava a existir em dois
+   * funis.
+   *
+   * A ordem das duas chamadas abaixo NÃO é estilo:
+   *
+   *  1. `updatePipeConfirmacao` é o passo que grava o responsável e leva o card
+   *     à etapa de sucesso. É ELE que dispara `meeting_held` — o gatilho de
+   *     métrica reage à TRANSIÇÃO para "compareceu", não à permanência. Mantido
+   *     exatamente como estava justamente para a contagem não mudar.
+   *  2. `moverNegocio` só troca o funil, com `stageOrigem: null` porque o passo
+   *     1 já aconteceu. Passar a etapa aqui de novo seria um UPDATE inerte.
+   *
+   * Se o passo 2 falhar, o card fica em "compareceu" na Confirmação — que é o
+   * estado de hoje menos o gêmeo. Degrada para trás, e é retentável.
+   *
+   * ⚠️ A assinatura mudou de `(sdrId, closerId)` para `(responsibleId)`, e isso
+   * é conserto: `CompareceuModal.onConfirm` é `(responsibleId: string | null)`,
+   * um argumento só. O `closerId` NUNCA chegava — era `undefined` em toda
+   * chamada, e ia assim para o card novo. O modal pede UM responsável; a
+   * aridade de dois era resto de uma versão anterior.
+   */
+  const handleCompareceuConfirm = async (responsibleId: string | null) => {
     if (!pendingCompareceuItem) return;
 
     setIsProcessingCompareceu(true);
     try {
-      // Find the success stage to get the configured status and target
       const successStage = pipelineStages.find(s => s.is_final_positive);
       const successStageKey = successStage?.stage_key || "compareceu";
       const targetStageKey = successStage?.target_stage_key || "marcar_compromisso"; // fallback
 
-      // Update confirmacao with SDR and Closer
+      if (!propostasPipelineId) {
+        throw new Error("Funil de Orçamentos não encontrado nesta organização");
+      }
+
+      // Passo 1 — responsável + etapa de sucesso. Produz `meeting_held`.
       await updatePipeConfirmacao.mutateAsync({
         id: pendingCompareceuItem.id,
         status: successStageKey as PipeConfirmacaoStatus,
-        sdr_id: sdrId,
-        closer_id: closerId,
+        sdr_id: responsibleId,
         leadId: pendingCompareceuItem.lead_id,
-        assignedTo: sdrId || closerId,
+        assignedTo: responsibleId,
       });
 
-      // Create proposta with selected closer and configured target stage
-      await createPipeProposta.mutateAsync({
-        lead_id: pendingCompareceuItem.lead_id,
-        closer_id: closerId,
-        status: targetStageKey,
+      // Passo 2 — a MESMA linha troca de funil. Nenhum card novo.
+      await moverNegocio({
+        entryId: pendingCompareceuItem.id,
+        targetPipelineId: propostasPipelineId,
+        targetStageKey,
+        stageOrigem: null,
+        assignedTo: responsibleId,
       });
+
+      invalidateAfterMove(queryClient, pendingCompareceuItem.lead_id);
 
       logAction({ leadId: pendingCompareceuItem.lead_id, action: "meeting_attended", description: `Lead compareceu à reunião e movido para Gestão de Propostas` });
-      toast.success("Lead movido para Gestão de Propostas!");
+      if (organizationId) {
+        // Os outros ramos desta tela já emitiam `card_moved` e este não —
+        // agora que ele de fato move, emite igual.
+        track({ event: "card_moved", organizationId, entityType: "pipe_confirmacao", entityId: pendingCompareceuItem.id, metadata: { from_stage: successStageKey, to_stage: targetStageKey, moved_to_pipe: "propostas" } });
+      }
+      toast.success("Negócio movido para Gestão de Propostas!");
       setIsCompareceuModalOpen(false);
       setPendingCompareceuItem(null);
     } catch (error) {
-      toast.error("Erro ao processar comparecimento");
+      const msg = error instanceof Error ? error.message : "Erro ao processar comparecimento";
+      toast.error(msg);
     } finally {
       setIsProcessingCompareceu(false);
     }
