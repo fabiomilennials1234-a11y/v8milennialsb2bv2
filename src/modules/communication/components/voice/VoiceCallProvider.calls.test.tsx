@@ -65,19 +65,32 @@ const maquina = {
   },
 };
 
+const NUMERO = {
+  tcSessionId: "tc-1",
+  instanceId: "i-1",
+  instanceName: "Comercial",
+};
+
 vi.mock("@/modules/communication/hooks/useVoipSession", () => ({
-  useCallableVoiceNumbers: () => ({
-    numbers: [
-      {
-        tcSessionId: "tc-1",
-        label: "Comercial",
-        phone: "4833334444",
-        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
-      },
-    ],
-    isLoading: false,
-  }),
+  useCallableVoiceNumbers: () => ({ numbers: [NUMERO], isLoading: false }),
+  // A lista de RECEBER é outra pergunta com a mesma forma. Ela entra no dublê
+  // porque o provider a consome desde a fatia do toque de entrada; sem ela, o
+  // provider quebra no render e todo teste deste arquivo morre por uma razão que
+  // não tem nada a ver com o que eles afirmam.
+  useAnswerableVoiceNumbers: () => ({ numbers: [NUMERO], isLoading: false }),
   useCanCallLead: () => true,
+}));
+
+/**
+ * As ligações que ENTRAM não participam do fio que este arquivo testa.
+ *
+ * O dublê devolve lista vazia porque o assunto aqui é a atualização da conversa
+ * quando a chamada que SAI termina — e o hook real abriria uma conexão de rede
+ * para responder outra pergunta. O que ele NÃO faz é sumir com a chamada: as
+ * ofertas de entrada têm suíte própria em `useIncomingVoiceCalls.test.ts`.
+ */
+vi.mock("@/modules/communication/hooks/useIncomingVoiceCalls", () => ({
+  useIncomingVoiceCalls: () => ({ calls: [], ringSilenced: false }),
 }));
 
 vi.mock("@/modules/communication/hooks/useVoiceCall", () => ({

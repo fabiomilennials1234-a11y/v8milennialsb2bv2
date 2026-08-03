@@ -30,11 +30,14 @@ import { useVoiceCall } from "@/modules/communication/hooks/useVoiceCall";
 import { invalidateConversationCalls } from "@/modules/communication/hooks/chat/useConversationCalls";
 import { FASES_EM_CURSO } from "@/modules/communication/lib/callPhases";
 import {
+  useAnswerableVoiceNumbers,
   useCallableVoiceNumbers,
   type CallableVoiceNumber,
 } from "@/modules/communication/hooks/useVoipSession";
+import { useIncomingVoiceCalls } from "@/modules/communication/hooks/useIncomingVoiceCalls";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { VoiceCallPanel } from "./VoiceCallPanel";
+import { IncomingCallPanel } from "./IncomingCallPanel";
 
 /**
  * A preferência de número é do vendedor, não da sessão do navegador. Vale mais
@@ -182,6 +185,22 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
     [busy, setPreferido],
   );
 
+  // ── As ligações que ENTRAM ──
+  //
+  // Lista PRÓPRIA, não uma fase de `useVoiceCall`: ver `callPhases.ts`. O
+  // conjunto de números vem de `useAnswerableVoiceNumbers`, que responde "quem
+  // deve ser chamado?" com a mesma lista do inbox e a permissão da entrada
+  // (`voip.call.answer`). Quem não tem número ao alcance não abre stream nenhum,
+  // e as duas leituras compartilham `queryKey` com `useCallableVoiceNumbers`
+  // acima — nenhuma requisição a mais neste provider, que vive fora das rotas.
+  const { numbers: answerable } = useAnswerableVoiceNumbers();
+  const { calls: incoming, ringSilenced } = useIncomingVoiceCalls(answerable, {
+    // Em chamada, o cartão APARECE e o tom CALA. Um toque por cima da conversa é
+    // hostil, e ele não poderia atender a segunda de qualquer jeito; o celular
+    // dele continua tocando, que é quem o ADR-0027 deixa decidir.
+    ringEnabled: !busy,
+  });
+
   const value = useMemo<VoiceCallContextValue>(
     () => ({
       busy,
@@ -196,13 +215,26 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
   return (
     <VoiceCallContext.Provider value={value}>
       {children}
-      <VoiceCallPanel
-        state={state}
-        leadName={leadName}
-        onHangup={() => void hangup()}
-        onToggleMute={toggleMute}
-        onDismiss={dismiss}
-      />
+      {/* A PILHA do canto, e ela é uma só.
+          Antes cada painel carregava o próprio `fixed bottom-6 right-6`, o que
+          bastava enquanto só existia um. Com a chamada que entra podendo
+          aparecer durante uma conversa em curso, dois elementos ancorados no
+          mesmo canto se cobririam — e "duas ligações ao mesmo tempo não podem se
+          atropelar na tela" é requisito, não detalhe. Numa coluna, empilhar é
+          consequência da ordem: as que ENTRAM ficam acima, e a chamada em curso
+          fica embaixo, onde o olho do vendedor já está.
+          `pointer-events-none` no container para que a faixa vazia da coluna não
+          engula cliques da tela atrás; cada painel devolve o seu. */}
+      <div className="pointer-events-none fixed bottom-6 right-6 z-50 flex w-[320px] flex-col items-end gap-3 [&>*]:pointer-events-auto">
+        <IncomingCallPanel calls={incoming} silenced={ringSilenced} />
+        <VoiceCallPanel
+          state={state}
+          leadName={leadName}
+          onHangup={() => void hangup()}
+          onToggleMute={toggleMute}
+          onDismiss={dismiss}
+        />
+      </div>
     </VoiceCallContext.Provider>
   );
 }
