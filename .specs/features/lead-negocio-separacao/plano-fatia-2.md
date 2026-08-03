@@ -46,11 +46,25 @@ O restante confirma ou fecha o que já estava previsto.
 **Nada de banco nesta leva.** Se o schema for primeiro, a entrada por formulário quebra em silêncio e 45.678 pares duplicados ficam a um clique de merge.
 
 1. **Push + PR** dos três commits de L0 (o M4 e o M6 são arquivos, não `apply` — entram sem tocar o banco).
-2. **Copilot repontado** (decisão 10): `decide-action.ts:326` e `build-prompt.ts` param de ler `leads.pipe_whatsapp` e passam a ler a posição do Negócio. A coluna sobrevive como espelho legado.
-3. **Dois nós n8n** deixam de escrever em `custom_pipe_entries` e passam a só criar/atualizar o Lead (decisão 3). Um dos dois está em workflow inativo — patchar mesmo assim, é armadilha armada.
+2. **Copilot repontado** (decisão 10): ✅ **feito**. Seis arquivos do BC deixaram de ler `leads.pipe_whatsapp` e passaram a ler a posição do Negócio via `getPipeEntry(..., "whatsapp")` — `decide-action.ts`, `build-prompt.ts`, `copilot/context-loader.ts` (roteamento **e** `loadLeadData`), `copilot/agent-router.ts`, `copilot/lead-profile-builder.ts`, `process-copilot-followups`. A coluna saiu dos `SELECT` para que ninguém caia nela sem perceber; sobrevive no banco como espelho legado. Achado do caminho: sem negócio, `enqueuePipelineStageUpdate` enfileirava `update_pipeline_stage`, e o executor faz `upsertPipeEntry`, **que INSERE a entry quando não existe** — o agente criava o Negócio, contra a decisão 3. Agora sai sem enfileirar.
+3. **Nós n8n de ingest** deixam de posicionar o Lead em funil (decisão 3). ⚠️ **Corrigido pela medição de 2026-08-03 — a versão anterior deste item estava errada em número e em tabela.** Não são dois nós, e nenhum escreve em `custom_pipe_entries`:
+
+   | Workflow (n8n) | Nó | Estado | O que faz |
+   |---|---|---|---|
+   | `ceVGTTgVH4vnf5u8` Lead Form → CRM | Enviar pro CRM | ativo | `place_in_pipe: {whatsapp, novo}` no `lead-webhook` |
+   | `KdzbN6NBqkWVDdKt` LP VSL A → CRM | Enviar pro CRM | ativo | idem |
+   | `nUPBNVNIz1vxCUzR` LP Nicolodi → CRM | Enviar pro CRM | ativo | idem |
+   | `6QL9uRtbe88k1fII` LP Acelerar → CRM | Enviar pro CRM | **inativo** | idem — armadilha armada, patchar junto |
+   | `bUHokUwk8Brv4xNo` Sweep Reunião → Agendado | Mover → agendado | ativo | `PATCH` direto em `pipeline_entries` a cada 3 min |
+
+   Os quatro primeiros **criam** o Negócio a partir do ingest — remover `place_in_pipe` resolve. O quinto **move** um Negócio de fora do app; ele não viola a decisão 3 (não cria), mas escreve na posição sem passar por nenhuma guarda do produto, e é o candidato natural a virar automação de dentro.
 4. **Aviso operacional** para a Milennials sobre o dia da virada. Sem código.
 
 **Saída de L1:** produção tolerante a N negócios, agente lendo da fonte certa, ingest sem escrever em funil. Nada mudou para o usuário.
+
+⚠️ **Pré-requisito de L2 descoberto junto**: o passo 5 de L2 acende o gatilho que zera `leads.pipe_whatsapp`. Fora do Copilot ainda existem **cinco leitores** dessa coluna, todos no BC de workflows, e todos passam a ler vazio no mesmo instante: `_shared/workflow-executor.ts:1005`, `_shared/workflow-action-handler.ts:72,89`, `_shared/workflow-condition-evaluator.ts:25,69` e `_shared/action-handlers/whatsapp-helpers.ts:324,340`. Os três primeiros preenchem a variável de template `{estagio}` — a mensagem sai com o campo em branco; o evaluator é pior: condição de automação que compara etapa passa a nunca casar. Repontar **antes** do passo 5, não depois.
+
+🔴 **Segurança, achado ao abrir os nós (herdado, nada mexido):** o nó `Mover → agendado` carrega a **service_role key do projeto de produção** em texto plano nos headers, em `apikey` e `Authorization` — chave que ignora RLS no banco inteiro, não só na Milennials. Os quatro nós de ingest carregam a anon key mais um `x-webhook-key` de segredo compartilhado, curto e adivinhável (o valor não vai para este documento de propósito — está nos nós). Rotacionar é decisão do CTO e quebra os fluxos vivos no ato: não fiz.
 
 ---
 
