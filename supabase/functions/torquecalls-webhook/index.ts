@@ -165,6 +165,16 @@ const CODE_TO_STATUS: Record<string, number> = {
   out_of_order: 200,
   session_not_found: 202,
   session_inert: 202,
+  // Aviso de ligação recebida cujo `peer` não cabe em `voip_calls.peer_phone`
+  // (`^[0-9]{8,15}$`) — 20270805000000, Entrada E2.
+  //
+  // 202, e NÃO 409, porque é RECUSA ESPERADA e não incidente: a RPC consumiu o
+  // evento e decidiu deliberadamente não registrar. Mesma forma de
+  // `session_not_found`/`session_inert`. Com 409 a VPS registra
+  // `webhook: CRM RECUSOU` em nível error a cada oferta recusada — e a
+  // população existe (conta LID sem `caller_pn`, oferta de grupo), então isso
+  // seria ruído permanente no lugar onde se procura incidente de verdade.
+  peer_unusable: 202,
   transition_refused: 409,
 };
 
@@ -175,6 +185,12 @@ const CODE_TO_STATUS: Record<string, number> = {
  * funcionando como projetada. Registrá-los dobraria a escrita de banco por
  * evento para não contar nada — e o que interessa deles a RPC já registra
  * sozinha (ressurreição, sessão falhando, chamada desconhecida).
+ *
+ * `peer_unusable` fica de fora PELA MESMA RAZÃO, e a ausência é deliberada: a
+ * RPC já escreve `webhook_entrada_sem_telefone` com o peer, a contagem de
+ * dígitos e a faixa aceita — informação que este lado não tem (o corpo já não
+ * está mais em mãos aqui). Uma linha daqui seria a SEGUNDA por oferta recusada,
+ * e mais pobre. Uma recusa, um registro.
  */
 const CODE_ACTION: Record<string, { action: string; status: "error" | "skipped" }> = {
   out_of_order: { action: "webhook_evento_fora_de_ordem", status: "skipped" },

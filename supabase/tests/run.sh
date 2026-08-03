@@ -161,6 +161,36 @@
 #      executam nenhuma das funções novas (o `rls_invariants` NÃO cobre grant de
 #      função; medido na S2).
 #
+#  25. voip_incoming_creates_call_test.sql — a ligação RECEBIDA vira linha no CRM
+#      (20270805000000, Entrada E2 #1372, ADR-0027). Costura REUSADA: o evento
+#      novo (`incoming`) entra pela MESMA fn_voip_apply_vps_event dos outros
+#      cinco, e é por ela que este arquivo o dispara — um INSERT à mão provaria
+#      só que a tabela aceita a linha.
+#      A asserção que manda é NEGATIVA: `call-status` e `call-ended` sobre
+#      chamada inexistente continuam devolvendo `call_not_found` e continuam sem
+#      criar nada. Criar na entrada não pode abrir caminho para criar na SAÍDA,
+#      onde a criação já tem dono (fn_voip_call_reserve, que cobra cota, checa
+#      consentimento e cunha o token).
+#      Prova também: `direction`/`status` são LITERAIS (o corpo pode dizer
+#      `outbound`/`connected` e a linha diz `inbound`/`ringing`); a linha nasce
+#      SEM DONO; o telefone casa nas DUAS formas (JID `555185960716` × cadastro
+#      `51985960716`) e também contra os 124 leads que produção guarda COM o DDI;
+#      número sem cadastro grava `lead_id` NULO em vez de inventar lead; o
+#      casamento é escopado pela org da SESSÃO e respeita `deleted_at` (com
+#      CONTROLE POSITIVO — asserção negativa de casamento passa verde por dois
+#      motivos, e o mutante do soft-delete sobreviveu até ele existir); `peer`
+#      fora de `^[0-9]{8,15}$` recusa LIMPO (`lives_ok`) em vez de derrubar a
+#      transação no CHECK, com code PRÓPRIO `peer_unusable` e `ok=true` (202) —
+#      recusa esperada NÃO é incidente, e `transition_refused` custaria TRÊS
+#      linhas de erro por oferta (RPC + CODE_ACTION do endpoint + `CRM RECUSOU`
+#      na VPS ao ver 4xx); o LIMITE da guarda vai declarado junto, porque
+#      comprimento não distingue LID de telefone;
+#      oferta RETRANSMITIDA não duplica (quem barra é a chave de rede, NÃO o
+#      jti); voz desligada REGISTRA assim mesmo; nenhum evento posterior
+#      reescreve `peer_phone`; e a projeção do S13 leva a ligação ao histórico do
+#      lead. `has_function_privilege` nome por nome — nem anon, nem
+#      authenticated, nem service_role executam a função nova.
+#
 #  14. assert_org_access_test.sql     — gate de tenancy dos leitores SECURITY
 #      DEFINER (#1209): membro ATIVO passa, membro DESATIVADO é BLOQUEADO (o
 #      furo: lia receita/ranking/comissão da org que o desativou), master e
@@ -223,13 +253,14 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/voip_reserve_instance_access_test.sql" \
     "$SCRIPT_DIR/voip_call_log_projection_test.sql" \
     "$SCRIPT_DIR/voip_recording_ingest_test.sql" \
-    "$SCRIPT_DIR/voip_recording_playback_test.sql"
-    "$SCRIPT_DIR/voip_recording_retention_test.sql"
+    "$SCRIPT_DIR/voip_recording_playback_test.sql" \
+    "$SCRIPT_DIR/voip_recording_retention_test.sql" \
+    "$SCRIPT_DIR/voip_incoming_creates_call_test.sql"
 }
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces
