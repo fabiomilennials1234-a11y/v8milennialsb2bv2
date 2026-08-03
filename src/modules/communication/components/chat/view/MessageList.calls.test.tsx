@@ -259,6 +259,26 @@ describe("MessageList — lead sem ligação nenhuma", () => {
   });
 });
 
+describe("MessageList — conversa só com ligação", () => {
+  it("o vendedor que ligou antes de escrever vê a ligação, não 'nada aqui ainda'", () => {
+    render(
+      <MessageList
+        {...baseProps({
+          messages: [],
+          calls: [call({ duration_seconds: 122 })],
+        })}
+      />,
+    );
+    expect(screen.getByTestId("call-marker")).toBeInTheDocument();
+    expect(screen.getByText("2min 2s")).toBeInTheDocument();
+  });
+
+  it("sem mensagem E sem ligação, a tela de conversa vazia continua", () => {
+    render(<MessageList {...baseProps({ messages: [], calls: [] })} />);
+    expect(screen.queryByTestId("call-marker")).not.toBeInTheDocument();
+  });
+});
+
 describe("MessageList — separador de data", () => {
   it("uma ligação que ABRE o dia não engole o separador da data", () => {
     // A ligação é o primeiro item do dia 03. Se o separador só fosse desenhado

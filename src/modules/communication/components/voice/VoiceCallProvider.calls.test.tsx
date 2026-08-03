@@ -1,21 +1,69 @@
 /**
- * O fio entre "desliguei o telefone" e "a ligação apareceu na conversa".
+ * O fio entre "a chamada acabou" e "a ligação apareceu na conversa".
  *
- * `call_logs` só ganha a linha quando o gatilho do banco projeta a chamada
- * encerrada — depois do navegador já ter visto a fase virar `ended`. Sem este
- * fio, a ligação recém-terminada só apareceria na próxima troca de conversa, e
- * o vendedor que acabou de falar veria a thread sem o seu próprio telefonema.
+ * ── Por que este dublê imita a máquina de estados, e não escolhe fases à mão ──
+ * A primeira versão destes testes empurrava `phase` direto para `"ended"` e
+ * declarava vitória. Só que `ended` é o caminho MENOS comum: ele só é escrito
+ * por `finish()` (`useVoiceCall.ts:293-307`), que é o evento da VPS — quando o
+ * OUTRO lado desliga. Quando o VENDEDOR desliga, `hangup()`
+ * (`useVoiceCall.ts:613-630`) faz `ending` → `setState(INITIAL)`, e
+ * `INITIAL.phase` é `"idle"`: nunca passa por `ended` nem por `failed`.
  *
- * A alternativa seria pendurar um poll no chat. Estes testes existem para que a
- * escolha barata (invalidar uma vez, só para quem ligou) continue funcionando
- * sem alguém precisar reintroduzir o poll.
+ * Ou seja, o teste antigo aprovava um provider que ficava MUDO no caminho mais
+ * percorrido do produto. Por isso o dublê aqui expõe `hangup`/`finish`/`fail`/
+ * `dismiss` que reproduzem as transições reais do hook, e os testes dirigem o
+ * fluxo por eles — nunca escrevendo uma fase arbitrária.
  */
 import { render, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
-import type { VoiceCallState } from "@/modules/communication/hooks/useVoiceCall";
+import type { CallPhase, VoiceCallState } from "@/modules/communication/hooks/useVoiceCall";
 
-let fase: VoiceCallState["phase"] = "idle";
+let fase: CallPhase = "idle";
+/** Avisa o React que a fase mudou — o provider lê `state.phase` no render. */
+let repintar: () => void = () => {};
+
+/**
+ * Réplica das transições de `useVoiceCall`. Cada passo cita a linha da fonte
+ * que ele imita; se a fonte mudar, isto tem que mudar junto.
+ */
+const maquina = {
+  /** `start()` até a mídia de pé (`useVoiceCall.ts:453→584→344`). */
+  discarAteAtender() {
+    for (const f of [
+      "requesting_mic",
+      "authorizing",
+      "negotiating",
+      "ringing",
+      "active",
+    ] as CallPhase[]) {
+      fase = f;
+      repintar();
+    }
+  },
+  /** O VENDEDOR desliga (`useVoiceCall.ts:613-630`): `ending` → INITIAL(`idle`). */
+  hangup() {
+    fase = "ending";
+    repintar();
+    fase = "idle"; // setState(INITIAL)
+    repintar();
+  },
+  /** A VPS avisa que acabou (`useVoiceCall.ts:293-307`): fase `ended`. */
+  finish() {
+    fase = "ended";
+    repintar();
+  },
+  /** Falha de autorização/mídia (`useVoiceCall.ts:276`): fase `failed`. */
+  fail() {
+    fase = "failed";
+    repintar();
+  },
+  /** "Fechar" no cartão (`useVoiceCall.ts:642`): `setState(INITIAL)` → `idle`. */
+  dismiss() {
+    fase = "idle";
+    repintar();
+  },
+};
 
 vi.mock("@/modules/communication/hooks/useVoipSession", () => ({
   useCallableVoiceNumbers: () => ({
@@ -42,10 +90,8 @@ vi.mock("@/modules/communication/hooks/useVoiceCall", () => ({
   }),
 }));
 
-// O painel desenha a chamada — irrelevante para o fio testado aqui.
 vi.mock("./VoiceCallPanel", () => ({ VoiceCallPanel: () => null }));
 
-// `usePersistedState` (preferência de número) monta a chave a partir da org.
 vi.mock("@/modules/identity", () => ({
   useOrganization: () => ({ organizationId: "org-1", teamMemberId: "tm-1" }),
 }));
@@ -68,113 +114,148 @@ afterEach(() => {
 });
 
 function montar() {
-  return render(
+  // Elemento NOVO a cada repintura: `rerender` com a mesma referência faz o
+  // React desistir do trabalho, e nada re-renderizaria.
+  const arvore = () => (
     <QueryClientProvider client={queryClient}>
       <VoiceCallProvider>
         <div />
       </VoiceCallProvider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const utils = render(arvore());
+  repintar = () =>
+    act(() => {
+      utils.rerender(arvore());
+    });
+  return utils;
 }
 
-/** As chaves que foram invalidadas, achatadas. */
+/** Deixa o relógio passar da janela de projeção. */
+function esperarProjecao() {
+  act(() => {
+    vi.advanceTimersByTime(3000);
+  });
+}
+
 function chavesInvalidadas(): string[] {
   return invalidateSpy.mock.calls.map((c) => String(c[0]?.queryKey?.[0]));
 }
 
-describe("VoiceCallProvider — a ligação encerrada chega na conversa", () => {
-  it("invalida as ligações da conversa quando a chamada termina", () => {
-    const { rerender } = montar();
+describe("VoiceCallProvider — o vendedor desliga (caminho mais comum)", () => {
+  it("a ligação chega na conversa mesmo sem passar por `ended`", () => {
+    montar();
 
-    fase = "ended";
-    act(() => {
-      rerender(
-        <QueryClientProvider client={queryClient}>
-          <VoiceCallProvider>
-            <div />
-          </VoiceCallProvider>
-        </QueryClientProvider>,
-      );
-    });
+    maquina.discarAteAtender();
+    maquina.hangup();
+    esperarProjecao();
 
-    // Ainda não: o banco leva um instante para projetar a linha.
+    expect(chavesInvalidadas()).toContain("call_logs_conversation");
+    expect(invalidateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("estar em `ending` ainda NÃO é o fim — a requisição espera a chamada sair do ar", () => {
+    montar();
+    maquina.discarAteAtender();
+
+    // Só até `ending`: o `endCall` ainda está indo ao servidor.
+    fase = "ending";
+    repintar();
+    esperarProjecao();
     expect(invalidateSpy).not.toHaveBeenCalled();
 
-    act(() => {
-      vi.advanceTimersByTime(3000);
-    });
+    // Agora sim, o repouso.
+    fase = "idle";
+    repintar();
+    esperarProjecao();
+    expect(invalidateSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("VoiceCallProvider — os outros finais", () => {
+  it("a VPS encerrando (`ended`) também atualiza a conversa", () => {
+    montar();
+    maquina.discarAteAtender();
+    maquina.finish();
+    esperarProjecao();
 
     expect(chavesInvalidadas()).toContain("call_logs_conversation");
   });
 
-  it("chamada que falhou também vira registro — o vendedor precisa ver a tentativa", () => {
-    const { rerender } = montar();
-
-    fase = "failed";
-    act(() => {
-      rerender(
-        <QueryClientProvider client={queryClient}>
-          <VoiceCallProvider>
-            <div />
-          </VoiceCallProvider>
-        </QueryClientProvider>,
-      );
-    });
-    act(() => {
-      vi.advanceTimersByTime(3000);
-    });
+  it("chamada que falhou vira registro — a tentativa importa", () => {
+    montar();
+    maquina.discarAteAtender();
+    maquina.fail();
+    esperarProjecao();
 
     expect(chavesInvalidadas()).toContain("call_logs_conversation");
   });
 
-  it("chamada em andamento NÃO gera requisição — o custo é por ligação, não por segundo", () => {
-    const { rerender } = montar();
+  it("fechar o cartão antes dos 2,5 s NÃO engole a atualização", () => {
+    montar();
+    maquina.discarAteAtender();
+    maquina.finish();
 
-    for (const f of ["ringing", "connected"] as VoiceCallState["phase"][]) {
-      fase = f;
-      act(() => {
-        rerender(
-          <QueryClientProvider client={queryClient}>
-            <VoiceCallProvider>
-              <div />
-            </VoiceCallProvider>
-          </QueryClientProvider>,
-        );
-      });
-      act(() => {
-        vi.advanceTimersByTime(10_000);
-      });
-    }
+    // O vendedor clica "Fechar" imediatamente: `ended` → `idle`.
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    maquina.dismiss();
+    esperarProjecao();
+
+    // O timer foi agendado no fim da chamada e sobrevive à troca de fase.
+    expect(invalidateSpy).toHaveBeenCalledTimes(1);
+    expect(chavesInvalidadas()).toContain("call_logs_conversation");
+  });
+});
+
+describe("VoiceCallProvider — o custo é por ligação, não por segundo", () => {
+  it("chamada em andamento não gera requisição nenhuma", () => {
+    montar();
+
+    maquina.discarAteAtender();
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
 
     expect(invalidateSpy).not.toHaveBeenCalled();
   });
 
-  it("ficar parado em `ended` não repete a requisição", () => {
-    const { rerender } = montar();
+  it("ficar parado depois do fim não repete a requisição", () => {
+    montar();
+    maquina.discarAteAtender();
+    maquina.hangup();
+    esperarProjecao();
 
-    fase = "ended";
-    const repintar = () =>
-      act(() => {
-        rerender(
-          <QueryClientProvider client={queryClient}>
-            <VoiceCallProvider>
-              <div />
-            </VoiceCallProvider>
-          </QueryClientProvider>,
-        );
-      });
-
-    repintar();
-    act(() => {
-      vi.advanceTimersByTime(3000);
-    });
-    // Repinturas depois do fim não são uma ligação nova.
     repintar();
     repintar();
     act(() => {
-      vi.advanceTimersByTime(10_000);
+      vi.advanceTimersByTime(60_000);
     });
 
     expect(invalidateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("sem nenhuma chamada, repintura nenhuma dispara requisição", () => {
+    montar();
+    repintar();
+    repintar();
+    esperarProjecao();
+
+    expect(invalidateSpy).not.toHaveBeenCalled();
+  });
+
+  it("duas ligações seguidas geram duas atualizações — uma por ligação", () => {
+    montar();
+
+    maquina.discarAteAtender();
+    maquina.hangup();
+    esperarProjecao();
+
+    maquina.discarAteAtender();
+    maquina.hangup();
+    esperarProjecao();
+
+    expect(invalidateSpy).toHaveBeenCalledTimes(2);
   });
 });

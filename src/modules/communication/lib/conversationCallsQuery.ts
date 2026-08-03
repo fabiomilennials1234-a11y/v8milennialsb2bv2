@@ -24,12 +24,13 @@
  * `whatsapp_messages` (84,5%) têm `lead_id` NULO, enquanto `normalized_phone`
  * está 100% populado. Casar só por `lead_id` perderia a maioria das conversas.
  *
- * O telefone casa porque os dois lados usam o mesmo formato — DDD + 9 dígitos,
- * só números. Medido em prod: `voip_calls.peer_phone = '48996458738'` e
- * `whatsapp_messages.normalized_phone = '48996458738'`. A projeção do #1352
- * grava `call_logs.phone_number := voip_calls.peer_phone`, então o formato se
- * mantém. (`leads.phone` NÃO serve de chave: a mesma base guarda
- * `'+55 48 9189-2653'`, `'+554899053409'` e `'554891470458'`.)
+ * O telefone é a chave porque `fn_voip_project_call_log` grava
+ * `call_logs.phone_number := voip_calls.peer_phone`, e o caso comum é canônico:
+ * medido em prod, `peer_phone = '48996458738'` e
+ * `whatsapp_messages.normalized_phone = '48996458738'`. Mas o produtor NÃO
+ * garante esse formato — ver `phoneVariants()` abaixo, que é a resposta a isso.
+ * (`leads.phone` não serve de chave: a mesma base guarda `'+55 48 9189-2653'`,
+ * `'+554899053409'` e `'554891470458'`.)
  *
  * Mesmo assim o `lead_id` entra como SEGUNDA identidade, em OU: a ligação
  * registrada à mão nasce com lead e pode ter `phone_number` nulo — é
@@ -83,6 +84,50 @@ export interface FetchConversationCallsParams {
 /** Só aceita UUID canônico — o valor entra numa expressão `.or()` do PostgREST. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Todos os formatos em que o MESMO telefone pode ter sido gravado em
+ * `call_logs.phone_number`.
+ *
+ * Existe porque o produtor **não garante** forma canônica. `call-plane.ts:260`
+ * escolhe o peer assim:
+ *
+ * ```ts
+ * peer = digitsOnly(lead.normalized_phone)
+ *     || digitsOnly(lead.phone_digits)
+ *     || digitsOnly(lead.phone);
+ * ```
+ *
+ * O primeiro ramo é canônico, mas os dois fallbacks são `digitsOnly` de texto
+ * cru: `'+55 48 9189-2653'` vira `'554891892653'` — com o `55` e sem o nono
+ * dígito. A `CHECK` da coluna só exige "8 a 15 dígitos", e
+ * `fn_voip_project_call_log` copia `peer_phone` **verbatim** para
+ * `call_logs.phone_number`. Ou seja: nada no caminho normaliza.
+ *
+ * Confiar no formato faria a ligação sumir da conversa para todo lead cujo
+ * `leads.normalized_phone` esteja nulo. Em vez de pressupor, comparamos o valor
+ * canônico contra as quatro formas que `digitsOnly` de um telefone brasileiro
+ * pode produzir.
+ */
+export function phoneVariants(canonical: string): string[] {
+  const variantes = new Set<string>();
+  const add = (v: string) => {
+    if (v.length >= 8 && v.length <= 15) variantes.add(v);
+  };
+
+  add(canonical);
+  add(`55${canonical}`);
+
+  // Sem o nono dígito: o `9` que `normalizePhone` insere em número de 10
+  // dígitos, e que o texto cru muitas vezes não tem.
+  if (canonical.length === 11 && canonical[2] === "9") {
+    const semNono = canonical.slice(0, 2) + canonical.slice(3);
+    add(semNono);
+    add(`55${semNono}`);
+  }
+
+  return [...variantes];
+}
+
 export async function fetchConversationCalls({
   organizationId,
   phoneNumber,
@@ -94,7 +139,9 @@ export async function fetchConversationCalls({
   // validado como UUID — nenhum dos dois pode injetar vírgula ou parêntese e
   // reescrever o filtro do PostgREST.
   const identities: string[] = [];
-  if (normalized) identities.push(`phone_number.eq.${normalized}`);
+  if (normalized) {
+    for (const v of phoneVariants(normalized)) identities.push(`phone_number.eq.${v}`);
+  }
   if (leadId && UUID_RE.test(leadId)) identities.push(`lead_id.eq.${leadId}`);
 
   if (identities.length === 0) return [];

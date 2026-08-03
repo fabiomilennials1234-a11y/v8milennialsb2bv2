@@ -17,6 +17,7 @@ import { ChatBubbleComposer } from "./ChatBubbleComposer";
 import { ChatBubblePermissionBanner } from "./ChatBubblePermissionBanner";
 import { normalizePhone } from "@/lib/normalizePhone";
 import { useLeadByPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
+import { resolveEffectiveLead } from "@/modules/communication/lib/resolveEffectiveLead";
 import { ChatComposerShell } from "@/modules/communication/components/chat/composer/ChatComposerShell";
 import { InstanceOwnerModal } from "@/modules/communication/components/chat/admin/InstanceOwnerModal";
 import { useLeadWriteInstance } from "@/modules/leads";
@@ -45,7 +46,14 @@ export function ChatBubbleThread({
   const leadId = lead?.id ?? null;
   const { state: writeInstanceState } = useLeadWriteInstance(leadId);
   // Mesma linha do tempo da tela cheia — a bolha não conta outra história.
-  const { data: calls = [] } = useConversationCalls(phoneNumber, leadId);
+  //
+  // O lead passa pelo MESMO resolvedor que o `ChatShellWithContext` usa. Antes
+  // cada tela resolvia do seu jeito, e as duas produziam `queryKey` diferente
+  // para a mesma conversa: duas entradas de cache e duas requisições para a
+  // mesma resposta. A bolha não tem `ChatContact`, então entra com `null` — o
+  // resolvedor cai no lead por telefone, que é exatamente o que ela tem.
+  const { leadId: effectiveLeadId } = resolveEffectiveLead(null, lead);
+  const { data: calls = [] } = useConversationCalls(phoneNumber, effectiveLeadId);
   const [isLinkInstanceOpen, setIsLinkInstanceOpen] = useState(false);
 
   const [imagePreview, setImagePreview] = useState<string | null>(null);

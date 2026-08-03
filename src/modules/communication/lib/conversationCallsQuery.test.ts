@@ -84,6 +84,7 @@ import {
   CONVERSATION_CALL_COLUMNS,
   formatCallDuration,
   isCallConnected,
+  phoneVariants,
 } from "./conversationCallsQuery";
 
 beforeEach(() => {
@@ -111,10 +112,7 @@ describe("fetchConversationCalls — identidade da conversa", () => {
     expect(recorded.order).toContainEqual(["started_at", { ascending: true }]);
   });
 
-  it("casa o telefone pelo MESMO formato normalizado que a mensagem usa", async () => {
-    // Medido em prod: voip_calls.peer_phone = '48996458738' e
-    // whatsapp_messages.normalized_phone = '48996458738' — formato idêntico.
-    // A projeção do #1352 grava call_logs.phone_number := peer_phone.
+  it("qualquer formato de entrada produz o MESMO filtro", async () => {
     const formats = ["5548996458738", "48996458738", "+55 (48) 99645-8738"];
     const seen: string[] = [];
 
@@ -129,12 +127,34 @@ describe("fetchConversationCalls — identidade da conversa", () => {
     }
 
     expect(new Set(seen).size).toBe(1);
-    expect(seen[0]).toBe("phone_number.eq.48996458738");
+  });
+
+  it("NÃO pressupõe que o produtor gravou o telefone canônico", async () => {
+    // `call-plane.ts:260` escolhe o peer com
+    //   digitsOnly(normalized_phone) || digitsOnly(phone_digits) || digitsOnly(phone)
+    // e os dois fallbacks são texto cru: '+55 48 9189-2653' vira '554891892653'.
+    // A CHECK da coluna só exige 8–15 dígitos e `fn_voip_project_call_log` copia
+    // `peer_phone` verbatim. Um `.eq` no formato canônico perderia essas linhas.
+    await fetchConversationCalls({
+      organizationId: "org-1",
+      phoneNumber: "5548991892653",
+      leadId: null,
+    });
+
+    const filtro = recorded.or[0];
+    for (const forma of [
+      "48991892653", // canônico
+      "5548991892653", // com o 55
+      "4891892653", // sem o nono dígito
+      "554891892653", // com 55 e sem o nono dígito — o caso do '+55 48 9189-2653'
+    ]) {
+      expect(filtro).toContain(`phone_number.eq.${forma}`);
+    }
   });
 
   it("quando há lead, aceita as DUAS identidades (telefone OU lead)", async () => {
     // A ligação registrada à mão nasce com lead_id e phone_number NULO
-    // (medido: a única linha de call_logs em prod é assim).
+    // (medido: a única linha de call_logs pré-#1352 em prod é assim).
     await fetchConversationCalls({
       organizationId: "org-1",
       phoneNumber: "5548996458738",
@@ -142,9 +162,8 @@ describe("fetchConversationCalls — identidade da conversa", () => {
     });
 
     expect(recorded.or).toHaveLength(1);
-    expect(recorded.or[0]).toBe(
-      "phone_number.eq.48996458738,lead_id.eq.11111111-2222-4333-8444-555555555555",
-    );
+    expect(recorded.or[0]).toContain("phone_number.eq.48996458738");
+    expect(recorded.or[0]).toContain("lead_id.eq.11111111-2222-4333-8444-555555555555");
   });
 
   it("sem telefone e sem lead não consulta nada", async () => {
@@ -163,7 +182,8 @@ describe("fetchConversationCalls — identidade da conversa", () => {
       phoneNumber: "5548996458738",
       leadId: "x,organization_id.neq.org-1",
     });
-    expect(recorded.or[0]).toBe("phone_number.eq.48996458738");
+    expect(recorded.or[0]).not.toContain("lead_id");
+    expect(recorded.or[0]).not.toContain("organization_id.neq");
   });
 
   it("propaga erro do supabase", async () => {
@@ -238,6 +258,31 @@ describe("formatCallDuration", () => {
   it("duração ausente ou zero não vira texto", () => {
     expect(formatCallDuration(null)).toBeNull();
     expect(formatCallDuration(0)).toBeNull();
+  });
+});
+
+describe("phoneVariants — as formas em que o produtor pode ter gravado", () => {
+  it("cobre canônico, com 55, sem o nono dígito, e com 55 sem o nono", () => {
+    expect(phoneVariants("48991892653").sort()).toEqual(
+      ["4891892653", "48991892653", "554891892653", "5548991892653"].sort(),
+    );
+  });
+
+  it("não inventa variante sem nono dígito quando não há nono dígito", () => {
+    // Fixo de 10 dígitos que `normalizePhone` não transformou em 11.
+    expect(phoneVariants("4833334444")).toEqual(["4833334444", "554833334444"]);
+  });
+
+  it("descarta forma fora do CHECK de 8 a 15 dígitos", () => {
+    for (const v of phoneVariants("48991892653")) {
+      expect(v.length).toBeGreaterThanOrEqual(8);
+      expect(v.length).toBeLessThanOrEqual(15);
+    }
+  });
+
+  it("não repete variante", () => {
+    const v = phoneVariants("48991892653");
+    expect(new Set(v).size).toBe(v.length);
   });
 });
 

@@ -41,11 +41,10 @@ export interface CallMarkerProps {
 }
 
 /**
- * Desfecho sem rótulo conhecido ainda degrada com dignidade. `OUTCOME_LABELS`
- * hoje cobre 6 dos 9 valores que o CHECK de `call_logs` aceita — os outros 3
- * (`rejected`, `failed`, `canceled`) ganham rótulo quando o #1352 entrar. Até
- * lá, e para qualquer valor que o banco venha a inventar, esta frase é
- * verdadeira sem fingir precisão.
+ * Rede para desfecho sem rótulo. `OUTCOME_LABELS` cobre hoje os 9 valores do
+ * CHECK de `call_logs`, então esta frase não aparece em nenhum caminho conhecido
+ * — ela existe para o dia em que o banco ganhar um décimo. É o que separa uma
+ * thread que degrada de uma que escreve `undefined` na cara do vendedor.
  */
 const DESFECHO_DESCONHECIDO = "Não completada";
 

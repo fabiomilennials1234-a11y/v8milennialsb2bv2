@@ -21,12 +21,14 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useVoiceCall } from "@/modules/communication/hooks/useVoiceCall";
 import { invalidateConversationCalls } from "@/modules/communication/hooks/chat/useConversationCalls";
+import { FASES_EM_CURSO } from "@/modules/communication/lib/callPhases";
 import {
   useCallableVoiceNumbers,
   type CallableVoiceNumber,
@@ -51,6 +53,7 @@ const PREFERENCIA_TTL_MS = 90 * 24 * 60 * 60 * 1000;
  * apareceria na próxima troca de conversa.
  */
 const PROJECAO_DA_LIGACAO_MS = 2500;
+
 
 interface VoiceCallContextValue {
   /** true enquanto houver qualquer chamada em andamento. */
@@ -110,26 +113,54 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
   const busy = state.phase !== "idle" && state.phase !== "failed" && state.phase !== "ended";
 
   // ── A ligação que acabou precisa aparecer na conversa ──
-  // `call_logs` só ganha a linha quando o gatilho do banco projeta a chamada
-  // encerrada, e isso acontece DEPOIS que o navegador já viu a fase virar
-  // `ended`. Invalidar na hora buscaria cedo demais e voltaria vazio — por isso
-  // a espera curta, que cobre o webhook + trigger.
+  //
+  // O gatilho é "a chamada SAIU do ar", não "a fase virou `ended`". A diferença
+  // é o caminho mais comum do produto: quando o VENDEDOR desliga, `hangup()`
+  // faz `ending` → `setState(INITIAL)`, que é `idle`
+  // (`useVoiceCall.ts:613-630`). Ele nunca passa por `ended` — `ended` só é
+  // escrito por `finish()` (`useVoiceCall.ts:293-307`), que é o evento da VPS,
+  // ou seja, quando o OUTRO lado desliga. Um efeito que olhasse só `ended`
+  // ficaria mudo justamente na ligação que o vendedor acabou de fazer.
+  //
+  // Por isso a marca de "havia chamada" vive num ref: qualquer fase em curso a
+  // levanta, e a primeira fase de repouso (`idle`, `ended`, `failed`) dispara a
+  // atualização e a abaixa. `ending` NÃO conta como fim — nela o `endCall` ainda
+  // está indo ao servidor e a linha de `call_logs` ainda não é final.
   //
   // Custo: UMA requisição, e só para quem acabou de falar ao telefone. É a
   // alternativa a pendurar um poll no chat, que cobraria de todo mundo o tempo
   // inteiro por um evento que quase nunca acontece.
-  // O efeito é chaveado na FASE: só reexecuta quando ela muda, então chegar em
-  // `ended` dispara uma vez e repintura nenhuma repete. Não há guarda de
-  // transição além disso porque não haveria como provar que ela faz algo.
   const queryClient = useQueryClient();
-  useEffect(() => {
-    if (state.phase !== "ended" && state.phase !== "failed") return;
+  const houveChamada = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const timer = setTimeout(() => {
+  useEffect(() => {
+    if (FASES_EM_CURSO.has(state.phase)) {
+      houveChamada.current = true;
+      return;
+    }
+    if (!houveChamada.current) return;
+    houveChamada.current = false;
+
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
       void invalidateConversationCalls(queryClient);
     }, PROJECAO_DA_LIGACAO_MS);
-    return () => clearTimeout(timer);
+
+    // SEM cleanup que cancele o timer. Sair da fase não pode desmarcar a
+    // atualização: `dismiss()` (`useVoiceCall.ts:642`) leva `ended` → `idle` no
+    // instante em que o vendedor clica "Fechar" no cartão
+    // (`VoiceCallPanel.tsx:83,105`), e um `clearTimeout` no cleanup engoliria a
+    // requisição no caminho mais provável de todos. Só o desmonte cancela.
   }, [state.phase, queryClient]);
+
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    },
+    [],
+  );
 
   const startCall = useCallback(
     (lead: { id: string; name?: string | null }) => {
