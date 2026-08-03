@@ -40,9 +40,29 @@
 --
 -- Este bloco varre o catálogo. Rode-o ANTES do bloco 1: se ele devolver par que
 -- o bloco 1 não cobre, o inventário fixo está desatualizado de novo.
+--
+-- ⚠️ CORREÇÃO 2026-08-03 — este bloco tinha um ponto cego, e ele não era teórico.
+-- A varredura exigia `organization_id` na PRÓPRIA tabela. **Oito tabelas
+-- referenciam `team_members` sem ter essa coluna** — a org delas vem do pai:
+--   campanha_allowed_viewers · campanha_leads · campanha_members ·
+--   competition_participants · meeting_participants ·
+--   pipe_distribution_members · user_badges · whatsapp_instance_allowed_members
+-- Nenhuma aparecia aqui, então o "TOTAL de valores cross-org na base" era falso.
+-- Medido em prod depois de fechar o furo: `campanha_leads` tem **503 linhas em 4
+-- colunas** (Zaplub, o mesmo import de 2026-03-26) e `campanha_members` tem 1.
+-- As outras seis estão em zero. Isso levou o inventário de 9 pares para 14.
+-- O cabeçalho deste arquivo já citava as 503 da Zaplub como fato, mas nenhum
+-- bloco daqui era capaz de encontrá-las — número herdado de leitura anterior,
+-- não reproduzível pelo próprio script. Agora é.
+--
+-- A parte 2 descobre o caminho até a org pelo CATÁLOGO (qual FK desta tabela
+-- aponta para um pai que tem `organization_id`), em vez de supor que a coluna se
+-- chama `<pai>_id`. Tabela sem nenhum pai com org simplesmente não é varrida —
+-- e aí não há como decidir o que é cross-org.
 DO $$
 DECLARE r record; v_n bigint; v_total bigint := 0;
 BEGIN
+  -- parte 1: org na própria linha
   FOR r IN
     SELECT c.conrelid::regclass::text AS tabela, a.attname::text AS coluna
       FROM pg_constraint c
@@ -64,7 +84,41 @@ BEGIN
       RAISE NOTICE 'CROSS-ORG: %.% → % linha(s)', r.tabela, r.coluna, v_n;
     END IF;
   END LOOP;
-  RAISE NOTICE 'TOTAL de valores cross-org na base: %', v_total;
+
+  -- parte 2: org herdada do pai
+  FOR r IN
+    SELECT filho.conrelid::regclass::text AS tabela,
+           af.attname::text                AS coluna,
+           ap.attname::text                AS via_coluna,
+           pai.confrelid::regclass::text   AS pai_tabela
+      FROM pg_constraint filho
+      JOIN unnest(filho.conkey) kf(attnum) ON true
+      JOIN pg_attribute af ON af.attrelid = filho.conrelid AND af.attnum = kf.attnum
+      JOIN pg_constraint pai ON pai.conrelid = filho.conrelid AND pai.contype = 'f'
+                            AND pai.confrelid <> 'public.team_members'::regclass
+      JOIN unnest(pai.conkey) kp(attnum) ON true
+      JOIN pg_attribute ap ON ap.attrelid = pai.conrelid AND ap.attnum = kp.attnum
+     WHERE filho.contype = 'f'
+       AND filho.confrelid = 'public.team_members'::regclass
+       AND NOT EXISTS (SELECT 1 FROM pg_attribute o WHERE o.attrelid = filho.conrelid
+                        AND o.attname = 'organization_id' AND NOT o.attisdropped)
+       AND EXISTS (SELECT 1 FROM pg_attribute o WHERE o.attrelid = pai.confrelid
+                    AND o.attname = 'organization_id' AND NOT o.attisdropped)
+     ORDER BY 1, 2
+  LOOP
+    EXECUTE format(
+      'SELECT count(*) FROM %s x JOIN %s p ON p.id = x.%I
+         JOIN public.team_members m ON m.id = x.%I
+        WHERE m.organization_id <> p.organization_id',
+      r.tabela, r.pai_tabela, r.via_coluna, r.coluna) INTO v_n;
+    IF v_n > 0 THEN
+      v_total := v_total + v_n;
+      RAISE NOTICE 'CROSS-ORG (org via %.%): %.% → % linha(s)',
+        r.pai_tabela, r.via_coluna, r.tabela, r.coluna, v_n;
+    END IF;
+  END LOOP;
+
+  RAISE NOTICE 'TOTAL de valores cross-org na base (org local + org herdada): %', v_total;
 END$$;
 
 
@@ -110,11 +164,22 @@ SELECT t AS tabela, c AS coluna,
  ORDER BY 7 DESC;
 
 
--- ── 2. LIMPEZA — NÃO rodar em prod sem ordem do CTO ────────────────────────
+-- ── 2. LIMPEZA — MUDOU DE ARQUIVO ──────────────────────────────────────────
+--
+-- A limpeza vive agora em `scripts/m6-limpeza-cross-org.sql`, executável, com
+-- backup, guarda de ordem (recusa rodar com a trava do M6 já acesa) e verificação
+-- que desfaz a transação se sobrar sujeira.
+--
+-- O rascunho que ficava aqui terminava em `...`, não rodava, e cobria 5 das 9
+-- colunas — faltavam `responsible_user_id` e as três de `custom_pipe_entries`.
+-- O texto abaixo fica como registro da DECISÃO (zerar, não reapontar), que é a
+-- parte que não é código.
+--
+-- ── por que ZERAR e não REAPONTAR ──────────────────────────────────────────
 --
 -- Duas opções, e a diferença não é técnica:
 --
--- (a) ZERAR (abaixo). O responsável some. É o que o operador **já vê hoje**: a
+-- (a) ZERAR. O responsável some. É o que o operador **já vê hoje**: a
 --     RLS de `team_members` é org-scoped, então o join volta vazio e a tela mostra
 --     branco. Zerar torna verdadeiro o que a interface já afirma.
 --     Preço: métrica por vendedor não muda pelo caminho normal, mas **muda em
@@ -129,28 +194,18 @@ SELECT t AS tabela, c AS coluna,
 --     conhecido. Maria Bonita tem 6 membros ativos e Zaplub tem 1; escolher um
 --     é chute.
 --
--- Recomendação: (a). É reversível por export prévio e não fabrica história.
--- A decisão é do CTO; este arquivo não escolhe sozinho.
+-- Recomendação: (a). É reversível pelo backup que a limpeza tira antes de
+-- escrever, e não fabrica história. A decisão é do CTO; este arquivo não escolhe
+-- sozinho.
 --
--- Exportar ANTES (o zeramento é irreversível sem isto):
---   COPY (SELECT id, organization_id, responsible_id, sdr_id, closer_id,
---                pre_sale_responsible_id, sale_responsible_id
---           FROM public.leads WHERE ...) TO STDOUT WITH CSV HEADER;
---
--- Descomentar para executar. Roda com a trava do M6 AINDA DESLIGADA.
---
--- UPDATE public.leads l SET
---   responsible_id          = CASE WHEN m1.organization_id <> l.organization_id THEN NULL ELSE l.responsible_id END,
---   sdr_id                  = CASE WHEN m2.organization_id <> l.organization_id THEN NULL ELSE l.sdr_id END,
---   closer_id               = CASE WHEN m3.organization_id <> l.organization_id THEN NULL ELSE l.closer_id END,
---   pre_sale_responsible_id = CASE WHEN m4.organization_id <> l.organization_id THEN NULL ELSE l.pre_sale_responsible_id END,
---   sale_responsible_id     = CASE WHEN m5.organization_id <> l.organization_id THEN NULL ELSE l.sale_responsible_id END
--- FROM (SELECT 1) _
--- LEFT JOIN public.team_members m1 ON m1.id = l.responsible_id
--- ...
+-- O backup deixou de ser um `COPY ... TO STDOUT` na mão: a limpeza grava
+-- `public.backup_cross_org_responsaveis` (formato longo: tabela, coluna, row_id,
+-- valor_antigo) dentro da própria transação, então restaurar é SQL e não depende
+-- de alguém ter guardado um CSV.
 --
 -- ⚠️ Escrever em `leads` acorda `enqueue_lead_webhooks` (sem comparar OLD/NEW:
 -- todo UPDATE vira entrega) e `fn_track_lead_field_changes` (grava em
 -- `field_changes` + `lead_history` — aqui isso é DESEJÁVEL: a limpeza fica
--- auditada). Hoje `webhooks` tem 0 linhas ativas, então a primeira ponta é
--- inerte por configuração, não por desenho. Conferir antes de rodar.
+-- auditada). Medido 2026-08-03: `webhooks` tem **0 linhas ativas**, então a
+-- primeira ponta é inerte por configuração, não por desenho. A limpeza confere
+-- isso em runtime e avisa se alguém tiver ligado um webhook nesse meio-tempo.

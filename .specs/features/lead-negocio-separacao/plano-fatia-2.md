@@ -72,8 +72,14 @@ O restante confirma ou fecha o que já estava previsto.
 
 Ordem interna obrigatória, cada passo depende do anterior.
 
-1. **Limpar os 1.594 responsáveis cross-org** (zerar, com exportação antes). Duas orgs: Maria Bonita 1.091, Zaplub 503. **Antes** de acender a trava — com ela no ar, os 1.091 cards ficam imóveis.
+1. **Limpar os responsáveis cross-org** (zerar, com backup antes). **Antes** de acender a trava — com ela no ar, os 1.091 cards ficam imóveis. Script executável: `scripts/m6-limpeza-cross-org.sql` (backup em tabela + guarda que recusa rodar com a trava já acesa + verificação que desfaz a transação se sobrar sujeira). O rascunho que vivia no fim do `m6-inventario.sql` terminava em `...`, não rodava, e cobria 5 das 9 colunas.
+
+   ⚠️ **O inventário cresceu de 9 para 14 pares** (medido em prod 2026-08-03). A varredura "genérica" do catálogo exigia `organization_id` na própria tabela, e **oito tabelas referenciam `team_members` sem ter essa coluna** — a org vem do pai. Duas delas estão sujas e eram invisíveis: `campanha_leads` (**503 linhas × 4 colunas**, 79% da tabela) e `campanha_members` (1). Ambas as varreduras agora rodam no inventário e na verificação da limpeza.
+
+   Predicados conferidos contra prod, um a um, e batem exato: leads 1.594 · pipeline_entries 1.091 · custom_pipe_entries 1.091 · campanha_leads 503 · campanha_members 1. `webhooks` ativos = 0, então a limpeza não dispara entrega.
 2. **Acender o M6** (`20270731000010`, já escrita e provada).
+
+   ⚠️ **Dependência de ordem descoberta agora:** o M6 cria `CREATE TRIGGER ... UPDATE OF ... claimed_by` em `leads`, e **`leads.claimed_by` não existe em prod** — quem a cria é `20270730000020_leads_claim.sql`, que também ainda não foi aplicada. Aplicar o M6 sozinho falha. Por timestamp a ordem já sai certa num `db push` sequencial, mas isso é coincidência de numeração, não garantia: aplicar migration avulsa aqui quebra.
 3. **Apagar `/negocios`** — 8 arquivos, ~1.485 linhas, mais 3 edições que saem juntas (rota em `App.tsx`, `feature-registry:101` e `:195`; remover só uma quebra).
 4. **`DROP COLUMN deals.pipeline_id, deals.stage_id`** (M3b). Só depois do passo 3 — são os únicos leitores no repo.
 5. **Migration nova: mover em vez de duplicar.** O `compareceu` passa a `UPDATE pipeline_entries SET pipeline_id, stage_key` em vez de inserir em Orçamentos. Cuidado nomeado: o `DELETE` de `pipeline_entries` dispara o gatilho que zera `leads.pipe_whatsapp` — com o `UPDATE` esse caminho não é usado, e é mais um motivo para mover a linha em vez de recriá-la.
