@@ -46,9 +46,20 @@ BEGIN
     FROM public.feature_catalog
    WHERE key IN ('custom_reports', 'gamification', 'multi_pipeline', 'whatsapp_integration');
 
+  -- Banco novo (db reset local, CI, projeto recém-criado) não tem essas chaves: elas vêm
+  -- de dado semeado em produção. Nada a remover é sucesso, não erro — uma guarda que
+  -- aborta em banco limpo quebraria `supabase db reset` e o CI.
+  IF v_keys = 0 THEN
+    RAISE NOTICE 'feature_catalog: nenhuma das 4 chaves presente — nada a remover';
+    RETURN;
+  END IF;
+
+  -- Se as chaves existem, o estado tem que ser exatamente o medido. Divergência significa
+  -- que alguém concedeu ou removeu essas features no intervalo, e a decisão de apagar
+  -- configuração de cliente precisa ser reavaliada antes de destruir dado.
   IF v_keys <> 4 THEN
     RAISE EXCEPTION
-      'feature_catalog: esperava 4 chaves a remover, encontrou %. Estado divergente do medido — abortando.', v_keys;
+      'feature_catalog: esperava 4 chaves a remover ou nenhuma, encontrou %. Estado divergente do medido — abortando.', v_keys;
   END IF;
 
   IF v_overrides <> 14 THEN
