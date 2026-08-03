@@ -23,7 +23,10 @@
  * `recording_status` NULO significa "não houve gravação". Uma busca que falha
  * NÃO pode deixar o registro assim: o gestor ficaria esperando por um arquivo
  * que nunca vem, sem saber que não vem. Todo caminho de erro aqui termina em
- * `fn_voip_recording_failed` com a causa.
+ * `fn_voip_recording_fetch_failed` com a causa — que, além de declarar a falha,
+ * coloca a busca de volta na fila (S4, #1360). A irmã dela,
+ * `fn_voip_recording_failed`, é para quando a VPS avisa que arquivo não haverá:
+ * aquela NÃO reenfileira, porque não há o que buscar.
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -298,7 +301,21 @@ export async function runRecordingIngest(
     // FALHA SE DECLARA. Sem esta escrita o registro ficaria em `processing`
     // para sempre — e "processando há três dias" é a ausência disfarçada que
     // esta fatia existe para acabar.
-    const { error } = await db.rpc("fn_voip_recording_failed", {
+    //
+    // `fn_voip_recording_fetch_failed`, e NÃO `fn_voip_recording_failed` (S4,
+    // #1360). As duas falhas não são a mesma coisa, e a distinção é o que
+    // impede o laço:
+    //
+    //   fn_voip_recording_failed ......... a VPS avisou que arquivo não haverá.
+    //       Buscar de novo é bater numa porta que o dono disse que não abre.
+    //   fn_voip_recording_fetch_failed ... o arquivo existe (ou existia) e a
+    //       BUSCA falhou. Esta volta para a fila, com teto de 4 tentativas.
+    //
+    // Chamar a primeira aqui — como esta função fazia antes da S4 — deixava a
+    // linha `failed` sem ninguém para tentar de novo: cada oscilação de rede
+    // virava perda definitiva, e o áudio órfão ficava no disco da VPS para
+    // sempre, porque o `sweepPartials` de lá só limpa `.part`.
+    const { error } = await db.rpc("fn_voip_recording_fetch_failed", {
       p_call_id: args.callId,
       p_reason: outcome.reason,
     });

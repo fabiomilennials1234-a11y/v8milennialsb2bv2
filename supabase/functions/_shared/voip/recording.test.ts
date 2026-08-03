@@ -17,8 +17,11 @@
  *
  *   1. O objeto vai para o caminho DERIVADO da organização e da chamada, e é
  *      esse mesmo caminho que `fn_voip_recording_stored` recebe.
- *   2. Toda falha da busca vira `fn_voip_recording_failed` COM A CAUSA — nunca
- *      ausência, que é o que o gestor lê como "não houve gravação".
+ *   2. Toda falha da busca vira `fn_voip_recording_fetch_failed` COM A CAUSA —
+ *      nunca ausência, que é o que o gestor lê como "não houve gravação". A
+ *      função é a da BUSCA, e não `fn_voip_recording_failed` (que é a VPS
+ *      avisando que arquivo não haverá): só a primeira reenfileira, e é essa
+ *      diferença que impede tentar de novo o que nunca vai existir (S4, #1360).
  *   3. A cópia da VPS só é apagada DEPOIS de o endereço estar gravado, e nunca
  *      quando a busca falhou: nesse momento ela é a única que existe.
  *
@@ -370,10 +373,20 @@ Deno.test("busca que falha registra `failed` com a causa, e não deixa em ausên
 
     // Sem esta escrita o registro ficaria em `processing` para sempre — e
     // "processando há três dias" é a ausência disfarçada.
-    const falhou = store.rpcs.find((c) => c.fn === "fn_voip_recording_failed");
+    const falhou = store.rpcs.find((c) => c.fn === "fn_voip_recording_fetch_failed");
     assert(falhou, `${caso.motivo}: a falha não foi registrada`);
     assertEquals(falhou.args.p_call_id, CALL_ID);
     assertEquals(falhou.args.p_reason, caso.motivo);
+
+    // A DIFERENÇA QUE IMPEDE O LAÇO (S4, #1360): quem declara a falha da BUSCA
+    // é `fn_voip_recording_fetch_failed`, que reenfileira com teto.
+    // `fn_voip_recording_failed` é a VPS avisando que arquivo não haverá — e
+    // essa NÃO volta para a fila. Trocar uma pela outra aqui faria o CRM buscar
+    // de novo, quatro vezes, um arquivo que o dono já disse que não existe.
+    assert(
+      !store.rpcs.some((c) => c.fn === "fn_voip_recording_failed"),
+      `${caso.motivo}: usou a função da falha ANUNCIADA no caminho da BUSCA`,
+    );
 
     assert(
       !store.rpcs.some((c) => c.fn === "fn_voip_recording_stored"),
@@ -413,7 +426,7 @@ Deno.test("upload que falha marca falha e NÃO declara a gravação pronta", asy
   assert(!out.ok);
   assertEquals(out.reason, "storage_upload_failed");
   assert(!store.rpcs.some((c) => c.fn === "fn_voip_recording_stored"));
-  assert(store.rpcs.some((c) => c.fn === "fn_voip_recording_failed"));
+  assert(store.rpcs.some((c) => c.fn === "fn_voip_recording_fetch_failed"));
 });
 
 Deno.test("banco que recusa o caminho não vira gravação pronta", async () => {
@@ -431,7 +444,7 @@ Deno.test("banco que recusa o caminho não vira gravação pronta", async () => 
   assert(!out.ok);
   assertEquals(out.reason, "db_path_mismatch");
   assert(
-    store.rpcs.some((c) => c.fn === "fn_voip_recording_failed"),
+    store.rpcs.some((c) => c.fn === "fn_voip_recording_fetch_failed"),
     "recusa do banco não virou falha registrada",
   );
 });
