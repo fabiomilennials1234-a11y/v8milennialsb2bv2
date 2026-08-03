@@ -22,8 +22,17 @@ vi.mock("../../../supabase/functions/_shared/logger.ts", () => ({
   logRuntime: vi.fn(async () => {}),
   redactSecrets: (v: unknown) => v,
 }));
+// Entries por slug de funil. Mock posicional (`mockResolvedValueOnce` em sequência)
+// não serve mais: ADR-0023 §10 acrescentou a leitura do funil WhatsApp ao mesmo
+// `Promise.all`, e qualquer nova leitura embaralharia a ordem de novo.
+const { pipeEntries } = vi.hoisted(() => ({
+  pipeEntries: {} as Record<string, unknown>,
+}));
+
 vi.mock("../../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
-  getPipeEntry: vi.fn().mockResolvedValue(null),
+  getPipeEntry: vi.fn(
+    async (_sb: unknown, _leadId: string, _orgId: string, slug: string) => pipeEntries[slug] ?? null,
+  ),
   getPipeEntriesByLeads: vi.fn().mockResolvedValue([]),
   resolvePipelineId: vi.fn().mockResolvedValue(null),
 }));
@@ -42,7 +51,6 @@ const LEAD_ROW = {
   faturamento: 500000,
   urgency: "alta",
   notes: "Big potential",
-  pipe_whatsapp: "novo_lead",
   organization_id: "org-1",
   created_at: "2026-01-01",
   updated_at: "2026-05-01",
@@ -85,6 +93,29 @@ function buildSupabase(opts: {
 }
 
 describe("LeadProfileBuilder", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(pipeEntries)) delete pipeEntries[k];
+  });
+
+  it("expõe a etapa do funil WhatsApp como whatsapp_status, vinda do negócio", async () => {
+    pipeEntries.whatsapp = { id: "entry-wa", stage_key: "abordado", metadata: {} };
+
+    const sb = buildSupabase();
+    const profile = await new LeadProfileBuilder(sb).build("lead-1");
+
+    expect(profile!.whatsapp_status).toBe("abordado");
+    // O espelho legado saiu do SELECT: nenhum consumidor do perfil pode cair nele
+    // sem perceber depois que o gatilho de L2 passar a zerá-lo.
+    expect(profile!.pipe_whatsapp).toBeUndefined();
+  });
+
+  it("deixa whatsapp_status nulo quando o lead não tem negócio no funil", async () => {
+    const sb = buildSupabase();
+    const profile = await new LeadProfileBuilder(sb).build("lead-1");
+
+    expect(profile!.whatsapp_status).toBeNull();
+  });
+
   it("builds enriched profile with basic lead data", async () => {
     const sb = buildSupabase();
     const builder = new LeadProfileBuilder(sb);
@@ -123,15 +154,13 @@ describe("LeadProfileBuilder", () => {
   });
 
   it("marks is_existing_client=true when closed deals exist", async () => {
-    const { getPipeEntry } = await import("../../../supabase/functions/_shared/pipeline-adapter.ts");
-    (getPipeEntry as any).mockResolvedValueOnce(null); // confirmacao
-    (getPipeEntry as any).mockResolvedValueOnce({
+    pipeEntries.propostas = {
       id: "entry-1",
       stage_key: "vendido",
       metadata: { sale_value: 10000, product_type: "mrr" },
       closed_at: "2026-04-01",
       created_at: "2026-03-01",
-    });
+    };
 
     const sb = buildSupabase();
     const builder = new LeadProfileBuilder(sb);

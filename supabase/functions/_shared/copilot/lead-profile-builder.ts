@@ -17,7 +17,7 @@ export class LeadProfileBuilder {
         .from("leads")
         .select(`
           id, name, phone, email, company, origin, rating, segment,
-          faturamento, urgency, notes, pipe_whatsapp, organization_id,
+          faturamento, urgency, notes, organization_id,
           created_at, updated_at
         `)
         .eq("id", leadId)
@@ -30,7 +30,7 @@ export class LeadProfileBuilder {
 
       const orgId = (lead as Record<string, unknown>).organization_id as string;
 
-      const [customFieldsRes, upsellRes, confirmacaoEntry, propostasEntry, campanhaRes] = await Promise.all([
+      const [customFieldsRes, upsellRes, whatsappEntry, confirmacaoEntry, propostasEntry, campanhaRes] = await Promise.all([
         this.supabase
           .from("lead_custom_field_values")
           .select(`value, field:lead_custom_fields(id, field_name, field_type)`)
@@ -40,6 +40,7 @@ export class LeadProfileBuilder {
           .select("tipo_cliente_tempo, gestao_stage, potencial, is_active")
           .eq("lead_id", leadId)
           .maybeSingle(),
+        getPipeEntry(this.supabase, leadId, orgId, "whatsapp"),
         getPipeEntry(this.supabase, leadId, orgId, "confirmacao"),
         getPipeEntry(this.supabase, leadId, orgId, "propostas"),
         this.supabase
@@ -88,6 +89,8 @@ export class LeadProfileBuilder {
         upsell_gestao_stage: upsellData?.gestao_stage ?? null,
         upsell_potencial: upsellData?.potencial ?? null,
         upsell_is_active: upsellData?.is_active ?? null,
+        // ADR-0023 §10: etapa do negócio, não do lead. `pipe_whatsapp` saiu do SELECT.
+        whatsapp_status: whatsappEntry?.stage_key ?? null,
         confirmacao_status: confirmacaoEntry?.stage_key ?? null,
         confirmacao_meeting_date: (confMeta.meeting_date as string) ?? null,
         confirmacao_is_confirmed: (confMeta.is_confirmed as boolean) ?? null,
