@@ -1,6 +1,6 @@
 -- O áudio some em 90 dias, e a busca que falhou é tentada de novo
 -- (Gravação S4, #1360 do PRD #1356).
--- ROLLBACK pareado: rollback/20270804000000_voip_recording_retention.sql
+-- ROLLBACK pareado: rollback/20270804000001_voip_recording_retention.sql
 -- BASE: 20270803000000_voip_recording_ingest.sql (S2, #1358) — sem ela nada
 -- aqui tem sobre o que operar.
 --
