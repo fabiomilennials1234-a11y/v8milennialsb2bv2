@@ -22,7 +22,9 @@ interface PlanFeatureCardProps {
 }
 
 export function PlanFeatureCard({ feature, enabled, onToggle }: PlanFeatureCardProps) {
-  const Icon = ICON_MAP[feature.icon] ?? Zap;
+  // O catálogo gerado admite feature sem ícone; o fallback cobre esse caso e o de um nome
+  // de ícone que não está no mapa.
+  const Icon = ICON_MAP[feature.icon ?? ""] ?? Zap;
 
   return (
     <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors">

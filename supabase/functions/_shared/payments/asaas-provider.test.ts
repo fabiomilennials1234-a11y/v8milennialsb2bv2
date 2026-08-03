@@ -209,6 +209,42 @@ Deno.test("getCharge — maps a paid charge to the canonical shape", async () =>
   assertEquals(charge.method, "pix");
 });
 
+Deno.test("getPixPayload — devolve QR e copia-e-cola da cobrança", async () => {
+  const { p, calls } = provider([
+    {
+      body: {
+        encodedImage: "iVBORw0KGgo=",
+        payload: "00020126580014BR.GOV.BCB.PIX",
+        expirationDate: "2026-08-10 23:59:59",
+      },
+    },
+  ]);
+
+  const pix = await p.getPixPayload("pay_1");
+
+  assertEquals(calls[0].url.endsWith("/payments/pay_1/pixQrCode"), true);
+  assertEquals(pix.payload, "00020126580014BR.GOV.BCB.PIX");
+  assertEquals(pix.encodedImage, "iVBORw0KGgo=");
+  assertEquals(pix.expiresAt, "2026-08-10 23:59:59");
+});
+
+Deno.test("getPixPayload — campo ausente não vira 'undefined' em string", async () => {
+  // O copia-e-cola vai para a tela do cliente. String "undefined" ali é um Pix que não paga.
+  const { p } = provider([{ body: {} }]);
+  const pix = await p.getPixPayload("pay_2");
+  assertEquals(pix.payload, "");
+  assertEquals(pix.encodedImage, "");
+  assertEquals(pix.expiresAt, undefined);
+});
+
+Deno.test("identificadores com caractere especial são escapados na URL", async () => {
+  const { p, calls } = provider([
+    { body: { id: "a/b", customer: "c", billingType: "PIX", value: 1, status: "PENDING" } },
+  ]);
+  await p.getCharge("a/b");
+  assertEquals(calls[0].url.includes("a%2Fb"), true);
+});
+
 // ---------------------------------------------------------------------------
 // Subscriptions
 // ---------------------------------------------------------------------------

@@ -1,55 +1,25 @@
 /**
- * Feature Registry — constantes de features, limites e mapeamento sidebar → feature_key.
+ * Feature Registry — limites e mapeamentos de navegação.
  *
- * Este arquivo é a fonte de verdade no frontend para saber quais features existem,
- * como se agrupam (para o editor de planos) e qual feature_key corresponde a cada
- * item da sidebar.
+ * O CATÁLOGO DE FEATURES NÃO MORA MAIS AQUI. A fonte de verdade é a tabela
+ * `public.feature_catalog`, e `FeatureKey`/`FEATURES` são gerados dela para
+ * `feature-catalog.generated.ts` (decisão de #1386). Este arquivo re-exporta esses símbolos
+ * para que todos os consumidores existentes continuem importando de um lugar só.
+ *
+ * O que continua sendo escrito à mão aqui: os limites (que não vivem no catálogo) e os
+ * mapeamentos de rota, campanha e template de funil — todos cobertos por teste que reprova
+ * referência a chave inexistente.
  */
 
-// ─── Feature Keys ──────────────────────────────────────────────
-export type FeatureKey =
-  // Modules (sidebar)
-  | "chat"
-  | "funnels"
-  | "review"
-  | "leads"
-  | "copilot"
-  | "automations"
-  | "commissions"
-  | "performance"
-  | "marketing"
-  | "analytics"
-  | "tv_dashboard"
-  | "products"
-  | "deals"
-  // Campaign types (legacy — deprecated, kept for backward compat)
-  | "campaigns_manual"
-  | "campaigns_semi"
-  | "campaigns_auto"
-  // Advanced
-  | "copilot_advanced"
-  | "oraculo"
-  | "scheduled_messages"
-  | "whatsapp_bulk"
-  | "api_access"
-  | "white_label"
-  // Integrations
-  | "external_cadastro"
-  | "voice_calls"
-  // Funnels v2
-  | "funnels_custom"
-  | "carteira"
-  | "funnels_template_indicacao"
-  | "funnels_template_prospeccao"
-  | "funnels_template_reativacao"
-  // Legacy campaign keys (deprecated — use funnels_template_* instead)
-  | "campaigns_indicacao"
-  | "campaigns_prospeccao"
-  | "campaigns_reativacao"
-  | "message_templates"
-  | "customer_portfolio"
-  // Rollout flags (per-org, not a plan feature)
-  | "merged_opportunity_funnel";
+export type {
+  FeatureCategory,
+  FeatureKey,
+  FeatureMeta,
+} from "./feature-catalog.generated";
+export { FEATURES, SELLABLE_FEATURE_KEYS } from "./feature-catalog.generated";
+
+import type { FeatureKey, FeatureMeta } from "./feature-catalog.generated";
+import { FEATURES } from "./feature-catalog.generated";
 
 export type LimitKey =
   | "max_leads"
@@ -63,73 +33,13 @@ export type LimitKey =
   | "max_custom_funnels"
   | "max_temporary_funnels";
 
-// ─── Feature Metadata ──────────────────────────────────────────
-export interface FeatureMeta {
-  key: FeatureKey;
-  label: string;
-  description: string;
-  icon: string; // Lucide icon name
-  category: "modules" | "campaigns" | "advanced";
-  sidebarPath?: string;
-}
-
+// ─── Limits Metadata ───────────────────────────────────────────
 export interface LimitMeta {
   key: LimitKey;
   label: string;
   description: string;
   unit: string;
 }
-
-// ─── Feature Catalog ───────────────────────────────────────────
-export const FEATURES: FeatureMeta[] = [
-  // Modules
-  { key: "chat", label: "Chat", description: "Chat e mensagens WhatsApp", icon: "Zap", category: "modules", sidebarPath: "/chat" },
-  { key: "funnels", label: "Funis", description: "Pipelines de qualificação, confirmação e propostas", icon: "GitBranch", category: "modules", sidebarPath: "/funis" },
-  { key: "review", label: "Revisão", description: "Revisão e follow-ups", icon: "Wrench", category: "modules", sidebarPath: "/follow-ups" },
-  { key: "leads", label: "Combustível", description: "Gestão de leads e contatos", icon: "Fuel", category: "modules", sidebarPath: "/leads" },
-  { key: "commissions", label: "Comissões", description: "Comissões e pagamentos", icon: "DollarSign", category: "modules", sidebarPath: "/comissoes" },
-  { key: "performance", label: "Pódio", description: "Performance, ranking e metas", icon: "Trophy", category: "modules", sidebarPath: "/performance" },
-  { key: "marketing", label: "Marketing", description: "Marketing e análises", icon: "BarChart2", category: "modules", sidebarPath: "/marketing" },
-  {
-    key: "analytics",
-    label: "Analytics",
-    description: "Painel de inteligência com métricas avançadas de vendas, financeiro e engajamento",
-    icon: "BarChart3",
-    category: "modules",
-    sidebarPath: "/analytics",
-  },
-  { key: "products", label: "Produtos", description: "Catálogo de produtos", icon: "Package", category: "modules", sidebarPath: "/produtos" },
-  { key: "deals", label: "Negócios", description: "Gestão de negócios com produtos, probabilidade e forecast", icon: "Briefcase", category: "modules", sidebarPath: "/negocios" },
-  { key: "tv_dashboard", label: "TV Dashboard", description: "Dashboard para exibição em TV", icon: "Tv", category: "modules", sidebarPath: "/tv" },
-  { key: "copilot", label: "Copilot", description: "Agente de IA conversacional", icon: "Bot", category: "modules", sidebarPath: "/copilot" },
-  { key: "automations", label: "Automações", description: "Workflows de automação com triggers, condições e ações", icon: "Workflow", category: "modules", sidebarPath: "/automacoes" },
-  // Campaigns
-  { key: "campaigns_manual", label: "Campanhas Manuais", description: "Campanhas via Kanban tradicional", icon: "MousePointer", category: "campaigns" },
-  { key: "campaigns_semi", label: "Campanhas Semi-Auto", description: "Disparo de templates em lote", icon: "Zap", category: "campaigns" },
-  { key: "campaigns_auto", label: "Campanhas Automáticas", description: "Campanhas com IA conversacional", icon: "Bot", category: "campaigns" },
-  // Advanced
-  { key: "copilot_advanced", label: "Copilot Avançado", description: "Follow-up automático, qualificação avançada", icon: "Sparkles", category: "advanced" },
-  { key: "oraculo", label: "Oráculo", description: "Inteligência comercial por IA sobre conversas e pipeline", icon: "Sparkles", category: "advanced" },
-  { key: "scheduled_messages", label: "Mensagens Agendadas", description: "Agendamento de mensagens no chat", icon: "Clock", category: "advanced" },
-  { key: "whatsapp_bulk", label: "Disparo em Massa", description: "Envio de mensagens em lote", icon: "Send", category: "advanced", sidebarPath: "/disparos" },
-  { key: "api_access", label: "Acesso API", description: "Acesso à API pública", icon: "Code", category: "advanced" },
-  { key: "white_label", label: "White Label", description: "Personalização completa de marca", icon: "Palette", category: "advanced" },
-  { key: "external_cadastro", label: "Cadastro Externo", description: "Cadastro automático de clientes no sistema externo", icon: "UserPlus", category: "advanced" },
-  { key: "voice_calls", label: "TorqueCalls (Voz)", description: "Chamada de voz pelo WhatsApp direto no CRM, sem sair da conversa", icon: "Phone", category: "advanced" },
-  // Funnels v2
-  { key: "funnels_custom", label: "Funis Customizados", description: "Criar funis personalizados", icon: "GitBranch", category: "modules" },
-  { key: "carteira", label: "Carteira", description: "Gestão de carteira de clientes", icon: "TrendingUp", category: "modules", sidebarPath: "/upsell" },
-  { key: "message_templates", label: "Templates", description: "Modelos de mensagem com slash commands", icon: "FileText", category: "modules", sidebarPath: "/templates" },
-  { key: "funnels_template_indicacao", label: "Funil de Indicação", description: "Funis temporários de indicação", icon: "Heart", category: "modules" },
-  { key: "funnels_template_prospeccao", label: "Funil de Prospecção", description: "Funis temporários de prospecção ativa", icon: "Target", category: "modules" },
-  { key: "funnels_template_reativacao", label: "Funil de Reativação", description: "Funis temporários de reativação de base", icon: "RefreshCw", category: "modules" },
-  // Legacy campaign keys (deprecated — kept for backward compat with existing orgs)
-  { key: "campaigns_indicacao", label: "Campanha de Indicação (legacy)", description: "Deprecated — use funnels_template_indicacao", icon: "Heart", category: "campaigns" },
-  { key: "campaigns_prospeccao", label: "Campanha de Prospecção (legacy)", description: "Deprecated — use funnels_template_prospeccao", icon: "Target", category: "campaigns" },
-  { key: "campaigns_reativacao", label: "Campanha de Reativação (legacy)", description: "Deprecated — use funnels_template_reativacao", icon: "RefreshCw", category: "campaigns" },
-  // Rollout flags
-  { key: "merged_opportunity_funnel", label: "Funil Oportunidades Consolidado", description: "Mergeia Agendamentos em Oportunidades — anexa etapas de reunião + confirmação por status (ADR-0004)", icon: "GitMerge", category: "advanced" },
-];
 
 // ─── Limits Catalog ────────────────────────────────────────────
 export const LIMITS: LimitMeta[] = [
