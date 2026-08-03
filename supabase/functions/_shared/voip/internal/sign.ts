@@ -196,7 +196,16 @@ export type AdminAction =
   | "session.pair"
   | "session.logout"
   | "session.adopt"
-  | "session.policy";
+  | "session.policy"
+  // A gravação (ADR-0026 §5). É o CRM que BUSCA o arquivo; a VPS só anuncia
+  // que ele existe e verifica este token. Server-to-server, 30 s, nunca chega
+  // a um navegador — por isso `admin` e não `stream`.
+  //
+  // LER e APAGAR são ações SEPARADAS de propósito: no instante da busca, a
+  // cópia da VPS é a ÚNICA que existe, e um token emitido para copiá-la não
+  // pode servir para destruí-la.
+  | "recording.read"
+  | "recording.delete";
 
 export interface AdminTokenArgs {
   act: AdminAction;
