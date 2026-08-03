@@ -110,12 +110,12 @@ Ordem interna obrigatória, cada passo depende do anterior.
 
 ## L3 — backfill, org a org
 
-**Antes de rodar, revisar o M4** contra as decisões 9 e 11:
+**M4 revisado (2026-08-03)** — ✅ feito:
 
-- fundir os cards de funis de sistema do mesmo lead num negócio só, posicionado no mais avançado — **597 leads, 926 negócios a menos** que a versão atual;
-- cada funil customizado continua sendo um negócio à parte;
-- título `Negócio de <mês>/<ano>` a partir de `created_at`, no lugar do nome do funil;
-- as guardas atuais continuam valendo e a prova de 1:1 vira prova de 1:1 **por jornada** — a guarda precisa ser reescrita junto, senão ela aborta o comportamento novo.
+- título `Negócio de <mês>/<ano>` a partir de `created_at`, no fuso da org, no lugar do nome do funil (decisão 9);
+- **um negócio por card**, e não por jornada. ⚠️ **A decisão 11 foi revertida pelo CTO**, e a medição do dia é o motivo: dos **801 leads** com mais de um card de sistema (933 cards a mais), **795 envolvem a Qualificação** — o par Oportunidades+Orçamentos, que era a premissa da decisão, são **6 leads**. Fundir apagaria 933 cards que, na maioria, não são gêmeos de uma venda só. Um lead pode ter mais de um negócio ao mesmo tempo (decisão 2) — é o motivo da fatia existir. Detalhe no ADR-0023 §11;
+- a prova de 1:1 continua sendo 1:1 por card, como estava;
+- cada funil customizado continua sendo um negócio à parte.
 
 **Ordem de execução:** Milennials primeiro (2.358 cards, 914 custom, 86 ganhos, 0 órfãos, pré-condição limpa). Depois as demais.
 

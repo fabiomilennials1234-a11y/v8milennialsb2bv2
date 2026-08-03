@@ -50,7 +50,18 @@ Rejected: putting the position on `deals`. Every board, the Copilot and the metr
 >
 > Two consequences: repointing the Copilot (done in L1) was necessary for a stronger reason than the one written here; and **the migration that implements the move (L2 step 5) has to clear the column itself** — moving the row out of the WhatsApp funnel must explicitly null `leads.pipe_whatsapp`, because the existing trigger will not.
 
-**11. The backfill creates one Negócio per journey, positioned at the furthest point reached.** System funnels are one journey; each custom funnel is a separate commercial motion and therefore its own Negócio. Measured against production: one-per-card yields **36.812**, one-per-journey **35.886**, one-per-Lead 31.601. The difference is **926 Negócios** concentrated in the **597 Leads** holding cards in two system funnels at once — the Oportunidades + Orçamentos pair.
+**11. ~~The backfill creates one Negócio per journey, positioned at the furthest point reached.~~ REVERSED 2026-08-03 — the backfill creates one Negócio per card.** Each custom funnel remains its own Negócio, as before.
+
+> **Why it was reversed, and the number that did it.**
+> The original text justified merging the system funnels on the Oportunidades + Orçamentos pair — the twin card the old copy-instead-of-move behaviour created for a *single* sale. Merging is only defensible if the extra cards really are twins.
+>
+> Re-measured in production on 2026-08-03, at the moment of writing the backfill: **801 Leads** hold more than one system card (up from 597), for **933 extra cards**. But the composition contradicts the premise — **795 of the 801 involve Qualificação**: Qualificação + Orçamentos 423, Qualificação + Oportunidades 240, all three 132. The Oportunidades + Orçamentos pair the decision was written about is **6 Leads**. Only 99 pairs carry the exact duplication signature (the Oportunidades card sitting at `compareceu`).
+>
+> So the overwhelming majority is not a twin of one sale. It is a Lead sitting in the qualification funnel while a proposal is open — and nothing in the data proves that is one Negócio rather than two. **Decision 2 already says a Lead may have several Negócios at once**; merging by journey would have contradicted it for 933 historical cards, and would have required **deleting** them, because a Negócio holds one position (decision 5, enforced by the unique index).
+>
+> One-per-card preserves the multiplicity, destroys nothing, and satisfies the unique index exactly the same way — each card gets its own Negócio. The asymmetry decides it: merging later is always possible, un-deleting is not.
+>
+> What this costs: 933 more Negócios (≈36.8k instead of ≈35.9k), and a Lead in Qualificação with an open proposal reads as two Negócios. That is what the board already shows today, so no operator is surprised. Decision 4 stops *new* duplicates from appearing, so the noise is bounded to history and drains as those cards close.
 
 ## Consequences
 

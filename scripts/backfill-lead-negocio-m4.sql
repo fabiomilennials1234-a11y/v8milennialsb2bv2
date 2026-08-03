@@ -1,13 +1,5 @@
 -- ============================================================================
--- M4 — backfill: cada JORNADA existente vira um Negócio. UMA org por execução.
---
--- ⚠️ Reescrito 2026-08-03 contra as decisões 9 e 11 do ADR-0023. Era "cada card
--- vira um negócio, com o nome do funil por título". Agora: os funis de SISTEMA
--- do mesmo lead são UMA jornada (posicionada no ponto mais avançado), cada funil
--- CUSTOM é a sua própria, e o título é derivado — `Negócio de <mês>/<ano>`.
--- Consequência que não dá para esconder: nas jornadas com mais de um card, o
--- card de trás é APAGADO, e isso exige `--fundir-jornada` explícito. Ver o bloco
--- 1a-bis.
+-- M4 — backfill: cada card existente vira um Negócio. UMA org por execução.
 --
 -- NÃO é migration, e isso é regra, não estilo: a CLAUDE.md raiz (guarda F4) diz
 -- que migration é só schema, para que URL errada no push vire erro recuperável
@@ -23,9 +15,8 @@
 --     runner faz ROLLBACK: não existe meia-migração.
 --
 -- O QUE ESTE ARQUIVO ESCREVE, E SÓ:
---   deals            +1 linha por JORNADA sem deal_id
---   pipeline_entries deal_id (uma coluna) no card eleito de cada jornada
---   pipeline_entries DELETE do card rebaixado — só com `--fundir-jornada`
+--   deals            +1 linha por card sem deal_id
+--   pipeline_entries deal_id (uma coluna)
 --   custom_pipe_entries deal_id (pelo gatilho reverso do M7)
 -- Qualquer outra escrita é bug, e cada uma tem guarda nominal abaixo.
 --
@@ -128,153 +119,33 @@ JOIN public.pipeline_entries pe ON pe.id = c.id
 WHERE c.organization_id = (SELECT org FROM _param)
   AND pe.deal_id IS NULL AND pe.lead_id IS NOT NULL;
 
--- ── 1. A JORNADA — quem vira negócio, e qual card fica com a posição ───────
---
--- ⚠️ REESCRITO 2026-08-03 contra as decisões 9 e 11 do ADR-0023. A versão
--- anterior criava **um negócio por card** e dava a ele o **nome do funil** como
--- título. As duas coisas estão erradas agora:
---
---   • decisão 11 — um negócio por JORNADA. Os funis de SISTEMA do mesmo lead são
---     uma jornada só, posicionada no ponto mais avançado; cada funil CUSTOM é
---     uma motivação comercial à parte, e continua sendo um negócio próprio.
---     Medido em prod: um-por-card = 36.812, um-por-jornada = 35.886. A diferença
---     de 926 está concentrada nos 597 leads com card em dois funis de sistema ao
---     mesmo tempo.
---   • decisão 9 — título derivado `Negócio de <mês>/<ano>`. Herdar o nome do
---     funil foi rejeitado por não distinguir nada: produziria dezenas de
---     milhares de negócios chamados "Qualificação".
---
--- E a prova de 1:1 mudou de significado junto: ela agora é 1:1 **por jornada**.
--- Mantida como estava, ela abortaria exatamente o comportamento novo.
---
--- `_jornada` é a espinha do resto do arquivo: define o agrupamento e elege o
--- card que fica com a posição.
-CREATE TEMP TABLE _jornada ON COMMIT DROP AS
-WITH cand AS (
-  SELECT pe.id AS entry_id, pe.lead_id, pe.organization_id, pe.pipeline_id,
-         pe.stage_key, pe.assigned_to, pe.closed_at, pe.notes, pe.metadata, pe.created_at,
-         p.type AS pipe_type, p.slug AS slug,
-         coalesce(ps.stage_role, cs.stage_role) AS stage_role,
-         -- Ordem da jornada de sistema. A escada é o próprio produto:
-         -- Qualificação → Oportunidades → Orçamentos.
-         CASE p.slug WHEN 'whatsapp' THEN 1 WHEN 'confirmacao' THEN 2 WHEN 'propostas' THEN 3
-                     ELSE 0 END AS ordem_funil,
-         coalesce(ps.position, cs.position, 0) AS ordem_etapa
+-- ── 1. GUARDA ANTES: o join tem que ser 1:1 ─────────────────────────────────
+-- A versão antiga casava etapa por (organization_id, stage_key) — prefixo da
+-- unique, não ela inteira — e emitia 39.164 linhas para 36.497 cards: 2.667
+-- negócios fantasma, silenciosos. Aqui cada LEFT JOIN cobre uma unique inteira:
+--   pipeline_stages         UNIQUE (organization_id, pipeline_type, stage_key)
+--   custom_pipeline_stages  UNIQUE (pipeline_id, stage_key)
+-- Mesmo WHERE do INSERT, de propósito: se divergir, a prova não prova nada.
+DO $$
+DECLARE v_org uuid := (SELECT org FROM _param); v_linhas bigint; v_cards bigint;
+BEGIN
+  SELECT count(*), count(DISTINCT pe.id) INTO v_linhas, v_cards
   FROM public.pipeline_entries pe
   JOIN public.pipelines p ON p.id = pe.pipeline_id
   LEFT JOIN public.pipeline_stages ps
          ON ps.organization_id = pe.organization_id
-        AND ps.stage_key       = pe.stage_key
-        AND ps.pipeline_type   = p.slug
+        AND ps.stage_key = pe.stage_key AND ps.pipeline_type = p.slug
   LEFT JOIN public.custom_pipeline_stages cs
-         ON cs.pipeline_id = pe.pipeline_id
-        AND cs.stage_key   = pe.stage_key
-  WHERE pe.deal_id IS NULL
-    AND pe.lead_id IS NOT NULL
-    AND pe.organization_id = (SELECT org FROM _param)
-)
-SELECT c.*,
-       -- A CHAVE DA JORNADA. Sistema: o lead inteiro é uma jornada, então o
-       -- pipeline_id sai da chave. Custom: cada funil é a sua própria.
-       CASE WHEN c.pipe_type = 'system'
-            THEN c.lead_id::text
-            ELSE c.lead_id::text || '::' || c.pipeline_id::text
-       END AS jornada,
-       -- Quem carrega a posição: o ponto mais avançado. Desempate total
-       -- (created_at, entry_id) porque duas execuções têm de eleger o MESMO card
-       -- — sem isso, rodar de novo depois de um rollback escolhe outro.
-       row_number() OVER (
-         PARTITION BY CASE WHEN c.pipe_type = 'system'
-                           THEN c.lead_id::text
-                           ELSE c.lead_id::text || '::' || c.pipeline_id::text END
-         ORDER BY c.ordem_funil DESC, c.ordem_etapa DESC, c.created_at DESC, c.entry_id DESC
-       ) AS posto
-FROM cand c;
-
-CREATE INDEX ON _jornada (jornada);
-CREATE INDEX ON _jornada (entry_id);
-
--- ── 1a. GUARDA ANTES: 1:1 POR JORNADA ──────────────────────────────────────
--- A versão antiga casava etapa por (organization_id, stage_key) — prefixo da
--- unique, não ela inteira — e emitia 39.164 linhas para 36.497 cards: 2.667
--- negócios fantasma, silenciosos. Cada LEFT JOIN acima cobre uma unique inteira:
---   pipeline_stages         UNIQUE (organization_id, pipeline_type, stage_key)
---   custom_pipeline_stages  UNIQUE (pipeline_id, stage_key)
--- A prova continua sendo "o join não multiplica" — só que a unidade agora é a
--- jornada, e o que se conta é: exatamente um card eleito por jornada.
-DO $$
-DECLARE
-  v_cards bigint; v_linhas bigint; v_jornadas bigint; v_eleitos bigint; v_rebaixados bigint;
-BEGIN
-  SELECT count(*), count(DISTINCT entry_id), count(DISTINCT jornada),
-         count(*) FILTER (WHERE posto = 1), count(*) FILTER (WHERE posto > 1)
-    INTO v_linhas, v_cards, v_jornadas, v_eleitos, v_rebaixados
-  FROM _jornada;
+         ON cs.pipeline_id = pe.pipeline_id AND cs.stage_key = pe.stage_key
+  WHERE pe.deal_id IS NULL AND pe.lead_id IS NOT NULL
+    AND pe.organization_id = v_org;
 
   IF v_linhas <> v_cards THEN
     RAISE EXCEPTION
       'FAIL: o join multiplica (% linhas para % cards) — % negocio(s) fantasma. Abortando ANTES de escrever.',
       v_linhas, v_cards, v_linhas - v_cards;
   END IF;
-
-  IF v_eleitos <> v_jornadas THEN
-    RAISE EXCEPTION
-      'FAIL: % jornada(s) para % card(s) eleito(s) — o desempate nao elegeu exatamente um por jornada.',
-      v_jornadas, v_eleitos;
-  END IF;
-
-  RAISE NOTICE
-    '1 OK: % card(s) em % jornada(s) — % negocio(s) a criar, % card(s) rebaixado(s) (a menos que a versao um-por-card).',
-    v_cards, v_jornadas, v_eleitos, v_rebaixados;
-END$$;
-
--- ── 1a-bis. O QUE FAZER COM O CARD REBAIXADO ───────────────────────────────
---
--- 🔴 Esta é a única parte do backfill que DESTRÓI dado, e por isso ela não roda
--- sozinha. Um negócio ocupa UMA posição (decisão 5, garantida pelo índice único
--- em `pipeline_entries.deal_id` do passo 6). Numa jornada com dois cards — o par
--- Oportunidades + Orçamentos dos 597 leads — o card de trás não pode continuar
--- existindo como posição: ou ele sai, ou o índice único do passo 6 recusa a base
--- inteira.
---
--- O ADR sustenta a remoção em cima do event-sourcing ("Nothing is lost: the
--- trail is event-sourced already — 47.077 stage events covering 36.312 of 36.812
--- cards"). Isso é **98,6%**, não 100%: para os 1,4% sem evento nenhum, apagar o
--- card apaga o rastro. A guarda abaixo recusa apagar exatamente esses.
---
--- Rodar com `SET LOCAL torque.m4_fundir_jornada = 'on';` antes do arquivo.
--- Sem isso, aborta e diz quantos cards estariam em jogo — de propósito: quem
--- decide apagar card de board de cliente é gente, não script.
-DO $$
-DECLARE
-  v_flag text := coalesce(current_setting('torque.m4_fundir_jornada', true), 'off');
-  v_rebaixados bigint; v_sem_rastro bigint;
-BEGIN
-  SELECT count(*) INTO v_rebaixados FROM _jornada WHERE posto > 1;
-
-  IF v_rebaixados = 0 THEN
-    RAISE NOTICE '1b OK: nenhuma jornada com mais de um card nesta org — nada a fundir.';
-    RETURN;
-  END IF;
-
-  IF v_flag <> 'on' THEN
-    RAISE EXCEPTION
-      'PARADA DELIBERADA: % card(s) desta org ficariam sem posicao ao fundir a jornada, e some(m) do board. Releia a decisao 11 e, se for isso mesmo, rode com: SET LOCAL torque.m4_fundir_jornada = ''on'';',
-      v_rebaixados;
-  END IF;
-
-  SELECT count(*) INTO v_sem_rastro
-  FROM _jornada j
-  WHERE j.posto > 1
-    AND NOT EXISTS (SELECT 1 FROM public.pipeline_stage_events e WHERE e.entry_id = j.entry_id);
-
-  IF v_sem_rastro > 0 THEN
-    RAISE EXCEPTION
-      'FAIL: % dos % card(s) rebaixados NAO tem evento de etapa. O ADR justifica a remocao dizendo que o rastro e event-sourced (98,6%%) — para estes o rastro morre junto. Reconcilie antes.',
-      v_sem_rastro, v_rebaixados;
-  END IF;
-
-  RAISE NOTICE '1b OK: % card(s) rebaixado(s), todos com rastro em pipeline_stage_events.', v_rebaixados;
+  RAISE NOTICE '1 OK: prova de 1:1 — % linhas = % cards.', v_linhas, v_cards;
 END$$;
 
 -- ── 1b. Desligar NOMINALMENTE o gatilho que escreve em `leads` ──────────────
@@ -289,65 +160,73 @@ END$$;
 ALTER TABLE public.pipeline_entries DISABLE TRIGGER trg_sync_whatsapp_stage_to_lead;
 
 -- ── 2. A escrita ────────────────────────────────────────────────────────────
+-- 2a) UM NEGÓCIO POR CARD, com título DERIVADO (ADR-0023 decisão 9).
 --
--- 2a) UM negócio por jornada, nascido do card eleito (`posto = 1`), com título
---     DERIVADO (decisão 9) em vez do nome do funil.
+-- O título deixou de herdar `p.name`. Herdar o nome do funil é o que a decisão 9
+-- rejeita nominalmente: não distingue nada e produziria dezenas de milhares de
+-- negócios chamados "Qualificação". Deriva de `created_at` do card, no fuso da
+-- ORG — negócio aberto às 22h de 31/03 em São Paulo é 01/04 em UTC, e sem o fuso
+-- o título diria abril para quem viveu março.
 --
--- O `value` e o `won` vêm do card eleito, que é o mais avançado — é onde o
--- dinheiro está. Somar valor pela jornada seria inventar: o `sale_value` do card
--- de Orçamentos é a proposta, não a soma das etapas anteriores.
+-- ⚠️ UM POR CARD, e não um por jornada — a decisão 11 do ADR foi REVERTIDA pelo
+-- CTO em 2026-08-03, e a razão está medida. A decisão 11 mandava fundir os funis
+-- de sistema do mesmo lead num negócio só; isso obrigaria a APAGAR o card de
+-- trás (um negócio ocupa uma posição, decisão 5 + índice único do passo 6).
+-- Medido em prod nesse dia: 801 leads com mais de um card de sistema, 933 cards
+-- a mais. Mas a composição desmente a premissa — **795 dos 801 envolvem a
+-- Qualificação** (Qualificação+Orçamentos 423, Qualificação+Oportunidades 240,
+-- os três 132), e o par Oportunidades+Orçamentos, que era a duplicação do
+-- `compareceu` citada pela decisão 11, são **6 leads**. Só 99 pares têm a
+-- assinatura exata da duplicação.
 --
--- `created_at` do negócio é o do card eleito, e o título deriva dele. Um lead
--- cujo primeiro contato foi em março mas cuja proposta saiu em agosto vira
--- "Negócio de agosto/2026" — a data do negócio é a do ponto onde ele está, não a
--- da primeira mensagem.
+-- Ou seja: a maioria não é gêmeo de uma venda só, e ninguém consegue provar pelo
+-- dado que não são dois negócios de verdade. Um lead PODE ter mais de um negócio
+-- ao mesmo tempo — é a decisão 2, e é o motivo da fatia existir. Um-por-card
+-- preserva isso, não destrói nada, e continua compatível com o índice único
+-- (cada card ganha o seu negócio). Fundir depois é possível; desapagar não é.
 WITH novo AS (
   INSERT INTO public.deals (
     organization_id, title, value, owner_id, source_lead_id,
     won, closed_at, notes, metadata, created_at
   )
   SELECT
-    j.organization_id,
-    public.fn_negocio_titulo_padrao(j.created_at, o.timezone),
-    nullif(j.metadata->>'sale_value', '')::numeric,
-    j.assigned_to,
-    j.lead_id,
+    pe.organization_id,
+    public.fn_negocio_titulo_padrao(pe.created_at, o.timezone),
+    nullif(pe.metadata->>'sale_value', '')::numeric,
+    pe.assigned_to,
+    pe.lead_id,
     -- IS TRUE, não `= 'won'`: card com stage_key órfão (35 na base) vira false,
     -- nunca NULL
-    (j.stage_role = 'won') IS TRUE,
-    j.closed_at,
-    j.notes,
-    jsonb_build_object(
-      'backfilled_from_entry', j.entry_id,
-      'backfilled_jornada',    j.jornada,
-      -- Quantos cards a jornada tinha. Sem isto, depois de fundir não há como
-      -- saber que este negócio veio de dois cards em vez de um.
-      'backfilled_cards',      (SELECT count(*) FROM _jornada k WHERE k.jornada = j.jornada)
-    ),
-    j.created_at
-  FROM _jornada j
-  JOIN public.organizations o ON o.id = j.organization_id
-  WHERE j.posto = 1
+    (coalesce(ps.stage_role, cs.stage_role) = 'won') IS TRUE,
+    pe.closed_at,
+    pe.notes,
+    jsonb_build_object('backfilled_from_entry', pe.id),
+    pe.created_at
+  FROM public.pipeline_entries pe
+  JOIN public.pipelines p ON p.id = pe.pipeline_id
+  -- só pelo fuso, para o título derivado
+  JOIN public.organizations o ON o.id = pe.organization_id
+  -- funil PADRÃO: pipeline_stages.pipeline_type fala o vocabulário do SLUG
+  -- (whatsapp/confirmacao/propostas). `= p.type` casaria 0 de 38.097 — são
+  -- vocabulários diferentes na mesma palavra.
+  LEFT JOIN public.pipeline_stages ps
+         ON ps.organization_id = pe.organization_id
+        AND ps.stage_key       = pe.stage_key
+        AND ps.pipeline_type   = p.slug
+  -- funil CUSTOM: etapa mora em outra tabela, chaveada pelo próprio funil
+  LEFT JOIN public.custom_pipeline_stages cs
+         ON cs.pipeline_id = pe.pipeline_id
+        AND cs.stage_key   = pe.stage_key
+  WHERE pe.deal_id IS NULL
+    AND pe.lead_id IS NOT NULL
+    AND pe.organization_id = (SELECT org FROM _param)
   RETURNING id, (metadata->>'backfilled_from_entry')::uuid AS entry_id
 )
--- 2b) amarra o card ELEITO ao negócio, SEM tocar lead_id
+-- 2b) amarra o card ao negócio SEM tocar lead_id
 UPDATE public.pipeline_entries pe
    SET deal_id = novo.id
   FROM novo
  WHERE pe.id = novo.entry_id;
-
--- 2b-bis) o card rebaixado sai. Ver a justificativa e a guarda no bloco 1a-bis:
--- um negócio ocupa uma posição só, e o rastro fica em `pipeline_stage_events`
--- (conferido card a card lá em cima — nenhum sem evento chega aqui).
---
--- `DELETE` e não `closed_at`: card fechado continua sendo posição, continua
--- aparecendo em contagem de coluna, e o índice único do passo 6 não distingue
--- fechado de aberto. Meia-medida aqui vira board mentindo depois.
-DELETE FROM public.pipeline_entries pe
- USING _jornada j
- WHERE pe.id = j.entry_id
-   AND j.posto > 1
-   AND coalesce(current_setting('torque.m4_fundir_jornada', true), 'off') = 'on';
 
 -- ── 2c. Religar ─────────────────────────────────────────────────────────────
 -- Fora de bloco condicional de propósito: dentro de um DO com EXCEPTION, um erro
@@ -381,42 +260,6 @@ BEGIN
   IF v_deals <> v_amarr THEN
     RAISE EXCEPTION 'FAIL: % negocio(s) criado(s) para % card(s) amarrado(s) — sobrou fantasma.', v_deals, v_amarr;
   END IF;
-
-  -- 3a-bis. A JORNADA fundiu de verdade (decisão 11).
-  --
-  -- Duas coisas que só esta guarda pega, e as duas silenciosas:
-  --   (i) card rebaixado que sobreviveu — o índice único de `deal_id` do passo 6
-  --       recusaria a base inteira depois, longe daqui, sem dizer por quê;
-  --   (ii) negócio criado para card rebaixado — seria voltar ao um-por-card sem
-  --       ninguém perceber, já que a contagem 3a continuaria batendo.
-  SELECT count(*) INTO v_agora
-    FROM public.pipeline_entries pe JOIN _jornada j ON j.entry_id = pe.id
-   WHERE j.posto > 1;
-  IF v_agora <> 0
-     AND coalesce(current_setting('torque.m4_fundir_jornada', true), 'off') = 'on' THEN
-    RAISE EXCEPTION
-      'FAIL: % card(s) rebaixado(s) sobreviveram. O passo 6 (unique em deal_id) vai recusar a base.', v_agora;
-  END IF;
-
-  SELECT count(*) INTO v_agora
-    FROM public.deals d
-   WHERE d.organization_id = v_org
-     AND d.metadata ? 'backfilled_from_entry'
-     AND EXISTS (SELECT 1 FROM _jornada j
-                  WHERE j.entry_id = (d.metadata->>'backfilled_from_entry')::uuid
-                    AND j.posto > 1);
-  IF v_agora <> 0 THEN
-    RAISE EXCEPTION
-      'FAIL: % negocio(s) nasceram de card rebaixado — voltou a ser um-por-card.', v_agora;
-  END IF;
-
-  -- Um negócio por jornada, e nem um a mais.
-  SELECT count(DISTINCT jornada) INTO v_scat FROM _jornada;
-  IF v_deals <> v_scat THEN
-    RAISE EXCEPTION
-      'FAIL: % negocio(s) para % jornada(s) — a decisao 11 pede exatamente um por jornada.', v_deals, v_scat;
-  END IF;
-  RAISE NOTICE '3a-bis OK: % negocio(s) para % jornada(s), zero card rebaixado sobrevivente.', v_deals, v_scat;
 
   -- 3b. `lead_id` nunca esvaziado: sem ele a métrica de reunião para em silêncio
   --     (fn_capture_meeting_event casa por lead_id e simplesmente não encontra).
