@@ -277,6 +277,74 @@ Deno.test("o número discado vem do lead, não do chamador — e normalizado", a
   assertEquals((reserve!.args as Record<string, unknown>).p_organization_id, ORG);
 });
 
+// O defeito de produção, medido de ponta a ponta pelo choke.
+//
+// `leads.normalized_phone` é chave de busca: `normalizePhoneForSearch` remove o
+// DDI de propósito. O choke lia essa coluna e mandava os dígitos para a rede; a
+// VPS montava `+51985960716`, que é PERU, e o WhatsApp respondia corretamente
+// que aquele número não existe. Duas linhas em `voip_calls` provam:
+// `end_reason = 'vps_refused:51985960716: number is not on WhatsApp'`.
+//
+// Mede as TRÊS saídas do choke, não só a devolvida: o token que a VPS vai ler,
+// o `p_peer_phone` que vira `peer_phone` no ledger (e conta o teto por destino)
+// e o `peer` da resposta. Divergência entre elas foi o que produziu o defeito
+// de `tc_call_id` em outra fatia.
+Deno.test("o DDI é reposto antes de o número sair para a rede (caso de produção)", async () => {
+  await setupSigningKey();
+
+  const db = stubClient({
+    tables: {
+      voip_sessions: openSession,
+      leads: () => ({ ...ownedLead(), normalized_phone: "51985960716" }),
+      consent_records: grantedConsent,
+      ...permissiveEngine,
+    },
+    rpc: okReserve,
+  });
+
+  const res = await authorizeCallAndMint(memberCaller(), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    direction: "outbound",
+    leadId: LEAD,
+  });
+
+  assert(res.ok);
+  assertEquals(res.peer, "5551985960716");
+  assertEquals(decodeClaims(res.tokens.start).peer, "5551985960716");
+
+  const reserve = db.__calls.rpc.find((c: Record<string, unknown>) => c.name === "fn_voip_call_reserve");
+  assertEquals((reserve!.args as Record<string, unknown>).p_peer_phone, "5551985960716");
+});
+
+// O lado oposto: número que já está internacional não pode ser alterado. Se o
+// choke empilhasse o DDI, `5551985960716` viraria `555551985960716` e a chamada
+// falharia do mesmo jeito, só que com o defeito invertido.
+Deno.test("número que já tem DDI atravessa o choke intocado", async () => {
+  await setupSigningKey();
+
+  const db = stubClient({
+    tables: {
+      voip_sessions: openSession,
+      leads: () => ({ ...ownedLead(), normalized_phone: "5551985960716" }),
+      consent_records: grantedConsent,
+      ...permissiveEngine,
+    },
+    rpc: okReserve,
+  });
+
+  const res = await authorizeCallAndMint(memberCaller(), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    direction: "outbound",
+    leadId: LEAD,
+  });
+
+  assert(res.ok);
+  assertEquals(res.peer, "5551985960716");
+  assertEquals(decodeClaims(res.tokens.start).peer, "5551985960716");
+});
+
 Deno.test("nega outbound sem lead_id", async () => {
   await setupSigningKey();
   const db = stubClient({

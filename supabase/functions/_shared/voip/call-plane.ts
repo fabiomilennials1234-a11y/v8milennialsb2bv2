@@ -24,6 +24,7 @@ import { canUserAccessFeature } from "../permission_engine.ts";
 import { logRuntime } from "../logger.ts";
 import { type Caller, isOrgAdmin } from "./caller.ts";
 import { signCallToken } from "./internal/sign.ts";
+import { toDialDigits } from "./peer-phone.ts";
 
 /** Validade de cada credencial. Três tokens, não um com três ações. */
 const TTL_START_SECONDS = 15;
@@ -257,9 +258,17 @@ export async function authorizeCallAndMint(
     if (!lead) return deny("lead_not_found");
     if (lead.organization_id !== caller.orgId) return deny("lead_org_mismatch");
 
-    peer = digitsOnly(lead.normalized_phone) ||
-      digitsOnly(lead.phone_digits) ||
-      digitsOnly(lead.phone);
+    // `normalized_phone` primeiro de propósito: é a chave canônica, igual para
+    // todas as linhas do mesmo contato, e por isso o `peer_phone` do ledger e o
+    // teto por destino contam a mesma pessoa uma vez só. O preço é que essa
+    // coluna é uma CHAVE DE BUSCA — `normalizePhoneForSearch` remove o DDI de
+    // propósito — e o que sai daqui vai para a rede. `toDialDigits` repõe o 55;
+    // sem ele a VPS perguntava ao WhatsApp por `+51985960716`, que é Peru.
+    peer = toDialDigits(
+      digitsOnly(lead.normalized_phone) ||
+        digitsOnly(lead.phone_digits) ||
+        digitsOnly(lead.phone),
+    );
     if (peer.length < 8 || peer.length > 15) return deny("lead_without_phone");
 
     // Admin operacional alcança qualquer lead da org; membro só os seus. É a
@@ -302,7 +311,12 @@ export async function authorizeCallAndMint(
     // `call_not_answerable` genérico vindo da RPC.
     if (!call.tc_call_id) return deny("no_tc_call_id");
 
-    peer = digitsOnly(call.peer_phone);
+    // No inbound o número veio do webhook da VPS, já como JID (`555185960716`,
+    // 12 dígitos) — `toDialDigits` é no-op sobre ele, por construção. Passa
+    // mesmo assim para que exista UMA forma de `peer` neste arquivo: linha
+    // antiga, gravada antes deste conserto com 11 dígitos, é reparada aqui em
+    // vez de virar um segundo formato circulando pelo mesmo campo.
+    peer = toDialDigits(digitsOnly(call.peer_phone));
     leadId = call.lead_id ?? null;
     if (peer.length < 8 || peer.length > 15) return deny("invalid_peer");
   }
