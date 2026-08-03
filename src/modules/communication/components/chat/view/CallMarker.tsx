@@ -22,6 +22,14 @@
  * Ligação não atendida NUNCA é escondida — três tentativas sem resposta é um
  * fato comercial sobre o lead, não sujeira visual.
  *
+ * ── A gravação (S3, #1359) ──
+ * Vem EMBAIXO da pílula, em `CallRecordingStrip`, e não dentro dela. A pílula
+ * responde "o que aconteceu com a ligação"; a gravação responde "dá para
+ * ouvir". Misturar as duas faria a silhueta mudar de ligação para ligação —
+ * exatamente o que esta peça evita ao manter a mesma altura entre uma chamada
+ * de 3 s e uma de 12 min — e faria uma gravação falha parecer uma ligação
+ * falha, que é mentira sobre o desfecho comercial.
+ *
  * ── Cor ──
  * Só token (`--muted-foreground`, `--destructive`, `--border`, `--card`).
  * O accent dourado fica de fora de propósito: no Torque ele é reservado a
@@ -30,6 +38,7 @@
 import { Phone, PhoneIncoming, PhoneMissed, PhoneOutgoing } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OUTCOME_LABELS } from "@/modules/engagement";
+import { CallRecordingStrip } from "@/modules/communication/components/chat/view/CallRecordingStrip";
 import {
   formatCallDuration,
   isCallConnected,
@@ -74,47 +83,54 @@ export function CallMarker({ call }: CallMarkerProps) {
 
   return (
     <div className="flex justify-center py-2">
-      <div
-        data-testid="call-marker"
-        data-connected={conectada ? "true" : "false"}
-        aria-label={`${evento} — ${detalhe}${hora ? ` às ${hora}` : ""}`}
-        className={cn(
-          "inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5",
-          "bg-card/70 shadow-sm",
-          conectada ? "border-border" : "border-destructive/30",
-        )}
-      >
-        <Icone
-          aria-hidden
+      {/* Coluna interna: a pílula, e embaixo dela a gravação quando existe. A
+          gravação é ADENDO — não entra na pílula, senão a silhueta muda de
+          ligação para ligação e a thread perde a calma de leitura. */}
+      <div className="flex max-w-full flex-col items-center gap-1">
+        <div
+          data-testid="call-marker"
+          data-connected={conectada ? "true" : "false"}
+          aria-label={`${evento} — ${detalhe}${hora ? ` às ${hora}` : ""}`}
           className={cn(
-            "h-3.5 w-3.5 shrink-0",
-            conectada ? "text-muted-foreground" : "text-destructive",
-          )}
-        />
-
-        <span className="truncate text-xs text-muted-foreground">{evento}</span>
-
-        <span aria-hidden className="text-muted-foreground/40">
-          ·
-        </span>
-
-        <span
-          className={cn(
-            "shrink-0 text-xs tabular-nums",
-            conectada ? "font-medium text-foreground" : "text-destructive",
+            "inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5",
+            "bg-card/70 shadow-sm",
+            conectada ? "border-border" : "border-destructive/30",
           )}
         >
-          {detalhe}
-        </span>
+          <Icone
+            aria-hidden
+            className={cn(
+              "h-3.5 w-3.5 shrink-0",
+              conectada ? "text-muted-foreground" : "text-destructive",
+            )}
+          />
 
-        {hora && (
-          <time
-            dateTime={call.started_at}
-            className="shrink-0 border-l border-border/60 pl-2 text-[11px] tabular-nums text-muted-foreground/60"
+          <span className="truncate text-xs text-muted-foreground">{evento}</span>
+
+          <span aria-hidden className="text-muted-foreground/40">
+            ·
+          </span>
+
+          <span
+            className={cn(
+              "shrink-0 text-xs tabular-nums",
+              conectada ? "font-medium text-foreground" : "text-destructive",
+            )}
           >
-            {hora}
-          </time>
-        )}
+            {detalhe}
+          </span>
+
+          {hora && (
+            <time
+              dateTime={call.started_at}
+              className="shrink-0 border-l border-border/60 pl-2 text-[11px] tabular-nums text-muted-foreground/60"
+            >
+              {hora}
+            </time>
+          )}
+        </div>
+
+        <CallRecordingStrip call={call} />
       </div>
     </div>
   );

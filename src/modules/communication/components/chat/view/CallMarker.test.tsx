@@ -25,6 +25,10 @@ function call(over: Partial<ConversationCall> = {}): ConversationCall {
     duration_seconds: 220,
     phone_number: "48996458738",
     started_at: "2026-08-02T19:23:23.000Z",
+    // Ausência de gravação — o estado de 100% das ligações em produção hoje.
+    recording_status: null,
+    recording_url: null,
+    recording_failure_reason: null,
     ...over,
   };
 }
@@ -93,6 +97,43 @@ describe("CallMarker — não atendida", () => {
     render(<CallMarker call={call({ outcome: "algo_novo_do_banco", duration_seconds: null })} />);
     expect(screen.getByTestId("call-marker")).toBeInTheDocument();
     expect(screen.queryByText(/undefined/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("CallMarker — a gravação é adendo, não parte da pílula", () => {
+  it("sem gravação, a pílula é tudo que existe", () => {
+    render(<CallMarker call={call()} />);
+    expect(screen.getByTestId("call-marker")).toBeInTheDocument();
+    expect(screen.queryByTestId("call-recording-processing")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("call-recording-ready")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("call-recording-failed")).not.toBeInTheDocument();
+  });
+
+  it("com gravação pronta, o convite aparece FORA da pílula", () => {
+    render(<CallMarker call={call({ recording_status: "ready", recording_url: "org/call-1.opus" })} />);
+    const pilula = screen.getByTestId("call-marker");
+    const convite = screen.getByTestId("call-recording-ready");
+    expect(convite).toBeInTheDocument();
+    // Dentro da pílula, a silhueta mudaria de ligação para ligação.
+    expect(pilula.contains(convite)).toBe(false);
+  });
+
+  it("gravação processando não muda o que a pílula diz sobre a ligação", () => {
+    render(<CallMarker call={call({ recording_status: "processing", duration_seconds: 220 })} />);
+    expect(screen.getByText("3min 40s")).toBeInTheDocument();
+    expect(screen.getByTestId("call-recording-processing")).toBeInTheDocument();
+  });
+
+  it("gravação que falhou não faz a ligação parecer falha", () => {
+    render(
+      <CallMarker
+        call={call({ recording_status: "failed", recording_failure_reason: "vps_timeout", outcome: "connected" })}
+      />,
+    );
+    // A ligação ATENDEU; foi a gravação que falhou. Confundir as duas mentiria
+    // sobre o desfecho comercial.
+    expect(screen.getByTestId("call-marker")).toHaveAttribute("data-connected", "true");
+    expect(screen.getByTestId("call-recording-failed")).toBeInTheDocument();
   });
 });
 
