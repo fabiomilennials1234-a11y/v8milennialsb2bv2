@@ -236,6 +236,60 @@ Deno.test("a busca guarda o objeto no caminho derivado da org e da chamada", asy
   assert(seen[0].auth?.startsWith("Bearer "), "a busca foi sem credencial");
 });
 
+/** Lê as claims de um `Bearer <JWS>` sem verificar — o teste só quer olhar. */
+function claimsOf(auth: string | null): Record<string, unknown> {
+  const jws = (auth ?? "").replace(/^Bearer\s+/, "");
+  const parte = jws.split(".")[1] ?? "";
+  return JSON.parse(new TextDecoder().decode(bytesFromB64url(parte)));
+}
+
+Deno.test("o token cunhado NOMEIA a chamada que está sendo buscada", async () => {
+  // O ACHADO DA REVISÃO, pelo lado do CRM. A VPS passou a exigir `cid` na
+  // credencial (`callIDFor`), e sem ele toda busca tomaria 404 — o sintoma
+  // apareceria como "a gravação nunca chega", que não aponta para o token.
+  //
+  // O `cid` é o id de rede da chamada (`tc_call_id`), NÃO o id do ledger do
+  // CRM: é ele que a VPS conhece, e trocá-los daria 404 em toda gravação.
+  await installSigner();
+  const store = fakeStore();
+  const { fn, seen } = fakeFetch([{ status: 200, body: OGG }, { status: 204 }]);
+
+  await muteRuntimeLogs(() => runRecordingIngest(store.db, ARGS, { fetch: fn }));
+
+  assertEquals(seen.length, 2, "esperado GET e DELETE");
+  for (const req of seen) {
+    const c = claimsOf(req.auth);
+    assertEquals(c.cid, TC_CALL, `${req.method}: o token não nomeia a chamada`);
+    assertEquals(c.sid, SID, `${req.method}: o token não nomeia a sessão`);
+    assertEquals(c.org, ORG, `${req.method}: o token não nomeia a organização`);
+    assertEquals(c.sc, "admin");
+  }
+  // LER e APAGAR continuam sendo atos SEPARADOS: o token da busca não apaga.
+  assertEquals(claimsOf(seen[0].auth).act, ["recording.read"]);
+  assertEquals(claimsOf(seen[1].auth).act, ["recording.delete"]);
+});
+
+Deno.test("cunhar credencial de gravação sem chamada é recusado no assinador", async () => {
+  // Fail-closed com a causa nomeada. Um token sem `cid` seria recusado lá na
+  // VPS com 404 — indistinguível de "a gravação não existe", que é o
+  // diagnóstico errado e manda olhar o lugar errado.
+  await installSigner();
+  const { signAdminToken } = await import("./tokens.ts");
+  for (const act of ["recording.read", "recording.delete"] as const) {
+    let estourou = false;
+    try {
+      await signAdminToken({ act, org: ORG, sid: SID, sub: "teste" });
+    } catch (e) {
+      estourou = true;
+      assert(
+        String(e).includes("cid"),
+        `${act}: a mensagem não nomeia a causa: ${e}`,
+      );
+    }
+    assert(estourou, `${act} foi cunhado sem cid`);
+  }
+});
+
 Deno.test("a gravação de outra organização não alcança este caminho", async () => {
   // O caminho é DERIVADO da organização que a RPC resolveu pela sessão. Duas
   // organizações produzem dois prefixos distintos, e a policy do bucket lê

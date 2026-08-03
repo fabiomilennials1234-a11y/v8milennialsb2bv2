@@ -130,6 +130,10 @@ export async function fetchAndStoreRecording(
       act: "recording.read",
       org: args.organizationId,
       sid: args.sessionId,
+      // A credencial nomeia UMA chamada. Sem `cid` ela autorizaria o acervo
+      // inteiro da sessão, e a VPS a recusa (`callIDFor`). Least-privilege:
+      // o token que busca a gravação de uma ligação não serve para outra.
+      cid: args.tcCallId,
       // `sub` é trilha, não autorização: quem pede é o próprio CRM, reagindo a
       // um evento assinado. Não há usuário humano neste caminho, e inventar um
       // faria a trilha mentir.
@@ -248,6 +252,8 @@ export async function dropRecordingFromVps(
       act: "recording.delete",
       org: args.organizationId,
       sid: args.sessionId,
+      // Mesma regra do GET, e aqui ela pesa mais: apagar é irreversível.
+      cid: args.tcCallId,
       sub: "torquecalls-webhook",
     });
     const controller = new AbortController();
