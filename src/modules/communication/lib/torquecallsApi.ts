@@ -62,6 +62,15 @@ export interface StreamTokenResult {
 /**
  * Códigos de recusa do governor. Traduzidos aqui, uma vez, porque a mesma
  * negativa aparece no botão, no toast e no painel — e três traduções divergem.
+ *
+ * A regra que decide cada frase: **o vendedor tem que saber o que fazer depois
+ * de ler.** "O serviço de chamadas recusou a ligação" falhava nisso — ele
+ * tentava de novo, dava o mesmo, e concluía que a ferramenta estava quebrada.
+ * Era a única frase para toda recusa vinda da VPS, inclusive para a causa mais
+ * acionável que existe: o número do lead não tem WhatsApp (issue #1365).
+ *
+ * Os códigos da VPS chegam aqui já traduzidos por `_shared/voip/vps-refusal.ts`
+ * — o front nunca vê prosa de terceiro.
  */
 export const CALL_DENY_MESSAGES: Record<string, string> = {
   voice_calls_disabled: "Chamada de voz está desligada para este número.",
@@ -79,6 +88,30 @@ export const CALL_DENY_MESSAGES: Record<string, string> = {
   session_not_open: "O número de chamadas não está conectado.",
   session_not_found: "Nenhum número de chamadas configurado.",
   call_not_answerable: "Esta chamada não está mais disponível.",
+  invalid_peer: "O telefone deste lead não serve para chamada. Confira o cadastro.",
+
+  // ─── recusas da VPS ───────────────────────────────────────────────────────
+  // Cada uma sai de uma causa que a VPS nomeia. A diferença entre elas é o que
+  // o vendedor faz a seguir: corrigir cadastro, esperar, ou chamar o suporte.
+
+  // A ligação é por WhatsApp. Sem conta lá, não há para onde ligar — e o
+  // cadastro é dele para corrigir. É a causa que motivou a issue #1365.
+  peer_not_on_whatsapp:
+    "Este número não tem WhatsApp. Confira o telefone no cadastro do lead.",
+  // Não foi possível PERGUNTAR ao WhatsApp. Transitório de verdade: tentar de
+  // novo é o conselho certo, e é o oposto do de cima.
+  whatsapp_unreachable:
+    "Não foi possível consultar o WhatsApp agora. Tente novamente em instantes.",
+  // A sessão existe mas o aparelho não está vinculado. Tem ação, e ela não é
+  // "tente de novo": é reconectar o número.
+  session_not_paired:
+    "O número de chamadas não está conectado. Reconecte em Configurações.",
+  // A VPS não respondeu — distinto de "recusou". Aqui não se sabe se a ligação
+  // saiu, e é a primeira pergunta de qualquer incidente de voz.
+  vps_unreachable: "O serviço de chamadas não respondeu. Tente novamente.",
+
+  // Fim de linha. Continua existindo para o que ainda não tem nome próprio —
+  // toda causa que ganhar um sai deste balde, nunca o contrário.
   vps_refused: "O serviço de chamadas recusou a ligação.",
 };
 

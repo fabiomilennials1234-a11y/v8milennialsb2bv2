@@ -26,6 +26,11 @@ import { adminClient, type Caller, isOrgAdmin, resolveCaller } from "../_shared/
 import { authorizeCallAndMint, renewCallControlToken } from "../_shared/voip/call-plane.ts";
 import { signStreamToken, STREAM_TTL_SECONDS } from "../_shared/voip/tokens.ts";
 import { callVps, publicVpsUrl } from "../_shared/voip/vps.ts";
+import {
+  refusedCallPatch,
+  type VpsRefusalCode,
+  vpsRefusalCode,
+} from "../_shared/voip/vps-refusal.ts";
 
 type Action =
   | "streamToken"
@@ -183,8 +188,13 @@ async function startCall(
   );
 
   if (!started.ok) {
-    await releaseReservation(db, authorized.callId, started.error);
-    return json(started.status, { error: started.error, code: "vps_refused" }, cors);
+    // A causa vira um CÓDIGO aqui, uma vez. Antes, toda recusa desta rota saía
+    // como `vps_refused` e o front traduzia em "o serviço de chamadas recusou a
+    // ligação" — frase com a qual o vendedor não pode fazer nada, para uma causa
+    // que ele resolveria em dez segundos (issue #1365).
+    const code = vpsRefusalCode(started);
+    await releaseReservation(db, authorized.callId, code, started.error);
+    return json(started.status, { error: started.error, code }, cors);
   }
 
   // A VPS ecoa o id que autorizamos. Divergência aqui é defeito de contrato, não
@@ -252,7 +262,13 @@ async function acceptCall(
     { token: authorized.tokens.start, body: {} },
   );
 
-  if (!accepted.ok) return json(accepted.status, { error: accepted.error, code: "vps_refused" }, cors);
+  // Mesma tradução do outbound. Atender tem motivos próprios ("no such call",
+  // "claimed by another client") que hoje ainda caem no balde genérico — o mapa
+  // é o lugar de acrescentá-los quando merecerem frase própria. O que não pode
+  // é esta rota ter uma tradução diferente da outra para a MESMA causa.
+  if (!accepted.ok) {
+    return json(accepted.status, { error: accepted.error, code: vpsRefusalCode(accepted) }, cors);
+  }
 
   return json(200, {
     call_id: authorized.callId,
@@ -365,14 +381,25 @@ async function renewCtl(
   return json(200, { ctl: renewed.ctl, expires_at: renewed.expiresAt }, cors);
 }
 
-async function releaseReservation(db: Admin, callId: string, reason: string) {
-  // A VPS recusou: a reserva não pode ficar segurando cota até o reaper passar.
-  await db.from("voip_calls").update({
-    status: "expired",
-    end_reason: `vps_refused:${reason}`.slice(0, 200),
-    ended_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }).eq("id", callId).eq("status", "authorized");
+/**
+ * A VPS recusou: a reserva não pode ficar segurando cota até o reaper passar.
+ *
+ * O QUE é escrito — estado e motivo — mora em `refusedCallPatch`, que é pura e
+ * tem teste. Aqui fica só o ONDE: a linha certa, e apenas enquanto ela ainda
+ * está `authorized` (o `.eq` final é o que impede sobrescrever uma chamada que
+ * já andou por outro caminho).
+ */
+async function releaseReservation(
+  db: Admin,
+  callId: string,
+  code: VpsRefusalCode,
+  reason: string,
+) {
+  await db
+    .from("voip_calls")
+    .update(refusedCallPatch(code, reason, new Date().toISOString()))
+    .eq("id", callId)
+    .eq("status", "authorized");
 }
 
 function denied(
