@@ -380,6 +380,10 @@ Deno.test("cada código da RPC vira o status que o contrato manda", async () => 
     ["out_of_order", true, 200],
     ["session_not_found", true, 202],
     ["session_inert", true, 202],
+    // Entrada E2: `peer` que não cabe em voip_calls.peer_phone. 202 e ok=true
+    // porque é recusa ESPERADA — 409 faria a VPS registrar `CRM RECUSOU` em
+    // nível error a cada oferta de conta LID.
+    ["peer_unusable", true, 202],
     ["transition_refused", false, 409],
   ];
 
@@ -394,6 +398,54 @@ Deno.test("cada código da RPC vira o status que o contrato manda", async () => 
     assertEquals(res.status, status, `código ${code}`);
     assertEquals(await res.json(), { ok, code });
   }
+});
+
+// Uma recusa, UM registro.
+//
+// `peer_unusable` é o desfecho de uma oferta de entrada cujo `peer` não cabe em
+// `voip_calls.peer_phone`, e a RPC já escreve `webhook_entrada_sem_telefone` com
+// o peer, a contagem de dígitos e a faixa aceita. Uma linha daqui seria a
+// SEGUNDA por oferta — e mais pobre, porque neste ponto o corpo já não está em
+// mãos. A população existe (conta LID sem `caller_pn`, oferta de grupo), então
+// isso seria ruído permanente em nível `error`.
+//
+// O controle é `transition_refused`, que CONTINUA escrevendo: recusa de
+// transição é o desfecho que merece olho humano, e nada aqui pode enfraquecê-la.
+Deno.test({
+  name: "peer_unusable NÃO gera linha de runtime_logs; transition_refused gera",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    {
+      const k = await makePair();
+      install(k.entry);
+      const db = fakeDb({ data: { ok: true, code: "peer_unusable", detail: "peer_phone_unusable" } });
+      const token = await signEnvelope({ priv: k.priv, kid: k.kid });
+
+      const { result, rows } = await captureRuntimeLogs(() =>
+        handleVpsEvent(post(GO_BODY, token), db.open)
+      );
+
+      assertEquals(result.status, 202, "recusa esperada não é 4xx");
+      assertEquals(rows.length, 0, "o endpoint NÃO pode dobrar o registro da RPC");
+    }
+
+    {
+      const k = await makePair();
+      install(k.entry);
+      const db = fakeDb({ data: { ok: false, code: "transition_refused", detail: "unknown_type" } });
+      const token = await signEnvelope({ priv: k.priv, kid: k.kid });
+
+      const { result, rows } = await captureRuntimeLogs(() =>
+        handleVpsEvent(post(GO_BODY, token), db.open)
+      );
+
+      assertEquals(result.status, 409);
+      assertEquals(rows.length, 1, "transition_refused continua deixando rastro");
+      assertEquals(rows[0].action, "webhook_transicao_recusada");
+      assertEquals(rows[0].status, "error");
+    }
+  },
 });
 
 Deno.test("código FORA do contrato vira 500, não 200 silencioso", async () => {

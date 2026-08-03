@@ -1,0 +1,68 @@
+-- ROLLBACK de 20270805000000_voip_incoming_creates_call.sql
+--
+-- Desfaz a criação de linha na ENTRADA: `fn_voip_apply_vps_event` volta à versão
+-- de 20270803000000 (cinco tipos, e ela só ATUALIZA), e `fn_phone_match_forms`
+-- some.
+--
+-- O QUE ESTE ARQUIVO NÃO FAZ, E POR QUÊ
+-- -------------------------------------
+-- 1. NÃO apaga as linhas de `voip_calls` que a entrada criou, nem os registros
+--    de `call_logs`/`lead_history` que elas produziram. Ligação recebida é fato
+--    do relacionamento com o cliente; um rollback de schema não apaga histórico
+--    comercial. As linhas ficam, coerentes e legíveis — o que muda é que nenhuma
+--    nova aparece.
+--
+--    Consequência aceita e dita em voz alta: as chamadas de entrada que ficarem
+--    abertas (`ringing`, sem operador) passam a depender exclusivamente do
+--    varredor `voip-sweep-stuck-calls`, que as fecha em 2 minutos com
+--    `end_reason = 'no_terminal_event'`. Isso já é o comportamento delas hoje
+--    quando o `call-ended` não chega — não é regressão nova.
+--
+-- 2. NÃO derruba `voip_calls_network_id_unique` nem coluna nenhuma. Esta
+--    migration não criou schema de tabela: só funções.
+--
+-- 3. NÃO mexe na VPS. Se a imagem que emite `incoming` já estiver no ar quando
+--    este rollback rodar, cada ligação recebida volta a cair em `unknown_type` →
+--    `transition_refused` → HTTP 409, com uma linha de `runtime_logs` em nível
+--    error de cada lado. Nada quebra (a VPS não espera nem retenta), mas é ruído
+--    — **desça a imagem da VPS ANTES de rodar este arquivo**, que é a ordem
+--    inversa da subida.
+
+-- ===========================================================================
+-- 1. A RPC volta à versão de 20270803000000
+-- ===========================================================================
+-- Em Postgres não existe "desfazer um CREATE OR REPLACE": o jeito é reaplicar o
+-- corpo anterior INTEIRO. Ele vive em
+-- `supabase/migrations/20270803000000_voip_recording_ingest.sql`, seção 6 — a
+-- fonte é aquele arquivo, e reproduzi-lo aqui por cópia criaria uma terceira
+-- versão do mesmo corpo, que é exatamente como duas divergem em três meses.
+--
+-- PROCEDIMENTO (um comando, e ele é idempotente):
+--
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+--     -c "$(sed -n '/^CREATE OR REPLACE FUNCTION public.fn_voip_apply_vps_event($/,/^\$\$;$/p' \
+--            supabase/migrations/20270803000000_voip_recording_ingest.sql)"
+--
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+--     REVOKE ALL ON FUNCTION public.fn_voip_apply_vps_event(uuid, text, bigint, bigint, timestamptz, jsonb) FROM PUBLIC;
+--     REVOKE ALL ON FUNCTION public.fn_voip_apply_vps_event(uuid, text, bigint, bigint, timestamptz, jsonb) FROM anon;
+--     REVOKE ALL ON FUNCTION public.fn_voip_apply_vps_event(uuid, text, bigint, bigint, timestamptz, jsonb) FROM authenticated;
+--     GRANT EXECUTE ON FUNCTION public.fn_voip_apply_vps_event(uuid, text, bigint, bigint, timestamptz, jsonb) TO service_role;
+--   SQL
+--
+-- CONFERÊNCIA (a única que importa): a função volta a NÃO conhecer `incoming`.
+--
+--   SELECT prosrc LIKE '%incoming_registered%' AS ainda_cria
+--     FROM pg_proc WHERE proname = 'fn_voip_apply_vps_event';
+--   -- tem que devolver `f`
+
+-- ===========================================================================
+-- 2. fn_phone_match_forms
+-- ===========================================================================
+-- Depois da RPC voltar, e não antes: enquanto a versão nova estiver no ar ela
+-- chama esta função, e derrubá-la primeiro deixaria toda ligação recebida
+-- estourando `function does not exist` dentro da transação do webhook.
+--
+-- Sem CASCADE de propósito: se algo mais tiver passado a depender dela, o DROP
+-- tem que FALHAR e a dependência tem que aparecer, não sumir junto.
+DROP FUNCTION IF EXISTS public.fn_phone_match_forms(text);
