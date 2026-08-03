@@ -332,39 +332,53 @@ export function useAddLeadToStandardPipe() {
       const memberId = chosenOwnerId ?? currentMemberId;
       const trimmedNotes = notes?.trim() ? notes.trim() : null;
 
-      if (pipeType === "qualificacao") {
-        const { error } = await supabase.from("pipe_whatsapp").insert({
-          lead_id: leadId,
-          status: stageId,
-          responsible_id: memberId,
-          sdr_id: memberId,
-          notes: trimmedNotes,
-          organization_id: teamMember.organization_id,
-        });
-        if (error) throw error;
-      } else if (pipeType === "confirmacao") {
-        const { error } = await supabase.from("pipe_confirmacao").insert({
-          lead_id: leadId,
-          status: stageId,
-          responsible_id: memberId,
-          sdr_id: memberId,
-          meeting_date: meetingDate ?? null,
-          notes: trimmedNotes,
-          organization_id: teamMember.organization_id,
-        });
-        if (error) throw error;
-      } else if (pipeType === "propostas") {
-        const { error } = await supabase.from("pipe_propostas").insert({
-          lead_id: leadId,
-          status: stageId,
-          responsible_id: memberId,
-          closer_id: memberId,
-          sale_value: saleValue ?? null,
-          notes: trimmedNotes,
-          organization_id: teamMember.organization_id,
-        });
+      /**
+       * ADR-0023 decisões 3 e 9 — abrir negócio é UM ato, não dois.
+       *
+       * Antes daqui saíam três `insert` nas views de compatibilidade, e cada um
+       * criava só a POSIÇÃO. A identidade (`deals`) nunca nascia: o único
+       * `INSERT INTO deals` do repo vivia no hook de `/negocios`, que a fatia 2
+       * apagou. Resultado: o "negócio" não tinha título próprio — a lista de
+       * Leads derivava um na leitura, a partir do nome do funil, que é
+       * exatamente o que a decisão 9 rejeita por produzir dezenas de milhares de
+       * negócios chamados "Qualificação".
+       *
+       * A RPC `abrir_negocio` faz as duas escritas no corpo de uma função só:
+       * ou nascem identidade e posição ligadas por `deal_id`, ou nenhuma. Do
+       * cliente seriam duas chamadas, e uma falha no meio deixaria card órfão —
+       * o mesmo estado que o backfill do L3 existe para consertar, refeito a
+       * cada erro de rede.
+       *
+       * A RPC é `SECURITY INVOKER`: a permissão continua sendo exatamente a de
+       * criar o card. A pergunta em aberto ("quem pode abrir um negócio?") segue
+       * respondível depois, mexendo em policy.
+       *
+       * `as never` no nome: `abrir_negocio` ainda não está em
+       * `integrations/supabase/types.ts`, que é gerado e só é regenerado depois
+       * do apply em prod (regenerar a partir de branch efêmera corrompe o
+       * arquivo — ver CLAUDE.md).
+       */
+      const RPC_PIPE: Record<string, string> = {
+        qualificacao: "whatsapp",
+        confirmacao: "confirmacao",
+        propostas: "propostas",
+      };
+
+      if (RPC_PIPE[pipeType]) {
+        const { error } = await supabase.rpc("abrir_negocio" as never, {
+          p_lead_id: leadId,
+          p_pipe: RPC_PIPE[pipeType],
+          p_stage: stageId,
+          p_owner_id: memberId,
+          p_value: pipeType === "propostas" ? saleValue ?? null : null,
+          p_meeting_date: pipeType === "confirmacao" ? meetingDate ?? null : null,
+          p_notes: trimmedNotes,
+          p_title: null,
+        } as never);
         if (error) throw error;
       } else if (pipeType === "upsell") {
+        // Carteira entra por regra própria (ADR-0023 decisão 8), não por esta
+        // porta — a RPC recusa `upsell` de propósito.
         const { error } = await supabase.from("upsell").insert({
           lead_id: leadId,
           status: stageId,
@@ -377,6 +391,12 @@ export function useAddLeadToStandardPipe() {
       queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["upsell"] });
+      // A camada de negócio da lista de Leads passa a ter linha nova em `deals`
+      // a cada abertura — sem isto, o negócio existe no banco e a lista segue
+      // mostrando o estado anterior até perder e recuperar o foco. Mesmo par que
+      // `useCrossPipeMove` invalida ao mover etapa.
+      queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-sales-metrics"] });
     },
   });
 }
