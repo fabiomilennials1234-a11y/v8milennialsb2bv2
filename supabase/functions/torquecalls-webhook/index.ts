@@ -85,6 +85,11 @@ import {
   verifyWebhookDetailed,
   type WebhookRejection,
 } from "../_shared/voip/webhook-verify.ts";
+import {
+  asRecordingStore,
+  type FetchLike,
+  runRecordingIngest,
+} from "../_shared/voip/recording.ts";
 
 export type Admin = ReturnType<typeof adminClient>;
 
@@ -331,6 +336,17 @@ function clip(value: string | undefined, max: number): string | null {
 export async function handleVpsEvent(
   req: Request,
   openAdmin: () => Admin,
+  /**
+   * Só para teste: substitui a busca da gravação e o `fetch` que ela usa.
+   *
+   * A busca é EFEITO do evento, não parte da transação dele — e para prová-lo é
+   * preciso poder observar que ela foi (ou não foi) disparada, e com quais
+   * argumentos. Sem esta costura, o único jeito de testar seria bater na rede.
+   */
+  deps: {
+    ingest?: typeof runRecordingIngest;
+    fetch?: FetchLike;
+  } = {},
 ): Promise<Response> {
   // ── 1. rajada ─────────────────────────────────────────────────────────────
   //
@@ -501,7 +517,17 @@ export async function handleVpsEvent(
     return json(500, { error: "internal_error" });
   }
 
-  const result = (data ?? {}) as { ok?: boolean; code?: string; detail?: string };
+  // `fetch_call_id`/`tc_call_id`/`organization_id` só existem no desfecho de
+  // `recording-ready`, e só quando há de fato o que buscar. Ver a seção 3.3 de
+  // 20270803000000_voip_recording_ingest.sql.
+  const result = (data ?? {}) as {
+    ok?: boolean;
+    code?: string;
+    detail?: string;
+    fetch_call_id?: unknown;
+    tc_call_id?: unknown;
+    organization_id?: unknown;
+  };
   const code = typeof result.code === "string" ? result.code : "";
   const status = CODE_TO_STATUS[code];
 
@@ -523,6 +549,57 @@ export async function handleVpsEvent(
       status: registro.status,
       payloadSnapshot: { ...evento, detalhe: clip(result.detail, MAX_DETAIL_CHARS) },
     });
+  }
+
+  // ── 6. o efeito: buscar a gravação ───────────────────────────────────────
+  //
+  // A RPC decide; esta função obedece. `fetch_call_id` só vem preenchido quando
+  // há de fato o que buscar — reentrega sobre gravação já guardada devolve
+  // `already_stored` e nada acontece aqui.
+  //
+  // É EFEITO, NÃO PARTE DA TRANSAÇÃO. O evento já foi aplicado e o `jti` já foi
+  // reservado; a busca acontece depois, e o que ela devolve não muda o status
+  // HTTP. Amarrar as duas coisas faria uma rede ruim entre o CRM e a VPS virar
+  // 500 sobre um evento que foi corretamente consumido — e a VPS não retenta.
+  //
+  // EM SEGUNDO PLANO, com `EdgeRuntime.waitUntil`. Um arquivo de 4,5 h leva mais
+  // que os 5 s do cliente HTTP da VPS (`webhookTimeout`), e segurar a resposta
+  // até o fim faria a VPS abortar a requisição — no Supabase Edge, cliente que
+  // desconecta recicla o isolate, e o upload morreria no meio deixando a
+  // gravação presa em `processing`. `waitUntil` mantém o isolate vivo até a
+  // busca terminar. Fora do Supabase Edge (teste, dev local) cai numa promessa
+  // aguardada, que é o que torna o efeito observável no teste.
+  const fetchCallId = typeof result.fetch_call_id === "string" ? result.fetch_call_id : null;
+  const fetchTcCallId = typeof result.tc_call_id === "string" ? result.tc_call_id : null;
+  const fetchOrgId = typeof result.organization_id === "string" ? result.organization_id : null;
+
+  if (fetchCallId && fetchTcCallId && fetchOrgId) {
+    const ingest = deps.ingest ?? runRecordingIngest;
+    const trabalho = ingest(
+      asRecordingStore(db),
+      {
+        callId: fetchCallId,
+        tcCallId: fetchTcCallId,
+        sessionId: claims.sid,
+        organizationId: fetchOrgId,
+      },
+      { fetch: deps.fetch },
+    )
+      .then(() => undefined)
+      .catch((e) => {
+        // `runRecordingIngest` já registra a falha no banco; isto cobre o que
+        // escapar dele. Nunca propaga: o evento foi consumido.
+        console.error("[torquecalls-webhook] busca da gravação explodiu:", e);
+      });
+
+    const edgeRuntime = (globalThis as {
+      EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void };
+    }).EdgeRuntime;
+    if (typeof edgeRuntime?.waitUntil === "function") {
+      edgeRuntime.waitUntil(trabalho);
+    } else {
+      await trabalho;
+    }
   }
 
   return json(status, { ok: result.ok === true, code });

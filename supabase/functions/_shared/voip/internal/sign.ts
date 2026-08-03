@@ -196,7 +196,16 @@ export type AdminAction =
   | "session.pair"
   | "session.logout"
   | "session.adopt"
-  | "session.policy";
+  | "session.policy"
+  // A gravação (ADR-0026 §5). É o CRM que BUSCA o arquivo; a VPS só anuncia
+  // que ele existe e verifica este token. Server-to-server, 30 s, nunca chega
+  // a um navegador — por isso `admin` e não `stream`.
+  //
+  // LER e APAGAR são ações SEPARADAS de propósito: no instante da busca, a
+  // cópia da VPS é a ÚNICA que existe, e um token emitido para copiá-la não
+  // pode servir para destruí-la.
+  | "recording.read"
+  | "recording.delete";
 
 export interface AdminTokenArgs {
   act: AdminAction;
@@ -206,6 +215,17 @@ export interface AdminTokenArgs {
   all?: boolean;
   /** Sessão alvo. Obrigatória em delete/pair/logout/adopt/policy. */
   sid?: string;
+  /**
+   * Chamada alvo. Obrigatória nos dois atos de gravação, e recusada pela VPS
+   * quando ausente (`callIDFor`) ou fora do formato (32 hex maiúsculos).
+   *
+   * Existe porque a rota da gravação nomeia UMA chamada: sem `cid` a
+   * credencial autorizaria o acervo inteiro da sessão. A revisão desta fatia
+   * mediu exatamente isso — um token da chamada A lendo a gravação da B, com
+   * 200 — e é a mesma forma de defeito de autorizar por uma chave e agir por
+   * outra.
+   */
+  cid?: string;
   /** Quem pediu, só para trilha. */
   sub: string;
 }
@@ -217,10 +237,18 @@ export async function signAdminToken(args: AdminTokenArgs): Promise<SignedToken>
   if (!args.all && !args.org) {
     throw new Error("voip/sign: tc-admin exige org ou all=true");
   }
+  // Os atos de gravação agem sobre UMA chamada. Cunhar sem `cid` produziria um
+  // token que a VPS recusa (`callIDFor` devolve 404) — e o sintoma apareceria
+  // como "a gravação nunca chega", que não aponta para cá. Fail-closed aqui,
+  // com a mensagem que nomeia a causa.
+  if ((args.act === "recording.read" || args.act === "recording.delete") && !args.cid) {
+    throw new Error(`voip/sign: ${args.act} exige cid — a credencial nomeia UMA chamada`);
+  }
   const claims: Record<string, unknown> = { sub: args.sub };
   if (args.all) claims.all = true;
   else claims.org = args.org;
   if (args.sid) claims.sid = args.sid;
+  if (args.cid) claims.cid = args.cid;
   return signJWS("admin", [args.act], ADMIN_TTL_SECONDS, claims);
 }
 
