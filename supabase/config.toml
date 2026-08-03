@@ -290,6 +290,14 @@ verify_jwt = false
 [functions.torquecalls-webhook]
 verify_jwt = false
 
+# torquecalls-recording-maintenance: expurgo de 90 dias da gravação + fila de
+# rebusca. Quem chama é o pg_cron via pg_net, que não carrega JWT de usuário —
+# a autenticação é `x-cron-secret` (ou service_role), conferida dentro. As
+# quatro RPCs que ela usa estão revogadas de anon e authenticated no banco.
+# Ver docs/adr/0026-gravacao-de-chamada-na-vps.md §8.
+[functions.torquecalls-recording-maintenance]
+verify_jwt = false
+
 # sz-chat-webhook: recebe webhooks do SZChat (Fortics); autenticação via x-webhook-secret header
 [functions.sz-chat-webhook]
 verify_jwt = false

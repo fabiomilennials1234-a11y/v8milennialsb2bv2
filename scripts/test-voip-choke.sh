@@ -65,11 +65,33 @@ find_outside_importers() {
 # ambiente e por isso citam a variável — exceção deliberada e estreita: um
 # arquivo `.test.ts` em qualquer outro lugar continua sendo violação, senão
 # bastaria batizar o vazamento de "teste".
+#
+# COMENTÁRIOS SÃO DESCARTADOS ANTES DA BUSCA, pela mesma razão da checagem 3b:
+# um casador de texto ingênuo acusa a EXPLICAÇÃO da barreira, e não a violação
+# dela. Sem isto, um arquivo que documenta "não leio esta variável porque o
+# choke proíbe" é reprovado — o que ensina o próximo a apagar a explicação em
+# vez de obedecer à regra, que é o incentivo exatamente invertido. (Medido na
+# S4 #1360: `torquecalls-recording-maintenance` foi acusado por dois comentários
+# que existem para dizer que ele NÃO lê a chave.)
+#
+# Descartar comentário não abre buraco: só some a linha que COMEÇA com marcador
+# de comentário, e uma leitura de verdade — `Deno.env.get("...")` — é código,
+# nunca prefixada por `//` ou `*`. Violação com comentário à direita sobrevive
+# ao filtro. A prova disso é a seção 4, que planta a violação e exige que este
+# mesmo detector a encontre.
 find_extra_secret_readers() {
   local root="$1"
-  grep -rlE "TORQUECALLS_SIGNING_SK" --include='*.ts' "$root" 2>/dev/null \
-    | grep -v "/_shared/voip/internal/sign\.ts$" \
-    | grep -vE "/_shared/voip/(internal/)?[a-z-]+\.test\.ts$" || true
+  local f
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    if grep -vE '^[[:space:]]*(\*|//|/\*)' "$f" 2>/dev/null | grep -q "TORQUECALLS_SIGNING_SK"; then
+      echo "$f"
+    fi
+  done < <(
+    grep -rlE "TORQUECALLS_SIGNING_SK" --include='*.ts' "$root" 2>/dev/null \
+      | grep -v "/_shared/voip/internal/sign\.ts$" \
+      | grep -vE "/_shared/voip/(internal/)?[a-z-]+\.test\.ts$" || true
+  )
 }
 
 # ---------------------------------------------------------------------------
