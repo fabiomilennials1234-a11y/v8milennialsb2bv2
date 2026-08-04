@@ -69,7 +69,7 @@ async function resolveVariables(
   const { data: lead } = await supabase
     .from("leads")
     .select(
-      "name, company, email, phone, pipe_whatsapp, qualification_score, rating, " +
+      "name, company, email, phone, qualification_score, rating, " +
       "sdr_id, closer_id, responsible_id, organization_id, " +
       "faturamento, segment, urgency, notes, origin",
     )
@@ -77,6 +77,10 @@ async function resolveVariables(
     .maybeSingle();
 
   if (!lead) return template;
+
+  // ADR-0023 §10: `{estagio}` é a etapa do NEGÓCIO. Ver a nota longa em
+  // `action-handlers/whatsapp-helpers.ts` — a coluna espelho congela no MOVE.
+  const waEntry = await getPipeEntry(supabase, leadId, lead.organization_id as string, "whatsapp");
 
   let result = template;
 
@@ -86,7 +90,7 @@ async function resolveVariables(
     empresa:    lead.company || "",
     email:      lead.email || "",
     telefone:   lead.phone || "",
-    estagio:    lead.pipe_whatsapp || "",
+    estagio:    waEntry?.stage_key || "",
     score:      String(lead.qualification_score ?? ""),
     rating:     String(lead.rating ?? ""),
     faturamento: String(lead.faturamento ?? ""),

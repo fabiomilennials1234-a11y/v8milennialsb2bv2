@@ -30,21 +30,27 @@ import { cn } from "@/lib/utils";
  * isso o botão é primário e vive no cabeçalho da seção, não escondido num strip
  * de rodapé.
  *
- * **Só oferece campo que tem casa no banco hoje.** `deals` está vazia e não
- * acesa (fatia 2), então o negócio nasce como card de funil e cada campo pousa
- * na tabela legada do respectivo pipe:
+ * **Só oferece campo que tem casa no banco.** O submit vai para a RPC
+ * `abrir_negocio`, que cria identidade (`deals`) e posição (`pipeline_entries` /
+ * `custom_pipe_entries`) ligadas por `deal_id`, numa transação só:
  *
  * | Campo      | Onde grava                                   | Em qual funil |
  * |------------|----------------------------------------------|---------------|
  * | Etapa      | `status` / `stage_id`                        | todos         |
- * | Dono       | `responsible_id` + `sdr_id`/`closer_id`      | todos         |
- * | Observação | `notes`                                      | todos         |
- * | Valor      | `pipe_propostas.sale_value`                  | Propostas     |
+ * | Dono       | `deals.owner_id` + responsável do card        | todos         |
+ * | Observação | `deals.notes` + `notes` do card               | todos         |
+ * | Valor      | `deals.value` + `pipe_propostas.sale_value`   | Propostas     |
  * | Reunião    | `pipe_confirmacao.meeting_date`              | Confirmação   |
  *
- * **Título não existe** — `deals.title` é da fatia 2. Enquanto isso o negócio se
- * chama pelo nome do funil. Campo de título aqui seria promessa que o banco não
- * cumpre: o usuário digitaria e o valor sumiria no submit.
+ * **Título não é campo daqui, e é de propósito** (ADR-0023 decisão 9). Ele nasce
+ * derivado — `Negócio de <mês>/<ano>`, no fuso da org — e é editável depois.
+ * Campo obrigatório aqui foi rejeitado por pôr atrito na única porta de criação;
+ * campo opcional foi deixado para a tela de detalhe, onde renomear ("Reposição
+ * trimestral") é a ação que o usuário já foi procurar.
+ *
+ * A versão anterior deste comentário dizia "título não existe, `deals.title` é da
+ * fatia 2, o negócio se chama pelo nome do funil". Verdade até a fatia 2 escrever
+ * esta porta — o nome do funil como título é exatamente o que a decisão 9 rejeita.
  */
 
 export interface NewDealOption {

@@ -30,6 +30,7 @@ import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkfl
 import { useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/modules/pipelines/hooks/legacy/usePipeWhatsapp";
 import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
 import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
+import { invalidateAfterMove } from "@/modules/pipelines/lib/moverNegocio";
 import { useQueryClient } from "@tanstack/react-query";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import {
@@ -957,24 +958,42 @@ function PipeWhatsappInner() {
           }}
           prefilledLeadId={meetingModal.leadId}
           prefilledResponsibleId={meetingModal.sdrId ?? undefined}
+          /**
+           * ADR-0023 decisão 4: o negócio MOVE para a Confirmação.
+           *
+           * Antes, o modal criava o card de Confirmação e este `onSuccess`
+           * atualizava o de origem no WhatsApp — que ficava lá. O mesmo negócio
+           * em dois funis, 81 organizações com esse caminho configurado.
+           *
+           * A responsabilidade inverteu: `beforeSubmit` faz o passo que produz a
+           * métrica (o card de origem transita para a etapa de sucesso, e é essa
+           * transição que emite `meeting_booked`), e `moveFromEntryId` diz ao
+           * modal para mover essa mesma linha em vez de criar outra. Se o
+           * `beforeSubmit` lançar, o modal não escreve nada e o card não sai do
+           * lugar — mesma garantia de antes, quando fechar o modal cancelava.
+           */
+          moveFromEntryId={meetingModal.pipeId}
+          beforeSubmit={async () => {
+            await updatePipeWhatsapp.mutateAsync({
+              id: meetingModal.pipeId,
+              status: meetingModal.newStatus as PipeWhatsappStatus,
+              leadId: meetingModal.leadId,
+              sdrId: meetingModal.sdrId ?? undefined,
+            });
+          }}
           onSuccess={async () => {
             const pending = meetingModal;
             setMeetingModal(null);
             const stageLabel = statusColumns.find(c => c.id === pending.newStatus)?.title || pending.newStatus;
             try {
-              await updatePipeWhatsapp.mutateAsync({
-                id: pending.pipeId,
-                status: pending.newStatus as PipeWhatsappStatus,
-                leadId: pending.leadId,
-                sdrId: pending.sdrId ?? undefined,
-              });
-              logAction({ leadId: pending.leadId, action: "stage_changed", description: `Etapa alterada para "${stageLabel}" no Funil WhatsApp` });
-              if (organizationId) track({ event: "card_moved", organizationId, entityType: "pipe_whatsapp", entityId: pending.pipeId, metadata: { from_stage: pending.fromStatus, to_stage: pending.newStatus } });
-              toast.success("Reunião agendada e lead movido para Confirmação!");
+              logAction({ leadId: pending.leadId, action: "stage_changed", description: `Negócio movido de "${stageLabel}" para Confirmação` });
+              if (organizationId) track({ event: "card_moved", organizationId, entityType: "pipe_whatsapp", entityId: pending.pipeId, metadata: { from_stage: pending.fromStatus, to_stage: pending.newStatus, moved_to_pipe: "confirmacao" } });
+              invalidateAfterMove(queryClient, pending.leadId);
+              toast.success("Reunião agendada e negócio movido para Confirmação!");
             } catch (err) {
-              console.error("[PipeWhatsapp] Falha ao mover card após agendar reunião:", err);
+              console.error("[PipeWhatsapp] Falha após agendar reunião:", err);
               void logger.error(
-                "Falha ao mover card após agendar reunião",
+                "Falha após agendar reunião",
                 err instanceof Error ? err : new Error(String(err)),
                 {
                   resource: "pipelines",
@@ -982,7 +1001,7 @@ function PipeWhatsappInner() {
                   metadata: { pipeId: pending.pipeId, leadId: pending.leadId, toStage: pending.newStatus },
                 },
               );
-              toast.error("Reunião agendada, mas não foi possível mover o card no funil", {
+              toast.error("Reunião agendada, mas o board pode estar desatualizado", {
                 description: getErrorMessage(err),
               });
             } finally {

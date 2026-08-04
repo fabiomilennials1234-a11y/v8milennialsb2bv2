@@ -30,6 +30,17 @@ export function makeMockPipeOps(overrides: Partial<PipeOpsPort> = {}): PipeOpsPo
     useCreatePipeWhatsapp: noopMutation,
     useCreatePipeConfirmacao: noopMutation,
     useCreatePipeProposta: noopMutation,
+    // ADR-0023 decisão 4 — o drawer move o negócio em vez de duplicá-lo.
+    //
+    // `usePipelineId` devolve um id de mentira em vez de `noopQuery` (que devolve
+    // `data: undefined`): o caminho do "compareceu" aborta com "Funil de
+    // Orçamentos não encontrado" quando o id é nulo, então o default inerte
+    // esconderia o comportamento sob teste. Sobrescreva se o teste quiser
+    // exercitar justamente a ausência do funil.
+    usePipelineId: (() =>
+      ({ data: "pipeline-fake", isLoading: false, isPending: false }) as never),
+    moverNegocio: async () => {},
+    invalidateAfterMove: () => {},
     useUpdatePipeWhatsapp: noopMutation,
     useUpdatePipeConfirmacao: noopMutation,
     useDeletePipeConfirmacao: noopMutation,

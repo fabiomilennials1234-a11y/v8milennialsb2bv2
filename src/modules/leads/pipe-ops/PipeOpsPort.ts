@@ -23,6 +23,7 @@ import type {
 import type {
   UseQueryResult,
   UseMutationResult,
+  QueryClient,
 } from "@tanstack/react-query";
 import type { Tables } from "@/integrations/supabase/types";
 import type {
@@ -119,6 +120,24 @@ export interface MergedMeetingEditorSlotProps {
  * `pipelines` (PipeOpsProvider) usando os hooks/components reais.
  */
 export interface PipeOpsPort {
+  // ── Mover negócio (ADR-0023 decisão 4: avançar é MOVER, não copiar) ──────
+  //
+  // Entra pela PORTA, e não por `import { moverNegocio } from "@/modules/pipelines"`,
+  // que foi a primeira tentativa e estava errada: o barrel de pipelines carrega o
+  // `PipeOpsProvider`, então importá-lo de dentro de `leads` arrasta o provider
+  // inteiro para qualquer arquivo que renderize o drawer — três suítes de teste
+  // quebraram por causa disso, e o custo em runtime seria o mesmo. A porta existe
+  // justamente para inverter essa dependência.
+  usePipelineId: (slug: PipelineType) => UseQueryResult<string | null>;
+  moverNegocio: (params: {
+    entryId: string;
+    targetPipelineId: string;
+    targetStageKey: string;
+    stageOrigem?: string | null;
+    assignedTo?: string | null;
+  }) => Promise<void>;
+  invalidateAfterMove: (queryClient: QueryClient, leadId?: string) => void;
+
   // ── Stages (canônico) ────────────────────────────────────────────────────
   usePipelineStages: (pipelineType: PipelineType) => UseQueryResult<PipelineStage[]>;
   useAllPipelineStageOptions: () => StageOptionsByPipe;

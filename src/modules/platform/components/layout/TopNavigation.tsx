@@ -230,7 +230,6 @@ const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/automacoes": "workflows.view",
   "/equipe": "team.view",
   "/produtos": "products.view",
-  "/negocios": "deals.view",
   "/configuracoes": "settings.view",
 };
 

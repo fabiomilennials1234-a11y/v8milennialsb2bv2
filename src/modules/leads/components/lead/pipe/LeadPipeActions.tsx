@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   getPipelineKey,
+  getPipelineEntryId,
   getPipelineLabel,
   getPipelineColor,
   isInPipeline,
@@ -69,7 +70,15 @@ export function LeadPipeActions({
   return (
     <div className="space-y-2">
       {pipelines.map((pipeline) => {
-        const key = getPipelineKey(pipeline);
+        // `getPipelineKey` identifica o FUNIL (pipeType para system, pipelineId
+        // para custom) — era único enquanto o lead só podia ter um negócio por
+        // funil. Depois do M1 `useLeadAllPipelines` emite uma linha POR NEGÓCIO,
+        // então o funil sozinho colide: React reclamaria de chave duplicada e,
+        // pior, expandir/adicionar num negócio abriria os N (o estado de
+        // expansão é comparado contra esta mesma chave, logo abaixo).
+        // A identidade da linha é (funil, negócio); `none` cobre o funil vazio,
+        // que continua emitindo exatamente uma linha com `pipeId` nulo.
+        const key = `${getPipelineKey(pipeline)}:${getPipelineEntryId(pipeline) ?? "none"}`;
         const label = getPipelineLabel(pipeline);
         const color = getPipelineColor(pipeline);
         const inPipe = isInPipeline(pipeline);

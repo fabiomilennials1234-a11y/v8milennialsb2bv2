@@ -21,6 +21,23 @@ export function getPipelineKey(p: PipelineStatus): string {
   return p.type === "standard" ? p.pipeType : p.pipelineId;
 }
 
+/**
+ * Id do NEGÓCIO representado por esta linha, ou `null` quando o lead não tem
+ * negócio no funil.
+ *
+ * Existe porque `getPipelineKey` identifica o FUNIL, e depois do M1 o funil
+ * deixou de ser identidade de linha: `useLeadAllPipelines` emite uma linha por
+ * negócio, e um lead pode ter N no mesmo funil (recompra). Quem precisa de
+ * chave estável de linha usa `${getPipelineKey(p)}:${getPipelineEntryId(p) ?? "none"}`.
+ *
+ * As duas metades da união guardam esse id com nomes diferentes — `pipeId` no
+ * padrão, `entryId` no customizado —, que é a mesma distinção que
+ * `isInPipeline` já fazia logo abaixo.
+ */
+export function getPipelineEntryId(p: PipelineStatus): string | null {
+  return p.type === "standard" ? p.pipeId : p.entryId;
+}
+
 export function getPipelineLabel(p: PipelineStatus): string {
   return p.type === "standard" ? p.label : p.pipelineName;
 }

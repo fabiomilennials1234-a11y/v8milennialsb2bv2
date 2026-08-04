@@ -16,6 +16,7 @@ import {
 } from "@/contracts/pipe";
 import type { Tables } from "@/integrations/supabase/types";
 import { usePipeOps } from "../../../pipe-ops";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { CompareceuModal } from "../../leads/funnel-contexts/modals/CompareceuModal";
 import { cn } from "@/lib/utils";
@@ -51,10 +52,13 @@ export const MeetingFieldBlock = memo(function MeetingFieldBlock({
   onSuccess,
   bare = false,
 }: MeetingFieldBlockProps) {
-  const { useCreatePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeProposta, RescheduleModal } = usePipeOps();
+  const { useCreatePipeConfirmacao, useUpdatePipeConfirmacao, RescheduleModal, usePipelineId, moverNegocio, invalidateAfterMove } = usePipeOps();
   const createPipe = useCreatePipeConfirmacao();
   const updatePipe = useUpdatePipeConfirmacao();
-  const createPipeProposta = useCreatePipeProposta();
+  const queryClient = useQueryClient();
+  // O funil de destino do "compareceu". A transição virou MOVE (ADR-0023 §4), e
+  // mover exige o id do funil — antes só o hook de criação o conhecia.
+  const { data: propostasPipelineId } = usePipelineId("propostas");
   const logAction = useLogLeadAction();
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [compareceuOpen, setCompareceuOpen] = useState(false);
@@ -285,9 +289,41 @@ export const MeetingFieldBlock = memo(function MeetingFieldBlock({
         onOpenChange={setCompareceuOpen}
         leadName="Lead"
         currentResponsibleId={pipeData.responsible_id ?? null}
-        isLoading={updatePipe.isPending || createPipeProposta.isPending}
+        isLoading={updatePipe.isPending}
         onConfirm={async (responsibleId) => {
           try {
+            /**
+             * ADR-0023 decisão 4: o negócio MOVE para Orçamentos.
+             *
+             * Antes daqui saía um `createPipeProposta` que INSERIA um card novo,
+             * e o de Confirmação ficava em "compareceu" para sempre — o mesmo
+             * gêmeo que a tela de funil produzia.
+             *
+             * A ordem é a mesma das outras duas telas, e pelo mesmo motivo: o
+             * `updatePipe` leva o card à etapa de sucesso e é ELE que emite
+             * `meeting_held`, porque o gatilho reage à transição. Só depois o
+             * funil troca, na mesma linha.
+             *
+             * ⚠️ HERDADO — as etapas seguem chumbadas aqui ("compareceu",
+             * "marcar_compromisso") em vez de virem de `pipeline_stages`, como
+             * na tela de funil. É um dos 3 de 5 caminhos com esse defeito;
+             * consertar exige carregar as etapas neste componente, e trocar o
+             * comportamento junto com o move misturaria duas mudanças numa só.
+             */
+            // Capturado num const local: o `await` entre a guarda e o uso faz o
+            // TypeScript reabrir o tipo do valor vindo do hook.
+            const targetPipelineId = propostasPipelineId;
+            if (!targetPipelineId) {
+              throw new Error("Funil de Orçamentos não encontrado nesta organização");
+            }
+            // `pipeData.id` é `string | null` no tipo da view. Card sem id não é
+            // posição que se possa mover — falhar aqui é melhor que mandar null
+            // para o banco e receber "negócio não encontrado".
+            const entryId = pipeData.id;
+            if (!entryId) {
+              throw new Error("Card de Confirmação sem identificador — recarregue a página");
+            }
+
             await updatePipe.mutateAsync({
               id: pipeData.id,
               status: "compareceu" as PipeConfirmacaoStatus,
@@ -295,11 +331,15 @@ export const MeetingFieldBlock = memo(function MeetingFieldBlock({
               leadId,
               assignedTo: responsibleId,
             } as any);
-            await createPipeProposta.mutateAsync({
-              lead_id: leadId,
-              responsible_id: responsibleId,
-              status: "marcar_compromisso",
-            } as any);
+
+            await moverNegocio({
+              entryId,
+              targetPipelineId,
+              targetStageKey: "marcar_compromisso",
+              stageOrigem: null,
+              assignedTo: responsibleId,
+            });
+            invalidateAfterMove(queryClient, leadId);
             logAction({
               leadId,
               action: "meeting_attended",

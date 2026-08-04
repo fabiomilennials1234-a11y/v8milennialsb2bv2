@@ -110,25 +110,29 @@ export async function loadCapabilities(
   // Routing por stage/origin/segment requer leadId
   if (leadId) {
     try {
-      const [leadRes, upsellRes, confirmacaoRes, propostasRes, campanhaRes] = await Promise.all([
-        supabase.from("leads").select("pipe_whatsapp, origin, segment").eq("id", leadId).maybeSingle(),
+      // ADR-0023 §10: o funil WhatsApp entra pelo NEGÓCIO (`pipeline_entries`), igual
+      // confirmação e propostas. `leads.pipe_whatsapp` é espelho legado e não roteia mais.
+      const [leadRes, upsellRes, whatsappRes, confirmacaoRes, propostasRes, campanhaRes] = await Promise.all([
+        supabase.from("leads").select("origin, segment").eq("id", leadId).maybeSingle(),
         supabase.from("upsell_clients").select("tipo_cliente_tempo, gestao_stage").eq("lead_id", leadId).maybeSingle(),
+        getPipeEntry(supabase, leadId, organizationId, "whatsapp"),
         getPipeEntry(supabase, leadId, organizationId, "confirmacao"),
         getPipeEntry(supabase, leadId, organizationId, "propostas"),
         supabase.from("campanha_leads").select("stage_id, campanha_stages(name)").eq("lead_id", leadId).limit(1).maybeSingle(),
       ]);
 
-      const leadRow = leadRes.data as { pipe_whatsapp?: string; origin?: string; segment?: string } | null;
+      const leadRow = leadRes.data as { origin?: string; segment?: string } | null;
       const upsellRow = upsellRes.data as { tipo_cliente_tempo?: string; gestao_stage?: string } | null;
+      const whatsappRow = whatsappRes ? { status: whatsappRes.stage_key } : null;
       const confirmacaoRow = confirmacaoRes ? { status: confirmacaoRes.stage_key } : null;
       const propostasRow = propostasRes ? { status: propostasRes.stage_key } : null;
       const campanhaRow = campanhaRes.data as { campanha_stages?: { name?: string } } | null;
 
       leadOrigin = leadRow?.origin;
 
-      if (leadRow || upsellRow || confirmacaoRow || propostasRow || campanhaRow) {
+      if (leadRow || upsellRow || whatsappRow || confirmacaoRow || propostasRow || campanhaRow) {
         const allStages: string[] = [];
-        if (leadRow?.pipe_whatsapp) allStages.push(leadRow.pipe_whatsapp);
+        if (whatsappRow?.status) allStages.push(whatsappRow.status);
         if (upsellRow?.tipo_cliente_tempo) allStages.push(upsellRow.tipo_cliente_tempo);
         if (upsellRow?.gestao_stage) allStages.push(upsellRow.gestao_stage);
         if (confirmacaoRow?.status) allStages.push(confirmacaoRow.status);
@@ -412,7 +416,6 @@ export async function loadLeadData(
         faturamento,
         urgency,
         notes,
-        pipe_whatsapp,
         organization_id,
         created_at,
         updated_at
@@ -427,7 +430,7 @@ export async function loadLeadData(
 
     const orgId = (lead as Record<string, unknown>).organization_id as string;
 
-    const [customFieldsRes, upsellRes, confirmacaoEntry, propostasEntry, campanhaRes] = await Promise.all([
+    const [customFieldsRes, upsellRes, whatsappEntry, confirmacaoEntry, propostasEntry, campanhaRes] = await Promise.all([
       supabase
         .from("lead_custom_field_values")
         .select(`value, field:lead_custom_fields(id, field_name, field_type)`)
@@ -437,6 +440,7 @@ export async function loadLeadData(
         .select("tipo_cliente_tempo, gestao_stage, potencial, is_active")
         .eq("lead_id", leadId)
         .maybeSingle(),
+      getPipeEntry(supabase, leadId, orgId, "whatsapp"),
       getPipeEntry(supabase, leadId, orgId, "confirmacao"),
       getPipeEntry(supabase, leadId, orgId, "propostas"),
       supabase
@@ -486,6 +490,10 @@ export async function loadLeadData(
       upsell_gestao_stage: upsellData?.gestao_stage ?? null,
       upsell_potencial: upsellData?.potencial ?? null,
       upsell_is_active: upsellData?.is_active ?? null,
+      // ADR-0023 §10: etapa do negócio, não do lead. Nome espelha os outros funis
+      // (`confirmacao_status`, `propostas_status`) — o antigo `pipe_whatsapp` saiu do
+      // SELECT de propósito, para que nenhum leitor caia no espelho legado sem perceber.
+      whatsapp_status: whatsappEntry?.stage_key ?? null,
       confirmacao_status: confirmacaoEntry?.stage_key ?? null,
       confirmacao_meeting_date: (confMeta.meeting_date as string) ?? null,
       confirmacao_is_confirmed: (confMeta.is_confirmed as boolean) ?? null,

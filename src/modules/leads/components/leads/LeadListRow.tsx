@@ -173,6 +173,11 @@ export function LeadListRow({
   const cycleDays = metrics?.reorderCycleDays ?? null;
   const sinceLast = metrics?.daysSinceLastOrder ?? null;
 
+  // Coluna "Negócios": fechado colapsa, em andamento continua detalhado.
+  const ganhos = deals.filter((d) => d.outcome === "won");
+  const emAndamento = deals.filter((d) => d.outcome !== "won");
+  const valorGanho = ganhos.reduce((soma, d) => soma + d.value, 0);
+
   return (
     <div
       role="button"
@@ -258,12 +263,13 @@ export function LeadListRow({
       <div>
         {deals.length > 0 ? (
           <div className="flex flex-col items-start gap-1.5">
-            {deals.map((deal) => (
+            {/* Só negócio EM ANDAMENTO mostra funil e etapa — é a informação
+                acionável: onde ele está e há quanto tempo. */}
+            {emAndamento.map((deal) => (
               <span
                 key={deal.id}
                 className={cn(
                   "inline-flex max-w-full items-center gap-2 rounded-md border px-2.5 py-0.5 text-[12.5px]",
-                  deal.outcome === "won" && "border-success/45 bg-success/10",
                   deal.outcome === "lost" && "border-destructive/35 bg-destructive/5",
                   deal.outcome === "open" && "border-border bg-muted/70",
                 )}
@@ -285,17 +291,33 @@ export function LeadListRow({
                     qualificação não tem `sale_value`, e "R$ 0,00" em toda linha
                     vira ruído que esconde o número que importa. */}
                 {deal.value > 0 && (
-                  <span
-                    className={cn(
-                      "font-semibold tabular-nums",
-                      deal.outcome === "won" && "text-success",
-                    )}
-                  >
-                    {formatBRL(deal.value)}
-                  </span>
+                  <span className="font-semibold tabular-nums">{formatBRL(deal.value)}</span>
                 )}
               </span>
             ))}
+
+            {/* Fechados colapsam num chip só, no lugar onde as etapas ficavam.
+                Um lead atravessa vários funis na mesma venda, então manter um
+                chip por funil depois de fechar empilharia a coluna inteira — e
+                dobraria a cada negócio novo que abrisse. O que importa depois
+                de fechar é que fechou e por quanto, não por onde passou. */}
+            {ganhos.length > 0 && (
+              <span className="inline-flex max-w-full items-center gap-2 rounded-md border border-success/45 bg-success/10 px-2.5 py-0.5 text-[12.5px]">
+                <span className="size-1.5 shrink-0 rounded-full bg-success" />
+                {/* Sem `truncate`: o rótulo é curto e fixo, ao contrário do
+                    nome de funil. Cortado ("2 negócios fe…") ele deixa de
+                    dizer o que é, que é a única função dele. */}
+                <span className="shrink-0 font-medium text-success">Negócio fechado</span>
+                {ganhos.length > 1 && (
+                  <span className="shrink-0 tabular-nums text-success/70">×{ganhos.length}</span>
+                )}
+                {valorGanho > 0 && (
+                  <span className="font-semibold tabular-nums text-success">
+                    {formatBRL(valorGanho)}
+                  </span>
+                )}
+              </span>
+            )}
           </div>
         ) : (
           <span className="inline-block rounded-md border border-dashed border-border px-2.5 py-0.5 text-[12.5px] text-muted-foreground">
@@ -323,16 +345,23 @@ export function LeadListRow({
           <span className="text-[10.5px] leading-tight text-muted-foreground">Compras</span>
         </div>
 
+        {/* Com uma venda só ainda não existe intervalo a medir — dizer "0d"
+            afirmaria recompra imediata, que é falso. "calculando" diz a
+            verdade: o ciclo aparece na segunda venda. Sem venda nenhuma, "—". */}
+        {/* `!== null`, não truthiness: duas vendas no mesmo dia dão ciclo 0,
+            que é um valor legítimo — testar por verdade mostraria "calculando"
+            para sempre nesse caso. */}
         <DataItem
-          value={cycleDays ? `${cycleDays}d` : "0d"}
+          value={cycleDays !== null ? `${cycleDays}d` : orderCount > 0 ? "calculando" : "—"}
           label="Ciclo de compra"
-          tone={cycleDays ? undefined : "muted"}
+          tone={cycleDays !== null ? undefined : "muted"}
         />
 
         <span className="h-[30px] w-px bg-border" />
 
+        {/* "0d" em lead que nunca comprou leria como "comprou hoje". */}
         <DataItem
-          value={sinceLast === null ? "0d" : `${sinceLast}d`}
+          value={sinceLast === null ? "—" : `${sinceLast}d`}
           label="Última compra"
           tone={sinceLast === null ? "muted" : sinceLast > 60 ? "danger" : undefined}
         />

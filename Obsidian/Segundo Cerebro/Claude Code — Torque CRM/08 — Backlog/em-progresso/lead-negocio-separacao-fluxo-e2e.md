@@ -3,7 +3,7 @@ title: Separação Lead ↔ Negócio — Fluxo E2E de um atendimento
 type: backlog
 status: planejamento
 created: 2026-07-28
-updated: 2026-07-28
+updated: 2026-07-30
 tags: [leads, negocios, deals, pipelines, carteira, copilot, arquitetura]
 related:
   - "[[ADR-0005-carteira-standalone-feature]]"
@@ -63,8 +63,9 @@ flowchart TD
     G --> H["Card anda: abordado<br/>respondeu, agendado"]
     H --> I["pipe_confirmacao<br/>reuniao marcada, d5..d1"]
     I --> J["pipe_propostas<br/>enviada, negociando"]
-    J --> K["vendido<br/>handle_proposta_vendida"]
-    K --> L["upsell_clients<br/>Carteira"]
+    J --> K["vendido<br/>card para na etapa final"]
+    K -.->|"NAO ACONTECE<br/>handle_proposta_vendida<br/>sem trigger"| L["upsell_clients<br/>Carteira"]
+    M["Sync ERP<br/>tinyerp / omie"] --> L
 ```
 
 ### 2.1 Entrada — o lead nasce
@@ -92,7 +93,7 @@ flowchart TD
    `pipeline_entries (pipeline whatsapp, stage_key = 'novo')`.
 
 > 🔴 **Este é o coração da mudança.** Hoje ninguém cria card — ele nasce. Foi assim que
-> os 39.402 cards de produção apareceram.
+> os **36.507** cards de produção apareceram (§7, medido em 2026-07-30).
 
 ### 2.2 Conversa — o Copilot atende
 
@@ -131,18 +132,40 @@ flowchart TD
 > `lead_id`, **a métrica de vendas e de reunião para de existir — em silêncio.**
 > Solução: o card mantém `lead_id` preenchido *e* ganha `deal_id`.
 
-### 2.4 Venda — vira cliente de carteira
+### 2.4 Venda — NÃO vira cliente de carteira (a carteira vem do ERP)
 
-9. Proposta marcada `vendido` → `handle_proposta_vendida`
-   (`baseline:12258`): trava advisory lock, checa idempotência, e insere em
-   `upsell_clients` com `ON CONFLICT (organization_id, lead_id)` — copiando nome,
-   empresa, e-mail, telefone e closer do lead.
-10. Cria `upsell_orders` + itens. Cron `calculate-portfolio-health` (30 min) recalcula
-    health score, segmento (ouro/prata/novo/resgate/dormindo), ciclo de recompra e churn.
+> [!danger] 🔴 Corrigido em 2026-07-30 — este passo NÃO acontece
+> A versão anterior descrevia: *"proposta marcada `vendido` → `handle_proposta_vendida`
+> insere em `upsell_clients`"*. **Não roda.** A função existe em `baseline:12258`, mas
+> tem **zero triggers ligados** — verificado em `pg_trigger` tanto em **prod**
+> (`jsjsmuncfkbsbzqzqhfq`) quanto na branch efêmera de QA. E **nenhuma outra função do
+> schema a chama** (`pg_proc.prosrc` não a menciona em lugar nenhum). É código morto
+> desde algum ponto do passado, não caminho vivo.
+>
+> Marcar proposta como vendida **não cria cliente de carteira hoje.**
+>
+> De onde vieram as **738 linhas** de `upsell_clients` (12 orgs, criadas entre
+> 2026-02-23 e 2026-07-08): do **ERP**. Os escritores reais são
+> `_shared/erp/sync/client-store.ts`, `omie-sync-clientes`, `tinyerp-sync-contacts` e
+> `erp-order-webhook`. Carteira, hoje, é espelho de ERP — não subproduto do funil.
+>
+> **Por que isso importa para a separação Lead ↔ Negócio:** o plano assumia que
+> "fechar negócio → vira cliente de carteira" já funcionava e só precisava sobreviver
+> à migração. Não existe o que preservar. Se a carteira deve nascer da venda no funil,
+> isso é **feature nova** (fatia 3), com custo próprio — não "não mexer que já está
+> certo".
 
-> 📌 **O cliente de carteira é chaveado por `lead_id`, não por negócio.** Isso continua
-> correto no modelo novo: 3 negócios ganhos do mesmo cliente = 1 linha na carteira,
-> 3 pedidos. Nada a mudar aqui.
+9. ~~Proposta marcada `vendido` → `handle_proposta_vendida` (`baseline:12258`): trava
+   advisory lock, checa idempotência, e insere em `upsell_clients`.~~ *(Ver o bloco
+   acima: função sem trigger, nunca executa. O corpo dela descreve a intenção do
+   desenho original, não o comportamento do sistema.)*
+10. `upsell_orders` + itens chegam pelo sync de ERP. Cron `calculate-portfolio-health`
+    (30 min) recalcula health score, segmento (ouro/prata/novo/resgate/dormindo), ciclo
+    de recompra e churn — este **está vivo** e opera sobre o que o ERP trouxe.
+
+> 📌 **O cliente de carteira é chaveado por `lead_id`, não por negócio.** O desenho
+> continua correto no modelo novo: 3 negócios ganhos do mesmo cliente = 1 linha na
+> carteira, 3 pedidos. O que muda é o status: isso é **alvo**, não estado atual.
 
 ---
 
@@ -174,22 +197,30 @@ flowchart TD
 | Etapa (`stage_key`) | propriedade do lead | propriedade do Negócio |
 | 2ª venda pro mesmo cliente | ❌ impossível (constraint) | ✅ 2º Negócio |
 | Métrica de pipeline | mistura curioso com proposta de R$ 40 mil | lead → negócio (qualificação) e negócio → ganho (venda), separados |
-| Carteira | módulo próprio no menu | faceta do lead na mesma tabela (fatia 2) |
+| Carteira | módulo próprio no menu | faceta do lead na mesma tabela — **fatia em aberto**: esta célula dizia "fatia 2" e o §6 deste mesmo doc diz "fatia 3". Quem decide é o CTO (`spec.md` §6c item 4); marcado em 2026-07-31 para não seguir respondendo sozinho |
 
-### Bloqueio único de schema
+### Bloqueio de schema — são TRÊS cadeados
 
 ```sql
--- proíbe hoje 2 cards do mesmo lead no mesmo funil
+-- proíbem hoje 2 cards do mesmo lead no mesmo funil
 ALTER TABLE pipeline_entries DROP CONSTRAINT uq_pipeline_entries_pipeline_lead;
 DROP INDEX idx_pipeline_entries_pipeline_lead;
+-- o terceiro, nos funis customizados (16.176 cards / 24 orgs, 913 na Milennials)
+ALTER TABLE custom_pipe_entries DROP CONSTRAINT custom_pipe_entries_pipeline_id_lead_id_key;
 ```
 
-É o ponto de não-retorno da feature. Um `DROP` de duas linhas — e a partir dele
-"N negócios por lead" existe.
+É o ponto de não-retorno da feature. *(Corrigido em 2026-07-30: esta seção se chamava
+"Bloqueio único de schema" e falava em "um `DROP` de duas linhas". Faltava o cadeado de
+`custom_pipe_entries` — sem ele, a recompra continua impossível justamente na org
+piloto. Plano completo, com as duas funções de bulk que quebram junto:
+[[lead-negocio-migrations-db]].)*
 
 ### O que já está pronto e nunca foi ligado
 
-- `pipeline_entries.deal_id` — coluna e índice existem. **0 de 39.402 linhas usam.**
+- `pipeline_entries.deal_id` — coluna e índice existem. **0 linhas usam**, de **36.507**
+  cards (§7, medido em 2026-07-30). `custom_pipe_entries` **não tem** a coluna — é a
+  **decisão F, TOMADA em 2026-07-30**: adicionar `deal_id` lá, com as **duas** pontas de
+  propagação. Plano de execução: **M7** em [[lead-negocio-migrations-db]].
 - `deals` — tabela completa (`title`, `value`, `pipeline_id`, `stage_id`,
   `source_lead_id`, `owner_id`, `probability`, `expected_close_date`, `won`,
   `loss_reason_id`, soft-delete). **0 linhas, 0 orgs em prod.**
@@ -264,8 +295,11 @@ decisão CTO pendente").
 >
 > **SUA RESPOSTA:** C
 
-> [!question] DECISÃO D3 — o que acontece com os 39.402 cards que já existem?
-> 23.748 em funis `system` (64 orgs) + 15.656 em custom (23 orgs).
+> [!question] DECISÃO D3 — o que acontece com os ~~39.402~~ cards que já existem?
+> ~~23.748 em funis `system` (64 orgs) + 15.656 em custom (23 orgs).~~
+> *(Números refutados — o real é **36.507**: 20.331 `system` / 64 orgs + 16.176 custom /
+> 24 orgs, medido em 2026-07-30. Ver a errata do §7. A pergunta e a resposta do CTO ficam
+> como foram feitas; só o tamanho do backfill muda.)*
 >
 > - **(a) Todo card vira um negócio.** Backfill 1:1. Nada some da tela de ninguém.
 >   Cria ~39 mil negócios, muitos dos quais são lead frio que nunca virou venda.
@@ -381,10 +415,13 @@ decisão CTO pendente").
 1. **Fatia 1 — aba Leads vira a verdade.** `/leads` sai da gaveta "Mais" e vira item
    primário; a tabela ganha as colunas que hoje só existem espalhadas (negócios do lead,
    posição em cada funil, estado de carteira); "Combustível" some como conceito.
-2. **Fatia 2 — Negócio nasce.** `DROP` da constraint, `deals` acesa, modal "Novo Negócio"
-   herdando do lead, card do funil passa a ser o negócio, backfill dos 39.402.
-   → **Plano de migrations detalhado: [[lead-negocio-migrations-db]]** (M1–M5, com o
-   segundo cadeado de unique, o `ON CONFLICT` que quebra, e a RLS de `deals` a corrigir).
+2. **Fatia 2 — Negócio nasce.** `DROP` dos **três** cadeados, `deals` acesa, modal "Novo
+   Negócio" herdando do lead, card do funil passa a ser o negócio, backfill dos ~36,5 mil.
+   → **Plano de migrations detalhado: [[lead-negocio-migrations-db]]** (M1–M7, com os três
+   cadeados de unique, as **duas** funções de bulk que o `ON CONFLICT` quebra, o
+   `upsertPipeEntry` que duplica sem o unique, a RLS de `deals` a corrigir e o **M7** —
+   `deal_id` em `custom_pipe_entries`, sem o qual o kanban customizado não enxerga
+   negócio nenhum).
 3. **Fatia 3 — Carteira absorvida** como faceta do lead; supersede do ADR-0005.
 4. **Fatia 4 — re-âncora de Copilot e follow-ups.**
 
@@ -393,13 +430,40 @@ dá pra começar por ela enquanto D1–D7 amadurecem.
 
 ---
 
-## 7. Números de prod (2026-07-28, leitura apenas)
+## 7. Números de prod — **re-medidos em 2026-07-30** (leitura apenas)
 
-| Métrica | Valor |
-|---|---|
-| Leads vivos | 32.154 |
-| Cards em funil | 39.402 |
-| — em funis `system` | 23.748 (64 orgs) |
-| — em funis custom | 15.656 (23 orgs) |
-| Negócios (`deals`) | **0** |
-| `pipeline_entries` com `deal_id` | **0** |
+| Métrica | Valor | Medido em |
+|---|---|---|
+| Leads vivos (`deleted_at IS NULL`) | **33.181** | 2026-07-30 |
+| Cards em funil (`pipeline_entries`, linhas distintas) | **36.507** | 2026-07-30 |
+| — em funis `system` | 20.331 (64 orgs) | 2026-07-30 |
+| — em funis custom | 16.176 (24 orgs) | 2026-07-30 |
+| `custom_pipe_entries` | 16.177 — **espelhadas** em `pipeline_entries` com a mesma PK | 2026-07-30 |
+| Negócios (`deals`) | **0** | 2026-07-30 |
+| `pipeline_entries` com `deal_id` | **0** | 2026-07-30 |
+
+> Base viva: as contagens oscilam por unidade entre leituras. O que não oscila é a
+> relação — `custom_pipe_entries ⊂ pipeline_entries` por `id`. **Somar as duas conta o
+> mesmo card duas vezes.**
+
+> [!warning] Errata — a tabela anterior (39.402 · 23.748 · 15.656 · 32.154) estava errada
+> E, pior que o número, a justificativa: uma versão intermediária deste documento escreveu
+> que *"os 39.402 são o retrato de 2026-07-28"*. **Essa frase nunca foi medida**, e a base
+> a contradiz.
+>
+> **Medido em 2026-07-30, em prod:** 35.095 das `pipeline_entries` de hoje foram criadas
+> **antes** de 2026-07-28, e o total de hoje é 36.507. Para 39.402 ter sido verdade em
+> 07-28, ~4,3 mil cards antigos teriam que ter sido apagados em 48 h — enquanto `leads`
+> apenas cresceu no mesmo período.
+>
+> **Medido:** rodando hoje o join antigo — `pipeline_stages` casado só por
+> `(organization_id, stage_key)`, **sem discriminar qual funil** — o lado `system` emite
+> **22.939 linhas para 20.331 cards**. O lado custom é chaveado por `pipeline_id` e não
+> infla, o que deixa 15.656 → 16.176 como crescimento normal.
+>
+> **Inferência (não medição):** é essa multiplicação, e não um retrato histórico, que
+> explica os 23.748. É a mesma família de erro refutada no M4 de
+> [[lead-negocio-migrations-db]].
+>
+> Registrado, não apagado: número inflado que ganha álibi de "retrato histórico" é como
+> erro de medição vira folclore — e este repo já pagou meses por documentação que mente.
