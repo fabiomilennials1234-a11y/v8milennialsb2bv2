@@ -27,7 +27,7 @@ import {
   type LeadListItem,
 } from "../components/leads/LeadListRow";
 import { useLeadsCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
-import type { LeadCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
+import { mergeDataMetrics } from "../lib/data-metrics";
 import { useLeadsSalesMetrics } from "../hooks/useLeadsSalesMetrics";
 import { useLeadsDeals } from "../hooks/useLeadsDeals";
 import {
@@ -304,30 +304,17 @@ function LeadsInner() {
   const { data: leadDeals } = useLeadsDeals(allLeadIds);
 
   /**
-   * Cluster "Dados" — venda ganha no funil tem precedência sobre carteira.
+   * Cluster "Dados" — a regra de precedência mora em `lib/data-metrics.ts`.
    *
-   * As duas fontes existem e medem coisas diferentes: `sale_events` são as
-   * vendas fechadas *aqui dentro*; `upsell_clients` é histórico de pedido vindo
-   * de ERP. Somar dobraria o número nas 12 orgs que têm ERP, então o lead que
-   * fechou venda no funil mostra a venda do funil, e o lead sem venda no funil
-   * continua mostrando a carteira — nunca os dois ao mesmo tempo.
+   * ADR-0024 decisão 1 tirou o cluster da LISTA e o levou para o drawer, então
+   * o drawer passou a precisar do mesmo número. A regra saiu daqui para uma
+   * função pura em vez de ser copiada — duas cópias divergem no primeiro ajuste.
    *
-   * `segment` (ouro/prata/novo/resgate) só existe na carteira; é preservado.
+   * A lista ainda consome isto porque o `segment` (ouro/prata/novo/resgate)
+   * continua sendo mostrado como selo na linha.
    */
   const dataMetrics = useMemo(() => {
-    const out: Record<string, LeadCarteiraMetrics> = { ...(carteiraMetrics ?? {}) };
-    for (const [leadId, s] of Object.entries(salesMetrics ?? {})) {
-      out[leadId] = {
-        leadId,
-        lifetimeValue: s.totalValue,
-        avgTicket: s.avgTicket,
-        orderCount: s.saleCount,
-        reorderCycleDays: s.cycleDays,
-        daysSinceLastOrder: s.daysSinceLastSale,
-        segment: carteiraMetrics?.[leadId]?.segment ?? null,
-      };
-    }
-    return out;
+    return mergeDataMetrics(carteiraMetrics, salesMetrics);
   }, [carteiraMetrics, salesMetrics]);
   const { isMobile } = useViewport();
 

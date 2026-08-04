@@ -18,10 +18,16 @@ import type { LeadDeal } from "../../hooks/useLeadsDeals";
 
 /** Colunas compartilhadas entre cabeçalho e linha — precisam casar. */
 const GRID_COLS =
-  "grid items-center gap-x-4 grid-cols-[34px_minmax(210px,1.5fr)_minmax(140px,0.9fr)_minmax(140px,1fr)_minmax(200px,1.4fr)_minmax(290px,1.3fr)_minmax(104px,0.7fr)_minmax(104px,0.7fr)_40px]";
+  "grid items-center gap-x-4 grid-cols-[34px_minmax(210px,1.5fr)_minmax(140px,0.9fr)_minmax(140px,1fr)_minmax(200px,1.4fr)_minmax(104px,0.7fr)_minmax(104px,0.7fr)_40px]";
 
-/** Largura mínima da lista — abaixo disso o contêiner rola no eixo X. */
-export const LEAD_LIST_MIN_WIDTH = "min-w-[1240px]";
+/**
+ * Largura mínima da lista — abaixo disso o contêiner rola no eixo X.
+ *
+ * Caiu de 1240px para 950px porque o cluster "Dados" saiu daqui (ADR-0024
+ * decisão 1): eram 290px de mínimo mais o `gap-x-4` da coluna. A lista passa a
+ * caber sem rolagem horizontal em telas que antes rolavam.
+ */
+export const LEAD_LIST_MIN_WIDTH = "min-w-[950px]";
 
 export interface LeadTagRef {
   id: string;
@@ -82,57 +88,7 @@ function LeadAvatar({ name }: { name: string }) {
   );
 }
 
-/** Anel com a contagem de compras — verde quando existe histórico. */
-function CountRing({ value }: { value: number }) {
-  const active = value > 0;
-  return (
-    <div className="relative grid size-[34px] place-items-center">
-      <svg viewBox="0 0 34 34" className="absolute inset-0 -rotate-90" aria-hidden="true">
-        <circle
-          cx="17"
-          cy="17"
-          r="15.5"
-          fill="none"
-          strokeWidth="2"
-          className={active ? "stroke-success" : "stroke-border"}
-        />
-      </svg>
-      <span
-        className={cn(
-          "text-[13px] font-semibold tabular-nums",
-          !active && "text-muted-foreground",
-        )}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function DataItem({
-  value,
-  label,
-  tone,
-}: {
-  value: string;
-  label: string;
-  tone?: "muted" | "danger";
-}) {
-  return (
-    <div className="flex flex-col items-center gap-px text-center">
-      <span
-        className={cn(
-          "text-sm font-semibold tabular-nums tracking-[-0.01em]",
-          tone === "muted" && "text-muted-foreground",
-          tone === "danger" && "text-destructive",
-        )}
-      >
-        {value}
-      </span>
-      <span className="text-[10.5px] leading-tight text-muted-foreground">{label}</span>
-    </div>
-  );
-}
+// `CountRing` e `DataItem` saíram junto com o cluster "Dados" (ADR-0024 §1).
 
 export function LeadListHeader({ selectAll }: { selectAll?: ReactNode }) {
   return (
@@ -142,7 +98,6 @@ export function LeadListHeader({ selectAll }: { selectAll?: ReactNode }) {
       <span>Contatos</span>
       <span>Tags</span>
       <span>Negócios</span>
-      <span>Dados</span>
       <span>Dono da conta</span>
       <span>Data de criação</span>
       <span />
@@ -167,11 +122,10 @@ export function LeadListRow({
   const owner =
     lead.sale_responsible?.name ?? lead.pre_sale_responsible?.name ?? lead.responsible?.name ?? null;
 
-  const lifetimeValue = metrics?.lifetimeValue ?? 0;
+  // `metrics` continua chegando por causa do ticket médio (na coluna Negócios) e
+  // do selo de `segment`. Total, nº de compras, ciclo e última compra saíram com
+  // o cluster "Dados" para o drawer — ADR-0024 decisão 1.
   const avgTicket = metrics?.avgTicket ?? 0;
-  const orderCount = metrics?.orderCount ?? 0;
-  const cycleDays = metrics?.reorderCycleDays ?? null;
-  const sinceLast = metrics?.daysSinceLastOrder ?? null;
 
   // Coluna "Negócios": fechado colapsa, em andamento continua detalhado.
   const ganhos = deals.filter((d) => d.outcome === "won");
@@ -326,46 +280,12 @@ export function LeadListRow({
         )}
       </div>
 
-      {/* dados de carteira */}
-      <div className="flex items-center gap-[18px]">
-        <div className="flex min-w-[84px] flex-col items-start gap-px">
-          <span className="text-[10.5px] leading-tight text-muted-foreground">Total</span>
-          <span
-            className={cn(
-              "text-sm font-semibold tabular-nums tracking-[-0.01em]",
-              !lifetimeValue && "text-muted-foreground",
-            )}
-          >
-            {formatBRL(lifetimeValue, 2)}
-          </span>
-        </div>
-
-        <div className="flex flex-col items-center gap-px">
-          <CountRing value={orderCount} />
-          <span className="text-[10.5px] leading-tight text-muted-foreground">Compras</span>
-        </div>
-
-        {/* Com uma venda só ainda não existe intervalo a medir — dizer "0d"
-            afirmaria recompra imediata, que é falso. "calculando" diz a
-            verdade: o ciclo aparece na segunda venda. Sem venda nenhuma, "—". */}
-        {/* `!== null`, não truthiness: duas vendas no mesmo dia dão ciclo 0,
-            que é um valor legítimo — testar por verdade mostraria "calculando"
-            para sempre nesse caso. */}
-        <DataItem
-          value={cycleDays !== null ? `${cycleDays}d` : orderCount > 0 ? "calculando" : "—"}
-          label="Ciclo de compra"
-          tone={cycleDays !== null ? undefined : "muted"}
-        />
-
-        <span className="h-[30px] w-px bg-border" />
-
-        {/* "0d" em lead que nunca comprou leria como "comprou hoje". */}
-        <DataItem
-          value={sinceLast === null ? "—" : `${sinceLast}d`}
-          label="Última compra"
-          tone={sinceLast === null ? "muted" : sinceLast > 60 ? "danger" : undefined}
-        />
-      </div>
+      {/* O cluster "Dados" (total, compras, ciclo, última compra) saiu daqui e
+          vive no drawer — ADR-0024 decisão 1. Medido em prod 2026-08-04: de
+          35.165 leads vivos, só 1.018 tinham algo a mostrar. A coluna estava
+          vazia 97,1% do tempo e era a mais larga da lista, com 290px.
+          Restringir às orgs com ERP foi descartado pelo mesmo dado: a org mais
+          preenchida da base é a Basic4u, com 23,7%. */}
 
       {/* dono da conta */}
       <div>
