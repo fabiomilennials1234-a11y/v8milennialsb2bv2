@@ -10,6 +10,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { track } from "@/lib/analytics";
 import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import {
+  friendlyWhatsAppSendError,
+  whatsAppSendErrorMessage,
+} from "@/modules/communication/lib/edgeFunctionError";
 import type { WhatsAppMessage, FailedMessage } from "./types";
 import { makeOptimisticId, promoteOptimisticMessage } from "./shared/optimistic-messages";
 
@@ -29,6 +33,10 @@ function readProviderMessageId(data: unknown): string | undefined {
   if (typeof id !== "string" || id.startsWith("local_")) return undefined;
   return id;
 }
+
+/** Copy única pro telefone que não passa na normalização — aponta pra ação. */
+const INVALID_PHONE_MESSAGE =
+  "Número de telefone inválido para WhatsApp. Confira o telefone no cadastro do lead (precisa ser um celular brasileiro com DDD).";
 
 // ─── Helpers privados ────────────────────────────────────────────────────────
 
@@ -185,7 +193,7 @@ export function useSendWhatsAppMessage() {
       }
 
       const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
-      if (!formattedNumber) throw new Error("Número de telefone inválido");
+      if (!formattedNumber) throw new Error(INVALID_PHONE_MESSAGE);
 
       const isSzChat = await isSzChatInstanceCached(instanceId);
 
@@ -221,8 +229,12 @@ export function useSendWhatsAppMessage() {
         error = result.error;
       }
 
-      if (error) throw error;
-      if ((data as Record<string, unknown>)?.error) throw new Error((data as Record<string, string>).error);
+      // Nunca relance o erro cru: a FunctionsHttpError do supabase-js carrega
+      // sempre a mesma frase genérica e esconde o motivo real no corpo.
+      if (error) throw new Error(await whatsAppSendErrorMessage(error));
+      if ((data as Record<string, unknown>)?.error) {
+        throw new Error(friendlyWhatsAppSendError(String((data as Record<string, string>).error)));
+      }
 
       const d = data as Record<string, any>;
       const messageId = d?.result?.message_id ?? d?.key?.id ?? `local_${Date.now()}`;
@@ -368,7 +380,7 @@ export function useSendWhatsAppMedia() {
       }
 
       const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
-      if (!formattedNumber) throw new Error("Número de telefone inválido");
+      if (!formattedNumber) throw new Error(INVALID_PHONE_MESSAGE);
       let mediaUrl = media;
 
       if (media.startsWith("data:")) {
@@ -432,13 +444,19 @@ export function useSendWhatsAppMedia() {
         error = result.error;
 
         if (error) {
-          throw new Error((error as { message?: string }).message || "Erro ao enviar mídia");
+          // Mesmo motivo do envio de texto: `.message` aqui é a frase genérica
+          // do supabase-js, não o erro que a edge function devolveu.
+          throw new Error(await whatsAppSendErrorMessage(error));
         }
         if ((data as Record<string, unknown>)?.error) {
           const details = (data as Record<string, unknown>).details
             ? JSON.stringify((data as Record<string, unknown>).details)
             : "";
-          throw new Error(`${(data as Record<string, string>).error}${details ? ` - ${details}` : ""}`);
+          const friendly = friendlyWhatsAppSendError(String((data as Record<string, string>).error));
+          // Só anexa o detalhe cru quando a mensagem não foi traduzida — senão
+          // o texto acionável volta a ficar poluído de ruído do provider.
+          const isTranslated = friendly !== (data as Record<string, string>).error;
+          throw new Error(isTranslated || !details ? friendly : `${friendly} - ${details}`);
         }
       }
 

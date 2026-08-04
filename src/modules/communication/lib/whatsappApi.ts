@@ -11,6 +11,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { extractEdgeFunctionError } from "./edgeFunctionError";
 
 type ProxyResponse<T> = {
   ok?: boolean;
@@ -19,27 +20,10 @@ type ProxyResponse<T> = {
   error?: string;
 };
 
-async function extractFunctionError(error: any): Promise<string> {
-  // supabase-js v2 wraps non-2xx responses in FunctionsHttpError; the real
-  // payload lives on error.context (a Response). Read it so we surface the
-  // edge function's actual error message instead of the generic
-  // "non-2xx status code" string.
-  try {
-    const ctx = error?.context;
-    if (ctx && typeof ctx.json === "function") {
-      const body = await ctx.json();
-      if (body?.error) return String(body.error);
-      if (body?.message) return String(body.message);
-    }
-    if (ctx && typeof ctx.text === "function") {
-      const text = await ctx.text();
-      if (text) return text.slice(0, 500);
-    }
-  } catch {
-    // ignore parse errors and fall back to error.message
-  }
-  return error?.message ?? "Unknown proxy error";
-}
+// Implementação compartilhada com os hooks de envio do chat — ver
+// `./edgeFunctionError`. Mantido como wrapper local só pra não mexer nas ~20
+// call-sites deste arquivo.
+const extractFunctionError = extractEdgeFunctionError;
 
 async function callProxy<T = unknown>(
   action: string,
