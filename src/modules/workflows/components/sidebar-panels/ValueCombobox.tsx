@@ -15,29 +15,39 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-interface UtmValueComboboxProps {
-  /** Valores UTM distintos da org (já deduplicados + ordenados). */
+interface ValueComboboxProps {
+  /** Valores distintos que já existem na org (deduplicados + ordenados). */
   values: string[];
   /** Valor atual (`data.value`). Pode ser um item da lista ou texto livre. */
   value: string;
   onChange: (value: string) => void;
   isLoading?: boolean;
   placeholder?: string;
+  /** Texto do estado vazio — varia por origem dos valores (UTM, campo custom, ...). */
+  emptyMessage?: string;
 }
 
 /**
- * Combobox creatable (Command + Popover) para o "Valor" de um campo UTM no node
- * de condição. Lista valores reais da org e SEMPRE permite digitar valor livre —
- * a maioria das orgs ainda não recebe UTM, então o estado vazio não pode
- * bloquear o input. Reusa o padrão visual de ProductCombobox/OrgInsightsCombobox.
+ * Combobox creatable (Command + Popover) para o "Valor" do node de condição.
+ * Lista valores REAIS da org e SEMPRE permite digitar valor livre — o estado
+ * vazio nunca pode bloquear o input.
+ *
+ * Serve dois campos, e pela mesma razão nos dois: o valor gravado no lead não é
+ * o que o humano escreveria de cabeça. UTM vem do Meta com pontuação/acento
+ * (`[TESTE CRIATIVOS] BATERIA.`); campo personalizado vem do formulário
+ * slugificado (`barril_de_chopp`, `ainda_não_sei`). Digitar de memória erra, e o
+ * erro é silencioso — a condição só devolve `false` pra sempre.
+ *
+ * Reusa o padrão visual de ProductCombobox/OrgInsightsCombobox.
  */
-export function UtmValueCombobox({
+export function ValueCombobox({
   values,
   value,
   onChange,
   isLoading = false,
   placeholder = "Selecione ou digite um valor",
-}: UtmValueComboboxProps) {
+  emptyMessage = "Nenhum valor encontrado nesta org — digite manualmente.",
+}: ValueComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -96,7 +106,7 @@ export function UtmValueCombobox({
               <>
                 {values.length === 0 && !showCreate && (
                   <div className="px-3 py-3 text-xs text-muted-foreground">
-                    Nenhum valor de UTM encontrado nesta org — digite manualmente.
+                    {emptyMessage}
                   </div>
                 )}
 
