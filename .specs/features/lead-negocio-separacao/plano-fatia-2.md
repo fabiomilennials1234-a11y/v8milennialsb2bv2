@@ -133,11 +133,13 @@ O grilling deu a ela a **primeira especificação funcional real**:
 - **A lista de negócios do lead**, com título, valor, etapa e estado — é onde a recompra fica visível.
 - **Identidade de Carteira**: o cliente aparece na mesma lista, com Relação `Cliente`, sem segunda tela de gente.
 
-**Ainda falta decidir para poder desenhar** (não bloqueia L1–L3):
+✅ **As três decisões foram fechadas pelo CTO em 2026-08-04** — registradas em [ADR-0024](../../../docs/adr/0024-leads-page-surface.md), com o número de prod do mesmo dia:
 
-1. **Destino do cluster "Dados"** — 290px, a coluna mais larga, **vazia em 97,8% dos leads**. Sair para o drawer, colapsar quando vazio, ou ficar só nas ~12 orgs com ERP.
-2. **Ordenação e os stat cards** — hoje a ordem é fixa por criação, sem UI, e 3 dos 4 cards do topo contam a página, não a org, ao lado de um total global.
-3. **Permissão de abrir negócio** — todo mundo, só admin, ou só quem atende. A separação cria um lugar novo onde a pergunta importa.
+1. **O cluster "Dados" sai da lista e vai para o drawer.** 290px de volta. Medido: **35.165 leads vivos, 1.018 com algo — 97,1% vazia**. A opção "deixar só nas orgs com ERP" foi **descartada pelo dado**: a org mais preenchida da base é a Basic4u com **23,7%**, Milennials 10,3%, ninguém passa de 24% — restringir por org não produz coluna cheia em lugar nenhum.
+2. **Os stat cards passam a contar a org**, e a **ordenação entra no clique do cabeçalho**. `Leads.tsx:387-397`: `total` é da org, mas `highRating`, `thisMonth` e `withSDR` contam só a página — três números de página ao lado de um total global, sem aviso.
+3. **Qualquer membro abre negócio.** Medido: 217 membros ativos (**148 admin, 68 member, 1 sdr**) e **22 orgs de um membro só**, 30 com 2-3. Travar em admin gatearia 68 pessoas em times onde todos já compartilham tudo — e remaria contra a decisão 3, que acabou de tornar o clique humano o único jeito de abrir negócio. Continua barato de mudar: `abrir_negocio` é `SECURITY INVOKER`, então apertar depois é policy, não reescrita.
+
+**O que sobra do L4 depois disso** é desenho e implementação — a fusão de identidade com a Carteira (decisão 8) segue sendo a outra metade e não foi decidida aqui.
 
 ---
 
