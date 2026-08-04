@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const startCallRequest = vi.fn();
 const acceptCallRequest = vi.fn();
@@ -172,6 +172,49 @@ async function callInRinging() {
   return { result, unmount, pc, track };
 }
 
+/**
+ * Uma discagem em que o cliente ATENDE no meio da troca de SDP — a janela em que
+ * a ligação que sai travava em "Chamando…" (#1399).
+ *
+ * O `connected` não espera a vez dele. A troca de SDP é uma ida e volta pela
+ * rede, o stream de eventos está aberto desde ANTES de discar (é a ordem que
+ * `abre o stream ANTES de discar` guarda) e quem atende rápido atende dentro
+ * dela. O evento é entregue aqui exatamente aí — depois da chamada de
+ * `exchangeSdp` e antes do `setRemoteDescription` que vem em seguida — pela
+ * mesma costura que a entrada usa: emitir de DENTRO do dublê da requisição que
+ * está em voo, e não por um `emit` solto que o teste dispararia no tempo errado.
+ *
+ * O relógio congela antes de discar para o cronômetro ser medido em números
+ * exatos, e não em "mais ou menos três". Nada na discagem espera temporizador: a
+ * única espera com prazo (`STREAM_OPEN_GRACE_MS`) é vencida pelo primeiro evento
+ * do stream, que o dublê entrega no instante da inscrição, como o `SnapshotFn`
+ * do broker faz de verdade.
+ */
+async function connectedDuranteOSdp() {
+  const track = fakeTrack();
+  installMedia(async () => ({ getTracks: () => [track], getAudioTracks: () => [track] }));
+  const { pc } = installPeerConnection();
+  startCallRequest.mockResolvedValueOnce(AUTHORIZED);
+  vi.useFakeTimers();
+
+  exchangeSdp.mockImplementationOnce(async () => {
+    streams[0].emit({
+      type: "call-status",
+      sessionId: SESSION,
+      id: TC_CALL_ID,
+      status: "connected",
+      peer: "554891005289",
+    });
+    return "v=0 answer";
+  });
+
+  const { result } = renderHook(() => useVoiceCall(SESSION));
+  await act(async () => {
+    await result.current.start(LEAD);
+  });
+  return { result, pc };
+}
+
 /** Empurra um evento do stream como se tivesse vindo da VPS. */
 async function emit(event: Record<string, unknown>) {
   await act(async () => {
@@ -188,6 +231,13 @@ describe("useVoiceCall", () => {
     startPcmAudio.mockResolvedValue({ enqueue: vi.fn(), stop: pcmSessionStop });
     installPeerConnection();
     installStream();
+  });
+
+  // Só o caso do cronômetro congela o relógio, mas restaurar aqui é o que
+  // impede que uma falha DENTRO dele deixe os timers falsos ligados e leve
+  // junto todos os casos seguintes.
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   // O invariante mais caro deste fluxo. Se o microfone for pedido DEPOIS de
@@ -478,6 +528,62 @@ describe("useVoiceCall", () => {
     });
 
     expect(result.current.state.phase).toBe("active");
+  });
+
+  // ─── O cliente atende DURANTE a troca de SDP (#1399) ────────────────────────
+  // O `setState` que vinha depois do `setRemoteDescription` era incondicional:
+  // desfazia o `active` que o evento tinha acabado de escrever e a tela não saía
+  // mais de "Chamando…", porque o `connected` só acontece uma vez.
+  //
+  // São TRÊS casos, e não um com três asserções, porque o vendedor sente três
+  // coisas — a tela errada, o tom por cima da voz do cliente e o cronômetro
+  // parado — e a primeira asserção a falhar esconderia as outras duas. Cada uma
+  // tem de ficar vermelha por conta própria.
+
+  it("a tela chega em `active` e FICA — o `connected` de quem atende rápido não é apagado", async () => {
+    const { result, pc } = await connectedDuranteOSdp();
+
+    // A janela foi mesmo atravessada: o caminho seguiu ATÉ DEPOIS do
+    // `setRemoteDescription`, que é onde a linha do defeito morava. Sem isto, um
+    // `exchangeSdp` que rejeitasse deixaria a asserção de baixo passando por
+    // nunca ter chegado perto do trecho em questão.
+    expect(pc.setRemoteDescription).toHaveBeenCalledWith({ type: "answer", sdp: "v=0 answer" });
+
+    // Pelo NOME. "Diferente de `ringing`" aceitaria `failed` e `ended`, que são
+    // justamente os desfechos que não queremos.
+    expect(result.current.state.phase).toBe("active");
+  });
+
+  it("o tom de chamada não volta a tocar por cima da voz do cliente", async () => {
+    await connectedDuranteOSdp();
+
+    // O tom é um efeito amarrado à fase: a volta para `ringing` ACENDIA um tom
+    // novo com o cliente já falando, e nada o apagava — o vendedor ouvia
+    // "tuuu… tuuu…" competindo com quem estava do outro lado. O controle
+    // positivo de que o tom realmente toca no caminho normal é o caso `toca o
+    // tom enquanto o telefone toca`, mais abaixo neste arquivo.
+    expect(startRingback).not.toHaveBeenCalled();
+    // E nenhum tom aceso pendurado: tom vazado toca para sempre.
+    expect(startRingback.mock.calls.length - ringbackStop.mock.calls.length).toBe(0);
+  });
+
+  it("o cronômetro corre desde o instante em que a pessoa atendeu", async () => {
+    const { result } = await connectedDuranteOSdp();
+
+    // O cronômetro só roda em `active`, então a fase presa o congelava em zero
+    // durante a conversa inteira — o vendedor não tinha como saber há quanto
+    // tempo estava falando. Medido em MAIS DE UM tique de propósito: um
+    // cronômetro que anda uma vez e para satisfaria "maior que zero" e
+    // continuaria mentindo.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(result.current.state.elapsedSeconds).toBe(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(result.current.state.elapsedSeconds).toBe(3);
   });
 
   it("ignora o `connected` da chamada de OUTRO operador da mesma org", async () => {

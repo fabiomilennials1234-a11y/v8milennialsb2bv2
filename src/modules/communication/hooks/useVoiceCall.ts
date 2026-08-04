@@ -644,7 +644,17 @@ export function useVoiceCall(tcSessionId: string | null) {
           });
 
           await pc.setRemoteDescription({ type: "answer", sdp: answer });
-          setState((s) => ({ ...s, phase: "ringing" }));
+          // NUNCA regride a fase — a mesma guarda do caminho de atender, e pelo
+          // mesmo motivo. A troca de SDP é uma ida e volta pela REDE, e o
+          // `connected` da VPS chega pelo stream que já está aberto desde antes
+          // de discar: quem atende rápido cai DENTRO desta janela, e quando o
+          // `await` acima assenta a fase já é `active`.
+          //
+          // Escrever `ringing` por cima prendia a tela ali para sempre, porque o
+          // `connected` só acontece uma vez e não há segundo aviso. O vendedor
+          // via "Chamando…" com o cliente já falando, o tom de chamada tocando
+          // por cima da voz dele e o cronômetro parado em zero (#1399).
+          setState((s) => (s.phase === "negotiating" ? { ...s, phase: "ringing" } : s));
         } catch (e) {
           // A chamada JÁ foi autorizada e pode já estar tocando. Encerrar no
           // servidor é obrigatório aqui: abandonar o fluxo deixaria o telefone do
