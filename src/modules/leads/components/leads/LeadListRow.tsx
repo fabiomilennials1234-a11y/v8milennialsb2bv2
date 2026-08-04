@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { LEAD_SORT_COLUMNS, type LeadListSort, type LeadSortKey } from "../../lib/lead-list-sort";
+import type { LeadStanding } from "../../lib/lead-relacao-situacao";
 import type { Lead } from "../../hooks/useLeads";
 import type { LeadCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
 import type { LeadDeal } from "../../hooks/useLeadsDeals";
@@ -19,16 +20,17 @@ import type { LeadDeal } from "../../hooks/useLeadsDeals";
 
 /** Colunas compartilhadas entre cabeçalho e linha — precisam casar. */
 const GRID_COLS =
-  "grid items-center gap-x-4 grid-cols-[34px_minmax(210px,1.5fr)_minmax(140px,0.9fr)_minmax(140px,1fr)_minmax(200px,1.4fr)_minmax(104px,0.7fr)_minmax(104px,0.7fr)_40px]";
+  "grid items-center gap-x-4 grid-cols-[34px_minmax(210px,1.5fr)_minmax(140px,0.9fr)_minmax(140px,1fr)_minmax(84px,0.45fr)_minmax(176px,1.1fr)_minmax(200px,1.4fr)_minmax(104px,0.7fr)_minmax(104px,0.7fr)_40px]";
 
 /**
  * Largura mínima da lista — abaixo disso o contêiner rola no eixo X.
  *
- * Caiu de 1240px para 950px porque o cluster "Dados" saiu daqui (ADR-0024
- * decisão 1): eram 290px de mínimo mais o `gap-x-4` da coluna. A lista passa a
- * caber sem rolagem horizontal em telas que antes rolavam.
+ * Foi 1240px, caiu para 950px quando o cluster "Dados" saiu daqui (ADR-0024
+ * decisão 1) e volta a 1242px agora: Relação (84px) e Situação (176px) mais os
+ * dois `gap-x-4` somam 292px, dentro dos 306px que aquela coluna liberou
+ * (290px de mínimo + o gap dela).
  */
-export const LEAD_LIST_MIN_WIDTH = "min-w-[950px]";
+export const LEAD_LIST_MIN_WIDTH = "min-w-[1242px]";
 
 export interface LeadTagRef {
   id: string;
@@ -55,6 +57,8 @@ interface LeadListRowProps {
   lead: LeadListItem;
   metrics?: LeadCarteiraMetrics;
   deals?: LeadDealRef[];
+  /** Relação + Situação já derivadas — ver `lib/lead-relacao-situacao`. */
+  standing?: LeadStanding;
   selected: boolean;
   onToggleSelect: () => void;
   onOpen: () => void;
@@ -173,6 +177,10 @@ export function LeadListHeader({ selectAll, sort, onSortChange }: LeadListHeader
       {sortable("Nome", "name")}
       <span>Contatos</span>
       <span>Tags</span>
+      {/* Dois rótulos, dois fatos — a ADR-0023 §6 proíbe colapsar num só, e um
+          cabeçalho com nome composto é a primeira etapa de virar campo único. */}
+      <span>Relação</span>
+      <span>Situação</span>
       <span>Negócios</span>
       <span>Dono da conta</span>
       {sortable("Data de criação", "created_at")}
@@ -181,10 +189,76 @@ export function LeadListHeader({ selectAll, sort, onSortChange }: LeadListHeader
   );
 }
 
+/**
+ * Relação — `Lead` ou `Cliente` (ADR-0023 §6).
+ *
+ * A tinta vai onde está o sinal. `Lead` é 97,1% das linhas: selo colorido ali
+ * seria decoração em 34 mil linhas, a mesma falha que a ADR-0024 §1 acabou de
+ * tirar da lista. `Cliente` é 1% e é o único valor da linha que merece o accent
+ * da marca. Os dois continuam sempre escritos — muda quanto cada um grita.
+ */
+function RelacaoCell({ standing }: { standing?: LeadStanding }) {
+  if (standing?.relacao !== "cliente") {
+    return <span className="text-[13px] text-muted-foreground">Lead</span>;
+  }
+
+  return (
+    <span
+      className="inline-flex w-fit items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-[12.5px] font-semibold text-primary"
+      title={
+        standing.prova === "ambas"
+          ? "Comprou pelo funil e tem pedido no ERP"
+          : standing.prova === "erp"
+            ? "Tem pedido no ERP"
+            : "Fechou negócio no funil"
+      }
+    >
+      <span className="size-1.5 shrink-0 rounded-full bg-primary" />
+      Cliente
+    </span>
+  );
+}
+
+/**
+ * Situação — `Em negociação` (com o funil do Negócio aberto mais avançado) ou
+ * `Sem negócio aberto`.
+ *
+ * O tracejado da ausência é o mesmo idioma que a linha já usa em "sem dono" e
+ * "sem negócio". O nome do funil trunca; "Em negociação" não — cortado, ele
+ * deixa de dizer o que é, que é a única função dele.
+ */
+function SituacaoCell({ standing }: { standing?: LeadStanding }) {
+  if (!standing?.emNegociacao) {
+    return (
+      <span className="inline-block w-fit rounded-md border border-dashed border-border px-2.5 py-0.5 text-[12.5px] text-muted-foreground">
+        Sem negócio aberto
+      </span>
+    );
+  }
+
+  const funil = standing.maisAvancado;
+
+  return (
+    <span className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
+      <span
+        className="size-1.5 shrink-0 rounded-full"
+        style={{ background: funil?.funnelColor ?? "hsl(var(--muted-foreground))" }}
+      />
+      <span className="shrink-0 text-foreground/80">Em negociação</span>
+      {funil && (
+        <span className="truncate" title={funil.funnelName}>
+          · {funil.funnelName}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function LeadListRow({
   lead,
   metrics,
   deals = [],
+  standing,
   selected,
   onToggleSelect,
   onOpen,
@@ -287,6 +361,16 @@ export function LeadListRow({
             {metrics.segment}
           </Badge>
         )}
+      </div>
+
+      {/* relação — quem essa pessoa é pra operação */}
+      <div>
+        <RelacaoCell standing={standing} />
+      </div>
+
+      {/* situação — o que está acontecendo com ela agora */}
+      <div className="min-w-0">
+        <SituacaoCell standing={standing} />
       </div>
 
       {/* negócios */}
