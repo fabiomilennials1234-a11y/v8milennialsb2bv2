@@ -63,6 +63,17 @@ export function friendlyWhatsAppSendError(raw: string): string {
     // 422 do whatsapp-api-proxy — já vem pronto em pt-BR
     return raw;
   }
+  // O WhatsApp (não a Uazapi) barra a conta quando ela abre conversa nova demais
+  // ou leva bloqueio de destinatário. É temporário e some sozinho em horas, mas
+  // sem esta tradução o vendedor lê "non-2xx", reenvia em looping e piora a
+  // reputação do número — foi o que aconteceu na Distetica (2026-08-03).
+  if (
+    s.includes("temporary restriction") ||
+    s.includes("whatsapp server error 463") ||
+    s.includes("error 463")
+  ) {
+    return "O WhatsApp bloqueou temporariamente esse número para iniciar conversas novas (volume/qualidade de envio). Pare os disparos por algumas horas — o bloqueio sai sozinho. Conversas já abertas continuam funcionando.";
+  }
   if (s.includes("rate limit")) {
     return "Muitas mensagens em pouco tempo. Aguarde alguns segundos e tente de novo.";
   }

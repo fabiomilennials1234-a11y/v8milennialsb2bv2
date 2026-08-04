@@ -73,6 +73,23 @@ describe("friendlyWhatsAppSendError", () => {
     expect(friendlyWhatsAppSendError(raw)).toBe(raw);
   });
 
+  it("translates the WhatsApp 463 temporary restriction — the Distetica case", () => {
+    const raw =
+      "Uazapi server error 500 on POST /send/text: error sending message: WhatsApp server error 463: WhatsApp reported that the currently connected account is under a temporary restriction for starting new conversations, usually related to sending volume or quality.";
+    const friendly = friendlyWhatsAppSendError(raw);
+    expect(friendly).toContain("bloqueou temporariamente");
+    expect(friendly).toContain("Pare os disparos");
+    expect(friendly).not.toContain("Uazapi");
+  });
+
+  it("does not mistake a phone number containing 463 for the restriction error", () => {
+    const raw =
+      "Uazapi server error 500 on POST /send/text: the number 5511994635555@s.whatsapp.net is not on WhatsApp";
+    expect(friendlyWhatsAppSendError(raw)).toBe(
+      "Esse número não tem WhatsApp. Confira o telefone no cadastro do lead.",
+    );
+  });
+
   it("passes unknown errors through instead of swallowing them", () => {
     expect(friendlyWhatsAppSendError("something nobody mapped yet")).toBe(
       "something nobody mapped yet",
