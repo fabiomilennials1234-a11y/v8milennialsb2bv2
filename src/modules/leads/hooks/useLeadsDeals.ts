@@ -39,6 +39,14 @@ export interface LeadDeal {
   isSystem: boolean;
   stageKey: string | null;
   stageName: string;
+  /**
+   * `position` da etapa dentro do funil. Desempata "qual negócio aberto está
+   * mais avançado" quando dois estão no MESMO funil — o que hoje não acontece
+   * (0 casos em prod) só porque as três travas de unicidade caíram agora, na
+   * migration `20270730000050`. Dois abertos no mesmo funil é exatamente a
+   * compra repetida que a fatia 2 foi feita para permitir.
+   */
+  stagePosition: number | null;
   outcome: DealOutcome;
   won: boolean;
   /** `metadata.sale_value` — só propostas costuma ter. 0 = sem valor. */
@@ -115,12 +123,12 @@ export function useLeadsDeals(leadIds: string[]) {
           .eq("organization_id", organizationId),
         supabase
           .from("pipeline_stages")
-          .select("pipeline_type, stage_key, name, stage_role")
+          .select("pipeline_type, stage_key, name, stage_role, position")
           .eq("organization_id", organizationId)
           .eq("is_active", true),
         supabase
           .from("custom_pipeline_stages")
-          .select("id, pipeline_id, stage_key, name, stage_role")
+          .select("id, pipeline_id, stage_key, name, stage_role, position")
           .eq("organization_id", organizationId)
           .eq("is_active", true),
       ]);
@@ -169,19 +177,28 @@ export function useLeadsDeals(leadIds: string[]) {
         }
       }
 
+      type StageInfo = { name: string; role: string | null; position: number | null };
+
       // Stages de funil system são chaveadas por (pipeline_type, stage_key).
-      const systemStage = new Map<string, { name: string; role: string | null }>();
+      const systemStage = new Map<string, StageInfo>();
       for (const s of stagesRes.data ?? []) {
-        const row = s as { pipeline_type: string; stage_key: string; name: string; stage_role: string | null };
+        const row = s as {
+          pipeline_type: string;
+          stage_key: string;
+          name: string;
+          stage_role: string | null;
+          position: number | null;
+        };
         systemStage.set(`${row.pipeline_type}::${row.stage_key}`, {
           name: row.name,
           role: row.stage_role ?? null,
+          position: row.position ?? null,
         });
       }
 
       // Custom: a entry grava ora o uuid da stage, ora o stage_key. Indexa os dois
       // (mesma tolerância de `useLeadAllPipelines`).
-      const customStage = new Map<string, { name: string; role: string | null }>();
+      const customStage = new Map<string, StageInfo>();
       for (const s of customStagesRes.data ?? []) {
         const row = s as {
           id: string;
@@ -189,8 +206,13 @@ export function useLeadsDeals(leadIds: string[]) {
           stage_key: string | null;
           name: string;
           stage_role: string | null;
+          position: number | null;
         };
-        const value = { name: row.name, role: row.stage_role ?? null };
+        const value: StageInfo = {
+          name: row.name,
+          role: row.stage_role ?? null,
+          position: row.position ?? null,
+        };
         customStage.set(`${row.pipeline_id}::${row.id}`, value);
         if (row.stage_key) customStage.set(`${row.pipeline_id}::${row.stage_key}`, value);
       }
@@ -230,6 +252,7 @@ export function useLeadsDeals(leadIds: string[]) {
           // Stage inativa/renomeada não vira card fantasma: mostra a chave crua
           // em vez de sumir. Mesma classe do incidente ghost-stage do lead-webhook.
           stageName: stage?.name ?? raw.stage_key ?? "sem etapa",
+          stagePosition: stage?.position ?? null,
           outcome: outcomeOf(stage?.role),
           won: outcomeOf(stage?.role) === "won",
           value: toNumber(metadata.sale_value),

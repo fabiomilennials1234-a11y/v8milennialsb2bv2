@@ -34,6 +34,7 @@ import {
   toggleLeadSort,
   type LeadSortKey,
 } from "../lib/lead-list-sort";
+import { deriveLeadStandings } from "../lib/lead-relacao-situacao";
 import { useLeadsStats } from "../hooks/useLeadsStats";
 import { useLeadsSalesMetrics } from "../hooks/useLeadsSalesMetrics";
 import { useLeadsDeals } from "../hooks/useLeadsDeals";
@@ -342,6 +343,26 @@ function LeadsInner() {
   const dataMetrics = useMemo(() => {
     return mergeDataMetrics(carteiraMetrics, salesMetrics);
   }, [carteiraMetrics, salesMetrics]);
+
+  /**
+   * Relação + Situação (ADR-0023 decisão 6). A regra mora em
+   * `lib/lead-relacao-situacao`; aqui só junta as três fontes que a página já
+   * carregou em lote — nenhuma query nova entra por causa destas colunas.
+   *
+   * Relação lê `salesMetrics` (ledger `sale_events`) e o contador de pedidos da
+   * carteira, nunca a posição do card: com a decisão 4, avançar move o card
+   * para fora da etapa onde ganhou, e 119 dos 342 clientes de prod já estão
+   * nessa situação.
+   */
+  const standings = useMemo(
+    () =>
+      deriveLeadStandings(allLeadIds, {
+        deals: leadDeals,
+        vendas: salesMetrics,
+        carteira: carteiraMetrics,
+      }),
+    [allLeadIds, leadDeals, salesMetrics, carteiraMetrics],
+  );
   const { isMobile } = useViewport();
 
   // ── Pipe/funnel selection for new leads ──
@@ -739,6 +760,44 @@ function LeadsInner() {
                     </div>
                     <StarRating rating={lead.rating || 0} readonly />
                   </div>
+
+                  {/* Relação + Situação — a §6 vale para a página, e o card do
+                      celular é a mesma página. Ficam numa linha própria, antes
+                      das etiquetas, para não se perderem entre badges. */}
+                  <div className="mt-2 flex items-center gap-2 text-[12.5px]">
+                    {standings[lead.id]?.relacao === "cliente" ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 font-semibold text-primary">
+                        <span className="size-1.5 shrink-0 rounded-full bg-primary" />
+                        Cliente
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">Lead</span>
+                    )}
+                    <span className="text-border">·</span>
+                    {standings[lead.id]?.emNegociacao ? (
+                      <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+                        <span
+                          className="size-1.5 shrink-0 rounded-full"
+                          style={{
+                            background:
+                              standings[lead.id]?.maisAvancado?.funnelColor ??
+                              "hsl(var(--muted-foreground))",
+                          }}
+                        />
+                        <span className="shrink-0 text-foreground/80">Em negociação</span>
+                        {standings[lead.id]?.maisAvancado && (
+                          <span className="truncate">
+                            · {standings[lead.id]!.maisAvancado!.funnelName}
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="rounded-md border border-dashed border-border px-2 py-0.5 text-muted-foreground">
+                        Sem negócio aberto
+                      </span>
+                    )}
+                  </div>
+
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <Badge variant="outline" className={originColors[lead.origin] || originColors.outro}>
                       {originLabels[lead.origin] || lead.origin}
@@ -810,6 +869,7 @@ function LeadsInner() {
                     lead={lead as LeadListItem}
                     metrics={dataMetrics[lead.id]}
                     deals={leadDeals?.[lead.id]}
+                    standing={standings[lead.id]}
                     selected={bulk.isSelected(lead.id)}
                     onToggleSelect={() => bulk.toggle(lead.id)}
                     onOpen={() => openLead(lead.id)}
