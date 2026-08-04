@@ -48,12 +48,20 @@ import {
 import { useLossReasons } from "./hooks/config/useLossReasons";
 import { RescheduleModal } from "./components/legacy/confirmacao/RescheduleModal";
 import { MergedMeetingEditor } from "./components/kanban/MergedMeetingEditor";
+import { usePipelineId } from "./hooks/model/usePipelineEntries";
+import { moverNegocio, invalidateAfterMove } from "./lib/moverNegocio";
 
 /**
  * Objeto-port estável. Os hooks são referências de função (estáveis entre
  * renders), então `useMemo` sem deps é seguro e evita re-render dos consumers.
  */
 const port: PipeOpsPort = {
+  // ADR-0023 decisão 4 — o drawer do lead também faz a transição
+  // compareceu → Orçamentos, e entra por aqui em vez de importar o barrel de
+  // pipelines (que carregaria este próprio provider de dentro de `leads`).
+  usePipelineId,
+  moverNegocio,
+  invalidateAfterMove,
   usePipelineStages,
   useAllPipelineStageOptions,
   useCustomPipelines,

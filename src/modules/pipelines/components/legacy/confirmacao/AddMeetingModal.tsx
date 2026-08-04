@@ -14,7 +14,9 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useLeads, useUpdateLead } from "@/modules/leads";
 import { useResponsibleMembers } from "@/modules/identity";
-import { useCreatePipeConfirmacao, PipeConfirmacaoStatus } from "@/modules/pipelines/hooks/legacy/usePipeConfirmacao";
+import { useCreatePipeConfirmacao, useUpdatePipeConfirmacao, PipeConfirmacaoStatus } from "@/modules/pipelines/hooks/legacy/usePipeConfirmacao";
+import { usePipelineId } from "@/modules/pipelines/hooks/model/usePipelineEntries";
+import { moverNegocio } from "@/modules/pipelines/lib/moverNegocio";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useGoogleCalendarStatus } from "@/modules/integrations/hooks/useGoogleCalendar";
 import { useCalendarSharing } from "@/modules/integrations/hooks/useGoogleCalendarSharing";
@@ -38,6 +40,26 @@ interface AddMeetingModalProps {
    * `pipeline_entries.metadata.pre_sale_responsible_id`.
    */
   prefilledResponsibleId?: string | null;
+  /**
+   * Quando informado, o negócio EXISTENTE (`pipeline_entries.id`) é MOVIDO para
+   * a Confirmação em vez de um card novo ser criado — ADR-0023 decisão 4.
+   *
+   * Existe porque este modal é a porta do "agendar reunião" arrastando o card no
+   * funil WhatsApp (81 orgs). Sem isto, ele cria o card de Confirmação e a página
+   * atualiza o de origem, que fica para trás: o mesmo negócio em dois funis.
+   *
+   * A ordem interna importa e está comentada no submit. Sem o prop, nada muda —
+   * o outro chamador (a própria tela de Confirmação, onde "Nova Reunião" é
+   * criação avulsa e não transição) continua criando card.
+   */
+  moveFromEntryId?: string | null;
+  /**
+   * Roda ANTES da escrita no funil de destino. É aqui que a página leva o card
+   * de origem à etapa de sucesso — o UPDATE que produz `meeting_booked`, porque
+   * o gatilho de métrica reage à TRANSIÇÃO para "agendado", não à permanência.
+   * Se lançar, nada é escrito no destino.
+   */
+  beforeSubmit?: () => Promise<void>;
 }
 
 export function AddMeetingModal({
@@ -46,6 +68,8 @@ export function AddMeetingModal({
   onSuccess,
   prefilledLeadId,
   prefilledResponsibleId,
+  moveFromEntryId,
+  beforeSubmit,
 }: AddMeetingModalProps) {
   const [email, setEmail] = useState("");
   const [selectedLeadId, setSelectedLeadId] = useState<string>(prefilledLeadId ?? "");
@@ -66,6 +90,8 @@ export function AddMeetingModal({
   const { data: leads, isLoading: leadsLoading } = useLeads();
   const responsibleMembers = useResponsibleMembers();
   const createPipeConfirmacao = useCreatePipeConfirmacao();
+  const updatePipeConfirmacao = useUpdatePipeConfirmacao();
+  const { data: confirmacaoPipelineId } = usePipelineId("confirmacao");
   const updateLead = useUpdateLead();
   const logAction = useLogLeadAction();
 
@@ -187,15 +213,62 @@ export function AddMeetingModal({
         });
       }
 
-      const pipeData = await createPipeConfirmacao.mutateAsync({
-        lead_id: selectedLeadId,
-        meeting_date: meetingDateTime.toISOString(),
-        // Redundant client-side hint. Authoritative snapshot is still produced
-        // by the DB trigger reading from `leads`.
-        pre_sale_responsible_id: desiredSdr,
-        notes: notes || null,
-        status,
-      });
+      // Passo do chamador ANTES de qualquer escrita no destino. Na tela do funil
+      // WhatsApp é ele que leva o card de origem à etapa de sucesso — o UPDATE
+      // que produz `meeting_booked`. Se lançar, nada abaixo acontece.
+      if (beforeSubmit) await beforeSubmit();
+
+      let pipeData: { id: string; lead_id: string; organization_id: string };
+
+      if (moveFromEntryId) {
+        /**
+         * MOVER, não criar — ADR-0023 decisão 4.
+         *
+         * Três escritas, nesta ordem, e nenhuma é opcional:
+         *  1. o `beforeSubmit` acima já levou a origem à etapa de sucesso;
+         *  2. `moverNegocio` troca o funil na MESMA linha — nenhum card novo;
+         *  3. o UPDATE abaixo grava a data da reunião no card que acabou de
+         *     chegar. Ele é obrigatório: `findOrCreatePipelineEntry`, quando ACHA
+         *     uma linha, devolve-a sem atualizar metadata nem etapa — então
+         *     mover e depois chamar o create deixaria a reunião sem data.
+         *
+         * Na métrica isso fecha: o passo 1 emite `meeting_booked`, e o passo 3
+         * cai no ramo de remarcação do gatilho (mesma etapa, data que era nula
+         * passa a existir), que ATUALIZA o evento em vez de criar outro.
+         */
+        if (!confirmacaoPipelineId) {
+          throw new Error("Funil de Confirmação não encontrado nesta organização");
+        }
+
+        await moverNegocio({
+          entryId: moveFromEntryId,
+          targetPipelineId: confirmacaoPipelineId,
+          targetStageKey: status,
+          stageOrigem: null,
+          assignedTo: desiredSdr,
+        });
+
+        await updatePipeConfirmacao.mutateAsync({
+          id: moveFromEntryId,
+          status,
+          meeting_date: meetingDateTime.toISOString(),
+          pre_sale_responsible_id: desiredSdr,
+          notes: notes || null,
+          leadId: selectedLeadId,
+        });
+
+        pipeData = { id: moveFromEntryId, lead_id: selectedLeadId, organization_id: "" };
+      } else {
+        pipeData = await createPipeConfirmacao.mutateAsync({
+          lead_id: selectedLeadId,
+          meeting_date: meetingDateTime.toISOString(),
+          // Redundant client-side hint. Authoritative snapshot is still produced
+          // by the DB trigger reading from `leads`.
+          pre_sale_responsible_id: desiredSdr,
+          notes: notes || null,
+          status,
+        });
+      }
 
       const meetingWhen = format(meetingDateTime, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
       const trimmedNotes = notes.trim();
