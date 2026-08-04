@@ -28,6 +28,7 @@ import {
 } from "../components/leads/LeadListRow";
 import { useLeadsCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
 import { mergeDataMetrics } from "../lib/data-metrics";
+import { useLeadsStats } from "../hooks/useLeadsStats";
 import { useLeadsSalesMetrics } from "../hooks/useLeadsSalesMetrics";
 import { useLeadsDeals } from "../hooks/useLeadsDeals";
 import {
@@ -371,18 +372,29 @@ function LeadsInner() {
     setPage(0);
   }, [searchQuery, filterOrigin, filterRating, filterQualification, createdFrom, createdTo]);
 
-  const stats = useMemo(() => {
-    const total = totalLeads ?? leads.length;
-    const highRating = leads.filter((l: Lead) => (l.rating || 0) >= 7).length;
-    const thisMonth = leads.filter((l: Lead) => {
-      const date = new Date(l.created_at);
-      const now = new Date();
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-    }).length;
-    const withSDR = leads.filter((l: Lead) => l.responsible_id).length;
+  /**
+   * ADR-0024 decisão 2 — os quatro cards contam a ORGANIZAÇÃO.
+   *
+   * Antes, três deles filtravam o array `leads`, que é **a página atual** (25
+   * linhas), e ficavam encostados num "Total" que vinha de `useLeadsCount` e
+   * contava a org. Três números de página ao lado de um total de organização,
+   * sem nada na tela marcando a diferença — numa org com 2.987 leads, "deste
+   * mês" reportava o que coubesse numa página.
+   *
+   * O corte de "deste mês" também mudou de fuso: era o do navegador, virou o da
+   * org, que é o que o resto do produto usa.
+   */
+  const { data: orgStats } = useLeadsStats({
+    searchQuery, filterOrigin, filterRating, filterQualification,
+    filterUf: ufFilter, createdFrom, createdTo,
+  });
 
-    return { total, highRating, thisMonth, withSDR };
-  }, [leads, totalLeads]);
+  const stats = useMemo(() => ({
+    total: totalLeads ?? leads.length,
+    highRating: orgStats?.highRating ?? 0,
+    thisMonth: orgStats?.thisMonth ?? 0,
+    withSDR: orgStats?.withOwner ?? 0,
+  }), [totalLeads, leads.length, orgStats]);
 
   const handleOpenDialog = (lead?: any) => {
     if (lead) {
