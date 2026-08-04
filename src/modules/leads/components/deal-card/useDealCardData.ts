@@ -187,6 +187,15 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
 
       funil: negocioBase.funnelName,
       funilCor: negocioBase.funnelColor,
+      pipeTable: negocioBase.isSystem
+        ? negocioBase.pipelineSlug === "whatsapp"
+          ? "pipe_whatsapp"
+          : negocioBase.pipelineSlug === "confirmacao"
+            ? "pipe_confirmacao"
+            : negocioBase.pipelineSlug === "propostas"
+              ? "pipe_propostas"
+              : null
+        : null,
       etapas,
       etapaAtual: negocioBase.stageKey ?? "",
 

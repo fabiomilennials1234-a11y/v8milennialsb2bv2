@@ -1,4 +1,7 @@
+import { useState } from "react";
+import { Loader2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useInlineEdit } from "../lead-detail/hooks/useInlineEdit";
 import type { LeadCardField, LeadCardFieldGroup } from "./types";
 
 /**
@@ -20,8 +23,42 @@ import type { LeadCardField, LeadCardFieldGroup } from "./types";
  * apêndice quebra nessa org.
  */
 
-function Linha({ campo }: { campo: LeadCardField }) {
+/** `type` do input a partir do tipo do campo — só onde muda o teclado. */
+const INPUT_TYPE: Partial<Record<NonNullable<LeadCardField["tipo"]>, string>> = {
+  email: "email",
+  telefone: "tel",
+  data: "date",
+  url: "url",
+};
+
+function Linha({
+  campo,
+  onSave,
+}: {
+  campo: LeadCardField;
+  onSave?: (chave: string, valor: string) => Promise<void>;
+}) {
+  const [erro, setErro] = useState(false);
   const vazio = campo.valor === null || campo.valor === "";
+
+  // `somenteLeitura` marca o campo que ainda não tem coluna em `leads` (CNPJ,
+  // site, nascimento, endereço). Ele APARECE, por decisão do CTO — sumir é o
+  // que faz ninguém preencher — mas não finge que grava.
+  const editavel = !!onSave && !campo.somenteLeitura;
+
+  const { localValue, setLocalValue, isEditing, isSaving, startEditing, commit, cancel } =
+    useInlineEdit({
+      value: campo.valor ?? "",
+      onSave: async (novo) => {
+        setErro(false);
+        try {
+          await onSave!(campo.chave, novo);
+        } catch (e) {
+          setErro(true);
+          throw e;
+        }
+      },
+    });
 
   return (
     <div
@@ -33,21 +70,66 @@ function Linha({ campo }: { campo: LeadCardField }) {
         "transition-colors hover:bg-muted/40",
       )}
     >
-      <span className="truncate text-[12.5px] text-muted-foreground">{campo.rotulo}</span>
-      <span
-        className={cn(
-          "min-w-0 break-words text-[13.5px]",
-          vazio ? "text-muted-foreground/45" : "text-foreground",
-          campo.tipo === "documento" || campo.tipo === "moeda" ? "tabular-nums" : undefined,
+      <span className="flex items-center gap-1.5 truncate text-[12.5px] text-muted-foreground">
+        {campo.rotulo}
+        {campo.somenteLeitura && (
+          <Lock
+            className="size-3 shrink-0 opacity-45"
+            aria-label="Campo ainda sem coluna no banco"
+          />
         )}
-      >
-        {vazio ? (campo.vazio ?? "—") : campo.valor}
       </span>
+
+      {isEditing ? (
+        <input
+          autoFocus
+          type={INPUT_TYPE[campo.tipo ?? "texto"] ?? "text"}
+          value={localValue}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") cancel();
+          }}
+          className={cn(
+            "min-w-0 rounded border border-primary/50 bg-background px-1.5 py-0.5 text-[13.5px]",
+            "focus:outline-none focus:ring-1 focus:ring-primary/30",
+          )}
+        />
+      ) : (
+        <button
+          type="button"
+          disabled={!editavel}
+          onClick={startEditing}
+          title={campo.somenteLeitura ? "Este campo ainda não existe no banco" : undefined}
+          className={cn(
+            "flex min-w-0 items-center gap-1.5 break-words rounded text-left text-[13.5px]",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            vazio ? "text-muted-foreground/45" : "text-foreground",
+            campo.tipo === "documento" || campo.tipo === "moeda" ? "tabular-nums" : undefined,
+            editavel && "cursor-text hover:text-foreground",
+            !editavel && "cursor-default",
+            erro && "text-destructive",
+          )}
+        >
+          <span className="min-w-0 break-words">
+            {vazio ? (campo.vazio ?? "—") : campo.valor}
+          </span>
+          {isSaving && <Loader2 className="size-3 shrink-0 animate-spin opacity-60" />}
+        </button>
+      )}
     </div>
   );
 }
 
-export function LeadCardFields({ grupos }: { grupos: LeadCardFieldGroup[] }) {
+export function LeadCardFields({
+  grupos,
+  onSave,
+}: {
+  grupos: LeadCardFieldGroup[];
+  /** Persiste o campo. Sem ela o bloco fica só de leitura (visualização). */
+  onSave?: (chave: string, valor: string) => Promise<void>;
+}) {
   return (
     <div className="flex flex-col gap-7 pb-2">
       {grupos.map((grupo) => {
@@ -70,7 +152,7 @@ export function LeadCardFields({ grupos }: { grupos: LeadCardFieldGroup[] }) {
 
             <div className="flex flex-col">
               {grupo.campos.map((campo) => (
-                <Linha key={campo.chave} campo={campo} />
+                <Linha key={campo.chave} campo={campo} onSave={onSave} />
               ))}
             </div>
           </section>

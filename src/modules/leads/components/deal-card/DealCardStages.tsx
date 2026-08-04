@@ -18,10 +18,16 @@ export function DealCardStages({
   etapas,
   atual,
   cor,
+  onMover,
+  movendo,
 }: {
   etapas: DealCardStage[];
   atual: string;
   cor: string;
+  /** Move o negócio para a etapa. Sem ela a trilha só informa. */
+  onMover?: (chave: string) => void;
+  /** Chave em trânsito — desabilita a trilha inteira enquanto grava. */
+  movendo?: string | null;
 }) {
   const trilha = etapas.filter((e) => e.papel === "aberto");
   const terminal = etapas.find((e) => e.chave === atual && e.papel !== "aberto");
@@ -62,25 +68,42 @@ export function DealCardStages({
       {trilha.map((e, i) => {
         const passou = indiceAtual >= 0 && i < indiceAtual;
         const aqui = i === indiceAtual;
+        const emTransito = movendo === e.chave;
+        // A trilha é o controle de mover: clicar numa casa leva o negócio até
+        // ela. É o mesmo caminho do `StageRail` do card antigo, pelo mesmo
+        // `useCrossPipeMove` — nenhuma escrita nova entra no produto.
         return (
-          <div key={e.chave} className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <button
+            key={e.chave}
+            type="button"
+            disabled={!onMover || aqui || !!movendo}
+            onClick={() => onMover?.(e.chave)}
+            title={aqui ? e.nome : `Mover para ${e.nome}`}
+            className={cn(
+              "group flex min-w-0 flex-1 flex-col gap-1.5 rounded text-left",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              onMover && !aqui && !movendo ? "cursor-pointer" : "cursor-default",
+              emTransito && "animate-pulse",
+            )}
+          >
             <span
               className={cn(
                 "h-[5px] rounded-full transition-colors",
                 aqui || passou ? "" : "bg-muted",
+                onMover && !aqui && !movendo && "group-hover:bg-muted-foreground/40",
               )}
               style={aqui || passou ? { background: cor } : undefined}
             />
             <span
               className={cn(
-                "truncate text-[11px] leading-tight",
+                "truncate text-[11px] leading-tight transition-colors",
                 aqui ? "font-semibold text-foreground" : "text-muted-foreground",
+                onMover && !aqui && !movendo && "group-hover:text-foreground",
               )}
-              title={e.nome}
             >
               {e.nome}
             </span>
-          </div>
+          </button>
         );
       })}
     </div>

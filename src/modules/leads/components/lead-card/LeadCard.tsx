@@ -5,7 +5,7 @@ import {
   Mail,
   MapPin,
   MessageCircle,
-  MoreHorizontal,
+  Trash2,
   Phone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -97,6 +97,9 @@ export function LeadCard({
   onSaveNote,
   onOpenDeal,
   onNewDeal,
+  onSaveField,
+  onToggleCopilot,
+  onDelete,
 }: {
   lead: LeadCardData;
   /** Persiste a anotação. Sem ela o campo edita mas não grava (visualização). */
@@ -104,6 +107,10 @@ export function LeadCard({
   /** Recebe o `pipeline_entries.id` — abre o card do Negócio. */
   onOpenDeal?: (entryId: string) => void;
   onNewDeal?: () => void;
+  /** Persiste um campo do bloco Dados. Sem ela o bloco fica só de leitura. */
+  onSaveField?: (chave: string, valor: string) => Promise<void>;
+  onToggleCopilot?: (ativo: boolean) => void;
+  onDelete?: () => void;
 }) {
   const [aba, setAba] = useState<Aba>("historico");
   const [nota, setNota] = useState(lead.nota);
@@ -206,12 +213,25 @@ export function LeadCard({
                   {lead.uf}
                 </span>
               )}
-              <span className="inline-flex items-center gap-1.5">
+              {/* O Copilot é interruptor, não rótulo: desligar a IA num lead é
+                  a ação de urgência quando o agente responde o que não devia. */}
+              <button
+                type="button"
+                onClick={() => onToggleCopilot?.(!lead.copilotAtivo)}
+                disabled={!onToggleCopilot}
+                title={lead.copilotAtivo ? "Desligar o Copilot neste lead" : "Ligar o Copilot"}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded px-1 py-0.5 transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  onToggleCopilot && "hover:bg-muted hover:text-foreground",
+                  !onToggleCopilot && "cursor-default",
+                )}
+              >
                 <Bot
                   className={cn("size-3.5", lead.copilotAtivo ? "text-primary" : "opacity-50")}
                 />
                 Copilot {lead.copilotAtivo ? "ativo" : "desligado"}
-              </span>
+              </button>
             </div>
           </div>
 
@@ -220,7 +240,12 @@ export function LeadCard({
             <AcaoRapida icone={Phone} rotulo="Ligar" desabilitado={!lead.telefone} />
             <AcaoRapida icone={Mail} rotulo="Enviar e-mail" desabilitado={!lead.email} />
             <AcaoRapida icone={CalendarPlus} rotulo="Agendar mensagem" />
-            <AcaoRapida icone={MoreHorizontal} rotulo="Mais ações" />
+            <AcaoRapida
+              icone={Trash2}
+              rotulo="Excluir lead"
+              onClick={onDelete}
+              desabilitado={!onDelete}
+            />
           </div>
         </div>
 
@@ -328,7 +353,7 @@ export function LeadCard({
                 onNewDeal={() => onNewDeal?.()}
               />
             )}
-            {aba === "dados" && <LeadCardFields grupos={lead.campos} />}
+            {aba === "dados" && <LeadCardFields grupos={lead.campos} onSave={onSaveField} />}
           </div>
         </div>
       </div>

@@ -87,6 +87,14 @@ export interface LeadCardField {
   vazio?: string;
   /** Campo criado pela org, não pelo sistema. */
   personalizado?: boolean;
+  /**
+   * Campo que aparece mas ainda não grava — CNPJ, site, nascimento, endereço
+   * não existem como coluna em `leads` (medido em prod 2026-08-04). Ficam
+   * visíveis por decisão do CTO, porque sumir da tela é o que faz ninguém
+   * nunca preencher; mas a interface diz que não grava, em vez de aceitar o
+   * texto e perdê-lo.
+   */
+  somenteLeitura?: boolean;
 }
 
 export interface LeadCardFieldGroup {

@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDealSheet } from "../deal-detail/deal-sheet-context";
 import { useLeadSheet } from "../lead-detail/hooks/useLeadSheet";
+import { useCrossPipeMove } from "../lead-detail/modal/pipes/useCrossPipeMove";
 import { DealCard } from "./DealCard";
 import { useDealCardData } from "./useDealCardData";
 
@@ -31,6 +32,39 @@ export const DealCardPanel = memo(function DealCardPanel() {
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useDealCardData(entryId, leadId, isOpen);
+
+  /**
+   * Mover de etapa — inclusive ganhar e perder, que são movimentos para a
+   * etapa terminal (ADR-0023 §5: a posição mora no card e é uma só).
+   *
+   * Reusa `useCrossPipeMove`, o mesmo motor do `StageRail` do card antigo:
+   * ele já invalida o board que hospeda o modal, a camada de negócio que a
+   * lista de Leads lê e o log de ação. Escrever mutação nova aqui criaria um
+   * segundo caminho de escrita para a mesma coisa — e é assim que as duas
+   * verdades voltam.
+   */
+  const { move, pendingStageKey } = useCrossPipeMove(leadId ?? "");
+
+  const moverEtapa = useCallback(
+    async (chave: string) => {
+      if (!data || !entryId) return;
+      const etapa = data.etapas.find((e) => e.chave === chave);
+      if (!etapa) return;
+
+      if (data.pipeTable) {
+        await move({
+          kind: "system",
+          pipeTable: data.pipeTable,
+          pipeId: entryId,
+          stageKey: chave,
+          stageLabel: etapa.nome,
+        });
+      } else {
+        await move({ kind: "custom", entryId, stageId: chave, stageLabel: etapa.nome });
+      }
+    },
+    [data, entryId, move],
+  );
 
   const salvarNota = useCallback(
     async (texto: string) => {
@@ -61,7 +95,13 @@ export const DealCardPanel = memo(function DealCardPanel() {
       <span className="text-[13px] text-muted-foreground">Carregando…</span>
     </div>
   ) : data ? (
-    <DealCard negocio={data} onOpenLead={abrirLead} onSaveNote={salvarNota} />
+    <DealCard
+      negocio={data}
+      onOpenLead={abrirLead}
+      onSaveNote={salvarNota}
+      onMoverEtapa={moverEtapa}
+      movendo={pendingStageKey}
+    />
   ) : (
     <div className="flex h-full items-center justify-center rounded-xl border border-border bg-background px-6 text-center">
       <span className="text-[13px] text-muted-foreground">Negócio não encontrado.</span>

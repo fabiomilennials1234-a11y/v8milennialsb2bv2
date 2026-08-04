@@ -34,6 +34,7 @@ export const NEGOCIO_ESTAGNADO: DealCardData = {
   },
   funil: "Orçamentos",
   funilCor: "#a855f7",
+  pipeTable: "pipe_propostas",
   etapas: ETAPAS_ORCAMENTOS,
   etapaAtual: "proposta_enviada",
   dono: "Luiza Andrade",
@@ -88,6 +89,7 @@ export const NEGOCIO_MAGRO: DealCardData = {
   },
   funil: "Qualificação",
   funilCor: "#22c55e",
+  pipeTable: "pipe_whatsapp",
   etapas: [
     { chave: "novo", nome: "Novo lead", papel: "aberto" },
     { chave: "abordado", nome: "Abordado", papel: "aberto" },
@@ -131,6 +133,7 @@ export const NEGOCIO_GANHO: DealCardData = {
   },
   funil: "Orçamentos",
   funilCor: "#a855f7",
+  pipeTable: "pipe_propostas",
   etapas: ETAPAS_ORCAMENTOS,
   etapaAtual: "vendido",
   dono: "Luiza Andrade",

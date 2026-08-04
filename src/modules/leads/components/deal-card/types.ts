@@ -52,6 +52,13 @@ export interface DealCardData {
 
   funil: string;
   funilCor: string;
+  /**
+   * Tabela do funil system (`pipe_whatsapp` | `pipe_confirmacao` |
+   * `pipe_propostas`), ou `null` em funil custom. É o que `useCrossPipeMove`
+   * precisa para saber onde escrever — as duas famílias guardam a posição em
+   * lugares diferentes.
+   */
+  pipeTable: "pipe_whatsapp" | "pipe_confirmacao" | "pipe_propostas" | null;
   /** Trilha completa do funil, para a barra mostrar onde ele está e o que falta. */
   etapas: DealCardStage[];
   etapaAtual: string;

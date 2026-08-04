@@ -166,39 +166,45 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
       vazio: "Não informado",
     }));
 
+    // ⚠️ A `chave` de campo do sistema É O NOME DA COLUNA em `leads` — o
+    // container a usa direto no `update`. Rótulo em português aqui grava
+    // numa coluna que não existe; era o que estava escrito antes de rodar.
     const campos: LeadCardFieldGroup[] = [
       {
         titulo: "Perfil",
         campos: [
-          { chave: "nome", rotulo: "Nome", valor: texto(l, "name"), tipo: "texto" },
-          { chave: "empresa", rotulo: "Empresa", valor: texto(l, "company"), tipo: "texto", vazio: "Informe a empresa" },
+          { chave: "name", rotulo: "Nome", valor: texto(l, "name"), tipo: "texto" },
+          { chave: "company", rotulo: "Empresa", valor: texto(l, "company"), tipo: "texto", vazio: "Informe a empresa" },
           { chave: "email", rotulo: "E-mail", valor: texto(l, "email"), tipo: "email", vazio: "nome@empresa.com.br" },
-          { chave: "telefone", rotulo: "Telefone", valor: texto(l, "phone"), tipo: "telefone", vazio: "(00) 00000-0000" },
+          { chave: "phone", rotulo: "Telefone", valor: texto(l, "phone"), tipo: "telefone", vazio: "(00) 00000-0000" },
           // ⚠️ As quatro abaixo NÃO existem como coluna em `leads` (medido em
           // prod 2026-08-04). Aparecem vazias por decisão do CTO — some da tela
           // é o que faz ninguém nunca preencher — mas continuam apenas de
           // leitura até a migration que cria as colunas. Ver o resumo da sessão.
-          { chave: "documento", rotulo: "CPF / CNPJ", valor: null, tipo: "documento", vazio: "Informe o documento" },
-          { chave: "site", rotulo: "Site", valor: null, tipo: "url", vazio: "www.exemplo.com.br" },
-          { chave: "nascimento", rotulo: "Nascimento / fundação", valor: null, tipo: "data", vazio: "dd/mm/aaaa" },
+          { somenteLeitura: true, chave: "documento", rotulo: "CPF / CNPJ", valor: null, tipo: "documento", vazio: "Informe o documento" },
+          { somenteLeitura: true, chave: "site", rotulo: "Site", valor: null, tipo: "url", vazio: "www.exemplo.com.br" },
+          { somenteLeitura: true, chave: "nascimento", rotulo: "Nascimento / fundação", valor: null, tipo: "data", vazio: "dd/mm/aaaa" },
         ],
       },
       {
         titulo: "Endereço",
         campos: [
           { chave: "uf", rotulo: "Estado", valor: texto(l, "uf"), tipo: "texto", vazio: "UF" },
-          { chave: "cidade", rotulo: "Cidade", valor: null, tipo: "texto", vazio: "Informe a cidade" },
-          { chave: "logradouro", rotulo: "Logradouro", valor: null, tipo: "texto", vazio: "Rua, número" },
-          { chave: "cep", rotulo: "CEP", valor: null, tipo: "texto", vazio: "00000-000" },
+          { somenteLeitura: true, chave: "cidade", rotulo: "Cidade", valor: null, tipo: "texto", vazio: "Informe a cidade" },
+          { somenteLeitura: true, chave: "logradouro", rotulo: "Logradouro", valor: null, tipo: "texto", vazio: "Rua, número" },
+          { somenteLeitura: true, chave: "cep", rotulo: "CEP", valor: null, tipo: "texto", vazio: "00000-000" },
         ],
       },
       {
         titulo: "Comercial",
         campos: [
-          { chave: "origem", rotulo: "Origem", valor: texto(l, "origin"), tipo: "texto" },
-          { chave: "segmento", rotulo: "Segmento", valor: texto(l, "segment"), tipo: "texto", vazio: "Informe o segmento" },
+          // `origin` e `qualification_tier` são ENUM no banco. Texto livre aqui
+          // grava valor inválido e derruba o update inteiro — só leitura até
+          // terem seletor, que é como o drawer V2 já os edita.
+          { somenteLeitura: true, chave: "origin", rotulo: "Origem", valor: texto(l, "origin"), tipo: "texto" },
+          { chave: "segment", rotulo: "Segmento", valor: texto(l, "segment"), tipo: "texto", vazio: "Informe o segmento" },
           { chave: "faturamento", rotulo: "Faturamento", valor: texto(l, "faturamento"), tipo: "moeda", vazio: "Informe o faturamento" },
-          { chave: "qualificacao", rotulo: "Qualificação", valor: texto(l, "qualification_tier"), tipo: "texto", vazio: "Sem qualificação" },
+          { somenteLeitura: true, chave: "qualification_tier", rotulo: "Qualificação", valor: texto(l, "qualification_tier"), tipo: "texto", vazio: "Sem qualificação" },
         ],
       },
       ...(camposDaOrg.length > 0

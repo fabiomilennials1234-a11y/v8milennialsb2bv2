@@ -3,7 +3,8 @@ import { toast } from "sonner";
 
 import { LeadCard } from "./LeadCard";
 import { useLeadCardData } from "./useLeadCardData";
-import { useUpdateLead } from "../../hooks/useLeads";
+import { useUpdateLead, useToggleLeadAI, useDeleteLead } from "../../hooks/useLeads";
+import { useSaveCustomFieldValue } from "../../hooks/useLeadCustomFields";
 
 /**
  * O Card do Lead ligado ao banco.
@@ -36,6 +37,36 @@ export function LeadCardContainer({
 }) {
   const { data, isLoading, visibility } = useLeadCardData(leadId, isOpen);
   const updateLead = useUpdateLead();
+  const saveCustomField = useSaveCustomFieldValue();
+  const toggleAI = useToggleLeadAI();
+  const deleteLead = useDeleteLead();
+
+  /**
+   * Grava um campo do bloco Dados.
+   *
+   * Campo do sistema vai por `useUpdateLead`; campo da organização vai por
+   * `useSaveCustomFieldValue`, e a `chave` dele É o id da definição. A
+   * distinção sai do próprio campo (`personalizado`) em vez de um prefixo na
+   * chave — prefixo em id é a classe de gambiarra que sobrevive anos.
+   *
+   * Campo `somenteLeitura` nunca chega aqui: a interface não o deixa entrar em
+   * edição. Aceitar o texto e não gravar seria pior que não oferecer.
+   */
+  const salvarCampo = useCallback(
+    async (chave: string, valor: string) => {
+      if (!leadId || !data) return;
+      const campo = data.campos.flatMap((g) => g.campos).find((c) => c.chave === chave);
+      if (!campo || campo.somenteLeitura) return;
+
+      const limpo = valor.trim();
+      if (campo.personalizado) {
+        await saveCustomField.mutateAsync({ leadId, fieldId: chave, value: limpo });
+        return;
+      }
+      await updateLead.mutateAsync({ id: leadId, [chave]: limpo === "" ? null : limpo });
+    },
+    [leadId, data, saveCustomField, updateLead],
+  );
 
   const salvarNota = useCallback(
     (texto: string) => {
@@ -84,6 +115,23 @@ export function LeadCardContainer({
       onSaveNote={salvarNota}
       onOpenDeal={onOpenDeal ? (entryId) => onOpenDeal(entryId, data.id) : undefined}
       onNewDeal={onNewDeal}
+      onSaveField={salvarCampo}
+      onToggleCopilot={(ativo) =>
+        leadId && toggleAI.mutate({ leadId, disabled: !ativo })
+      }
+      onDelete={async () => {
+        if (!leadId || !data) return;
+        // Confirmação nativa, igual ao card antigo: exclusão de lead leva junto
+        // conversas, reuniões e follow-ups. Trocar por um diálogo bonito é
+        // trabalho de UI que não vale atrasar o fechamento do buraco.
+        if (!window.confirm(`Excluir "${data.nome}"? A ação vai para a lixeira.`)) return;
+        try {
+          await deleteLead.mutateAsync(leadId);
+          toast.success("Lead movido para a lixeira.");
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : "Erro ao excluir o lead.");
+        }
+      }}
     />
   );
 }

@@ -94,17 +94,21 @@ function AcaoPrimaria({
   rotulo,
   tom,
   onClick,
+  desabilitado,
 }: {
   icone: typeof Check;
   rotulo: string;
   tom: "ganho" | "perda" | "neutro";
   onClick?: () => void;
+  desabilitado?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={desabilitado}
       className={cn(
+        "disabled:pointer-events-none disabled:opacity-45",
         "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px] font-medium transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         tom === "ganho" &&
@@ -124,15 +128,22 @@ export function DealCard({
   negocio,
   onOpenLead,
   onSaveNote,
+  onMoverEtapa,
+  movendo,
 }: {
   negocio: DealCardData;
   onOpenLead?: (leadId: string) => void;
   onSaveNote?: (texto: string) => void;
+  /** Move o negócio. Ganhar e perder são movimentos para etapa terminal. */
+  onMoverEtapa?: (chave: string) => void;
+  movendo?: string | null;
 }) {
   const [nota, setNota] = useState(negocio.nota);
   useEffect(() => setNota(negocio.nota), [negocio.id, negocio.nota]);
 
   const aberto = negocio.estado === "aberto";
+  const etapaGanha = negocio.etapas.find((e) => e.papel === "ganho");
+  const etapaPerdida = negocio.etapas.find((e) => e.papel === "perdido");
   const estagnado =
     aberto &&
     negocio.diasNaEtapa !== null &&
@@ -200,10 +211,31 @@ export function DealCard({
             </div>
           </div>
 
-          {aberto && (
+          {/* Ganhar e perder são MOVIMENTOS para a etapa terminal do funil, não
+              um campo de estado à parte — é o que mantém uma verdade só sobre
+              onde o negócio está (ADR-0023 §5). Somem quando o funil não tem
+              etapa terminal configurada: 83 funis custom em prod estão nesse
+              caso, e botão que não tem para onde ir é botão que mente. */}
+          {aberto && (etapaGanha || etapaPerdida) && (
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-              <AcaoPrimaria icone={Check} rotulo="Ganhou" tom="ganho" />
-              <AcaoPrimaria icone={X} rotulo="Perdeu" tom="perda" />
+              {etapaGanha && (
+                <AcaoPrimaria
+                  icone={Check}
+                  rotulo="Ganhou"
+                  tom="ganho"
+                  desabilitado={!!movendo}
+                  onClick={() => onMoverEtapa?.(etapaGanha.chave)}
+                />
+              )}
+              {etapaPerdida && (
+                <AcaoPrimaria
+                  icone={X}
+                  rotulo="Perdeu"
+                  tom="perda"
+                  desabilitado={!!movendo}
+                  onClick={() => onMoverEtapa?.(etapaPerdida.chave)}
+                />
+              )}
             </div>
           )}
         </div>
@@ -212,6 +244,8 @@ export function DealCard({
           etapas={negocio.etapas}
           atual={negocio.etapaAtual}
           cor={negocio.funilCor}
+          onMover={onMoverEtapa}
+          movendo={movendo}
         />
       </header>
 
