@@ -790,7 +790,15 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
             }
 
             if (arMode === "random") {
-              const randomIdx = Math.floor(Math.random() * eligibleMembers.length);
+              // CSPRNG em vez de `Math.random()`. O sorteio aqui é de negócio —
+              // qual vendedor da própria org recebe o lead —, mas o id sorteado
+              // agora alimenta `responsible_user_id`, e o CodeQL trata
+              // identidade derivada de PRNG fraco como falha ("Insecure
+              // randomness", high). Trocar custa nada e mantém o portão verde
+              // sem precisar dispensar alerta na mão.
+              const buf = new Uint32Array(1);
+              crypto.getRandomValues(buf);
+              const randomIdx = buf[0] % eligibleMembers.length;
               arAssigneeId = eligibleMembers[randomIdx].id;
               arAssigneeName = eligibleMembers[randomIdx].name;
             } else {
