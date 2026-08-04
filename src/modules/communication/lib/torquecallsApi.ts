@@ -89,6 +89,10 @@ export const CALL_DENY_MESSAGES: Record<string, string> = {
   session_not_found: "Nenhum número de chamadas configurado.",
   call_not_answerable: "Esta chamada não está mais disponível.",
   invalid_peer: "O telefone deste lead não serve para chamada. Confira o cadastro.",
+  // A corrida com o celular, que o ADR-0027 desenha de propósito: o aparelho
+  // toca junto e quem pegar primeiro leva. Não é falha, e a frase não pode
+  // soar como uma — o vendedor perdeu meio segundo, não encontrou um defeito.
+  call_already_claimed: "Esta ligação já foi atendida.",
 
   // ─── recusas da VPS ───────────────────────────────────────────────────────
   // Cada uma sai de uma causa que a VPS nomeia. A diferença entre elas é o que
@@ -191,6 +195,52 @@ export async function startCall(args: {
   }>(
     "startCall",
     withOrg({ tc_session_id: args.tcSessionId, lead_id: args.leadId }, args.organizationId),
+  );
+
+  return {
+    callId: raw.call_id,
+    tcCallId: raw.tc_call_id,
+    peer: raw.peer,
+    media: raw.media,
+    ctl: raw.ctl,
+    vpsUrl: raw.vps_url,
+  };
+}
+
+/**
+ * Atender uma chamada que ESTÁ ENTRANDO.
+ *
+ * Mesma fronteira de `startCall` e mesma resposta — o choke
+ * (`authorizeCallAndMint`) é o mesmo, só a direção muda. O que muda de verdade
+ * é a IDENTIDADE que o navegador tem para oferecer.
+ *
+ * Discar começa por um `lead_id`, que a tela conhece. Atender começa por uma
+ * oferta que chegou pelo stream da VPS, e o stream carrega o id de REDE
+ * (`tc_call_id`) — nunca o uuid de `voip_calls`, que a VPS não conhece. Por
+ * isso é ele que vai daqui: o navegador manda o que de fato lhe contaram, e a
+ * edge function faz a tradução, uma vez, do lado onde a linha mora.
+ *
+ * A sessão vem da OFERTA, não da preferência de discagem do vendedor. Chegam
+ * pelo mesmo stream as ligações de todos os números da organização, e atender
+ * pela sessão errada seria autorizar sobre a instância errada — o gate de
+ * instância confere as duas coisas, mas mandar o par certo é o que faz a
+ * negativa nunca acontecer.
+ */
+export async function acceptCall(args: {
+  tcSessionId: string;
+  tcCallId: string;
+  organizationId?: string;
+}): Promise<StartCallResult> {
+  const raw = await signal<{
+    call_id: string;
+    tc_call_id: string | null;
+    peer: string;
+    media: string;
+    ctl: string;
+    vps_url: string;
+  }>(
+    "acceptCall",
+    withOrg({ tc_session_id: args.tcSessionId, tc_call_id: args.tcCallId }, args.organizationId),
   );
 
   return {

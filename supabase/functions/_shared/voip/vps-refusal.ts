@@ -59,8 +59,25 @@ export type VpsRefusalCode =
   | "operator_busy"
   /** A sessão bateu o teto de chamadas simultâneas da VPS. */
   | "org_concurrency_reached"
+  /**
+   * A ligação de entrada já tem dono — o celular do vendedor atendeu, ou um
+   * colega pegou primeiro pelo CRM.
+   *
+   * Tem código próprio porque é o desfecho NORMAL da corrida que o ADR-0027
+   * desenha de propósito: o celular toca junto, e quem pegar primeiro leva. Sem
+   * ele, o vendedor que clicou meio segundo tarde lia "o serviço de chamadas
+   * recusou a ligação" — uma frase de falha para uma disputa que ele perdeu, e
+   * que o faz abrir chamado sobre um sistema que funcionou.
+   */
+  | "call_already_claimed"
   /** A VPS não respondeu (timeout ou rede). Distinto de "recusou". */
   | "vps_unreachable"
+  /**
+   * A chamada não está mais lá para ser atendida — o cliente desistiu, ou ela
+   * já foi encerrada. Reusa o nome que o governor (`DenyCode`) já dá à mesma
+   * causa: uma causa, um nome na interface, venha ela do banco ou da rede.
+   */
+  | "call_not_answerable"
   /** Fim de linha: a VPS recusou e não sabemos dizer por quê. */
   | "vps_refused";
 
@@ -87,6 +104,7 @@ const POR_CODIGO: Record<string, VpsRefusalCode> = {
   session_not_paired: "session_not_paired",
   operator_busy: "operator_busy",
   max_concurrent_calls: "org_concurrency_reached",
+  call_already_claimed: "call_already_claimed",
 };
 
 /**
@@ -106,6 +124,13 @@ const POR_PROSA: ReadonlyArray<readonly [RegExp, VpsRefusalCode]> = [
   [/not paired/i, "session_not_paired"],
   [/operator already on a call/i, "operator_busy"],
   [/max concurrent calls/i, "org_concurrency_reached"],
+  // `doAccept` (`cmd/server/httpapi.go`): `setOwner` recusou porque a chamada
+  // já tem dono. É a corrida com o celular, e ela é o caminho esperado.
+  [/claimed by another client/i, "call_already_claimed"],
+  // `doAccept`/`doWebRTC`: a chamada saiu do registro da sessão. Para quem
+  // clicou em atender significa a mesma coisa que o de cima — não é mais dele —
+  // mas o motivo é outro (o cliente desistiu), e por isso o código é outro.
+  [/no such call/i, "call_not_answerable"],
 ];
 
 /**

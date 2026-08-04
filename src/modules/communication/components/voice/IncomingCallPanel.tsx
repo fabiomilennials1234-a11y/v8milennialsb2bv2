@@ -16,7 +16,8 @@
  * (`VoiceCallProvider`), não de cada cartão: posição absoluta por cartão é o que
  * faria a segunda cobrir a primeira.
  */
-import { PhoneIncoming, BellOff } from "lucide-react";
+import { PhoneIncoming, BellOff, Phone, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { formatPeerPhone } from "@/modules/communication/lib/formatPeerPhone";
 import { normalizePhone } from "@/lib/normalizePhone";
 import {
@@ -36,9 +37,16 @@ const MAXIMO_VISIVEL = 3;
 function CartaoDeEntrada({
   call,
   silenced,
+  busy,
+  onAnswer,
+  onDismiss,
 }: {
   call: IncomingVoiceCall;
   silenced: boolean;
+  /** O vendedor já está em outra chamada: atender está fechado, não escondido. */
+  busy: boolean;
+  onAnswer: (call: IncomingVoiceCall) => void;
+  onDismiss: (call: IncomingVoiceCall) => void;
 }) {
   const nome = useIncomingCallerName(call.peerDigits);
   /**
@@ -96,6 +104,37 @@ function CartaoDeEntrada({
           </p>
         </div>
       )}
+
+      {/* ─── As duas ações, e elas NÃO são simétricas ─────────────────────────
+          Atender é a ação; Recusar é a saída. Por isso uma é o botão cheio e a
+          outra um ícone discreto — e é o mesmo desequilíbrio do produto: quem
+          recusa não decide nada sobre a ligação, só tira o cartão da frente.
+          A ligação segue tocando no celular dele e nos CRMs dos colegas. */}
+      <div className="flex items-center gap-2 border-t border-border/40 bg-background/40 px-3 py-2.5">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onDismiss(call)}
+          className="gap-2 text-muted-foreground"
+          // Diz o que recusar FAZ, porque o rótulo sozinho promete o contrário:
+          // "recusar" soa como desligar na cara do cliente, e não é isso.
+          title="Tira esta ligação da sua tela. Ela continua tocando no seu celular e para os colegas."
+        >
+          <X className="h-4 w-4" />
+          Recusar
+        </Button>
+        <div className="flex-1" />
+        <Button
+          size="sm"
+          onClick={() => onAnswer(call)}
+          disabled={busy}
+          className="gap-2"
+          title={busy ? "Você já está em uma chamada" : undefined}
+        >
+          <Phone className="h-4 w-4" />
+          Atender
+        </Button>
+      </div>
     </div>
   );
 }
@@ -103,9 +142,15 @@ function CartaoDeEntrada({
 export function IncomingCallPanel({
   calls,
   silenced,
+  busy,
+  onAnswer,
+  onDismiss,
 }: {
   calls: IncomingVoiceCall[];
   silenced: boolean;
+  busy: boolean;
+  onAnswer: (call: IncomingVoiceCall) => void;
+  onDismiss: (call: IncomingVoiceCall) => void;
 }) {
   if (calls.length === 0) return null;
 
@@ -132,6 +177,9 @@ export function IncomingCallPanel({
           key={`${call.tcSessionId.length}:${call.tcSessionId}:${call.tcCallId}`}
           call={call}
           silenced={silenced}
+          busy={busy}
+          onAnswer={onAnswer}
+          onDismiss={onDismiss}
         />
       ))}
     </>
