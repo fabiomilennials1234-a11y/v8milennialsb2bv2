@@ -9,6 +9,7 @@ import { normalizePhone } from "@/lib/normalizePhone";
 import { useIdentity } from "@/modules/identity";
 import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platform/lib/optimistic-lock";
 import { applyLeadListFilters } from "../lib/lead-list-filters";
+import { applyLeadListSort, DEFAULT_LEAD_SORT, type LeadListSort } from "../lib/lead-list-sort";
 
 export type Lead = Tables<"leads">;
 export type LeadInsert = TablesInsert<"leads">;
@@ -27,6 +28,15 @@ export interface LeadsFilterParams {
   createdFrom?: string;
   /** Instante ISO (inclusive) — limite superior de `created_at`. */
   createdTo?: string;
+  /**
+   * Ordenação da lista (ADR-0024 decisão 2). Catálogo fechado e regra de
+   * desempate em `../lib/lead-list-sort`. Ausente = a ordem de sempre.
+   *
+   * Só `useLeads` usa. `useLeadsCount` não recebe de propósito: contagem não
+   * depende de ordem, e incluí-la lá invalidaria o cache do total a cada
+   * clique no cabeçalho — três `count(*)` a mais por clique, de graça.
+   */
+  sort?: LeadListSort;
 }
 
 /**
@@ -53,13 +63,17 @@ function applyLeadsFilters(
  * Retorna até LEADS_PAGE_SIZE leads por página.
  */
 export function useLeads(params: LeadsFilterParams = {}) {
-  const { page = 0, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo } = params;
+  const { page = 0, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, sort = DEFAULT_LEAD_SORT } = params;
   const { organizationId, isReady } = useOrganization();
 
   useRealtimeSubscription("leads", ["leads"]);
 
   return useQuery({
-    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo],
+    // A ordem entra na chave junto com os filtros e a página: sem isso o cache
+    // devolveria a página 3 da ordem antiga como se fosse a da ordem nova.
+    // Espalhada em duas primitivas (e não como objeto) para a chave continuar
+    // legível no devtools.
+    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, sort.key, sort.direction],
     queryFn: async () => {
       if (!organizationId) {
         console.warn("[useLeads] No organization_id available - returning empty array");
@@ -85,9 +99,10 @@ export function useLeads(params: LeadsFilterParams = {}) {
 
       query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo });
 
-      const { data, error } = await query
-        .order("created_at", { ascending: false })
-        .range(from, to);
+      // Sempre com desempate por `id` — ver `lib/lead-list-sort`. Sem ele a
+      // paginação por OFFSET repete linha entre páginas dentro de um empate,
+      // e em prod há um grupo de 643 leads com o mesmo `created_at`.
+      const { data, error } = await applyLeadListSort(query, sort).range(from, to);
 
       if (error) throw error;
       return data;

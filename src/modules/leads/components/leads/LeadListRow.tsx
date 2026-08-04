@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
-import { Phone, Mail } from "lucide-react";
+import { ArrowUp, Phone, Mail } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
+import { LEAD_SORT_COLUMNS, type LeadListSort, type LeadSortKey } from "../../lib/lead-list-sort";
 import type { Lead } from "../../hooks/useLeads";
 import type { LeadCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
 import type { LeadDeal } from "../../hooks/useLeadsDeals";
@@ -90,16 +91,91 @@ function LeadAvatar({ name }: { name: string }) {
 
 // `CountRing` e `DataItem` saíram junto com o cluster "Dados" (ADR-0024 §1).
 
-export function LeadListHeader({ selectAll }: { selectAll?: ReactNode }) {
+interface LeadListHeaderProps {
+  selectAll?: ReactNode;
+  /** Ordenação vigente. Sem `onSortChange` o cabeçalho volta a ser só rótulo. */
+  sort?: LeadListSort;
+  onSortChange?: (key: LeadSortKey) => void;
+}
+
+/**
+ * Rótulo que ordena.
+ *
+ * ADR-0024 decisão 2 põe a ordenação NO cabeçalho em vez de num menu à parte:
+ * a affordance mora na coisa que ela ordena, e a linha de cabeçalho já existia
+ * pra carregá-la.
+ *
+ * A seta é permanente só na coluna ativa; nas outras aparece no hover e no
+ * foco — e apontando pro lado que o clique VAI produzir, não pro lado oposto.
+ * Três setas cinzas ao mesmo tempo não dizem qual está valendo.
+ */
+function SortableLabel({
+  label,
+  column,
+  sort,
+  onSortChange,
+}: {
+  label: string;
+  column: LeadSortKey;
+  sort?: LeadListSort;
+  onSortChange: (key: LeadSortKey) => void;
+}) {
+  const active = sort?.key === column;
+  const shown = active ? sort!.direction : LEAD_SORT_COLUMNS[column].firstClick;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSortChange(column)}
+      aria-label={
+        active
+          ? `${label}, em ordem ${shown === "asc" ? "crescente" : "decrescente"}. Ativar para inverter.`
+          : `Ordenar por ${label.toLowerCase()}`
+      }
+      className={cn(
+        "group -ml-1.5 inline-flex w-fit items-center gap-1 rounded px-1.5 py-0.5",
+        "transition-colors hover:text-foreground",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        active && "text-foreground",
+      )}
+    >
+      {label}
+      <ArrowUp
+        aria-hidden="true"
+        className={cn(
+          "size-3 transition-[opacity,transform] duration-150",
+          active
+            ? "opacity-100"
+            : "opacity-0 group-hover:opacity-45 group-focus-visible:opacity-45",
+          shown === "desc" && "rotate-180",
+        )}
+      />
+    </button>
+  );
+}
+
+export function LeadListHeader({ selectAll, sort, onSortChange }: LeadListHeaderProps) {
+  /**
+   * Só `Nome` e `Data de criação` ordenam — são as duas únicas colunas do
+   * cabeçalho que existem como coluna de `leads`. O porquê das outras quatro
+   * ficarem de fora está em `lib/lead-list-sort`.
+   */
+  const sortable = (label: string, column: LeadSortKey) =>
+    onSortChange ? (
+      <SortableLabel label={label} column={column} sort={sort} onSortChange={onSortChange} />
+    ) : (
+      <span>{label}</span>
+    );
+
   return (
     <div className={cn(GRID_COLS, "px-[18px] pb-2.5 text-[13px] font-medium text-muted-foreground")}>
       <span>{selectAll}</span>
-      <span>Nome</span>
+      {sortable("Nome", "name")}
       <span>Contatos</span>
       <span>Tags</span>
       <span>Negócios</span>
       <span>Dono da conta</span>
-      <span>Data de criação</span>
+      {sortable("Data de criação", "created_at")}
       <span />
     </div>
   );

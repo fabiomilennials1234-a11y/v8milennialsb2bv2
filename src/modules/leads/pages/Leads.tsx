@@ -28,6 +28,12 @@ import {
 } from "../components/leads/LeadListRow";
 import { useLeadsCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
 import { mergeDataMetrics } from "../lib/data-metrics";
+import {
+  DEFAULT_LEAD_SORT,
+  normalizeLeadSort,
+  toggleLeadSort,
+  type LeadSortKey,
+} from "../lib/lead-list-sort";
 import { useLeadsStats } from "../hooks/useLeadsStats";
 import { useLeadsSalesMetrics } from "../hooks/useLeadsSalesMetrics";
 import { useLeadsDeals } from "../hooks/useLeadsDeals";
@@ -280,7 +286,26 @@ function LeadsInner() {
       return next;
     }, { replace: true });
   }, [setSearchParams]);
-  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo };
+  /**
+   * ADR-0024 decisão 2 — a ordenação chega pelo clique no cabeçalho.
+   *
+   * Guardada FORA de `filterState` de propósito. `filterState` é o payload das
+   * visões salvas (`SavedViewsDropdown`), e enfiar ordenação ali mudaria o
+   * formato do que já está gravado na conta de quem usa. A separação também é
+   * conceitual: a visão salva descreve QUAIS leads aparecem; ordem é
+   * apresentação, não recorte.
+   *
+   * `normalizeLeadSort` fecha o caminho de volta: o valor vem de localStorage,
+   * então nunca é repassado cru ao `.order()`.
+   */
+  const [persistedSort, setPersistedSort] = usePersistedState("leads-sort", DEFAULT_LEAD_SORT);
+  const sort = useMemo(() => normalizeLeadSort(persistedSort), [persistedSort]);
+  const handleSortChange = useCallback(
+    (key: LeadSortKey) => setPersistedSort((atual) => toggleLeadSort(normalizeLeadSort(atual), key)),
+    [setPersistedSort],
+  );
+
+  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, sort };
   const { data: leads = [], isLoading } = useLeads(filterParams);
   const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo });
   const { data: teamMembers = [] } = useTeamMembers();
@@ -367,10 +392,12 @@ function LeadsInner() {
     }
   }, [selectedPipe, stageOptions, selectedStage]);
 
-  // Reset para página 0 quando filtros mudam
+  // Reset para página 0 quando filtros ou ordenação mudam. A ordenação entra
+  // aqui pelo mesmo motivo dos filtros: a página 5 da ordem anterior não é a
+  // página 5 da nova, e ficar nela devolve um pedaço arbitrário da lista.
   useEffect(() => {
     setPage(0);
-  }, [searchQuery, filterOrigin, filterRating, filterQualification, createdFrom, createdTo]);
+  }, [searchQuery, filterOrigin, filterRating, filterQualification, createdFrom, createdTo, sort.key, sort.direction]);
 
   /**
    * ADR-0024 decisão 2 — os quatro cards contam a ORGANIZAÇÃO.
@@ -756,6 +783,8 @@ function LeadsInner() {
           <div className="overflow-x-auto pb-1">
             <div className={LEAD_LIST_MIN_WIDTH}>
               <LeadListHeader
+                sort={sort}
+                onSortChange={handleSortChange}
                 selectAll={
                   <Checkbox
                     checked={allLeadIds.length > 0 && allLeadIds.every(id => bulk.isSelected(id))}
