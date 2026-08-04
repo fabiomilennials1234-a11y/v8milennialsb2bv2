@@ -822,7 +822,22 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
           }
 
           // Update lead based on target
-          const arUpdateFields: Record<string, string> = { responsible_id: arAssigneeId };
+          //
+          // `responsible_user_id` entra junto porque é a coluna que
+          // `get_lead_write_instance` casa com `whatsapp_instances.owner_team_member_id`
+          // — apesar do nome, a FK aponta para `team_members(id)`, igual às outras.
+          // Sem ela, a política de roteamento `responsible` devolve NO_RESPONSIBLE
+          // para TODO lead atribuído por automação: o nó de envio cai no recuo, ou
+          // falha com `no_instance_resolved` quando não há recuo declarado.
+          //
+          // Nenhum dos dois triggers de `leads` cobre isso — `fn_sync_canonical_assignment`
+          // só espelha sdr↔pre_sale e closer↔sale. Medido em prod (2026-08-04):
+          // 0 de 82 leads da Cervejaria Insana tinham a coluna preenchida, e
+          // 3.321 de 35.171 na plataforma — todos vindos de outros caminhos.
+          const arUpdateFields: Record<string, string> = {
+            responsible_id: arAssigneeId,
+            responsible_user_id: arAssigneeId,
+          };
           if (arTarget === "sdr") {
             arUpdateFields.sdr_id = arAssigneeId;
           } else if (arTarget === "closer") {
