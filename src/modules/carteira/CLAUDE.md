@@ -107,7 +107,7 @@ Re-exportados via index.ts: `PortfolioKPIs`, `PortfolioClientRow`, `PortfolioCli
 ### Consumidores cross-module (importam de `@/modules/carteira`)
 
 - `@/modules/leads` — `useLeadProducts` (lead-products hook em `src/modules/leads/hooks/lead/useLeadProducts.ts`), `BudgetFieldBlock`, `PropostasContext`, `UpsellContext`, `LeadTabProducts`, `ImportLeadsFunnelModal` — consomem `useProducts`, `useDeals`, `useUpsellClientByLeadId`
-- `@/modules/pipelines` — `PipePropostas`, `Negocios`, `PipeSettingsDialog` — consomem `useDeals`, `useProducts`, `CreateDealDialog`
+- `@/modules/pipelines` — `PipePropostas`, `PipeSettingsDialog` — consomem `useDeals`, `useProducts`, `CreateDealDialog`
 - `src/components/settings/IntegrationsCatalog.tsx`, `src/components/settings/TinyErpSettings.tsx` — consomem `useTinyErp*` (será absorvido por `integrations` ou `platform` em slice 13/14)
 - `src/components/dashboard/ProductRanking.tsx` — `useProductRanking` (será absorvido por `analytics` em slice 12)
 
