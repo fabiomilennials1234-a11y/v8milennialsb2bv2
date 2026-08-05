@@ -59,7 +59,7 @@ BEGIN
   IF TG_OP = 'DELETE' THEN
     SELECT pip.slug INTO v_slug_velho
       FROM public.pipelines pip
-     WHERE pip.id = OLD.pipeline_id AND pip.type = 'system';
+     WHERE pip.id = OLD.pipeline_id AND pip.type = 'system'; -- metric-lint-allow: não é métrica — é o gatilho-espelho sync_pipeline_entry_to_lead_pipe_whatsapp. `leads.pipe_whatsapp` espelha só o funil de SISTEMA; um funil custom com slug "whatsapp" não pode escrever nessa coluna. Tirar o predicado seria o defeito, não o conserto. Parametrizar por pipeline_id não se aplica: a função resolve o slug A PARTIR do pipeline_id que o gatilho já recebe.
 
     IF v_slug_velho = 'whatsapp' THEN
       UPDATE public.leads SET pipe_whatsapp = NULL WHERE id = OLD.lead_id;
@@ -70,7 +70,7 @@ BEGIN
 
   SELECT pip.slug INTO v_slug_novo
     FROM public.pipelines pip
-   WHERE pip.id = NEW.pipeline_id AND pip.type = 'system';
+   WHERE pip.id = NEW.pipeline_id AND pip.type = 'system'; -- metric-lint-allow: não é métrica — é o gatilho-espelho sync_pipeline_entry_to_lead_pipe_whatsapp. `leads.pipe_whatsapp` espelha só o funil de SISTEMA; um funil custom com slug "whatsapp" não pode escrever nessa coluna. Tirar o predicado seria o defeito, não o conserto. Parametrizar por pipeline_id não se aplica: a função resolve o slug A PARTIR do pipeline_id que o gatilho já recebe.
 
   IF v_slug_novo = 'whatsapp' THEN
     -- Entrou, ou andou dentro do funil WhatsApp: espelha a etapa.
@@ -89,7 +89,7 @@ BEGIN
   IF TG_OP = 'UPDATE' AND OLD.pipeline_id IS DISTINCT FROM NEW.pipeline_id THEN
     SELECT pip.slug INTO v_slug_velho
       FROM public.pipelines pip
-     WHERE pip.id = OLD.pipeline_id AND pip.type = 'system';
+     WHERE pip.id = OLD.pipeline_id AND pip.type = 'system'; -- metric-lint-allow: não é métrica — é o gatilho-espelho sync_pipeline_entry_to_lead_pipe_whatsapp. `leads.pipe_whatsapp` espelha só o funil de SISTEMA; um funil custom com slug "whatsapp" não pode escrever nessa coluna. Tirar o predicado seria o defeito, não o conserto. Parametrizar por pipeline_id não se aplica: a função resolve o slug A PARTIR do pipeline_id que o gatilho já recebe.
 
     IF v_slug_velho = 'whatsapp' THEN
       -- `OLD.lead_id`: se o lead da linha mudasse no mesmo UPDATE (não deveria,
