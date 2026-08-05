@@ -25,7 +25,17 @@ const defaultsEnsuredForSession = new Set<string>();
 async function ensureDefaultStagesInDb(organizationId: string) {
   const allStages: Record<string, unknown>[] = [];
 
-  for (const pipeType of ["whatsapp", "confirmacao", "propostas", "upsell_base", "upsell_gestao"] as PipelineType[]) {
+  // Carteira fora da semeadura: `upsell_base`/`upsell_gestao` foram aposentados
+  // (ADR-0023 §8, migration 20270805000010). Esta função é a torneira VIVA —
+  // é ela, e não `create_default_pipeline_stages`, que dá etapas às orgs novas
+  // (Liris e Bolivar nasceram com as 8 etapas de `propostas` do DEFAULT_STAGES,
+  // não com as 7 da função SQL). Continuar semeando carteira aqui recriaria,
+  // ATIVA, em toda org nova, exatamente o que a migration desativou em 98.
+  //
+  // `DEFAULT_STAGES` MANTÉM as duas famílias de propósito: é o fallback em
+  // memória de `buildFallbackStages` que segura `/upsell` de pé enquanto a
+  // rota não for terminada ou enterrada (decisão em aberto, ADR-0005).
+  for (const pipeType of ["whatsapp", "confirmacao", "propostas"] as PipelineType[]) {
     for (let i = 0; i < DEFAULT_STAGES[pipeType].length; i++) {
       const stage = DEFAULT_STAGES[pipeType][i];
       allStages.push({
