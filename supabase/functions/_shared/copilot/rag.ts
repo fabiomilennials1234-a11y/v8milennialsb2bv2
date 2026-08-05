@@ -11,7 +11,15 @@
  * Estimativa: 3h.
  */
 
-export { generateEmbedding, generateEmbeddingsBatch } from "../embeddings.ts";
+// `export { x } from "..."` é RE-EXPORT: publica o nome, mas não cria binding
+// local. As duas funções abaixo chamam `generateEmbedding` no corpo do módulo, e
+// com só o re-export o identificador não existia em escopo — ReferenceError em
+// runtime, engolido pelo `catch` de cada uma (que devolve ""). Resultado medido:
+// o RAG do copilot (docs + FAQs) e as memórias de longo prazo nunca retornaram
+// nada. `import` + `export` separados dão as duas coisas: binding local e API
+// pública idêntica à de antes.
+import { generateEmbedding, generateEmbeddingsBatch } from "../embeddings.ts";
+export { generateEmbedding, generateEmbeddingsBatch };
 
 export const EMBEDDING_DIMENSIONS = 1536; // gemini-embedding-2
 

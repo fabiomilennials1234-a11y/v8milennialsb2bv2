@@ -1,5 +1,6 @@
 {
   "tasks": {
+    "check:shared": "deno check _shared/",
     "test": "deno test --allow-env --allow-net --allow-read --no-check",
     "test:coverage": "deno test --allow-env --allow-net --allow-read --no-check --coverage=.coverage",
     "coverage:report": "deno coverage .coverage --lcov --output=coverage.lcov && deno coverage .coverage"

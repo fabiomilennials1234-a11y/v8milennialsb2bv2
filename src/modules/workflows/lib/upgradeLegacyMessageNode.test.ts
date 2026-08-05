@@ -82,6 +82,46 @@ describe("upgradeWorkflowNodes", () => {
     expect((out[2].data as ActionNodeData).actionType).toBe("generate_ai_message");
   });
 
+  // PRD #1331: migrar de nó não pode devolver o roteamento ao comportamento
+  // aleatório — a política declarada tem que atravessar o auto-upgrade.
+  it("preserva a política de roteamento e o recuo ao converter o nó legado", () => {
+    const nodes = [
+      {
+        id: "1",
+        type: "action",
+        data: action("send_whatsapp", {
+          instanceRoutingPolicy: "conversation",
+          fallbackInstanceId: "inst-2",
+          fallbackInstanceName: "Comercial 2",
+        }),
+      },
+    ];
+    const out = upgradeWorkflowNodes(nodes as any);
+    const data = out[0].data as ActionNodeData;
+    expect(data.actionType).toBe("send_whatsapp_message");
+    expect(data.instanceRoutingPolicy).toBe("conversation");
+    expect(data.fallbackInstanceId).toBe("inst-2");
+    expect(data.fallbackInstanceName).toBe("Comercial 2");
+  });
+
+  it("preserva a instância fixa do nó legado ao converter", () => {
+    const nodes = [
+      {
+        id: "1",
+        type: "action",
+        data: action("send_whatsapp_image", {
+          whatsappInstanceId: "inst-1",
+          whatsappInstanceName: "Comercial 1",
+        }),
+      },
+    ];
+    const out = upgradeWorkflowNodes(nodes as any);
+    const data = out[0].data as ActionNodeData;
+    expect(data.actionType).toBe("send_whatsapp_message");
+    expect(data.whatsappInstanceId).toBe("inst-1");
+    expect(data.whatsappInstanceName).toBe("Comercial 1");
+  });
+
   it("returns a workflow without legacy senders unchanged (referential same data)", () => {
     const nodes = [{ id: "1", type: "action", data: action("move_stage") }];
     const out = upgradeWorkflowNodes(nodes as any);

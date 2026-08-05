@@ -269,8 +269,8 @@ export default function CopilotReasoning() {
                                 <span><span className="font-semibold">Conversation:</span> <code>{r.entity_id ?? "—"}</code></span>
                                 <span><span className="font-semibold">Status:</span> {r.status}</span>
                               </div>
-                              <ScrollArea className="max-h-[420px] rounded-md border bg-background p-4">
-                                <pre className="text-xs whitespace-pre-wrap font-mono leading-relaxed">
+                              <ScrollArea className="max-h-[420px] rounded-md border bg-background">
+                                <pre className="p-4 text-xs whitespace-pre-wrap font-mono leading-relaxed">
                                   {r.reasoning ?? "(sem conteúdo)"}
                                 </pre>
                               </ScrollArea>

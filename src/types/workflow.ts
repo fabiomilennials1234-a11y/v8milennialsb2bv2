@@ -44,6 +44,19 @@ export type WorkflowNodeType =
   | "wait_business_window"
   | "assign_responsible";
 
+/**
+ * Instance Routing Policy (PRD #1331) — a regra declarada no WhatsApp Message
+ * Node para escolher a Instance de saída.
+ *
+ *   conversation — a Instance em que a conversa com o Lead está viva
+ *   responsible  — a Instance vinculada ao responsável pelo Lead
+ *   fixed        — a Instance nomeada no nó
+ *
+ * A leitura do nó legado e as transições vivem em
+ * `modules/workflows/lib/instance-routing`.
+ */
+export type InstanceRoutingPolicy = "conversation" | "responsible" | "fixed";
+
 export type MessageType =
   | "texto"
   | "imagem"
@@ -305,9 +318,15 @@ export interface ActionNodeData {
   type: "action";
   actionType: WorkflowActionType;
   label: string;
-  // WhatsApp instance (shared by all WhatsApp actions)
+  // Instance Routing Policy (PRD #1331) — de qual Instance a mensagem sai.
+  // `whatsappInstanceId` é o campo legado e passa a ser a Instance da política
+  // `fixed`; vazio significa `conversation`. Ver modules/workflows/lib/instance-routing.
+  instanceRoutingPolicy?: InstanceRoutingPolicy;
   whatsappInstanceId?: string;
   whatsappInstanceName?: string;
+  // Instance usada quando a política não resolve por ausência de conversa.
+  fallbackInstanceId?: string;
+  fallbackInstanceName?: string;
   // Unified "Enviar Mensagem" node (ADR-0012) — discriminator + semi-auto toggle
   messageType?: MessageType;
   semiAutomatic?: boolean;

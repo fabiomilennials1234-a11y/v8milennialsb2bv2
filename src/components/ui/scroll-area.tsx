@@ -8,7 +8,17 @@ const ScrollArea = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root>
 >(({ className, children, ...props }, ref) => (
   <ScrollAreaPrimitive.Root ref={ref} className={cn("relative overflow-hidden", className)} {...props}>
-    <ScrollAreaPrimitive.Viewport className="h-full w-full rounded-[inherit]">{children}</ScrollAreaPrimitive.Viewport>
+    {/*
+      `max-h-[inherit]` é obrigatório, não decoração. O viewport é quem rola, mas
+      `h-full` (height:100%) só resolve contra pai de altura DEFINIDA — com
+      `max-h-*` no Root a altura é `auto`, o percentual vira `auto` e o viewport
+      cresce até o tamanho do conteúdo. Aí scrollHeight == clientHeight: nada rola
+      e o Root só corta o excedente no `overflow-hidden`. Herdando o max-height o
+      viewport volta a ser menor que o conteúdo e a rolagem funciona.
+    */}
+    <ScrollAreaPrimitive.Viewport className="h-full max-h-[inherit] w-full rounded-[inherit]">
+      {children}
+    </ScrollAreaPrimitive.Viewport>
     <ScrollBar />
     <ScrollAreaPrimitive.Corner />
   </ScrollAreaPrimitive.Root>

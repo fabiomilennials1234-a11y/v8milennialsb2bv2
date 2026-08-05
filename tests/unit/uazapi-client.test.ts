@@ -958,3 +958,89 @@ describe("sender — reads and state mutations stay retryable", () => {
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// markRead — /message/markread
+//
+// REGRESSÃO: o cliente mandava `{id: "<string>", number}` e o servidor
+// respondia 400 {"error":"Invalid payload"}. Nenhum read receipt jamais saiu do
+// CRM (11/11 chamadas registradas em runtime_logs falharam, 3 orgs, 4 dias) e
+// não havia UM teste cobrindo este método — foi assim que passou.
+// Contrato verificado contra o servidor real em 28/07/2026: `id` é ARRAY.
+// ---------------------------------------------------------------------------
+
+describe("markRead — contrato do payload", () => {
+  it("manda id como ARRAY (string crua devolve 400 Invalid payload)", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeResponse(200, { results: [{ message_id: "m1", status: "success" }] })
+    );
+
+    const client = new UazapiClient(BASE_CONFIG);
+    await withTimers(client.markRead("m1"));
+
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    expect(JSON.parse(String(init?.body))).toEqual({ id: ["m1"] });
+  });
+
+  it("não manda `number` — o endpoint não usa e a presença dele quebrava", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeResponse(200, { results: [{ message_id: "m1", status: "success" }] })
+    );
+
+    const client = new UazapiClient(BASE_CONFIG);
+    await withTimers(client.markRead(["m1"]));
+
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(body).not.toHaveProperty("number");
+  });
+
+  it("marca lote de uma vez", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeResponse(200, {
+        results: [
+          { message_id: "a", status: "success" },
+          { message_id: "b", status: "success" },
+        ],
+      })
+    );
+
+    const client = new UazapiClient(BASE_CONFIG);
+    await withTimers(client.markRead(["a", "b"]));
+
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(body).toEqual({ id: ["a", "b"] });
+  });
+
+  it("lista vazia não chega a bater na rede", async () => {
+    const client = new UazapiClient(BASE_CONFIG);
+    await withTimers(client.markRead([]));
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it("200 com TODOS os itens em erro vira exceção (Uazapi não usa 4xx pra isso)", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeResponse(200, {
+        results: [{ message_id: "m1", status: "error", error: "Message not found" }],
+      })
+    );
+
+    const client = new UazapiClient(BASE_CONFIG);
+    await expect(withTimers(client.markRead("m1"))).rejects.toMatchObject({
+      provider_code: "markread_all_failed",
+    });
+  });
+
+  it("sucesso parcial não é tratado como falha", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeResponse(200, {
+        results: [
+          { message_id: "a", status: "success" },
+          { message_id: "b", status: "error", error: "Message not found" },
+        ],
+      })
+    );
+
+    const client = new UazapiClient(BASE_CONFIG);
+    await expect(withTimers(client.markRead(["a", "b"]))).resolves.toBeUndefined();
+  });
+});

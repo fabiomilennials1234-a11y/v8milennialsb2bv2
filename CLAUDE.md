@@ -67,8 +67,12 @@ npm run lint             # ESLint
 
 Deploy edge functions: `supabase functions deploy <fn> --project-ref <ref>`
 - Prod: `jsjsmuncfkbsbzqzqhfq`
-- Frontend: push main → **constrói e publica** a imagem Docker em ghcr.io (`:latest` + `:sha-<short>`). **O deploy NÃO é automático: merge em main NÃO deploya frontend.** Pra subir prod, **Redeploy MANUAL na UI do EasyPanel** (ele puxa `:latest` do ghcr.io). O desacoplamento é **INTENCIONAL** — evita push acidental de prod em merge de rotina; **não é bug, não "conserte"**. Fonte: `.github/workflows/docker-image.yml:56-60` (comentário explícito) + `docs/DEPLOY_EASYPANEL.md`. Edge functions + migrations também manuais.
-  > Correção 2026-07-27: a versão anterior afirmava "EasyPanel puxa `:latest` automaticamente / merge = deploy" — **falso**, custou meses (4 memórias registram "falta redeploy front EasyPanel" como pendência recorrente, sempre a mesma causa redescoberta). Doc que mente é pior que doc que falta.
+- Frontend: **merge em main DEPLOYA sozinho.** Há um webhook `push` ativo do GitHub para `http://46.202.148.241:3000/api/deploy/…` (o EasyPanel), e ele builda e sobe a imagem. **Não existe passo manual.** Edge functions e migrations continuam manuais.
+  > **Medido em 2026-08-02, e é a segunda vez que esta linha muda de lado.** PR #1352 mergeado às 23:05:53 UTC → imagem `easypanel/v8_mvp/teste:latest` construída às **23:07:55 UTC**, dois minutos depois, sem ninguém tocar na UI. O webhook está em `gh api repos/…/hooks` (`active=true`, evento `push`); não há watchtower na VPS — quem age é o próprio EasyPanel.
+  >
+  > A versão anterior afirmava o oposto ("NÃO é automático", "Redeploy MANUAL", "desacoplamento INTENCIONAL", "não conserte") e citava um comentário do `docker-image.yml` como fonte. Aquele comentário descreve o workflow do GitHub — que de fato só publica no ghcr.io — e **não sabe do webhook do EasyPanel**, que é outro caminho. Fonte parcial lida como fonte completa.
+  >
+  > O custo dessa inversão foi assimétrico e vale registrar: enquanto o doc dizia "automático", ninguém redeployava e a pendência voltava; depois que passou a dizer "manual", passou-se a anunciar redeploy pendente para coisa **já em produção**. As duas versões produziram trabalho errado. **Antes de reescrever isto uma terceira vez, meça:** compare o `mergedAt` do PR com o `CreatedAt` da imagem na VPS, e confira `gh api repos/…/hooks`.
 
 ## Ambientes — servidor dev APOSENTADO (decisão CTO 2026-07-22)
 

@@ -6,13 +6,13 @@
 import { Switch } from "@/components/ui/switch";
 import {
   Zap, GitBranch, Wrench, Fuel, DollarSign, Trophy, BarChart2, Package,
-  Tv, Bot, MousePointer, Sparkles, Send, Code, Palette,
+  Tv, Bot, MousePointer, Sparkles, Send, Code, Palette, Phone,
 } from "lucide-react";
 import type { FeatureMeta } from "@/modules/platform/lib/feature-registry";
 
 const ICON_MAP: Record<string, React.ElementType> = {
   Zap, GitBranch, Wrench, Fuel, DollarSign, Trophy, BarChart2, Package,
-  Tv, Bot, MousePointer, Sparkles, Send, Code, Palette,
+  Tv, Bot, MousePointer, Sparkles, Send, Code, Palette, Phone,
 };
 
 interface PlanFeatureCardProps {

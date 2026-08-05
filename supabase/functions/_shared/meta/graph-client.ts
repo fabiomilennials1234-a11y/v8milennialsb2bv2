@@ -68,6 +68,13 @@ function graphError(error: { message?: string; code?: number; type?: string }): 
   return new Error(`Meta Graph error: ${error.message ?? "unknown"}${code}`);
 }
 
+/** Envelope de página do Graph API — o formato é documentado pelo Meta. */
+interface GraphPage<T> {
+  data?: T[];
+  paging?: { next?: string | null };
+  error?: { message?: string; code?: number; type?: string };
+}
+
 export function createMetaGraphClient(opts: MetaGraphClientOptions) {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const version = opts.version ?? DEFAULT_VERSION;
@@ -81,8 +88,16 @@ export function createMetaGraphClient(opts: MetaGraphClientOptions) {
     const out: T[] = [];
     let url: string | null = firstUrl;
     while (url) {
-      const res = await fetchImpl(url);
-      const json = await res.json();
+      // As duas anotações cortam um ciclo de inferência real, não são
+      // preciosismo: `url` é reatribuído a partir de `json.paging?.next`, que
+      // vem de `res.json()`, que vem de `fetchImpl(url)` — para saber o tipo de
+      // `url` o compilador precisa de `json`, que precisa de `res`, que precisa
+      // de `url`. TS7022 em `res` e em `json`.
+      //
+      // Só aparece em Deno mais novo que o 2.7.7 desta máquina, e foi o portão
+      // de tipo do CI (que usa `v2.x`, flutuante) quem pegou.
+      const res: Response = await fetchImpl(url);
+      const json: GraphPage<T> = await res.json();
       if (json.error) throw graphError(json.error);
       for (const row of json.data ?? []) out.push(row as T);
       url = json.paging?.next ?? null;

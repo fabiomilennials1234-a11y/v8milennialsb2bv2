@@ -1,14 +1,17 @@
 // @vitest-environment node
+/**
+ * getWhatsAppInstance — a fronteira entre os handlers de envio e a Instance
+ * Routing Policy (ADR-0025).
+ *
+ * Este arquivo cobria o antigo "org-default": as instâncias vivas da
+ * organização ordenadas por `last_connection_at`, e a primeira levava. Essa
+ * regra saiu — ela escolhia sem relação nenhuma com o lead, e trocava de
+ * escolha sozinha quando outro número reconectava. O que sobrou dela e segue
+ * valendo é o filtro de sessão viva, coberto aqui.
+ */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import "../../helpers/deno-mock";
 import { createMockSupabase } from "../../helpers/supabase-mock";
-
-// Strict (lead-bound) resolution returns null so every case here exercises the
-// org-default fallback branch of getWhatsAppInstance.
-vi.mock("../../../supabase/functions/_shared/instance-write-guard.ts", () => ({
-  resolveStrictInstanceForCaller: vi.fn().mockResolvedValue(null),
-  StrictWriteResolutionError: class extends Error { errorCode = "test"; },
-}));
 
 vi.mock("../../../supabase/functions/_shared/time-variables.ts", () => ({
   getTimeBasedVariables: vi.fn().mockReturnValue({ saudacao: "Bom dia", data: "19/06/2026", hora: "10:00" }),
@@ -29,8 +32,8 @@ const LIVE = {
   last_connection_at: "2026-06-19T12:00:00Z",
 };
 
-// status frozen at "connected" — WhatsApp logged out from another device; the
-// watchdog stamped session_dead_since. This is the Bertin 1f7bb711 shape.
+// status congelado em "connected" — WhatsApp deslogado de outro aparelho; o
+// watchdog carimbou session_dead_since. É o formato do caso Bertin 1f7bb711.
 const DEAD = {
   id: "inst-dead",
   instance_name: "Comercial Morto",
@@ -41,31 +44,46 @@ const DEAD = {
   last_connection_at: "2026-06-15T13:21:30Z",
 };
 
-describe("getWhatsAppInstance org-default fallback", () => {
+describe("getWhatsAppInstance — sessão viva", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("skips a session-dead instance and picks the live one", async () => {
+  it("ignora a instância com sessão morta e usa a viva", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("whatsapp_instances", [DEAD, LIVE]);
 
-    const res = await getWhatsAppInstance(sb, "org-1", undefined, null);
-    expect(res?.instanceId).toBe("inst-live");
+    const res = await getWhatsAppInstance(sb, "org-1", {}, null);
+    expect(res.ok).toBe(true);
+    expect(res.ok && res.instanceId).toBe("inst-live");
   });
 
-  it("returns null when the only candidate is session-dead", async () => {
+  it("falha, sem retentativa, quando a única candidata está com sessão morta", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("whatsapp_instances", [DEAD]);
 
-    const res = await getWhatsAppInstance(sb, "org-1", undefined, null);
-    expect(res).toBeNull();
+    const res = await getWhatsAppInstance(sb, "org-1", {}, null);
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.failure.retryable).toBe(false);
   });
 
-  it("prefers the most recently connected live instance", async () => {
-    const olderLive = { ...LIVE, id: "inst-older", instance_name: "Antigo", last_connection_at: "2026-06-10T08:00:00Z" };
+  // A regra antiga desempatava por `last_connection_at`. Hoje duas vivas sem
+  // política que resolva é ambiguidade — e ambiguidade falha em vez de sortear.
+  it("com duas vivas e nada declarado, falha em vez de escolher a mais recente", async () => {
+    const outraViva = { ...LIVE, id: "inst-outra", instance_name: "Outro", last_connection_at: "2026-06-10T08:00:00Z" };
     const { sb, mockTable } = createMockSupabase();
-    mockTable("whatsapp_instances", [olderLive, LIVE]);
+    mockTable("whatsapp_instances", [outraViva, LIVE]);
 
-    const res = await getWhatsAppInstance(sb, "org-1", undefined, null);
-    expect(res?.instanceId).toBe("inst-live");
+    const res = await getWhatsAppInstance(sb, "org-1", {}, null);
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.failure.retryable).toBe(false);
+  });
+
+  it("com duas vivas, o recuo declarado no nó resolve", async () => {
+    const outraViva = { ...LIVE, id: "inst-outra", instance_name: "Outro" };
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("whatsapp_instances", [outraViva, LIVE]);
+
+    const res = await getWhatsAppInstance(sb, "org-1", { fallbackInstanceId: "inst-outra" }, null);
+    expect(res.ok).toBe(true);
+    expect(res.ok && res.instanceId).toBe("inst-outra");
   });
 });

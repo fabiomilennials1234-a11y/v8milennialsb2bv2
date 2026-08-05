@@ -49,6 +49,7 @@ Internals (não re-exportados — usados apenas via Pages do próprio módulo): 
 
 ### Lib interna
 
+- `lib/instance-routing.ts` — **Instance Routing Policy** (ADR-0025): de qual Instance o nó de mensagem envia. `readRoutingPolicy` (resolve o legado: `whatsappInstanceId` preenchido = `fixed`, vazio = `conversation`), `buildPolicyChange`/`buildFixedInstanceChange`/`buildFallbackChange` (patches de `data`), `isInstanceRoutedAction` (quais actionTypes declaram política — inclui `send_campaign_message`). Um único `POLICY_SPECS` guarda rótulo, frase de apoio e necessidade de recuo. Pura, testada (`tests/unit/instance-routing.test.ts`). UI: `sidebar-panels/InstanceRoutingSelector.tsx`. **Entrar em `fixed` preserva o recuo** — apagá-lo destruiria o valor semeado (#1333).
 - `lib/clipboard.ts` — copy/paste de nós no editor. `extractSelection` (seleção copiável + edges internas) + `cloneSelection` (remap IDs/edges/goto, preserva splitAb `sourceHandle`, filtra trigger). Pura, testada (`clipboard.test.ts`). Consumida só por `AutomacoesEditor`. Feature doc: `06 — Features/automacoes/copy-paste-nodes.md`.
 
 ### Pages

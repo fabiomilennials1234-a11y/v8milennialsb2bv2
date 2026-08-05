@@ -30,6 +30,7 @@ import { SyncChatButton } from "@/modules/communication/components/chat/history-
 import { useMessageLimits } from "@/modules/communication/hooks/useMessageLimits";
 import { HumanPauseBadge } from "../HumanPauseBadge";
 import { getAvatarGradient } from "@/modules/communication/components/chat/list/avatarGradient";
+import { VoiceCallButton } from "@/modules/communication/components/voice/VoiceCallButton";
 
 export interface SzChatSession {
   sz_chat_session_id: string;
@@ -196,6 +197,10 @@ export function ChatHeader({
           </p>
         </div>
       </div>
+
+      {/* Ligar por WhatsApp (TorqueCalls). Some sozinho quando a org não tem
+          número de voz conectado. */}
+      <VoiceCallButton leadId={leadId} leadName={contactName} />
 
       {/* Botão ver / criar lead */}
       <Button

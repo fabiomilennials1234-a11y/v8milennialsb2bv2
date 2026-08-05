@@ -350,6 +350,58 @@ describe("executeWorkflow", () => {
     expect(result.stepsExecuted).toBeGreaterThan(0);
   });
 
+  /**
+   * `responsible_user_id` é o que `get_lead_write_instance` casa com
+   * `whatsapp_instances.owner_team_member_id`. Sem ele o roteamento `responsible`
+   * devolve NO_RESPONSIBLE para todo lead atribuído por automação, e o nó de
+   * envio cai no recuo — ou falha, quando não há recuo declarado.
+   */
+  it("assign_responsible grava responsible_user_id junto das demais colunas", async () => {
+    const { sb, mockTable, getUpdated } = createMockSupabase();
+    mockTable("workflow_execution_steps", []);
+    mockTable("workflow_executions", []);
+    mockTable("leads", [{ id: "lead-1", organization_id: "org-1" }]);
+
+    const definition = {
+      nodes: [
+        { id: "t1", type: "trigger", data: {} },
+        {
+          id: "ar1",
+          type: "assign_responsible",
+          data: {
+            assignMode: "manual",
+            assignTarget: "responsible",
+            assigneeId: "tm-1",
+            assigneeName: "Wagner",
+          },
+        },
+      ],
+      edges: [
+        { id: "e1", source: "t1", target: "ar1" },
+      ],
+    };
+
+    await executeWorkflow({
+      supabase: sb,
+      executionId: "exec-1",
+      workflowId: "wf-1",
+      organizationId: "org-1",
+      leadId: "lead-1",
+      definition,
+      loopLimit: 10,
+      context: {},
+    });
+
+    const updated = getUpdated("leads");
+    expect(updated.length).toBeGreaterThan(0);
+    expect(updated[0]).toMatchObject({
+      responsible_id: "tm-1",
+      responsible_user_id: "tm-1",
+      sdr_id: "tm-1",
+      closer_id: "tm-1",
+    });
+  });
+
   it("handles goto node", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("workflow_execution_steps", []);

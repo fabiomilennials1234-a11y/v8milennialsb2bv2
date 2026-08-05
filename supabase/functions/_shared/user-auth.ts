@@ -54,7 +54,12 @@ export class AuthError extends Error {
 function getServiceClient(): SupabaseClient {
   const url = Deno.env.get("SUPABASE_URL")!;
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  return createClient(url, key, { auth: { persistSession: false } });
+  // `autoRefreshToken: false`: `persistSession` sozinho não impede o auth-js de
+  // armar um `setInterval` de 30 s por cliente, que ninguém desarma. Ver
+  // `_shared/supabase-admin.ts`.
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
 
 function getAnonKey(): string {
@@ -155,7 +160,9 @@ export async function requireAuth(
   }
 
   const anonClient = createClient(Deno.env.get("SUPABASE_URL")!, anonKey, {
-    auth: { persistSession: false },
+    // `autoRefreshToken: false`: o token vem por parâmetro em `getUser(token)`,
+    // não há sessão a renovar — e o ticker de 30 s do auth-js nunca é desarmado.
+    auth: { persistSession: false, autoRefreshToken: false },
   });
 
   const { data: { user }, error: userError } = await anonClient.auth.getUser(token);

@@ -10,7 +10,33 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { track } from "@/lib/analytics";
 import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import {
+  friendlyWhatsAppSendError,
+  whatsAppSendErrorMessage,
+} from "@/modules/communication/lib/edgeFunctionError";
 import type { WhatsAppMessage, FailedMessage } from "./types";
+import { makeOptimisticId, promoteOptimisticMessage } from "./shared/optimistic-messages";
+
+/**
+ * Lê o id do provider carimbado em `_localMessage` pelo mutationFn.
+ *
+ * Devolve `undefined` também para o fallback `local_…` — esse id é inventado
+ * pelo cliente quando a resposta do envio não traz um, e não casa com a linha
+ * que o webhook grava. Promover a bolha com ele criaria a duplicata que este
+ * caminho existe pra evitar; melhor deixá-la otimista e o casamento por
+ * conteúdo resolver.
+ */
+function readProviderMessageId(data: unknown): string | undefined {
+  const local = (data as { _localMessage?: { messageId?: unknown } } | null | undefined)
+    ?._localMessage;
+  const id = local?.messageId;
+  if (typeof id !== "string" || id.startsWith("local_")) return undefined;
+  return id;
+}
+
+/** Copy única pro telefone que não passa na normalização — aponta pra ação. */
+const INVALID_PHONE_MESSAGE =
+  "Número de telefone inválido para WhatsApp. Confira o telefone no cadastro do lead (precisa ser um celular brasileiro com DDD).";
 
 // ─── Helpers privados ────────────────────────────────────────────────────────
 
@@ -167,7 +193,7 @@ export function useSendWhatsAppMessage() {
       }
 
       const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
-      if (!formattedNumber) throw new Error("Número de telefone inválido");
+      if (!formattedNumber) throw new Error(INVALID_PHONE_MESSAGE);
 
       const isSzChat = await isSzChatInstanceCached(instanceId);
 
@@ -203,8 +229,12 @@ export function useSendWhatsAppMessage() {
         error = result.error;
       }
 
-      if (error) throw error;
-      if ((data as Record<string, unknown>)?.error) throw new Error((data as Record<string, string>).error);
+      // Nunca relance o erro cru: a FunctionsHttpError do supabase-js carrega
+      // sempre a mesma frase genérica e esconde o motivo real no corpo.
+      if (error) throw new Error(await whatsAppSendErrorMessage(error));
+      if ((data as Record<string, unknown>)?.error) {
+        throw new Error(friendlyWhatsAppSendError(String((data as Record<string, string>).error)));
+      }
 
       const d = data as Record<string, any>;
       const messageId = d?.result?.message_id ?? d?.key?.id ?? `local_${Date.now()}`;
@@ -238,11 +268,12 @@ export function useSendWhatsAppMessage() {
         ["whatsapp_messages", orgId, phone, instId]
       );
 
+      const optimisticId = makeOptimisticId();
       const optimisticMsg: WhatsAppMessage = {
-        id: `optimistic_${Date.now()}`,
+        id: optimisticId,
         organization_id: orgId || "",
         instance_id: instId || null,
-        message_id: `optimistic_${Date.now()}`,
+        message_id: optimisticId,
         remote_jid: `${phone}@s.whatsapp.net`,
         phone_number: phone,
         direction: "outgoing",
@@ -262,7 +293,7 @@ export function useSendWhatsAppMessage() {
         (old) => [...(old || []), optimisticMsg]
       );
 
-      return { previousMessages };
+      return { previousMessages, optimisticId };
     },
     onError: (err, variables, context) => {
       if (context?.previousMessages) {
@@ -290,7 +321,18 @@ export function useSendWhatsAppMessage() {
         },
       ]);
     },
-    onSuccess: () => {
+    onSuccess: (data, variables, context) => {
+      // Carimba o id real do provider na bolha otimista assim que ele chega.
+      // A partir daí o dedupe por message_id do realtime reconhece a linha do
+      // webhook e não anexa uma segunda bolha.
+      const realMessageId = readProviderMessageId(data);
+      if (context?.optimisticId && realMessageId) {
+        queryClient.setQueryData<WhatsAppMessage[]>(
+          ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
+          (old) => promoteOptimisticMessage(old, context.optimisticId, realMessageId),
+        );
+      }
+
       if (teamMember?.organization_id) {
         track({ event: "message_sent", organizationId: teamMember.organization_id, entityType: "conversation" });
       }
@@ -338,7 +380,7 @@ export function useSendWhatsAppMedia() {
       }
 
       const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
-      if (!formattedNumber) throw new Error("Número de telefone inválido");
+      if (!formattedNumber) throw new Error(INVALID_PHONE_MESSAGE);
       let mediaUrl = media;
 
       if (media.startsWith("data:")) {
@@ -402,13 +444,19 @@ export function useSendWhatsAppMedia() {
         error = result.error;
 
         if (error) {
-          throw new Error((error as { message?: string }).message || "Erro ao enviar mídia");
+          // Mesmo motivo do envio de texto: `.message` aqui é a frase genérica
+          // do supabase-js, não o erro que a edge function devolveu.
+          throw new Error(await whatsAppSendErrorMessage(error));
         }
         if ((data as Record<string, unknown>)?.error) {
           const details = (data as Record<string, unknown>).details
             ? JSON.stringify((data as Record<string, unknown>).details)
             : "";
-          throw new Error(`${(data as Record<string, string>).error}${details ? ` - ${details}` : ""}`);
+          const friendly = friendlyWhatsAppSendError(String((data as Record<string, string>).error));
+          // Só anexa o detalhe cru quando a mensagem não foi traduzida — senão
+          // o texto acionável volta a ficar poluído de ruído do provider.
+          const isTranslated = friendly !== (data as Record<string, string>).error;
+          throw new Error(isTranslated || !details ? friendly : `${friendly} - ${details}`);
         }
       }
 
@@ -431,7 +479,9 @@ export function useSendWhatsAppMedia() {
       }, { onConflict: "message_id,instance_id", ignoreDuplicates: false })
         .then(({ error: e }) => { if (e) console.warn("[send] media upsert fallback failed:", e.message); });
 
-      return data;
+      // `_localMessage` carrega o id real do provider até o onSuccess, que o usa
+      // pra promover a bolha otimista. Mesmo contrato do envio de texto.
+      return { ...(data as Record<string, unknown>), _localMessage: { messageId } };
     },
     onMutate: async (variables) => {
       const orgId = teamMember?.organization_id;
@@ -444,11 +494,12 @@ export function useSendWhatsAppMedia() {
         ["whatsapp_messages", orgId, phone, instId]
       );
 
+      const optimisticId = makeOptimisticId();
       const optimisticMsg: WhatsAppMessage = {
-        id: `optimistic_${Date.now()}`,
+        id: optimisticId,
         organization_id: orgId || "",
         instance_id: instId || null,
-        message_id: `optimistic_${Date.now()}`,
+        message_id: optimisticId,
         remote_jid: `${phone}@s.whatsapp.net`,
         phone_number: phone,
         direction: "outgoing",
@@ -468,7 +519,17 @@ export function useSendWhatsAppMedia() {
         (old) => [...(old || []), optimisticMsg]
       );
 
-      return { previousMessages };
+      return { previousMessages, optimisticId };
+    },
+    onSuccess: (data, variables, context) => {
+      // Mesma promoção do envio de texto — ver comentário lá.
+      const realMessageId = readProviderMessageId(data);
+      if (context?.optimisticId && realMessageId) {
+        queryClient.setQueryData<WhatsAppMessage[]>(
+          ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
+          (old) => promoteOptimisticMessage(old, context.optimisticId, realMessageId),
+        );
+      }
     },
     onError: (err, variables, context) => {
       if (context?.previousMessages) {

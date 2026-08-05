@@ -274,6 +274,30 @@ verify_jwt = false
 # aborta ao tentar empacotar uma função inexistente — o que derrubou RLS
 # Invariants, Integration Tests e E2E Tests no CI desde então.
 
+# torquecalls-control / torquecalls-signal: verify_jwt=false libera o preflight
+# OPTIONS; o JWT é validado dentro, por resolveCaller, que também resolve a
+# organização. Ver docs/adr/0024-torquecalls-voice-call-plane.md.
+[functions.torquecalls-control]
+verify_jwt = false
+
+[functions.torquecalls-signal]
+verify_jwt = false
+
+# torquecalls-webhook: quem chama é a VPS, não um navegador — não há JWT de
+# usuário para verificar. A autenticação é o envelope JWS assinado em Ed25519
+# pela VPS, conferido em _shared/voip/webhook-verify.ts ANTES de qualquer ida ao
+# banco. verify_jwt=true aqui recusaria 100% do tráfego legítimo.
+[functions.torquecalls-webhook]
+verify_jwt = false
+
+# torquecalls-recording-maintenance: expurgo de 90 dias da gravação + fila de
+# rebusca. Quem chama é o pg_cron via pg_net, que não carrega JWT de usuário —
+# a autenticação é `x-cron-secret` (ou service_role), conferida dentro. As
+# quatro RPCs que ela usa estão revogadas de anon e authenticated no banco.
+# Ver docs/adr/0026-gravacao-de-chamada-na-vps.md §8.
+[functions.torquecalls-recording-maintenance]
+verify_jwt = false
+
 # sz-chat-webhook: recebe webhooks do SZChat (Fortics); autenticação via x-webhook-secret header
 [functions.sz-chat-webhook]
 verify_jwt = false
