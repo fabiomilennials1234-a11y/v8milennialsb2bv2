@@ -61,7 +61,7 @@ Gerado em 2026-08-05 a partir do repo (commits, PRs, migrations, testes, specs e
 | `inv:H3-09` | Testando | Testado | 20270803000030 — índice único parcial em pipeline_entries.deal_id | um negócio, uma posição; recusou dois cards no mesmo negócio em branch |
 | `inv:H3-10` | Testando | Testado | 20270803000040 — espelho leads.pipe_whatsapp esvazia em vez de congelar | sem isso o {estagio} mentia e a condição casava sempre |
 | `inv:H3-11` | Testando | Testado | 20270803000050 — RPC mover_negocio (avançar move, não copia) | recusa destino em funil custom de propósito (passo 5c em aberto) |
-| `inv:H3-12` | Fazendo | Fazendo | 20270805000010 — aposenta os funis de Carteira | c1718248, só na branch feat/card-do-lead (PR #1411 aberta) |
+| `inv:H3-12` | Fazendo | Fazendo | 20270805000010 — aposenta os funis de Carteira | PR #1419 (mira develop) — reescrita depois de medir: `UPDATE` em `pipelines` REMOVIDO (o `LIKE 'upsell%'` só pega 2 funis **custom** da Milennials), prova de card trocada, guarda antes do `DELETE` de kanban rules. Branch efêmera encerrada: aplicou limpo + 6 provas |
 | `inv:H3-13` | Testando | Testado | 20270729000010 — parâmetros de "parado há" nas RPCs do board | schema-only; dropa assinaturas antes de recriar e revoga PUBLIC+anon |
 | `inv:H3-14` | Testando | Testado | Reescrever bulk_move_stage e bulk_add_to_custom_pipe sem ON CONFLICT no par | o par (pipeline_id, lead_id) deixou de ser único |
 | `inv:H3-15` | Testando | Testado | Tolerar N negócios nos 26 call sites chaveados pelo par (funil, lead) | e3d20145 — Copilot e workflow incluídos |
@@ -126,8 +126,8 @@ Gerado em 2026-08-05 a partir do repo (commits, PRs, migrations, testes, specs e
 
 | Chave | Coluna TOR | Régua | Subtask | Evidência / nota |
 |---|---|---|---|---|
-| `inv:H6-01` | Fazendo | Fazendo | Aposentar os funis de Carteira (upsell_base / upsell_gestao) | c1718248 — 1.078 etapas ativas em 97 orgs e ZERO entries usando; desativa, não apaga |
-| `inv:H6-02` | Fazendo | Fazendo | Limpar as 4 transições que apontavam para a carteira antes de desativar | ponteiro para funil inativo faz o move falhar em silêncio |
+| `inv:H6-01` | Fazendo | Fazendo | Aposentar os funis de Carteira (upsell_base / upsell_gestao) | PR #1419 — 1.078 etapas em **98** orgs (97 era medição velha); desativa, não apaga. "0 entries" media a tabela errada: uso real é 10 de 739 fora do default e **1** arrasto humano. Torneira fechada dos dois lados — `create_default_pipeline_stages` e `ensureDefaultStagesInDb` |
+| `inv:H6-02` | Fazendo | Fazendo | Limpar as 4 transições que apontavam para a carteira antes de desativar | PR #1419 — as 4 limpas (2 `whatsapp`, 2 `propostas`). `is_final_positive` cai **só** em `whatsapp`: o fallback `target_pipe_type \|\| "confirmacao"` é load-bearing em 6 orgs e passaria a exigir reunião. Métrica intacta — ganho é `stage_role` (ADR-0017) |
 | `inv:H6-03` | Testando | Testado | Converter os 344 pedidos de ERP em Negócios ganhos | scripts/backfill-carteira-negocios — 182 leads, 13 orgs; idempotente por deals.metadata |
 | `inv:H6-04` | Testando | Testado | Recusar org sem etapa de ganho ativa no backfill da carteira | sem destino o backfill inventaria lugar — defeito dos 83 funis custom sem desfecho |
 
