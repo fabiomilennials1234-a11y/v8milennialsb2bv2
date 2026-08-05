@@ -850,6 +850,10 @@ export function useCopilotAgentForEdit(agentId?: string) {
         // Playground structured prompt data (round-trip)
         promptSections: conversationStyle.promptSections || undefined,
         toolInstructions: conversationStyle.toolInstructions || undefined,
+        // Links da base de conhecimento (round-trip da aba Conhecimento).
+        knowledgeLinks: Array.isArray(conversationStyle.knowledgeLinks)
+          ? conversationStyle.knowledgeLinks
+          : [],
         // Pipeline config (funis tab round-trip)
         activePipes: (agent as any).active_pipes || [],
         activeStages: (agent as any).active_stages || {},
@@ -910,6 +914,11 @@ export function useUpdateCopilotAgentFromWizard() {
           // Playground structured prompt data (round-trip)
           ...((data as any).promptSections ? { promptSections: (data as any).promptSections } : {}),
           ...((data as any).toolInstructions ? { toolInstructions: (data as any).toolInstructions } : {}),
+          // Array vazio é intencionalmente persistido — é assim que a remoção do
+          // último link chega ao banco. Só `undefined` preserva o valor anterior.
+          ...((data as any).knowledgeLinks !== undefined
+            ? { knowledgeLinks: (data as any).knowledgeLinks }
+            : {}),
         },
         qualification_rules: data.qualification || {},
         few_shot_examples: data.examples || [],

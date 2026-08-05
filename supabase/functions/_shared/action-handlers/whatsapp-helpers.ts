@@ -9,108 +9,67 @@ import { getPipeEntry } from "../pipeline-adapter.ts";
 import { getWhatsAppProvider } from "../whatsapp-client.ts";
 import { personalizationName, isPlaceholderLeadName, tidyEmptyVarGaps } from "../lead-name.ts";
 import type { ActionResult } from "./types.ts";
+import {
+  resolveRoutedInstance,
+  isInstanceLive,
+  type RoutedInstance,
+  type RoutingNodeConfig,
+} from "../instance-routing.ts";
+
+/** Reexport: a definição de "instância viva" mora em `_shared/instance-routing.ts`. */
+export { isInstanceLive };
 
 // ─── WhatsApp instance resolution ──────────────────────────────────────────
 
 /**
- * A WhatsApp instance is "live" (safe to send from) when the provider webhook
- * reports it connected AND the watchdog has not recorded a dead session.
- *
- * `status` alone is unreliable: it freezes at "connected" after a remote logout
- * from another device — the real verdict is `session_dead_since`, set by
- * whatsapp-session-watchdog. This mirrors the org-default fallback filter below
- * and the frontend's deriveInstanceStatus().
+ * Resultado da resolução, no formato que o handler já devolve. Falha vira
+ * `ActionResult` não-retentável, nunca exceção: o executor lê `retryable` para
+ * decidir se reenvia, e uma exceção atravessando a fronteira do handler
+ * quebraria esse contrato.
  */
-export function isInstanceLive(
-  inst: { status?: string | null; session_dead_since?: string | null } | null | undefined,
-): boolean {
-  if (!inst) return false;
-  const connected = inst.status === "open" || inst.status === "connected";
-  return connected && inst.session_dead_since == null;
-}
+export type InstanceResolution =
+  | { ok: true; instanceId: string; instanceName: string; instance: RoutedInstance }
+  | { ok: false; failure: ActionResult };
 
+/**
+ * Resolve a Instance de saída do nó, obedecendo a Instance Routing Policy
+ * declarada nele (ADR-0025).
+ *
+ * Antes daqui a escolha era do banco: as Instances vivas da Organization
+ * ordenadas por `last_connection_at`, e a primeira levava. Determinístico, mas
+ * sem nenhuma relação com o Lead — ele escrevia para um número e recebia a
+ * automação de outro, e a escolha mudava sozinha quando outro número
+ * reconectava. A regra agora vive em `_shared/instance-routing.ts` e é a mesma
+ * para os onze pontos de envio do Workflow.
+ *
+ * Toda falha é **não-retentável**: sem número resolvido, tentar de novo em 30s
+ * não muda nada, e contra uma sessão morta o Uazapi responde 5xx a cada
+ * `/send/text` — três retentativas viram a tempestade documentada no M1.
+ */
 export async function getWhatsAppInstance(
   supabase: SupabaseClient,
   organizationId: string,
-  instanceId?: string,
+  node: RoutingNodeConfig | undefined,
   leadId?: string | null,
-): Promise<{ instanceId: string; instanceName: string; instance: any } | null> {
-  let resolved: any = null;
+): Promise<InstanceResolution> {
+  const resolved = await resolveRoutedInstance(supabase, {
+    organizationId,
+    leadId: leadId ?? null,
+    node: node ?? {},
+  });
 
-  if (leadId) {
-    const { resolveStrictInstanceForCaller, StrictWriteResolutionError } = await import(
-      "../instance-write-guard.ts"
-    );
-    try {
-      const strict = await resolveStrictInstanceForCaller(
-        supabase as unknown as Parameters<typeof resolveStrictInstanceForCaller>[0],
-        organizationId,
-        leadId,
-      );
-      if (strict) resolved = strict;
-    } catch (err) {
-      if (err instanceof StrictWriteResolutionError) {
-        console.warn(
-          "[action-handler] strict_write_fallback lead=%s code=%s — using legacy instance resolution",
-          leadId, err.errorCode,
-        );
-      } else {
-        throw err;
-      }
-    }
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      failure: { success: false, error: resolved.message, retryable: false },
+    };
   }
 
-  if (!resolved && instanceId) {
-    const { data } = await supabase
-      .from("whatsapp_instances")
-      .select("*")
-      .eq("id", instanceId)
-      .maybeSingle();
-    // Only honour the pinned instance if its session is actually live. A node can
-    // pin an instance that was later logged out, or (Evolution→Uazapi migration)
-    // deleted at the provider — sending to it is a guaranteed 5xx/404 that the
-    // executor then retries into a noisy "outage". When the pin is dead, fall
-    // through to the org-default live-instance fallback below instead of using it
-    // blindly. (org 163874dd: 83 failed workflow execs/7d from a node pinned to an
-    // extinct Evolution instance — this routes them to the org's one live one.)
-    if (data && isInstanceLive(data)) {
-      resolved = data;
-    } else if (data) {
-      console.warn(
-        "[action-handler] pinned instance %s not live (status=%s, dead_since=%s) — falling back to org-default",
-        instanceId,
-        (data as { status?: string }).status,
-        (data as { session_dead_since?: string }).session_dead_since,
-      );
-    }
-  }
-
-  if (!resolved) {
-    // Org-default fallback. `status` is the raw provider-webhook signal and stays
-    // frozen at "connected" when WhatsApp is logged out from another device — the
-    // watchdog records the real verdict in `session_dead_since`. Excluding dead
-    // sessions here mirrors the frontend's deriveInstanceStatus() and stops sends
-    // from routing to a logged-out instance (Uazapi answers /send/text with 5xx).
-    // Prefer the most recently connected live instance when an org has several.
-    const { data } = await supabase
-      .from("whatsapp_instances")
-      .select("*")
-      .eq("organization_id", organizationId)
-      // Meta isolation (cert Rule 2): never auto-pick a Meta number for a legacy send.
-      .in("provider", ["uazapi", "evolution"])
-      .in("status", ["open", "connected"])
-      .is("session_dead_since", null)
-      .order("last_connection_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    resolved = data;
-  }
-
-  if (!resolved) return null;
   return {
-    instanceId: resolved.id,
-    instanceName: resolved.instance_name,
-    instance: resolved,
+    ok: true,
+    instanceId: resolved.instance.id,
+    instanceName: resolved.instance.instance_name,
+    instance: resolved.instance,
   };
 }
 
@@ -320,11 +279,12 @@ export async function resolveVariables(
 
   const { data: lead } = await supabase
     .from("leads")
-    .select(
-      "name, company, email, phone, qualification_score, rating, " +
-      "sdr_id, closer_id, responsible_id, organization_id, " +
-      "faturamento, segment, urgency, notes, origin",
-    )
+    // Uma única string literal, não concatenação: `"a, " + "b"` tem tipo `string`
+    // em TypeScript (o compilador não junta literais com `+`), e o parser de
+    // tipos do postgrest-js só sabe ler um literal. Com `string` ele devolve
+    // `ParserError`, a linha vira `GenericStringError` e TODO acesso a coluna
+    // aqui embaixo virava um TS2339. O texto enviado ao servidor é idêntico.
+    .select("name, company, email, phone, pipe_whatsapp, qualification_score, rating, sdr_id, closer_id, responsible_id, organization_id, faturamento, segment, urgency, notes, origin")
     .eq("id", leadId)
     .maybeSingle();
 
@@ -495,9 +455,21 @@ export async function resolveVariables(
       .from("lead_tags")
       .select("tags(name)")
       .eq("lead_id", leadId);
+    // O parser de tipos do postgrest-js não conhece a cardinalidade do embed:
+    // sem o `Database` gerado ele chuta ARRAY para `tags(name)`. A relação é
+    // muitos-para-um (`lead_tags.tag_id → tags.id`) e o PostgREST devolve
+    // OBJETO — é o que este código sempre leu, e o que os testes deste arquivo
+    // encenam. A asserção corrige o palpite do parser; o `unknown` no meio é
+    // exigência do compilador, já que os dois formatos não se sobrepõem.
+    //
+    // Asserção e não `.returns<>()` de propósito: `.returns()` é método DE
+    // RUNTIME do builder, e chamá-lo só para ajustar tipo quebrou os três testes
+    // de `{{tag.X}}` (os dublês de teste não o implementam). Num módulo que 78
+    // funções importam, ajuste de tipo não deveria acrescentar chamada nenhuma.
+    const tagRows = (leadTags ?? []) as unknown as Array<{ tags: { name: string | null } | null }>;
     const tagNames = new Set(
-      (leadTags || [])
-        .map((lt: { tags?: { name?: string } | null }) => lt.tags?.name)
+      tagRows
+        .map((lt) => lt.tags?.name)
         .filter((n): n is string => Boolean(n)),
     );
     for (const match of tagMatches) {

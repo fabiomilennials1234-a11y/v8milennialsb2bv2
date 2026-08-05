@@ -64,6 +64,17 @@ interface PlaygroundKnowledgeProps {
 
 const ACCEPTED_TYPES = ".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.mp4,.mov";
 
+/** Limite inline do Gemini para imagem/video. */
+const MAX_MEDIA_SIZE = 20 * 1024 * 1024; // 20MB
+
+/**
+ * Espelha `PDF_MAX_BYTES` da edge function process-agent-document. Sem este
+ * gate o arquivo sobe inteiro pro storage e só falha depois, no processamento —
+ * o usuário esperava o upload de um catálogo inteiro pra receber erro no fim.
+ * Mudou lá, muda aqui (e o `file_size_limit` do bucket também).
+ */
+const MAX_DOCUMENT_SIZE = 25 * 1024 * 1024; // 25MB
+
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "webp"]);
 const VIDEO_EXTS = new Set(["mp4", "mov", "webm"]);
 
@@ -125,9 +136,6 @@ export function PlaygroundKnowledge({
   const docCount = pendingDocs.length + existingDocuments.length;
   const linkCount = links.length;
 
-  // Handle file upload
-  const MAX_MEDIA_SIZE = 20 * 1024 * 1024; // 20MB Gemini inline limit
-
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files) return;
@@ -140,6 +148,15 @@ export function PlaygroundKnowledge({
         if (isMediaType(fileType) && file.size > MAX_MEDIA_SIZE) {
           toast.error(`${file.name} excede 20MB`, {
             description: `Arquivos de ${fileType === "image" ? "imagem" : "video"} devem ter no maximo 20MB.`,
+          });
+          continue;
+        }
+
+        // Size validation for documents (PDF, DOC, TXT)
+        if (!isMediaType(fileType) && file.size > MAX_DOCUMENT_SIZE) {
+          toast.error(`${file.name} excede 25MB`, {
+            description:
+              "Documentos devem ter no maximo 25MB. Divida o catalogo em partes e envie cada uma separadamente.",
           });
           continue;
         }
@@ -270,7 +287,7 @@ export function PlaygroundKnowledge({
               Arraste arquivos aqui ou clique para selecionar
             </p>
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              PDF, DOC, TXT, imagens (PNG, JPG) e videos (MP4, MOV)
+              PDF, DOC, TXT (ate 25MB), imagens (PNG, JPG) e videos (MP4, MOV) ate 20MB
             </p>
             <input
               ref={fileInputRef}

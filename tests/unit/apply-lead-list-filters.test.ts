@@ -103,13 +103,35 @@ describe("applyLeadListFilters — demais filtros (guardas de regressão)", () =
     expect(low.rec.lts).toContainEqual(["rating", 4]);
   });
 
-  it("busca: adiciona .or() com ilike em name/company/email", () => {
+  it("busca: adiciona .or() com ilike em name/company/email/phone", () => {
     const { builder, rec } = makeBuilder();
     applyLeadListFilters(builder, { searchQuery: "  acme  " });
     expect(rec.ors).toHaveLength(1);
     expect(rec.ors[0]).toContain("name.ilike.%acme%");
     expect(rec.ors[0]).toContain("company.ilike.%acme%");
     expect(rec.ors[0]).toContain("email.ilike.%acme%");
+    expect(rec.ors[0]).toContain("phone.ilike.%acme%");
+  });
+
+  it("busca por telefone com máscara casa a coluna normalizada só com os dígitos", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { searchQuery: "(21) 99999-8888" });
+    expect(rec.ors[0]).toContain("normalized_phone.ilike.%21999998888%");
+    // O termo cru continua valendo pra `phone`, que guarda o número formatado.
+    expect(rec.ors[0]).toContain("phone.ilike.%(21) 99999-8888%");
+  });
+
+  it("busca parcial de telefone (sem DDD) casa por substring", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { searchQuery: "999998888" });
+    expect(rec.ors[0]).toContain("normalized_phone.ilike.%999998888%");
+  });
+
+  it("termo textual com poucos dígitos não vira busca de telefone", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { searchQuery: "Loja 21" });
+    expect(rec.ors[0]).toContain("name.ilike.%Loja 21%");
+    expect(rec.ors[0]).not.toContain("normalized_phone");
   });
 
   it("busca vazia/whitespace não adiciona .or()", () => {

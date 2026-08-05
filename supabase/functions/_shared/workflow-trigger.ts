@@ -18,6 +18,19 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { computeTriggerDedupKey } from "./workflow-trigger-dedup.ts";
 
+/**
+ * Forma das linhas que `fireTrigger` lê de `workflows`.
+ *
+ * `definition` é opcional de propósito: só entra no `select` quando a origem é o
+ * copilot (é o único caso que precisa inspecionar os nós), e o guard de origem
+ * já trata a ausência.
+ */
+type TriggerWorkflowRow = {
+  id: string;
+  trigger_config: Record<string, unknown>;
+  definition?: { nodes: { type: string }[] } | null;
+};
+
 interface FireTriggerParams {
   supabase: SupabaseClient;
   organizationId: string;
@@ -37,25 +50,35 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
   const { supabase, organizationId, triggerType, leadId, context, source } = params;
 
   try {
+    // `selectFields` é uma UNIÃO de dois literais, e o parser de tipos do
+    // postgrest-js não a atravessa: devolve `ParserError`, a linha vira um tipo
+    // opaco e cada `.filter`/`.map` abaixo virava erro de sobrecarga — 5 dos 8
+    // erros que a #1343 contou. A string enviada ao servidor continua
+    // condicional, como sempre foi (`definition` só é buscada quando a origem é
+    // o copilot); só a leitura do resultado passa a declarar a forma real.
     const selectFields = source === "copilot" ? "id, trigger_config, definition" : "id, trigger_config";
-    const { data: workflows, error } = await supabase
+    const { data, error } = await supabase
       .from("workflows")
       .select(selectFields)
       .eq("organization_id", organizationId)
       .eq("trigger_type", triggerType)
       .eq("is_active", true);
 
-    if (error || !workflows?.length) return 0;
+    if (error || !data?.length) return 0;
+    // Asserção, e não `.returns<>()`: aquele é método de runtime do builder, e
+    // acrescentar chamada num módulo que 78 funções importam para corrigir tipo
+    // é preço que não se paga (quebrou dublê de teste em `whatsapp-helpers`).
+    const workflows = data as unknown as TriggerWorkflowRow[];
 
     // Filter by trigger_config match
-    let matching = workflows.filter((w: { id: string; trigger_config: Record<string, unknown> }) =>
+    let matching = workflows.filter((w) =>
       matchesTriggerConfig(triggerType, w.trigger_config, context || {}),
     );
 
     // Origin guard: skip workflows with copilot nodes when triggered by copilot
     if (source === "copilot" && matching.length > 0) {
       const before = matching.length;
-      matching = matching.filter((w: Record<string, unknown>) => !workflowHasCopilotNode(w.definition as { nodes: { type: string }[] } | null));
+      matching = matching.filter((w) => !workflowHasCopilotNode(w.definition ?? null));
       if (matching.length < before) {
         console.log(`[workflow-trigger] Origin guard: skipped ${before - matching.length} copilot-containing workflows (source=copilot)`);
       }

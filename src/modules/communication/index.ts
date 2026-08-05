@@ -250,3 +250,31 @@ export {
   prefetchChatData,
 } from "./lib/chatPrefetch";
 export type { PrefetchChatDataParams } from "./lib/chatPrefetch";
+
+// Chamada de voz (TorqueCalls, S14). O provider vive na raiz do app porque a
+// chamada tem que sobreviver ao fechamento da tela que a originou.
+export { VoiceCallProvider, useVoiceCallContext } from "./components/voice/VoiceCallProvider";
+export { VoiceCallButton } from "./components/voice/VoiceCallButton";
+// Quais números de voz ESTE vendedor pode usar. Substitui o antigo
+// `useVoipSession` (singular), que devolvia uma sessão qualquer da organização
+// sem perguntar de quem ela era.
+export { useCallableVoiceNumbers } from "./hooks/useVoipSession";
+export type { CallableVoiceNumber } from "./hooks/useVoipSession";
+// `useVoipSessions` (plural) é da TELA DE INTEGRAÇÃO e mostra o que o cliente
+// precisa administrar — inclusive `pending` e `closed`, que não servem para
+// ligar. Sai como `VoipSessionSummary` porque o nome do tipo local dele é
+// `VoipSession`, e um nome tão perto de "o número por onde eu ligo" convida ao
+// engano exato que esta separação existe para evitar.
+export { useVoipSessions, useVoiceSessionsCap } from "./hooks/useVoipSessions";
+export type { VoipSession as VoipSessionSummary } from "./hooks/useVoipSessions";
+export { useVoiceCall } from "./hooks/useVoiceCall";
+export type { CallPhase, VoiceCallState } from "./hooks/useVoiceCall";
+export { CALL_DENY_MESSAGES, CallDeniedError } from "./lib/torquecallsApi";
+export { VoicePairingDialog } from "./components/voice/VoicePairingDialog";
+export {
+  createVoiceSession,
+  logoutVoiceSession,
+  pairVoiceSession,
+  VoiceControlError,
+  VOICE_CONTROL_MESSAGES,
+} from "./lib/torquecallsApi";

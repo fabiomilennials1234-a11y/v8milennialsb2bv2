@@ -22,6 +22,7 @@ import {
   Bot,
   Link2,
   Headset,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -46,7 +47,7 @@ const TIERS: { id: string; label: string; color: string }[] = [
 
 type DimKey =
   | "funnel" | "stage" | "vendor" | "tag" | "tier"
-  | "waiting" | "needsHuman" | "source" | "lead";
+  | "waiting" | "needsHuman" | "source" | "lead" | "showGroups";
 
 const DIM_META: { key: DimKey; label: string; icon: React.ComponentType<{ className?: string }>; toggle?: boolean }[] = [
   { key: "funnel", label: "Funil", icon: FunnelIcon },
@@ -58,6 +59,9 @@ const DIM_META: { key: DimKey; label: string; icon: React.ComponentType<{ classN
   { key: "needsHuman", label: "Pediu atendente", icon: Headset, toggle: true },
   { key: "source", label: "Fonte", icon: Bot },
   { key: "lead", label: "Com / sem lead", icon: Link2 },
+  // O desktop escondia TODA conversa de grupo desde 6356ef92 (23/07/2026),
+  // sem toggle e sem aviso. Volta como dimensão opt-in.
+  { key: "showGroups", label: "Grupos", icon: Users, toggle: true },
 ];
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -257,6 +261,7 @@ function isDimActive(dim: DimKey, f: InboxFilterState): boolean {
     case "needsHuman": return f.needsHuman;
     case "source": return f.source !== null;
     case "lead": return f.lead !== null;
+    case "showGroups": return f.showGroups;
     default: return false;
   }
 }
@@ -272,6 +277,7 @@ function resetDim(dim: DimKey, patch: InboxFilterBarProps["patch"]) {
     case "needsHuman": patch({ needsHuman: false }); break;
     case "source": patch({ source: null }); break;
     case "lead": patch({ lead: null }); break;
+    case "showGroups": patch({ showGroups: false }); break;
   }
 }
 

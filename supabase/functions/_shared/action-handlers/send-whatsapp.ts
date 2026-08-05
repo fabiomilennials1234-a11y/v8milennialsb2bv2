@@ -23,12 +23,8 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
     return { success: false, error: "leadId is required for sendWhatsApp" };
   }
 
-  const wa = await getWhatsAppInstance(
-    supabase, organizationId,
-    params.whatsappInstanceId as string | undefined,
-    leadId,
-  );
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  const wa = await getWhatsAppInstance(supabase, organizationId, params, leadId);
+  if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
   const phone = await getLeadPhone(supabase, leadId);

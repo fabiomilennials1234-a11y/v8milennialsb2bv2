@@ -52,12 +52,8 @@ export async function sendCampaignMessage(input: ActionInput): Promise<ActionRes
   );
 
   // Resolve WhatsApp instance
-  const wa = await getWhatsAppInstance(
-    supabase, organizationId,
-    params.whatsappInstanceId as string | undefined,
-    leadId,
-  );
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  const wa = await getWhatsAppInstance(supabase, organizationId, params, leadId);
+  if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
   // Resolve phone

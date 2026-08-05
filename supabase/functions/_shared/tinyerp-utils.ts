@@ -17,7 +17,12 @@ function base64Encode(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes));
 }
 
-function base64Decode(str: string): Uint8Array {
+// `Uint8Array<ArrayBuffer>` e não `Uint8Array` pelado: desde o TS 5.7 o tipo é
+// genérico e `Uint8Array` sozinho significa `Uint8Array<ArrayBufferLike>`, que
+// admite `SharedArrayBuffer` e por isso não satisfaz o `BufferSource` exigido
+// por `crypto.subtle.importKey`/`decrypt`. O valor devolvido já vem de
+// `new Uint8Array(...)` — a anotação frouxa é que jogava a informação fora.
+function base64Decode(str: string): Uint8Array<ArrayBuffer> {
   return new Uint8Array(
     atob(str)
       .split("")
@@ -25,7 +30,7 @@ function base64Decode(str: string): Uint8Array {
   );
 }
 
-function hexToBytes(hex: string): Uint8Array {
+function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
   const pairs = hex.match(/.{2}/g);
   if (!pairs) throw new Error("Chave de criptografia inválida");
   return new Uint8Array(pairs.map((b) => parseInt(b, 16)));

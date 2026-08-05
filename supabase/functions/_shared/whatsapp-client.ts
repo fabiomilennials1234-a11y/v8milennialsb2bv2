@@ -199,7 +199,8 @@ export interface WhatsAppProvider {
   edit?(messageId: string, number: string, newText: string): Promise<void>;
   pin?(messageId: string, number: string): Promise<void>;
   deleteForAll?(messageId: string, number: string): Promise<void>;
-  markRead?(messageId: string, number: string): Promise<void>;
+  /** Marca mensagens como lidas. Aceita lote — o endpoint da Uazapi é por array. */
+  markRead?(messageIds: string | string[]): Promise<void>;
   listChats?(type?: "all" | "individual" | "group"): Promise<Array<{ id: string; name?: string; isGroup?: boolean; lastMessageTimestamp?: number }>>;
   historySync?(opts: {
     chat_jid?: string;
