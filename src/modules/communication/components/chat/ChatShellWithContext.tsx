@@ -47,9 +47,11 @@ import { ImagePreviewModal } from "@/modules/communication/components/chat/media
 import { useWhatsAppInstancesForUser } from "@/modules/communication/hooks/chat/useWhatsAppInstances";
 import { useWhatsAppContacts } from "@/modules/communication/hooks/chat/useWhatsAppContacts";
 import { useWhatsAppMessages } from "@/modules/communication/hooks/chat/useWhatsAppMessages";
+import { useAutoReadReceipt } from "@/modules/communication/hooks/chat/useAutoReadReceipt";
 import { useWhatsAppMessagesRealtime } from "@/modules/communication/hooks/chat/useWhatsAppRealtime";
 import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
 import { useFailedMessages, useRetryMessage } from "@/modules/communication/hooks/chat/useWhatsAppSend";
+import { useConversationCalls } from "@/modules/communication/hooks/chat/useConversationCalls";
 import { useChatDensity } from "@/modules/communication/hooks/chat/useChatDensity";
 import { useTakeover } from "@/modules/communication/hooks/chat/useTakeover";
 import { useIdentity } from "@/modules/identity";
@@ -131,8 +133,21 @@ function ChatView({
     instanceId,
   );
 
+  // Tique azul para o contato. Complementa `markConversationRead` (que só zera o
+  // badge interno do CRM e nunca falou com o WhatsApp).
+  useAutoReadReceipt({
+    instanceId,
+    phone: phoneNumber,
+    messages,
+    isGroup: selectedContact?.is_group === true,
+  });
+
   const failedMessages = useFailedMessages(phoneNumber, instanceId);
   const retryFn = useRetryMessage();
+
+  // Ligações da mesma conversa, para entrarem na linha do tempo junto das
+  // mensagens. Uma requisição por conversa aberta, cacheada — sem poll.
+  const { data: calls = [] } = useConversationCalls(phoneNumber, effectiveLeadId);
 
   // ── C1: useTakeover real — FSM ia_state da conversa ──────────────────────
   const {
@@ -260,6 +275,7 @@ function ChatView({
             messages={messages}
             transferEvents={[]}
             failedMessages={failedMessages}
+            calls={calls}
             isLoading={messagesLoading}
             contactName={contactName}
             instanceName={instanceName}

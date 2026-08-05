@@ -17,6 +17,7 @@ import type { WhatsAppMessage, ChatContact } from "./types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { normalizePhone as canonicalNormalizePhone } from "@/lib/normalizePhone";
 import { chatQueryKeys } from "./shared/queryKeys";
+import { upsertRealtimeMessage } from "./shared/optimistic-messages";
 
 const normalizePhone = (p: string): string => canonicalNormalizePhone(p) ?? "";
 
@@ -55,12 +56,13 @@ export function useWhatsAppMessagesRealtime(
         );
 
         if (eventType === "INSERT") {
-          queryClient.setQueryData<WhatsAppMessage[]>(msgQueryKey, (prev) => {
-            const existing = prev ?? [];
-            if (existing.some((m) => m.message_id === message.message_id))
-              return existing;
-            return [...existing, message];
-          });
+          // Dedupe por message_id + reconciliação da bolha otimista. Antes aqui
+          // havia só o dedupe, e a bolha otimista (message_id sintético) nunca
+          // casava com a linha real — que era anexada ao lado dela, deixando a
+          // mesma mensagem duas vezes na tela até o refetch.
+          queryClient.setQueryData<WhatsAppMessage[]>(msgQueryKey, (prev) =>
+            upsertRealtimeMessage(prev ?? [], message),
+          );
         } else if (eventType === "UPDATE") {
           queryClient.setQueryData<WhatsAppMessage[]>(msgQueryKey, (prev) => {
             if (!prev) return prev;

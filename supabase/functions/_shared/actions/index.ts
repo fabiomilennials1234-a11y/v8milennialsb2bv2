@@ -99,7 +99,11 @@ export async function executeAiAction(
       });
       break;
     case "confirm_meeting":
-      result = await executeConfirmMeeting(supabase, payload);
+      // `organization_id` faltava na chamada — `tenantId` chegava `undefined` e
+      // `getPipeEntry` resolvia pipeline nenhum, então a ação SEMPRE devolvia
+      // "Lead não encontrado no pipe de confirmação". Todos os cases vizinhos já
+      // repassam o mesmo argumento.
+      result = await executeConfirmMeeting(supabase, payload, organization_id);
       break;
     case "advance_confirmation_stage":
       result = await executeAdvanceConfirmationStage(supabase, payload, organization_id);

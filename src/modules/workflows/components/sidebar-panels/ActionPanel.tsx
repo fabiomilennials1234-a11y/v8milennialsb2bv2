@@ -22,7 +22,8 @@ import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG } from "@
 import type { ActionNodeData, WorkflowActionType, MessageType } from "@/types/workflow";
 import { MenuNodeConfig, PixButtonNodeConfig } from "@/modules/workflows/components/action-configs";
 import { useFeatureFlag } from "@/modules/platform";
-import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
+import { InstanceRoutingSelector } from "./InstanceRoutingSelector";
+import { isInstanceRoutedAction } from "@/modules/workflows/lib/instance-routing";
 import { useOrganization } from "@/modules/identity";
 import { useCampaignTemplatesByType } from "@/modules/campaigns/hooks/useCampaignTemplates";
 import { supabase } from "@/integrations/supabase/client";
@@ -406,20 +407,11 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
       {/* ═══════ COMUNICAÇÃO ═══════ */}
 
       {/* WhatsApp Instance Selector (shared by all WhatsApp actions) */}
-      {(at === "send_whatsapp_message" ||
-        at === "send_whatsapp" ||
-        at === "send_whatsapp_audio" ||
-        at === "send_whatsapp_image" ||
-        at === "send_whatsapp_video" ||
-        at === "send_whatsapp_sticker" ||
-        at === "send_whatsapp_document" ||
-        at === "send_whatsapp_template" ||
-        at === "send_to_number") && (
-        <WhatsAppInstanceSelector
-          instanceId={data.whatsappInstanceId}
-          onSelect={(id, name) =>
-            onUpdate({ whatsappInstanceId: id, whatsappInstanceName: name })
-          }
+      {isInstanceRoutedAction(at) && (
+        <InstanceRoutingSelector
+          data={data}
+          onUpdate={onUpdate}
+          fixedOnly={at === "send_to_number"}
         />
       )}
 
@@ -2463,84 +2455,6 @@ function AudioRecorderField({
           )}
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-// ── Seletor de instância WhatsApp ─────────────────────────────────────────────
-
-function WhatsAppInstanceSelector({
-  instanceId,
-  onSelect,
-}: {
-  instanceId?: string;
-  onSelect: (id: string, name: string) => void;
-}) {
-  const { data: instances, isLoading } = useWhatsAppInstances();
-
-  const connectedInstances = (instances || []).filter(
-    (i) => i.status === "connected" || i.status === "open",
-  );
-
-  if (isLoading) {
-    return (
-      <div className="space-y-2">
-        <Label>Instância WhatsApp</Label>
-        <p className="text-xs text-muted-foreground">
-          Carregando instâncias...
-        </p>
-      </div>
-    );
-  }
-
-  if (connectedInstances.length === 0) {
-    return (
-      <div className="space-y-2">
-        <Label>Instância WhatsApp</Label>
-        <div className="p-3 rounded-lg bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
-          <p className="text-xs text-yellow-700 dark:text-yellow-300">
-            Nenhuma instância WhatsApp conectada. Configure em Configurações
-            &gt; WhatsApp.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <Label>Instância WhatsApp</Label>
-      <Select
-        value={instanceId || "__auto__"}
-        onValueChange={(v) => {
-          if (v === "__auto__") {
-            onSelect("", "");
-            return;
-          }
-          const inst = connectedInstances.find((i) => i.id === v);
-          onSelect(v, inst?.instance_name || "");
-        }}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder="Selecione a instância" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__auto__">
-            Automático (primeira disponível)
-          </SelectItem>
-          {connectedInstances.map((inst) => (
-            <SelectItem key={inst.id} value={inst.id}>
-              {inst.instance_name}
-              {inst.phone_number ? ` (${inst.phone_number})` : ""}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <p className="text-xs text-muted-foreground">
-        {instanceId
-          ? "Mensagens serão enviadas por esta instância específica."
-          : "O sistema escolherá automaticamente uma instância conectada."}
-      </p>
     </div>
   );
 }

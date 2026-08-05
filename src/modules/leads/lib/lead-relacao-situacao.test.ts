@@ -18,6 +18,8 @@ function negocio(over: Partial<LeadDeal> = {}): LeadDeal {
     stageKey: "abordado",
     stageName: "Abordado",
     stagePosition: 1,
+    stageIndex: 1,
+    stageCount: 5,
     outcome: "open",
     won: false,
     value: 0,

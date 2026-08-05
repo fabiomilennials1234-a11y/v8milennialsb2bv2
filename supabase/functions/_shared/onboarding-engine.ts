@@ -5,10 +5,17 @@ export async function getOrgIdFromJwt(req: Request): Promise<{ orgId: string; us
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;
 
+  // `autoRefreshToken: false` nos dois: o auth-js arma um `setInterval` de 30 s
+  // por cliente e ninguém o desarma. Aqui o JWT vem pronto no cabeçalho e o
+  // service_role não tem sessão — não há o que renovar. Ver
+  // `_shared/supabase-admin.ts`.
   const userClient = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } },
+    {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    },
   );
 
   const { data: { user } } = await userClient.auth.getUser();
@@ -17,6 +24,7 @@ export async function getOrgIdFromJwt(req: Request): Promise<{ orgId: string; us
   const adminClient = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
   );
 
   const { data: tm } = await adminClient

@@ -169,7 +169,11 @@ function feedReputationBestEffort(instanceId: string, code: number): void {
     if (!url || !key) return;
     import("https://esm.sh/@supabase/supabase-js@2")
       .then(({ createClient }) => {
-        const supabase = createClient(url, key);
+        // `autoRefreshToken: false`: senão o auth-js arma um `setInterval` de
+        // 30 s por cliente e ninguém o desarma. Ver `_shared/supabase-admin.ts`.
+        const supabase = createClient(url, key, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
         return supabase.rpc("record_ban_signal", {
           p_instance_id: instanceId,
           p_code: code,

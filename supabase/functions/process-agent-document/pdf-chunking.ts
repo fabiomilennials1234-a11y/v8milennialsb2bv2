@@ -32,14 +32,33 @@ export interface PdfBatch {
   size: number;
 }
 
+export interface PdfBatchStream {
+  /** Total de páginas do PDF original. */
+  totalPages: number;
+  /** Quantos batches o stream vai produzir. */
+  batchCount: number;
+  /** Sub-PDFs, um de cada vez. */
+  batches: AsyncGenerator<PdfBatch, void, unknown>;
+}
+
 /**
- * Carrega PDF e retorna sub-PDFs com batches de N páginas.
- * Cada sub-PDF é independente — pode ser enviado ao LLM separadamente.
+ * Abre o PDF e devolve os sub-PDFs como stream — um batch por vez.
+ *
+ * O consumo é preguiçoso de propósito. A versão anterior montava TODOS os
+ * sub-PDFs num array antes de processar qualquer um, o que mantinha vivos ao
+ * mesmo tempo: o documento original parseado (~2-3× o arquivo, pdf-lib) + a
+ * soma de todos os sub-PDFs — e essa soma costuma passar o tamanho do original,
+ * porque cada sub-PDF recarrega os recursos compartilhados (fontes, imagens de
+ * catálogo) que `copyPages` duplica por batch. Era esse acúmulo, não a extração
+ * em si, que estourava o isolate e forçava o teto de 8MB.
+ *
+ * Streamando, a memória viva vira: documento original + UM sub-PDF. O batch
+ * anterior fica elegível pro GC assim que o consumidor avança.
  */
-export async function splitPdfIntoBatches(
+export async function openPdfBatchStream(
   pdfBytes: Uint8Array,
   options: PdfChunkingOptions = {},
-): Promise<{ batches: PdfBatch[]; totalPages: number }> {
+): Promise<PdfBatchStream> {
   const pagesPerBatch = options.pagesPerBatch ?? 3;
   const maxPages = options.maxPages ?? 100;
 
@@ -55,26 +74,30 @@ export async function splitPdfIntoBatches(
     );
   }
 
-  const batches: PdfBatch[] = [];
+  async function* generate(): AsyncGenerator<PdfBatch, void, unknown> {
+    for (let start = 0; start < totalPages; start += pagesPerBatch) {
+      const end = Math.min(start + pagesPerBatch, totalPages);
+      const pageIndices: number[] = [];
+      for (let i = start; i < end; i++) pageIndices.push(i);
 
-  for (let start = 0; start < totalPages; start += pagesPerBatch) {
-    const end = Math.min(start + pagesPerBatch, totalPages);
-    const pageIndices: number[] = [];
-    for (let i = start; i < end; i++) pageIndices.push(i);
+      const subDoc = await PDFDocument.create();
+      const copiedPages = await subDoc.copyPages(sourceDoc, pageIndices);
+      copiedPages.forEach((page) => subDoc.addPage(page));
 
-    const subDoc = await PDFDocument.create();
-    const copiedPages = await subDoc.copyPages(sourceDoc, pageIndices);
-    copiedPages.forEach((page) => subDoc.addPage(page));
-
-    const subBytes = await subDoc.save();
-    batches.push({
-      pageNumbers: pageIndices.map((i) => i + 1),
-      bytes: subBytes,
-      size: subBytes.length,
-    });
+      const subBytes = await subDoc.save();
+      yield {
+        pageNumbers: pageIndices.map((i) => i + 1),
+        bytes: subBytes,
+        size: subBytes.length,
+      };
+    }
   }
 
-  return { batches, totalPages };
+  return {
+    totalPages,
+    batchCount: Math.ceil(totalPages / pagesPerBatch),
+    batches: generate(),
+  };
 }
 
 /**

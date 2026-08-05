@@ -91,7 +91,12 @@ export class AgentRouter {
       const campanhaRow = campanhaRes.data as { campanha_stages?: { name?: string } } | null;
 
       if (!leadRow && !upsellRow && !whatsappRow && !confirmacaoRow && !propostasRow && !campanhaRow) {
-        return { agent: null, leadOrigin: leadRow?.origin };
+        // `leadRow` é provadamente `null` dentro deste `if` — o `leadRow?.origin`
+        // que estava aqui SEMPRE valia `undefined`, e era exatamente isso que o
+        // compilador dizia ao reclamar de `never` (o encadeamento opcional tira
+        // `null` do operando e não sobra tipo nenhum). Escrever `undefined` é o
+        // mesmo valor, sem o encadeamento morto.
+        return { agent: null, leadOrigin: undefined };
       }
 
       const allStages: string[] = [];

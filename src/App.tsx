@@ -74,6 +74,7 @@ const AtendimentoMeta = lazy(() => lazyRetry(() => import("@/modules/communicati
 // ChatSkeleton é eager (não lazy) — precisa estar disponível no instante
 // em que o chunk de ChatWhatsApp começa a ser baixado.
 import { ChatSkeleton } from "@/modules/communication/components/chat/ChatSkeleton";
+import { VoiceCallProvider } from "@/modules/communication";
 const Upsell = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Upsell")));
 const ClienteDetail = lazy(() => lazyRetry(() => import("@/modules/carteira/components/client/ClienteDetailPage")));
 const CustomPipeline = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/CustomPipeline")));
@@ -789,10 +790,15 @@ const App = () => {
                         <SupportPanelProvider>
                           <CommandPaletteProvider>
                             <GlobalShortcutsProvider>
-                              <AppRoutes />
-                              <CommandPaletteComponent />
-                              <SupportPanel />
-                              <SupportAnnouncement />
+                              {/* VoiceCallProvider por fora das rotas: a chamada
+                                  sobrevive à navegação e ao fechamento do modal
+                                  do lead que a originou. */}
+                              <VoiceCallProvider>
+                                <AppRoutes />
+                                <CommandPaletteComponent />
+                                <SupportPanel />
+                                <SupportAnnouncement />
+                              </VoiceCallProvider>
                             </GlobalShortcutsProvider>
                           </CommandPaletteProvider>
                         </SupportPanelProvider>

@@ -26,12 +26,8 @@ export async function sendWhatsAppTemplate(input: ActionInput): Promise<ActionRe
   const templateId = params.templateId as string;
   if (!templateId) return { success: false, error: "No template configured", retryable: false };
 
-  const wa = await getWhatsAppInstance(
-    supabase, organizationId,
-    params.whatsappInstanceId as string | undefined,
-    leadId,
-  );
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  const wa = await getWhatsAppInstance(supabase, organizationId, params, leadId);
+  if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
   const phone = await getLeadPhone(supabase, leadId);
@@ -91,12 +87,8 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
     return { success: false, error: "leadId is required for sendWhatsAppMenu" };
   }
 
-  const wa = await getWhatsAppInstance(
-    supabase, organizationId,
-    params.whatsappInstanceId as string | undefined,
-    leadId,
-  );
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  const wa = await getWhatsAppInstance(supabase, organizationId, params, leadId);
+  if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
   const phone = await getLeadPhone(supabase, leadId);
@@ -199,12 +191,8 @@ export async function sendWhatsAppPixButton(input: ActionInput): Promise<ActionR
     return { success: false, error: "leadId is required for sendWhatsAppPixButton" };
   }
 
-  const wa = await getWhatsAppInstance(
-    supabase, organizationId,
-    params.whatsappInstanceId as string | undefined,
-    leadId,
-  );
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  const wa = await getWhatsAppInstance(supabase, organizationId, params, leadId);
+  if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
   const phone = await getLeadPhone(supabase, leadId);

@@ -1,4 +1,15 @@
 -- 20270203000000_omie_foundation.sql
+--
+-- REPLAY-SAFE em 2026-07-30. As duas tabelas deste arquivo JÁ ESTÃO no
+-- `20260101000000_baseline_prod_schema.sql` — o baseline é um dump do prod
+-- tirado DEPOIS de o Omie ter sido aplicado lá. Com `CREATE TABLE` cru, o
+-- replay do zero morria aqui ("relation omie_connections already exists"),
+-- e junto com ele os três jobs de CI que dependem de `supabase start`:
+-- RLS Invariants, Integration Tests e E2E Tests.
+--
+-- Nada muda em produção: lá isto já está aplicado, e todo statement agora é
+-- idempotente. O que muda é que a árvore de migrations volta a poder ser
+-- reproduzida do zero — que é a única forma de o CI testar schema.
 -- Omie ERP — connection lifecycle + deny-all credential vault (ADR-0020, slice S3).
 --
 -- Two tables:
@@ -13,7 +24,7 @@
 -- ============================================================
 -- 1. omie_connections (1 per org) — no secrets stored here
 -- ============================================================
-CREATE TABLE public.omie_connections (
+CREATE TABLE IF NOT EXISTS public.omie_connections (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id),
@@ -44,18 +55,20 @@ CREATE TABLE public.omie_connections (
   CONSTRAINT unique_omie_org UNIQUE (organization_id)
 );
 
-CREATE INDEX idx_omie_connections_organization_id
+CREATE INDEX IF NOT EXISTS idx_omie_connections_organization_id
   ON public.omie_connections(organization_id);
 
 ALTER TABLE public.omie_connections ENABLE ROW LEVEL SECURITY;
 
 -- Members of the org may read the connection (status + sync mode drive the UI).
+DROP POLICY IF EXISTS "omie_connections_member_select" ON public.omie_connections;
 CREATE POLICY "omie_connections_member_select" ON public.omie_connections
   FOR SELECT
   USING (organization_id IN (SELECT public.get_my_organization_ids()));
 
 -- Only org admins manage the connection (connect/disconnect also runs via
 -- service_role edge functions, which bypass RLS).
+DROP POLICY IF EXISTS "omie_connections_admin_all" ON public.omie_connections;
 CREATE POLICY "omie_connections_admin_all" ON public.omie_connections
   FOR ALL
   USING (organization_id IN (SELECT public.get_my_admin_organization_ids()))
@@ -63,6 +76,7 @@ CREATE POLICY "omie_connections_admin_all" ON public.omie_connections
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.omie_connections TO authenticated;
 
+DROP TRIGGER IF EXISTS trg_omie_connections_updated_at ON public.omie_connections;
 CREATE TRIGGER trg_omie_connections_updated_at
   BEFORE UPDATE ON public.omie_connections
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
@@ -73,7 +87,7 @@ CREATE TRIGGER trg_omie_connections_updated_at
 --    Mirrors whatsapp_instance_secrets (stricter than the tinyerp_connections
 --    pattern, whose encrypted columns are member-readable).
 -- ============================================================
-CREATE TABLE public.omie_connection_secrets (
+CREATE TABLE IF NOT EXISTS public.omie_connection_secrets (
   connection_id UUID PRIMARY KEY
     REFERENCES public.omie_connections(id) ON DELETE CASCADE,
   organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
@@ -88,7 +102,7 @@ CREATE TABLE public.omie_connection_secrets (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_omie_connection_secrets_org
+CREATE INDEX IF NOT EXISTS idx_omie_connection_secrets_org
   ON public.omie_connection_secrets(organization_id);
 
 COMMENT ON TABLE public.omie_connection_secrets IS
@@ -98,6 +112,8 @@ COMMENT ON TABLE public.omie_connection_secrets IS
 ALTER TABLE public.omie_connection_secrets ENABLE ROW LEVEL SECURITY;
 
 -- Single policy: service_role only. No policy for authenticated/anon = deny all.
+DROP POLICY IF EXISTS "Service role full access omie_connection_secrets"
+  ON public.omie_connection_secrets;
 CREATE POLICY "Service role full access omie_connection_secrets"
   ON public.omie_connection_secrets
   USING (auth.role() = 'service_role')
@@ -108,6 +124,7 @@ REVOKE ALL ON public.omie_connection_secrets FROM authenticated;
 REVOKE ALL ON public.omie_connection_secrets FROM anon;
 GRANT ALL ON public.omie_connection_secrets TO service_role;
 
+DROP TRIGGER IF EXISTS trg_omie_connection_secrets_updated_at ON public.omie_connection_secrets;
 CREATE TRIGGER trg_omie_connection_secrets_updated_at
   BEFORE UPDATE ON public.omie_connection_secrets
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();

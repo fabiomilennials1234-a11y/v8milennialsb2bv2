@@ -45,7 +45,17 @@ async function readActiveCustomPipeEntry(
   // duplicado a cada erro transitório, sem ninguém para desfazer.
   if (error) throw error;
 
-  const rows = (data ?? []) as Array<{ id: string; stage: { stage_role: string } | null }>;
+  // `as unknown as` e não `as` direto: `stage:custom_pipeline_stages(stage_role)`
+  // é embed MUITOS-PARA-UM (`custom_pipe_entries.stage_id → custom_pipeline_stages.id`),
+  // então em tempo de execução o PostgREST devolve objeto (ou null) — que é o que
+  // esta asserção diz. O parser de tipos do postgrest-js, porém, infere ARRAY para
+  // embed com alias, e TS recusa a ponte entre os dois formatos (TS2352).
+  //
+  // A asserção descreve o runtime corretamente; o desvio por `unknown` é só para
+  // atravessar a inferência. Trocar a query para agradar o parser mudaria
+  // comportamento, e `isClosed` aqui embaixo decide se um negócio GANHO sai da
+  // etapa de ganho — o gatilho de `sale_reversed`, irreversível (decisão G do CTO).
+  const rows = (data ?? []) as unknown as Array<{ id: string; stage: { stage_role: string } | null }>;
   const isClosed = (row: (typeof rows)[number]) =>
     row.stage?.stage_role === "won" || row.stage?.stage_role === "lost";
 

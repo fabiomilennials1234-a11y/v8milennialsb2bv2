@@ -242,7 +242,12 @@ export async function sendOutboundDispatch(
     // ---------------------------------------------------------------
     // Execute in configured order
     // ---------------------------------------------------------------
-    let textResult: { ok: boolean; messageId?: string; error?: string };
+    // Derivado de `sendText` em vez de recopiado: a anotação à mão parou no
+    // formato de antes do RC-cancel (2026-04-26), que acrescentou `canceled`,
+    // `chunksSent` e `chunksTotal`. As três leituras logo abaixo — inclusive a
+    // que decide marcar o dispatch como `canceled` — eram erro de tipo contra um
+    // formato que já não existia. `Awaited<ReturnType<…>>` não volta a defasar.
+    let textResult: Awaited<ReturnType<typeof sendText>>;
     let audioResult: { ok: boolean; messageId?: string; error?: string } | null = null;
 
     if (chosenAudio && audioSendOrder === "audio_first") {

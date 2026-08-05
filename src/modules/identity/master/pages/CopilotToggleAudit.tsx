@@ -214,8 +214,8 @@ function HistoryTab() {
                           <TableCell colSpan={7} className="bg-muted/30">
                             <div className="py-3 space-y-2">
                               <div className="text-xs"><span className="font-semibold">Descrição:</span> {r.description ?? "—"}</div>
-                              <ScrollArea className="max-h-[300px] rounded-md border bg-background p-3">
-                                <pre className="text-xs whitespace-pre-wrap font-mono">{JSON.stringify(r.metadata, null, 2)}</pre>
+                              <ScrollArea className="max-h-[300px] rounded-md border bg-background">
+                                <pre className="p-3 text-xs whitespace-pre-wrap font-mono">{JSON.stringify(r.metadata, null, 2)}</pre>
                               </ScrollArea>
                             </div>
                           </TableCell>
