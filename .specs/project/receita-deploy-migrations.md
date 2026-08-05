@@ -149,6 +149,55 @@ Branch encerrada após o ensaio.
 
 ---
 
+## 7. O backfill M4 — ensaiado e cronometrado
+
+Ensaio em branch efêmera com **4.221 cards**, o mesmo tamanho da maior org real
+(Basic4u). Seed: `supabase/qa-seed/volume-m4-seed.sql`.
+
+| medida | valor |
+|---|---|
+| M4 na maior org, dry-run | **1,9 s** |
+| M4 na maior org, com commit | **1,7 s** |
+| Orgs a backfillar | 67 |
+| Cards totais | 38.898 |
+| **Projeção do backfill inteiro** | **≈ 16 segundos** |
+
+O M4 é set-based — um `INSERT..SELECT` mais um `UPDATE`, por org — e não um
+laço. O custo não cresce como se temia: a leitura na maior org custa **76 ms**
+(medido por `EXPLAIN ANALYZE` direto em produção, com índice
+`idx_pipeline_entries_org` e hash joins em memória).
+
+**O passo 6 da sexta não é o gargalo que o roadmap sugeria.** O tempo de
+parede do backfill inteiro é da ordem de meio minuto, não de dezenas de
+minutos. O que continua caro é a decisão de rodar, não a execução.
+
+### Gatilhos: verificado, não suposto
+
+O passo 2b do M4 é um `UPDATE` em `pipeline_entries`, que tem **11 gatilhos
+ROW de UPDATE**. A pergunta que importava era se algum dispararia envio.
+Resposta, lida do catálogo em produção:
+
+- **Guardados por `stage_key IS DISTINCT FROM`** (o M4 só toca `deal_id`, então
+  não disparam): histórico de etapa, `stage_changed_at`, evento de etapa e —
+  o mais importante — **`trg_workflow_pipeline_stage_changed`**.
+- **Guardados por dentro:** `apply_stage_checklist` (retorna cedo quando a
+  etapa não muda), `set_pipeline_entry_stage_changed`, `update_updated_at`.
+- **`trigger_pipeline_entries_dispatch`**: o agendamento de disparo está sob
+  `IF TG_OP = 'INSERT'`. O `UPDATE` não enfileira nada.
+- **`fn_capture_meeting_event`**: exige `TG_OP='INSERT'` ou mudança de etapa.
+
+**Nenhum envio dispara, nenhum evento espúrio nasce.** As próprias guardas do
+M4 confirmam ao fim da execução: *"sale/meeting/lead_products/stage_events/
+lead_history/checklists/scheduled_msgs/workflow_execs/webhook_deliveries
+inalterados"*.
+
+Um risco teórico ficou de fora por dado, não por sorte:
+`enforce_closed_at_on_final_stage` não tem guarda de etapa e carimbaria
+`closed_at = NOW()` em card de etapa final sem data. Medido em prod: dos 801
+cards em `vendido`/`perdido`, **801 já têm `closed_at`**. Exposição zero.
+
+---
+
 *Ensaiado em 2026-08-04. Se a data do deploy mudar, reconferir o ledger de
 produção antes de usar esta receita — outra frente aplica migrations direto em
 prod.*
