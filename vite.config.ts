@@ -80,6 +80,15 @@ export default defineConfig(({ mode }) => {
   // Configurações de build para produção (esbuild não exige dependência terser)
   build: {
     minify: 'esbuild',
+    // O worklet de captura de áudio da chamada de voz PRECISA sair como arquivo
+    // próprio. Ele é pequeno (~3 KB) e o limite padrão de 4 KB o transformava
+    // num `data:text/javascript,...` — que a CSP de produção
+    // (`script-src 'self' 'unsafe-inline'`) BLOQUEIA, porque `'unsafe-inline'`
+    // não libera `data:`. O sintoma seria o pior possível: funciona no dev
+    // server, e em produção a chamada conecta e fica muda.
+    // `undefined` devolve o resto dos assets ao comportamento padrão.
+    assetsInlineLimit: (filePath: string) =>
+      filePath.includes('pcm-capture-processor') ? false : undefined,
     ...(mode === 'production' && {
       esbuild: {
         drop: ['console', 'debugger'],

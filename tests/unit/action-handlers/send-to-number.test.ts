@@ -143,7 +143,7 @@ describe("sendToNumber action handler", () => {
     const result = await sendToNumber(input);
     expect(result.success).toBe(false);
     expect(result.retryable).toBe(false);
-    expect(result.error).toContain("instance");
+    expect(result.error).toMatch(/nenhum número de WhatsApp conectado/i);
   });
 
   // ── M1: dead / logged-out FROM instance ──────────────────────────────────
@@ -157,7 +157,9 @@ describe("sendToNumber action handler", () => {
 
     expect(result.success).toBe(false);
     expect(result.retryable).toBe(false);
-    expect(result.error).toMatch(/deslogada|indispon/i);
+    // ADR-0025: a mensagem nomeia o número e diz que NÃO houve troca, porque é
+    // isso que o operador precisa saber na tela de Execuções.
+    expect(result.error).toMatch(/desconectado/i);
     // No send and no per-recipient check were attempted — storm avoided.
     expect(vi.mocked(sendTextViaInstance)).not.toHaveBeenCalled();
     expect(vi.mocked(recipientGate)).not.toHaveBeenCalled();
@@ -279,21 +281,37 @@ describe("sendToNumber action handler", () => {
   });
 
   // ── Design claim: leadId is NOT passed to instance resolution ─────────────
-  it("uses the org-default instance and never consults the strict-write resolver", async () => {
-    const instX = { ...WA_INSTANCE, id: "inst-x", instance_name: "responsible-bound", last_connection_at: "2026-01-01T00:00:00Z" };
-    const instY = { ...WA_INSTANCE, id: "inst-y", instance_name: "org-default", last_connection_at: "2026-06-01T00:00:00Z" };
+  // ADR-0025 trocou o antigo "org-default = instância conectada mais
+  // recentemente" por uma regra declarada. Com dois números vivos e nenhum
+  // declarado no nó não há o que resolver: os destinatários são números fixos,
+  // não o lead, então não existe conversa a seguir. Falha em vez de escolher.
+  it("com dois números vivos e nenhum declarado, falha em vez de escolher sozinho", async () => {
+    const instX = { ...WA_INSTANCE, id: "inst-x", instance_name: "comercial-1", last_connection_at: "2026-01-01T00:00:00Z" };
+    const instY = { ...WA_INSTANCE, id: "inst-y", instance_name: "comercial-2", last_connection_at: "2026-06-01T00:00:00Z" };
     const { input } = makeInput({
       instances: [instX, instY],
-      // No whatsappInstanceId → org-default fallback (most recent connection = Y).
+      params: { notifyPhones: ["5511988887777"], messageTemplate: "oi" },
+    });
+    const result = await sendToNumber(input);
+
+    expect(result.success).toBe(false);
+    expect(result.retryable).toBe(false);
+    expect(vi.mocked(sendTextViaInstance)).not.toHaveBeenCalled();
+    // Vínculo strict-write nunca é consultado (leadId não vai para o resolvedor).
+    expect(vi.mocked(resolveStrictInstanceForCaller)).not.toHaveBeenCalled();
+  });
+
+  it("com um número vivo só, envia por ele sem nada declarado", async () => {
+    const unico = { ...WA_INSTANCE, id: "inst-unico", instance_name: "o-unico" };
+    const { input } = makeInput({
+      instances: [unico],
       params: { notifyPhones: ["5511988887777"], messageTemplate: "oi" },
     });
     const result = await sendToNumber(input);
 
     expect(result.success).toBe(true);
     expect(vi.mocked(sendTextViaInstance)).toHaveBeenCalledTimes(1);
-    // Sent FROM the org-default instance Y, not the responsible-bound X.
-    expect((vi.mocked(sendTextViaInstance).mock.calls[0][1] as { id: string }).id).toBe("inst-y");
-    // Strict-write lead binding was never consulted (leadId not passed to resolver).
+    expect((vi.mocked(sendTextViaInstance).mock.calls[0][1] as { id: string }).id).toBe("inst-unico");
     expect(vi.mocked(resolveStrictInstanceForCaller)).not.toHaveBeenCalled();
   });
 

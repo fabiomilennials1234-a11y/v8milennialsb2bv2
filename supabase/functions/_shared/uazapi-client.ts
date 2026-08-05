@@ -473,11 +473,45 @@ export class UazapiClient {
     });
   }
 
-  async markRead(messageId: string, number: string): Promise<void> {
-    await this.request<unknown>("POST", "/message/markread", {
-      id: messageId,
-      number,
-    });
+  /**
+   * Marca mensagens como lidas (tique azul para o contato).
+   *
+   * ⚠️ `id` PRECISA ser array. Mandar string devolve HTTP 400
+   * `{"error":"Invalid payload"}` — era o que este método fazia, e por isso
+   * NENHUM read receipt jamais saiu do CRM (11/11 chamadas registradas em
+   * runtime_logs falharam, em 3 orgs e 4 dias). Contrato verificado contra o
+   * servidor em 28/07/2026:
+   *   {id:"X", number}   → 400 Invalid payload
+   *   {id:"X"}           → 400 Invalid payload
+   *   {id:["X"]}         → 200 {"results":[{message_id, status, error?}]}
+   * `number` é ignorado pelo endpoint; mantido fora do payload.
+   *
+   * A Uazapi responde **200 mesmo quando o item falha** (`status:"error"`,
+   * ex. "Message not found"), então o resultado é inspecionado item a item —
+   * sem isso uma falha real voltaria a passar por sucesso.
+   */
+  async markRead(messageIds: string | string[]): Promise<void> {
+    const ids = (Array.isArray(messageIds) ? messageIds : [messageIds]).filter(
+      (id) => typeof id === "string" && id.length > 0,
+    );
+    if (ids.length === 0) return;
+
+    const res = await this.request<{
+      results?: Array<{ message_id?: string; status?: string; error?: string }>;
+    }>("POST", "/message/markread", { id: ids });
+
+    const results = res?.results ?? [];
+    const failed = results.filter((r) => r?.status === "error");
+    if (results.length > 0 && failed.length === results.length) {
+      const err: UazapiError = {
+        status: 422,
+        message: `markRead falhou para ${failed.length} mensagem(ns): ${
+          failed[0]?.error ?? "erro desconhecido"
+        }`,
+        provider_code: "markread_all_failed",
+      };
+      throw err;
+    }
   }
 
   async downloadMedia(messageId: string): Promise<{

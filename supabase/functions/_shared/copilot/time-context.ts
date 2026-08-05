@@ -19,12 +19,27 @@ const DEFAULT_TIMEZONE = "America/Sao_Paulo";
 
 export type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
-export interface BehaviorWindow {
-  id: string;
+/**
+ * O que a aritmética de agenda realmente lê de uma janela: nome (para localizar
+ * a janela-alvo), dias e horários.
+ *
+ * `behavior` — o texto que altera o tom do copilot — não entra em nenhuma conta
+ * de horário, então exigi-lo aqui era mentira do tipo. O nó
+ * `wait_business_window` do workflow guarda janelas com `action` no lugar de
+ * `behavior` e passava a `computeNextWindowStart` mesmo assim; o compilador
+ * recusava (dois TS2345) uma chamada que sempre foi correta em runtime.
+ * `BehaviorWindow` continua satisfazendo este contrato — é ele mais o `behavior`.
+ */
+export interface WindowSchedule {
   name: string;
-  days: DayKey[];
+  days: string[];
   start: string;
   end: string;
+}
+
+export interface BehaviorWindow extends WindowSchedule {
+  id: string;
+  days: DayKey[];
   behavior: string;
 }
 
@@ -83,7 +98,7 @@ function parseHHMM(s: string): number {
  * Match janela contra (dayKey, minutesOfDay).
  * Trata wrap midnight (end <= start) consultando dia anterior também.
  */
-export function windowMatches(window: BehaviorWindow, dayKey: DayKey, minutes: number): boolean {
+export function windowMatches(window: WindowSchedule, dayKey: DayKey, minutes: number): boolean {
   const startMin = parseHHMM(window.start);
   const endMin = parseHHMM(window.end);
   const days = Array.isArray(window.days) ? window.days : [];
@@ -263,7 +278,7 @@ export function buildDateInTimezone(dateStr: string, timeStr: string, tz: string
  * Worst-case 14×24×60 = 20160 iterações — tolerável (sub-ms em V8).
  */
 export function computeNextWindowStart(
-  windows: BehaviorWindow[],
+  windows: WindowSchedule[],
   targetName: string,
   tz: string,
   from: Date = new Date(),

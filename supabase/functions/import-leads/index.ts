@@ -1088,8 +1088,19 @@ async function importToCustomPipeline(
           ? existingEmailMap.get(lead.email.toLowerCase().trim())
           : null;
 
+      // Resolve stage — match by name if stages provided, fallback to default
+      const stageIdForLead = stages?.length
+        ? resolveCustomStageFromName(lead.stage, stages, defaultStageId)
+        : defaultStageId;
+
+      // Resolve seller
+      const assignedTo = resolveSellerToId(lead.seller_name, membersList, defaultSdrId ?? null);
+
       try {
         let leadId: string;
+        // Lead novo já entra no funil dentro da própria RPC — sem isto o bloco
+        // de upsert abaixo gravaria a entry uma segunda vez.
+        let entryAlreadyCreated = false;
 
         if (existingLead) {
           leadId = existingLead.id;
@@ -1109,52 +1120,65 @@ async function importToCustomPipeline(
             report.rejected++;
             report.errors.push({ row: rowIndex + 1, reason: "Lead já existe sem dados novos para atualizar" });
           }
+
+          // Responsável só é sobrescrito no caminho do lead já existente; no
+          // lead novo a RPC já grava responsible_id/sdr_id no INSERT.
+          if (assignedTo) {
+            await supabase.from("leads").update({ responsible_id: assignedTo, sdr_id: assignedTo }).eq("id", leadId);
+          }
         } else {
-          const leadInsert: Record<string, unknown> = {
-            organization_id: organizationId,
-            name: lead.name,
-            company: lead.company,
-            phone: formattedPhone,
-            email: lead.email,
-            faturamento: lead.faturamento ? normalizeFaturamento(lead.faturamento) : undefined,
-            segment: lead.segment,
-            notes: mergeNotes(undefined, lead.notes, lead.kommoBlock),
-            origin: "outro",
-            rating: lead.rating || 0,
-            utm_campaign: lead.utm_campaign,
-            utm_source: lead.utm_source,
-            utm_medium: lead.utm_medium,
-            utm_content: lead.utm_content,
-            utm_term: lead.utm_term,
-          };
+          // Lead + entry do funil custom na MESMA transação, com o seed
+          // automático em whatsapp/novo suprimido. Inserir o lead direto aqui
+          // faria o trigger trg_auto_assign_lead_default_pipe vencer a corrida
+          // e duplicar o card em Oportunidades (migration 20270729000000).
+          const { data: newLeadId, error: rpcError } = await supabase.rpc(
+            "import_lead_into_custom_pipeline",
+            {
+              p_organization_id: organizationId,
+              p_lead: {
+                name: lead.name,
+                company: lead.company,
+                phone: formattedPhone,
+                email: lead.email,
+                faturamento: lead.faturamento ? normalizeFaturamento(lead.faturamento) : null,
+                segment: lead.segment,
+                notes: mergeNotes(undefined, lead.notes, lead.kommoBlock),
+                origin: "outro",
+                rating: lead.rating || 0,
+                utm_campaign: lead.utm_campaign,
+                utm_source: lead.utm_source,
+                utm_medium: lead.utm_medium,
+                utm_content: lead.utm_content,
+                utm_term: lead.utm_term,
+              },
+              p_pipeline_id: pipelineId,
+              p_stage_id: stageIdForLead,
+              p_assigned_to: assignedTo,
+            },
+          );
 
-          const { data: newLead, error: leadError } = await supabase
-            .from("leads").insert(leadInsert).select("id").single();
-
-          if (leadError) {
+          if (rpcError || !newLeadId) {
             report.rejected++;
-            report.errors.push({ row: rowIndex + 1, reason: `Erro ao inserir lead: ${leadError.message}` });
+            report.errors.push({
+              row: rowIndex + 1,
+              reason: `Erro ao inserir lead: ${truncateErr(rpcError?.message ?? "RPC não retornou id")}`,
+            });
             continue;
           }
-          leadId = newLead.id;
+          leadId = newLeadId as string;
+          entryAlreadyCreated = true;
           report.created++;
-          createdLeadIds.push(newLead.id);
+          createdLeadIds.push(leadId);
         }
 
         // Campos personalizados → lead_custom_field_values (upsert por lead+field)
         await applyCustomFields(supabase, leadId, lead.customFields, customFieldMap);
 
-        // Resolve stage — match by name if stages provided, fallback to default
-        const stageIdForLead = stages?.length
-          ? resolveCustomStageFromName(lead.stage, stages, defaultStageId)
-          : defaultStageId;
-
-        // Resolve seller
-        const assignedTo = resolveSellerToId(lead.seller_name, membersList, defaultSdrId ?? null);
-
-        // Update lead responsible
-        if (assignedTo) {
-          await supabase.from("leads").update({ responsible_id: assignedTo, sdr_id: assignedTo }).eq("id", leadId);
+        if (entryAlreadyCreated) {
+          // Mesmo bookkeeping do fim do caminho normal: sem isto, duas linhas
+          // com o mesmo telefone no arquivo criariam dois leads.
+          if (formattedPhone) processedPhones.add(formattedPhone);
+          continue;
         }
 
         // Upsert into custom_pipe_entries

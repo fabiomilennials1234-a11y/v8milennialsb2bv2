@@ -34,6 +34,29 @@ jobs:
         run: bash scripts/check-migration-versions.sh
       - name: Metric anti-pattern lint (ADR-0017 — no new metric root causes)
         run: bash scripts/check-metric-antipatterns.sh
+      # ADR-0024 §4: só o governor assina credencial de chamada. Nem o
+      # dependency-cruiser (exclui ^supabase/) nem o ESLint boundaries
+      # (include: src/**) enxergam supabase/functions — a barreira é este script.
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v2.x
+      # `deno task test` roda com `--no-check`: nada em `_shared/` passava por
+      # compilador. Custou dois `TS2339` vivos por meses sobre
+      # `crypto.subtle.timingSafeEqual` (função que não existe no Deno 2) no
+      # verificador de assinatura do `meta-webhook`, um `generateEmbedding`
+      # inexistente que deixava o RAG do copilot mudo, e uma ação de copilot
+      # chamada sem `tenantId`. Nenhum teste pegava: os três falham para dentro
+      # de um `catch`. Bloqueante de propósito — portão amarelo ninguém olha.
+      #
+      # Escopo = `_shared/`, e só. `deno check` já arrasta o grafo importado por
+      # esses arquivos, então a camada compartilhada fica coberta inteira. As 96
+      # funções em si NÃO entram: carregam dívida própria (medido em 2026-08-02:
+      # 106 erros só em 4 delas), e portão que nasce vermelho é portão que alguém
+      # desliga na primeira sexta-feira.
+      - name: Type-check shared edge modules (deno check _shared/)
+        run: npm run typecheck:edge-shared
+      - name: VoIP choke barrier (só o governor assina)
+        run: bash scripts/test-voip-choke.sh
       - name: TSC ratchet (no new type errors vs baseline)
         run: npm run typecheck:ratchet
       - name: Build (prod)
@@ -162,9 +185,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      # Deno 2. O `supabase/functions/deno.lock` está na versão 5 do formato, que
+      # só o Deno 2 lê — o 1.46.3 morre com "Unsupported lockfile version '5'"
+      # antes de rodar um teste sequer. A main já corrigiu isto no a9b99c7e; a
+      # develop não recebeu, e ninguém viu porque o job vinha `skipped` atrás do
+      # `needs: [quality]` vermelho.
       - uses: denoland/setup-deno@v1
         with:
-          deno-version: v1.x
+          deno-version: v2.x
       - run: npm run test:edge
       - run: npm run test:edge:coverage
       - name: Upload edge coverage artifact

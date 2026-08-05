@@ -8,23 +8,37 @@ import { logRuntime } from "../_shared/logger.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { requireAuth, AuthError, authErrorResponse, type AuthContext } from "../_shared/user-auth.ts";
-import { splitPdfIntoBatches, encodeBatchAsBase64 } from "./pdf-chunking.ts";
+import { openPdfBatchStream, encodeBatchAsBase64 } from "./pdf-chunking.ts";
 
 // Threshold pra acionar chunking. PDFs >= esse tamanho viram batched
 // background processing (evita WORKER_RESOURCE_LIMIT em isolate Deno).
 const PDF_CHUNK_THRESHOLD_BYTES = 5 * 1024 * 1024; // 5MB
 
 // Limite duro absoluto. PDFs maiores que isso = erro imediato com mensagem
-// pra usuario dividir o arquivo. Valor conservador: pdf-lib.load() carrega
-// PDF inteiro em memoria e cria copias intermediarias durante o split, o que
-// na pratica usa ~3x do tamanho do arquivo. Edge function Deno isolate tem
-// ~150MB heap, mas OpenAI multimodal payload + outros buffers comem o resto.
-// Empiricamente: PDFs >8MB travam silenciosamente em prod.
-const PDF_MAX_BYTES = 8 * 1024 * 1024; // 8MB
+// pra usuario dividir o arquivo.
+//
+// Historico: era 8MB porque o split materializava TODOS os sub-PDFs de uma vez
+// (documento original parseado + soma de todos os batches vivos ao mesmo tempo).
+// `openPdfBatchStream` passou a produzir um batch por vez, entao o pico caiu pra
+// documento original + UM sub-PDF.
+//
+// 25MB e decisao de produto (CTO, 2026-07-29): cobrir o catalogo B2B inteiro
+// sem obrigar o cliente a fatiar o arquivo. Duas coisas precisam acompanhar
+// esta constante, senao o teto e so nominal:
+//   - `storage.buckets.file_size_limit` do bucket agent-documents — o upload
+//     morreria antes, com 413 (migration 20270729000001);
+//   - `MAX_DOCUMENT_SIZE` em PlaygroundKnowledge.tsx (gate do cliente).
+const PDF_MAX_BYTES = 25 * 1024 * 1024; // 25MB
 
 // Configuração do chunking
 const PDF_PAGES_PER_BATCH = 3;
-const PDF_MAX_PAGES = 100;
+
+// Teto de paginas. Na pratica morde antes do teto de bytes: cada batch de 3
+// paginas e UMA chamada sequencial ao modelo de visao, entao 300 paginas = 100
+// chamadas em serie. E ai, nao em heap, que o processamento em background
+// esbarra no wall clock do isolate. Documento acima disso falha com erro
+// explicito de paginas em vez de travar calado.
+const PDF_MAX_PAGES = 300;
 
 // Modelos via OpenAI
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -621,18 +635,19 @@ async function processPdfInBackground(params: {
 
   const startedAt = Date.now();
 
-  // 1. Split em batches
-  let batches: Awaited<ReturnType<typeof splitPdfIntoBatches>>["batches"];
+  // 1. Abrir o stream de batches (preguiçoso — um sub-PDF vivo por vez)
+  let stream: Awaited<ReturnType<typeof openPdfBatchStream>>;
   let totalPages: number;
+  let batchCount: number;
   try {
-    const splitResult = await splitPdfIntoBatches(fileBytes, {
+    stream = await openPdfBatchStream(fileBytes, {
       pagesPerBatch: PDF_PAGES_PER_BATCH,
       maxPages: PDF_MAX_PAGES,
     });
-    batches = splitResult.batches;
-    totalPages = splitResult.totalPages;
+    totalPages = stream.totalPages;
+    batchCount = stream.batchCount;
     console.log(
-      `[process-agent-document] PDF split: ${totalPages} páginas em ${batches.length} batches`,
+      `[process-agent-document] PDF split: ${totalPages} páginas em ${batchCount} batches`,
     );
   } catch (splitErr) {
     const errMsg = `Falha ao dividir PDF: ${splitErr instanceof Error ? splitErr.message : String(splitErr)}`;
@@ -647,8 +662,9 @@ async function processPdfInBackground(params: {
   const textParts: string[] = [];
   let batchErrors = 0;
 
-  for (let i = 0; i < batches.length; i++) {
-    const batch = batches[i];
+  let i = -1;
+  for await (const batch of stream.batches) {
+    i++;
     const batchLabel = `págs ${batch.pageNumbers[0]}-${batch.pageNumbers[batch.pageNumbers.length - 1]}`;
 
     try {
@@ -664,18 +680,18 @@ async function processPdfInBackground(params: {
       if (text && text.length > 10) {
         textParts.push(`--- ${batchLabel} ---\n${text}`);
         console.log(
-          `[process-agent-document] Batch ${i + 1}/${batches.length} OK: ${text.length} chars (${batchLabel})`,
+          `[process-agent-document] Batch ${i + 1}/${batchCount} OK: ${text.length} chars (${batchLabel})`,
         );
       } else {
         batchErrors++;
         console.warn(
-          `[process-agent-document] Batch ${i + 1}/${batches.length} falhou (${batchLabel}): ${extractError || "texto vazio"}`,
+          `[process-agent-document] Batch ${i + 1}/${batchCount} falhou (${batchLabel}): ${extractError || "texto vazio"}`,
         );
       }
     } catch (batchErr) {
       batchErrors++;
       console.warn(
-        `[process-agent-document] Batch ${i + 1}/${batches.length} exception (${batchLabel}):`,
+        `[process-agent-document] Batch ${i + 1}/${batchCount} exception (${batchLabel}):`,
         batchErr,
       );
     }
@@ -684,7 +700,7 @@ async function processPdfInBackground(params: {
   const textContent = textParts.join("\n\n");
 
   if (!textContent || textContent.trim().length < 10) {
-    const errMsg = `Extracao de texto falhou em todos os ${batches.length} batches (${batchErrors} erros). PDF pode estar protegido, vazio ou ilegivel.`;
+    const errMsg = `Extracao de texto falhou em todos os ${batchCount} batches (${batchErrors} erros). PDF pode estar protegido, vazio ou ilegivel.`;
     await supabase
       .from("copilot_agent_documents")
       .update({ status: "error", error_message: errMsg, updated_at: new Date().toISOString() })
@@ -787,7 +803,7 @@ async function processPdfInBackground(params: {
 
   const elapsedMs = Date.now() - startedAt;
   console.log(
-    `[process-agent-document] Background DONE: ${totalPages} páginas, ${batches.length} batches, ${batchErrors} erros, ${elapsedMs}ms`,
+    `[process-agent-document] Background DONE: ${totalPages} páginas, ${batchCount} batches, ${batchErrors} erros, ${elapsedMs}ms`,
   );
 
   await logRuntime({
@@ -803,7 +819,7 @@ async function processPdfInBackground(params: {
       mimeType: doc.mime_type,
       mode: "background_chunked",
       totalPages,
-      batches: batches.length,
+      batches: batchCount,
       batchErrors,
       elapsedMs,
       textChars: contentToSave.length,

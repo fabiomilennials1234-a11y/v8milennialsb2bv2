@@ -52,7 +52,9 @@ import { useUserRole, useFeaturePermission } from "@/modules/identity";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
-import { DealPanelProvider, useDealSheet, DealDetailDialog } from "@/modules/leads";
+import { DealPanelProvider, useDealSheet, LeadPanelProvider } from "@/modules/leads";
+import { DealCardPanel } from "@/modules/leads/components/deal-card/DealCardPanel";
+import { LeadCardPanel } from "@/modules/leads/components/lead-card/LeadCardPanel";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { LeadModal } from "@/modules/leads";
 import { CreateOpportunityModal } from "@/modules/pipelines/components/kanban/CreateOpportunityModal";
@@ -1015,12 +1017,32 @@ function PipeWhatsappInner() {
   );
 }
 
+/**
+ * Os dois cards do sistema, montados juntos.
+ *
+ * O card do funil abre o **Negócio** (`DealCardPanel`); clicar na pessoa dentro
+ * dele fecha esse e abre o **Lead** (`LeadCardPanel`). Por isso o
+ * `LeadPanelProvider` precisa envolver o `DealPanelProvider`: sem ele,
+ * `useLeadSheet` não acha contexto e o link para a pessoa quebra.
+ *
+ * Nunca ficam empilhados — são as duas únicas fichas do produto, cada uma dona
+ * de um assunto.
+ */
 export default function PipeWhatsapp() {
   return (
-    <DealPanelProvider>
-      <LeadPanelLayout panel={<DealDetailDialog />}>
-        <PipeWhatsappInner />
-      </LeadPanelLayout>
-    </DealPanelProvider>
+    <LeadPanelProvider>
+      <DealPanelProvider>
+        <LeadPanelLayout
+          panel={
+            <>
+              <DealCardPanel />
+              <LeadCardPanel />
+            </>
+          }
+        >
+          <PipeWhatsappInner />
+        </LeadPanelLayout>
+      </DealPanelProvider>
+    </LeadPanelProvider>
   );
 }

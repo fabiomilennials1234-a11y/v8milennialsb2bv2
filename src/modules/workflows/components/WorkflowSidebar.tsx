@@ -21,6 +21,9 @@ import type { WorkflowNode, WorkflowNodeData } from "@/types/workflow";
  */
 const ORG_SPECIFIC_ID_FIELDS: Record<string, string> = {
   whatsappInstanceId: "Instância WhatsApp",
+  // Recuo da Instance Routing Policy (ADR-0025) — também é uma Instance da org,
+  // então um workflow importado precisa avisar que ele ficou por configurar.
+  fallbackInstanceId: "Instância de recuo",
   campaignId: "Campanha",
   campaignStageId: "Estágio da Campanha",
   campaignTemplateId: "Template da Campanha",

@@ -792,15 +792,27 @@ Deno.serve(
 
         case "markRead": {
           if (!provider.markRead) throw new Error("Provider does not support markRead");
-          const { message_id, number } = payload as {
+          // Aceita os dois formatos de propósito: o frontend só é redeployado à
+          // mão (EasyPanel), então o build em produção continua mandando
+          // `message_id` string por um tempo depois desta função subir.
+          // `number` é aceito e ignorado — o endpoint da Uazapi não usa.
+          const { message_id, message_ids } = payload as {
             message_id?: string;
+            message_ids?: string[];
             number?: string;
           };
-          if (!message_id || !number) {
-            return jsonResponse(400, { error: "Missing message_id/number" }, corsHeaders);
+          const ids = (
+            Array.isArray(message_ids) ? message_ids : message_id ? [message_id] : []
+          ).filter((id) => typeof id === "string" && id.length > 0);
+          if (ids.length === 0) {
+            return jsonResponse(
+              400,
+              { error: "Missing message_id/message_ids" },
+              corsHeaders,
+            );
           }
-          await provider.markRead(message_id, number);
-          result = { ok: true };
+          await provider.markRead(ids);
+          result = { ok: true, marked: ids.length };
           break;
         }
 

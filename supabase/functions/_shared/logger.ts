@@ -186,6 +186,7 @@ export type RuntimeLogModule =
   | "support"
   | "sz_chat"
   | "tts"
+  | "voip"
   | "webhook"
   | "whatsapp"
   | "workflow";
@@ -220,8 +221,45 @@ interface LogRuntimeParams {
 }
 
 /**
+ * Último recurso quando o canal de registro é o que falhou.
+ *
+ * `runtime_logs` está fora — logo, o relato NÃO pode passar por `runtime_logs`.
+ * `logError` escreve uma linha estruturada em `console.error`, coletada nos logs
+ * da própria edge function: o único canal que sobra quando o banco cai. Nunca
+ * lança — telemetria não derruba o chamador.
+ */
+async function reportLogFailure(
+  cause: unknown,
+  params: LogRuntimeParams,
+  extra?: Record<string, unknown>,
+): Promise<void> {
+  try {
+    console.warn("[logRuntime] Failed to write log (non-fatal):", cause);
+    // Surface persistent insert failures to runtime logs instead of swallowing them.
+    // A CHECK/enum drift can silently drop an entire module's logs (incident
+    // 2026-06-24: 'whatsapp' missing from runtime_logs_module_check dropped 100%
+    // of WhatsApp telemetry for days, hiding the inbound outage). logError
+    // never throws, so this stays strictly non-fatal on the hot path.
+    await logError(cause, {
+      functionName: "logRuntime",
+      organizationId: params.organizationId,
+      extra: {
+        log_module: params.module,
+        log_action: params.action,
+        log_status: params.status,
+        ...extra,
+      },
+    });
+  } catch {
+    // never let observability reporting break the caller
+  }
+}
+
+/**
  * Inserts a runtime_logs record using the service role key.
- * Never throws — if the insert fails, it silently logs to console and returns.
+ * Never throws — if the insert fails, it reports the failure to the function's
+ * own console log (the only channel left when the database is the thing that
+ * broke) and returns.
  * All payloadSnapshot data is passed through redactSecrets() before persisting.
  */
 export async function logRuntime(params: LogRuntimeParams): Promise<void> {
@@ -230,7 +268,15 @@ export async function logRuntime(params: LogRuntimeParams): Promise<void> {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!supabaseUrl || !serviceRoleKey) return;
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    // Mesma configuração de `_shared/supabase-admin.ts`. Um cliente `service_role`
+    // não tem sessão de usuário para renovar nem persistir, mas o auth-js arma um
+    // `setInterval` de 30 s por cliente (`_startAutoRefresh`) que ninguém desarma.
+    // Como `logRuntime` cria um cliente POR CHAMADA dentro de isolates de vida
+    // longa, cada requisição registrada deixava um temporizador para trás — em
+    // todas as 78+ edge functions.
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
     const sanitizedPayload = params.payloadSnapshot
       ? (redactSecrets(params.payloadSnapshot) as Record<string, unknown>)
@@ -264,26 +310,23 @@ export async function logRuntime(params: LogRuntimeParams): Promise<void> {
       if (params.gestorId) row.gestor_id = params.gestorId;
     }
 
-    await supabase.from("runtime_logs").insert(row);
-  } catch (err) {
-    console.warn("[logRuntime] Failed to write log (non-fatal):", err);
-    // Surface persistent insert failures to runtime logs instead of swallowing them.
-    // A CHECK/enum drift can silently drop an entire module's logs (incident
-    // 2026-06-24: 'whatsapp' missing from runtime_logs_module_check dropped 100%
-    // of WhatsApp telemetry for days, hiding the inbound outage). logError
-    // never throws, so this stays strictly non-fatal on the hot path.
-    try {
-      await logError(err, {
-        functionName: "logRuntime",
-        organizationId: params.organizationId,
-        extra: {
-          log_module: params.module,
-          log_action: params.action,
-          log_status: params.status,
+    // `supabase-js` RESOLVE com `{ error }` em vez de lançar: descartar este
+    // retorno fazia a falha de escrita não produzir sinal nenhum — `logRuntime`
+    // ficava muda exatamente durante a indisponibilidade do banco, que é quando
+    // a linha mais importa. O `catch` abaixo nunca veria isto.
+    const { error: insertError } = await supabase.from("runtime_logs").insert(row);
+    if (insertError) {
+      await reportLogFailure(
+        new Error(`runtime_logs insert failed: ${insertError.message}`),
+        params,
+        {
+          db_code: insertError.code,
+          db_details: insertError.details,
+          db_hint: insertError.hint,
         },
-      });
-    } catch {
-      // never let observability reporting break the caller
+      );
     }
+  } catch (err) {
+    await reportLogFailure(err, params);
   }
 }

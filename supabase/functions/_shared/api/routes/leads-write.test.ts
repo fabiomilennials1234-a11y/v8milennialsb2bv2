@@ -7,6 +7,7 @@ import {
   removeLeadTag,
 } from "./leads-write.ts";
 import type { ApiRouteContext } from "../router.ts";
+import type { ActionInput } from "../../action-handlers/types.ts";
 
 const cors = { "access-control-allow-origin": "*" };
 
@@ -105,7 +106,11 @@ Deno.test("moveLeadStage — calls injected mover with mapped params, 200 on suc
   const calls: RpcCall[] = [];
   const c = ctx("POST", "https://x/api/v1/leads/l-1/stage",
     { pipe: "confirmacao", stage: "compareceu" }, { data: true }, calls);
-  let moverArg: Record<string, unknown> | null = null;
+  // `ActionInput` e não `Record<string, unknown>`: é o que o mover recebe de
+  // fato. `interface` não ganha assinatura de índice implícita, então a captura
+  // num `Record` era erro de tipo — e guardar o argumento com o tipo real ainda
+  // dispensa os casts nas asserções abaixo.
+  let moverArg: ActionInput | null = null;
   const res = await moveLeadStage(c, (input) => {
     moverArg = input;
     return Promise.resolve({ success: true, data: { target_stage: "compareceu" } });
@@ -114,8 +119,8 @@ Deno.test("moveLeadStage — calls injected mover with mapped params, 200 on suc
   assertEquals(res.status, 200);
   assertEquals(moverArg!.organizationId, "org-1");
   assertEquals(moverArg!.leadId, "l-1");
-  assertEquals((moverArg!.params as Record<string, unknown>).target_pipe, "confirmacao");
-  assertEquals((moverArg!.params as Record<string, unknown>).target_stage, "compareceu");
+  assertEquals(moverArg!.params.target_pipe, "confirmacao");
+  assertEquals(moverArg!.params.target_stage, "compareceu");
 });
 
 Deno.test("moveLeadStage — 422 when mover fails (invalid stage)", async () => {

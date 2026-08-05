@@ -17,16 +17,67 @@
  */
 
 /**
+ * Resultado de consulta, com `data` em `unknown`.
+ *
+ * `unknown` não é preguiça: é a única forma honesta de descrever o retorno aqui.
+ * Como `select()` recebe uma `string` (não um literal), o parser de tipos do
+ * postgrest-js não consegue derivar a linha e devolve `GenericStringError` —
+ * diferente entre versões da lib, e este módulo é compartilhado por funções que
+ * importam `@2` e `@2.49.4`. Prometer uma forma concreta faria a atribuição
+ * falhar em uma das duas. `rowId`, abaixo, estreita o valor à mão.
+ */
+interface GestorAuthResult {
+  data: unknown;
+  error: { message: string } | null;
+}
+
+/** Encadeamento de filtro que este módulo usa, e nada além dele. */
+interface GestorAuthFilter extends PromiseLike<GestorAuthResult> {
+  eq: (column: string, value: unknown) => GestorAuthFilter;
+  limit: (count: number) => GestorAuthFilter;
+  maybeSingle: () => PromiseLike<GestorAuthResult>;
+}
+
+interface GestorAuthTable {
+  select: (columns: string) => GestorAuthFilter;
+}
+
+/**
  * Client mínimo estrutural. Aceita qualquer SupabaseClient (service_role),
  * independente da versão de `@supabase/supabase-js` importada pela função
  * chamadora — o choke point (`@2`) e funções como carteira-bulk-message
  * (`@2.49.4`) compartilham este helper sem fricção de tipo entre versões.
+ *
+ * `from` devolve `unknown` DE PROPÓSITO. Descrever aqui o encadeamento
+ * (`from(...).select(...)`) obrigava o compilador, a cada chamada, a instanciar
+ * o `select` do supabase-js com `Query = string`; o parser de tipos da lib
+ * recorre sobre a string de colunas e, num programa grande, estourava o
+ * orçamento de instanciação — `TS2589` em `user-auth.ts`, e só quando a árvore
+ * inteira era checada de uma vez (arquivo isolado passava, o que é o pior tipo
+ * de erro: some quando você vai olhar). Com `unknown`, a comparação é trivial e
+ * o estreitamento acontece num ponto só, em `queryTable`.
  */
 interface GestorAuthClient {
-  from: (table: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    select: (columns: string) => { eq: (column: string, value: unknown) => any };
-  };
+  from: (table: string) => unknown;
+}
+
+/**
+ * Único ponto onde o builder do supabase-js é estreitado.
+ *
+ * A asserção é inevitável — é a ponte entre um client de versão desconhecida e o
+ * encadeamento mínimo que este módulo usa — mas é UMA, nomeada e comentada, em
+ * vez de `any` vazando por todas as consultas. Se a lib mudar o encadeamento, o
+ * conserto é aqui.
+ */
+function queryTable(supabase: GestorAuthClient, table: string, columns: string): GestorAuthFilter {
+  return (supabase.from(table) as GestorAuthTable).select(columns);
+}
+
+/** `data` de uma linha lida por este módulo → `id` como string, ou null. */
+function rowId(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const id = (data as { id?: unknown }).id;
+  return typeof id === "string" && id.length > 0 ? id : null;
 }
 
 /**
@@ -89,14 +140,13 @@ export async function getActiveGestorForOrg(
 
   try {
     // 1. Gestor ativo do usuário (fora de team_members; espelha master_users).
-    const { data: gestor, error: gestorErr } = await supabase
-      .from("gestores")
-      .select("id")
+    const { data: gestor, error: gestorErr } = await queryTable(supabase, "gestores", "id")
       .eq("user_id", userId)
       .eq("is_active", true)
       .maybeSingle();
 
-    if (gestorErr || !gestor?.id) {
+    const gestorId = rowId(gestor);
+    if (gestorErr || !gestorId) {
       if (gestorErr) {
         console.error(
           JSON.stringify({
@@ -111,10 +161,8 @@ export async function getActiveGestorForOrg(
     }
 
     // 2. Vínculo org-alvo (binding master-gerido).
-    const { data: binding, error: bindErr } = await supabase
-      .from("gestor_organizations")
-      .select("id")
-      .eq("gestor_id", gestor.id)
+    const { data: binding, error: bindErr } = await queryTable(supabase, "gestor_organizations", "id")
+      .eq("gestor_id", gestorId)
       .eq("organization_id", organizationId)
       .limit(1)
       .maybeSingle();
@@ -132,7 +180,7 @@ export async function getActiveGestorForOrg(
       return null;
     }
 
-    return binding ? { gestorId: gestor.id as string } : null;
+    return binding ? { gestorId } : null;
   } catch (err) {
     console.error(
       JSON.stringify({

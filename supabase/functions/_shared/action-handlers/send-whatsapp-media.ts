@@ -31,12 +31,8 @@ export async function sendWhatsAppAudio(input: ActionInput): Promise<ActionResul
   const audioUrl = params.audioUrl as string;
   if (!audioUrl) return { success: false, error: "No audio URL configured", retryable: false };
 
-  const wa = await getWhatsAppInstance(
-    supabase, organizationId,
-    params.whatsappInstanceId as string | undefined,
-    leadId,
-  );
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  const wa = await getWhatsAppInstance(supabase, organizationId, params, leadId);
+  if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
   const phone = await getLeadPhone(supabase, leadId);
@@ -122,12 +118,8 @@ export async function sendWhatsAppImage(input: ActionInput): Promise<ActionResul
   const imageUrl = params.imageUrl as string;
   if (!imageUrl) return { success: false, error: "No image URL configured", retryable: false };
 
-  const wa = await getWhatsAppInstance(
-    supabase, organizationId,
-    params.whatsappInstanceId as string | undefined,
-    leadId,
-  );
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  const wa = await getWhatsAppInstance(supabase, organizationId, params, leadId);
+  if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
   const phone = await getLeadPhone(supabase, leadId);
@@ -196,12 +188,8 @@ export async function sendWhatsAppVideo(input: ActionInput): Promise<ActionResul
   const videoUrl = params.videoUrl as string;
   if (!videoUrl) return { success: false, error: "No video URL configured", retryable: false };
 
-  const wa = await getWhatsAppInstance(
-    supabase, organizationId,
-    params.whatsappInstanceId as string | undefined,
-    leadId,
-  );
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  const wa = await getWhatsAppInstance(supabase, organizationId, params, leadId);
+  if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
   const phone = await getLeadPhone(supabase, leadId);
@@ -270,12 +258,8 @@ export async function sendWhatsAppSticker(input: ActionInput): Promise<ActionRes
   const stickerUrl = params.stickerUrl as string;
   if (!stickerUrl) return { success: false, error: "No sticker URL configured", retryable: false };
 
-  const wa = await getWhatsAppInstance(
-    supabase, organizationId,
-    params.whatsappInstanceId as string | undefined,
-    leadId,
-  );
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  const wa = await getWhatsAppInstance(supabase, organizationId, params, leadId);
+  if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
   const phone = await getLeadPhone(supabase, leadId);
@@ -341,12 +325,8 @@ export async function sendWhatsAppDocument(input: ActionInput): Promise<ActionRe
   if (!documentUrl) return { success: false, error: "No document URL configured", retryable: false };
   const documentName = (params.documentName as string) || undefined;
 
-  const wa = await getWhatsAppInstance(
-    supabase, organizationId,
-    params.whatsappInstanceId as string | undefined,
-    leadId,
-  );
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  const wa = await getWhatsAppInstance(supabase, organizationId, params, leadId);
+  if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
   const phone = await getLeadPhone(supabase, leadId);

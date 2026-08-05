@@ -98,6 +98,27 @@ export const chatQueryKeys = {
       allowedInstanceIdsCsv,
     ] as const,
 
+  /**
+   * Ligações que pertencem a uma conversa.
+   *
+   * A identidade é `(org, telefone normalizado, lead)` — as MESMAS duas
+   * identidades que `fetchConversationCalls` usa no filtro. O telefone entra
+   * já normalizado (e não cru como em `messages`) porque dois formatos do
+   * mesmo número produzem exatamente a mesma linha de ligação: mantê-los
+   * separados no cache seria um segundo fetch para a mesma resposta.
+   */
+  calls: (
+    organizationId: string | null | undefined,
+    phoneNormalized: string | null | undefined,
+    leadId: string | null | undefined,
+  ) =>
+    [
+      "call_logs_conversation",
+      organizationId ?? null,
+      phoneNormalized ?? null,
+      leadId ?? null,
+    ] as const,
+
   /** Mensagens com falha de envio (cache local de retry). */
   failed: (
     organizationId: string | null | undefined,
@@ -117,4 +138,5 @@ export type ChatQueryKey =
   | ReturnType<typeof chatQueryKeys.unreadBadge>
   | ReturnType<typeof chatQueryKeys.leadWhatsAppInstance>
   | ReturnType<typeof chatQueryKeys.chatDeepLink>
-  | ReturnType<typeof chatQueryKeys.failed>;
+  | ReturnType<typeof chatQueryKeys.failed>
+  | ReturnType<typeof chatQueryKeys.calls>;

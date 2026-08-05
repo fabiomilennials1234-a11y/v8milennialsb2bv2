@@ -242,16 +242,22 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- ────────────────────────────────────────────────────────────
--- 8a. organization_role_permissions (Org A, role 'member')
+-- 8a. organization_role_permissions — REMOVIDO em 2026-07-30
 -- ────────────────────────────────────────────────────────────
-INSERT INTO organization_role_permissions (organization_id, role, permission_key, enabled)
-VALUES
-  ('00000000-0000-0000-0000-000000000001', 'member', 'see_unassigned_cards',   false),
-  ('00000000-0000-0000-0000-000000000001', 'member', 'see_subordinates_cards', false),
-  ('00000000-0000-0000-0000-000000000001', 'member', 'see_general_info',       true),
-  ('00000000-0000-0000-0000-000000000001', 'member', 'see_all_leads',          false),
-  ('00000000-0000-0000-0000-000000000001', 'member', 'can_delete_leads',       false)
-ON CONFLICT (organization_id, role, permission_key) DO NOTHING;
+-- A tabela não existe mais: a consolidação do PRD #408 passou o papel dela para
+-- feature_permissions (bloco 8b, o default por chave) + member_feature_permissions
+-- (8c, o override por membro). Confirmado em produção: to_regclass devolve NULL.
+--
+-- Enquanto o bloco esteve aqui, o seed ABORTAVA nesta linha — então 8b, 8c, 8d,
+-- os funis, as tags e o `ENABLE TRIGGER trg_enforce_seat_limit` do fim do arquivo
+-- nunca rodavam. Remover restaura mais seed do que tira.
+--
+-- Tradução das 5 chaves legadas, para quem vier procurar:
+--   see_unassigned_cards   → leads.view_unassigned
+--   see_subordinates_cards → leads.view_subordinates
+--   see_general_info       → leads.view_general_info
+--   see_all_leads          → leads.view_all
+--   can_delete_leads       → leads.delete
 
 -- ────────────────────────────────────────────────────────────
 -- 8b. feature_permissions (global catalog — idempotent)
@@ -279,15 +285,40 @@ VALUES (
 ) ON CONFLICT (team_member_id, feature_key) DO NOTHING;
 
 -- ────────────────────────────────────────────────────────────
--- 8d. team_member_permissions (Member One: leads/delete = 'denied')
+-- 8d. team_member_permissions — REMOVIDO em 2026-07-30
 -- ────────────────────────────────────────────────────────────
-INSERT INTO team_member_permissions (team_member_id, resource_key, action_key, value)
+-- Mesmo caso do 8a: a tabela da matriz legada não existe mais em produção
+-- (to_regclass = NULL). O equivalente vivo é o override por membro, no 8c.
+--
+-- NOTA para quem cuidar do permission_engine: `checkMatrixPermission`
+-- (_shared/permission_engine.ts, etapa 7 da cascata) ainda consulta esta
+-- tabela. Hoje isso só é alcançado pela ação `import_leads` e falha fechado,
+-- mas é referência a objeto ausente e merece issue própria.
+INSERT INTO member_feature_permissions (team_member_id, organization_id, feature_key, enabled)
 VALUES (
   '00000000-0000-0000-0000-000000000140',
-  'leads',
-  'delete',
-  'denied'
-) ON CONFLICT (team_member_id, resource_key, action_key) DO NOTHING;
+  '00000000-0000-0000-0000-000000000001',
+  'leads.delete',
+  false
+) ON CONFLICT (team_member_id, feature_key) DO NOTHING;
+
+-- ────────────────────────────────────────────────────────────
+-- 8e. pipelines do sistema (pré-requisito do bloco 9)
+-- ────────────────────────────────────────────────────────────
+-- `pipe_whatsapp` é VIEW; o INSTEAD OF INSERT (pipe_whatsapp_insert_fn) exige
+-- uma linha em `pipelines` com slug='whatsapp' e type='system' para a org, e
+-- levanta exceção quando não acha. Em produção essas linhas nascem no
+-- provisionamento da org; num banco semeado do zero, ninguém as criava — o seed
+-- morria aqui.
+INSERT INTO pipelines (organization_id, name, slug, type, display_order)
+VALUES
+  ('00000000-0000-0000-0000-000000000001', 'WhatsApp',   'whatsapp',    'system', 1),
+  ('00000000-0000-0000-0000-000000000001', 'Confirmação','confirmacao', 'system', 2),
+  ('00000000-0000-0000-0000-000000000001', 'Propostas',  'propostas',   'system', 3),
+  ('00000000-0000-0000-0000-000000000002', 'WhatsApp',   'whatsapp',    'system', 1),
+  ('00000000-0000-0000-0000-000000000002', 'Confirmação','confirmacao', 'system', 2),
+  ('00000000-0000-0000-0000-000000000002', 'Propostas',  'propostas',   'system', 3)
+ON CONFLICT DO NOTHING;
 
 -- ────────────────────────────────────────────────────────────
 -- 9. pipe_whatsapp entries

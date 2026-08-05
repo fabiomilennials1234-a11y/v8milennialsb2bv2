@@ -1352,6 +1352,57 @@ export type Database = {
           },
         ]
       }
+      backup_chique_oportunidades_20260729: {
+        Row: {
+          assigned_to: string | null
+          closed_at: string | null
+          created_at: string | null
+          deal_id: string | null
+          entered_at: string | null
+          id: string | null
+          lead_id: string | null
+          metadata: Json | null
+          notes: string | null
+          organization_id: string | null
+          pipeline_id: string | null
+          stage_changed_at: string | null
+          stage_key: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          closed_at?: string | null
+          created_at?: string | null
+          deal_id?: string | null
+          entered_at?: string | null
+          id?: string | null
+          lead_id?: string | null
+          metadata?: Json | null
+          notes?: string | null
+          organization_id?: string | null
+          pipeline_id?: string | null
+          stage_changed_at?: string | null
+          stage_key?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          closed_at?: string | null
+          created_at?: string | null
+          deal_id?: string | null
+          entered_at?: string | null
+          id?: string | null
+          lead_id?: string | null
+          metadata?: Json | null
+          notes?: string | null
+          organization_id?: string | null
+          pipeline_id?: string | null
+          stage_changed_at?: string | null
+          stage_key?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       badges: {
         Row: {
           created_at: string
@@ -1678,7 +1729,7 @@ export type Database = {
           phone_number: string | null
           recording_url: string | null
           started_at: string
-          user_id: string
+          user_id: string | null
           voip_call_id: string | null
           voip_provider: string | null
         }
@@ -1696,7 +1747,7 @@ export type Database = {
           phone_number?: string | null
           recording_url?: string | null
           started_at?: string
-          user_id: string
+          user_id?: string | null
           voip_call_id?: string | null
           voip_provider?: string | null
         }
@@ -1714,7 +1765,7 @@ export type Database = {
           phone_number?: string | null
           recording_url?: string | null
           started_at?: string
-          user_id?: string
+          user_id?: string | null
           voip_call_id?: string | null
           voip_provider?: string | null
         }
@@ -11262,6 +11313,7 @@ export type Database = {
           payment_subscription_id: string | null
           plan_id: string | null
           quick_blast_max_leads: number
+          require_voice_consent: boolean
           sandbox_created_at: string | null
           sandbox_source_org_id: string | null
           send_governor_cold_gate_enabled: boolean
@@ -11274,6 +11326,7 @@ export type Database = {
           timezone: string
           updated_at: string | null
           user_creation_key: string | null
+          voice_sessions_cap: number
           whatsapp_migration_completed_at: string | null
           whatsapp_migration_status: string
           whatsapp_provider_override: string | null
@@ -11307,6 +11360,7 @@ export type Database = {
           payment_subscription_id?: string | null
           plan_id?: string | null
           quick_blast_max_leads?: number
+          require_voice_consent?: boolean
           sandbox_created_at?: string | null
           sandbox_source_org_id?: string | null
           send_governor_cold_gate_enabled?: boolean
@@ -11319,6 +11373,7 @@ export type Database = {
           timezone?: string
           updated_at?: string | null
           user_creation_key?: string | null
+          voice_sessions_cap?: number
           whatsapp_migration_completed_at?: string | null
           whatsapp_migration_status?: string
           whatsapp_provider_override?: string | null
@@ -11352,6 +11407,7 @@ export type Database = {
           payment_subscription_id?: string | null
           plan_id?: string | null
           quick_blast_max_leads?: number
+          require_voice_consent?: boolean
           sandbox_created_at?: string | null
           sandbox_source_org_id?: string | null
           send_governor_cold_gate_enabled?: boolean
@@ -11364,6 +11420,7 @@ export type Database = {
           timezone?: string
           updated_at?: string | null
           user_creation_key?: string | null
+          voice_sessions_cap?: number
           whatsapp_migration_completed_at?: string | null
           whatsapp_migration_status?: string
           whatsapp_provider_override?: string | null
@@ -15789,6 +15846,257 @@ export type Database = {
         }
         Relationships: []
       }
+      voip_call_usage: {
+        Row: {
+          calls_authorized: number
+          calls_connected: number
+          last_authorized_at: string | null
+          organization_id: string
+          updated_at: string
+          usage_date: string
+          whatsapp_instance_id: string
+        }
+        Insert: {
+          calls_authorized?: number
+          calls_connected?: number
+          last_authorized_at?: string | null
+          organization_id: string
+          updated_at?: string
+          usage_date: string
+          whatsapp_instance_id: string
+        }
+        Update: {
+          calls_authorized?: number
+          calls_connected?: number
+          last_authorized_at?: string | null
+          organization_id?: string
+          updated_at?: string
+          usage_date?: string
+          whatsapp_instance_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voip_call_usage_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voip_call_usage_whatsapp_instance_id_fkey"
+            columns: ["whatsapp_instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voip_calls: {
+        Row: {
+          authorized_at: string
+          connected_at: string | null
+          consent_record_id: string | null
+          created_at: string
+          direction: string
+          end_reason: string | null
+          ended_at: string | null
+          id: string
+          last_seq: number
+          last_seq_epoch: number
+          lead_id: string | null
+          operator_user_id: string | null
+          organization_id: string
+          peer_phone: string
+          ringing_at: string | null
+          status: string
+          tc_call_id: string | null
+          tc_session_id: string
+          token_jti: string | null
+          updated_at: string
+        }
+        Insert: {
+          authorized_at?: string
+          connected_at?: string | null
+          consent_record_id?: string | null
+          created_at?: string
+          direction: string
+          end_reason?: string | null
+          ended_at?: string | null
+          id?: string
+          last_seq?: number
+          last_seq_epoch?: number
+          lead_id?: string | null
+          operator_user_id?: string | null
+          organization_id: string
+          peer_phone: string
+          ringing_at?: string | null
+          status?: string
+          tc_call_id?: string | null
+          tc_session_id: string
+          token_jti?: string | null
+          updated_at?: string
+        }
+        Update: {
+          authorized_at?: string
+          connected_at?: string | null
+          consent_record_id?: string | null
+          created_at?: string
+          direction?: string
+          end_reason?: string | null
+          ended_at?: string | null
+          id?: string
+          last_seq?: number
+          last_seq_epoch?: number
+          lead_id?: string | null
+          operator_user_id?: string | null
+          organization_id?: string
+          peer_phone?: string
+          ringing_at?: string | null
+          status?: string
+          tc_call_id?: string | null
+          tc_session_id?: string
+          token_jti?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voip_calls_consent_record_id_fkey"
+            columns: ["consent_record_id"]
+            isOneToOne: false
+            referencedRelation: "consent_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voip_calls_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voip_calls_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_compat"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voip_calls_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voip_calls_tc_session_id_fkey"
+            columns: ["tc_session_id"]
+            isOneToOne: false
+            referencedRelation: "voip_sessions"
+            referencedColumns: ["tc_session_id"]
+          },
+        ]
+      }
+      voip_sessions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          jid: string | null
+          last_seq: number
+          last_seq_epoch: number
+          name: string | null
+          organization_id: string
+          status: string
+          tc_session_id: string
+          updated_at: string
+          whatsapp_instance_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          jid?: string | null
+          last_seq?: number
+          last_seq_epoch?: number
+          name?: string | null
+          organization_id: string
+          status?: string
+          tc_session_id: string
+          updated_at?: string
+          whatsapp_instance_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          jid?: string | null
+          last_seq?: number
+          last_seq_epoch?: number
+          name?: string | null
+          organization_id?: string
+          status?: string
+          tc_session_id?: string
+          updated_at?: string
+          whatsapp_instance_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voip_sessions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voip_sessions_whatsapp_instance_id_fkey"
+            columns: ["whatsapp_instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voip_webhook_events: {
+        Row: {
+          event_jti: string
+          expires_at: string
+          organization_id: string
+          received_at: string
+          seq: number
+          seq_epoch: number
+          signed_at: string
+          tc_session_id: string
+        }
+        Insert: {
+          event_jti: string
+          expires_at: string
+          organization_id: string
+          received_at?: string
+          seq: number
+          seq_epoch: number
+          signed_at: string
+          tc_session_id: string
+        }
+        Update: {
+          event_jti?: string
+          expires_at?: string
+          organization_id?: string
+          received_at?: string
+          seq?: number
+          seq_epoch?: number
+          signed_at?: string
+          tc_session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voip_webhook_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       webhook_dead_letters: {
         Row: {
           attempts: number
@@ -16379,6 +16687,7 @@ export type Database = {
           copilot_agent_id: string | null
           created_at: string | null
           daily_blast_cap: number
+          daily_call_cap: number | null
           id: string
           instance_id: string | null
           instance_name: string
@@ -16395,11 +16704,13 @@ export type Database = {
           session_dead_since: string | null
           status: string
           updated_at: string | null
+          voice_calls_enabled: boolean
         }
         Insert: {
           copilot_agent_id?: string | null
           created_at?: string | null
           daily_blast_cap?: number
+          daily_call_cap?: number | null
           id?: string
           instance_id?: string | null
           instance_name: string
@@ -16416,11 +16727,13 @@ export type Database = {
           session_dead_since?: string | null
           status?: string
           updated_at?: string | null
+          voice_calls_enabled?: boolean
         }
         Update: {
           copilot_agent_id?: string | null
           created_at?: string | null
           daily_blast_cap?: number
+          daily_call_cap?: number | null
           id?: string
           instance_id?: string | null
           instance_name?: string
@@ -16437,6 +16750,7 @@ export type Database = {
           session_dead_since?: string | null
           status?: string
           updated_at?: string | null
+          voice_calls_enabled?: boolean
         }
         Relationships: [
           {
@@ -18172,6 +18486,48 @@ export type Database = {
         Returns: number
       }
       fn_seed_default_dashboard: { Args: { p_org_id: string }; Returns: Json }
+      fn_voip_apply_vps_event: {
+        Args: {
+          p_epoch: number
+          p_event_jti: string
+          p_payload: Json
+          p_seq: number
+          p_sid: string
+          p_signed_at: string
+        }
+        Returns: Json
+      }
+      fn_voip_call_reserve: {
+        Args: {
+          p_consent_record_id?: string
+          p_direction?: string
+          p_existing_call_id?: string
+          p_lead_id?: string
+          p_operator_user_id: string
+          p_organization_id: string
+          p_peer_phone: string
+          p_tc_session_id: string
+        }
+        Returns: Json
+      }
+      fn_voip_can_use_instance: {
+        Args: { p_instance_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      fn_voip_consent_record: {
+        Args: {
+          p_contact_phone?: string
+          p_granted: boolean
+          p_ip_address?: string
+          p_lead_id: string
+          p_metadata?: Json
+          p_organization_id: string
+          p_source: string
+          p_user_agent?: string
+        }
+        Returns: string
+      }
+      fn_voip_project_call_log: { Args: { p_call_id: string }; Returns: string }
       generate_api_key: {
         Args: { p_created_by: string; p_name: string; p_org_id: string }
         Returns: Json
@@ -19064,6 +19420,16 @@ export type Database = {
         }
         Returns: boolean
       }
+      import_lead_into_custom_pipeline: {
+        Args: {
+          p_assigned_to?: string
+          p_lead: Json
+          p_organization_id: string
+          p_pipeline_id: string
+          p_stage_id: string
+        }
+        Returns: string
+      }
       increment: {
         Args: { column_name: string; row_id: string; table_name: string }
         Returns: undefined
@@ -19528,6 +19894,20 @@ export type Database = {
         Args: { p_agent_id: string }
         Returns: undefined
       }
+      upsert_meta_conversation: {
+        Args: {
+          p_bump_unread?: boolean
+          p_channel: Database["public"]["Enums"]["channel_type"]
+          p_direction: string
+          p_external_user_id: string
+          p_lead_id?: string
+          p_message_at: string
+          p_meta_page_id: string
+          p_organization_id: string
+          p_preview?: string
+        }
+        Returns: string
+      }
       user_has_org_permission: {
         Args: { p_permission_key: string }
         Returns: boolean
@@ -19536,6 +19916,7 @@ export type Database = {
         Args: { p_code: string; p_plan_slug: string }
         Returns: Json
       }
+      voip_can_see_call: { Args: { p_lead_id: string }; Returns: boolean }
     }
     Enums: {
       agent_energy: "baixa" | "moderada" | "alta" | "muito_alta"

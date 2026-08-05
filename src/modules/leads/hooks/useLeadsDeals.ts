@@ -47,6 +47,14 @@ export interface LeadDeal {
    * compra repetida que a fatia 2 foi feita para permitir.
    */
   stagePosition: number | null;
+  /**
+   * Posição ordinal da etapa entre as etapas ATIVAS do funil (0-based), e
+   * quantas existem. É o que permite desenhar o progresso do negócio sem
+   * inventar denominador: `stagePosition` sozinho é um número solto, porque
+   * cada org numera as etapas como quer e apaga etapa no meio.
+   */
+  stageIndex: number | null;
+  stageCount: number;
   outcome: DealOutcome;
   won: boolean;
   /** `metadata.sale_value` — só propostas costuma ter. 0 = sem valor. */
@@ -217,6 +225,32 @@ export function useLeadsDeals(leadIds: string[]) {
         if (row.stage_key) customStage.set(`${row.pipeline_id}::${row.stage_key}`, value);
       }
 
+      /**
+       * Etapas ativas de cada funil, em ordem, para o progresso do negócio.
+       * Chave: `pipeline_type` nos funis system, `pipeline_id` nos custom —
+       * a mesma dualidade que os dois mapas de etapa acima já carregam.
+       */
+      const trilhaPorFunil = new Map<string, string[]>();
+      for (const s of stagesRes.data ?? []) {
+        const row = s as { pipeline_type: string; stage_key: string; position: number | null };
+        const lista = trilhaPorFunil.get(row.pipeline_type) ?? [];
+        lista.push(`${row.position ?? 0}::${row.stage_key}`);
+        trilhaPorFunil.set(row.pipeline_type, lista);
+      }
+      for (const s of customStagesRes.data ?? []) {
+        const row = s as { pipeline_id: string; id: string; position: number | null };
+        const lista = trilhaPorFunil.get(row.pipeline_id) ?? [];
+        lista.push(`${row.position ?? 0}::${row.id}`);
+        trilhaPorFunil.set(row.pipeline_id, lista);
+      }
+      for (const [chave, lista] of trilhaPorFunil) {
+        lista.sort((a, b) => Number(a.split("::")[0]) - Number(b.split("::")[0]));
+        trilhaPorFunil.set(
+          chave,
+          lista.map((item) => item.split("::").slice(1).join("::")),
+        );
+      }
+
       const map: LeadDealsMap = {};
 
       for (const raw of entriesRes.data ?? []) {
@@ -237,6 +271,11 @@ export function useLeadsDeals(leadIds: string[]) {
         const metadata = asObject(raw.metadata);
         const stageChangedAt = raw.stage_changed_at ?? raw.entered_at ?? null;
 
+        // Custom guarda ora o uuid da etapa, ora o `stage_key`; a trilha é
+        // indexada por uuid, então tenta os dois antes de desistir.
+        const trilha = trilhaPorFunil.get(isSystem ? stageType : raw.pipeline_id) ?? [];
+        const posicaoNaTrilha = raw.stage_key ? trilha.indexOf(raw.stage_key) : -1;
+
         const dealId = (raw as { deal_id?: string | null }).deal_id ?? null;
 
         const deal: LeadDeal = {
@@ -253,6 +292,8 @@ export function useLeadsDeals(leadIds: string[]) {
           // em vez de sumir. Mesma classe do incidente ghost-stage do lead-webhook.
           stageName: stage?.name ?? raw.stage_key ?? "sem etapa",
           stagePosition: stage?.position ?? null,
+          stageIndex: posicaoNaTrilha >= 0 ? posicaoNaTrilha : null,
+          stageCount: trilha.length,
           outcome: outcomeOf(stage?.role),
           won: outcomeOf(stage?.role) === "won",
           value: toNumber(metadata.sale_value),

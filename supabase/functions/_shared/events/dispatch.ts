@@ -22,8 +22,12 @@ export async function dispatchPending(
   options: DispatchOptions = {},
 ): Promise<DispatchResult> {
   const batchSize = options.batchSize ?? 50;
-  const supabase =
-    options.supabase ?? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  // `autoRefreshToken: false`: senão o auth-js arma um `setInterval` de 30 s por
+  // cliente e ninguém o desarma. Ver `_shared/supabase-admin.ts`.
+  const supabase = options.supabase ??
+    createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
   const result: DispatchResult = {
     scanned: 0,
@@ -107,6 +111,18 @@ async function markFailed(
     .eq("id", row.id);
 }
 
+/**
+ * Fronteira de confiança: `payload` chega como JSONB (`Record<string, unknown>`)
+ * e sai daqui tipado como o payload concreto do evento.
+ *
+ * O `as unknown as` é deliberado e é o mais honesto que dá para escrever sem
+ * mudar comportamento. Quem garante a forma é o publicador (o trigger que grava
+ * em `domain_events`), mais o `getHandler(row.event_type)` do chamador, que já
+ * recusa event_type sem handler registrado. O compilador não enxerga nenhuma das
+ * duas coisas, e um `as` simples é recusado porque os dois tipos não se
+ * sobrepõem — validar o payload aqui seria mudar o caminho de erro de um módulo
+ * compartilhado, decisão que não cabe a uma limpeza de tipos.
+ */
 function rowToEvent(row: DomainEventRow): DomainEvent {
   return {
     event_type: row.event_type as DomainEvent["event_type"],
@@ -115,5 +131,5 @@ function rowToEvent(row: DomainEventRow): DomainEvent {
     organization_id: row.organization_id,
     payload: row.payload,
     metadata: row.metadata,
-  } as DomainEvent;
+  } as unknown as DomainEvent;
 }

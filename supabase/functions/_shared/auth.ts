@@ -4,33 +4,40 @@
  * SECURITY: Validates webhook requests to prevent unauthorized access
  */
 
-import { createHmac } from "https://deno.land/std@0.177.0/node/crypto.ts";
+import { createHmac, timingSafeEqual } from "https://deno.land/std@0.177.0/node/crypto.ts";
 
 /**
- * Constant-time string comparison.
- * Uses crypto.subtle.timingSafeEqual when available (Deno CLI),
- * falls back to manual XOR comparison (Deno Deploy / Supabase Edge).
+ * Comparação de tempo constante.
+ *
+ * `crypto.subtle.timingSafeEqual` NÃO existe — foi extensão não-padrão do Deno 1.x
+ * e saiu no Deno 2 (medido neste runtime: `typeof` devolve `undefined`). Procurá-lo
+ * ali custava dois erros `TS2339` a todo `deno check` que tocasse este arquivo, e o
+ * ramo "nativo" nunca rodou uma vez sequer.
+ *
+ * A primitiva vive no mesmo módulo de onde `createHmac` já vem: sem dependência
+ * nova, sem versão nova, e é o acumulador XOR de `std/crypto` — percorre os N bytes
+ * sempre, sem sair no primeiro que difere. Esse laço integral é o ponto da função:
+ * `===` sairia no primeiro byte diferente e o tempo dessa saída é o vazamento.
+ *
+ * `DataView` explícito com `byteOffset`/`byteLength`: é a única sobrecarga que o
+ * shim aceita sem cast, e evita o caso em que `.buffer` de uma view parcial traria
+ * bytes de fora da fatia.
  */
 export function timingSafeCompare(a: string, b: string): boolean {
   const encoder = new TextEncoder();
   const bufA = encoder.encode(a);
   const bufB = encoder.encode(b);
   if (bufA.length !== bufB.length) {
+    // O comprimento vaza de qualquer jeito (está no tamanho do corpo/cabeçalho).
+    // O laço mantém o custo proporcional ao candidato, como antes.
     let _xor = 0;
     for (let i = 0; i < bufA.length; i++) _xor |= bufA[i] ^ 0;
     return false;
   }
-  // Prefer native API, fall back to manual constant-time XOR
-  if (typeof crypto?.subtle?.timingSafeEqual === "function") {
-    try {
-      return crypto.subtle.timingSafeEqual(bufA, bufB);
-    } catch { /* fall through */ }
-  }
-  let result = 0;
-  for (let i = 0; i < bufA.length; i++) {
-    result |= bufA[i] ^ bufB[i];
-  }
-  return result === 0;
+  return timingSafeEqual(
+    new DataView(bufA.buffer, bufA.byteOffset, bufA.byteLength),
+    new DataView(bufB.buffer, bufB.byteOffset, bufB.byteLength),
+  );
 }
 
 /**
@@ -191,7 +198,11 @@ export function getClientIdentifier(req: Request): string {
  * Validates that organization_id belongs to authenticated user
  */
 export async function validateOrganizationAccess(
-  supabase: ReturnType<typeof import("https://esm.sh/@supabase/supabase-js@2").createClient>,
+  // `SupabaseClient` e não `ReturnType<typeof createClient>`: `ReturnType`
+  // instancia os genéricos nos defaults declarados, que no supabase-js 2.10x são
+  // `Database = unknown` / `SchemaName = never` — `team_members` viraria `never` e
+  // esta consulta deixaria de ser conferida justamente onde ela decide acesso.
+  supabase: import("https://esm.sh/@supabase/supabase-js@2").SupabaseClient,
   userId: string,
   organizationId: string
 ): Promise<boolean> {
