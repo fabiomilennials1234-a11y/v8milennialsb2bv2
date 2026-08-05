@@ -7,6 +7,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isDealManualOnly } from "./deal-policy.ts";
 
 export type PipeSlug = "whatsapp" | "confirmacao" | "propostas";
 
@@ -322,6 +323,31 @@ export async function getPipeEntriesByLeads(
   return picked;
 }
 
+/**
+ * Resultado de `upsertPipeEntryDetailed`.
+ *
+ * Existe porque `string | null` achata quatro coisas diferentes em "null", e uma
+ * delas passou a ser uma DECISÃO DE PRODUTO, não uma falha: a org que ligou
+ * `deal_manual_only` não quer que o Negócio nasça daqui. Vários chamadores
+ * traduzem `null` em erro visível (`success:false`, `report.rejected++`) — sem
+ * distinguir, uma política deliberada apareceria para o cliente como "erro ao
+ * inserir proposta".
+ */
+export type UpsertPipeEntryResult =
+  | { status: "created" | "updated"; entryId: string }
+  /** ADR-0023 decisão 3 — a org só abre Negócio por clique humano. Não é erro. */
+  | { status: "skipped_deal_manual_only" }
+  | { status: "no_pipeline" }
+  | { status: "read_failed" }
+  | { status: "write_failed" };
+
+/**
+ * Versão fina de `upsertPipeEntryDetailed`: devolve o id ou `null`.
+ *
+ * Mantida com a assinatura histórica porque os ~34 call sites do repo quase
+ * todos fazem `await` sem ler o retorno. Quem precisa distinguir "pulei por
+ * política" de "falhei" usa `upsertPipeEntryDetailed`.
+ */
 export async function upsertPipeEntry(
   supabase: SupabaseClient,
   params: {
@@ -334,8 +360,24 @@ export async function upsertPipeEntry(
     notes?: string | null;
   },
 ): Promise<string | null> {
+  const result = await upsertPipeEntryDetailed(supabase, params);
+  return result.status === "created" || result.status === "updated" ? result.entryId : null;
+}
+
+export async function upsertPipeEntryDetailed(
+  supabase: SupabaseClient,
+  params: {
+    leadId: string;
+    orgId: string;
+    slug: PipeSlug;
+    stageKey: string;
+    metadata?: Record<string, unknown>;
+    assignedTo?: string | null;
+    notes?: string | null;
+  },
+): Promise<UpsertPipeEntryResult> {
   const pipelineId = await resolvePipelineId(supabase, params.orgId, params.slug);
-  if (!pipelineId) return null;
+  if (!pipelineId) return { status: "no_pipeline" };
 
   // Lê direto (não via getPipeEntry) porque aqui a diferença entre "a leitura
   // falhou" e "não existe entry" decide INSERT vs não-INSERT — e getPipeEntry
@@ -359,7 +401,7 @@ export async function upsertPipeEntry(
     console.warn(
       `[pipeline-adapter] upsertPipeEntry abortado: leitura de pipeline_entries falhou para pipeline=${pipelineId} lead=${params.leadId}. Não inserimos às cegas para não duplicar negócio.`,
     );
-    return null;
+    return { status: "read_failed" };
   }
 
   if (read.rows.length > 1) {
@@ -385,9 +427,39 @@ export async function upsertPipeEntry(
 
     if (error) {
       console.warn("[pipeline-adapter] upsertPipeEntry update error:", error);
-      return null;
+      return { status: "write_failed" };
     }
-    return existing.id;
+    return { status: "updated", entryId: existing.id };
+  }
+
+  // ── ADR-0023 decisão 3 — "um Negócio nasce só por clique humano" ──────────
+  //
+  // O gate fica AQUI, e só no ramo do INSERT, porque é aqui que a distinção do
+  // ADR mora: a decisão 3 proíbe CRIAR, não proíbe MOVER. Um Negócio que já
+  // existe continua andando por automação, webhook e agente — é o ramo do
+  // UPDATE acima, que não passa por este teste.
+  //
+  // Por que no adapter e não em cada caminho de ingest: são 34 call sites em 20
+  // arquivos, e a lista cresce a cada integração nova. É o mesmo argumento que o
+  // ADR usa para pôr o índice único em `pipeline_entries.deal_id` (decisão 5) —
+  // uma garantia estrutural vale mais que uma propriedade que N caminhos têm de
+  // honrar cada um por conta.
+  //
+  // O que este gate NÃO alcança, de propósito:
+  //   - `abrir_negocio` (migration 20270803000020): é a porta humana, roda em
+  //     SQL pelas views de compatibilidade e nunca passa por aqui. Se passasse,
+  //     a flag desligaria justamente o clique que ela existe para preservar.
+  //   - `custom_pipe_entries`: outra tabela, gateada nos 4 sítios que a inserem.
+  //   - `create_lead_with_pipe`: cria lead+entry dentro do banco; gateado nos 2
+  //     webhooks que a chamam, passando `p_pipe_type = null`.
+  //
+  // A leitura é cacheada por 30s por org (ver `_shared/deal-policy.ts`), então o
+  // custo num lote de import é uma query, não uma por linha.
+  if (await isDealManualOnly(supabase, params.orgId)) {
+    console.log(
+      `[pipeline-adapter] deal_manual_only ON em org=${params.orgId}: NÃO criando Negócio em ${params.slug}/${params.stageKey} para lead=${params.leadId} (ADR-0023 decisão 3). Lead permanece na base, sem card.`,
+    );
+    return { status: "skipped_deal_manual_only" };
   }
 
   const { data, error } = await supabase
@@ -406,9 +478,9 @@ export async function upsertPipeEntry(
 
   if (error) {
     console.warn("[pipeline-adapter] upsertPipeEntry insert error:", error);
-    return null;
+    return { status: "write_failed" };
   }
-  return data?.id ?? null;
+  return data?.id ? { status: "created", entryId: data.id } : { status: "write_failed" };
 }
 
 export async function updatePipeEntryById(

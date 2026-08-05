@@ -9,6 +9,7 @@ import { logRuntime } from "../_shared/logger.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
 import { successResponse, errorResponse } from "../_shared/response.ts";
 import { upsertPipeEntry, getPipeEntry, deletePipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
+import { isDealManualOnly } from "../_shared/deal-policy.ts";
 
 // Helper function to normalize email (lowercase, trim)
 function normalizeEmail(email: string | null | undefined): string | null {
@@ -354,7 +355,21 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
     // CREATE NEW LEAD (NO DUPLICATE FOUND)
     // Atomic lead + pipe creation via RPC (single transaction)
     // ============================================
-    const pipeType = compromisso_date ? 'confirmacao' : 'whatsapp';
+    // ADR-0023 decisão 3 — `create_lead_with_pipe` cria lead E card na mesma
+    // transação, dentro do banco: `upsertPipeEntry` não passa por aqui e o gate
+    // do adapter não alcança este caminho. A RPC já aceita `p_pipe_type = null`
+    // (é como `webhook-confirmacao` opera com o merge de funis ligado), então o
+    // gate é passar null: o lead nasce, o Negócio não.
+    const dealManualOnly = await isDealManualOnly(supabase, organization_id);
+    const pipeType = dealManualOnly
+      ? null
+      : (compromisso_date ? 'confirmacao' : 'whatsapp');
+
+    if (dealManualOnly) {
+      console.log(
+        `[webhook-new-lead] deal_manual_only ON em org=${organization_id}: lead criado SEM card (p_pipe_type=null).`,
+      );
+    }
 
     const { data: result, error: rpcError } = await supabase.rpc('create_lead_with_pipe', {
       p_name: name,
@@ -378,7 +393,7 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
       p_utm_term: utm_term || null,
       p_utm_content: utm_content || null,
       p_pipe_type: pipeType,
-      p_pipe_status: pipeType === 'confirmacao' ? 'reuniao_marcada' : 'novo',
+      p_pipe_status: pipeType === null ? null : (pipeType === 'confirmacao' ? 'reuniao_marcada' : 'novo'),
       p_pipe_meeting_date: compromisso_date || null,
     });
 
