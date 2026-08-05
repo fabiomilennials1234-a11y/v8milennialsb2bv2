@@ -34,8 +34,11 @@ function fakeSupabase(tables: Record<string, { single?: any; list?: any[] }>): a
 
 const LEAD = {
   single: {
+    // SCRUM-202: `pipe_whatsapp` saiu do mock. A coluna já não é lida por
+    // `resolveVariables` — `{estagio}` vem de `getPipeEntry` (ADR-0023 §10) —,
+    // então mantê-la aqui só sugeria um contrato que não existe mais.
     name: "Bar do Zé", company: "Bar do Zé", email: "", phone: "",
-    pipe_whatsapp: "novo", qualification_score: null, rating: null,
+    qualification_score: null, rating: null,
     sdr_id: null, closer_id: null, responsible_id: null,
     organization_id: "org-1", faturamento: null, segment: "",
     urgency: "", notes: "", origin: "",

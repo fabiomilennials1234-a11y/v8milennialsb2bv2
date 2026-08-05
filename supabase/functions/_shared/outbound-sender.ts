@@ -330,9 +330,9 @@ export async function sendOutboundDispatch(
       })
       .eq("id", dispatchId);
 
-    // Pipe auto-move: novo_lead → abordado
-    await supabase.from("leads").update({ pipe_whatsapp: "abordado" }).eq("id", row.lead_id);
-
+    // Pipe auto-move: novo_lead → abordado.
+    // SCRUM-202: o espelho `leads.pipe_whatsapp` saiu — o upsert abaixo escreve
+    // `pipeline_entries` em depth 1 e o gatilho de sync grava a coluna.
     await upsertPipeEntry(supabase, {
       leadId: row.lead_id,
       orgId: organizationId,
