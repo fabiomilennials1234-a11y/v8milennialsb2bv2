@@ -65,7 +65,10 @@ import { ExportLeadsModal } from "../components/leads/ExportLeadsModal";
 import { ImportHistoryPanel } from "../components/leads/ImportHistoryPanel";
 import { QUALIFICATION_TIER_CONFIG } from "../components/lead-detail/modal/qualification-config";
 import { QUALIFICATION_TIERS } from "../components/lead-detail/modal/types";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "../components/lead-detail";
+import { LeadPanelProvider, useLeadSheet } from "../components/lead-detail";
+import { LeadCardPanel } from "../components/lead-card/LeadCardPanel";
+import { DealPanelProvider } from "../components/deal-detail/DealPanelProvider";
+import { DealDetailDialog } from "../components/deal-detail/DealDetailDialog";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { useCanDo } from "@/modules/identity";
 import { useFeaturePermission } from "@/modules/identity";
@@ -1208,12 +1211,29 @@ function LeadsInner() {
   );
 }
 
+/**
+ * O painel da aba de Leads passa a ser o **Card do Lead** novo.
+ *
+ * `DealPanelProvider` entra junto porque clicar num negócio dentro do card abre
+ * o card do Negócio por cima — o mesmo `DealDetailDialog` que os três funis já
+ * abrem. É o que permite tirar etapa, reunião e orçamento do card do Lead sem
+ * tirar a função de ninguém.
+ */
 export default function Leads() {
   return (
     <LeadPanelProvider>
-      <LeadPanelLayout panel={<LeadDetailSheet />}>
-        <LeadsInner />
-      </LeadPanelLayout>
+      <DealPanelProvider>
+        <LeadPanelLayout
+          panel={
+            <>
+              <LeadCardPanel />
+              <DealDetailDialog />
+            </>
+          }
+        >
+          <LeadsInner />
+        </LeadPanelLayout>
+      </DealPanelProvider>
     </LeadPanelProvider>
   );
 }
