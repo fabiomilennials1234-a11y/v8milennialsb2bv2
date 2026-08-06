@@ -58,6 +58,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLeads, useLeadsCount, useCreateLead, useUpdateLead, useDeleteLead, LEADS_PAGE_SIZE, type Lead } from "../hooks/useLeads";
 import { LeadMobileCard, StarRating, type LeadMobileCardLead } from "../components/leads/LeadMobileCard";
+import { LeadMobileSortBar } from "../components/leads/LeadMobileSortBar";
 import { ExportLeadsModal } from "../components/leads/ExportLeadsModal";
 import { ImportHistoryPanel } from "../components/leads/ImportHistoryPanel";
 import { QUALIFICATION_TIER_CONFIG } from "../components/lead-detail/modal/qualification-config";
@@ -707,6 +708,10 @@ function LeadsInner() {
       <div className="rounded-lg">
         {isMobile ? (
           <div className="space-y-2.5 py-0.5">
+            {/* Ordenação do celular: no desktop quem ordena é o cabeçalho da
+                tabela, que aqui não existe — sem esta faixa o telefone ficava
+                preso na ordem padrão (inv:H5-22). */}
+            <LeadMobileSortBar sort={sort} onSortChange={handleSortChange} />
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-24 w-full rounded-xl" />
