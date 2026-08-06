@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import type { LeadsFilterParams } from "./useLeads";
+import { applyLeadListFilters } from "../lib/lead-list-filters";
 
 /**
  * Os três números do topo da lista de Leads, contados na ORGANIZAÇÃO inteira.
@@ -76,22 +77,27 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
       if (!organizationId) return { highRating: 0, thisMonth: 0, withOwner: 0 };
 
       const base = () => {
-        let q = supabase
+        const q = supabase
           .from("leads")
           .select("*", { count: "exact", head: true })
           .eq("organization_id", organizationId)
-          .is("deleted_at", null);
+          .is("deleted_at", null)
+          // Mesmo guard da lista (`applyLeadsFilters`): lead sombra não aparece
+          // embaixo, então não pode entrar na conta de cima.
+          .or("is_shadow.is.null,is_shadow.eq.false");
 
-        // Os mesmos recortes da lista, para o card concordar com o que está
-        // embaixo dele. Um card que ignora o filtro ativo é outra forma de mentir.
-        if (searchQuery) {
-          q = q.or(`name.ilike.%${searchQuery}%,company.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
-        }
-        if (filterOrigin && filterOrigin !== "all") q = q.eq("origin", filterOrigin);
-        if (filterUf && filterUf !== "all") q = q.eq("uf", filterUf);
-        if (createdFrom) q = q.gte("created_at", createdFrom);
-        if (createdTo) q = q.lte("created_at", createdTo);
-        return q;
+        // A semântica dos filtros vem de `applyLeadListFilters` — a MESMA função
+        // que a lista e a exportação usam. Antes daqui este hook reimplementava
+        // os filtros inline, e a cópia divergiu em três pontos: `filterRating` e
+        // `filterQualification` eram desestruturados, entravam na queryKey e
+        // NUNCA eram aplicados (filtrar por rating mudava a lista e não mudava o
+        // card, com refetch a cada clique para devolver o mesmo número), e a
+        // busca não casava `normalized_phone`, então procurar por telefone dava
+        // contagem diferente do que estava na tela.
+        return applyLeadListFilters(q, {
+          searchQuery, filterOrigin, filterRating, filterQualification,
+          filterUf, createdFrom, createdTo,
+        });
       };
 
       const inicioDoMes = monthStartInTz(timeZone).toISOString();
