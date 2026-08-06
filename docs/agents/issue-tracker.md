@@ -49,7 +49,7 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 - **Blocking**: GitHub's **native issue dependencies** — the canonical, UI-visible representation. Add an edge with `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where `<blocker-db-id>` is the blocker's numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, _not_ the `#number` or `node_id`). GitHub reports `issue_dependencies_summary.blocked_by` (open blockers only — the live gate). Where dependencies aren't available, fall back to a `Blocked by: #<n>, #<n>` line at the top of the child body. A ticket is unblocked when every blocker is closed.
 - **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
 - **Claim**: `gh issue edit <n> --add-assignee @me` — the session's first write.
-- **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
+- **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far. Then clear the `BLOQUEADO por #<n>` line from every Jira Tarefa this closure just unblocked — Jira has no native dependency, so that text is the only source of the blocked state, and nothing updates it for you (see "Espelho no Jira").
 
 ## Espelho no Jira (camada de gestão)
 
@@ -75,6 +75,8 @@ Epic (nível 1) > História ou Tarefa (nível 0) > Subtarefa
 
 Subtarefa **não é item de sprint**: não aparece sozinha no board e não pode ir para uma sprint diferente da do pai.
 
+**Converter Subtarefa em Tarefa pela API é recusado** — `editJiraIssue` sobre o campo `issuetype` devolve `O tipo de item selecionado é inválido`, porque a troca muda o item de nível na hierarquia. **Reparentar funciona** (campo `parent`); trocar o tipo, não. Subtarefa mal colocada se conserta mudando o pai, não o tipo.
+
 ### Mapeamento GitHub → Jira
 
 | GitHub | Jira |
@@ -82,15 +84,20 @@ Subtarefa **não é item de sprint**: não aparece sozinha no board e não pode 
 | Issue de PRD (label `prd`) | **Epic** |
 | Issue de fatia (a que traz `Part of #<prd>`) | **História**, com o Epic correspondente como pai (campo `parent`) |
 | Issue avulsa (`bug`, `docs`, `api` — sem PRD) | **Tarefa**, sem pai |
+| Ticket de decisão do wayfinder (`wayfinder:<tipo>`) | **Tarefa**, com o Epic espelho do mapa como pai (campo `parent`) |
 | — | **Subtarefa**: só checklist interno de execução dentro de uma fatia |
 
 A subtarefa **nunca** é a unidade que o `/to-tickets` cria — o que ele cria vira História.
 
-O legado anterior a esta convenção **não será arrumado retroativamente**: hoje SCRUM-6, SCRUM-7 e SCRUM-8 são Subtarefas órfãs, sem pai e sem sprint, e ficam como estão até alguém decidir o destino delas.
+O legado anterior a esta convenção **não será arrumado retroativamente** — mexe-se nele só quando ele passa a atrapalhar. SCRUM-6, SCRUM-7 e SCRUM-8 nunca foram órfãs: eram Subtarefas do **próprio SCRUM-5**, provavelmente porque nasceram sob ele quando ele ainda era História, e a promoção para Epic as deixou penduradas direto num Epic. Foram reparentadas para **SCRUM-262** ("O plano de migração dos fluxos e do app do Make"), que é o lugar semanticamente certo. Seguem sendo Subtarefas — o tipo não muda (ver Hierarquia).
 
-### Wayfinder não é espelhado
+### Wayfinder é espelhado
 
-O mapa (`wayfinder:map`) e seus tickets de decisão vivem **só no GitHub**. O Epic do Jira recebe, na descrição, o link do mapa e o gist de uma linha por decisão fechada. Espelhar cada ticket de decisão é ruído e está **proibido**.
+**Regra vigente:** todo ticket de decisão do mapa vira uma **Tarefa** no Jira, filha do Epic espelho do mapa (campo `parent`), com responsável **Milennials Tech** e a descrição começando pela URL da issue do GitHub. O **mapa** em si (`wayfinder:map`) continua **só no GitHub** — o que ele espelha é o Epic, que recebe na descrição o link do mapa e o gist de uma linha por decisão fechada.
+
+Isto **revoga** a regra anterior, que proibia espelhar ticket de decisão por ser ruído. O que ela não previu: o time — inclusive o dev do redesenho de funis — vive no Jira e **não abre o GitHub**. Sem o espelho, decisão que faz fronteira com outra pessoa fica invisível justamente para ela, e a fronteira só aparece no merge.
+
+**Bloqueio não atravessa.** O GitHub tem dependência nativa entre issues; o Jira **não tem equivalente automático**. Então o estado de bloqueio viaja como **texto** na descrição da Tarefa — `BLOQUEADO por #<n>` — e quem fecha um ticket no GitHub é responsável por atualizar o texto das Tarefas que aquele fechamento destravou. Texto não se atualiza sozinho: bloqueio esquecido no Jira é pior que bloqueio nenhum, porque parece medido.
 
 ### Como os dois lados se acham
 
@@ -117,4 +124,6 @@ O workflow do SCRUM tem **quatro** estados:
 
 ### Primeiro Epic sob esta convenção
 
-**SCRUM-5** — "Revisão/ Atualização de toda API do Torque" (`https://milennialstech-1785256858036.atlassian.net/browse/SCRUM-5`), promovido de História para Epic em 06/08/2026. O vínculo com o GitHub ainda está **pendente**: nasce quando o mapa do `/wayfinder` for criado, e nesse momento a descrição do Epic passa a começar pela URL da issue do GitHub.
+**SCRUM-5** — "Revisão/ Atualização de toda API do Torque" (`https://milennialstech-1785256858036.atlassian.net/browse/SCRUM-5`), promovido de História para Epic em 06/08/2026. O vínculo com o GitHub está **feito**: o Epic espelha o mapa **#1436**, e a descrição dele começa pela URL da issue.
+
+É também o exemplo vivo do espelho do wayfinder: os 15 tickets de decisão do mapa estão no Jira como **Tarefas filhas do Epic**, de **SCRUM-250** a **SCRUM-264**, todas com responsável Milennials Tech. SCRUM-262 é a que herdou as três Subtarefas de legado (SCRUM-6/7/8).
