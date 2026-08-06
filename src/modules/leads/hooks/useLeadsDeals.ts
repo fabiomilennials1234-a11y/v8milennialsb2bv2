@@ -207,6 +207,14 @@ export function useLeadsDeals(leadIds: string[]) {
       // Custom: a entry grava ora o uuid da stage, ora o stage_key. Indexa os dois
       // (mesma tolerância de `useLeadAllPipelines`).
       const customStage = new Map<string, StageInfo>();
+      /**
+       * `${pipeline_id}::${stage_key}` → uuid da etapa. A trilha custom é
+       * indexada por uuid (é o que `custom_pipe_entries` guarda na maioria das
+       * linhas), mas parte das entries guarda o `stage_key`. Sem esta tradução
+       * o `indexOf` devolve -1 e o card fica SEM barra de progresso — some em
+       * silêncio, que é como o defeito sobreviveu.
+       */
+      const uuidPorStageKey = new Map<string, string>();
       for (const s of customStagesRes.data ?? []) {
         const row = s as {
           id: string;
@@ -222,7 +230,10 @@ export function useLeadsDeals(leadIds: string[]) {
           position: row.position ?? null,
         };
         customStage.set(`${row.pipeline_id}::${row.id}`, value);
-        if (row.stage_key) customStage.set(`${row.pipeline_id}::${row.stage_key}`, value);
+        if (row.stage_key) {
+          customStage.set(`${row.pipeline_id}::${row.stage_key}`, value);
+          uuidPorStageKey.set(`${row.pipeline_id}::${row.stage_key}`, row.id);
+        }
       }
 
       /**
@@ -274,7 +285,17 @@ export function useLeadsDeals(leadIds: string[]) {
         // Custom guarda ora o uuid da etapa, ora o `stage_key`; a trilha é
         // indexada por uuid, então tenta os dois antes de desistir.
         const trilha = trilhaPorFunil.get(isSystem ? stageType : raw.pipeline_id) ?? [];
-        const posicaoNaTrilha = raw.stage_key ? trilha.indexOf(raw.stage_key) : -1;
+        // Funil system indexa a trilha por `stage_key`; custom, por uuid. A
+        // entry custom guarda ora um, ora outro — daí a tradução antes de
+        // procurar. O comentário acima sempre disse "tenta os dois"; o código
+        // só tentava um, e todo card cuja entry guardava `stage_key` perdia a
+        // barra de progresso.
+        const chaveNaTrilha = !raw.stage_key
+          ? null
+          : isSystem
+            ? raw.stage_key
+            : (uuidPorStageKey.get(`${raw.pipeline_id}::${raw.stage_key}`) ?? raw.stage_key);
+        const posicaoNaTrilha = chaveNaTrilha ? trilha.indexOf(chaveNaTrilha) : -1;
 
         const dealId = (raw as { deal_id?: string | null }).deal_id ?? null;
 
