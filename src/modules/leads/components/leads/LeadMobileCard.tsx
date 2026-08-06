@@ -1,0 +1,184 @@
+import { Building, Mail, Phone, Star } from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import type { LeadStanding } from "../../lib/lead-relacao-situacao";
+
+/**
+ * O cartão de lead do celular — a lista abaixo de 768px.
+ *
+ * ── POR QUE ISTO SAIU DE DENTRO DA PÁGINA ─────────────────────────────────
+ * O bloco vivia inline em `Leads.tsx`, entre as 1.239 linhas do arquivo, e
+ * era a única entrega da fatia 1 sem nenhuma prova: montar a página inteira
+ * num teste exige mockar quarenta hooks, então na prática ninguém testava
+ * (`inv:H8-33`). Extrair não muda pixel nenhum — cria a costura que faltava
+ * para o celular ter teste, e é onde a ordenação da lista no celular
+ * (`inv:H5-22`) vai entrar sem tocar na página de novo.
+ *
+ * ── O QUE ESTE CARD NÃO TEM, E É DE PROPÓSITO SABER ───────────────────────
+ * Medido em 2026-08-06, comparando com `LeadListRow` do desktop, o celular
+ * NÃO recebe:
+ *   - `deals` — a coluna de Negócios da `inv:H1-04`, entrega central da fatia
+ *     1, não existe aqui. O que sobra é a linha de Situação, que diz o funil
+ *     mais avançado e nada sobre valor, etapa ou tempo parado;
+ *   - `metrics` — as métricas de compra da lista;
+ *   - checkbox de seleção. `selecionado` pinta a borda, mas não há como
+ *     selecionar pelo card: o ato de seleção só existe no desktop.
+ * Nenhum dos três é regressão desta extração; os três já faltavam. Ficam
+ * escritos aqui porque "a fatia 1 não existe abaixo de 768px" é vago e cada
+ * uma dessas linhas é um trabalho com dono.
+ */
+
+export interface LeadMobileCardLead {
+  id: string;
+  name: string;
+  company?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  rating?: number | null;
+  origin: string;
+  pre_sale_responsible?: { name?: string | null } | null;
+  sale_responsible?: { name?: string | null } | null;
+}
+
+/** Nota de 1 a 10 em estrelas. Vive aqui porque o card do celular é o uso mais quente. */
+export function StarRating({
+  rating,
+  onRate,
+  readonly = false,
+}: {
+  rating: number;
+  onRate?: (r: number) => void;
+  readonly?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
+        <button
+          key={star}
+          type="button"
+          disabled={readonly}
+          onClick={() => onRate?.(star)}
+          className={`${readonly ? "cursor-default" : "cursor-pointer hover:scale-110"} transition-transform`}
+        >
+          <Star
+            className={`w-3.5 h-3.5 ${
+              star <= rating ? "fill-chart-5 text-chart-5" : "text-muted-foreground/30"
+            }`}
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function LeadMobileCard({
+  lead,
+  standing,
+  selecionado = false,
+  onOpen,
+  originLabel,
+  originClassName,
+  createdLabel,
+}: {
+  lead: LeadMobileCardLead;
+  standing?: LeadStanding;
+  selecionado?: boolean;
+  onOpen: () => void;
+  originLabel: string;
+  originClassName?: string;
+  createdLabel: string;
+}) {
+  return (
+    <div
+      onClick={onOpen}
+      className={cn(
+        "rounded-xl border border-border bg-card p-3.5 transition-colors active:bg-muted/50",
+        selecionado && "border-primary/40 bg-primary/5",
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-semibold">{lead.name}</p>
+          {lead.company && (
+            <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
+              <Building className="h-3 w-3 shrink-0" />
+              {lead.company}
+            </p>
+          )}
+        </div>
+        <StarRating rating={lead.rating || 0} readonly />
+      </div>
+
+      {/* Relação + Situação — a §6 vale para a página, e o card do celular é a
+          mesma página. Ficam numa linha própria, antes das etiquetas, para não
+          se perderem entre badges. */}
+      <div className="mt-2 flex items-center gap-2 text-[12.5px]">
+        {standing?.relacao === "cliente" ? (
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 font-semibold text-primary">
+            <span className="size-1.5 shrink-0 rounded-full bg-primary" />
+            Cliente
+          </span>
+        ) : (
+          <span className="text-muted-foreground">Lead</span>
+        )}
+        <span className="text-border">·</span>
+        {standing?.emNegociacao ? (
+          <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+            <span
+              className="size-1.5 shrink-0 rounded-full"
+              style={{
+                background: standing.maisAvancado?.funnelColor ?? "hsl(var(--muted-foreground))",
+              }}
+            />
+            <span className="shrink-0 text-foreground/80">Em negociação</span>
+            {standing.maisAvancado && (
+              <span className="truncate">· {standing.maisAvancado.funnelName}</span>
+            )}
+          </span>
+        ) : (
+          <span className="rounded-md border border-dashed border-border px-2 py-0.5 text-muted-foreground">
+            Sem negócio aberto
+          </span>
+        )}
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <Badge variant="outline" className={originClassName}>
+          {originLabel}
+        </Badge>
+        {lead.pre_sale_responsible?.name && (
+          <Badge variant="outline" className="border-blue-500/30 text-xs text-blue-400">
+            {lead.pre_sale_responsible.name}
+          </Badge>
+        )}
+        {lead.sale_responsible?.name && (
+          <Badge variant="outline" className="border-emerald-500/30 text-xs text-emerald-400">
+            {lead.sale_responsible.name}
+          </Badge>
+        )}
+      </div>
+
+      {(lead.phone || lead.email) && (
+        <div className="mt-2 flex flex-col gap-0.5">
+          {lead.phone && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Phone className="h-3 w-3 shrink-0" />
+              {lead.phone}
+            </span>
+          )}
+          {lead.email && (
+            <span className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+              <Mail className="h-3 w-3 shrink-0" />
+              <span className="truncate">{lead.email}</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      <div className="mt-2 border-t border-border/60 pt-2">
+        <span className="text-[11px] text-muted-foreground">{createdLabel}</span>
+      </div>
+    </div>
+  );
+}

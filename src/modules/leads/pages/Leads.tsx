@@ -4,10 +4,6 @@ import { useViewport } from "@/shared/hooks/use-viewport";
 import { motion } from "framer-motion";
 import {
   Search,
-  Star,
-  Phone,
-  Mail,
-  Building,
   Calendar,
   MoreHorizontal,
   Plus,
@@ -61,6 +57,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLeads, useLeadsCount, useCreateLead, useUpdateLead, useDeleteLead, LEADS_PAGE_SIZE, type Lead } from "../hooks/useLeads";
+import { LeadMobileCard, StarRating, type LeadMobileCardLead } from "../components/leads/LeadMobileCard";
 import { ExportLeadsModal } from "../components/leads/ExportLeadsModal";
 import { ImportHistoryPanel } from "../components/leads/ImportHistoryPanel";
 import { QUALIFICATION_TIER_CONFIG } from "../components/lead-detail/modal/qualification-config";
@@ -152,29 +149,6 @@ const initialFormData: LeadFormData = {
   compromisso_date: "",
 };
 
-function StarRating({ rating, onRate, readonly = false }: { rating: number; onRate?: (r: number) => void; readonly?: boolean }) {
-  return (
-    <div className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
-        <button
-          key={star}
-          type="button"
-          disabled={readonly}
-          onClick={() => onRate?.(star)}
-          className={`${readonly ? "cursor-default" : "cursor-pointer hover:scale-110"} transition-transform`}
-        >
-          <Star
-            className={`w-3.5 h-3.5 ${
-              star <= rating
-                ? "fill-chart-5 text-chart-5"
-                : "text-muted-foreground/30"
-            }`}
-          />
-        </button>
-      ))}
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Persisted filter state — scoped per org + user, TTL 24 h
@@ -743,101 +717,16 @@ function LeadsInner() {
               </div>
             ) : (
               leads.map((lead: Lead) => (
-                <div
+                <LeadMobileCard
                   key={lead.id}
-                  onClick={() => openLead(lead.id)}
-                  className={cn(
-                    "rounded-xl border border-border bg-card p-3.5 transition-colors active:bg-muted/50",
-                    bulk.isSelected(lead.id) && "border-primary/40 bg-primary/5",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold">{lead.name}</p>
-                      {lead.company && (
-                        <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
-                          <Building className="h-3 w-3 shrink-0" />
-                          {lead.company}
-                        </p>
-                      )}
-                    </div>
-                    <StarRating rating={lead.rating || 0} readonly />
-                  </div>
-
-                  {/* Relação + Situação — a §6 vale para a página, e o card do
-                      celular é a mesma página. Ficam numa linha própria, antes
-                      das etiquetas, para não se perderem entre badges. */}
-                  <div className="mt-2 flex items-center gap-2 text-[12.5px]">
-                    {standings[lead.id]?.relacao === "cliente" ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 font-semibold text-primary">
-                        <span className="size-1.5 shrink-0 rounded-full bg-primary" />
-                        Cliente
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">Lead</span>
-                    )}
-                    <span className="text-border">·</span>
-                    {standings[lead.id]?.emNegociacao ? (
-                      <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
-                        <span
-                          className="size-1.5 shrink-0 rounded-full"
-                          style={{
-                            background:
-                              standings[lead.id]?.maisAvancado?.funnelColor ??
-                              "hsl(var(--muted-foreground))",
-                          }}
-                        />
-                        <span className="shrink-0 text-foreground/80">Em negociação</span>
-                        {standings[lead.id]?.maisAvancado && (
-                          <span className="truncate">
-                            · {standings[lead.id]!.maisAvancado!.funnelName}
-                          </span>
-                        )}
-                      </span>
-                    ) : (
-                      <span className="rounded-md border border-dashed border-border px-2 py-0.5 text-muted-foreground">
-                        Sem negócio aberto
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <Badge variant="outline" className={originColors[lead.origin] || originColors.outro}>
-                      {originLabels[lead.origin] || lead.origin}
-                    </Badge>
-                    {lead.pre_sale_responsible?.name && (
-                      <Badge variant="outline" className="border-blue-500/30 text-xs text-blue-400">
-                        {lead.pre_sale_responsible.name}
-                      </Badge>
-                    )}
-                    {lead.sale_responsible?.name && (
-                      <Badge variant="outline" className="border-emerald-500/30 text-xs text-emerald-400">
-                        {lead.sale_responsible.name}
-                      </Badge>
-                    )}
-                  </div>
-                  {(lead.phone || lead.email) && (
-                    <div className="mt-2 flex flex-col gap-0.5">
-                      {lead.phone && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Phone className="h-3 w-3 shrink-0" />
-                          {lead.phone}
-                        </span>
-                      )}
-                      {lead.email && (
-                        <span className="flex items-center gap-1 truncate text-xs text-muted-foreground">
-                          <Mail className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{lead.email}</span>
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  <div className="mt-2 border-t border-border/60 pt-2">
-                    <span className="text-[11px] text-muted-foreground">
-                      {formatDayInTz(lead.created_at, orgTimezone)}
-                    </span>
-                  </div>
-                </div>
+                  lead={lead as LeadMobileCardLead}
+                  standing={standings[lead.id]}
+                  selecionado={bulk.isSelected(lead.id)}
+                  onOpen={() => openLead(lead.id)}
+                  originLabel={originLabels[lead.origin ?? "outro"] || lead.origin || "outro"}
+                  originClassName={originColors[lead.origin ?? "outro"] || originColors.outro}
+                  createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
+                />
               ))
             )}
           </div>
