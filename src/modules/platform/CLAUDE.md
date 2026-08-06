@@ -53,7 +53,7 @@ Slice 16 movimentou para os módulos os hooks/components que residiam em `src/co
 | `components/command/*`, `components/saved-views/*`, `components/layout/*` | `platform` |
 | `useTags`, `useImportBatches`, `useEnrichment`, `useBulkActions`, `useBulkSelection`, `useBatchedLeadMetrics` | `leads` |
 | `components/bulk-actions/BulkActionBar` | `leads` |
-| `useEmailAccounts`, `useEmails`, `useAiEmailDrafts`, `useSms`, `components/email/*`, `components/sms/*`, `components/ai/AiEmailWriter`, `pages/MessageTemplates` | `communication` |
+| `pages/MessageTemplates` | `communication` | (os hooks/componentes de e-mail e SMS foram **removidos** em 2026-08-06 — backend nunca existiu) |
 | `useGoogleCalendar`, `useGoogleCalendarSharing` | `integrations` |
 | `useLossReasons` | `pipelines` |
 | `components/team/*`, `useAvatarMap`, `useAutoAdminAssignment` | `identity` |
