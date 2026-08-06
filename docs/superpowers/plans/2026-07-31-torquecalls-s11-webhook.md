@@ -60,7 +60,7 @@ TypeScript (Supabase Edge Functions, `crypto.subtle`) · PostgreSQL 15 com pgTAP
 
 | Arquivo | Responsabilidade | Tarefas |
 |---|---|---|
-| `supabase/migrations/20270730000010_voip_webhook_ingest.sql` | tabela de anti-replay, colunas de marca d'água, RPC de aplicação | 6 |
+| `supabase/migrations/20270730000011_voip_webhook_ingest.sql` | tabela de anti-replay, colunas de marca d'água, RPC de aplicação | 6 |
 | `supabase/migrations/rollback/20270730000010_...sql` | rollback pareado | 6 |
 | `supabase/tests/voip_webhook_ingest_test.sql` | pgTAP da RPC e das transições | 6 |
 | `supabase/functions/_shared/voip/webhook-verify.ts` | **novo** — verificação Ed25519 + auto-teste de chave | 7 |
@@ -1162,8 +1162,8 @@ invertida quer dizer que a VPS assina o evento, não que ela decide o tenant."
 ## Tarefa 6: a RPC que aplica o evento
 
 **Files:**
-- Create: `supabase/migrations/20270730000010_voip_webhook_ingest.sql`
-- Create: `supabase/migrations/rollback/20270730000010_voip_webhook_ingest.sql`
+- Create: `supabase/migrations/20270730000011_voip_webhook_ingest.sql`
+- Create: `supabase/migrations/rollback/20270730000011_voip_webhook_ingest.sql`
 - Create: `supabase/tests/voip_webhook_ingest_test.sql`
 - Modify: `supabase/tests/run.sh`
 
@@ -1332,8 +1332,8 @@ Aplique o rollback, confirme que os testes voltam a falhar, reaplique a migratio
 - [ ] **Passo 6: Commit**
 
 ```bash
-git add supabase/migrations/20270730000010_voip_webhook_ingest.sql \
-        supabase/migrations/rollback/20270730000010_voip_webhook_ingest.sql \
+git add supabase/migrations/20270730000011_voip_webhook_ingest.sql \
+        supabase/migrations/rollback/20270730000011_voip_webhook_ingest.sql \
         supabase/tests/voip_webhook_ingest_test.sql supabase/tests/run.sh
 git commit -m "feat(voip): RPC que aplica o evento da VPS, com anti-replay e ordem
 
