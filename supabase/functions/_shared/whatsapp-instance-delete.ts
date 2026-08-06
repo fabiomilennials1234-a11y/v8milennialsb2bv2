@@ -36,10 +36,24 @@ export type DeleteRunResult =
   | { status: "pending"; steps: number; progress: DeleteStepProgress | null }
   | { status: "error"; steps: number; message: string };
 
-/** Lote por chamada. 5.000 linhas de `whatsapp_messages` ≈ 13s no PROD. */
-export const DELETE_BATCH_SIZE = 5000;
-/** Teto de tempo antes de devolver progresso e pedir nova tentativa. */
-export const DELETE_DEADLINE_MS = 50_000;
+/**
+ * Lote por chamada.
+ *
+ * Dimensionado para caber nos **8s** do `authenticator`, não nos 55s que a RPC
+ * pede via `set_config`: o Postgres arma o timer do `statement_timeout` quando
+ * o statement começa, então mudar o GUC dentro da função NÃO re-agenda o timer
+ * da chamada em curso. Medido no PROD (pg_stat_statements, variante por ctid):
+ * 3.000 linhas de `whatsapp_messages` = 8,1s de média e 18,4s de pico. Em
+ * 1.000 dá ≈2,7s de média e ≈6,1s de pico — dentro do teto com folga.
+ */
+export const DELETE_BATCH_SIZE = 1000;
+/**
+ * Teto de tempo antes de devolver progresso e pedir nova tentativa.
+ *
+ * Com lote de 1.000 uma instância de ~20k mensagens leva ~38 idas e voltas;
+ * um teto curto demais faria o usuário clicar duas vezes à toa.
+ */
+export const DELETE_DEADLINE_MS = 110_000;
 /** Trava contra laço infinito caso a RPC pare de progredir. */
 export const DELETE_MAX_STEPS = 200;
 

@@ -22,11 +22,12 @@ Escala do caso concreto: 20.424 mensagens + 13.723 `whatsapp_media_jobs` + 1.299
 
 ## Conserto
 
-- **`whatsapp_instance_delete_step(p_instance_id, p_reassign_to, p_batch)`** (migration `20270806000020`) — SECURITY DEFINER, `statement_timeout` próprio de 55s, faz **um lote por chamada** e devolve `{done, phase, touched, remaining}`. Fases: mensagens → media jobs → health checks → summary → linha. Idempotente: reentrar continua de onde parou. `GRANT` só para `service_role`.
+- **`whatsapp_instance_delete_step(p_instance_id, p_reassign_to, p_batch)`** (migration `20270806000020`) — SECURITY DEFINER, faz **um lote por chamada** e devolve `{done, phase, touched, remaining}`. Fases: mensagens → media jobs → health checks → summary → linha. Idempotente: reentrar continua de onde parou. `GRANT` só para `service_role`.
+- **O lote (1.000) é dimensionado para os 8s do `authenticator`, não para o `set_config('statement_timeout','55s')` da função.** O Postgres arma o timer quando o statement começa; mudar o GUC dentro da função não re-agenda o timer da chamada em curso. Medição que fixa o número (pg_stat_statements, variante por ctid): **3.000 linhas = 8,1s de média, 18,4s de pico** → 1.000 ≈ 2,7s. O `set_config` fica como bônus para chamada via psql/Management API.
 - **`p_reassign_to`** (opcional) migra o histórico para outra instância da mesma org em vez de orfanar — ver [[excluir-instancia-apaga-historico-chat]]. Sem ele, o comportamento é o histórico: mensagens ficam com `instance_id` NULL e somem do chat.
 - **`whatsapp_conversation_summary` é deixada de propósito** apontando para o UUID morto quando não há destino: é o rastro que permite restaurar recriando a instância com o **mesmo UUID**.
 - Índice nas 12 colunas de FK órfãs de índice.
-- `_shared/whatsapp-instance-delete.ts` — o laço, separado do edge function para ser testável (`tests/unit/whatsapp-instance-delete.test.ts`, 5 casos). Se não terminar dentro de 50s, o proxy devolve `pending` **com progresso** em vez de erro, e a UI pede pra clicar de novo.
+- `_shared/whatsapp-instance-delete.ts` — o laço, separado do edge function para ser testável (`tests/unit/whatsapp-instance-delete.test.ts`, 5 casos). Se não terminar dentro de 110s, o proxy devolve `pending` **com progresso** em vez de erro, e a UI pede pra clicar de novo. Uma instância de ~20k mensagens leva ~38 idas e voltas e cabe numa chamada só.
 
 ## Deploy
 

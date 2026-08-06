@@ -15,8 +15,10 @@
 --      22s, e estoura de novo → "DB delete failed: canceling statement due to
 --      statement timeout".
 --
--- Conserto: uma RPC que faz UM lote por chamada e devolve progresso, com
--- `statement_timeout` próprio. O edge function chama em laço até `done`.
+-- Conserto: uma RPC que faz UM lote por chamada e devolve progresso. O edge
+-- function chama em laço até `done`, com lote dimensionado para caber nos 8s
+-- (≈1.000 linhas ≈ 2,7s medidos) — e NÃO nos 55s do set_config abaixo, que não
+-- vale para a chamada em curso. Ver comentário dentro da função.
 -- Bônus: índice nas 12 colunas de FK para `whatsapp_instances` que não tinham
 -- (cada DELETE fazia seq scan nelas).
 
@@ -92,8 +94,12 @@ DECLARE
   v_touched  integer;
   v_left     bigint;
 BEGIN
-  -- Vale só por esta transação. Sem isto herdamos os 8s do `authenticator`,
-  -- que é exatamente o teto que o lote estoura.
+  -- Best-effort, NÃO é a defesa principal: o Postgres arma o timer do
+  -- statement_timeout quando o statement começa, então mudar o GUC aqui dentro
+  -- não re-agenda o timer da chamada em curso — a RPC continua sujeita aos 8s
+  -- do `authenticator`. Quem garante é o tamanho do lote (p_batch = 1000 no
+  -- proxy, ≈2,7s medidos). Isto só ajuda quando a função é chamada por psql /
+  -- Management API, onde o timer ainda não foi armado com valor menor.
   PERFORM set_config('statement_timeout', '55s', true);
 
   IF p_batch IS NULL OR p_batch < 1 OR p_batch > 20000 THEN
