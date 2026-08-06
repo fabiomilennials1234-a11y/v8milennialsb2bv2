@@ -69,4 +69,54 @@ describe("useViewport", () => {
     // After mount, width is defined
     expect(result.current.width).toBe(500);
   });
+
+  // ── Acrescentado ao fechar `inv:H8-33` ─────────────────────────────────
+  // A suíte cobria 375 e 1024 — nenhum dos dois toca a fronteira. 768 exatos
+  // é o iPad em retrato, e a regra do hook é `< 768`: por um pixel ele entrega
+  // desktop. Trocar `<` por `<=` não quebrava nenhum caso anterior.
+  it("768 exatos é DESKTOP — a fronteira é estritamente menor (iPad em retrato)", () => {
+    setViewportWidth(768);
+    const { result } = renderHook(() => useViewport());
+
+    expect(result.current.isMobile).toBe(false);
+    expect(result.current.isDesktop).toBe(true);
+  });
+
+  it("767 é celular — o outro lado da mesma fronteira", () => {
+    setViewportWidth(767);
+    const { result } = renderHook(() => useViewport());
+
+    expect(result.current.isMobile).toBe(true);
+  });
+
+  it("isMobile e isDesktop nunca são os dois verdadeiros, nem os dois falsos", () => {
+    for (const px of [320, 767, 768, 1024, 1920]) {
+      setViewportWidth(px);
+      const { result, unmount } = renderHook(() => useViewport());
+      expect(result.current.isMobile && result.current.isDesktop).toBe(false);
+      expect(result.current.isMobile || result.current.isDesktop).toBe(true);
+      unmount();
+    }
+  });
+
+  it("sem ResizeObserver cai no evento de resize — e desassina ao desmontar", () => {
+    vi.unstubAllGlobals();
+    // @ts-expect-error — apagar de propósito para exercitar o fallback.
+    delete globalThis.ResizeObserver;
+    const add = vi.spyOn(window, "addEventListener");
+    const remove = vi.spyOn(window, "removeEventListener");
+
+    setViewportWidth(1024);
+    const { result, unmount } = renderHook(() => useViewport());
+    expect(add).toHaveBeenCalledWith("resize", expect.any(Function));
+
+    act(() => {
+      setViewportWidth(390);
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(result.current.isMobile).toBe(true);
+
+    unmount();
+    expect(remove).toHaveBeenCalledWith("resize", expect.any(Function));
+  });
 });
