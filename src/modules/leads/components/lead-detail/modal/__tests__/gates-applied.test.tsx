@@ -193,7 +193,10 @@ describe("LeadModalToolbar gates", () => {
     aiDisabled: false,
     onToggleAI: vi.fn(),
     onOpenCallModal: vi.fn(),
+    onOpenEmailComposer: vi.fn(),
+    onOpenEmailWriter: vi.fn(),
     onOpenScheduleModal: vi.fn(),
+    onOpenSmsDialog: vi.fn(),
     onDelete: vi.fn(),
     onClose: vi.fn(),
   };
@@ -207,14 +210,15 @@ describe("LeadModalToolbar gates", () => {
     expect(queryByText(/excluir lead/i)).not.toBeInTheDocument();
   });
 
-  it("hides comms buttons (WhatsApp/Ligar) when canSendMessage=false", () => {
+  it("hides comms buttons (WhatsApp/Email/Ligar) when canSendMessage=false", () => {
     // Add canSendMessage to gates contract via canMention as proxy until granular key lands.
     // For now sendMessage gate maps internally; we exercise the "off" path with all comm-related flags off.
     gatesState.current.canMention = { allowed: false, isLoading: false, reason: "denied" };
     gatesState.current.canEditField = { allowed: false, isLoading: false, reason: "denied" };
     renderWithQuery(<LeadModalToolbar {...baseProps} />);
-    // When comms are denied, WhatsApp / Ligar should not render.
+    // When comms are denied, WhatsApp / Email / Ligar should not render.
     expect(screen.queryByRole("button", { name: /whatsapp/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^email$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^ligar$/i })).not.toBeInTheDocument();
   });
 });

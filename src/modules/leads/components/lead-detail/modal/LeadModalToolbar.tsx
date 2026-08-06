@@ -1,6 +1,6 @@
 import { memo } from "react";
 import {
-  MessageSquare, Phone, Bot, MoreVertical, Clock,
+  MessageSquare, Phone, Mail, Bot, MoreVertical, Clock,
   Send, PhoneCall, Trash2,
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -26,14 +26,18 @@ interface LeadModalToolbarProps {
   aiDisabled: boolean;
   onToggleAI: (enabled: boolean) => void;
   onOpenCallModal: () => void;
+  onOpenEmailComposer: () => void;
+  onOpenEmailWriter: () => void;
   onOpenScheduleModal: () => void;
+  onOpenSmsDialog: () => void;
   onDelete: () => void;
   onClose: () => void;
 }
 
 export const LeadModalToolbar = memo(function LeadModalToolbar({
   lead, aiDisabled, onToggleAI,
-  onOpenCallModal, onOpenScheduleModal, onDelete, onClose,
+  onOpenCallModal, onOpenEmailComposer, onOpenEmailWriter,
+  onOpenScheduleModal, onOpenSmsDialog, onDelete, onClose,
 }: LeadModalToolbarProps) {
   const openWhatsApp = useOpenWhatsAppChat();
   const gates = useLeadActionGates(lead.id);
@@ -59,6 +63,11 @@ export const LeadModalToolbar = memo(function LeadModalToolbar({
           <a href={`tel:${lead.phone.replace(/\D/g, "")}`}>
             <Phone className="w-3.5 h-3.5" /> Ligar
           </a>
+        </Button>
+      )}
+      {lead.email && canSendMessage && (
+        <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={onOpenEmailComposer}>
+          <Mail className="w-3.5 h-3.5" /> Email
         </Button>
       )}
       <ScheduleFollowUpButton
@@ -88,9 +97,14 @@ export const LeadModalToolbar = memo(function LeadModalToolbar({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             {canSendMessage && (
-              <DropdownMenuItem onClick={onOpenCallModal}>
-                <PhoneCall className="w-3.5 h-3.5 mr-2" /> Registrar ligação
-              </DropdownMenuItem>
+              <>
+                <DropdownMenuItem onClick={onOpenCallModal}>
+                  <PhoneCall className="w-3.5 h-3.5 mr-2" /> Registrar ligação
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onOpenEmailWriter}>
+                  <Mail className="w-3.5 h-3.5 mr-2" /> Email com IA
+                </DropdownMenuItem>
+              </>
             )}
             {lead.phone && canSendMessage && (
               <>
@@ -101,6 +115,9 @@ export const LeadModalToolbar = memo(function LeadModalToolbar({
                   <Link to={`/chat-whatsapp?phone=${encodeURIComponent(formatPhoneForWhatsApp(lead.phone) ?? lead.phone)}`} onClick={onClose}>
                     <Send className="w-3.5 h-3.5 mr-2" /> Abrir conversa
                   </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onOpenSmsDialog}>
+                  <Phone className="w-3.5 h-3.5 mr-2" /> Enviar SMS
                 </DropdownMenuItem>
               </>
             )}

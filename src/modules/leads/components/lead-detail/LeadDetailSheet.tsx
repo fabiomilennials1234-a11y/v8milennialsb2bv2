@@ -16,6 +16,9 @@ import { LeadDetailTimeline } from "./LeadDetailTimeline";
 import { LeadDetailNotes } from "./LeadDetailNotes";
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
 import { LogCallModal } from "@/modules/engagement/components/calls/LogCallModal";
+import { EmailComposer } from "@/modules/communication/components/email/EmailComposer";
+import { SmsSendDialog } from "@/modules/communication/components/sms/SmsSendDialog";
+import { AiEmailWriter } from "@/modules/communication/components/ai/AiEmailWriter";
 import { toast } from "sonner";
 import { useToast } from "@/hooks/use-toast";
 
@@ -35,6 +38,9 @@ export const LeadDetailSheet = memo(function LeadDetailSheet() {
   const [activeTab, setActiveTab] = useState("atividade");
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [callModalOpen, setCallModalOpen] = useState(false);
+  const [emailWriterOpen, setEmailWriterOpen] = useState(false);
+  const [emailComposerOpen, setEmailComposerOpen] = useState(false);
+  const [smsDialogOpen, setSmsDialogOpen] = useState(false);
   const [optimisticAiDisabled, setOptimisticAiDisabled] = useState<boolean | null>(null);
 
   // Fetch pipeline stages for progress bar
@@ -138,6 +144,9 @@ export const LeadDetailSheet = memo(function LeadDetailSheet() {
         onClose={close}
         onOpenScheduleModal={() => setScheduleModalOpen(true)}
         onOpenCallModal={() => setCallModalOpen(true)}
+        onOpenEmailWriter={() => setEmailWriterOpen(true)}
+        onOpenEmailComposer={() => setEmailComposerOpen(true)}
+        onOpenSmsDialog={() => setSmsDialogOpen(true)}
         onDelete={handleDelete}
       />
 
@@ -187,6 +196,32 @@ export const LeadDetailSheet = memo(function LeadDetailSheet() {
           open={callModalOpen}
           onOpenChange={setCallModalOpen}
           leadId={lead.id}
+          leadName={lead.name}
+        />
+      )}
+      {emailWriterOpen && (
+        <AiEmailWriter
+          open={emailWriterOpen}
+          onOpenChange={setEmailWriterOpen}
+          leadId={lead.id}
+          leadName={lead.name}
+        />
+      )}
+      {emailComposerOpen && lead.email && (
+        <EmailComposer
+          defaultTo={lead.email}
+          leadId={lead.id}
+          compact
+          onClose={() => setEmailComposerOpen(false)}
+          onSent={() => setEmailComposerOpen(false)}
+        />
+      )}
+      {smsDialogOpen && lead.phone && (
+        <SmsSendDialog
+          open={smsDialogOpen}
+          onOpenChange={setSmsDialogOpen}
+          leadId={lead.id}
+          phoneNumber={lead.phone}
           leadName={lead.name}
         />
       )}
