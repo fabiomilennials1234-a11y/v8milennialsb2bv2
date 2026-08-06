@@ -59,6 +59,8 @@ O GitHub continua sendo o tracker canônico — é onde os skills publicam e ond
 
 Só pelas ferramentas MCP do Atlassian — `searchJiraIssuesUsingJql`, `getJiraIssue`, `createJiraIssue`, `editJiraIssue`, `createIssueLink`. **Não existe CLI de Jira neste ambiente**; não tente `jira`, `acli` ou equivalente.
 
+**`createIssueLink` não gera hierarquia.** Este é um projeto *team-managed*: o pai vem do campo `parent` em `createJiraIssue`/`editJiraIssue`. `createIssueLink` só faz relações laterais (*relates*, *blocks*) e não prende nada ao Epic — usá-lo para isso produz História sem Epic no board.
+
 - Site: `https://milennialstech-1785256858036.atlassian.net`
 - Projeto: `SCRUM` — "Milennials Tech", *team-managed*
 - cloudId: `e612e2e2-533a-4add-994d-2b1679fe5a98`
@@ -78,10 +80,13 @@ Subtarefa **não é item de sprint**: não aparece sozinha no board e não pode 
 | GitHub | Jira |
 |---|---|
 | Issue de PRD (label `prd`) | **Epic** |
-| Issue de fatia (a que traz `Part of #<prd>`) | **História**, com o Epic correspondente como pai |
+| Issue de fatia (a que traz `Part of #<prd>`) | **História**, com o Epic correspondente como pai (campo `parent`) |
+| Issue avulsa (`bug`, `docs`, `api` — sem PRD) | **Tarefa**, sem pai |
 | — | **Subtarefa**: só checklist interno de execução dentro de uma fatia |
 
 A subtarefa **nunca** é a unidade que o `/to-tickets` cria — o que ele cria vira História.
+
+O legado anterior a esta convenção **não será arrumado retroativamente**: hoje SCRUM-6, SCRUM-7 e SCRUM-8 são Subtarefas órfãs, sem pai e sem sprint, e ficam como estão até alguém decidir o destino delas.
 
 ### Wayfinder não é espelhado
 
@@ -100,11 +105,16 @@ O agente que cria o lado GitHub cria o lado Jira na **mesma sessão**. Não exis
 
 ### Status
 
+O workflow do SCRUM tem **quatro** estados:
+
 | GitHub | Jira |
 |---|---|
-| aberto | "A fazer" ou "Fazendo" |
-| fechado | "Feito" |
+| aberto | "A fazer" (10000) ou "Fazendo" (10001) |
+| — | "Testando" (10002) |
+| fechado | "Feito" (10003) |
+
+**"Testando" é estado de humano.** Fechar a issue no GitHub **não** autoriza mover de "Testando" para "Feito" no Jira — quem tira de "Testando" é a pessoa que validou. O agente que fecha no GitHub move para "Feito" apenas se a issue do Jira **não** estiver em "Testando".
 
 ### Primeiro Epic sob esta convenção
 
-**SCRUM-5** — "Revisão/ Atualização de toda API do Torque" (`https://milennialstech-1785256858036.atlassian.net/browse/SCRUM-5`), promovido de História para Epic em 06/08/2026.
+**SCRUM-5** — "Revisão/ Atualização de toda API do Torque" (`https://milennialstech-1785256858036.atlassian.net/browse/SCRUM-5`), promovido de História para Epic em 06/08/2026. O vínculo com o GitHub ainda está **pendente**: nasce quando o mapa do `/wayfinder` for criado, e nesse momento a descrição do Epic passa a começar pela URL da issue do GitHub.
