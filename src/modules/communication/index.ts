@@ -116,12 +116,15 @@ export {
   useArchiveConversation,
   useUnarchiveConversation,
   useDeleteConversation,
+  useDeletedConversations,
+  useRestoreConversation,
   useAddConversationTag,
   useRemoveConversationTag,
 } from "./hooks/useWhatsAppConversations";
 export type {
   ConversationMeta,
   ConversationTagLink,
+  DeletedConversation,
 } from "./hooks/useWhatsAppConversations";
 
 // ── Hooks: composer state + chat bubble ──────────────────────────────────

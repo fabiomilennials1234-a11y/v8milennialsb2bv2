@@ -32,6 +32,7 @@ import { MobileConversationRow } from "./MobileConversationRow";
 import { MobileChatListHeader, type MobileChatFilter } from "./MobileChatListHeader";
 import { InboxFilterBar } from "./InboxFilterBar";
 import { InboxEnrichmentNotice } from "./InboxEnrichmentNotice";
+import { DeletedConversationsPanel } from "./DeletedConversationsPanel";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
 import {
   applyInboxFilters,
@@ -367,6 +368,10 @@ export function ConversationList({
             Arquivadas ({fmtCount(archivedCount)})
           </button>
         </div>
+
+        {/* Só admin: excluir conversa é gated por is_user_admin(), restaurar
+            também. Montar só pra admin evita disparar as queries pros demais. */}
+        {isAdmin && <DeletedConversationsPanel instanceId={instanceId} />}
       </div>
       )}
 
