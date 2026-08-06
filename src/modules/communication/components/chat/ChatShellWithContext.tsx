@@ -47,6 +47,7 @@ import { ImagePreviewModal } from "@/modules/communication/components/chat/media
 import { useWhatsAppInstancesForUser } from "@/modules/communication/hooks/chat/useWhatsAppInstances";
 import { useWhatsAppContacts } from "@/modules/communication/hooks/chat/useWhatsAppContacts";
 import { useWhatsAppMessages } from "@/modules/communication/hooks/chat/useWhatsAppMessages";
+import { useAutoReadReceipt } from "@/modules/communication/hooks/chat/useAutoReadReceipt";
 import { useWhatsAppMessagesRealtime } from "@/modules/communication/hooks/chat/useWhatsAppRealtime";
 import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
 import { useFailedMessages, useRetryMessage } from "@/modules/communication/hooks/chat/useWhatsAppSend";
@@ -132,6 +133,15 @@ function ChatView({
     phoneNumber,
     instanceId,
   );
+
+  // Tique azul para o contato. Complementa `markConversationRead` (que só zera o
+  // badge interno do CRM e nunca falou com o WhatsApp).
+  useAutoReadReceipt({
+    instanceId,
+    phone: phoneNumber,
+    messages,
+    isGroup: selectedContact?.is_group === true,
+  });
 
   const failedMessages = useFailedMessages(phoneNumber, instanceId);
   const retryFn = useRetryMessage();

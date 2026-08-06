@@ -34,12 +34,33 @@ const start = vi.fn();
 
 vi.mock("@/modules/communication/hooks/useVoipSession", () => ({
   useCallableVoiceNumbers: () => ({ numbers, isLoading: false }),
+  // A lista de RECEBER responde outra pergunta e não decide botão nenhum. Ela
+  // entra no dublê porque o `VoiceCallProvider`, que estes testes montam de
+  // verdade, a consome desde a fatia do toque de entrada.
+  useAnswerableVoiceNumbers: () => ({ numbers, isLoading: false }),
   // A regra real vive em `useVoipSession.test.ts`, contra o banco dublê. Aqui o
   // que está em julgamento é o BOTÃO: se ele pergunta, e se obedece a resposta.
   useCanCallLead: (leadId: string | null | undefined) => {
     leadsPerguntados.push(leadId);
     return !!leadId && leadEhDele;
   },
+}));
+
+/**
+ * As ligações que ENTRAM não têm nada a ver com o botão de discar, e o hook real
+ * abriria uma conexão de rede aqui dentro. O dublê devolve lista vazia; o que
+ * elas fazem tem suíte própria em `useIncomingVoiceCalls.test.ts`.
+ */
+vi.mock("@/modules/communication/hooks/useIncomingVoiceCalls", () => ({
+  useIncomingVoiceCalls: () => ({
+    calls: [],
+    ringSilenced: false,
+    dispensar: vi.fn(),
+    restaurar: vi.fn(),
+  }),
+  // Sem oferta atendida não há dígitos para resolver, e o hook real devolve
+  // `null` para telefone sem cadastro — que é 47% deles.
+  useIncomingCallerName: () => null,
 }));
 
 vi.mock("@/modules/communication/hooks/useVoiceCall", () => ({

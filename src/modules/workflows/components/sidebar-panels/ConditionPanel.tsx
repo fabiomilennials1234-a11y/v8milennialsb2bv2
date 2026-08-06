@@ -10,13 +10,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useResponsibleMembers } from "@/modules/identity";
-import { useLeadOrigins } from "@/modules/leads";
+import { useLeadOrigins, useLeadCustomFields } from "@/modules/leads";
 import { CONDITION_OPERATOR_LABELS, WEEKDAY_OPTIONS } from "@/types/workflow";
 import type { ConditionNodeData, ConditionOperator, ConditionMode } from "@/types/workflow";
 import { Clock, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOrgUtmValues, UTM_VALUE_FIELDS } from "@/modules/workflows/hooks/useOrgUtmValues";
-import { UtmValueCombobox } from "./UtmValueCombobox";
+import { useOrgCustomFieldValues } from "@/modules/workflows/hooks/useOrgCustomFieldValues";
+import { ValueCombobox } from "./ValueCombobox";
 
 interface ConditionPanelProps {
   data: ConditionNodeData;
@@ -86,6 +87,10 @@ const TEXT_SAFE_OPERATORS = new Set<ConditionOperator>([
 
 const NO_VALUE_OPERATORS: ConditionOperator[] = ["is_empty", "is_not_empty"];
 
+// `data.field` guarda o campo personalizado como `custom.<field_name>` — é o
+// formato que o avaliador (`workflow-condition-evaluator.ts`) sabe resolver.
+const CUSTOM_FIELD_PREFIX = "custom.";
+
 const TIMEZONE_OPTIONS = [
   { value: "America/Sao_Paulo", label: "Brasilia (GMT-3)" },
   { value: "America/Manaus", label: "Manaus (GMT-4)" },
@@ -106,6 +111,37 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
   const isOriginField = data.field === "origin";
   const { values: utmValues, isLoading: utmLoading } = useOrgUtmValues(data.field);
 
+  // Campo personalizado: `custom` = escolhido no seletor mas ainda sem campo
+  // definido; `custom.<nome>` = configurado.
+  const isCustomField =
+    data.field === "custom" || (data.field?.startsWith(CUSTOM_FIELD_PREFIX) ?? false);
+  const customFieldName = data.field?.startsWith(CUSTOM_FIELD_PREFIX)
+    ? data.field.slice(CUSTOM_FIELD_PREFIX.length)
+    : "";
+
+  // Catálogo real de campos personalizados da org. Antes o nome era digitado à
+  // mão — e o avaliador casa por `field_name` exato, então um acento ou
+  // dois-pontos a menos (`Você tem interesse em:`) devolvia "" e mandava TODO
+  // lead pela saída "Não", sem erro visível. Escolher da lista mata a classe.
+  const { data: customFields = [] } = useLeadCustomFields();
+  const customFieldItems = customFields.map((f) => ({
+    value: f.field_name,
+    label: f.field_name,
+  }));
+  // Campo renomeado/excluído depois do workflow salvo: mantém selecionável e
+  // rotula o estrago, em vez de a seleção sumir calada.
+  const customFieldMissing =
+    !!customFieldName && !customFields.some((f) => f.field_name === customFieldName);
+  if (customFieldMissing) {
+    customFieldItems.unshift({
+      value: customFieldName,
+      label: `${customFieldName} (não existe mais)`,
+    });
+  }
+  const selectedCustomField = customFields.find((f) => f.field_name === customFieldName);
+  const { values: customValues, isLoading: customValuesLoading } =
+    useOrgCustomFieldValues(selectedCustomField?.id);
+
   // Catálogo dinâmico de origens (built-ins globais + custom da org) — mesma fonte do gatilho.
   // Compara por slug; garante que o valor já salvo continue selecionável se sumiu do catálogo.
   const { origins: leadOrigins } = useLeadOrigins();
@@ -117,11 +153,19 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
   const handleFieldChange = (v: string) => {
     const nowResponsible = RESPONSIBLE_FIELDS.has(v);
     const nowOrigin = v === "origin";
+    const nowCustom = v === "custom";
     const updates: Partial<ConditionNodeData> = { field: v };
     // Switching responsible <-> non-responsible swaps value semantics (member id vs free text) → clear.
     if (nowResponsible !== isResponsibleField) updates.value = "";
     // Same for origin: free text <-> origin slug are incompatible → clear.
     if (nowOrigin !== isOriginField) updates.value = "";
+    // Same for custom field: the value domain belongs to the field → clear.
+    if (nowCustom !== isCustomField) updates.value = "";
+    // Custom fields are always text (`lead_custom_field_values.value` is text) —
+    // a numeric operator carried over from `score` would never match.
+    if (nowCustom && !TEXT_SAFE_OPERATORS.has(data.operator)) {
+      updates.operator = "contains";
+    }
     // Carry over only operators valid for a member field.
     if (nowResponsible && !RESPONSIBLE_OPERATORS.includes(data.operator)) {
       updates.operator = "equals";
@@ -133,6 +177,13 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
       updates.operator = "contains";
     }
     onUpdate(updates);
+  };
+
+  // Trocar de campo personalizado troca o domínio do valor → limpa. Reselecionar
+  // o mesmo campo é no-op (não pode apagar o valor já configurado).
+  const handleCustomFieldChange = (name: string) => {
+    if (name === customFieldName) return;
+    onUpdate({ field: `${CUSTOM_FIELD_PREFIX}${name}`, value: "" });
   };
 
   const operatorEntries: Array<[string, string]> = isResponsibleField
@@ -233,14 +284,33 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
             </Select>
           </div>
 
-          {(data.field === "custom" || data.field?.startsWith("custom.")) && (
+          {isCustomField && (
             <div className="space-y-2">
-              <Label>Nome do campo customizado</Label>
-              <Input
-                value={data.field?.startsWith("custom.") ? data.field.slice(7) : ""}
-                onChange={(e) => onUpdate({ field: `custom.${e.target.value}` })}
-                placeholder="Ex: cargo"
-              />
+              <Label>Campo personalizado</Label>
+              <Select value={customFieldName} onValueChange={handleCustomFieldChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o campo personalizado" />
+                </SelectTrigger>
+                <SelectContent>
+                  {customFieldItems.length === 0 ? (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                      Nenhum campo personalizado cadastrado nesta org
+                    </div>
+                  ) : (
+                    customFieldItems.map((f) => (
+                      <SelectItem key={f.value} value={f.value}>
+                        {f.label}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              {customFieldMissing && (
+                <p className="text-xs text-amber-600 dark:text-amber-500">
+                  Este campo nao existe mais na org — a condicao nunca sera
+                  verdadeira. Selecione outro campo.
+                </p>
+              )}
             </div>
           )}
 
@@ -289,12 +359,28 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
                   </SelectContent>
                 </Select>
               ) : isUtmField ? (
-                <UtmValueCombobox
+                <ValueCombobox
                   values={utmValues}
                   isLoading={utmLoading}
                   value={data.value || ""}
                   onChange={(v) => onUpdate({ value: v })}
+                  emptyMessage="Nenhum valor de UTM encontrado nesta org — digite manualmente."
                 />
+              ) : isCustomField ? (
+                customFieldName ? (
+                  <ValueCombobox
+                    values={customValues}
+                    isLoading={customValuesLoading}
+                    value={data.value || ""}
+                    onChange={(v) => onUpdate({ value: v })}
+                    emptyMessage="Nenhum lead preencheu este campo ainda — digite manualmente."
+                  />
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Selecione o campo personalizado acima para ver os valores ja
+                    respondidos.
+                  </p>
+                )
               ) : isOriginField ? (
                 <Select
                   value={data.value || ""}

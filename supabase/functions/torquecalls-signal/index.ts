@@ -26,6 +26,11 @@ import { adminClient, type Caller, isOrgAdmin, resolveCaller } from "../_shared/
 import { authorizeCallAndMint, renewCallControlToken } from "../_shared/voip/call-plane.ts";
 import { signStreamToken, STREAM_TTL_SECONDS } from "../_shared/voip/tokens.ts";
 import { callVps, publicVpsUrl } from "../_shared/voip/vps.ts";
+import {
+  refusedCallPatch,
+  type VpsRefusalCode,
+  vpsRefusalCode,
+} from "../_shared/voip/vps-refusal.ts";
 
 type Action =
   | "streamToken"
@@ -183,8 +188,13 @@ async function startCall(
   );
 
   if (!started.ok) {
-    await releaseReservation(db, authorized.callId, started.error);
-    return json(started.status, { error: started.error, code: "vps_refused" }, cors);
+    // A causa vira um CÓDIGO aqui, uma vez. Antes, toda recusa desta rota saía
+    // como `vps_refused` e o front traduzia em "o serviço de chamadas recusou a
+    // ligação" — frase com a qual o vendedor não pode fazer nada, para uma causa
+    // que ele resolveria em dez segundos (issue #1365).
+    const code = vpsRefusalCode(started);
+    await releaseReservation(db, authorized.callId, code, started.error);
+    return json(started.status, { error: started.error, code }, cors);
   }
 
   // A VPS ecoa o id que autorizamos. Divergência aqui é defeito de contrato, não
@@ -223,6 +233,81 @@ async function startCall(
   }, cors);
 }
 
+/**
+ * A linha do ledger que o operador quer atender, a partir do que o NAVEGADOR
+ * sabe.
+ *
+ * O cartão da chamada recebida nasce do stream da VPS, e o stream carrega o id
+ * de REDE (`tc_call_id`) — nunca o uuid de `voip_calls`, que só existe do lado
+ * de cá e que a VPS nem conhece. Exigir `call_id` obrigaria o navegador a ler
+ * `voip_calls` só para traduzir um id no outro, o que custaria uma consulta e,
+ * pior, faria o atendimento depender do formato da RLS daquela tabela: hoje
+ * `voip_can_see_call(NULL)` devolve `true` e a linha sem lead é legível, mas
+ * essa é uma decisão de OUTRA regra, livre para mudar sem saber que o botão de
+ * atender depende dela.
+ *
+ * `call_id` continua aceito e vem PRIMEIRO: quem já tem o uuid não precisa de
+ * tradução, e é o caminho que os testes de choke já exercem.
+ *
+ * ─── A identidade é o PAR `(sessão, id de rede)` ─────────────────────────────
+ * Na entrada o `tc_call_id` vem do stanza REMOTO — string escolhida pelo outro
+ * lado — e nada garante que dois números da mesma organização não recebam o
+ * mesmo valor. O broker da VPS chaveia por `callKey{sessionID, callID}`
+ * exatamente por isso, e `useIncomingVoiceCalls` repete a chave no navegador.
+ * Buscar só pelo id aqui reintroduziria, no servidor, a premissa que os dois
+ * outros lados já descartaram: um peer remoto escolhendo o id certo faria o
+ * operador atender a chamada de outro número da organização.
+ *
+ * O filtro por status é a mesma pergunta que `authorizeCallAndMint` faz adiante
+ * (e `fn_voip_call_reserve` amarra no WHERE do UPDATE, que é o gate real). Aqui
+ * ele existe para que uma chamada JÁ ENCERRADA com o mesmo id não seja a linha
+ * escolhida, e a autorização acabe negando a errada.
+ */
+async function resolveInboundCall(
+  db: Admin,
+  caller: Caller,
+  sid: string,
+  body: Record<string, unknown>,
+): Promise<
+  { ok: true; callId: string; tcCallId: string } | { ok: false; status: number; code: string }
+> {
+  const callId = typeof body.call_id === "string" ? body.call_id : null;
+  if (callId) {
+    const { data } = await db
+      .from("voip_calls")
+      .select("id, tc_call_id, organization_id")
+      .eq("id", callId)
+      .maybeSingle();
+    // Org conferida aqui também: sem isto o `no_tc_call_id` de uma linha de
+    // outra organização já contaria que ela existe. A negativa de autorização
+    // que viria adiante (`session_org_mismatch`) chegaria tarde demais.
+    if (!data || data.organization_id !== caller.orgId) {
+      return { ok: false, status: 409, code: "call_not_answerable" };
+    }
+    if (!data.tc_call_id) return { ok: false, status: 409, code: "no_tc_call_id" };
+    return { ok: true, callId, tcCallId: data.tc_call_id };
+  }
+
+  const tcCallId = typeof body.tc_call_id === "string" ? body.tc_call_id : null;
+  if (!tcCallId) return { ok: false, status: 400, code: "call_id_required" };
+
+  const { data } = await db
+    .from("voip_calls")
+    .select("id, tc_call_id")
+    .eq("organization_id", caller.orgId)
+    .eq("tc_session_id", sid)
+    .eq("tc_call_id", tcCallId)
+    .in("status", ["ringing", "authorized"])
+    // Duas linhas com o mesmo par não deveriam existir; se existirem, a mais
+    // nova é a que está tocando agora.
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!data) return { ok: false, status: 409, code: "call_not_answerable" };
+  return { ok: true, callId: data.id, tcCallId };
+}
+
 async function acceptCall(
   db: Admin,
   caller: Caller,
@@ -230,8 +315,18 @@ async function acceptCall(
   body: Record<string, unknown>,
   cors: Record<string, string>,
 ) {
-  const callId = typeof body.call_id === "string" ? body.call_id : null;
-  if (!callId) return json(400, { error: "call_id obrigatório" }, cors);
+  const alvo = await resolveInboundCall(db, caller, sid, body);
+  if (!alvo.ok) {
+    return json(
+      alvo.status,
+      {
+        error: alvo.code === "call_id_required" ? "call_id ou tc_call_id obrigatório" : alvo.code,
+        code: alvo.code,
+      },
+      cors,
+    );
+  }
+  const { callId, tcCallId } = alvo;
 
   const authorized = await authorizeCallAndMint(caller, {
     supabaseAdmin: db,
@@ -242,17 +337,19 @@ async function acceptCall(
 
   if (!authorized.ok) return denied(caller, authorized, cors);
 
-  const { data: row } = await db.from("voip_calls").select("tc_call_id").eq("id", callId).maybeSingle();
-  const tcCallId = row?.tc_call_id;
-  if (!tcCallId) return json(409, { error: "Chamada sem id de rede", code: "no_tc_call_id" }, cors);
-
   const accepted = await callVps(
     "POST",
     `/api/sessions/${encodeURIComponent(sid)}/calls/${encodeURIComponent(tcCallId)}/accept`,
     { token: authorized.tokens.start, body: {} },
   );
 
-  if (!accepted.ok) return json(accepted.status, { error: accepted.error, code: "vps_refused" }, cors);
+  // Mesma tradução do outbound. Atender tem motivos próprios ("no such call",
+  // "claimed by another client") que hoje ainda caem no balde genérico — o mapa
+  // é o lugar de acrescentá-los quando merecerem frase própria. O que não pode
+  // é esta rota ter uma tradução diferente da outra para a MESMA causa.
+  if (!accepted.ok) {
+    return json(accepted.status, { error: accepted.error, code: vpsRefusalCode(accepted) }, cors);
+  }
 
   return json(200, {
     call_id: authorized.callId,
@@ -365,14 +462,25 @@ async function renewCtl(
   return json(200, { ctl: renewed.ctl, expires_at: renewed.expiresAt }, cors);
 }
 
-async function releaseReservation(db: Admin, callId: string, reason: string) {
-  // A VPS recusou: a reserva não pode ficar segurando cota até o reaper passar.
-  await db.from("voip_calls").update({
-    status: "expired",
-    end_reason: `vps_refused:${reason}`.slice(0, 200),
-    ended_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }).eq("id", callId).eq("status", "authorized");
+/**
+ * A VPS recusou: a reserva não pode ficar segurando cota até o reaper passar.
+ *
+ * O QUE é escrito — estado e motivo — mora em `refusedCallPatch`, que é pura e
+ * tem teste. Aqui fica só o ONDE: a linha certa, e apenas enquanto ela ainda
+ * está `authorized` (o `.eq` final é o que impede sobrescrever uma chamada que
+ * já andou por outro caminho).
+ */
+async function releaseReservation(
+  db: Admin,
+  callId: string,
+  code: VpsRefusalCode,
+  reason: string,
+) {
+  await db
+    .from("voip_calls")
+    .update(refusedCallPatch(code, reason, new Date().toISOString()))
+    .eq("id", callId)
+    .eq("status", "authorized");
 }
 
 function denied(

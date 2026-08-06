@@ -79,8 +79,10 @@ export function useDeleteMessage() {
 export function useMarkMessageRead() {
   const invalidate = useInvalidateMessages();
   return useMutation({
-    mutationFn: async ({ instanceId, messageId, number }: ActionArgs) => {
-      await markMessageRead(instanceId, messageId, number);
+    // `number` não é usado pelo endpoint da Uazapi — mantido na assinatura só
+    // para não mexer nos call sites do botão da action bar.
+    mutationFn: async ({ instanceId, messageId }: ActionArgs) => {
+      await markMessageRead(instanceId, messageId);
     },
     onSuccess: invalidate,
   });

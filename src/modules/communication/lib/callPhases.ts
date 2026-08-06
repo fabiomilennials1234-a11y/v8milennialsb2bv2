@@ -17,6 +17,28 @@
  * `callPhases.test.ts` trava que os dois conjuntos cobrem `CallPhase` inteiro —
  * uma fase nova não pode cair no repouso por omissão e fazer uma chamada viva
  * parecer terminada.
+ *
+ * ── A ligação que ENTRA e ainda não foi atendida NÃO tem fase aqui ──
+ * E a ausência é decidida, não esquecida. `CallPhase` descreve UMA chamada que
+ * ESTE operador possui: `useVoiceCall` guarda um `tcCallIdRef`, um
+ * `RTCPeerConnection` e um microfone, todos no singular. Uma oferta de entrada
+ * não cabe em nenhuma das duas condições — ela não tem dono
+ * (`voip_calls.operator_user_id` nasce nulo, e é justamente por isso que o
+ * índice `idx_voip_calls_one_live_per_operator` a deixa coexistir com outras), e
+ * N delas podem estar tocando ao mesmo tempo.
+ *
+ * Classificá-la aqui obrigaria a escolher entre dois erros: em `FASES_EM_CURSO`,
+ * um estranho ligando para o número da empresa deixaria `busy === true` e
+ * tiraria do vendedor o botão de discar; em `FASES_DE_REPOUSO`, o provider
+ * trataria a oferta viva como terminada e dispararia a atualização da conversa
+ * no meio dela. As ofertas moram em `useIncomingVoiceCalls`, numa LISTA, que é a
+ * forma que corresponde ao fato.
+ *
+ * Quando alguém ATENDE (E4), aí sim a chamada passa a ter dono e entra nesta
+ * máquina — e ela entra por uma fase NOVA, `accepting`, porque a ordem inverte.
+ * A ausência da oferta aqui continua valendo: o que entrou na máquina foi a
+ * chamada que ESTE operador aceitou, e as outras N que estavam tocando seguem
+ * na lista, sem dono, exatamente como antes.
  */
 import type { CallPhase } from "@/modules/communication/hooks/useVoiceCall";
 
@@ -31,6 +53,33 @@ export const FASES_EM_CURSO: ReadonlySet<CallPhase> = new Set<CallPhase>([
   "authorizing",
   "negotiating",
   "ringing",
+  /**
+   * `accepting` — "aceitando, pedindo microfone" — está EM CURSO, e a escolha é
+   * a que o guardião existe para cobrar. Três razões, todas mensuráveis:
+   *
+   * 1. A CHAMADA ESTÁ VIVA. Ela já existe (o cliente está na linha, tocando) e
+   *    o operador já disse que vai atendê-la. Pôr isto no repouso faria o
+   *    provider tratar a chamada como terminada e disparar a atualização da
+   *    conversa NO MEIO dela — o defeito exato que fazia a ligação não aparecer
+   *    quando o vendedor desligava, agora do outro lado da máquina.
+   *
+   * 2. `busy` SAI DAQUI. Enquanto se atende, discar tem de estar fechado: o
+   *    servidor recusaria com `operator_busy`, e o índice
+   *    `idx_voip_calls_one_live_per_operator` recusaria a segunda linha viva do
+   *    mesmo operador. Uma fase de repouso deixaria o botão de ligar aceso
+   *    durante o atendimento — e deixaria atender uma segunda ligação por baixo.
+   *
+   * 3. O TOM DA OFERTA CALA POR CONSEQUÊNCIA. O provider passa
+   *    `ringEnabled: !busy`; com `accepting` em curso, o toque para no clique,
+   *    e não numa ida à rede. Não é efeito colateral: é a mesma afirmação
+   *    ("existe chamada no ar") usada pelo terceiro consumidor da partição.
+   *
+   * O preço, declarado: um atendimento que FALHA (o celular pegou primeiro)
+   * também passa por aqui e dispara a atualização da conversa ao voltar para o
+   * repouso. É UMA requisição, e ela está certa — a ligação de fato acabou, e a
+   * linha do histórico acabou de mudar.
+   */
+  "accepting",
   "active",
   "ending",
 ]);
@@ -68,5 +117,5 @@ export const FASES_DE_REPOUSO: ReadonlySet<CallPhase> = new Set<CallPhase>([
 type Exige<T extends never> = T;
 export type FASE_NAO_CLASSIFICADA = Exige<
   Exclude<CallPhase, "idle" | "requesting_mic" | "authorizing" | "negotiating"
-    | "ringing" | "active" | "ending" | "ended" | "failed">
+    | "ringing" | "accepting" | "active" | "ending" | "ended" | "failed">
 >;

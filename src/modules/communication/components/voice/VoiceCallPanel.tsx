@@ -9,10 +9,18 @@
  * O estado é sempre legível em uma olhada: onde está, com quem, há quanto tempo.
  * Chamada é a única superfície do produto em que o usuário não pode "conferir
  * depois" — ou ele entende agora, ou já falou com a pessoa errada.
+ *
+ * ─── A ÂNCORA saiu daqui ────────────────────────────────────────────────────
+ * O `fixed bottom-6 right-6` vive agora na pilha do `VoiceCallProvider`, e este
+ * componente é um bloco comum. A razão é que ele deixou de ser o único painel do
+ * canto: as ligações que ENTRAM aparecem ao mesmo tempo que uma conversa em
+ * curso, e dois elementos com posição absoluta no mesmo canto se cobrem. Com uma
+ * pilha só, empilhar é consequência da ordem, não de calcular altura.
  */
 import { Mic, MicOff, PhoneOff, Loader2, AlertTriangle, PhoneMissed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatPeerPhone } from "@/modules/communication/lib/formatPeerPhone";
 import type { VoiceCallState } from "@/modules/communication/hooks/useVoiceCall";
 
 interface VoiceCallPanelProps {
@@ -28,6 +36,10 @@ const PHASE_LABEL: Record<string, string> = {
   authorizing: "Autorizando…",
   negotiating: "Preparando áudio…",
   ringing: "Chamando…",
+  // A ligação que ENTRA. "Atendendo…" e não "Liberando microfone…" porque o
+  // microfone é o meio: quem clicou quer saber que está entrando na conversa, e
+  // o diálogo de permissão do navegador já explica a si mesmo.
+  accepting: "Atendendo…",
   active: "Em chamada",
   ending: "Encerrando…",
 };
@@ -38,16 +50,8 @@ function formatElapsed(seconds: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-/** 554891005289 → (48) 9100-5289. Não valida: só deixa legível. */
-function formatPeer(digits: string | null): string {
-  if (!digits) return "";
-  const local = digits.replace(/^55/, "");
-  if (local.length < 10) return digits;
-  const ddd = local.slice(0, 2);
-  const rest = local.slice(2);
-  const head = rest.slice(0, rest.length - 4);
-  return `(${ddd}) ${head}-${rest.slice(-4)}`;
-}
+/** O painel de entrada mostra o mesmo número; a formatação é UMA. */
+const formatPeer = formatPeerPhone;
 
 export function VoiceCallPanel({
   state,
@@ -68,7 +72,7 @@ export function VoiceCallPanel({
       <div
         role="status"
         aria-live="polite"
-        className="fixed bottom-6 right-6 z-50 w-[320px] rounded-xl border border-border/60 bg-card shadow-2xl"
+        className="w-full rounded-xl border border-border/60 bg-card shadow-2xl"
       >
         <div className="flex items-start gap-3 p-4">
           <PhoneMissed className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
@@ -92,7 +96,7 @@ export function VoiceCallPanel({
     return (
       <div
         role="alert"
-        className="fixed bottom-6 right-6 z-50 w-[320px] rounded-xl border border-destructive/30 bg-card shadow-2xl"
+        className="w-full rounded-xl border border-destructive/30 bg-card shadow-2xl"
       >
         <div className="flex items-start gap-3 p-4">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
@@ -116,7 +120,7 @@ export function VoiceCallPanel({
     <div
       role="status"
       aria-live="polite"
-      className="fixed bottom-6 right-6 z-50 w-[320px] overflow-hidden rounded-xl border border-border/60 bg-card shadow-2xl"
+      className="w-full overflow-hidden rounded-xl border border-border/60 bg-card shadow-2xl"
     >
       <div className="flex items-center gap-3 p-4">
         {/* O ponto pulsa só quando há áudio de verdade. Animar durante a

@@ -49,12 +49,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useOrganization } from "@/modules/identity";
 import {
+  acceptCall as acceptCallRequest,
   CallDeniedError,
   endCall as endCallRequest,
   exchangeSdp,
   requestStreamToken,
   startCall as startCallRequest,
 } from "@/modules/communication/lib/torquecallsApi";
+import { normalizePhone } from "@/lib/normalizePhone";
 import {
   subscribeSessionEvents,
   type SessionEvent,
@@ -120,11 +122,43 @@ export type CallPhase =
   | "authorizing"
   | "negotiating"
   | "ringing"
+  /**
+   * ATENDENDO uma ligação que entrou (E4) — e a máquina INVERTE aqui.
+   *
+   * Discar vai de "pedindo microfone" para "autorizando": o operador decidiu
+   * antes de existir chamada, e o microfone é preparado antes de o telefone do
+   * lead tocar. Receber é o oposto: a chamada já existe, já está tocando, e o
+   * que ainda não existe é a DECISÃO. Só depois dela o microfone é pedido —
+   * pedir antes seria abrir o diálogo de permissão de áudio a cada ligação que
+   * entra, inclusive as que ninguém vai atender.
+   *
+   * Uma fase só para o caminho inteiro (microfone, caminho de áudio, stream e
+   * o `acceptCall`) porque, para quem olha a tela, ele é um ato só: a pessoa
+   * clicou em atender e está entrando na conversa. Repartir em três rótulos que
+   * piscam em 300 ms informaria menos, não mais.
+   */
+  | "accepting"
   | "active"
   | "ending"
   /** Terminal e informativo: a chamada acabou e o operador ainda não leu por quê. */
   | "ended"
   | "failed";
+
+/**
+ * A oferta que o operador decidiu atender.
+ *
+ * Vem de `useIncomingVoiceCalls`, e carrega exatamente o que o stream da VPS
+ * contou — nada derivado, nada buscado no banco. `tcCallId` é o id de REDE (o
+ * `id` do evento), e a sessão é a da OFERTA, não a que o vendedor escolheu para
+ * discar: as duas podem ser números diferentes, e atender pela errada
+ * autorizaria sobre a instância errada.
+ */
+export interface IncomingCallOffer {
+  tcSessionId: string;
+  tcCallId: string;
+  /** Dígitos do JID de quem ligou. Sem o nono dígito — ver `answer`. */
+  peerDigits: string;
+}
 
 export interface VoiceCallState {
   phase: CallPhase;
@@ -179,6 +213,22 @@ export function useVoiceCall(tcSessionId: string | null) {
    */
   const tcCallIdRef = useRef<string | null>(null);
   const callIdRef = useRef<string | null>(null);
+  /**
+   * Por qual SESSÃO a chamada corrente está aberta.
+   *
+   * Existe porque `tcSessionId` (o argumento do hook) é a preferência de
+   * DISCAGEM do vendedor, e a chamada que ele ATENDE chega por outro número: a
+   * oferta traz a sessão dela. Encerrar pela sessão errada é o defeito que a
+   * guarda de `selectNumber` já evita na troca de número — o `endCall` sairia
+   * pela sessão que não tem a chamada, a linha ficaria aberta segurando a cota
+   * do operador, e a próxima tentativa dele voltaria `operator_busy` até o
+   * reaper passar.
+   *
+   * Em ref, e não em estado, pela mesma razão de `tcCallIdRef`: quem a lê são
+   * closures registradas uma vez (`finish`) ou o clique de desligar, e as duas
+   * precisam do valor de agora, não o do render em que nasceram.
+   */
+  const sessaoDaChamadaRef = useRef<string | null>(null);
   /** Sobe a cada teardown. Invalida um `startPcmAudio` que ainda esteja em voo. */
   const audioGenRef = useRef(0);
   /** Trava de reentrância: dois cliques não podem virar duas chamadas. */
@@ -202,6 +252,7 @@ export function useVoiceCall(tcSessionId: string | null) {
     // ainda casaria com o filtro.
     tcCallIdRef.current = null;
     callIdRef.current = null;
+    sessaoDaChamadaRef.current = null;
 
     // O canal fecha ANTES do PeerConnection: a VPS aceita um único canal `pcm`
     // por chamada e recusa o segundo. Deixar o antigo pendurado queima o slot.
@@ -300,15 +351,18 @@ export function useVoiceCall(tcSessionId: string | null) {
       if (!tcCallIdRef.current) return;
 
       const callId = callIdRef.current;
+      // A sessão DA CHAMADA, lida antes do teardown que a zera. Na ligação
+      // atendida ela não é `tcSessionId` — ver `sessaoDaChamadaRef`.
+      const sessao = sessaoDaChamadaRef.current ?? tcSessionId;
       teardown();
       setState({
         ...INITIAL,
         phase: "ended",
         endReason: END_REASON_MESSAGES[reason ?? "unknown"] ?? END_REASON_MESSAGES.unknown,
       });
-      if (tcSessionId && callId) {
+      if (sessao && callId) {
         void endCallRequest({
-          tcSessionId,
+          tcSessionId: sessao,
           callId,
           organizationId: organizationId ?? undefined,
         }).catch(() => {
@@ -340,8 +394,16 @@ export function useVoiceCall(tcSessionId: string | null) {
           // AQUI, e só aqui, a pessoa atendeu. O cronômetro nasce deste
           // instante — não do momento em que a mídia com a VPS ficou de pé.
           if (startedAtRef.current === null) startedAtRef.current = Date.now();
+          // `accepting` entra na lista porque na ENTRADA o `connected` chega
+          // ANTES da troca de SDP: a VPS aceita a chamada no WhatsApp dentro do
+          // próprio `POST /accept` (`doAccept` → `cm.AcceptCall`), e o evento
+          // sai enquanto o navegador ainda espera a resposta daquela requisição.
+          // Sem esta fase aqui, o único `connected` que existe seria descartado
+          // e a tela ficaria em "Atendendo…" durante a conversa inteira.
           setState((s) =>
-            s.phase === "negotiating" || s.phase === "ringing" ? { ...s, phase: "active" } : s,
+            s.phase === "negotiating" || s.phase === "ringing" || s.phase === "accepting"
+              ? { ...s, phase: "active" }
+              : s,
           );
           return;
         }
@@ -529,6 +591,7 @@ export function useVoiceCall(tcSessionId: string | null) {
         // no filtro por não bater com nada.
         tcCallIdRef.current = call.tcCallId;
         callIdRef.current = call.callId;
+        sessaoDaChamadaRef.current = tcSessionId;
         setState((s) => ({ ...s, phase: "negotiating", callId: call.callId, peer: call.peer }));
 
         // 5. WebRTC — só canal de dados, nenhuma faixa de mídia.
@@ -581,7 +644,17 @@ export function useVoiceCall(tcSessionId: string | null) {
           });
 
           await pc.setRemoteDescription({ type: "answer", sdp: answer });
-          setState((s) => ({ ...s, phase: "ringing" }));
+          // NUNCA regride a fase — a mesma guarda do caminho de atender, e pelo
+          // mesmo motivo. A troca de SDP é uma ida e volta pela REDE, e o
+          // `connected` da VPS chega pelo stream que já está aberto desde antes
+          // de discar: quem atende rápido cai DENTRO desta janela, e quando o
+          // `await` acima assenta a fase já é `active`.
+          //
+          // Escrever `ringing` por cima prendia a tela ali para sempre, porque o
+          // `connected` só acontece uma vez e não há segundo aviso. O vendedor
+          // via "Chamando…" com o cliente já falando, o tom de chamada tocando
+          // por cima da voz dele e o cronômetro parado em zero (#1399).
+          setState((s) => (s.phase === "negotiating" ? { ...s, phase: "ringing" } : s));
         } catch (e) {
           // A chamada JÁ foi autorizada e pode já estar tocando. Encerrar no
           // servidor é obrigatório aqui: abandonar o fluxo deixaria o telefone do
@@ -602,6 +675,208 @@ export function useVoiceCall(tcSessionId: string | null) {
   );
 
   /**
+   * ATENDER a ligação que está entrando.
+   *
+   * ─── A ordem, e por que ela não é a de discar ───────────────────────────────
+   * Discar prepara tudo ANTES de o telefone do lead tocar, porque falhar depois
+   * já custou uma ligação ao cliente. Atender tem a restrição espelhada: o
+   * telefone JÁ está tocando, e o custo assimétrico está do outro lado — dizer
+   * ao WhatsApp "atendi" e só então descobrir que não há microfone entrega ao
+   * cliente uma linha muda, encerra a corrida com o celular e queima a única
+   * chance de alguém atender de verdade.
+   *
+   * Por isso microfone, caminho de áudio e stream vêm ANTES do `acceptCall`, na
+   * mesma doutrina: o que não puder ser observado ou falado não deve virar um
+   * "alô". Falhar antes do aceite custa ZERO — a oferta segue viva, tocando no
+   * celular do vendedor e nos CRMs dos colegas.
+   *
+   * E o microfone é o primeiro por uma razão de plataforma, não de gosto: o
+   * navegador só concede `getUserMedia` dentro do gesto do usuário. Depois de um
+   * `await` de rede a permissão costuma ser negada sem diálogo nenhum.
+   *
+   * ─── Por que `tcCallIdRef` é preenchido ANTES de qualquer `await` ──────────
+   * Porque o `connected` desta chamada chega enquanto o `acceptCall` ainda está
+   * em voo: a VPS aceita no WhatsApp dentro do próprio `POST /accept`. O filtro
+   * de `handleCallEvent` compara o evento com este ref; sem ele preenchido, o
+   * único `connected` que existe cai no filtro por não bater com nada. Na saída
+   * o problema não existe da mesma forma — lá a identidade só nasce com a
+   * resposta do servidor, e o telefone só toca depois dela.
+   *
+   * Preenchê-lo cedo também é o que faz o `call-ended` de um cliente que
+   * desistiu durante o diálogo do microfone derrubar esta tela, em vez de ficar
+   * pendurada esperando por uma chamada que já morreu.
+   *
+   * Devolve `false` quando o atendimento não aconteceu, para que quem chamou
+   * possa devolver o cartão da oferta à tela: a ligação continua tocando.
+   */
+  const answer = useCallback(
+    async (offer: IncomingCallOffer): Promise<boolean> => {
+      // Mesma trava de reentrância de `start`: dois cliques em Atender abririam
+      // dois canais `pcm`, e a VPS recusa o segundo.
+      if (startingRef.current || pcRef.current) return false;
+      startingRef.current = true;
+
+      try {
+        // O telefone JÁ tem identidade: ela veio na oferta. Ver o cabeçalho.
+        tcCallIdRef.current = offer.tcCallId;
+        sessaoDaChamadaRef.current = offer.tcSessionId;
+        setState({
+          ...INITIAL,
+          phase: "accepting",
+          // O JID chega SEM o nono dígito (`555185960716`); mostrado como veio,
+          // vira `(51) 8596-0716`, um número que não existe. `normalizePhone` é
+          // a mesma tradução que o cartão de entrada aplica, e pela mesma razão:
+          // normaliza quem sabe que perdeu. O painel da saída não normaliza de
+          // propósito — lá o `peer` já vem derivado do cadastro pelo servidor.
+          peer: normalizePhone(offer.peerDigits) ?? offer.peerDigits,
+        });
+
+        let mic: MediaStream;
+        try {
+          mic = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          });
+        } catch {
+          fail(
+            "Não foi possível usar o microfone. Autorize o acesso no navegador e tente de novo.",
+            "mic_denied",
+          );
+          return false;
+        }
+        micRef.current = mic;
+
+        const generation = audioGenRef.current;
+        let audio: PcmAudioSession;
+        try {
+          audio = await startPcmAudio({ stream: mic, send: sendPcm });
+        } catch {
+          fail(
+            "Este navegador não conseguiu preparar o áudio da chamada. Atualize o navegador e tente de novo.",
+            "audio_unsupported",
+          );
+          return false;
+        }
+        if (generation !== audioGenRef.current) {
+          audio.stop();
+          return false;
+        }
+        audioRef.current = audio;
+
+        try {
+          await openEventStream(offer.tcSessionId);
+        } catch {
+          fail("Não foi possível acompanhar o estado da chamada. Tente de novo.", "stream_failed");
+          return false;
+        }
+
+        // SÓ AQUI o WhatsApp ouve "atendi". Tudo acima podia falhar de graça.
+        let call;
+        try {
+          call = await acceptCallRequest({
+            tcSessionId: offer.tcSessionId,
+            tcCallId: offer.tcCallId,
+            organizationId: organizationId ?? undefined,
+          });
+        } catch (e) {
+          // `call_already_claimed` mora aqui: o celular do vendedor ou um colega
+          // pegou primeiro. É o desfecho normal da corrida que o ADR-0027
+          // desenha, e por isso vira uma frase e não um susto.
+          if (e instanceof CallDeniedError) fail(e.message, e.code);
+          else fail(e instanceof Error ? e.message : "Falha ao atender a chamada", null);
+          return false;
+        }
+
+        /**
+         * A chamada pode ter MORRIDO enquanto o aceite ia e voltava: o cliente
+         * desistiu, ou o celular do vendedor pegou. Nesse caso `finish` já rodou
+         * e o teardown zerou a identidade — seguir daqui montaria uma
+         * `RTCPeerConnection` e um canal `pcm` para uma chamada que não existe
+         * mais, por cima de uma tela que já anunciou o fim.
+         *
+         * O aviso ao servidor é obrigatório: a VPS pode ter aceitado do lado
+         * dela, e abandonar sem encerrar deixaria a linha aberta segurando a
+         * cota do operador. `endCall` já trata "essa chamada já acabou" como
+         * sucesso, então o caminho comum não custa nada.
+         */
+        if (tcCallIdRef.current !== offer.tcCallId) {
+          void endCallRequest({
+            tcSessionId: offer.tcSessionId,
+            callId: call.callId,
+            organizationId: organizationId ?? undefined,
+          }).catch(() => {});
+          return false;
+        }
+
+        callIdRef.current = call.callId;
+        // O servidor pode ter reparado o `peer` (`toDialDigits`); o que ele
+        // devolve ganha do que veio pelo stream.
+        const peerDoServidor = normalizePhone(call.peer) ?? call.peer;
+        // NUNCA regride a fase. O `connected` pode ter chegado durante o
+        // `acceptCall` acima e já ter posto `active`; sobrescrever aqui apagaria
+        // o único aviso de que a conversa começou, e a tela ficaria em
+        // "Preparando áudio…" com as duas pessoas falando.
+        setState((s) => ({
+          ...s,
+          phase: s.phase === "accepting" ? "negotiating" : s.phase,
+          callId: call.callId,
+          peer: peerDoServidor,
+        }));
+
+        try {
+          const pc = new RTCPeerConnection();
+          pcRef.current = pc;
+
+          const channel = pc.createDataChannel(PCM_CHANNEL_LABEL, PCM_CHANNEL_INIT);
+          channel.binaryType = "arraybuffer";
+          channel.onmessage = (ev: MessageEvent) => {
+            if (ev.data instanceof ArrayBuffer) audioRef.current?.enqueue(ev.data);
+          };
+          channelRef.current = channel;
+
+          pc.onconnectionstatechange = () => {
+            if (pc.connectionState === "failed") finish("media_failed");
+          };
+
+          const sdpOffer = await pc.createOffer();
+          await pc.setLocalDescription(sdpOffer);
+          await waitForIceGathering(pc);
+
+          abortRef.current = new AbortController();
+          const sdpAnswer = await exchangeSdp({
+            vpsUrl: call.vpsUrl,
+            tcSessionId: offer.tcSessionId,
+            tcCallId: offer.tcCallId,
+            mediaToken: call.media,
+            sdpOffer: pc.localDescription?.sdp ?? sdpOffer.sdp ?? "",
+            signal: abortRef.current.signal,
+          });
+
+          await pc.setRemoteDescription({ type: "answer", sdp: sdpAnswer });
+        } catch (e) {
+          // A chamada JÁ foi atendida no WhatsApp: o cliente está na linha e não
+          // ouve ninguém. Encerrar no servidor é obrigatório — abandonar aqui
+          // deixaria uma conversa muda aberta contra a cota do operador.
+          void endCallRequest({
+            tcSessionId: offer.tcSessionId,
+            callId: call.callId,
+            organizationId: organizationId ?? undefined,
+          }).catch(() => {});
+          fail(e instanceof Error ? e.message : "Falha ao estabelecer o áudio", "media_failed");
+          return false;
+        }
+
+        // Sem `ringing` na entrada: ninguém está esperando ser atendido. A fase
+        // vira `active` quando a VPS disser `connected` — e ela já pode ter
+        // dito, o que é exatamente o motivo de não haver `setState` aqui.
+        return true;
+      } finally {
+        startingRef.current = false;
+      }
+    },
+    [fail, finish, openEventStream, organizationId, sendPcm],
+  );
+
+  /**
    * O operador desligou. Volta para `idle` sem cartão de motivo: quem desligou
    * já sabe por quê, e um aviso a mais seria só mais um clique entre ele e a
    * próxima ligação.
@@ -612,12 +887,19 @@ export function useVoiceCall(tcSessionId: string | null) {
    */
   const hangup = useCallback(async () => {
     const callId = callIdRef.current ?? state.callId;
+    // A sessão DA CHAMADA, e não a preferência de discagem: a ligação atendida
+    // entrou por outro número. Lida antes do teardown, que a zera.
+    const sessao = sessaoDaChamadaRef.current ?? tcSessionId;
     setState((s) => ({ ...s, phase: "ending" }));
     teardown();
 
-    if (tcSessionId && callId) {
+    if (sessao && callId) {
       try {
-        await endCallRequest({ tcSessionId, callId, organizationId: organizationId ?? undefined });
+        await endCallRequest({
+          tcSessionId: sessao,
+          callId,
+          organizationId: organizationId ?? undefined,
+        });
       } catch {
         // `endCall` já trata "essa chamada não existe mais" como sucesso; o que
         // sobra é rede caída. A mídia local já caiu e o `ctl` de 30 minutos
@@ -641,7 +923,7 @@ export function useVoiceCall(tcSessionId: string | null) {
 
   const dismiss = useCallback(() => setState(INITIAL), []);
 
-  return { state, start, hangup, toggleMute, dismiss };
+  return { state, start, answer, hangup, toggleMute, dismiss };
 }
 
 /**

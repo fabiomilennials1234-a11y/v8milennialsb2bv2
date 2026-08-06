@@ -1,4 +1,4 @@
--- ROLLBACK de 20270804000000_voip_recording_retention.sql
+-- ROLLBACK de 20270804000001_voip_recording_retention.sql
 --
 -- Desfaz o expurgo de 90 dias e o reenfileiramento da busca: derruba o cron, o
 -- invocador, as quatro funções de sistema e a de espaçamento, e devolve os dois

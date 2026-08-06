@@ -219,6 +219,103 @@ describe("signal() — mesma fronteira de invoke, mesmo conserto", () => {
 });
 
 /**
+ * Issue #1365 — a recusa que escondia a causa.
+ *
+ * Produção, 2026-08-03: a VPS respondeu 404 com
+ * `"51985960716: number is not on WhatsApp"`, a edge function repassava
+ * `code: "vps_refused"` e o vendedor lia *"O serviço de chamadas recusou a
+ * ligação"*. Ele não tem o que fazer com essa frase; a causa, essa sim, ele
+ * resolve — corrige o telefone no cadastro.
+ *
+ * O que estes testes guardam é a MENSAGEM, não o código. Asserir só o código
+ * passaria igual com a tabela de tradução vazia, que é o defeito original.
+ */
+describe("startCall — a causa da recusa chega ao vendedor (#1365)", () => {
+  it("número sem WhatsApp diz o que fazer, não 'o serviço recusou'", async () => {
+    const { startCall } = await import("./torquecallsApi");
+    invoke.mockResolvedValue(
+      httpErrorInvokeResult(404, {
+        error: "5551985960716: number is not on WhatsApp",
+        code: "peer_not_on_whatsapp",
+      }),
+    );
+
+    await expect(startCall({ tcSessionId: "tc-1", leadId: "lead-1" }))
+      .rejects.toMatchObject({
+        code: "peer_not_on_whatsapp",
+        message: "Este número não tem WhatsApp. Confira o telefone no cadastro do lead.",
+      });
+  });
+
+  it("a frase genérica NÃO é mais o que este caso produz", async () => {
+    const { startCall, CALL_DENY_MESSAGES } = await import("./torquecallsApi");
+    invoke.mockResolvedValue(
+      httpErrorInvokeResult(404, {
+        error: "5551985960716: number is not on WhatsApp",
+        code: "peer_not_on_whatsapp",
+      }),
+    );
+
+    const erro = await startCall({ tcSessionId: "tc-1", leadId: "lead-1" }).catch((e) => e);
+    expect(erro.message).not.toBe(CALL_DENY_MESSAGES.vps_refused);
+  });
+
+  // A prosa da VPS é texto de terceiro, em inglês, escrito para operador de
+  // infraestrutura. Ela serve ao log; nunca à tela do vendedor.
+  it("a prosa em inglês da VPS não vaza para a tela", async () => {
+    const { startCall } = await import("./torquecallsApi");
+    invoke.mockResolvedValue(
+      httpErrorInvokeResult(404, {
+        error: "5551985960716: number is not on WhatsApp",
+        code: "peer_not_on_whatsapp",
+      }),
+    );
+
+    const erro = await startCall({ tcSessionId: "tc-1", leadId: "lead-1" }).catch((e) => e);
+    expect(erro.message).not.toContain("not on WhatsApp");
+    expect(erro.message).not.toContain("5551985960716");
+  });
+
+  // Cada código novo tem que ter frase. Um código sem entrada cai no fallback
+  // "Não foi possível completar a chamada." — que é o defeito de volta, com
+  // outro nome.
+  it("todo código de recusa da VPS tem tradução própria", async () => {
+    const { CALL_DENY_MESSAGES } = await import("./torquecallsApi");
+
+    for (
+      const code of [
+        "peer_not_on_whatsapp",
+        "whatsapp_unreachable",
+        "session_not_paired",
+        "vps_unreachable",
+        "invalid_peer",
+        "operator_busy",
+        "org_concurrency_reached",
+        "vps_refused",
+      ]
+    ) {
+      expect(CALL_DENY_MESSAGES[code], `sem frase para ${code}`).toBeTruthy();
+    }
+  });
+
+  // E as frases têm que ser distintas entre si: duas causas com o mesmo texto
+  // são, para quem lê, uma causa só — que é exatamente o estado anterior.
+  it("as causas da VPS não compartilham a mesma frase", async () => {
+    const { CALL_DENY_MESSAGES } = await import("./torquecallsApi");
+
+    const frases = [
+      "peer_not_on_whatsapp",
+      "whatsapp_unreachable",
+      "session_not_paired",
+      "vps_unreachable",
+      "vps_refused",
+    ].map((c) => CALL_DENY_MESSAGES[c]);
+
+    expect(new Set(frases).size).toBe(frases.length);
+  });
+});
+
+/**
  * Desligar o que já acabou é sucesso, não erro.
  *
  * Defeito vivido em produção (2026-07-30): o outro lado desligava, o operador
