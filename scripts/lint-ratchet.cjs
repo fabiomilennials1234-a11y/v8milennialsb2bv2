@@ -37,7 +37,20 @@ const PENDING_FILE = ".eslint-pending.json";
 // --cache derruba a rerodada de ~7min pra segundos. 7min por execução é tempo
 // que o subagente paga em toda volta do pipeline — o cache é parte do fix, não
 // otimização opcional. Cache é local (gitignored); CI roda frio e correto.
-const ESLINT_CMD = "node ./node_modules/eslint/bin/eslint.js . --format json --cache --cache-location .eslintcache";
+// Resolvido pelo algoritmo do Node, não por caminho fixo: worktree do git não
+// tem `node_modules` local, e `./node_modules/eslint` fazia o portão morrer com
+// MODULE_NOT_FOUND justamente onde o trabalho acontece (medido 2026-08-05, ao
+// rodar o gate na worktree da PR #1424). O Node sobe os diretórios e acha o do
+// repo. Mesma correção em scripts/test-ratchet.cjs.
+function acharEslint() {
+  try {
+    return path.join(path.dirname(require.resolve("eslint/package.json")), "bin", "eslint.js");
+  } catch {
+    return path.join(process.cwd(), "node_modules", "eslint", "bin", "eslint.js");
+  }
+}
+
+const ESLINT_CMD = `node ${JSON.stringify(acharEslint())} . --format json --cache --cache-location .eslintcache`;
 
 // Teto de impressão: o ponto do ratchet é NÃO despejar 29k linhas no contexto
 // de quem o roda. Erro introduzido em volume > 20 já é sinal suficiente.

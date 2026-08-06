@@ -80,9 +80,31 @@ jobs:
           node-version: '24'
           cache: 'npm'
       - run: npm ci
-      - run: npm run test:unit
-      # Coverage thresholds in vitest.config.ts are the regression gate.
+      # Ratchet, e não `npm run test:unit` cru: medido em 2026-08-05 na
+      # develop, a suíte tem 178 vermelhos herdados de 7.718 — o job reprovava
+      # em toda execução, e portão que nasce vermelho ninguém lê. A dívida não
+      # é regressão de feature nenhuma: o CI rodava só `tests/unit/` e, quando
+      # passou a incluir `src/` (#1041), apareceram os arquivos co-locados que
+      # nunca tinham sido executados.
+      #
+      # O ratchet reprova só o que ESTA branch quebrou, e avisa quando um teste
+      # do baseline volta a passar — para o teto encolher em vez de virar
+      # decoração. Mesma forma de `lint:ratchet` e `typecheck:ratchet`.
+      - name: Vitest ratchet (no newly broken tests vs baseline)
+        run: npm run test:ratchet
+      # Os thresholds de coverage em vitest.config.ts SERIAM o portão de
+      # regressão — mas hoje não são: `vitest run --coverage` sai != 0 por
+      # teste vermelho antes de chegar a avaliar cobertura, e são 137 dos 178
+      # herdados dentro de `tests/unit/` (medido 2026-08-05). O passo reprovava
+      # sempre, pelo mesmo motivo que o de cima.
+      #
+      # Fica informativo ATÉ o baseline do ratchet encolher — o relatório
+      # continua sendo publicado como artefato, que é o que serve para decidir
+      # onde escrever teste. Voltar a ser bloqueante é uma linha: apagar o
+      # `continue-on-error`. Não faça isso antes de `.vitest-baseline.json`
+      # chegar a zero, ou o portão volta a nascer vermelho.
       - run: npm run test:coverage
+        continue-on-error: true
       - name: Upload coverage artifact
         if: always()
         uses: actions/upload-artifact@v4

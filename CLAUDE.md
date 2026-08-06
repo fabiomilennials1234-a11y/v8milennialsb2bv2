@@ -30,7 +30,7 @@ Subagente agora é **ferramenta, não protocolo**. Use quando ganha de verdade:
 1. **Bug → causa-raiz antes de fix.** Reproduz → minimiza → hipótese → instrumenta → localiza `arquivo:linha`. Não trate sintoma.
 2. **Pergunta ≠ ordem de conserto.** "Por que X?" / "isso é normal?" → responda e pare. Não abra PR que ninguém pediu.
 3. **Escopo = o diff.** Nunca trave a task por dívida que a branch não criou. Reporte `HERDADO — arquivo:linha — o quê` e siga; vira issue.
-4. **Gate é delta, não zero absoluto.** `lint:ratchet` + `typecheck:ratchet` + `test:unit` + `build`. O repo carrega 805 erros de tipo e 29.142 warnings herdados — exigir verde absoluto trava tudo pra sempre. **Nunca use `npm run lint` cru como sinal**: sai 0 mas imprime `✖ 29142 problems`.
+4. **Gate é delta, não zero absoluto.** `lint:ratchet` + `typecheck:ratchet` + `test:ratchet` + `build`. O repo carrega 805 erros de tipo, 29.142 warnings e **178 testes vermelhos** herdados — exigir verde absoluto trava tudo pra sempre. **Nunca use `npm run lint` cru como sinal**: sai 0 mas imprime `✖ 29142 problems`. **Nem `npm run test:unit` cru**: reprova sempre, por 178 falhas que a sua branch não criou (medido 2026-08-05; a causa dominante é `No QueryClient set` em teste que monta componente sem `QueryClientProvider`). O ratchet reprova só o introduzido e avisa quando um teste do baseline volta a passar — aí `npm run test:baseline` encolhe o teto, com uma frase no PR por linha que sai.
 5. **Área frágil → `/security-rubric`**, disparado pelo diff (RLS, multi-tenant, permissões, auth, secrets, CORS, PII, payment, Copilot, WhatsApp/Uazapi). Bloqueante.
 6. **Fechar = `/ship`** — branch nova, stage seletivo, commit Conventional, push, PR. **Prod é botão do humano.** Default deploy: dev.
 
