@@ -88,6 +88,29 @@ $function$;
 -- O trigger `trg_lead_field_changes` nunca foi tocado (AFTER UPDATE FOR EACH
 -- ROW, sem lista de colunas) — não há nada a restaurar nele.
 
+-- ── 1b. A trava do M6 sai ANTES — medido em branch efêmera 2026-08-06 ──────
+--
+-- `fn_assert_member_same_org` cobre OITO colunas, e `claimed_by` é uma delas.
+-- Os três gatilhos são `BEFORE INSERT OR UPDATE OF <colunas>`, o que cria
+-- dependência de COLUNA no catálogo. Com o M6 aceso, o `DROP COLUMN` abaixo
+-- não é um risco teórico: ele FALHA, com
+--
+--     cannot drop column claimed_by of table leads because other objects
+--     depend on it
+--
+-- e o rollback morre no meio — que é o pior momento para descobrir isso, já
+-- que rollback se roda em incidente. Este bloco foi acrescentado depois de
+-- exercitar o arquivo pela primeira vez (SCRUM-89 / `inv:H3-16`); antes disso
+-- ele nunca tinha rodado contra um banco com o M6 no ar.
+--
+-- ⚠️ CONSEQUÊNCIA: ao fim deste rollback a trava cross-org fica DESLIGADA.
+-- Para reacendê-la sem o claim, reaplique
+-- `20270731000010_assert_member_same_org.sql` **depois** de recriar as colunas
+-- — a função referencia `claimed_by` e não compila sem ela.
+DROP TRIGGER IF EXISTS trg_assert_member_same_org_leads ON public.leads;
+DROP TRIGGER IF EXISTS trg_assert_member_same_org_pipeline_entries ON public.pipeline_entries;
+DROP TRIGGER IF EXISTS trg_assert_member_same_org_custom_pipe_entries ON public.custom_pipe_entries;
+
 -- ── 2. Índice, constraints e colunas ────────────────────────────────────────
 -- DROP COLUMN já derruba a FK, a CHECK e o índice parcial em cascata; os DROPs
 -- explícitos abaixo existem pra o caso de rollback PARCIAL (apply que morreu no
@@ -129,5 +152,10 @@ BEGIN
     RAISE EXCEPTION 'FAIL: allow-list original não foi restaurada (segment ausente).';
   END IF;
 
-  RAISE NOTICE 'ROLLBACK OK: claim removido de leads e allow-list de volta aos 13 campos.';
+  IF EXISTS (SELECT 1 FROM pg_trigger
+              WHERE tgname LIKE 'trg_assert_member_same_org%' AND NOT tgisinternal) THEN
+    RAISE EXCEPTION 'FAIL: a trava do M6 sobreviveu ao rollback — ela depende de claimed_by e teria bloqueado o DROP.';
+  END IF;
+
+  RAISE NOTICE 'ROLLBACK OK: claim removido de leads, allow-list de volta aos 13 campos, e trava do M6 DESLIGADA (reaplique 20270731000010 depois de recriar as colunas).';
 END$$;
