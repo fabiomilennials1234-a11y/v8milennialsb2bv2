@@ -50,3 +50,71 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 - **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
 - **Claim**: `gh issue edit <n> --add-assignee @me` — the session's first write.
 - **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
+
+## Espelho no Jira (camada de gestão)
+
+O GitHub continua sendo o tracker canônico — é onde os skills publicam e onde o trabalho realmente vive. O Jira é **espelho de gestão**: existe para dar visibilidade de sprint e responsável a quem não abre o repo. Em qualquer divergência de conteúdo entre os dois lados, **o GitHub ganha**. O Jira carrega só título, link, status, sprint e responsável; corpo, discussão e labels ficam no GitHub e não são replicados.
+
+### Acesso
+
+Só pelas ferramentas MCP do Atlassian — `searchJiraIssuesUsingJql`, `getJiraIssue`, `createJiraIssue`, `editJiraIssue`, `createIssueLink`. **Não existe CLI de Jira neste ambiente**; não tente `jira`, `acli` ou equivalente.
+
+**`createIssueLink` não gera hierarquia.** Este é um projeto *team-managed*: o pai vem do campo `parent` em `createJiraIssue`/`editJiraIssue`. `createIssueLink` só faz relações laterais (*relates*, *blocks*) e não prende nada ao Epic — usá-lo para isso produz História sem Epic no board.
+
+- Site: `https://milennialstech-1785256858036.atlassian.net`
+- Projeto: `SCRUM` — "Milennials Tech", *team-managed*
+- cloudId: `e612e2e2-533a-4add-994d-2b1679fe5a98`
+
+### Hierarquia
+
+Três níveis, e nada além:
+
+```
+Epic (nível 1) > História ou Tarefa (nível 0) > Subtarefa
+```
+
+Subtarefa **não é item de sprint**: não aparece sozinha no board e não pode ir para uma sprint diferente da do pai.
+
+### Mapeamento GitHub → Jira
+
+| GitHub | Jira |
+|---|---|
+| Issue de PRD (label `prd`) | **Epic** |
+| Issue de fatia (a que traz `Part of #<prd>`) | **História**, com o Epic correspondente como pai (campo `parent`) |
+| Issue avulsa (`bug`, `docs`, `api` — sem PRD) | **Tarefa**, sem pai |
+| — | **Subtarefa**: só checklist interno de execução dentro de uma fatia |
+
+A subtarefa **nunca** é a unidade que o `/to-tickets` cria — o que ele cria vira História.
+
+O legado anterior a esta convenção **não será arrumado retroativamente**: hoje SCRUM-6, SCRUM-7 e SCRUM-8 são Subtarefas órfãs, sem pai e sem sprint, e ficam como estão até alguém decidir o destino delas.
+
+### Wayfinder não é espelhado
+
+O mapa (`wayfinder:map`) e seus tickets de decisão vivem **só no GitHub**. O Epic do Jira recebe, na descrição, o link do mapa e o gist de uma linha por decisão fechada. Espelhar cada ticket de decisão é ruído e está **proibido**.
+
+### Como os dois lados se acham
+
+- A **primeira linha** do corpo da issue do GitHub traz `Jira: SCRUM-<n>`.
+- A **descrição** da issue do Jira começa com a URL da issue do GitHub.
+
+Assim nenhum lado fica órfão.
+
+### Quem espelha
+
+O agente que cria o lado GitHub cria o lado Jira na **mesma sessão**. Não existe job de sincronia automática — o espelho é manual e é responsabilidade de quem escreveu.
+
+### Status
+
+O workflow do SCRUM tem **quatro** estados:
+
+| GitHub | Jira |
+|---|---|
+| aberto | "A fazer" (10000) ou "Fazendo" (10001) |
+| — | "Testando" (10002) |
+| fechado | "Feito" (10003) |
+
+**"Testando" é estado de humano.** Fechar a issue no GitHub **não** autoriza mover de "Testando" para "Feito" no Jira — quem tira de "Testando" é a pessoa que validou. O agente que fecha no GitHub move para "Feito" apenas se a issue do Jira **não** estiver em "Testando".
+
+### Primeiro Epic sob esta convenção
+
+**SCRUM-5** — "Revisão/ Atualização de toda API do Torque" (`https://milennialstech-1785256858036.atlassian.net/browse/SCRUM-5`), promovido de História para Epic em 06/08/2026. O vínculo com o GitHub ainda está **pendente**: nasce quando o mapa do `/wayfinder` for criado, e nesse momento a descrição do Epic passa a começar pela URL da issue do GitHub.
