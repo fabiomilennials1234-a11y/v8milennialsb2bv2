@@ -287,7 +287,7 @@ não como "falta configurar". Pior: falta de segredo derruba até requisição *
 credencial, porque o verificador carrega a chave na primeira linha, antes de olhar
 o token.
 
-**1. Migration** `20270730000010_voip_webhook_ingest.sql`
+**1. Migration** `20270730000011_voip_webhook_ingest.sql`
 
 Cria `voip_webhook_events` (anti-replay), as marcas d'água de ordem e a RPC
 `fn_voip_apply_vps_event`. Sem ela a verificação passa e o `db.rpc` devolve erro do
@@ -298,7 +298,7 @@ ledger à mão. Confira depois:
 
 ```sql
 select to_regprocedure('public.fn_voip_apply_vps_event(uuid,text,bigint,bigint,timestamptz,jsonb)') is not null as rpc_existe;
-select version from supabase_migrations.schema_migrations where version = '20270730000010';
+select version from supabase_migrations.schema_migrations where version = '20270730000011';
 ```
 
 **2. Os DOIS segredos novos no Supabase**
