@@ -220,7 +220,6 @@ export {
   GhostLeadsBanner,
   ManagePipelineStagesContent,
   ManagePipelineStagesModal,
-  MetricsPeriodSelector,
   PipeDispatchRulesSection,
   PipeDistributionSection,
   PipeSettingsDialog,
