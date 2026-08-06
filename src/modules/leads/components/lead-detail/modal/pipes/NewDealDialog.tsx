@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Loader2, Lock } from "lucide-react";
 import {
   Dialog,
@@ -81,6 +81,21 @@ interface NewDealDialogProps {
   isCreating?: boolean;
   onCreate: (option: NewDealOption, values: NewDealValues) => Promise<void>;
   size?: "sm" | "md";
+  /**
+   * Modo controlado — quem abre é de fora.
+   *
+   * Existe porque a porta de criação passou a ter dois pontos de partida: o
+   * cabeçalho da seção Negócios (que usa o gatilho daqui) e o botão "Criar
+   * negócio" do Card do Lead, que já é um botão desenhado, em outra árvore, e
+   * não pode virar `DialogTrigger` sem arrastar Supabase para dentro do card —
+   * o card é DB-free de propósito (é o que mantém `/preview.html` de pé).
+   *
+   * Omitido, o diálogo segue exatamente como era: estado interno + gatilho.
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Sem gatilho próprio — o botão que abre vive fora. */
+  hideTrigger?: boolean;
 }
 
 /** "1.234,56" e "1234.56" viram 1234.56; lixo vira null. */
@@ -99,8 +114,17 @@ export const NewDealDialog = memo(function NewDealDialog({
   isCreating = false,
   onCreate,
   size = "sm",
+  open: openProp,
+  onOpenChange,
+  hideTrigger = false,
 }: NewDealDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [openInterno, setOpenInterno] = useState(false);
+  const controlado = openProp !== undefined;
+  const open = controlado ? openProp : openInterno;
+  const setOpen = (next: boolean) => {
+    if (!controlado) setOpenInterno(next);
+    onOpenChange?.(next);
+  };
   const [optionKey, setOptionKey] = useState<string | null>(null);
   const [stageId, setStageId] = useState<string>("");
   const [ownerId, setOwnerId] = useState<string>("");
@@ -126,26 +150,41 @@ export const NewDealDialog = memo(function NewDealDialog({
     [options, optionKey],
   );
 
+  const limparFormulario = useCallback(() => {
+    const first = enabled[0] ?? null;
+    setOptionKey(first?.key ?? null);
+    setStageId(first?.stages[0]?.id ?? "");
+    setOwnerId(
+      currentMember && !isVirtualTeamMember(currentMember.id) ? currentMember.id : "",
+    );
+    setValueRaw("");
+    setMeetingDate("");
+    setNotes("");
+  }, [enabled, currentMember]);
+
   /**
-   * Reset acontece na transição para aberto, não num efeito.
+   * Reset acontece na **transição** fechado→aberto, e só nela.
    *
-   * Efeito com `[open, enabled, currentMember]` reexecutava a cada render em que
-   * qualquer uma dessas referências fosse recriada — e aí o formulário se zerava
-   * embaixo de quem estava digitando. Amarrar ao evento de abertura elimina a
-   * classe inteira do problema em vez de estabilizar dependência por dependência.
+   * A versão anterior amarrava o reset ao `handleOpenChange`, para fugir de um
+   * efeito com `[open, enabled, currentMember]` que reexecutava a cada render em
+   * que qualquer uma dessas referências fosse recriada — e aí o formulário se
+   * zerava embaixo de quem estava digitando. O modo controlado quebra aquela
+   * amarração: quando quem abre é o botão do Card do Lead, `handleOpenChange`
+   * nunca roda, e o modal abriria sem funil escolhido — com o botão "Criar
+   * negócio" morto, porque `canSubmit` exige `selected`.
+   *
+   * A guarda de aresta (`estavaAberto`) devolve a propriedade que interessava:
+   * o efeito pode reexecutar à vontade, mas o corpo só age na borda de abertura.
+   * Começa em `false` de propósito — montar já aberto (modo controlado) É uma
+   * abertura.
    */
+  const estavaAberto = useRef(false);
+  useEffect(() => {
+    if (open && !estavaAberto.current) limparFormulario();
+    estavaAberto.current = open;
+  }, [open, limparFormulario]);
+
   const handleOpenChange = (next: boolean) => {
-    if (next) {
-      const first = enabled[0] ?? null;
-      setOptionKey(first?.key ?? null);
-      setStageId(first?.stages[0]?.id ?? "");
-      setOwnerId(
-        currentMember && !isVirtualTeamMember(currentMember.id) ? currentMember.id : "",
-      );
-      setValueRaw("");
-      setMeetingDate("");
-      setNotes("");
-    }
     setOpen(next);
   };
 
@@ -182,6 +221,7 @@ export const NewDealDialog = memo(function NewDealDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
+      {!hideTrigger && (
       <DialogTrigger asChild>
         <button
           type="button"
@@ -202,6 +242,7 @@ export const NewDealDialog = memo(function NewDealDialog({
           Novo negócio
         </button>
       </DialogTrigger>
+      )}
 
       <DialogContent className="max-w-lg" data-testid="new-deal-dialog">
         <DialogHeader>
@@ -212,9 +253,21 @@ export const NewDealDialog = memo(function NewDealDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* No modo controlado o botão que abre vive fora e não sabe se sobrou
+              funil — o gatilho daqui se desabilita sozinho, o de lá não pode.
+              Sem esta linha o diálogo abriria vazio, que lê como quebrado. */}
+          {noOptions && (
+            <p
+              className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12.5px] text-muted-foreground"
+              data-testid="new-deal-sem-funil"
+            >
+              O lead já tem negócio em todos os funis.
+            </p>
+          )}
+
           {/* Funil — a escolha estruturante, então vem primeiro e em cartões. */}
           <div className="space-y-1.5">
-            <Label className="text-[12px] text-muted-foreground">Funil</Label>
+            {!noOptions && <Label className="text-[12px] text-muted-foreground">Funil</Label>}
             <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Funil">
               {enabled.map((option) => {
                 const active = option.key === optionKey;
