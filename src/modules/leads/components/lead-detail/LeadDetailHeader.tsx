@@ -1,6 +1,6 @@
 import { memo } from "react";
 import {
-  MessageSquare, Mail, Phone, PhoneCall, Send, Clock,
+  MessageSquare, Phone, PhoneCall, Send, Clock,
   Bot, MoreVertical, Flame, X,
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -34,9 +34,6 @@ interface LeadDetailHeaderProps {
   onClose: () => void;
   onOpenScheduleModal: () => void;
   onOpenCallModal: () => void;
-  onOpenEmailWriter: () => void;
-  onOpenEmailComposer: () => void;
-  onOpenSmsDialog: () => void;
   onDelete: () => void;
 }
 
@@ -46,8 +43,7 @@ function initials(name: string | undefined) {
 
 export const LeadDetailHeader = memo(function LeadDetailHeader({
   lead, variant, stages, currentStageId, currentAiDisabled,
-  onToggleAI, onClose, onOpenScheduleModal, onOpenCallModal,
-  onOpenEmailWriter, onOpenEmailComposer, onOpenSmsDialog, onDelete,
+  onToggleAI, onClose, onOpenScheduleModal, onOpenCallModal, onDelete,
 }: LeadDetailHeaderProps) {
   const openWhatsApp = useOpenWhatsAppChat();
   const originColor = ORIGIN_COLORS[lead.origin] || ORIGIN_COLORS.outro;
@@ -119,11 +115,6 @@ export const LeadDetailHeader = memo(function LeadDetailHeader({
             <MessageSquare className="w-3 h-3" /> WhatsApp
           </Button>
         )}
-        {lead.email && (
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onOpenEmailComposer}>
-            <Mail className="w-3 h-3" /> Email
-          </Button>
-        )}
         {lead.phone && (
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1" asChild>
             <a href={`tel:${(lead.phone || "").replace(/\D/g, "")}`}>
@@ -151,9 +142,6 @@ export const LeadDetailHeader = memo(function LeadDetailHeader({
               <DropdownMenuItem onClick={onOpenCallModal}>
                 <PhoneCall className="w-4 h-4 mr-2" /> Registrar ligação
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onOpenEmailWriter}>
-                <Mail className="w-4 h-4 mr-2" /> Email com IA
-              </DropdownMenuItem>
               {lead.phone && (
                 <>
                   <DropdownMenuItem onClick={onOpenScheduleModal}>
@@ -163,9 +151,6 @@ export const LeadDetailHeader = memo(function LeadDetailHeader({
                     <Link to={`/chat-whatsapp?phone=${encodeURIComponent(formatPhoneForWhatsApp(lead.phone) ?? lead.phone)}`} onClick={onClose}>
                       <Send className="w-4 h-4 mr-2" /> Enviar mensagem
                     </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={onOpenSmsDialog}>
-                    <Phone className="w-4 h-4 mr-2" /> Enviar SMS
                   </DropdownMenuItem>
                 </>
               )}

@@ -24,9 +24,6 @@ import { LeadDetailBanners } from "./LeadDetailBanners";
 import { useAuth } from "@/modules/identity";
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
 import { LogCallModal } from "@/modules/engagement/components/calls/LogCallModal";
-import { EmailComposer } from "@/modules/communication/components/email/EmailComposer";
-import { SmsSendDialog } from "@/modules/communication/components/sms/SmsSendDialog";
-import { AiEmailWriter } from "@/modules/communication/components/ai/AiEmailWriter";
 import { cn } from "@/lib/utils";
 import type { QualificationTier } from "./types";
 
@@ -52,9 +49,6 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
 
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [callOpen, setCallOpen] = useState(false);
-  const [emailWriterOpen, setEmailWriterOpen] = useState(false);
-  const [emailComposerOpen, setEmailComposerOpen] = useState(false);
-  const [smsOpen, setSmsOpen] = useState(false);
   const [optimisticAi, setOptimisticAi] = useState<boolean | null>(null);
 
   const aiDisabled = optimisticAi !== null ? optimisticAi : Boolean(lead?.ai_disabled);
@@ -177,10 +171,7 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
           aiDisabled={aiDisabled}
           onToggleAI={handleToggleAI}
           onOpenCallModal={() => setCallOpen(true)}
-          onOpenEmailComposer={() => setEmailComposerOpen(true)}
-          onOpenEmailWriter={() => setEmailWriterOpen(true)}
           onOpenScheduleModal={() => setScheduleOpen(true)}
-          onOpenSmsDialog={() => setSmsOpen(true)}
           onDelete={handleDelete}
           onClose={onClose}
         />
@@ -204,32 +195,6 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
           open={callOpen}
           onOpenChange={setCallOpen}
           leadId={lead.id}
-          leadName={lead.name}
-        />
-      )}
-      {emailWriterOpen && (
-        <AiEmailWriter
-          open={emailWriterOpen}
-          onOpenChange={setEmailWriterOpen}
-          leadId={lead.id}
-          leadName={lead.name}
-        />
-      )}
-      {emailComposerOpen && lead.email && (
-        <EmailComposer
-          defaultTo={lead.email}
-          leadId={lead.id}
-          compact
-          onClose={() => setEmailComposerOpen(false)}
-          onSent={() => setEmailComposerOpen(false)}
-        />
-      )}
-      {smsOpen && lead.phone && (
-        <SmsSendDialog
-          open={smsOpen}
-          onOpenChange={setSmsOpen}
-          leadId={lead.id}
-          phoneNumber={lead.phone}
           leadName={lead.name}
         />
       )}
