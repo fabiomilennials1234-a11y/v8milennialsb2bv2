@@ -1,6 +1,6 @@
 {
   "gerado_em": "2026-08-06",
-  "nota": "Testes vermelhos tolerados. NÃO regenerar às cegas: cada linha que sai daqui é uma correção que merece uma frase no PR. Só encolhe.",
+  "nota": "Testes vermelhos tolerados. NÃO regenerar às cegas: cada linha que sai daqui é uma correção que merece uma frase no PR. Só encolhe. 2026-08-07: saíram os 2 de migration-version-collision-contract (o baseline de colisões foi esvaziado — as 15 versões viraram archive/ no #1233). NÃO foram removidos os 9 '<arquivo não coletou>' nem o stress de configs aleatórias de refactor-smoke que apareceram verdes na mesma run: aquilo é flake de coleta/aleatoriedade, e tirá-los do teto deixaria o ratchet vermelho na branch de quem não mexeu em nada.",
   "total_de_testes": 7718,
   "falhando": [
     "src/modules/communication/components/voice/VoicePairingDialog.test.tsx::<arquivo não coletou>",
@@ -92,8 +92,6 @@
     "tests/unit/lead-origins-ui.test.tsx::Drawer V2 — origem editável persiste a nova origem via useUpdateLead e invalida o cache do lead",
     "tests/unit/lead-webhook.test.ts::lead-webhook — Meta dummy/test lead skips dedup dummy placeholder value forces create (string 'true' too)",
     "tests/unit/lead-webhook.test.ts::lead-webhook — Meta dummy/test lead skips dedup email test@meta.com forces create even with update_existing_if_match=true",
-    "tests/unit/migration-version-collision-contract.test.ts::migration version-collision guard baseline only shrinks — remove resolved collisions from the set",
-    "tests/unit/migration-version-collision-contract.test.ts::migration version-collision guard no NEW duplicate migration version prefix beyond the known baseline",
     "tests/unit/move-pipe-record-permission.test.ts::move-pipe-record permission gate executeAdvanceStage admin user passes permission check (existing behavior preserved)",
     "tests/unit/move-pipe-record-permission.test.ts::move-pipe-record permission gate executeAdvanceStage proceeds normally when assertPermission returns { allowed: true }",
     "tests/unit/move-pipe-record-permission.test.ts::move-pipe-record permission gate executeAdvanceStage skips permission check when no userId provided (AI/automation)",
