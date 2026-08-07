@@ -14,7 +14,7 @@
  *  7. Per-chat error tracking — chat_errors JSONB column
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
@@ -23,6 +23,14 @@ import { timingSafeCompare } from "../_shared/auth.ts";
 
 import "../_shared/whatsapp-providers/evolution-provider.ts";
 import "../_shared/whatsapp-providers/uazapi-provider.ts";
+import {
+  GUARD_DEFAULTS,
+  type GuardConfig,
+  insideFullWindow,
+  parseGuardConfig,
+  reachedChatCap,
+  reachedGlobalCap,
+} from "./guards.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -80,6 +88,38 @@ const JOB_STALE_MINUTES = 10;
 const TIME_BUDGET_MS = 50_000;
 const PARALLEL_CHATS = 2;
 const SKIP_RECENT_THRESHOLD_MS = 3_600_000; // 1h
+
+// --- Guard-rails (incidente 2026-08-06) -----------------------------------
+// Duas importações de uma única org escreveram ~500 msgs/min e esgotaram o pool
+// de conexões do Postgres; o sistema inteiro ficou 42 minutos sem gravar
+// mensagem. O backfill nunca perguntava se o banco aguentava.
+//
+// As regras de decisão (tetos, janela, leitura da config) vivem em `guards.ts`,
+// onde são testadas sem banco nem provedor — ver `guards.test.ts`.
+
+// Reavaliar a pressão a cada chunk custaria uma ida ao banco por lote de 100
+// mensagens. 5s é curto o bastante para reagir dentro do mesmo tick (que dura
+// 50s) e longo o bastante para o custo desaparecer.
+const PRESSURE_TTL_MS = 5_000;
+
+// Estados que o operador define e que o worker não pode desfazer escrevendo
+// progresso por cima. Sem isto, cancelar um job durante um tick não tem efeito:
+// o worker termina o lote e grava "running" de volta.
+const OPERATOR_TERMINAL_STATES = ["cancelled", "paused"];
+
+/**
+ * Cliente Supabase deste worker.
+ *
+ * Os helpers deste arquivo declaravam `ReturnType<typeof createClient>`, que sem
+ * argumentos de tipo resolve o schema para `never` — e aí todo `.update({...})`
+ * vira "argumento não atribuível a never". Eram 10 erros de tipo antes desta
+ * mudança, todos do mesmo molde. Um alias explícito resolve na raiz.
+ *
+ * O `any` no schema é deliberado: as edge functions não consomem
+ * `integrations/supabase/types.ts` (que é gerado para o front), então não há
+ * tipo de schema real a oferecer aqui.
+ */
+type Db = SupabaseClient<any, any, any>;
 
 type HistorySyncJob = {
   id: string;
@@ -142,7 +182,7 @@ function parseMultiCursor(raw: string | null): MultiChatCursor | null {
 }
 
 async function getLatestSyncedTimestamp(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Db,
   instanceId: string,
   remoteJid: string
 ): Promise<number | null> {
@@ -163,7 +203,7 @@ async function getLatestSyncedTimestamp(
 // ---------------------------------------------------------------------------
 
 async function upsertMessages(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Db,
   job: HistorySyncJob,
   messages: unknown[],
   maxDays: number,
@@ -240,11 +280,122 @@ async function upsertMessages(
 }
 
 // ---------------------------------------------------------------------------
+// Guard-rails — freio de pressão, cota por org, janela noturna
+// ---------------------------------------------------------------------------
+
+async function loadGuardConfig(supabase: Db): Promise<GuardConfig> {
+  // Em `cron_config` e não como constante compilada porque, no meio de um
+  // incidente, apertar o freio não pode depender de deploy de edge function.
+  const { data, error } = await supabase
+    .from("cron_config")
+    .select("key, value")
+    .in("key", [
+      "history_sync_max_pressure_pct",
+      "history_sync_max_rows_per_min",
+      "history_sync_full_window_start",
+      "history_sync_full_window_end",
+    ]);
+
+  // Falha ao ler a config cai nos defaults, que são conservadores — nunca no
+  // "sem limite".
+  if (error) return GUARD_DEFAULTS;
+  return parseGuardConfig(data as Array<{ key: string; value: string | null }>);
+}
+
+/**
+ * Pressão do pool, com cache curto para não consultar a cada chunk.
+ *
+ * Falha ao medir devolve `null`, e quem chama trata `null` como "pode seguir".
+ * A escolha é deliberada: se o medidor quebrar, o backfill continua funcionando
+ * — degradado para o comportamento antigo, mas funcionando. O oposto (parar
+ * tudo quando o medidor falha) transformaria um defeito de telemetria em
+ * paralisação de produto.
+ */
+function makePressureGate(supabase: Db) {
+  let cached: { pct: number; at: number } | null = null;
+
+  return async function pressurePct(): Promise<number | null> {
+    if (cached && Date.now() - cached.at < PRESSURE_TTL_MS) return cached.pct;
+
+    const { data, error } = await supabase.rpc("db_connection_pressure");
+    if (error || !data || typeof (data as any).pct !== "number") return null;
+
+    cached = { pct: (data as any).pct, at: Date.now() };
+    return cached.pct;
+  };
+}
+
+/** Soma linhas ao balde do minuto da org e devolve o total. `null` = não medido. */
+async function consumeWriteBudget(
+  supabase: Db,
+  organizationId: string,
+  rows: number,
+): Promise<number | null> {
+  const { data, error } = await supabase.rpc("history_sync_consume_budget", {
+    p_organization_id: organizationId,
+    p_rows: rows,
+  });
+  if (error || typeof data !== "number") return null;
+  return data;
+}
+
+/**
+ * O job ainda pode rodar, ou o operador interveio?
+ *
+ * Relido do banco a cada lote. É o que faz o botão de cancelar valer alguma
+ * coisa no meio de um tick de 50 segundos.
+ */
+async function stillRunnable(
+  supabase: Db,
+  jobId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("history_sync_jobs")
+    .select("status")
+    .eq("id", jobId)
+    .maybeSingle();
+
+  // Erro de leitura não interrompe: seria dar ao banco instável o poder de
+  // abortar jobs válidos. A pressão já cobre esse cenário.
+  if (error || !data) return true;
+  return !OPERATOR_TERMINAL_STATES.includes((data as any).status);
+}
+
+/**
+ * Decide se o próximo lote pode sair.
+ *
+ * Devolve o motivo da recusa (para registro) ou `null` para seguir. Recusar não
+ * é falha: o job volta para `queued` e retoma no tick seguinte, de onde parou.
+ */
+async function batchAllowed(
+  supabase: Db,
+  job: HistorySyncJob,
+  cfg: GuardConfig,
+  pressurePct: () => Promise<number | null>,
+): Promise<string | null> {
+  if (!(await stillRunnable(supabase, job.id))) return "cancelado ou pausado pelo operador";
+
+  const pct = await pressurePct();
+  if (pct !== null && pct >= cfg.maxPressurePct) {
+    return `pressao do banco em ${pct}% (teto ${cfg.maxPressurePct}%)`;
+  }
+
+  // p_rows = 0 consulta sem consumir: o consumo real é lançado depois do upsert,
+  // com a contagem verdadeira.
+  const spent = await consumeWriteBudget(supabase, job.organization_id, 0);
+  if (spent !== null && spent >= cfg.maxRowsPerMin) {
+    return `cota da org esgotada neste minuto (${spent}/${cfg.maxRowsPerMin} linhas)`;
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Job management helpers
 // ---------------------------------------------------------------------------
 
 async function failJob(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Db,
   jobId: string,
   error: string
 ) {
@@ -256,11 +407,19 @@ async function failJob(
 }
 
 async function updateJobProgress(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Db,
   jobId: string,
   updates: Record<string, unknown>
 ) {
-  await supabase.from("history_sync_jobs").update(updates).eq("id", jobId);
+  // `not in (cancelled, paused)` é o que impede a corrida clássica: o operador
+  // cancela enquanto o tick está no ar, e o worker — que já tinha lido o job —
+  // grava "running" por cima ao terminar o lote, ressuscitando o que foi
+  // abortado. Com o filtro, essa escrita simplesmente não encontra a linha.
+  await supabase
+    .from("history_sync_jobs")
+    .update(updates)
+    .eq("id", jobId)
+    .not("status", "in", `(${OPERATOR_TERMINAL_STATES.join(",")})`);
 }
 
 // ---------------------------------------------------------------------------
@@ -268,19 +427,33 @@ async function updateJobProgress(
 // ---------------------------------------------------------------------------
 
 async function processSingleChat(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Db,
   job: HistorySyncJob,
   provider: any,
   chatJid: string,
   cursor: string | null,
-  maxDays: number
+  maxDays: number,
+  cfg: GuardConfig,
+  pressurePct: () => Promise<number | null>,
 ): Promise<{ fetched: number; done: boolean; error?: string }> {
   const startTime = Date.now();
   let currentCursor = cursor;
   let totalFetched = job.total_fetched;
   let totalThisTick = 0;
+  // Escopo `chat` percorre uma conversa só, então o total do job É o total do
+  // chat — aqui as duas contagens coincidem legitimamente.
+  let fetchedThisChat = 0;
 
   while (Date.now() - startTime < TIME_BUDGET_MS) {
+    const blocked = await batchAllowed(supabase, job, cfg, pressurePct);
+    if (blocked) {
+      await yieldJob(supabase, job, {
+        cursor: currentCursor,
+        total_fetched: totalFetched,
+      }, blocked);
+      return { fetched: totalThisTick, done: false };
+    }
+
     let chunkResult;
     try {
       chunkResult = await provider.historySync({
@@ -296,9 +469,12 @@ async function processSingleChat(
     const { fetched } = await upsertMessages(supabase, job, chunkResult.messages ?? [], maxDays);
     totalFetched += fetched;
     totalThisTick += fetched;
+    fetchedThisChat += fetched;
+    await consumeWriteBudget(supabase, job.organization_id, fetched);
+
     const nextCursor = chunkResult.nextCursor ?? null;
-    const reachedMsgCap = job.scope !== "full" && totalFetched >= job.max_messages_per_chat;
-    const done = !nextCursor || reachedMsgCap;
+    const done = !nextCursor
+      || reachedChatCap(job.scope, fetchedThisChat, job.max_messages_per_chat);
 
     await updateJobProgress(supabase, job.id, {
       cursor: done ? null : nextCursor,
@@ -314,6 +490,41 @@ async function processSingleChat(
   // Budget exhausted — re-queue for next tick
   await updateJobProgress(supabase, job.id, { status: "queued" });
   return { fetched: totalThisTick, done: false };
+}
+
+/**
+ * Devolve o job à fila preservando o ponto exato onde parou.
+ *
+ * Ceder a vez não é falhar: o progresso fica gravado, o motivo fica registrado
+ * em `error` para quem for olhar depois, e o próximo tick retoma daqui.
+ */
+async function yieldJob(
+  supabase: Db,
+  job: HistorySyncJob,
+  progress: Record<string, unknown>,
+  reason: string,
+) {
+  await logRuntime({
+    module: "whatsapp",
+    action: "history_sync_yield",
+    status: "success",
+    payloadSnapshot: {
+      job_id: job.id,
+      organization_id: job.organization_id,
+      scope: job.scope,
+      reason,
+    },
+  });
+
+  // Cancelado/pausado pelo operador: não tocar no status, só no progresso — e o
+  // filtro de updateJobProgress já barra qualquer escrita nesse caso.
+  if (reason.startsWith("cancelado")) return;
+
+  await updateJobProgress(supabase, job.id, {
+    ...progress,
+    status: "queued",
+    error: `aguardando: ${reason}`,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -345,11 +556,13 @@ async function fetchChatChunk(
 // ---------------------------------------------------------------------------
 
 async function processMultiChat(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Db,
   job: HistorySyncJob,
   provider: any,
   mc: MultiChatCursor,
-  maxDays: number
+  maxDays: number,
+  cfg: GuardConfig,
+  pressurePct: () => Promise<number | null>,
 ): Promise<{ fetched: number; done: boolean; error?: string }> {
   const startTime = Date.now();
   let totalFetched = job.total_fetched;
@@ -358,8 +571,27 @@ async function processMultiChat(
   let chatsSkipped = job.chats_skipped ?? 0;
   const chatErrors: Record<string, string> = (job.chat_errors as Record<string, string>) ?? {};
   const isIncremental = job.scope === "incremental";
+  // Quanto cada conversa já rendeu NESTE tick. O cursor persistido guarda o
+  // offset no provedor, não a contagem — e é a contagem que o teto por conversa
+  // precisa enxergar.
+  const fetchedPerChat: Record<string, number> = {};
 
   while (Date.now() - startTime < TIME_BUDGET_MS) {
+    // Este é o laço que causou o incidente de 2026-08-06: buscava lote após lote
+    // sem nunca perguntar se o banco aguentava.
+    const blocked = await batchAllowed(supabase, job, cfg, pressurePct);
+    if (blocked) {
+      await yieldJob(supabase, job, {
+        cursor: JSON.stringify(mc),
+        total_fetched: totalFetched,
+        current_chat_index: mc.chatIdx,
+        chats_completed: chatsCompleted,
+        chats_skipped: chatsSkipped,
+        chat_errors: chatErrors,
+      }, blocked);
+      return { fetched: totalThisTick, done: false };
+    }
+
     // Collect next batch of chats to process
     const batch: Array<{ jid: string; cursor: string | null }> = [];
     for (let i = mc.chatIdx; i < mc.chats.length && batch.length < PARALLEL_CHATS; i++) {
@@ -440,9 +672,15 @@ async function processMultiChat(
       );
       totalFetched += fetched;
       totalThisTick += fetched;
+      fetchedPerChat[item.jid] = (fetchedPerChat[item.jid] ?? 0) + fetched;
+      await consumeWriteBudget(supabase, job.organization_id, fetched);
 
-      // Decide: chat done or continue
-      const chatDone = !chunk.nextCursor || hitExisting;
+      // O teto por conversa não era aplicado neste caminho — era ele que deixava
+      // o cursor de um único chat chegar a offset 2300 com `max_messages_per_chat`
+      // declarado em 500.
+      const chatDone = !chunk.nextCursor
+        || hitExisting
+        || reachedChatCap(job.scope, fetchedPerChat[item.jid], job.max_messages_per_chat);
       if (chatDone) {
         delete mc.perChat[item.jid];
         chatsCompleted += 1;
@@ -454,9 +692,9 @@ async function processMultiChat(
     // Advance chatIdx past completed chats
     advanceChatIdx(mc);
 
-    // Check global cap
-    const reachedCap = totalFetched >= job.max_messages_per_chat * job.max_chats;
-    const allDone = Object.keys(mc.perChat).length === 0 || reachedCap;
+    // Teto global — o único que vale também para `scope=full`.
+    const allDone = Object.keys(mc.perChat).length === 0
+      || reachedGlobalCap(totalFetched, job.max_messages_per_chat, job.max_chats);
 
     // Persist progress after each batch
     await updateJobProgress(supabase, job.id, {
@@ -501,8 +739,10 @@ function advanceChatIdx(mc: MultiChatCursor) {
 // ---------------------------------------------------------------------------
 
 async function processJob(
-  supabase: ReturnType<typeof createClient>,
-  job: HistorySyncJob
+  supabase: Db,
+  job: HistorySyncJob,
+  cfg: GuardConfig,
+  pressurePct: () => Promise<number | null>,
 ): Promise<{ fetched: number; done: boolean; error?: string }> {
   const { error: claimErr } = await supabase
     .from("history_sync_jobs")
@@ -542,7 +782,9 @@ async function processJob(
 
   // --- scope=chat: single chat, time-budgeted loop ---
   if (job.scope === "chat" && job.chat_jid) {
-    return processSingleChat(supabase, job, provider, job.chat_jid, job.cursor, maxDays);
+    return processSingleChat(
+      supabase, job, provider, job.chat_jid, job.cursor, maxDays, cfg, pressurePct,
+    );
   }
 
   // --- scope=default/full/incremental: multi-chat with parallel fetch ---
@@ -585,14 +827,24 @@ async function processJob(
     });
   }
 
-  return processMultiChat(supabase, job, provider, mc, maxDays);
+  return processMultiChat(supabase, job, provider, mc, maxDays, cfg, pressurePct);
 }
 
 // ---------------------------------------------------------------------------
 // Stale job reset
 // ---------------------------------------------------------------------------
 
-async function resetStaleJobs(supabase: ReturnType<typeof createClient>): Promise<number> {
+/**
+ * Reanima jobs que ficaram presos em `running` — tick que morreu no meio,
+ * instância que caiu.
+ *
+ * O filtro `status = 'running'` é o que mantém `paused` e `cancelled` fora do
+ * alcance deste reaper: estado posto pelo operador não é job preso. Antes de
+ * `cancelled` existir, a única forma de abortar era escrever a mensagem em
+ * `error` e deixar o job em `running` — e este reaper o devolvia para a fila
+ * dez minutos depois, indefinidamente.
+ */
+async function resetStaleJobs(supabase: Db): Promise<number> {
   const threshold = new Date(Date.now() - JOB_STALE_MINUTES * 60_000).toISOString();
   const { data } = await supabase
     .from("history_sync_jobs")
@@ -614,9 +866,17 @@ Deno.serve(
       return jsonResponse(401, { error: "unauthorized" });
     }
 
+    // O cast reconcilia duas leituras do mesmo tipo: `createClient(...)` resolve
+    // os genéricos para o schema "public", enquanto `ReturnType<typeof createClient>`
+    // — a assinatura que todos os helpers deste arquivo usam — resolve para os
+    // defaults do pacote. São o mesmo cliente em tempo de execução; sem o cast o
+    // arquivo acumula um erro de tipo por helper chamado.
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
-    });
+    }) as unknown as Db;
+
+    const cfg = await loadGuardConfig(supabase);
+    const pressurePct = makePressureGate(supabase);
 
     const staleReset = await resetStaleJobs(supabase);
 
@@ -637,14 +897,47 @@ Deno.serve(
       return jsonResponse(500, { error: "failed to fetch queue" });
     }
 
-    const perInstance = new Map<string, HistorySyncJob>();
+    // `scope=full` puxa o histórico inteiro de até 100 conversas — dezenas de
+    // milhares de linhas. É manutenção, e manutenção não disputa banco com o
+    // horário comercial. Fora da janela o job fica na fila, intocado.
+    const inWindow = insideFullWindow(cfg, new Date());
+    const eligible: HistorySyncJob[] = [];
+    let deferredFull = 0;
     for (const j of (jobs ?? []) as HistorySyncJob[]) {
+      if (j.scope === "full" && !inWindow) { deferredFull += 1; continue; }
+      eligible.push(j);
+    }
+
+    const perInstance = new Map<string, HistorySyncJob>();
+    for (const j of eligible) {
       if (!perInstance.has(j.instance_id)) perInstance.set(j.instance_id, j);
+    }
+
+    // Se o banco já está sob pressão quando o tick começa, nem vale abrir
+    // provedor e listar conversas — cede a vez inteira.
+    const openingPressure = await pressurePct();
+    if (openingPressure !== null && openingPressure >= cfg.maxPressurePct) {
+      await logRuntime({
+        module: "whatsapp",
+        action: "history_sync_tick_skipped",
+        status: "success",
+        payloadSnapshot: {
+          pressure_pct: openingPressure,
+          threshold_pct: cfg.maxPressurePct,
+          jobs_waiting: perInstance.size,
+        },
+      });
+      return jsonResponse(200, {
+        ok: true,
+        skipped: "db_pressure",
+        pressure_pct: openingPressure,
+        jobs_waiting: perInstance.size,
+      });
     }
 
     const results: Array<{ id: string; fetched: number; done: boolean; error?: string }> = [];
     for (const job of perInstance.values()) {
-      const res = await processJob(supabase, job);
+      const res = await processJob(supabase, job, cfg, pressurePct);
       results.push({ id: job.id, ...res });
     }
 
@@ -655,6 +948,8 @@ Deno.serve(
       payloadSnapshot: {
         jobs_processed: results.length,
         stale_reset: staleReset,
+        deferred_full: deferredFull,
+        pressure_pct: openingPressure,
         total_fetched: results.reduce((a, r) => a + r.fetched, 0),
       },
     });
@@ -663,6 +958,8 @@ Deno.serve(
       ok: true,
       jobs_processed: results.length,
       stale_reset: staleReset,
+      deferred_full: deferredFull,
+      pressure_pct: openingPressure,
       results,
     });
   })
