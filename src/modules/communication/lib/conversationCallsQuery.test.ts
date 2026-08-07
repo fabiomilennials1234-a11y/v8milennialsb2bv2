@@ -24,9 +24,10 @@ interface Recorded {
   eq: Array<[string, unknown]>;
   or: string[];
   order: Array<[string, unknown]>;
+  limit: number[];
 }
 
-const recorded: Recorded = { table: null, columns: null, eq: [], or: [], order: [] };
+const recorded: Recorded = { table: null, columns: null, eq: [], or: [], order: [], limit: [] };
 let rows: Record<string, unknown>[] = [];
 let queryError: unknown = null;
 
@@ -64,6 +65,10 @@ function makeBuilder() {
     },
     order: (col: string, opts: unknown) => {
       recorded.order.push([col, opts]);
+      return builder;
+    },
+    limit: (n: number) => {
+      recorded.limit.push(n);
       return settle();
     },
   });
@@ -86,6 +91,7 @@ import {
   isCallConnected,
   phoneVariants,
 } from "./conversationCallsQuery";
+import { THREAD_MESSAGE_LIMIT } from "./whatsappMessagesQuery";
 
 beforeEach(() => {
   recorded.table = null;
@@ -93,13 +99,14 @@ beforeEach(() => {
   recorded.eq = [];
   recorded.or = [];
   recorded.order = [];
+  recorded.limit = [];
   rows = [];
   queryError = null;
   fromMock.mockClear();
 });
 
 describe("fetchConversationCalls — identidade da conversa", () => {
-  it("lê de call_logs, escopa por org e ordena igual às mensagens (started_at asc)", async () => {
+  it("lê de call_logs, escopa por org e usa a MESMA janela das mensagens", async () => {
     await fetchConversationCalls({
       organizationId: "org-1",
       phoneNumber: "5548996458738",
@@ -108,8 +115,26 @@ describe("fetchConversationCalls — identidade da conversa", () => {
 
     expect(recorded.table).toBe("call_logs");
     expect(recorded.eq).toContainEqual(["organization_id", "org-1"]);
-    // Mesma direção da query de mensagens — o merge cronológico depende disso.
-    expect(recorded.order).toContainEqual(["started_at", { ascending: true }]);
+    // DESC + limit explícito, igual à query de mensagens: sem limite o
+    // PostgREST corta em max_rows sozinho e a janela cai nas linhas ANTIGAS.
+    expect(recorded.order).toContainEqual(["started_at", { ascending: false }]);
+    expect(recorded.limit).toEqual([THREAD_MESSAGE_LIMIT]);
+  });
+
+  it("devolve em ordem cronológica ascendente — o merge com as mensagens depende disso", async () => {
+    rows = [
+      { id: "call-c", started_at: "2026-08-06T10:00:00.000Z" },
+      { id: "call-b", started_at: "2026-08-05T10:00:00.000Z" },
+      { id: "call-a", started_at: "2026-08-04T10:00:00.000Z" },
+    ];
+
+    const res = await fetchConversationCalls({
+      organizationId: "org-1",
+      phoneNumber: "5548996458738",
+      leadId: null,
+    });
+
+    expect(res.map((c) => c.id)).toEqual(["call-a", "call-b", "call-c"]);
   });
 
   it("qualquer formato de entrada produz o MESMO filtro", async () => {

@@ -340,6 +340,10 @@ verify_jwt = false
 [functions.history-sync-worker]
 verify_jwt = false
 
+# infra-watchdog: chamado por pg_cron via pg_net; auth via x-cron-secret
+[functions.infra-watchdog]
+verify_jwt = false
+
 # mass-send-create: UI invoca com JWT (admin/master); proxy authenticated
 [functions.mass-send-create]
 verify_jwt = false
