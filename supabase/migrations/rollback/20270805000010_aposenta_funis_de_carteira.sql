@@ -131,4 +131,26 @@ BEGIN
     'NÃO restaurado por este arquivo: o corpo anterior de create_default_pipeline_stages (bloco 3 da migration). Ele está em supabase/migrations/20260101000000_baseline_prod_schema.sql — reponha por CREATE OR REPLACE se a reversão precisar voltar a provisionar funil de carteira em org nova.';
 END $$;
 
+-- ── 4. Consumir o backup ────────────────────────────────────────────────────
+-- Esvaziar, não dropar. Os dois porquês:
+--
+--   • ESVAZIAR é o que destrava o re-apply. O ensaio de 2026-08-07 provou que
+--     sem isto o ciclo apply → rollback → re-apply morre em 42P07: a migration
+--     encontra o snapshot velho e (com razão) recusa empilhar. O backup já
+--     cumpriu a função no momento em que a seção 3 confirmou a restauração —
+--     os valores estão de volta em `pipeline_stages`, que é a fonte;
+--   • NÃO DROPAR porque a tabela vazia é barata e o DROP/CREATE repetido em
+--     ciclos de tentativa gera churn de catálogo sem ganho. E se alguém quiser
+--     auditar que houve um rollback, a tabela existindo e vazia conta essa
+--     história melhor que a ausência dela.
+--
+-- Só chega aqui se a seção 3 não levantou exceção: restauração verificada é a
+-- pré-condição de descartar a cópia.
+TRUNCATE public.backup_aposenta_funis_carteira;
+
+DO $$
+BEGIN
+  RAISE NOTICE 'Backup consumido (tabela esvaziada). A migration pode ser reaplicada.';
+END $$;
+
 COMMIT;

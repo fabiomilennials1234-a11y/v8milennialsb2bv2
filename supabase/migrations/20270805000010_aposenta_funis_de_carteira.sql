@@ -69,10 +69,22 @@
 BEGIN;
 
 -- ── 0. Backup do que os blocos 1 e 2 vão sobrescrever ─────────────────────
--- Sem `IF NOT EXISTS` no CREATE: se a tabela já existir de uma tentativa
--- anterior, é melhor a migration falhar e alguém olhar do que empilhar dois
--- snapshots na mesma tabela e o rollback restaurar uma mistura dos dois.
-CREATE TABLE public.backup_aposenta_funis_carteira (
+-- `IF NOT EXISTS` + guarda de linhas, e não `CREATE TABLE` nu.
+--
+-- A primeira versão disto usava `CREATE TABLE` sem `IF NOT EXISTS`, com o
+-- raciocínio de que falhar era melhor que empilhar dois snapshots. O raciocínio
+-- estava certo sobre o risco e errado sobre o remédio: o ensaio de 2026-08-07
+-- rodou apply → rollback → re-apply na branch efêmera e o re-apply MORREU com
+-- `relation "backup_aposenta_funis_carteira" already exists` (42P07), porque o
+-- rollback não dropava a tabela. E apply→rollback→re-apply é o ciclo mais
+-- provável num incidente — falhar nele é falhar exatamente quando importa.
+--
+-- A separação certa é entre os dois casos que o CREATE nu confundia:
+--   • tabela existe e está VAZIA → snapshot anterior já foi consumido pelo
+--     rollback (que a esvazia ao restaurar). Seguir é seguro;
+--   • tabela existe e tem LINHAS → há um snapshot não consumido. Aí sim é
+--     empilhamento, e a migration aborta pedindo que alguém olhe.
+CREATE TABLE IF NOT EXISTS public.backup_aposenta_funis_carteira (
   stage_id                uuid PRIMARY KEY,
   organization_id         uuid,
   pipeline_type           text,
@@ -99,6 +111,18 @@ REVOKE ALL ON public.backup_aposenta_funis_carteira FROM PUBLIC, anon, authentic
 COMMENT ON TABLE public.backup_aposenta_funis_carteira IS
   'Snapshot de pipeline_stages imediatamente antes de 20270805000010 aposentar os funis de carteira. Existe porque o UPDATE daquela migration apaga o próprio predicado que seleciona as linhas (target_pipe_type LIKE ''upsell%''), tornando o conjunto irreconstruível de dentro do banco. Lido pelo rollback homônimo. Descartável depois que a virada estabilizar — mas só depois.';
 
+-- Guarda de empilhamento: linha remanescente = snapshot que ninguém consumiu.
+DO $$
+DECLARE v_resto bigint;
+BEGIN
+  SELECT count(*) INTO v_resto FROM public.backup_aposenta_funis_carteira;
+  IF v_resto > 0 THEN
+    RAISE EXCEPTION
+      'ABORTADO: backup_aposenta_funis_carteira já tem % linha(s) de um apply anterior que não foi revertido. Empilhar dois snapshots faria o rollback restaurar uma mistura dos dois. Rode o rollback (que consome e esvazia a tabela) ou, se aquele snapshot já não vale, apague-o explicitamente antes de reaplicar.',
+      v_resto;
+  END IF;
+END $$;
+
 -- Um INSERT só, com as duas metades resolvidas por predicado, para o snapshot
 -- ser coerente: os dois blocos abaixo rodam na MESMA transação, então o que se
 -- captura aqui é exatamente o que eles vão encontrar.
@@ -112,11 +136,16 @@ SELECT
   ps.organization_id,
   ps.pipeline_type,
   ps.stage_key,
-  (ps.target_pipe_type LIKE 'upsell%'),
+  -- COALESCE porque `NULL LIKE 'upsell%'` é NULL, não false — e as duas colunas
+  -- são NOT NULL. A linha que entra no backup só por causa do `is_active` tem
+  -- `target_pipe_type` NULL, e sem o COALESCE o INSERT viola a constraint.
+  -- Só aparece quando HÁ dado: com a tabela vazia o INSERT não insere nada e a
+  -- migration passa. Pego no ensaio de 2026-08-07, depois de semear a branch.
+  COALESCE(ps.target_pipe_type LIKE 'upsell%', false),
   ps.target_pipe_type,
   ps.target_stage_key,
   ps.is_final_positive,
-  (ps.pipeline_type IN ('upsell_base', 'upsell_gestao') AND ps.is_active)
+  COALESCE(ps.pipeline_type IN ('upsell_base', 'upsell_gestao') AND ps.is_active, false)
 FROM public.pipeline_stages ps
 WHERE ps.target_pipe_type LIKE 'upsell%'
    OR (ps.pipeline_type IN ('upsell_base', 'upsell_gestao') AND ps.is_active);
