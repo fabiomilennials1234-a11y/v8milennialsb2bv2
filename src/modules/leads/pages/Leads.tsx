@@ -66,7 +66,7 @@ import { QUALIFICATION_TIERS } from "../components/lead-detail/modal/types";
 import { LeadPanelProvider, useLeadSheet } from "../components/lead-detail";
 import { LeadCardPanel } from "../components/lead-card/LeadCardPanel";
 import { DealPanelProvider } from "../components/deal-detail/DealPanelProvider";
-import { DealDetailDialog } from "../components/deal-detail/DealDetailDialog";
+import { DealCardPanel } from "../components/deal-card/DealCardPanel";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { useCanDo } from "@/modules/identity";
 import { useFeaturePermission } from "@/modules/identity";
@@ -1109,9 +1109,14 @@ function LeadsInner() {
  * O painel da aba de Leads passa a ser o **Card do Lead** novo.
  *
  * `DealPanelProvider` entra junto porque clicar num negócio dentro do card abre
- * o card do Negócio por cima — o mesmo `DealDetailDialog` que os três funis já
- * abrem. É o que permite tirar etapa, reunião e orçamento do card do Lead sem
- * tirar a função de ninguém.
+ * o card do Negócio por cima. É o que permite tirar etapa, reunião e orçamento
+ * do card do Lead sem tirar a função de ninguém.
+ *
+ * SCRUM-124: o segundo painel era o `DealDetailDialog` legado. Passou a ser o
+ * `DealCardPanel`, o mesmo que os quatro funis montam. Antes, abrir o MESMO
+ * negócio pela aba de Leads e pelo funil dava duas telas diferentes, e nada na
+ * interface explicava por quê — a diferença era a porta de entrada, que é
+ * exatamente o tipo de coisa que o usuário não tem como deduzir.
  */
 export default function Leads() {
   return (
@@ -1120,8 +1125,8 @@ export default function Leads() {
         <LeadPanelLayout
           panel={
             <>
+              <DealCardPanel />
               <LeadCardPanel />
-              <DealDetailDialog />
             </>
           }
         >

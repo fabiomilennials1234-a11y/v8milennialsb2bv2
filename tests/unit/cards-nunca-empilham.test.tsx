@@ -142,7 +142,27 @@ function clicarNaPessoa() {
   );
 }
 
-describe("Os dois cards do Torque nunca ficam empilhados", () => {
+/**
+ * Timeout explícito, pelo mesmo motivo de `lead-card-novo-negocio.test.tsx`.
+ *
+ * ⚠️ HERDADO — este arquivo já estourava o default de 5s do Vitest ANTES do
+ * SCRUM-124 (medido: com o diff em stash, 1 de 8 casos reprova por tempo). Cada
+ * caso monta os dois cards de produção em jsdom, e o caso do vaivém completo
+ * monta e remonta várias vezes. Não é asserção errada: com `--testTimeout=30000`
+ * os 8 passam.
+ *
+ * Entra aqui em vez de virar issue porque (a) é a MESMA correção que a #1460 já
+ * aplicou no arquivo irmão — segunda ocorrência da mesma classe, e a segunda é
+ * quando vale arrumar em vez de anotar; e (b) o SCRUM-124 faz três funis a mais
+ * montarem estes dois cards, então deixar o teto apertado seria empurrar o
+ * problema justamente enquanto se aumenta a superfície.
+ *
+ * 20s é folga para runner lento e ainda curto para um travamento de verdade
+ * (promise que nunca resolve) continuar reprovando em vez de pendurar a suíte.
+ */
+const TIMEOUT_RENDER_MS = 20_000;
+
+describe("Os dois cards do Torque nunca ficam empilhados", { timeout: TIMEOUT_RENDER_MS }, () => {
   beforeEach(() => {
     negocioRef.value = { ...NEGOCIO_ESTAGNADO, lead: { ...NEGOCIO_ESTAGNADO.lead, id: "l1" } };
     leadRef.value = { ...LEAD_EXEMPLO, id: "l1" };

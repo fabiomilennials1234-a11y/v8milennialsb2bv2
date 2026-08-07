@@ -66,7 +66,13 @@ import { useTeamMembers, useResponsibleMembers } from "@/modules/identity";
 import { CreateProposalModal } from "@/modules/carteira/components/proposal/CreateProposalModal";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
-import { DealPanelProvider, useDealSheet, DealDetailDialog } from "@/modules/leads";
+import {
+  DealPanelProvider,
+  useDealSheet,
+  LeadPanelProvider,
+  DealCardPanel,
+  LeadCardPanel,
+} from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import {
   AnalyticsPanel,
@@ -1713,12 +1719,31 @@ function PipePropostasInner() {
   );
 }
 
+/**
+ * Os dois cards do sistema (SCRUM-124). Ver a nota em `PipeWhatsapp.tsx` — a
+ * ordem dos providers não é estética: `LeadPanelProvider` por fora, senão o link
+ * "abrir a pessoa" de dentro do card do Negócio não acha contexto.
+ *
+ * Aqui o card novo importa mais que nos outros funis: é neste que o negócio é
+ * ganho ou perdido, e é o card do Negócio que carrega valor, etapa e a trilha do
+ * funil. O `DealDetailDialog` legado mostrava a ficha do lead numa tela sobre
+ * fechamento de venda.
+ */
 export default function PipePropostas() {
   return (
-    <DealPanelProvider>
-      <LeadPanelLayout panel={<DealDetailDialog />}>
-        <PipePropostasInner />
-      </LeadPanelLayout>
-    </DealPanelProvider>
+    <LeadPanelProvider>
+      <DealPanelProvider>
+        <LeadPanelLayout
+          panel={
+            <>
+              <DealCardPanel />
+              <LeadCardPanel />
+            </>
+          }
+        >
+          <PipePropostasInner />
+        </LeadPanelLayout>
+      </DealPanelProvider>
+    </LeadPanelProvider>
   );
 }

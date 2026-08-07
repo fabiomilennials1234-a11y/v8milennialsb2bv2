@@ -48,7 +48,13 @@ import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modu
 import { matchesQualificationFilters } from "@/modules/pipelines/lib/kanbanFilterParams";
 import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";
 import { useViewport } from "@/shared/hooks/use-viewport";
-import { DealPanelProvider, useDealSheet, DealDetailDialog } from "@/modules/leads";
+import {
+  DealPanelProvider,
+  useDealSheet,
+  LeadPanelProvider,
+  DealCardPanel,
+  LeadCardPanel,
+} from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { AddLeadToPipeModal } from "@/modules/pipelines/components/custom/AddLeadToPipeModal";
 import { CustomPipeSettingsDialog } from "@/modules/pipelines/components/custom/CustomPipeSettingsDialog";
@@ -444,12 +450,29 @@ function CustomPipelinePageInner() {
   );
 }
 
+/**
+ * Os dois cards do sistema (SCRUM-124). Ver a nota em `PipeWhatsapp.tsx` sobre a
+ * ordem dos providers.
+ *
+ * O funil CUSTOM é onde as orgs modelam reativação e upsell, e é o único dos
+ * quatro que não tem etapa fixa — mais uma razão para a ficha ser a do Negócio,
+ * que desenha a trilha a partir das etapas do próprio funil, e não a do lead.
+ */
 export default function CustomPipelinePage() {
   return (
-    <DealPanelProvider>
-      <LeadPanelLayout panel={<DealDetailDialog />}>
-        <CustomPipelinePageInner />
-      </LeadPanelLayout>
-    </DealPanelProvider>
+    <LeadPanelProvider>
+      <DealPanelProvider>
+        <LeadPanelLayout
+          panel={
+            <>
+              <DealCardPanel />
+              <LeadCardPanel />
+            </>
+          }
+        >
+          <CustomPipelinePageInner />
+        </LeadPanelLayout>
+      </DealPanelProvider>
+    </LeadPanelProvider>
   );
 }

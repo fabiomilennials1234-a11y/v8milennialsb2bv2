@@ -49,7 +49,13 @@ import {
 } from "@/modules/pipelines/lib/stalled-buckets";
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
-import { DealPanelProvider, useDealSheet, DealDetailDialog } from "@/modules/leads";
+import {
+  DealPanelProvider,
+  useDealSheet,
+  LeadPanelProvider,
+  DealCardPanel,
+  LeadCardPanel,
+} from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
 import { MeetingTimeline } from "@/modules/pipelines/components/legacy/confirmacao/MeetingTimeline";
@@ -1104,16 +1110,37 @@ function PipeConfirmacaoInner() {
   );
 }
 
+/**
+ * Os dois cards do sistema (SCRUM-124). Antes daqui este funil abria o
+ * `DealDetailDialog` legado enquanto o pipe-whatsapp já abria o card novo — dois
+ * layouts para a mesma coisa, decididos pela porta por onde o usuário entrou.
+ *
+ * `LeadPanelProvider` PRECISA envolver o `DealPanelProvider`, não o contrário:
+ * clicar na pessoa dentro do card do Negócio fecha esse e abre o card do Lead, e
+ * sem o provider de fora o `useLeadSheet` não acha contexto e o link quebra.
+ *
+ * Nunca ficam empilhados — são as duas únicas fichas do produto, cada uma dona
+ * de um assunto.
+ */
 export default function PipeConfirmacao() {
   const { hasFeature } = useOrgFeatures();
   // Agendamentos foi mergeado em Oportunidades — board standalone aposentado (ADR-0004).
   if (hasFeature("merged_opportunity_funnel")) return <Navigate to="/funis" replace />;
 
   return (
-    <DealPanelProvider>
-      <LeadPanelLayout panel={<DealDetailDialog />}>
-        <PipeConfirmacaoInner />
-      </LeadPanelLayout>
-    </DealPanelProvider>
+    <LeadPanelProvider>
+      <DealPanelProvider>
+        <LeadPanelLayout
+          panel={
+            <>
+              <DealCardPanel />
+              <LeadCardPanel />
+            </>
+          }
+        >
+          <PipeConfirmacaoInner />
+        </LeadPanelLayout>
+      </DealPanelProvider>
+    </LeadPanelProvider>
   );
 }
