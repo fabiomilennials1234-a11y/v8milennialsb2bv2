@@ -19,16 +19,45 @@ Três arquivos é dois a mais do que o ideal, e o custo é real: escrevi este se
 
 ## 0. Onde estamos
 
-| O quê | Medido 07/08 |
+| O quê | Medido 07/08 (fim do dia) |
 |---|---|
 | Épico **SCRUM-43** | Fazendo — 5 histórias Feito, 2 Testando, 1 Fazendo, 2 A fazer |
-| Código da sprint | **Completo**, exceto 1 regressão (F0.1 abaixo) |
+| Código da sprint | **Completo** — a regressão dos 13 testes foi fechada e mergeada |
+| Rollbacks das 13 migrations da virada | **13 de 13, e ensaiados contra banco real** (eram 9 escritos, 8 nunca rodados) |
+| Ratchet local (o gate declarado pelo SCRUM-177) | **verde**, teto 178 → 176 |
+| `main` à frente de `develop` | **0** — reconciliada |
 | Migrations pendentes | **41** — 21 re-carimbos, 13 da virada, o resto de outras frentes |
-| Ledger de prod | **64 versões** (a spec media 60 em 06/08) |
-| Versões em prod sem arquivo no repo | **35** |
+| Ledger de prod | **64 versões** — sem drift novo desde a manhã |
+| Versões em prod sem arquivo no repo | **33** (eram 35; o reconcile `main→develop` deu arquivo a 2) |
 | Edge functions desatualizadas em prod | 30 de 30 |
 | Orgs com a feature em produção | **0 de 98** |
 | Cards do Jira feitos em código e parados no board | ~10 |
+
+### O que fechou em 07/08
+
+Tudo mergeado em `develop` (PRs #1461, #1466, #1467). **Nada tocou produção.**
+
+| Item | Estado |
+|---|---|
+| F0.1 — os 13 testes vermelhos do `DealCardPanel` | ✅ era regressão da própria branch; mock do barrel corrigido |
+| F0.2 — merge da #1461 | ✅ última entrega de código da sprint |
+| Reconcile `main → develop` (#1466) | ✅ 4 hotfixes que nunca tinham voltado |
+| Os 4 rollbacks que faltavam | ✅ **13/13** |
+| **Ensaio dos rollbacks em branch efêmera** | ✅ 12 OK + 1 abortado pela guarda (correto); 13/13 depois do pré-passo |
+| Passo **4b** — captura dos corpos que o push destrói | ✅ novo; 7 funções, não 1 |
+| Passo **4** — as 21 do repair | ✅ lista versionada + gate delta+conjunto + teste-guarda |
+| Escape auditável nos runners de backfill | ✅ `--eu-sei-que-e-prod <ref>` |
+| `--include-all` na guarda de push | ✅ **era bloqueador silencioso do apply** |
+| Ratchet de volta ao verde | ✅ os 2 vermelhos herdados fechados |
+| Ambiente do QA de 3 papéis | ✅ caminho provado ponta a ponta (ver F0.4) |
+
+**Três defeitos que só o ensaio revelaria** — e que estariam esperando no dia do apply:
+
+1. **`db-push-branch.sh` não sabia passar `--include-all`.** A spec §5 diz que a flag é obrigatória em prod (4 órfãs com versão acima de tudo no repo, e o CLI ignora migration abaixo do máximo remoto). O script que o `CLAUDE.md` chama de *"único caminho autorizado"* não a tinha: no dia, ou se usava a guarda e **não se aplicava nada** — com o CLI imprimindo uma lista que se lê como sucesso —, ou se contornava a guarda e se rodava `db push` na mão, que é o caminho que já escreveu em prod por engano.
+2. **O backup da carteira quebrava o re-apply** (42P07) — e *apply → rollback → re-apply* é o ciclo mais provável num incidente.
+3. **`NULL LIKE 'upsell%'` é `NULL`**, e a coluna era `NOT NULL`. Só aparece **com dado**: as duas primeiras execuções passaram verdes porque a branch nasce vazia.
+
+O ensaio não serviu para confirmar o que já se achava. Serviu para achar o que a leitura não pegaria — que é a única razão de ensaiar.
 
 ### A regra de escopo (CTO, 07/08)
 
@@ -54,11 +83,16 @@ O que o congelamento **não** bloqueia: as Fases 0, 1-código e 3, que são inte
 
 ## Dependências
 
+Atualizado em 07/08 — verde é o que fechou.
+
 ```mermaid
 graph TD
-    F01["F0.1 · mock DealCardPanel<br/>13 testes vermelhos"] --> F02["F0.2 · merge PR #1461"]
-    F02 --> F03["F0.3 · CI vira gate?"]
-    F02 --> F04["F0.4 · QA logado 3 papéis"]
+    F01["✅ F0.1 · mock DealCardPanel"] --> F02["✅ F0.2 · merge #1461"]
+    F02 --> F03["✅ F0.3 · ratchet verde"]
+    F02 --> F04["🟡 F0.4 · QA 3 papéis<br/>ambiente pronto, evidência pendente"]
+    RB["✅ 13/13 rollbacks<br/>ensaiados em branch efêmera"] --> FASE2
+    CAP["✅ passo 4b · captura dos corpos<br/>(expira no apply)"] --> FASE2
+    IA["✅ --include-all na guarda<br/>era bloqueador silencioso"] --> FASE2
     F04 --> FASE2["FASE 2 · virada em produção<br/>(congelada)"]
     F03 --> FASE2
     F05["F0.5 · aviso à piloto"] --> FASE2
@@ -73,33 +107,52 @@ graph TD
 
 ## Fase 0 — fechar tudo que não é produção
 
-Ordem importa só entre F0.1 e F0.2. O resto é paralelo.
+**Cinco dos seis itens fecharam em 07/08.** Sobra o F0.4, que é humano, e o F0.6, que precisa de escrita no Jira.
 
-### F0.1 · Destravar o PR #1461 — **o único item de código aberto da sprint**
-**Dono:** agente · **Custo:** minutos · **Cards:** SCRUM-124
+### ✅ F0.1 · Destravar o PR #1461 — FEITO
+**Cards:** SCRUM-124
 
-13 testes vermelhos em `pipe-whatsapp-agendar-move`, `pipe-confirmacao-compareceu-move` e `funnel-nav-switcher`. **Não é dívida herdada — é regressão desta branch**, provada: em `origin/develop` a mesma suíte passa 6/6.
+13 testes vermelhos, e **não eram dívida herdada — era regressão da própria branch**: em `origin/develop` as mesmas suítes passavam.
 
-Causa-raiz: o commit `9b351abb` trocou o import de `DealCardPanel` do caminho profundo para o barrel `@/modules/leads` — que é o certo pela convenção do repo. Os testes mockam o caminho profundo, então a página passa a resolver pelo mock do barrel, que não exporta o componente, e explode ao montar.
+O commit `9b351abb` trocou o import de `DealCardPanel` do caminho profundo para o barrel `@/modules/leads` — que é o certo pela convenção do repo. `vi.mock` de barrel é substituição **total**: chave ausente vira `undefined`, o React recusa como componente e derruba a montagem inteira. Por isso 13 testes sobre *mover negócio* falharam sem que nada do move tivesse mudado, e o erro apontava para o render, não para o import.
 
-Correção: acrescentar `DealCardPanel` e `LeadCardPanel` ao mock de `@/modules/leads` nos três arquivos. **Gate:** as 3 suítes verdes.
+Correção nos mocks, não no produto. `funnel-nav-switcher` nunca esteve quebrada — estava na minha lista por engano.
 
-### F0.2 · Mergear o PR #1461 em `develop`
-**Dono:** CTO · **Cards:** fecha SCRUM-124 e SCRUM-126, destrava SCRUM-110
+### ✅ F0.2 · Mergear o PR #1461 — FEITO
+Fecha SCRUM-124 e SCRUM-126, destrava SCRUM-110. Mergeada junto a #1466 (reconcile) e #1467 (rollbacks + ensaio).
 
-Rebase antes — a branch está 4 commits atrás de `develop`. É a última entrega de código da sprint.
+### ✅ F0.3 · O que o CI significa — RESOLVIDO, e por dois lados
+**Cards:** SCRUM-177 — **estava `Feito` no Jira desde 06/08**, com a decisão no corpo: *"~157 testes de dívida herdada; gate real é ratchet local"*.
 
-### F0.3 · Decidir o que o CI significa
-**Dono:** CTO · **Cards:** SCRUM-177
+Só que o ratchet **estava reprovando em `origin/develop`**. Dois testes, ambos herdados, fechados em 07/08:
 
-`main` e `develop` vermelhas: Unit, Integration, E2E e RLS pgTAP. Ou vira gate de verdade, ou fica escrito que o gate é o QA manual da F0.4. Sem meio-termo — **vermelho crônico tratado como ruído foi exatamente o que escondeu a regressão da F0.1 por dois dias.** Esse é o argumento, e ele já custou uma vez.
+- **`webhook-persist-message`** — o código estava certo e o mock envelheceu. `persistMessage` passou a lançar quando upsert **e** DLQ falham (devolver `null` fazia o handler responder 200 e o Uazapi considerar entregue — mensagem de cliente sumindo em silêncio). Ganhou também o caso irmão que faltava para essa garantia;
+- **`migration-version-collision-contract`** — o ratchet estava certo e ninguém ouviu: as 15 colisões viraram `archive/` no #1233, e ele pedia o encolhimento havia semanas.
 
-### F0.4 · QA logado com admin, membro e master separadamente
+Teto **178 → 176**, só as 2 linhas determinísticas. Não rodei `test:baseline`, que removeria as 15 apontadas — 9 são falha de coleta e 1 é stress com configs aleatórias; tirá-las deixaria o ratchet vermelho na branch de quem não mexeu em nada.
+
+> O gate declarado agora **passa**, e passa com o teto mais apertado, não afrouxado.
+
+### 🟡 F0.4 · QA logado com admin, membro e master — **ambiente pronto, evidência pendente**
 **Dono:** humano · **Cards:** SCRUM-172 · **Bloqueia a Fase 2**
 
-O gate declarado do deploy, e o único não coberto por teste automatizado: a branch efêmera replica só o Postgres, e sem as edge functions o app não passa do boot. É justamente onde mora a correção de RLS de `deals` — multi-org e master.
+⚠️ **O card está `Feito` no Jira desde 06/08, e a spec §7 diz que a prova não existe.** Uma das duas afirmações está errada, e resolver isso é do CTO — não dá para inferir do dado.
 
-Precisa de ambiente. Branch efêmera custa **$0,01344/hora** e **encerra na mesma sessão** (`delete_branch`); runbook em `runbook-validacao-local.md`.
+**O que deixou de ser obstáculo:** a objeção era *"a branch replica só o Postgres, e sem as edge functions o app não passa do boot"*. Em 07/08 o caminho inteiro foi percorrido e funciona:
+
+| Camada | Como |
+|---|---|
+| Schema | `create_branch` → repair do ledger (nasce com 3 linhas mentindo e 0 tabelas) → `db-push-branch.sh` |
+| Edge functions | **69 deployadas, 0 falhas**, `verify_jwt` lido do `config.toml` como em prod |
+| Três usuários | Auth Admin API com os UUIDs fixos que o seed espera |
+| Fixture | `qa-seed/rls-deals-tres-papeis.sql` — 2 orgs, leads, negócios, 1 na lixeira |
+| Frontend | `npm run dev:branch` → `.env.development.local` (gitignored); o `predev` recusa prod |
+
+**A camada Postgres saiu 9/9** (`qa-seed/rls-deals-provas.sql`): admin multi-org vê as duas orgs, membro preso na dele, master atravessa sem pertencer, anon sem grant, soft-delete escondido, `WITH CHECK` recusando.
+
+**O que falta é só a interface**, percorrida por um humano nos três logins. Tudo o que a monta é script versionado — refazer o ambiente é executar, não redescobrir.
+
+Duas ressalvas do dia: a branch **não tem os secrets de prod** (`UAZAPI_*`, Gemini, Meta), então chat de WhatsApp e Copilot falham em runtime — o caminho de leads/negócios/funis não passa por eles; e foram deployadas **69 das 141**, as que o frontend invoca por dois padrões conhecidos (`invoke('literal')` e `fetch` para `/functions/v1/`). Há uma chamada por variável em `useWhatsAppSend.ts:67` fora desse levantamento.
 
 ### F0.5 · Avisar a piloto do salto nos stat cards
 **Dono:** humano · **Cards:** SCRUM-128
@@ -151,9 +204,13 @@ A sequência não muda, e a spec já a tem passo a passo com gate e reversão po
 
 ```
 unlink → decidir a chave → 30 edge functions → n8n → repair dos 21 →
-push dos 20 → limpeza DML cross-org → M6 → backfill M4 → carteira →
-types + pontes → merge em main → flag na piloto
+CAPTURAR OS CORPOS (4b) → push dos 20 → limpeza DML cross-org → M6 →
+backfill M4 → carteira → types + pontes → merge em main → flag na piloto
 ```
+
+⚠️ **O passo 4b é novo (07/08) e tem prazo de validade: vence no instante do push.** `CREATE OR REPLACE` não guarda o corpo anterior, e **sete** funções que já existem em prod são reescritas pela virada. Sem a captura, o rollback da `20270730000030` não tem de onde ler e `sync_custom_pipe_to_entries()` fica mencionando `deal_id` depois do `DROP COLUMN` — todo arrastar-e-soltar de card custom quebra. `node scripts/capturar-corpos-antes-do-apply.mjs --db-url "$URL_PROD"`, e **commite o resultado**.
+
+⚠️ **O `db push` do passo 5 exige `--include-all` E `--allow-dml`.** A guarda passou a aceitar as duas flags em 07/08 — antes não aceitava `--include-all`, e sem ela o push **não aplica nada** e imprime uma lista que se lê como sucesso. O `--allow-dml` já era necessário antes: 5 das 6 migrations acusadas têm `INSERT` dentro de **corpo de função** (falso positivo do scan por linha); o único DML de topo é o backup do bloco 0 da carteira, que escreve numa tabela que ele mesmo cria.
 
 **As duas ordens que não invertem**, e o porquê de cada uma:
 
@@ -166,7 +223,15 @@ types + pontes → merge em main → flag na piloto
 
 > A linha anterior dizia "12 das 13 não têm". Estava stale desde `a21d78b2` (que escreveu 5) e eu a repeti de documento em vez de medir. Medido: eram 7 faltando, agora 0.
 
-**O buraco que continua:** 8 dos 13 rollbacks **nunca rodaram contra um banco**, e não há gate que os rode. O único exercitado — `20270730000020_leads_claim` — **falhou** na primeira execução (`fn_assert_member_same_org` cria dependência sobre `claimed_by`; o `DROP COLUMN` batia com `cannot drop column ... because other objects depend on it`), foi corrigido em `320f2437` e só então passou. Amostra de 1, taxa de falha de 1. Rollback que ninguém rodou é rollback que não existe — e agora há um ponto de dado dizendo exatamente isso.
+**✅ O buraco fechou em 07/08: os 13 foram ENSAIADOS.** Branch efêmera criada, usada e encerrada na mesma sessão. Resultado: **12 OK, 1 abortado pela própria guarda, 0 falhas** — e o abortado passou depois do pré-passo que ele exige. 13/13.
+
+O aborto é um acerto, não um defeito: o rollback da `20270730000030` recusa rodar enquanto `sync_custom_pipe_to_entries()` ainda mencionar `deal_id`, com a mensagem *"esta guarda acabou de evitar uma queda"*. Sem ela, o `DROP COLUMN` quebraria todo arrastar-e-soltar de card custom.
+
+Com dado semeado, o ciclo foi medido de ponta a ponta na `aposenta_funis_de_carteira`: o apply destruiu os valores, o rollback **restaurou byte a byte idêntico** ao pré-apply, e o re-apply passou. Era a promessa que o backup fazia e que, até ali, não estava provada — as execuções anteriores capturaram 0 linhas e validaram a canalização, não a restauração.
+
+**O que continua sem cobertura:** não há gate automático que rode o diretório de rollbacks. O ensaio foi manual e pontual; se alguém editar um rollback amanhã, nada reprova. Vale como dívida conhecida, não como bloqueador — o lote de hoje está provado.
+
+**A `20270803000010` (`DROP COLUMN`) segue irreversível sem restore** — o rollback repõe as colunas, não os valores.
 
 ---
 
@@ -216,4 +281,23 @@ Vale para a Fase 2 e está na spec §3, repetido aqui porque é a parte que ning
 - o gate do M6 não imprimir `VALIDATION PASSED`;
 - a verificação pós-apply achar **trava ≠ 0** — a fatia 2 não valeu e o backfill **não pode** rodar;
 - qualquer edge function ficar fora de `ACTIVE`;
-- `has_function_privilege('anon', 'public.abrir_negocio(...)', 'EXECUTE')` voltar `true`.
+- `has_function_privilege('anon', 'public.abrir_negocio(...)', 'EXECUTE')` voltar `true`;
+- **o passo 4b não ter deixado 7 arquivos commitados** em `supabase/migrations/rollback/_corpos-anteriores/`. Sem eles não há rollback para a `20270730000030`, e o push passa a ser irreversível nesse ponto.
+
+---
+
+## O que continua aberto, em uma tela
+
+Depois de 07/08, o que separa a sprint do apply:
+
+| # | O quê | Dono |
+|---|---|---|
+| 1 | **F0.4** — a evidência do QA nos três papéis, e resolver a contradição (`Feito` no Jira × spec §7 "não provado") | CTO + humano |
+| 2 | **F0.5** — avisar a piloto do salto nos stat cards | humano |
+| 3 | **F0.6** — pôr o board de pé (~10 cards feitos em código, parados) | precisa de escrita no Jira |
+| 4 | **Basic4u `dd91cd35`** — destrava 4.226 cards do M4 e 68% da Carteira | CTO |
+| 5 | **Cross-org: zerar ou reatribuir** os 1.594 responsáveis | CTO |
+| 6 | **F1.3 + F1.4** — destino do Sweep e a `service_role` exposta (são o mesmo objeto) | CTO |
+| 7 | **Fase 2 inteira** — congelada | CTO |
+
+**Nenhum é código.** A sprint terminou de construir; o que resta é decidir e entregar.
