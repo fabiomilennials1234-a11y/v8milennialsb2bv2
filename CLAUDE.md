@@ -15,6 +15,21 @@ Este doc é **mínimo**. Para detalhe, navegar via:
   - `src/modules/<bc>/CLAUDE.md` — 14 sub-CLAUDE.md (1 por BC)
 - **AGENTS.md** raiz — spec agent-agnostic
 - **llms.txt** raiz — index curado pra LLMs
+- **`docs/MASTER-ROADMAP-WORLD-CLASS.md`** — 7 waves, 47 gaps, dependências explícitas. 🔴 **Ler ANTES de remover qualquer arquivo.** É o que distingue **andaime de wave futura** de **resíduo morto** — tabela vazia e código sem chamador são o estado *esperado* de uma wave ainda não construída.
+
+### ⚠️ Antes de remover arquivo: de onde ele veio?
+
+```bash
+git log --all --follow --diff-filter=A -- <arquivo>   # commit que CRIOU o arquivo
+```
+
+Nasceu num commit de fundação (ex.: `8dd7d94c` *"feat: waves 0-7 — world-class CRM foundation"*)? **É andaime de roadmap, não resíduo. Pare.** Custa 2 segundos e é a checagem que não existia quando a #1434 removeu o andaime da Wave 2 (e-mail/SMS) e precisou ser revertida pela #1456.
+
+Duas regras que saíram daquele episódio:
+1. **PR que remove código nasce como `draft`**, e traz no corpo *de onde os arquivos vieram* (a saída do comando acima).
+2. **`count(*) = 0` NÃO é evidência de feature morta.** Tabela vazia também significa: é o futuro (SCRUM-43) · está em construção · é cache/lock com TTL · é sink quebrado por RLS · é infra nova não exercitada. Só a sexta causa autoriza remover. Prova mínima: `count(*)` + `max(created_at)` + **quem ESCREVE** (`git grep 'from("<tabela>")'`) + onde a UI está montada + **a edge function está deployada?**
+
+⚠️ **O custo é assimétrico:** adicionar código errado dá erro; **remover código errado dá silêncio**, e a conta chega meses depois.
 
 ## Como o trabalho anda (revisto 2026-07-28)
 
