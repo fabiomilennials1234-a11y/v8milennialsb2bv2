@@ -15,6 +15,11 @@ import {
   type InboxServerFilter,
 } from "@/modules/communication/lib/inboxFilterServer";
 import {
+  selectInChunks,
+  IN_CHUNK_SIZE,
+  IN_CHUNK_SIZE_FANOUT,
+} from "@/shared/supabase/selectInChunks";
+import {
   useWhatsAppRealtimeFallback,
   FALLBACK_POLL_INTERVAL_MS,
   JOINED_BACKSTOP_POLL_INTERVAL_MS,
@@ -68,6 +73,30 @@ export function useWhatsAppContacts(
     queryKey: chatQueryKeys.contacts(organizationId, instanceId, serverFilter?.cacheKey),
     queryFn: async () => {
       if (!organizationId || !instanceId) return [];
+
+      // Falha de enriquecimento NÃO derruba a lista: a lista é o payload, nome e
+      // etiqueta são acessórios e degradam. Mas degradar em silêncio foi o que
+      // escondeu o incidente — agora deixa rastro no console.
+      const soft = <T,>(p: Promise<T[]>, label: string): Promise<T[]> =>
+        p.catch((e) => {
+          console.error(`[inbox] enriquecimento "${label}" falhou`, e);
+          return [] as T[];
+        });
+
+      /**
+       * Etiqueta é a única coisa enriquecida AQUI que o filtro do inbox avalia
+       * (`matchesTags`). Com filtro de etiqueta ativo, degradar pra `[]` não é
+       * degradar: é reencenar o incidente por outra porta — o predicado reprova
+       * a página inteira e a tela mostra "Total: 0" como se fosse resposta.
+       *
+       * Então a política inverte quando a dimensão está em uso: a falha SOBE, a
+       * query vai a `isError`, e o gate (`inboxFilterGate`) acende o aviso em vez
+       * do empty state. Sem filtro de etiqueta, a lista vale mais que os chips e
+       * o comportamento é o de sempre.
+       */
+      const tagsAreFilterCritical = filterArgs?.p_tags != null;
+      const softTags = <T,>(p: Promise<T[]>, label: string): Promise<T[]> =>
+        tagsAreFilterCritical ? p : soft(p, label);
 
       // ── V3: lista server-side via RPC (DEFAULT ON; escape hatch localStorage '0') ──
       // get_whatsapp_conversation_list lê da tabela-resumo whatsapp_conversation_summary
@@ -125,33 +154,59 @@ export function useWhatsAppContacts(
           } as ChatContact;
         });
 
-        // Enriquecimento (lead names + tags) — mesmo padrão do caminho antigo.
+        // Enriquecimento (lead names + tags) — em LOTES. Com filtro ativo a página
+        // vai a 1000 conversas e um `.in()` com 1000 uuids passa de 39 KB de URL:
+        // o gateway responde 400. Antes o código lia só `.data`, sem checar `error`,
+        // então esse 400 apagava nome e etiqueta de todas as conversas em silêncio.
         const leadIds = [...new Set(contacts.map((c) => c.lead_id).filter((id): id is string => !!id))];
-        const convIds = contacts.map((c) => c.conversation_id).filter((id): id is string => !!id);
-        const [leadNamesRes, leadTagsRes, convTagsRes] = await Promise.all([
-          leadIds.length
-            ? supabase.from("leads").select("id, name").in("id", leadIds)
-            : Promise.resolve({ data: [] as { id: string; name: string | null }[] }),
-          leadIds.length
-            ? supabase.from("lead_tags").select("lead_id, tags!inner(id, name, color)").in("lead_id", leadIds)
-            : Promise.resolve({ data: [] as any[] }),
-          convIds.length
-            ? supabase
-                .from("whatsapp_conversation_tags")
-                .select("conversation_id, tags!inner(id, name, color)")
-                .in("conversation_id", convIds)
-            : Promise.resolve({ data: [] as any[] }),
+        const convIds = [
+          ...new Set(contacts.map((c) => c.conversation_id).filter((id): id is string => !!id)),
+        ];
+
+        const [leadNameRows, leadTagRows, convTagRows] = await Promise.all([
+          soft(
+            selectInChunks<{ id: string; name: string | null }>(
+              leadIds,
+              (chunk) => supabase.from("leads").select("id, name").in("id", chunk),
+              IN_CHUNK_SIZE,
+            ),
+            "leads",
+          ),
+          softTags(
+            selectInChunks<any>(
+              leadIds,
+              (chunk) =>
+                supabase
+                  .from("lead_tags")
+                  .select("lead_id, tags!inner(id, name, color)")
+                  .in("lead_id", chunk),
+              IN_CHUNK_SIZE_FANOUT,
+            ),
+            "lead_tags",
+          ),
+          softTags(
+            selectInChunks<any>(
+              convIds,
+              (chunk) =>
+                supabase
+                  .from("whatsapp_conversation_tags")
+                  .select("conversation_id, tags!inner(id, name, color)")
+                  .in("conversation_id", chunk),
+              IN_CHUNK_SIZE_FANOUT,
+            ),
+            "conversation_tags",
+          ),
         ]);
 
         const leadNameMap = new Map<string, string>();
-        for (const row of leadNamesRes.data || []) if (row.name) leadNameMap.set(row.id, row.name);
+        for (const row of leadNameRows) if (row.name) leadNameMap.set(row.id, row.name);
         const leadTagsMap = new Map<string, ChatContactTag[]>();
-        for (const row of (leadTagsRes.data || []) as any[]) {
+        for (const row of leadTagRows as any[]) {
           const tag = (row as { tags: ChatContactTag }).tags;
           leadTagsMap.set(row.lead_id, [...(leadTagsMap.get(row.lead_id) || []), tag]);
         }
         const convTagsMap = new Map<string, ChatContactTag[]>();
-        for (const row of (convTagsRes.data || []) as any[]) {
+        for (const row of convTagRows as any[]) {
           const tag = (row as { tags: ChatContactTag }).tags;
           convTagsMap.set(row.conversation_id, [...(convTagsMap.get(row.conversation_id) || []), tag]);
         }
@@ -267,27 +322,55 @@ export function useWhatsAppContacts(
         .filter(([, c]) => !c.lead_id)
         .map(([key]) => key);
 
+      // Aqui os ids saem de até 8000 mensagens, então passam de 641 fácil em org
+      // grande — mesmo estouro de URL do caminho server. Vai em lotes, e falha
+      // deixa rastro em vez de sumir com nome/etiqueta em silêncio. `soft` e
+      // `softTags` são os mesmos do caminho server (declarados no topo do queryFn).
+
       // Query 2: lead names (by id + by phone) + lead_tags + conversation_tags em paralelo
-      const [leadNamesResult, leadsByPhoneResult, leadTagsResult, convTagsResult] = await Promise.all([
-        leadIds.length > 0
-          ? supabase.from("leads").select("id, name, phone").in("id", leadIds)
-          : Promise.resolve({ data: [] as { id: string; name: string | null; phone: string | null }[] }),
+      const [leadNameRows, leadsByPhoneResult, leadTagRows, convTagRows] = await Promise.all([
+        soft(
+          selectInChunks<{ id: string; name: string | null; phone: string | null }>(
+            leadIds,
+            (chunk) => supabase.from("leads").select("id, name, phone").in("id", chunk),
+            IN_CHUNK_SIZE,
+          ),
+          "leads",
+        ),
         phonesWithoutLead.length > 0
           ? supabase.from("leads").select("id, name, phone")
               .eq("organization_id", organizationId)
               .not("phone", "is", null)
           : Promise.resolve({ data: [] as { id: string; name: string | null; phone: string | null }[] }),
-        leadIds.length > 0
-          ? supabase.from("lead_tags").select("lead_id, tags!inner(id, name, color)").in("lead_id", leadIds)
-          : Promise.resolve({ data: [] as any[] }),
-        convIds.length > 0
-          ? supabase.from("whatsapp_conversation_tags").select("conversation_id, tags!inner(id, name, color)").in("conversation_id", convIds)
-          : Promise.resolve({ data: [] as any[] }),
+        softTags(
+          selectInChunks<any>(
+            leadIds,
+            (chunk) =>
+              supabase
+                .from("lead_tags")
+                .select("lead_id, tags!inner(id, name, color)")
+                .in("lead_id", chunk),
+            IN_CHUNK_SIZE_FANOUT,
+          ),
+          "lead_tags",
+        ),
+        softTags(
+          selectInChunks<any>(
+            convIds,
+            (chunk) =>
+              supabase
+                .from("whatsapp_conversation_tags")
+                .select("conversation_id, tags!inner(id, name, color)")
+                .in("conversation_id", chunk),
+            IN_CHUNK_SIZE_FANOUT,
+          ),
+          "conversation_tags",
+        ),
       ]);
 
       // Index lead names by id
       const leadNameMap = new Map<string, string>();
-      for (const row of leadNamesResult.data || []) {
+      for (const row of leadNameRows) {
         if (row.name) leadNameMap.set(row.id, row.name);
       }
 
@@ -301,7 +384,7 @@ export function useWhatsAppContacts(
 
       // Index lead tags
       const leadTagsMap = new Map<string, ChatContactTag[]>();
-      for (const row of (leadTagsResult.data || []) as any[]) {
+      for (const row of leadTagRows as any[]) {
         const tag = (row as unknown as { tags: ChatContactTag }).tags;
         const existing = leadTagsMap.get(row.lead_id) || [];
         existing.push(tag);
@@ -310,7 +393,7 @@ export function useWhatsAppContacts(
 
       // Index conversation tags
       const convTagsByConvId = new Map<string, ChatContactTag[]>();
-      for (const row of (convTagsResult.data || []) as any[]) {
+      for (const row of convTagRows as any[]) {
         const tag = row.tags as unknown as ChatContactTag;
         const existing = convTagsByConvId.get(row.conversation_id) || [];
         existing.push(tag);
@@ -334,11 +417,19 @@ export function useWhatsAppContacts(
 
       // Fetch tags for phone-resolved leads
       if (extraLeadIds.length > 0) {
-        const { data: extraTags } = await supabase
-          .from("lead_tags")
-          .select("lead_id, tags!inner(id, name, color)")
-          .in("lead_id", extraLeadIds);
-        for (const row of (extraTags || []) as any[]) {
+        const extraTags = await softTags(
+          selectInChunks<any>(
+            extraLeadIds,
+            (chunk) =>
+              supabase
+                .from("lead_tags")
+                .select("lead_id, tags!inner(id, name, color)")
+                .in("lead_id", chunk),
+            IN_CHUNK_SIZE_FANOUT,
+          ),
+          "lead_tags(phone-resolved)",
+        );
+        for (const row of extraTags as any[]) {
           const tag = (row as unknown as { tags: ChatContactTag }).tags;
           const existing = leadTagsMap.get(row.lead_id) || [];
           existing.push(tag);
