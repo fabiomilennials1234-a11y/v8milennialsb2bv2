@@ -73,11 +73,37 @@ Três escritas diretas por PostgREST ficam **fora do alcance da flag** — inclu
 
 21 das 41 pendentes são **o mesmo SQL já aplicado em prod** sob versão 2026 diferente (provado: o ledger de `20260804124709` começa com `-- 20270805000000_voip_incoming_creates_call.sql`). Replicá-las rodaria `DROP POLICY`/`DROP TRIGGER`/`CREATE` em tabelas vivas — 20 delas fazem DDL destrutivo-e-recriativo.
 
+A lista das 21 vive em **`scripts/repair-recarimbos-virada.txt`** — uma versão por linha, com procedência e receita de conferência no cabeçalho. Antes ela era o placeholder `<as 21>`, e o conjunto não existia em artefato nenhum.
+
 ```bash
-supabase migration repair --status applied <as 21> --db-url "$URL_PROD"
+supabase migration repair --status applied \
+  $(grep -v '^#' scripts/repair-recarimbos-virada.txt | tr '\n' ' ') \
+  --db-url "$URL_PROD"
 ```
 
-**Gate:** ledger passa de 60 para 81 versões, e o `--dry-run` do passo 5 passa a listar 20, não 41.
+**Gate: delta + conjunto, não contagem absoluta.** O ledger cresce **exatamente +21** e passa a conter as 21 versões do arquivo; o `--dry-run` do passo 5 passa a listar 20, não 41.
+
+> A forma anterior — "ledger passa de 60 para 81" — nasceu certa (60+21=81) e apodreceu em 24 h: prod ganhou 4 linhas de outra frente e hoje daria 85. Contagem absoluta de tabela que um terceiro escreve todo dia não é gate.
+
+⚠️ **Reparar de MAIS é o erro caro, não reparar de menos.** Marcar uma migration NOVA como aplicada faz o `db push` **pulá-la em silêncio** — sem erro, sem aviso, e o objeto nunca é criado. `tests/unit/repair-recarimbos-nao-tem-virada.test.ts` trava isso: reprova se qualquer uma das 13 da virada entrar na lista.
+
+Correção de tamanho, medida: **só um** dos 21 arquivos é genuinamente não-idempotente — `20270728000000_meta_conversations.sql:24`. Os demais trazem `DROP … IF EXISTS` na linha anterior ao `CREATE`. A frase anterior ("20 delas fazem DDL destrutivo-e-recriativo") superestimava o risco e escondia qual era o arquivo.
+
+### 4b · Capturar os corpos que o push vai destruir
+**Dono:** agente · **Reversão:** n/a (é leitura) · **Prazo: vence no instante do passo 5**
+
+```bash
+node scripts/capturar-corpos-antes-do-apply.mjs --db-url "$URL_PROD"
+git add supabase/migrations/rollback/_corpos-anteriores/ && git commit
+```
+
+**Sete** funções que já existem em prod são reescritas por `CREATE OR REPLACE` pelas migrations da virada. `CREATE OR REPLACE` não guarda o corpo anterior: depois do apply, `pg_get_functiondef` devolve o corpo NOVO e o antigo deixa de existir no banco.
+
+O rollback de `20270730000030` já exigia isso em prosa — *"capture o corpo com `pg_get_functiondef` ANTES de aplicar esta migration"* — e nenhum passo desta receita fazia. Era um pré-requisito com prazo de validade escrito onde ninguém leria a tempo. Sem ele, reverter a `…000030` deixa `sync_custom_pipe_to_entries()` mencionando `deal_id` depois do `DROP COLUMN`, e **todo arrastar-e-soltar de card custom quebra** com `record "new" has no field "deal_id"`.
+
+Não basta o baseline: ele é uma foto de janeiro, e o ledger de prod carrega **35 versões sem arquivo no repo** — qualquer uma pode ter reescrito uma dessas funções desde então.
+
+**Gate:** 7 arquivos em `supabase/migrations/rollback/_corpos-anteriores/`, **commitados**. O script recusa sobrescrever captura anterior sem `--forcar`, e aborta com código 2 se detectar que o corpo lido já é a versão pós-apply — que é como ele avisa "você já aplicou, não há o que capturar".
 
 ### 5 · Push das 18 migrations — sem a M6 e sem a da Carteira
 **Dono:** CTO (é escrita em prod) · **Reversão:** ver §4
@@ -162,7 +188,12 @@ Pare e reverta se:
 
 ## 4. Rollback — o buraco conhecido
 
-**12 das 13 migrations da virada não têm arquivo de rollback.** Uma delas (`20270803000010`, o `DROP COLUMN`) é irreversível sem restore.
+**As 13 migrations da virada têm rollback executável** (medido 2026-08-07; a versão anterior desta linha dizia "12 das 13 não têm", e estava stale desde `a21d78b2`). Uma delas — `20270803000010`, o `DROP COLUMN` — continua **irreversível sem restore**: o rollback repõe as colunas, não os valores.
+
+Dois deles exigiram mais que transcrição, e vale saber por quê:
+
+- **`20270805000010` (aposenta funis de carteira)**: o rollback prometido no cabeçalho — *"reverter é `is_active = true` nas mesmas linhas"* — era **falso**. O `UPDATE` NULLifica `target_pipe_type`, que é o **próprio predicado** que seleciona as linhas; depois do apply o conjunto não é reconstruível de dentro do banco. Consertado na origem: a migration ganhou um bloco 0 que grava `backup_aposenta_funis_carteira` (com RLS **antes** do INSERT — a lição do `backup_cross_org_responsaveis`) e o rollback lê dele.
+- **`20270730000030`**: o rollback depende da captura do passo 4b. Sem ela, não há caminho.
 
 O único rollback que existe foi exercitado hoje pela primeira vez — e **falhava**: `fn_assert_member_same_org` referencia `claimed_by`, e o `DROP COLUMN` batia em dependência de catálogo. Corrigido na PR #1430; agora derruba as três travas antes, e diz em letra grande que a trava fica desligada ao fim.
 
@@ -205,8 +236,8 @@ Nenhum depende do deploy. Rotacionar a chave, porém, derruba integrações que 
 ## 8. Ordem, em uma linha
 
 ```
-unlink → [decidir chave] → 30 EF → n8n → repair 21 → push 18 → limpeza DML →
-M6 → backfill M4 → carteira → types+pontes → merge main → flag piloto
+unlink → [decidir chave] → 30 EF → n8n → repair 21 → CAPTURAR CORPOS → push 18 →
+limpeza DML → M6 → backfill M4 → carteira → types+pontes → merge main → flag piloto
 ```
 
 O que essa ordem protege: **a limpeza cabe entre o schema e a trava** (senão 1.091 cards ficam imóveis), e **as functions chegam antes das migrations que quebram o código velho** (senão automação de cliente escreve errado, calada).

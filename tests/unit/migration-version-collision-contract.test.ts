@@ -20,13 +20,33 @@ const MIGRATIONS_DIR = resolve(__dirname, "../../supabase/migrations");
 // Pre-existing duplicate version prefixes (tech debt, being cleaned up). NEW
 // collisions are NOT allowed. As legacy dups are re-timestamped, REMOVE the
 // resolved version from this set (it only shrinks).
-const BASELINE_DUPLICATE_VERSIONS = new Set<string>([
-  "20260603000000", "20260930000000", "20260985000000", "20261026000000",
-  "20261030000000", "20261030000001", "20261031000000", "20261031000004",
-  "20261031000008", "20261105000000", "20261105000001", "20261119000000",
-  "20261121000000", "20261125000000", "20261127000000",
-  // (5 collisions resolved by #824 re-timestamp: 20261012/16/16-001/128/215 → 20261218*)
-]);
+/**
+ * VAZIO — e é assim que este ratchet deveria terminar.
+ *
+ * As 15 versões que viviam aqui saíram todas pelo mesmo motivo, medido em
+ * 2026-08-07: o baseline de migrations (#1233, 23/07) moveu as 840 antigas para
+ * `supabase/migrations/archive/`, e com isso os pares gêmeos deixaram de
+ * coexistir entre os arquivos ativos. Conferido versão por versão — cada uma das
+ * 15 tem `archive=2, ativas=0` (a `20261127000000` tem `ativas=1`, que também não
+ * é colisão).
+ *
+ * Saíram: 20260603000000, 20260930000000, 20260985000000, 20261026000000,
+ * 20261030000000, 20261030000001, 20261031000000, 20261031000004,
+ * 20261031000008, 20261105000000, 20261105000001, 20261119000000,
+ * 20261121000000, 20261125000000, 20261127000000.
+ * (5 outras já tinham saído antes, pelo re-timestamp da #824:
+ * 20261012/16/16-001/128/215 → 20261218*.)
+ *
+ * O caso "baseline only shrinks" vinha REPROVANDO desde então, pedindo
+ * exatamente isto. Ficou vermelho por semanas junto com o resto do CI, que é o
+ * custo de tratar sinal vermelho crônico como ruído: quando o ratchet acertou,
+ * ninguém ouviu.
+ *
+ * Daqui para a frente qualquer colisão é NOVA e o outro caso a reprova. Não
+ * acrescente versão aqui para calar o teste — conserte o timestamp da migration,
+ * que é único por construção.
+ */
+const BASELINE_DUPLICATE_VERSIONS = new Set<string>([]);
 
 function duplicateVersionPrefixes(): string[] {
   const counts = new Map<string, number>();

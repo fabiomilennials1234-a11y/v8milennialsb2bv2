@@ -1,0 +1,71 @@
+# As 21 migrations re-carimbadas — insumo do passo 4 da virada
+#
+# MEDIDO EM 2026-08-07 contra origin/develop@74f90ed7 e o ledger de prod
+# (jsjsmuncfkbsbzqzqhfq, 64 versões). RE-MEÇA ANTES DE USAR: o ledger ganhou 4
+# linhas em 24h, de outra frente. A receita de conferência está no fim.
+#
+# ── O QUE É UM "RE-CARIMBO" ────────────────────────────────────────────────
+# É o MESMO SQL já aplicado em produção sob uma versão diferente. O repo usa
+# prefixos `2027…` fictícios; quando alguém aplicou aquele conteúdo direto em
+# prod, o ledger gravou a versão `2026…` do momento. O arquivo continua no repo
+# parecendo pendente, mas o objeto que ele cria já existe.
+#
+# Prova do padrão: o ledger de `20260804124709` começa com o comentário
+# `-- 20270805000000_voip_incoming_creates_call.sql`.
+#
+# Aplicá-las de novo NÃO é inerte: rodaria `DROP POLICY`/`DROP TRIGGER`/`CREATE`
+# em tabelas vivas. Por isso o passo 4 as marca como aplicadas, sem executá-las:
+#
+#   supabase migration repair --status applied $(grep -v '^#' scripts/repair-recarimbos-virada.txt | tr '\n' ' ') --db-url "$URL_PROD"
+#
+# ── OS DOIS MODOS DE FALHA, COM O TAMANHO CERTO ───────────────────────────
+# Reparar de MENOS: o push morre em 20270728000000_meta_conversations.sql:24
+# (`CREATE TABLE public.meta_conversations (` sem guarda; a tabela existe em prod
+# com 4 policies) — 42P07 no meio do lote, com os anteriores já commitados.
+# ⚠️ Este é o ÚNICO arquivo genuinamente não-idempotente das 21. A spec dizia
+# "20 delas fazem DDL destrutivo-e-recriativo"; medido, os demais trazem
+# `DROP ... IF EXISTS` na linha anterior ao CREATE (ex.: 20270730000000:124-125,
+# 20270730000011:109, 20270801000000:333, 20270803000000:311).
+#
+# Reparar de MAIS é o caro: marcar uma migration NOVA como aplicada faz o push
+# PULÁ-LA em silêncio. Nenhuma das 13 da virada pode aparecer nesta lista —
+# há um teste que trava isso (tests/unit/repair-recarimbos-nao-tem-virada.test.ts).
+#
+# ── COMO CONFERIR ANTES DE USAR ───────────────────────────────────────────
+#   1. supabase migration list --db-url "$URL_PROD"   (ou MCP list_migrations)
+#   2. para cada versão abaixo, confirme que o OBJETO que o arquivo cria já
+#      existe em prod — não que a versão está no ledger (ela não está; é esse o
+#      ponto). Consulta de exemplo, para meta_conversations:
+#        SELECT to_regclass('public.meta_conversations');
+#   3. o gate do passo 4 é DELTA + CONJUNTO, não contagem absoluta:
+#        o ledger cresce exatamente +21, e passa a conter estas 21 versões.
+#      A forma antiga ("de 60 para 81") nasceu certa e apodreceu em 24h porque
+#      prod é mutado por outra frente. Contagem absoluta de tabela que terceiro
+#      escreve todo dia não é gate.
+#
+# ── JÁ NO LEDGER SOB A VERSÃO DO REPO — NÃO REPARAR ───────────────────────
+# 20270730000006, 20270730000007, 20270730000008, 20270806220000, 20270806220001
+# Estas cinco já constam com o prefixo do próprio repo. Repará-las é no-op na
+# melhor hipótese e ruído no ledger na pior.
+
+20270728000000
+20270728000001
+20270728000002
+20270728000003
+20270729000000
+20270729000001
+20270729000002
+20270730000000
+20270730000001
+20270730000002
+20270730000003
+20270730000004
+20270730000005
+20270730000009
+20270730000011
+20270731000001
+20270801000000
+20270803000000
+20270804000000
+20270804000001
+20270805000000

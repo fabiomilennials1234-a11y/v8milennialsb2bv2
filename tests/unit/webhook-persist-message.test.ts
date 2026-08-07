@@ -4,10 +4,16 @@
  *
  * Verifies:
  * 1. Returns PersistedMessage on successful upsert
- * 2. Returns null on upsert error (DLQ path)
- * 3. Returns null for groups with capture_groups=false
- * 4. Returns null for groups (persist-only, no downstream reactions)
- * 5. Fires media persist for CDN URLs
+ * 2. Upsert falhou + DLQ estacionou → null (o 200 ao Uazapi é honesto)
+ * 3. Upsert falhou + DLQ falhou → LANÇA `message_lost` (5xx → reentrega)
+ * 4. Returns null for groups with capture_groups=false
+ * 5. Returns null for groups (persist-only, no downstream reactions)
+ * 6. Fires media persist for CDN URLs
+ *
+ * O item 3 é a garantia mais nova e a que não tinha cobertura. Ela existe porque
+ * devolver `null` quando NENHUMA cópia da mensagem sobreviveu fazia o handler
+ * responder 200 e o provedor marcar como entregue — mensagem de cliente sumindo
+ * em silêncio. Ver `whatsapp-webhook/index.ts:948-953`.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -73,10 +79,25 @@ vi.stubGlobal("fetch", vi.fn());
 let mockUpsertResult: { error: unknown } = { error: null };
 let mockOrgData: unknown = { capture_groups: true };
 
+/**
+ * Resultado do INSERT na DLQ (`whatsapp_webhook_dlq`).
+ *
+ * A DLQ entrou no caminho de erro do `persistMessage` e o mock não a
+ * acompanhou: o `from()` devolvia um objeto só com `upsert`, então
+ * `enqueueDlq` chamava `.insert` em `undefined`, o catch marcava
+ * `parked = false` e o `persistMessage` lançava `message_lost`. O teste
+ * "returns null on upsert error" reprovava por causa do MOCK, não do código —
+ * e a mensagem de falha (`message_lost`) parecia bug de produção.
+ */
+let mockDlqResult: { error: unknown } = { error: null };
+
 const createMockSupabase = () => ({
   from: vi.fn((table: string) => {
     if (table === "whatsapp_messages") {
       return { upsert: vi.fn(async () => mockUpsertResult) };
+    }
+    if (table === "whatsapp_webhook_dlq") {
+      return { insert: vi.fn(async () => mockDlqResult) };
     }
     if (table === "organizations") {
       return {
@@ -87,7 +108,13 @@ const createMockSupabase = () => ({
         })),
       };
     }
-    return { upsert: vi.fn(async () => ({ error: null })) };
+    // Fallback com as duas operações: tabela nova que caia aqui não deve
+    // reprovar um teste por `undefined is not a function` — o que se quer
+    // enxergar é a decisão do código, não o buraco do mock.
+    return {
+      upsert: vi.fn(async () => ({ error: null })),
+      insert: vi.fn(async () => ({ error: null })),
+    };
   }),
   rpc: vi.fn(async () => ({ error: null })),
 });
@@ -133,6 +160,7 @@ describe("persistMessage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUpsertResult = { error: null };
+    mockDlqResult = { error: null };
     mockOrgData = { capture_groups: true };
   });
 
@@ -146,8 +174,9 @@ describe("persistMessage", () => {
     expect(result!.organization_id).toBe("org-1");
   });
 
-  it("returns null on upsert error", async () => {
+  it("upsert falhou mas a DLQ estacionou: devolve null (o 200 é honesto)", async () => {
     mockUpsertResult = { error: { message: "conflict" } };
+    mockDlqResult = { error: null };
     const sb = createMockSupabase();
     const result = await persistMessage(sb, mockInstance, baseNormalized as any, null);
 
@@ -157,6 +186,27 @@ describe("persistMessage", () => {
         action: "uazapi_messages_upsert_error",
       }),
     );
+  });
+
+  /**
+   * A garantia que o `persistMessage` passou a dar, e que não tinha teste.
+   *
+   * Quando o upsert falha E a DLQ também, não sobrou cópia da mensagem em lugar
+   * nenhum. Devolver `null` — como era antes — faria o handler responder 200 e o
+   * Uazapi considerar entregue: a mensagem do cliente sumiria em silêncio, sem
+   * reentrega. Lançar é o que produz 5xx e faz o provedor tentar de novo.
+   *
+   * Sem este caso, alguém "consertando" o `message_lost` para devolver null
+   * deixaria a suíte verde e a perda de mensagem de volta.
+   */
+  it("upsert E DLQ falharam: LANÇA, para o provedor reentregar", async () => {
+    mockUpsertResult = { error: { message: "conflict" } };
+    mockDlqResult = { error: { message: "dlq indisponível" } };
+    const sb = createMockSupabase();
+
+    await expect(
+      persistMessage(sb, mockInstance, baseNormalized as any, null),
+    ).rejects.toThrow(/message_lost/);
   });
 
   it("returns null for group messages (persist-only path)", async () => {

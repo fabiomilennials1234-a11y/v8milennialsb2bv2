@@ -3,7 +3,10 @@
  * Runner do backfill "cada pedido de ERP vira um Negócio ganho".
  * UMA org por execução, mesmas guardas do M4.
  *
- *   • recusa o ref de produção e o do dev aposentado, com qualquer flag;
+ *   • recusa o ref do dev aposentado, sem escape;
+ *   • recusa o ref de PRODUÇÃO por padrão, com escape auditável
+ *     `--eu-sei-que-e-prod <ref>` (o ref tem de bater com o extraído da própria
+ *     URL). A razão de o escape existir está no cabeçalho do runner do M4;
  *   • exige --org, valida uuid E existência (uuid errado backfillaria 0 e
  *     pareceria sucesso);
  *   • DRY-RUN É O PADRÃO. Sem --commit termina em ROLLBACK, com todas as
@@ -39,20 +42,60 @@ function morrer(msg) {
 let dbUrl = "";
 let org = "";
 let commit = false;
+let escapeProd = "";
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--db-url") dbUrl = args[++i] ?? "";
   else if (args[i] === "--org") org = args[++i] ?? "";
   else if (args[i] === "--commit") commit = true;
+  else if (args[i] === "--eu-sei-que-e-prod") escapeProd = args[++i] ?? "";
   else morrer(`argumento desconhecido: ${args[i]}`);
 }
 
 if (!dbUrl) morrer("falta --db-url. O alvo nunca é implícito.");
+
+// ── Prod: recusa por padrão, escape auditável se explicitado ────────────────
+// Idêntico ao de backfill-lead-negocio-m4.mjs, e a razão de existir é a mesma: a
+// versão anterior mandava usar "outro caminho, com autorização explícita", e esse
+// caminho não existia no repo. Guarda que só proíbe, sem oferecer a via segura,
+// empurra para `psql` na mão — sem transação única, sem dry-run, sem os NOTICE.
+const refDaUrl =
+  (dbUrl.match(/postgres\.([a-z]{20})/)?.[1] ??
+    dbUrl.match(/db\.([a-z]{20})\.supabase/)?.[1] ??
+    "");
+
 if (dbUrl.includes(PROD_REF)) {
+  if (!escapeProd) {
+    morrer(
+      `RECUSADO: a URL aponta para PRODUÇÃO (${PROD_REF}).\n` +
+        `    Este backfill escreve dado de cliente em deals e pipeline_entries.\n\n` +
+        `    Se é intencional — é o passo da Carteira na virada — repita o ref do alvo:\n` +
+        `      --eu-sei-que-e-prod ${PROD_REF}\n\n` +
+        `    Sem --commit isto ainda roda em DRY-RUN e termina em ROLLBACK.`,
+    );
+  }
+  if (!refDaUrl) {
+    morrer(
+      `Não consegui extrair o project ref da URL para conferir contra --eu-sei-que-e-prod.\n` +
+        `    Formato esperado: 'postgres.<ref>' ou 'db.<ref>.supabase'. Nada foi executado.`,
+    );
+  }
+  if (escapeProd !== refDaUrl) {
+    morrer(
+      `--eu-sei-que-e-prod '${escapeProd}' não bate com o ref da própria URL ('${refDaUrl}').\n` +
+        `    Isto é a guarda funcionando: ou a URL não é a que você pensa, ou o ref veio de outro lugar.\n` +
+        `    Nada foi executado.`,
+    );
+  }
+  console.error(
+    vermelho(
+      `\n  ⚠  ALVO É PRODUÇÃO (${refDaUrl}). Org ${org || "(não informada)"}. Modo: ${commit ? "COMMIT — ESCREVE" : "dry-run (ROLLBACK ao fim)"}.\n`,
+    ),
+  );
+} else if (escapeProd) {
   morrer(
-    `RECUSADO: a URL aponta para PRODUÇÃO (${PROD_REF}).\n` +
-      `    Este backfill escreve dado de cliente em deals e pipeline_entries.\n` +
-      `    Prod é botão do humano, por outro caminho, com autorização explícita.`,
+    `--eu-sei-que-e-prod foi passado, mas a URL NÃO aponta para produção (ref '${refDaUrl || "?"}').\n` +
+      `    Confira qual das duas está errada antes de rodar. Nada foi executado.`,
   );
 }
 if (dbUrl.includes(DEV_APOSENTADO_REF)) {

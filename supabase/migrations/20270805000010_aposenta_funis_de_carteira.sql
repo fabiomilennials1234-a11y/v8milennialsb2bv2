@@ -34,11 +34,145 @@
 -- ganhos que `scripts/backfill-carteira-negocios` cria. O que morre é o funil,
 -- não a carteira.
 --
--- Reverter é `is_active = true` nas mesmas linhas, mais restaurar a versão
--- anterior de `create_default_pipeline_stages` (está no baseline).
+-- ── COMO REVERTER, E POR QUE A FRASE ANTERIOR ERA FALSA ───────────────────
+-- Até 2026-08-07 esta linha dizia: "Reverter é `is_active = true` nas mesmas
+-- linhas, mais restaurar a versão anterior de `create_default_pipeline_stages`".
+-- A segunda metade é verdade (a função está no baseline). A PRIMEIRA É FALSA, e
+-- de um jeito que só apareceria no dia de reverter:
+--
+--   • o bloco 1 abaixo NULLifica `target_pipe_type`/`target_stage_key` — e o
+--     predicado que seleciona as linhas (`WHERE target_pipe_type LIKE 'upsell%'`)
+--     É O PRÓPRIO VALOR APAGADO. Depois do apply, o conjunto de linhas afetadas
+--     não é reconstruível de dentro do banco: não sobra coluna que diga quais
+--     etapas apontavam para a carteira, nem para qual etapa apontavam;
+--   • `is_final_positive` é reescrito por `CASE` — o valor anterior de cada
+--     linha não é derivável do valor novo;
+--   • "as mesmas linhas" do `is_active` só existe enquanto alguém souber quais
+--     estavam ativas ANTES. O `AND is_active` do bloco 2 faz a migration tocar
+--     só as ativas, mas não deixa registro de quais foram.
+--
+-- Ou seja: o rollback prometido no cabeçalho reativaria etapas SEM restaurar
+-- para onde elas apontavam, deixando o banco num terceiro estado — nem o
+-- anterior, nem o posterior. Config de cliente, em 98 organizações.
+--
+-- O bloco 0 conserta isso na origem, e não no rollback: guarda as três colunas
+-- antes de tocá-las. É a mesma classe de `backup_cross_org_responsaveis`, com a
+-- lição dele aplicada — RLS ANTES do INSERT, não depois (a tabela de backup da
+-- limpeza cross-org nasceu legível por qualquer `authenticated`, e a migration
+-- que existia para fechar vazamento criou um).
+--
+-- O rollback executável vive em
+-- `supabase/migrations/rollback/20270805000010_aposenta_funis_de_carteira.sql`
+-- e lê deste backup.
 -- ============================================================================
 
 BEGIN;
+
+-- ── 0. Backup do que os blocos 1 e 2 vão sobrescrever ─────────────────────
+-- `IF NOT EXISTS` + guarda de linhas, e não `CREATE TABLE` nu.
+--
+-- A primeira versão disto usava `CREATE TABLE` sem `IF NOT EXISTS`, com o
+-- raciocínio de que falhar era melhor que empilhar dois snapshots. O raciocínio
+-- estava certo sobre o risco e errado sobre o remédio: o ensaio de 2026-08-07
+-- rodou apply → rollback → re-apply na branch efêmera e o re-apply MORREU com
+-- `relation "backup_aposenta_funis_carteira" already exists` (42P07), porque o
+-- rollback não dropava a tabela. E apply→rollback→re-apply é o ciclo mais
+-- provável num incidente — falhar nele é falhar exatamente quando importa.
+--
+-- A separação certa é entre os dois casos que o CREATE nu confundia:
+--   • tabela existe e está VAZIA → snapshot anterior já foi consumido pelo
+--     rollback (que a esvazia ao restaurar). Seguir é seguro;
+--   • tabela existe e tem LINHAS → há um snapshot não consumido. Aí sim é
+--     empilhamento, e a migration aborta pedindo que alguém olhe.
+CREATE TABLE IF NOT EXISTS public.backup_aposenta_funis_carteira (
+  stage_id                uuid PRIMARY KEY,
+  organization_id         uuid,
+  pipeline_type           text,
+  stage_key               text,
+  -- Estado ANTES do bloco 1. `tinha_ponteiro` distingue "apontava para NULL"
+  -- de "não estava no conjunto", que o NULL sozinho não distingue.
+  tinha_ponteiro          boolean NOT NULL DEFAULT false,
+  target_pipe_type_antes  text,
+  target_stage_key_antes  text,
+  is_final_positive_antes boolean,
+  -- Estado ANTES do bloco 2: true só nas linhas que este apply de fato apagou.
+  foi_desativada          boolean NOT NULL DEFAULT false,
+  capturado_em            timestamptz NOT NULL DEFAULT now()
+);
+
+-- RLS ANTES de qualquer INSERT. A tabela carrega `organization_id` de 98 orgs;
+-- nascer sem política é o vazamento que a limpeza cross-org já cometeu uma vez.
+-- Sem policy = deny-all para `anon`/`authenticated`; só `service_role` (que tem
+-- BYPASSRLS) e o dono enxergam. É o que se quer: isto é artefato de operação,
+-- não dado de produto.
+ALTER TABLE public.backup_aposenta_funis_carteira ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.backup_aposenta_funis_carteira FROM PUBLIC, anon, authenticated;
+
+COMMENT ON TABLE public.backup_aposenta_funis_carteira IS
+  'Snapshot de pipeline_stages imediatamente antes de 20270805000010 aposentar os funis de carteira. Existe porque o UPDATE daquela migration apaga o próprio predicado que seleciona as linhas (target_pipe_type LIKE ''upsell%''), tornando o conjunto irreconstruível de dentro do banco. Lido pelo rollback homônimo. Descartável depois que a virada estabilizar — mas só depois.';
+
+-- Guarda de empilhamento: linha remanescente = snapshot que ninguém consumiu.
+DO $$
+DECLARE v_resto bigint;
+BEGIN
+  SELECT count(*) INTO v_resto FROM public.backup_aposenta_funis_carteira;
+  IF v_resto > 0 THEN
+    RAISE EXCEPTION
+      'ABORTADO: backup_aposenta_funis_carteira já tem % linha(s) de um apply anterior que não foi revertido. Empilhar dois snapshots faria o rollback restaurar uma mistura dos dois. Rode o rollback (que consome e esvazia a tabela) ou, se aquele snapshot já não vale, apague-o explicitamente antes de reaplicar.',
+      v_resto;
+  END IF;
+END $$;
+
+-- Um INSERT só, com as duas metades resolvidas por predicado, para o snapshot
+-- ser coerente: os dois blocos abaixo rodam na MESMA transação, então o que se
+-- captura aqui é exatamente o que eles vão encontrar.
+INSERT INTO public.backup_aposenta_funis_carteira (
+  stage_id, organization_id, pipeline_type, stage_key,
+  tinha_ponteiro, target_pipe_type_antes, target_stage_key_antes, is_final_positive_antes,
+  foi_desativada
+)
+SELECT
+  ps.id,
+  ps.organization_id,
+  ps.pipeline_type,
+  ps.stage_key,
+  -- COALESCE porque `NULL LIKE 'upsell%'` é NULL, não false — e as duas colunas
+  -- são NOT NULL. A linha que entra no backup só por causa do `is_active` tem
+  -- `target_pipe_type` NULL, e sem o COALESCE o INSERT viola a constraint.
+  -- Só aparece quando HÁ dado: com a tabela vazia o INSERT não insere nada e a
+  -- migration passa. Pego no ensaio de 2026-08-07, depois de semear a branch.
+  COALESCE(ps.target_pipe_type LIKE 'upsell%', false),
+  ps.target_pipe_type,
+  ps.target_stage_key,
+  ps.is_final_positive,
+  COALESCE(ps.pipeline_type IN ('upsell_base', 'upsell_gestao') AND ps.is_active, false)
+FROM public.pipeline_stages ps
+WHERE ps.target_pipe_type LIKE 'upsell%'
+   OR (ps.pipeline_type IN ('upsell_base', 'upsell_gestao') AND ps.is_active);
+
+DO $$
+DECLARE v_n bigint; v_ponteiro bigint; v_desativa bigint;
+BEGIN
+  SELECT count(*), count(*) FILTER (WHERE tinha_ponteiro), count(*) FILTER (WHERE foi_desativada)
+    INTO v_n, v_ponteiro, v_desativa
+    FROM public.backup_aposenta_funis_carteira;
+
+  RAISE NOTICE 'BACKUP: % linha(s) capturada(s) — % com ponteiro para carteira, % a desativar.',
+    v_n, v_ponteiro, v_desativa;
+
+  -- Backup vazio com trabalho a fazer é o modo de falha silencioso: a migration
+  -- passaria, os UPDATEs abaixo escreveriam, e o rollback não teria de onde ler.
+  IF v_n = 0 THEN
+    IF EXISTS (
+      SELECT 1 FROM public.pipeline_stages
+       WHERE target_pipe_type LIKE 'upsell%'
+          OR (pipeline_type IN ('upsell_base','upsell_gestao') AND is_active)
+    ) THEN
+      RAISE EXCEPTION 'FAIL: há linhas a alterar mas o backup saiu vazio. Não prossiga — o rollback ficaria sem fonte.';
+    END IF;
+    RAISE NOTICE 'BACKUP vazio e nada a alterar: esta org/banco já está aposentado. Blocos 1 e 2 serão inertes.';
+  END IF;
+END $$;
 
 -- ── 1. As 4 transições que apontam para a carteira ────────────────────────
 -- Etapa com `target_pipe_type` de carteira mandaria o negócio para um funil

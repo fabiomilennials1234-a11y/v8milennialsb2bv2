@@ -35,6 +35,22 @@ MIGRATIONS_DIR="supabase/migrations"
 DB_URL=""
 CONFIRM_REF=""
 ALLOW_DML=0
+# `supabase db push` IGNORA migration cujo timestamp é menor que o máximo já
+# presente no ledger remoto — sem `--include-all` ele aplica NADA e imprime uma
+# lista que o operador lê como "já está tudo lá".
+#
+# Isso não é hipótese: apareceu no ensaio de rollback de 2026-08-07. Depois de
+# reverter as 13 da virada, o topo do ledger da branch era `20270806220001`
+# (history_sync_guardrails), acima de todas elas — e o push recusou reaplicar as
+# 13, dizendo "Found local migration files to be inserted before the last
+# migration on remote database".
+#
+# Em produção é pior: há 4 órfãs `20270807000000-003` (billing) com versão acima
+# de tudo no repo. Ou seja, o apply da virada em prod **exige** esta flag, e até
+# hoje este script não sabia passá-la — quem seguisse a guarda não aplicaria
+# nada, e quem quisesse aplicar teria de contornar a guarda. Era uma guarda que
+# empurrava para fora de si mesma.
+INCLUDE_ALL=0
 
 die() { printf '\n\033[1;31m✖ %s\033[0m\n' "$*" >&2; exit 1; }
 info() { printf '\033[1;36m→\033[0m %s\n' "$*"; }
@@ -45,6 +61,7 @@ while [ $# -gt 0 ]; do
     --db-url)   DB_URL="${2:-}"; shift 2 ;;
     --confirm)  CONFIRM_REF="${2:-}"; shift 2 ;;
     --allow-dml) ALLOW_DML=1; shift ;;
+    --include-all) INCLUDE_ALL=1; shift ;;
     -h|--help)  sed -n '2,30p' "$0"; exit 0 ;;
     *) die "Argumento desconhecido: $1" ;;
   esac
@@ -83,7 +100,9 @@ info "Alvo: $TARGET_REF (não é prod, não é o dev aposentado)"
 # ── Dry-run: descobre o que seria aplicado ──────────────────────────────────
 info "Rodando dry-run..."
 set +e
-DRY_OUT="$(supabase db push --db-url "$DB_URL" --dry-run 2>&1)"
+PUSH_FLAGS=""
+[ "$INCLUDE_ALL" -eq 1 ] && PUSH_FLAGS="--include-all"
+DRY_OUT="$(supabase db push --db-url "$DB_URL" $PUSH_FLAGS --dry-run 2>&1)"
 DRY_RC=$?
 set -e
 printf '%s\n' "$DRY_OUT"
@@ -140,7 +159,7 @@ fi
 
 # ── Aplica ──────────────────────────────────────────────────────────────────
 info "Aplicando em $TARGET_REF..."
-supabase db push --db-url "$DB_URL"
+supabase db push --db-url "$DB_URL" $PUSH_FLAGS
 ok "Aplicado em $TARGET_REF."
 
 printf '\n\033[1;33mBranch efêmera custa ~$0.013/h. Encerre agora que o teste acabou.\033[0m\n'

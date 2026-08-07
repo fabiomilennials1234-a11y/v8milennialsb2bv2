@@ -162,7 +162,11 @@ types + pontes → merge em main → flag na piloto
 
 **O que remedir no dia:** as 41 pendentes (o lote muda com o que outras frentes aplicarem), o ledger, os 363 pedidos da Carteira (o ERP sincroniza ao vivo) e o `git merge-tree` contra `main`.
 
-**Buraco conhecido:** 12 das 13 migrations da virada não têm arquivo de rollback, e a `20270803000010` (`DROP COLUMN`) é irreversível sem restore. Os 5 de efeito destrutivo ganharam rollback no commit `a21d78b2` — os outros não. Rollback que ninguém rodou é rollback que não existe.
+**Rollback (atualizado 2026-08-07):** as 13 migrations da virada **têm arquivo executável**. A `20270803000010` (`DROP COLUMN`) segue irreversível sem restore — repõe as colunas, não os valores.
+
+> A linha anterior dizia "12 das 13 não têm". Estava stale desde `a21d78b2` (que escreveu 5) e eu a repeti de documento em vez de medir. Medido: eram 7 faltando, agora 0.
+
+**O buraco que continua:** 8 dos 13 rollbacks **nunca rodaram contra um banco**, e não há gate que os rode. O único exercitado — `20270730000020_leads_claim` — **falhou** na primeira execução (`fn_assert_member_same_org` cria dependência sobre `claimed_by`; o `DROP COLUMN` batia com `cannot drop column ... because other objects depend on it`), foi corrigido em `320f2437` e só então passou. Amostra de 1, taxa de falha de 1. Rollback que ninguém rodou é rollback que não existe — e agora há um ponto de dado dizendo exatamente isso.
 
 ---
 
