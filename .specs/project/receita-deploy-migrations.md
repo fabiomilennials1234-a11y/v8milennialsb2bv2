@@ -1,3 +1,13 @@
+> ⚠️ **SUPERADO EM 2026-08-06 por `.specs/project/spec-virada-leads-negocios.md`.**
+>
+> Medido naquele dia contra o ledger de prod: são **41** migrations pendentes (não 22),
+> o ledger tem **60** versões (não 57), o repair de `20270203000000_omie_foundation`
+> virou desnecessário (o commit `dc0c1b44` tornou o arquivo idempotente) e a falha real
+> de `42P07` hoje é `20270728000000_meta_conversations.sql:24`. Além disso, `db push`
+> **sem `--include-all` não aplica nada** — há 4 órfãs com versão maior que tudo no repo.
+>
+> Este arquivo continua útil como registro do ensaio de 2026-08-04. Não use os números.
+
 # Receita do apply de migrations — deploy de 07/08/2026
 
 Ensaiada de ponta a ponta em branch efêmera (`yyvzakfeddnulpgdkgbm`) em
