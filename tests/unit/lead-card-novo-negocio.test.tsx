@@ -405,7 +405,27 @@ beforeEach(() => {
   pipelinesMock.mockReturnValue({ data: FUNIS, isLoading: false });
 });
 
-describe("Card do Lead — o botão 'Criar negócio' abre a porta única", () => {
+/**
+ * Timeout explícito nos dois blocos que MONTAM o card.
+ *
+ * Medido em 2026-08-07: os 13 casos de render deste arquivo levam ~3,5s cada
+ * nesta máquina (jsdom + `LeadCardPanel` inteiro + o Dialog do Radix), contra
+ * ~1,1s de um teste de render comparável já no repo
+ * (`pipe-whatsapp-agendar-move.test.tsx`). Com o default de 5s do Vitest os 13
+ * estouram **por tempo, não por asserção** — com `--testTimeout=30000` os 26
+ * passam. Os 13 casos de função pura (blocos de cima) rodam em milissegundos e
+ * não precisam disto.
+ *
+ * Ou seja: o arquivo passava na máquina de quem escreveu e reprovava em
+ * qualquer máquina ~4x mais lenta. Teste que depende da velocidade do runner
+ * não é sinal — é moeda. O número abaixo é ~6x a medição, folga suficiente para
+ * runner lento e ainda curto o bastante para um travamento de verdade (promise
+ * que nunca resolve, `waitFor` sem alvo) continuar reprovando em vez de
+ * pendurar a suíte.
+ */
+const TIMEOUT_RENDER_MS = 20_000;
+
+describe("Card do Lead — o botão 'Criar negócio' abre a porta única", { timeout: TIMEOUT_RENDER_MS }, () => {
   it("o clique no card abre o diálogo de novo negócio", () => {
     montarCard();
 
@@ -549,7 +569,7 @@ describe("Card do Lead — o botão 'Criar negócio' abre a porta única", () =>
   });
 });
 
-describe("Card do Lead — o que o diálogo recusa", () => {
+describe("Card do Lead — o que o diálogo recusa", { timeout: TIMEOUT_RENDER_MS }, () => {
   it("sem permissão o diálogo abre, mas não há o que criar", () => {
     gate.allowed = false;
     gate.reason = "Perfil membro não abre negócio";
