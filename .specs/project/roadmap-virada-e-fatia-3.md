@@ -30,6 +30,22 @@ Três arquivos é dois a mais do que o ideal, e o custo é real: escrevi este se
 | Orgs com a feature em produção | **0 de 98** |
 | Cards do Jira feitos em código e parados no board | ~10 |
 
+### A regra de escopo (CTO, 07/08)
+
+**Tudo do épico SCRUM-43 fica na sprint 1. Nada é empurrado para uma sprint seguinte.** As fases deste arquivo (F0/F1/F2/F3) são **ordem de execução**, não recorte de sprint — ler "Fase 3" como "próxima sprint" foi o erro que este documento cometeu na primeira versão.
+
+A conta da sprint, portanto, é sobre as **174 subtarefas** das dez histórias, não sobre um subconjunto:
+
+| Etapa | Itens | Feito | % |
+|---|---|---|---|
+| Implementação em dev | 122 | 121 | ~99% |
+| Passagem de dev para prod | 24 | 2 | ~8% |
+| Testes em produção | 2 | 0 | 0% |
+| **Decisões do CTO** (H10) | **26** | **0** | **0%** |
+| **Sprint** | **174** | **123** | **~71%** |
+
+A quarta linha é a que faltava. Uma versão anterior desta conta excluía as 26 da H10 e dava 83% — número mais bonito, obtido tirando trabalho da sprint em vez de fazendo. Decisão pendente é item de sprint como qualquer outro; a diferença é que o dono é o CTO, não o agente.
+
 **A leitura que decide o resto:** a feature está 100% em `develop` e 0% em produção. Toda a Fase 2 é o transporte dessa distância, e ela está **congelada por decisão do CTO** (07/08). Enquanto o congelamento durar, a sprint não fecha — a H9 *é* "deploy em produção".
 
 O que o congelamento **não** bloqueia: as Fases 0, 1-código e 3, que são inteiramente repositório.
@@ -150,9 +166,22 @@ types + pontes → merge em main → flag na piloto
 
 ---
 
-## Fase 3 — fatia 3 (SCRUM-61, 26 subtarefas)
+## Fase 3 — decisões abertas e fatia 3 (SCRUM-61, 26 subtarefas)
 
-Escopo de sprint própria. O card já diz que não cabe nesta.
+> **Fica na sprint 1. Decisão do CTO em 07/08.** Nada do épico SCRUM-43 sai para uma sprint seguinte: fase é ordem de execução, não recorte de sprint. A sprint fecha quando as 174 subtarefas fecharem.
+>
+> A versão anterior deste arquivo dizia "escopo de sprint própria, o card já diz que não cabe nesta" — repetindo o corpo do próprio SCRUM-61. Estava errado, e a medição mostra por quê: a H10 **não** é um bloco de trabalho futuro. Ela mistura decisões que travam o que já está em curso com tarefas que já estão sendo feitas. Empurrá-la inteira para a frente levaria junto trabalho da sprint 1 — o vazamento que a regra existe para impedir.
+
+**Quatro itens que provam que a H10 não é "depois":**
+
+| Card | Estado | Por que é desta sprint |
+|---|---|---|
+| SCRUM-207 | **Fazendo** | auditar os 6 fluxos n8n da piloto — pré-requisito da F2.4 (patch do n8n) |
+| SCRUM-205 | A fazer | plano de rollback para depois do primeiro Negócio do piloto: "reversível só enquanto ninguém criar negócio novo". Expira no dia do deploy |
+| SCRUM-206 | A fazer | fronteira com o dev do redesenho de funis — "os dois trabalhos tocam as mesmas 4 páginas" |
+| SCRUM-201 | A fazer | o passo 5c, mover Negócio para funil customizado, que é do fluxo religado nesta sprint |
+
+**A categoria que eu vinha escondendo:** pelo menos 11 das 26 subtarefas da H10 são **decisões do CTO**, não trabalho de código — D1 a D7 (`SCRUM-208` a `SCRUM-214`), o passo 5c, o destino da rota `/carteira`, o escopo restante da fusão com a Carteira, a fronteira com o dev. Decisão não é dev, não é transporte e não é teste em produção: é **entrada** dos três. Enquanto elas ficarem sem resposta, aparecem no board como "A fazer" e são lidas como trabalho parado, quando na verdade estão esperando você.
 
 ### F3.1 · O "Assumir"
 A migration `20270730000020_leads_claim` já está escrita e pendente. Falta hook e UI.
