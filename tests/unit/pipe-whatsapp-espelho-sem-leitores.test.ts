@@ -26,10 +26,21 @@
  *
  * O QUE ESTE TESTE **NÃO** COBRE, dito explicitamente
  * ---------------------------------------------------
- *  • `src/` (frontend). Lá a coluna ainda é lida de propósito em
- *    `useWhatsAppFunnel` e `useAgentMetrics` enquanto a fatia 3 não chega — e
- *    incluir `src/` aqui produziria uma lista de exceções maior que a asserção.
- *    O gate do frontend é o SCRUM-222 (o DROP em si).
+ *  • LEITURA em `src/` (frontend). Lá a coluna ainda é lida de propósito em
+ *    `useAgentMetrics` enquanto a fatia 3 não chega — e varrer leitura no
+ *    frontend produziria uma lista de exceções maior que a asserção (a coluna
+ *    aparece em tipo gerado, em mapa de config indexado por nome de funil e em
+ *    chave de cache, nenhum dos três sendo a coluna). O gate da leitura no
+ *    frontend é o SCRUM-222 (o DROP em si).
+ *
+ *    ESCRITA em `src/`, porém, ESTÁ coberta — segundo bloco deste arquivo.
+ *    Escrita não tem a ambiguidade da leitura: ou a linha manda `pipe_whatsapp`
+ *    dentro de um `update`/`insert` em `leads`, ou não manda. E escrita é a
+ *    metade que faz dano ANTES do drop, não depois: desde a `20270803000040` o
+ *    espelho não acompanha o move, então quem escreve a coluna na mão pode
+ *    deixá-la afirmando uma etapa que a entry não confirma — e é o espelho que
+ *    a lista lê. Leitura sobrante só quebra no dia do drop; escrita sobrante
+ *    mente hoje.
  *  • SQL. O gatilho-espelho `sync_pipeline_entry_to_lead_pipe_whatsapp` ESCREVE
  *    a coluna por desenho, e é ele quem morre junto com ela na fatia 3.
  *  • A view `pipe_whatsapp`, que é outro objeto: `.from("pipe_whatsapp")` lê a
@@ -125,5 +136,85 @@ describe("SCRUM-202 — o espelho `leads.pipe_whatsapp` não é mais lido nem es
       arquivos.some((c) => c.endsWith(join("_shared", "workflow-action-handler.ts"))),
       "o arquivo do achado original tem que estar no escopo da varredura",
     ).toBe(true);
+  });
+});
+
+const RAIZ_SRC = join(process.cwd(), "src");
+
+/**
+ * Acha `.from("leads")` e devolve o trecho até o fim do primeiro
+ * `.update(...)` / `.insert(...)` / `.upsert(...)` que venha depois.
+ *
+ * A varredura é sobre o TEXTO do arquivo, não linha a linha, porque o payload
+ * costuma estar quebrado em várias linhas — e um gate que só olha uma linha por
+ * vez não enxerga justamente a forma mais comum de escrever isso.
+ *
+ * A janela é limitada porque `.from("leads")` também abre SELECT, e sem teto um
+ * arquivo grande casaria com um `update` de outra tabela dez funções abaixo.
+ */
+function escritasEmLeads(fonte: string): string[] {
+  const trechos: string[] = [];
+  const abertura = /\.from\(\s*["'`]leads["'`]\s*\)/g;
+  let m: RegExpExecArray | null;
+  while ((m = abertura.exec(fonte)) !== null) {
+    const janela = fonte.slice(m.index, m.index + 600);
+    const escrita = /\.(update|insert|upsert)\(([\s\S]{0,400}?)\)\s*(\.|;|$)/.exec(janela);
+    if (escrita) trechos.push(escrita[2]);
+  }
+  return trechos;
+}
+
+function arquivosFonte(dir: string, acc: string[] = []): string[] {
+  for (const nome of readdirSync(dir)) {
+    if (nome === "node_modules") continue;
+    const caminho = join(dir, nome);
+    if (statSync(caminho).isDirectory()) arquivosFonte(caminho, acc);
+    else if (/\.(ts|tsx)$/.test(nome) && !nome.endsWith(".d.ts") && !/\.test\.tsx?$/.test(nome)) acc.push(caminho);
+  }
+  return acc;
+}
+
+describe("SCRUM-202 — nenhum código do frontend ESCREVE o espelho `leads.pipe_whatsapp`", () => {
+  it("nenhum update/insert em `leads` carrega a coluna no payload", () => {
+    const ofensores: string[] = [];
+
+    for (const caminho of arquivosFonte(RAIZ_SRC)) {
+      const rel = relative(process.cwd(), caminho).split(sep).join("/");
+      // O tipo gerado do Supabase espelha o schema por definição: enquanto a
+      // coluna existir no banco ela aparece ali, e não é escrita de ninguém.
+      if (rel === "src/integrations/supabase/types.ts") continue;
+
+      for (const payload of escritasEmLeads(readFileSync(caminho, "utf8"))) {
+        if (/pipe_whatsapp(?![_\w])\s*:/.test(payload)) {
+          ofensores.push(`${rel} → ${payload.replace(/\s+/g, " ").trim().slice(0, 120)}`);
+        }
+      }
+    }
+
+    expect(
+      ofensores,
+      ofensores.length === 0
+        ? ""
+        : `Estes sítios do frontend ESCREVEM a coluna legada \`leads.pipe_whatsapp\`:\n  ${ofensores.join("\n  ")}\n\n` +
+            "Quem alimenta a coluna é o gatilho `sync_pipeline_entry_to_lead_pipe_whatsapp`, no write da ENTRY. " +
+            "Escrever direto em `leads` duplica a fonte e desde a `20270803000040` pode divergir dela — o espelho " +
+            "não acompanha o move, então a coluna passa a afirmar uma etapa que a entry não confirma. " +
+            "Para mudar a etapa do funil WhatsApp, escreva a entry (a view `pipe_whatsapp`, ou a RPC `mover_negocio`).",
+    ).toEqual([]);
+  });
+
+  it("a varredura enxerga o frontend e reconhece a forma que ela procura", () => {
+    const arquivos = arquivosFonte(RAIZ_SRC);
+    expect(arquivos.length).toBeGreaterThan(500);
+
+    // Prova que o casador pega a forma real do defeito — a linha que este mesmo
+    // commit removeu de `useCustomPipelines`. Sem isto o gate poderia passar por
+    // não casar com nada, que é como um teste de árvore morre em silêncio.
+    const amostra = `await supabase.from("leads").update({ pipe_whatsapp: targetStageKey }).eq("id", data.lead_id);`;
+    expect(escritasEmLeads(amostra).some((p) => /pipe_whatsapp\s*:/.test(p))).toBe(true);
+
+    // E que não confunde a VIEW homônima com a coluna.
+    const view = `await supabase.from("pipe_whatsapp").update({ status: targetStageKey }).eq("id", existing.id);`;
+    expect(escritasEmLeads(view)).toEqual([]);
   });
 });
