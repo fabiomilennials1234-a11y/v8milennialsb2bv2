@@ -203,6 +203,52 @@ describe("SCRUM-202 — nenhum código do frontend ESCREVE o espelho `leads.pipe
     ).toEqual([]);
   });
 
+  it("nenhum select de `leads` pede a coluna", () => {
+    // A leitura no frontend parecia invarrível porque a busca ingênua pelo token
+    // casa com três coisas que NÃO são a coluna: o nome da view em string
+    // (`"pipe_whatsapp"` como identificador de funil), o mapa de config indexado
+    // por funil (`pipe_whatsapp: { visible: true }`) e o tipo gerado. A saída não
+    // é lista de exceções — é casar o SELECT DE `leads`, que é a única forma em
+    // que o token significa a coluna. Nenhuma das três formas acima está dentro
+    // de um select de `leads`, então nenhuma precisa ser excepcionada.
+    const ofensores: string[] = [];
+
+    for (const caminho of arquivosFonte(RAIZ_SRC)) {
+      const rel = relative(process.cwd(), caminho).split(sep).join("/");
+      if (rel === "src/integrations/supabase/types.ts") continue;
+      const fonte = readFileSync(caminho, "utf8");
+
+      // Forma A — select direto: `.from("leads")` … `.select("…")`.
+      const abertura = /\.from\(\s*["'`]leads["'`]\s*\)/g;
+      let m: RegExpExecArray | null;
+      while ((m = abertura.exec(fonte)) !== null) {
+        const sel = /\.select\(\s*([`"'])([\s\S]{0,600}?)\1/.exec(fonte.slice(m.index, m.index + 700));
+        if (sel && /pipe_whatsapp(?![_\w])/.test(sel[2])) {
+          ofensores.push(`${rel} (select direto) → ${sel[2].replace(/\s+/g, " ").trim().slice(0, 100)}`);
+        }
+      }
+
+      // Forma B — recurso embutido: `lead:leads(id, name, …)` dentro do select de
+      // OUTRA tabela. Foi assim que a coluna sobreviveu em `useAgentMetrics`: o
+      // `.from()` é `conversation_context_summary`, então a forma A não a vê.
+      for (const emb of fonte.matchAll(/\bleads\s*\(([^)]*)\)/g)) {
+        if (/pipe_whatsapp(?![_\w])/.test(emb[1])) {
+          ofensores.push(`${rel} (join embutido) → leads(${emb[1].replace(/\s+/g, " ").trim().slice(0, 100)})`);
+        }
+      }
+    }
+
+    expect(
+      ofensores,
+      ofensores.length === 0
+        ? ""
+        : `Estes selects ainda pedem a coluna legada \`leads.pipe_whatsapp\`:\n  ${ofensores.join("\n  ")}\n\n` +
+            "No DROP da fatia 3 isso não devolve o campo vazio: derruba a QUERY INTEIRA com " +
+            "`column leads.pipe_whatsapp does not exist`, inclusive os campos que a tela usa. " +
+            "A etapa do funil WhatsApp vem da entry (`pipeline_entries.stage_key`), nunca do espelho.",
+    ).toEqual([]);
+  });
+
   it("a varredura enxerga o frontend e reconhece a forma que ela procura", () => {
     const arquivos = arquivosFonte(RAIZ_SRC);
     expect(arquivos.length).toBeGreaterThan(500);
