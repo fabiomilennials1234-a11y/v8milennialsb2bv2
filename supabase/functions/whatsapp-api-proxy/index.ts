@@ -26,6 +26,10 @@ import {
   type WhatsAppInstance,
 } from "../_shared/whatsapp-client.ts";
 import { isActiveGestorForOrg } from "../_shared/gestor-auth.ts";
+import {
+  runInstanceDeletion,
+  DELETE_BATCH_SIZE,
+} from "../_shared/whatsapp-instance-delete.ts";
 
 // Force bundler to include provider modules (used via dynamic import in
 // whatsapp-client). meta-cloud is force-imported too so the human composer can
@@ -42,6 +46,7 @@ import "../_shared/whatsapp-providers/meta-cloud-provider.ts";
 const RATE_LIMIT_MAX = 60;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const rateLimitState = new Map<string, { count: number; resetAt: number }>();
+
 
 function checkRateLimit(orgId: string): boolean {
   const now = Date.now();
@@ -421,31 +426,40 @@ Deno.serve(
             console.log(`[deleteInstance] provider unavailable (best-effort skip): ${providerError}`);
           }
 
-          // Nullify/delete FKs in batches before deleting the instance row,
-          // otherwise ON DELETE SET NULL / CASCADE on large tables causes timeout.
-          await supabaseAdmin
-            .from("scheduled_user_messages")
-            .update({ whatsapp_instance_id: null })
-            .eq("whatsapp_instance_id", instanceId);
+          // DB side, em lotes via RPC.
+          //
+          // A versão anterior nulificava whatsapp_messages num UPDATE só e
+          // depois deletava a linha. Os dois estouram: o cascade
+          // `ON DELETE SET NULL` de whatsapp_messages custa 22,7s de média e
+          // 53,4s de pico (pg_stat_statements no PROD — 4,4 GB, 18 índices, 7
+          // deles com instance_id), contra os 8s de statement_timeout do
+          // PostgREST. Pior, o erro do UPDATE não era checado: ele estourava
+          // em silêncio, era revertido, e o DELETE caía no mesmo cascade —
+          // o cliente via "DB delete failed: canceling statement due to
+          // statement timeout" e nada acontecia (8 tentativas seguidas numa
+          // org, 06/08).
+          //
+          // whatsapp_instance_delete_step faz UM lote por chamada, com
+          // statement_timeout próprio, e devolve progresso. É idempotente:
+          // reentrar continua de onde parou.
+          const reassignTo =
+            typeof payload?.reassign_messages_to === "string"
+              ? (payload.reassign_messages_to as string)
+              : null;
 
-          await supabaseAdmin
-            .from("whatsapp_messages")
-            .update({ instance_id: null })
-            .eq("instance_id", instanceId);
+          const run = await runInstanceDeletion({
+            step: () =>
+              supabaseAdmin.rpc("whatsapp_instance_delete_step", {
+                p_instance_id: instanceId,
+                p_reassign_to: reassignTo,
+                p_batch: DELETE_BATCH_SIZE,
+              }),
+            onStep: (n, progress) =>
+              console.log(`[deleteInstance] step ${n}: ${JSON.stringify(progress ?? {})}`),
+          });
 
-          await supabaseAdmin
-            .from("whatsapp_conversations")
-            .delete()
-            .eq("instance_id", instanceId);
-
-          const { error: deleteErr } = await supabaseAdmin
-            .from("whatsapp_instances")
-            .delete()
-            .eq("id", instanceId);
-
-          console.log(`[deleteInstance] DB delete result: error=${deleteErr?.message ?? "none"}`);
-
-          if (deleteErr) {
+          if (run.status === "error") {
+            console.error(`[deleteInstance] step ${run.steps} failed: ${run.message}`);
             await logRuntime({
               organizationId: callerOrgId,
               module: "whatsapp",
@@ -453,9 +467,38 @@ Deno.serve(
               status: "error",
               entityType: "whatsapp_instances",
               entityId: instanceId,
-              errorMessage: deleteErr.message,
+              errorMessage: run.message,
             });
-            return jsonResponse(500, { error: `DB delete failed: ${deleteErr.message}` }, corsHeaders);
+            return jsonResponse(500, { error: `DB delete failed: ${run.message}` }, corsHeaders);
+          }
+
+          // `pending` não é falha: a RPC é idempotente e a próxima tentativa
+          // continua de onde parou. Sem isto, uma instância gigante rodaria
+          // até o edge function ser morto no meio — o que parece erro e não é.
+          if (run.status === "pending") {
+            const phase = run.progress?.phase ?? "?";
+            await logRuntime({
+              organizationId: callerOrgId,
+              module: "whatsapp",
+              action: "deleteInstance",
+              status: "skipped",
+              entityType: "whatsapp_instances",
+              entityId: instanceId,
+              errorMessage: `exclusão incompleta nesta chamada (fase ${phase})`,
+              payloadSnapshot: { progress: run.progress, steps: run.steps },
+            });
+            return jsonResponse(
+              200,
+              {
+                ok: false,
+                pending: true,
+                progress: run.progress,
+                error:
+                  `Exclusão em andamento (${phase}: ${run.progress?.remaining ?? "?"} ` +
+                  `registros restantes). Clique em excluir de novo para continuar de onde parou.`,
+              },
+              corsHeaders
+            );
           }
 
           // Verify row is actually gone
