@@ -3,6 +3,16 @@
 **Medido em 2026-08-07** contra prod `jsjsmuncfkbsbzqzqhfq`, `origin/develop` e o board SCRUM.
 Companheiro de [`spec-virada-leads-negocios.md`](./spec-virada-leads-negocios.md), que continua sendo a receita passo-a-passo da Fase 2 — este arquivo é a ordem e as dependências entre as fases, não a substitui.
 
+**Os outros dois roadmaps do repo, e por que os três coexistem:**
+
+| Arquivo | Horizonte | Estado |
+|---|---|---|
+| [`docs/MASTER-ROADMAP-WORLD-CLASS.md`](../../docs/MASTER-ROADMAP-WORLD-CLASS.md) | produto — 47 gaps, 7 waves, meses | 08/05. ⚠️ A **Wave 1** ("Data Model Foundation — 0 tabelas Contact/Company/Deal/Activity") está vencida: `deals` é justamente o que esta sprint construiu. Não cita a virada. |
+| [`ROADMAP.md`](./ROADMAP.md) | modularização + hardening | 26/05, histórico. A modularização terminou em 28/05. |
+| **este arquivo** | execução do que está na mão | vivo |
+
+Três arquivos é dois a mais do que o ideal, e o custo é real: escrevi este sem ter visto o MASTER-ROADMAP. Ficam separados porque respondem perguntas diferentes — *o que o produto quer ser* / *como o código foi reorganizado* / *o que falta entregar esta semana* — e fundi-los trocaria três documentos honestos por um documento longo que ninguém lê inteiro. Mas quem mexer em qualquer um **atualiza os ponteiros dos outros dois**, senão daqui a um mês são três fontes se contradizendo em silêncio.
+
 > **Regra de uso.** Todo número aqui tem data porque todo número aqui envelhece — o ledger de prod ganhou 4 versões entre 06/08 e 07/08, de outra frente. **Remeça antes de cada fase.** Um roadmap com número stale não é um plano, é uma opinião com aparência de medição. Foi assim que a receita anterior chegou ao dia do apply dizendo "22 migrations" quando eram 41.
 
 ---
