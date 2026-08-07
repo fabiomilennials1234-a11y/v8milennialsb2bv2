@@ -107,6 +107,8 @@ const ResetPassword = lazy(() => lazyRetry(() => import("@/modules/identity/page
 const MasterDashboard = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterDashboard")));
 const MasterOrganizations = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOrganizations")));
 const MasterUsers = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterUsers")));
+// Usuários ativos por org — quem deu sinal de uso (auth.sessions), master-only
+const MasterUsuariosAtivos = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterUsuariosAtivos")));
 const MasterPlans = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterPlans")));
 const MasterFeatures = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterFeatures")));
 const MasterAuditLogs = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterAuditLogs")));
@@ -755,6 +757,7 @@ function AppRoutes() {
         <Route path="meta-assets" element={<MasterMetaAssets />} />
         <Route path="support-tickets" element={<MasterSupportTickets />} />
         <Route path="stage-roles" element={<MasterStageRoleReview />} />
+        <Route path="usuarios-ativos" element={<MasterUsuariosAtivos />} />
       </Route>
 
       {/* Insights — área master azul (top-level, chrome próprio, sem MasterLayout) */}

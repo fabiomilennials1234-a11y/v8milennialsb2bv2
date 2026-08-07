@@ -30,6 +30,9 @@ export { PermissionProtectedRoute } from "./permissions";
 
 // ── Master ops ──────────────────────────────────────────────────────────────
 export { useMasterAuth } from "./master";
+// Ping de usuários ativos na barra superior — componente, para o hook (e a RPC
+// master-only por trás dele) não vazar do módulo.
+export { MasterOnlineIndicator } from "./master";
 
 // ── Gestor de Portfólio (scoped master, ADR-0021) ───────────────────────────
 export { useGestor, GestorRoute } from "./gestor";

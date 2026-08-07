@@ -26,6 +26,7 @@ import {
   Megaphone,
   CircleDollarSign,
   LifeBuoy,
+  Radio,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -38,12 +39,19 @@ interface NavItem {
   path: string;
   /** Se definido, o item só aparece quando a permissão existir (ou all=true) */
   permission?: string;
+  /**
+   * Item exige master PLENO (`permissions.all`). Usar em telas que expõem
+   * dados de TODOS os clientes — o outbounder tem linha em master_users mas
+   * é perfil restrito e não pode ver a frota inteira.
+   */
+  requiresFullMaster?: boolean;
 }
 
 const allNavItems: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/master" },
   { label: "Organizações", icon: Building2, path: "/master/organizations", permission: "organizations" },
   { label: "Usuários", icon: Users, path: "/master/users", permission: "users" },
+  { label: "Usuários Ativos", icon: Radio, path: "/master/usuarios-ativos", permission: "users", requiresFullMaster: true },
   { label: "Gestores", icon: UserCog, path: "/master/gestores", permission: "gestores" },
   { label: "Planos", icon: CreditCard, path: "/master/plans", permission: "billing" },
   { label: "Features", icon: Flag, path: "/master/features", permission: "features" },
@@ -65,6 +73,9 @@ export function MasterSidebar() {
 
   // Filtrar nav items baseado nas permissões
   const navItems = allNavItems.filter((item) => {
+    // Itens de frota inteira: só master pleno. Checado ANTES do resto, senão
+    // o outbounder passaria pelo `permission: "users"` que ele possui.
+    if (item.requiresFullMaster && !permissions.all) return false;
     if (!item.permission) return true; // Dashboard sempre visível
     if (permissions.all) return true; // Master full access
     return !!(permissions as Record<string, boolean>)[item.permission];
