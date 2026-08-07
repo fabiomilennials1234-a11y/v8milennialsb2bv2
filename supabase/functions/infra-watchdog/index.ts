@@ -124,29 +124,62 @@ async function checkSupportNotifyHealth(supabase: any): Promise<Alert | null> {
   };
 }
 
-/** Importação de histórico rodando fora da janela noturna, ou grande demais. */
+// Escrita de backfill, somada por org, acima da qual vale avisar. O incidente
+// sustentou ~500/min por 7 minutos (3.500 linhas) antes do colapso; 1.500 em 5
+// minutos (300/min) pega o mesmo padrão bem antes de doer.
+const BACKFILL_BURST_ROWS = 1_500;
+const BACKFILL_BURST_MINUTES = 5;
+
+/**
+ * Backfill escrevendo rápido demais.
+ *
+ * A primeira versão disto media `total_fetched` de jobs em `running` — e a
+ * produção mostrou o erro em minutos: os jobs antigos da fila entram em
+ * `running` por instantes a cada tick do worker, e qualquer um deles com
+ * histórico acumulado grande disparava o alerta. Zero job rodando de fato,
+ * alerta mesmo assim, ~48 vezes por dia.
+ *
+ * O que interessa não é quanto um job já baixou algum dia — é quanto está sendo
+ * escrito AGORA. `history_sync_write_budget` guarda exatamente isso, por org e
+ * por minuto, e é alimentada pelo próprio worker a cada lote.
+ */
 async function checkRunawayBackfill(supabase: any): Promise<Alert | null> {
+  const desde = new Date(Date.now() - BACKFILL_BURST_MINUTES * 60_000).toISOString();
+
   const { data } = await supabase
-    .from("history_sync_jobs")
-    .select("id, organization_id, scope, total_fetched, chats_completed, total_chats")
-    .eq("status", "running");
+    .from("history_sync_write_budget")
+    .select("organization_id, rows_written")
+    .gte("minute_bucket", desde);
 
   if (!data || data.length === 0) return null;
 
-  const heavy = data.filter((j: any) => Number(j.total_fetched) > 20_000);
-  if (heavy.length === 0) return null;
+  const porOrg = new Map<string, number>();
+  for (const linha of data) {
+    const atual = porOrg.get(linha.organization_id) ?? 0;
+    porOrg.set(linha.organization_id, atual + Number(linha.rows_written ?? 0));
+  }
 
-  const linhas = heavy
-    .map((j: any) =>
-      `• ${j.scope} — ${j.total_fetched} msgs, ${j.chats_completed ?? 0}/${j.total_chats ?? "?"} conversas`)
+  const quentes = [...porOrg.entries()].filter(([, linhas]) => linhas >= BACKFILL_BURST_ROWS);
+  if (quentes.length === 0) return null;
+
+  const nomes = new Map<string, string>();
+  const { data: orgs } = await supabase
+    .from("organizations")
+    .select("id, name")
+    .in("id", quentes.map(([id]) => id));
+  for (const o of orgs ?? []) nomes.set(o.id, o.name);
+
+  const linhas = quentes
+    .map(([orgId, total]) =>
+      `• ${nomes.get(orgId) ?? orgId}: ${total} linhas em ${BACKFILL_BURST_MINUTES} min`)
     .join("\n");
 
   return {
     key: "runaway_backfill",
     text:
-      `🟡 *Importação de histórico volumosa em curso*\n\n${linhas}\n\n` +
-      `O freio de pressão está ativo, então isto não deve derrubar nada — ` +
-      `é aviso, não emergência.\n` +
+      `🟡 *Importação de histórico escrevendo rápido*\n\n${linhas}\n\n` +
+      `O freio de pressão e a cota por organização estão ativos, então isto não ` +
+      `deve derrubar nada — é aviso, não emergência.\n` +
       `Para parar: status = 'cancelled' no job.`,
   };
 }
