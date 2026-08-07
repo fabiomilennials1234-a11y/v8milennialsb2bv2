@@ -145,6 +145,13 @@ vi.mock("@/modules/leads", () => ({
   LeadModal: () => null,
   LeadCard: () => null,
   DealDetailDialog: () => null,
+  // A página monta os dois painéis do Card e os importa do barrel; sem estas
+  // chaves o mock devolve `undefined` e o React derruba a montagem antes de
+  // qualquer asserção sobre o move. `LeadPanelProvider` entra pelo mesmo
+  // motivo — vem no mesmo import de `@/modules/leads` que os painéis.
+  DealCardPanel: () => null,
+  LeadCardPanel: () => null,
+  LeadPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   DealPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useDealSheet: () => ({ openDeal: vi.fn(), closeDeal: vi.fn() }),
   useDeleteAllLeadsInPipe: () => ({ mutateAsync: vi.fn(), isPending: false }),

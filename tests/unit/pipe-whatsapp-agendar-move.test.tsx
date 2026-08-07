@@ -135,9 +135,17 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
+// Os dois painéis entram AQUI, no mock do barrel, e não como mock do caminho
+// profundo — a página os importa de `@/modules/leads`, que é o que a convenção
+// do repo manda (cross-module sempre pelo barrel). Mockar
+// `.../deal-card/DealCardPanel` não intercepta nada nesse caminho: o módulo que
+// a página resolve é o barrel, e um barrel mockado sem a chave devolve
+// `undefined`, que o React recusa como componente e derruba a montagem inteira.
 vi.mock("@/modules/leads", () => ({
   LeadCard: () => null,
   LeadModal: () => null,
+  DealCardPanel: () => null,
+  LeadCardPanel: () => null,
   DealPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   LeadPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useDealSheet: () => ({ openDeal: vi.fn(), closeDeal: vi.fn() }),
@@ -149,12 +157,8 @@ vi.mock("@/modules/leads/hooks/useTags", () => ({ useTags: () => ({ data: [] }) 
 vi.mock("@/modules/leads/components/bulk-actions/BulkActionBar", () => ({
   BulkActionBar: () => null,
 }));
-vi.mock("@/modules/leads/components/deal-card/DealCardPanel", () => ({
-  DealCardPanel: () => null,
-}));
-vi.mock("@/modules/leads/components/lead-card/LeadCardPanel", () => ({
-  LeadCardPanel: () => null,
-}));
+// (os mocks de caminho profundo dos dois painéis saíram daqui — subiram para o
+// mock do barrel acima, que é por onde a página realmente os resolve)
 
 vi.mock("@/modules/identity", () => ({
   useCanDo: () => ({ allowed: true, isLoading: false }),
