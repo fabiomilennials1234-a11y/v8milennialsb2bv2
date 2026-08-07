@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -8,6 +8,7 @@ import { useViewport } from "@/shared/hooks/use-viewport";
 import { useLeadSheet } from "../lead-detail/hooks/useLeadSheet";
 import { useDealSheet } from "../deal-detail/deal-sheet-context";
 import { LeadCardContainer } from "./LeadCardContainer";
+import { LeadCardNewDeal } from "./LeadCardNewDeal";
 
 /**
  * A casca do Card do Lead — diálogo no desktop, folha no celular.
@@ -26,12 +27,45 @@ export const LeadCardPanel = memo(function LeadCardPanel() {
   const { openDeal } = useDealSheet();
   const { isMobile } = useViewport();
 
+  /**
+   * "Criar negócio" (`inv:H5-18`) — o botão vive lá dentro, o diálogo mora aqui.
+   *
+   * O estado não pode ficar no `LeadCardContainer`: ele é quem busca o lead, e
+   * pendurar as cinco queries de funil nele custaria em toda abertura de card —
+   * e o card abre em toda linha da lista, onde quase ninguém vai criar negócio.
+   */
+  const [novoNegocio, setNovoNegocio] = useState(false);
+
+  // Trava de montagem: antes do primeiro "Criar negócio" o diálogo nem existe
+  // na árvore (e nenhuma query de funil roda); depois dele fica montado, para o
+  // fechamento animar em vez de sumir de um quadro para o outro. Ele já não
+  // busca nada com `open` falso.
+  const jaAbriu = useRef(false);
+  if (novoNegocio) jaAbriu.current = true;
+
+  // Trocar de pessoa com o modal de criação aberto abriria um negócio no lead
+  // errado — o alvo vem de `leadId`, que já mudou. Fechar é a única leitura
+  // honesta: quem for criar recomeça na pessoa que está na tela.
+  useEffect(() => {
+    setNovoNegocio(false);
+  }, [leadId]);
+
   const conteudo = (
-    <LeadCardContainer
-      leadId={leadId}
-      isOpen={isOpen}
-      onOpenDeal={(entryId, id) => openDeal(entryId, id)}
-    />
+    <>
+      <LeadCardContainer
+        leadId={leadId}
+        isOpen={isOpen}
+        onOpenDeal={(entryId, id) => openDeal(entryId, id)}
+        onNewDeal={() => setNovoNegocio(true)}
+      />
+      {(novoNegocio || jaAbriu.current) && (
+        <LeadCardNewDeal
+          leadId={leadId}
+          open={novoNegocio}
+          onOpenChange={setNovoNegocio}
+        />
+      )}
+    </>
   );
 
   if (isMobile) {
