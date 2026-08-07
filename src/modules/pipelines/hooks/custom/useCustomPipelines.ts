@@ -965,7 +965,21 @@ export function useMoveLeadInCustomPipe() {
           const targetStageKey = stageRow.target_stage_key;
 
           if (pipeType === "whatsapp") {
-            await supabase.from("leads").update({ pipe_whatsapp: targetStageKey }).eq("id", data.lead_id);
+            // SCRUM-202: a transição escreve só a entry (via a view homônima). O
+            // espelho `leads.pipe_whatsapp` sai daqui por dois motivos, e nenhum
+            // é estilo:
+            //
+            //   1. era REDUNDANTE — quem alimenta a coluna é o gatilho
+            //      `sync_pipeline_entry_to_lead_pipe_whatsapp`, que dispara no
+            //      write da entry logo abaixo. Escrever dos dois lados só cria a
+            //      chance de divergirem;
+            //   2. era ESCRITA DIRETA em `leads` fora da porta do Negócio, e
+            //      desde a `20270803000040` o espelho deixou de acompanhar o
+            //      move — então este UPDATE podia deixar a coluna dizendo uma
+            //      etapa que a entry não confirma.
+            //
+            // A coluna é dropada na fatia 3 (SCRUM-222); esta linha viraria erro
+            // de coluna inexistente derrubando a transição inteira.
             const existing = await readCurrentSystemPipeEntry("whatsapp", data.lead_id);
             if (existing) {
               await supabase.from("pipe_whatsapp").update({ status: targetStageKey }).eq("id", existing.id);

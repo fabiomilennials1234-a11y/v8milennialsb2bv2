@@ -52,9 +52,16 @@ import { useUserRole, useFeaturePermission } from "@/modules/identity";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
-import { DealPanelProvider, useDealSheet, LeadPanelProvider } from "@/modules/leads";
-import { DealCardPanel } from "@/modules/leads/components/deal-card/DealCardPanel";
-import { LeadCardPanel } from "@/modules/leads/components/lead-card/LeadCardPanel";
+// SCRUM-124: os dois cards passam a sair pelo barrel. Eram deep-import daqui —
+// violação de `boundaries/element-types` que ia se multiplicar por quatro assim
+// que os outros três funis montassem os mesmos componentes.
+import {
+  DealPanelProvider,
+  useDealSheet,
+  LeadPanelProvider,
+  DealCardPanel,
+  LeadCardPanel,
+} from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { LeadModal } from "@/modules/leads";
 import { CreateOpportunityModal } from "@/modules/pipelines/components/kanban/CreateOpportunityModal";

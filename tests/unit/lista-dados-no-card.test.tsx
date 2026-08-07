@@ -1,7 +1,23 @@
 /**
- * O cluster "Dados" saiu da LISTA de Leads e foi para o card — ADR-0024 §1.
+ * O cluster "Dados" saiu da LISTA de Leads e foi para o CARD — ADR-0024 §1.
  *
  * Prova `inv:H5-01` (SCRUM-107), que até aqui era decisão escrita sem teste.
+ *
+ * ── SCRUM-126: onde o bloco "Compras" foi parar ──────────────────────────────
+ * A ADR-0024 §1 mandou o cluster para "o drawer", e o arquivo se chamava
+ * `lista-dados-no-drawer.test.tsx`. Aquele drawer **não é mais montado**: os
+ * dois cards (Lead e Negócio) o substituíram, e o destino real do bloco é a
+ * seção "A relação" do `LeadCardMetrics`, dentro do Card do Lead.
+ *
+ * Renomeado para `lista-dados-no-card` porque o nome antigo mandava o próximo
+ * leitor procurar um componente que não existe — e o bloco "Compras" já tinha
+ * ficado uma sprint com dono ambíguo exatamente por isso. O conteúdo dos casos
+ * não mudou: eles sempre testaram o card (`LeadCardMetrics`), nunca um drawer.
+ *
+ * Alcance, depois do SCRUM-124: o Card do Lead passou a ser montado pelos quatro
+ * funis e pela aba de Leads. Antes, o bloco só era alcançável por uma porta —
+ * o que fazia "o destino do bloco" parecer questão em aberto quando na verdade
+ * a questão era o card não estar montado em lugar nenhum além do pipe-whatsapp.
  *
  * O número que motivou a mudança: medido em prod 2026-08-04, de **35.165 leads
  * vivos só 1.018** tinham algo para mostrar naquela coluna — ela estava vazia

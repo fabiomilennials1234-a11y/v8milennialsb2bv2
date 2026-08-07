@@ -100,8 +100,49 @@ CREATE TABLE IF NOT EXISTS public.backup_cross_org_responsaveis (
   org_do_membro  uuid NOT NULL
 );
 
+-- ⚠️ FECHAR ANTES DE ENCHER (SCRUM-247). `CREATE TABLE` no schema `public` herda
+-- os privilégios DEFAULT do Supabase, que incluem `anon` e `authenticated`. Sem
+-- as duas linhas abaixo esta tabela nasce legível por qualquer autenticado — e o
+-- que ela guarda são 14.347 linhas de "quem era responsável por qual lead em
+-- qual org", ou seja, exatamente o mapa cross-org que esta limpeza existe para
+-- remover. Fechar depois do INSERT não serve: a janela é o próprio script.
+--
+-- Mesma classe de falha que a migration 20270730000002_close_open_backup_tables
+-- fechou em 2026-07-30, nas quatro tabelas `_backup_*` criadas à mão. É lacuna
+-- conhecida do gate: `supabase/tests/rls_invariants.sql` (INV-3) roda contra o
+-- schema montado a partir de `supabase/migrations/`, e tabela que nasce em
+-- script de operação nunca passa por lá. O gate é cego para isto — a defesa tem
+-- que morar no próprio script.
+--
+-- Sem policy é deny-all para `authenticated` e `anon`. `service_role` continua
+-- enxergando por BYPASSRLS, que é quem roda a restauração.
+ALTER TABLE public.backup_cross_org_responsaveis ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.backup_cross_org_responsaveis FROM PUBLIC, anon, authenticated;
+
 COMMENT ON TABLE public.backup_cross_org_responsaveis IS
-  'Snapshot dos responsáveis cross-org zerados pelo passo 1 do L2 (fatia 2 lead-negocio). Restauração: UPDATE <tabela> SET <coluna> = valor_antigo FROM esta tabela WHERE id = row_id. Descartável depois que o M6 estiver no ar e estável.';
+  'Snapshot dos responsáveis cross-org zerados pelo passo 1 do L2 (fatia 2 lead-negocio). RLS deny-all + zero GRANT (SCRUM-247) — guarda o mapa cross-org que a limpeza remove. Restauração: UPDATE <tabela> SET <coluna> = valor_antigo FROM esta tabela WHERE id = row_id. Descartável depois que o M6 estiver no ar e estável.';
+
+-- Guarda de fechamento: se por qualquer motivo a tabela chegar aqui aberta
+-- (ex.: alguém rodou uma versão antiga do script antes e ela já existia com
+-- GRANT), aborta ANTES do INSERT em vez de encher a tabela exposta.
+DO $$
+DECLARE v_rls boolean; v_grants text;
+BEGIN
+  SELECT c.relrowsecurity INTO v_rls
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'public' AND c.relname = 'backup_cross_org_responsaveis';
+
+  SELECT string_agg(DISTINCT grantee, ', ') INTO v_grants
+    FROM information_schema.role_table_grants
+   WHERE table_schema = 'public' AND table_name = 'backup_cross_org_responsaveis'
+     AND grantee IN ('PUBLIC', 'anon', 'authenticated');
+
+  IF NOT v_rls OR v_grants IS NOT NULL THEN
+    RAISE EXCEPTION
+      'BACKUP EXPOSTO: rls=% grants=%. Abortado ANTES do INSERT — encher esta tabela aberta publicaria o mapa cross-org de 14.347 linhas.',
+      v_rls, COALESCE(v_grants, '(nenhum)');
+  END IF;
+END$$;
 
 INSERT INTO public.backup_cross_org_responsaveis (tabela, coluna, row_id, valor_antigo, org_da_linha, org_do_membro)
 SELECT 'leads','responsible_id', x.id, x.responsible_id, x.organization_id, m.organization_id

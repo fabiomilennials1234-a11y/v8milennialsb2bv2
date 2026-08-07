@@ -264,24 +264,13 @@ describe("usePipeDistribution", () => {
   });
 });
 
-// ═══ 13. useWhatsAppFunnel (20 LOC) ═══
-import { FUNNEL_STAGES, useWhatsAppFunnelLeads, groupLeadsByStage } from "@/modules/communication/hooks/useWhatsAppFunnel";
-
-describe("useWhatsAppFunnel", () => {
-  it("FUNNEL_STAGES has stages", () => { expect(FUNNEL_STAGES.length).toBeGreaterThan(0); });
-  it("useWhatsAppFunnelLeads fetches", async () => {
-    const { result } = renderHook(() => useWhatsAppFunnelLeads(), { wrapper: w() });
-    await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
-  });
-  it("groupLeadsByStage groups empty", () => {
-    const result = groupLeadsByStage(undefined);
-    expect(result).toBeDefined();
-  });
-  it("groupLeadsByStage groups data", () => {
-    const result = groupLeadsByStage([{ id: "1", lead_id: "l1", status: "novo" } as any]);
-    expect(result).toBeDefined();
-  });
-});
+// ═══ 13. useWhatsAppFunnel — REMOVIDO (SCRUM-202) ═══
+// O hook era o último escritor de `leads.pipe_whatsapp` no frontend e não tinha
+// nenhum consumidor de produção: saiu do barrel de `communication` quando os
+// re-exports mortos quebraram o ESM em dev, e desde então só estes testes o
+// importavam. Cobertura de um hook que ninguém monta não é cobertura — é o que
+// fazia o espelho parecer vivo. A etapa do funil WhatsApp vem da entry
+// (`pipeline_entries.stage_key`), nunca da coluna.
 
 // ═══ 14. useSellerActivity (17 LOC) ═══
 import { useSellerActivity } from "@/modules/engagement/hooks/useSellerActivity";
