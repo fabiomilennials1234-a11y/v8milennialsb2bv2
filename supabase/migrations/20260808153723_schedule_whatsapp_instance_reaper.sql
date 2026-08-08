@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20270808000001_schedule_whatsapp_instance_reaper.sql
+-- 20260808153723_schedule_whatsapp_instance_reaper.sql
 --
 -- Agenda o coletor de lápides (#1476, PRD #1472).
 --
@@ -12,7 +12,7 @@
 -- public.cron_config e dispara via pg_net. Falha de invocação vira WARNING, nunca
 -- aborta a transação do cron.
 --
--- ROLLBACK pareado: rollback/20270808000001_schedule_whatsapp_instance_reaper.sql
+-- ROLLBACK pareado: rollback/20260808153723_schedule_whatsapp_instance_reaper.sql
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION public.invoke_whatsapp_instance_reaper()

@@ -1,5 +1,5 @@
 -- =============================================================================
--- ROLLBACK de 20270808000001_schedule_whatsapp_instance_reaper.sql (#1476)
+-- ROLLBACK de 20260808153723_schedule_whatsapp_instance_reaper.sql (#1476)
 --
 -- ATENÇÃO: sem o cron, as lápides param de ser drenadas. A fila continua correta
 -- e nada se perde, mas nenhuma Instance é removida no provider até o coletor
