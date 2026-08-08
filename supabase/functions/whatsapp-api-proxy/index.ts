@@ -26,6 +26,10 @@ import {
   type WhatsAppInstance,
 } from "../_shared/whatsapp-client.ts";
 import { isActiveGestorForOrg } from "../_shared/gestor-auth.ts";
+import {
+  nullifyInBatches,
+  type BatchNullifyIO,
+} from "../_shared/whatsapp-instance-teardown.ts";
 
 // Force bundler to include provider modules (used via dynamic import in
 // whatsapp-client). meta-cloud is force-imported too so the human composer can
@@ -421,17 +425,67 @@ Deno.serve(
             console.log(`[deleteInstance] provider unavailable (best-effort skip): ${providerError}`);
           }
 
-          // Nullify/delete FKs in batches before deleting the instance row,
-          // otherwise ON DELETE SET NULL / CASCADE on large tables causes timeout.
-          await supabaseAdmin
-            .from("scheduled_user_messages")
-            .update({ whatsapp_instance_id: null })
-            .eq("whatsapp_instance_id", instanceId);
+          // Clear FKs BEFORE deleting the instance row, otherwise the
+          // ON DELETE SET NULL cascade runs as one statement over
+          // whatsapp_messages (~2.3M rows, 7 indexes on instance_id) and blows
+          // the statement timeout — 34 of 95 deletions failed that way. Each
+          // batch is a short statement in its own transaction, so locks on a
+          // table the webhook writes to continuously are released in between.
+          const nullifyIO: BatchNullifyIO = {
+            async selectIds(table, column, value, limit) {
+              const { data, error } = await supabaseAdmin
+                .from(table)
+                .select("id")
+                .eq(column, value)
+                .limit(limit);
+              if (error) throw new Error(`${table} select failed: ${error.message}`);
+              return (data ?? []).map((r: { id: string }) => r.id);
+            },
+            async nullifyByIds(table, column, ids) {
+              const { error } = await supabaseAdmin
+                .from(table)
+                .update({ [column]: null })
+                .in("id", ids);
+              if (error) throw new Error(`${table} nullify failed: ${error.message}`);
+            },
+          };
 
-          await supabaseAdmin
-            .from("whatsapp_messages")
-            .update({ instance_id: null })
-            .eq("instance_id", instanceId);
+          for (const target of [
+            { table: "whatsapp_messages", column: "instance_id" },
+            { table: "scheduled_user_messages", column: "whatsapp_instance_id" },
+          ]) {
+            const outcome = await nullifyInBatches(nullifyIO, {
+              ...target,
+              value: instanceId,
+            });
+            console.log(
+              `[deleteInstance] ${target.table}: cleared ${outcome.rows} rows in ${outcome.batches} batches`
+            );
+
+            // Rows still carry the FK. Proceeding would hand the remainder to
+            // the cascade, which is exactly the statement that times out — so
+            // stop and let the caller retry instead of failing opaquely.
+            if (outcome.hitBatchCeiling) {
+              await logRuntime({
+                organizationId: callerOrgId,
+                module: "whatsapp",
+                action: "deleteInstance",
+                status: "error",
+                entityType: "whatsapp_instances",
+                entityId: instanceId,
+                errorMessage: `${target.table} not drained after ${outcome.batches} batches (${outcome.rows} rows cleared); retry to continue`,
+              });
+              return jsonResponse(
+                503,
+                {
+                  error:
+                    "Exclusão em andamento: muitas mensagens vinculadas. Tente novamente para continuar.",
+                  partial: { table: target.table, rows: outcome.rows },
+                },
+                corsHeaders
+              );
+            }
+          }
 
           await supabaseAdmin
             .from("whatsapp_conversations")
