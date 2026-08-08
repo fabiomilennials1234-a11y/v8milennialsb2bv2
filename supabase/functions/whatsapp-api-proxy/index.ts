@@ -373,15 +373,22 @@ Deno.serve(
       if (action === "deleteInstance") {
           console.log(`[deleteInstance] starting for instance=${instanceId} org=${callerOrgId}`);
 
-          // Best-effort provider-side delete (skip if credentials missing).
+          // A REMOÇÃO no provider não acontece mais aqui (#1476).
           //
-          // If the provider delete fails we DO NOT silently proceed: a swallowed
-          // failure here leaves the Uazapi instance — and its WhatsApp
-          // linked-device session — alive, which competes with the next paired
-          // instance and produces recurring "401 logged out from another device"
-          // flapping. So on failure we fall back to disconnecting the session
-          // (frees the linked device even when the instance record lingers) and
-          // log the failure loudly for cleanup.
+          // Antes era best-effort: quando falhava, a linha do CRM era apagada de
+          // qualquer forma e o token morria em CASCADE — instância órfã
+          // inalcançável para sempre. E o pior caminho (apagar uma org, que
+          // cascateia no Postgres) nunca passava por aqui. Agora um trigger grava
+          // a lápide (#1475) antes de qualquer linha morrer, e o coletor remove no
+          // provider com retry — cobrindo TODOS os caminhos de exclusão com um
+          // caminho único, que por isso é exercitado em 100% delas.
+          //
+          // O `disconnect` CONTINUA síncrono, e de propósito: ele não deleta nada,
+          // libera a sessão do dispositivo vinculado. Sem isso o aparelho antigo
+          // segue competindo com a próxima instância pareada e reaparece o
+          // flapping "401 logged out from another device" — incidente já corrigido
+          // que não pode voltar por causa dos minutos até o coletor rodar. A
+          // falha dele é inofensiva: o coletor ainda vai deletar.
           let providerError: string | null = null;
           const withTimeout = <T>(p: Promise<T>, label: string): Promise<T> =>
             Promise.race([
@@ -395,30 +402,15 @@ Deno.serve(
               instance as WhatsAppInstance,
               supabaseAdmin
             );
-            try {
-              await withTimeout(provider.deleteInstance(), "provider delete");
-              console.log(`[deleteInstance] provider delete OK`);
-            } catch (delErr) {
-              providerError = (delErr as Error).message ?? "provider delete failed";
-              // Fallback: free the WhatsApp session so the linked device stops
-              // competing, even though the instance record could not be removed.
-              try {
-                await withTimeout(provider.logoutInstance(), "provider disconnect");
-                console.warn(
-                  `[deleteInstance] provider delete failed (${providerError}); disconnected session as fallback`
-                );
-              } catch (discErr) {
-                const discMsg = (discErr as Error).message ?? "disconnect failed";
-                providerError = `${providerError}; disconnect fallback failed: ${discMsg}`;
-                console.error(
-                  `[deleteInstance] ORPHAN RISK: provider delete AND disconnect failed for instance=${instanceId} org=${callerOrgId}: ${providerError}`
-                );
-              }
-            }
+            await withTimeout(provider.logoutInstance(), "provider disconnect");
+            console.log(`[deleteInstance] provider session disconnected`);
           } catch (e) {
-            // No provider credentials (e.g. orphan from a failed createInstance).
-            providerError = (e as Error).message ?? "provider unavailable";
-            console.log(`[deleteInstance] provider unavailable (best-effort skip): ${providerError}`);
+            // Sessão não liberada agora: o coletor ainda remove a instância, e com
+            // ela a sessão. Registrado para diagnóstico, não é falha da operação.
+            providerError = (e as Error).message ?? "provider disconnect skipped";
+            console.log(
+              `[deleteInstance] disconnect best-effort falhou (coletor assume a remoção): ${providerError}`
+            );
           }
 
           // Nullify/delete FKs in batches before deleting the instance row,
