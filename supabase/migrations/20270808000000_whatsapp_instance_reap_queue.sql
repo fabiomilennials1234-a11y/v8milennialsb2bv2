@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20270807000000_whatsapp_instance_reap_queue.sql
+-- 20270808000000_whatsapp_instance_reap_queue.sql
 --
 -- Lápide de Instance WhatsApp (#1475, PRD #1472).
 --
@@ -26,7 +26,7 @@
 -- Esta migration entrega a EVIDÊNCIA. A remoção efetiva no provider é o
 -- coletor (#1476).
 --
--- ROLLBACK pareado: rollback/20270807000000_whatsapp_instance_reap_queue.sql
+-- ROLLBACK pareado: rollback/20270808000000_whatsapp_instance_reap_queue.sql
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 -- =============================================================================
--- ROLLBACK de 20270807000000_whatsapp_instance_reap_queue.sql (#1475)
+-- ROLLBACK de 20270808000000_whatsapp_instance_reap_queue.sql (#1475)
 --
 -- ATENÇÃO: derrubar isto reabre o vazamento. Toda Instance apagada enquanto o
 -- trigger estiver ausente perde o token em CASCADE e vira órfã inalcançável no
