@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Gauge,
+  ChartNoAxesCombined,
   Fuel,
   CalendarDays,
   Wrench,
@@ -128,6 +129,8 @@ const turboSubItems: NavItem[] = [
 // Primary items — always visible in the top bar
 const primaryNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/dashboard" },
+  // Métricas sai do Comando: lá é operação (próximos passos), aqui é análise.
+  { label: "Métricas", icon: ChartNoAxesCombined, path: "/metricas" },
   { label: "Chat", icon: Zap, path: "/chat-whatsapp" },
   // Disparos — porta canônica, sempre visível perto do Chat (#904)
   { label: "Disparos", icon: Send, path: "/disparos" },
@@ -156,6 +159,7 @@ const moreNavItems: NavItemWithChildren[] = [
 // All items combined for mobile
 const allNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/dashboard" },
+  { label: "Métricas", icon: ChartNoAxesCombined, path: "/metricas" },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Chat", icon: Zap, path: "/chat-whatsapp" },

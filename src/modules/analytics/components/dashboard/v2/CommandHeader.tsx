@@ -94,6 +94,7 @@ function CommandHeaderBase({
       </div>
 
       <TabsList className="ml-0 h-auto max-w-full justify-start gap-1 overflow-x-auto scrollbar-hide bg-transparent p-0 md:ml-[18px]">
+        <TabsTrigger value="proximos-passos" className={TAB_TRIGGER_CLASS}>Próximos passos</TabsTrigger>
         <TabsTrigger value="visao-geral" className={TAB_TRIGGER_CLASS}>Visão Geral</TabsTrigger>
         <TabsTrigger value="performance" className={TAB_TRIGGER_CLASS}>Performance</TabsTrigger>
         <TabsTrigger value="saude" className={TAB_TRIGGER_CLASS}>Saúde</TabsTrigger>

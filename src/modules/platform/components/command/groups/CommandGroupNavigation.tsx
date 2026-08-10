@@ -12,6 +12,7 @@ import {
   Bot,
   CalendarDays,
   BarChart3,
+  ChartNoAxesCombined,
   Megaphone,
   Zap,
   Settings,
@@ -32,6 +33,7 @@ interface CommandGroupNavigationProps {
 
 const NAV_ITEMS = [
   { id: "nav-dashboard",   label: "Dashboard",      path: "/dashboard",      Icon: LayoutDashboard },
+  { id: "nav-metricas",    label: "Métricas",        path: "/metricas",       Icon: ChartNoAxesCombined },
   { id: "nav-leads",       label: "Leads",           path: "/leads",          Icon: Users },
   { id: "nav-chat",        label: "Chat WhatsApp",   path: "/chat-whatsapp",   Icon: MessageSquare },
   { id: "nav-copilot",     label: "Copilot IA",      path: "/copilot",        Icon: Bot },

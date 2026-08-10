@@ -6,6 +6,7 @@ import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { CommandHeader } from "@/modules/analytics/components/dashboard/v2/CommandHeader";
 import { TelemetryTicker } from "@/modules/analytics/components/dashboard/v2/TelemetryTicker";
+import { TabProximosPassos } from "@/modules/analytics/components/dashboard/v2/TabProximosPassos";
 import { TabVisaoGeralV2 } from "@/modules/analytics/components/dashboard/v2/TabVisaoGeralV2";
 import { TabPerformanceV2 } from "@/modules/analytics/components/dashboard/v2/TabPerformanceV2";
 import { TabSaude } from "@/modules/analytics/components/dashboard/TabSaude";
@@ -116,7 +117,7 @@ export default function Dashboard() {
 
   return (
     <div className="relative">
-      <Tabs defaultValue="visao-geral" className="w-full">
+      <Tabs defaultValue="proximos-passos" className="w-full">
         <CommandHeader
           month={selectedMonth}
           year={selectedYear}
@@ -131,6 +132,17 @@ export default function Dashboard() {
         />
 
         <TelemetryTicker />
+
+        <TabsContent value="proximos-passos" className="mt-0">
+          <motion.div
+            key="proximos-passos"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <TabProximosPassos />
+          </motion.div>
+        </TabsContent>
 
         <TabsContent value="visao-geral" className="mt-0">
           <TabVisaoGeralV2

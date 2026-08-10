@@ -9,7 +9,8 @@
 
 Visão agregada do desempenho da org. Inclui:
 
-- **Dashboard** — KPIs principais (leads novos, conversão, ticket médio, receita)
+- **Comando** (`/dashboard`) — aba default **Próximos passos** (fila de ação da operação) + KPIs (leads novos, conversão, ticket médio, receita), Performance, Saúde, Mapa
+- **Estúdio de Métricas** (`/metricas`) — painel em branco + catálogo lateral; o usuário compõe as janelas que quer ver
 - **Dashboard Outbound** — fila de envio, queue health
 - **TV Dashboard** — display rotativo pra parede do escritório (period rotation)
 - **Performance** — view por vendedor (cross-cut com `engagement`)
@@ -92,6 +93,29 @@ Tipos públicos re-exportados via barrel: `PipelineVelocity`, `RevenueAttributio
 ### Eventos (post slice 19)
 
 n/a — analytics é read-only (consome eventos via aggregation tables/RPCs).
+
+## Estúdio de Métricas (`/metricas`) — SCRUM-11, MVP
+
+Superfície nova. Comando vira **operação** (o que fazer agora), Estúdio vira **análise** (o que olhar). Portas cruzadas nas duas direções: botão "Ver métricas" na aba Próximos passos, botão "Comando" no header do Estúdio, item na top bar e no Command Palette.
+
+| Peça | Arquivo |
+|---|---|
+| Página | `pages/MetricsStudio.tsx` (rota full-bleed — ver `FULL_BLEED_PATTERNS`) |
+| Catálogo (29 métricas, 9 famílias) | `lib/metrics-studio-catalog.ts` |
+| Amostra determinística | `lib/metrics-studio-sample.ts` (+ `.test.ts`) |
+| Estado do painel | `hooks/useMetricsStudio.ts` (persistido por org+usuário, TTL 30d) |
+| Lista lateral | `components/metrics-studio/MetricsStudioSidebar.tsx` |
+| Canvas / janela | `components/metrics-studio/{MetricsCanvas,MetricWindow}.tsx` |
+| Gráficos | `components/metrics-studio/charts/Studio{Line,Pie,Candle}Chart.tsx` |
+
+**Estado do MVP — o que ainda NÃO é real:**
+
+1. 🔴 **Números são amostra**, não o motor. `buildMetricSample()` é o único seam; trocar por `useMetricMeasure` (`fn_metric_measure`, ADR-0023) não toca componente nenhum.
+2. 🟠 **O catálogo da UI é maior que o do motor.** 29 métricas listadas, **13** já são medida de `fn_metric_catalog()`. O resto vive em hook legado (marcado `readiness: "pronta"`) ou não existe (`"parcial"` / `"ausente"`). O selo **motor** na lista mostra quais são componíveis hoje.
+3. 🟠 **Sem gate de permissão.** `useFeaturePermission` é fail-closed; gatear em `metrics.view` antes de a `get-member-permissions` semear a chave trancaria todo membro. Espelha `/dashboard`. Quando a chave existir: gate em `App.tsx` + entrada em `NAV_VIEW_PERMISSIONS`.
+4. 🟠 **`TabProximosPassos` roda com fixture** (`lib/proximos-passos-sample.ts`). Cada faixa declara em `wiring` a fonte real que a alimentaria.
+
+**Vela é SVG próprio** (`StudioCandleChart`): recharts não tem candlestick, e a receita usual de empilhar `Bar` com base falsa quebra quando `low = 0`.
 
 ## Áreas frágeis
 
