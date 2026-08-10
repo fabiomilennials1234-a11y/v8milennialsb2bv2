@@ -339,7 +339,16 @@ verify_jwt = false
 [functions.whatsapp-media-retry]
 verify_jwt = false
 # whatsapp-media-retention: deleta whatsapp-media/ >30d via Storage API + marca media_expired; cron diário 04:00; auth via x-cron-secret
+# ATENÇÃO: o código-fonte desta função NÃO está no repo — ela existe só no
+# projeto de prod. Não a redeploye a partir daqui: não há o que deployar, e o
+# comando apagaria a versão viva. Em prod ela responde retention_days=90, não os
+# 30 deste comentário, e por isso purga 0 candidatos (2026-08-10: 91 dos 100 GB
+# do bucket têm menos de 30 dias). Recuperar o fonte é dívida aberta.
 [functions.whatsapp-media-retention]
+verify_jwt = false
+# whatsapp-media-purge: limpeza retroativa do bucket media (órfãos + mídia de grupo);
+# SEM cron — operação manual, dryRun por default; auth via x-cron-secret
+[functions.whatsapp-media-purge]
 verify_jwt = false
 # history-sync-worker: chamado por pg_cron via pg_net; auth via x-cron-secret
 [functions.history-sync-worker]
