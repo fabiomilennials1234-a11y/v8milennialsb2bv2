@@ -40,7 +40,10 @@ import { logRuntime } from "../_shared/logger.ts";
 // ~150k linhas da fila.
 const BATCH_SIZE = 500;
 const DEFAULT_MAX_BATCHES = 10;
-const VALID_CATEGORIES = new Set(["orphans", "groups"]);
+// 'dedup' exige que o reapontamento das mensagens (media_dedup_plan) tenha
+// rodado ANTES: os objetos desta categoria ainda existem e só são descartáveis
+// porque um keeper de conteúdo idêntico assumiu as referências.
+const VALID_CATEGORIES = new Set(["orphans", "groups", "dedup"]);
 
 type PurgeCandidate = { object_name: string; size_bytes: number | null };
 

@@ -85,6 +85,43 @@ export async function enqueueMediaJob(
 }
 
 /**
+ * Path do objeto no Storage, derivado do CONTEÚDO — não da mensagem.
+ *
+ * Antes o path era `<org>/<message_id>.<ext>`, e message_id é único por
+ * mensagem. Um disparo do mesmo catálogo para 290 clientes gravava 290 cópias
+ * idênticas: medido em prod (2026-08-10) isso valia 42 dos 43 GB de duplicata
+ * do bucket, com um caso real de 1 PDF de 22 MB em 299 cópias.
+ *
+ * A causa é o eco: o WhatsApp devolve pelo webhook cada mensagem que nós
+ * enviamos, e nós rebaixávamos da CDN um arquivo que já era nosso, uma vez por
+ * destinatário.
+ *
+ * Com o hash do conteúdo no path, o mesmo binário resolve para o mesmo caminho
+ * e o `upsert` sobrescreve em vez de multiplicar. Vale para mídia recebida
+ * também, não só para disparo.
+ *
+ * O org fica no path de propósito: o bucket é público e serve várias orgs, e
+ * um path global por hash faria duas orgs compartilharem o mesmo objeto —
+ * apagar mídia de uma quebraria a outra, e o isolamento multi-tenant viraria
+ * ficção. Cópia por org é o preço do isolamento.
+ *
+ * CONSEQUÊNCIA: várias mensagens passam a apontar para o mesmo objeto. Apagar
+ * mídia de uma mensagem deixou de ser seguro sem antes checar se outra ainda
+ * referencia o mesmo path.
+ */
+export async function buildMediaPath(
+  organizationId: string,
+  bin: Uint8Array<ArrayBuffer>,
+  ext: string,
+): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bin);
+  const hash = Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `whatsapp-media/${organizationId}/${hash}.${ext}`;
+}
+
+/**
  * Stamp a media job as resolved (storage_path set) or failed (attempts++).
  * Best-effort — failure to stamp does not propagate.
  */
@@ -178,7 +215,10 @@ export async function downloadAndPersistMedia(
     const result = await res.json().catch(() => ({} as any));
     const mimetype: string = result?.mimetype ?? "application/octet-stream";
 
-    let bin: Uint8Array;
+    // Uint8Array<ArrayBuffer>, e não o Uint8Array genérico: crypto.subtle.digest
+    // recusa ArrayBufferLike (que admite SharedArrayBuffer). Ambos os caminhos
+    // abaixo produzem buffer próprio, então a restrição é honesta.
+    let bin: Uint8Array<ArrayBuffer>;
 
     // Uazapi v2 returns fileURL; legacy/Evolution returned base64
     const fileURL: string = result?.fileURL ?? "";
@@ -200,7 +240,7 @@ export async function downloadAndPersistMedia(
     }
 
     const ext = MIME_TO_EXT[mimetype] ?? mimetype.split("/")[1] ?? "bin";
-    const storagePath = `whatsapp-media/${input.organizationId}/${input.messageId}.${ext}`;
+    const storagePath = await buildMediaPath(input.organizationId, bin, ext);
 
     const { error: upErr } = await supabase.storage
       .from("media")
