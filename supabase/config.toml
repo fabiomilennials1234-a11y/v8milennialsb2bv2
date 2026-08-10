@@ -322,6 +322,11 @@ verify_jwt = false
 [functions.whatsapp-dlq-replay]
 verify_jwt = false
 
+# whatsapp-instance-reaper: remove no provider as Instances já apagadas no CRM, a
+# partir da lápide (#1475); cron 5min; auth via x-cron-secret
+[functions.whatsapp-instance-reaper]
+verify_jwt = false
+
 # whatsapp-session-watchdog: detecta sessões WhatsApp mortas; cron 10min; auth via x-cron-secret
 [functions.whatsapp-session-watchdog]
 verify_jwt = false
