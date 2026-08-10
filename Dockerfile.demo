@@ -1,0 +1,57 @@
+# ============================================
+# Imagem de DEMONSTRAÇÃO LOCAL — não é a de deploy.
+#
+# Sobe o app inteiro (top bar, navegação, rotas reais) sem sessão e sem
+# Supabase, para revisar UI integrada ao shell do produto.
+#
+# Diferenças para o `Dockerfile` de produção, e por que cada uma existe:
+#
+#   1. `npm run build:dev` (vite build --mode development) em vez de
+#      `npm run build`. É isso que deixa `import.meta.env.DEV === true` e,
+#      só então, permite o modo demo. O Dockerfile de produção usa `build`,
+#      onde a guarda vira `false` e o Rollup elimina o bypass do bundle.
+#   2. `VITE_DEMO_MODE=1` — a segunda metade da guarda (src/core/demo-mode.ts).
+#   3. Supabase apontado para um host PLACEHOLDER. A demo não fala com banco
+#      nenhum; as queries falham e a UI mostra estado vazio. É de propósito:
+#      nenhuma chance de tocar dado de cliente.
+#   4. Sem os headers de segurança/CSP e sem o proxy /api/v1 do nginx de
+#      produção — esta imagem não deve ser publicada em lugar nenhum.
+#
+# Uso:  docker compose -f docker-compose.demo.yml up --build
+# ============================================
+
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm install
+
+COPY . .
+
+ENV VITE_DEMO_MODE=1 \
+    VITE_SUPABASE_URL=https://placeholders.supabase.co \
+    VITE_SUPABASE_PUBLISHABLE_KEY=placeholder \
+    VITE_SUPABASE_PROJECT_ID=placeholder \
+    VITE_APP_VERSION=demo
+
+RUN npm run build:dev
+
+# ---- Serve ----
+FROM nginx:alpine
+
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# SPA fallback puro. Sem CSP e sem proxy: imagem local de revisão visual.
+RUN printf '%s\n' \
+  'server {' \
+  '  listen 8080;' \
+  '  server_tokens off;' \
+  '  root /usr/share/nginx/html;' \
+  '  index index.html;' \
+  '  location / { try_files $uri $uri/ /index.html; }' \
+  '}' \
+  > /etc/nginx/conf.d/default.conf
+
+EXPOSE 8080
+CMD ["nginx", "-g", "daemon off;"]

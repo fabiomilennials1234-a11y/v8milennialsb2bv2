@@ -51,12 +51,21 @@ function overlaps(a: { x: number; y: number; w: number; h: number }, b: StudioWi
 }
 
 /**
+ * Altura VIRTUAL de varredura. O painel é uma região da página, não o viewport:
+ * cabem ~2 fileiras de janela na área visível. Sem isto, a quarta métrica não
+ * acha slot e cai no cascateamento — janelas empilhadas por cima umas das
+ * outras. Com isto, ela desce para fora da dobra e o canvas rola.
+ */
+const SCAN_HEIGHT = 2400;
+
+/**
  * Acha o primeiro slot livre numa varredura em coluna, para que a métrica nova
- * não caia em cima da anterior. Cai no cascateamento quando o canvas lota.
+ * não caia em cima da anterior. Cai no cascateamento só quando nem a área
+ * rolável comporta — cenário que exige dezenas de janelas.
  */
 function placeNext(windows: StudioWindow[], w: number, h: number, bounds: { width: number; height: number }) {
   const maxX = Math.max(GAP, bounds.width - w - GAP);
-  const maxY = Math.max(GAP, bounds.height - h - GAP);
+  const maxY = Math.max(GAP, Math.max(bounds.height, SCAN_HEIGHT) - h - GAP);
 
   for (let y = GAP; y <= maxY; y += GRID * 4) {
     for (let x = GAP; x <= maxX; x += GRID * 4) {
@@ -149,9 +158,8 @@ export function useMetricsStudio(): MetricsStudioApi {
         // Só reposiciona quando o retângulo NOVO de fato colide ou transborda —
         // sobreposição que o próprio usuário criou arrastando fica de pé.
         const others = prev.windows.filter((w) => w.id !== id);
-        const transborda =
-          bounds.width > 0 &&
-          (grown.x + grown.w > bounds.width - GAP || grown.y + grown.h > bounds.height - GAP);
+        // Só a largura é limite duro — na vertical o canvas rola.
+        const transborda = bounds.width > 0 && grown.x + grown.w > bounds.width - GAP;
         const cresceu = grown.w > target.w || grown.h > target.h;
         const colide = cresceu && others.some((w) => overlaps(grown, w));
 

@@ -41,9 +41,6 @@ const FULL_BLEED_PATTERNS = [
   /^\/chat(\/|$)/,
   /^\/chat-whatsapp/,
   /^\/automacoes\/[^/]+$/,
-  // Estúdio de Métricas: painel em branco com janelas posicionadas em px. O
-  // padding do <main> encolheria o canvas e o max-w cortaria a área útil.
-  /^\/metricas/,
 ];
 
 // Rotas de chat: no mobile escondem a navbar p/ imersão total. O canvas de
@@ -63,6 +60,10 @@ const WIDE_LAYOUT_PATTERNS = [
   /^\/campanhas/,
   /^\/upsell/,
   /^\/follow-ups/,
+  // Estúdio de Métricas: o painel ganha com largura, como os kanbans. Wide, NÃO
+  // full-bleed — a página mantém o padding e o cabeçalho padrão do <main>, e a
+  // top bar continua sendo a do produto.
+  /^\/metricas/,
 ];
 
 interface MainLayoutProps {

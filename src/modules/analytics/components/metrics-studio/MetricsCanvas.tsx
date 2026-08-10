@@ -28,19 +28,24 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
 ) {
   const empty = windows.length === 0;
 
+  // O painel é uma região da página, não o viewport: quando as janelas passam
+  // da dobra, o canvas cresce e rola em vez de empilhar em cascata.
+  const contentHeight = windows.reduce((acc, w) => Math.max(acc, w.y + w.h + 24), 0);
+
   return (
-    <div
-      ref={ref}
-      onPointerDown={(e) => {
-        if (e.target === e.currentTarget) onSelect(null);
-      }}
-      className={cn(
-        "relative h-full w-full overflow-hidden",
-        "bg-[radial-gradient(hsl(var(--border))_1px,transparent_1px)] [background-size:24px_24px]",
-        "bg-background",
-      )}
-      style={{ backgroundPosition: "12px 12px" }}
-    >
+    <div className="h-full w-full overflow-auto">
+      <div
+        ref={ref}
+        onPointerDown={(e) => {
+          if (e.target === e.currentTarget) onSelect(null);
+        }}
+        style={{ backgroundPosition: "12px 12px", minHeight: Math.max(contentHeight, 0) || undefined }}
+        className={cn(
+          "relative h-full min-h-full w-full",
+          "bg-[radial-gradient(hsl(var(--border))_1px,transparent_1px)] [background-size:24px_24px]",
+          "bg-background",
+        )}
+      >
       {empty && (
         <div className="pointer-events-none flex h-full w-full flex-col items-center justify-center gap-3 text-center">
           <div className="rounded-2xl border border-dashed border-border/70 p-4">
@@ -75,6 +80,7 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
           />
         );
       })}
+      </div>
     </div>
   );
 });

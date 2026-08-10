@@ -17,11 +17,16 @@ const PERIODS = [
 type PeriodKey = (typeof PERIODS)[number]["key"];
 
 /**
- * Estúdio de Métricas — painel em branco + catálogo lateral.
+ * Estúdio de Métricas — `/metricas`.
  *
- * A rota é full-bleed (ver FULL_BLEED_PATTERNS no MainLayout): a top bar do
- * Torque continua, o resto do viewport é canvas. Sem `max-w`, sem scroll de
- * página — quem rola é a lista lateral.
+ * PÁGINA NORMAL do sistema, não canvas full-screen. A top bar do Torque, o
+ * padding e o cabeçalho do `<main>` continuam valendo; a rota só entra em
+ * WIDE_LAYOUT_PATTERNS (como os kanbans) para soltar o `max-w-[1600px]`.
+ *
+ * O painel é uma REGIÃO da página com altura própria, não o viewport inteiro:
+ * a primeira versão era full-bleed e comia a top bar, o que fazia a tela
+ * parecer outro produto. Aqui o estúdio é um painel emoldurado — mesma
+ * gramática de card do resto do app.
  *
  * Estado de composição: `useMetricsStudio` (persistido por org+usuário).
  * Números: amostra determinística (`metrics-studio-sample`). Trocar pelo motor
@@ -81,8 +86,9 @@ export default function MetricsStudio() {
   }, [studio]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 items-center gap-3 border-b border-border/70 px-4 py-2.5">
+    <div className="space-y-5">
+      {/* Cabeçalho de página — mesma gramática das outras rotas do sistema. */}
+      <header className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={() => setSidebarOpen((v) => !v)}
@@ -93,54 +99,56 @@ export default function MetricsStudio() {
         </button>
 
         <div className="min-w-0">
-          <h1 className="text-[17px] font-extrabold leading-tight tracking-[-0.03em]">Métricas</h1>
-          <p className="text-[11px] text-muted-foreground/70">
+          <h1 className="text-[19px] font-extrabold leading-tight tracking-[-0.03em]">Métricas</h1>
+          <p className="text-[12px] text-muted-foreground/70">
             {studio.windows.length === 0
-              ? "Painel vazio"
+              ? "Escolha as métricas que você quer acompanhar"
               : `${studio.windows.length} ${studio.windows.length === 1 ? "janela" : "janelas"} no painel`}
           </p>
         </div>
 
-        <div className="flex-1" />
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="flex gap-[2px] rounded-[9px] border border-border bg-card p-[3px]">
+            {PERIODS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => setPeriod(p.key)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-[12px] font-semibold transition-all",
+                  period === p.key
+                    ? "bg-background text-foreground shadow-[inset_0_0_0_1px_hsl(var(--border))]"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
 
-        <div className="flex gap-[2px] rounded-[9px] border border-border bg-card p-[3px]">
-          {PERIODS.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              onClick={() => setPeriod(p.key)}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-[12px] font-semibold transition-all",
-                period === p.key
-                  ? "bg-background text-foreground shadow-[inset_0_0_0_1px_hsl(var(--border))]"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {p.label}
-            </button>
-          ))}
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center gap-1.5 rounded-[9px] border border-border bg-card px-3 py-[7px] text-[12px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+          >
+            <Gauge className="h-3.5 w-3.5" />
+            Comando
+          </Link>
+
+          <button
+            type="button"
+            onClick={handleClear}
+            disabled={studio.windows.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-[9px] border border-border bg-card px-3 py-[7px] text-[12px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Limpar
+          </button>
         </div>
-
-        <Link
-          to="/dashboard"
-          className="inline-flex items-center gap-1.5 rounded-[9px] border border-border bg-card px-3 py-[7px] text-[12px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-        >
-          <Gauge className="h-3.5 w-3.5" />
-          Comando
-        </Link>
-
-        <button
-          type="button"
-          onClick={handleClear}
-          disabled={studio.windows.length === 0}
-          className="inline-flex items-center gap-1.5 rounded-[9px] border border-border bg-card px-3 py-[7px] text-[12px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          Limpar
-        </button>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      {/* Painel emoldurado. Altura própria (não o viewport): desconta a top bar,
+          o padding do <main> e este cabeçalho, com piso para telas baixas. */}
+      <div className="flex h-[calc(100vh-15rem)] min-h-[520px] overflow-hidden rounded-xl border border-border/70 bg-card/30">
         {sidebarOpen && (
           <MetricsStudioSidebar openMetricIds={studio.openMetricIds} onAdd={handleAdd} />
         )}
