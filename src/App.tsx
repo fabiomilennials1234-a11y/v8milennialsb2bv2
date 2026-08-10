@@ -47,6 +47,7 @@ function lazyRetry<T extends { default: any }>(
 // Lazy-loaded pages — cada página vira um chunk separado (com retry automático)
 const Auth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Auth")));
 const Dashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Dashboard")));
+const MetricsStudio = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/MetricsStudio")));
 const PipeConfirmacao = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeConfirmacao")));
 const PipePropostas = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipePropostas")));
 const PipeWhatsapp = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeWhatsapp")));
@@ -294,6 +295,22 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <Dashboard />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      {/* SCRUM-11 — Estúdio de Métricas. SEM PermissionProtectedRoute de
+          propósito, espelhando /dashboard: `useFeaturePermission` é fail-closed
+          (`features?.[key] === true`), então gatear numa chave que a
+          `get-member-permissions` ainda não semeia trancaria todo membro
+          não-admin. Quando `metrics.view` existir no modelo de permissão, o
+          gate entra aqui e a rota entra no NAV_VIEW_PERMISSIONS. */}
+      <Route
+        path="/metricas"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <MetricsStudio />
             </LayoutWrapper>
           </ProtectedRoute>
         }

@@ -41,6 +41,9 @@ const FULL_BLEED_PATTERNS = [
   /^\/chat(\/|$)/,
   /^\/chat-whatsapp/,
   /^\/automacoes\/[^/]+$/,
+  // Estúdio de Métricas: painel em branco com janelas posicionadas em px. O
+  // padding do <main> encolheria o canvas e o max-w cortaria a área útil.
+  /^\/metricas/,
 ];
 
 // Rotas de chat: no mobile escondem a navbar p/ imersão total. O canvas de
