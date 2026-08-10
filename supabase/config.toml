@@ -327,6 +327,11 @@ verify_jwt = false
 [functions.whatsapp-instance-reaper]
 verify_jwt = false
 
+# whatsapp-instance-reconcile: relatório READ-ONLY do passivo de Instances no
+# provider (#1478); sob demanda, sem cron; auth via x-cron-secret. NÃO deleta.
+[functions.whatsapp-instance-reconcile]
+verify_jwt = false
+
 # whatsapp-session-watchdog: detecta sessões WhatsApp mortas; cron 10min; auth via x-cron-secret
 [functions.whatsapp-session-watchdog]
 verify_jwt = false

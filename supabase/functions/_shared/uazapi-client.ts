@@ -183,6 +183,19 @@ export class UazapiClient {
   }
 
   /**
+   * Every instance on the provider's server. Admin-token operation.
+   *
+   * Read-only by intent: this is the input of the reconciliation report (#1478),
+   * which never deletes. The response shape is not pinned by the public spec —
+   * some deployments return a bare array, others wrap it — so callers normalise.
+   */
+  async listAllInstances(): Promise<unknown> {
+    return this.request<unknown>("GET", "/instance/all", undefined, {
+      useAdminToken: true,
+    });
+  }
+
+  /**
    * Regional proxy catalog. Uazapi caches it for 24h on their side; today the
    * public regional pool is Brazil-only. Requires a valid instance token.
    */
