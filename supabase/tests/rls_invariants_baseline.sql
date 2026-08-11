@@ -47,7 +47,7 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
   ('INV-2', 100, 'ratchet ceiling: writing DEFINER fns reachable by anon/PUBLIC (static est. <=89 callable writers; tighten then burn down to 0)'),
   ('INV-3', 0,   'zero-tolerance: every org table must have RLS enabled'),
   ('INV-4', 90,  'ratchet ceiling: DEFINER fns lacking SET search_path (static est. ~70; tighten then burn down to 0)'),
-  ('INV-6', 91,  'ratchet ceiling: DEFINER fns reachable by anon/authenticated with no authorization gate (SCRUM-339). MEASURED 2026-08-11 = 91, zero headroom; tighten on every fix and burn down to 0. See note below.');
+  ('INV-6', 79,  'ratchet ceiling: DEFINER fns reachable by anon/authenticated with no authorization gate (SCRUM-339). MEASURED 2026-08-11 = 79 on the main tree, zero headroom; tighten on every fix and burn down to 0. See note below.');
 
 -- ---------------------------------------------------------------------------
 -- INV-6 (SCRUM-339) — provenance of this ceiling, and why it is not 2.
@@ -57,22 +57,26 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
 -- and `ensure_pipeline_display_config`, which the browser genuinely calls and
 -- which are waiting on the `_unchecked` + wrapper treatment.
 --
--- That number describes PRODUCTION. This suite does not run against production
--- — it runs against a database built from `supabase/migrations/*`, and those
--- two populations are NOT the same:
+-- That number describes PRODUCTION. This suite runs against a database built
+-- from `supabase/migrations/*`, so the ceiling belongs to THE TREE IT IS
+-- MEASURED ON, and the two trees of this repo do not agree:
 --
---   * The 23 REVOKEs applied on 2026-08-11 were executed directly in prod and
---     never landed in a migration. Measured on a migrations-built database,
---     `fire_workflow_trigger`, `enqueue_webhook_deliveries_for_org`,
---     `schedule_pipe_rule_steps_from_position` and `acquire_copilot_lock` still
---     answer `has_function_privilege('authenticated', …) = true`. The fix does
---     not exist in the repo, so CI cannot see it — and neither can a fresh
---     branch, a rebuild, or a restore.
---   * A live count on a (differently-branched) local database returned 90, not
---     2, which is the order of magnitude to expect here.
+--   * on `main` (this branch's base) the 2026-08-11 REVOKEs ARE in the
+--     migrations. Verified in the built database: `fire_workflow_trigger`,
+--     `enqueue_webhook_deliveries_for_org`,
+--     `schedule_pipe_rule_steps_from_position` and `acquire_copilot_lock` all
+--     answer `has_function_privilege(..., 'EXECUTE') = false` for both anon and
+--     authenticated.
+--   * on `develop` they are NOT, and the same four still answer true. The first
+--     version of this comment said "the fix does not exist in the repo" — that
+--     was measured on develop and is FALSE for main. Corrected here rather than
+--     deleted, because the difference is the point: a ratchet baselined on the
+--     wrong tree is born slack. Measured on develop the ceiling is 91; on main
+--     it is 79. Baselining at 91 here would tolerate twelve violations that no
+--     longer exist.
 --
--- MEASURED, 2026-08-11: the live count is 91. The ceiling above is set to
--- exactly that — zero headroom, so the 92nd ungated function fails the build.
+-- MEASURED, 2026-08-11: the live count is 79 on `main`. The ceiling above is set to
+-- exactly that — zero headroom, so the 80th ungated function fails the build.
 -- Measured on an isolated Supabase stack booted from THIS branch's
 -- `supabase/migrations/*` (own project id, ports 5452x, so the shared local
 -- database the other worktrees use was never touched), which is the same
@@ -87,7 +91,8 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
 --     ONLY widening the helper list .................................... 80   (-10)
 --     both (first ship) ................................................ 89
 --     + transitive closure, `is_master_user` dropped by NAME ........... 101   (+12, WRONG)
---     - `is_master_user()` recognised by its DEFAULT (what ships) ....... 91   (-10)
+--     - `is_master_user()` recognised by its DEFAULT ..................... 91   (-10)
+--     rebased onto `main`, which HAS the 2026-08-11 REVOKEs (what ships) . 79   (-12)
 --
 -- Each delta is a finding, not noise:
 --
@@ -118,7 +123,14 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
 -- (baseline:12579), so they count only with `auth.uid()` as the argument — the
 -- asymmetry is the DEFAULT, not "takes a parameter".
 --
--- REAL DEBT, recomputed on the correct population: of the 91 violations, TWO
+-- OF THE 79, FOURTEEN ARE REACHABLE BY `anon` — no login at all. That subset is
+-- listed by the diag() line and deserves triage before the rest: `anon` talking
+-- to the database is the surface the 2026-08-11 denial-of-service arrived
+-- through. Three of the fourteen are noise the reader should not chase:
+-- `has_role`, `is_master_user` and `is_team_member` are the gate helpers
+-- THEMSELVES — a helper does not gate itself.
+--
+-- REAL DEBT, recomputed on the correct population: of the violations, TWO
 -- call `is_master_user(<argument>)` — checking whether some uuid handed in is a
 -- master, which gates nothing. Two, not the twelve computed over the wrong
 -- population. Cheapest place to start burning down.
@@ -133,7 +145,7 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
 -- unnoticed for twelve days. When the migration carrying the 23 production
 -- REVOKEs finally lands in the repo, this number drops on its own.
 --
--- Burning it down is SCRUM-339, and it is not a formality: 91 ungated DEFINER
+-- Burning it down is SCRUM-339, and it is not a formality: 79 ungated DEFINER
 -- functions reachable from a browser is the population that produced the 23
 -- closed on 2026-08-11.
 --
