@@ -105,6 +105,18 @@
 
     --radius: 0.75rem;
 
+    /* ─── QR do Pix ───────────────────────────────────────────────
+       DELIBERADAMENTE IDÊNTICOS NOS DOIS TEMAS. O Asaas devolve o QR
+       como PNG preto-sobre-branco (PixPayload.encodedImage), e módulo
+       claro sobre fundo escuro faz leitor de celular errar. A plaqueta
+       é superfície FUNCIONAL, não decorativa: ela não acompanha o tema.
+       Trocar --qr-plate por algo escuro quebra o pagamento, não o
+       visual. (SCRUM-289; nasceram no protótipo de billing #1390.)
+       --qr-ink só entra em uso se um dia o QR for desenhado como SVG;
+       nasce junto por simetria, mas hoje não tem consumidor. */
+    --qr-plate: 0 0% 100%;
+    --qr-ink: 30 18% 12%;
+
     /* Sidebar - Dark Theme */
     --sidebar-background: 36 20% 18%;
     --sidebar-foreground: 45 20% 90%;
@@ -186,6 +198,13 @@
     --border: 35 8% 19%;
     --input: 35 8% 19%;
     --ring: 47 100% 50%;
+
+    /* ─── QR do Pix ───────────────────────────────────────────────
+       MESMOS VALORES DO TEMA CLARO, de propósito. Ver o comentário em
+       :root — a plaqueta do QR é superfície funcional e não segue o
+       tema, senão o leitor de celular erra a leitura no escuro. */
+    --qr-plate: 0 0% 100%;
+    --qr-ink: 30 18% 12%;
 
     /* ─── Bubble tokens (dark) ────────────────────────────────── */
     --bubble-outgoing:            217 19% 27%;
