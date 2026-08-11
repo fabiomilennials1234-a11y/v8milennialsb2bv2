@@ -27,7 +27,9 @@ import { LeadMobileSortBar } from "@/modules/leads/components/leads/LeadMobileSo
 import {
   DEFAULT_LEAD_SORT,
   LEAD_SORT_COLUMNS,
+  toggleLeadSort,
   type LeadListSort,
+  type LeadSortKey,
 } from "@/modules/leads/lib/lead-list-sort";
 
 function montar(sort: LeadListSort = DEFAULT_LEAD_SORT) {
@@ -91,6 +93,38 @@ describe("LeadMobileSortBar — a regra do clique é a do desktop", () => {
     const segunda = montar({ key: "name", direction: "desc" });
     fireEvent.click(screen.getAllByTestId("lead-mobile-sort-name")[1]);
     expect(segunda).toHaveBeenLastCalledWith({ key: "name", direction: "asc" });
+  });
+});
+
+describe("LeadMobileSortBar — a faixa entrega ordenação PRONTA, não a coluna", () => {
+  /**
+   * O defeito que esta suíte não pegava, e que viveu até o `typecheck` voltar
+   * a rodar: a página ligava `onSortChange` ao handler do cabeçalho do
+   * desktop, que recebe a COLUNA e resolve a direção. Como a faixa já resolve,
+   * o toggle era aplicado duas vezes — e a segunda recebia um objeto onde se
+   * espera `"name" | "created_at"`.
+   *
+   * A suíte inteira acima monta a faixa com um `onSortChange` de mentira, então
+   * nada aqui divergia. O gate real é o compilador; este caso existe para que a
+   * consequência fique escrita: o duplo toggle não degrada, ele derruba a tela.
+   */
+  it("aplicar o toggle no que a faixa já resolveu derruba a lista", () => {
+    const jaResolvido = toggleLeadSort(DEFAULT_LEAD_SORT, "name");
+
+    expect(() =>
+      toggleLeadSort(DEFAULT_LEAD_SORT, jaResolvido as unknown as LeadSortKey),
+    ).toThrow(TypeError);
+  });
+
+  it("o que a faixa emite é persistível como está — é um LeadListSort completo", () => {
+    const onSortChange = montar({ key: "created_at", direction: "desc" });
+
+    fireEvent.click(screen.getByTestId("lead-mobile-sort-name"));
+
+    const [emitido] = onSortChange.mock.calls[0] as [LeadListSort];
+    expect(Object.keys(emitido).sort()).toEqual(["direction", "key"]);
+    expect(LEAD_SORT_COLUMNS[emitido.key]).toBeDefined();
+    expect(["asc", "desc"]).toContain(emitido.direction);
   });
 });
 
