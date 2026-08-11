@@ -3,6 +3,18 @@
 Companheiro de `scripts/backfill-orphan-whatsapp-messages.sql`.
 Tudo aqui foi medido em prod (`jsjsmuncfkbsbzqzqhfq`) em **2026-08-11**.
 
+> ⚠️ **NÃO AGENDADO.** Decisão do CTO em 2026-08-11: o backfill **não** vai
+> rodar. O objetivo é estancar a perda, e para isso bastam a migration e o
+> deploy das edge functions — nenhum dos dois depende deste script.
+>
+> O que fica em aberto ao não rodar, com número: **385.828** linhas seguem sem
+> `instance_id` (invisíveis na thread) e **10.641** conversas em 24 orgs seguem
+> apontando para instância morta (fora da lista do inbox). Nada disso piora com
+> o tempo depois do deploy — o estoque para de crescer.
+>
+> Este runbook fica versionado como receita pronta, medida, para o dia em que a
+> decisão mudar.
+
 ---
 
 ## 1. O que é isto

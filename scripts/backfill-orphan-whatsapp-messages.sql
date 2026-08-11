@@ -9,6 +9,14 @@
 -- Este script reata o vínculo do que já ficou para trás. Ele NÃO conserta a
 -- causa.
 --
+-- ⚠️  NÃO AGENDADO — decisão do CTO em 2026-08-11: rodar o backfill NÃO está no
+--     plano. O objetivo é que o erro pare de acontecer, e para isso bastam a
+--     migration e o deploy das edge functions. Este arquivo fica versionado
+--     como a receita de recuperação, medida e pronta, para o dia em que alguém
+--     quiser o histórico de volta. Enquanto não rodar, o custo é conhecido e
+--     está declarado abaixo: as 385.828 linhas órfãs seguem invisíveis no chat
+--     e as 10.641 conversas afetadas seguem fora da lista do inbox.
+--
 -- ── ORDEM OBRIGATÓRIA: MIGRATION → DEPLOY → BACKFILL ───────────────────────
 --   1. migration aplicada em prod            (MANUAL)
 --   2. deploy das edge functions             (MANUAL)

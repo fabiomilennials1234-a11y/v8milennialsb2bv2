@@ -550,7 +550,12 @@ Deno.serve(
           // `whatsapp_messages_instance_id_fkey` for dropada. Esse DROP é a
           // migration `20270811000000_whatsapp_messages_drop_instance_fk.sql`, ainda um
           // passo MANUAL — a ordem real é (1) migration em prod, (2) deploy
-          // deste proxy, (3) backfill. Nada aqui pode supor o estado (1).
+          // deste proxy. Nada aqui pode supor o estado (1).
+          //
+          // Esses dois passos ESTANCAM a perda; eles não recuperam o que já foi
+          // perdido. As 385.828 linhas órfãs de antes só voltam com o script
+          // `scripts/backfill-orphan-whatsapp-messages.sql`, que é OPCIONAL e
+          // não está no caminho de deploy — decisão do CTO em 2026-08-11.
           //
           // Por que a saída é o conserto: enquanto existe FK ON DELETE SET NULL,
           // este nullify antecipa o cascade e desliga o histórico do chip a cada
