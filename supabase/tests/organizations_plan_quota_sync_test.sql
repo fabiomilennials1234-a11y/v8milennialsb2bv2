@@ -49,6 +49,14 @@ SELECT ok(
       AND tgrelid = 'public.organizations'::regclass) LIKE '%UPDATE OF subscription_plan%',
   '(STRUCT) trg_sync_org_plan_quotas continua escutando subscription_plan');
 
+-- É o UNIQUE que torna a resolução por nome determinística. Sem ele, `WHERE
+-- name = NEW.subscription_plan` devolveria mais de uma linha e a função
+-- levantaria 21000 no meio de uma escrita quente. A função não desempata
+-- porque o schema proíbe o empate — esta asserção é o que ancora essa escolha.
+SELECT col_is_unique(
+  'public', 'subscription_plans', 'name',
+  '(STRUCT) subscription_plans.name é UNIQUE — resolução por nome é determinística');
+
 -- ===========================================================================
 -- Fixtures — os planos
 --
@@ -88,6 +96,28 @@ INSERT INTO public.subscription_plans (name, display_name, limits)
 SELECT 'enterprise', 'Enterprise (fixture SCRUM-338)',
        jsonb_build_object('max_users', -1, 'max_whatsapp_instances', -1, 'max_copilot_agents', -1)
  WHERE NOT EXISTS (SELECT 1 FROM public.subscription_plans WHERE name = 'enterprise');
+
+-- Plano com limites PARCIAIS. `limits` é jsonb DEFAULT '{}' NOT NULL, entao
+-- catalogar plano sem preencher tudo é o caminho fácil, não o exótico.
+UPDATE public.subscription_plans
+   SET limits = jsonb_build_object('max_users', 7)
+ WHERE name = 'starter';
+
+INSERT INTO public.subscription_plans (name, display_name, limits)
+SELECT 'starter', 'Starter (fixture SCRUM-338, limites parciais)',
+       jsonb_build_object('max_users', 7)
+ WHERE NOT EXISTS (SELECT 1 FROM public.subscription_plans WHERE name = 'starter');
+
+-- Plano com ZERO explícito nos três — o oposto da ausência.
+UPDATE public.subscription_plans
+   SET limits = jsonb_build_object(
+         'max_users', 0, 'max_whatsapp_instances', 0, 'max_copilot_agents', 0)
+ WHERE name = 'basic';
+
+INSERT INTO public.subscription_plans (name, display_name, limits)
+SELECT 'basic', 'Basic (fixture SCRUM-338, zeros explícitos)',
+       jsonb_build_object('max_users', 0, 'max_whatsapp_instances', 0, 'max_copilot_agents', 0)
+ WHERE NOT EXISTS (SELECT 1 FROM public.subscription_plans WHERE name = 'basic');
 
 -- ===========================================================================
 -- Fixtures — a organização, provisionada pela porta real (AFTER INSERT)
@@ -195,6 +225,83 @@ SELECT is(
       AND resource_key = 'max_users'),
   2,
   '(VOLTA) enterprise→free devolve plan_base para 2');
+
+-- ===========================================================================
+-- (AUSENTE) chave que não está em `limits` significa "não mexer", não "zero"
+--
+-- `subscription_plans.limits` é `jsonb DEFAULT '{}' NOT NULL`, então plano
+-- cadastrado sem preencher os limites é o caminho FÁCIL, não o exótico — e
+-- depois do SCRUM-337 catalogar plano virou operação de dado, sem migration.
+-- Se a ausência virasse 0, uma org pagante perderia a capacidade de adicionar
+-- usuário em silêncio: a mesma forma do incidente de 11/08, por outra porta.
+-- ===========================================================================
+UPDATE public.organizations
+   SET subscription_plan = 'starter'
+ WHERE id = '5c2c8338-0000-4000-8000-000000000001';
+
+SELECT is(
+  (SELECT plan_base FROM public.org_quotas
+    WHERE organization_id = '5c2c8338-0000-4000-8000-000000000001'
+      AND resource_key = 'max_users'),
+  7,
+  '(AUSENTE) a chave PRESENTE no plano parcial sincroniza normalmente');
+
+SELECT is(
+  (SELECT plan_base FROM public.org_quotas
+    WHERE organization_id = '5c2c8338-0000-4000-8000-000000000001'
+      AND resource_key = 'max_whatsapp_instances'),
+  1,
+  '(AUSENTE) chave fora de limits NÃO rebaixa a cota existente para 0');
+
+SELECT is(
+  (SELECT plan_base FROM public.org_quotas
+    WHERE organization_id = '5c2c8338-0000-4000-8000-000000000001'
+      AND resource_key = 'max_copilot_agents'),
+  1,
+  '(AUSENTE) idem para o segundo recurso ausente — o pulo é por recurso');
+
+-- ===========================================================================
+-- (ZERO) e o zero EXPLÍCITO continua sendo zero — ausência ≠ 0
+--
+-- Sem esta, o pulo do (AUSENTE) passaria verde por dois motivos: porque a
+-- ausência é respeitada, ou porque a função parou de escrever zero nenhum.
+-- ===========================================================================
+UPDATE public.organizations
+   SET subscription_plan = 'basic'
+ WHERE id = '5c2c8338-0000-4000-8000-000000000001';
+
+SELECT is(
+  (SELECT plan_base FROM public.org_quotas
+    WHERE organization_id = '5c2c8338-0000-4000-8000-000000000001'
+      AND resource_key = 'max_users'),
+  0,
+  '(ZERO) chave presente com 0 grava 0 — ausência e zero não colapsam');
+
+SELECT is(
+  (SELECT effective_limit FROM public.org_quotas
+    WHERE organization_id = '5c2c8338-0000-4000-8000-000000000001'
+      AND resource_key = 'max_users'),
+  5,
+  '(ZERO) effective_limit = GREATEST(0 + 2 + 3, 0) — os deltas do cliente seguram');
+
+-- ===========================================================================
+-- (NULO) o único ramo que produção exercita e o teste não via
+--
+-- `create_org_sandbox` e o edge `test-workflow-system` inserem organização SEM
+-- plano. O gatilho AFTER INSERT dispara e a função sai cedo. Comportamento não
+-- muda com este PR — mas é ramo vivo, e ramo vivo tem asserção.
+-- ===========================================================================
+SELECT lives_ok(
+  $$ UPDATE public.organizations SET subscription_plan = NULL
+      WHERE id = '5c2c8338-0000-4000-8000-000000000001' $$,
+  '(NULO) organização sem plano não derruba a escrita');
+
+SELECT is(
+  (SELECT plan_base FROM public.org_quotas
+    WHERE organization_id = '5c2c8338-0000-4000-8000-000000000001'
+      AND resource_key = 'max_users'),
+  0,
+  '(NULO) sem plano, a cota fica como estava — não zera, não some');
 
 -- NOTA sobre o caso "nome sem linha no catálogo": `sync_org_plan_quotas()`
 -- retorna sem tocar a cota quando a resolução por nome não acha plano —

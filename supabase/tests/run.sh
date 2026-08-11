@@ -191,7 +191,7 @@
 #      lead. `has_function_privilege` nome por nome — nem anon, nem
 #      authenticated, nem service_role executam a função nova.
 #
-#  26. organizations_plan_quota_sync_test.sql — a cota segue o plano VIGENTE,
+#  27. organizations_plan_quota_sync_test.sql — a cota segue o plano VIGENTE,
 #      resolvido por NOME (SCRUM-338, 20270811000001). Exercita a porta REAL —
 #      `UPDATE organizations SET subscription_plan` deixando o gatilho agir —
 #      porque chamar `sync_org_plan_quotas()` direto provaria só que a função
@@ -203,6 +203,11 @@
 #      (há clientes com ajuste manual em produção), que -1 (ILIMITADO)
 #      atravessa inteiro sem virar soma, que descer de plano também move a
 #      cota, e que a coluna `plan_id` não existe mais.
+#      Cobre ainda o par que não pode colapsar: chave AUSENTE de `limits`
+#      (jsonb DEFAULT '{}') não rebaixa a cota para 0, enquanto chave presente
+#      com 0 grava 0 — sem as duas, o pulo passaria verde por dois motivos. E o
+#      ramo `subscription_plan` NULO, que só produção exercitava
+#      (`create_org_sandbox`, edge `test-workflow-system`).
 #
 #  14. assert_org_access_test.sql     — gate de tenancy dos leitores SECURITY
 #      DEFINER (#1209): membro ATIVO passa, membro DESATIVADO é BLOQUEADO (o

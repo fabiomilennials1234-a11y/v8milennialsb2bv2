@@ -43,19 +43,18 @@ CREATE OR REPLACE FUNCTION public.sync_org_plan_quotas() RETURNS trigger
 DECLARE
   v_limits JSONB;
   v_resource TEXT;
+  v_raw JSONB;
 BEGIN
   IF NEW.subscription_plan IS NULL THEN
     RETURN NEW;
   END IF;
 
   -- Fonte única: o NOME do plano vigente na organização.
-  -- ORDER BY torna a escolha determinística caso o catálogo carregue nomes
-  -- repetidos (`LIMIT 1` sozinho devolveria linha arbitrária).
+  -- `subscription_plans_name_key` garante UNIQUE(name), então não há desempate
+  -- a fazer aqui — nome repetido no catálogo não é estado alcançável.
   SELECT sp.limits INTO v_limits
   FROM public.subscription_plans sp
-  WHERE sp.name = NEW.subscription_plan
-  ORDER BY sp.is_active DESC NULLS LAST, sp.position, sp.created_at
-  LIMIT 1;
+  WHERE sp.name = NEW.subscription_plan;
 
   -- Nome sem linha no catálogo (o CHECK de `subscription_plan` aceita 'basic',
   -- 'starter', 'torque-*', que podem não existir em `subscription_plans`):
@@ -68,11 +67,23 @@ BEGIN
   FOREACH v_resource IN ARRAY ARRAY[
     'max_whatsapp_instances', 'max_copilot_agents', 'max_users'
   ] LOOP
+    v_raw := v_limits -> v_resource;
+
+    -- AUSÊNCIA da chave significa "não mexer", nunca "zero". `limits` é
+    -- `jsonb DEFAULT '{}' NOT NULL`: um plano cadastrado sem preencher os
+    -- limites tem `{}`, passa pela guarda de plano-não-encontrado acima, e um
+    -- COALESCE para 0 aqui rebaixaria a organização a zero em silêncio — a
+    -- mesma forma do incidente de 11/08, por outra porta. Chave PRESENTE com
+    -- valor 0 continua significando zero.
+    IF v_raw IS NULL OR jsonb_typeof(v_raw) = 'null' THEN
+      CONTINUE;
+    END IF;
+
     -- Só `plan_base` é do plano. `purchased_addons` e `admin_adjustment` são
     -- do cliente e não são tocados aqui — há organizações em produção com
     -- ajuste manual, e `effective_limit` é coluna GERADA sobre os três.
     INSERT INTO public.org_quotas (organization_id, resource_key, plan_base)
-    VALUES (NEW.id, v_resource, COALESCE((v_limits->>v_resource)::INTEGER, 0))
+    VALUES (NEW.id, v_resource, (v_limits->>v_resource)::INTEGER)
     ON CONFLICT (organization_id, resource_key) DO UPDATE
     SET plan_base = EXCLUDED.plan_base,
         updated_at = NOW();
@@ -83,7 +94,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.sync_org_plan_quotas() IS
-  'Sincroniza org_quotas.plan_base a partir de subscription_plans.limits, resolvendo o plano pelo NOME em organizations.subscription_plan. Preserva purchased_addons e admin_adjustment. SCRUM-338: a resolução por organizations.plan_id foi removida junto com a coluna — ela ficava velha na troca de plano e entregava a cota do plano errado (8 orgs pagantes em 11/08/2026).';
+  'Sincroniza org_quotas.plan_base a partir de subscription_plans.limits, resolvendo o plano pelo NOME em organizations.subscription_plan. Preserva purchased_addons e admin_adjustment, e PULA o recurso cuja chave está ausente de limits (ausência = não mexer; chave presente com 0 = zero). SCRUM-338: a resolução por organizations.plan_id foi removida junto com a coluna — ela ficava velha na troca de plano e entregava a cota do plano errado (8 orgs pagantes em 11/08/2026).';
 
 -- ---------------------------------------------------------------------------
 -- 2. O gatilho para de escutar a coluna que vai morrer.
