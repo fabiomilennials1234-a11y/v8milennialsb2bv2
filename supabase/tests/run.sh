@@ -290,6 +290,21 @@
 #      (ADR-0021). Inclui planted-failure: replanta a definição antiga e prova
 #      que sob ela o desativado passava e o gestor era bloqueado.
 #
+#  29. rls_inv6_definer_sem_gate_test.sql — INV-6 (SCRUM-339): nenhuma função
+#      SECURITY DEFINER em `public` alcançável por anon/authenticated pode
+#      existir sem portão de autorização no corpo. É o invariante que faltava
+#      quando, em 11/08, fechamos 23 funções com exatamente essa forma — a que
+#      deixou despachar WhatsApp pelo número da vítima, enfileirar webhook com
+#      corpo escolhido pelo atacante, escrever em `organizations` e devolver
+#      telefone de lead de qualquer organização.
+#      O recorte é por QUEM ALCANÇA, nunca por qual parâmetro a função recebe:
+#      `schedule_rule_steps_from_position` escapou de três varreduras porque
+#      recebe `whatsapp_instance_id` e não org. E NÃO exige escrita no corpo: o
+#      primeiro recorte pedia INSERT/UPDATE/DELETE, achou 9 onde havia 24, e as
+#      que faltavam eram justamente as que exfiltravam. Nasce como RATCHET
+#      (teto em rls_invariants_baseline.sql), com prova plantada em transação
+#      revertida de que morde e de que os DOIS caminhos de conserto limpam.
+
 # All files run inside rolled-back transactions, so none mutates the DB.
 #
 # Env:
@@ -353,12 +368,13 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/organizations_plan_fk_test.sql" \
     "$SCRIPT_DIR/organizations_plan_quota_sync_test.sql" \
     "$SCRIPT_DIR/inv5_public_tables_readable_by_anon_test.sql" \
-    "$SCRIPT_DIR/payment_links_test.sql"
+    "$SCRIPT_DIR/payment_links_test.sql" \
+    "$SCRIPT_DIR/rls_inv6_definer_sem_gate_test.sql"
 }
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql subscription_snapshot_base_layer_test.sql organizations_plan_fk_test.sql organizations_plan_quota_sync_test.sql inv5_public_tables_readable_by_anon_test.sql payment_links_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql subscription_snapshot_base_layer_test.sql organizations_plan_fk_test.sql organizations_plan_quota_sync_test.sql inv5_public_tables_readable_by_anon_test.sql payment_links_test.sql rls_inv6_definer_sem_gate_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces
