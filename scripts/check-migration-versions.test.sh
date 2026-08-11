@@ -1,94 +1,75 @@
 #!/usr/bin/env bash
 # Teste do guarda de colisão de versão de migration (issue #1534).
 #
-# Prova as DUAS pontas, porque só a vermelha não basta: um guarda que reprova
-# sempre passaria por "funcionando". O controle negativo é o que separa gate de
-# alarme travado.
+# Monta a história num repositório temporário em vez de depender da topologia do
+# repositório real: os casos que importam são sobre QUANDO cada commit aconteceu
+# (a branch bifurca, DEPOIS a base ganha o gêmeo), e isso não se reproduz de
+# forma determinística a partir de commits históricos.
 #
-# Exercita o caminho REAL — branch de verdade contra a base de verdade —, e não
-# um diretório temporário: metade (b) lê o que a branch INTRODUZ via
-# `git diff --diff-filter=A merge-base...HEAD`, e um fixture solto em /tmp não
-# tem branch nem merge-base para ler.
+# Quatro casos. Cada um morre por uma mudança pontual diferente no guarda, e os
+# dois controles negativos existem porque guarda que reprova sempre passaria por
+# funcionando.
 set -uo pipefail
 
-RAIZ="$(git rev-parse --show-toplevel)"
-GUARD="$RAIZ/scripts/check-migration-versions.sh"
-BASE="${MIGRATION_BASE_REF:-origin/main}"
+GUARD="$(cd "$(dirname "$0")" && pwd)/check-migration-versions.sh"
 TMP="$(mktemp -d)"
-WT="$TMP/wt"
 falhas=0
+trap 'rm -rf "$TMP"' EXIT
 
-limpar() {
-  git -C "$RAIZ" worktree remove --force "$WT" >/dev/null 2>&1 || true
-  rm -rf "$TMP"
-}
-trap limpar EXIT
+git init -q "$TMP/repo"
+cd "$TMP/repo"
+git config user.email t@t; git config user.name t
+mkdir -p supabase/migrations
 
-# Uma versão que a base COMPROVADAMENTE já tem — lida do próprio repositório, não
-# escrita à mão, senão o teste apodrece quando essa migration for arquivada.
-OCUPADA="$(git -C "$RAIZ" ls-tree -r --name-only "$BASE" supabase/migrations/ \
-            | sed 's|.*/||' | grep -oE '^[0-9]{14}' | sort -u | tail -1)"
-# E uma que ninguém tem.
-LIVRE="29991231235959"
+commitar() { git add -A >/dev/null 2>&1; git commit -qm "$1" >/dev/null 2>&1; }
+mig() { printf -- '-- %s\n' "$2" > "supabase/migrations/$1_$2.sql"; }
 
-if [ -z "$OCUPADA" ]; then
-  echo "ERRO: não consegui ler nenhuma versão de $BASE. O teste não pode afirmar nada." >&2
-  exit 1
-fi
+mig 20250101000000 inicial && commitar base-inicial
+git branch -M base
 
-git -C "$RAIZ" worktree add --detach "$WT" "$BASE" >/dev/null 2>&1 || {
-  echo "ERRO: não consegui criar worktree de teste." >&2; exit 1; }
-
-# Planta UM arquivo na versão $1, REMOVENDO antes o arquivo que a base tem nessa
-# versão. A remoção é o que isola a metade (b): sem ela o checkout fica com dois
-# arquivos do mesmo prefixo e a metade (a) prende o caso — o teste passaria por
-# dois motivos, e ficaria verde mesmo com (b) arrancada.
-rodar() {  # $1 = versão do arquivo plantado
-  git -C "$WT" reset --hard "$BASE" >/dev/null 2>&1
-  rm -f "$WT"/supabase/migrations/"$1"_*.sql
-  printf -- '-- fixture do teste do guarda\n' > "$WT/supabase/migrations/$1_guard_fixture.sql"
-  git -C "$WT" add -A supabase/migrations >/dev/null 2>&1
-  git -C "$WT" -c user.email=t@t -c user.name=t commit -qm "fixture $1" >/dev/null 2>&1
-  ( cd "$WT" && bash "$GUARD" >/dev/null 2>&1 )
+roda_em() {  # $1 = branch a testar
+  git checkout -q "$1"
+  ( MIGRATION_BASE_REF=base bash "$GUARD" supabase/migrations supabase/migrations >/dev/null 2>&1 )
 }
 
-# Dois arquivos com a MESMA versão nova dentro do checkout. Isola a metade (a):
-# a versão não existe na base, então (b) não tem o que dizer.
-rodar_dup() {
-  git -C "$WT" reset --hard "$BASE" >/dev/null 2>&1
-  printf -- '-- a\n' > "$WT/supabase/migrations/${LIVRE}_guard_fixture_a.sql"
-  printf -- '-- b\n' > "$WT/supabase/migrations/${LIVRE}_guard_fixture_b.sql"
-  git -C "$WT" add -A supabase/migrations >/dev/null 2>&1
-  git -C "$WT" -c user.email=t@t -c user.name=t commit -qm "fixture dup" >/dev/null 2>&1
-  ( cd "$WT" && bash "$GUARD" >/dev/null 2>&1 )
+checar() {  # $1 = branch, $2 = esperado (falha|passa), $3 = descrição
+  if roda_em "$1"; then res=passa; else res=falha; fi
+  if [ "$res" = "$2" ]; then
+    echo "ok — $3"
+  else
+    echo "FALHOU: $3 (esperado $2, deu $res)" >&2
+    falhas=$((falhas + 1))
+  fi
 }
 
-# --- VERMELHO: versão que a base já tem tem que REPROVAR ---------------------
-if rodar "$OCUPADA"; then
-  echo "FALHOU: o guarda passou com a versão $OCUPADA, que já existe em $BASE." >&2
-  echo "        É a colisão que o db push pularia em silêncio." >&2
-  falhas=$((falhas + 1))
-else
-  echo "ok — versão já existente em $BASE reprova ($OCUPADA)"
-fi
+# --- (1) GÊMEO TARDIO: a branch bifurca, DEPOIS a base ganha a mesma versão ---
+# É a forma de TODAS as colisões reais de 2026-08-11. Se `base_versions` for lido
+# no merge-base em vez da ponta da base, este caso passa em silêncio — o gêmeo
+# ainda não existe lá.
+git checkout -q -b gemeo-tardio base
+mig 20260202000000 metrica_da_branch && commitar branch-adiciona
+git checkout -q base
+mig 20260202000000 billing_da_base && commitar base-ganha-gemeo-depois
+checar gemeo-tardio falha "gêmeo que chega na base DEPOIS do fork reprova"
 
-# --- VERMELHO (a): duas do mesmo prefixo no checkout. Morre se BASELINE > 0 ---
-if rodar_dup; then
-  echo "FALHOU: o guarda passou com DUAS migrations do mesmo prefixo no checkout." >&2
-  echo "        Provável BASELINE > 0 — folga que tolera colisão nova." >&2
-  falhas=$((falhas + 1))
-else
-  echo "ok — duas do mesmo prefixo no checkout reprovam ($LIVRE)"
-fi
+# --- (2) CHERRY-PICK: mesma versão, MESMO nome. Não é colisão -----------------
+# O git funde o mesmo caminho e sobra um arquivo só. Acusar aqui é falso vermelho.
+git checkout -q -b cherry base
+mig 20260303000000 mesmo_arquivo && commitar base-tem
+git checkout -q base && git merge -q --no-ff -m merge cherry >/dev/null 2>&1
+git checkout -q -b cherry2 base~1 2>/dev/null || git checkout -q -b cherry2 base
+mig 20260303000000 mesmo_arquivo && commitar branch-readiciona-igual
+checar cherry2 passa "mesma versão com o MESMO nome (cherry-pick) não reprova"
 
-# --- VERDE: controle negativo. Sem ele, guarda travado passaria por bom ------
-if rodar "$LIVRE"; then
-  echo "ok — versão livre passa ($LIVRE)"
-else
-  echo "FALHOU: o guarda reprovou a versão livre $LIVRE." >&2
-  echo "        Guarda que reprova sempre é indistinguível de guarda quebrado." >&2
-  falhas=$((falhas + 1))
-fi
+# --- (3) DUPLICATA DENTRO DO CHECKOUT: isola a metade (a) --------------------
+git checkout -q -b dup base
+mig 20260404000000 arquivo_a && mig 20260404000000 arquivo_b && commitar duas-iguais
+checar dup falha "duas do mesmo prefixo no checkout reprovam"
 
-[ "$falhas" -eq 0 ] && echo "guarda de colisão: 3/3" || echo "guarda de colisão: $falhas falha(s)" >&2
+# --- (4) CONTROLE NEGATIVO: versão livre tem que PASSAR ----------------------
+git checkout -q -b livre base
+mig 20260505000000 versao_livre && commitar livre
+checar livre passa "versão livre passa"
+
+if [ "$falhas" -eq 0 ]; then echo "guarda de colisão: 4/4"; else echo "guarda de colisão: $falhas falha(s)" >&2; fi
 exit "$falhas"

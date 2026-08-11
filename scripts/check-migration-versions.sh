@@ -45,28 +45,52 @@ if [ "${count}" -gt "${BASELINE}" ]; then
   fail=1
 fi
 
-# --- (b) versions this branch INTRODUCES that the base already has ----------
+# --- (b) same version as the base, under a different filename ---------------
 #
-# "Introduces" is the operative word: comparing every file present against the
-# base flags the whole tree when run on the base itself. What matters is the set
-# ADDED relative to the merge-base.
+# Compares the FULL set on both sides, not the set the branch "adds". Three
+# attempts taught why (issue #1534):
+#
+#   * merge-base as the base side: every real collision on 2026-08-11 had the
+#     twin landing on `main` AFTER the branch forked, so at the merge-base it is
+#     not there yet and the guard passes on the case it exists to catch;
+#   * `--diff-filter=A` as the branch side: it misses the branch that KEEPS a
+#     file whose version the base later reused under another name — measured
+#     live on 20270730000010 (`deals_rls_org_scope` here, `voip_webhook_ingest`
+#     on main).
+#
+# What defines a collision is not who added what and when. It is: the same
+# 14-digit version resolving to DIFFERENT filenames on the two sides. Same
+# version and same name is the same migration — a cherry-pick or a shared
+# ancestor — and git merges the one path, so flagging it is a false red.
+#
+# Run on the base itself every version matches its own name, so the set comes
+# out empty. No special case needed.
 if git rev-parse --verify --quiet "${BASE_REF}" >/dev/null; then
-  merge_base="$(git merge-base "${BASE_REF}" HEAD 2>/dev/null || echo "${BASE_REF}")"
+  pares() {
+    git ls-tree -r --name-only "$1" "${GIT_PATH}" 2>/dev/null \
+      | sed 's|.*/||' | grep -E '^[0-9]{14}' | awk '{print substr($0,1,14), $0}' | sort -u
+  }
+  base_pairs="$(pares "${BASE_REF}" || true)"
+  here_pairs="$(pares HEAD || true)"
 
-  added="$(git diff --name-only --diff-filter=A "${merge_base}...HEAD" -- "${GIT_PATH}" 2>/dev/null \
-             | sed 's|.*/||' | grep -oE '^[0-9]{14}' | sort -u || true)"
-  base_versions="$(git ls-tree -r --name-only "${merge_base}" "${GIT_PATH}" 2>/dev/null \
-             | sed 's|.*/||' | grep -oE '^[0-9]{14}' | sort -u || true)"
+  cross=""
+  while read -r ver nome; do
+    [ -z "${ver:-}" ] && continue
+    homonimos="$(printf '%s\n' "${base_pairs}" | awk -v v="$ver" '$1==v {print $2}')"
+    [ -z "${homonimos}" ] && continue
+    printf '%s\n' "${homonimos}" | grep -qxF "${nome}" && continue
+    cross="${cross}${ver}  ${nome}  <->  $(printf '%s\n' "${homonimos}" | paste -sd, -)
+"
+  done <<< "${here_pairs}"
 
-  cross="$(comm -12 <(printf '%s\n' "${base_versions}") <(printf '%s\n' "${added}") | grep -v '^$' || true)"
   ncross="$(printf '%s' "$cross" | grep -c . || true)"
-
-  echo "Versions this branch introduces that ${BASE_REF} already has: ${ncross}"
+  echo "Versions colliding with ${BASE_REF} under another name: ${ncross}"
   if [ "${ncross}" -gt 0 ]; then
-    echo "${cross}" | sed 's/^/  - /'
-    echo "FAIL: this version already exists on ${BASE_REF}. \`supabase db push\` would" >&2
-    echo "      SKIP the file in silence — it would merge, CI would stay green, and the" >&2
-    echo "      migration would never reach production. Renumber to a free version." >&2
+    printf '%s' "${cross}" | sed 's/^/  - /'
+    echo "FAIL: this version already exists on ${BASE_REF} under another name." >&2
+    echo "      \`supabase db push\` would SKIP one of them in silence — it would merge," >&2
+    echo "      CI would stay green, and the migration would never reach production." >&2
+    echo "      Renumber to a free version." >&2
     fail=1
   fi
 else
