@@ -32,6 +32,7 @@ import {
   isWhatsAppCdnUrl as isWhatsAppCdnUrlShared,
   stampMediaJob,
 } from "../_shared/whatsapp-media.ts";
+import { shouldPersistMedia } from "./group-media-gate.ts";
 import { timingSafeCompare, checkRateLimitPersistent } from "../_shared/auth.ts";
 import { extractOwnerNumber } from "../_shared/whatsapp-owner.ts";
 import {
@@ -167,6 +168,7 @@ export function computeShouldTriggerCopilot(normalized: {
   return COPILOT_MEDIA_TYPES.has(normalized.message_type) && !!normalized.media_url;
 }
 
+
 export interface ReactionContext {
   shouldTriggerCopilot: boolean;
   shouldResolveWaitResponse: boolean;
@@ -280,9 +282,30 @@ function pickUazapiToken(payload: Record<string, unknown> | null | undefined): s
   return null;
 }
 
-// Enqueue an unprocessable webhook event into the DLQ. Best-effort: a DLQ
-// insert failure must never break the 200 OK contract back to Uazapi (Uazapi
-// retries on non-2xx and we do not want to amplify load during incidents).
+/**
+ * Guarda na DLQ um evento que não deu para processar. Devolve `true` se a linha
+ * foi mesmo gravada.
+ *
+ * O RETORNO É O PONTO. Antes esta função devolvia `void` e engolia a falha de
+ * insert, e quem chamava respondia 200 de qualquer jeito — sob a premissa de que
+ * responder não-2xx faria o Uazapi reentregar e amplificar a carga durante um
+ * incidente. A premissa está certa; a conclusão, invertida.
+ *
+ * No incidente de 2026-08-06 o banco saturou: `resolveInstance` não conseguia
+ * conexão, o insert na DLQ falhava pelo mesmo motivo, e o webhook respondia 200.
+ * O Uazapi tomava aquilo como entrega concluída e nunca reenviava. Resultado: 42
+ * minutos de mensagem de cliente perdida em definitivo — e uma DLQ com 2 linhas,
+ * porque nem a rede de segurança conseguia escrever.
+ *
+ * A regra que fica: 200 significa "está guardado". Se a DLQ gravou, o evento
+ * está salvo e o cron de replay o recupera — 200 é honesto. Se a DLQ não gravou,
+ * nada foi persistido em lugar nenhum, e a única resposta verdadeira é 5xx, para
+ * que o provedor reentregue.
+ *
+ * Sobre a amplificação: ela continua sendo um risco real, mas agora só ocorre no
+ * caso raro em que a própria DLQ está fora — e reentrega com backoff custa menos
+ * que a conversa perdida de um cliente.
+ */
 async function enqueueDlq(
   supabase: ReturnType<typeof createClient>,
   input: {
@@ -293,7 +316,7 @@ async function enqueueDlq(
     payload: unknown;
     resolved_instance_id?: string;
   },
-): Promise<void> {
+): Promise<boolean> {
   try {
     const row: Record<string, unknown> = {
       source_ip: input.source_ip,
@@ -306,10 +329,22 @@ async function enqueueDlq(
     const { error } = await supabase.from("whatsapp_webhook_dlq").insert(row);
     if (error) {
       console.error("[whatsapp-webhook] dlq insert failed:", error.message);
+      return false;
     }
+    return true;
   } catch (err) {
     console.error("[whatsapp-webhook] dlq insert threw:", err);
+    return false;
   }
+}
+
+/**
+ * Resposta para evento que não pôde ser processado, coerente com o que de fato
+ * foi persistido: 200 se a DLQ o guardou, 503 se não guardou nada.
+ */
+function dlqOutcomeResponse(persisted: boolean, reason: string): Response {
+  if (persisted) return genericResponse(200);
+  return genericResponse(503, { error: "dlq_unavailable", reason });
 }
 
 // Best-effort media persist with DLQ semantics. Always enqueues a
@@ -903,7 +938,7 @@ export async function persistMessage(
       status: "error",
       payloadSnapshot: { instance_id: instance.id, error: error.message },
     });
-    await enqueueDlq(supabase, {
+    const parked = await enqueueDlq(supabase, {
       source_ip: null,
       url_path: "",
       event: "messages",
@@ -911,17 +946,25 @@ export async function persistMessage(
       payload: normalized as unknown as Record<string, unknown>,
       resolved_instance_id: instance.id,
     });
+    // Falhou gravar a mensagem E falhou estacioná-la na DLQ: não sobrou cópia
+    // em lugar nenhum. Propagar é o que faz o handler responder 5xx e o provedor
+    // reentregar. Devolver null aqui — como era antes — levava a um 200 que
+    // afirmava ao Uazapi uma entrega que nunca houve.
+    if (!parked) {
+      throw new Error("message_lost: upsert e DLQ falharam para a mesma mensagem");
+    }
     return null;
   }
 
   // Best-effort: download encrypted WhatsApp CDN media and persist to Storage.
-  if (normalized.media_url && isWhatsAppCdnUrlShared(normalized.media_url) && normalized.message_id) {
+  // Ver shouldPersistMedia — grupo não desce mídia.
+  if (shouldPersistMedia(normalized)) {
     persistMediaToStorage(
       supabase,
       instance,
-      normalized.message_id,
+      normalized.message_id!,
       normalized.message_type,
-      normalized.media_url,
+      normalized.media_url!,
     ).catch((err) => console.error(`[webhook] media persist fire-forget:`, err));
   }
 
@@ -1439,14 +1482,14 @@ Deno.serve(
           raw_truncated: rawSnippet,
         },
       });
-      await enqueueDlq(supabase, {
+      const parked = await enqueueDlq(supabase, {
         source_ip: sourceIp,
         url_path: url.pathname,
         event,
         reason: "missing_instance",
         payload,
       });
-      return genericResponse(200);
+      return dlqOutcomeResponse(parked, "missing_instance");
     }
 
     let instance: ResolvedInstance | null = null;
@@ -1499,14 +1542,14 @@ Deno.serve(
           uazapi_instance_id: uazapiInstanceId,
         },
       });
-      await enqueueDlq(supabase, {
+      const parked = await enqueueDlq(supabase, {
         source_ip: sourceIp,
         url_path: url.pathname,
         event,
         reason: "unknown_instance",
         payload,
       });
-      return genericResponse(200);
+      return dlqOutcomeResponse(parked, "unknown_instance");
     }
 
     try {

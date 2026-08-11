@@ -322,6 +322,16 @@ verify_jwt = false
 [functions.whatsapp-dlq-replay]
 verify_jwt = false
 
+# whatsapp-instance-reaper: remove no provider as Instances já apagadas no CRM, a
+# partir da lápide (#1475); cron 5min; auth via x-cron-secret
+[functions.whatsapp-instance-reaper]
+verify_jwt = false
+
+# whatsapp-instance-reconcile: relatório READ-ONLY do passivo de Instances no
+# provider (#1478); sob demanda, sem cron; auth via x-cron-secret. NÃO deleta.
+[functions.whatsapp-instance-reconcile]
+verify_jwt = false
+
 # whatsapp-session-watchdog: detecta sessões WhatsApp mortas; cron 10min; auth via x-cron-secret
 [functions.whatsapp-session-watchdog]
 verify_jwt = false
@@ -334,10 +344,22 @@ verify_jwt = false
 [functions.whatsapp-media-retry]
 verify_jwt = false
 # whatsapp-media-retention: deleta whatsapp-media/ >30d via Storage API + marca media_expired; cron diário 04:00; auth via x-cron-secret
+# ATENÇÃO — drift: o fonte no repo usa RETENTION_DAYS=30, mas a versão rodando
+# em prod responde retention_days=90. Deployar daqui muda a janela de retenção
+# de 90 para 30 dias como efeito colateral, e passa a apagar mídia real que hoje
+# sobrevive. Faça isso como decisão consciente, não de carona em outro deploy.
 [functions.whatsapp-media-retention]
+verify_jwt = false
+# whatsapp-media-purge: limpeza retroativa do bucket media (órfãos + mídia de grupo);
+# SEM cron — operação manual, dryRun por default; auth via x-cron-secret
+[functions.whatsapp-media-purge]
 verify_jwt = false
 # history-sync-worker: chamado por pg_cron via pg_net; auth via x-cron-secret
 [functions.history-sync-worker]
+verify_jwt = false
+
+# infra-watchdog: chamado por pg_cron via pg_net; auth via x-cron-secret
+[functions.infra-watchdog]
 verify_jwt = false
 
 # mass-send-create: UI invoca com JWT (admin/master); proxy authenticated

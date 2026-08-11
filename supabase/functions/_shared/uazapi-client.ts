@@ -182,14 +182,67 @@ export class UazapiClient {
     );
   }
 
-  async connectInstance(phone?: string): Promise<{
+  /**
+   * Every instance on the provider's server. Admin-token operation.
+   *
+   * Read-only by intent: this is the input of the reconciliation report (#1478),
+   * which never deletes. The response shape is not pinned by the public spec —
+   * some deployments return a bare array, others wrap it — so callers normalise.
+   */
+  async listAllInstances(): Promise<unknown> {
+    return this.request<unknown>("GET", "/instance/all", undefined, {
+      useAdminToken: true,
+    });
+  }
+
+  /**
+   * Regional proxy catalog. Uazapi caches it for 24h on their side; today the
+   * public regional pool is Brazil-only. Requires a valid instance token.
+   */
+  async listProxyCities(
+    country = "br",
+    state?: string
+  ): Promise<{ country: string; state?: string; cities: Array<{ value: string; label: string; state?: string }> }> {
+    const qs = new URLSearchParams({ country });
+    if (state) qs.set("state", state);
+    return this.request(
+      "GET",
+      `/proxy-managed/cities?${qs.toString()}`,
+      undefined,
+      { useAdminToken: false }
+    );
+  }
+
+  /**
+   * Connect the instance, optionally pinning the managed proxy to a region.
+   *
+   * `proxy_managed_*` is accepted ONLY here — not on instance creation — so the
+   * region is decided at connect time. Since connect only runs on a disconnected
+   * instance, this never interrupts a live session, and existing instances adopt
+   * the region as they naturally reconnect.
+   *
+   * `region` absent means: send nothing and keep today's behaviour. Failure to
+   * derive a region must never cost a connection.
+   */
+  async connectInstance(
+    phone?: string,
+    region?: {
+      proxy_managed_country: string;
+      proxy_managed_state: string;
+      proxy_managed_city: string;
+    }
+  ): Promise<{
     qrcode?: string;
     paircode?: string;
   }> {
+    const body: Record<string, unknown> = {};
+    if (phone) body.phone = phone;
+    if (region) Object.assign(body, region);
+
     return this.request(
       "POST",
       "/instance/connect",
-      phone ? { phone } : undefined,
+      Object.keys(body).length > 0 ? body : undefined,
       { useAdminToken: false }
     );
   }

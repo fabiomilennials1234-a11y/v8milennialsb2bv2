@@ -77,8 +77,19 @@ export function useMasterAuth() {
 
   const isOutbounder = !!masterUser && !permissions.all && !!permissions.outbound_only;
 
+  /**
+   * Master PLENO (`permissions.all`), não apenas "tem linha em master_users".
+   *
+   * `isMaster` é true para QUALQUER linha ativa — inclusive o outbounder, que
+   * é um perfil restrito e não deve enxergar a frota inteira. Telas que expõem
+   * dados cross-org de todos os clientes devem gatear por `isFullMaster`.
+   * Ver o gate equivalente na RPC `master_org_user_activity`.
+   */
+  const isFullMaster = !!masterUser && permissions.all === true;
+
   return {
     isMaster: !!masterUser,
+    isFullMaster,
     isOutbounder,
     masterUser,
     permissions,

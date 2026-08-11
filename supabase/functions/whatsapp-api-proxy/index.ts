@@ -26,6 +26,10 @@ import {
   type WhatsAppInstance,
 } from "../_shared/whatsapp-client.ts";
 import { isActiveGestorForOrg } from "../_shared/gestor-auth.ts";
+import {
+  nullifyInBatches,
+  type BatchNullifyIO,
+} from "../_shared/whatsapp-instance-teardown.ts";
 
 // Force bundler to include provider modules (used via dynamic import in
 // whatsapp-client). meta-cloud is force-imported too so the human composer can
@@ -373,15 +377,22 @@ Deno.serve(
       if (action === "deleteInstance") {
           console.log(`[deleteInstance] starting for instance=${instanceId} org=${callerOrgId}`);
 
-          // Best-effort provider-side delete (skip if credentials missing).
+          // A REMOÇÃO no provider não acontece mais aqui (#1476).
           //
-          // If the provider delete fails we DO NOT silently proceed: a swallowed
-          // failure here leaves the Uazapi instance — and its WhatsApp
-          // linked-device session — alive, which competes with the next paired
-          // instance and produces recurring "401 logged out from another device"
-          // flapping. So on failure we fall back to disconnecting the session
-          // (frees the linked device even when the instance record lingers) and
-          // log the failure loudly for cleanup.
+          // Antes era best-effort: quando falhava, a linha do CRM era apagada de
+          // qualquer forma e o token morria em CASCADE — instância órfã
+          // inalcançável para sempre. E o pior caminho (apagar uma org, que
+          // cascateia no Postgres) nunca passava por aqui. Agora um trigger grava
+          // a lápide (#1475) antes de qualquer linha morrer, e o coletor remove no
+          // provider com retry — cobrindo TODOS os caminhos de exclusão com um
+          // caminho único, que por isso é exercitado em 100% delas.
+          //
+          // O `disconnect` CONTINUA síncrono, e de propósito: ele não deleta nada,
+          // libera a sessão do dispositivo vinculado. Sem isso o aparelho antigo
+          // segue competindo com a próxima instância pareada e reaparece o
+          // flapping "401 logged out from another device" — incidente já corrigido
+          // que não pode voltar por causa dos minutos até o coletor rodar. A
+          // falha dele é inofensiva: o coletor ainda vai deletar.
           let providerError: string | null = null;
           const withTimeout = <T>(p: Promise<T>, label: string): Promise<T> =>
             Promise.race([
@@ -395,43 +406,78 @@ Deno.serve(
               instance as WhatsAppInstance,
               supabaseAdmin
             );
-            try {
-              await withTimeout(provider.deleteInstance(), "provider delete");
-              console.log(`[deleteInstance] provider delete OK`);
-            } catch (delErr) {
-              providerError = (delErr as Error).message ?? "provider delete failed";
-              // Fallback: free the WhatsApp session so the linked device stops
-              // competing, even though the instance record could not be removed.
-              try {
-                await withTimeout(provider.logoutInstance(), "provider disconnect");
-                console.warn(
-                  `[deleteInstance] provider delete failed (${providerError}); disconnected session as fallback`
-                );
-              } catch (discErr) {
-                const discMsg = (discErr as Error).message ?? "disconnect failed";
-                providerError = `${providerError}; disconnect fallback failed: ${discMsg}`;
-                console.error(
-                  `[deleteInstance] ORPHAN RISK: provider delete AND disconnect failed for instance=${instanceId} org=${callerOrgId}: ${providerError}`
-                );
-              }
-            }
+            await withTimeout(provider.logoutInstance(), "provider disconnect");
+            console.log(`[deleteInstance] provider session disconnected`);
           } catch (e) {
-            // No provider credentials (e.g. orphan from a failed createInstance).
-            providerError = (e as Error).message ?? "provider unavailable";
-            console.log(`[deleteInstance] provider unavailable (best-effort skip): ${providerError}`);
+            // Sessão não liberada agora: o coletor ainda remove a instância, e com
+            // ela a sessão. Registrado para diagnóstico, não é falha da operação.
+            providerError = (e as Error).message ?? "provider disconnect skipped";
+            console.log(
+              `[deleteInstance] disconnect best-effort falhou (coletor assume a remoção): ${providerError}`
+            );
           }
 
-          // Nullify/delete FKs in batches before deleting the instance row,
-          // otherwise ON DELETE SET NULL / CASCADE on large tables causes timeout.
-          await supabaseAdmin
-            .from("scheduled_user_messages")
-            .update({ whatsapp_instance_id: null })
-            .eq("whatsapp_instance_id", instanceId);
+          // Clear FKs BEFORE deleting the instance row, otherwise the
+          // ON DELETE SET NULL cascade runs as one statement over
+          // whatsapp_messages (~2.3M rows, 7 indexes on instance_id) and blows
+          // the statement timeout — 34 of 95 deletions failed that way. Each
+          // batch is a short statement in its own transaction, so locks on a
+          // table the webhook writes to continuously are released in between.
+          const nullifyIO: BatchNullifyIO = {
+            async selectIds(table, column, value, limit) {
+              const { data, error } = await supabaseAdmin
+                .from(table)
+                .select("id")
+                .eq(column, value)
+                .limit(limit);
+              if (error) throw new Error(`${table} select failed: ${error.message}`);
+              return (data ?? []).map((r: { id: string }) => r.id);
+            },
+            async nullifyByIds(table, column, ids) {
+              const { error } = await supabaseAdmin
+                .from(table)
+                .update({ [column]: null })
+                .in("id", ids);
+              if (error) throw new Error(`${table} nullify failed: ${error.message}`);
+            },
+          };
 
-          await supabaseAdmin
-            .from("whatsapp_messages")
-            .update({ instance_id: null })
-            .eq("instance_id", instanceId);
+          for (const target of [
+            { table: "whatsapp_messages", column: "instance_id" },
+            { table: "scheduled_user_messages", column: "whatsapp_instance_id" },
+          ]) {
+            const outcome = await nullifyInBatches(nullifyIO, {
+              ...target,
+              value: instanceId,
+            });
+            console.log(
+              `[deleteInstance] ${target.table}: cleared ${outcome.rows} rows in ${outcome.batches} batches`
+            );
+
+            // Rows still carry the FK. Proceeding would hand the remainder to
+            // the cascade, which is exactly the statement that times out — so
+            // stop and let the caller retry instead of failing opaquely.
+            if (outcome.hitBatchCeiling) {
+              await logRuntime({
+                organizationId: callerOrgId,
+                module: "whatsapp",
+                action: "deleteInstance",
+                status: "error",
+                entityType: "whatsapp_instances",
+                entityId: instanceId,
+                errorMessage: `${target.table} not drained after ${outcome.batches} batches (${outcome.rows} rows cleared); retry to continue`,
+              });
+              return jsonResponse(
+                503,
+                {
+                  error:
+                    "Exclusão em andamento: muitas mensagens vinculadas. Tente novamente para continuar.",
+                  partial: { table: target.table, rows: outcome.rows },
+                },
+                corsHeaders
+              );
+            }
+          }
 
           await supabaseAdmin
             .from("whatsapp_conversations")
