@@ -191,6 +191,28 @@
 #      lead. `has_function_privilege` nome por nome — nem anon, nem
 #      authenticated, nem service_role executam a função nova.
 #
+#  26. organizations_plan_fk_test.sql — o catálogo passa a mandar em
+#      `organizations.subscription_plan` (SCRUM-337, 20270811000000). O CHECK de
+#      8 literais permitia `basic`, nome que NUNCA existiu em
+#      `subscription_plans`: a org passava na validação e depois perdia TODAS as
+#      features no `COALESCE(sp.features, '{}')` de
+#      `org_get_features_and_limits` — apagão silencioso.
+#      Asserções de COMPORTAMENTO, não de estrutura: nenhuma pergunta "existe
+#      uma constraint chamada X" (quebra em refactor sem defeito e passaria
+#      verde com CHECK e FK vivos ao mesmo tempo). Quem mata essa ambiguidade é
+#      atribuir um plano RECÉM-CADASTRADO no catálogo — só passa se o CHECK
+#      tiver morrido. Prova ainda: plano ausente recusado no INSERT *e* no
+#      UPDATE; rename no catálogo levando a org junto (CASCADE); DELETE de plano
+#      com org recusado (RESTRICT) com o gatilho `trg_sync_org_plan_quotas`
+#      desligado e `plan_id` NULO — senão quem recusaria seria a FK ANTIGA de
+#      `plan_id` e o teste passaria sem provar nada da nova; esse isolamento é
+#      CONDICIONAL, porque a SCRUM-338 derruba a coluna `plan_id` e o gatilho
+#      junto, e nenhuma das duas fatias deve depender da ordem de merge da
+#      outra; e NULO ainda
+#      permitido, com a coluna omitida ficando NULA (sem NOT NULL, sem DEFAULT),
+#      porque `create_org_sandbox` e o edge `test-workflow-system` inserem org
+#      sem plano.
+#
 #  14. assert_org_access_test.sql     — gate de tenancy dos leitores SECURITY
 #      DEFINER (#1209): membro ATIVO passa, membro DESATIVADO é BLOQUEADO (o
 #      furo: lia receita/ranking/comissão da org que o desativou), master e
@@ -257,12 +279,13 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/voip_recording_retention_test.sql" \
     "$SCRIPT_DIR/voip_incoming_creates_call_test.sql" \
     "$SCRIPT_DIR/whatsapp_instance_reap_queue_test.sql" \
-    "$SCRIPT_DIR/subscription_snapshot_base_layer_test.sql"
+    "$SCRIPT_DIR/subscription_snapshot_base_layer_test.sql" \
+    "$SCRIPT_DIR/organizations_plan_fk_test.sql"
 }
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql subscription_snapshot_base_layer_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql subscription_snapshot_base_layer_test.sql organizations_plan_fk_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces
