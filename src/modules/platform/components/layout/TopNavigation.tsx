@@ -56,6 +56,7 @@ import { useAuth } from "@/modules/identity";
 import { useUserRole, useJobTitle, useFeaturePermissions } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
+import { useMetricsStudioEnabled } from "@/modules/analytics";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { useMetaPages } from "@/modules/communication/hooks/chat-meta/useMetaPages";
 import { SIDEBAR_FEATURE_MAP, type FeatureKey } from "@/modules/platform/lib/feature-registry";
@@ -98,7 +99,7 @@ interface NavItem {
   badge?: number;
   masterOnly?: boolean;
   /** Optional runtime gate key — filtered by the component when false. */
-  gate?: "meta_pages_connected";
+  gate?: "meta_pages_connected" | "metrics_studio_enabled";
 }
 
 interface NavItemWithChildren extends NavItem {
@@ -130,7 +131,9 @@ const turboSubItems: NavItem[] = [
 const primaryNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/dashboard" },
   // Métricas sai do Comando: lá é operação (próximos passos), aqui é análise.
-  { label: "Métricas", icon: ChartNoAxesCombined, path: "/metricas" },
+  // Rollout por org (G5): sem a flag, o item não aparece — se aparecesse, o
+  // clique levaria à tela de "ainda não liberado", que é pior que não ver.
+  { label: "Métricas", icon: ChartNoAxesCombined, path: "/metricas", gate: "metrics_studio_enabled" },
   { label: "Chat", icon: Zap, path: "/chat-whatsapp" },
   // Disparos — porta canônica, sempre visível perto do Chat (#904)
   { label: "Disparos", icon: Send, path: "/disparos" },
@@ -159,7 +162,7 @@ const moreNavItems: NavItemWithChildren[] = [
 // All items combined for mobile
 const allNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/dashboard" },
-  { label: "Métricas", icon: ChartNoAxesCombined, path: "/metricas" },
+  { label: "Métricas", icon: ChartNoAxesCombined, path: "/metricas", gate: "metrics_studio_enabled" },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Chat", icon: Zap, path: "/chat-whatsapp" },
@@ -261,6 +264,8 @@ export function TopNavigation() {
   const prefetchPipes = usePrefetchPipes();
   const { data: metaPages } = useMetaPages();
   const showMetaNav = (metaPages?.pages.length ?? 0) > 0;
+  // G5: trava de rollout do Estúdio de Métricas. Falha para fechado.
+  const metricsStudio = useMetricsStudioEnabled();
 
   // Build dynamic funnel sub-items from display config
   const dynamicFunisChildren: NavItem[] = (displayConfig ?? [])
@@ -400,6 +405,7 @@ export function TopNavigation() {
   const filterByGate = (items: NavItemWithChildren[]) =>
     items.filter((item) => {
       if (item.gate === "meta_pages_connected") return showMetaNav;
+      if (item.gate === "metrics_studio_enabled") return metricsStudio.enabled;
       return true;
     });
 

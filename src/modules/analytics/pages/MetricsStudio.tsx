@@ -1,10 +1,12 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Gauge, PanelLeftClose, PanelLeftOpen, Trash2 } from "lucide-react";
+import { Gauge, Lock, PanelLeftClose, PanelLeftOpen, Trash2 } from "lucide-react";
+import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { cn } from "@/lib/utils";
 import { MetricsCanvas } from "@/modules/analytics/components/metrics-studio/MetricsCanvas";
 import { MetricsStudioSidebar } from "@/modules/analytics/components/metrics-studio/MetricsStudioSidebar";
 import { useMetricsStudio } from "@/modules/analytics/hooks/useMetricsStudio";
+import { useMetricsStudioEnabled } from "@/modules/analytics/hooks/useMetricsStudioEnabled";
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
 import { STUDIO_PERIODS, type StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
@@ -31,6 +33,9 @@ export default function MetricsStudio() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [period, setPeriod] = useState<StudioPeriod>("month");
+
+  // G5: trava de liberação por org. Falha para FECHADO — ver o hook.
+  const rollout = useMetricsStudioEnabled();
 
   // G6 do grill: os cortes por pessoa (closer/SDR) reusam a trava do Ranking,
   // que já existe. Sem ela, o seletor de corte simplesmente não os oferece.
@@ -115,6 +120,14 @@ export default function MetricsStudio() {
     studio.clear();
     setSelectedId(null);
   }, [studio]);
+
+  if (rollout.isLoading) {
+    return <TorqueLoader variant="inline" />;
+  }
+
+  if (!rollout.enabled) {
+    return <EstudioIndisponivel />;
+  }
 
   return (
     <div className="space-y-5">
@@ -209,6 +222,35 @@ export default function MetricsStudio() {
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Org fora do rollout. NÃO é tela de erro nem de permissão negada: a feature
+ * existe e está sendo liberada aos poucos. O texto diz isso, em vez de sugerir
+ * que o usuário fez algo errado ou que falta plano.
+ */
+function EstudioIndisponivel() {
+  return (
+    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center">
+      <div className="rounded-2xl border border-dashed border-border/70 p-4">
+        <Lock className="h-6 w-6 text-muted-foreground/40" strokeWidth={1.5} />
+      </div>
+      <div className="max-w-[360px]">
+        <p className="text-[14px] font-semibold">Métricas ainda não liberado</p>
+        <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/70">
+          Estamos liberando esta tela aos poucos. Enquanto isso, os números da sua operação
+          continuam no Comando.
+        </p>
+      </div>
+      <Link
+        to="/dashboard"
+        className="inline-flex items-center gap-1.5 rounded-[9px] border border-border bg-card px-3 py-[7px] text-[12px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+      >
+        <Gauge className="h-3.5 w-3.5" />
+        Ir para o Comando
+      </Link>
     </div>
   );
 }
