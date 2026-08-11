@@ -109,13 +109,16 @@
 --       `REVOKE` — então incluí-la aqui exigiria que o teste parasse de tratar
 --       "ligar RLS" como conserto universal.
 --
--- Medido no schema deste repositório: `public` tem 279 relações, TODAS 'r' —
--- zero particionadas, zero matviews. Ampliar agora seria escrever predicado
--- para caso que não existe aqui, e mudar o significado de "conserto" no teste
--- sem ter um exemplo para exercitar. Produção pode divergir: o saneamento de
--- 11/08 encontrou objeto de backup que `relkind='r'` deixava passar. Ampliar
--- para `IN ('r','p','m')` é fatia própria, com teste que cubra o caso da
--- matview — não um `IN` silencioso enfiado aqui.
+-- Medido em 11/08: `public` tem 279 relações no schema deste repositório e 289
+-- em produção — TODAS 'r' nos dois. Zero particionadas, zero matviews. Ampliar
+-- agora seria escrever predicado para caso que não existe, e mudar o
+-- significado de "conserto" no teste sem ter exemplo para exercitar.
+--
+-- E o escopo NÃO fica dependendo de alguém ler este comentário: o teste tem uma
+-- asserção de PRECONDIÇÃO que exige que `public` só tenha `relkind = 'r'`. No
+-- dia em que a primeira matview ou particionada nascer, ela fica vermelha e
+-- força a decisão naquele momento, com o exemplo em mãos. Comentário envelhece;
+-- asserção não.
 --
 -- Uma linha por (tabela, grantee): saber que `anon` lê é diferente de saber que
 -- só `authenticated` lê — a primeira é vazamento para a internet, a segunda é

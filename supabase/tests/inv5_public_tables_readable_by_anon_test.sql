@@ -64,6 +64,39 @@ SELECT no_plan();
 SET LOCAL role postgres;
 
 -- ===========================================================================
+-- (PRECONDIÇÃO) o escopo do invariante se defende sozinho.
+--
+-- INV-5 olha `relkind = 'r'` — tabela ordinária. Duas outras coisas em `public`
+-- podem guardar linha e receber GRANT, e o detector é CEGO para as duas:
+--
+--   'p' (particionada) — o pai não guarda linha, mas SELECT no pai lê as
+--       partições. Pai sem RLS com GRANT vivo vaza, e INV-5 não vê.
+--   'm' (matview)      — pior: matview NÃO ACEITA RLS. Não existe `ENABLE ROW
+--       LEVEL SECURITY` para ela, então incluí-la mudaria o significado de
+--       "conserto" neste arquivo: o CONSERTO 1 abaixo deixaria de valer
+--       universalmente, e teste cujo conserto vale "quase sempre" é pior que
+--       teste com escopo declarado.
+--
+-- Medido em 11/08: `public` tem 279 relações no schema deste repositório e 289
+-- em produção — TODAS 'r' nos dois. Zero particionada, zero matview. Ampliar o
+-- predicado hoje seria escrever regra para caso que não existe, sem exemplo
+-- real para exercitar.
+--
+-- Daí esta asserção, em vez de uma nota de rodapé: comentário envelhece,
+-- asserção não. No dia em que a primeira matview ou tabela particionada nascer
+-- em `public`, este teste fica VERMELHO e força a decisão NAQUELE momento — com
+-- o exemplo em mãos, que é exatamente o que falta hoje.
+-- ===========================================================================
+SELECT is(
+  (SELECT count(*)::int
+     FROM pg_class c
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relkind IN ('p', 'm')),
+  0,
+  '(PRECONDIÇÃO) public só tem tabela ordinária — se quebrar: nasceu relação que INV-5 NÃO cobre (particionada ou matview). Decidir ali: ampliar o detector (matview não aceita RLS, então o conserto muda) ou excluir a relação explicitamente. Não deixar passar em silêncio');
+
+-- ===========================================================================
 -- (HARD-0) o schema montado das migrations não tem NENHUMA violação.
 --
 -- Zero-tolerância desde o primeiro dia, sem ratchet e sem dívida herdada:
