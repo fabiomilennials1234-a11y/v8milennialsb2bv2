@@ -21,7 +21,7 @@ import {
 
 /**
  * Medidas do catálogo. As 7 primeiras estão em PROD (conferidas 2026-08-11);
- * `leads_sem_responsavel` entra pela migration 20270811120000 (SCRUM-311).
+ * `leads_sem_responsavel` entra pela migration 20270812010000 (SCRUM-311).
  */
 const MEDIDAS_DO_CATALOGO = [
   "receita",

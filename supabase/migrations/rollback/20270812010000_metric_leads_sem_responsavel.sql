@@ -1,4 +1,4 @@
--- ROLLBACK de 20270811120000_metric_leads_sem_responsavel.sql
+-- ROLLBACK de 20270812010000_metric_leads_sem_responsavel.sql
 --
 -- ORDEM IMPORTA. O despachante precisa perder o ramo ANTES de a função sumir,
 -- senão _metric_leaf fica referenciando função inexistente e toda leitura do

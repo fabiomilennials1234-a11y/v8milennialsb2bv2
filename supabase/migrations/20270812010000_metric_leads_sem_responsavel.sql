@@ -1,4 +1,4 @@
--- 20270811120000_metric_leads_sem_responsavel.sql
+-- 20270812010000_metric_leads_sem_responsavel.sql
 --
 -- SCRUM-311, primeira fatia: porta "Leads sem responsável" para o catálogo
 -- fechado do motor (ADR-0023). Serve de MOLDE para as demais 18 — uma medida
@@ -35,7 +35,7 @@
 -- Medida catalogada sem ramo no motor devolvia NULL silencioso — número em
 -- branco na tela, sem erro em lugar nenhum. Agora levanta exceção.
 --
--- ROLLBACK pareado: rollback/20270811120000_metric_leads_sem_responsavel.sql
+-- ROLLBACK pareado: rollback/20270812010000_metric_leads_sem_responsavel.sql
 
 -- ===========================================================================
 -- 1 — CATÁLOGO

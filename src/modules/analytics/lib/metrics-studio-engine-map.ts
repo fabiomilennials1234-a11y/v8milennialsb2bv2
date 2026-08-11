@@ -21,7 +21,7 @@
  *
  * ⚠ Só entra aqui o que o motor calcula. Medido em 2026-08-11: o catálogo de
  * prod tem 7 medidas; `leads_sem_responsavel` é a 8ª e chega pela migration
- * `20270811120000` (SCRUM-311) — a UI só a mostra depois do apply.
+ * `20270812010000` (SCRUM-311) — a UI só a mostra depois do apply.
  *
  * `reunioes_no_show` e o campo `target` (de que `meta_definida` depende) vivem
  * na migration `20260727140000`, que NUNCA foi aplicada — o ledger pula de
