@@ -18,6 +18,8 @@
     "guard:master-ghost": "node scripts/definer-master-ghost-ratchet.cjs",
     "guard:master-ghost:write": "node scripts/definer-master-ghost-ratchet.cjs --write",
     "gen:api-spec": "deno run --no-check --unstable-sloppy-imports --allow-read --allow-write scripts/gen-api-spec.ts",
+    "gen:feature-catalog": "node scripts/gen-feature-catalog.mjs",
+    "gen:feature-catalog:check": "node scripts/gen-feature-catalog.mjs --check",
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
