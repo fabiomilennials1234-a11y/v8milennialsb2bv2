@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Dublê de teste. O cliente Supabase falso é um builder encadeável que devolve a si mesmo; tipá-lo com precisão exigiria enumerar a superfície inteira do SDK sem ganhar segurança nenhuma no teste. A intenção já estava declarada ao linter do Deno (deno-lint-ignore no-explicit-any) — isto diz o mesmo ao ESLint, que também passou a ler estes arquivos. */
 /**
  * `{{estagio}}` — a etapa vem do NEGÓCIO, nunca do espelho legado.
  *
