@@ -18,7 +18,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap;
 
 \ir _rls_invariants_detectors.sql
 
-SELECT plan(7);
+SELECT plan(8);
 
 -- ===========================================================================
 -- Baseline assertions: with NO bad objects planted yet, detectors that look at
@@ -80,13 +80,34 @@ SELECT isnt(
   'INV-2 RED: detector flags writing DEFINER function executable by PUBLIC'
 );
 
--- and once PUBLIC EXECUTE is revoked, the detector clears it (no longer reachable)
+-- Revoking PUBLIC is NOT the fix on Supabase, and this is the trap worth pinning
+-- down. The base image ships
+--   ALTER DEFAULT PRIVILEGES ... IN SCHEMA public GRANT ALL ON FUNCTIONS
+--     TO postgres, anon, authenticated, service_role
+-- (visible in pg_default_acl, defaclobjtype='f'), so every function created in
+-- `public` is born with an *explicit* anon grant alongside the implicit PUBLIC
+-- one. `REVOKE ... FROM PUBLIC` strips only the `=X/postgres` entry; anon keeps
+-- `anon=X/postgres` and the function stays reachable. Asserting the violation
+-- SURVIVES here is what stops the remediation recipe below from being a lie.
 REVOKE EXECUTE ON FUNCTION public._rls_inv_bad_writer(uuid) FROM PUBLIC;
+SELECT isnt(
+  (SELECT count(*)::int FROM public._rls_inv_writing_definer_exec_by_anon_or_public()
+     WHERE functionname = '_rls_inv_bad_writer'),
+  0,
+  'INV-2 trap: revoking PUBLIC alone does NOT clear it — anon keeps the default-privilege grant'
+);
+
+-- The actual fix: revoke the explicit anon grant too. Only then is the function
+-- unreachable by the roles INV-2 covers, and the detector clears.
+-- (`authenticated` deliberately keeps its grant here: INV-2's contract is
+-- anon/PUBLIC only. That narrower scope is a known blind spot of the invariant,
+-- not of this fixture — see issue for INV-2 coverage.)
+REVOKE EXECUTE ON FUNCTION public._rls_inv_bad_writer(uuid) FROM anon;
 SELECT is(
   (SELECT count(*)::int FROM public._rls_inv_writing_definer_exec_by_anon_or_public()
      WHERE functionname = '_rls_inv_bad_writer'),
   0,
-  'INV-2 GREEN-after-fix: revoking PUBLIC EXECUTE clears the violation'
+  'INV-2 GREEN-after-fix: revoking PUBLIC *and* anon EXECUTE clears the violation'
 );
 
 -- ---------------------------------------------------------------------------
