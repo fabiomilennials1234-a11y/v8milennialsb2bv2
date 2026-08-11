@@ -46,4 +46,39 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
   ('INV-1', 0,   'zero-tolerance: no broad-role USING(true)/WITH CHECK(true) on org tables'),
   ('INV-2', 100, 'ratchet ceiling: writing DEFINER fns reachable by anon/PUBLIC (static est. <=89 callable writers; tighten then burn down to 0)'),
   ('INV-3', 0,   'zero-tolerance: every org table must have RLS enabled'),
-  ('INV-4', 90,  'ratchet ceiling: DEFINER fns lacking SET search_path (static est. ~70; tighten then burn down to 0)');
+  ('INV-4', 90,  'ratchet ceiling: DEFINER fns lacking SET search_path (static est. ~70; tighten then burn down to 0)'),
+  ('INV-6', 90,  'ratchet ceiling: DEFINER fns reachable by anon/authenticated with no authorization gate (SCRUM-339). PLACEHOLDER — see note below.');
+
+-- ---------------------------------------------------------------------------
+-- INV-6 (SCRUM-339) — provenance of this ceiling, and why it is not 2.
+--
+-- The intent registered on the ticket is "baseline = 2": after the 2026-08-11
+-- sweep, the only violations that should remain are `create_default_pipelines`
+-- and `ensure_pipeline_display_config`, which the browser genuinely calls and
+-- which are waiting on the `_unchecked` + wrapper treatment.
+--
+-- That number describes PRODUCTION. This suite does not run against production
+-- — it runs against a database built from `supabase/migrations/*`, and those
+-- two populations are NOT the same:
+--
+--   * The 23 REVOKEs applied on 2026-08-11 were executed directly in prod and
+--     never landed in a migration. Measured on a migrations-built database,
+--     `fire_workflow_trigger`, `enqueue_webhook_deliveries_for_org`,
+--     `schedule_pipe_rule_steps_from_position` and `acquire_copilot_lock` still
+--     answer `has_function_privilege('authenticated', …) = true`. The fix does
+--     not exist in the repo, so CI cannot see it — and neither can a fresh
+--     branch, a rebuild, or a restore.
+--   * A live count on a (differently-branched) local database returned 90, not
+--     2, which is the order of magnitude to expect here.
+--
+-- So the ceiling above is a deliberate, documented PLACEHOLDER whose only job
+-- is to let the assertion run once and print the exact live count through the
+-- diag() line in rls_inv6_definer_sem_gate_test.sql. Tighten it to that exact
+-- number, in this same PR, before merge.
+--
+-- Do NOT repeat the INV-2/INV-4 history: those shipped as "conservative upper
+-- bounds, tighten in a follow-up PR" on 2026-06-01 and were never tightened —
+-- they still read 100 and 90, which is why a gate that has been failing since
+-- 2026-07-30 went unnoticed. A ceiling far above the live count is not a
+-- ratchet; it is decoration.
+-- ---------------------------------------------------------------------------

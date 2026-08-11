@@ -207,3 +207,91 @@ AS $fn$
       WHERE cfg ILIKE 'search_path=%'
     );
 $fn$;
+
+-- ---------------------------------------------------------------------------
+-- Invariant 6 — No SECURITY DEFINER function in `public` that anon or
+-- authenticated can EXECUTE may lack an authorization gate in its body.
+--
+-- A DEFINER function runs as its owner and therefore bypasses RLS. If it is
+-- reachable by a browser role and never asks "who is calling, and may they
+-- touch this tenant?", then every id it accepts is a steering wheel: the caller
+-- picks the tenant and the function obeys. The 2026-08-11 audit closed 23 such
+-- functions — cross-tenant WhatsApp dispatch, webhook delivery with an
+-- attacker-chosen body, writes into `organizations`, and readers that returned
+-- lead phone numbers from any organization.
+--
+-- TWO SCOPING MISTAKES THIS DETECTOR DELIBERATELY DOES NOT REPEAT — both were
+-- measured on 2026-08-11, and each one produced a false clean bill of health:
+--
+--   1. It does NOT filter on "takes organization_id as a parameter".
+--      `schedule_rule_steps_from_position` survived three sweeps that way: it
+--      takes `whatsapp_instance_id`, not an org id, and let a caller schedule a
+--      send through the victim's own WhatsApp number. ANY caller-controlled id
+--      is a steering wheel. The population is defined by WHO CAN REACH the
+--      function, never by which parameters it happens to accept.
+--
+--   2. It does NOT filter on "the body writes".
+--      The first cut required INSERT/UPDATE/DELETE and was blind to
+--      exfiltration: it found 9 where there were 24, and the ones it missed
+--      were readers handing back lead phone numbers cross-tenant. Reading the
+--      wrong tenant's data is the same breach as writing it.
+--
+-- WHAT COUNTS AS A GATE: a mention of one of the known authorization helpers,
+-- or of `auth.uid()` / `auth.org_id()` (deriving identity from the JWT rather
+-- than trusting a parameter). SQL comments are stripped before matching, so a
+-- helper named only in a `--` note does not buy a pass.
+--
+-- KNOWN IMPRECISION, stated on purpose: this is textual. A function that gates
+-- by calling some *other* helper not on the list reads as a violation
+-- (false positive), which is the safe direction — it is loud, and the ratchet
+-- absorbs it. The unsafe direction is narrowed by the comment stripping above.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public._rls_inv_definer_without_gate()
+RETURNS TABLE (
+  schemaname            name,
+  functionname          name,
+  identity_args         text,
+  anon_can_execute      boolean,
+  auth_can_execute      boolean
+)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path TO 'public', 'pg_catalog'
+AS $fn$
+  SELECT
+    n.nspname  AS schemaname,
+    pr.proname AS functionname,
+    pg_get_function_identity_arguments(pr.oid) AS identity_args,
+    (EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon')
+       AND has_function_privilege('anon', pr.oid, 'EXECUTE'))          AS anon_can_execute,
+    (EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated')
+       AND has_function_privilege('authenticated', pr.oid, 'EXECUTE')) AS auth_can_execute
+  FROM pg_proc pr
+  JOIN pg_namespace n ON n.oid = pr.pronamespace
+  WHERE n.nspname = 'public'
+    AND pr.prosecdef = true
+    AND pr.prokind = 'f'
+    -- Trigger/event-trigger functions cannot be invoked as an RPC: PostgREST
+    -- does not expose them and they fire as the table owner regardless of any
+    -- EXECUTE grant. Same carve-out as INV-2.
+    AND pr.prorettype NOT IN ('pg_catalog.trigger'::regtype, 'pg_catalog.event_trigger'::regtype)
+    -- Extension-owned functions (pgtap, pg_graphql, …) are not ours to gate.
+    AND NOT EXISTS (
+      SELECT 1 FROM pg_depend d
+      WHERE d.objid = pr.oid AND d.deptype = 'e'
+    )
+    -- REACHABILITY, the only population filter: a browser role can call it.
+    AND (
+      (EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon')
+         AND has_function_privilege('anon', pr.oid, 'EXECUTE'))
+      OR (EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated')
+         AND has_function_privilege('authenticated', pr.oid, 'EXECUTE'))
+    )
+    -- ...and the body never establishes who is calling. Comments stripped first
+    -- (block comments, then line comments) so a mention in prose is not a gate.
+    AND regexp_replace(
+          regexp_replace(pr.prosrc, '/\*.*?\*/', ' ', 'gs'),
+          '--[^\n]*', ' ', 'g'
+        ) !~* '(assert_org_access|assert_org_member|is_master_user|get_my_organization_ids|get_my_admin_organization_ids|get_my_team_member_ids|auth\s*\.\s*uid\s*\(|auth\s*\.\s*org_id\s*\(|resolve_org_for_rpc)';
+$fn$;
