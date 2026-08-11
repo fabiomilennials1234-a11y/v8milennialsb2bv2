@@ -19,10 +19,13 @@
  * As duas linguagens NÃO se traduzem por semelhança de nome:
  * `taxa_conversao` e `ticket_medio` são RAZÕES, não medidas.
  *
- * ⚠ Só entra aqui o que o motor calcula EM PRODUÇÃO. Medido em 2026-08-11: o
- * catálogo de prod tem 7 medidas. `reunioes_no_show` e o campo `target` (de que
- * `meta_definida` depende) vivem na migration `20260727140000`, que NUNCA foi
- * aplicada — o ledger pula de `20260727120000` para `20260727140241`.
+ * ⚠ Só entra aqui o que o motor calcula. Medido em 2026-08-11: o catálogo de
+ * prod tem 7 medidas; `leads_sem_responsavel` é a 8ª e chega pela migration
+ * `20270811120000` (SCRUM-311) — a UI só a mostra depois do apply.
+ *
+ * `reunioes_no_show` e o campo `target` (de que `meta_definida` depende) vivem
+ * na migration `20260727140000`, que NUNCA foi aplicada — o ledger pula de
+ * `20260727120000` para `20260727140241`.
  */
 
 import type { MeasureRef, MetricFilters } from "@/modules/analytics/hooks/useMetricMeasure";
@@ -100,6 +103,9 @@ export const COMPATIBILIDADE: Record<string, MetricRecorte[]> = {
   reunioes_realizadas: ["total", "sdr", "origem", "tag", "tempo"],
   leads_na_etapa: ["total", "pipeline", "etapa"],
   tempo_medio_etapa: ["etapa", "pipeline"],
+  // SCRUM-311 fatia 1. Sem 'tempo' (é estado, não série) e sem corte por
+  // pessoa ("sem dono por vendedor" é contradição).
+  leads_sem_responsavel: ["total", "origem", "tag"],
 };
 
 /** Formato único por medida, de `metric_catalog_measure_formats` em prod. */
@@ -111,10 +117,11 @@ export const FORMATO_DA_MEDIDA: Record<string, MetricFormatId> = {
   reunioes_realizadas: "integer",
   leads_na_etapa: "integer",
   tempo_medio_etapa: "duration_human",
+  leads_sem_responsavel: "integer",
 };
 
 /**
- * O que o Estúdio oferece. 7 medidas + 3 razões.
+ * O que o Estúdio oferece. 8 medidas + 3 razões.
  *
  * Fora daqui, com o motivo:
  *   - `reunioes_no_show`, `meta_definida` → migration 20260727140000 não está em prod
@@ -162,6 +169,13 @@ export const ENGINE_METRICS: EngineMetric[] = [
     label: "Negócios na etapa",
     measureRef: { kind: "leaf", id: "leads_na_etapa" },
     cortes: ["total", "etapa", "pipeline"],
+    formatId: "integer",
+  },
+  {
+    id: "leads_sem_responsavel",
+    label: "Leads sem responsável",
+    measureRef: { kind: "leaf", id: "leads_sem_responsavel" },
+    cortes: ["total", "origem", "tag"],
     formatId: "integer",
   },
   {

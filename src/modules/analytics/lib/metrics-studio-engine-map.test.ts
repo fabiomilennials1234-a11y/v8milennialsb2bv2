@@ -19,8 +19,11 @@ import {
  * isMissingSchemaError e derruba a janela em runtime.
  */
 
-/** As 7 medidas do catálogo em PROD, conferidas em 2026-08-11. */
-const MEDIDAS_EM_PROD = [
+/**
+ * Medidas do catálogo. As 7 primeiras estão em PROD (conferidas 2026-08-11);
+ * `leads_sem_responsavel` entra pela migration 20270811120000 (SCRUM-311).
+ */
+const MEDIDAS_DO_CATALOGO = [
   "receita",
   "num_vendas",
   "leads_criados",
@@ -28,16 +31,17 @@ const MEDIDAS_EM_PROD = [
   "reunioes_realizadas",
   "leads_na_etapa",
   "tempo_medio_etapa",
+  "leads_sem_responsavel",
 ];
 
 /** Fora de prod: migration 20260727140000 nunca aplicada. */
 const MEDIDAS_FORA_DE_PROD = ["reunioes_no_show"];
 
 describe("engine map — integridade contra o catálogo do motor", () => {
-  it("toda medida referenciada existe no catálogo de PROD", () => {
+  it("toda medida referenciada existe no catálogo do motor", () => {
     for (const m of ENGINE_METRICS) {
       for (const medida of medidasDe(m)) {
-        expect(MEDIDAS_EM_PROD, `${m.id} → ${medida}`).toContain(medida);
+        expect(MEDIDAS_DO_CATALOGO, `${m.id} → ${medida}`).toContain(medida);
       }
     }
   });
@@ -136,11 +140,19 @@ describe("engine map — decisões do grill", () => {
     }
   });
 
-  it("G1: a oferta é 7 medidas + 3 razões", () => {
+  it("G1: a oferta é 8 medidas + 3 razões", () => {
     const leafs = ENGINE_METRICS.filter((m) => m.measureRef.kind === "leaf");
     const ratios = ENGINE_METRICS.filter((m) => m.measureRef.kind === "ratio");
-    expect(leafs).toHaveLength(7);
+    expect(leafs).toHaveLength(8);
     expect(ratios).toHaveLength(3);
+  });
+
+  it("SCRUM-311: leads_sem_responsavel não oferece corte por pessoa", () => {
+    const m = ENGINE_BY_ID.get("leads_sem_responsavel")!;
+    expect(m.cortes).not.toContain("closer");
+    expect(m.cortes).not.toContain("sdr");
+    // Nem série temporal: é estado atual, não contagem de período.
+    expect(m.cortes).not.toContain("tempo");
   });
 });
 
