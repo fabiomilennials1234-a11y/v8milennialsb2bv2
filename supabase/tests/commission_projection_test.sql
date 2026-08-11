@@ -95,7 +95,7 @@ VALUES
   ('99499499-aaaa-2222-0001-000000000994', '99499499-aaaa-0000-0000-000000000994',
    'Closer C1', 'admin', true, 10, 5),
   ('99499499-aaaa-2222-0002-000000000994', '99499499-aaaa-0000-0000-000000000994',
-   'Closer C2 sem taxa', 'membro', true, NULL, NULL)
+   'Closer C2 sem taxa', 'member', true, NULL, NULL)
 ON CONFLICT (id) DO NOTHING;
 
 -- L1 mrr/C1 (estorno + re-venda), L2 projeto/C1 (won→lost), L3 sem valor/C1,

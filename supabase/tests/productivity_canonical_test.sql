@@ -83,7 +83,7 @@ VALUES
   ('10001000-aaaa-2222-0000-000000001000', '10001000-aaaa-0000-0000-000000001000',
    '10001000-aaaa-1111-0000-000000001000', 'Seller 1', 'admin', true, 'sales'),
   ('10001000-aaaa-2222-0001-000000001000', '10001000-aaaa-0000-0000-000000001000',
-   NULL, 'Seller 2', 'membro', true, 'meetings')
+   NULL, 'Seller 2', 'member', true, 'meetings')
 ON CONFLICT (id) DO NOTHING;
 
 -- lead1 criado DENTRO da janela (novos_leads), responsável = seller1;

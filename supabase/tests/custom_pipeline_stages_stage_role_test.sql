@@ -31,7 +31,7 @@ VALUES ('a1000000-0000-0000-0000-000000000001', 'Org U1 custom governance', 'org
 
 INSERT INTO public.team_members (id, organization_id, user_id, name, role, is_active) VALUES
   ('a1000000-aaaa-2222-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 'a1000000-aaaa-1111-0000-000000000001', 'Admin U1',  'admin',  true),
-  ('a1000000-bbbb-2222-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 'a1000000-bbbb-1111-0000-000000000001', 'Member U1', 'membro', true);
+  ('a1000000-bbbb-2222-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 'a1000000-bbbb-1111-0000-000000000001', 'Member U1', 'member', true);
 
 -- master SEM team_member na org (prova o path master, não o de admin).
 INSERT INTO public.master_users (user_id, is_active)
