@@ -47,7 +47,7 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
   ('INV-2', 100, 'ratchet ceiling: writing DEFINER fns reachable by anon/PUBLIC (static est. <=89 callable writers; tighten then burn down to 0)'),
   ('INV-3', 0,   'zero-tolerance: every org table must have RLS enabled'),
   ('INV-4', 90,  'ratchet ceiling: DEFINER fns lacking SET search_path (static est. ~70; tighten then burn down to 0)'),
-  ('INV-6', 90,  'ratchet ceiling: DEFINER fns reachable by anon/authenticated with no authorization gate (SCRUM-339). PLACEHOLDER — see note below.');
+  ('INV-6', 90,  'ratchet ceiling: DEFINER fns reachable by anon/authenticated with no authorization gate (SCRUM-339). MEASURED 2026-08-11 = 90, zero headroom. 18 of the 90 are reachable by anon. See note below.');
 
 -- ---------------------------------------------------------------------------
 -- INV-6 (SCRUM-339) — provenance of this ceiling, and why it is not 2.
@@ -71,10 +71,17 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
 --   * A live count on a (differently-branched) local database returned 90, not
 --     2, which is the order of magnitude to expect here.
 --
--- So the ceiling above is a deliberate, documented PLACEHOLDER whose only job
--- is to let the assertion run once and print the exact live count through the
--- diag() line in rls_inv6_definer_sem_gate_test.sql. Tighten it to that exact
--- number, in this same PR, before merge.
+-- MEASURED, 2026-08-11: the live count is 90, of which 18 are reachable by
+-- `anon` (no login at all). The ceiling above is set to exactly that — zero
+-- headroom, so the 91st ungated function fails the build. It was measured on an
+-- isolated Supabase stack booted from THIS branch's `supabase/migrations/*`
+-- (own project id, ports 5452x, so the shared local database the other
+-- worktrees use was never touched), which is the same construction CI performs
+-- via `supabase start`. Ledger: 74 versions, matching the branch file count.
+--
+-- Burning this down is SCRUM-339, and it is not a formality: 90 ungated
+-- DEFINER functions reachable from a browser is the population that produced
+-- the 23 closed on 2026-08-11.
 --
 -- Do NOT repeat the INV-2/INV-4 history: those shipped as "conservative upper
 -- bounds, tighten in a follow-up PR" on 2026-06-01 and were never tightened —
