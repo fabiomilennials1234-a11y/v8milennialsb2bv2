@@ -97,17 +97,27 @@
 -- exige privilégio nenhum, então não há razão para a função carregar poder. O
 -- `pg_cron` a executa como o dono do job, e o `service_role` como ele mesmo.
 --
+-- `search_path` com `pg_catalog` ANTES de `public`, e aqui a ordem importa mais
+-- que em outras funções da casa (o baseline costuma pôr `public` primeiro,
+-- inclusive em SECURITY DEFINER). Esta função roda todo dia pelo cron, como o
+-- dono do job — `postgres`, superusuário. Com `public` na frente, um objeto
+-- criado em `public` que sombreasse `has_table_privilege` seria executado com
+-- esse poder. Inverter custa zero: todas as referências aqui são qualificadas.
+--
 -- `relkind = 'r'` — só tabela ordinária, e esta linha é uma LIMITAÇÃO CONHECIDA,
 -- não um descuido. VIEW não tem RLS própria (herda a das tabelas de base), mas
 -- os outros dois casos são reais:
 --
---   'p' (particionada) — o pai não guarda linha, mas SELECT no pai lê as
+--   'p' (particionada)      — o pai não guarda linha, mas SELECT no pai lê as
 --       partições. Pai sem RLS com GRANT vivo é vazamento de verdade, e este
 --       predicado NÃO o vê.
---   'm' (matview)      — pior: matview NÃO ACEITA RLS. Não há `ENABLE ROW LEVEL
---       SECURITY` para ela. Se uma matview exposta aparecer, o único conserto é
---       `REVOKE` — então incluí-la aqui exigiria que o teste parasse de tratar
---       "ligar RLS" como conserto universal.
+--   'm' (matview)           — pior: matview NÃO ACEITA RLS. Não há `ENABLE ROW
+--       LEVEL SECURITY` para ela. Se uma matview exposta aparecer, o único
+--       conserto é `REVOKE` — então incluí-la aqui exigiria que o teste parasse
+--       de tratar "ligar RLS" como conserto universal.
+--   'f' (tabela estrangeira) — mesma forma da matview, e a mais alcançável das
+--       três neste stack: a extensão Wrappers do Supabase cria foreign table, e
+--       nada obriga que ela nasça fora de `public`.
 --
 -- Medido em 11/08: `public` tem 279 relações no schema deste repositório e 289
 -- em produção — TODAS 'r' nos dois. Zero particionadas, zero matviews. Ampliar
@@ -115,10 +125,11 @@
 -- significado de "conserto" no teste sem ter exemplo para exercitar.
 --
 -- E o escopo NÃO fica dependendo de alguém ler este comentário: o teste tem uma
--- asserção de PRECONDIÇÃO que exige que `public` só tenha `relkind = 'r'`. No
--- dia em que a primeira matview ou particionada nascer, ela fica vermelha e
--- força a decisão naquele momento, com o exemplo em mãos. Comentário envelhece;
--- asserção não.
+-- asserção de PRECONDIÇÃO que exige que `public` não contenha relação fora do
+-- escopo. Ela é escrita por NEGAÇÃO — enumera o que está DENTRO — para que
+-- `relkind` que ainda não existe caia nela sem ninguém precisar editá-la. Uma
+-- lista de exclusão só protege contra o que alguém lembrou de listar, e foi
+-- assim que 'f' quase passou. Comentário envelhece; asserção não.
 --
 -- Uma linha por (tabela, grantee): saber que `anon` lê é diferente de saber que
 -- só `authenticated` lê — a primeira é vazamento para a internet, a segunda é
@@ -133,7 +144,7 @@ RETURNS TABLE (
 LANGUAGE sql
 STABLE
 SECURITY INVOKER
-SET search_path TO 'public', 'pg_catalog'
+SET search_path TO 'pg_catalog', 'public'
 AS $fn$
   SELECT
     n.nspname AS schemaname,
@@ -171,13 +182,28 @@ GRANT EXECUTE ON FUNCTION public.inv_public_tables_readable_by_anon() TO service
 --
 -- O array vai limitado a 50 tabelas para o payload não crescer sem teto; o
 -- `total` continua sendo a contagem REAL, para que truncar a lista nunca
--- pareça um número menor de violações.
+-- pareça um número menor de violações. Quem precisar da lista inteira chama o
+-- detector direto — `service_role` tem EXECUTE.
+--
+-- SOBRE O INSERT EM `runtime_logs`, e por que `SECURITY INVOKER` basta:
+--   - `service_role` tem `GRANT ALL ON TABLE public.runtime_logs` (baseline:45705);
+--   - `runtime_logs` tem RLS, e a policy `service_role_all_runtime_logs` é FOR
+--     ALL com `USING (current_setting('role', true) = 'service_role')` e SEM
+--     `WITH CHECK` — nesse caso o Postgres usa a USING COMO WITH CHECK no
+--     INSERT. Pelo PostgREST o GUC casa, porque ele faz `SET LOCAL ROLE`.
+--
+-- ARMADILHA A REGISTRAR: numa conexão DIRETA como `service_role` (psql, pooler)
+-- sem `SET ROLE`, `current_setting('role')` é `none`, a policy dá falso, e o
+-- INSERT só passa porque `service_role` tem BYPASSRLS no Supabase. Se um dia
+-- esse atributo sair da role, este caminho morre CALADO — o cron continua
+-- rodando e o alarme para de registrar. Quem investigar isso no futuro começa
+-- por aqui, e não por uma caça ao tesouro.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.inv_scan_public_tables_readable_by_anon()
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY INVOKER
-SET search_path TO 'public', 'pg_catalog'
+SET search_path TO 'pg_catalog', 'public'
 AS $fn$
 DECLARE
   v_violacoes jsonb;

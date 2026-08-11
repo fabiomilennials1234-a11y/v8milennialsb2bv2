@@ -66,35 +66,49 @@ SET LOCAL role postgres;
 -- ===========================================================================
 -- (PRECONDIÇÃO) o escopo do invariante se defende sozinho.
 --
--- INV-5 olha `relkind = 'r'` — tabela ordinária. Duas outras coisas em `public`
--- podem guardar linha e receber GRANT, e o detector é CEGO para as duas:
+-- INV-5 olha `relkind = 'r'` — tabela ordinária. Outras coisas em `public`
+-- guardam linha, recebem GRANT e ficam FORA do alcance do detector:
 --
---   'p' (particionada) — o pai não guarda linha, mas SELECT no pai lê as
+--   'p' (particionada)   — o pai não guarda linha, mas SELECT no pai lê as
 --       partições. Pai sem RLS com GRANT vivo vaza, e INV-5 não vê.
---   'm' (matview)      — pior: matview NÃO ACEITA RLS. Não existe `ENABLE ROW
+--   'm' (matview)        — pior: matview NÃO ACEITA RLS. Não existe `ENABLE ROW
 --       LEVEL SECURITY` para ela, então incluí-la mudaria o significado de
 --       "conserto" neste arquivo: o CONSERTO 1 abaixo deixaria de valer
 --       universalmente, e teste cujo conserto vale "quase sempre" é pior que
 --       teste com escopo declarado.
+--   'f' (tabela estrangeira) — mesma forma da matview: expõe linha, recebe
+--       GRANT, e também NÃO aceita RLS. E é a mais alcançável das três neste
+--       stack: a extensão Wrappers do Supabase cria foreign table, e nada
+--       obriga que ela nasça fora de `public`.
 --
--- Medido em 11/08: `public` tem 279 relações no schema deste repositório e 289
--- em produção — TODAS 'r' nos dois. Zero particionada, zero matview. Ampliar o
+-- A LISTA É DE NEGAÇÃO, não de afirmação, e isso é o ponto. Enumerar o que está
+-- fora ('p','m','f') só protege contra o que alguém lembrou de listar — foi
+-- exatamente assim que 'f' quase passou. Enumerando o que está DENTRO, qualquer
+-- `relkind` novo cai na asserção sem ninguém precisar editá-la.
+--
+-- Medido em 11/08: `public` tem 279 relações no schema deste repositório
+-- (279 'r' + 10 'v' + 4 'S' + 1067 'i') e 289 tabelas em produção — todas 'r'
+-- nos dois. Zero particionada, zero matview, zero estrangeira. Ampliar o
 -- predicado hoje seria escrever regra para caso que não existe, sem exemplo
 -- real para exercitar.
 --
 -- Daí esta asserção, em vez de uma nota de rodapé: comentário envelhece,
--- asserção não. No dia em que a primeira matview ou tabela particionada nascer
--- em `public`, este teste fica VERMELHO e força a decisão NAQUELE momento — com
--- o exemplo em mãos, que é exatamente o que falta hoje.
+-- asserção não. No dia em que a primeira nascer em `public`, este teste fica
+-- VERMELHO e força a decisão NAQUELE momento — com o exemplo em mãos, que é
+-- exatamente o que falta hoje.
 -- ===========================================================================
 SELECT is(
   (SELECT count(*)::int
      FROM pg_class c
      JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname = 'public'
-      AND c.relkind IN ('p', 'm')),
+      -- Dentro do escopo declarado: tabela ordinária (o que INV-5 cobre), view
+      -- (não tem RLS própria — herda a das tabelas de base), e o que não guarda
+      -- linha de dado: índice, índice particionado, sequence, tipo composto e
+      -- TOAST.
+      AND c.relkind NOT IN ('r', 'v', 'i', 'I', 'S', 'c', 't')),
   0,
-  '(PRECONDIÇÃO) public só tem tabela ordinária — se quebrar: nasceu relação que INV-5 NÃO cobre (particionada ou matview). Decidir ali: ampliar o detector (matview não aceita RLS, então o conserto muda) ou excluir a relação explicitamente. Não deixar passar em silêncio');
+  '(PRECONDIÇÃO) public não tem relação FORA do escopo do INV-5 — se quebrar: nasceu particionada, matview ou tabela estrangeira. Decidir ali: ampliar o detector (matview e estrangeira NÃO aceitam RLS, então o conserto muda) ou excluir a relação explicitamente. Não deixar passar em silêncio');
 
 -- ===========================================================================
 -- (HARD-0) o schema montado das migrations não tem NENHUMA violação.
