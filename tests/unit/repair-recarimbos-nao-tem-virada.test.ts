@@ -23,7 +23,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const LISTA = join(process.cwd(), "scripts", "repair-recarimbos-virada.txt");
@@ -76,7 +76,6 @@ describe("lista de repair do passo 4", () => {
     // Versão na lista sem arquivo correspondente é erro de digitação — e um
     // repair de versão inventada polui o ledger com uma linha que nunca vai
     // parear com nada.
-    const { readdirSync } = require("node:fs") as typeof import("node:fs");
     const arquivos = readdirSync(join(process.cwd(), "supabase", "migrations"))
       .filter((f) => f.endsWith(".sql"))
       .map((f) => f.slice(0, 14));
