@@ -41,6 +41,34 @@ export default function MetricsStudio() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
+  // Altura do painel MEDIDA, não chutada. A primeira versão usava
+  // `h-[calc(100vh-15rem)]`: 240px fixos contra ~142px de cromo real, o que
+  // deixava ~98px de área morta embaixo. E o padding do <main> é responsivo
+  // (py-5 sm:py-6 lg:py-8), então qualquer constante erra em algum breakpoint.
+  // Aqui o topo do painel é lido do layout e o rodapé respeita o padding real.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [panelHeight, setPanelHeight] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    const medir = () => {
+      const el = panelRef.current;
+      if (!el) return;
+      const topo = el.getBoundingClientRect().top;
+      // O padding do layout está num DIV interno do <main>, não no <main> —
+      // por isso subimos até achar quem de fato tem padding-bottom, em vez de
+      // ler direto do <main> (que devolve 0 e cola o painel na borda).
+      let respiro = 0;
+      for (let n = el.parentElement, i = 0; n && i < 6; n = n.parentElement, i++) {
+        const p = parseFloat(getComputedStyle(n).paddingBottom) || 0;
+        if (p > 0) { respiro = p; break; }
+      }
+      setPanelHeight(Math.max(420, window.innerHeight - topo - respiro));
+    };
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, []);
+
   useLayoutEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
@@ -146,9 +174,13 @@ export default function MetricsStudio() {
         </div>
       </header>
 
-      {/* Painel emoldurado. Altura própria (não o viewport): desconta a top bar,
-          o padding do <main> e este cabeçalho, com piso para telas baixas. */}
-      <div className="flex h-[calc(100vh-15rem)] min-h-[520px] overflow-hidden rounded-xl border border-border/70 bg-card/30">
+      {/* Painel emoldurado: ocupa toda a altura restante da página, medida em
+          runtime. Enquanto a medição não chega, cai num piso razoável. */}
+      <div
+        ref={panelRef}
+        style={panelHeight ? { height: panelHeight } : undefined}
+        className="flex min-h-[420px] overflow-hidden rounded-xl border border-border/70 bg-card/30"
+      >
         {sidebarOpen && (
           <MetricsStudioSidebar openMetricIds={studio.openMetricIds} onAdd={handleAdd} />
         )}
