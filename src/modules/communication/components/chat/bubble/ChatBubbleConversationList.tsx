@@ -20,6 +20,7 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizePhone } from "@/lib/normalizePhone";
+import { resolveChipInstanceIds } from "@/modules/communication/lib/chipInstanceIds";
 import type { ChatContact, ChatContactTag, WhatsAppInstanceForUser } from "@/modules/communication/hooks/chat/types";
 
 const VIRTUALIZE_THRESHOLD = 50;
@@ -51,6 +52,12 @@ async function fetchContactsForInstance(
   organizationId: string,
   instanceId: string,
 ): Promise<ChatContact[]> {
+  // Chip, não instância: histórico de instância excluída some da bolha pelo
+  // mesmo motivo que sumia do /chat. A varredura por chip depende da migration
+  // (apply MANUAL); antes dela isto degrada pra instância viva, que é o
+  // comportamento de hoje. Ver `chipInstanceIds.ts`.
+  const instanceIds = await resolveChipInstanceIds(organizationId, instanceId);
+
   const { data, error } = await supabase
     .from("whatsapp_messages")
     .select(`
@@ -63,7 +70,7 @@ async function fetchContactsForInstance(
       leads(name)
     `)
     .eq("organization_id", organizationId)
-    .eq("instance_id", instanceId)
+    .in("instance_id", [...instanceIds])
     .order("timestamp", { ascending: false });
   if (error) throw error;
 
@@ -154,7 +161,7 @@ async function fetchContactsForInstance(
     .from("whatsapp_messages")
     .select("phone_number, timestamp")
     .eq("organization_id", organizationId)
-    .eq("instance_id", instanceId)
+    .in("instance_id", [...instanceIds])
     .eq("direction", "incoming")
     .order("timestamp", { ascending: false });
 
@@ -172,7 +179,9 @@ async function fetchContactsForInstance(
     c.unread_count = unreadByPhone[k] ?? 0;
   }
 
-  // Conversation metadata pra filtrar arquivadas/deletadas
+  // Conversation metadata pra filtrar arquivadas/deletadas. Segue na instância
+  // viva: a FK de `whatsapp_conversations` é ON DELETE CASCADE, então instância
+  // excluída não deixa linha pra varrer — não há chip a resolver aqui.
   const { data: convMeta } = await supabase
     .from("whatsapp_conversations")
     .select("id, phone_number, archived_at, deleted_at")

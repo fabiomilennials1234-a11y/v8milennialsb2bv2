@@ -13,21 +13,33 @@
  *    (`max_rows = 1000`) cortava em silêncio — sobravam as 1000 mensagens mais
  *    ANTIGAS e a conversa congelava numa data passada. Fix: janela DESC +
  *    `.limit()` + reverse, ancorada na mensagem mais recente.
+ *
+ * 3) "As mensagens somem quando a instância é excluída". Causa: a FK era
+ *    `ON DELETE SET NULL` e a query filtrava `.eq("instance_id", <viva>)`, então
+ *    a conversa inteira saía da tela. Fix: filtrar pelo CONJUNTO de ids do chip
+ *    — que depende da migration (apply manual) e degrada pra instância viva
+ *    enquanto ela não estiver em prod. Os dois estados estão cobertos abaixo.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Builder supabase inspecionável — cadeia:
-// from().select().eq().eq().eq().order().order().limit()
+// from().select().eq().in().eq().order().order().limit()
 const queryResult: { data: unknown[]; error: unknown } = { data: [], error: null };
 const builder = {
   select: vi.fn(() => builder),
   eq: vi.fn(() => builder),
+  in: vi.fn(() => builder),
   order: vi.fn(() => builder),
   limit: vi.fn(() => Promise.resolve(queryResult)),
 };
 const fromMock = vi.fn((..._args: unknown[]) => builder);
+const rpcResult: { data: unknown; error: unknown } = { data: null, error: null };
+const rpcMock = vi.fn((..._args: unknown[]) => Promise.resolve(rpcResult));
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { from: (...a: unknown[]) => fromMock(...a) },
+  supabase: {
+    from: (...a: unknown[]) => fromMock(...a),
+    rpc: (...a: unknown[]) => rpcMock(...a),
+  },
 }));
 
 import {
@@ -35,20 +47,34 @@ import {
   WHATSAPP_MESSAGE_COLUMNS,
   THREAD_MESSAGE_LIMIT,
 } from "./whatsappMessagesQuery";
+import { clearChipInstanceIdsCache } from "./chipInstanceIds";
 
 beforeEach(() => {
   queryResult.data = [];
   queryResult.error = null;
+  rpcResult.data = null;
+  rpcResult.error = null;
   fromMock.mockClear();
+  rpcMock.mockClear();
   builder.select.mockClear();
   builder.eq.mockClear();
+  builder.in.mockClear();
   builder.order.mockClear();
   builder.limit.mockClear();
+  clearChipInstanceIdsCache();
 });
 
 /** Todos os `.eq(col, val)` chamados, como pares [col, val]. */
 function eqCalls(): Array<[string, unknown]> {
   return builder.eq.mock.calls as Array<[string, unknown]>;
+}
+
+/** Valores passados no `.in("instance_id", …)`. */
+function instanceIdFilter(): unknown {
+  const call = (builder.in.mock.calls as Array<[string, unknown]>).find(
+    ([col]) => col === "instance_id",
+  );
+  return call?.[1];
 }
 
 describe("fetchConversationMessages — filtro por telefone normalizado", () => {
@@ -67,7 +93,9 @@ describe("fetchConversationMessages — filtro por telefone normalizado", () => 
     // O bug era filtrar por phone_number exato — garante que não volta.
     expect(cols).not.toContain("phone_number");
     expect(eqCalls()).toContainEqual(["organization_id", "org-1"]);
-    expect(eqCalls()).toContainEqual(["instance_id", "inst-1"]);
+    // Instância saiu do `.eq` e virou conjunto — nunca pode voltar pro igual.
+    expect(cols).not.toContain("instance_id");
+    expect(instanceIdFilter()).toEqual(["inst-1"]);
   });
 
   it("formatos divergentes (com/sem 55, com/sem 9º dígito) colapsam no MESMO filtro", async () => {
@@ -171,5 +199,51 @@ describe("fetchConversationMessages — janela ancorada nas mensagens recentes",
       phoneNumber: "5515992486581",
     });
     expect(res).toEqual([]);
+  });
+});
+
+describe("fetchConversationMessages — thread por chip, não por instância", () => {
+  it("varre a instância viva MAIS as excluídas do mesmo chip", async () => {
+    rpcResult.data = ["inst-1", "morta-a", "morta-b"];
+
+    await fetchConversationMessages({
+      organizationId: "org-1",
+      instanceId: "inst-1",
+      phoneNumber: "5515992486581",
+    });
+
+    expect(rpcMock).toHaveBeenCalledWith("whatsapp_chip_instance_ids", {
+      p_org: "org-1",
+      p_instance: "inst-1",
+    });
+    expect(instanceIdFilter()).toEqual(["inst-1", "morta-a", "morta-b"]);
+  });
+
+  it("RPC ausente em prod (deploy-order) NÃO derruba a thread — cai na instância viva", async () => {
+    // É o estado real entre o merge do front e o apply manual da migration.
+    rpcResult.error = { message: 'function whatsapp_chip_instance_ids does not exist' };
+    queryResult.data = [{ id: "a", timestamp: "2026-08-04T10:00:00Z" }];
+
+    const res = await fetchConversationMessages({
+      organizationId: "org-1",
+      instanceId: "inst-1",
+      phoneNumber: "5515992486581",
+    });
+
+    expect(instanceIdFilter()).toEqual(["inst-1"]);
+    expect(res).toHaveLength(1);
+  });
+
+  it("tolerar a falha do chip não pode virar tolerar falha de mensagem", async () => {
+    rpcResult.error = { message: "boom" };
+    queryResult.error = new Error("query morreu");
+
+    await expect(
+      fetchConversationMessages({
+        organizationId: "org-1",
+        instanceId: "inst-1",
+        phoneNumber: "5515992486581",
+      }),
+    ).rejects.toThrow("query morreu");
   });
 });
