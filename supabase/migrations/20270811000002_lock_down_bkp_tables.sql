@@ -43,7 +43,18 @@
 --
 -- ─── O LAÇO É GENÉRICO DE PROPÓSITO ─────────────────────────────────────────
 --
--- Cobre estas 6 e qualquer `_bkp_%` que nasça depois pelo mesmo caminho. Em
+-- AS TRÊS CONVENÇÕES: este banco nomeia backup de três jeitos — `_bkp_*`,
+-- `_backup_*` e `backup_*` (esta sem underscore inicial). O predicado cobre as
+-- três, e `relkind IN ('r','p','m')` impede que backup feito como matview ou
+-- tabela particionada passe reto.
+--
+-- A primeira versão cobria só `_bkp_%` + relkind 'r'. Medido: deixava
+-- `_backup_bertin_20260608_pipe_entries` e `_backup_merge_agendamentos_milennials`
+-- COM privilégio para anon e authenticated. As duas têm RLS ligada com zero
+-- policy, então a RLS já barrava as linhas e não havia vazamento ativo — mas
+-- ficavam com UMA camada onde as outras dez têm duas. Achado pela revisão.
+--
+-- Cobre as 12 e qualquer backup que nasça depois pelo mesmo caminho. Em
 -- banco novo (`supabase db reset`, CI) não há o que casar e o bloco é no-op —
 -- estas tabelas nunca existiram em migration nenhuma.
 --
@@ -63,13 +74,18 @@ BEGIN
       FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE n.nspname = 'public'
-       AND c.relkind = 'r'
-       AND c.relname LIKE '\_bkp\_%'
+       AND c.relkind IN ('r', 'p', 'm')
+       AND c.relname ~ '^_?b(kp|ackup)_'
   LOOP
     EXECUTE format('REVOKE ALL ON TABLE %s FROM PUBLIC, anon, authenticated', r.tbl);
-    EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', r.tbl);
+
+    -- matview não aceita RLS; só tabela (ordinária ou particionada).
+    IF (SELECT c2.relkind FROM pg_class c2 WHERE c2.oid = r.tbl) IN ('r', 'p') THEN
+      EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', r.tbl);
+    END IF;
+
     v_n := v_n + 1;
   END LOOP;
 
-  RAISE NOTICE 'tabelas _bkp_ fechadas: %', v_n;
+  RAISE NOTICE 'tabelas de backup fechadas (3 convenções): %', v_n;
 END $$;
