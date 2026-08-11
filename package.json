@@ -130,6 +130,7 @@
     "autoprefixer": "^10.4.21",
     "dependency-cruiser": "^17.4.2",
     "dotenv": "^16.4.5",
+    "esbuild": "^0.28.2",
     "eslint": "^9.32.0",
     "eslint-plugin-boundaries": "^6.0.2",
     "eslint-plugin-react-hooks": "^5.2.0",
