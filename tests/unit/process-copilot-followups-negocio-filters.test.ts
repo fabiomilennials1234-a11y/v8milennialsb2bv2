@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Suíte de dublês: estado de fixture e mocks de borda do handler de followups. O `any` está nas formas de mock, não no código sob teste. */
 // @vitest-environment node
 /**
  * POR QUE ESTE TESTE EXISTE — inv:H4-03 (SCRUM-97)
@@ -98,7 +99,7 @@ const state: {
 
 // ── Mocks de borda (tudo que NÃO é a decisão sob teste) ──────────────────────
 vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({
-  withErrorBoundary: (_n: string, h: Function) => h,
+  withErrorBoundary: (_n: string, h: (req: Request) => Promise<Response>) => h,
 }));
 vi.mock("../../supabase/functions/_shared/cors.ts", () => ({
   getCorsHeaders: () => ({ "Access-Control-Allow-Origin": "*" }),
