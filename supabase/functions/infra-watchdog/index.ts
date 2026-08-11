@@ -34,7 +34,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
-import { buildInv5AlertText, type Inv5Payload } from "../_shared/inv5-alert.ts";
+import { buildInv5AlertText, buildInv5PayloadFromRows } from "../_shared/inv5-alert.ts";
 
 // Silêncio entre avisos do mesmo assunto. Um incidente de banco dura dezenas de
 // minutos; avisar a cada 2 seria ruído, e ruído treina o time a ignorar.
@@ -44,14 +44,18 @@ const ALERT_COOLDOWN_MINUTES = 30;
 // oscilação de rede e ainda pega uma credencial morta no mesmo dia.
 const NOTIFY_FAILURE_STREAK = 3;
 
-type Alert = { key: string; text: string };
+type Alert = { key: string; text: string; cooldownMinutes?: number };
 
 /**
  * Um assunto só volta a alertar depois do silêncio. O carimbo mora em
  * `cron_config` porque a função é stateless e roda em instância nova a cada
  * disparo.
  */
-async function shouldAlert(supabase: any, key: string): Promise<boolean> {
+async function shouldAlert(
+  supabase: any,
+  key: string,
+  cooldownMinutes: number = ALERT_COOLDOWN_MINUTES,
+): Promise<boolean> {
   const configKey = `watchdog_last_alert_${key}`;
   const { data } = await supabase
     .from("cron_config")
@@ -61,7 +65,7 @@ async function shouldAlert(supabase: any, key: string): Promise<boolean> {
 
   if (data?.value) {
     const last = Date.parse(data.value);
-    if (Number.isFinite(last) && Date.now() - last < ALERT_COOLDOWN_MINUTES * 60_000) {
+    if (Number.isFinite(last) && Date.now() - last < cooldownMinutes * 60_000) {
       return false;
     }
   }
@@ -192,11 +196,27 @@ async function checkRunawayBackfill(supabase: any): Promise<Alert | null> {
   };
 }
 
-// Janela de leitura do resultado da varredura do INV-5. Ela roda 1x/dia (04:17),
-// então 24h cobre a passada mais recente com folga — e a folga importa: se o
-// watchdog estiver fora do ar às 04:17, o achado continua sendo visto quando ele
-// voltar, em vez de se perder por ter nascido fora de uma janela apertada.
+// Janela em que o resultado da varredura do INV-5 ainda merece ser reconferido.
+// Ela roda 1x/dia (04:17), então 24h cobre a passada mais recente com folga — e
+// a folga é segura agora que o alerta lê o ESTADO ATUAL: janela larga não
+// significa mais aviso sobre estado velho, só significa "vale reconferir".
 const INV5_LOOKBACK_HOURS = 24;
+
+// Cooldown PRÓPRIO desta sonda: 24h, não os 30 minutos do resto do arquivo.
+//
+// `shouldAlert` é cooldown DESLIZANTE — ele regrava o carimbo toda vez que
+// libera. Com 30 minutos e um watchdog que roda a cada 2, uma exposição que
+// dure o dia inteiro dispara ~48 avisos, e nenhuma escolha de chave conserta
+// isso: o que manda é a relação entre o cooldown e a duração do problema.
+// (A versão anterior deste bloco usava chave por linha de log achando que
+// resolvia. Não resolvia: a varredura é diária, então a chave era constante por
+// 24h — exatamente o mesmo resultado da chave fixa.)
+//
+// 24h é a cadência certa aqui: consertar exposição exige mão humana no banco, e
+// um lembrete por dia enquanto durar é lembrete; de meia em meia hora é ruído,
+// e ruído treina o time a ignorar o canal — a lição que o cabeçalho deste
+// arquivo existe para registrar.
+const INV5_ALERT_COOLDOWN_MINUTES = 24 * 60;
 
 /**
  * Alguma tabela de `public` está legível por `anon`/`authenticated` sem RLS?
@@ -207,27 +227,25 @@ const INV5_LOOKBACK_HOURS = 24;
  * que o cabeçalho deste arquivo documenta como **não lida**. Detectar não é
  * alertar: sem este consumidor, o INV-5 rodaria às 04:17, registraria o
  * vazamento num lugar que ninguém abre, e a falha que ele existe para impedir —
- * exposição durando semanas sem ninguém saber — se repetiria idêntica, só que
- * com a documentação da lição aberta ao lado.
+ * exposição durando semanas sem ninguém saber — se repetiria idêntica.
  *
- * O texto mora em `_shared/inv5-alert.ts` para ser testado sem subir a função:
- * o requisito de dizer QUAL tabela e QUANTAS é o que separa alarme de ruído, e
- * regride calado se ninguém o exercitar.
+ * DOIS PASSOS, e a ordem é o ponto:
  *
- * A chave do alerta inclui o id da linha da varredura, e isso é deliberado: o
- * `ALERT_COOLDOWN_MINUTES` é de 30 minutos e o watchdog roda a cada 2, então uma
- * chave fixa avisaria ~48 vezes pelo mesmo achado enquanto a linha estivesse na
- * janela de 24h. Com a chave por linha, cada varredura avisa UMA vez; se a
- * exposição continuar amanhã, a varredura do dia seguinte gera outra linha e o
- * lembrete volta — uma vez por dia, que é a cadência certa para algo que exige
- * intervenção humana no banco.
+ *   1. a linha de log diz que a varredura mais recente ACHOU alguma coisa —
+ *      é o gatilho, e só;
+ *   2. o detector é chamado AO VIVO, e o alerta fala do estado de AGORA.
+ *
+ * Alertar a partir da linha de log seria alertar sobre história: exposição
+ * consertada às 09:00 continuaria na janela até a varredura do dia seguinte, e
+ * o watchdog seguiria avisando sobre problema que já não existe. Ler o estado
+ * mata isso na raiz — se alguém consertou, a sonda cala na mesma hora.
  */
 async function checkExposedTables(supabase: any): Promise<Alert | null> {
   const desde = new Date(Date.now() - INV5_LOOKBACK_HOURS * 3_600_000).toISOString();
 
-  const { data } = await supabase
+  const { data: varredura } = await supabase
     .from("runtime_logs")
-    .select("id, payload_snapshot, created_at")
+    .select("created_at")
     .eq("module", "seguranca")
     .eq("action", "inv5_tabela_publica_legivel_por_anon")
     .eq("status", "error")
@@ -238,12 +256,21 @@ async function checkExposedTables(supabase: any): Promise<Alert | null> {
   // Silêncio é o estado normal, e fica sem resposta de propósito: nenhum "tudo
   // ok" diário. Canal que fala todo dia treina o time a ignorá-lo, que foi
   // exatamente como o aviso de suporte morreu 23 dias sem ninguém ver.
-  if (!data || data.length === 0) return null;
+  if (!varredura || varredura.length === 0) return null;
 
-  const linha = data[0];
+  // O estado de AGORA. `service_role` tem EXECUTE no detector (a migration
+  // concede) e o watchdog já usa cliente `service_role`.
+  const { data: linhas, error } = await supabase.rpc("inv_public_tables_readable_by_anon");
+  if (error) return null;
+
+  const payload = buildInv5PayloadFromRows(linhas ?? []);
+  // Consertado entre a varredura e agora: cala.
+  if (payload.total === 0) return null;
+
   return {
-    key: `inv5_exposed_${String(linha.id).slice(0, 8)}`,
-    text: buildInv5AlertText((linha.payload_snapshot ?? {}) as Inv5Payload, linha.created_at),
+    key: "inv5_exposed",
+    cooldownMinutes: INV5_ALERT_COOLDOWN_MINUTES,
+    text: buildInv5AlertText(payload, varredura[0].created_at),
   };
 }
 
@@ -316,7 +343,7 @@ Deno.serve(
     const failed: string[] = [];
 
     for (const alert of alerts) {
-      if (!(await shouldAlert(supabase, alert.key))) {
+      if (!(await shouldAlert(supabase, alert.key, alert.cooldownMinutes))) {
         suppressed.push(alert.key);
         continue;
       }

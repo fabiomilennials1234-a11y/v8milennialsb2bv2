@@ -2,7 +2,11 @@ import {
   assertEquals,
   assertStringIncludes,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { buildInv5AlertText, INV5_MAX_TABELAS_NO_TEXTO } from "./inv5-alert.ts";
+import {
+  buildInv5AlertText,
+  buildInv5PayloadFromRows,
+  INV5_MAX_TABELAS_NO_TEXTO,
+} from "./inv5-alert.ts";
 
 const QUANDO = "2026-08-12T04:17:03.221Z";
 
@@ -65,5 +69,34 @@ Deno.test("carrega o conserto, e proíbe o conserto errado", () => {
 
 Deno.test("carimba quando a varredura rodou", () => {
   const texto = buildInv5AlertText({ total: 1, violacoes: [{ tabela: "x", grantees: ["anon"] }] }, QUANDO);
-  assertStringIncludes(texto, "2026-08-12 04:17 UTC");
+  assertStringIncludes(texto, "Varredura que disparou: 2026-08-12 04:17 UTC");
+  assertStringIncludes(texto, "Estado reconferido agora");
+});
+
+Deno.test("LACUNA v3: total sem detalhe não anuncia resto — '…e mais 137' abaixo de 'payload sem detalhe' lê como número errado", () => {
+  const texto = buildInv5AlertText({ total: 137, violacoes: [] }, QUANDO);
+  assertStringIncludes(texto, "137 tabelas estão legíveis");
+  assertStringIncludes(texto, "payload sem detalhe");
+  assertEquals(texto.includes("…e mais"), false);
+});
+
+Deno.test("linhas vivas do detector viram uma entrada por TABELA, com os grantees juntos", () => {
+  const payload = buildInv5PayloadFromRows([
+    { schemaname: "public", tablename: "_bkp_x", grantee: "authenticated" },
+    { schemaname: "public", tablename: "_bkp_x", grantee: "anon" },
+    { schemaname: "public", tablename: "_bkp_a", grantee: "anon" },
+  ]);
+  // 3 linhas, 2 tabelas: o alerta conta TABELA, não par tabela+grantee — senão
+  // uma tabela exposta aos dois roles vira "2 tabelas expostas".
+  assertEquals(payload.total, 2);
+  assertEquals(payload.violacoes?.[0].tabela, "_bkp_a");
+  assertEquals(payload.violacoes?.[1].grantees, ["anon", "authenticated"]);
+});
+
+Deno.test("detector vazio é total 0 — é o sinal de 'consertaram, cala a boca'", () => {
+  assertEquals(buildInv5PayloadFromRows([]).total, 0);
+});
+
+Deno.test("linha sem tablename não vira violação fantasma", () => {
+  assertEquals(buildInv5PayloadFromRows([{ grantee: "anon" } as never]).total, 0);
 });
