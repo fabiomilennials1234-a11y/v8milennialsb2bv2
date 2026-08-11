@@ -166,10 +166,7 @@ export type RuntimeLogModule =
   | "agent"
   | "analytics"
   | "auth"
-  // SCRUM-289: o checkout e a área de billing do admin passam a registrar aqui.
-  // `runtime_logs.module` não tem CHECK no banco (só `status` tem), então o
-  // vocabulário fechado é ESTE — e é o único lugar que impede o próximo módulo
-  // de nascer como "billling" e sumir das buscas.
+  // SCRUM-289: checkout e a área de billing do admin registram aqui.
   | "billing"
   | "calendar"
   | "campaign"
@@ -188,6 +185,9 @@ export type RuntimeLogModule =
   | "pipe_dispatch"
   | "pipe_distribution"
   | "scheduled_user_messages"
+  // O INV-5 (migration 20270811120000) JÁ escreve `module='seguranca'` e o
+  // banco aceita — o vocabulário estava furado do lado que de fato o guarda.
+  | "seguranca"
   | "support"
   | "sz_chat"
   | "tts"

@@ -64,6 +64,29 @@ describe("billing-payment-link — o que a resposta NÃO carrega", () => {
     expect(serializado).not.toContain("payment_method");
   });
 
+  it("fixa o CONJUNTO de chaves em cada nível — a superfície não cresce sem alguém decidir", () => {
+    // O teste de VALOR acima pega "um segredo conhecido vazou". Este pega outra
+    // mutação: "a superfície CRESCEU". Um campo novo com dado interno e SEM
+    // valor proibido — payment_method, included_seats, base_cents, seat_cents,
+    // que ficaram de fora por escolha e não por proibição — passaria liso pelo
+    // primeiro. Este quebra no dia em que alguém acrescenta campo, e a quebra é
+    // o momento de decidir se aquele campo é público.
+    const body = shapePublicLink(RESOLVIDO, PLANO, "Milennials", AGORA);
+
+    expect(Object.keys(body).sort()).toEqual(["link", "state"]);
+    expect(Object.keys(body.link!).sort()).toEqual([
+      "amount_cents", "display_name", "expires_at", "next_charge_preview_at",
+      "plan", "target_kind", "totals",
+    ]);
+    expect(Object.keys(body.link!.plan).sort()).toEqual([
+      "billing_cycle", "cycle_months", "name", "seats", "slug",
+    ]);
+    expect(Object.keys(body.link!.totals).sort()).toEqual([
+      "charge_cents", "coupon_discount_cents", "cycle_discount_cents",
+      "manual_discount_cents", "monthly_cents", "subtotal_cents",
+    ]);
+  });
+
   it("não devolve `message` — a copy é do front", () => {
     const body = shapePublicLink({ ok: false, code: "link_expired" }, PLANO, null, AGORA);
     expect(body).toEqual({ state: "expired" });

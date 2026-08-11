@@ -95,6 +95,21 @@ Deno.serve(
 
     // Freio quebrado NÃO vira porta aberta: sem conseguir contar, recusa. É o
     // lado seguro para errar numa porta sem autenticação.
+    //
+    // Para FORA, as duas causas devolvem o mesmo 429 — o visitante não tem que
+    // aprender que o nosso freio quebrou. Para DENTRO, elas se separam: teto
+    // estourado é o freio funcionando; erro de infra é o freio MORTO, e sem
+    // registro próprio ele fecharia o checkout inteiro sem deixar rastro.
+    if (erroTeto) {
+      await logRuntime({
+        module: "billing",
+        action: "public_link_rate_limit",
+        status: "error",
+        errorMessage: erroTeto.message,
+        payloadSnapshot: { fail_closed: true },
+      });
+    }
+
     if (erroTeto || dentroDoTeto === false) {
       return new Response(JSON.stringify({ error: "rate_limited" }), {
         status: 429,
@@ -153,7 +168,11 @@ Deno.serve(
     await logRuntime({
       module: "billing",
       action: "public_link_resolve",
-      status: "success",
+      // `not_found` é onde uma VARREDURA aparece: rajada do mesmo IP é o sinal
+      // de enumeração. Gravado como `success`, esse sinal ficaria enterrado no
+      // mesmo balde do caso feliz — e quem procura ataque não filtra por
+      // sucesso. `skipped` o separa sem mudar nada para o visitante.
+      status: body.state === "not_found" ? "skipped" : "success",
       payloadSnapshot: {
         state: body.state,
         // Resolvido, o rastro é o id do link. Não resolvido, o prefixo do hash
