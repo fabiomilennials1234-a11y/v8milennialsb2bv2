@@ -1,19 +1,23 @@
 import { forwardRef } from "react";
 import { LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { METRIC_BY_ID, type ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
+import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
+import { ENGINE_BY_ID, type MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
+import type { StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
 import type { StudioWindow } from "@/modules/analytics/hooks/useMetricsStudio";
 import { MetricWindow } from "./MetricWindow";
 
 interface MetricsCanvasProps {
   windows: StudioWindow[];
-  periodKey: string;
+  period: StudioPeriod;
+  podeVerPorPessoa: boolean;
   selectedId: string | null;
   size: { width: number; height: number };
   onSelect: (id: string | null) => void;
   onMove: (id: string, x: number, y: number) => void;
   onResize: (id: string, w: number, h: number) => void;
   onChart: (id: string, chart: ChartKind) => void;
+  onCorte: (id: string, corte: MetricRecorte) => void;
   onRemove: (id: string) => void;
 }
 
@@ -23,7 +27,7 @@ interface MetricsCanvasProps {
  * a malha orienta, não prende.
  */
 export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(function MetricsCanvas(
-  { windows, periodKey, selectedId, size, onSelect, onMove, onResize, onChart, onRemove },
+  { windows, period, podeVerPorPessoa, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
   ref,
 ) {
   const empty = windows.length === 0;
@@ -62,20 +66,22 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
       )}
 
       {windows.map((win) => {
-        const metric = METRIC_BY_ID.get(win.metricId);
+        const metric = ENGINE_BY_ID.get(win.metricId);
         if (!metric) return null;
         return (
           <MetricWindow
             key={win.id}
             win={win}
             metric={metric}
-            periodKey={periodKey}
+            period={period}
+            podeVerPorPessoa={podeVerPorPessoa}
             selected={selectedId === win.id}
             canvas={size}
             onSelect={onSelect}
             onMove={onMove}
             onResize={onResize}
             onChart={onChart}
+            onCorte={onCorte}
             onRemove={onRemove}
           />
         );

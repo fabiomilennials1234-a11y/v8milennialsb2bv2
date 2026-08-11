@@ -5,16 +5,10 @@ import { cn } from "@/lib/utils";
 import { MetricsCanvas } from "@/modules/analytics/components/metrics-studio/MetricsCanvas";
 import { MetricsStudioSidebar } from "@/modules/analytics/components/metrics-studio/MetricsStudioSidebar";
 import { useMetricsStudio } from "@/modules/analytics/hooks/useMetricsStudio";
-import type { ChartKind, StudioMetric } from "@/modules/analytics/lib/metrics-studio-catalog";
-
-const PERIODS = [
-  { key: "today", label: "Hoje" },
-  { key: "week", label: "Semana" },
-  { key: "month", label: "Mês" },
-  { key: "quarter", label: "Trim." },
-] as const;
-
-type PeriodKey = (typeof PERIODS)[number]["key"];
+import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
+import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
+import { STUDIO_PERIODS, type StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
+import { useFeaturePermission } from "@/modules/identity";
 
 /**
  * Estúdio de Métricas — `/metricas`.
@@ -29,14 +23,18 @@ type PeriodKey = (typeof PERIODS)[number]["key"];
  * gramática de card do resto do app.
  *
  * Estado de composição: `useMetricsStudio` (persistido por org+usuário).
- * Números: amostra determinística (`metrics-studio-sample`). Trocar pelo motor
- * `fn_metric_measure` não muda nenhum componente desta árvore.
+ * Números: motor `fn_metric_measure`, via `useMetricWindowData` (SCRUM-310).
+ * A lista mostra só o que o motor calcula em produção — G1 do grill.
  */
 export default function MetricsStudio() {
   const studio = useMetricsStudio();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [period, setPeriod] = useState<PeriodKey>("month");
+  const [period, setPeriod] = useState<StudioPeriod>("month");
+
+  // G6 do grill: os cortes por pessoa (closer/SDR) reusam a trava do Ranking,
+  // que já existe. Sem ela, o seletor de corte simplesmente não os oferece.
+  const { allowed: podeVerPorPessoa } = useFeaturePermission("performance.view");
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -81,7 +79,7 @@ export default function MetricsStudio() {
   }, []);
 
   const handleAdd = useCallback(
-    (metric: StudioMetric) => studio.addMetric(metric, canvasSize),
+    (metric: EngineMetric) => studio.addMetric(metric, canvasSize),
     [studio, canvasSize],
   );
 
@@ -97,6 +95,11 @@ export default function MetricsStudio() {
   // janela que cresce ao virar pizza/vela.
   const handleChart = useCallback(
     (id: string, chart: ChartKind) => studio.setChart(id, chart, canvasSize),
+    [studio, canvasSize],
+  );
+
+  const handleCorte = useCallback(
+    (id: string, corte: MetricRecorte) => studio.setCorte(id, corte, canvasSize),
     [studio, canvasSize],
   );
 
@@ -137,7 +140,7 @@ export default function MetricsStudio() {
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <div className="flex gap-[2px] rounded-[9px] border border-border bg-card p-[3px]">
-            {PERIODS.map((p) => (
+            {STUDIO_PERIODS.map((p) => (
               <button
                 key={p.key}
                 type="button"
@@ -182,20 +185,26 @@ export default function MetricsStudio() {
         className="flex min-h-[420px] overflow-hidden rounded-xl border border-border/70 bg-card/30"
       >
         {sidebarOpen && (
-          <MetricsStudioSidebar openMetricIds={studio.openMetricIds} onAdd={handleAdd} />
+          <MetricsStudioSidebar
+            openMetricIds={studio.openMetricIds}
+            podeVerPorPessoa={podeVerPorPessoa}
+            onAdd={handleAdd}
+          />
         )}
 
         <div className="min-w-0 flex-1">
           <MetricsCanvas
             ref={canvasRef}
             windows={studio.windows}
-            periodKey={period}
+            period={period}
+            podeVerPorPessoa={podeVerPorPessoa}
             selectedId={selectedId}
             size={canvasSize}
             onSelect={handleSelect}
             onMove={studio.moveWindow}
             onResize={studio.resizeWindow}
             onChart={handleChart}
+            onCorte={handleCorte}
             onRemove={handleRemove}
           />
         </div>

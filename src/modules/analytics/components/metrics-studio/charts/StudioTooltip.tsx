@@ -1,5 +1,4 @@
-import type { MetricUnit } from "@/modules/analytics/lib/metrics-studio-catalog";
-import { formatMetricValue } from "@/modules/analytics/lib/metrics-studio-catalog";
+import { formatMetricValue } from "@/modules/analytics/lib/tv-metric-format";
 
 interface Row {
   label: string;
@@ -10,14 +9,14 @@ interface Row {
 interface StudioTooltipProps {
   title: string;
   rows: Row[];
-  unit: MetricUnit;
+  formatId: string;
 }
 
 /**
  * Tooltip único do estúdio — recharts e o canvas de vela renderizam o mesmo
  * corpo, então linha, pizza e vela não divergem visualmente.
  */
-export function StudioTooltip({ title, rows, unit }: StudioTooltipProps) {
+export function StudioTooltip({ title, rows, formatId }: StudioTooltipProps) {
   return (
     <div className="pointer-events-none rounded-lg border border-border/70 bg-popover/95 px-3 py-2 shadow-xl backdrop-blur-sm">
       <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
@@ -31,7 +30,7 @@ export function StudioTooltip({ title, rows, unit }: StudioTooltipProps) {
             )}
             <span className="text-muted-foreground">{row.label}</span>
             <span className="ml-auto font-semibold tabular-nums text-foreground">
-              {formatMetricValue(row.value, unit)}
+              {formatMetricValue(row.value, formatId)}
             </span>
           </div>
         ))}

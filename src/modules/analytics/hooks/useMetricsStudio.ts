@@ -1,22 +1,26 @@
 import { useCallback, useMemo } from "react";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
+import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import {
-  METRIC_BY_ID,
-  type ChartKind,
-  type StudioMetric,
-} from "@/modules/analytics/lib/metrics-studio-catalog";
+  ENGINE_BY_ID,
+  ehEscalar,
+  type EngineMetric,
+  type MetricRecorte,
+} from "@/modules/analytics/lib/metrics-studio-engine-map";
 
 /** Passo do grid do canvas — todo drag/resize encaixa nele. */
 export const GRID = 8;
 
 export const MIN_W = 220;
-// 120 = header (44) + valor (54) + seletor de gráfico (34), sem folga morta.
+// 120 = header (44) + valor (54) + rodapé de controles (34), sem folga morta.
 export const MIN_H = 120;
 
 export interface StudioWindow {
   /** Instância, não métrica: a mesma métrica pode abrir duas janelas. */
   id: string;
   metricId: string;
+  /** G2 do grill: o corte é escolha do usuário, não atributo da métrica. */
+  corte: MetricRecorte;
   x: number;
   y: number;
   w: number;
@@ -35,12 +39,26 @@ const EMPTY: StudioState = { windows: [], nextZ: 1, seq: 0 };
 
 const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 
-/** Tamanho inicial por tipo de gráfico — pizza/vela precisam de mais corpo. */
+/**
+ * Desenhos que fazem sentido para um corte. G3 tirou a vela — o motor não tem
+ * OHLC. O resto cai do formato do dado, não de preferência:
+ *
+ *   escalar  → o motor devolve um número e `series: null`. Só cabe número.
+ *   por dia  → série cronológica. Linha.
+ *   demais   → série categórica (origem, vendedor, etapa…). Pizza.
+ *
+ * Número sempre sobra como alternativa: a soma da série é informação legítima.
+ */
+export function graficosPara(metric: EngineMetric, corte: MetricRecorte): ChartKind[] {
+  if (ehEscalar(metric, corte)) return ["number"];
+  if (corte === "tempo") return ["line", "number"];
+  return ["pie", "number"];
+}
+
+/** Tamanho inicial por desenho. Número não tem corpo — altura justa. */
 function initialSize(chart: ChartKind): { w: number; h: number } {
   if (chart === "pie") return { w: 360, h: 300 };
-  if (chart === "candle") return { w: 480, h: 300 };
   if (chart === "line") return { w: 440, h: 260 };
-  // Número não tem corpo de gráfico — altura justa, sem área morta.
   return { w: 280, h: 132 };
 }
 
@@ -77,14 +95,35 @@ function placeNext(windows: StudioWindow[], w: number, h: number, bounds: { widt
   return { x: GAP + offset, y: GAP + offset };
 }
 
+type Bounds = { width: number; height: number };
+
+/**
+ * Reposiciona só quando o retângulo NOVO de fato colide ou transborda —
+ * sobreposição que o próprio usuário criou arrastando fica de pé.
+ */
+function acomodar(
+  alvo: StudioWindow,
+  crescido: StudioWindow,
+  outras: StudioWindow[],
+  bounds: Bounds,
+): StudioWindow {
+  const transborda = bounds.width > 0 && crescido.x + crescido.w > bounds.width - GAP;
+  const cresceu = crescido.w > alvo.w || crescido.h > alvo.h;
+  const colide = cresceu && outras.some((w) => overlaps(crescido, w));
+  return transborda || colide
+    ? { ...crescido, ...placeNext(outras, crescido.w, crescido.h, bounds) }
+    : crescido;
+}
+
 export interface MetricsStudioApi {
   windows: StudioWindow[];
   openMetricIds: Set<string>;
-  addMetric: (metric: StudioMetric, bounds: { width: number; height: number }) => void;
+  addMetric: (metric: EngineMetric, bounds: Bounds) => void;
   removeWindow: (id: string) => void;
   moveWindow: (id: string, x: number, y: number) => void;
   resizeWindow: (id: string, w: number, h: number) => void;
-  setChart: (id: string, chart: ChartKind, bounds: { width: number; height: number }) => void;
+  setChart: (id: string, chart: ChartKind, bounds: Bounds) => void;
+  setCorte: (id: string, corte: MetricRecorte, bounds: Bounds) => void;
   focusWindow: (id: string) => void;
   clear: () => void;
 }
@@ -97,16 +136,17 @@ export function useMetricsStudio(): MetricsStudioApi {
   const windows = state.windows ?? EMPTY.windows;
 
   const addMetric = useCallback(
-    (metric: StudioMetric, bounds: { width: number; height: number }) => {
+    (metric: EngineMetric, bounds: Bounds) => {
       setState((prev) => {
-        const chart: ChartKind = metric.charts[0] ?? "number";
+        const corte = metric.cortes[0];
+        const chart = graficosPara(metric, corte)[0];
         const { w, h } = initialSize(chart);
         const { x, y } = placeNext(prev.windows, w, h, bounds);
         const seq = prev.seq + 1;
         return {
           windows: [
             ...prev.windows,
-            { id: `${metric.id}-${seq}`, metricId: metric.id, x, y, w, h, chart, z: prev.nextZ },
+            { id: `${metric.id}-${seq}`, metricId: metric.id, corte, x, y, w, h, chart, z: prev.nextZ },
           ],
           nextZ: prev.nextZ + 1,
           seq,
@@ -140,35 +180,41 @@ export function useMetricsStudio(): MetricsStudioApi {
   );
 
   const setChart = useCallback(
-    (id: string, chart: ChartKind, bounds: { width: number; height: number }) =>
+    (id: string, chart: ChartKind, bounds: Bounds) =>
       setState((prev) => {
-        const target = prev.windows.find((w) => w.id === id);
-        if (!target) return prev;
-
-        // Trocar para pizza/vela num card de número deixaria o gráfico espremido.
+        const alvo = prev.windows.find((w) => w.id === id);
+        if (!alvo) return prev;
         const min = initialSize(chart);
-        const grown = {
-          ...target,
-          chart,
-          w: Math.max(target.w, min.w),
-          h: Math.max(target.h, min.h),
+        const outras = prev.windows.filter((w) => w.id !== id);
+        const crescido = { ...alvo, chart, w: Math.max(alvo.w, min.w), h: Math.max(alvo.h, min.h) };
+        return {
+          ...prev,
+          windows: outras.concat(acomodar(alvo, crescido, outras, bounds)).sort((a, b) => a.z - b.z),
         };
+      }),
+    [setState],
+  );
 
-        // Crescer no lugar atropela a janela vizinha e pode vazar do canvas.
-        // Só reposiciona quando o retângulo NOVO de fato colide ou transborda —
-        // sobreposição que o próprio usuário criou arrastando fica de pé.
-        const others = prev.windows.filter((w) => w.id !== id);
-        // Só a largura é limite duro — na vertical o canvas rola.
-        const transborda = bounds.width > 0 && grown.x + grown.w > bounds.width - GAP;
-        const cresceu = grown.w > target.w || grown.h > target.h;
-        const colide = cresceu && others.some((w) => overlaps(grown, w));
+  const setCorte = useCallback(
+    (id: string, corte: MetricRecorte, bounds: Bounds) =>
+      setState((prev) => {
+        const alvo = prev.windows.find((w) => w.id === id);
+        const metric = alvo && ENGINE_BY_ID.get(alvo.metricId);
+        if (!alvo || !metric) return prev;
 
-        const placed =
-          transborda || colide
-            ? { ...grown, ...placeNext(others, grown.w, grown.h, bounds) }
-            : grown;
-
-        return { ...prev, windows: others.concat(placed).sort((a, b) => a.z - b.z) };
+        // Trocar o corte muda o formato do dado: "por dia" vira série
+        // cronológica, "Total" vira escalar. O desenho atual pode deixar de
+        // existir — nesse caso cai no primeiro válido em vez de renderizar
+        // gráfico sem fonte.
+        const permitidos = graficosPara(metric, corte);
+        const chart = permitidos.includes(alvo.chart) ? alvo.chart : permitidos[0];
+        const min = initialSize(chart);
+        const outras = prev.windows.filter((w) => w.id !== id);
+        const crescido = { ...alvo, corte, chart, w: Math.max(alvo.w, min.w), h: Math.max(alvo.h, min.h) };
+        return {
+          ...prev,
+          windows: outras.concat(acomodar(alvo, crescido, outras, bounds)).sort((a, b) => a.z - b.z),
+        };
       }),
     [setState],
   );
@@ -190,9 +236,20 @@ export function useMetricsStudio(): MetricsStudioApi {
   const clear = useCallback(() => setState(EMPTY), [setState]);
 
   const openMetricIds = useMemo(
-    () => new Set(windows.filter((w) => METRIC_BY_ID.has(w.metricId)).map((w) => w.metricId)),
+    () => new Set(windows.filter((w) => ENGINE_BY_ID.has(w.metricId)).map((w) => w.metricId)),
     [windows],
   );
 
-  return { windows, openMetricIds, addMetric, removeWindow, moveWindow, resizeWindow, setChart, focusWindow, clear };
+  return {
+    windows,
+    openMetricIds,
+    addMetric,
+    removeWindow,
+    moveWindow,
+    resizeWindow,
+    setChart,
+    setCorte,
+    focusWindow,
+    clear,
+  };
 }

@@ -1,20 +1,21 @@
 import { useId } from "react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { MetricUnit } from "@/modules/analytics/lib/metrics-studio-catalog";
-import { formatMetricValue, STUDIO_PALETTE } from "@/modules/analytics/lib/metrics-studio-catalog";
-import type { SamplePoint } from "@/modules/analytics/lib/metrics-studio-sample";
+import { STUDIO_PALETTE } from "@/modules/analytics/lib/metrics-studio-catalog";
+import { formatMetricValue } from "@/modules/analytics/lib/tv-metric-format";
+import type { MetricSeriesPoint } from "@/modules/analytics/lib/tv-series";
 import { StudioTooltip } from "./StudioTooltip";
 
 interface StudioLineChartProps {
-  series: SamplePoint[];
-  unit: MetricUnit;
-  /** Abaixo de ~200px de altura os eixos viram ruído — o card compacto some com eles. */
+  /** Já ordenada cronologicamente por quem chama — o motor devolve por valor. */
+  series: MetricSeriesPoint[];
+  formatId: string;
+  /** Abaixo de ~200px de altura os eixos viram ruído. */
   compact: boolean;
 }
 
 const ACCENT = STUDIO_PALETTE[0];
 
-export function StudioLineChart({ series, unit, compact }: StudioLineChartProps) {
+export function StudioLineChart({ series, formatId, compact }: StudioLineChartProps) {
   // `useId` devolve ":r0:" — dois-pontos é reservado para namespace em XML e
   // quebra o `url(#…)` do fill em parte dos engines. Tira antes de usar.
   const gradientId = `studio-grad-${useId().replace(/:/g, "")}`;
@@ -45,7 +46,7 @@ export function StudioLineChart({ series, unit, compact }: StudioLineChartProps)
             tickLine={false}
             axisLine={false}
             tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-            tickFormatter={(v: number) => formatMetricValue(v, unit)}
+            tickFormatter={(v: number) => formatMetricValue(v, formatId)}
           />
         )}
 
@@ -55,7 +56,7 @@ export function StudioLineChart({ series, unit, compact }: StudioLineChartProps)
             active && payload?.length ? (
               <StudioTooltip
                 title={String(label)}
-                unit={unit}
+                formatId={formatId}
                 rows={[{ label: "Valor", value: Number(payload[0].value), swatch: ACCENT }]}
               />
             ) : null
