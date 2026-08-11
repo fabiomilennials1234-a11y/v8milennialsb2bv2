@@ -71,5 +71,21 @@ git checkout -q -b livre base
 mig 20260505000000 versao_livre && commitar livre
 checar livre passa "versão livre passa"
 
-if [ "$falhas" -eq 0 ]; then echo "guarda de colisão: 4/4"; else echo "guarda de colisão: $falhas falha(s)" >&2; fi
+# --- (5) CONTROLE POSITIVO: o guarda LEU a árvore, e não ficou mudo ----------
+# "0 colisões" tem duas leituras — "nenhuma colidiu" e "não li nada". Este caso
+# separa as duas: exige que o guarda relate ter inspecionado exatamente uma
+# versão a mais aqui do que na base, que é a que acabou de ser plantada.
+git checkout -q livre
+saida="$(MIGRATION_BASE_REF=base bash "$GUARD" supabase/migrations supabase/migrations 2>&1)"
+aqui="$(printf '%s\n' "$saida" | sed -n 's/.*inspected: \([0-9]*\) here, \([0-9]*\) on.*/\1/p')"
+na_base="$(printf '%s\n' "$saida" | sed -n 's/.*inspected: \([0-9]*\) here, \([0-9]*\) on.*/\2/p')"
+if [ -n "$aqui" ] && [ -n "$na_base" ] && [ "$aqui" -eq $((na_base + 1)) ]; then
+  echo "ok — o guarda relata ter lido a árvore ($aqui aqui, $na_base na base)"
+else
+  echo "FALHOU: o guarda não provou que leu a árvore (aqui='$aqui', base='$na_base')." >&2
+  echo "        Sem isso, 'zero colisões' e 'não inspecionei nada' são a mesma saída." >&2
+  falhas=$((falhas + 1))
+fi
+
+if [ "$falhas" -eq 0 ]; then echo "guarda de colisão: 5/5"; else echo "guarda de colisão: $falhas falha(s)" >&2; fi
 exit "$falhas"

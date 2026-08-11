@@ -73,6 +73,20 @@ if git rev-parse --verify --quiet "${BASE_REF}" >/dev/null; then
   base_pairs="$(pares "${BASE_REF}" || true)"
   here_pairs="$(pares HEAD || true)"
 
+  # CONTROLE POSITIVO, e não é enfeite: "0 colisões" é ambíguo — significa
+  # "nenhuma colidiu" E TAMBÉM "não li árvore nenhuma". Um GIT_PATH errado, um
+  # ref vazio ou um filtro que não casa nada produzem exatamente o mesmo silêncio
+  # de um repositório limpo. Dizer QUANTAS versões foram inspecionadas de cada
+  # lado desambigua as duas leituras, e é o que o teste ancora.
+  n_here="$(printf '%s' "${here_pairs}" | grep -c . || true)"
+  n_base="$(printf '%s' "${base_pairs}" | grep -c . || true)"
+  echo "Migration versions inspected: ${n_here} here, ${n_base} on ${BASE_REF}"
+  if [ "${n_here}" -eq 0 ]; then
+    echo "FAIL: read ZERO migration versions in '${GIT_PATH}'. A guard that inspects" >&2
+    echo "      nothing reports no collision — that silence is not a pass." >&2
+    fail=1
+  fi
+
   cross=""
   while read -r ver nome; do
     [ -z "${ver:-}" ] && continue
