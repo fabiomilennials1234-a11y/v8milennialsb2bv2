@@ -166,6 +166,8 @@ export type RuntimeLogModule =
   | "agent"
   | "analytics"
   | "auth"
+  // SCRUM-289: checkout e a área de billing do admin registram aqui.
+  | "billing"
   | "calendar"
   | "campaign"
   | "carteira"
