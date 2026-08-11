@@ -44,12 +44,15 @@ import { decidir, proximoStatus, deveProvisionar, type PaymentStatus } from "./d
 /**
  * IPs publicados de PRODUÇÃO do Asaas.
  *
- * DECISÃO REGISTRADA: a allowlist só é EXIGIDA quando `ASAAS_ENV=production`.
- * O Sandbox entrega de IPs que NÃO estão nesta lista — travar por IP em
- * desenvolvimento deixaria o sandbox de fora e o time testaria contra uma porta
- * que nunca abre. Fora de produção o IP é REGISTRADO e não bloqueia: perde-se
- * uma camada onde não há dinheiro, e mantêm-se as outras duas (caminho secreto
- * e token), que valem nos dois ambientes.
+ * DECISÃO REGISTRADA: a allowlist é dispensada SOMENTE quando `ASAAS_ENV` vale
+ * exatamente `sandbox`. O Sandbox entrega de IPs que NÃO estão nesta lista, e
+ * travar por IP em desenvolvimento deixaria o sandbox de fora — o time testaria
+ * contra uma porta que nunca abre.
+ *
+ * E a dispensa é FECHADA POR PADRÃO: variável ausente, vazia ou com valor
+ * inesperado EXIGE o IP. Configuração que falha ABERTO é como a maioria dos
+ * furos nasce — um `ASAAS_ENV` esquecido em produção não pode virar porta
+ * aberta. Perde-se uma camada onde não há dinheiro; nunca onde há.
  */
 const ASAAS_PROD_IPS = ["52.67.12.206", "18.230.8.159", "54.94.136.112", "54.94.183.101"];
 
@@ -78,7 +81,10 @@ Deno.serve(
 
     const PATH_SECRET = Deno.env.get("ASAAS_WEBHOOK_PATH_SECRET") ?? "";
     const TOKEN = Deno.env.get("ASAAS_WEBHOOK_TOKEN") ?? "";
-    const EM_PRODUCAO = (Deno.env.get("ASAAS_ENV") ?? "sandbox") === "production";
+    // FALHA FECHADA: só o valor EXPLÍCITO "sandbox" dispensa a allowlist de IP.
+    // Variável ausente, vazia ou com valor inesperado ⇒ EXIGE o IP. Segredo de
+    // configuração que falha ABERTO é como a maioria dos furos nasce.
+    const EXIGE_IP = (Deno.env.get("ASAAS_ENV") ?? "").trim() !== "sandbox";
 
     // ── Camada 1: caminho secreto ──────────────────────────────────────────
     const segmentos = new URL(req.url).pathname.split("/").filter(Boolean);
@@ -95,7 +101,7 @@ Deno.serve(
 
     // ── Camada 3: IP, exigida só em produção (ver decisão no topo) ─────────
     const ip = clientIp(req);
-    if (EM_PRODUCAO && !ASAAS_PROD_IPS.includes(ip)) {
+    if (EXIGE_IP && !ASAAS_PROD_IPS.includes(ip)) {
       await logRuntime({
         module: "billing",
         action: "asaas_webhook_ip_rejected",
@@ -120,7 +126,7 @@ Deno.serve(
         module: "billing",
         action: "asaas_webhook_malformed",
         status: "error",
-        payloadSnapshot: { ip: EM_PRODUCAO ? ip : null },
+        payloadSnapshot: { ip: EXIGE_IP ? ip : null },
       });
       return ok(headers, { received: true, ignored: "malformed_body" });
     }
@@ -188,7 +194,7 @@ Deno.serve(
       return ok(headers, { received: true, absorbed: true });
     }
 
-    // ── Aplica: histórico primeiro, acesso depois ──────────────────────────
+    // ── Aplica: histórico, assinatura, cupom ──────────────────────────────
     const { data: existente } = await supabase
       .from("payment_history")
       .select("id, organization_id, status, coupon_id")
@@ -215,15 +221,91 @@ Deno.serve(
         .eq("id", existente.id);
     }
 
+    // A cobrança conhecida vem do LINK, não do histórico: é o link que carrega
+    // o `quote` congelado na geração — plano, ciclo e valores. `payment_history`
+    // não tem coluna de plano, então montar a assinatura a partir dele seria
+    // chutar o `plan_id`, que é NOT NULL sem default.
+    const { data: charge } = await supabase
+      .from("payment_link_charges")
+      .select("payment_link_id")
+      .eq("provider_charge_id", d.paymentId)
+      .maybeSingle();
+
+    const { data: link } = charge
+      ? await supabase
+          .from("payment_links")
+          .select("organization_id, quote")
+          .eq("id", charge.payment_link_id)
+          .maybeSingle()
+      : { data: null };
+
+    const quote = (link?.quote ?? null) as Record<string, unknown> | null;
+    const orgId = (link?.organization_id ?? existente?.organization_id ?? null) as string | null;
+    let assinou = false;
+
+    if (liberaAgora && orgId && quote && typeof quote.plan_id === "string") {
+      const inteiro = (v: unknown, padrao = 0) =>
+        typeof v === "number" && Number.isFinite(v) ? v : padrao;
+      const base = inteiro(quote.base_amount_cents, inteiro(quote.subtotal_cents));
+      const finalCents = inteiro(quote.charge_cents, base);
+
+      // ON CONFLICT sobre `org_subscriptions_one_current_per_org` — o índice
+      // parcial que o schema já tinha e que PROÍBE duas assinaturas vivas na
+      // mesma organização. Por isso a renovação ATUALIZA a corrente em vez de
+      // empilhar linha: quem guarda o histórico do que foi pago é
+      // `payment_history`. A garantia continua sendo do BANCO, não de um `IF` —
+      // que é o que importa quando dois eventos chegam no mesmo milissegundo.
+      const { error: erroAssinatura } = await supabase
+        .from("org_subscriptions")
+        .upsert({
+          organization_id: orgId,
+          plan_id: quote.plan_id,
+          billing_cycle: quote.billing_cycle,
+          payment_method: quote.payment_method,
+          user_count: inteiro(quote.seats, 1),
+          // `final_amount_cents <= base_amount_cents` é CHECK da tabela; o
+          // quote já respeita, e o piso evita gravar um par impossível se o
+          // motor mudar.
+          base_amount_cents: Math.max(base, finalCents),
+          discount_amount_cents: inteiro(quote.cycle_discount_cents) +
+            inteiro(quote.coupon_discount_cents) + inteiro(quote.manual_discount_cents),
+          final_amount_cents: finalCents,
+          cycle_discount_pct: inteiro(quote.cycle_discount_pct),
+          coupon_discount_pct: inteiro(quote.coupon_discount_pct),
+          manual_discount_cents: inteiro(quote.manual_discount_cents),
+          coupon_id: typeof quote.coupon_id === "string" ? quote.coupon_id : null,
+          provider: "asaas",
+          provider_payment_id: d.paymentId,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "organization_id", ignoreDuplicates: false })
+        .select("id");
+
+      if (erroAssinatura) {
+        await logRuntime({
+          module: "billing",
+          organizationId: orgId,
+          action: "asaas_webhook_assinatura_falhou",
+          status: "error",
+          errorMessage: erroAssinatura.message,
+          payloadSnapshot: { event_id: d.eventId, payment_id: d.paymentId },
+        });
+      } else {
+        assinou = true;
+      }
+    }
+
     // Consumo do cupom: INSERIR no livro. A segunda vez é recusada pelo banco
     // (UNIQUE coupon_id, payment_id), então re-entrega não queima uso — e o
     // consumo pertence à CONFIRMAÇÃO, não à validação, porque validar é leitura
     // e o cliente abre o link dez vezes sem pagar.
-    if (liberaAgora && existente?.coupon_id) {
+    const cupomId = (typeof quote?.coupon_id === "string" ? quote.coupon_id : null) ??
+      existente?.coupon_id ?? null;
+
+    if (liberaAgora && cupomId) {
       const { error: erroCupom } = await supabase.from("coupon_redemptions").insert({
-        coupon_id: existente.coupon_id,
+        coupon_id: cupomId,
         payment_id: d.paymentId,
-        organization_id: existente.organization_id,
+        organization_id: orgId,
       });
       if (erroCupom && erroCupom.code !== "23505") {
         await logRuntime({
@@ -240,14 +322,14 @@ Deno.serve(
       .from("payment_webhook_events")
       .update({
         status: "applied",
-        organization_id: existente?.organization_id ?? null,
+        organization_id: orgId,
         processed_at: new Date().toISOString(),
       })
       .eq("id", gravado.id);
 
     await logRuntime({
       module: "billing",
-      organizationId: existente?.organization_id ?? undefined,
+      organizationId: orgId ?? undefined,
       action: "asaas_webhook_aplicado",
       status: "success",
       payloadSnapshot: {
@@ -258,7 +340,8 @@ Deno.serve(
         provisionou: liberaAgora,
         // Cobrança sem linha em payment_history é o sinal de que a fatia que
         // CRIA a cobrança ainda não gravou — aparece aqui em vez de sumir.
-        cobranca_conhecida: !!existente,
+        cobranca_conhecida: !!charge,
+        assinou,
       },
     });
 

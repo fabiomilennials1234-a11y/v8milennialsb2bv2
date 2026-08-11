@@ -164,3 +164,29 @@ GRANT EXECUTE ON FUNCTION public.increment_coupon_uses(uuid) TO service_role;
 
 COMMENT ON FUNCTION public.increment_coupon_uses(uuid) IS
   'Projeção do contador de usos. A VERDADE é coupon_redemptions (SCRUM-287). service_role apenas: com EXECUTE para authenticated, qualquer usuário logado queimava uso de cupom alheio pelo PostgREST.';
+
+-- ---------------------------------------------------------------------------
+-- 4. A assinatura ganha PROVENIÊNCIA — mas a idempotência dela já existia
+-- ---------------------------------------------------------------------------
+-- MEDIDO ANTES DE ESCREVER, e mudou o desenho: `org_subscriptions` já tem
+--   CREATE UNIQUE INDEX org_subscriptions_one_current_per_org
+--     ON org_subscriptions (organization_id) WHERE cancelled_at IS NULL
+-- ou seja, o schema PROÍBE duas assinaturas vivas para a mesma organização.
+--
+-- Consequência para esta fatia: o webhook NÃO pode inserir uma linha por ciclo
+-- pago — a segunda seria recusada pelo banco. O modelo aqui é UMA assinatura
+-- corrente por organização, e a renovação ATUALIZA essa linha. O livro de "o
+-- que já foi pago" é `payment_history`, não `org_subscriptions`.
+--
+-- Então a garantia contra duplicar não precisa de chave nova: ela é o índice
+-- que já existe, e o handler escreve com ON CONFLICT sobre ele. Continua sendo
+-- o BANCO decidindo, não um `IF` — que era o ponto.
+--
+-- O que falta é PROVENIÊNCIA: qual cobrança pagou a assinatura corrente. Sem
+-- isso, "esta organização está ativa por causa de qual pagamento?" não tem
+-- resposta, e é a primeira pergunta de qualquer disputa de cobrança.
+ALTER TABLE public.org_subscriptions
+  ADD COLUMN IF NOT EXISTS provider_payment_id text;
+
+COMMENT ON COLUMN public.org_subscriptions.provider_payment_id IS
+  'Id da cobrança no gateway que pagou o ciclo CORRENTE desta assinatura. Proveniência, não chave: a unicidade já é garantida por org_subscriptions_one_current_per_org (uma assinatura viva por organização). NULO em linha criada por outro caminho.';

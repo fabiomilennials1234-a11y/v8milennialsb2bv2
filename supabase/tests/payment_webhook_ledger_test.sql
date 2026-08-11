@@ -179,5 +179,68 @@ SELECT is(
   2,
   '(CUPOM) cada resgate diz de quem é e quando foi');
 
+-- ===========================================================================
+-- (ASSINATURA) o schema já decide: UMA assinatura viva por organização
+--
+-- Medido antes de escrever o handler, e mudou o desenho da fatia: não dá para
+-- gravar uma linha por ciclo pago — `org_subscriptions_one_current_per_org`
+-- recusa a segunda. A renovação ATUALIZA a corrente, e quem guarda o histórico
+-- do que foi pago é `payment_history`.
+-- ===========================================================================
+SELECT has_column('public', 'org_subscriptions', 'provider_payment_id',
+  '(ASSINATURA) a assinatura corrente sabe QUAL cobrança a pagou — a primeira pergunta de uma disputa');
+
+SELECT ok(
+  (SELECT count(*) = 1 FROM pg_indexes
+    WHERE tablename = 'org_subscriptions'
+      AND indexname = 'org_subscriptions_one_current_per_org'),
+  '(ASSINATURA) e o índice que garante UMA viva por org continua de pé — é ele a idempotência, não um IF no handler');
+
+SET LOCAL role postgres;
+SET LOCAL session_replication_role = replica;
+
+INSERT INTO public.subscription_plans (id, name, display_name, limits)
+VALUES ('91a17287-0000-4000-8000-000000000001', 'pro-scrum-287', 'Pro (fixture 287)', '{}'::jsonb)
+ON CONFLICT (id) DO NOTHING;
+
+SET LOCAL session_replication_role = DEFAULT;
+
+INSERT INTO public.org_subscriptions
+  (organization_id, plan_id, billing_cycle, payment_method, provider, provider_payment_id,
+   final_amount_cents, base_amount_cents)
+VALUES ('5c2c8287-0000-4000-8000-000000000001', '91a17287-0000-4000-8000-000000000001',
+        'annual', 'pix', 'asaas', 'pay_assinatura_1', 19900, 19900);
+
+-- O segundo evento da MESMA cobrança (o RECEIVED que chega 32 dias depois do
+-- CONFIRMED, no cartão) escreve pelo mesmo caminho do handler: ON CONFLICT
+-- sobre o índice parcial. Uma linha, valores atualizados — nunca duas.
+INSERT INTO public.org_subscriptions
+  (organization_id, plan_id, billing_cycle, payment_method, provider, provider_payment_id,
+   final_amount_cents, base_amount_cents)
+VALUES ('5c2c8287-0000-4000-8000-000000000001', '91a17287-0000-4000-8000-000000000001',
+        'annual', 'pix', 'asaas', 'pay_assinatura_1', 19900, 19900)
+ON CONFLICT (organization_id) WHERE cancelled_at IS NULL
+DO UPDATE SET provider_payment_id = EXCLUDED.provider_payment_id, updated_at = now();
+
+SELECT is(
+  (SELECT count(*)::int FROM public.org_subscriptions
+    WHERE organization_id = '5c2c8287-0000-4000-8000-000000000001' AND cancelled_at IS NULL),
+  1,
+  '(ASSINATURA) o par CONFIRMED/RECEIVED da mesma cobrança deixa UMA assinatura viva');
+
+SELECT is(
+  (SELECT provider_payment_id FROM public.org_subscriptions
+    WHERE organization_id = '5c2c8287-0000-4000-8000-000000000001' AND cancelled_at IS NULL),
+  'pay_assinatura_1',
+  '(ASSINATURA) e ela aponta para a cobrança que a pagou');
+
+SELECT throws_ok(
+  $$ INSERT INTO public.org_subscriptions
+       (organization_id, plan_id, billing_cycle, payment_method, provider, final_amount_cents, base_amount_cents)
+     VALUES ('5c2c8287-0000-4000-8000-000000000001', '91a17287-0000-4000-8000-000000000001',
+             'annual', 'pix', 'manual', 19900, 19900) $$,
+  '23505', NULL,
+  '(ASSINATURA) e uma SEGUNDA assinatura viva é recusada pelo banco — é isto que impede "append-only por ciclo" aqui');
+
 SELECT * FROM finish();
 ROLLBACK;
