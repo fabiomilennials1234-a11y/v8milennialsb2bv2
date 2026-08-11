@@ -11,6 +11,8 @@ interface MetricsCanvasProps {
   windows: StudioWindow[];
   period: StudioPeriod;
   podeVerPorPessoa: boolean;
+  editavel: boolean;
+  onEditar: () => void;
   selectedId: string | null;
   size: { width: number; height: number };
   onSelect: (id: string | null) => void;
@@ -27,7 +29,7 @@ interface MetricsCanvasProps {
  * a malha orienta, não prende.
  */
 export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(function MetricsCanvas(
-  { windows, period, podeVerPorPessoa, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
+  { windows, period, podeVerPorPessoa, editavel, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
   ref,
 ) {
   const empty = windows.length === 0;
@@ -41,7 +43,7 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
       <div
         ref={ref}
         onPointerDown={(e) => {
-          if (e.target === e.currentTarget) onSelect(null);
+          if (editavel && e.target === e.currentTarget) onSelect(null);
         }}
         style={{ backgroundPosition: "12px 12px", minHeight: Math.max(contentHeight, 0) || undefined }}
         className={cn(
@@ -51,17 +53,29 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
         )}
       >
       {empty && (
-        <div className="pointer-events-none flex h-full w-full flex-col items-center justify-center gap-3 text-center">
+        <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
           <div className="rounded-2xl border border-dashed border-border/70 p-4">
             <LayoutGrid className="h-6 w-6 text-muted-foreground/40" strokeWidth={1.5} />
           </div>
           <div>
             <p className="text-[13px] font-semibold">Painel em branco</p>
             <p className="mt-0.5 max-w-[320px] text-[11px] leading-relaxed text-muted-foreground/60">
-              Escolha uma métrica na lista ao lado. Ela vira uma janela aqui — arraste pela barra
-              de título, redimensione pela borda e troque o gráfico ao selecioná-la.
+              {editavel
+                ? "Escolha uma métrica na lista ao lado. Ela vira uma janela aqui — arraste pela barra de título, redimensione pela borda e troque o corte ao selecioná-la."
+                : "Monte o painel com as métricas que você acompanha."}
             </p>
           </div>
+          {/* Em Visualização o painel vazio seria um beco sem saída: sem a
+              lista lateral, não há como adicionar nada. O convite é a saída. */}
+          {!editavel && (
+            <button
+              type="button"
+              onClick={onEditar}
+              className="inline-flex items-center gap-1.5 rounded-[9px] bg-primary px-4 py-[9px] text-[13px] font-bold text-primary-foreground transition-transform duration-150 hover:-translate-y-px"
+            >
+              Montar painel
+            </button>
+          )}
         </div>
       )}
 
@@ -75,6 +89,7 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
             metric={metric}
             period={period}
             podeVerPorPessoa={podeVerPorPessoa}
+            editavel={editavel}
             selected={selectedId === win.id}
             canvas={size}
             onSelect={onSelect}

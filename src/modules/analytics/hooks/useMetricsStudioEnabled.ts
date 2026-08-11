@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
+import { IS_DEMO_MODE } from "@/core/demo-mode";
 
 /**
  * Trava de liberação do Estúdio de Métricas — G5 do grill de 2026-08-11.
@@ -23,6 +24,11 @@ import { useOrganization } from "@/modules/identity";
 export function useMetricsStudioEnabled() {
   const { organizationId, isReady } = useOrganization();
 
+  // A consulta só existe quando há org para consultar. Sem isso, `isLoading`
+  // do TanStack fica pendente para sempre numa query desabilitada — foi o que
+  // travou a tela no spinner durante a verificação em modo demo.
+  const ativa = isReady && !!organizationId;
+
   const query = useQuery({
     queryKey: ["metrics-studio-enabled", organizationId],
     queryFn: async (): Promise<boolean> => {
@@ -36,14 +42,20 @@ export function useMetricsStudioEnabled() {
       if (error) return false;
       return Boolean((data as { metrics_studio_enabled?: boolean } | null)?.metrics_studio_enabled);
     },
-    enabled: isReady && !!organizationId,
+    enabled: ativa,
     staleTime: 5 * 60 * 1000,
   });
 
   return {
-    /** Só `true` quando a org está comprovadamente liberada. */
-    enabled: query.data === true,
-    /** Enquanto resolve, a tela não decide nada — nem mostra, nem nega. */
-    isLoading: !isReady || query.isLoading,
+    // Modo demonstração libera a tela: sem sessão não há org, e sem org a
+    // trava negaria tudo, tornando a tela impossível de revisar. Em produção
+    // `IS_DEMO_MODE` é a constante `false` e o ramo some do bundle.
+    enabled: IS_DEMO_MODE || query.data === true,
+    /**
+     * Só é "carregando" enquanto a consulta está de fato no ar. Sem org a
+     * query nunca roda, e reportar carregando ali deixaria a tela num spinner
+     * eterno em vez de dizer que não está liberada.
+     */
+    isLoading: ativa && query.isLoading,
   };
 }

@@ -28,6 +28,8 @@ interface MetricWindowProps {
   metric: EngineMetric;
   period: StudioPeriod;
   podeVerPorPessoa: boolean;
+  /** SCRUM-308: em Visualização a janela é só leitura. */
+  editavel: boolean;
   selected: boolean;
   canvas: { width: number; height: number };
   onSelect: (id: string) => void;
@@ -51,7 +53,7 @@ const snap = (n: number) => Math.round(n / GRID) * GRID;
 const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max);
 
 function MetricWindowBase({
-  win, metric, period, podeVerPorPessoa, selected, canvas,
+  win, metric, period, podeVerPorPessoa, editavel, selected, canvas,
   onSelect, onMove, onResize, onChart, onCorte, onRemove,
 }: MetricWindowProps) {
   // Geometria em trânsito fica LOCAL: `usePersistedState` grava a cada
@@ -149,12 +151,12 @@ function MetricWindowBase({
     <div
       role="group"
       aria-label={metric.label}
-      onPointerDown={() => onSelect(win.id)}
+      onPointerDown={editavel ? () => onSelect(win.id) : undefined}
       style={{ left: geo.x, top: geo.y, width: geo.w, height: geo.h, zIndex: win.z }}
       className={cn(
         "group absolute flex flex-col overflow-hidden rounded-xl border bg-card/95 backdrop-blur-sm",
         "transition-[box-shadow,border-color] duration-150",
-        selected
+        selected && editavel
           ? "border-primary/50 shadow-[0_0_0_1px_hsl(var(--primary)/.25),0_18px_50px_-12px_hsl(0_0%_0%/.55)]"
           : "border-border/70 shadow-[0_10px_30px_-16px_hsl(0_0%_0%/.6)] hover:border-border",
         draft && "select-none",
@@ -162,11 +164,14 @@ function MetricWindowBase({
     >
       {/* Header — também é a alça de arrasto. */}
       <div
-        onPointerDown={startDrag}
-        onPointerMove={onDragMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        className="flex cursor-grab items-start gap-2 border-b border-border/50 px-3 py-2 active:cursor-grabbing"
+        onPointerDown={editavel ? startDrag : undefined}
+        onPointerMove={editavel ? onDragMove : undefined}
+        onPointerUp={editavel ? endDrag : undefined}
+        onPointerCancel={editavel ? endDrag : undefined}
+        className={cn(
+          "flex items-start gap-2 border-b border-border/50 px-3 py-2",
+          editavel && "cursor-grab active:cursor-grabbing",
+        )}
       >
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[12px] font-semibold tracking-[-0.01em]">{metric.label}</h3>
@@ -178,15 +183,17 @@ function MetricWindowBase({
           )}
         </div>
 
-        <button
-          type="button"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => onRemove(win.id)}
-          aria-label={`Remover ${metric.label}`}
-          className="rounded-md p-1 text-muted-foreground/60 opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+        {editavel && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => onRemove(win.id)}
+            aria-label={`Remover ${metric.label}`}
+            className="rounded-md p-1 text-muted-foreground/60 opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Corpo */}
@@ -247,7 +254,8 @@ function MetricWindowBase({
         )}
       </div>
 
-      {/* Controles — aparecem ao selecionar a janela ou no hover. */}
+      {/* Controles — só em Edição, ao selecionar a janela ou no hover. */}
+      {editavel && (
       <div
         className={cn(
           "flex items-center gap-1 overflow-x-auto border-t border-border/50 px-2 py-1.5 scrollbar-hide transition-opacity duration-150",
@@ -289,15 +297,20 @@ function MetricWindowBase({
             </button>
           ))}
       </div>
+      )}
 
-      {/* Alças de redimensionamento */}
-      <div onPointerDown={startResize("e")} className="absolute inset-y-3 right-0 w-1.5 cursor-ew-resize" aria-hidden />
-      <div onPointerDown={startResize("s")} className="absolute inset-x-3 bottom-0 h-1.5 cursor-ns-resize" aria-hidden />
-      <div onPointerDown={startResize("se")} className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize" aria-hidden>
-        <svg viewBox="0 0 16 16" className="h-full w-full text-muted-foreground/35">
-          <path d="M15 6 L6 15 M15 11 L11 15" stroke="currentColor" strokeWidth="1.5" fill="none" />
-        </svg>
-      </div>
+      {/* Alças de redimensionamento — só em Edição. */}
+      {editavel && (
+        <>
+          <div onPointerDown={startResize("e")} className="absolute inset-y-3 right-0 w-1.5 cursor-ew-resize" aria-hidden />
+          <div onPointerDown={startResize("s")} className="absolute inset-x-3 bottom-0 h-1.5 cursor-ns-resize" aria-hidden />
+          <div onPointerDown={startResize("se")} className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize" aria-hidden>
+            <svg viewBox="0 0 16 16" className="h-full w-full text-muted-foreground/35">
+              <path d="M15 6 L6 15 M15 11 L11 15" stroke="currentColor" strokeWidth="1.5" fill="none" />
+            </svg>
+          </div>
+        </>
+      )}
     </div>
   );
 }
