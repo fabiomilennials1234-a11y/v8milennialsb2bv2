@@ -6,6 +6,7 @@ import {
   buildInv5AlertText,
   buildInv5PayloadFromRows,
   INV5_MAX_TABELAS_NO_TEXTO,
+  INV5_MAX_VIOLACOES_NO_PAYLOAD,
 } from "./inv5-alert.ts";
 
 const QUANDO = "2026-08-12T04:17:03.221Z";
@@ -103,4 +104,24 @@ Deno.test("detector vazio é total 0 — é o sinal de 'consertaram, cala a boca
 
 Deno.test("linha sem tablename não vira violação fantasma", () => {
   assertEquals(buildInv5PayloadFromRows([{ grantee: "anon" } as never]).total, 0);
+});
+
+Deno.test("o caminho ao vivo respeita o mesmo teto de 50 da varredura SQL, e o total continua real", () => {
+  const rows = Array.from({ length: 137 }, (_, i) => ({
+    tablename: `t${String(i).padStart(3, "0")}`,
+    grantee: "anon",
+  }));
+  const payload = buildInv5PayloadFromRows(rows);
+  // O registro não cresce sem teto — restrição que a varredura SQL já tinha e
+  // que o caminho ao vivo tinha deixado cair.
+  assertEquals(payload.violacoes?.length, INV5_MAX_VIOLACOES_NO_PAYLOAD);
+  assertEquals(payload.truncado, true);
+  // ...e cortar a lista nunca reporta menos violação do que existe.
+  assertEquals(payload.total, 137);
+  assertStringIncludes(buildInv5AlertText(payload, QUANDO), "137 tabelas estão legíveis");
+});
+
+Deno.test("abaixo do teto não marca truncado", () => {
+  const payload = buildInv5PayloadFromRows([{ tablename: "t", grantee: "anon" }]);
+  assertEquals(payload.truncado, false);
 });
