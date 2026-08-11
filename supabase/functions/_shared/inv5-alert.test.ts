@@ -67,10 +67,14 @@ Deno.test("carrega o conserto, e proíbe o conserto errado", () => {
   assertStringIncludes(texto, "NÃO mexa no `ALTER DEFAULT PRIVILEGES`");
 });
 
-Deno.test("carimba quando a varredura rodou", () => {
+Deno.test("carimba QUANDO o estado foi verificado, e diz que reconfere sozinho", () => {
   const texto = buildInv5AlertText({ total: 1, violacoes: [{ tabela: "x", grantees: ["anon"] }] }, QUANDO);
-  assertStringIncludes(texto, "Varredura que disparou: 2026-08-12 04:17 UTC");
-  assertStringIncludes(texto, "Estado reconferido agora");
+  // O alerta fala do estado de AGORA, não do resultado da varredura diária —
+  // exposição efêmera (nasce 10:00, some 16:00) não aparece em varredura
+  // nenhuma, e é a forma que a intervenção manual em produção tem.
+  assertStringIncludes(texto, "Estado verificado em 2026-08-12 04:17 UTC");
+  assertStringIncludes(texto, "reconfere a cada 2 minutos");
+  assertEquals(texto.includes("Varredura que disparou"), false);
 });
 
 Deno.test("LACUNA v3: total sem detalhe não anuncia resto — '…e mais 137' abaixo de 'payload sem detalhe' lê como número errado", () => {
