@@ -157,10 +157,20 @@ SELECT ok(
      FROM public.organizations o WHERE o.slug = 'scrum337-org-restrict'),
   '(SEAM 5a) isolamento: a org do teste NÃO tem plan_id (nulo, ou coluna já derrubada pela SCRUM-338), então quem recusar o DELETE só pode ser a FK do NOME');
 
+-- A mensagem vai casada junto com o SQLSTATE, e não por gosto: `23503` sozinho
+-- é o código de QUALQUER violação de chave estrangeira. Hoje a prova fecha por
+-- construção — o plano nasce dentro desta transação e ninguém mais o
+-- referencia —, mas no dia em que outra FK para `subscription_plans` ganhar
+-- linha de fixture, um `23503` vindo dela deixaria esta asserção verde pelo
+-- motivo errado. Casar a mensagem amarra a recusa em
+-- `organizations_subscription_plan_fkey`. Continua sendo comportamento: o que
+-- se assere é QUEM recusou o DELETE, não que uma constraint com esse nome
+-- exista.
 SELECT throws_ok(
   $$ DELETE FROM public.subscription_plans WHERE name = 'scrum337-com-org' $$,
-  '23503', NULL,
-  '(SEAM 5b) apagar plano que tem org é RECUSADO (RESTRICT) — SET NULL reproduziria o apagão, CASCADE apagaria as organizações');
+  '23503',
+  'update or delete on table "subscription_plans" violates foreign key constraint "organizations_subscription_plan_fkey" on table "organizations"',
+  '(SEAM 5b) apagar plano que tem org é RECUSADO pela FK do NOME (RESTRICT) — SET NULL reproduziria o apagão, CASCADE apagaria as organizações');
 
 SELECT is(
   (SELECT subscription_plan FROM public.organizations WHERE slug = 'scrum337-org-restrict'),
