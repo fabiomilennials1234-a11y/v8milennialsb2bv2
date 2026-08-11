@@ -46,6 +46,7 @@ function lazyRetry<T extends { default: any }>(
 
 // Lazy-loaded pages — cada página vira um chunk separado (com retry automático)
 const Auth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Auth")));
+const CheckoutPublico = lazy(() => lazyRetry(() => import("@/modules/billing/pages/CheckoutPublico")));
 const Dashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Dashboard")));
 const PipeConfirmacao = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeConfirmacao")));
 const PipePropostas = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipePropostas")));
@@ -253,6 +254,12 @@ function AppRoutes() {
       {/* Signup dedicado — renderiza a página (honra ?plan vindo do pricing) em vez de redirecionar p/ /auth e perder o plano */}
       <Route path="/signup" element={<Signup />} />
       <Route path="/privacidade" element={<Privacidade />} />
+      {/* Contratação pública (SCRUM-289). O token no path É a credencial — não
+          há sessão aqui. A página não lê o banco: tudo passa pela edge function
+          billing-payment-link, com service_role. Depois do incidente de 11/08,
+          em que um SELECT como `anon` derrubou o Postgres no planejamento, dar
+          alcance de leitura ao `anon` é contenção, não estilo. */}
+      <Route path="/contratar/:token" element={<CheckoutPublico />} />
       {/* #1223 — calibração da escala tipográfica da TV. Pública de propósito:
           é instrumento de medição com valores fictícios, não expõe dado algum. */}
       <Route path="/tv-type-scale" element={<TvTypeScale />} />
