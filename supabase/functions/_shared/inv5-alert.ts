@@ -45,7 +45,7 @@ export function buildInv5PayloadFromRows(rows: Inv5Row[]): Inv5Payload {
 /** Quantas tabelas cabem no texto antes de virar parede. */
 export const INV5_MAX_TABELAS_NO_TEXTO = 8;
 
-export function buildInv5AlertText(payload: Inv5Payload, scannedAt: string): string {
+export function buildInv5AlertText(payload: Inv5Payload, checkedAt: string): string {
   const violacoes = Array.isArray(payload?.violacoes) ? payload.violacoes : [];
   // `total` manda sobre o tamanho da lista: a varredura trunca o array em 50 e
   // mantém a contagem real, então usar `violacoes.length` reportaria menos
@@ -66,7 +66,7 @@ export function buildInv5AlertText(payload: Inv5Payload, scannedAt: string): str
   const resto = mostradas.length === 0 ? 0 : total - mostradas.length;
   const sobra = resto > 0 ? `\n…e mais ${resto}.` : "";
 
-  const quando = String(scannedAt ?? "").slice(0, 16).replace("T", " ");
+  const quando = String(checkedAt ?? "").slice(0, 16).replace("T", " ");
 
   return (
     `🔴 *Tabela exposta em público (INV-5)*\n\n` +
@@ -80,6 +80,6 @@ export function buildInv5AlertText(payload: Inv5Payload, scannedAt: string): str
     `\`REVOKE SELECT ON public.<t> FROM anon, authenticated;\`\n` +
     `NÃO mexa no \`ALTER DEFAULT PRIVILEGES\` — ele é load-bearing, o PostgREST ` +
     `depende dele.\n\n` +
-    `Estado reconferido agora. Varredura que disparou: ${quando} UTC.`
+    `Estado verificado em ${quando} UTC — o watchdog reconfere a cada 2 minutos.`
   );
 }
