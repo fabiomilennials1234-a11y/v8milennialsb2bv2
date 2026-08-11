@@ -1,10 +1,10 @@
 -- =============================================================================
--- 20270811000001_whatsapp_historico_por_chip.sql
+-- 20270811000011_whatsapp_historico_por_chip.sql
 --
 -- Passo 2 de 2. O histórico de WhatsApp passa a pertencer ao CHIP, não à
 -- Instance.
 --
--- DEPENDE de `20270811000000_whatsapp_messages_drop_instance_fk.sql`, que já
+-- DEPENDE de `20270811000010_whatsapp_messages_drop_instance_fk.sql`, que já
 -- removeu a FK `whatsapp_messages_instance_id_fkey`. Aquele arquivo é separado
 -- porque o `DROP CONSTRAINT` retém ACCESS EXCLUSIVE em `whatsapp_messages`
 -- (2,3M linhas) até o COMMIT: juntar as duas coisas numa transação só faria o

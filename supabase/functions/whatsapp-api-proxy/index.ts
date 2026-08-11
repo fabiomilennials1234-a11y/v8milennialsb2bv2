@@ -94,7 +94,7 @@ const FK_PROBE_SENTINEL_ID = "00000000-0000-0000-0000-000000000000";
  *
  * Por que uma guarda em runtime, e não um comentário
  * --------------------------------------------------
- * O DROP da FK é a migration `20270811000000_whatsapp_messages_drop_instance_fk.sql`,
+ * O DROP da FK é a migration `20270811000010_whatsapp_messages_drop_instance_fk.sql`,
  * passo MANUAL; o deploy desta função é outro passo MANUAL. Um comentário
  * dizendo "aplique a migration antes" só vale enquanto alguém lê e obedece. Se
  * o proxy subir primeiro já tendo parado de limpar `whatsapp_messages`, o
@@ -548,7 +548,7 @@ Deno.serve(
 
           // `whatsapp_messages` sai desta limpeza SOMENTE DEPOIS que a FK
           // `whatsapp_messages_instance_id_fkey` for dropada. Esse DROP é a
-          // migration `20270811000000_whatsapp_messages_drop_instance_fk.sql`, ainda um
+          // migration `20270811000010_whatsapp_messages_drop_instance_fk.sql`, ainda um
           // passo MANUAL — a ordem real é (1) migration em prod, (2) deploy
           // deste proxy. Nada aqui pode supor o estado (1).
           //

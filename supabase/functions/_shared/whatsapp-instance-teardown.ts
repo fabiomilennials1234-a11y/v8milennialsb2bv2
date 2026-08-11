@@ -10,7 +10,7 @@
  *
  * **That table stops being a target once — and only once — the
  * `whatsapp_messages_instance_id_fkey` FK is DROPPED**, which happens in
- * migration `20270811000000_whatsapp_messages_drop_instance_fk.sql`. That migration is
+ * migration `20270811000010_whatsapp_messages_drop_instance_fk.sql`. That migration is
  * a MANUAL step and it is applied BEFORE the proxy that calls this module is
  * deployed; this module never assumes it already ran. `whatsapp-api-proxy`
  * decides the target list per deletion by probing the catalog

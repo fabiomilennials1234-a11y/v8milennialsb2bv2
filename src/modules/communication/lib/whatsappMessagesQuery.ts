@@ -53,7 +53,7 @@
  * 385.828 linhas órfãs em prod (2026-08-10), com excluir→recriar acontecendo em
  * menos de dois minutos. A saída é tirar `instance_id` do ciclo de vida da
  * Instance: o uuid passa a ser identificador HISTÓRICO — quem dropa a FK é a
- * migration `20270811000000_whatsapp_messages_drop_instance_fk.sql` — e a leitura
+ * migration `20270811000010_whatsapp_messages_drop_instance_fk.sql` — e a leitura
  * deixa de ser de UMA instância pra varrer o CHIP: instância viva + as que já
  * morreram no mesmo número (`resolveChipInstanceIds`).
  *

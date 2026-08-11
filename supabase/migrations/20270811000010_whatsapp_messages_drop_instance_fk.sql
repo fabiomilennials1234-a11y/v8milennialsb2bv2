@@ -1,11 +1,11 @@
 -- =============================================================================
--- 20270811000000_whatsapp_messages_drop_instance_fk.sql
+-- 20270811000010_whatsapp_messages_drop_instance_fk.sql
 --
 -- Passo 1 de 2 — cai a FK que apaga o histórico do WhatsApp. E SÓ ela.
 --
 -- O resto do desenho (lápide com `phone_number`, `whatsapp_chip_instance_ids`,
 -- `get_whatsapp_conversation_list` resolvendo por chip) está em
--- `20270811000001_whatsapp_historico_por_chip.sql`, que aplica logo em seguida e
+-- `20270811000011_whatsapp_historico_por_chip.sql`, que aplica logo em seguida e
 -- documenta o desenho inteiro. Este arquivo aqui é só a DDL cara.
 --
 -- O problema que isto resolve

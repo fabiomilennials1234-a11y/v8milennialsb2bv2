@@ -14,7 +14,7 @@
  * passa a ser identificador HISTÓRICO, e o mapa chip → uuids passa a viver na
  * lápide (`whatsapp_instance_reap_queue`). Quem lê esse mapa é
  * `whatsapp_chip_instance_ids(p_org, p_instance)`, criada pela migration
- * `20270811000001_whatsapp_historico_por_chip.sql` — cujo apply é passo MANUAL,
+ * `20270811000011_whatsapp_historico_por_chip.sql` — cujo apply é passo MANUAL,
  * então este módulo não pode supor que ela exista (seção seguinte).
  *
  * ── Por que a falha é engolida ──

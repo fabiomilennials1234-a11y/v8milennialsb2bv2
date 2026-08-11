@@ -232,7 +232,7 @@ export function useWhatsAppContacts(
       //
       // No caminho server a resolução do chip fica dentro da RPC
       // (`get_whatsapp_conversation_list`, redefinida pela migration
-      // `20270811000001_whatsapp_historico_por_chip.sql` — apply MANUAL); aqui
+      // `20270811000011_whatsapp_historico_por_chip.sql` — apply MANUAL); aqui
       // ela é explícita, senão o escape hatch esconderia justamente as conversas
       // que ficaram numa instância excluída. Antes do apply os dois caminhos
       // degradam pra instância viva — ver `chipInstanceIds.ts`.
