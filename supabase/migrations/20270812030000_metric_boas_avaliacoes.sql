@@ -1,4 +1,4 @@
--- 20270811150000_metric_boas_avaliacoes.sql
+-- 20270812030000_metric_boas_avaliacoes.sql
 --
 -- SCRUM-311, fatia 4 de 19: "Boas avaliações". Terceira e última da família de
 -- qualidade de lead; reusa o leaf criado em 20270811130000.
@@ -27,7 +27,7 @@
 -- taxa como medida seria contrabandear divisão para dentro do catálogo de
 -- medidas, que o ADR-0023 separa de propósito.
 --
--- ROLLBACK pareado: rollback/20270811150000_metric_boas_avaliacoes.sql
+-- ROLLBACK pareado: rollback/20270812030000_metric_boas_avaliacoes.sql
 
 -- ===========================================================================
 -- 1 — CATÁLOGO

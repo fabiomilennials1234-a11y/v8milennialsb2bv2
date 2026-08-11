@@ -1,4 +1,4 @@
--- 20270811140000_metric_leads_nao_avaliados.sql
+-- 20270812020000_metric_leads_nao_avaliados.sql
 --
 -- SCRUM-311, fatia 3 de 19: "Leads não avaliados". Complemento exato de
 -- `leads_avaliados` (20270811130000), sobre a mesma coorte.
@@ -23,7 +23,7 @@
 -- um tier, portanto é avaliado. Confundir os dois faria o número inchar com
 -- leads que a operação já julgou.
 --
--- ROLLBACK pareado: rollback/20270811140000_metric_leads_nao_avaliados.sql
+-- ROLLBACK pareado: rollback/20270812020000_metric_leads_nao_avaliados.sql
 
 -- ===========================================================================
 -- 1 — CATÁLOGO

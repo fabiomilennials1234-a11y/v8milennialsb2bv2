@@ -1,4 +1,4 @@
--- ROLLBACK de 20270811140000_metric_leads_nao_avaliados.sql
+-- ROLLBACK de 20270812020000_metric_leads_nao_avaliados.sql
 --
 -- Tira a medida do catálogo. O RAMO no despachante fica — ramo sem medida
 -- catalogada é inerte: `_metric_leaf` recusa antes de chegar no CASE, porque a

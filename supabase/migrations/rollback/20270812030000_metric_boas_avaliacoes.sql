@@ -1,4 +1,4 @@
--- ROLLBACK de 20270811150000_metric_boas_avaliacoes.sql
+-- ROLLBACK de 20270812030000_metric_boas_avaliacoes.sql
 --
 -- Mesma razão da fatia anterior: só o catálogo sai. Ramo órfão no despachante é
 -- inerte, porque `_metric_leaf` valida a medida contra o catálogo antes do CASE.
