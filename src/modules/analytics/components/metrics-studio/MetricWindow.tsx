@@ -56,8 +56,9 @@ function MetricWindowBase({
   win, metric, period, podeVerPorPessoa, editavel, selected, canvas,
   onSelect, onMove, onResize, onChart, onCorte, onRemove,
 }: MetricWindowProps) {
-  // Geometria em trânsito fica LOCAL: `usePersistedState` grava a cada
-  // mudança, e commitar por pointermove picotaria o arrasto.
+  // Geometria em trânsito fica LOCAL. Commitar por pointermove subiria cada
+  // quadro do arrasto para o estado do painel — e, desde o SCRUM-309, isso
+  // agenda gravação no servidor. O pai só recebe o valor final, no pointerup.
   const [draft, setDraft] = useState<Geometry | null>(null);
   const origin = useRef({ px: 0, py: 0, x: 0, y: 0, w: 0, h: 0 });
   const draftRef = useRef<Geometry | null>(null);

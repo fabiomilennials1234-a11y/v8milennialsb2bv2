@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from "react";
-import { usePersistedState } from "@/shared/hooks/usePersistedState";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMetricsStudioPanel } from "./useMetricsStudioPanel";
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import {
   ENGINE_BY_ID,
@@ -36,8 +36,6 @@ interface StudioState {
 }
 
 const EMPTY: StudioState = { windows: [], nextZ: 1, seq: 0 };
-
-const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Desenhos que fazem sentido para um corte. G3 tirou a vela — o motor não tem
@@ -129,15 +127,50 @@ export interface MetricsStudioApi {
 }
 
 export function useMetricsStudio(): MetricsStudioApi {
-  const [state, setState] = usePersistedState<StudioState>("metrics-studio", EMPTY, {
-    ttlMs: THIRTY_DAYS,
-  });
+  // SCRUM-309: o painel vive no servidor. O estado local é a cópia de
+  // trabalho — arrastar produz dezenas de mudanças por segundo e nenhuma delas
+  // deve virar requisição.
+  const persistencia = useMetricsStudioPanel();
+  const [state, setState] = useState<StudioState>(EMPTY);
+
+  // Hidrata uma vez, quando o painel chega do servidor. `nextZ` e `seq` são
+  // derivados do layout salvo para que janela nova continue nascendo por cima
+  // e o id não colida com o que já existe.
+  const hidratado = useRef(false);
+  // Guarda a referência do último layout que veio do servidor ou foi mandado
+  // para ele. Serve para o efeito de gravação saber o que NÃO precisa salvar.
+  const ultimoSincronizado = useRef<StudioWindow[] | null>(null);
+
+  useEffect(() => {
+    if (hidratado.current || persistencia.isLoading || persistencia.layout === null) return;
+    hidratado.current = true;
+    const windows = persistencia.layout;
+    ultimoSincronizado.current = windows;
+    setState({
+      windows,
+      nextZ: windows.reduce((max, w) => Math.max(max, w.z), 0) + 1,
+      seq: windows.length,
+    });
+  }, [persistencia.isLoading, persistencia.layout]);
 
   const windows = state.windows ?? EMPTY.windows;
 
+  // A gravação é EFEITO, não parte do updater. Chamar `save()` de dentro de um
+  // updater de estado seria efeito colateral em função que o StrictMode executa
+  // duas vezes — o mesmo defeito já corrigido no arrasto da janela.
+  const { save } = persistencia;
+  useEffect(() => {
+    if (!hidratado.current) return;
+    if (windows === ultimoSincronizado.current) return; // hidratação, não mudança
+    ultimoSincronizado.current = windows;
+    save(windows);
+  }, [windows, save]);
+
+  const mutar = useCallback((fn: (prev: StudioState) => StudioState) => setState(fn), []);
+
   const addMetric = useCallback(
     (metric: EngineMetric, bounds: Bounds) => {
-      setState((prev) => {
+      mutar((prev) => {
         const corte = metric.cortes[0];
         const chart = graficosPara(metric, corte)[0];
         const { w, h } = initialSize(chart);
@@ -153,35 +186,35 @@ export function useMetricsStudio(): MetricsStudioApi {
         };
       });
     },
-    [setState],
+    [mutar],
   );
 
   const removeWindow = useCallback(
-    (id: string) => setState((prev) => ({ ...prev, windows: prev.windows.filter((w) => w.id !== id) })),
-    [setState],
+    (id: string) => mutar((prev) => ({ ...prev, windows: prev.windows.filter((w) => w.id !== id) })),
+    [mutar],
   );
 
   const moveWindow = useCallback(
     (id: string, x: number, y: number) =>
-      setState((prev) => ({
+      mutar((prev) => ({
         ...prev,
         windows: prev.windows.map((w) => (w.id === id ? { ...w, x, y } : w)),
       })),
-    [setState],
+    [mutar],
   );
 
   const resizeWindow = useCallback(
     (id: string, w: number, h: number) =>
-      setState((prev) => ({
+      mutar((prev) => ({
         ...prev,
         windows: prev.windows.map((win) => (win.id === id ? { ...win, w, h } : win)),
       })),
-    [setState],
+    [mutar],
   );
 
   const setChart = useCallback(
     (id: string, chart: ChartKind, bounds: Bounds) =>
-      setState((prev) => {
+      mutar((prev) => {
         const alvo = prev.windows.find((w) => w.id === id);
         if (!alvo) return prev;
         const min = initialSize(chart);
@@ -192,12 +225,12 @@ export function useMetricsStudio(): MetricsStudioApi {
           windows: outras.concat(acomodar(alvo, crescido, outras, bounds)).sort((a, b) => a.z - b.z),
         };
       }),
-    [setState],
+    [mutar],
   );
 
   const setCorte = useCallback(
     (id: string, corte: MetricRecorte, bounds: Bounds) =>
-      setState((prev) => {
+      mutar((prev) => {
         const alvo = prev.windows.find((w) => w.id === id);
         const metric = alvo && ENGINE_BY_ID.get(alvo.metricId);
         if (!alvo || !metric) return prev;
@@ -216,12 +249,14 @@ export function useMetricsStudio(): MetricsStudioApi {
           windows: outras.concat(acomodar(alvo, crescido, outras, bounds)).sort((a, b) => a.z - b.z),
         };
       }),
-    [setState],
+    [mutar],
   );
 
+  // Ordem-z é estado de UI, mas persiste junto: reabrir o painel com as
+  // janelas em ordem diferente da que se deixou seria desorientador.
   const focusWindow = useCallback(
     (id: string) =>
-      setState((prev) => {
+      mutar((prev) => {
         const target = prev.windows.find((w) => w.id === id);
         if (!target || target.z === prev.nextZ - 1) return prev;
         return {
@@ -230,10 +265,10 @@ export function useMetricsStudio(): MetricsStudioApi {
           nextZ: prev.nextZ + 1,
         };
       }),
-    [setState],
+    [mutar],
   );
 
-  const clear = useCallback(() => setState(EMPTY), [setState]);
+  const clear = useCallback(() => mutar(() => EMPTY), [mutar]);
 
   const openMetricIds = useMemo(
     () => new Set(windows.filter((w) => ENGINE_BY_ID.has(w.metricId)).map((w) => w.metricId)),

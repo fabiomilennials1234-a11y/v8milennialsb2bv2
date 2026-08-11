@@ -105,7 +105,9 @@ Superfície nova. Comando vira **operação** (o que fazer agora), Estúdio vira
 | Mapa Estúdio→motor | `lib/metrics-studio-engine-map.ts` (+ `.test.ts`) |
 | Período Estúdio→motor | `lib/metrics-studio-period.ts` (+ `.test.ts`) |
 | Dado de uma janela | `hooks/useMetricWindowData.ts` |
-| Estado do painel | `hooks/useMetricsStudio.ts` (persistido por org+usuário, TTL 30d) |
+| Estado do painel | `hooks/useMetricsStudio.ts` (cópia de trabalho em memória) |
+| Persistência do painel | `hooks/useMetricsStudioPanel.ts` → tabela `metrics_studio_panels`, 1 por (org, membro) |
+| Trava de rollout | `hooks/useMetricsStudioEnabled.ts` → `organizations.metrics_studio_enabled` |
 | Lista lateral | `components/metrics-studio/MetricsStudioSidebar.tsx` |
 | Canvas / janela | `components/metrics-studio/{MetricsCanvas,MetricWindow}.tsx` |
 | Gráficos | `components/metrics-studio/charts/Studio{Line,Pie}Chart.tsx` (Candle existe e está DESLIGADO — G3) |
@@ -116,7 +118,9 @@ Superfície nova. Comando vira **operação** (o que fazer agora), Estúdio vira
 2. ✅ **A lista mostra só o que tem número real** (G1): 7 medidas + 3 razões. O inventário de 29 continua em `metrics-studio-catalog.ts` como mapa do roadmap, não como fonte da UI.
 3. ✅ **O corte é escolha do usuário** (G2) — o seletor da janela oferece só os cortes que aquela medida aceita, conferidos contra prod.
 4. ✅ **Cortes por pessoa reusam `performance.view`** (G6). Não foi preciso criar `metrics.view`.
-5. 🟠 **Sem trava de liberação por org ainda.** G5 decidiu chave própria do Estúdio, começando na Milennials — a coluna ainda não existe. Enquanto isso, a rota está aberta a toda org que chegar nela.
+5. ✅ **Trava de liberação por org** (G5): `organizations.metrics_studio_enabled`, migration `20270811100000`. Falha para FECHADO — enquanto não estiver em prod, o Estúdio fica invisível para todos. Fecha três portas: rota, item da top bar e command palette.
+7. ✅ **Modos Visualização e Edição** (SCRUM-308). Nasce em Visualização; canvas travado, sem alças nem controles, lista lateral recolhida.
+8. ✅ **Painel persistido no servidor** (SCRUM-309): `metrics_studio_panels`, um por (org, membro), migration `20270811110000`. NÃO reusa `dashboard_widgets` — ver o cabeçalho da migration para os quatro motivos medidos.
 6. 🟠 **17 das 29 do inventário seguem fora do motor** — é o SCRUM-311 que as porta.
 
 **Asperezas do motor que a UI precisa respeitar** (todas tratadas em `useMetricWindowData`):
