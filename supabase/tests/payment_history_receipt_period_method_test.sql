@@ -60,7 +60,7 @@ SET LOCAL session_replication_role = DEFAULT;
 SELECT lives_ok(
   $$ INSERT INTO public.payment_history
        (organization_id, amount, billing_cycle, status, period_start, period_end, billing_type)
-     VALUES ('5c2c8289-0000-4000-8000-000000000001', 510.00, 'semester', 'received',
+     VALUES ('5c2c8289-0000-4000-8000-000000000001', 510.00, 'semiannual', 'received',
              '2026-08-01', '2027-01-31', 'PIX') $$,
   '(PERÍODO) semestre coberto entra — é o caso que destrava o "Referente a"');
 

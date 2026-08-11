@@ -283,7 +283,7 @@
 #      (link, método), que é o que impede QR velho, entulho de cobrança no
 #      gateway e recarregar-a-página-virar-gerador-de-cobrança.
 #
-#  30. payment_history_receipt_period_method_test.sql — as tres faltas de
+#  33. payment_history_receipt_period_method_test.sql — as tres faltas de
 #      `payment_history` que travavam a area de billing do admin (SCRUM-289 /
 #      #1390, migration 20270811160000): recibo e fatura (DUAS colunas, porque
 #      sao dois documentos — a fatura existe desde a emissao, o recibo so depois
