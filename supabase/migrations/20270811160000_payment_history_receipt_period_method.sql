@@ -20,11 +20,17 @@
 --
 -- ESCOPO: só schema. Preencher as colunas é do lado de quem escreve a linha
 -- (ingestão do Asaas), e hoje NÃO EXISTE escritor de `payment_history` no
--- repositório — `grep` em `src/` e `supabase/functions/` não acha nenhum. As
--- linhas de produção vieram por outro caminho. Portanto: colunas NULLABLE, sem
--- backfill, sem default inventado. Linha antiga fica com NULO, que é a verdade
--- — não sabemos a forma de pagamento do que já passou, e fingir que sabemos
--- seria pior que a lacuna.
+-- repositório — `grep` em `src/` e `supabase/functions/` não acha nenhum.
+--
+-- E não é que as linhas tenham vindo por outro caminho: medido em produção em
+-- 2026-08-11, `payment_history` tem **ZERO linhas**, e `org_subscriptions`
+-- também. A tabela nunca foi escrita por ninguém. O Torque cobra e o sistema
+-- não registra — é o furo central do épico de billing, não um detalhe desta
+-- migration.
+--
+-- Portanto NULLABLE sem backfill não é concessão, é a única opção honesta: não
+-- existe dado para backfillar. Quando a ingestão nascer, ela preenche; até lá,
+-- NULO é a verdade, e inventar default seria pior que a lacuna.
 --
 -- RLS: `payment_history` já tem RLS ligada e duas policies
 -- (`payment_history_all_service_or_master` e `payment_history_select_own`).
@@ -42,7 +48,7 @@ ALTER TABLE public.payment_history
   ADD COLUMN IF NOT EXISTS billing_type text;
 
 COMMENT ON COLUMN public.payment_history.invoice_url IS
-  'Asaas `invoiceUrl`: a fatura, existe desde a emissão e serve para pagar. NULO em linha anterior à SCRUM-289.';
+  'Asaas `invoiceUrl`: a fatura, existe desde a emissão e serve para pagar. NULO enquanto não houver ingestão gravando — a tabela tinha ZERO linhas quando esta coluna nasceu.';
 
 COMMENT ON COLUMN public.payment_history.receipt_url IS
   'Asaas `transactionReceiptUrl`: o recibo, só existe depois da liquidação e serve para provar o pagamento. NULO enquanto não liquidado.';

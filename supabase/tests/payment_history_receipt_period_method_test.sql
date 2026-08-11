@@ -6,9 +6,9 @@
 --
 -- O que este arquivo segura, além de "a coluna existe":
 --   - NULO é permitido nas cinco. Não existe escritor de `payment_history` no
---     repositório, então toda linha de produção veio por outro caminho e vai
---     ficar sem esses dados. Coluna NOT NULL aqui quebraria a ingestão que
---     ninguém tem em mãos.
+--     repositório, e produção tem ZERO linhas na tabela (medido 2026-08-11) —
+--     ela nunca foi escrita. Coluna NOT NULL aqui só serviria para quebrar a
+--     ingestão no dia em que ela nascer, sem proteger nada hoje.
 --   - Os dois CHECK MORDEM: período invertido e forma de pagamento fora do
 --     vocabulário são recusados. Sem estas asserções, o CHECK poderia ser
 --     escrito errado e passar despercebido — constraint que não recusa nada é
