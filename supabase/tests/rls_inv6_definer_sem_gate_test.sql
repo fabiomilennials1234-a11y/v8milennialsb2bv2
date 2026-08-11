@@ -30,7 +30,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap;
 \ir _rls_invariants_detectors.sql
 \ir rls_invariants_baseline.sql
 
-SELECT plan(5);
+SELECT plan(8);
 
 -- ===========================================================================
 -- (1) THE GATE — live count must not exceed the frozen ceiling.
@@ -49,6 +49,17 @@ SELECT diag('INV-6 LIVE COUNT = ' ||
             (SELECT count(*)::text FROM public._rls_inv_definer_without_gate()) ||
             '  (ceiling = ' ||
             (SELECT max_violations::text FROM _rls_inv_baseline WHERE invariant = 'INV-6') || ')');
+
+-- If this gate fails, there are exactly TWO legitimate ways out, and a third
+-- that must never happen. Printed next to the count so the person staring at a
+-- red build reads it before reaching for the ceiling.
+SELECT diag('INV-6 se reprovou, há DUAS saídas legítimas: (1) a função ganha portão — '
+         || 'assert_org_access/get_my_organization_ids/auth.uid() em posição que DECIDE, ou o molde '
+         || '_unchecked + wrapper; (2) a função perde alcance — REVOKE EXECUTE de PUBLIC, anon E '
+         || 'authenticated (revogar só de PUBLIC não basta no Supabase). Se o portão é um helper que '
+         || 'ainda não está na lista do detector, ele entra NO MESMO PR que mostra o corpo do helper — '
+         || 'nome novo na lista sem alguém ler o corpo é como o gate morre em silêncio. '
+         || 'SUBIR O TETO NÃO É SAÍDA.');
 
 SELECT cmp_ok(
   (SELECT count(*)::int FROM public._rls_inv_definer_without_gate()),
@@ -120,6 +131,83 @@ SELECT isnt(
      WHERE functionname = '_rls_inv6_bad_reader'),
   0,
   'INV-6 RED: a gate named only inside a comment does not count — comments are stripped before matching'
+);
+
+-- --------------------------------------------------------------------------
+-- ...and not by a NESTED block comment either. Postgres block comments nest —
+-- `/* a /* b */ c */` is ONE comment — so a single non-greedy `/\*.*?\*/` stops
+-- at the first `*/` and leaves the tail behind. This body is the exact corpse
+-- that walked past the first version of the stripper.
+-- --------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public._rls_inv6_bad_reader(p_whatsapp_instance_id uuid)
+RETURNS TABLE (leaked text)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_catalog'
+AS $bad$
+  /* nota: /* TODO */ chamar assert_org_access aqui */
+  SELECT i.instance_name::text
+  FROM public.whatsapp_instances i
+  WHERE i.id = p_whatsapp_instance_id;
+$bad$;
+
+SELECT isnt(
+  (SELECT count(*)::int FROM public._rls_inv_definer_without_gate()
+     WHERE functionname = '_rls_inv6_bad_reader'),
+  0,
+  'INV-6 RED: gate named inside a NESTED block comment does not count — stripper is iterative'
+);
+
+-- --------------------------------------------------------------------------
+-- CARIMBAR NÃO É AUTORIZAR. `auth.uid()` as a column VALUE records who acted;
+-- it refuses nobody. This is the shape of public.log_activity(), and matching
+-- the bare token would call it gated for a reason unrelated to its actual gate.
+-- --------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public._rls_inv6_bad_reader(p_whatsapp_instance_id uuid)
+RETURNS TABLE (leaked text)
+LANGUAGE sql
+VOLATILE
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_catalog'
+AS $bad$
+  INSERT INTO public.activities (organization_id, type, subject, owner_id)
+  SELECT i.organization_id, 'x', 'y', auth.uid()
+  FROM public.whatsapp_instances i
+  WHERE i.id = p_whatsapp_instance_id
+  RETURNING subject::text;
+$bad$;
+
+SELECT isnt(
+  (SELECT count(*)::int FROM public._rls_inv_definer_without_gate()
+     WHERE functionname = '_rls_inv6_bad_reader'),
+  0,
+  'INV-6 RED: auth.uid() as a stamp (column value) is not a gate — it refuses nobody'
+);
+
+-- --------------------------------------------------------------------------
+-- The same token, now in a position that DECIDES. This must clear — otherwise
+-- the rule above would forbid the cheapest correct gate there is.
+-- --------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public._rls_inv6_bad_reader(p_whatsapp_instance_id uuid)
+RETURNS TABLE (leaked text)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_catalog'
+AS $fixed$
+  SELECT i.instance_name::text
+  FROM public.whatsapp_instances i
+  JOIN public.team_members tm ON tm.organization_id = i.organization_id
+  WHERE i.id = p_whatsapp_instance_id
+    AND tm.user_id = auth.uid();
+$fixed$;
+
+SELECT is(
+  (SELECT count(*)::int FROM public._rls_inv_definer_without_gate()
+     WHERE functionname = '_rls_inv6_bad_reader'),
+  0,
+  'INV-6 GREEN-after-fix (C): auth.uid() inside a WHERE decides something and counts as a gate'
 );
 
 -- --------------------------------------------------------------------------

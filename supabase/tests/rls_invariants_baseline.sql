@@ -47,7 +47,7 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
   ('INV-2', 100, 'ratchet ceiling: writing DEFINER fns reachable by anon/PUBLIC (static est. <=89 callable writers; tighten then burn down to 0)'),
   ('INV-3', 0,   'zero-tolerance: every org table must have RLS enabled'),
   ('INV-4', 90,  'ratchet ceiling: DEFINER fns lacking SET search_path (static est. ~70; tighten then burn down to 0)'),
-  ('INV-6', 90,  'ratchet ceiling: DEFINER fns reachable by anon/authenticated with no authorization gate (SCRUM-339). MEASURED 2026-08-11 = 90, zero headroom. 18 of the 90 are reachable by anon. See note below.');
+  ('INV-6', 89,  'ratchet ceiling: DEFINER fns reachable by anon/authenticated with no authorization gate (SCRUM-339). MEASURED 2026-08-11 = 89, zero headroom; tighten on every fix and burn down to 0. See note below.');
 
 -- ---------------------------------------------------------------------------
 -- INV-6 (SCRUM-339) — provenance of this ceiling, and why it is not 2.
@@ -71,17 +71,39 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
 --   * A live count on a (differently-branched) local database returned 90, not
 --     2, which is the order of magnitude to expect here.
 --
--- MEASURED, 2026-08-11: the live count is 90, of which 18 are reachable by
--- `anon` (no login at all). The ceiling above is set to exactly that — zero
--- headroom, so the 91st ungated function fails the build. It was measured on an
--- isolated Supabase stack booted from THIS branch's `supabase/migrations/*`
--- (own project id, ports 5452x, so the shared local database the other
--- worktrees use was never touched), which is the same construction CI performs
--- via `supabase start`. Ledger: 74 versions, matching the branch file count.
+-- MEASURED, 2026-08-11: the live count is 89. The ceiling above is set to
+-- exactly that — zero headroom, so the 90th ungated function fails the build.
+-- Measured on an isolated Supabase stack booted from THIS branch's
+-- `supabase/migrations/*` (own project id, ports 5452x, so the shared local
+-- database the other worktrees use was never touched), which is the same
+-- construction CI performs via `supabase start`. Ledger: 74 versions, matching
+-- the branch file count.
 --
--- Burning this down is SCRUM-339, and it is not a formality: 90 ungated
--- DEFINER functions reachable from a browser is the population that produced
--- the 23 closed on 2026-08-11.
+-- WHY 89 AND NOT 90 — the two corrections from the #1518 review pull in
+-- opposite directions, and each was measured in isolation:
+--
+--     starting point (bare `auth.uid(` counted as a gate) ......... 90
+--     ONLY requiring auth.uid() in a deciding position ............ 101   (+11)
+--     ONLY widening the helper list ................................ 80   (-10)
+--     both, which is what ships ................................... 89
+--
+-- The +11 is the finding: eleven functions were passing this invariant on a
+-- STAMP — `owner_id, auth.uid()` in a VALUES — with nothing in them that
+-- refuses anybody. The -10 is the correction to the correction: seven real
+-- identity-derived helpers were missing from the list, so those functions were
+-- being called violations while genuinely holding a gate.
+--
+-- BURN-DOWN TARGET: 0. Not "someday" — every PR that adds a gate or revokes a
+-- grant lowers this number in the same PR. The ceiling may never be raised;
+-- raising it to land code is the failure mode that turned INV-2 (100) and
+-- INV-4 (90) into decoration, which is why a gate failing since 2026-07-30 went
+-- unnoticed for twelve days. When the migration carrying the 23 production
+-- REVOKEs finally lands in the repo, this number drops on its own — that is the
+-- moment to freeze it.
+--
+-- Burning it down is SCRUM-339, and it is not a formality: 89 ungated DEFINER
+-- functions reachable from a browser is the population that produced the 23
+-- closed on 2026-08-11.
 --
 -- Do NOT repeat the INV-2/INV-4 history: those shipped as "conservative upper
 -- bounds, tighten in a follow-up PR" on 2026-06-01 and were never tightened —
