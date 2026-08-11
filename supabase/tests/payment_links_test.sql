@@ -285,9 +285,19 @@ SELECT is(
 
 SELECT is(
   (SELECT public.billing_attach_link_charge(
-            (SELECT (r ->> 'link_id')::uuid FROM _t_link2), 'boleto', 'asaas', 'pay_CCC') ->> 'provider_charge_id'),
+            (SELECT (r ->> 'link_id')::uuid FROM _t_link2), 'credit_card', 'asaas', 'pay_CCC') ->> 'provider_charge_id'),
   'pay_CCC',
   '(COBRANÇA) método DIFERENTE no mesmo link gera cobrança própria — a idempotência é por par, não por link');
+
+-- O vocabulário de método é o do PORT (`"pix" | "credit_card"`), não um
+-- inventado aqui. `boleto` não existe neste produto: o port não o tipa, a policy
+-- não o mapeia e o motor de preço não o precifica. Se o CHECK aceitasse, a
+-- tabela guardaria cobrança de um método que ninguém sabe cobrar.
+SELECT throws_ok(
+  format($$ SELECT public.billing_attach_link_charge(%L, 'boleto', 'asaas', 'pay_ZZZ') $$,
+         (SELECT r ->> 'link_id' FROM _t_link2)),
+  '23514', NULL,
+  '(COBRANÇA) método fora do vocabulário do port é RECUSADO — boleto não existe neste produto');
 
 -- ===========================================================================
 -- (COBRANÇA) link revogado não recebe cobrança.
@@ -313,12 +323,26 @@ SELECT is(
 -- entulho que esta tabela existe para impedir. Achado do Sentinela na volta 2.
 -- ===========================================================================
 SET LOCAL role postgres;
+
+-- Link PRÓPRIO para o caso expirado: reusar o _t_link2 misturaria a prova da
+-- idempotência por par com a prova do vencimento, e um teste que prova duas
+-- coisas na mesma linha não diz qual delas quebrou.
+SET LOCAL role authenticated;
+SELECT set_config('request.jwt.claims',
+  '{"sub":"28628628-0001-0000-0000-000000000286","role":"authenticated"}', true);
+CREATE TEMP TABLE _t_link3 AS
+SELECT public.billing_create_payment_link(
+         'new_org', NULL, 'Org do vencido SCRUM-286',
+         '28628628-9999-0000-0000-000000000286', 3, 'annual', 'pix',
+         now() + interval '7 days') AS r;
+SET LOCAL role postgres;
+
 UPDATE public.payment_links SET expires_at = now() - interval '1 minute'
- WHERE id = (SELECT (r ->> 'link_id')::uuid FROM _t_link2);
+ WHERE id = (SELECT (r ->> 'link_id')::uuid FROM _t_link3);
 
 CREATE TEMP TABLE _t_exp AS
 SELECT public.billing_attach_link_charge(
-         (SELECT (r ->> 'link_id')::uuid FROM _t_link2), 'credit_card', 'asaas', 'pay_EEE') AS r;
+         (SELECT (r ->> 'link_id')::uuid FROM _t_link3), 'pix', 'asaas', 'pay_EEE') AS r;
 
 SELECT is((SELECT (r ->> 'ok')::boolean FROM _t_exp), true,
   '(COBRANÇA) link EXPIRADO NÃO recusa — escrituração que se recusa a escrever perde uma cobrança que já existe no gateway');
@@ -326,14 +350,26 @@ SELECT is((SELECT (r ->> 'expired_at_attach')::boolean FROM _t_exp), true,
   '(COBRANÇA) e AVISA que expirou — quem chama precisa cancelar a cobrança no gateway');
 SELECT is(
   (SELECT count(*)::int FROM public.payment_link_charges
-    WHERE payment_link_id = (SELECT (r ->> 'link_id')::uuid FROM _t_link2)
-      AND method = 'credit_card'),
+    WHERE payment_link_id = (SELECT (r ->> 'link_id')::uuid FROM _t_link3)
+      AND method = 'pix'),
   1,
   '(COBRANÇA) a linha existe — é ela que a reconciliação vai achar, e é ela que impede a segunda cobrança');
 
--- Contraste: revogado é decisão DELIBERADA, e continua recusando.
-SELECT is((SELECT (r ->> 'expired_at_attach')::boolean FROM _t_exp), true,
-  '(COBRANÇA) relógio e decisão humana são estados DIFERENTES — expirado grava e sinaliza, revogado recusa');
+-- O CONTRASTE, agora lendo o link REVOGADO e não o expirado de novo.
+--
+-- A primeira versão desta asserção lia `_t_exp` — a MESMA expressão da anterior,
+-- com mensagem diferente. Não tinha matador próprio: nenhuma mudança pontual a
+-- derrubaria deixando a de cima verde, porque eram a mesma asserção. Decoração,
+-- e do pior tipo: a mensagem prometia exatamente a prova que mais se quer ter
+-- aqui. Achado do Sentinela na volta 3.
+CREATE TEMP TABLE _t_rev AS
+SELECT public.billing_attach_link_charge(
+         (SELECT (r ->> 'link_id')::uuid FROM _t_link), 'credit_card', 'asaas', 'pay_FFF') AS r;
+
+SELECT is((SELECT (r ->> 'ok')::boolean FROM _t_rev), false,
+  '(COBRANÇA) revogado RECUSA — decisão deliberada, alguém agiu, e quem chamou ignorou o resolve');
+SELECT ok((SELECT (r -> 'expired_at_attach') IS NULL FROM _t_rev),
+  '(COBRANÇA) e a recusa NÃO traz expired_at_attach — os dois estados são distinguíveis no retorno, então uniformizar os quatro códigos derruba esta asserção');
 
 -- ===========================================================================
 -- (AUDITORIA) gerar e revogar deixam rastro em master_audit_logs.
