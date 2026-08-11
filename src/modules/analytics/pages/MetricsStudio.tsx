@@ -1,12 +1,19 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Gauge, Lock, Pencil, Trash2 } from "lucide-react";
+import { Check, Download, Gauge, Loader2, Lock, Pencil, Trash2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { cn } from "@/lib/utils";
 import { MetricsCanvas } from "@/modules/analytics/components/metrics-studio/MetricsCanvas";
 import { MetricsStudioSidebar } from "@/modules/analytics/components/metrics-studio/MetricsStudioSidebar";
 import { useMetricsStudio } from "@/modules/analytics/hooks/useMetricsStudio";
 import { useMetricsStudioEnabled } from "@/modules/analytics/hooks/useMetricsStudioEnabled";
+import { useMetricsStudioReport } from "@/modules/analytics/hooks/useMetricsStudioReport";
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
 import { STUDIO_PERIODS, type StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
@@ -41,6 +48,7 @@ export default function MetricsStudio() {
 
   // G5: trava de liberação por org. Falha para FECHADO — ver o hook.
   const rollout = useMetricsStudioEnabled();
+  const relatorio = useMetricsStudioReport(studio.windows);
 
   // G6 do grill: os cortes por pessoa (closer/SDR) reusam a trava do Ranking,
   // que já existe. Sem ela, o seletor de corte simplesmente não os oferece.
@@ -175,6 +183,33 @@ export default function MetricsStudio() {
             <Gauge className="h-3.5 w-3.5" />
             Comando
           </Link>
+
+          {/* SCRUM-312 · G10: planilha, não PDF. Desabilitado com painel
+              vazio — exportar nada gera arquivo que decepciona. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                disabled={studio.windows.length === 0 || relatorio.exportando !== null}
+                className="inline-flex items-center gap-1.5 rounded-[9px] border border-border bg-card px-3 py-[7px] text-[12px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+              >
+                {relatorio.exportando ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+                Exportar
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => void relatorio.exportar("month")}>
+                Relatório mensal
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void relatorio.exportar("quarter")}>
+                Relatório trimestral
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <button
             type="button"
