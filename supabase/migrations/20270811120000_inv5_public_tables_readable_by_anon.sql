@@ -21,13 +21,37 @@
 --   public | postgres       | r | anon=rxtm/postgres
 --   public | supabase_admin | r | anon=arwdDxtm/supabase_admin
 --
--- Toda tabela criada em `public` NASCE com SELECT para `anon`. Não existe passo
--- errado a evitar: o default é inseguro, e disciplina humana não fecha isso —
--- só detecção fecha.
+-- Toda tabela criada em `public` NASCE com SELECT para `anon`.
 --
--- O mesmo vale para FUNÇÃO (`f | anon=X/postgres`), e é por isso que os
+-- ================== NÃO MEXA NESSES DEFAULTS ==================
+--
+-- Ler o parágrafo acima como "então revogue o default" é o erro que este bloco
+-- existe para impedir. Esses defaults são LOAD-BEARING: o PostgREST atende
+-- `anon` e `authenticated` justamente porque essas roles têm GRANT de tabela, e
+-- quem faz o portão é a RLS. Revogar o default global não conserta vazamento
+-- nenhum — derruba o produto inteiro, toda leitura de toda tela.
+--
+-- Por isso o invariante NÃO é "tabela não deve ter GRANT para anon". É:
+--
+--   TODA TABELA EM `public` TEM QUE TER RLS LIGADA.
+--
+-- O GRANT é o estado normal e permanente; a RLS é o controle. INV-5 não é
+-- remendo por falta de coisa melhor — é o ponto de imposição CORRETO, o único
+-- lugar onde dá para exigir segurança sem quebrar o acesso de que o produto
+-- depende. Quem vier "melhorar" isto mexendo em `ALTER DEFAULT PRIVILEGES`
+-- daqui a seis meses vai derrubar o PostgREST e não vai entender por quê.
+--
+-- O detector aceita `REVOKE` como conserto (ver CONSERTO 2 no teste) porque
+-- para uma tabela AVULSA — um backup manual que ninguém deveria ler — revogar é
+-- legítimo e mais simples que inventar policy. O que não se faz é revogar no
+-- DEFAULT, que atinge todas as tabelas futuras de uma vez.
+-- ==============================================================
+--
+-- O mesmo default vale para FUNÇÃO (`f | anon=X/postgres`), e é por isso que os
 -- `REVOKE` abaixo são explícitos por role: `REVOKE FROM PUBLIC` sozinho NÃO
 -- remove um privilégio concedido diretamente a `anon` pelo default privilege.
+-- Aqui revogar é certo e sem efeito colateral: função de auditoria não faz
+-- parte da superfície que o PostgREST serve ao cliente.
 --
 -- POR QUE O INV-3 NÃO PEGOU
 -- -------------------------
@@ -43,10 +67,28 @@
 --
 -- O QUE ESTA MIGRATION NÃO FAZ
 -- ----------------------------
--- Não revoga nada, não apaga nada, não mexe em tabela de dado. O destino das
--- seis `_bkp_%` é decisão do CTO e caminho separado; aqui só nasce o detector.
--- Consequência: no dia 1 em produção a primeira varredura provavelmente ACHA
--- violação — e isso é o comportamento certo, não um defeito da migration.
+-- Não revoga nada, não apaga nada, não mexe em tabela de dado. Aqui só nasce o
+-- detector.
+--
+-- O QUE ESPERAR DA PRIMEIRA VARREDURA EM PRODUÇÃO: SILÊNCIO.
+--
+-- O saneamento já foi feito, antes desta migration e por caminho separado.
+-- Produção tem hoje 12 tabelas de backup, TODAS com RLS ligada, ZERO privilégio
+-- para `anon` e `authenticated`, e `service_role` alcançando. Então a primeira
+-- passada do cron não deve escrever nada em `runtime_logs` — e silêncio é
+-- resultado VÁLIDO, não sinal de alarme quebrado.
+--
+-- Se a primeira passada escrever alguma coisa, é achado de verdade: tabela que
+-- ninguém tinha olhado, e não resíduo das que motivaram a fatia.
+--
+-- (O saneamento foi mais largo que o achado original: além das seis `_bkp_%`,
+-- apareceram `_backup_bertin_20260608_pipe_entries` e
+-- `_backup_merge_agendamentos_milennials` — este banco usa TRÊS convenções de
+-- nome, `_bkp_*`, `_backup_*` e `backup_*`. Nada disso vira predicado aqui de
+-- propósito: INV-5 não olha NOME. Um detector que casasse nome só acharia
+-- backup batizado na convenção que alguém lembrou de seguir; o predicado é
+-- estrutural — RLS desligada com GRANT vivo — e por isso pega a tabela que
+-- ninguém pensou em chamar de backup.)
 
 -- ---------------------------------------------------------------------------
 -- 1. O detector
@@ -55,10 +97,25 @@
 -- exige privilégio nenhum, então não há razão para a função carregar poder. O
 -- `pg_cron` a executa como o dono do job, e o `service_role` como ele mesmo.
 --
--- `relkind = 'r'` — só tabela ordinária. VIEW não tem RLS própria (herda a das
--- tabelas de base) e tabela particionada ('p') não guarda linha. Se um dia uma
--- partição exposta aparecer, é ampliação deliberada do predicado, com teste
--- junto, não um `IN ('r','p')` silencioso.
+-- `relkind = 'r'` — só tabela ordinária, e esta linha é uma LIMITAÇÃO CONHECIDA,
+-- não um descuido. VIEW não tem RLS própria (herda a das tabelas de base), mas
+-- os outros dois casos são reais:
+--
+--   'p' (particionada) — o pai não guarda linha, mas SELECT no pai lê as
+--       partições. Pai sem RLS com GRANT vivo é vazamento de verdade, e este
+--       predicado NÃO o vê.
+--   'm' (matview)      — pior: matview NÃO ACEITA RLS. Não há `ENABLE ROW LEVEL
+--       SECURITY` para ela. Se uma matview exposta aparecer, o único conserto é
+--       `REVOKE` — então incluí-la aqui exigiria que o teste parasse de tratar
+--       "ligar RLS" como conserto universal.
+--
+-- Medido no schema deste repositório: `public` tem 279 relações, TODAS 'r' —
+-- zero particionadas, zero matviews. Ampliar agora seria escrever predicado
+-- para caso que não existe aqui, e mudar o significado de "conserto" no teste
+-- sem ter um exemplo para exercitar. Produção pode divergir: o saneamento de
+-- 11/08 encontrou objeto de backup que `relkind='r'` deixava passar. Ampliar
+-- para `IN ('r','p','m')` é fatia própria, com teste que cubra o caso da
+-- matview — não um `IN` silencioso enfiado aqui.
 --
 -- Uma linha por (tabela, grantee): saber que `anon` lê é diferente de saber que
 -- só `authenticated` lê — a primeira é vazamento para a internet, a segunda é

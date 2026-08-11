@@ -18,8 +18,19 @@
 --   public | postgres       | r | anon=rxtm/postgres
 --   public | supabase_admin | r | anon=arwdDxtm/supabase_admin
 --
--- Toda tabela criada em `public` NASCE com SELECT para `anon`. Não há passo
--- errado a evitar — o padrão é inseguro, e só um detector fecha isso.
+-- Toda tabela criada em `public` NASCE com SELECT para `anon`.
+--
+-- E esses defaults FICAM. Eles são load-bearing: o PostgREST atende `anon` e
+-- `authenticated` porque essas roles têm GRANT de tabela, e quem faz o portão é
+-- a RLS. Revogar o default global não conserta vazamento — derruba o produto.
+-- Por isso o invariante não é "tabela não deve ter GRANT para anon", é **toda
+-- tabela em `public` tem que ter RLS ligada**: o GRANT é o estado normal e
+-- permanente, a RLS é o controle, e este é o ponto de imposição correto — o
+-- único que exige segurança sem quebrar o acesso de que o produto depende.
+--
+-- O detector aceita `REVOKE` como conserto (CONSERTO 2, abaixo) porque para uma
+-- tabela AVULSA — backup manual que ninguém deveria ler — revogar é legítimo. O
+-- que não se faz é revogar no DEFAULT, que atinge toda tabela futura.
 --
 -- POR QUE O INV-3 NÃO PEGOU — três cegueiras, e a terceira é a que decide
 --
