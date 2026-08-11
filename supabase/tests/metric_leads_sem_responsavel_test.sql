@@ -33,7 +33,7 @@ INSERT INTO public.organizations (id, name, slug, timezone) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.tags (id, organization_id, name) VALUES
-  ('3110ta9a-0000-4000-8000-00000000000a', '3110000a-0000-4000-8000-00000000000a', 'Ouro')
+  ('31100a9a-0000-4000-8000-00000000000a', '3110000a-0000-4000-8000-00000000000a', 'Ouro')
 ON CONFLICT (id) DO NOTHING;
 
 -- Org A: 3 órfãos (2 meta_ads, 1 indicacao), 1 com dono, 1 apagado, 1 sombra.
@@ -49,7 +49,7 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Uma tag no Órfão 1, para o recorte por tag.
 INSERT INTO public.lead_tags (lead_id, tag_id) VALUES
-  ('3110ead1-0000-4000-8000-000000000001', '3110ta9a-0000-4000-8000-00000000000a')
+  ('3110ead1-0000-4000-8000-000000000001', '31100a9a-0000-4000-8000-00000000000a')
 ON CONFLICT DO NOTHING;
 
 -- Org B: 1 órfão. Existe só para provar que não vaza para a contagem da A.
@@ -57,6 +57,43 @@ INSERT INTO public.leads (id, organization_id, name, origin, deleted_at, is_shad
                           responsible_id, sale_responsible_id, pre_sale_responsible_id) VALUES
   ('3110ead1-0000-4000-8000-0000000000b1', '3110000b-0000-4000-8000-00000000000b', 'Órfão B', 'meta_ads', NULL, false, NULL, NULL, NULL)
 ON CONFLICT (id) DO NOTHING;
+
+-- Um membro por org. `fn_metric_measure` chama `assert_org_access`, que só
+-- libera service_role, master, ou membro ATIVO da org via
+-- get_my_organization_ids(). Sem estes dois usuários a suíte inteira morre em
+-- `access_denied` (P0001) na primeira chamada ao motor — foi o que aconteceu ao
+-- rodá-la pela primeira vez, na branch efêmera de 2026-08-11. Mesmo fixture da
+-- suíte irmã composable_metrics_engine_test.sql.
+INSERT INTO auth.users (
+  id, email, encrypted_password, email_confirmed_at, raw_user_meta_data,
+  created_at, updated_at, instance_id, aud, role,
+  confirmation_token, recovery_token, email_change_token_new,
+  email_change_token_current, reauthentication_token, phone_change_token,
+  email_change, phone_change
+) VALUES
+  ('3110115e-0000-4000-8000-00000000000a', 'user-3110a@test.local', '', now(), '{}'::jsonb,
+   now(), now(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+   '', '', '', '', '', '', '', ''),
+  ('3110115e-0000-4000-8000-00000000000b', 'user-3110b@test.local', '', now(), '{}'::jsonb,
+   now(), now(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+   '', '', '', '', '', '', '', '')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.team_members (id, organization_id, user_id, name, role, is_active) VALUES
+  ('31101ea9-0000-4000-8000-00000000000a', '3110000a-0000-4000-8000-00000000000a',
+   '3110115e-0000-4000-8000-00000000000a', 'Membro A', 'member', true),
+  ('31101ea9-0000-4000-8000-00000000000b', '3110000b-0000-4000-8000-00000000000b',
+   '3110115e-0000-4000-8000-00000000000b', 'Membro B', 'member', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- A medida fantasma da seção (NL) entra AQUI, ainda como postgres: o catálogo é
+-- deny-all para authenticated, então inserir depois da troca de papel falharia
+-- por RLS e não pelo motivo que o caso quer medir.
+INSERT INTO public.metric_catalog_measures (id, label, unit, anchor, description, sort)
+VALUES ('medida_fantasma_311', 'Fantasma', 'count', 'hoje', 'Só existe neste teste.', 999)
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.metric_catalog_measure_recortes (measure_id, recorte_id)
+VALUES ('medida_fantasma_311', 'total') ON CONFLICT DO NOTHING;
 
 -- ===========================================================================
 -- (CT) Catálogo
@@ -124,8 +161,15 @@ SELECT ok(
 );
 
 -- ===========================================================================
--- (VL) Valor
+-- (VL) Valor — daqui em diante como MEMBRO DE A, que é o caminho real
 -- ===========================================================================
+-- O motor é chamado pelo navegador como `authenticated`, e é assim que ele tem
+-- de ser medido. Rodar como postgres/service_role passaria por cima de
+-- assert_org_access e o teste não provaria o caminho que existe em produção.
+SET LOCAL role authenticated;
+SELECT set_config('request.jwt.claims',
+  '{"sub":"3110115e-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+
 SELECT is(
   (public.fn_metric_measure(
      '3110000a-0000-4000-8000-00000000000a',
@@ -154,20 +198,40 @@ SELECT is(
 );
 
 -- ===========================================================================
--- (XO) Isolamento cross-org
+-- (XO) Isolamento cross-org — duas metades
 -- ===========================================================================
+-- Primeira: membro de A NÃO lê a org B. Isto é autorização, e sem ele a medida
+-- poderia filtrar certo e ainda assim ser lida por quem não devia.
+SELECT throws_ok(
+  $$SELECT public.fn_metric_measure(
+      '3110000b-0000-4000-8000-00000000000b',
+      '{"kind":"leaf","id":"leads_sem_responsavel"}'::jsonb,
+      'total')$$,
+  'P0001',
+  NULL,
+  'XO1: membro de A é BLOQUEADO na org B (assert_org_access)'
+);
+
+-- Segunda: como membro de B, a contagem é só a de B. Isto é o filtro da medida,
+-- e é outra coisa — passar no de cima não implica passar neste.
+SELECT set_config('request.jwt.claims',
+  '{"sub":"3110115e-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+
 SELECT is(
   (public.fn_metric_measure(
      '3110000b-0000-4000-8000-00000000000b',
      '{"kind":"leaf","id":"leads_sem_responsavel"}'::jsonb,
      'total') ->> 'value')::numeric,
   1::numeric,
-  'XO1: org B vê só o próprio órfão — o da A não vaza'
+  'XO2: org B vê só o próprio órfão — os 3 da A não vazam'
 );
 
 -- ===========================================================================
--- (SR) Séries
+-- (SR) Séries — de volta ao membro de A
 -- ===========================================================================
+SELECT set_config('request.jwt.claims',
+  '{"sub":"3110115e-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+
 SELECT is(
   jsonb_array_length(
     public.fn_metric_measure(
@@ -223,12 +287,8 @@ SELECT throws_ok(
 -- ===========================================================================
 -- Antes desta migration o CASE sem ELSE devolvia NULL e o motor entregava
 -- value e series nulos SEM erro — número em branco na tela, nada nos logs.
-INSERT INTO public.metric_catalog_measures (id, label, unit, anchor, description, sort)
-VALUES ('medida_fantasma_311', 'Fantasma', 'count', 'hoje', 'Só existe neste teste.', 999)
-ON CONFLICT (id) DO NOTHING;
-INSERT INTO public.metric_catalog_measure_recortes (measure_id, recorte_id)
-VALUES ('medida_fantasma_311', 'total') ON CONFLICT DO NOTHING;
-
+-- A medida fantasma é semeada no bloco de fixtures, como postgres: o catálogo é
+-- deny-all para authenticated.
 SELECT throws_ok(
   $$SELECT public.fn_metric_measure(
       '3110000a-0000-4000-8000-00000000000a',

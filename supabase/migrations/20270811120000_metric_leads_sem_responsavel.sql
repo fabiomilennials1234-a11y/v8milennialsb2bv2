@@ -209,10 +209,14 @@ $$;
 -- CREATE OR REPLACE PRESERVA o proacl existente — reescrever os REVOKEs é o que
 -- garante o estado correto num ambiente novo, onde a função nasce do zero e
 -- herda o grant nominal do ALTER DEFAULT PRIVILEGES.
-REVOKE EXECUTE ON FUNCTION public._metric_leaf(uuid, text, text, text, date, date, jsonb) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public._metric_leaf(uuid, text, text, text, date, date, jsonb) FROM anon;
-REVOKE EXECUTE ON FUNCTION public._metric_leaf(uuid, text, text, text, date, date, jsonb) FROM authenticated;
-GRANT  EXECUTE ON FUNCTION public._metric_leaf(uuid, text, text, text, date, date, jsonb) TO service_role;
+-- A assinatura tem TRÊS `date` (p_ref, p_start, p_end), não dois. Com dois, o
+-- REVOKE aponta para uma função que não existe em ambiente nenhum — nem aqui,
+-- nem em prod — e a migration morre com 42883 no statement 9, depois de o
+-- CREATE OR REPLACE já ter rodado. Pego na branch efêmera em 2026-08-11.
+REVOKE EXECUTE ON FUNCTION public._metric_leaf(uuid, text, text, text, date, date, date, jsonb) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public._metric_leaf(uuid, text, text, text, date, date, date, jsonb) FROM anon;
+REVOKE EXECUTE ON FUNCTION public._metric_leaf(uuid, text, text, text, date, date, date, jsonb) FROM authenticated;
+GRANT  EXECUTE ON FUNCTION public._metric_leaf(uuid, text, text, text, date, date, date, jsonb) TO service_role;
 
 -- ===========================================================================
 -- 4 — GUARDA QUE ABORTA
@@ -234,6 +238,26 @@ BEGIN
   IF NOT has_function_privilege('service_role', v_fn, 'EXECUTE') THEN
     RAISE EXCEPTION 'GUARDA: service_role NÃO executa % — o motor não roda', v_fn;
   END IF;
+
+  -- O despachante também é reescrito acima, então também precisa ser provado.
+  -- Sem isto a migration REVOKE uma função e não verifica nenhuma das duas
+  -- metades do grant nela — que é exatamente o buraco que a seção 4 existe para
+  -- fechar. O `::regprocedure` de brinde falha alto se a assinatura divergir do
+  -- CREATE, em vez de deixar o REVOKE mirar no vazio.
+  DECLARE
+    v_disp regprocedure :=
+      'public._metric_leaf(uuid, text, text, text, date, date, date, jsonb)'::regprocedure;
+  BEGIN
+    IF has_function_privilege('anon', v_disp, 'EXECUTE') THEN
+      RAISE EXCEPTION 'GUARDA: anon executa % — REVOKE não pegou', v_disp;
+    END IF;
+    IF has_function_privilege('authenticated', v_disp, 'EXECUTE') THEN
+      RAISE EXCEPTION 'GUARDA: authenticated executa % — despachante interno não pode', v_disp;
+    END IF;
+    IF NOT has_function_privilege('service_role', v_disp, 'EXECUTE') THEN
+      RAISE EXCEPTION 'GUARDA: service_role NÃO executa % — o motor não roda', v_disp;
+    END IF;
+  END;
 
   -- O wrapper público continua acessível: se este REVOKE vazar para ele, o
   -- Estúdio inteiro para.
