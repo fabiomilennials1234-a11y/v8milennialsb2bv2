@@ -47,7 +47,7 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
   ('INV-2', 100, 'ratchet ceiling: writing DEFINER fns reachable by anon/PUBLIC (static est. <=89 callable writers; tighten then burn down to 0)'),
   ('INV-3', 0,   'zero-tolerance: every org table must have RLS enabled'),
   ('INV-4', 90,  'ratchet ceiling: DEFINER fns lacking SET search_path (static est. ~70; tighten then burn down to 0)'),
-  ('INV-6', 101,  'ratchet ceiling: DEFINER fns reachable by anon/authenticated with no authorization gate (SCRUM-339). MEASURED 2026-08-11 = 101, zero headroom; tighten on every fix and burn down to 0. See note below.');
+  ('INV-6', 91,  'ratchet ceiling: DEFINER fns reachable by anon/authenticated with no authorization gate (SCRUM-339). MEASURED 2026-08-11 = 91, zero headroom; tighten on every fix and burn down to 0. See note below.');
 
 -- ---------------------------------------------------------------------------
 -- INV-6 (SCRUM-339) — provenance of this ceiling, and why it is not 2.
@@ -71,8 +71,8 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
 --   * A live count on a (differently-branched) local database returned 90, not
 --     2, which is the order of magnitude to expect here.
 --
--- MEASURED, 2026-08-11: the live count is 101. The ceiling above is set to
--- exactly that — zero headroom, so the 102nd ungated function fails the build.
+-- MEASURED, 2026-08-11: the live count is 91. The ceiling above is set to
+-- exactly that — zero headroom, so the 92nd ungated function fails the build.
 -- Measured on an isolated Supabase stack booted from THIS branch's
 -- `supabase/migrations/*` (own project id, ports 5452x, so the shared local
 -- database the other worktrees use was never touched), which is the same
@@ -86,7 +86,8 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
 --     ONLY requiring auth.uid() in a deciding position ................ 101   (+11)
 --     ONLY widening the helper list .................................... 80   (-10)
 --     both (first ship) ................................................ 89
---     + transitive closure, and `is_master_user` no longer a bare name . 101   (+12)
+--     + transitive closure, `is_master_user` dropped by NAME ........... 101   (+12, WRONG)
+--     - `is_master_user()` recognised by its DEFAULT (what ships) ....... 91   (-10)
 --
 -- Each delta is a finding, not noise:
 --
@@ -94,13 +95,33 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
 --         VALUES records who acted and refuses nobody.
 --   -10 — seven identity-derived helpers were missing, so functions that DO
 --         hold a gate were being counted as violations.
---   +12 — `is_master_user(_user_id)` answers honestly about WHOEVER is passed;
---         the bare name is not a gate. Measured: ZERO DEFINER functions call
---         `is_master_user(auth.uid())`, and 51 call it with a parameter. Of the
---         101 violations, **12 call `is_master_user(<param>)` with no
---         `auth.uid()` anywhere in the body** — those check whether some uuid
---         handed in is a master, which gates nothing. That subset is the
---         cheapest place to start burning down.
+--   +12 — dropping `is_master_user` from the trusted set. This was WRONG, and
+--         the measurement that justified it was INVERTED. See below.
+--   -10 — undoing it correctly.
+--
+-- THE INVERTED MEASUREMENT, worth writing down because it is a trap that looks
+-- like evidence. The signature is
+--     is_master_user("_user_id" uuid DEFAULT auth.uid())        (baseline:13760)
+-- so the parameter exists but its DEFAULT is auth.uid(). Nobody writes
+-- `is_master_user(auth.uid())` — the default already does it — which means the
+-- IDIOMATIC GATED FORM IS EMPTY PARENS. Counting occurrences of the literal
+-- `auth.uid()` inside the parens therefore returns zero and reads as "nothing
+-- is gated", when the truth is the opposite. Measured properly on this branch:
+--     is_master_user()   — subject is the caller, GATED ......... 44
+--     is_master_user(x)  — answers about someone else ............ 9
+-- Treating the name as never-a-gate turned ~44 genuinely gated calls into
+-- violations: false positives in bulk, and exactly what makes a target of 0
+-- unreachable.
+--
+-- The rule that ships needs no heuristic: empty parens counts, parens with
+-- content does not. `has_role` and `is_team_member` have NO default
+-- (baseline:12579), so they count only with `auth.uid()` as the argument — the
+-- asymmetry is the DEFAULT, not "takes a parameter".
+--
+-- REAL DEBT, recomputed on the correct population: of the 91 violations, TWO
+-- call `is_master_user(<argument>)` — checking whether some uuid handed in is a
+-- master, which gates nothing. Two, not the twelve computed over the wrong
+-- population. Cheapest place to start burning down.
 --
 -- BURN-DOWN TARGET: 0, and it is now REACHABLE — which is the point of the
 -- transitive closure. A helper that gates but sits outside the list would make
@@ -112,7 +133,7 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
 -- unnoticed for twelve days. When the migration carrying the 23 production
 -- REVOKEs finally lands in the repo, this number drops on its own.
 --
--- Burning it down is SCRUM-339, and it is not a formality: 101 ungated DEFINER
+-- Burning it down is SCRUM-339, and it is not a formality: 91 ungated DEFINER
 -- functions reachable from a browser is the population that produced the 23
 -- closed on 2026-08-11.
 --

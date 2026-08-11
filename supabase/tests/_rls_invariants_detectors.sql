@@ -444,19 +444,24 @@ AS $fn$
       -- subject. `is_master_user(_user_id)` and `has_role(_user_id, _role)`
       -- answer honestly about WHOEVER you pass — so the name alone is not a
       -- gate; `is_master_user(auth.uid())` is.
-      OR (
-        -- SUBJECT-parameter predicates: `is_master_user(_user_id)`,
-        -- `has_role(_user_id, _role)` and `is_team_member(_user_id)` answer
-        -- honestly about WHOEVER is passed, so the bare name is not a gate.
-        -- They count when the subject is demonstrably the caller: either the
-        -- argument is literally `auth.uid()`, or the body derives identity
-        -- somewhere (a `v_uid := auth.uid()` assigned above the call is the
-        -- common shape, and matching it exactly would need a parser).
-        -- A body that never touches auth.uid() and simply trusts a uuid handed
-        -- in has checked nothing — that is the case this refuses.
-        public._rls_inv_strip_sql_comments(pr.prosrc) ~* '(is_master_user|has_role|is_team_member)\s*\('
-        AND public._rls_inv_strip_sql_comments(pr.prosrc) ~* 'auth\s*\.\s*(uid|org_id)\s*\('
-      )
+      -- (a2) SUBJECT-parameter predicates. Whether they gate depends on HOW
+      -- they are called, and the distinction is textual and exact — no
+      -- heuristic needed.
+      --
+      -- `is_master_user("_user_id" uuid DEFAULT auth.uid())` (baseline:13760).
+      -- The parameter exists but its DEFAULT is auth.uid(), so:
+      --     is_master_user()      → subject IS the caller      → GATE
+      --     is_master_user(x)     → answers about someone else → NOT a gate
+      -- Nobody writes `is_master_user(auth.uid())` precisely because the
+      -- default already does it: the idiomatic gated form is EMPTY PARENS.
+      -- Measuring the literal `auth.uid()` inside the parens counts the gated
+      -- calls as ungated — inverted, and it cost a review round.
+      OR public._rls_inv_strip_sql_comments(pr.prosrc) ~* '\mis_master_user\s*\(\s*\)'
+      -- `has_role(_user_id, _role)` and `is_team_member(_user_id)` have NO
+      -- default (baseline:12579): there is no way to call them that resolves
+      -- the subject on its own, so they count only with auth.uid() as the
+      -- argument. The asymmetry is the DEFAULT, not "takes a parameter".
+      OR public._rls_inv_strip_sql_comments(pr.prosrc) ~* '(has_role|is_team_member|is_master_user)\s*\(\s*auth\s*\.\s*uid\s*\('
       -- (b) ...or uses auth.uid()/auth.org_id() where it DECIDES something —
       -- inside IF/WHERE/AND/EXISTS/RAISE, bounded to the same statement by
       -- forbidding a `;` in between. A bare `auth.uid()` sitting in a VALUES
