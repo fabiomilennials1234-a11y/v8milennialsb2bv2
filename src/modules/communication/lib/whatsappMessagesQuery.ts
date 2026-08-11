@@ -45,9 +45,34 @@
  * de `THREAD_MESSAGE_LIMIT` fica inalcançável na tela (segue no banco). A
  * paginação é o passo seguinte — e, quando vier, a janela das ligações em
  * `conversationCallsQuery.ts` tem que andar junto.
+ *
+ * ── Por que a instância virou um CONJUNTO, e por que o chip fica na chave ──
+ * O terceiro sabor de "mensagem sumiu" não era formato nem janela: era o
+ * `.eq("instance_id", <instância viva>)`. Excluir uma instância desatava todo o
+ * histórico dela (FK `ON DELETE SET NULL`) e a conversa inteira saía da tela —
+ * 385.828 linhas órfãs em prod (2026-08-10), com excluir→recriar acontecendo em
+ * menos de dois minutos. A saída é tirar `instance_id` do ciclo de vida da
+ * Instance: o uuid passa a ser identificador HISTÓRICO — quem dropa a FK é a
+ * migration `20270811000000_whatsapp_messages_drop_instance_fk.sql` — e a leitura
+ * deixa de ser de UMA instância pra varrer o CHIP: instância viva + as que já
+ * morreram no mesmo número (`resolveChipInstanceIds`).
+ *
+ * ⚠️ Essa varredura DEPENDE da migration, que é passo MANUAL, enquanto este
+ * arquivo sobe sozinho no merge pra `main`. Enquanto ela não estiver aplicada
+ * em prod, `whatsapp_chip_instance_ids` não existe, `resolveChipInstanceIds`
+ * degrada pro conjunto `[instância viva]` e esta query se comporta exatamente
+ * como a versão `.eq("instance_id", …)` de antes — nem melhor, nem pior. O
+ * porquê da degradação está em `chipInstanceIds.ts`.
+ *
+ * O que NÃO muda é a identidade da thread: continua `(org, chip, telefone)`. A
+ * tentação era tirar o chip da chave e unir tudo por telefone — só que org com
+ * chips departamentais (uma delas tem 55) fala com o MESMO contato por números
+ * diferentes, e 87% das conversas órfãs dela são tocadas por 2+ chips. Sem o
+ * chip na chave, FINANCEIRO e TÉCNICA viram uma conversa só.
  */
 import { supabase } from "@/integrations/supabase/client";
 import { normalizePhone } from "@/lib/normalizePhone";
+import { resolveChipInstanceIds } from "@/modules/communication/lib/chipInstanceIds";
 import type { WhatsAppMessage } from "@/modules/communication/hooks/chat/types";
 
 /** Colunas devolvidas pra o chat. Mantém em sync hook + prefetch. */
@@ -71,9 +96,11 @@ export interface FetchConversationMessagesParams {
 
 /**
  * Busca as `THREAD_MESSAGE_LIMIT` mensagens mais recentes de uma conversa
- * (org + instância + telefone) e devolve em ordem cronológica ascendente.
+ * (org + chip + telefone) e devolve em ordem cronológica ascendente.
  * Filtra por `normalized_phone` pra capturar a thread inteira mesmo com
- * formatos divergentes de `phone_number`.
+ * formatos divergentes de `phone_number`, e pelo conjunto de `instance_id` que
+ * `resolveChipInstanceIds` devolver pro chip, pra não perder o que ficou pra
+ * trás numa instância excluída.
  */
 export async function fetchConversationMessages(
   params: FetchConversationMessagesParams,
@@ -84,11 +111,15 @@ export async function fetchConversationMessages(
   // Telefone impossível de normalizar (vazio/inválido) → sem conversa.
   if (!normalized) return [];
 
+  // Degrada pra `[instanceId]` se a RPC ainda não existe em prod — ver
+  // `chipInstanceIds.ts`. Nunca rejeita, então não precisa de guarda aqui.
+  const instanceIds = await resolveChipInstanceIds(organizationId, instanceId);
+
   const { data, error } = await supabase
     .from("whatsapp_messages")
     .select(WHATSAPP_MESSAGE_COLUMNS)
     .eq("organization_id", organizationId)
-    .eq("instance_id", instanceId)
+    .in("instance_id", [...instanceIds])
     .eq("normalized_phone", normalized)
     // DESC + limit = a janela cai nas MAIS RECENTES. Ver docblock.
     .order("timestamp", { ascending: false })

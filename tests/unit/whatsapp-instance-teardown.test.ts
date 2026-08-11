@@ -1,15 +1,16 @@
 /**
  * Unit tests for batched FK teardown before deleting a WhatsApp instance.
  *
- * Why this exists: `whatsapp_messages` holds ~2.3M rows / 4.5 GB with SEVEN
- * indexes covering `instance_id`. A single `UPDATE ... SET instance_id = NULL`
- * rewrites 7 index entries per row and blew the statement timeout — measured at
- * 34 of 95 instance deletions failing with
- * `canceling statement due to statement timeout`.
+ * Why this exists: the loop clears an `ON DELETE SET NULL` FK in short
+ * statements, each its own transaction, instead of letting the delete hand the
+ * whole table to one cascade statement.
  *
- * The fix batches the nullification into short statements, each its own
- * transaction, so locks on a table the webhook writes to constantly are
- * released between batches.
+ * It was written for `whatsapp_messages` (~2.3M rows, seven indexes over
+ * `instance_id`, 34 of 95 deletions dying on the statement timeout). That table
+ * is no longer a target: its FK was dropped, so `instance_id` survives the
+ * instance and the history stays visible in the chat. The remaining target is
+ * `scheduled_user_messages.whatsapp_instance_id` — a pending-send queue, where
+ * the batching is a bound rather than a cure.
  *
  * IO is injected — these tests touch no database.
  */
@@ -54,8 +55,8 @@ function idsUpTo(n: number): string[] {
 }
 
 const TARGET = {
-  table: "whatsapp_messages",
-  column: "instance_id",
+  table: "scheduled_user_messages",
+  column: "whatsapp_instance_id",
   value: "inst-abc",
 };
 
@@ -153,11 +154,13 @@ describe("DEFAULT_BATCH_SIZE — bounded by URL length, not by database cost", (
     expect(estimatedBytes).toBeLessThan(CONSERVATIVE_URL_LIMIT_BYTES);
   });
 
-  it("is still large enough that an average instance drains within the batch ceiling", () => {
-    // ~19k rows is the average instance (2.3M rows across 117 instances).
-    const AVERAGE_ROWS_PER_INSTANCE = 19_000;
+  it("is still large enough that a real pending-send queue drains within the batch ceiling", () => {
+    // The whole `scheduled_user_messages` table holds tens of rows in
+    // production; 10k pending sends on ONE instance is already an order of
+    // magnitude past pathological, and it still drains in one call.
+    const PATHOLOGICAL_QUEUE_ROWS = 10_000;
 
-    expect(Math.ceil(AVERAGE_ROWS_PER_INSTANCE / DEFAULT_BATCH_SIZE)).toBeLessThan(
+    expect(Math.ceil(PATHOLOGICAL_QUEUE_ROWS / DEFAULT_BATCH_SIZE)).toBeLessThan(
       500
     );
   });

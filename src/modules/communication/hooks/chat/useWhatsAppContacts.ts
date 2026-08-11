@@ -19,6 +19,7 @@ import {
   IN_CHUNK_SIZE,
   IN_CHUNK_SIZE_FANOUT,
 } from "@/shared/supabase/selectInChunks";
+import { resolveChipInstanceIds } from "@/modules/communication/lib/chipInstanceIds";
 import {
   useWhatsAppRealtimeFallback,
   FALLBACK_POLL_INTERVAL_MS,
@@ -228,16 +229,28 @@ export function useWhatsAppContacts(
       // ── Escape hatch (v3_server_contacts='0'): monta a lista de whatsapp_messages ──
       // Não empurra `serverFilter`: aqui o universo já são todas as conversas com
       // mensagem recente, então o filtro do cliente sozinho não trunca.
+      //
+      // No caminho server a resolução do chip fica dentro da RPC
+      // (`get_whatsapp_conversation_list`, redefinida pela migration
+      // `20270811000001_whatsapp_historico_por_chip.sql` — apply MANUAL); aqui
+      // ela é explícita, senão o escape hatch esconderia justamente as conversas
+      // que ficaram numa instância excluída. Antes do apply os dois caminhos
+      // degradam pra instância viva — ver `chipInstanceIds.ts`.
+      const instanceIds = await resolveChipInstanceIds(organizationId, instanceId);
+
       // Query 1: mensagens recentes (limitadas) + metadados de conversas em paralelo
       const [{ data: msgData, error: msgError }, { data: convMeta }] = await Promise.all([
         supabase
           .from("whatsapp_messages")
           .select("phone_number, push_name, content, timestamp, direction, lead_id, sent_source, is_group")
           .eq("organization_id", organizationId)
-          .eq("instance_id", instanceId)
+          .in("instance_id", [...instanceIds])
           .is("deleted_at", null)
           .order("timestamp", { ascending: false })
           .limit(8000),
+        // `whatsapp_conversations` fica na instância viva de propósito: a FK dela
+        // é ON DELETE CASCADE, então instância excluída não deixa linha órfã pra
+        // varrer. Arquivamento e etiqueta da instância morta morreram com ela.
         supabase
           .from("whatsapp_conversations")
           .select("id, phone_number, archived_at, deleted_at")
