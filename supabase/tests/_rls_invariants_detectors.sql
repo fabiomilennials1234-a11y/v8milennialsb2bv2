@@ -462,6 +462,17 @@ AS $fn$
       -- the subject on its own, so they count only with auth.uid() as the
       -- argument. The asymmetry is the DEFAULT, not "takes a parameter".
       OR public._rls_inv_strip_sql_comments(pr.prosrc) ~* '(has_role|is_team_member|is_master_user)\s*\(\s*auth\s*\.\s*uid\s*\('
+      --
+      -- KNOWN FALSE-POSITIVE CLASS, for whoever is burning this list down:
+      --     v_uid := auth.uid();  ...  has_role(v_uid, 'admin')
+      -- reads as a violation. The function IS gated; the subject just travels
+      -- through a variable, and following it would take a parser. Do not "fix"
+      -- such a function — pass `auth.uid()` directly at the call site and the
+      -- count drops. This is the loud direction we chose on purpose; the quiet
+      -- alternative (accepting any body that mentions auth.uid() anywhere) was
+      -- tried and rejected in review: it lets a function that merely STAMPS
+      -- `created_by = auth.uid()` and then calls `is_master_user(p_target)`
+      -- pass as gated — the stamp bug again, one level down.
       -- (b) ...or uses auth.uid()/auth.org_id() where it DECIDES something —
       -- inside IF/WHERE/AND/EXISTS/RAISE, bounded to the same statement by
       -- forbidding a `;` in between. A bare `auth.uid()` sitting in a VALUES
