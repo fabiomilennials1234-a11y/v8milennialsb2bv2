@@ -46,7 +46,7 @@ Deno.test("fromProviderAmount — rejects values that are not finite numbers", (
 
 Deno.test("formatCentsBRL — renders pt-BR currency from cents", () => {
   // Non-breaking space is what Intl emits between symbol and digits.
-  assertEquals(formatCentsBRL(199700).replace(/ /g, " "), "R$ 1.997,00");
-  assertEquals(formatCentsBRL(218960).replace(/ /g, " "), "R$ 2.189,60");
-  assertEquals(formatCentsBRL(0).replace(/ /g, " "), "R$ 0,00");
+  assertEquals(formatCentsBRL(199700).replace(/\u00A0/g, " "), "R$ 1.997,00");
+  assertEquals(formatCentsBRL(218960).replace(/\u00A0/g, " "), "R$ 2.189,60");
+  assertEquals(formatCentsBRL(0).replace(/\u00A0/g, " "), "R$ 0,00");
 });
