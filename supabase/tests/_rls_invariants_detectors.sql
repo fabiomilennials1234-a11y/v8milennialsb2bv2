@@ -236,16 +236,71 @@ $fn$;
 --      were readers handing back lead phone numbers cross-tenant. Reading the
 --      wrong tenant's data is the same breach as writing it.
 --
--- WHAT COUNTS AS A GATE: a mention of one of the known authorization helpers,
--- or of `auth.uid()` / `auth.org_id()` (deriving identity from the JWT rather
--- than trusting a parameter). SQL comments are stripped before matching, so a
--- helper named only in a `--` note does not buy a pass.
+-- WHAT COUNTS AS A GATE — two ways, and the difference between them is the
+-- whole point:
+--
+--   (a) a call to a known authorization helper. The list below is MEASURED, not
+--       guessed: every entry either derives the caller's identity from the JWT
+--       with no parameter to lie about (`prosrc` references `auth.uid()`,
+--       `pronargs = 0`) or is an assertion helper that refuses. Helpers that
+--       take an id by parameter and trust it — `has_role`, `is_team_member`,
+--       `lead_in_my_org`, `get_org_team_member_ids` — are deliberately NOT on
+--       the list: a caller who picks the id being checked has not been gated.
+--
+--   (b) `auth.uid()` / `auth.org_id()` **in a position that decides something**
+--       — inside IF / WHERE / AND / EXISTS / RAISE, within the same statement.
+--
+-- (b) is not pedantry, and it is the correction that made this detector honest.
+-- Stamping the author is one of the most common things a DEFINER function does
+-- — `owner_id, auth.uid()` in a VALUES, `created_by := auth.uid()` — and a
+-- stamp REFUSES NOTHING. `public.log_activity(...)` is the measured example:
+-- its only `auth.uid()` is the value of `owner_id` in an INSERT, while its real
+-- gate is `get_user_organization_id()` followed by `IF ... IS NULL THEN RAISE`.
+-- Matching the bare token would have called it gated FOR THE WRONG REASON —
+-- and, worse, would have kept calling it gated on the day someone deleted the
+-- only check it has. An invariant whose verdict is decorrelated from the fact
+-- it claims to measure is not a gate; it is a decoration.
+--
+-- COMMENTS ARE STRIPPED FIRST, and the stripper is iterative because **Postgres
+-- block comments NEST**: `/* a /* b */ c */` is one comment, and a single
+-- non-greedy `/\*.*?\*/` stops at the first `*/`, leaving ` c */` behind — so
+-- `/* nota: /* TODO */ chamar assert_org_access aqui */` would have left the
+-- token sitting in prose and bought the pass the stripping exists to deny.
+-- `_rls_inv_strip_sql_comments` removes the innermost block repeatedly until it
+-- reaches a fixed point, then removes line comments.
 --
 -- KNOWN IMPRECISION, stated on purpose: this is textual. A function that gates
--- by calling some *other* helper not on the list reads as a violation
--- (false positive), which is the safe direction — it is loud, and the ratchet
--- absorbs it. The unsafe direction is narrowed by the comment stripping above.
+-- through some other helper not on the list reads as a violation. That is a
+-- FALSE POSITIVE — loud, visible, absorbed by the ratchet — and it is the
+-- direction we choose. The two silent directions (a stamp read as a gate; a
+-- token in a nested comment read as a gate) are the ones closed above.
 -- ---------------------------------------------------------------------------
+
+-- Strips SQL comments, handling the nesting Postgres allows in block comments.
+-- Innermost-first, repeated to a fixed point; the guard bounds pathological
+-- input rather than trusting it.
+CREATE OR REPLACE FUNCTION public._rls_inv_strip_sql_comments(p_src text)
+RETURNS text
+LANGUAGE plpgsql
+IMMUTABLE
+SECURITY INVOKER
+SET search_path TO 'pg_catalog'
+AS $fn$
+DECLARE
+  v_prev  text;
+  v_out   text := coalesce(p_src, '');
+  v_guard int  := 0;
+BEGIN
+  LOOP
+    v_prev := v_out;
+    -- innermost block = one containing neither an opening nor a closing marker
+    v_out  := regexp_replace(v_out, '/\*((?!/\*)(?!\*/).)*\*/', ' ', 'gs');
+    v_guard := v_guard + 1;
+    EXIT WHEN v_out = v_prev OR v_guard > 50;
+  END LOOP;
+  RETURN regexp_replace(v_out, '--[^\n]*', ' ', 'g');
+END;
+$fn$;
 CREATE OR REPLACE FUNCTION public._rls_inv_definer_without_gate()
 RETURNS TABLE (
   schemaname            name,
@@ -288,10 +343,14 @@ AS $fn$
       OR (EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated')
          AND has_function_privilege('authenticated', pr.oid, 'EXECUTE'))
     )
-    -- ...and the body never establishes who is calling. Comments stripped first
-    -- (block comments, then line comments) so a mention in prose is not a gate.
-    AND regexp_replace(
-          regexp_replace(pr.prosrc, '/\*.*?\*/', ' ', 'gs'),
-          '--[^\n]*', ' ', 'g'
-        ) !~* '(assert_org_access|assert_org_member|is_master_user|get_my_organization_ids|get_my_admin_organization_ids|get_my_team_member_ids|auth\s*\.\s*uid\s*\(|auth\s*\.\s*org_id\s*\(|resolve_org_for_rpc)';
+    -- ...and the body never establishes who is calling.
+    AND NOT (
+      -- (a) calls a known authorization helper (measured list — see header)
+      public._rls_inv_strip_sql_comments(pr.prosrc) ~* '(assert_org_access|assert_org_member|is_master_user|resolve_org_for_rpc|get_user_organization_id|get_user_org_role|get_my_organization_ids|get_my_admin_organization_ids|get_my_team_member_ids|get_my_org_ids|get_my_gestor_organization_ids|get_my_team_admin_organization_ids|is_user_admin)'
+      -- (b) ...or uses auth.uid()/auth.org_id() where it DECIDES something —
+      -- inside IF/WHERE/AND/EXISTS/RAISE, bounded to the same statement by
+      -- forbidding a `;` in between. A bare `auth.uid()` sitting in a VALUES
+      -- list is a stamp, not a gate, and does not satisfy this.
+      OR public._rls_inv_strip_sql_comments(pr.prosrc) ~* '(\mif\M|\mwhere\M|\mand\M|\mexists\M|\mraise\M)[^;]{0,200}auth\s*\.\s*(uid|org_id)\s*\('
+    );
 $fn$;
