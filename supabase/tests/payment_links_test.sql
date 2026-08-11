@@ -331,9 +331,21 @@ SELECT is(
   1,
   '(COBRANÇA) a linha existe — é ela que a reconciliação vai achar, e é ela que impede a segunda cobrança');
 
--- Contraste: revogado é decisão DELIBERADA, e continua recusando.
-SELECT is((SELECT (r ->> 'expired_at_attach')::boolean FROM _t_exp), true,
-  '(COBRANÇA) relógio e decisão humana são estados DIFERENTES — expirado grava e sinaliza, revogado recusa');
+-- O CONTRASTE, agora lendo o link REVOGADO e não o expirado de novo.
+--
+-- A primeira versão desta asserção lia `_t_exp` — a MESMA expressão da anterior,
+-- com mensagem diferente. Não tinha matador próprio: nenhuma mudança pontual a
+-- derrubaria deixando a de cima verde, porque eram a mesma asserção. Decoração,
+-- e do pior tipo: a mensagem prometia exatamente a prova que mais se quer ter
+-- aqui. Achado do Sentinela na volta 3.
+CREATE TEMP TABLE _t_rev AS
+SELECT public.billing_attach_link_charge(
+         (SELECT (r ->> 'link_id')::uuid FROM _t_link), 'boleto', 'asaas', 'pay_FFF') AS r;
+
+SELECT is((SELECT (r ->> 'ok')::boolean FROM _t_rev), false,
+  '(COBRANÇA) revogado RECUSA — decisão deliberada, alguém agiu, e quem chamou ignorou o resolve');
+SELECT ok((SELECT (r -> 'expired_at_attach') IS NULL FROM _t_rev),
+  '(COBRANÇA) e a recusa NÃO traz expired_at_attach — os dois estados são distinguíveis no retorno, então uniformizar os quatro códigos derruba esta asserção');
 
 -- ===========================================================================
 -- (AUDITORIA) gerar e revogar deixam rastro em master_audit_logs.

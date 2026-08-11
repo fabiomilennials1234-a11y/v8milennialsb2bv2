@@ -434,8 +434,24 @@ BEGIN
   --                      registro de uma cobrança real por causa de 40
   --                      segundos. Grava, e AVISA.
   --
-  -- A regra geral, para a fatia seguinte: o portão de ENTRADA é o `resolve`;
-  -- aqui é escrituração.
+  -- A REGRA GERAL, para a fatia seguinte, e nesta ORDEM:
+  --
+  --   1. Recusar aqui DESTRÓI o registro de algo que já aconteceu fora do
+  --      banco? Se sim, não recuse: grave e sinalize. Vale para relógio E para
+  --      decisão humana.
+  --   2. Se não destrói nada, o estado mudou por ação humana? Se sim, recusar
+  --      está certo — quem chamou ignorou o portão.
+  --
+  -- A (1) vem primeiro porque é ela que separa PORTÃO de ESCRITURAÇÃO, e é onde
+  -- o dinheiro mora. "Relógio versus decisão humana" era o corte que eu tinha
+  -- na cabeça, e ele acerta este caso e erraria o simétrico: cobrança criada no
+  -- gateway com o link REVOGADO no meio do caminho tem o mesmo problema — é
+  -- decisão humana, e recusar orfanaria a cobrança igual.
+  --
+  -- Aqui isso não morde porque revogar exige o Master agir na mesma janela de
+  -- segundos, e a escolha DELIBERADA é que nesse caso o erro é de quem chamou
+  -- sem passar pelo `resolve`. Fica escrito para a fatia 6 não herdar o corte
+  -- errado. Refinamento do Sentinela.
   SELECT * INTO v_link FROM public.payment_links WHERE id = p_link_id;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('ok', false, 'code', 'link_not_found');
