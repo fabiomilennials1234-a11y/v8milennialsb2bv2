@@ -303,6 +303,39 @@ SELECT is(
   '(COBRANÇA) link REVOGADO não recebe cobrança — o guard está na função, não no acordo com o chamador');
 
 -- ===========================================================================
+-- (COBRANÇA) link EXPIRADO grava assim mesmo, e avisa.
+--
+-- Expirar é evento de RELÓGIO, que acontece sozinho entre o resolve e o attach.
+-- E quando o attach é chamado a cobrança JÁ EXISTE no gateway — a assinatura
+-- diz isso, ela recebe o provider_charge_id. Recusar destruiria o único
+-- registro de dinheiro que já saiu, e como a chave de idempotência mora nesta
+-- tabela, a próxima tentativa criaria uma SEGUNDA cobrança: exatamente o
+-- entulho que esta tabela existe para impedir. Achado do Sentinela na volta 2.
+-- ===========================================================================
+SET LOCAL role postgres;
+UPDATE public.payment_links SET expires_at = now() - interval '1 minute'
+ WHERE id = (SELECT (r ->> 'link_id')::uuid FROM _t_link2);
+
+CREATE TEMP TABLE _t_exp AS
+SELECT public.billing_attach_link_charge(
+         (SELECT (r ->> 'link_id')::uuid FROM _t_link2), 'credit_card', 'asaas', 'pay_EEE') AS r;
+
+SELECT is((SELECT (r ->> 'ok')::boolean FROM _t_exp), true,
+  '(COBRANÇA) link EXPIRADO NÃO recusa — escrituração que se recusa a escrever perde uma cobrança que já existe no gateway');
+SELECT is((SELECT (r ->> 'expired_at_attach')::boolean FROM _t_exp), true,
+  '(COBRANÇA) e AVISA que expirou — quem chama precisa cancelar a cobrança no gateway');
+SELECT is(
+  (SELECT count(*)::int FROM public.payment_link_charges
+    WHERE payment_link_id = (SELECT (r ->> 'link_id')::uuid FROM _t_link2)
+      AND method = 'credit_card'),
+  1,
+  '(COBRANÇA) a linha existe — é ela que a reconciliação vai achar, e é ela que impede a segunda cobrança');
+
+-- Contraste: revogado é decisão DELIBERADA, e continua recusando.
+SELECT is((SELECT (r ->> 'expired_at_attach')::boolean FROM _t_exp), true,
+  '(COBRANÇA) relógio e decisão humana são estados DIFERENTES — expirado grava e sinaliza, revogado recusa');
+
+-- ===========================================================================
 -- (AUDITORIA) gerar e revogar deixam rastro em master_audit_logs.
 -- ===========================================================================
 SELECT ok(

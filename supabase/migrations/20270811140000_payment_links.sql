@@ -411,13 +411,31 @@ SET search_path TO 'pg_catalog', 'public', 'extensions'
 AS $fn$
 DECLARE
   v_row     public.payment_link_charges%ROWTYPE;
-  v_criada  boolean := false;
-  v_link    public.payment_links%ROWTYPE;
+  v_criada   boolean := false;
+  v_link     public.payment_links%ROWTYPE;
+  v_expirado boolean := false;
 BEGIN
-  -- O ESTADO do link é checado AQUI, não deixado como contrato implícito para
-  -- quem chama. "O chamador resolveu antes" é acordo que sobrevive à primeira
-  -- fatia e morre na segunda — e o preço de errar é cobrança amarrada a
-  -- proposta revogada. Achado do Sentinela.
+  -- ESTA FUNÇÃO É ESCRITURAÇÃO, NÃO PORTÃO. A distinção é a assinatura: ela
+  -- recebe `p_provider_charge_id`, ou seja, quando é chamada a cobrança JÁ
+  -- EXISTE no gateway. Ela não cria cobrança — registra uma que já nasceu.
+  --
+  -- Consequência, e foi o Sentinela quem viu: escrituração que se RECUSA a
+  -- escrever perde o fato, e o fato aqui é dinheiro que já saiu. Pior, a chave
+  -- de idempotência mora na NOSSA tabela — sem a linha, a próxima tentativa não
+  -- acha nada e cria uma SEGUNDA cobrança no gateway. Seria literalmente o
+  -- "entulho de cobrança pendente" e o "QR velho" que esta tabela existe para
+  -- impedir.
+  --
+  -- Daí os dois estados serem tratados DIFERENTE:
+  --   revogado / pago  — decisão DELIBERADA, alguém agiu. Recusar está certo:
+  --                      quem chamou ignorou o resolve, e o erro é dele.
+  --   EXPIRADO         — evento de RELÓGIO, que acontece sozinho entre o
+  --                      resolve e o attach. Recusar aqui destruiria o único
+  --                      registro de uma cobrança real por causa de 40
+  --                      segundos. Grava, e AVISA.
+  --
+  -- A regra geral, para a fatia seguinte: o portão de ENTRADA é o `resolve`;
+  -- aqui é escrituração.
   SELECT * INTO v_link FROM public.payment_links WHERE id = p_link_id;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('ok', false, 'code', 'link_not_found');
@@ -428,9 +446,10 @@ BEGIN
   IF v_link.paid_at IS NOT NULL THEN
     RETURN jsonb_build_object('ok', false, 'code', 'link_already_paid');
   END IF;
-  IF v_link.expires_at <= now() THEN
-    RETURN jsonb_build_object('ok', false, 'code', 'link_expired');
-  END IF;
+
+  -- Não recusa: sinaliza. Quem chama fica sabendo que precisa CANCELAR a
+  -- cobrança no gateway, e a linha existe para a reconciliação achar.
+  v_expirado := v_link.expires_at <= now();
 
   INSERT INTO public.payment_link_charges
     (payment_link_id, method, provider, provider_charge_id)
@@ -454,7 +473,10 @@ BEGIN
     'charge_id',          v_row.id,
     'provider',           v_row.provider,
     'provider_charge_id', v_row.provider_charge_id,
-    'reused',             NOT v_criada);
+    'reused',             NOT v_criada,
+    -- Sinal, não erro: a cobrança foi registrada, E o link já tinha vencido
+    -- quando ela chegou. Quem chama precisa cancelar no gateway.
+    'expired_at_attach',  v_expirado);
 END
 $fn$;
 
