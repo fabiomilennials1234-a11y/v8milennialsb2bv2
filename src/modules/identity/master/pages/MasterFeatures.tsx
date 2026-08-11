@@ -84,8 +84,8 @@ export default function MasterFeatures() {
   });
 
   const createFeature = useMutation({
-    mutationFn: async (data: TablesInsert<"feature_flags">) => {
-      const { error } = await supabase.from("feature_flags").insert(data);
+    mutationFn: async (data: TablesInsert<"feature_catalog">) => {
+      const { error } = await supabase.from("feature_catalog").insert(data);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -102,7 +102,7 @@ export default function MasterFeatures() {
   const updateFeature = useMutation({
     mutationFn: async ({ id, ...data }: Partial<FeatureFlag> & { id: string }) => {
       const { error } = await supabase
-        .from("feature_flags")
+        .from("feature_catalog")
         .update(data)
         .eq("id", id);
       if (error) throw error;
@@ -119,7 +119,7 @@ export default function MasterFeatures() {
 
   const deleteFeature = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("feature_flags").delete().eq("id", id);
+      const { error } = await supabase.from("feature_catalog").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
