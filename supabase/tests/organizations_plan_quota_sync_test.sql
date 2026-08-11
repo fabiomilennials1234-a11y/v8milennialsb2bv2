@@ -49,10 +49,11 @@ SELECT ok(
       AND tgrelid = 'public.organizations'::regclass) LIKE '%UPDATE OF subscription_plan%',
   '(STRUCT) trg_sync_org_plan_quotas continua escutando subscription_plan');
 
--- É o UNIQUE que torna a resolução por nome determinística. Sem ele, `WHERE
--- name = NEW.subscription_plan` devolveria mais de uma linha e a função
--- levantaria 21000 no meio de uma escrita quente. A função não desempata
--- porque o schema proíbe o empate — esta asserção é o que ancora essa escolha.
+-- É o UNIQUE que torna a resolução por nome determinística, e a falha que ele
+-- previne é SILENCIOSA: `SELECT ... INTO` sem STRICT não levanta 21000 com
+-- várias linhas — pega a PRIMEIRA, arbitrariamente, sem erro. Homônimo no
+-- catálogo entregaria a cota de um plano escolhido ao acaso. A função não
+-- desempata porque o schema proíbe o empate; esta asserção é essa âncora.
 SELECT col_is_unique(
   'public', 'subscription_plans', 'name',
   '(STRUCT) subscription_plans.name é UNIQUE — resolução por nome é determinística');
@@ -259,6 +260,32 @@ SELECT is(
       AND resource_key = 'max_copilot_agents'),
   1,
   '(AUSENTE) idem para o segundo recurso ausente — o pulo é por recurso');
+
+-- ===========================================================================
+-- (AUSENTE-INSERT) o alcance do "não mexer" no caminho de organização NOVA
+--
+-- Pular o recurso preserva a linha que EXISTE. Numa organização nova não há
+-- linha para preservar: nenhuma nasce para o recurso ausente, e `org_resolve_
+-- quota` desce a cadeia de fallback até o default 0. Não é regressão — era 0
+-- antes e é 0 agora —, mas é limite de alcance, e limite de alcance sem
+-- asserção vira promessa que o comentário faz e o código não cumpre.
+-- ===========================================================================
+INSERT INTO public.organizations (id, name, slug, subscription_plan)
+VALUES ('5c2c8338-0000-4000-8000-000000000002', 'Org SCRUM-338 nova', 'org-scrum-338-nova', 'starter');
+
+SELECT is(
+  (SELECT plan_base FROM public.org_quotas
+    WHERE organization_id = '5c2c8338-0000-4000-8000-000000000002'
+      AND resource_key = 'max_users'),
+  7,
+  '(AUSENTE-INSERT) org nova recebe a cota das chaves PRESENTES no plano parcial');
+
+SELECT is(
+  (SELECT count(*)::int FROM public.org_quotas
+    WHERE organization_id = '5c2c8338-0000-4000-8000-000000000002'
+      AND resource_key = 'max_whatsapp_instances'),
+  0,
+  '(AUSENTE-INSERT) recurso ausente NÃO ganha linha — cai no fallback de org_resolve_quota, não em 0 gravado');
 
 -- ===========================================================================
 -- (ZERO) e o zero EXPLÍCITO continua sendo zero — ausência ≠ 0

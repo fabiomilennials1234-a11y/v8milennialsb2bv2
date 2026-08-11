@@ -51,7 +51,11 @@ BEGIN
 
   -- Fonte única: o NOME do plano vigente na organização.
   -- `subscription_plans_name_key` garante UNIQUE(name), então não há desempate
-  -- a fazer aqui — nome repetido no catálogo não é estado alcançável.
+  -- a fazer aqui — nome repetido no catálogo não é estado alcançável. E é o
+  -- UNIQUE que segura isso, não o `INTO`: sem STRICT, `SELECT ... INTO` pega a
+  -- PRIMEIRA linha em silêncio, então homônimo no catálogo entregaria cota de
+  -- um plano escolhido ao acaso, sem erro nenhum. (`INTO STRICT` não serve de
+  -- rede aqui: sem linha ele levanta 20000 e mataria a guarda logo abaixo.)
   SELECT sp.limits INTO v_limits
   FROM public.subscription_plans sp
   WHERE sp.name = NEW.subscription_plan;
@@ -75,6 +79,10 @@ BEGIN
     -- COALESCE para 0 aqui rebaixaria a organização a zero em silêncio — a
     -- mesma forma do incidente de 11/08, por outra porta. Chave PRESENTE com
     -- valor 0 continua significando zero.
+    --
+    -- O alcance é o que o CONTINUE consegue dar: preserva a linha que EXISTE.
+    -- Em organização NOVA não há linha para preservar — o recurso ausente fica
+    -- sem linha e `org_resolve_quota` desce até o default 0, como já descia.
     IF v_raw IS NULL OR jsonb_typeof(v_raw) = 'null' THEN
       CONTINUE;
     END IF;
