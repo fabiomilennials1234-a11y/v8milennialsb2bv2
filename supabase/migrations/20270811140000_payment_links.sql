@@ -189,6 +189,19 @@ BEGIN
 
   -- Autorização no CORPO, e ela é a MESMA leitura que produz o id da
   -- auditoria: não há caminho em que o rastro exista sem o gate ter passado.
+  --
+  -- POR QUE ESTA FUNÇÃO TEM GRANT PARA `authenticated`, e por que isso NÃO é
+  -- grant por omissão — leia antes de "consertar":
+  --
+  --   `is_master_user()` resolve por `auth.uid()`. O Master É um usuário
+  --   autenticado, então o EXECUTE para `authenticated` PRECISA existir para
+  --   que ele consiga chamar isto do front. Quem barra o não-master é a linha
+  --   abaixo, não o grant.
+  --
+  --   Tirar o grant não deixa a função mais segura: deixa o Master sem
+  --   caminho. E é exatamente a distinção que faltava nas 23 RPCs fechadas em
+  --   2026-08-11 por escrita e leitura cross-tenant — elas tinham o mesmo
+  --   grant e NÃO tinham este gate.
   IF v_master_id IS NULL THEN
     RAISE EXCEPTION 'Forbidden: geração de link de pagamento é autoridade de master';
   END IF;
@@ -266,6 +279,9 @@ BEGIN
     FROM public.master_users
    WHERE user_id = v_actor AND is_active = true;
 
+  -- Mesmo desenho da geração: grant para `authenticated` porque o Master é um
+  -- usuário autenticado, e o gate é esta linha. Ver o bloco em
+  -- `billing_create_payment_link` para o porquê completo.
   IF v_master_id IS NULL THEN
     RAISE EXCEPTION 'Forbidden: revogação de link de pagamento é autoridade de master';
   END IF;
