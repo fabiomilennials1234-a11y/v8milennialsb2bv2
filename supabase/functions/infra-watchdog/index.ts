@@ -10,6 +10,13 @@
  *      o aviso de Chamado novo passou a tomar 401 da Uazapi. 35 chamados
  *      entraram sem que ninguém fosse notificado, por 23 dias. O único vestígio
  *      era uma linha de erro em `runtime_logs`, que ninguém lê.
+ *   3. 2026-08-11 — seis tabelas de backup criadas à mão em produção ficaram
+ *      legíveis por `anon`, uma delas com credencial viva de envio de WhatsApp.
+ *      Terceira repetição da mesma classe. O INV-5 (migration `20270811120000`)
+ *      passou a detectá-las — escrevendo em `runtime_logs`, a mesma tabela do
+ *      caso 2. **Detectar não é alertar**, e é por isso que
+ *      `checkExposedTables` mora aqui: sem consumidor, o detector seria mais
+ *      uma feature construída e nunca ligada.
  *
  * O segundo caso ensina a regra de ouro deste arquivo: **um alerta que depende
  * do canal que ele vigia não é alerta.** Por isso o watchdog usa secrets
@@ -27,6 +34,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { buildInv5AlertText, type Inv5Payload } from "../_shared/inv5-alert.ts";
 
 // Silêncio entre avisos do mesmo assunto. Um incidente de banco dura dezenas de
 // minutos; avisar a cada 2 seria ruído, e ruído treina o time a ignorar.
@@ -184,6 +192,61 @@ async function checkRunawayBackfill(supabase: any): Promise<Alert | null> {
   };
 }
 
+// Janela de leitura do resultado da varredura do INV-5. Ela roda 1x/dia (04:17),
+// então 24h cobre a passada mais recente com folga — e a folga importa: se o
+// watchdog estiver fora do ar às 04:17, o achado continua sendo visto quando ele
+// voltar, em vez de se perder por ter nascido fora de uma janela apertada.
+const INV5_LOOKBACK_HOURS = 24;
+
+/**
+ * Alguma tabela de `public` está legível por `anon`/`authenticated` sem RLS?
+ *
+ * Este bloco é a razão de o INV-5 existir de verdade. A migration
+ * `20270811120000` criou o detector e agendou a varredura, que escreve em
+ * `runtime_logs` quando acha violação — e `runtime_logs` é exatamente a tabela
+ * que o cabeçalho deste arquivo documenta como **não lida**. Detectar não é
+ * alertar: sem este consumidor, o INV-5 rodaria às 04:17, registraria o
+ * vazamento num lugar que ninguém abre, e a falha que ele existe para impedir —
+ * exposição durando semanas sem ninguém saber — se repetiria idêntica, só que
+ * com a documentação da lição aberta ao lado.
+ *
+ * O texto mora em `_shared/inv5-alert.ts` para ser testado sem subir a função:
+ * o requisito de dizer QUAL tabela e QUANTAS é o que separa alarme de ruído, e
+ * regride calado se ninguém o exercitar.
+ *
+ * A chave do alerta inclui o id da linha da varredura, e isso é deliberado: o
+ * `ALERT_COOLDOWN_MINUTES` é de 30 minutos e o watchdog roda a cada 2, então uma
+ * chave fixa avisaria ~48 vezes pelo mesmo achado enquanto a linha estivesse na
+ * janela de 24h. Com a chave por linha, cada varredura avisa UMA vez; se a
+ * exposição continuar amanhã, a varredura do dia seguinte gera outra linha e o
+ * lembrete volta — uma vez por dia, que é a cadência certa para algo que exige
+ * intervenção humana no banco.
+ */
+async function checkExposedTables(supabase: any): Promise<Alert | null> {
+  const desde = new Date(Date.now() - INV5_LOOKBACK_HOURS * 3_600_000).toISOString();
+
+  const { data } = await supabase
+    .from("runtime_logs")
+    .select("id, payload_snapshot, created_at")
+    .eq("module", "seguranca")
+    .eq("action", "inv5_tabela_publica_legivel_por_anon")
+    .eq("status", "error")
+    .gte("created_at", desde)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  // Silêncio é o estado normal, e fica sem resposta de propósito: nenhum "tudo
+  // ok" diário. Canal que fala todo dia treina o time a ignorá-lo, que foi
+  // exatamente como o aviso de suporte morreu 23 dias sem ninguém ver.
+  if (!data || data.length === 0) return null;
+
+  const linha = data[0];
+  return {
+    key: `inv5_exposed_${String(linha.id).slice(0, 8)}`,
+    text: buildInv5AlertText((linha.payload_snapshot ?? {}) as Inv5Payload, linha.created_at),
+  };
+}
+
 async function sendWhatsApp(text: string): Promise<{ ok: boolean; detail?: string }> {
   // Secrets próprias primeiro. O fallback para as do suporte existe para o
   // watchdog nascer funcionando antes de alguém provisionar as dele — mas com
@@ -240,6 +303,7 @@ Deno.serve(
       checkDbPressure(supabase),
       checkSupportNotifyHealth(supabase),
       checkRunawayBackfill(supabase),
+      checkExposedTables(supabase),
     ]);
 
     const alerts = results
@@ -280,6 +344,6 @@ Deno.serve(
       }
     }
 
-    return json({ ok: true, checked: 3, sent, suppressed, failed });
+    return json({ ok: true, checked: 4, sent, suppressed, failed });
   })
 );
