@@ -230,6 +230,35 @@
 #      ramo `subscription_plan` NULO, que só produção exercitava
 #      (`create_org_sandbox`, edge `test-workflow-system`).
 #
+#  28. inv5_public_tables_readable_by_anon_test.sql — INV-5: nenhuma tabela de
+#      `public` é legível por `anon`/`authenticated` sem RLS (20270811120000).
+#      Nasceu de seis tabelas `_bkp_%` criadas À MÃO em produção que ficaram
+#      legíveis por `anon` — uma delas com `uazapi_token`, credencial viva de
+#      envio. Terceira vez da mesma classe de defeito. A causa NÃO é "herda o
+#      GRANT do schema public": é `ALTER DEFAULT PRIVILEGES`, que faz toda
+#      tabela criada em `public` NASCER com SELECT para `anon` — o default é
+#      inseguro, e disciplina humana não fecha isso.
+#      O INV-3 não pegou por três razões, e o arquivo ataca as três: população
+#      (INV-3 só olha tabela com `organization_id`; três das seis não têm),
+#      predicado (INV-3 testa só `relrowsecurity`, mas quem expõe é GRANT **e**
+#      RLS off) e ONDE roda. Esta última é a que decide: a suíte corre contra um
+#      banco montado de `supabase/migrations/*`, onde objeto feito à mão em
+#      produção nunca existe. Por isso a fatia entrega também `pg_cron` 1x/dia
+#      rodando o MESMO detector contra o banco vivo e escrevendo em
+#      `runtime_logs`; só a suíte seria teatro para este achado.
+#      As asserções vêm em PARES: o hard-0 (schema real limpo) E a falha
+#      plantada, porque hard-0 sozinho passa verde tanto com detector correto
+#      quanto com detector que nunca devolve linha. E o par CONSERTO 1 / CONSERTO
+#      2 (ligar RLS limpa; revogar SELECT também limpa) é o que prova que o
+#      predicado é conjunção honesta — um detector que olhasse só a RLS passaria
+#      no primeiro e falharia no segundo. Cobre ainda: regressão (desligar a RLS
+#      volta a acusar, provando que se lê ESTADO e não carimbo de criação),
+#      `has_function_privilege` nome por nome nas duas funções novas (nem anon
+#      nem authenticated executam), e o alarme exercitado pelo comando LITERAL
+#      de `cron.job` — banco limpo não escreve nada (silêncio é o estado
+#      normal), banco sujo escreve UMA linha `error` sem `organization_id` e com
+#      a tabela nomeada no payload.
+#
 #  14. assert_org_access_test.sql     — gate de tenancy dos leitores SECURITY
 #      DEFINER (#1209): membro ATIVO passa, membro DESATIVADO é BLOQUEADO (o
 #      furo: lia receita/ranking/comissão da org que o desativou), master e
@@ -298,12 +327,13 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/whatsapp_instance_reap_queue_test.sql" \
     "$SCRIPT_DIR/subscription_snapshot_base_layer_test.sql" \
     "$SCRIPT_DIR/organizations_plan_fk_test.sql" \
-    "$SCRIPT_DIR/organizations_plan_quota_sync_test.sql"
+    "$SCRIPT_DIR/organizations_plan_quota_sync_test.sql" \
+    "$SCRIPT_DIR/inv5_public_tables_readable_by_anon_test.sql"
 }
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql subscription_snapshot_base_layer_test.sql organizations_plan_fk_test.sql organizations_plan_quota_sync_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql subscription_snapshot_base_layer_test.sql organizations_plan_fk_test.sql organizations_plan_quota_sync_test.sql inv5_public_tables_readable_by_anon_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces
