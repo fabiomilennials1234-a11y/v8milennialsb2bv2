@@ -101,10 +101,11 @@ export function useLeadActionGates(leadId: string | null | undefined): LeadActio
   }
 
   // Single canonical source: identity.effectiveRole already normalizes
-  // team_members.role (admin | sdr | closer | member) → "admin" | "member",
-  // and isMaster → admin. The typed union forbids a "membro" literal at
-  // compile time — the original bug was `role === "membro"`, which never
-  // matched the real DB value "member", silently denying every non-admin.
+  // team_members.role (the app_role enum) → "admin" | "member", and
+  // isMaster → admin. The typed union forbids the Portuguese spelling at
+  // compile time — the original bug (#834) compared against it, never matched
+  // the real DB value "member", and silently denied every non-admin.
+  // The vocabulary is now guarded by tests/unit/role-vocabulary.test.ts (#1541).
   const isAdmin = identity.isAdmin;
   const isMember = identity.effectiveRole === "member";
 

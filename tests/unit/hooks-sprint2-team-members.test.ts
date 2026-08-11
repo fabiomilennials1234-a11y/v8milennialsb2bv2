@@ -184,7 +184,7 @@ describe("useCreateTeamMember", () => {
         await result.current.mutateAsync({
           name: "New Member",
           organization_id: "org-t",
-          role: "membro",
+          role: "member",
         } as any);
       } catch {}
     });

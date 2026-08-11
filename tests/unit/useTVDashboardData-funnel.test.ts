@@ -62,7 +62,7 @@ vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", user_id: "u1", role: "admin" } }),
   useTeamMembers: () => ({ data: [
     { id: "tm1", name: "Closer 1", is_active: true, metric_type: "sales", role: "admin", user_id: "u1", organization_id: "org-t" },
-    { id: "tm2", name: "SDR 1", is_active: true, metric_type: "meetings", role: "membro", user_id: "u2", organization_id: "org-t" },
+    { id: "tm2", name: "SDR 1", is_active: true, metric_type: "meetings", role: "member", user_id: "u2", organization_id: "org-t" },
   ] }),
   isVirtualTeamMember: (id: any) => typeof id === "string" && id.startsWith("_virtual_"),
   getSelectedOrgId: () => "org-t",

@@ -688,7 +688,7 @@ describe("useMasterOrganizations", () => {
     it("fetches members for an org", async () => {
       const members = [
         { id: "tm1", name: "Alice", user_roles: [{ role: "admin" }] },
-        { id: "tm2", name: "Bob", user_roles: [{ role: "membro" }] },
+        { id: "tm2", name: "Bob", user_roles: [{ role: "member" }] },
       ];
       mF.mockReturnValue(c(members));
 
