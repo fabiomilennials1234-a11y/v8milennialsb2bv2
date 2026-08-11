@@ -301,6 +301,98 @@ BEGIN
   RETURN regexp_replace(v_out, '--[^\n]*', ' ', 'g');
 END;
 $fn$;
+-- ---------------------------------------------------------------------------
+-- The trusted-helper set, COMPUTED as a transitive closure instead of typed by
+-- hand. A hand list is a back door: it grows by someone adding a name, and the
+-- name is cheaper to add than the body is to read.
+--
+-- THE AXIS IS NOT "takes a parameter" — it is WHICH parameter (review of #1518):
+--
+--   * SUBJECT by parameter → NOT a gate. `has_role(_user_id, _role)` and
+--     `is_master_user(_user_id)` answer honestly about whoever you pass. The
+--     caller picks who is being checked, so nothing was checked. These count
+--     only when the argument is `auth.uid()` — handled by (a2) in the detector.
+--   * OBJECT by parameter, subject resolved internally → IS a gate.
+--     `lead_in_my_org(p_lead_id)` lets the caller choose WHICH lead to ask
+--     about, never WHO they are: the body does
+--     `organization_id IN (SELECT get_my_organization_ids())`.
+--     `IF NOT lead_in_my_org(p_lead_id) THEN RAISE` cannot be beaten by the
+--     caller's choice of argument.
+--
+-- SEED: assertion helpers that refuse, plus every zero-argument function whose
+-- body reaches `auth.uid()`. A zero-argument function has nothing the caller can
+-- lie about.
+-- CLOSURE: any zero-argument function whose body calls something already
+-- trusted. `get_org_team_member_ids()` is exactly this — it never touches
+-- `auth.uid()` directly, it derives one level deeper through
+-- `get_my_organization_ids()`. A one-hop criterion misses it, and every function
+-- gated by it would have counted as a violation FOREVER, which is how a
+-- burn-down target of 0 quietly becomes unreachable — the same trap that turned
+-- INV-2 and INV-4 into decoration.
+-- OBJECT-PARAMETER helpers cannot be derived mechanically (it takes reading the
+-- body to see that the parameter is the object). They are named explicitly, and
+-- the rule stands: a name enters here only in the PR that shows its body.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public._rls_inv_gate_helpers()
+RETURNS TABLE (helper name)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path TO 'public', 'pg_catalog'
+AS $fn$
+  WITH RECURSIVE eligible AS (
+    -- A gate helper ANSWERS a question, so it returns something. Trigger
+    -- functions and void procedures are excluded: they run as side effects and
+    -- their `auth.uid()` is a STAMP, not an answer — the same confusion between
+    -- identifying and authorizing that this detector exists to refuse. Without
+    -- this carve-out the seed swallows fn_track_lead_field_changes,
+    -- log_lead_deletion and friends, and calling any of them would buy a pass.
+    SELECT p.oid, p.proname, p.pronargs,
+           public._rls_inv_strip_sql_comments(p.prosrc) AS src
+    FROM pg_proc p
+    WHERE p.pronamespace = 'public'::regnamespace
+      AND p.prokind = 'f'
+      AND p.prorettype NOT IN ('pg_catalog.trigger'::regtype,
+                               'pg_catalog.event_trigger'::regtype,
+                               'pg_catalog.void'::regtype)
+      AND p.proname NOT LIKE '\_rls\_inv\_%'          -- the detectors themselves
+      AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')
+  ),
+  seed AS (
+    SELECT proname FROM eligible
+    WHERE pronargs = 0 AND src ~* 'auth\s*\.\s*(uid|org_id)\s*\('
+    UNION
+    -- assertion helpers: return void by design (they RAISE), so they are named
+    SELECT unnest(ARRAY['assert_org_access', 'assert_org_member', 'resolve_org_for_rpc']::name[])
+    UNION
+    -- object-parameter gates: reviewed by hand, body shown in the header
+    SELECT unnest(ARRAY['lead_in_my_org']::name[])
+  ),
+  closure AS (
+    SELECT proname FROM seed
+    UNION
+    SELECT e.proname
+    FROM eligible e, closure c
+    WHERE e.pronargs = 0
+      AND e.proname <> c.proname
+      AND e.src ~* ('\m' || c.proname || '\M')
+  )
+  SELECT DISTINCT proname::name FROM closure;
+$fn$;
+
+-- The closure rendered as one alternation, so the detector matches in a single
+-- pass instead of once per helper.
+CREATE OR REPLACE FUNCTION public._rls_inv_gate_helper_pattern()
+RETURNS TABLE (pattern text)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path TO 'public', 'pg_catalog'
+AS $fn$
+  SELECT '(\m(' || string_agg(helper::text, '|' ORDER BY helper) || ')\M)'
+  FROM public._rls_inv_gate_helpers();
+$fn$;
+
 CREATE OR REPLACE FUNCTION public._rls_inv_definer_without_gate()
 RETURNS TABLE (
   schemaname            name,
@@ -345,8 +437,26 @@ AS $fn$
     )
     -- ...and the body never establishes who is calling.
     AND NOT (
-      -- (a) calls a known authorization helper (measured list — see header)
-      public._rls_inv_strip_sql_comments(pr.prosrc) ~* '(assert_org_access|assert_org_member|is_master_user|resolve_org_for_rpc|get_user_organization_id|get_user_org_role|get_my_organization_ids|get_my_admin_organization_ids|get_my_team_member_ids|get_my_org_ids|get_my_gestor_organization_ids|get_my_team_admin_organization_ids|is_user_admin)'
+      -- (a) calls a trusted authorization helper. The set is COMPUTED, not
+      -- hand-written — see _rls_inv_gate_helpers().
+      public._rls_inv_strip_sql_comments(pr.prosrc) ~* (SELECT pattern FROM public._rls_inv_gate_helper_pattern())
+      -- (a2) ...or calls a SUBJECT-parameter predicate with auth.uid() as the
+      -- subject. `is_master_user(_user_id)` and `has_role(_user_id, _role)`
+      -- answer honestly about WHOEVER you pass — so the name alone is not a
+      -- gate; `is_master_user(auth.uid())` is.
+      OR (
+        -- SUBJECT-parameter predicates: `is_master_user(_user_id)`,
+        -- `has_role(_user_id, _role)` and `is_team_member(_user_id)` answer
+        -- honestly about WHOEVER is passed, so the bare name is not a gate.
+        -- They count when the subject is demonstrably the caller: either the
+        -- argument is literally `auth.uid()`, or the body derives identity
+        -- somewhere (a `v_uid := auth.uid()` assigned above the call is the
+        -- common shape, and matching it exactly would need a parser).
+        -- A body that never touches auth.uid() and simply trusts a uuid handed
+        -- in has checked nothing — that is the case this refuses.
+        public._rls_inv_strip_sql_comments(pr.prosrc) ~* '(is_master_user|has_role|is_team_member)\s*\('
+        AND public._rls_inv_strip_sql_comments(pr.prosrc) ~* 'auth\s*\.\s*(uid|org_id)\s*\('
+      )
       -- (b) ...or uses auth.uid()/auth.org_id() where it DECIDES something —
       -- inside IF/WHERE/AND/EXISTS/RAISE, bounded to the same statement by
       -- forbidding a `;` in between. A bare `auth.uid()` sitting in a VALUES

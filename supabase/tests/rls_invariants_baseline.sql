@@ -47,7 +47,7 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
   ('INV-2', 100, 'ratchet ceiling: writing DEFINER fns reachable by anon/PUBLIC (static est. <=89 callable writers; tighten then burn down to 0)'),
   ('INV-3', 0,   'zero-tolerance: every org table must have RLS enabled'),
   ('INV-4', 90,  'ratchet ceiling: DEFINER fns lacking SET search_path (static est. ~70; tighten then burn down to 0)'),
-  ('INV-6', 89,  'ratchet ceiling: DEFINER fns reachable by anon/authenticated with no authorization gate (SCRUM-339). MEASURED 2026-08-11 = 89, zero headroom; tighten on every fix and burn down to 0. See note below.');
+  ('INV-6', 101,  'ratchet ceiling: DEFINER fns reachable by anon/authenticated with no authorization gate (SCRUM-339). MEASURED 2026-08-11 = 101, zero headroom; tighten on every fix and burn down to 0. See note below.');
 
 -- ---------------------------------------------------------------------------
 -- INV-6 (SCRUM-339) — provenance of this ceiling, and why it is not 2.
@@ -71,37 +71,48 @@ INSERT INTO _rls_inv_baseline (invariant, max_violations, note) VALUES
 --   * A live count on a (differently-branched) local database returned 90, not
 --     2, which is the order of magnitude to expect here.
 --
--- MEASURED, 2026-08-11: the live count is 89. The ceiling above is set to
--- exactly that — zero headroom, so the 90th ungated function fails the build.
+-- MEASURED, 2026-08-11: the live count is 101. The ceiling above is set to
+-- exactly that — zero headroom, so the 102nd ungated function fails the build.
 -- Measured on an isolated Supabase stack booted from THIS branch's
 -- `supabase/migrations/*` (own project id, ports 5452x, so the shared local
 -- database the other worktrees use was never touched), which is the same
 -- construction CI performs via `supabase start`. Ledger: 74 versions, matching
 -- the branch file count.
 --
--- WHY 89 AND NOT 90 — the two corrections from the #1518 review pull in
--- opposite directions, and each was measured in isolation:
+-- HOW THE NUMBER MOVED, each correction measured in isolation. Summed they
+-- cancel and the net lies, so they are recorded separately:
 --
---     starting point (bare `auth.uid(` counted as a gate) ......... 90
---     ONLY requiring auth.uid() in a deciding position ............ 101   (+11)
---     ONLY widening the helper list ................................ 80   (-10)
---     both, which is what ships ................................... 89
+--     starting point (bare `auth.uid(` counted as a gate) .............. 90
+--     ONLY requiring auth.uid() in a deciding position ................ 101   (+11)
+--     ONLY widening the helper list .................................... 80   (-10)
+--     both (first ship) ................................................ 89
+--     + transitive closure, and `is_master_user` no longer a bare name . 101   (+12)
 --
--- The +11 is the finding: eleven functions were passing this invariant on a
--- STAMP — `owner_id, auth.uid()` in a VALUES — with nothing in them that
--- refuses anybody. The -10 is the correction to the correction: seven real
--- identity-derived helpers were missing from the list, so those functions were
--- being called violations while genuinely holding a gate.
+-- Each delta is a finding, not noise:
 --
--- BURN-DOWN TARGET: 0. Not "someday" — every PR that adds a gate or revokes a
--- grant lowers this number in the same PR. The ceiling may never be raised;
--- raising it to land code is the failure mode that turned INV-2 (100) and
--- INV-4 (90) into decoration, which is why a gate failing since 2026-07-30 went
+--   +11 — eleven functions were passing on a STAMP. `owner_id, auth.uid()` in a
+--         VALUES records who acted and refuses nobody.
+--   -10 — seven identity-derived helpers were missing, so functions that DO
+--         hold a gate were being counted as violations.
+--   +12 — `is_master_user(_user_id)` answers honestly about WHOEVER is passed;
+--         the bare name is not a gate. Measured: ZERO DEFINER functions call
+--         `is_master_user(auth.uid())`, and 51 call it with a parameter. Of the
+--         101 violations, **12 call `is_master_user(<param>)` with no
+--         `auth.uid()` anywhere in the body** — those check whether some uuid
+--         handed in is a master, which gates nothing. That subset is the
+--         cheapest place to start burning down.
+--
+-- BURN-DOWN TARGET: 0, and it is now REACHABLE — which is the point of the
+-- transitive closure. A helper that gates but sits outside the list would make
+-- its callers count forever, and a target that cannot be reached is the same
+-- trap as a ceiling too high, wearing a different name. Every PR that adds a
+-- gate or revokes a grant lowers this number in the same PR. The ceiling may
+-- never be raised to land code: raising it is what turned INV-2 (100) and INV-4
+-- (90) into decoration, which is why a gate failing since 2026-07-30 went
 -- unnoticed for twelve days. When the migration carrying the 23 production
--- REVOKEs finally lands in the repo, this number drops on its own — that is the
--- moment to freeze it.
+-- REVOKEs finally lands in the repo, this number drops on its own.
 --
--- Burning it down is SCRUM-339, and it is not a formality: 89 ungated DEFINER
+-- Burning it down is SCRUM-339, and it is not a formality: 101 ungated DEFINER
 -- functions reachable from a browser is the population that produced the 23
 -- closed on 2026-08-11.
 --
