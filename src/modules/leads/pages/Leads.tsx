@@ -710,8 +710,16 @@ function LeadsInner() {
           <div className="space-y-2.5 py-0.5">
             {/* Ordenação do celular: no desktop quem ordena é o cabeçalho da
                 tabela, que aqui não existe — sem esta faixa o telefone ficava
-                preso na ordem padrão (inv:H5-22). */}
-            <LeadMobileSortBar sort={sort} onSortChange={handleSortChange} />
+                preso na ordem padrão (inv:H5-22).
+
+                `setPersistedSort` e NÃO `handleSortChange`: os dois contratos
+                são diferentes de propósito. O cabeçalho do desktop entrega a
+                COLUNA clicada e quem resolve a direção é o `handleSortChange`;
+                a faixa do celular já resolve com `toggleLeadSort` e entrega a
+                ordenação PRONTA. Ligar um no outro aplicava o toggle duas
+                vezes — e `LEAD_SORT_COLUMNS[{objeto}]` é `undefined`, então
+                tocar num chip derrubava a lista com TypeError. */}
+            <LeadMobileSortBar sort={sort} onSortChange={setPersistedSort} />
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-24 w-full rounded-xl" />

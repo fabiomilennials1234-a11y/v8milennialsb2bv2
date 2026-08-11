@@ -303,7 +303,11 @@ export function useAgentPendingTasks(agentId: string | undefined) {
             tasks.push({
               id: `followup-${item.lead_id}`,
               type: 'followup' as const,
-              priority: item.lead_temperature === 'hot' ? 'high' : item.lead_temperature === 'warm' ? 'medium' : 'low',
+              // `as const` nos três ramos: sem eles o ternário infere `string`,
+              // e `string` não entra em `'high' | 'medium' | 'low'`. As outras
+              // duas tarefas já fixavam o literal, então só esta desalinhava —
+              // e derrubava o `.map()` inteiro em AgentTasksTab.
+              priority: item.lead_temperature === 'hot' ? ('high' as const) : item.lead_temperature === 'warm' ? ('medium' as const) : ('low' as const),
               title: `Follow-up com ${(item.lead as any).name || 'Lead'}`,
               description: item.last_topic 
                 ? `Último assunto: "${item.last_topic.substring(0, 50)}..."`
