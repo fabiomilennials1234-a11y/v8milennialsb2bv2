@@ -259,7 +259,31 @@
 #      normal), banco sujo escreve UMA linha `error` sem `organization_id` e com
 #      a tabela nomeada no payload.
 #
-#  28. payment_history_receipt_period_method_test.sql — as tres faltas de
+#  29. payment_links_test.sql — link de pagamento do billing (SCRUM-286,
+#      20270811140000). A asserção que manda é NEGATIVA: o link NÃO é
+#      recuperável do banco. Molde `generate_api_key` — guarda-se o SHA-256 de
+#      16 bytes aleatórios, nunca o texto, então dump não entrega link vivo e o
+#      Master copia o link uma única vez.
+#      Provar isso comparando hash com sha256(token) seria fraco: mostraria que
+#      o hash está certo, não que o texto está AUSENTE — uma coluna extra
+#      guardando o link passaria verde. Por isso a prova VARRE dinamicamente
+#      toda coluna de texto e jsonb das tabelas novas E de `master_audit_logs`,
+#      sem lista escrita à mão: coluna nova nasce fora de lista fixa, e é a
+#      coluna nova que vaza. Provado com dois mutantes — auditoria registrando o
+#      token, e uma coluna `raw_token` — e o segundo só é pego porque a varredura
+#      é dinâmica.
+#      O resto ataca o que custou caro neste banco no mesmo dia (23 RPCs DEFINER
+#      fechadas por escrita/leitura cross-tenant): toda função nova é exercida
+#      como `authenticated` NÃO-master e os grants vão conferidos nome por nome,
+#      porque `DROP + CREATE` devolve EXECUTE a PUBLIC. Cobre ainda: alvo
+#      coerente por CHECK (org existente exige a org, org nova a proíbe);
+#      gerar link NÃO toca a assinatura da org — a troca é no pagamento, não na
+#      proposta; política do motor herdada (Pix mensal recusado) com recusa PURA,
+#      sem linha órfã; revogação como ESTADO e não deleção; e a idempotência por
+#      (link, método), que é o que impede QR velho, entulho de cobrança no
+#      gateway e recarregar-a-página-virar-gerador-de-cobrança.
+#
+#  30. payment_history_receipt_period_method_test.sql — as tres faltas de
 #      `payment_history` que travavam a area de billing do admin (SCRUM-289 /
 #      #1390, migration 20270811160000): recibo e fatura (DUAS colunas, porque
 #      sao dois documentos — a fatura existe desde a emissao, o recibo so depois
@@ -342,12 +366,13 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/organizations_plan_fk_test.sql" \
     "$SCRIPT_DIR/organizations_plan_quota_sync_test.sql" \
     "$SCRIPT_DIR/inv5_public_tables_readable_by_anon_test.sql" \
+    "$SCRIPT_DIR/payment_links_test.sql" \
     "$SCRIPT_DIR/payment_history_receipt_period_method_test.sql"
 }
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql subscription_snapshot_base_layer_test.sql organizations_plan_fk_test.sql organizations_plan_quota_sync_test.sql inv5_public_tables_readable_by_anon_test.sql payment_history_receipt_period_method_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql subscription_snapshot_base_layer_test.sql organizations_plan_fk_test.sql organizations_plan_quota_sync_test.sql inv5_public_tables_readable_by_anon_test.sql payment_links_test.sql payment_history_receipt_period_method_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces
