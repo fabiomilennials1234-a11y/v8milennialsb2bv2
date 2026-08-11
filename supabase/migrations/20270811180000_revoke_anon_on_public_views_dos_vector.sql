@@ -1,0 +1,70 @@
+-- 20270811180000_revoke_anon_on_public_views_dos_vector.sql
+--
+-- APLICADA EM PRODUÇÃO em 2026-08-11. MITIGAÇÃO DE NEGAÇÃO DE SERVIÇO
+-- ALCANÇÁVEL SEM LOGIN.
+--
+-- ─── O QUE ACONTECE ─────────────────────────────────────────────────────────
+--
+--   BEGIN; SET LOCAL ROLE anon; SELECT count(*) FROM public.leads_compat;
+--
+-- Resposta do servidor: "server closed the connection unexpectedly / the server
+-- terminated abnormally". Não é erro de permissão nem timeout — é o backend do
+-- Postgres MORRENDO. O banco entra em recovery e TODA conexão é recusada por
+-- alguns segundos.
+--
+-- Reproduzido 2 de 2 vezes, determinístico, em imagem da mesma família de
+-- produção (public.ecr.aws/supabase/postgres:17.6.1.*). Entre as duas o banco
+-- voltou sozinho e caiu de novo com a mesma consulta.
+--
+-- ─── POR QUE ALCANÇAVA PRODUÇÃO ─────────────────────────────────────────────
+--
+-- O GRANT está no baseline (linha 45221): veio de produção para o repositório,
+-- não o contrário. A view mora em `public`, então o PostgREST a serve em
+-- `GET /rest/v1/leads_compat` — alcançável com a ANON KEY, que é pública por
+-- construção e sai do bundle do frontend. Sem sessão, sem conta, sem nada.
+--
+-- IMPACTO: negação de serviço no banco MULTI-TENANT. Cada chamada derruba o
+-- Postgres e leva TODOS os clientes junto pela janela de recovery. Um laço
+-- simples mantém o CRM inteiro fora do ar. Não é vazamento — é o produto parando.
+--
+-- NÃO FOI TESTADO EM PRODUÇÃO, de propósito: testar lá é derrubar lá. A
+-- confirmação foi feita LENDO o privilégio
+-- (`has_table_privilege('anon', 'public.leads_compat', 'SELECT')` = true),
+-- nunca executando a view.
+--
+-- ─── POR QUE REVOGAR NÃO TIRA NADA DE NINGUÉM ───────────────────────────────
+--
+--   * `leads_compat` tem ZERO consumidores no código — nem `src/`, nem edge
+--     function. Medido por grep em `origin/main`.
+--   * Ela é `security_invoker = on`, então a RLS de `leads` é avaliada COMO
+--     `anon`, e o papel nunca veria linha alguma. O grant não entrega DADO;
+--     entrega o CRASH.
+--
+-- As outras duas, pelo mesmo critério de superfície mínima:
+--   * `org_visible_members` — consumida pelo front (`Performance.tsx`,
+--     `useTeamMembers.ts`, `visible-ranking.ts`), mas SEMPRE em caminho
+--     autenticado. Revogar de `anon` não toca o uso legítimo.
+--   * `pg_buffercache` — view de sistema, zero consumidores; `anon` lendo o cache
+--     de buffers é vazamento de interno sem contrapartida. NÃO revogável aqui: é
+--     da extensão `pg_buffercache`, dono `supabase_admin`, e o grant foi concedido
+--     por ele — `REVOKE` como `postgres` não tem efeito. Fica registrado como
+--     pendência de plataforma.
+--
+-- ─── ISTO É MITIGAÇÃO, NÃO CONSERTO ────────────────────────────────────────
+--
+-- A causa-raiz NÃO está fechada. Sendo `security_invoker = on`, a morte
+-- provavelmente acontece ao avaliar alguma policy de `leads` COMO `anon` —
+-- helper `SECURITY DEFINER`, recursão, ou algo que estoura a pilha em C em vez de
+-- levantar erro. Se for a policy, a MESMA morte pode ser alcançável por outro
+-- caminho que leia `leads` como `anon`, e aí revogar a view deixa o vetor de pé.
+-- O isolamento da policy é fatia própria e urgente.
+--
+-- ─── COMO FOI ENCONTRADO ────────────────────────────────────────────────────
+--
+-- Pela "lente da cegueira": em vez de perguntar "o critério está certo?",
+-- perguntar "o que este critério NÃO PODE achar, por construção?". Todas as
+-- varreduras de segurança do dia mediram FUNÇÃO; nenhuma mediu VIEW. A primeira
+-- view testada como `anon` matou o servidor.
+
+REVOKE ALL ON TABLE public.leads_compat FROM anon;
+REVOKE ALL ON TABLE public.org_visible_members FROM anon;
