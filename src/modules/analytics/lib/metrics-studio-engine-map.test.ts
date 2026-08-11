@@ -1,21 +1,25 @@
 import { describe, it, expect } from "vitest";
 import {
   COMPATIBILIDADE,
-  ENGINE_MAP,
+  CORTES_POR_PESSOA,
+  ENGINE_BY_ID,
+  ENGINE_METRICS,
   FORMATO_DA_MEDIDA,
-  bindingDe,
+  ROTULO_DO_CORTE,
+  cortesVisiveis,
+  ehEscalar,
   medidasDe,
   parEhCompativel,
+  type MetricRecorte,
 } from "./metrics-studio-engine-map";
-import { METRIC_BY_ID, STUDIO_METRICS } from "./metrics-studio-catalog";
 
 /**
- * Estas asserções são a rede que impede o erro caro: montar um par
- * (medida, recorte) que o motor recusa com EXCEPTION 22023 — erro que NÃO é
- * capturado por isMissingSchemaError e derruba a janela em runtime.
+ * Rede contra o erro caro: oferecer na UI um par (medida, corte) que o motor
+ * recusa com EXCEPTION 22023 — erro que não é capturado por
+ * isMissingSchemaError e derruba a janela em runtime.
  */
 
-/** As 7 medidas do catálogo em PROD, medidas em 2026-08-11. */
+/** As 7 medidas do catálogo em PROD, conferidas em 2026-08-11. */
 const MEDIDAS_EM_PROD = [
   "receita",
   "num_vendas",
@@ -26,106 +30,137 @@ const MEDIDAS_EM_PROD = [
   "tempo_medio_etapa",
 ];
 
-/** Fora de prod porque a migration 20260727140000 nunca foi aplicada. */
+/** Fora de prod: migration 20260727140000 nunca aplicada. */
 const MEDIDAS_FORA_DE_PROD = ["reunioes_no_show"];
 
 describe("engine map — integridade contra o catálogo do motor", () => {
   it("toda medida referenciada existe no catálogo de PROD", () => {
-    for (const [metricId, binding] of Object.entries(ENGINE_MAP)) {
-      for (const medida of medidasDe(binding)) {
-        expect(MEDIDAS_EM_PROD, `${metricId} → ${medida}`).toContain(medida);
+    for (const m of ENGINE_METRICS) {
+      for (const medida of medidasDe(m)) {
+        expect(MEDIDAS_EM_PROD, `${m.id} → ${medida}`).toContain(medida);
       }
     }
   });
 
-  it("nenhum binding aponta para medida que não está em prod", () => {
-    const referenciadas = Object.values(ENGINE_MAP).flatMap(medidasDe);
+  it("nada aponta para medida ausente de prod", () => {
+    const referenciadas = ENGINE_METRICS.flatMap(medidasDe);
     for (const ausente of MEDIDAS_FORA_DE_PROD) {
       expect(referenciadas).not.toContain(ausente);
     }
   });
 
-  it("todo par (medida, recorte) está na tabela de compatibilidade", () => {
-    for (const [metricId, binding] of Object.entries(ENGINE_MAP)) {
-      expect(parEhCompativel(binding), `${metricId}`).toBe(true);
-    }
-  });
-
-  it("tempo_medio_etapa não aceita recorte total — a exceção do catálogo", () => {
-    expect(COMPATIBILIDADE.tempo_medio_etapa).not.toContain("total");
-    expect(
-      parEhCompativel({
-        measureRef: { kind: "leaf", id: "tempo_medio_etapa" },
-        recorte: "total",
-        formatId: "duration_human",
-        escalar: true,
-      }),
-    ).toBe(false);
-  });
-
-  it("o formato do binding bate com o formato canônico da medida (leaf)", () => {
-    for (const [metricId, binding] of Object.entries(ENGINE_MAP)) {
-      if (binding.measureRef.kind !== "leaf") continue;
-      expect(binding.formatId, `${metricId}`).toBe(FORMATO_DA_MEDIDA[binding.measureRef.id]);
-    }
-  });
-});
-
-describe("engine map — coerência com o catálogo do Estúdio", () => {
-  it("toda chave do mapa é uma métrica que existe no Estúdio", () => {
-    for (const metricId of Object.keys(ENGINE_MAP)) {
-      expect(METRIC_BY_ID.has(metricId), metricId).toBe(true);
-    }
-  });
-
-  it("bindingDe devolve undefined para métrica sem tradução — o caso da amostra", () => {
-    expect(bindingDe("curva_abc")).toBeUndefined();
-    expect(bindingDe("negocios_por_lead")).toBeUndefined();
-    expect(bindingDe("taxa_resposta_automacao")).toBeUndefined();
-  });
-
-  it("meta_definida e reunioes_no_show ficam fora: dependem de migration não aplicada", () => {
-    expect(bindingDe("meta_definida")).toBeUndefined();
-    expect(bindingDe("reunioes_no_show")).toBeUndefined();
-  });
-
-  it("razão é sempre escalar — o motor devolve series null em kind=ratio", () => {
-    for (const [metricId, binding] of Object.entries(ENGINE_MAP)) {
-      if (binding.measureRef.kind === "ratio") {
-        expect(binding.escalar, `${metricId}`).toBe(true);
+  it("TODO corte oferecido está na tabela de compatibilidade", () => {
+    for (const m of ENGINE_METRICS) {
+      for (const corte of m.cortes) {
+        expect(parEhCompativel(m, corte), `${m.id} × ${corte}`).toBe(true);
       }
     }
   });
 
-  it("leaf com recorte total é escalar; com qualquer outro recorte, série", () => {
-    for (const [metricId, binding] of Object.entries(ENGINE_MAP)) {
-      if (binding.measureRef.kind !== "leaf") continue;
-      expect(binding.escalar, `${metricId}`).toBe(binding.recorte === "total");
+  it("nenhuma métrica oferece corte que o motor recusa", () => {
+    for (const m of ENGINE_METRICS) {
+      if (m.measureRef.kind !== "leaf") continue;
+      const aceitos = COMPATIBILIDADE[m.measureRef.id];
+      for (const corte of m.cortes) {
+        expect(aceitos, `${m.id}`).toContain(corte);
+      }
+    }
+  });
+
+  it("tempo_medio_etapa não oferece total — a exceção do catálogo", () => {
+    const m = ENGINE_BY_ID.get("tempo_medio_etapa")!;
+    expect(COMPATIBILIDADE.tempo_medio_etapa).not.toContain("total");
+    expect(m.cortes).not.toContain("total");
+    expect(parEhCompativel(m, "total")).toBe(false);
+  });
+
+  it("o formato bate com o formato canônico da medida (leaf)", () => {
+    for (const m of ENGINE_METRICS) {
+      if (m.measureRef.kind !== "leaf") continue;
+      expect(m.formatId, m.id).toBe(FORMATO_DA_MEDIDA[m.measureRef.id]);
     }
   });
 });
 
-describe("engine map — cobertura declarada", () => {
-  it("cobre exatamente as métricas cujo cálculo o motor já faz em prod", () => {
-    expect(Object.keys(ENGINE_MAP).sort()).toEqual(
-      [
-        "leads_criados",
-        "negocios_por_etapa",
-        "negocios_por_funil",
-        "receita",
-        "receita_por_origem",
-        "reunioes_marcadas",
-        "reunioes_realizadas",
-        "taxa_conversao",
-        "ticket_medio",
-        "tempo_medio_etapa",
-      ].sort(),
-    );
+describe("engine map — decisões do grill", () => {
+  it("G2: toda métrica declara ao menos um corte, e o primeiro é o default", () => {
+    for (const m of ENGINE_METRICS) {
+      expect(m.cortes.length, m.id).toBeGreaterThan(0);
+      expect(parEhCompativel(m, m.cortes[0]), m.id).toBe(true);
+    }
   });
 
-  it("a maioria do catálogo do Estúdio segue SEM motor — a UI precisa dizer isso", () => {
-    const semMotor = STUDIO_METRICS.filter((m) => !bindingDe(m.id));
-    expect(semMotor.length).toBe(STUDIO_METRICS.length - Object.keys(ENGINE_MAP).length);
-    expect(semMotor.length).toBeGreaterThan(Object.keys(ENGINE_MAP).length);
+  it("G2: razão não oferece corte — o motor força total nos dois filhos", () => {
+    for (const m of ENGINE_METRICS) {
+      if (m.measureRef.kind === "ratio") {
+        expect(m.cortes, m.id).toEqual(["total"]);
+      }
+    }
+  });
+
+  it("razão é sempre escalar; leaf é escalar só no total", () => {
+    for (const m of ENGINE_METRICS) {
+      if (m.measureRef.kind === "ratio") {
+        expect(ehEscalar(m, "total"), m.id).toBe(true);
+      } else {
+        expect(ehEscalar(m, "total"), m.id).toBe(true);
+        const naoTotal = m.cortes.find((c) => c !== "total");
+        if (naoTotal) expect(ehEscalar(m, naoTotal), `${m.id}/${naoTotal}`).toBe(false);
+      }
+    }
+  });
+
+  it("G6: sem permissão de Ranking, cortes por pessoa somem", () => {
+    const receita = ENGINE_BY_ID.get("receita")!;
+    const comPermissao = cortesVisiveis(receita, true);
+    const semPermissao = cortesVisiveis(receita, false);
+
+    expect(comPermissao).toContain("closer");
+    expect(comPermissao).toContain("sdr");
+    for (const corte of CORTES_POR_PESSOA) {
+      expect(semPermissao).not.toContain(corte);
+    }
+    // O resto sobrevive — a trava é cirúrgica, não desliga a métrica.
+    expect(semPermissao).toContain("total");
+    expect(semPermissao).toContain("origem");
+  });
+
+  it("G6: métrica sem corte por pessoa não muda com a permissão", () => {
+    const leads = ENGINE_BY_ID.get("leads_criados")!;
+    expect(cortesVisiveis(leads, false)).toEqual(cortesVisiveis(leads, true));
+  });
+
+  it("G6: nenhuma métrica fica sem corte algum quando a trava aplica", () => {
+    for (const m of ENGINE_METRICS) {
+      expect(cortesVisiveis(m, false).length, m.id).toBeGreaterThan(0);
+    }
+  });
+
+  it("G1: a oferta é 7 medidas + 3 razões", () => {
+    const leafs = ENGINE_METRICS.filter((m) => m.measureRef.kind === "leaf");
+    const ratios = ENGINE_METRICS.filter((m) => m.measureRef.kind === "ratio");
+    expect(leafs).toHaveLength(7);
+    expect(ratios).toHaveLength(3);
+  });
+});
+
+describe("engine map — higiene", () => {
+  it("não há id duplicado", () => {
+    const ids = ENGINE_METRICS.map((m) => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("todo corte usado tem rótulo de UI", () => {
+    const usados = new Set<MetricRecorte>(ENGINE_METRICS.flatMap((m) => m.cortes));
+    for (const corte of usados) {
+      expect(ROTULO_DO_CORTE[corte], corte).toBeTruthy();
+    }
+  });
+
+  it("toda métrica tem rótulo humano, sem id cru vazando para a tela", () => {
+    for (const m of ENGINE_METRICS) {
+      expect(m.label.length, m.id).toBeGreaterThan(2);
+      expect(m.label).not.toBe(m.id);
+    }
   });
 });

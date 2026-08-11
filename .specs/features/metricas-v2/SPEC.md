@@ -134,6 +134,54 @@ com **4 chaves** (só as `voip.*`). Validar gate de rota em branch dá **falso-n
 Assimetria viva: menu usa `!== false` (fail-open), rota usa `=== true` (fail-closed) — é
 o que produz "item aparece e ao clicar dá Lock".
 
+## 1.7 Decisões do CTO — grill de 2026-08-11
+
+Treze decisões fechadas, com o número que sustentou cada uma. Estas **substituem**
+qualquer coisa em conflito na §2.
+
+| # | Decisão | Número que sustentou |
+|---|---|---|
+| G1 | A lista lateral mostra **só as métricas com número real**. As demais somem — nada de amostra na frente do cliente | 29 listadas × 10 com motor |
+| G2 | A janela ganha **seletor de corte** (Total, tempo, origem, vendedor, funil, etapa, tag, produto) | 10 cortes já prontos e validados no motor |
+| G3 | **Vela sai.** Componente fica no repo, desligado | 0 fontes de OHLC; hoje os 4 valores são inventados |
+| G4 | **Comparativo com período anterior fica**, sempre calculado sobre o total | dobra as consultas — aceito e a ser medido |
+| G5 | **Chave de liberação própria do Estúdio**, ligada só na Milennials | a chave existente arrasta a TV junto (cria 2 telas + 13 blocos) |
+| G6 | Tela **aberta a todos**; cortes por pessoa (vendedor/closer/SDR) respeitam a trava do Ranking | coerente com `/dashboard` aberto e Ranking travado |
+| G7 | Faixa "Responder agora" = **últimas 24h** | 607 conversas (~11/org) contra 9.758 sem janela |
+| G8 | Faixa "Esfriando" = teve **reunião ou proposta** + 14 dias sem toque | 655 (~12/org) contra 11.333 da base inteira |
+| G9 | Conversão X→Y é **fluxo com janela fechada**, descontando o ciclo médio da etapa | 61.822 transições cobrem 100% das propostas abertas |
+| G10 | Relatório é **planilha** (XLSX). PDF vira ticket próprio, se houver demanda | caminho provado em `useExportLeads`; zero PDF no frontend |
+| G11 | Faixa 2 vira **"Compromissos da semana"**: 7 dias + as marcadas sem hora | 4 reuniões hoje no sistema todo; 227 de 991 sem hora |
+| G12 | Faixa "Propostas paradas" = **limiar fixo por org, padrão 7 dias** | média de parada é 54 dias — comparar contra ela normaliza a doença |
+| G13 | Métrica própria: **soma antes de dividir + número literal**, profundidade 3 | cobre "por dia útil", "aproveitamento" e "projeção" |
+
+### O que G1 + G2 fazem com o catálogo
+
+O catálogo do Estúdio hoje modela corte como métrica separada — "Faturamento" e "Receita
+por origem" são dois itens. Com o seletor de corte isso vira duplicação. A lista passa a
+ser **7 medidas + 3 razões**:
+
+| Item | Cortes disponíveis |
+|---|---|
+| Faturamento | total · tempo · origem · vendedor · SDR · funil · tag · fluxo |
+| Nº de vendas | os mesmos |
+| Leads que entraram | total · tempo · origem · tag · produto |
+| Reuniões marcadas | total · tempo · origem · SDR · tag |
+| Reuniões comparecidas | os mesmos |
+| Negócios na etapa | total · funil · etapa |
+| Tempo médio na etapa | funil · etapa (**sem total** — o catálogo não aceita) |
+| Taxa de conversão · Comparecimento · Ticket médio | razões, sempre escalares |
+
+### Consequências que caem de G3 e G6
+
+- G3: `charts` perde `candle` em todo o catálogo.
+- G6: **não é preciso criar `metrics.view`.** Os cortes por pessoa reusam
+  `performance.view`, que já existe e já governa o Ranking. Some da §2 a decisão 15 e
+  some do roadmap o custo de semear chave nova.
+- G6, dito explicitamente: esconder o corte é gate de **tela**. As RPCs seguem chamáveis
+  por qualquer membro autenticado da org. Se a exigência virar "membro não pode obter o
+  dado", é trabalho no banco, não na UI.
+
 ## 2. Decisões
 
 1. **Comando é fila; Estúdio é análise.** Comando responde "o que faço agora", Estúdio
