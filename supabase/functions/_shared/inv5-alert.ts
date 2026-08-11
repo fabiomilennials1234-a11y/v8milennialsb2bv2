@@ -21,9 +21,24 @@ export type Inv5Payload = {
 export type Inv5Row = { schemaname?: string; tablename?: string; grantee?: string };
 
 /**
+ * Teto do array de violações, igual ao da varredura SQL.
+ *
+ * A varredura capa em 50 "para o payload não crescer sem teto", e o caminho ao
+ * vivo não herdava esse limite — o `logPayload` acabava carregando uma entrada
+ * por tabela violada, com teto real igual ao número de tabelas de `public`
+ * (289 hoje), não 50. Restrição escrita de propósito num caminho e perdida no
+ * outro quando ele foi reconectado. Achado do Sentinela.
+ */
+export const INV5_MAX_VIOLACOES_NO_PAYLOAD = 50;
+
+/**
  * Linhas cruas do detector (uma por tabela+grantee) viram o mesmo formato que a
  * varredura grava em `runtime_logs`. Existe para o alerta poder falar do estado
  * de AGORA sem duplicar a formatação do texto.
+ *
+ * `total` é sempre a contagem REAL, mesmo quando o array é cortado — mesma
+ * regra que a varredura SQL segue e que o texto já defende: truncar a lista
+ * nunca pode parecer um número menor de violações.
  */
 export function buildInv5PayloadFromRows(rows: Inv5Row[]): Inv5Payload {
   const porTabela = new Map<string, string[]>();
@@ -35,11 +50,15 @@ export function buildInv5PayloadFromRows(rows: Inv5Row[]): Inv5Payload {
     porTabela.set(tabela, atual);
   }
 
-  const violacoes = [...porTabela.entries()]
+  const todas = [...porTabela.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([tabela, grantees]) => ({ tabela, grantees: grantees.sort() }));
 
-  return { total: violacoes.length, violacoes, truncado: false };
+  return {
+    total: todas.length,
+    violacoes: todas.slice(0, INV5_MAX_VIOLACOES_NO_PAYLOAD),
+    truncado: todas.length > INV5_MAX_VIOLACOES_NO_PAYLOAD,
+  };
 }
 
 /** Quantas tabelas cabem no texto antes de virar parede. */

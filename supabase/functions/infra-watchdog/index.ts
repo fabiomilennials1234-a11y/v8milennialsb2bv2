@@ -364,7 +364,16 @@ Deno.serve(
           action: "watchdog_alert",
           status: "error",
           errorMessage: `${alert.key}: ${res.detail ?? "envio falhou"}`,
-          payloadSnapshot: { alert: alert.key, message_preview: alert.text.slice(0, 200) },
+          // O detalhe entra AQUI também, e aqui ele vale ainda mais que no
+          // caminho de sucesso: se o envio falhou, ninguém recebeu o texto, e
+          // esta linha é o ÚNICO registro do que foi encontrado. Sem ela sobrava
+          // o `message_preview` de 200 chars, que carrega algumas tabelas por
+          // acidente e não por desenho.
+          payloadSnapshot: {
+            alert: alert.key,
+            message_preview: alert.text.slice(0, 200),
+            ...(alert.logPayload ?? {}),
+          },
         });
       }
     }
