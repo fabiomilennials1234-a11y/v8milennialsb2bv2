@@ -11671,7 +11671,6 @@ export type Database = {
           org_type: Database["public"]["Enums"]["org_type"]
           payment_customer_id: string | null
           payment_subscription_id: string | null
-          plan_id: string | null
           quick_blast_max_leads: number
           require_voice_consent: boolean
           sandbox_created_at: string | null
@@ -11718,7 +11717,6 @@ export type Database = {
           org_type?: Database["public"]["Enums"]["org_type"]
           payment_customer_id?: string | null
           payment_subscription_id?: string | null
-          plan_id?: string | null
           quick_blast_max_leads?: number
           require_voice_consent?: boolean
           sandbox_created_at?: string | null
@@ -11765,7 +11763,6 @@ export type Database = {
           org_type?: Database["public"]["Enums"]["org_type"]
           payment_customer_id?: string | null
           payment_subscription_id?: string | null
-          plan_id?: string | null
           quick_blast_max_leads?: number
           require_voice_consent?: boolean
           sandbox_created_at?: string | null
@@ -11788,18 +11785,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "organizations_plan_id_fkey"
-            columns: ["plan_id"]
-            isOneToOne: false
-            referencedRelation: "subscription_plans"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "organizations_sandbox_source_org_id_fkey"
             columns: ["sandbox_source_org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organizations_subscription_plan_fkey"
+            columns: ["subscription_plan"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["name"]
           },
         ]
       }
