@@ -94,10 +94,22 @@ SELECT ok((SELECT (r ->> 'token') IS NOT NULL FROM _t_link),
 -- ===========================================================================
 -- (HASH-ONLY) o link NÃO é recuperável do banco.
 --
--- Varredura dinâmica: toda coluna de texto/jsonb das duas tabelas novas e de
--- `master_audit_logs`. Não há lista de colunas escrita à mão aqui de propósito
--- — coluna nova nasceria fora de uma lista fixa, e é justamente a coluna nova
--- que vaza.
+-- Varredura dinâmica de TODA coluna de texto/jsonb de TODA tabela de `public`.
+--
+-- A primeira versão era genérica por coluna e ESPECÍFICA POR TABELA — olhava
+-- três. A mensagem, porém, prometia "nenhuma coluna", e prometer mais do que se
+-- mede é o mesmo defeito que corrigi no INV-5 ("public só tem tabela
+-- ordinária", com 10 views em public). Achado do Sentinela.
+--
+-- Sem lista escrita à mão em nenhuma das duas dimensões: tabela nova e coluna
+-- nova nascem cobertas, e é justamente o que ainda não existe que vaza.
+--
+-- DOIS CANAIS QUE VARREDURA DE TABELA NÃO ALCANÇA, para quem vier depois:
+--   1. o log do próprio Postgres — `billing_resolve_payment_link` recebe o
+--      token como ARGUMENTO, então `log_statement` ou `log_min_duration_statement`
+--      o levariam em claro. (`pg_stat_statements` normaliza literal; esse está
+--      seguro.)
+--   2. o log da edge function da fatia seguinte, que é onde eu olharia primeiro.
 -- ===========================================================================
 SET LOCAL role postgres;
 
@@ -110,8 +122,10 @@ BEGIN
     SELECT c.table_name, c.column_name
       FROM information_schema.columns c
      WHERE c.table_schema = 'public'
-       AND c.table_name IN ('payment_links', 'payment_link_charges', 'master_audit_logs')
        AND c.data_type IN ('text', 'character varying', 'jsonb', 'json')
+       -- Só tabela ordinária: view repete o dado da base e duplicaria achado.
+       AND EXISTS (SELECT 1 FROM pg_class k JOIN pg_namespace n ON n.oid = k.relnamespace
+                    WHERE n.nspname = 'public' AND k.relname = c.table_name AND k.relkind = 'r')
   LOOP
     EXECUTE format(
       'SELECT EXISTS (SELECT 1 FROM public.%I WHERE %I::text LIKE %L)',
@@ -127,7 +141,7 @@ $fn$;
 SELECT is(
   (SELECT count(*)::int FROM pg_temp._t_procura_token((SELECT r ->> 'token' FROM _t_link))),
   0,
-  '(HASH-ONLY) o token não aparece em NENHUMA coluna de texto ou jsonb — nem na tabela do link, nem na auditoria');
+  '(HASH-ONLY) o token não aparece em NENHUMA coluna de texto ou jsonb de NENHUMA tabela de public — a varredura é genérica nas duas dimensões, tabela e coluna');
 
 SELECT is(
   (SELECT token_hash FROM public.payment_links
@@ -171,8 +185,8 @@ SELECT is(
 
 SELECT throws_ok(
   $$ INSERT INTO public.payment_links
-       (token_hash, token_prefix, target_kind, organization_id, new_org_name, quote, amount_cents, expires_at, created_by)
-     VALUES ('h', 'p', 'new_org', '28628628-aaaa-0000-0000-000000000286', NULL, '{}'::jsonb, 1, now(), '28628628-0001-0000-0000-000000000286') $$,
+       (token_hash, target_kind, organization_id, new_org_name, quote, amount_cents, expires_at, created_by)
+     VALUES ('h', 'new_org', '28628628-aaaa-0000-0000-000000000286', NULL, '{}'::jsonb, 1, now(), '28628628-0001-0000-0000-000000000286') $$,
   '23514', NULL,
   '(ALVO) new_org com organization_id é recusado — alvo incoerente não entra nem por escrita direta');
 
@@ -276,19 +290,71 @@ SELECT is(
   '(COBRANÇA) método DIFERENTE no mesmo link gera cobrança própria — a idempotência é por par, não por link');
 
 -- ===========================================================================
+-- (COBRANÇA) link revogado não recebe cobrança.
+--
+-- O estado é checado DENTRO da função, não deixado como contrato implícito para
+-- quem chama: "o chamador resolveu antes" é acordo que morre na segunda fatia, e
+-- o preço de errar é cobrança amarrada a proposta revogada.
+-- ===========================================================================
+SELECT is(
+  (SELECT public.billing_attach_link_charge(
+            (SELECT (r ->> 'link_id')::uuid FROM _t_link), 'pix', 'asaas', 'pay_DDD') ->> 'code'),
+  'link_revoked',
+  '(COBRANÇA) link REVOGADO não recebe cobrança — o guard está na função, não no acordo com o chamador');
+
+-- ===========================================================================
 -- (AUDITORIA) gerar e revogar deixam rastro em master_audit_logs.
 -- ===========================================================================
 SELECT ok(
   EXISTS (SELECT 1 FROM public.master_audit_logs
            WHERE action = 'payment_link_created'
-             AND target_id = (SELECT (r ->> 'link_id')::uuid FROM _t_link)),
-  '(AUDITORIA) a geração é registrada');
+             AND target_id = (SELECT (r ->> 'link_id')::uuid FROM _t_link)
+             AND target_name = 'Org alvo (SCRUM-286)'),
+  '(AUDITORIA) a geração é registrada, e o rótulo é o NOME de quem recebe — não o prefixo do token, que era material de segredo num log');
 
 SELECT ok(
   EXISTS (SELECT 1 FROM public.master_audit_logs
            WHERE action = 'payment_link_revoked'
              AND target_id = (SELECT (r ->> 'link_id')::uuid FROM _t_link)),
   '(AUDITORIA) a revogação é registrada');
+
+-- ===========================================================================
+-- (RLS) master LÊ, mas não ESCREVE direto — a auditoria não é contornável.
+--
+-- As quatro funções são DEFINER de dono `postgres` e não passam por policy, então
+-- policy de escrita não habilitaria nada legítimo: habilitaria só o Master
+-- gravar por PostgREST CONTORNANDO o rastro. Nesta tabela isso vira consequência
+-- de cobrança.
+-- ===========================================================================
+SET LOCAL role authenticated;
+SELECT set_config('request.jwt.claims',
+  '{"sub":"28628628-0001-0000-0000-000000000286","role":"authenticated"}', true);
+
+SELECT ok(
+  (SELECT count(*) FROM public.payment_links) > 0,
+  '(RLS) master LÊ os links — é assim que a tela mostra o estado de cada proposta');
+
+-- A recusa é SILENCIOSA, e isso é o que o Postgres faz: sem policy de UPDATE,
+-- a linha simplesmente não é visível para o comando, então ele casa ZERO linhas
+-- em vez de levantar erro. Escrevi `throws_ok` na primeira versão e o teste me
+-- corrigiu. Vale saber para quem for construir a tela: uma escrita direta não
+-- devolve erro nenhum — ela não faz nada.
+CREATE TEMP TABLE _t_upd AS
+  WITH u AS (UPDATE public.payment_links SET amount_cents = 1 RETURNING 1)
+  SELECT count(*)::int AS n FROM u;
+
+SELECT is((SELECT n FROM _t_upd), 0,
+  '(RLS) master NÃO escreve direto na tabela — o UPDATE casa ZERO linhas; quem muda proposta são as funções, que auditam');
+
+SET LOCAL role postgres;
+SELECT is(
+  (SELECT amount_cents FROM public.payment_links
+    WHERE id = (SELECT (r ->> 'link_id')::uuid FROM _t_link)),
+  (SELECT (r ->> 'amount_cents')::integer FROM _t_link),
+  '(RLS) e o valor da proposta ficou intacto — controle positivo da asserção acima, que sozinha passaria com a tabela vazia');
+SET LOCAL role authenticated;
+
+SET LOCAL role postgres;
 
 -- ===========================================================================
 -- (RLS) as duas tabelas novas nascem com RLS ligada.
@@ -312,6 +378,13 @@ SELECT ok(NOT has_function_privilege('anon',
 SELECT ok(has_function_privilege('authenticated',
   'public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz)', 'EXECUTE'),
   '(GRANT) authenticated executa — o Master é um usuário autenticado, e quem barra o não-master é o corpo, não o grant');
+
+-- `service_role` NÃO gera link: sob ele `auth.uid()` é NULL, então a função só
+-- entregaria `Forbidden`. Grant que só devolve erro manda quem depura para o
+-- lugar errado.
+SELECT ok(NOT has_function_privilege('service_role',
+  'public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz)', 'EXECUTE'),
+  '(GRANT) service_role NÃO gera link — sob ele auth.uid() é NULL e a função só devolveria Forbidden');
 
 SELECT ok(NOT has_function_privilege('anon',
   'public.billing_resolve_payment_link(text)', 'EXECUTE'),

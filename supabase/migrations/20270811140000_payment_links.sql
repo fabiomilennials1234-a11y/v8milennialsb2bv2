@@ -29,7 +29,13 @@
 -- Todas eram SECURITY DEFINER, recebiam id por parâmetro e não confrontavam
 -- nada com o contexto de autenticação — escrita e leitura cross-tenant. As
 -- quatro funções abaixo seguem a regra que saiu daquilo:
---   1. DEFINER → autorização no CORPO, não no grant;
+--   1. DEFINER → autorização no CORPO, não no grant.
+--      A EXCEÇÃO, escrita junto para não ser "consertada" depois:
+--      `billing_resolve_payment_link` e `billing_attach_link_charge` NÃO têm
+--      gate no corpo, e está certo — nelas não existe ator humano, o chamador
+--      é código nosso, e o grant `service_role`-only É a autorização. Enfiar um
+--      `auth.uid()` nelas não aumenta segurança nenhuma e quebra a edge
+--      function, porque sob `service_role` `auth.uid()` é NULL;
 --   2. EXECUTE só para quem precisa, conferido com `has_function_privilege`
 --      depois de criar, porque `DROP + CREATE` devolve EXECUTE a PUBLIC;
 --   3. nenhum id vindo do chamador é usado sem ser confrontado com quem chama;
@@ -48,10 +54,17 @@ CREATE TABLE IF NOT EXISTS public.payment_links (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 
   -- Só o hash. Nunca o texto. UNIQUE porque é por ele que se resolve.
+  --
+  -- NÃO existe coluna de prefixo, e a ausência é deliberada. A primeira versão
+  -- desta tabela tinha `token_prefix = left(token, 11)`, copiando a forma de
+  -- `api_keys` — mas lá o prefixo serve para BUSCA, e aqui a busca é pelo hash.
+  -- Sobrava um rótulo que carregava `tq_pay_` (7 chars) mais 4 chars hex do
+  -- aleatório: 16 bits do segredo guardados em claro, na tabela E na
+  -- auditoria. Restariam 112 bits e o impacto seria nulo hoje — mas é material
+  -- de segredo persistido sem precisar, e quem encurtasse o token depois
+  -- herdaria o defeito com juros. Para identificar a proposta existem `id`,
+  -- `organization_id` e `created_at`. Achado do Sentinela.
   token_hash        text        NOT NULL UNIQUE,
-  -- Prefixo curto para o Master reconhecer a proposta na lista sem que isso
-  -- torne o link adivinhável: são 8 chars fixos de rótulo, não de segredo.
-  token_prefix      text        NOT NULL,
 
   -- O ALVO. Criar org nova OU trocar o pacote de uma org existente.
   target_kind       text        NOT NULL,
@@ -73,6 +86,9 @@ CREATE TABLE IF NOT EXISTS public.payment_links (
   revoked_by        uuid,
   revoked_reason    text,
 
+  -- Escrita pela fatia SEGUINTE (confirmação de pagamento). Aqui ela nasce e
+  -- fica NULA: os códigos `link_already_paid` de `resolve` e `attach` são
+  -- caminho preparado, não caminho vivo.
   paid_at           timestamptz,
 
   created_by        uuid        NOT NULL,
@@ -137,11 +153,20 @@ COMMENT ON TABLE public.payment_link_charges IS
 ALTER TABLE public.payment_links        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payment_link_charges ENABLE ROW LEVEL SECURITY;
 
+-- FOR SELECT, e não FOR ALL, apesar de FOR ALL ser a norma da casa (medido:
+-- 136 policies do baseline citam `is_master_user()` sem cláusula FOR).
+--
+-- O argumento é que escrita direta não habilita NADA de legítimo: as quatro
+-- funções são SECURITY DEFINER de dono `postgres`, então não passam por policy
+-- nenhuma. FOR ALL só habilitaria o Master escrever na tabela por PostgREST,
+-- CONTORNANDO a auditoria. Nas outras 136 tabelas isso é aceitável; esta é a
+-- tabela de dinheiro, e é a única em que "master mexeu e não ficou registro"
+-- vira consequência de cobrança. Achado do Sentinela.
 DROP POLICY IF EXISTS payment_links_master_all ON public.payment_links;
-CREATE POLICY payment_links_master_all ON public.payment_links
-  FOR ALL TO authenticated
-  USING (public.is_master_user())
-  WITH CHECK (public.is_master_user());
+DROP POLICY IF EXISTS payment_links_master_read ON public.payment_links;
+CREATE POLICY payment_links_master_read ON public.payment_links
+  FOR SELECT TO authenticated
+  USING (public.is_master_user());
 
 DROP POLICY IF EXISTS payment_link_charges_master_read ON public.payment_link_charges;
 CREATE POLICY payment_link_charges_master_read ON public.payment_link_charges
@@ -172,17 +197,17 @@ SECURITY DEFINER
 SET search_path TO 'pg_catalog', 'public', 'extensions'
 AS $fn$
 DECLARE
-  v_token  text;
-  v_quote  jsonb;
-  v_id       uuid;
-  v_actor    uuid := auth.uid();
+  v_token     text;
+  v_quote     jsonb;
+  v_id        uuid;
+  v_actor     uuid := auth.uid();
   -- `master_audit_logs.master_user_id` referencia `master_users.id`, NÃO o
   -- `auth.uid()` — a coluna do usuário é `user_id`. A FK é quem ensina isso, e
   -- ela ensinou aqui.
   v_master_id uuid;
+  -- Rótulo da auditoria: o NOME de quem recebe a proposta.
+  v_label     text;
 BEGIN
-  -- Autorização no CORPO. O grant deixa `authenticated` chamar porque o Master
-  -- é um usuário autenticado; quem barra o não-master é esta linha.
   SELECT id INTO v_master_id
     FROM public.master_users
    WHERE user_id = v_actor AND is_active = true;
@@ -219,12 +244,18 @@ BEGIN
   -- conta da entropia.
   v_token := 'tq_pay_' || encode(gen_random_bytes(16), 'hex');
 
+  -- Rótulo da auditoria: o NOME de quem recebe a proposta. A versão anterior
+  -- usava o prefixo do token aqui, o que era material de segredo num log.
+  v_label := COALESCE(
+    p_new_org_name,
+    (SELECT name FROM public.organizations WHERE id = p_organization_id),
+    '(sem nome)');
+
   INSERT INTO public.payment_links (
-    token_hash, token_prefix, target_kind, organization_id, new_org_name,
+    token_hash, target_kind, organization_id, new_org_name,
     quote, amount_cents, expires_at, created_by)
   VALUES (
     encode(digest(v_token, 'sha256'), 'hex'),
-    left(v_token, 11),
     p_target_kind,
     p_organization_id,
     p_new_org_name,
@@ -239,7 +270,7 @@ BEGIN
   INSERT INTO public.master_audit_logs
     (master_user_id, user_id, action, target_type, target_id, target_name, details)
   VALUES (
-    v_master_id, v_actor, 'payment_link_created', 'payment_link', v_id, left(v_token, 11),
+    v_master_id, v_actor, 'payment_link_created', 'payment_link', v_id, v_label,
     jsonb_build_object(
       'target_kind', p_target_kind,
       'organization_id', p_organization_id,
@@ -252,7 +283,6 @@ BEGIN
   RETURN jsonb_build_object(
     'link_id',      v_id,
     'token',        v_token,
-    'prefix',       left(v_token, 11),
     'amount_cents', (v_quote ->> 'charge_cents')::integer,
     'expires_at',   p_expires_at);
 END
@@ -273,7 +303,7 @@ AS $fn$
 DECLARE
   v_actor     uuid := auth.uid();
   v_master_id uuid;
-  v_prefix    text;
+  v_label     text;
 BEGIN
   SELECT id INTO v_master_id
     FROM public.master_users
@@ -290,16 +320,16 @@ BEGIN
      SET revoked_at = now(), revoked_by = v_actor, revoked_reason = p_reason
    WHERE id = p_link_id
      AND revoked_at IS NULL
-  RETURNING token_prefix INTO v_prefix;
+  RETURNING COALESCE(new_org_name, organization_id::text) INTO v_label;
 
-  IF v_prefix IS NULL THEN
+  IF v_label IS NULL THEN
     -- Já revogado ou inexistente. Não é erro: revogar duas vezes é inofensivo.
     RETURN jsonb_build_object('ok', true, 'code', 'nothing_to_revoke');
   END IF;
 
   INSERT INTO public.master_audit_logs
     (master_user_id, user_id, action, target_type, target_id, target_name, details)
-  VALUES (v_master_id, v_actor, 'payment_link_revoked', 'payment_link', p_link_id, v_prefix,
+  VALUES (v_master_id, v_actor, 'payment_link_revoked', 'payment_link', p_link_id, v_label,
           jsonb_build_object('reason', p_reason));
 
   RETURN jsonb_build_object('ok', true, 'code', 'revoked');
@@ -382,7 +412,26 @@ AS $fn$
 DECLARE
   v_row     public.payment_link_charges%ROWTYPE;
   v_criada  boolean := false;
+  v_link    public.payment_links%ROWTYPE;
 BEGIN
+  -- O ESTADO do link é checado AQUI, não deixado como contrato implícito para
+  -- quem chama. "O chamador resolveu antes" é acordo que sobrevive à primeira
+  -- fatia e morre na segunda — e o preço de errar é cobrança amarrada a
+  -- proposta revogada. Achado do Sentinela.
+  SELECT * INTO v_link FROM public.payment_links WHERE id = p_link_id;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'link_not_found');
+  END IF;
+  IF v_link.revoked_at IS NOT NULL THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'link_revoked');
+  END IF;
+  IF v_link.paid_at IS NOT NULL THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'link_already_paid');
+  END IF;
+  IF v_link.expires_at <= now() THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'link_expired');
+  END IF;
+
   INSERT INTO public.payment_link_charges
     (payment_link_id, method, provider, provider_charge_id)
   VALUES (p_link_id, p_method, p_provider, p_provider_charge_id)
@@ -400,6 +449,8 @@ BEGIN
   END IF;
 
   RETURN jsonb_build_object(
+    'ok',                 true,
+    'code',               'ok',
     'charge_id',          v_row.id,
     'provider',           v_row.provider,
     'provider_charge_id', v_row.provider_charge_id,
@@ -415,11 +466,20 @@ $fn$;
 -- fechar nos dois casos — e o teste confere com `has_function_privilege` nome
 -- por nome, porque grant é estado a medir, não a supor.
 -- ---------------------------------------------------------------------------
-REVOKE ALL ON FUNCTION public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz) TO authenticated, service_role;
+-- As duas de ESCRITA: `authenticated` sim, `service_role` NÃO.
+--
+-- Não é descuido invertido — sob `service_role` `auth.uid()` é NULL, então
+-- `is_master_user()` nunca casa e a função levantaria `Forbidden` SEMPRE. Um
+-- grant que só entrega erro é pior que nenhum: quem tentasse gerar link
+-- server-side numa edge function tomaria "Forbidden" e procuraria o defeito no
+-- lugar errado. Se a fatia seguinte precisar de geração server-side, o caminho
+-- é uma função própria com autorização própria, não este grant. Achado do
+-- Sentinela.
+REVOKE ALL ON FUNCTION public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz) FROM PUBLIC, anon, service_role;
+GRANT EXECUTE ON FUNCTION public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz) TO authenticated;
 
-REVOKE ALL ON FUNCTION public.billing_revoke_payment_link(uuid,text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.billing_revoke_payment_link(uuid,text) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.billing_revoke_payment_link(uuid,text) FROM PUBLIC, anon, service_role;
+GRANT EXECUTE ON FUNCTION public.billing_revoke_payment_link(uuid,text) TO authenticated;
 
 REVOKE ALL ON FUNCTION public.billing_resolve_payment_link(text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.billing_resolve_payment_link(text) TO service_role;
