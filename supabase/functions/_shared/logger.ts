@@ -166,6 +166,11 @@ export type RuntimeLogModule =
   | "agent"
   | "analytics"
   | "auth"
+  // SCRUM-289: o checkout e a área de billing do admin passam a registrar aqui.
+  // `runtime_logs.module` não tem CHECK no banco (só `status` tem), então o
+  // vocabulário fechado é ESTE — e é o único lugar que impede o próximo módulo
+  // de nascer como "billling" e sumir das buscas.
+  | "billing"
   | "calendar"
   | "campaign"
   | "carteira"
