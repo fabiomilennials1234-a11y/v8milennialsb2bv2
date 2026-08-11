@@ -208,19 +208,6 @@ Deno.serve(
     const statusFinal = proximoStatus(statusAnterior, d.status);
     const liberaAgora = deveProvisionar(statusAnterior, d.status);
 
-    if (existente) {
-      await supabase
-        .from("payment_history")
-        .update({
-          status: statusFinal,
-          paid_at: d.paidAt ?? undefined,
-          invoice_url: d.invoiceUrl ?? undefined,
-          receipt_url: d.receiptUrl ?? undefined,
-          billing_type: d.billingType ?? undefined,
-        })
-        .eq("id", existente.id);
-    }
-
     // A cobrança conhecida vem do LINK, não do histórico: é o link que carrega
     // o `quote` congelado na geração — plano, ciclo e valores. `payment_history`
     // não tem coluna de plano, então montar a assinatura a partir dele seria
@@ -243,9 +230,56 @@ Deno.serve(
     const orgId = (link?.organization_id ?? existente?.organization_id ?? null) as string | null;
     let assinou = false;
 
+    const inteiro = (v: unknown, padrao = 0) =>
+      typeof v === "number" && Number.isFinite(v) ? v : padrao;
+
+    // ── O HISTÓRICO. Medido antes de escrever: NINGUÉM insere em
+    // `payment_history` neste repositório — nem a fatia que cria a cobrança.
+    // Se este handler só ATUALIZASSE, a tabela continuaria com zero linhas e a
+    // fatia não entregaria o que promete: fazer o pagamento virar fato.
+    //
+    // Upsert sobre `payment_history_asaas_payment_id_key` (UNIQUE que já
+    // existia): a mesma cobrança nunca vira duas linhas, e de novo é o BANCO
+    // que garante. Os valores de criação vêm do `quote` do link — que é a
+    // única fonte que carrega ciclo e desconto congelados.
+    const centavos = inteiro(quote?.charge_cents, inteiro(quote?.monthly_cents));
+    const { error: erroHistorico } = await supabase
+      .from("payment_history")
+      .upsert({
+        organization_id: orgId,
+        asaas_payment_id: d.paymentId,
+        asaas_subscription_id: d.subscriptionId,
+        amount: existente ? undefined : centavos / 100,
+        billing_cycle: existente ? undefined : (quote?.billing_cycle ?? "monthly"),
+        discount_applied: existente
+          ? undefined
+          : (inteiro(quote?.cycle_discount_cents) + inteiro(quote?.coupon_discount_cents) +
+             inteiro(quote?.manual_discount_cents)) / 100,
+        coupon_id: existente ? undefined : (typeof quote?.coupon_id === "string" ? quote.coupon_id : null),
+        status: statusFinal,
+        paid_at: d.paidAt ?? undefined,
+        // ⚠️ DEPENDE do #1523 (migration 20270811160000): estas três colunas já
+        // existem em PRODUÇÃO, mas NÃO na cadeia de migrations desta branch.
+        // Num ambiente montado só daqui, o upsert falha, cai no log abaixo e o
+        // evento ainda responde 200 — fail-soft, não fail-open. A ordem de
+        // merge #1523 → #1535 resolve; invertida, o histórico nasce sem recibo.
+        invoice_url: d.invoiceUrl ?? undefined,
+        receipt_url: d.receiptUrl ?? undefined,
+        billing_type: d.billingType ?? undefined,
+      }, { onConflict: "asaas_payment_id", ignoreDuplicates: false });
+
+    if (erroHistorico) {
+      await logRuntime({
+        module: "billing",
+        organizationId: orgId ?? undefined,
+        action: "asaas_webhook_historico_falhou",
+        status: "error",
+        errorMessage: erroHistorico.message,
+        payloadSnapshot: { event_id: d.eventId, payment_id: d.paymentId },
+      });
+    }
+
     if (liberaAgora && orgId && quote && typeof quote.plan_id === "string") {
-      const inteiro = (v: unknown, padrao = 0) =>
-        typeof v === "number" && Number.isFinite(v) ? v : padrao;
       const base = inteiro(quote.base_amount_cents, inteiro(quote.subtotal_cents));
       const finalCents = inteiro(quote.charge_cents, base);
 
