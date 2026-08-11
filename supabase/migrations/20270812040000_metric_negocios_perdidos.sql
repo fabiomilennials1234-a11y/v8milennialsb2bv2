@@ -1,4 +1,4 @@
--- 20270811160000_metric_negocios_perdidos.sql
+-- 20270812040000_metric_negocios_perdidos.sql
 --
 -- SCRUM-311, fatia 5 de 19: "Negócios perdidos".
 --
@@ -42,7 +42,7 @@
 -- isso. Recorte que ninguém pediu é superfície para manter. Sem 'stream'
 -- também — fluxo de receita não classifica quem não gerou receita.
 --
--- ROLLBACK pareado: rollback/20270811160000_metric_negocios_perdidos.sql
+-- ROLLBACK pareado: rollback/20270812040000_metric_negocios_perdidos.sql
 
 -- ===========================================================================
 -- 1 — CATÁLOGO

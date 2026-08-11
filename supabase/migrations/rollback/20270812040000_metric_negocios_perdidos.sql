@@ -1,4 +1,4 @@
--- ROLLBACK de 20270811160000_metric_negocios_perdidos.sql
+-- ROLLBACK de 20270812040000_metric_negocios_perdidos.sql
 --
 -- Só o catálogo sai. O ramo no despachante fica: ramo sem medida catalogada é
 -- inerte, porque `_metric_leaf` procura a medida em metric_catalog_measures e
