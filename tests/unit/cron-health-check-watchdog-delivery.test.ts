@@ -127,6 +127,22 @@ describe("cron-health-check — a falha de envio chega ao relatório", () => {
     expect(report.healthy).toBe(false);
     expect(report.watchdog_delivery?.failing).toBe(true);
     expect(report.message).toMatch(/não deu para ler as falhas de envio/);
+
+    // O discriminador. Sem ele, esta linha de runtime_logs seria idêntica à do
+    // caso saudável (count 0) e ninguém separaria saúde de cegueira depois.
+    expect(report.watchdog_delivery?.readable).toBe(false);
+    expect(report.watchdog_delivery?.count).toBeNull();
+  });
+
+  it("caso saudável se declara LEGÍVEL com zero — o par do teste acima", async () => {
+    const report = await runHealthCheck({
+      ...sondaSaudavel,
+      fetchWatchdogDeliveryFailures: vi.fn().mockResolvedValue([]),
+      now: AGORA,
+    });
+
+    expect(report.watchdog_delivery?.readable).toBe(true);
+    expect(report.watchdog_delivery?.count).toBe(0);
   });
 
   it("sem o leitor injetado, o relatório é o de antes (nada muda para quem já chama)", async () => {

@@ -60,8 +60,12 @@ export async function runHealthCheck(deps: HealthCheckDeps): Promise<HealthRepor
       // seria a mentira exata que este código existe para impedir.
       watchdog = {
         failing: true,
-        count: 0,
+        // NULO, não 0: gravar 0 aqui daria a MESMA linha de log do caso
+        // saudável, e quem lesse depois não separaria "nenhuma falha" de "não
+        // consegui contar". É o mesmo princípio de total real vs lista truncada.
+        count: null,
         oldest_at: null,
+        readable: false,
         message: `não deu para ler as falhas de envio do watchdog: ${String(err)}`,
       };
     }

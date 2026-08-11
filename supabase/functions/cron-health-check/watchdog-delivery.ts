@@ -18,7 +18,19 @@
  * Lógica pura, sem import de Deno, para rodar no vitest.
  */
 
-/** Janela de observação. Falha de envio fica visível por um dia. */
+/**
+ * Janela de observação. Falha de envio fica visível por um dia.
+ *
+ * O PISO NÃO É ESCOLHA — é derivado: o `infra-watchdog` tem cooldown de 30 min
+ * por assunto, então uma falha PERSISTENTE só se re-registra a cada 30 min.
+ * Qualquer janela menor que isso abre um vão: falha em T, próxima em T+30, e um
+ * health-check em T+31 com janela de 30 não vê nada enquanto o problema
+ * continua. **A janela tem que exceder o cooldown do watchdog.**
+ *
+ * 1440 min está ordens de grandeza acima do piso e coincide com o dia útil de
+ * quem conserta. Se alguém achar 24 h exagerado e encolher, o limite inferior é
+ * 30 min — abaixo disso o detector fica cego com o defeito no ar.
+ */
 export const WATCHDOG_DELIVERY_LOOKBACK_MINUTES = 1440;
 
 export interface WatchdogDeliveryFailureRow {
@@ -28,10 +40,16 @@ export interface WatchdogDeliveryFailureRow {
 
 export interface WatchdogDeliveryReport {
   failing: boolean;
-  /** Quantas falhas de envio dentro da janela. */
-  count: number;
+  /**
+   * Quantas falhas de envio dentro da janela. NULO quando não deu para contar
+   * — "não sei" e "zero" não podem colapsar no mesmo número, senão quem ler
+   * `runtime_logs` depois não separa saúde de cegueira.
+   */
+  count: number | null;
   /** A mais antiga da janela — o "desde quando". */
   oldest_at: string | null;
+  /** Falso quando a leitura falhou. É o discriminador do `count` nulo. */
+  readable: boolean;
   /** Nulo quando não há falha. Silêncio é o normal. */
   message: string | null;
 }
@@ -61,7 +79,7 @@ export function assessWatchdogDelivery(
     .sort((a, b) => a.at - b.at);
 
   if (dentroDaJanela.length === 0) {
-    return { failing: false, count: 0, oldest_at: null, message: null };
+    return { failing: false, count: 0, oldest_at: null, readable: true, message: null };
   }
 
   const count = dentroDaJanela.length;
@@ -72,6 +90,7 @@ export function assessWatchdogDelivery(
     failing: true,
     count,
     oldest_at: oldest,
+    readable: true,
     message:
       `${count} ${plural} — o mais antigo em ${oldest} ` +
       `(janela de ${lookbackMinutes} min). O infra-watchdog detectou e não conseguiu avisar.`,

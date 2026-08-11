@@ -138,8 +138,11 @@ Deno.serve(
         edge_probe_status: report.edge_probe_status,
         // Quantas e desde quando — "houve falha" não diz se é um tropeço ou
         // uma semana de silêncio.
-        watchdog_delivery_failures: report.watchdog_delivery?.count ?? 0,
+        watchdog_delivery_failures: report.watchdog_delivery?.count ?? null,
         watchdog_delivery_oldest_at: report.watchdog_delivery?.oldest_at ?? null,
+        // Discriminador: sem ele, "0 falhas" e "não consegui contar" viram a
+        // mesma linha em runtime_logs.
+        watchdog_delivery_readable: report.watchdog_delivery?.readable ?? null,
       },
     });
 
