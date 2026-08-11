@@ -8,6 +8,7 @@ import { getTimeBasedVariables } from "../time-variables.ts";
 import { getPipeEntry } from "../pipeline-adapter.ts";
 import { getWhatsAppProvider } from "../whatsapp-client.ts";
 import { personalizationName, isPlaceholderLeadName, tidyEmptyVarGaps } from "../lead-name.ts";
+import { normalizeBrazilianPhone } from "../whatsapp-dispatch.ts";
 import type { ActionResult } from "./types.ts";
 import {
   resolveRoutedInstance,
@@ -246,6 +247,144 @@ export async function enforceWhatsAppRateLimit(
     if (elapsed < MIN_INTERVAL_MS) {
       await new Promise(r => setTimeout(r, MIN_INTERVAL_MS - elapsed));
     }
+  }
+}
+
+// ─── Persistência da mensagem de saída ─────────────────────────────────────
+
+/** Uma mensagem que a automação ACABOU de entregar, pronta para virar linha. */
+export type OutboundMessage = {
+  organizationId: string;
+  instanceId: string;
+  /** O id devolvido pelo provider no `/send`. Ver `persistOutboundMessage`. */
+  providerMessageId?: string | null;
+  /** Telefone do destinatário; normalizado aqui antes de virar `remote_jid`. */
+  phone: string;
+  /** Como o chat vai renderizar: `image`, `video`, `conversation`, `poll`, … */
+  messageType: string;
+  content?: string | null;
+  /** Omitido (não `null`) quando a mensagem não carrega mídia. */
+  mediaUrl?: string | null;
+  leadId?: string | null;
+  /** Prefixo do id sintético de último recurso. Default `wf`. */
+  fallbackIdPrefix?: string;
+};
+
+/**
+ * Grava em `whatsapp_messages` a mensagem que a automação acabou de enviar.
+ *
+ * **O `message_id` tem de ser o do provider.** É essa a peça central, não um
+ * detalhe de higiene: quando o eco `fromMe` volta pelo webhook, ele entra com
+ * `onConflict: "message_id,instance_id"` e `ignoreDuplicates: true`. Com o id
+ * real, o eco colide com esta linha, vira DO NOTHING, e o que escrevemos aqui
+ * sobrevive inteiro — inclusive `sent_source: "workflow"`, que é o que impede o
+ * `trg_human_pause_on_manual_send` de pausar o Copilot do lead a cada mídia
+ * disparada por automação. Com um id sintético não há colisão: o eco insere uma
+ * SEGUNDA linha, com `sent_source` no default `manual`, e o gatilho dispara.
+ *
+ * `ignoreDuplicates: false` (merge), e não `true`: o eco pode chegar ANTES do
+ * retorno do `/send`. Se este upsert virasse no-op nesse caso, a linha ficaria
+ * rotulada `manual` / `sent_by_ai=false` para sempre. Com merge, quem enviou
+ * corrige o rótulo de quem enviou.
+ *
+ * ⚠️ DÍVIDA CONHECIDA — o merge conserta o RÓTULO, não a PAUSA
+ * ---------------------------------------------------------
+ * A corrida com o eco não é só cosmética, e o limite tem de ficar declarado com
+ * precisão:
+ *
+ *  - A colisão por `message_id` real mata a DUPLICATA **sempre** — chegue o eco
+ *    antes ou depois, existe uma linha só.
+ *  - Ela só evita a PAUSA DO COPILOT quando a NOSSA escrita chega primeiro.
+ *
+ * Por quê: `trg_human_pause_on_manual_send` é AFTER **INSERT** FOR EACH ROW (não
+ * UPDATE) e só PAUSA quando as três batem — `direction = 'outgoing'` AND
+ * `COALESCE(sent_source,'manual') = 'manual'` AND
+ * `COALESCE(sent_by_ai,false) = false`. Se o eco insere primeiro,
+ * ele entra com `sent_source` no default `manual` e `sent_by_ai=false`: o
+ * gatilho dispara e grava `human_paused_until` em `phone_ai_preferences` e em
+ * `conversations`. Nosso upsert chega depois como UPDATE — não refaz o INSERT,
+ * logo não refaz o gatilho, e o efeito colateral já commitado NÃO é desfeito.
+ * O Copilot daquele lead fica pausado por causa de uma mídia que a automação
+ * enviou.
+ *
+ * Não é hipótese: já foi medido eco chegando **1,5 s antes** do retorno do
+ * `/send`.
+ *
+ * A correção real é no gate do gatilho (distinguir eco de envio humano), muda
+ * comportamento do Copilot e é decisão do CTO — fora deste módulo. Registrado
+ * aqui para que ninguém leia o merge como se resolvesse a corrida inteira.
+ *
+ * Falha de escrita nunca derruba a action: a mensagem já está no WhatsApp do
+ * cliente, e devolver erro aqui só provocaria retentativa — ou seja, mensagem
+ * duplicada para o lead por causa de um problema nosso de banco.
+ */
+export async function persistOutboundMessage(
+  supabase: SupabaseClient,
+  msg: OutboundMessage,
+): Promise<void> {
+  // `remote_jid` alimenta as ações de mensagem da UI (reagir, editar, apagar),
+  // que devolvem esse número ao Uazapi — um jid sem o 55 produz ação que falha.
+  // (`normalized_phone` é preenchida por gatilho; isto aqui é só sobre o jid.)
+  // Normalização que falha não pode custar a mensagem: fica o valor original.
+  let phone = msg.phone;
+  try {
+    phone = normalizeBrazilianPhone(msg.phone) ?? msg.phone;
+  } catch {
+    phone = msg.phone;
+  }
+
+  // Provider sem id de volta é raro (medido: 1 em 3427 envios de workflow em 3
+  // dias). Nesse caso grava-se assim mesmo, com id sintético: o eco vai criar
+  // uma duplicata, mas duplicata rara é preferível a mensagem que ninguém vê.
+  const messageId =
+    msg.providerMessageId || `${msg.fallbackIdPrefix ?? "wf"}_${crypto.randomUUID()}`;
+
+  const row: Record<string, unknown> = {
+    organization_id: msg.organizationId,
+    instance_id: msg.instanceId,
+    message_id: messageId,
+    remote_jid: `${phone}@s.whatsapp.net`,
+    phone_number: phone,
+    direction: "outgoing",
+    message_type: msg.messageType,
+    content: msg.content ?? null,
+    timestamp: new Date().toISOString(),
+    status: "sent",
+    sent_by_ai: true,
+    sent_source: "workflow",
+  };
+  // Coluna ausente do payload fica de fora do UPDATE do upsert. Omitir preserva
+  // o que o eco já tiver gravado ali, em vez de sobrescrever com null.
+  if (msg.mediaUrl !== undefined && msg.mediaUrl !== null) row.media_url = msg.mediaUrl;
+  if (msg.leadId) row.lead_id = msg.leadId;
+
+  try {
+    const { error } = await supabase
+      .from("whatsapp_messages")
+      .upsert(row, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+    if (error) {
+      // `error.message` do PostgREST fica FORA do log de propósito: a linha que
+      // falhou carrega `phone_number`, `remote_jid` e o `content` da mensagem
+      // para o lead, e violação de constraint no Postgres costuma ecoar os
+      // valores da chave no detalhe do erro. `error.code` identifica a classe da
+      // falha (23505, 23503, 42501, …) sem carregar PII; o resto do contexto é
+      // só id e tipo, o bastante para achar a linha por conta própria.
+      console.error(
+        "[whatsapp-helpers] persistOutboundMessage failed:",
+        JSON.stringify({
+          code: error.code ?? "unknown",
+          organization_id: msg.organizationId,
+          instance_id: msg.instanceId,
+          message_type: msg.messageType,
+        }),
+      );
+    }
+  } catch (err) {
+    // Caminho de transporte (fetch abortado, DNS, TLS), não resposta do
+    // PostgREST: aqui a mensagem descreve a falha de rede e não ecoa a linha.
+    // Ainda assim, só `name`/`message` — nunca o payload.
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error("[whatsapp-helpers] persistOutboundMessage threw:", detail);
   }
 }
 
