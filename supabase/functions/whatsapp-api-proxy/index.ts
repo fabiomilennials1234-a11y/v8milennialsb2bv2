@@ -60,6 +60,135 @@ function checkRateLimit(orgId: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Guarda de ordem de deploy — estado de `whatsapp_messages_instance_id_fkey`
+// ---------------------------------------------------------------------------
+
+/**
+ * `present` = a FK ainda existe (ou não deu para saber). `dropped` = provado
+ * que não existe mais.
+ */
+type WhatsAppMessagesFkState = "present" | "dropped";
+
+/**
+ * Cache no isolate. Assimétrico de propósito:
+ *
+ *  - `dropped` é TERMINAL e vale para sempre. A FK não volta: recriá-la exige
+ *    `ADD CONSTRAINT`, que valida as 2,3M linhas contra órfãs que já violam a
+ *    referência — a própria migration documenta que recriar é recriar o bug.
+ *  - `present` expira em `FK_PRESENT_RECHECK_MS`, porque um isolate vivo desde
+ *    ANTES do apply da migration precisa enxergar o DROP sem esperar reciclagem.
+ *    Sem TTL, a guarda protegeria só isolates novos.
+ */
+let fkProbeCache: { state: WhatsAppMessagesFkState; at: number } | null = null;
+const FK_PRESENT_RECHECK_MS = 60_000;
+
+/**
+ * Uuid que nunca casa com linha nenhuma. `whatsapp_messages.id` é uuid, então
+ * este literal é aceito pelo parser (um valor de outro tipo viraria `22P02` e
+ * mascararia o `PGRST200` que interessa) e resolve por PK sem ler dado.
+ */
+const FK_PROBE_SENTINEL_ID = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * Descobre, em runtime, se `whatsapp_messages_instance_id_fkey` ainda existe.
+ *
+ * Por que uma guarda em runtime, e não um comentário
+ * --------------------------------------------------
+ * O DROP da FK é a migration `20270811000010_whatsapp_messages_drop_instance_fk.sql`,
+ * passo MANUAL; o deploy desta função é outro passo MANUAL. Um comentário
+ * dizendo "aplique a migration antes" só vale enquanto alguém lê e obedece. Se
+ * o proxy subir primeiro já tendo parado de limpar `whatsapp_messages`, o
+ * DELETE da instância entrega as linhas ao `ON DELETE SET NULL` num statement
+ * único — ~155k só na Alamaster — e estoura o statement timeout: a falha que
+ * derrubou 34 de 95 exclusões. Perguntando, as duas ordens de deploy ficam
+ * seguras e o passo 2 deixa de depender do passo 1.
+ *
+ * Como se pergunta sem `pg_constraint`
+ * ------------------------------------
+ * `pg_constraint` não é legível por PostgREST (fora dos schemas expostos), e o
+ * único executor de SQL cru do projeto (`mcp_exec_readonly_sql`) é master-only
+ * — service_role não passa no `is_master_user()`. Sobra o MESMO catálogo por
+ * outro caminho: o grafo de relações do PostgREST é derivado de
+ * `pg_constraint`, e um embed que cita a constraint PELO NOME responde 200 se
+ * ela existe e `PGRST200` ("Could not find a relationship") se não existe.
+ *
+ * O `PGRST200` é levantado ao MONTAR a query, a partir do schema cache, antes de
+ * executar — por isso o probe filtra por um uuid sentinela que nunca casa: zero
+ * linha lida, zero PII em memória, e a validação do relacionamento acontece
+ * igual. E é um GET, não um HEAD: resposta HEAD não tem corpo, então um
+ * `PGRST200` viria sem `code` nem `message` e o probe travaria em "unknown"
+ * para sempre — exatamente o modo de falha que ele existe para evitar.
+ *
+ * Qual é o lado seguro na dúvida
+ * ------------------------------
+ * Manter o nullify — e a assimetria é real, não covardia. Com a FK viva o banco
+ * vai anular essas linhas no instante do DELETE de qualquer forma; o lote não
+ * causa perda que o schema já não imponha, só troca um statement gigante por
+ * vários curtos. Pular por engano não compra nada e ressuscita o timeout. Por
+ * isso só um `PGRST200` explícito autoriza pular: erro desconhecido, exceção ou
+ * resposta estranha caem em `present`.
+ *
+ * ⚠️ `unknown` PERMANENTE depois da migration aplicada inverte o sinal — aí o
+ * nullify volta a apagar histórico. Por isso toda dúvida emite log de erro:
+ * `delete_instance_fk_probe_failed` recorrente é para ser investigado, não
+ * tolerado.
+ */
+async function whatsappMessagesFkState(
+  // deno-lint-ignore no-explicit-any
+  supabaseAdmin: any,
+  orgId: string | null
+): Promise<WhatsAppMessagesFkState> {
+  const cached = fkProbeCache;
+  if (cached) {
+    if (cached.state === "dropped") return "dropped";
+    if (Date.now() - cached.at < FK_PRESENT_RECHECK_MS) return "present";
+  }
+
+  try {
+    const { error } = await supabaseAdmin
+      .from("whatsapp_messages")
+      .select("id, whatsapp_instances!whatsapp_messages_instance_id_fkey(id)")
+      .eq("id", FK_PROBE_SENTINEL_ID)
+      .limit(1);
+
+    if (!error) {
+      fkProbeCache = { state: "present", at: Date.now() };
+      return "present";
+    }
+
+    const relationshipGone =
+      error.code === "PGRST200" ||
+      /could not find a relationship/i.test(error.message ?? "");
+
+    if (relationshipGone) {
+      fkProbeCache = { state: "dropped", at: Date.now() };
+      return "dropped";
+    }
+
+    // Só o `code` — a mensagem do PostgREST pode ecoar conteúdo da linha.
+    await logRuntime({
+      organizationId: orgId ?? undefined,
+      module: "whatsapp",
+      action: "delete_instance_fk_probe_failed",
+      status: "error",
+      entityType: "whatsapp_messages",
+      errorMessage: `probe inconclusivo (${error.code ?? "sem code"}); mantendo o nullify de whatsapp_messages`,
+    });
+    return "present";
+  } catch (e) {
+    await logRuntime({
+      organizationId: orgId ?? undefined,
+      module: "whatsapp",
+      action: "delete_instance_fk_probe_failed",
+      status: "error",
+      entityType: "whatsapp_messages",
+      errorMessage: `probe lançou (${(e as Error).name ?? "erro"}); mantendo o nullify de whatsapp_messages`,
+    });
+    return "present";
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Response helpers
 // ---------------------------------------------------------------------------
 
@@ -417,12 +546,61 @@ Deno.serve(
             );
           }
 
-          // Clear FKs BEFORE deleting the instance row, otherwise the
-          // ON DELETE SET NULL cascade runs as one statement over
-          // whatsapp_messages (~2.3M rows, 7 indexes on instance_id) and blows
-          // the statement timeout — 34 of 95 deletions failed that way. Each
-          // batch is a short statement in its own transaction, so locks on a
-          // table the webhook writes to continuously are released in between.
+          // `whatsapp_messages` sai desta limpeza SOMENTE DEPOIS que a FK
+          // `whatsapp_messages_instance_id_fkey` for dropada. Esse DROP é a
+          // migration `20270811000010_whatsapp_messages_drop_instance_fk.sql`, ainda um
+          // passo MANUAL — a ordem real é (1) migration em prod, (2) deploy
+          // deste proxy. Nada aqui pode supor o estado (1).
+          //
+          // Esses dois passos ESTANCAM a perda; eles não recuperam o que já foi
+          // perdido. As 385.828 linhas órfãs de antes só voltam com o script
+          // `scripts/backfill-orphan-whatsapp-messages.sql`, que é OPCIONAL e
+          // não está no caminho de deploy — decisão do CTO em 2026-08-11.
+          //
+          // Por que a saída é o conserto: enquanto existe FK ON DELETE SET NULL,
+          // este nullify antecipa o cascade e desliga o histórico do chip a cada
+          // exclusão de instância — o chat filtra por `instance_id`, então a
+          // conversa inteira some da tela embora siga no banco (385.828 linhas
+          // órfãs acumuladas). Sem a FK, `instance_id` passa a ser uuid
+          // histórico da mensagem, apagar a instância não toca as 2,3M linhas, e
+          // some junto a classe de statement timeout que justificava o lote
+          // nessa tabela. Quem liga chip → ids históricos passa a ser a lápide
+          // em `whatsapp_instance_reap_queue`.
+          //
+          // Quem decide não é este comentário: `whatsappMessagesFkState`
+          // pergunta ao catálogo, a cada exclusão (com cache no isolate).
+          // Enquanto a FK existir, `whatsapp_messages` continua na lista e o
+          // comportamento é exatamente o de hoje; quando não existir mais, sai
+          // sozinha. Deployar fora de ordem deixa de quebrar alguma coisa.
+          //
+          // `scheduled_user_messages.whatsapp_instance_id` continua com FK
+          // ON DELETE SET NULL e continua sendo limpo antes do DELETE em
+          // qualquer cenário: é fila de envio pendente, não histórico — perder o
+          // vínculo ali não esconde conversa de ninguém, e limpar em lotes
+          // curtos evita entregar tudo a um único statement de cascade.
+          const fkState = await whatsappMessagesFkState(
+            supabaseAdmin,
+            callerOrgId
+          );
+
+          const nullifyTargets: Array<{ table: string; column: string }> = [];
+          if (fkState === "present") {
+            nullifyTargets.push({
+              table: "whatsapp_messages",
+              column: "instance_id",
+            });
+          }
+          nullifyTargets.push({
+            table: "scheduled_user_messages",
+            column: "whatsapp_instance_id",
+          });
+
+          console.log(
+            `[deleteInstance] whatsapp_messages FK=${fkState} → alvos: ${nullifyTargets
+              .map((t) => t.table)
+              .join(", ")}`
+          );
+
           const nullifyIO: BatchNullifyIO = {
             async selectIds(table, column, value, limit) {
               const { data, error } = await supabaseAdmin
@@ -442,10 +620,7 @@ Deno.serve(
             },
           };
 
-          for (const target of [
-            { table: "whatsapp_messages", column: "instance_id" },
-            { table: "scheduled_user_messages", column: "whatsapp_instance_id" },
-          ]) {
+          for (const target of nullifyTargets) {
             const outcome = await nullifyInBatches(nullifyIO, {
               ...target,
               value: instanceId,
@@ -454,9 +629,10 @@ Deno.serve(
               `[deleteInstance] ${target.table}: cleared ${outcome.rows} rows in ${outcome.batches} batches`
             );
 
-            // Rows still carry the FK. Proceeding would hand the remainder to
-            // the cascade, which is exactly the statement that times out — so
-            // stop and let the caller retry instead of failing opaquely.
+            // Ainda há linhas apontando pra instância. Seguir entregaria o resto
+            // ao cascade — o statement único que o lote existe pra evitar.
+            // Melhor parar e ser repetido do que falhar de forma opaca no
+            // DELETE.
             if (outcome.hitBatchCeiling) {
               await logRuntime({
                 organizationId: callerOrgId,
