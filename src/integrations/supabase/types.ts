@@ -351,6 +351,234 @@ export type Database = {
         }
         Relationships: []
       }
+      _bkp_c7e4ba84_instance: {
+        Row: {
+          copilot_agent_id: string | null
+          created_at: string | null
+          daily_blast_cap: number | null
+          daily_call_cap: number | null
+          id: string | null
+          instance_id: string | null
+          instance_name: string | null
+          last_connection_at: string | null
+          metadata: Json | null
+          organization_id: string | null
+          owner_team_member_id: string | null
+          phone_number: string | null
+          provider: string | null
+          provider_config: Json | null
+          qr_code: string | null
+          qr_code_expires_at: string | null
+          session_dead_reason: string | null
+          session_dead_since: string | null
+          status: string | null
+          updated_at: string | null
+          voice_calls_enabled: boolean | null
+        }
+        Insert: {
+          copilot_agent_id?: string | null
+          created_at?: string | null
+          daily_blast_cap?: number | null
+          daily_call_cap?: number | null
+          id?: string | null
+          instance_id?: string | null
+          instance_name?: string | null
+          last_connection_at?: string | null
+          metadata?: Json | null
+          organization_id?: string | null
+          owner_team_member_id?: string | null
+          phone_number?: string | null
+          provider?: string | null
+          provider_config?: Json | null
+          qr_code?: string | null
+          qr_code_expires_at?: string | null
+          session_dead_reason?: string | null
+          session_dead_since?: string | null
+          status?: string | null
+          updated_at?: string | null
+          voice_calls_enabled?: boolean | null
+        }
+        Update: {
+          copilot_agent_id?: string | null
+          created_at?: string | null
+          daily_blast_cap?: number | null
+          daily_call_cap?: number | null
+          id?: string | null
+          instance_id?: string | null
+          instance_name?: string | null
+          last_connection_at?: string | null
+          metadata?: Json | null
+          organization_id?: string | null
+          owner_team_member_id?: string | null
+          phone_number?: string | null
+          provider?: string | null
+          provider_config?: Json | null
+          qr_code?: string | null
+          qr_code_expires_at?: string | null
+          session_dead_reason?: string | null
+          session_dead_since?: string | null
+          status?: string | null
+          updated_at?: string | null
+          voice_calls_enabled?: boolean | null
+        }
+        Relationships: []
+      }
+      _bkp_c7e4ba84_messages: {
+        Row: {
+          id: string | null
+          instance_id: string | null
+          lead_id: string | null
+          message_id: string | null
+          remote_jid: string | null
+          timestamp: string | null
+        }
+        Insert: {
+          id?: string | null
+          instance_id?: string | null
+          lead_id?: string | null
+          message_id?: string | null
+          remote_jid?: string | null
+          timestamp?: string | null
+        }
+        Update: {
+          id?: string | null
+          instance_id?: string | null
+          lead_id?: string | null
+          message_id?: string | null
+          remote_jid?: string | null
+          timestamp?: string | null
+        }
+        Relationships: []
+      }
+      _bkp_c7e4ba84_secrets: {
+        Row: {
+          created_at: string | null
+          instance_id: string | null
+          meta_access_token: string | null
+          meta_phone_number_id: string | null
+          meta_waba_id: string | null
+          organization_id: string | null
+          uazapi_instance_id: string | null
+          uazapi_token: string | null
+          updated_at: string | null
+          webhook_secret: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          instance_id?: string | null
+          meta_access_token?: string | null
+          meta_phone_number_id?: string | null
+          meta_waba_id?: string | null
+          organization_id?: string | null
+          uazapi_instance_id?: string | null
+          uazapi_token?: string | null
+          updated_at?: string | null
+          webhook_secret?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          instance_id?: string | null
+          meta_access_token?: string | null
+          meta_phone_number_id?: string | null
+          meta_waba_id?: string | null
+          organization_id?: string | null
+          uazapi_instance_id?: string | null
+          uazapi_token?: string | null
+          updated_at?: string | null
+          webhook_secret?: string | null
+        }
+        Relationships: []
+      }
+      _bkp_c7e4ba84_summary: {
+        Row: {
+          instance_id: string | null
+          is_group: boolean | null
+          last_message: string | null
+          last_message_direction: string | null
+          last_message_sent_source: string | null
+          last_message_time: string | null
+          last_push_name: string | null
+          lead_id: string | null
+          normalized_phone: string | null
+          organization_id: string | null
+          phone_number: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          instance_id?: string | null
+          is_group?: boolean | null
+          last_message?: string | null
+          last_message_direction?: string | null
+          last_message_sent_source?: string | null
+          last_message_time?: string | null
+          last_push_name?: string | null
+          lead_id?: string | null
+          normalized_phone?: string | null
+          organization_id?: string | null
+          phone_number?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          instance_id?: string | null
+          is_group?: boolean | null
+          last_message?: string | null
+          last_message_direction?: string | null
+          last_message_sent_source?: string | null
+          last_message_time?: string | null
+          last_push_name?: string | null
+          lead_id?: string | null
+          normalized_phone?: string | null
+          organization_id?: string | null
+          phone_number?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      _bkp_c7e4ba84_workflows: {
+        Row: {
+          definition: Json | null
+          id: string | null
+          is_active: boolean | null
+          name: string | null
+        }
+        Insert: {
+          definition?: Json | null
+          id?: string | null
+          is_active?: boolean | null
+          name?: string | null
+        }
+        Update: {
+          definition?: Json | null
+          id?: string | null
+          is_active?: boolean | null
+          name?: string | null
+        }
+        Relationships: []
+      }
+      _bkp_lid_principal: {
+        Row: {
+          id: string | null
+          lead_id: string | null
+          normalized_phone: string | null
+          phone_number: string | null
+          remote_jid: string | null
+        }
+        Insert: {
+          id?: string | null
+          lead_id?: string | null
+          normalized_phone?: string | null
+          phone_number?: string | null
+          remote_jid?: string | null
+        }
+        Update: {
+          id?: string | null
+          lead_id?: string | null
+          normalized_phone?: string | null
+          phone_number?: string | null
+          remote_jid?: string | null
+        }
+        Relationships: []
+      }
       _lead_duplicates_audit: {
         Row: {
           detected_at: string | null
@@ -1727,6 +1955,9 @@ export type Database = {
           organization_id: string
           outcome: string
           phone_number: string | null
+          recording_failure_reason: string | null
+          recording_notice_regime: string | null
+          recording_status: string | null
           recording_url: string | null
           started_at: string
           user_id: string | null
@@ -1745,6 +1976,9 @@ export type Database = {
           organization_id: string
           outcome: string
           phone_number?: string | null
+          recording_failure_reason?: string | null
+          recording_notice_regime?: string | null
+          recording_status?: string | null
           recording_url?: string | null
           started_at?: string
           user_id?: string | null
@@ -1763,6 +1997,9 @@ export type Database = {
           organization_id?: string
           outcome?: string
           phone_number?: string | null
+          recording_failure_reason?: string | null
+          recording_notice_regime?: string | null
+          recording_status?: string | null
           recording_url?: string | null
           started_at?: string
           user_id?: string | null
@@ -7324,7 +7561,7 @@ export type Database = {
         }
         Relationships: []
       }
-      feature_flags: {
+      feature_catalog: {
         Row: {
           category: string | null
           created_at: string | null
@@ -7334,6 +7571,7 @@ export type Database = {
           feature_type: string | null
           icon: string | null
           id: string
+          is_sellable: boolean
           key: string
           name: string
           position: number | null
@@ -7349,6 +7587,7 @@ export type Database = {
           feature_type?: string | null
           icon?: string | null
           id?: string
+          is_sellable?: boolean
           key: string
           name: string
           position?: number | null
@@ -7364,6 +7603,7 @@ export type Database = {
           feature_type?: string | null
           icon?: string | null
           id?: string
+          is_sellable?: boolean
           key?: string
           name?: string
           position?: number | null
@@ -8356,6 +8596,32 @@ export type Database = {
           },
           {
             foreignKeyName: "history_sync_jobs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      history_sync_write_budget: {
+        Row: {
+          minute_bucket: string
+          organization_id: string
+          rows_written: number
+        }
+        Insert: {
+          minute_bucket: string
+          organization_id: string
+          rows_written?: number
+        }
+        Update: {
+          minute_bucket?: string
+          organization_id?: string
+          rows_written?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "history_sync_write_budget_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -9458,6 +9724,63 @@ export type Database = {
           permissions?: Json | null
           updated_at?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      media_dedup_plan: {
+        Row: {
+          created_at: string
+          dup_path: string
+          keeper_path: string
+          msg_id: string | null
+          org_id: string | null
+          repointed: number | null
+          size_bytes: number | null
+        }
+        Insert: {
+          created_at?: string
+          dup_path: string
+          keeper_path: string
+          msg_id?: string | null
+          org_id?: string | null
+          repointed?: number | null
+          size_bytes?: number | null
+        }
+        Update: {
+          created_at?: string
+          dup_path?: string
+          keeper_path?: string
+          msg_id?: string | null
+          org_id?: string | null
+          repointed?: number | null
+          size_bytes?: number | null
+        }
+        Relationships: []
+      }
+      media_purge_queue: {
+        Row: {
+          category: string
+          last_error: string | null
+          object_name: string
+          purged_at: string | null
+          queued_at: string
+          size_bytes: number | null
+        }
+        Insert: {
+          category: string
+          last_error?: string | null
+          object_name: string
+          purged_at?: string | null
+          queued_at?: string
+          size_bytes?: number | null
+        }
+        Update: {
+          category?: string
+          last_error?: string | null
+          object_name?: string
+          purged_at?: string | null
+          queued_at?: string
+          size_bytes?: number | null
         }
         Relationships: []
       }
@@ -11097,51 +11420,81 @@ export type Database = {
       }
       org_subscriptions: {
         Row: {
-          addon_turbo_count: number
-          base_amount: number
+          base_amount_cents: number
           billing_cycle: string
           cancelled_at: string | null
+          coupon_discount_pct: number
           coupon_id: string | null
           created_at: string
-          discount_amount: number
-          final_amount: number
+          created_by: string | null
+          cycle_discount_pct: number
+          discount_amount_cents: number
+          features: Json
+          final_amount_cents: number
           id: string
+          limits: Json
+          manual_discount_by: string | null
+          manual_discount_cents: number
+          manual_discount_reason: string | null
           organization_id: string
+          payment_method: string | null
           plan_id: string
+          provider: string | null
+          provider_subscription_id: string | null
           renews_at: string | null
           started_at: string
           updated_at: string
           user_count: number
         }
         Insert: {
-          addon_turbo_count?: number
-          base_amount: number
+          base_amount_cents?: number
           billing_cycle: string
           cancelled_at?: string | null
+          coupon_discount_pct?: number
           coupon_id?: string | null
           created_at?: string
-          discount_amount?: number
-          final_amount: number
+          created_by?: string | null
+          cycle_discount_pct?: number
+          discount_amount_cents?: number
+          features?: Json
+          final_amount_cents?: number
           id?: string
+          limits?: Json
+          manual_discount_by?: string | null
+          manual_discount_cents?: number
+          manual_discount_reason?: string | null
           organization_id: string
+          payment_method?: string | null
           plan_id: string
+          provider?: string | null
+          provider_subscription_id?: string | null
           renews_at?: string | null
           started_at?: string
           updated_at?: string
           user_count?: number
         }
         Update: {
-          addon_turbo_count?: number
-          base_amount?: number
+          base_amount_cents?: number
           billing_cycle?: string
           cancelled_at?: string | null
+          coupon_discount_pct?: number
           coupon_id?: string | null
           created_at?: string
-          discount_amount?: number
-          final_amount?: number
+          created_by?: string | null
+          cycle_discount_pct?: number
+          discount_amount_cents?: number
+          features?: Json
+          final_amount_cents?: number
           id?: string
+          limits?: Json
+          manual_discount_by?: string | null
+          manual_discount_cents?: number
+          manual_discount_reason?: string | null
           organization_id?: string
+          payment_method?: string | null
           plan_id?: string
+          provider?: string | null
+          provider_subscription_id?: string | null
           renews_at?: string | null
           started_at?: string
           updated_at?: string
@@ -11158,7 +11511,7 @@ export type Database = {
           {
             foreignKeyName: "org_subscriptions_organization_id_fkey"
             columns: ["organization_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
@@ -11269,7 +11622,14 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "organization_features_feature_key_fkey"
+            foreignKeyName: "organization_features_feature_catalog_fkey"
+            columns: ["feature_key"]
+            isOneToOne: false
+            referencedRelation: "feature_catalog"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "organization_features_feature_catalog_fkey"
             columns: ["feature_key"]
             isOneToOne: false
             referencedRelation: "feature_flags"
@@ -15907,6 +16267,17 @@ export type Database = {
           operator_user_id: string | null
           organization_id: string
           peer_phone: string
+          recording_bytes: number | null
+          recording_duration_ms: number | null
+          recording_failure_reason: string | null
+          recording_fetch_abandoned_at: string | null
+          recording_last_attempt_at: string | null
+          recording_notice_regime: string | null
+          recording_path: string | null
+          recording_purged_at: string | null
+          recording_refetch_count: number
+          recording_status: string | null
+          recording_stored_at: string | null
           ringing_at: string | null
           status: string
           tc_call_id: string | null
@@ -15929,6 +16300,17 @@ export type Database = {
           operator_user_id?: string | null
           organization_id: string
           peer_phone: string
+          recording_bytes?: number | null
+          recording_duration_ms?: number | null
+          recording_failure_reason?: string | null
+          recording_fetch_abandoned_at?: string | null
+          recording_last_attempt_at?: string | null
+          recording_notice_regime?: string | null
+          recording_path?: string | null
+          recording_purged_at?: string | null
+          recording_refetch_count?: number
+          recording_status?: string | null
+          recording_stored_at?: string | null
           ringing_at?: string | null
           status?: string
           tc_call_id?: string | null
@@ -15951,6 +16333,17 @@ export type Database = {
           operator_user_id?: string | null
           organization_id?: string
           peer_phone?: string
+          recording_bytes?: number | null
+          recording_duration_ms?: number | null
+          recording_failure_reason?: string | null
+          recording_fetch_abandoned_at?: string | null
+          recording_last_attempt_at?: string | null
+          recording_notice_regime?: string | null
+          recording_path?: string | null
+          recording_purged_at?: string | null
+          recording_refetch_count?: number
+          recording_status?: string | null
+          recording_stored_at?: string | null
           ringing_at?: string | null
           status?: string
           tc_call_id?: string | null
@@ -16579,6 +16972,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      whatsapp_instance_reap_queue: {
+        Row: {
+          attempts: number
+          confirmed_at: string | null
+          created_at: string
+          gave_up_at: string | null
+          gave_up_reason: string | null
+          id: string
+          instance_id: string
+          instance_name: string | null
+          last_error: string | null
+          next_attempt_at: string
+          organization_id: string | null
+          provider: string | null
+          provider_instance_id: string | null
+          provider_token: string | null
+        }
+        Insert: {
+          attempts?: number
+          confirmed_at?: string | null
+          created_at?: string
+          gave_up_at?: string | null
+          gave_up_reason?: string | null
+          id?: string
+          instance_id: string
+          instance_name?: string | null
+          last_error?: string | null
+          next_attempt_at?: string
+          organization_id?: string | null
+          provider?: string | null
+          provider_instance_id?: string | null
+          provider_token?: string | null
+        }
+        Update: {
+          attempts?: number
+          confirmed_at?: string | null
+          created_at?: string
+          gave_up_at?: string | null
+          gave_up_reason?: string | null
+          id?: string
+          instance_id?: string
+          instance_name?: string | null
+          last_error?: string | null
+          next_attempt_at?: string
+          organization_id?: string | null
+          provider?: string | null
+          provider_instance_id?: string | null
+          provider_token?: string | null
+        }
+        Relationships: []
       }
       whatsapp_instance_reputation: {
         Row: {
@@ -17399,6 +17843,54 @@ export type Database = {
       }
     }
     Views: {
+      feature_flags: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          default_enabled: boolean | null
+          description: string | null
+          display_name: string | null
+          feature_type: string | null
+          icon: string | null
+          id: string | null
+          key: string | null
+          name: string | null
+          position: number | null
+          requires_plan: string[] | null
+          sidebar_path: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          default_enabled?: boolean | null
+          description?: string | null
+          display_name?: string | null
+          feature_type?: string | null
+          icon?: string | null
+          id?: string | null
+          key?: string | null
+          name?: string | null
+          position?: number | null
+          requires_plan?: string[] | null
+          sidebar_path?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          default_enabled?: boolean | null
+          description?: string | null
+          display_name?: string | null
+          feature_type?: string | null
+          icon?: string | null
+          id?: string | null
+          key?: string | null
+          name?: string | null
+          position?: number | null
+          requires_plan?: string[] | null
+          sidebar_path?: string | null
+        }
+        Relationships: []
+      }
       leads_compat: {
         Row: {
           ai_disabled: boolean | null
@@ -18012,6 +18504,17 @@ export type Database = {
       }
       assert_org_access: { Args: { p_org_id: string }; Returns: undefined }
       assert_org_member: { Args: { p_org_id: string }; Returns: undefined }
+      billing_quote_price: {
+        Args: {
+          p_billing_cycle: string
+          p_coupon_code?: string
+          p_manual_final_cents?: number
+          p_payment_method?: string
+          p_plan_id: string
+          p_user_count: number
+        }
+        Returns: Json
+      }
       bulk_add_to_custom_pipe: {
         Args: {
           p_lead_ids: string[]
@@ -18182,6 +18685,13 @@ export type Database = {
           claimed_id: string
         }[]
       }
+      claim_purge_batch: {
+        Args: { p_category: string; p_limit?: number }
+        Returns: {
+          object_name: string
+          size_bytes: number
+        }[]
+      }
       claim_workflow_executions: {
         Args: { batch_size?: number; per_org_cap?: number }
         Returns: {
@@ -18339,6 +18849,7 @@ export type Database = {
         Returns: Json
       }
       create_org_sandbox: { Args: { p_source_org_id: string }; Returns: string }
+      db_connection_pressure: { Args: never; Returns: Json }
       default_org_feature_flags: { Args: never; Returns: Json }
       distribute_campaign_round_robin: {
         Args: { p_campaign_id: string; p_member_ids: string[] }
@@ -18451,6 +18962,7 @@ export type Database = {
         }
         Returns: Json
       }
+      fn_phone_match_forms: { Args: { p_canonical: string }; Returns: string[] }
       fn_publish_dashboard_page: {
         Args: { p_org_id: string; p_page_id: string }
         Returns: Json
@@ -18510,6 +19022,10 @@ export type Database = {
         }
         Returns: Json
       }
+      fn_voip_can_hear_recording: {
+        Args: { object_name: string }
+        Returns: boolean
+      }
       fn_voip_can_use_instance: {
         Args: { p_instance_id: string; p_user_id: string }
         Returns: boolean
@@ -18528,6 +19044,45 @@ export type Database = {
         Returns: string
       }
       fn_voip_project_call_log: { Args: { p_call_id: string }; Returns: string }
+      fn_voip_recording_announced: {
+        Args: { p_bytes: number; p_call_id: string; p_duration_ms: number }
+        Returns: string
+      }
+      fn_voip_recording_failed: {
+        Args: { p_call_id: string; p_reason: string }
+        Returns: string
+      }
+      fn_voip_recording_fetch_failed: {
+        Args: { p_call_id: string; p_reason: string }
+        Returns: string
+      }
+      fn_voip_recording_purge_candidates: {
+        Args: { p_limit?: number }
+        Returns: {
+          call_id: string
+          object_path: string
+          organization_id: string
+        }[]
+      }
+      fn_voip_recording_purged: { Args: { p_call_id: string }; Returns: string }
+      fn_voip_recording_retry_claim: {
+        Args: { p_limit?: number }
+        Returns: {
+          call_id: string
+          organization_id: string
+          refetch_count: number
+          tc_call_id: string
+          tc_session_id: string
+        }[]
+      }
+      fn_voip_recording_retry_delay: {
+        Args: { p_refetch_count: number }
+        Returns: string
+      }
+      fn_voip_recording_stored: {
+        Args: { p_bytes: number; p_call_id: string; p_path: string }
+        Returns: string
+      }
       generate_api_key: {
         Args: { p_created_by: string; p_name: string; p_org_id: string }
         Returns: Json
@@ -19420,6 +19975,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      history_sync_consume_budget: {
+        Args: { p_organization_id: string; p_rows: number }
+        Returns: number
+      }
       import_lead_into_custom_pipeline: {
         Args: {
           p_assigned_to?: string
@@ -19458,6 +20017,7 @@ export type Database = {
       invoke_cron_health_check: { Args: never; Returns: undefined }
       invoke_followup_reclassify: { Args: never; Returns: undefined }
       invoke_history_sync_worker: { Args: never; Returns: undefined }
+      invoke_infra_watchdog: { Args: never; Returns: undefined }
       invoke_mass_send_status: { Args: never; Returns: undefined }
       invoke_meta_conversion_dispatch: { Args: never; Returns: undefined }
       invoke_meta_leadgen_poll: { Args: never; Returns: undefined }
@@ -19476,8 +20036,13 @@ export type Database = {
       invoke_process_workflow_executions: { Args: never; Returns: undefined }
       invoke_refresh_meta_tokens: { Args: never; Returns: undefined }
       invoke_retry_dead_letter_jobs: { Args: never; Returns: undefined }
+      invoke_torquecalls_recording_maintenance: {
+        Args: never
+        Returns: undefined
+      }
       invoke_whatsapp_dlq_replay: { Args: never; Returns: undefined }
       invoke_whatsapp_health_monitor: { Args: never; Returns: undefined }
+      invoke_whatsapp_instance_reaper: { Args: never; Returns: undefined }
       invoke_whatsapp_media_retention: { Args: never; Returns: undefined }
       invoke_whatsapp_media_retry: { Args: never; Returns: undefined }
       invoke_whatsapp_session_watchdog: { Args: never; Returns: undefined }
@@ -19546,6 +20111,7 @@ export type Database = {
         Args: { p_conversation_id: string }
         Returns: undefined
       }
+      mark_purged: { Args: { p_names: string[] }; Returns: number }
       master_add_user: {
         Args: { _email: string; _notes?: string }
         Returns: string
@@ -19566,6 +20132,22 @@ export type Database = {
       master_get_org_sales_summary: {
         Args: { p_end: string; p_org_id: string; p_start: string }
         Returns: Json
+      }
+      master_org_user_activity: {
+        Args: { p_window_minutes?: number }
+        Returns: {
+          is_master: boolean
+          is_online: boolean
+          last_seen_at: string
+          member_email: string
+          member_id: string
+          member_name: string
+          member_role: string
+          org_name: string
+          org_subscription_status: string
+          organization_id: string
+          user_id: string
+        }[]
       }
       master_override_billing: {
         Args: {
