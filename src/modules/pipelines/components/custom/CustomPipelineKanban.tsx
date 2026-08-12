@@ -27,10 +27,14 @@ interface CustomPipelineKanbanProps {
   entries: CustomPipeEntry[];
   searchQuery?: string;
   /**
-   * True when a qualification-tier filter is active upstream (the page already
-   * removed non-matching entries). The server stage-count RPC doesn't know
-   * about tiers, so under a tier filter we must derive the column badge from
-   * the loaded (filtered) items instead — otherwise badge != cards.
+   * True quando QUALQUER filtro client-side está ativo na página (qualificação,
+   * pré-qualificação ou responsável) — a página já removeu as entries que não
+   * casam. A RPC `get_custom_pipeline_stage_counts` só conhece a busca: não
+   * conhece tier nem responsável. Então sob esses filtros o badge da coluna tem
+   * que ser derivado dos items carregados (já filtrados), senão badge != cards.
+   *
+   * O nome ficou de quando só existia o filtro de tier; mantido para não
+   * conflitar com a mesma prop na `develop`.
    */
   tierFilterActive?: boolean;
   onRemoveEntry?: (entryId: string) => void;

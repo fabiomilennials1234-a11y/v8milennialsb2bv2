@@ -101,3 +101,65 @@ export function matchesQualificationFilters(
     matchesTierFilter(lead?.pre_qualification_tier, preQualificationTier)
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Responsável — funis personalizados
+//
+// ⚠️ Nome deliberadamente distinto do `matchesResponsibleFilter` de
+// `src/lib/kanban-filters.ts`. Aquele casa SÓ o par dual
+// (`pre_sale_responsible_id` / `sale_responsible_id`) do PRD #211 e hoje não
+// tem nenhum consumidor em `src/` — reaproveitá-lo aqui devolveria ZERO card,
+// porque `useCustomPipeEntries` nem seleciona essas duas colunas do lead. E
+// mesmo selecionando, a semântica dele é "casa QUALQUER um dos campos",
+// enquanto o card do funil custom desenha só o PRIMEIRO da cadeia — filtrar por
+// um nome traria card escrito com outro.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Forma mínima de uma entry de funil custom para resolver o responsável. */
+export interface ResponsibleBearingEntry {
+  assigned_to?: string | null;
+  lead?: {
+    responsible?: { id?: string | null } | null;
+    closer?: { id?: string | null } | null;
+    sdr?: { id?: string | null } | null;
+  } | null;
+}
+
+/**
+ * Responsável EFETIVO de uma entry de funil custom, em `team_members.id`.
+ *
+ * A ordem é a MESMA de `CustomPipelineKanban.transformToCard` (responsible →
+ * closer → sdr → assigned_to da entry). Ela precisa ser idêntica: o filtro tem
+ * que casar com o nome que o card mostra, senão o operador seleciona "José" e
+ * some um card que está escrito "José" (ou sobra um escrito "Elena").
+ *
+ * Os quatro campos são FK para `team_members.id` — inclusive
+ * `custom_pipe_entries.assigned_to`, que NÃO aponta para `profiles`/`user_id`.
+ */
+export function resolveCustomPipeResponsibleId(
+  entry: ResponsibleBearingEntry | null | undefined,
+): string | null {
+  const lead = entry?.lead;
+  return (
+    lead?.responsible?.id ??
+    lead?.closer?.id ??
+    lead?.sdr?.id ??
+    entry?.assigned_to ??
+    null
+  );
+}
+
+/**
+ * Predicado client-side do filtro "Responsável" nos funis personalizados.
+ *
+ * `"all"` (ou vazio) = sem filtro, espelhando o `SelectItem value="all"` do
+ * `KanbanFilterPanel`. Entry sem responsável nenhum nunca casa com uma seleção
+ * ativa — mesma regra de NULL do filtro de qualificação.
+ */
+export function matchesCustomPipeResponsible(
+  entry: ResponsibleBearingEntry | null | undefined,
+  responsibleId: string | null | undefined,
+): boolean {
+  if (!responsibleId || responsibleId === "all") return true;
+  return resolveCustomPipeResponsibleId(entry) === responsibleId;
+}

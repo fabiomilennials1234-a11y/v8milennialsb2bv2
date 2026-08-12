@@ -40,7 +40,10 @@ import {
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { CustomPipelineKanban } from "@/modules/pipelines/components/custom/CustomPipelineKanban";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
-import { matchesQualificationFilters } from "@/modules/pipelines/lib/kanbanFilterParams";
+import {
+  matchesQualificationFilters,
+  matchesCustomPipeResponsible,
+} from "@/modules/pipelines/lib/kanbanFilterParams";
 import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
@@ -50,7 +53,7 @@ import { CustomPipeSettingsDialog } from "@/modules/pipelines/components/custom/
 import { DisparoWizard } from "../components/disparo";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
-import { useFeaturePermission } from "@/modules/identity";
+import { useFeaturePermission, useResponsibleMembers } from "@/modules/identity";
 const ICON_MAP: Record<string, LucideIcon> = {
   kanban: Kanban,
   target: Target,
@@ -69,6 +72,7 @@ function CustomPipelinePageInner() {
 
   const { openLead } = useLeadSheet();
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterResponsible, setFilterResponsible] = useState("all");
   const [qualificationTier, setQualificationTier] = useState<string[]>([]);
   const [preQualificationTier, setPreQualificationTier] = useState<string[]>([]);
   const [showAddLead, setShowAddLead] = useState(false);
@@ -86,33 +90,47 @@ function CustomPipelinePageInner() {
   const moveLead = useMoveLeadInCustomPipe();
   const { allowed: canDeletePipeline } = useFeaturePermission("pipeline.delete");
   const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
+  // Pool de responsáveis = membros ATIVOS da org (mesma fonte dos funis do
+  // sistema — `org_visible_members`), então a lista aqui é a mesma que o
+  // operador já vê no Funil de Qualificação.
+  const responsibleMembers = useResponsibleMembers();
 
   const isLoading = loadingPipeline || loadingStages || loadingEntries;
 
-  // Qualification-tier filter (client-side — este board não é paginado no
-  // servidor). Aplicado às entries carregadas ANTES de alimentar o kanban e a
-  // lista mobile, e propagado como `tierFilterActive` pro kanban derivar o
-  // badge da contagem client-side (o RPC de count não conhece tier).
-  const tierFilterActive = qualificationTier.length > 0 || preQualificationTier.length > 0;
+  // Filtros client-side — este board não é paginado no servidor. Aplicados às
+  // entries carregadas ANTES de alimentar o kanban e a lista mobile, e
+  // propagados como `tierFilterActive` pro kanban derivar o badge da contagem
+  // client-side. O RPC `get_custom_pipeline_stage_counts` só conhece a BUSCA:
+  // não conhece tier nem responsável, então sob qualquer um destes o badge
+  // precisa vir dos items filtrados ou passaria a contar o que a tela não
+  // mostra.
+  const tierFilterActive =
+    qualificationTier.length > 0 ||
+    preQualificationTier.length > 0 ||
+    filterResponsible !== "all";
   const tieredEntries = useMemo(
     () =>
       tierFilterActive
-        ? entries.filter((e) =>
-            matchesQualificationFilters(e.lead, qualificationTier, preQualificationTier),
+        ? entries.filter(
+            (e) =>
+              matchesQualificationFilters(e.lead, qualificationTier, preQualificationTier) &&
+              matchesCustomPipeResponsible(e, filterResponsible),
           )
         : entries,
-    [entries, tierFilterActive, qualificationTier, preQualificationTier],
+    [entries, tierFilterActive, qualificationTier, preQualificationTier, filterResponsible],
   );
 
   const filterSections: FilterSectionConfig[] = useMemo(
     () => [
+      { type: "responsible", value: filterResponsible, onChange: setFilterResponsible, members: responsibleMembers },
       { type: "qualification-tier", value: qualificationTier, onChange: setQualificationTier },
       { type: "pre-qualification-tier", value: preQualificationTier, onChange: setPreQualificationTier },
     ],
-    [qualificationTier, preQualificationTier],
+    [filterResponsible, responsibleMembers, qualificationTier, preQualificationTier],
   );
 
   const handleClearFilters = useCallback(() => {
+    setFilterResponsible("all");
     setQualificationTier([]);
     setPreQualificationTier([]);
   }, []);
