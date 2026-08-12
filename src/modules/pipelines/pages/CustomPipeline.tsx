@@ -50,6 +50,7 @@ import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/lead
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { AddLeadToPipeModal } from "@/modules/pipelines/components/custom/AddLeadToPipeModal";
 import { CustomPipeSettingsDialog } from "@/modules/pipelines/components/custom/CustomPipeSettingsDialog";
+import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
 import { DisparoWizard } from "../components/disparo";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
@@ -97,28 +98,53 @@ function CustomPipelinePageInner() {
 
   const isLoading = loadingPipeline || loadingStages || loadingEntries;
 
+  // ── Entries cujo lead a RLS negou ────────────────────────────────────────
+  // `custom_pipe_entries` tem RLS por ORG; `leads` tem RLS por
+  // RESPONSABILIDADE. Numa org que desligou `leads.view_all`, o membro recebe
+  // TODAS as entries mas o embed `lead:leads(...)` volta null nas que não são
+  // dele — e o card renderizava "Sem nome". Medido no PROD (HGE Iluminação,
+  // funil "Prospecção"): 575 de 673 assim para um dos vendedores.
+  //
+  // Os funis do sistema nunca tiveram isso porque `get_pipeline_page` usa
+  // INNER JOIN: a linha que a RLS esvazia some inteira. Aqui o embed equivale
+  // a LEFT JOIN, então descartamos no cliente para dar o mesmo resultado. O
+  // contador da coluna vem da migration 20270812130000, que troca o LEFT JOIN
+  // por JOIN em `get_custom_pipeline_stage_counts`.
+  //
+  // Não é filtro de UI: não tem chave no painel e não vira chip. É a leitura
+  // se alinhando com o que a RLS já decidiu.
+  const visibleEntries = useMemo(() => entries.filter((e) => e.lead != null), [entries]);
+  const ghostCount = entries.length - visibleEntries.length;
+
   // Filtros client-side — este board não é paginado no servidor. Aplicados às
-  // entries carregadas ANTES de alimentar o kanban e a lista mobile, e
-  // propagados como `tierFilterActive` pro kanban derivar o badge da contagem
-  // client-side. O RPC `get_custom_pipeline_stage_counts` só conhece a BUSCA:
-  // não conhece tier nem responsável, então sob qualquer um destes o badge
-  // precisa vir dos items filtrados ou passaria a contar o que a tela não
-  // mostra.
-  const tierFilterActive =
+  // entries visíveis ANTES de alimentar o kanban e a lista mobile.
+  const filtersActive =
     qualificationTier.length > 0 ||
     preQualificationTier.length > 0 ||
     filterResponsible !== "all";
   const tieredEntries = useMemo(
     () =>
-      tierFilterActive
-        ? entries.filter(
+      filtersActive
+        ? visibleEntries.filter(
             (e) =>
               matchesQualificationFilters(e.lead, qualificationTier, preQualificationTier) &&
               matchesCustomPipeResponsible(e, filterResponsible),
           )
-        : entries,
-    [entries, tierFilterActive, qualificationTier, preQualificationTier, filterResponsible],
+        : visibleEntries,
+    [visibleEntries, filtersActive, qualificationTier, preQualificationTier, filterResponsible],
   );
+
+  // O badge da coluna vem do RPC (server-side) e só conhece a BUSCA — não
+  // conhece tier nem responsável. Sob qualquer filtro client-side ele precisa
+  // ser derivado dos items filtrados, ou contaria o que a tela não mostra.
+  //
+  // Fantasma também entra na disjunção, e de propósito: a migration que
+  // conserta o RPC é de deploy MANUAL enquanto o front sobe sozinho no merge.
+  // Na janela entre os dois, o badge server-side ainda contaria os fantasmas
+  // que esta tela acabou de esconder. Derivar no cliente é exato para todas as
+  // orgs afetadas hoje — as duas com fantasma (HGE 673, Alamaster 95) estão
+  // muito abaixo do corte de 1000 linhas do PostgREST.
+  const clientCountActive = filtersActive || ghostCount > 0;
 
   const filterSections: FilterSectionConfig[] = useMemo(
     () => [
@@ -262,6 +288,11 @@ function CustomPipelinePageInner() {
         </div>
       </div>
 
+      {/* Leads que a RLS de `leads` esconde deste usuário. Sem este aviso o
+          board simplesmente encolhe e o vendedor lê como "sumiram os cards" —
+          na Alamaster a tela ficaria VAZIA (95 entries, 0 leads visíveis). */}
+      <GhostLeadsBanner pipeType="custom" ghostCount={ghostCount} />
+
       {/* Stats + Search + Filtros */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
@@ -300,7 +331,7 @@ function CustomPipelinePageInner() {
             stages={stages}
             entries={tieredEntries}
             searchQuery={searchQuery}
-            tierFilterActive={tierFilterActive}
+            clientCountActive={clientCountActive}
             onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
             onClickEntry={(entry) => {
               openLead(entry.lead_id, entry.id);
