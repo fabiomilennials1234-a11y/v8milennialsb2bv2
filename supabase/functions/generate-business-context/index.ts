@@ -108,7 +108,7 @@ Regras:
         "X-Title": "V8 Millennials - Generate Business Context",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "openai/gpt-4.1-mini",
         messages: [
           {
             role: "user",

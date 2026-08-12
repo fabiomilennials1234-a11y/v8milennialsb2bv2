@@ -44,7 +44,7 @@ export async function extractConversationContext(
       .join("\n");
 
     const response = await llmClient.chat({
-      model: "google/gemini-2.5-flash",
+      model: "openai/gpt-4.1-mini",
       messages: [
         { role: "system", content: EXTRACTION_PROMPT },
         { role: "user", content: conversationText },

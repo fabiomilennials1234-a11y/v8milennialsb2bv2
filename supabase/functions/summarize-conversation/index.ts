@@ -244,7 +244,7 @@ IMPORTANTE: Retorne APENAS o JSON, nada mais.`;
         'X-Title': 'V8 Millennials CRM - Summarizer',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'openai/gpt-4.1-mini',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Conversa:\n\n${conversationText}` }
