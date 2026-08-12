@@ -174,9 +174,20 @@ SELECT is(
     WHERE id IN ('receita','num_vendas','leads_criados','reunioes_marcadas',
                  'reunioes_realizadas','leads_na_etapa','tempo_medio_etapa')),
   7, '(cat) as sete medidas fundadoras continuam no catálogo');
+-- Mesmo tratamento das medidas, e pela mesma razão. Esta linha ficou literal em
+-- 3 enquanto a de cima já era à prova de futuro — e a primeira razão nova
+-- (`taxa_qualidade`, 20270812100000) a reprovaria sem que nada estivesse
+-- errado. O que importa é a identidade função↔tabela e a sobrevivência das três
+-- fundadoras.
 SELECT is(
   (SELECT count(*)::int FROM (SELECT jsonb_array_elements(public.fn_metric_catalog()->'ratios')) x),
-  3, '(cat) catálogo serve 3 presets de razão');
+  (SELECT count(*)::int FROM public.metric_catalog_ratios),
+  '(cat) fn_metric_catalog serve todas as razões registradas, nem uma a mais nem a menos');
+
+SELECT is(
+  (SELECT count(*)::int FROM public.metric_catalog_ratios
+    WHERE id IN ('conversao','comparecimento','ticket_medio')),
+  3, '(cat) os três presets fundadores de razão continuam no catálogo');
 
 -- RLS HABILITADA em TODA tabela nova (fecha a classe do bug do ratios: o
 -- deny-all via REVOKE passa mesmo com RLS off, então checa-se relrowsecurity
@@ -310,16 +321,25 @@ SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
   '{"sub":"11940000-0000-4000-8000-000000000101","role":"authenticated"}', true);
 
--- FK backstop: 5 FKs de dashboard_widgets apontam para o catálogo
+-- FK backstop: as colunas de catálogo de dashboard_widgets são ancoradas por FK
 -- (measure_id, num_measure_id, den_measure_id → measures; recorte_id; format_id).
+--
+-- HERDADO, corrigido aqui: a asserção contava 5 e o schema tem 6 desde
+-- `20260727110000_tv_widget_style_expand`, que acrescentou
+-- `dashboard_widgets_value_format_fkey → metric_catalog_formats`. O teste
+-- reprovava por uma FK A MAIS — isto é, por schema mais protegido do que o
+-- esperado. Contar FK envelhece a cada coluna nova; o que importa é que estas
+-- cinco colunas continuem ancoradas, então a asserção passa a ser por NOME.
 SELECT is(
   (SELECT count(*)::int FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid
    WHERE t.relname = 'dashboard_widgets' AND c.contype = 'f'
-     AND c.confrelid IN (
-       'public.metric_catalog_measures'::regclass,
-       'public.metric_catalog_recortes'::regclass,
-       'public.metric_catalog_formats'::regclass)),
-  5, '(RJ) 5 FKs de dashboard_widgets ancoram no catálogo (backstop)');
+     AND c.conname IN (
+       'dashboard_widgets_measure_id_fkey',
+       'dashboard_widgets_num_measure_id_fkey',
+       'dashboard_widgets_den_measure_id_fkey',
+       'dashboard_widgets_recorte_id_fkey',
+       'dashboard_widgets_format_id_fkey')),
+  5, '(RJ) as 5 colunas de catálogo de dashboard_widgets seguem ancoradas por FK');
 
 -- measure inexistente: o trigger BEFORE front-runs a FK → 23514 (rejeitado na escrita).
 SELECT throws_ok(

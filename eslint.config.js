@@ -26,6 +26,13 @@ export default tseslint.config(
       // de arquivos que nem versionados são, e qualquer worktree novo reprova o
       // gate de quem não tem nada a ver com ele.
       ".claude/worktrees/",
+      // E o outro lugar onde eles nascem. `.worktrees/` (raiz) só está em
+      // `.git/info/exclude`, que é local e que o ESLint não lê — então o git
+      // não vê o diretório e o ESLint vê tudo. Mesmo defeito de 2026-08-04,
+      // metade não corrigida: medido em 2026-08-12, um `.worktrees/` presente
+      // no checkout acrescenta **2.979 warnings** ao ratchet, atribuídos a quem
+      // por acaso tem a branch aberta.
+      ".worktrees/",
     ],
   },
   {
