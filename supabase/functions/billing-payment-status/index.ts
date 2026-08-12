@@ -45,13 +45,44 @@ const RATE_LIMIT_MAX = 80;
 const RATE_LIMIT_WINDOW = "5 minutes";
 const RATE_LIMIT_ENDPOINT = "billing-payment-status";
 
+/**
+ * SEGUNDO teto, por IP, e MUITO mais frouxo — os dois medem coisas diferentes.
+ *
+ * O teto por token é o orçamento de UMA compra. Sozinho, ele não vê quem varre:
+ * cada token novo estreia com orçamento cheio, então uma máquina sorteando
+ * tokens nunca esbarra nele. O teto por IP é quem enxerga isso.
+ *
+ * E o inverso também vale, que é por que o de IP não pode ser o único: atrás de
+ * CGNAT ou da rede de uma empresa, dois compradores legítimos dividem o mesmo
+ * IP e um derrubaria o outro no meio do pagamento. Um teto aperta o abuso, o
+ * outro protege o uso — trocar um pelo outro quebra metade.
+ */
+const RATE_LIMIT_IP_MAX = 400;
+const RATE_LIMIT_IP_ENDPOINT = "billing-payment-status:ip";
+
+async function sha256Hex(entrada: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(entrada));
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
 /** Rastro seguro de um token que NÃO resolveu: não volta para o segredo. */
 async function hashPrefix(token: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
-  return Array.from(new Uint8Array(digest))
-    .slice(0, 4)
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
+  return (await sha256Hex(token)).slice(0, 8);
+}
+
+/**
+ * Chave de balde do teto por token — e ela NÃO é o hash do token.
+ *
+ * `payment_links.token_hash` É `sha256(token)` em hex. Se o balde usasse esse
+ * mesmo valor, `auth_rate_limits` passaria a guardar, em claro, a chave de busca
+ * da proposta — e essa tabela não tem o cuidado que `payment_links` tem. Quem
+ * lesse os baldes teria a coluna por onde se resolve um link.
+ *
+ * Com o prefixo de domínio o valor é outro, não serve para procurar nada, e
+ * continua estável por token — que é tudo o que um balde precisa.
+ */
+async function chaveDoBalde(token: string): Promise<string> {
+  return (await sha256Hex(`ratelimit:billing-payment-status:${token}`)).slice(0, 32);
 }
 
 function clientIp(req: Request): string {
@@ -87,12 +118,47 @@ Deno.serve(
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
+    // O parâmetro é `p_max`. A primeira versão daqui escrevia `p_max_attempts`,
+    // que NÃO existe na assinatura — o PostgREST devolvia erro, e como o freio
+    // falha ABERTO por desenho (ver abaixo), ele nunca teria contado nada. Freio
+    // que nasce quebrado e falha aberto é pior que freio nenhum: dá a sensação
+    // de proteção. A porta irmã já estava certa; conferi as duas lado a lado.
+    //
+    // `p_ip` é o nome da coluna do balde, não uma exigência de que seja um IP:
+    // a função é um contador por (chave, endpoint). Aqui a chave é derivada do
+    // TOKEN — cada compra tem o próprio orçamento.
     const { data: dentroDoTeto, error: erroTeto } = await supabase.rpc("check_auth_rate_limit", {
-      p_ip: clientIp(req),
+      p_ip: await chaveDoBalde(token),
       p_endpoint: RATE_LIMIT_ENDPOINT,
-      p_max_attempts: RATE_LIMIT_MAX,
+      p_max: RATE_LIMIT_MAX,
       p_window: RATE_LIMIT_WINDOW,
     });
+
+    const { data: dentroDoTetoIp, error: erroTetoIp } = await supabase.rpc("check_auth_rate_limit", {
+      p_ip: clientIp(req),
+      p_endpoint: RATE_LIMIT_IP_ENDPOINT,
+      p_max: RATE_LIMIT_IP_MAX,
+      p_window: RATE_LIMIT_WINDOW,
+    });
+
+    if (dentroDoTetoIp === false) {
+      await logRuntime({
+        module: "billing",
+        action: "payment_status_teto_ip_atingido",
+        status: "error",
+        payloadSnapshot: { endpoint: RATE_LIMIT_IP_ENDPOINT },
+      });
+      return new Response(JSON.stringify({ error: "rate_limited" }), { status: 429, headers });
+    }
+    if (erroTetoIp) {
+      await logRuntime({
+        module: "billing",
+        action: "payment_status_freio_ip_falhou",
+        status: "error",
+        errorMessage: erroTetoIp.message,
+        payloadSnapshot: { endpoint: RATE_LIMIT_IP_ENDPOINT },
+      });
+    }
 
     // Freio que falha REGISTRANDO. Um freio que barra sem deixar rastro é
     // indistinguível de um freio quebrado — e a distinção só aparece no dia em
