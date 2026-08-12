@@ -14,6 +14,10 @@
 -- ativada, em silêncio. Se o motivo do rollback for outro, NÃO derrube a
 -- restrição junto: ela é independente do resto deste arquivo.
 
+-- ATENÇÃO ADICIONAL: `billing_create_payment_link` (SCRUM-288) CHAMA
+-- `billing_prefill_link_buyer`. Derrubar esta função sem reverter a SCRUM-288
+-- junto quebra a GERAÇÃO DE LINK, não só o checkout.
+DROP FUNCTION IF EXISTS public.billing_prefill_link_buyer(uuid, text, text, text);
 DROP FUNCTION IF EXISTS public.billing_resolve_charge_buyer(text);
 DROP FUNCTION IF EXISTS public.billing_get_link_customer(uuid);
 DROP FUNCTION IF EXISTS public.billing_upsert_link_buyer(uuid, text, text, text, text, text);

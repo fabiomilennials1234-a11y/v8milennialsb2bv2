@@ -128,11 +128,22 @@ CREATE TABLE IF NOT EXISTS public.payment_link_buyers (
   tax_id               text        NOT NULL,
   tax_id_kind          text        NOT NULL,
 
-  -- O cliente no gateway. NOT NULL porque a linha só nasce DEPOIS de o cliente
-  -- existir lá: é essa ordem que torna o cliente reaproveitável entre os
-  -- métodos do mesmo link, em vez de um cliente novo por tentativa.
-  provider             text        NOT NULL,
-  provider_customer_id text        NOT NULL,
+  -- O cliente no gateway. NULO ENQUANTO NÃO EXISTIR, e isso é desenho, não
+  -- frouxidão.
+  --
+  -- A primeira versão tinha os dois NOT NULL, sob a premissa de que a linha só
+  -- nasce depois de o cliente existir no gateway. A premissa caiu: a SCRUM-288
+  -- deixa o Master PRÉ-PREENCHER o comprador na geração do link, e ali ainda
+  -- não há cobrança nem cliente na Asaas. Com NOT NULL, o pré-preenchimento
+  -- teria que inventar um valor ou morar noutro lugar — e "noutro lugar" era
+  -- justamente três colunas de PII em `payment_links`, que é servida ao
+  -- PostgREST. A mesma PII em dois lugares, uma das cópias atrás de policy, é
+  -- pior que qualquer um dos dois desenhos sozinho.
+  --
+  -- O par é coerente por CHECK: ou os dois existem, ou nenhum. Meio ponteiro
+  -- não aponta para nada.
+  provider             text,
+  provider_customer_id text,
 
   created_at           timestamptz NOT NULL DEFAULT now(),
   updated_at           timestamptz NOT NULL DEFAULT now(),
@@ -153,7 +164,12 @@ CREATE TABLE IF NOT EXISTS public.payment_link_buyers (
     AND email ~ '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$'
   ),
 
-  CONSTRAINT payment_link_buyers_legal_name_check CHECK (btrim(legal_name) <> '')
+  CONSTRAINT payment_link_buyers_legal_name_check CHECK (btrim(legal_name) <> ''),
+
+  -- Ou os dois lados do ponteiro para o gateway existem, ou nenhum existe.
+  CONSTRAINT payment_link_buyers_provider_coerente_check CHECK (
+    (provider IS NULL) = (provider_customer_id IS NULL)
+  )
 );
 
 COMMENT ON TABLE public.payment_link_buyers IS
@@ -184,8 +200,12 @@ ALTER TABLE public.payment_link_buyers ENABLE ROW LEVEL SECURITY;
 -- ---------------------------------------------------------------------------
 -- 4. As portas
 --
--- Três, e cada uma devolve o MENOS que serve ao seu chamador:
+-- Quatro, e cada uma devolve o MENOS que serve ao seu chamador:
 --
+--   billing_prefill_link_buyer    o Master, na    Devolve ZERO PII. É a porta
+--                                 GERAÇÃO do      da SCRUM-288, e existe para
+--                                 link            que `payment_links` NÃO
+--                                                 precise guardar PII.
 --   billing_upsert_link_buyer     escreve.        Devolve ZERO PII.
 --   billing_get_link_customer     nossa cobrança. Devolve só o id do cliente
 --                                 no gateway — o suficiente para reusar o
@@ -227,8 +247,21 @@ DECLARE
   v_tax      text := regexp_replace(COALESCE(p_tax_id, ''), '[^0-9]', '', 'g');
   v_kind     text;
   v_name     text := btrim(COALESCE(p_legal_name, ''));
+  v_prov     text := NULLIF(btrim(COALESCE(p_provider, '')), '');
+  v_cust     text := NULLIF(btrim(COALESCE(p_provider_customer_id, '')), '');
   v_expirado boolean := false;
 BEGIN
+  -- MEIO PONTEIRO É NENHUM PONTEIRO, e a normalização tem que acontecer AQUI,
+  -- não no CHECK. Motivo medido, não teórico: o Postgres avalia CHECK sobre a
+  -- tupla PROPOSTA, antes de o `ON CONFLICT` decidir que vai virar UPDATE. Uma
+  -- chamada com provider preenchido e customer_id vazio levantava 23514 mesmo
+  -- quando a linha existente já tinha o ponteiro certo e o UPDATE o preservaria
+  -- — ou seja, a chamada que só queria corrigir o e-mail morria. O teste pegou.
+  IF v_prov IS NULL OR v_cust IS NULL THEN
+    v_prov := NULL;
+    v_cust := NULL;
+  END IF;
+
   -- Mesma divisão de `billing_attach_link_charge`, e pelo mesmo motivo: isto é
   -- ESCRITURAÇÃO de um fato que já aconteceu do lado de fora (o cliente já
   -- existe no gateway), não portão. Revogado e pago são decisões DELIBERADAS e
@@ -263,25 +296,26 @@ BEGIN
   IF v_name = '' THEN
     RETURN jsonb_build_object('ok', false, 'code', 'legal_name_missing');
   END IF;
-  IF COALESCE(btrim(p_provider), '') = '' OR COALESCE(btrim(p_provider_customer_id), '') = '' THEN
-    RETURN jsonb_build_object('ok', false, 'code', 'provider_customer_missing');
-  END IF;
+  -- O ponteiro para o gateway NÃO é exigido aqui. Era, e a exigência caiu junto
+  -- com o NOT NULL da coluna: o pré-preenchimento do Master acontece antes de
+  -- existir cliente na Asaas. Quem exige o ponteiro é o CHECK de coerência —
+  -- meio ponteiro não entra, nenhum entra.
 
   INSERT INTO public.payment_link_buyers AS b
     (payment_link_id, legal_name, email, tax_id, tax_id_kind, provider, provider_customer_id)
   VALUES
-    (p_link_id, v_name, v_email, v_tax, v_kind, btrim(p_provider), btrim(p_provider_customer_id))
+    (p_link_id, v_name, v_email, v_tax, v_kind, v_prov, v_cust)
   ON CONFLICT (payment_link_id) DO UPDATE
      SET legal_name           = EXCLUDED.legal_name,
          email                = EXCLUDED.email,
          tax_id               = EXCLUDED.tax_id,
          tax_id_kind          = EXCLUDED.tax_id_kind,
-         provider             = EXCLUDED.provider,
-         -- O id do cliente no gateway NÃO é sobrescrito por um vazio, e o
-         -- primeiro que gravou vence: reescrevê-lo abandonaria o cliente já
-         -- criado lá e a próxima cobrança nasceria em outro cadastro.
-         provider_customer_id = COALESCE(NULLIF(btrim(EXCLUDED.provider_customer_id), ''),
-                                         b.provider_customer_id),
+         -- O ponteiro do gateway NÃO é sobrescrito por vazio, e o primeiro que
+         -- gravou vence: reescrevê-lo abandonaria o cliente já criado lá e a
+         -- próxima cobrança nasceria em outro cadastro. Os dois lados andam
+         -- JUNTOS, senão o CHECK de coerência recusa — e recusar está certo.
+         provider             = COALESCE(EXCLUDED.provider,             b.provider),
+         provider_customer_id = COALESCE(EXCLUDED.provider_customer_id, b.provider_customer_id),
          updated_at           = now();
 
   -- Devolve ESTADO, nunca o dado. Quem escreveu já tem o que escreveu.
@@ -290,6 +324,85 @@ BEGIN
     'code',              'ok',
     'payment_link_id',   p_link_id,
     'expired_at_write',  v_expirado);
+END
+$fn$;
+
+-- 4.1-b Pré-preenchimento pelo Master, na GERAÇÃO do link (SCRUM-288)
+--
+-- Existe para que `payment_links` NÃO precise de coluna de PII. A SCRUM-288
+-- adicionava `customer_legal_name`, `customer_tax_id` e `customer_email` lá —
+-- e `payment_links` é servida pelo PostgREST, com GRANT para `anon` e
+-- `authenticated`, atrás de UMA policy. O mesmo documento em dois lugares, uma
+-- das cópias alcançável por policy, anula a razão de esta tabela existir.
+--
+-- Chamada de DENTRO de `billing_create_payment_link`, que é DEFINER de dono
+-- `postgres`, na MESMA transação — então grant de tabela não entra na conta e o
+-- link e o comprador nascem juntos ou não nascem.
+--
+-- DOIS DESFECHOS, e a diferença entre eles é o ponto:
+--   nada preenchido  → `noop`, e NENHUMA linha. Pré-preencher é opcional; linha
+--                      vazia de comprador seria dado inventado.
+--   valor inválido   → LEVANTA, abortando a criação do link junto. Aqui não é
+--                      escrituração de fato consumado (não existe cobrança nem
+--                      cliente no gateway ainda): é ENTRADA de formulário do
+--                      Master, e link que nasce com documento impossível vira
+--                      cobrança que não pode ser criada, descoberta na frente
+--                      do cliente. Falhar na geração é barato; falhar no
+--                      checkout não é.
+--
+-- A exceção NÃO carrega o valor recusado — nem inteiro, nem em prefixo.
+CREATE OR REPLACE FUNCTION public.billing_prefill_link_buyer(
+  p_link_id    uuid,
+  p_legal_name text,
+  p_email      text,
+  p_tax_id     text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'public'
+AS $fn$
+DECLARE
+  v_email text := lower(btrim(COALESCE(p_email, '')));
+  v_tax   text := regexp_replace(COALESCE(p_tax_id, ''), '[^0-9]', '', 'g');
+  v_name  text := btrim(COALESCE(p_legal_name, ''));
+  v_kind  text;
+BEGIN
+  -- Master não preencheu nada: não é erro, e não vira linha.
+  IF v_email = '' AND v_tax = '' AND v_name = '' THEN
+    RETURN jsonb_build_object('ok', true, 'code', 'noop');
+  END IF;
+
+  -- Preencheu PELA METADE também não vira linha meia-boca. As três colunas são
+  -- NOT NULL porque a Asaas exige as três para criar cliente; aceitar duas
+  -- adiaria a descoberta da falta para o momento da cobrança.
+  IF v_email = '' OR v_tax = '' OR v_name = '' THEN
+    RAISE EXCEPTION 'Comprador incompleto: nome, e-mail e documento fiscal andam juntos (link %)', p_link_id
+      USING ERRCODE = '22023';
+  END IF;
+
+  v_kind := CASE length(v_tax) WHEN 11 THEN 'cpf' WHEN 14 THEN 'cnpj' ELSE NULL END;
+  IF v_kind IS NULL THEN
+    RAISE EXCEPTION 'Documento fiscal do comprador inválido (link %)', p_link_id
+      USING ERRCODE = '22023';
+  END IF;
+  IF v_email !~ '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$' THEN
+    RAISE EXCEPTION 'E-mail do comprador inválido (link %)', p_link_id
+      USING ERRCODE = '22023';
+  END IF;
+
+  -- Sem ponteiro de gateway: ele não existe neste momento da história.
+  INSERT INTO public.payment_link_buyers
+    (payment_link_id, legal_name, email, tax_id, tax_id_kind)
+  VALUES (p_link_id, v_name, v_email, v_tax, v_kind)
+  ON CONFLICT (payment_link_id) DO UPDATE
+     SET legal_name  = EXCLUDED.legal_name,
+         email       = EXCLUDED.email,
+         tax_id      = EXCLUDED.tax_id,
+         tax_id_kind = EXCLUDED.tax_id_kind,
+         updated_at  = now();
+
+  RETURN jsonb_build_object('ok', true, 'code', 'ok');
 END
 $fn$;
 
@@ -309,7 +422,12 @@ BEGIN
     FROM public.payment_link_buyers
    WHERE payment_link_id = p_link_id;
 
-  IF NOT FOUND THEN
+  -- DUAS ausências, UM código, e é de propósito: "não há linha de comprador" e
+  -- "há linha, pré-preenchida pelo Master, mas ainda sem cliente no gateway"
+  -- pedem exatamente a mesma ação de quem chama — criar o cliente agora. Dar
+  -- códigos diferentes para desfechos que levam à mesma ação convida o chamador
+  -- a tratar um deles como erro.
+  IF NOT FOUND OR v_customer_id IS NULL THEN
     RETURN jsonb_build_object('ok', true, 'code', 'no_customer');
   END IF;
 
@@ -494,6 +612,9 @@ $fn$;
 -- ---------------------------------------------------------------------------
 REVOKE ALL ON FUNCTION public.billing_upsert_link_buyer(uuid,text,text,text,text,text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.billing_upsert_link_buyer(uuid,text,text,text,text,text) TO service_role;
+
+REVOKE ALL ON FUNCTION public.billing_prefill_link_buyer(uuid,text,text,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.billing_prefill_link_buyer(uuid,text,text,text) TO service_role;
 
 REVOKE ALL ON FUNCTION public.billing_get_link_customer(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.billing_get_link_customer(uuid) TO service_role;
