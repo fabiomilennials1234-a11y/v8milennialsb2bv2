@@ -182,7 +182,13 @@ Comparado como número, `-1 < 50000` e **a proposta mais generosa apareceria mar
    que é a base desta migration, nunca subiu, embora a `150000` e a `160000` tenham subido). O plano de
    subida inteiro está lá; aplicar fora dessa ordem repete o defeito que a renumeração acabou de evitar.
 
-1. **APLICAR E TESTAR A `20270812120000`** (local, depois do passo 0). Ela nunca rodou.
+1. ✅ **FEITO** — a `20270812120000` foi aplicada no banco LOCAL (psql, `--single-transaction`, URL explícita;
+   sem `db push`, sem tocar prod) e o `payment_links_test.sql` está **40 ok / 0 not ok**. O RED previsto
+   apareceu e foi consertado: `has_function_privilege` resolve por assinatura EXATA, e a função saiu de 8
+   para 16 parâmetros. Detalhe que importa: as **chamadas** continuaram passando (os parâmetros novos têm
+   `DEFAULT`) — só a asserção que nomeia tipos quebrou, e ela morria com `ERROR` depois de 32 `ok`. Como a
+   suíte roda `no_plan()`, abortar no meio **não produz `not ok`**: conte os `ok`, não confie na ausência de
+   vermelho. Procedimento original, para quem precisar refazer do zero:
    ```bash
    export PATH="/Applications/Docker.app/Contents/Resources/bin:$PATH"
    supabase db reset      # avise o Malho antes: o banco local é compartilhado
@@ -191,6 +197,11 @@ Comparado como número, `-1 < 50000` e **a proposta mais generosa apareceria mar
      --file supabase/tests/payment_links_test.sql
    ```
    Espere quebrar: a assinatura de `billing_create_payment_link` mudou e o teste da Fatia 5 chama a antiga. **Isso é RED legítimo** — o teste precisa passar os parâmetros novos.
+
+   **Onde esta migration entra na fila de prod (issue #1548):** ela vem **depois** da `20270811140000`
+   (Fatia 5), que **ainda não subiu** — é o vão do ledger. Ordem: `…140000` → `…220000` (Fatia 6) →
+   `20270812100000` (Fatia 9) → **`20270812120000` (esta)**. A renumeração já a deixou por último, o que
+   coincide com a dependência: ela só altera objeto que a `…140000` cria.
 
 2. **Escrever o teste da Fatia 7** e registrá-lo no `run.sh` como **item 32** (número reservado com o Malho; 30 é dele, 31 provavelmente do Fole). **Nas DUAS listas.**
    Cobrir: `CHECK` do motivo obrigatório, normalização do CNPJ, autor vindo de `auth.uid()` e não de parâmetro, e os grants nome por nome — `DROP + CREATE` devolve EXECUTE a PUBLIC, e esta migration **faz** `DROP + CREATE`.
