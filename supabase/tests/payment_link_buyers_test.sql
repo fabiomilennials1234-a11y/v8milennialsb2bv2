@@ -228,12 +228,103 @@ SELECT is(
 SELECT lives_ok(
   format($$ SELECT public.billing_upsert_link_buyer(%L, 'asaas', '', 'Fábrica Alfa LTDA', 'financeiro@fabrica-alfa.com.br', '11222333000181') $$,
          (SELECT r ->> 'link_id' FROM _t_a)),
-  '(ESCRITA) escrita sem o id do cliente no gateway não estoura');
+  '(ESCRITA) escrita com METADE do ponteiro do gateway não estoura — o CHECK é avaliado sobre a tupla PROPOSTA, antes de o ON CONFLICT virar UPDATE, então normalizar o par só no CHECK mataria a chamada que só queria corrigir o e-mail');
 SELECT is(
   (SELECT provider_customer_id FROM public.payment_link_buyers
     WHERE payment_link_id = (SELECT (r ->> 'link_id')::uuid FROM _t_a)),
   'cus_289_AAA',
   '(ESCRITA) e NÃO apaga o cliente já criado no gateway — sobrescrever com vazio abandonaria o cadastro lá e a próxima cobrança nasceria em outro, que é o entulho que payment_link_charges existe para impedir, um nível acima');
+
+-- ===========================================================================
+-- (PRÉ-PREENCHIMENTO) o Master preenche o comprador na GERAÇÃO do link, e é
+-- por isso que payment_links não precisa de coluna de PII.
+--
+-- Aqui não existe cobrança nem cliente no gateway ainda — então esta porta é a
+-- única que grava com o ponteiro do gateway NULO, e a única que LEVANTA em vez
+-- de devolver código: é entrada de formulário do Master dentro da transação que
+-- cria o link, não escrituração de fato consumado.
+-- ===========================================================================
+SET LOCAL role authenticated;
+SELECT set_config('request.jwt.claims',
+  '{"sub":"28928928-0001-0000-0000-000000000289","role":"authenticated"}', true);
+CREATE TEMP TABLE _t_pre AS
+SELECT public.billing_create_payment_link(
+         'new_org', NULL, 'Org Pre-preenchida (SCRUM-289)',
+         '28928928-9999-0000-0000-000000000289', 3, 'annual', 'pix',
+         now() + interval '7 days') AS r;
+SET LOCAL role postgres;
+
+SELECT is(
+  (SELECT public.billing_prefill_link_buyer(
+            (SELECT (r ->> 'link_id')::uuid FROM _t_pre),
+            NULL, NULL, NULL) ->> 'code'),
+  'noop',
+  '(PRE) Master que não preenche nada não vira linha — pré-preencher é opcional, e linha vazia de comprador seria dado inventado');
+
+SELECT is(
+  (SELECT count(*)::int FROM public.payment_link_buyers
+    WHERE payment_link_id = (SELECT (r ->> 'link_id')::uuid FROM _t_pre)),
+  0,
+  '(PRE) e o noop é PURO: nenhuma linha ficou para trás');
+
+SELECT throws_ok(
+  format($$ SELECT public.billing_prefill_link_buyer(%L, 'Org Pre', 'contato@org-pre.com.br', NULL) $$,
+         (SELECT r ->> 'link_id' FROM _t_pre)),
+  '22023', NULL,
+  '(PRE) preencher PELA METADE levanta e aborta a criação do link junto — a Asaas exige as três, e aceitar duas adiaria a descoberta da falta para o momento da cobrança, na frente do cliente');
+
+SELECT throws_ok(
+  format($$ SELECT public.billing_prefill_link_buyer(%L, 'Org Pre', 'contato@org-pre.com.br', '123456789') $$,
+         (SELECT r ->> 'link_id' FROM _t_pre)),
+  '22023', NULL,
+  '(PRE) documento impossível levanta na GERAÇÃO — falhar aqui é barato, falhar no checkout não é');
+
+SELECT lives_ok(
+  format($$ SELECT public.billing_prefill_link_buyer(%L, ' Org Pre LTDA ', ' Contato@Org-Pre.COM.BR ', '11.222.333/0001-81') $$,
+         (SELECT r ->> 'link_id' FROM _t_pre)),
+  '(PRE) pré-preenchimento completo entra');
+
+SELECT results_eq(
+  format($$ SELECT legal_name, email, tax_id, tax_id_kind, provider, provider_customer_id
+              FROM public.payment_link_buyers WHERE payment_link_id = %L $$,
+         (SELECT r ->> 'link_id' FROM _t_pre)),
+  $$ VALUES ('Org Pre LTDA'::text, 'contato@org-pre.com.br'::text, '11222333000181'::text,
+             'cnpj'::text, NULL::text, NULL::text) $$,
+  '(PRE) normalizado igual à porta do checkout — a derivação do tipo mora numa função só, senão a regra anda sozinha e diverge — e o ponteiro do gateway nasce NULO, porque o cliente da Asaas ainda não existe neste momento da história');
+
+-- O ponteiro nulo tem que ser indistinguível de "não há comprador" para quem
+-- vai criar a cobrança: os dois pedem a MESMA ação, criar o cliente agora.
+SELECT is(
+  (SELECT public.billing_get_link_customer((SELECT (r ->> 'link_id')::uuid FROM _t_pre)) ->> 'code'),
+  'no_customer',
+  '(PRE) linha pré-preenchida SEM cliente no gateway responde no_customer, igual a link sem comprador nenhum — códigos diferentes para desfechos que levam à mesma ação convidam o chamador a tratar um deles como erro');
+
+-- E o carimbo do gateway COMPLETA a linha em vez de criar outra.
+SELECT lives_ok(
+  format($$ SELECT public.billing_upsert_link_buyer(%L, 'asaas', 'cus_289_PRE', 'Org Pre LTDA', 'contato@org-pre.com.br', '11222333000181') $$,
+         (SELECT r ->> 'link_id' FROM _t_pre)),
+  '(PRE) a criação da cobrança carimba o cliente do gateway na MESMA linha');
+
+SELECT is(
+  (SELECT count(*)::int FROM public.payment_link_buyers
+    WHERE payment_link_id = (SELECT (r ->> 'link_id')::uuid FROM _t_pre)),
+  1,
+  '(PRE) UMA linha — pré-preenchimento do Master e preenchimento do comprador são a mesma linha, e o que o cliente digitar corrige o que o Master chutou');
+
+SELECT is(
+  (SELECT provider_customer_id FROM public.payment_link_buyers
+    WHERE payment_link_id = (SELECT (r ->> 'link_id')::uuid FROM _t_pre)),
+  'cus_289_PRE',
+  '(PRE) e o ponteiro do gateway ficou');
+
+-- Meio ponteiro não entra. O CHECK é quem impede, não a disciplina do chamador.
+SELECT throws_ok(
+  format($$ INSERT INTO public.payment_link_buyers
+              (payment_link_id, legal_name, email, tax_id, tax_id_kind, provider)
+            VALUES (%L, 'X', 'x@x.com.br', '12345678909', 'cpf', 'asaas') $$,
+         (SELECT r ->> 'link_id' FROM _t_b)),
+  '23514', NULL,
+  '(PRE) provider sem provider_customer_id é recusado — meio ponteiro não aponta para nada, e a coerência é do CHECK, não de quem escreve');
 
 -- ===========================================================================
 -- (RECUSA) documento e e-mail inválidos não entram — e a recusa não ecoa nada.
@@ -431,6 +522,16 @@ SELECT ok(NOT has_function_privilege('authenticated',
 SELECT ok(has_function_privilege('service_role',
   'public.billing_upsert_link_buyer(uuid,text,text,text,text,text)', 'EXECUTE'),
   '(GRANT) service_role escreve comprador');
+
+SELECT ok(NOT has_function_privilege('anon',
+  'public.billing_prefill_link_buyer(uuid,text,text,text)', 'EXECUTE'),
+  '(GRANT) anon não pré-preenche comprador');
+SELECT ok(NOT has_function_privilege('authenticated',
+  'public.billing_prefill_link_buyer(uuid,text,text,text)', 'EXECUTE'),
+  '(GRANT) authenticated não pré-preenche comprador — e isso NÃO tira o Master do caminho: billing_create_payment_link é DEFINER de dono postgres, então a checagem de EXECUTE acontece como postgres. O Master chega pela geração do link, não por esta porta');
+SELECT ok(has_function_privilege('service_role',
+  'public.billing_prefill_link_buyer(uuid,text,text,text)', 'EXECUTE'),
+  '(GRANT) service_role pré-preenche comprador');
 
 SELECT ok(NOT has_function_privilege('anon',
   'public.billing_get_link_customer(uuid)', 'EXECUTE'),
