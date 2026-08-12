@@ -140,7 +140,33 @@ O que já sei do shape dele:
 - `payment_history` continua por upsert no handler, inferindo por `payment_history_asaas_payment_id_key` (índice **total**, medido).
 - Teste dele: 37/37.
 
-**Conferir antes de construir:** de qual dessas duas o endpoint de status deve derivar `paid`. A minha aposta é `org_subscriptions` (é o fato "está assinado"), com `payment_history` servindo de trilha — mas **medir, não presumir**.
+**RESPONDIDO pelo CTO (2026-08-12, 14:06 — a Fatia 6 MERGEOU):** a assinatura é gravada pela RPC `billing_apply_paid_subscription`, e **a proveniência fica em `org_subscriptions.provider_payment_id`**. Ou seja: o endpoint de status deriva `paid` de `org_subscriptions`, casando pelo `provider_payment_id` da cobrança que este checkout criou. `payment_history` fica como trilha.
+
+Era a minha aposta, mas aposta não entra em código — agora está medido por quem tinha acesso. **Ainda assim, confirmar a coluna no schema real antes de escrever a query:** o handoff da Fatia 6 está na `main`, em `.specs/billing/HANDOFF-FATIA-6.md`.
+
+---
+
+## 5-B. ESCOPO ACRESCENTADO (decisão do CTO, 2026-08-12) — o cliente da Asaas nasce aqui
+
+Medido pelo CTO: `payment_links` **não guarda** e-mail, `cpfCnpj` nem razão social do comprador — só `new_org_name`. E `billing-payment-link` **não cria** cliente na Asaas; só lê rótulo de plano. Mas `_shared/payments/types.ts` **já tem** o contrato (`CustomerInput` com `email`, `ProviderCustomer` com `providerCustomerId`).
+
+**Logo o cliente da Asaas nasce na CRIAÇÃO DA COBRANÇA, que é desta fatia.** E no Brasil a Asaas **exige `cpfCnpj`** para Pix e cartão — então este checkout **obrigatoriamente** coleta esse dado para a cobrança existir. Não é opcional, não é "nice to have" do formulário fiscal.
+
+### O que muda, e é a parte que se perde se ninguém escrever
+
+**O dado não pode só TRANSITAR. Tem que ser PERSISTIDO junto da cobrança.**
+
+Motivo: a **Fatia 9 provisiona DEPOIS** do pagamento confirmar, e precisa do **e-mail** para criar o usuário admin da organização nova. Sem persistir, o dado passa pelo nosso código, vai para a Asaas, e **some** — e a Fatia 9 fica sem como criar o admin.
+
+Desenho é nosso: colunas novas em `payment_link_charges`, ou tabela irmã. **Combinar o shape direto com o Malho** (Fatia 9) — é costura dos dois, não passa pelo CTO.
+
+Ele começa pelo caminho `existing_org`, que **não** depende disso, então não estamos bloqueando ninguém. Mas o `new_org` **espera por nós**.
+
+### REGRA DURA — PII de comprador
+
+`cpfCnpj` e e-mail são **PII**. **Nunca** em log, em mensagem de erro, ou em telemetria. Mesma disciplina do token: quando não resolve, registrar prefixo de hash, nunca o valor.
+
+Isso vale também para o que o `withErrorBoundary` capturar: o boundary devolve 500 com CORS, e um `console.error(payload)` inteiro num handler de cobrança vaza CPF para `runtime_logs`.
 
 ---
 
