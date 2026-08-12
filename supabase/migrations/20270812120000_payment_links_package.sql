@@ -272,11 +272,22 @@ BEGIN
 
   -- O COMPRADOR VAI PARA A TABELA DELE, na mesma transação.
   --
-  -- Chamada DEPOIS do INSERT porque a PK de `payment_link_buyers` é FK deste
-  -- `id`. E de dentro desta função, que é DEFINER de dono `postgres`: a
-  -- checagem de EXECUTE acontece como `postgres`, então o grant
-  -- `service_role`-only da porta não barra o caminho — e continua barrando o
-  -- PostgREST, que é o ponto.
+  -- O QUE TORNA ISTO SEGURO É QUE O ALVO NÃO VEM DO CHAMADOR.
+  --
+  -- `v_id` é o id que o `RETURNING` acima acabou de cunhar. Quem chama a RPC não
+  -- escolhe em qual link o comprador é gravado. Se este parâmetro viesse de
+  -- fora, isto seria a 24ª da família fechada em 2026-08-11: `authenticated`
+  -- escrevendo comprador no link de outro. A composição é
+  -- `authenticated` → [gate de master] → `postgres` → porta, com o gate ANTES e
+  -- o alvo não-controlável — autorização separada de execução, como a casa já
+  -- adotou. Achado do Sentinela: o comentário anterior explicava por que
+  -- FUNCIONA, e não por que é SEGURO.
+  --
+  -- O mecanismo, para quem precisar dele: EXECUTE é conferido contra o usuário
+  -- EFETIVO, e dentro de `SECURITY DEFINER` esse usuário é o dono (`postgres`).
+  -- Por isso o grant `service_role`-only da porta não barra este caminho e
+  -- continua barrando o PostgREST. Chamada DEPOIS do INSERT porque a PK de
+  -- `payment_link_buyers` é FK deste `id`.
   --
   -- ELA LEVANTA em vez de devolver código, e isso ABORTA A CRIAÇÃO DO LINK
   -- junto. É o desfecho certo: aqui nada aconteceu do lado de fora ainda

@@ -117,6 +117,27 @@ SELECT is(
   '{}'::jsonb,
   '(PACOTE) limites não informados nascem {} — mesma regra, e é o que a tela lê para dizer "herda tudo do plano base"');
 
+-- AS DUAS ACIMA NÃO BASTAM, e o achado é do Sentinela: o `{}` chega ali por
+-- TRÊS caminhos independentes — o DEFAULT do parâmetro, o `COALESCE` do INSERT e
+-- o DEFAULT da coluna. A asserção passa verde com dois deles removidos, então
+-- não distingue qual sustenta o comportamento. E a mensagem promete `NOT NULL`,
+-- que nada ali exercita. Duas asserções abaixo, uma por garantia prometida.
+
+-- NULL EXPLÍCITO no parâmetro mata o `COALESCE`, e só ele: o DEFAULT do
+-- parâmetro não entra em jogo quando o chamador passa o argumento.
+CREATE TEMP TABLE _t_nulo AS
+SELECT public.billing_create_payment_link(
+         'existing_org', '28828828-aaaa-0000-0000-000000000288', NULL,
+         '28828828-9999-0000-0000-000000000288', 5, 'annual', 'pix',
+         now() + interval '7 days',
+         NULL, NULL) AS r;
+
+SELECT is(
+  (SELECT package_features FROM public.payment_links
+    WHERE id = (SELECT (r ->> 'link_id')::uuid FROM _t_nulo)),
+  '{}'::jsonb,
+  '(PACOTE) NULL explícito no parâmetro também vira {} — é o COALESCE do INSERT que faz isso, e tirar ele derruba SÓ esta asserção');
+
 SELECT is((SELECT (r ->> 'buyer_prefilled')::boolean FROM _t_pelado), false,
   '(COMPRADOR) sem pré-preenchimento o retorno diz false — a tela precisa distinguir "não preenchi" de "preenchi", e sem carregar PII no retorno');
 -- Ler `payment_link_buyers` exige sair de `authenticated` — e isso não é
@@ -131,6 +152,16 @@ SELECT is(
     WHERE payment_link_id = (SELECT (r ->> 'link_id')::uuid FROM _t_pelado)),
   0,
   '(COMPRADOR) e NENHUMA linha de comprador é criada — pré-preencher é opcional, e linha vazia seria dado inventado');
+
+-- E o `NOT NULL`, que a mensagem das duas primeiras prometia e nenhuma media.
+-- Escrita direta como `postgres`, que é quem consegue burlar a função: se a
+-- coluna perder o `NOT NULL`, este UPDATE passa e a asserção cai.
+SELECT throws_ok($$
+  UPDATE public.payment_links SET package_features = NULL
+   WHERE id = (SELECT (r ->> 'link_id')::uuid FROM _t_pelado)
+$$, '23502',
+  NULL,
+  '(PACOTE) e a coluna é NOT NULL DE VERDADE — escrever NULL direto na tabela é recusado, então "ausência = {}" não depende de todo escritor lembrar do COALESCE');
 
 -- ===========================================================================
 -- (COMPRADOR) o pré-preenchimento do Master escreve na tabela do comprador

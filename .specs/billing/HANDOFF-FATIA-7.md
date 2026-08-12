@@ -120,6 +120,11 @@ Ou seja: PII ali fica a **uma policy** de distância de qualquer autenticado. A 
 - **Não há leitura de volta.** Decidido com o Fole: a lista de links **não mostra o comprador**, e ele não vai abrir porta master-gated para isso. Porta que devolve nome e e-mail para `authenticated` recria a superfície que essa decisão fechou.
 - O retorno da RPC traz `buyer_prefilled` (booleano) — estado, nunca o dado.
 
+**DOIS CANAIS DE PII QUE ASSERÇÃO NÃO ALCANÇA** (achado do Sentinela na revisão; a auditoria e as mensagens de exceção da porta do Fole estão limpas — ele foi ler os `RAISE` e as três só ecoam o `p_link_id`):
+
+1. **O log do próprio Postgres.** Os três `p_buyer_*` viajam como **argumento** da RPC. Com `log_statement` ou `log_min_duration_statement` ligados, CPF e e-mail vão para o log do servidor **em texto claro**. `pg_stat_statements` normaliza literal — esse está seguro. Mesma classe já levantada na porta pública do #1523; não nasceu nesta fatia, mas é onde o próximo vazamento mora.
+2. **Para quem escrever a tela (#1553):** se a RPC levantar por documento inválido, o objeto de erro do cliente Supabase pode carregar o **payload da requisição** para o Sentry. Saiba disso **antes** de instrumentar.
+
 ### 2.2 `supabase/functions/billing-quote/index.ts` — typecheck Deno limpo, **nunca deployada**
 
 Edge function fina que cota o pacote. Master-gate no padrão de `create-gestor` (anon key em `Authorization`, JWT real em `X-User-JWT`).
@@ -220,7 +225,9 @@ Comparado como número, `-1 < 50000` e **a proposta mais generosa apareceria mar
    `20270812100000` (Fatia 9) → **`20270812120000` (esta)**. A renumeração já a deixou por último, o que
    coincide com a dependência: ela só altera objeto que a `…140000` cria.
 
-2. ✅ **FEITO** — `supabase/tests/payment_links_package_test.sql`, **23 asserções, 23 ok**, registrado no `run.sh` como **item 32** nas duas listas. Cobre: colunas do pacote com default `{}`, as três colunas de PII **ausentes** (`hasnt_column`), `authenticated` sem `SELECT` em `payment_link_buyers`, pré-preenchimento gravando na tabela do comprador com documento normalizado e `tax_id_kind` derivado, auditoria registrando o **fato** e varrida contra e-mail/documento/nome, atomicidade (os três casos de recusa **não deixam link para trás**), desconto vindo do motor com controle positivo em número concreto, autor vindo de `auth.uid()`, e motivo obrigatório por CHECK. Medido também no mundo de **91 migrations** (as 4 ausentes do banco local aplicadas na mesma transação revertida): 23/23 aqui e 40/40 no `payment_links_test`.
+2. ✅ **FEITO** — `supabase/tests/payment_links_package_test.sql`, **25 asserções, 25 ok**, registrado no `run.sh` como **item 32** nas duas listas. Cobre: colunas do pacote com default `{}`, as três colunas de PII **ausentes** (`hasnt_column`), `authenticated` sem `SELECT` em `payment_link_buyers`, pré-preenchimento gravando na tabela do comprador com documento normalizado e `tax_id_kind` derivado, auditoria registrando o **fato** e varrida contra e-mail/documento/nome, atomicidade (os três casos de recusa **não deixam link para trás**), desconto vindo do motor com controle positivo em número concreto, autor vindo de `auth.uid()`, e motivo obrigatório por CHECK. Duas asserções entraram na revisão do Sentinela e são **mutation-tested**: `NULL` explícito no parâmetro (mata o `COALESCE` do INSERT) e `UPDATE` direto para `NULL` esperando `23502` (mata o `NOT NULL` da coluna). Mutante 1 (coluna perde `NOT NULL`) derruba 1 das 25; mutante 2 (`COALESCE` removido + coluna sem `NOT NULL`/`DEFAULT`) derruba as 2 — e os dois rodam com **25 asserções coletadas**, sem aborto. As duas asserções originais de `{}` continuavam verdes nos dois mutantes: o `{}` chegava pelo DEFAULT do parâmetro, e era a tautologia.
+
+   Medido também no mundo de **91 migrations** (as 4 ausentes do banco local aplicadas na mesma transação revertida): 23/23 aqui e 40/40 no `payment_links_test`.
 
    O que **NÃO** está coberto e é o próximo teste de alguém: o caminho do checkout público chamando `billing_upsert_link_buyer` em cima de uma linha pré-preenchida — é do Fole (item 36).
 

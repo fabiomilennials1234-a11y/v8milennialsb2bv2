@@ -5,11 +5,19 @@
 -- proposta que já circulou perde o que o operador montou, e não há de onde
 -- reconstruir.
 --
+-- E O QUE ELE DESTRÓI QUE NÃO É ÓBVIO: `manual_discount_reason` e
+-- `manual_discount_by`. Cai o MOTIVO e o AUTOR de toda concessão registrada
+-- enquanto a fatia esteve viva. É recuperável — `master_audit_logs` grava os
+-- dois no `details` de `payment_link_created` —, mas recuperar é trabalho
+-- manual, e quem roda isto às pressas não vai saber que precisa.
+--
 -- O COMPRADOR NÃO É TOCADO AQUI, de propósito. Ele vive em
 -- `payment_link_buyers` (Fatia 8) e desfazer aquela tabela é do rollback dela.
--- Consequência aceita: depois deste rollback, um link pode ter comprador
--- pré-preenchido e nenhuma coluna de pacote — estado feio, mas sem PII órfã, já
--- que a linha do comprador cai por CASCADE junto com o link.
+-- E não há PII órfã por um motivo mais simples do que a cascata: este arquivo
+-- NÃO apaga link nenhum. Ele derruba cinco colunas e restaura a função de 8
+-- parâmetros. Sem link morrendo, não há o que orfanar. (A FK de lá é
+-- `ON DELETE CASCADE`, então nem no cenário de deleção haveria — mas esse
+-- cenário não é este. Correção do Sentinela: decisão certa, argumento errado.)
 --
 -- Este arquivo é o inverso EXATO da migration, e nada além. Banco que aplicou a
 -- versão pré-contrato (a que adicionava `customer_legal_name`, `customer_tax_id`
