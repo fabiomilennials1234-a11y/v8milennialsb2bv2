@@ -283,6 +283,21 @@
 #      (link, método), que é o que impede QR velho, entulho de cobrança no
 #      gateway e recarregar-a-página-virar-gerador-de-cobrança.
 #
+#  32. payment_links_package_test.sql — SCRUM-288 (Fatia 7): o pacote montado, o
+#      desconto manual auditável e o COMPRADOR pré-preenchido pelo Master. As
+#      asserções que mandam são NEGATIVAS: `payment_links` NÃO tem
+#      `customer_legal_name`, `customer_tax_id` nem `customer_email`. A primeira
+#      versão da fatia guardava PII ali, e essa tabela tem GRANT para `anon` e
+#      `authenticated` com UMA policy no caminho; o comprador mora em
+#      `payment_link_buyers` (item 36), fechada por REVOKE. Sem a asserção
+#      negativa, alguém recria as colunas em seis meses e nada fica vermelho.
+#      Cobre também ATOMICIDADE (comprador inválido derruba a criação do link,
+#      porque a porta LEVANTA dentro da mesma transação) e a semântica que custou
+#      duas asserções: `p_manual_final_cents` é o preço MENSAL, não o total —
+#      passar o total de um ciclo anual não dá desconto, dá aumento de 12x.
+#      DEPENDE de 20270812111845 (Fatia 8) estar aplicada: dela são a tabela e a
+#      porta `billing_prefill_link_buyer`.
+#
 #  33. payment_history_receipt_period_method_test.sql — as tres faltas de
 #      `payment_history` que travavam a area de billing do admin (SCRUM-289 /
 #      #1390, migration 20270811160000): recibo e fatura (DUAS colunas, porque
@@ -460,6 +475,7 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/payment_links_test.sql" \
     "$SCRIPT_DIR/rls_inv6_definer_sem_gate_test.sql" \
     "$SCRIPT_DIR/billing_cycle_semiannual_test.sql" \
+    "$SCRIPT_DIR/payment_links_package_test.sql" \
     "$SCRIPT_DIR/payment_history_receipt_period_method_test.sql" \
     "$SCRIPT_DIR/payment_webhook_ledger_test.sql" \
     "$SCRIPT_DIR/provision_existing_org_test.sql" \
@@ -470,7 +486,7 @@ run_with_pg_prove() {
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql subscription_snapshot_base_layer_test.sql organizations_plan_fk_test.sql organizations_plan_quota_sync_test.sql inv5_public_tables_readable_by_anon_test.sql payment_links_test.sql rls_inv6_definer_sem_gate_test.sql billing_cycle_semiannual_test.sql payment_history_receipt_period_method_test.sql payment_webhook_ledger_test.sql provision_existing_org_test.sql payment_link_buyers_test.sql provision_new_org_test.sql payment_link_paid_at_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql subscription_snapshot_base_layer_test.sql organizations_plan_fk_test.sql organizations_plan_quota_sync_test.sql inv5_public_tables_readable_by_anon_test.sql payment_links_test.sql rls_inv6_definer_sem_gate_test.sql billing_cycle_semiannual_test.sql payment_links_package_test.sql payment_history_receipt_period_method_test.sql payment_webhook_ledger_test.sql provision_existing_org_test.sql payment_link_buyers_test.sql provision_new_org_test.sql payment_link_paid_at_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces

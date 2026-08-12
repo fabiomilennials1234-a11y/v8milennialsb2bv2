@@ -110,6 +110,7 @@ const MasterUsers = lazy(() => lazyRetry(() => import("@/modules/identity/master
 // Usuários ativos por org — quem deu sinal de uso (auth.sessions), master-only
 const MasterUsuariosAtivos = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterUsuariosAtivos")));
 const MasterPlans = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterPlans")));
+const MasterPaymentLinks = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterPaymentLinks")));
 const MasterFeatures = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterFeatures")));
 const MasterAuditLogs = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterAuditLogs")));
 const MasterOperations = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOperations")));
@@ -745,6 +746,7 @@ function AppRoutes() {
         <Route path="organizations" element={<MasterOrganizations />} />
         <Route path="users" element={<MasterUsers />} />
         <Route path="plans" element={<MasterPlans />} />
+        <Route path="payment-links" element={<MasterPaymentLinks />} />
         <Route path="features" element={<MasterFeatures />} />
         <Route path="audit-logs" element={<MasterAuditLogs />} />
         <Route path="operations" element={<MasterOperations />} />
