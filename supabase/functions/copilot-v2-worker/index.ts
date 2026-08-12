@@ -20,6 +20,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getWhatsAppProvider } from "../_shared/whatsapp-client.ts";
 import { resolveInstance, normalizeBrazilianPhone } from "../_shared/whatsapp-dispatch.ts";
 import { governSend, isSkippedSend } from "../_shared/send-governor/gate.ts";
+import { persistOutboundMessage } from "../_shared/action-handlers/whatsapp-helpers.ts";
 import { processBatch, type QueueRow } from "../_shared/copilot-v2/queue-processor.ts";
 import { routeArchetype, type ContactStatus } from "../_shared/copilot-v2/contact-status.ts";
 import { modelForArchetype, type Archetype, type ModelId } from "../_shared/copilot-v2/model-selector.ts";
@@ -79,7 +80,8 @@ serve(
         canonicalPhone: row.canonical_phone,
         agentId: (context as ResolvedContext & { _agentId?: string | null })._agentId ?? null,
       }),
-      sendReply: (canonicalPhone, text, row) => sendReply(supabase, row.organization_id, canonicalPhone, text),
+      sendReply: (canonicalPhone, text, row) =>
+        sendReply(supabase, row.organization_id, canonicalPhone, text, row.lead_id),
       markComplete: async (id) => { await supabase.rpc("copilot_v2_complete_message", { p_id: id }); },
       markFailed: async (id, err) => { await supabase.rpc("copilot_v2_fail_message", { p_id: id, p_error: err.slice(0, 500) }); },
       logStep: async (traceId, step, reason, meta) => {
@@ -157,7 +159,13 @@ function capsFor(agentRow: any): Record<string, boolean | undefined> {
   };
 }
 
-async function sendReply(supabase: any, orgId: string, canonicalPhone: string, text: string): Promise<void> {
+async function sendReply(
+  supabase: any,
+  orgId: string,
+  canonicalPhone: string,
+  text: string,
+  leadId: string | null,
+): Promise<void> {
   const instance = await resolveInstance(supabase, orgId, { requireConnected: true });
   if (!instance) throw new Error(`no connected WhatsApp instance for org ${orgId}`);
   const provider = await getWhatsAppProvider(instance, supabase);
@@ -177,4 +185,34 @@ async function sendReply(supabase: any, orgId: string, canonicalPhone: string, t
   if (isSkippedSend(governed)) return;
   const res = governed;
   if (!res?.success && (res as any)?.error) throw new Error(`sendText failed: ${(res as any).error}`);
+
+  // A resposta do Copilot v2 precisa virar linha em `whatsapp_messages` com o
+  // id do provider. Sem isso o eco `fromMe` entra rotulado `manual`, e o
+  // `trg_human_pause_on_manual_send` pausa o Copilot — quer dizer, o v2 pausaria
+  // a si mesmo a cada resposta que desse.
+  //
+  // Fica FORA do caminho de erro: falha ao persistir não pode virar exceção aqui,
+  // senão o `processBatch` marcaria como falha uma mensagem que JÁ foi entregue e
+  // a reenviaria na próxima passada. `persistOutboundMessage` já engole os
+  // próprios erros; este `catch` é o cinto de segurança contra o resto.
+  try {
+    await persistOutboundMessage(supabase, {
+      organizationId: orgId,
+      instanceId: instance.id,
+      providerMessageId: (res as any)?.message_id,
+      phone: number,
+      messageType: "conversation",
+      content: text,
+      leadId,
+      sentSource: "copilot",
+      fallbackIdPrefix: "cpv2",
+    });
+  } catch (err) {
+    // Só `message`, nunca o objeto cru: `persistOutboundMessage` mantém o
+    // payload FORA do log porque erro de constraint do PostgREST ecoa os valores
+    // da chave — e a linha carrega `phone_number`, `remote_jid` e o `content` da
+    // conversa com o lead. Um catch mais largo aqui não pode desfazer isso.
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error("[copilot-v2-worker] persist failed (mensagem JÁ entregue):", detail);
+  }
 }
