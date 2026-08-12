@@ -4,7 +4,15 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main]
+    # `develop` entrou em 2026-08-11. Antes disso, PR com base develop não
+    # rodava NADA daqui — nem typecheck, nem build, nem vitest, nem os pgTAP
+    # de invariante de RLS. Os gates só disparavam no push do merge, ou seja
+    # DEPOIS de o código já estar em develop, quando reprovar custa reverter.
+    #
+    # Os outros workflows com pull_request (codeql, secret-scan,
+    # vault-sentinel) já listavam os dois branches; este era o único fora do
+    # padrão, o que fazia o PR parecer verde com dois checks passando.
+    branches: [main, develop]
 
 jobs:
   quality:
