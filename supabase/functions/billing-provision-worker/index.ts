@@ -85,6 +85,25 @@ Deno.serve(
       return new Response(JSON.stringify({ error: "subscriptions_unreadable" }), { status: 500, headers });
     }
 
+    // ── PENDENTES DE ORGANIZAÇÃO NOVA ────────────────────────────────────
+    // Aqui o sinal NÃO pode ser `org_subscriptions`: no `new_org` a Fatia 6 não
+    // consegue escrever assinatura, porque ainda não existe organização para
+    // ser dona dela. O sinal é o LINK PAGO — `payment_links.paid_at`, que o
+    // webhook carimba assim que a cobrança confirma (e que era justamente a
+    // coluna escrita em lugar nenhum até o conserto do #1558).
+    const { data: linksPagos } = await supabase
+      .from("payment_links")
+      .select("id, payment_link_charges(provider_charge_id)")
+      .eq("target_kind", "new_org")
+      .not("paid_at", "is", null)
+      .limit(LOTE * 2);
+
+    const pendentesNovas = (linksPagos ?? [])
+      .flatMap(l => ((l as Record<string, unknown>).payment_link_charges as
+        { provider_charge_id: string }[] ?? []))
+      .map(c => c.provider_charge_id)
+      .filter(id => !feitos.has(id));
+
     const pendentes = (assinaturas ?? [])
       .filter(s => !feitos.has(s.provider_payment_id as string))
       .slice(0, LOTE);
@@ -138,10 +157,85 @@ Deno.serve(
       }
     }
 
+    // ── ORGANIZAÇÃO NOVA ──────────────────────────────────────────────────
+    for (const pagamento of pendentesNovas.slice(0, LOTE)) {
+      const { data: compradorRaw, error: erroComprador } = await supabase
+        .rpc("billing_resolve_charge_buyer", { p_provider_charge_id: pagamento });
+
+      if (erroComprador) {
+        falhou.push(pagamento);
+        await logRuntime({
+          module: "billing", action: "provision_buyer_falhou", status: "error",
+          errorMessage: erroComprador.message,
+          payloadSnapshot: { payment_id: pagamento },
+        });
+        continue;
+      }
+
+      // Ramifica por CODE, nunca por `ok`: `buyer_missing` volta com ok=true,
+      // porque cobrança nossa sem comprador não é falha de resolução.
+      const comprador = (compradorRaw ?? {}) as
+        { code?: string; buyer_email?: string; target_kind?: string };
+
+      if (comprador.code === "buyer_missing") {
+        // INCIDENTE: pagamento confirmado e nenhum jeito de criar o admin. Não
+        // inventa e-mail, não cria organização pela metade. Vira linha visível,
+        // e o alarme sai UMA vez — o worker passa a cada 2 minutos, e repetir
+        // afogaria o sinal em vez de emitir um.
+        const { data: bloqueio } = await supabase.rpc("billing_block_provisioning", {
+          p_provider_payment_id: pagamento, p_code: "buyer_missing",
+        });
+        if ((bloqueio as { alarmou?: boolean })?.alarmou) {
+          await logRuntime({
+            module: "billing", action: "provision_bloqueado", status: "error",
+            errorMessage: "pagamento confirmado sem comprador — exige humano",
+            payloadSnapshot: { payment_id: pagamento, code: "buyer_missing" },
+          });
+        }
+        recusado.push(pagamento);
+        continue;
+      }
+
+      if (comprador.code !== "ok" || !comprador.buyer_email) {
+        recusado.push(pagamento);
+        continue;
+      }
+
+      const { data: criadaRaw, error: erroCriar } = await supabase
+        .rpc("billing_provision_new_org", {
+          p_provider_payment_id: pagamento,
+          p_buyer_email: comprador.buyer_email,
+        });
+
+      const criada = (criadaRaw ?? {}) as
+        { ok?: boolean; code?: string; organization_id?: string };
+
+      if (erroCriar || !criada.ok) {
+        falhou.push(pagamento);
+        await logRuntime({
+          module: "billing", action: "provision_new_org_falhou", status: "error",
+          errorMessage: erroCriar?.message ?? criada.code ?? "desconhecido",
+          payloadSnapshot: { payment_id: pagamento, code: criada.code },
+        });
+        continue;
+      }
+
+      feito.push(pagamento);
+      await logRuntime({
+        module: "billing",
+        organizationId: criada.organization_id,
+        action: "provisionada_org_nova",
+        status: "success",
+        // O e-mail NÃO entra aqui: é PII de comprador, e a redação do logger é
+        // por nome de chave — quem quiser correlacionar usa o organization_id.
+        payloadSnapshot: { payment_id: pagamento, code: criada.code },
+      });
+    }
+
     return new Response(
       JSON.stringify({
         ok: true,
-        pendentes: pendentes.length,
+        pendentes: pendentes.length + pendentesNovas.length,
         provisionados: feito.length,
         recusados: recusado.length,
         falhas: falhou.length,
