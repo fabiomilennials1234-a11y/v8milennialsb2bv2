@@ -69,9 +69,20 @@ describe("buildRingbackCycle", () => {
 
     // Trecho desligado: silêncio EXATO. Qualquer resíduo aqui vira zumbido de
     // 4 segundos no fone do vendedor a cada ciclo.
+    //
+    // Agregado de propósito: um `expect` por amostra são 192.000 asserções
+    // (4 s × 48 kHz), e a chamada custa mais que a conta. O teste passava
+    // sozinho e estourava o timeout de 5 s quando a suíte inteira disputava
+    // CPU — flaky por construção, e teste que às vezes falha é o que ensina a
+    // ignorar o CI. Aqui vale um só, e o índice sai na mensagem quando quebra.
+    let primeiroResiduo = -1;
     for (let i = onSamples; i < cycle.length; i++) {
-      expect(cycle[i]).toBe(0);
+      if (cycle[i] !== 0) {
+        primeiroResiduo = i;
+        break;
+      }
     }
+    expect(primeiroResiduo, `resíduo audível na amostra ${primeiroResiduo} do trecho mudo`).toBe(-1);
   });
 
   it("não estoura o volume — vai direto no fone do operador", () => {

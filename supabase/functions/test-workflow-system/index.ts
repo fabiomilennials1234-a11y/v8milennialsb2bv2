@@ -608,17 +608,23 @@ function buildActionTests(
   return [
     // ── Lead Management (DB-verifiable) ──
     {
-      name: "move_stage — updates pipe_whatsapp",
+      // SCRUM-202: era "updates pipe_whatsapp" e semeava/afirmava a COLUNA.
+      // ADR-0023 decisão 1: quem tem etapa é o Negócio. A asserção passou para
+      // `pipeline_entries` — que é o que `move_stage` de fato escreve, e o que
+      // sobrevive ao DROP COLUMN da fatia 3.
+      name: "move_stage — updates pipeline_entries(whatsapp)",
       fn: async () => {
-        const leadId = await createTestLead(supabase, orgId, { pipe_whatsapp: "novo" });
+        const leadId = await createTestLead(supabase, orgId);
         const result = await executeWorkflowAction({
           supabase, organizationId: orgId, leadId,
           nodeData: { actionType: "move_stage", pipeType: "whatsapp", targetStage: "qualificado" },
           executionContext: {},
         });
         assert(result.success, `move_stage failed: ${result.error}`);
-        const { data: lead } = await supabase.from("leads").select("pipe_whatsapp").eq("id", leadId).single();
-        assert(lead?.pipe_whatsapp === "qualificado", `Expected qualificado, got ${lead?.pipe_whatsapp}`);
+        const { data: waPipeline } = await supabase.from("pipelines").select("id").eq("organization_id", orgId).eq("slug", "whatsapp").eq("type", "system").maybeSingle();
+        assert(waPipeline?.id, "whatsapp pipeline not found");
+        const { data: entry } = await supabase.from("pipeline_entries").select("stage_key").eq("pipeline_id", waPipeline!.id).eq("lead_id", leadId).maybeSingle();
+        assert(entry?.stage_key === "qualificado", `Expected qualificado in pipeline_entries, got ${entry?.stage_key}`);
       },
     },
     {
@@ -793,7 +799,9 @@ function buildActionTests(
     {
       name: "remove_from_pipe — removes whatsapp entry",
       fn: async () => {
-        const leadId = await createTestLead(supabase, orgId, { pipe_whatsapp: "novo" });
+        // SCRUM-202: o override `{ pipe_whatsapp: "novo" }` saiu — a posição é da
+        // entry, criada logo abaixo.
+        const leadId = await createTestLead(supabase, orgId);
         // Create entry in pipeline_entries
         const { data: waPipeline } = await supabase.from("pipelines").select("id").eq("organization_id", orgId).eq("slug", "whatsapp").eq("type", "system").maybeSingle();
         if (waPipeline?.id) {

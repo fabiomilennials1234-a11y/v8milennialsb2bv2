@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/assert-dev-not-prod.mjs",
     "dev": "vite",
+    "dev:branch": "node scripts/dev-target-branch.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
@@ -22,6 +24,8 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:unit": "vitest run tests/unit/ src/ --reporter=verbose",
+    "test:ratchet": "node scripts/test-ratchet.cjs",
+    "test:baseline": "node scripts/test-ratchet.cjs --write",
     "test:integration": "vitest run tests/integration/ --reporter=verbose",
     "test:e2e": "playwright test",
     "test:coverage": "vitest run tests/unit/ --coverage",
@@ -36,7 +40,10 @@
     "vault:upgrade-fm": "node scripts/vault-upgrade-frontmatter.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build -o dist-storybook",
-    "typecheck:pending": "node scripts/tsc-ratchet.cjs --write-pending"
+    "typecheck:pending": "node scripts/tsc-ratchet.cjs --write-pending",
+    "lint:ratchet": "node scripts/lint-ratchet.cjs",
+    "lint:baseline": "node scripts/lint-ratchet.cjs --write",
+    "lint:pending": "node scripts/lint-ratchet.cjs --write-pending"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

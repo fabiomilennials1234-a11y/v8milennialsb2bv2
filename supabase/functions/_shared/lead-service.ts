@@ -253,11 +253,19 @@ export async function getOrCreateLead(
     insertData.is_shadow = true;
   }
 
-  // Shadow leads não entram em nenhum pipe até serem promovidos.
-  // skipPipeSeed: fonte já coloca o lead em outro pipe (ex: Cal.com → confirmacao).
-  if (!isShadow && !skipPipeSeed) {
-    insertData.pipe_whatsapp = "novo";
-  }
+  // SCRUM-202: `insertData.pipe_whatsapp = "novo"` saiu daqui.
+  //
+  // A coluna é espelho legado do funil, e quem a mantém é
+  // `trg_sync_whatsapp_stage_to_lead`: o `upsertPipeEntry` lá embaixo escreve
+  // `pipeline_entries` em depth 1 e o gatilho grava a etapa resolvida — que é a
+  // etapa ATIVA da org, não o literal "novo" (guard de ghost-stage). Semear aqui
+  // gravava "novo" antes disso e podia deixar a coluna divergente da entry até a
+  // primeira movimentação.
+  //
+  // Com `deal_manual_only` ON não há entry, o gatilho não roda e a coluna fica
+  // NULL — que é a verdade: o lead entrou na base e não tem Negócio.
+  // Para que isso valha, a migration 20270806000010 tira o
+  // `DEFAULT 'novo'` da coluna; sem ela o default mentiria no lugar deste código.
 
   // Add sdr_id and responsible_id if provided
   if (sdrId) {

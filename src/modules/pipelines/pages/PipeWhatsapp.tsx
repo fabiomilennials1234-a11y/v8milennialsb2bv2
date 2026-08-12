@@ -1,8 +1,13 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
-import { motion } from "framer-motion";
-import { Search, Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List, BarChart3, Send } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List, BarChart3, Send, MoreHorizontal } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -25,12 +30,18 @@ import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkfl
 import { useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/modules/pipelines/hooks/legacy/usePipeWhatsapp";
 import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
 import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
+import { invalidateAfterMove } from "@/modules/pipelines/lib/moverNegocio";
 import { useQueryClient } from "@tanstack/react-query";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
-import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/MetricsPeriodSelector";
+import {
+  getStalledBucket,
+  STALLED_ALL,
+  STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES,
+} from "@/modules/pipelines/lib/stalled-buckets";
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
 import { PipeWhatsappAnalytics } from "@/modules/pipelines/components/shared/PipeWhatsappAnalytics";
-import { PipeViewToggle } from "@/modules/pipelines/components/shared/PipeViewToggle";
+import { FunnelControlBar } from "../components/shared/FunnelControlBar";
+import { FunnelViewsMenu } from "../components/shared/FunnelViewsMenu";
 import { AutoCreateLeadToggle } from "@/modules/pipelines/components/shared/AutoCreateLeadToggle";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
@@ -41,7 +52,9 @@ import { useUserRole, useFeaturePermission } from "@/modules/identity";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
+import { DealPanelProvider, useDealSheet, LeadPanelProvider } from "@/modules/leads";
+import { DealCardPanel } from "@/modules/leads/components/deal-card/DealCardPanel";
+import { LeadCardPanel } from "@/modules/leads/components/lead-card/LeadCardPanel";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { LeadModal } from "@/modules/leads";
 import { CreateOpportunityModal } from "@/modules/pipelines/components/kanban/CreateOpportunityModal";
@@ -62,7 +75,6 @@ import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActio
 import { PipeTableView } from "@/modules/pipelines/components/kanban/PipeTableView";
 import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";
 import { useViewport } from "@/shared/hooks/use-viewport";
-import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { useSearchParams } from "react-router-dom";
 
 
@@ -88,6 +100,10 @@ type WhatsappFilterState = {
   filterQualificationTier: string[];
   filterPreQualificationTier: string[];
   filterScheduled: boolean;
+  /** Data de criação. Saiu do cabeçalho pro painel de Filtros (protótipo). */
+  periodState: MetricsPeriodState;
+  /** Dias na etapa atual — id de `STALLED_BUCKETS`, ou "all". */
+  filterStalled: string;
   viewMode: "kanban" | "list" | "analytics";
 };
 
@@ -99,6 +115,8 @@ const DEFAULT_WHATSAPP_FILTERS: WhatsappFilterState = {
   filterQualificationTier: [],
   filterPreQualificationTier: [],
   filterScheduled: false,
+  periodState: createInitialPeriodState(),
+  filterStalled: STALLED_ALL,
   viewMode: "kanban",
 };
 
@@ -108,7 +126,7 @@ function PipeWhatsappInner() {
     DEFAULT_WHATSAPP_FILTERS
   );
 
-  const { searchTerm, filterResponsible, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterScheduled, viewMode } = filterState;
+  const { searchTerm, filterResponsible, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterScheduled, periodState, filterStalled, viewMode } = filterState;
   const { isMobile } = useViewport();
 
   const setSearchTerm = useCallback(
@@ -139,6 +157,14 @@ function PipeWhatsappInner() {
     (v: boolean) => setFilterState((f) => ({ ...f, filterScheduled: v })),
     [setFilterState]
   );
+  const setPeriodState = useCallback(
+    (v: MetricsPeriodState) => setFilterState((f) => ({ ...f, periodState: v })),
+    [setFilterState]
+  );
+  const setFilterStalled = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterStalled: v })),
+    [setFilterState]
+  );
   const setViewMode = useCallback(
     (v: "kanban" | "list" | "analytics") => setFilterState((f) => ({ ...f, viewMode: v })),
     [setFilterState]
@@ -158,7 +184,7 @@ function PipeWhatsappInner() {
   // launched from the bulk-bar with a kanban selection seeded.
   const [disparoSource, setDisparoSource] = useState<DisparoSource>("estagio");
   const [disparoManualIds, setDisparoManualIds] = useState<string[]>([]);
-  const { openLead } = useLeadSheet();
+  const { openDeal } = useDealSheet();
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
@@ -171,13 +197,15 @@ function PipeWhatsappInner() {
     sdrId: string | null;
     closerId: string | null;
   } | null>(null);
-  const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
-
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_whatsapp", organizationId); }, []);
 
   const { data: pipelineStages = [], isLoading: loadingStages } = usePipelineStages("whatsapp");
   const metricsRange = useMemo(() => getDateRange(periodState), [periodState]);
+  const stalledBucket = useMemo(
+    () => (STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES ? getStalledBucket(filterStalled) : null),
+    [filterStalled],
+  );
   const { stageData, allItems: pipeData, isLoading, organizationId: paginatedOrgId } = usePaginatedPipeline(
     "whatsapp",
     pipelineStages,
@@ -193,6 +221,8 @@ function PipeWhatsappInner() {
       scheduled: filterScheduled || undefined,
       periodAfter: metricsRange?.startStr ?? undefined,
       periodBefore: metricsRange?.endStr ?? undefined,
+      stalledMinDays: stalledBucket?.minDays ?? null,
+      stalledMaxDays: stalledBucket?.maxDays ?? null,
     }
   );
   const isError = false;
@@ -234,13 +264,22 @@ function PipeWhatsappInner() {
 
   // Build declarative sections for KanbanFilterPanel
   const filterSections: FilterSectionConfig[] = useMemo(() => [
+    // Os dois filtros de tempo abrem o painel e são independentes de propósito:
+    // "criado" é entrada, "parado" é a etapa atual. Um lead de maio pode ter se
+    // mexido ontem — por isso combinam em vez de competir.
+    { type: "created-period", value: periodState, onChange: setPeriodState },
+    // "Parado há" só entra com a migration 20270729000010 aplicada — ver
+    // STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES.
+    ...(STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES
+      ? [{ type: "stalled-days", value: filterStalled, onChange: setFilterStalled } as const]
+      : []),
     { type: "responsible", value: filterResponsible, onChange: setFilterResponsible, members: responsibleMembers },
     { type: "origin-single", value: filterOrigin, onChange: setFilterOrigin },
     { type: "tags", value: filterTags, onChange: setFilterTags, tags: orgTags },
     { type: "qualification-tier", value: filterQualificationTier, onChange: setFilterQualificationTier },
     { type: "pre-qualification-tier", value: filterPreQualificationTier, onChange: setFilterPreQualificationTier },
     { type: "scheduled", value: filterScheduled, onChange: setFilterScheduled },
-  ], [filterResponsible, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterScheduled, responsibleMembers, orgTags, setFilterResponsible, setFilterOrigin, setFilterTags, setFilterQualificationTier, setFilterPreQualificationTier, setFilterScheduled]);
+  ], [periodState, filterStalled, filterResponsible, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterScheduled, responsibleMembers, orgTags, setPeriodState, setFilterStalled, setFilterResponsible, setFilterOrigin, setFilterTags, setFilterQualificationTier, setFilterPreQualificationTier, setFilterScheduled]);
 
   const handleClearAllFilters = useCallback(() => {
     setFilterState((f) => ({
@@ -251,6 +290,8 @@ function PipeWhatsappInner() {
       filterQualificationTier: [],
       filterPreQualificationTier: [],
       filterScheduled: false,
+      periodState: createInitialPeriodState(),
+      filterStalled: STALLED_ALL,
     }));
   }, [setFilterState]);
 
@@ -410,8 +451,8 @@ function PipeWhatsappInner() {
 
   const handleMobileLeadClick = useCallback((leadId: string) => {
     const item = pipeData?.find((p) => p.lead_id === leadId);
-    if (item) openLead(item.lead_id, item.id);
-  }, [pipeData, openLead]);
+    if (item) openDeal(item.id, item.lead_id);
+  }, [pipeData, openDeal]);
 
   // Count "ghost leads" — rows do pipe que o usuário enxerga mas cujo join
   // com `leads` retornou null. Indica divergência entre RLS do pipe e de
@@ -432,7 +473,11 @@ function PipeWhatsappInner() {
   }, [pipeData, metricsRange]);
 
   // Handle status change from drag-and-drop
-  const handleStatusChange = async (itemId: string, newStatus: string) => {
+  // Envolvida em useCallback: sem isso a identidade mudava a cada render e
+  // arrastava consigo as dependências de `handleMobileMove`. O ESLint reclamava
+  // citando o número da linha na mensagem, então qualquer edição neste arquivo
+  // reabria o aviso como se fosse novo.
+  const handleStatusChange = useCallback(async (itemId: string, newStatus: string) => {
     const item = pipeData?.find(p => p.id === itemId);
     if (!item) return;
 
@@ -517,7 +562,16 @@ function PipeWhatsappInner() {
       toast.error("Erro ao atualizar status");
       console.error(error);
     }
-  };
+  }, [
+    createPipeProposta,
+    logAction,
+    organizationId,
+    pipeData,
+    pipelineStages,
+    queryClient,
+    statusColumns,
+    updatePipeWhatsapp,
+  ]);
 
   const handleMobileMove = useCallback(
     async (leadId: string, newStageKey: string) => {
@@ -566,97 +620,105 @@ function PipeWhatsappInner() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <motion.h1
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold"
-          >
-            Funil de Qualificação
-          </motion.h1>
-          <p className="text-muted-foreground mt-1">
-            Arraste os cards para alterar o status • Agendado → move para Confirmação
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 [&>*]:shrink-0">
-          <PipeViewToggle
-            value={viewMode}
-            onChange={setViewMode}
-            layoutId="pipe-whatsapp-view-indicator"
-            options={[
+      {/* Faixa única de controles — Modelo 1 do protótipo `.specs/mockups/funis-redesign/`.
+          Substitui o cabeçalho de cinco fileiras (título, período, busca+views+filtros,
+          chips e indicador de período) que empurrava o board pra baixo da dobra. */}
+      <FunnelControlBar
+        funnelKey="sys:whatsapp"
+        funnelLabel="Qualificação"
+        funnelColor="#3b82f6"
+        search={searchTerm}
+        onSearchChange={setSearchTerm}
+        views={
+          /* Alternador + views salvas no mesmo gatilho (decisão 1 do protótipo).
+             Renderiza SEMPRE — em Analytics ele é o único caminho de volta. */
+          <FunnelViewsMenu
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            viewOptions={[
               { value: "kanban", icon: LayoutGrid, label: "Kanban" },
               { value: "list", icon: List, label: "Lista" },
               { value: "analytics", icon: BarChart3, label: "Analytics" },
             ]}
+            entityType="pipe_whatsapp"
+            currentFilters={filterState}
+            defaultFilters={DEFAULT_WHATSAPP_FILTERS}
+            onApplyFilters={(f) => setFilterState(() => f)}
+            activeViewId={activeViewId}
+            onActiveViewChange={handleActiveViewChange}
           />
-          <AutoCreateLeadToggle />
-          <Button size="sm" variant="outline" onClick={() => setIsSettingsOpen(true)}>
-            <Settings2 className="w-4 h-4 mr-2" />
-            Configurações
-          </Button>
+        }
+        filters={
+          viewMode !== "analytics" ? (
+            <KanbanFilterPanel sections={filterSections} onClearAll={handleClearAllFilters} />
+          ) : null
+        }
+        actions={
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-9"
+              onClick={() => setIsSettingsOpen(true)}
+            >
+              <Settings2 className="w-4 h-4 mr-2" />
+              Configurações
+            </Button>
+
+            {/* O protótipo enxuga a faixa pra seis controles. Disparo, Novo Lead,
+                período e auto-criar não somem — descem pro overflow. Tirar
+                capacidade em nome de layout seria trocar um problema por outro. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-9 px-2"
+                  aria-label="Mais ações do funil"
+                  data-testid="funnel-overflow"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                {/* O seletor de período saiu daqui: virou a seção "Criados no
+                    período" do painel de Filtros, que é onde compõe com origem,
+                    responsável e tags em vez de agir sozinho. */}
+                <DropdownMenuItem onClick={handleOpenDisparoStage}>
+                  <Send className="w-4 h-4 mr-2 text-primary" />
+                  Disparo
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsCreateLeadModalOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Novo lead
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <div className="px-2 py-1.5">
+                  <AutoCreateLeadToggle />
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+        primaryAction={
           <Button
             size="sm"
-            variant="outline"
-            className="border-primary/30 text-foreground hover:border-primary/60 hover:bg-primary/5"
-            onClick={handleOpenDisparoStage}
+            className="h-9 gradient-gold"
+            onClick={() => setIsOpportunityModalOpen(true)}
           >
-            <Send className="w-4 h-4 mr-2 text-primary" />
-            Disparo
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setIsCreateLeadModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
-            Novo Lead
+            Novo negócio
           </Button>
-          <Button size="sm" className="gradient-gold" onClick={() => setIsOpportunityModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Nova Oportunidade
-          </Button>
-        </div>
-      </div>
+        }
+        chips={
+          viewMode !== "analytics" ? (
+            <FilterChips sections={filterSections} onClearAll={handleClearAllFilters} />
+          ) : null
+        }
+      />
 
       {/* Ghost leads (RLS divergente entre pipe e leads) */}
       <GhostLeadsBanner pipeType="whatsapp" ghostCount={ghostLeadsCount} />
-
-      {/* Período (segue para a coorte do Funil de Saúde no Analytics) */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
-      </div>
-
-      {/* Filters — ocultos no modo Analytics (são específicos do board) */}
-      {viewMode !== "analytics" && (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar lead, empresa, telefone..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <SavedViewsDropdown
-              entityType="pipe_whatsapp"
-              currentFilters={filterState}
-              defaultFilters={DEFAULT_WHATSAPP_FILTERS}
-              onApplyFilters={(f) => setFilterState(() => f)}
-              activeViewId={activeViewId}
-              onActiveViewChange={handleActiveViewChange}
-            />
-            <KanbanFilterPanel
-              sections={filterSections}
-              onClearAll={handleClearAllFilters}
-            />
-          </div>
-          <FilterChips
-            sections={filterSections}
-            onClearAll={handleClearAllFilters}
-          />
-        </div>
-      )}
 
       {/* Period filter indicator — aparece quando um período está selecionado */}
       {viewMode !== "analytics" && metricsRange && (
@@ -698,6 +760,7 @@ function PipeWhatsappInner() {
           onStatusChange={handleStatusChange}
           disabled={!canMovePipe}
           onDeleteAllLeads={(stageId, stageTitle) => setStageToDelete({ id: stageId, title: stageTitle })}
+          onCreateInColumn={() => setIsOpportunityModalOpen(true)}
           onExportStage={(stageId, stageTitle) => {
             const col = columns.find((c) => c.id === stageId);
             setStageToExport({ id: stageId, title: stageTitle, count: col?.items.length ?? 0 });
@@ -722,6 +785,7 @@ function PipeWhatsappInner() {
             <LeadCard
               lead={card}
               variant="whatsapp"
+              density="compact"
               extraActions={
                 <MergedFunnelCardActions
                   entryId={card.id}
@@ -745,7 +809,7 @@ function PipeWhatsappInner() {
               onClick={() => {
                 const item = pipeData?.find(p => p.id === card.id);
                 if (item) {
-                  openLead(item.lead_id, item.id);
+                  openDeal(item.id, item.lead_id);
                 }
               }}
               onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}
@@ -768,7 +832,7 @@ function PipeWhatsappInner() {
           onRowClick={(card) => {
             const item = pipeData?.find(p => p.id === card.id);
             if (item) {
-              openLead(item.lead_id, item.id);
+              openDeal(item.id, item.lead_id);
             }
           }}
           selectedIds={bulk.selectedIds}
@@ -896,24 +960,42 @@ function PipeWhatsappInner() {
           }}
           prefilledLeadId={meetingModal.leadId}
           prefilledResponsibleId={meetingModal.sdrId ?? undefined}
+          /**
+           * ADR-0023 decisão 4: o negócio MOVE para a Confirmação.
+           *
+           * Antes, o modal criava o card de Confirmação e este `onSuccess`
+           * atualizava o de origem no WhatsApp — que ficava lá. O mesmo negócio
+           * em dois funis, 81 organizações com esse caminho configurado.
+           *
+           * A responsabilidade inverteu: `beforeSubmit` faz o passo que produz a
+           * métrica (o card de origem transita para a etapa de sucesso, e é essa
+           * transição que emite `meeting_booked`), e `moveFromEntryId` diz ao
+           * modal para mover essa mesma linha em vez de criar outra. Se o
+           * `beforeSubmit` lançar, o modal não escreve nada e o card não sai do
+           * lugar — mesma garantia de antes, quando fechar o modal cancelava.
+           */
+          moveFromEntryId={meetingModal.pipeId}
+          beforeSubmit={async () => {
+            await updatePipeWhatsapp.mutateAsync({
+              id: meetingModal.pipeId,
+              status: meetingModal.newStatus as PipeWhatsappStatus,
+              leadId: meetingModal.leadId,
+              sdrId: meetingModal.sdrId ?? undefined,
+            });
+          }}
           onSuccess={async () => {
             const pending = meetingModal;
             setMeetingModal(null);
             const stageLabel = statusColumns.find(c => c.id === pending.newStatus)?.title || pending.newStatus;
             try {
-              await updatePipeWhatsapp.mutateAsync({
-                id: pending.pipeId,
-                status: pending.newStatus as PipeWhatsappStatus,
-                leadId: pending.leadId,
-                sdrId: pending.sdrId ?? undefined,
-              });
-              logAction({ leadId: pending.leadId, action: "stage_changed", description: `Etapa alterada para "${stageLabel}" no Funil WhatsApp` });
-              if (organizationId) track({ event: "card_moved", organizationId, entityType: "pipe_whatsapp", entityId: pending.pipeId, metadata: { from_stage: pending.fromStatus, to_stage: pending.newStatus } });
-              toast.success("Reunião agendada e lead movido para Confirmação!");
+              logAction({ leadId: pending.leadId, action: "stage_changed", description: `Negócio movido de "${stageLabel}" para Confirmação` });
+              if (organizationId) track({ event: "card_moved", organizationId, entityType: "pipe_whatsapp", entityId: pending.pipeId, metadata: { from_stage: pending.fromStatus, to_stage: pending.newStatus, moved_to_pipe: "confirmacao" } });
+              invalidateAfterMove(queryClient, pending.leadId);
+              toast.success("Reunião agendada e negócio movido para Confirmação!");
             } catch (err) {
-              console.error("[PipeWhatsapp] Falha ao mover card após agendar reunião:", err);
+              console.error("[PipeWhatsapp] Falha após agendar reunião:", err);
               void logger.error(
-                "Falha ao mover card após agendar reunião",
+                "Falha após agendar reunião",
                 err instanceof Error ? err : new Error(String(err)),
                 {
                   resource: "pipelines",
@@ -921,7 +1003,7 @@ function PipeWhatsappInner() {
                   metadata: { pipeId: pending.pipeId, leadId: pending.leadId, toStage: pending.newStatus },
                 },
               );
-              toast.error("Reunião agendada, mas não foi possível mover o card no funil", {
+              toast.error("Reunião agendada, mas o board pode estar desatualizado", {
                 description: getErrorMessage(err),
               });
             } finally {
@@ -935,12 +1017,32 @@ function PipeWhatsappInner() {
   );
 }
 
+/**
+ * Os dois cards do sistema, montados juntos.
+ *
+ * O card do funil abre o **Negócio** (`DealCardPanel`); clicar na pessoa dentro
+ * dele fecha esse e abre o **Lead** (`LeadCardPanel`). Por isso o
+ * `LeadPanelProvider` precisa envolver o `DealPanelProvider`: sem ele,
+ * `useLeadSheet` não acha contexto e o link para a pessoa quebra.
+ *
+ * Nunca ficam empilhados — são as duas únicas fichas do produto, cada uma dona
+ * de um assunto.
+ */
 export default function PipeWhatsapp() {
   return (
     <LeadPanelProvider>
-      <LeadPanelLayout panel={<LeadDetailSheet />}>
-        <PipeWhatsappInner />
-      </LeadPanelLayout>
+      <DealPanelProvider>
+        <LeadPanelLayout
+          panel={
+            <>
+              <DealCardPanel />
+              <LeadCardPanel />
+            </>
+          }
+        >
+          <PipeWhatsappInner />
+        </LeadPanelLayout>
+      </DealPanelProvider>
     </LeadPanelProvider>
   );
 }

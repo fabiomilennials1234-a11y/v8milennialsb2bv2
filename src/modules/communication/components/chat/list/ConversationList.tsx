@@ -31,14 +31,12 @@ import { ConversationListItem, contactDisplayName } from "./ConversationListItem
 import { MobileConversationRow } from "./MobileConversationRow";
 import { MobileChatListHeader, type MobileChatFilter } from "./MobileChatListHeader";
 import { InboxFilterBar } from "./InboxFilterBar";
-import { InboxEnrichmentNotice } from "./InboxEnrichmentNotice";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
 import {
   applyInboxFilters,
   type InboxFilterState,
   type InboxFilterContext,
 } from "@/modules/communication/lib/inboxFilter";
-import type { InboxFilterGate } from "@/modules/communication/lib/inboxEnrichment";
 import type { FunnelOption } from "@/modules/communication/hooks/chat/useInboxFunnelOptions";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -92,13 +90,6 @@ interface ConversationListProps {
   canSeeUnassigned: boolean;
   waitingHumanLeadIds?: Set<string>;
   waitingHumanCount: number;
-  /**
-   * O dado que as dimensões client-side (funil/etapa/qualificação/vendedor) usam
-   * já chegou? `"pending"` = ainda carregando, `"error"` = falhou. Em ambos os
-   * casos a lista filtrada e os contadores seriam ficção — ver `inboxEnrichment`.
-   */
-  filterGate: InboxFilterGate;
-  onRetryEnrichment: () => void;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -137,8 +128,6 @@ export function ConversationList({
   canSeeUnassigned,
   waitingHumanLeadIds,
   waitingHumanCount,
-  filterGate,
-  onRetryEnrichment,
 }: ConversationListProps) {
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const { isMobile } = useViewport();
@@ -208,12 +197,6 @@ export function ConversationList({
   const unreadCount = useMemo(
     () => contacts.filter((c) => !c.is_group && !c.archived_at && c.unread_count > 0).length,
     [contacts],
-  );
-
-  // Com o gate fechado o recorte não é confiável — número exibido seria invenção.
-  const fmtCount = useCallback(
-    (n: number) => (filterGate === "ok" ? String(n) : "—"),
-    [filterGate],
   );
 
   const shouldVirtualize = filteredContacts.length > VIRTUALIZE_THRESHOLD;
@@ -337,9 +320,7 @@ export function ConversationList({
           allTags={allTags}
         />
 
-        <p className="mt-2 text-xs text-muted-foreground">
-          Total: {fmtCount(filteredContacts.length)}
-        </p>
+        <p className="mt-2 text-xs text-muted-foreground">Total: {filteredContacts.length}</p>
 
         <div className="flex mt-2 bg-muted rounded-md p-0.5">
           <button
@@ -352,7 +333,7 @@ export function ConversationList({
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            Ativas ({fmtCount(activeCount)})
+            Ativas ({activeCount})
           </button>
           <button
             type="button"
@@ -364,7 +345,7 @@ export function ConversationList({
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            Arquivadas ({fmtCount(archivedCount)})
+            Arquivadas ({archivedCount})
           </button>
         </div>
       </div>
@@ -372,15 +353,10 @@ export function ConversationList({
 
       {/* ─── Lista ──────────────────────────────────────────────────────────── */}
       <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0">
-        {isLoading || filterGate === "pending" ? (
-          // `pending` conta como carregando: sem o enriquecimento a lista filtrada
-          // seria vazia por falta de dado, e "Total: 0" piscaria a cada troca de
-          // chip (queryKey nova = cache frio) em qualquer org.
+        {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
-        ) : filterGate === "error" ? (
-          <InboxEnrichmentNotice onRetry={onRetryEnrichment} onClear={clearFilter} />
         ) : filteredContacts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
             {activeTab === "archived" ? (

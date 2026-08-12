@@ -98,7 +98,6 @@ Ver `./index.ts` para a superfície completa. Estável.
 ### Components — shared (configuração + dispatch)
 - `PipeSettingsDialog`, `ManagePipelineStagesContent`, `ManagePipelineStagesModal`
 - `PipeDispatchRulesSection`, `PipeDistributionSection`
-- `MetricsPeriodSelector`
 - `GhostLeadsBanner`
 
 ### Components — custom pipelines
@@ -120,9 +119,10 @@ Ver `./index.ts` para a superfície completa. Estável.
 - `@/modules/pipelines/pages/PipePropostas`
 - `@/modules/pipelines/pages/CustomPipeline`
 - `@/modules/pipelines/pages/FunisHub`
-- `@/modules/pipelines/pages/Negocios`
 
 Pages NÃO são exportadas via `index.ts` — `App.tsx` faz deep-import para preservar code-splitting via `React.lazy()` + `lazyRetry`.
+
+> `Negocios` **não existe mais**: a rota `/negocios` e a página saíram do `App.tsx` (ADR-0023 decisão 5 — eram o único leitor de `deals.pipeline_id`). O Negócio é lido pelos próprios funis e pela aba de Leads.
 
 ### Types públicos
 - Legacy (pipe_*): `PipeWhatsapp{,Insert,Update,Status}`, `PipeConfirmacao{,Insert,Update,Status,Row}`, `PipeProposta{,Insert,Update,Row}`, `PipePropostasStatus`, `PipePropostaItem{,Insert}`
@@ -175,7 +175,6 @@ Out-of-scope (movem em outras slices):
 
 - **Dual model unificação**: hooks `usePipe*` (views) vs `usePipeline*` (entries). Cleanup futuro depois de migrar consumidores 100% para `pipeline_entries`.
 - **`statusColumns`** existe em 3 hooks com valores divergentes — manter por compat até refactor.
-- **`Negocios.tsx` vs `PipePropostas.tsx`** — auditar atividade (continua pendente).
 
 ## Slice de migração
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ElementType, type ReactNode } from "react";
 import {
   Popover,
   PopoverContent,
@@ -28,6 +28,17 @@ interface SavedViewsDropdownProps<T extends Record<string, unknown>> {
   onApplyFilters: (filters: T) => void;
   activeViewId: string | null;
   onActiveViewChange: (viewId: string | null) => void;
+  /**
+   * Bloco opcional no topo do popover, acima das views salvas. Existe pro
+   * "Views" do funil abrigar o alternador Kanban/Lista/Analytics (decisão 1 do
+   * protótipo `.specs/mockups/funis-redesign/`): o Modelo 1 tirou o alternador
+   * da faixa, e sem um lar ele deixaria a visão Lista — a única do mobile —
+   * inalcançável no desktop. Recebe `close` porque quem renderiza o slot não
+   * enxerga o estado do popover.
+   */
+  header?: (ctx: { close: () => void }) => ReactNode;
+  /** Ícone do gatilho. Default `Bookmark`. */
+  triggerIcon?: ElementType;
 }
 
 export function SavedViewsDropdown<T extends Record<string, unknown>>({
@@ -37,6 +48,8 @@ export function SavedViewsDropdown<T extends Record<string, unknown>>({
   onApplyFilters,
   activeViewId,
   onActiveViewChange,
+  header,
+  triggerIcon: TriggerIcon = Bookmark,
 }: SavedViewsDropdownProps<T>) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -104,12 +117,19 @@ export function SavedViewsDropdown<T extends Record<string, unknown>>({
               activeView && "border-primary/50 bg-primary/5 text-primary"
             )}
           >
-            <Bookmark className="w-4 h-4" />
+            <TriggerIcon className="w-4 h-4" />
             {activeView ? activeView.name : "Views"}
             <ChevronDown className="w-3 h-3 opacity-50" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[280px] p-0" align="start">
+          {header && (
+            <>
+              {header({ close: () => setPopoverOpen(false) })}
+              <Separator />
+            </>
+          )}
+
           {filtersChanged && !activeView && (
             <>
               <div className="p-2">

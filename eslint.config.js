@@ -14,6 +14,18 @@ export default tseslint.config(
       // Editar manualmente é proibido (ver CLAUDE.md). Parsing errors aqui
       // indicam drift de versão CLI ou schema; corrigir é regen, não fix manual.
       "src/integrations/supabase/types.ts",
+      // Worktrees de agente: CÓPIAS do repo dentro do repo, já ignoradas pelo
+      // git (`.gitignore:99`). O flat config do ESLint 9 **não** ignora
+      // dot-directories por padrão — o comportamento antigo era do `.eslintrc` —,
+      // então cada worktree era lintado como se fosse código novo.
+      //
+      // Custo real, medido em 2026-08-04: um worktree criado durante a sessão
+      // acrescentou **753 warnings** ao `lint:ratchet`, todos atribuídos à branch
+      // que por acaso estava aberta. Os worktrees mais antigos não acusavam
+      // porque já estavam dentro do baseline — ou seja, o baseline carrega lint
+      // de arquivos que nem versionados são, e qualquer worktree novo reprova o
+      // gate de quem não tem nada a ver com ele.
+      ".claude/worktrees/",
     ],
   },
   {

@@ -25,7 +25,7 @@
 --      linhas de produção — 8 a 10, dependendo de quantas o webhook fechou.
 --   2. `voip-sweep-stuck-calls` (pg_cron, migration 20270730000007) —
 --      `end_reason = 'no_terminal_event'`. 4 linhas de produção.
---   3. `fn_voip_apply_vps_event` (webhook da VPS, migration 20270730000010).
+--   3. `fn_voip_apply_vps_event` (webhook da VPS, migration 20270730000011).
 --      VIVA, mas ainda quase muda: só 2 das 14 chamadas têm `last_seq > 0` (ou
 --      seja, receberam evento da VPS), então ela fechou entre 0 e 2 delas.
 --      (`voip_webhook_events` não serve de contagem histórica: as linhas
@@ -106,7 +106,7 @@
 -- ------------
 -- A mesma chamada É projetada mais de uma vez, por desenho, e não por acidente:
 --   - o varredor fecha com `no_terminal_event` e o webhook chega depois com a
---     causa verdadeira (`sweeper_reason_corrected`, 20270730000010);
+--     causa verdadeira (`sweeper_reason_corrected`, 20270730000011);
 --   - a faixa tardia do S11 preenche `connected_at` DEPOIS do fim — o que
 --     transforma uma chamada registrada como não atendida na conversa que ela
 --     de fato foi;
@@ -214,7 +214,7 @@ BEGIN
   v_duration := CASE
     WHEN v_answered AND v_call.ended_at IS NOT NULL
       -- GREATEST(0, ...) é guarda, não caminho: as duas escritas de
-      -- 20270730000010 já impedem `ended_at < connected_at` (GREATEST no fim,
+      -- 20270730000011 já impedem `ended_at < connected_at` (GREATEST no fim,
       -- LEAST no carimbo tardio). Fica porque duração negativa numa média é
       -- pior defeito que um zero grudado, e relógios de terceiro já produziram
       -- -00:00:01.999797 nesta base.

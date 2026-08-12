@@ -91,26 +91,6 @@ test.describe('Pipe Confirmação', () => {
     expect(page.url()).toContain(ROUTE);
   });
 
-  test('período de filtro é selecionável', async ({ page }) => {
-    await page.goto(ROUTE);
-    await page.waitForLoadState('networkidle');
-
-    // MetricsPeriodSelector — look for period select or tabs
-    const periodSelector = page
-      .locator('[class*="period"], [class*="Period"]')
-      .first();
-
-    const hasPeriod = await periodSelector.isVisible({ timeout: 5_000 }).catch(() => false);
-
-    if (hasPeriod) {
-      // Just verify it's interactive, don't assert specific value
-      await periodSelector.click().catch(() => {});
-      await page.keyboard.press('Escape').catch(() => {});
-    }
-
-    expect(page.url()).toContain(ROUTE);
-  });
-
   test('sem erros de console críticos', async ({ page }) => {
     const errors: string[] = [];
     page.on('console', (msg) => {

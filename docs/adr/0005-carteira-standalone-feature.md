@@ -4,7 +4,11 @@ Date: 2026-06-07
 
 ## Status
 
-Accepted
+Superseded by [ADR-0023](./0023-negocio-is-the-funnel-unit.md) (2026-08-01).
+
+The half that survives: the legacy Upsell kanban is dead, and post-sale is a relationship managed by segment rather than a stage-progression board. The half that does not: Carteira is **not** a standalone feature beside Leads — it is a facet of the Lead, and clients and leads are one population read in one place.
+
+Also corrected there: this ADR calls `handle_proposta_vendida` "the only working entry" into Carteira. Measured in production 2026-07-30 — that function has **zero triggers attached and zero callers**; all 739 rows came from ERP sync. The entry it describes never ran.
 
 ## Context
 

@@ -1,9 +1,8 @@
+import { useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useUpsellCampanhas, useUpdateUpsellCampanha } from "@/modules/carteira/hooks/useUpsellCampanhas";
 import { LeadCard } from "@/modules/leads";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
-import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { NewOrderModal } from "@/modules/carteira/components/client/NewOrderModal";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import { useUpdateLead } from "@/modules/leads";
@@ -34,7 +33,7 @@ function UpsellCampanhasKanbanInner({ searchQuery, filterStatus, filterResponsib
   const updateCampanha = useUpdateUpsellCampanha();
   const createAcaoDoDia = useCreateAcaoDoDia();
   const updateLead = useUpdateLead();
-  const { openLead } = useLeadSheet();
+  const navigate = useNavigate();
 
   const [selectedCampanha, setSelectedCampanha] = useState<any>(null);
   const [quickSaleOpen, setQuickSaleOpen] = useState(false);
@@ -219,7 +218,7 @@ function UpsellCampanhasKanbanInner({ searchQuery, filterStatus, filterResponsib
                       onClick={() => {
                         setSelectedCampanha(campanha);
                         const leadId = (campanha.client as any)?.lead_id;
-                        if (leadId) openLead(leadId);
+                        if (leadId) navigate(`/leads?lead=${leadId}`);
                       }}
                       onQuickAction={(title) => {
                         createAcaoDoDia.mutate({ title, lead_id: (campanha.client as any)?.lead_id || undefined });
@@ -255,10 +254,6 @@ function UpsellCampanhasKanbanInner({ searchQuery, filterStatus, filterResponsib
 
 export function UpsellCampanhasKanban(props: UpsellCampanhasKanbanProps) {
   return (
-    <LeadPanelProvider>
-      <LeadPanelLayout panel={<LeadDetailSheet />}>
         <UpsellCampanhasKanbanInner {...props} />
-      </LeadPanelLayout>
-    </LeadPanelProvider>
   );
 }

@@ -16,6 +16,7 @@ import { resolveActiveWindow, computeNextWindowStart as computeNextWindowStartLo
 import { logRuntime } from "./logger.ts";
 import { validateExternalUrl } from "./url-validator.ts";
 import { fetchWithTimeout } from "./fetch-utils.ts";
+import { getPipeEntry } from "./pipeline-adapter.ts";
 import { personalizationName } from "./lead-name.ts";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -1016,6 +1017,10 @@ async function resolveWebhookBody(supabase: SupabaseClient, leadId: string, temp
 
   if (!lead) return template;
 
+  // ADR-0023 §10: `{estagio}` é a etapa do NEGÓCIO. Ver a nota longa em
+  // `action-handlers/whatsapp-helpers.ts` — a coluna espelho congela no MOVE.
+  const waEntry = await getPipeEntry(supabase, leadId, lead.organization_id as string, "whatsapp");
+
   let result = template;
   const vars: Record<string, string> = {
     nome: personalizationName(lead.name),
@@ -1025,7 +1030,7 @@ async function resolveWebhookBody(supabase: SupabaseClient, leadId: string, temp
     lead_id: lead.id || "",
     score: String(lead.qualification_score ?? ""),
     rating: String(lead.rating ?? ""),
-    estagio: lead.pipe_whatsapp || "",
+    estagio: waEntry?.stage_key || "",
   };
 
   for (const [key, val] of Object.entries(vars)) {

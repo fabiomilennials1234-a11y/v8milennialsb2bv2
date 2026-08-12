@@ -153,7 +153,7 @@ const REJECTION_ACTION: Record<WebhookRejection, string> = {
 
 /**
  * Código da RPC → status HTTP. Ver o contrato em
- * `supabase/migrations/20270730000010_voip_webhook_ingest.sql`.
+ * `supabase/migrations/20270730000011_voip_webhook_ingest.sql`.
  *
  * Código FORA desta tabela é deriva de contrato entre a migration e esta
  * função, e vira 500 — nunca um 200 silencioso sobre um desfecho que ninguém

@@ -10,17 +10,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
 
-// Mock do supabase client antes de importar o helper.
-// A cadeia termina em `.limit()` — `fetchConversationMessages` pede
-// `order(timestamp desc).order(created_at desc).limit(THREAD_MESSAGE_LIMIT)`,
-// porque sem limite explícito o PostgREST corta em `max_rows` sozinho.
+// Mock do supabase client antes de importar o helper
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: vi.fn(() => ({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({
+      order: vi.fn().mockResolvedValue({
         data: [{ id: "m1", phone_number: "5511999999999" }],
         error: null,
       }),

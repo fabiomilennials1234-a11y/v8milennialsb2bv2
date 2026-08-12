@@ -23,7 +23,6 @@ import {
   BarChart2,
   Workflow,
   TrendingUp,
-  Wallet,
   Lock,
   Camera,
   Loader2,
@@ -134,7 +133,10 @@ const primaryNavItems: NavItemWithChildren[] = [
   { label: "Disparos", icon: Send, path: "/disparos" },
   // { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
-  { label: "Carteira", icon: Wallet, path: "/upsell" },
+  // Leads sobe do "Mais" pra barra principal: é a fonte de verdade do lead.
+  // Substitui "Combustível" (mesma rota) e ocupa o lugar de "Carteira", que
+  // passa a ser dado do lead (cluster "Dados" da lista), não módulo próprio.
+  { label: "Leads", icon: Fuel, path: "/leads" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Ranking", icon: Trophy, path: "/performance" },
@@ -143,7 +145,6 @@ const primaryNavItems: NavItemWithChildren[] = [
 // Secondary items — go inside "Mais" overflow menu
 const moreNavItems: NavItemWithChildren[] = [
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
-  { label: "Combustível", icon: Fuel, path: "/leads" },
   // Comissões desceu pro "Mais" — Disparos tomou seu lugar na top bar (#904)
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Checklists", icon: ListChecks, path: "/checklists" },
@@ -162,8 +163,7 @@ const allNavItems: NavItemWithChildren[] = [
   { label: "Disparos", icon: Send, path: "/disparos" },
   // { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
-  { label: "Carteira", icon: Wallet, path: "/upsell" },
-  { label: "Combustível", icon: Fuel, path: "/leads" },
+  { label: "Leads", icon: Fuel, path: "/leads" },
   { label: "Ranking", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
@@ -230,7 +230,6 @@ const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/automacoes": "workflows.view",
   "/equipe": "team.view",
   "/produtos": "products.view",
-  "/negocios": "deals.view",
   "/configuracoes": "settings.view",
 };
 
@@ -262,7 +261,8 @@ export function TopNavigation() {
   // Build dynamic funnel sub-items from display config
   const dynamicFunisChildren: NavItem[] = (displayConfig ?? [])
     .filter((c) => c.is_visible)
-    // Carteira (upsell) agora é item próprio na top bar — não entra no dropdown de Funis
+    // Carteira (upsell) saiu da navegação: virou dado do lead na aba Leads.
+    // A rota /upsell segue viva, só não tem mais porta no menu.
     .filter((c) => c.pipe_type !== "upsell")
     // Agendamentos colapsado em Oportunidades quando o merge está ON (ADR-0004)
     .filter((c) => !(c.pipe_type === "confirmacao" && hasFeature("merged_opportunity_funnel")))

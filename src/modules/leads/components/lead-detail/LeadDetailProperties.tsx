@@ -2,6 +2,7 @@ import { memo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PropertyGroup } from "./PropertyGroup";
+import { LeadPurchaseStats } from "./LeadPurchaseStats";
 import { InlineField } from "./InlineField";
 import { LeadChecklistSection } from "../leads/LeadChecklistSection";
 import { useResponsibleMembers } from "@/modules/identity";
@@ -134,6 +135,11 @@ export const LeadDetailProperties = memo(function LeadDetailProperties({
         <ResponsibleSelect field="pre_sale_responsible_id" label="Pré-Venda" />
         <ResponsibleSelect field="sale_responsible_id" label="Venda" />
       </PropertyGroup>
+
+      {/* Vem antes de "Detalhes" de propósito: quando existe histórico de compra,
+          ele é o fato mais pesado sobre a pessoa. E some sozinho quando não há —
+          em 97% dos leads este bloco não renderiza (ADR-0024 decisão 1). */}
+      <LeadPurchaseStats leadId={lead.id} />
 
       <PropertyGroup label="Detalhes">
         <InlineField

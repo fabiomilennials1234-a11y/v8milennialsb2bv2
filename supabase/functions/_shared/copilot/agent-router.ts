@@ -72,21 +72,25 @@ export class AgentRouter {
 
   private async routeByLead(leadId: string): Promise<{ agent: Record<string, unknown> | null; leadOrigin?: string }> {
     try {
-      const [leadRes, upsellRes, confirmacaoRes, propostasRes, campanhaRes] = await Promise.all([
-        this.supabase.from("leads").select("pipe_whatsapp, origin, segment").eq("id", leadId).maybeSingle(),
+      // ADR-0023 §10: o funil WhatsApp entra pelo NEGÓCIO (`pipeline_entries`), igual
+      // confirmação e propostas. `leads.pipe_whatsapp` é espelho legado e não roteia mais.
+      const [leadRes, upsellRes, whatsappRes, confirmacaoRes, propostasRes, campanhaRes] = await Promise.all([
+        this.supabase.from("leads").select("origin, segment").eq("id", leadId).maybeSingle(),
         this.supabase.from("upsell_clients").select("tipo_cliente_tempo, gestao_stage").eq("lead_id", leadId).maybeSingle(),
+        getPipeEntry(this.supabase, leadId, this.organizationId, "whatsapp"),
         getPipeEntry(this.supabase, leadId, this.organizationId, "confirmacao"),
         getPipeEntry(this.supabase, leadId, this.organizationId, "propostas"),
         this.supabase.from("campanha_leads").select("stage_id, campanha_stages(name)").eq("lead_id", leadId).limit(1).maybeSingle(),
       ]);
 
-      const leadRow = leadRes.data as { pipe_whatsapp?: string; origin?: string; segment?: string } | null;
+      const leadRow = leadRes.data as { origin?: string; segment?: string } | null;
       const upsellRow = upsellRes.data as { tipo_cliente_tempo?: string; gestao_stage?: string } | null;
+      const whatsappRow = whatsappRes ? { status: whatsappRes.stage_key } : null;
       const confirmacaoRow = confirmacaoRes ? { status: confirmacaoRes.stage_key } : null;
       const propostasRow = propostasRes ? { status: propostasRes.stage_key } : null;
       const campanhaRow = campanhaRes.data as { campanha_stages?: { name?: string } } | null;
 
-      if (!leadRow && !upsellRow && !confirmacaoRow && !propostasRow && !campanhaRow) {
+      if (!leadRow && !upsellRow && !whatsappRow && !confirmacaoRow && !propostasRow && !campanhaRow) {
         // `leadRow` é provadamente `null` dentro deste `if` — o `leadRow?.origin`
         // que estava aqui SEMPRE valia `undefined`, e era exatamente isso que o
         // compilador dizia ao reclamar de `never` (o encadeamento opcional tira
@@ -96,7 +100,7 @@ export class AgentRouter {
       }
 
       const allStages: string[] = [];
-      if (leadRow?.pipe_whatsapp) allStages.push(leadRow.pipe_whatsapp);
+      if (whatsappRow?.status) allStages.push(whatsappRow.status);
       if (upsellRow?.tipo_cliente_tempo) allStages.push(upsellRow.tipo_cliente_tempo);
       if (upsellRow?.gestao_stage) allStages.push(upsellRow.gestao_stage);
       if (confirmacaoRow?.status) allStages.push(confirmacaoRow.status);

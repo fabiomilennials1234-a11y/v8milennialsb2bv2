@@ -37,25 +37,16 @@
  * exatamente o caso da única linha de `call_logs` que existe hoje em prod.
  *
  * ── Janela ──
- * Espelha a janela das mensagens (`whatsappMessagesQuery.ts`): DESC +
- * `.limit()` + reverse, ancorada no fim da conversa. Dar às ligações um recorte
- * de direção DIFERENTE do das mensagens abriria buraco (ligação sem a mensagem
- * vizinha) ou ligação órfã antes da primeira mensagem carregada.
- *
- * A versão anterior deste comentário dizia "sem `.limit()`, de propósito,
- * porque a thread inteira vem num fetch só". Isso era falso em prod: o
- * PostgREST corta em `max_rows = 1000` sem devolver erro, e com ordem
- * ASCENDENTE o que sobrava eram as linhas mais ANTIGAS. Limite implícito não é
- * "sem limite" — é limite que ninguém vê.
- *
- * As duas janelas ainda não são o MESMO recorte (tabelas e volumes distintos);
- * hoje isso não morde porque `call_logs` é minúsculo. Quando a thread virar
- * paginada, o certo é recortar as ligações pelo intervalo da página de
- * mensagens — e aí este comentário é o aviso.
+ * Sem `.limit()`, de propósito. A query de mensagens
+ * (`whatsappMessagesQuery.ts`) também não tem: ela carrega a thread inteira num
+ * único fetch, sem paginação. Dar às ligações QUALQUER recorte diferente do
+ * das mensagens abriria buraco (ligação sem a mensagem vizinha) ou duplicata na
+ * rolagem. As duas fontes cobrem a conversa inteira, então o merge cronológico
+ * é exato e não tem fronteira onde errar. Se um dia a thread virar paginada,
+ * este comentário é o aviso: as duas janelas têm que passar a andar juntas.
  */
 import { supabase } from "@/integrations/supabase/client";
 import { normalizePhone } from "@/lib/normalizePhone";
-import { THREAD_MESSAGE_LIMIT } from "./whatsappMessagesQuery";
 
 /**
  * Colunas que a peça da conversa desenha.
@@ -186,12 +177,10 @@ export async function fetchConversationCalls({
     .select(CONVERSATION_CALL_COLUMNS)
     .eq("organization_id", organizationId)
     .or(identities.join(","))
-    // DESC + limit: mesma direção da janela das mensagens. Ver docblock.
-    .order("started_at", { ascending: false })
-    .limit(THREAD_MESSAGE_LIMIT);
+    .order("started_at", { ascending: true });
 
   if (error) throw error;
-  return ((data ?? []) as unknown as ConversationCall[]).reverse();
+  return (data ?? []) as unknown as ConversationCall[];
 }
 
 /** Uma ligação só "aconteceu" de verdade quando foi atendida. */

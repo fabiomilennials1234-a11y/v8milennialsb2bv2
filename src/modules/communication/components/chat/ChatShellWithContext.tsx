@@ -64,7 +64,6 @@ import { useLeadInboxMeta } from "@/modules/communication/hooks/chat/useLeadInbo
 import { useInboxFunnelOptions } from "@/modules/communication/hooks/chat/useInboxFunnelOptions";
 import { useInboxFilterState } from "@/modules/communication/hooks/chat/useInboxFilterState";
 import { toServerFilter } from "@/modules/communication/lib/inboxFilterServer";
-import { inboxFilterGate } from "@/modules/communication/lib/inboxEnrichment";
 import {
   useArchiveConversation,
   useUnarchiveConversation,
@@ -493,14 +492,10 @@ export function ChatShellWithContext() {
   );
 
   // ── Contatos ────────────────────────────────────────────────────────────────
-  // `isError` importa porque a etiqueta é enriquecida DENTRO desta query: com
-  // filtro de etiqueta ativo o hook deixa a falha subir em vez de devolver
-  // `tags: []` (que o filtro trataria como verdade). Ver `useWhatsAppContacts`.
-  const {
-    data: contacts = [],
-    isLoading: contactsLoading,
-    isError: contactsError,
-  } = useWhatsAppContacts(selectedInstanceId, serverFilter);
+  const { data: contacts = [], isLoading: contactsLoading } = useWhatsAppContacts(
+    selectedInstanceId,
+    serverFilter,
+  );
 
   // ── Conversa selecionada ────────────────────────────────────────────────────
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
@@ -584,23 +579,15 @@ export function ChatShellWithContext() {
   useWhatsAppMessagesRealtime(selectedPhone, selectedInstanceId);
 
   // ── Waiting human — leads com state WAITING_HUMAN em conversations ──────────
-  // Este Set é a fonte do chip "Pediu atendente". Descartar o `error` (como fazia
-  // antes) devolvia um Set vazio indistinguível de "ninguém na fila" — e aí
-  // `matchesNeedsHuman` reprovava a página inteira e a tela dizia "Total: 0" como
-  // se fosse resposta. O erro precisa subir pro gate poder enxergá-lo.
-  const {
-    data: waitingHumanLeadIds = new Set<string>(),
-    isError: waitingHumanError,
-  } = useQuery({
+  const { data: waitingHumanLeadIds = new Set<string>() } = useQuery({
     queryKey: ["waiting-human-leads", organizationId],
     queryFn: async () => {
       if (!organizationId) return new Set<string>();
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("conversations")
         .select("lead_id")
         .eq("organization_id", organizationId)
         .eq("state", "WAITING_HUMAN");
-      if (error) throw error;
       return new Set((data ?? []).map((c) => c.lead_id as string));
     },
     enabled: !!organizationId,
@@ -630,13 +617,10 @@ export function ChatShellWithContext() {
     [responsibleMembers],
   );
   const leadIds = useMemo(
-    () => [...new Set(contacts.map((c) => c.lead_id).filter((id): id is string => !!id))],
+    () => contacts.map((c) => c.lead_id).filter((id): id is string => !!id),
     [contacts],
   );
-  const { map: leadResponsibleMap, status: vendorStatus } = useLeadResponsibleMap(
-    leadIds,
-    organizationId,
-  );
+  const leadResponsibleMap = useLeadResponsibleMap(leadIds, organizationId);
   const resolveContactVendorId = useCallback(
     (c: ChatContact): string | null =>
       c.lead_id ? leadResponsibleMap.get(c.lead_id) ?? null : null,
@@ -644,7 +628,7 @@ export function ChatShellWithContext() {
   );
 
   // ── Enrichment do inbox: funis (+ etapa) e qualificação por lead ─────────────
-  const { map: inboxMeta, status: metaStatus } = useLeadInboxMeta(leadIds, organizationId);
+  const inboxMeta = useLeadInboxMeta(leadIds, organizationId);
   const funnelOptions = useInboxFunnelOptions();
   const enrichedContacts = useMemo(
     () =>
@@ -654,41 +638,6 @@ export function ChatShellWithContext() {
       }),
     [contacts, inboxMeta],
   );
-
-  // O engine do filtro não sabe distinguir "esse lead não está em funil nenhum"
-  // de "o enriquecimento não chegou" — nos dois casos `funnels` é []. O gate faz
-  // essa distinção FORA do engine, pra UI não exibir uma lista vazia como se
-  // fosse resposta (incidente Goletric Pinheiros, 2026-07-31).
-  // Etiqueta e "pediu atendente" não têm hook de enriquecimento próprio: a
-  // primeira vive dentro da query de contatos, a segunda na query de handoff
-  // aqui em cima. Sem `pending` porque nos dois casos o carregamento já é o
-  // `isLoading` que a lista respeita — o que faltava era o ramo de ERRO.
-  const filterGate = useMemo(
-    () =>
-      inboxFilterGate(
-        filter,
-        {
-          meta: metaStatus,
-          vendor: vendorStatus,
-          tags: contactsError ? "error" : "ready",
-          waitingHuman: waitingHumanError ? "error" : "ready",
-        },
-        { isMobile },
-      ),
-    [filter, metaStatus, vendorStatus, contactsError, waitingHumanError, isMobile],
-  );
-
-  // Precisa alcançar as QUATRO fontes que o gate lê. Invalidar só os dois hooks
-  // de lead deixaria "Tentar de novo" sem efeito justamente nas dimensões cujo
-  // dado mora nas outras duas queries.
-  const retryEnrichment = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ["lead-inbox-meta"] });
-    void queryClient.invalidateQueries({ queryKey: ["lead-responsible-map"] });
-    void queryClient.invalidateQueries({ queryKey: ["waiting-human-leads"] });
-    void queryClient.invalidateQueries({
-      queryKey: chatQueryKeys.contactsPrefix(organizationId, selectedInstanceId),
-    });
-  }, [queryClient, organizationId, selectedInstanceId]);
 
   // ── Archive / Delete / Tags ─────────────────────────────────────────────────
   const archiveConversation = useArchiveConversation();
@@ -809,8 +758,6 @@ export function ChatShellWithContext() {
             resolveContactVendorId={resolveContactVendorId}
             currentTeamMemberId={teamMember?.id ?? null}
             canSeeUnassigned={isAdmin}
-            filterGate={filterGate}
-            onRetryEnrichment={retryEnrichment}
           />
         }
         view={

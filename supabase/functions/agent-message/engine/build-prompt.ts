@@ -611,7 +611,7 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
     if (leadData.urgency) sections.push(`- Urgência: ${leadData.urgency}`);
     if (leadData.rating) sections.push(`- Rating/Score: ${leadData.rating}/10`);
     if (leadData.origin) sections.push(`- Origem: ${leadData.origin}`);
-    if (leadData.pipe_whatsapp) sections.push(`- Etapa no funil WhatsApp: ${leadData.pipe_whatsapp}`);
+    if (leadData.whatsapp_status) sections.push(`- Etapa no funil WhatsApp: ${leadData.whatsapp_status}`);
     if (leadData.confirmacao_status) {
       let confirmacaoInfo = `- Etapa no funil Confirmação: ${leadData.confirmacao_status}`;
       if (leadData.confirmacao_meeting_date)
@@ -769,8 +769,8 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
       campanha: "Campanhas",
     };
     const currentStages: Array<{ pipe: string; stage: string }> = [];
-    if (leadData?.pipe_whatsapp?.trim())
-      currentStages.push({ pipe: "whatsapp", stage: leadData.pipe_whatsapp.trim() });
+    if (leadData?.whatsapp_status?.trim())
+      currentStages.push({ pipe: "whatsapp", stage: leadData.whatsapp_status.trim() });
     if (leadData?.confirmacao_status?.trim())
       currentStages.push({ pipe: "confirmacao", stage: leadData.confirmacao_status.trim() });
     if (leadData?.propostas_status?.trim())

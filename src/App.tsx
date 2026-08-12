@@ -67,7 +67,6 @@ const NovoDisparo = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages
 const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));
 // Marketing and Analytics are unified in the Analytics tab — see TabAnalyticsV2.tsx
 const Produtos = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Produtos")));
-const Negocios = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Negocios")));
 const Copilot = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/Copilot")));
 const CopilotMetrics = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/CopilotMetrics")));
 const ChatWhatsApp = lazy(() => lazyRetry(() => import("@/modules/communication/pages/ChatWhatsApp")));
@@ -519,16 +518,6 @@ function AppRoutes() {
             <OrgFeaturesProvider>
               <FeatureRoute feature="tv_dashboard"><TVDashboard /></FeatureRoute>
             </OrgFeaturesProvider>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/negocios"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <FeatureRoute feature="deals"><Negocios /></FeatureRoute>
-            </LayoutWrapper>
           </ProtectedRoute>
         }
       />

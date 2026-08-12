@@ -21,7 +21,6 @@ export type FeatureKey =
   | "analytics"
   | "tv_dashboard"
   | "products"
-  | "deals"
   // Campaign types (legacy — deprecated, kept for backward compat)
   | "campaigns_manual"
   | "campaigns_semi"
@@ -86,7 +85,7 @@ export const FEATURES: FeatureMeta[] = [
   { key: "chat", label: "Chat", description: "Chat e mensagens WhatsApp", icon: "Zap", category: "modules", sidebarPath: "/chat" },
   { key: "funnels", label: "Funis", description: "Pipelines de qualificação, confirmação e propostas", icon: "GitBranch", category: "modules", sidebarPath: "/funis" },
   { key: "review", label: "Revisão", description: "Revisão e follow-ups", icon: "Wrench", category: "modules", sidebarPath: "/follow-ups" },
-  { key: "leads", label: "Combustível", description: "Gestão de leads e contatos", icon: "Fuel", category: "modules", sidebarPath: "/leads" },
+  { key: "leads", label: "Leads", description: "Fonte de verdade do lead — ficha, contatos, negócios e carteira", icon: "Fuel", category: "modules", sidebarPath: "/leads" },
   { key: "commissions", label: "Comissões", description: "Comissões e pagamentos", icon: "DollarSign", category: "modules", sidebarPath: "/comissoes" },
   { key: "performance", label: "Pódio", description: "Performance, ranking e metas", icon: "Trophy", category: "modules", sidebarPath: "/performance" },
   { key: "marketing", label: "Marketing", description: "Marketing e análises", icon: "BarChart2", category: "modules", sidebarPath: "/marketing" },
@@ -99,7 +98,6 @@ export const FEATURES: FeatureMeta[] = [
     sidebarPath: "/analytics",
   },
   { key: "products", label: "Produtos", description: "Catálogo de produtos", icon: "Package", category: "modules", sidebarPath: "/produtos" },
-  { key: "deals", label: "Negócios", description: "Gestão de negócios com produtos, probabilidade e forecast", icon: "Briefcase", category: "modules", sidebarPath: "/negocios" },
   { key: "tv_dashboard", label: "TV Dashboard", description: "Dashboard para exibição em TV", icon: "Tv", category: "modules", sidebarPath: "/tv" },
   { key: "copilot", label: "Copilot", description: "Agente de IA conversacional", icon: "Bot", category: "modules", sidebarPath: "/copilot" },
   { key: "automations", label: "Automações", description: "Workflows de automação com triggers, condições e ações", icon: "Workflow", category: "modules", sidebarPath: "/automacoes" },
@@ -192,9 +190,8 @@ export const ROUTE_FEATURE_MAP: Record<string, FeatureKey> = {
   "/performance": "performance",
   "/comissoes": "commissions",
   "/tv": "tv_dashboard",
-  // catálogo / negócios
+  // catálogo
   "/produtos": "products",
-  "/negocios": "deals",
   // carteira
   "/upsell": "carteira",
   "/carteira/:clientId": "carteira",

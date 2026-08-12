@@ -21,7 +21,8 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { trackEvent } from "../_shared/track.ts";
-import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
+import { upsertPipeEntryDetailed } from "../_shared/pipeline-adapter.ts";
+import { isDealManualOnly } from "../_shared/deal-policy.ts";
 import { unauthorizedResponse } from "../_shared/auth.ts";
 
 // ─── Types ───────────────────────────────────────────────
@@ -93,6 +94,12 @@ interface ImportReport {
   rejected: number;
   /** Leads importados sem telefone e sem email (são criados, mas marcados como incompletos). */
   incomplete: number;
+  /**
+   * Leads importados que NÃO viraram card porque a org tem
+   * `feature_flags.deal_manual_only` (ADR-0023 decisão 3). Não são rejeitados —
+   * o lead está na base; só não existe Negócio até alguém clicar.
+   */
+  skippedDealManualOnly?: number;
   errors: { row: number; reason: string }[];
   distribution?: Record<string, number>;
 }
@@ -862,9 +869,14 @@ async function importToFunnel(
           await supabase.from("leads").update(leadUpdates).eq("id", leadId);
         }
 
-        // Insert into pipeline via adapter
+        // Insert into pipeline via adapter.
+        // ADR-0023 decisão 3: com `deal_manual_only` ligada o adapter devolve
+        // `skipped_deal_manual_only` e nenhum card nasce — o lead foi importado
+        // do mesmo jeito. Os três ramos contam o pulo em `skippedDealManualOnly`
+        // para o relatório do import não dizer "importado no funil X" sobre
+        // leads que não estão em funil nenhum.
         if (destination === "qualificacao") {
-          await upsertPipeEntry(supabase, {
+          const qualifResult = await upsertPipeEntryDetailed(supabase, {
             leadId,
             orgId: organizationId,
             slug: "whatsapp",
@@ -872,6 +884,9 @@ async function importToFunnel(
             metadata: { sdr_id: sdrIdForLead, responsible_id: sdrIdForLead },
             assignedTo: sdrIdForLead,
           });
+          if (qualifResult.status === "skipped_deal_manual_only") {
+            report.skippedDealManualOnly = (report.skippedDealManualOnly ?? 0) + 1;
+          }
         } else if (destination === "propostas") {
           const productNamesRaw = (lead.product_name || "").trim();
           const productNames = productNamesRaw
@@ -896,7 +911,7 @@ async function importToFunnel(
           };
           if (metricsPeriodAt != null) propostaMetadata.metrics_period_at = metricsPeriodAt;
 
-          const propostaEntryId = await upsertPipeEntry(supabase, {
+          const propostaResult = await upsertPipeEntryDetailed(supabase, {
             leadId,
             orgId: organizationId,
             slug: "propostas",
@@ -906,11 +921,20 @@ async function importToFunnel(
             notes: lead.pipe_notes ?? null,
           });
 
-          if (!propostaEntryId) {
+          // ADR-0023 decisão 3: sem card, não há a que pendurar os itens da
+          // proposta. A linha NÃO é rejeitada — o lead entrou; o Negócio é que
+          // não nasce por import nesta org.
+          if (propostaResult.status === "skipped_deal_manual_only") {
+            report.skippedDealManualOnly = (report.skippedDealManualOnly ?? 0) + 1;
+            continue;
+          }
+
+          if (propostaResult.status !== "created" && propostaResult.status !== "updated") {
             report.rejected++;
             report.errors.push({ row: rowIndex + 1, reason: "Erro ao inserir proposta via pipeline_entries" });
             continue;
           }
+          const propostaEntryId = propostaResult.entryId;
 
           // Insert product items (still uses pipe_proposta_items with entry id)
           if (productIds.length > 0) {
@@ -934,7 +958,7 @@ async function importToFunnel(
             meeting_date: lead.commitment_date ?? null,
           };
           if (metricsPeriodAt != null) confirmacaoMetadata.metrics_period_at = metricsPeriodAt;
-          await upsertPipeEntry(supabase, {
+          const confirmacaoResult = await upsertPipeEntryDetailed(supabase, {
             leadId,
             orgId: organizationId,
             slug: "confirmacao",
@@ -943,6 +967,9 @@ async function importToFunnel(
             assignedTo: closerIdForLead || sdrIdForLead,
             notes: lead.pipe_notes ?? null,
           });
+          if (confirmacaoResult.status === "skipped_deal_manual_only") {
+            report.skippedDealManualOnly = (report.skippedDealManualOnly ?? 0) + 1;
+          }
         }
 
         if (formattedPhone) processedPhones.add(formattedPhone);
@@ -984,6 +1011,12 @@ async function importToCustomPipeline(
 
   if (!pipelineId) throw new Error("custom_pipeline_id é obrigatório para importação em pipeline custom");
   if (!defaultStageId) throw new Error("custom_stage_id é obrigatório para importação em pipeline custom");
+
+  // ADR-0023 decisão 3 — lido UMA vez para o lote inteiro. `isDealManualOnly`
+  // cacheia por 30s, mas um import de milhares de linhas atravessa essa janela;
+  // resolver aqui garante que a planilha inteira use a MESMA política, em vez de
+  // metade dos leads virar card porque alguém mexeu na flag no meio do arquivo.
+  const dealManualOnly = await isDealManualOnly(supabase, organizationId as string);
 
   // Validate pipeline belongs to this organization and is active
   const { data: pipelineRow } = await supabase
@@ -1182,6 +1215,14 @@ async function importToCustomPipeline(
             .select("id")
             .single();
           pipeEntryError = updateError;
+        } else if (dealManualOnly) {
+          // ADR-0023 decisão 3: planilha é ingest. O lead é importado, o Negócio
+          // não nasce. Não é linha rejeitada — é a política da org, e contar como
+          // erro faria o relatório do import acusar falha onde não houve.
+          console.log(
+            `[import-leads] deal_manual_only ON em org=${organizationId}: lead=${leadId} importado SEM card no funil custom ${pipelineId}.`,
+          );
+          report.skippedDealManualOnly = (report.skippedDealManualOnly ?? 0) + 1;
         } else {
           const { error: insertError } = await supabase
             .from("custom_pipe_entries")

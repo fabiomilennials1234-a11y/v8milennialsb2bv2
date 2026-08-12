@@ -2,14 +2,29 @@
  * AI Action handlers — movimentação entre etapas/funis.
  *
  *  - executeAdvanceStage: muda lead de stage no pipe alvo
- *  - executeUpdatePipelineStage: atalho específico do pipe_whatsapp
+ *  - executeUpdatePipelineStage: atalho específico do funil WhatsApp
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { ActionResult } from "./types.ts";
-import { upsertPipeEntry } from "../pipeline-adapter.ts";
-import type { PipeSlug } from "../pipeline-adapter.ts";
+import { upsertPipeEntryDetailed } from "../pipeline-adapter.ts";
+import type { PipeSlug, UpsertPipeEntryResult } from "../pipeline-adapter.ts";
 import { assertPermission } from "../assert-permission.ts";
+
+/**
+ * ADR-0023 decisão 3: org com `deal_manual_only` não abre Negócio por
+ * automação. O agente pediu para mover um lead que não tem card — pular é a
+ * resposta certa, e devolvê-la como `success:false` faria o agente tentar de
+ * novo e pedir desculpa ao cliente por um comportamento pedido pelo cliente.
+ */
+function policySkip(result: UpsertPipeEntryResult, pipe: string): ActionResult | null {
+  if (result.status !== "skipped_deal_manual_only") return null;
+  return {
+    success: true,
+    message: `Lead não movido: esta organização abre negócio só por clique humano, e não há negócio aberto no funil ${pipe}.`,
+    data: { skipped: true, reason: "deal_manual_only" },
+  };
+}
 
 export interface MoveCardOptions {
   /** When provided, enforces move_pipe_record permission. Omit for AI/automation calls. */
@@ -79,22 +94,21 @@ export async function executeAdvanceStage(
     stageKeys.find((k: string) => k.toLowerCase() === normalizedStage) || normalizedStage;
 
   switch (target_pipe) {
-    case "whatsapp": {
-      const entryId = await upsertPipeEntry(supabase, {
-        leadId: lead_id, orgId: tenantId, slug: "whatsapp", stageKey: finalStage,
-      });
-      if (!entryId) {
-        return { success: false, error: `Falha ao atualizar pipeline_entries para whatsapp/${finalStage}` };
-      }
-      await supabase.from("leads").update({ pipe_whatsapp: finalStage }).eq("id", lead_id);
-      break;
-    }
+    case "whatsapp":
     case "confirmacao":
     case "propostas": {
-      const entryId = await upsertPipeEntry(supabase, {
+      // SCRUM-202: o espelho `leads.pipe_whatsapp` saiu do ramo `whatsapp`. A
+      // escrita em `pipeline_entries` logo abaixo roda em `pg_trigger_depth() = 1`
+      // e dispara `trg_sync_whatsapp_stage_to_lead`, que grava a mesma coluna com
+      // o mesmo valor. Escrever de novo era duplicação — e vira erro no DROP da
+      // fatia 3. Os três ramos colapsaram num só porque essa era a única
+      // diferença entre eles.
+      const result = await upsertPipeEntryDetailed(supabase, {
         leadId: lead_id, orgId: tenantId, slug: target_pipe as PipeSlug, stageKey: finalStage,
       });
-      if (!entryId) {
+      const skipped = policySkip(result, target_pipe);
+      if (skipped) return skipped;
+      if (result.status !== "created" && result.status !== "updated") {
         return { success: false, error: `Falha ao atualizar pipeline_entries para ${target_pipe}/${finalStage}` };
       }
       break;
@@ -158,13 +172,15 @@ export async function executeUpdatePipelineStage(
     }
   }
 
-  const entryId = await upsertPipeEntry(supabase, {
+  const result = await upsertPipeEntryDetailed(supabase, {
     leadId, orgId: organizationId, slug: "whatsapp", stageKey: newStage,
   });
-  if (!entryId) {
+  const skipped = policySkip(result, "whatsapp");
+  if (skipped) return skipped;
+  if (result.status !== "created" && result.status !== "updated") {
     return { success: false, error: `Falha ao atualizar pipeline_entries para whatsapp/${newStage}` };
   }
-  await supabase.from("leads").update({ pipe_whatsapp: newStage }).eq("id", leadId);
+  // Espelho `leads.pipe_whatsapp` removido — ver nota em executeAdvanceStage.
 
   return {
     success: true,

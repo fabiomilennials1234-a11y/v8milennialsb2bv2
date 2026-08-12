@@ -88,6 +88,10 @@ async function resolveVariables(
 
   if (!lead) return template;
 
+  // ADR-0023 §10: `{estagio}` é a etapa do NEGÓCIO. Ver a nota longa em
+  // `action-handlers/whatsapp-helpers.ts` — a coluna espelho congela no MOVE.
+  const waEntry = await getPipeEntry(supabase, leadId, lead.organization_id as string, "whatsapp");
+
   let result = template;
 
   // Standard variables
@@ -96,7 +100,7 @@ async function resolveVariables(
     empresa:    lead.company || "",
     email:      lead.email || "",
     telefone:   lead.phone || "",
-    estagio:    lead.pipe_whatsapp || "",
+    estagio:    waEntry?.stage_key || "",
     score:      String(lead.qualification_score ?? ""),
     rating:     String(lead.rating ?? ""),
     faturamento: String(lead.faturamento ?? ""),
