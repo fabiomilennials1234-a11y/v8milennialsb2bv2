@@ -50,8 +50,42 @@ export function useMetricsStudioPanel(): PanelPersistence {
   const query = useQuery({
     queryKey: ["metrics-studio-panel", organizationId, teamMemberId],
     queryFn: async (): Promise<StudioWindow[]> => {
-      const { data, error } = await supabase
-        .from("metrics_studio_panels")
+      // PONTE DE COMPATIBILIDADE — some junto com o apply em prod.
+      //
+      // `metrics_studio_panels` nasce na migration 20270811110000, que ainda
+      // NÃO está em produção. `src/integrations/supabase/types.ts` é gerado A
+      // PARTIR DE PROD (`supabase gen types`), então a tabela não existe para o
+      // cliente tipado. Sem assinatura conhecida, o TypeScript percorre a cadeia
+      // do PostgrestBuilder sem fim e estoura TS2589 "Type instantiation is
+      // excessively deep" — que reprovava o TSC ratchet do job `Lint & Build`
+      // e, com ele, os outros SEIS jobs (`needs: [quality]`) e os cinco PRs
+      // empilhados sobre esta branch.
+      //
+      // A chamada é ISOLADA numa variável e a resposta é lida como forma PLANA:
+      // não basta silenciar o erro na linha do `.from`, porque o tipo profundo
+      // continua fluindo para a anotação de retorno da queryFn (o erro reaparece
+      // ali, e foi o que aconteceu na primeira tentativa). Cortar aqui é o que
+      // impede a cadeia de sair deste bloco.
+      //
+      // Ordem correta (runbook): apply em prod → `gen types` apontando para
+      // PROD → apagar as duas pontes deste arquivo. Nunca gerar types a partir
+      // de branch efêmera: faltam a ela as versões órfãs de prod.
+      const tabela = (supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (c: string, v: string) => {
+              eq: (c: string, v: string) => {
+                maybeSingle: () => Promise<{
+                  data: { layout?: unknown } | null;
+                  error: { message: string; code?: string } | null;
+                }>;
+              };
+            };
+          };
+        };
+      }).from("metrics_studio_panels");
+
+      const { data, error } = await tabela
         .select("layout")
         .eq("organization_id", organizationId!)
         .eq("team_member_id", teamMemberId!)
@@ -81,6 +115,9 @@ export function useMetricsStudioPanel(): PanelPersistence {
     pendente.current = null;
 
     const { error } = await supabase
+      // PONTE DE COMPATIBILIDADE — ver o bloco na leitura, acima. Some no mesmo
+      // commit, depois do apply em prod e do `gen types`.
+      // @ts-expect-error tabela ausente de types.ts até o apply em produção
       .from("metrics_studio_panels")
       .upsert(
         { organization_id: organizationId, team_member_id: teamMemberId, layout },
