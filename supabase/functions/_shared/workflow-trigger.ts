@@ -158,11 +158,20 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
     // algum workflow candidato realmente configurou o filtro. Assim o inbound
     // da esmagadora maioria das orgs não paga query nenhuma.
     //
-    // Esta lista vive num contexto SEPARADO e nunca entra no `context` gravado
-    // em `workflow_executions`: aquele alimenta `computeTriggerDedupKey`, que
-    // faz hash do payload inteiro. Injetar os funis lá mudaria a chave de dedup
-    // (e, como os funis do lead mudam com o tempo, a mudaria de forma instável)
-    // sem nenhum ganho.
+    // Esta lista PRECISA entrar no `context` gravado em `workflow_executions`:
+    // `process-workflow-executions` relê o context persistido e roda
+    // `matchesTriggerConfig` DE NOVO antes de executar. Sem os funis ali, o
+    // fail-closed do matcher reprova tudo — o filtro vira no-op em 100% dos
+    // casos, com `error: "Skipped: trigger conditions not met"`.
+    //
+    // O medo de mexer na chave de dedup era legítimo (os funis do lead mudam
+    // com o tempo, e isso a tornaria instável) mas não se aplica: `context:` e
+    // `payload:` já são expressões separadas na montagem da execução, e só a
+    // primeira leva os funis. A chave sai byte-a-byte igual.
+    //
+    // `lead_replied` é o primeiro trigger cujo matcher depende de um insumo que
+    // não vem no evento — os outros só leem campos que o próprio evento traz,
+    // e para eles a revalidação sempre foi idempotente.
     let matchContext: Record<string, unknown> = context || {};
     if (triggerType === "lead_replied" && leadId && workflows.some((w) => usesPipelineFilter(w.trigger_config))) {
       matchContext = {
@@ -237,9 +246,14 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
         organization_id: organizationId,
         lead_id: leadId,
         status: "running",
-        context: { trigger_type: triggerType, ...(context || {}) },
+        // `matchContext` (e não `context`): carrega os funis do lead, que o
+        // executor precisa reler para revalidar o matcher. Quando o trigger não
+        // usa filtro de funil, `matchContext` É `context` — nada muda.
+        context: { trigger_type: triggerType, ...matchContext },
         trigger_dedup_key: leadId
           ? await computeTriggerDedupKey({
+              // `context`, NÃO `matchContext`: a chave de dedup precisa ser
+              // estável, e os funis do lead mudam com o tempo.
               triggerType,
               payload: context || {},
               now,
