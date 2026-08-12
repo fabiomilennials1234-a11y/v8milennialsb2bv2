@@ -70,7 +70,7 @@ describe("useMasterUsers", () => {
     vi.clearAllMocks();
     const membersData = [
       { id: "tm1", user_id: "u1", name: "User 1", role: "admin", is_active: true, organization_id: "org-1", organization: { id: "org-1", name: "Org 1", org_type: "crm" } },
-      { id: "tm2", user_id: "u2", name: null, role: "membro", is_active: false, organization_id: "org-1", organization: { id: "org-1", name: "Org 1", org_type: "outbound" } },
+      { id: "tm2", user_id: "u2", name: null, role: "member", is_active: false, organization_id: "org-1", organization: { id: "org-1", name: "Org 1", org_type: "outbound" } },
     ];
     const profilesData = [
       { id: "u1", full_name: "Full User 1", avatar_url: "http://avatar.com/1" },
@@ -102,8 +102,8 @@ describe("useMasterUserStats", () => {
     vi.clearAllMocks();
     mockFrom.mockReturnValue(createChainMock([
       { role: "admin", is_active: true, organization_id: "org-1", metric_type: "sales" },
-      { role: "membro", is_active: true, organization_id: "org-1", metric_type: "meetings" },
-      { role: "membro", is_active: false, organization_id: null, metric_type: null },
+      { role: "member", is_active: true, organization_id: "org-1", metric_type: "meetings" },
+      { role: "member", is_active: false, organization_id: null, metric_type: null },
     ]));
   });
 

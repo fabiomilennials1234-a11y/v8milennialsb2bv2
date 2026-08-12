@@ -39,7 +39,7 @@ export async function generateAiMessage(input: ActionInput): Promise<ActionResul
         "X-Title": "V8 Millennials CRM - Workflow AI Message",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.0-flash-001",
+        model: "openai/gpt-4.1-mini",
         messages: [
           {
             role: "system",

@@ -254,7 +254,7 @@ IMPORTANTE: Responda APENAS com JSON válido, sem texto adicional.`;
           "HTTP-Referer": referer,
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "openai/gpt-4.1-mini",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },

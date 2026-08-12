@@ -98,9 +98,9 @@ describe("createTestDB", () => {
   });
 
   it("options.userRole controls what useUserRole returns inside wrapper", () => {
-    createTestDB({}, { userRole: "membro", ...getAllMockRefs() });
+    createTestDB({}, { userRole: "member", ...getAllMockRefs() });
 
-    expect((mockUserRoleState.data as any)?.role).toBe("membro");
+    expect((mockUserRoleState.data as any)?.role).toBe("member");
   });
 
   it("options.isMaster controls useMasterAuth return value", () => {

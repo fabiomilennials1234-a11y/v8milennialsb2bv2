@@ -26,10 +26,17 @@ export function QuickBlastProgressPanel() {
   const { data: jobs = [] } = useMassSendJobs();
   const control = useControlMassSend();
   const { data: roleRow } = useUserRole();
-  // useUserRole returns team_members.role (admin/master/membro) at runtime, but
-  // its declared type is the user_roles enum; cast to compare.
-  const role = roleRow?.role as string | undefined;
-  const canControl = role === "admin" || role === "master";
+  // useUserRole devolve `team_members.role`, que é o enum `app_role`
+  // (admin|sdr|closer|agency|bdr|cliente|member) — o comentário anterior dizia
+  // "admin/master/membro" e errava DOIS dos três valores. `master` não é role:
+  // é camada à parte (`useMasterAuth`), então `role === "master"` nunca casava
+  // e o disjunto era morto. Removido sem mudar quem passa hoje.
+  //
+  // CONSEQUÊNCIA CONHECIDA (#1541): master que não seja admin naquela org não
+  // controla o disparo. Conceder isso é mudança de PERMISSÃO — precisa de
+  // `isMaster` e de revisão própria, não entra de carona aqui.
+  const role = roleRow?.role;
+  const canControl = role === "admin";
 
   const active = useMemo(
     () => jobs.filter((j) => ACTIVE.has(j.status) && isQuickBlast(j)),

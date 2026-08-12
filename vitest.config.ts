@@ -33,7 +33,6 @@ export default defineConfig({
       // proprio projeto usa como exemplar. Ao inclui-los, estes 4 apareceram
       // quebrados. Nao sao regressao; sao divida descoberta. Ver #1041.
       // Remover daqui, um a um, conforme forem consertados.
-      'src/modules/leads/**/useLeadActionGates.test.tsx',
       'src/modules/**/VariableInserter.test.tsx',
       'src/modules/**/TimelineItem.test.tsx',
       'src/modules/**/usePaginatedPipeline.test.tsx',

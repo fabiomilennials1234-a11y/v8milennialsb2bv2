@@ -126,7 +126,7 @@ Deno.serve(withErrorBoundary("classify-followup-stages", async (req) => {
 
   const openRouter = new OpenRouterClient(OPENROUTER_API_KEY);
   const response = await openRouter.chat({
-    model: Deno.env.get("OPENROUTER_DEFAULT_MODEL") || "google/gemini-2.5-flash",
+    model: Deno.env.get("OPENROUTER_DEFAULT_MODEL") || "openai/gpt-4.1-mini",
     messages: [{ role: "user", content: buildPrompt(stages as StageRow[]) }],
     max_tokens: 800,
     temperature: 0,

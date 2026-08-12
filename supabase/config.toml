@@ -494,3 +494,11 @@ verify_jwt = false
 # recebimento de toda a receita, não só daquele evento.
 [functions.asaas-webhook]
 verify_jwt = false
+
+# billing-provision-worker: transforma pagamento confirmado em ACESSO (Fatia 9).
+# verify_jwt=false — quem chama é o pg_cron via pg_net; auth por x-cron-secret.
+# É worker separado do webhook DE PROPÓSITO: o webhook responde 200 sempre (a
+# fila do Asaas pausa em 15 falhas), e provisionar lá dentro faria a organização
+# ficar paga e inacessível em silêncio. Aqui a falha é vermelha e visível.
+[functions.billing-provision-worker]
+verify_jwt = false

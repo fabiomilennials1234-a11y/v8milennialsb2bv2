@@ -9,7 +9,7 @@
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 /** Modelo rápido e barato para reescrita simples */
-const HUMANIZER_MODEL = "google/gemini-2.5-flash";
+const HUMANIZER_MODEL = "openai/gpt-4.1-mini";
 
 const SYSTEM_PROMPT = `Você é um reescritor de mensagens de WhatsApp comercial.
 
