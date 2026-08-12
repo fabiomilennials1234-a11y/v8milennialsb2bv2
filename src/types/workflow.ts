@@ -217,6 +217,12 @@ export interface TriggerConfigCron {
 export interface TriggerConfigLeadReplied {
   channel?: "whatsapp" | "meta" | "any";
   contains_text?: string;
+  /**
+   * Funis em que o lead precisa estar para o trigger disparar (`pipelines.id`).
+   * Um campo só cobre funil padrão e custom — `pipelines` é a união dos dois.
+   * Semântica OR; vazio/ausente = qualquer funil.
+   */
+  pipeline_ids?: string[];
 }
 
 export interface TriggerConfigLeadNoReply {

@@ -216,6 +216,108 @@ describe("matchesTriggerConfig", () => {
         { message: "Qual o preço?" }
       )).toBe(false);
     });
+
+    // ── filtro por funil (pipeline_ids) ──
+    describe("filtro por funil", () => {
+      const FUNIL_A = "11111111-1111-1111-1111-111111111111";
+      const FUNIL_B = "22222222-2222-2222-2222-222222222222";
+
+      it("lista vazia = qualquer funil (não exige o contexto)", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { pipeline_ids: [] },
+          {}
+        )).toBe(true);
+      });
+
+      it("dispara quando o lead está no funil escolhido", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { pipeline_ids: [FUNIL_A] },
+          { lead_pipeline_ids: [FUNIL_A] }
+        )).toBe(true);
+      });
+
+      it("não dispara quando o lead está em outro funil", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { pipeline_ids: [FUNIL_A] },
+          { lead_pipeline_ids: [FUNIL_B] }
+        )).toBe(false);
+      });
+
+      it("basta estar em UM dos funis marcados (OR)", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { pipeline_ids: [FUNIL_A, FUNIL_B] },
+          { lead_pipeline_ids: [FUNIL_B] }
+        )).toBe(true);
+      });
+
+      it("lead em vários funis casa se um deles estiver marcado", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { pipeline_ids: [FUNIL_B] },
+          { lead_pipeline_ids: [FUNIL_A, FUNIL_B] }
+        )).toBe(true);
+      });
+
+      it("não dispara quando o lead não está em funil nenhum", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { pipeline_ids: [FUNIL_A] },
+          { lead_pipeline_ids: [] }
+        )).toBe(false);
+      });
+
+      // Fail-closed: sem a lista no contexto o filtro é inavaliável. Disparar
+      // levaria a automação para leads fora do funil — pior que não disparar.
+      it("fail-closed quando o contexto não traz os funis do lead", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { pipeline_ids: [FUNIL_A] },
+          {}
+        )).toBe(false);
+      });
+
+      it("fail-closed quando a leitura dos funis falhou (null)", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { pipeline_ids: [FUNIL_A] },
+          { lead_pipeline_ids: null }
+        )).toBe(false);
+      });
+
+      it("ignora entradas inválidas na lista salva (jsonb não é validado)", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { pipeline_ids: ["  ", null, 42, FUNIL_A] },
+          { lead_pipeline_ids: [FUNIL_A] }
+        )).toBe(true);
+      });
+
+      it("lista só com lixo equivale a sem filtro", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { pipeline_ids: ["", "   "] },
+          {}
+        )).toBe(true);
+      });
+
+      it("funil e contains_text se somam (E, não OU)", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { pipeline_ids: [FUNIL_A], contains_text: "orçamento" },
+          { lead_pipeline_ids: [FUNIL_A], message: "quero um orçamento" }
+        )).toBe(true);
+
+        expect(matchesTriggerConfig("lead_replied",
+          { pipeline_ids: [FUNIL_A], contains_text: "orçamento" },
+          { lead_pipeline_ids: [FUNIL_A], message: "bom dia" }
+        )).toBe(false);
+
+        expect(matchesTriggerConfig("lead_replied",
+          { pipeline_ids: [FUNIL_A], contains_text: "orçamento" },
+          { lead_pipeline_ids: [FUNIL_B], message: "quero um orçamento" }
+        )).toBe(false);
+      });
+
+      it("funil e canal se somam", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { pipeline_ids: [FUNIL_A], channel: "whatsapp" },
+          { lead_pipeline_ids: [FUNIL_A], channel: "meta" }
+        )).toBe(false);
+      });
+    });
   });
 
   // lead_no_reply, meeting_not_confirmed, followup_overdue, cron
@@ -379,5 +481,137 @@ describe("fireTrigger", () => {
       leadId: "lead-1",
     });
     expect(count).toBe(0);
+  });
+
+  // ── lead_replied + filtro por funil: o enriquecimento sob demanda ──
+  describe("lead_replied com filtro por funil", () => {
+    const FUNIL_A = "11111111-1111-1111-1111-111111111111";
+    const FUNIL_B = "22222222-2222-2222-2222-222222222222";
+
+    function seedWorkflow(mockTable: ReturnType<typeof createMockSupabase>["mockTable"], config: Record<string, unknown>) {
+      mockTable("workflows", [
+        {
+          id: "wf-funil",
+          trigger_config: config,
+          organization_id: "org-1",
+          trigger_type: "lead_replied",
+          is_active: true,
+        },
+      ]);
+    }
+
+    it("dispara quando o lead tem entrada no funil configurado", async () => {
+      const { sb, mockTable } = createMockSupabase();
+      seedWorkflow(mockTable, { pipeline_ids: [FUNIL_A] });
+      mockTable("pipeline_entries", [
+        { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A },
+      ]);
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      expect(count).toBe(1);
+    });
+
+    it("não dispara quando o lead só está em outro funil", async () => {
+      const { sb, mockTable } = createMockSupabase();
+      seedWorkflow(mockTable, { pipeline_ids: [FUNIL_A] });
+      mockTable("pipeline_entries", [
+        { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_B },
+      ]);
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      expect(count).toBe(0);
+    });
+
+    it("não confunde funis de OUTRO lead da mesma org", async () => {
+      const { sb, mockTable } = createMockSupabase();
+      seedWorkflow(mockTable, { pipeline_ids: [FUNIL_A] });
+      mockTable("pipeline_entries", [
+        { organization_id: "org-1", lead_id: "lead-outro", pipeline_id: FUNIL_A },
+      ]);
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied" },
+      });
+
+      expect(count).toBe(0);
+    });
+
+    it("não confunde funis do mesmo lead em OUTRA org", async () => {
+      const { sb, mockTable } = createMockSupabase();
+      seedWorkflow(mockTable, { pipeline_ids: [FUNIL_A] });
+      // service_role bypassa RLS: sem o .eq(organization_id) explícito esta
+      // linha vazaria para dentro do matching.
+      mockTable("pipeline_entries", [
+        { organization_id: "org-2", lead_id: "lead-1", pipeline_id: FUNIL_A },
+      ]);
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied" },
+      });
+
+      expect(count).toBe(0);
+    });
+
+    it("sem filtro de funil, dispara mesmo sem nenhuma entrada de funil", async () => {
+      const { sb, mockTable } = createMockSupabase();
+      seedWorkflow(mockTable, { channel: "any" });
+      mockTable("pipeline_entries", []);
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied" },
+      });
+
+      expect(count).toBe(1);
+    });
+
+    // Trava de desenho: os funis do lead são contexto de MATCHING e não podem
+    // entrar no context persistido — ele alimenta computeTriggerDedupKey.
+    it("não grava lead_pipeline_ids no context da execução", async () => {
+      const { sb, mockTable, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, { pipeline_ids: [FUNIL_A] });
+      mockTable("pipeline_entries", [
+        { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A },
+      ]);
+
+      await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      const execs = getInserted("workflow_executions");
+      expect(execs).toHaveLength(1);
+      const ctx = execs[0].context as Record<string, unknown>;
+      expect(ctx).not.toHaveProperty("lead_pipeline_ids");
+      expect(ctx.message).toBe("oi");
+    });
   });
 });
