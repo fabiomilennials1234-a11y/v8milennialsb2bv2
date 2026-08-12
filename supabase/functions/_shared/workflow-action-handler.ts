@@ -56,19 +56,30 @@ interface ActionContext {
 
 // ─── Variable substitution ──────────────────────────────────────────────────
 
-async function resolveVariables(
+/**
+ * Substitui `{{variavel}}` pelo valor do lead / do contexto de execução.
+ *
+ * `opts.escape` existe para os nós de código: um lead chamado `Pneus "Bom Preço" Ltda`
+ * quebra o `JSON.parse` do nó JSON, e um chamado `<script>alert(1)</script>` injeta no
+ * HTML gerado. Sem o hook, os dois nós nasceriam com bug de dado real. Parâmetro
+ * opcional de propósito — os call-sites de ação passam 4 argumentos e nada muda para eles.
+ */
+export async function resolveVariables(
   supabase: SupabaseClient,
   leadId: string,
   template: string,
   executionContext?: Record<string, unknown>,
+  opts?: { escape?: (raw: string) => string },
 ): Promise<string> {
   if (!template || !template.includes("{{")) return template;
+
+  const esc = opts?.escape ?? ((v: string) => v);
 
   // First pass: resolve execution context variables (e.g., {{ai_message}} from previous nodes)
   if (executionContext) {
     for (const [key, val] of Object.entries(executionContext)) {
       if (val !== null && val !== undefined && typeof val !== "object") {
-        template = template.replaceAll(`{{${key}}}`, String(val));
+        template = template.replaceAll(`{{${key}}}`, esc(String(val)));
       }
     }
     // If all variables resolved, return early
@@ -194,7 +205,7 @@ async function resolveVariables(
   }
 
   for (const [key, val] of Object.entries(vars)) {
-    result = result.replaceAll(`{{${key}}}`, val);
+    result = result.replaceAll(`{{${key}}}`, esc(val));
   }
 
   // Campaign variables: {{campanha_nome}}, {{campanha_estagio}}
@@ -228,7 +239,7 @@ async function resolveVariables(
 
   // Second pass for late-bound vars (campaign + AI)
   for (const [key, val] of Object.entries(vars)) {
-    result = result.replaceAll(`{{${key}}}`, val);
+    result = result.replaceAll(`{{${key}}}`, esc(val));
   }
 
   // Custom fields: {{custom.campo}}
@@ -255,7 +266,7 @@ async function resolveVariables(
           val = fv?.value || "";
         }
       }
-      result = result.replaceAll(match, val);
+      result = result.replaceAll(match, esc(val));
     }
   }
 

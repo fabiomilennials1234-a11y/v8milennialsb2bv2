@@ -1,7 +1,7 @@
 /**
  * Workflow vocabulary — PORTED verbatim from `src/types/workflow.ts` (the frontend source of
  * truth). Deno can't import that file, so this is a deliberate copy; a parity test
- * (tests/unit/workflow-schema-parity.test.ts) guards against drift. Zero imports on purpose.
+ * (./parity.test.ts, run by `npm run test:edge`) guards against drift. Zero imports on purpose.
  * docs/adr/0013.
  */
 
@@ -18,6 +18,10 @@ export const NODE_TYPES = [
   "goto",
   "wait_business_window",
   "assign_responsible",
+  // Nós de código
+  "code_json",
+  "code_javascript",
+  "code_https",
 ] as const;
 
 export const TRIGGER_TYPES = [
