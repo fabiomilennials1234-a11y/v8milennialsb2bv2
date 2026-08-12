@@ -72,7 +72,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.team_members (id, organization_id, user_id, name, role, is_active)
 VALUES
   ('99090090-aaaa-2222-0000-000000000904', '99090090-0000-0000-0000-000000000904', '99090090-aaaa-1111-0000-000000000904', 'Admin FIX4',  'admin',  true),
-  ('99090090-bbbb-2222-0000-000000000904', '99090090-0000-0000-0000-000000000904', '99090090-bbbb-1111-0000-000000000904', 'Member FIX4', 'membro', true)
+  ('99090090-bbbb-2222-0000-000000000904', '99090090-0000-0000-0000-000000000904', '99090090-bbbb-1111-0000-000000000904', 'Member FIX4', 'member', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- master SEM team_member na org (prova o path master, não o de admin da org).

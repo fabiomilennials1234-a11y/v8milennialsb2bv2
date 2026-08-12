@@ -77,7 +77,7 @@ VALUES
   ('99599599-aaaa-2222-0000-000000000995', '99599599-aaaa-0000-0000-000000000995',
    '99599599-aaaa-1111-0000-000000000995', 'Closer 1', 'admin', true),
   ('99599599-aaaa-2222-0001-000000000995', '99599599-aaaa-0000-0000-000000000995',
-   NULL, 'Closer 2', 'membro', true)
+   NULL, 'Closer 2', 'member', true)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.leads (id, organization_id, name)

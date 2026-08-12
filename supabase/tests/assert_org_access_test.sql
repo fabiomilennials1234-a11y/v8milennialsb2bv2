@@ -91,9 +91,9 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.team_members (id, organization_id, user_id, name, role, is_active)
 VALUES
   ('12091209-1111-0000-0000-000000001209', '12091209-aaaa-0000-0000-000000001209',
-   '12091209-0001-0000-0000-000000001209', 'Membro Ativo', 'membro', true),
+   '12091209-0001-0000-0000-000000001209', 'Membro Ativo', 'member', true),
   ('12091209-2222-0000-0000-000000001209', '12091209-aaaa-0000-0000-000000001209',
-   '12091209-0002-0000-0000-000000001209', 'Membro Desativado', 'membro', false)
+   '12091209-0002-0000-0000-000000001209', 'Membro Desativado', 'member', false)
 ON CONFLICT (id) DO UPDATE SET is_active = EXCLUDED.is_active;
 
 INSERT INTO public.master_users (user_id, is_active)
