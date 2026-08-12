@@ -1,6 +1,6 @@
--- 20270812120000_payment_links_package.sql
+-- 20270812190000_payment_links_package.sql
 --
--- RENUMERADA de 20270811160000 → 20270812120000. O prefixo antigo já existia na
+-- RENUMERADA de 20270811160000 → 20270812190000. O prefixo antigo já existia na
 -- `main` E no ledger de produção sob outro nome
 -- (20270811160000_payment_history_receipt_period_method.sql): `supabase db push`
 -- teria PULADO este arquivo em silêncio. O guarda
@@ -16,7 +16,7 @@
 -- `20270812111845_payment_link_buyers.sql` (PR #1553). Ela precisa estar aplicada
 -- ANTES. A ordem numérica já garante isso; aplicar fora de ordem dá "function
 -- does not exist", que é o jeito certo de falhar.
--- ROLLBACK pareado: rollback/20270812120000_payment_links_package.sql
+-- ROLLBACK pareado: rollback/20270812190000_payment_links_package.sql
 --
 -- POR QUE ESTA MIGRATION EXISTE, E POR QUE ELA NÃO É EMENDA DA FATIA 5
 -- -------------------------------------------------------------------

@@ -12,7 +12,7 @@
  * copia.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +39,28 @@ function checkoutUrl(token: string): string {
 export function GeneratedLinkDialog({ token, buyerPrefilled, onClose }: GeneratedLinkDialogProps) {
   const [copied, setCopied] = useState(false);
 
+  /**
+   * O RESET SEGUE O TOKEN, não o caminho de fechamento — e essa distinção é o
+   * bloqueante que o Sentinela achou.
+   *
+   * `onOpenChange` do Radix só dispara em dismissal iniciado DENTRO do
+   * componente: ESC e clique fora. O botão "Fechar" chama `onClose()` no pai,
+   * que zera o token, e o `open` vira false pela PROP — sem passar por
+   * `onOpenChange`. Resetar lá cobria dois dos três caminhos.
+   *
+   * O que ficava para trás era o pior estado possível nesta tela: a proposta
+   * SEGUINTE abria com o botão dizendo "Copiado", o check verde, e o aviso de
+   * "se fechar sem copiar" SUPRIMIDO — porque ele é condicionado a `!copied`.
+   * A tela afirmava sucesso de cópia para um link que ninguém copiou, e
+   * escondia justamente o aviso que existe para impedir isso.
+   *
+   * Derivar do `token` cobre os três caminhos e não depende de alguém lembrar
+   * de resetar em cada um que aparecer depois.
+   */
+  useEffect(() => {
+    setCopied(false);
+  }, [token]);
+
   async function copy() {
     if (!token) return;
     try {
@@ -57,10 +79,10 @@ export function GeneratedLinkDialog({ token, buyerPrefilled, onClose }: Generate
     <Dialog
       open={!!token}
       onOpenChange={(open) => {
-        if (!open) {
-          setCopied(false);
-          onClose();
-        }
+        // ESC e clique fora chegam por aqui; o botão "Fechar" chama `onClose`
+        // direto. Os dois caminhos convergem no mesmo lugar, e o reset do
+        // `copied` não mora em nenhum dos dois — mora no efeito do token.
+        if (!open) onClose();
       }}
     >
       <DialogContent className="sm:max-w-lg">

@@ -56,6 +56,7 @@ import {
   visibleKeys,
   seatFloor,
   seatFloorMessage,
+  validateBuyer,
   useBillingQuote,
   useCreatePaymentLink,
   type Direction,
@@ -208,7 +209,20 @@ export function PaymentLinkComposer() {
   const targetOk =
     targetKind === "existing_org" ? !!organizationId : newOrgName.trim().length >= 2;
   const discountOk = manualMonthlyCents === null || manualReason.trim().length >= 3;
-  const canGenerate = !!planId && targetOk && discountOk && !!quote && !isStale && !createLink.isPending;
+
+  // A validação do comprador acontece ANTES de enviar, e o motivo é o canal de
+  // PII: documento inválido faz a porta do banco levantar 22023, e o evento de
+  // erro nasce carregando o payload — CPF e e-mail junto. O valor inválido não
+  // sair daqui é o que impede o erro que o carregaria de existir.
+  const buyerErrors = validateBuyer({
+    legalName: buyerLegalName,
+    taxId: buyerTaxId,
+    email: buyerEmail,
+  });
+  const buyerOk = buyerErrors === null || Object.keys(buyerErrors).length === 0;
+
+  const canGenerate =
+    !!planId && targetOk && discountOk && buyerOk && !!quote && !isStale && !createLink.isPending;
 
   async function handleGenerate() {
     if (!planId) return;
@@ -569,6 +583,12 @@ export function PaymentLinkComposer() {
               />
             </div>
           </div>
+
+          {buyerErrors?.incomplete && (
+            <p className="text-xs text-destructive">{buyerErrors.incomplete}</p>
+          )}
+          {buyerErrors?.taxId && <p className="text-xs text-destructive">{buyerErrors.taxId}</p>}
+          {buyerErrors?.email && <p className="text-xs text-destructive">{buyerErrors.email}</p>}
 
           <p className="text-xs text-muted-foreground">
             Estes dados não voltam para esta tela depois de gravados, por decisão de segurança.

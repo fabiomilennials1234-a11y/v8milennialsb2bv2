@@ -15,9 +15,9 @@ Leia inteiro antes de escrever a primeira linha. Metade do valor daqui é o que 
 
 Três coisas registradas acima **mudaram ou estavam erradas**. Leia isto antes de agir por qualquer uma delas.
 
-### 1. ✅ RESOLVIDO em 2026-08-12 — a migration colidia; foi RENUMERADA para `20270812120000`.
+### 1. ✅ RESOLVIDO em 2026-08-12 — a migration colidia; foi RENUMERADA para `20270812190000`.
 
-**Estado atual:** `supabase/migrations/20270812120000_payment_links_package.sql` (+ rollback pareado).
+**Estado atual:** `supabase/migrations/20270812190000_payment_links_package.sql` (+ rollback pareado).
 Rebase sobre `origin/main` **feito**, guarda local **verde**. O texto abaixo fica como registro do porquê.
 
 **E o que quase passou batido, medido pelo orquestrador:** o guarda
@@ -38,7 +38,7 @@ documentada no cabeçalho de `scripts/check-migration-versions.sh`.
 `…140000`, `…150000`, `…160000`, `…170000`, `…220000`, e `20270812000000` a `…040000`, mais `20270812100000`.
 `20270812110000` **também está ocupado** (`copilot_model_defaults_gpt41_mini`, em ref que ainda não mergeou) e
 `20270812111845` é do colega em `mst-eng-b` (`payment_link_buyers`) — nenhum dos dois aparece em `origin/main`,
-então o guarda não os enxerga. Comando que enxerga **qualquer ref**, e é como `20270812120000` foi escolhida:
+então o guarda não os enxerga. Comando que enxerga **qualquer ref**, e é como `20270812190000` foi escolhida:
 
 ```bash
 git log --all --name-only --diff-filter=A --pretty=format: -- 'supabase/migrations/2027081*' \
@@ -89,7 +89,7 @@ A **Fatia 7** é a **tela do Master** que chama essas funções. O CTO foi expl�
 
 ## 2. O que JÁ ESTÁ FEITO (nos dois commits)
 
-### 2.1 `supabase/migrations/20270812120000_payment_links_package.sql` — **NÃO TESTADA**
+### 2.1 `supabase/migrations/20270812190000_payment_links_package.sql` — **NÃO TESTADA**
 
 ⚠️ **Esta migration nunca rodou.** Foi escrita numa janela em que o banco local estava sendo derrubado de propósito por outro agente (isolamento de um segfault). **A primeira coisa a fazer ao retomar é aplicá-la e rodar o teste.** Ver seção 5.
 
@@ -205,12 +205,12 @@ Comparado como número, `-1 < 50000` e **a proposta mais generosa apareceria mar
 
 ## 5. O QUE FALTA — em ordem
 
-0. **Já feito (2026-08-12):** rebase sobre `origin/main`, renumeração para `20270812120000`, guarda local verde.
+0. **Já feito (2026-08-12):** rebase sobre `origin/main`, renumeração para `20270812190000`, guarda local verde.
    **Não aplique nada sem antes ler a issue #1548** — o ledger de prod tem um **vão** (a `20270811140000`,
    que é a base desta migration, nunca subiu, embora a `150000` e a `160000` tenham subido). O plano de
    subida inteiro está lá; aplicar fora dessa ordem repete o defeito que a renumeração acabou de evitar.
 
-1. ✅ **FEITO** — a `20270812120000` foi aplicada no banco LOCAL (psql, `--single-transaction`, URL explícita;
+1. ✅ **FEITO** — a `20270812190000` foi aplicada no banco LOCAL (psql, `--single-transaction`, URL explícita;
    sem `db push`, sem tocar prod) e o `payment_links_test.sql` está **40 ok / 0 not ok**. O RED previsto
    apareceu e foi consertado: `has_function_privilege` resolve por assinatura EXATA, e a função saiu de 8
    para 16 parâmetros. Detalhe que importa: as **chamadas** continuaram passando (os parâmetros novos têm
@@ -228,7 +228,7 @@ Comparado como número, `-1 < 50000` e **a proposta mais generosa apareceria mar
 
    **Onde esta migration entra na fila de prod (issue #1548):** ela vem **depois** da `20270811140000`
    (Fatia 5), que **ainda não subiu** — é o vão do ledger. Ordem: `…140000` → `…220000` (Fatia 6) →
-   `20270812100000` (Fatia 9) → **`20270812120000` (esta)**. A renumeração já a deixou por último, o que
+   `20270812100000` (Fatia 9) → **`20270812190000` (esta)**. A renumeração já a deixou por último, o que
    coincide com a dependência: ela só altera objeto que a `…140000` cria.
 
 2. ✅ **FEITO** — `supabase/tests/payment_links_package_test.sql`, **25 asserções, 25 ok**, registrado no `run.sh` como **item 32** nas duas listas. Cobre: colunas do pacote com default `{}`, as três colunas de PII **ausentes** (`hasnt_column`), `authenticated` sem `SELECT` em `payment_link_buyers`, pré-preenchimento gravando na tabela do comprador com documento normalizado e `tax_id_kind` derivado, auditoria registrando o **fato** e varrida contra e-mail/documento/nome, atomicidade (os três casos de recusa **não deixam link para trás**), desconto vindo do motor com controle positivo em número concreto, autor vindo de `auth.uid()`, e motivo obrigatório por CHECK. Duas asserções entraram na revisão do Sentinela e são **mutation-tested**: `NULL` explícito no parâmetro (mata o `COALESCE` do INSERT) e `UPDATE` direto para `NULL` esperando `23502` (mata o `NOT NULL` da coluna). Mutante 1 (coluna perde `NOT NULL`) derruba 1 das 25; mutante 2 (`COALESCE` removido + coluna sem `NOT NULL`/`DEFAULT`) derruba as 2 — e os dois rodam com **25 asserções coletadas**, sem aborto. As duas asserções originais de `{}` continuavam verdes nos dois mutantes: o `{}` chegava pelo DEFAULT do parâmetro, e era a tautologia.
@@ -273,7 +273,7 @@ Comparado como número, `-1 < 50000` e **a proposta mais generosa apareceria mar
 - **PR #1533** (`fix/payment-link-metodo-do-port`): `boleto` não existe neste produto e o `CHECK` aceitava. **Mergeado; rebase feito.** O conflito veio exatamente onde ele previa: a asserção de contraste em `payment_links_test.sql` passava `'boleto'`, e o lado da `main` passa `'credit_card'`. Resolvido pela `main` — o `CHECK` agora só aceita `pix | credit_card`.
 - **A migration de ciclo que está em produção NÃO está na cadeia do repo** — uma das **44 fantasmas** (issue #1521). O repo diverge de prod **agora**, nesse ponto.
 - **Dois vocabulários de ciclo convivem por tabela:** `semiannual` no billing novo, `semester` no `payment_history` legado. Não é inconsistência de arquivo — são duas gerações de schema no mesmo banco.
-- **Deploys manuais pendentes** (merge não faz): migrations `20270811120000`, `20270811140000`, `20270812120000` (esta fatia), `20270811170000`, e as edge functions `infra-watchdog` e `billing-quote`. **Ordem e vãos: issue #1548.**
+- **Deploys manuais pendentes** (merge não faz): migrations `20270811120000`, `20270811140000`, `20270812190000` (esta fatia), `20270811170000`, e as edge functions `infra-watchdog` e `billing-quote`. **Ordem e vãos: issue #1548.**
 - **Dois blocos `29`** no cabeçalho do `run.sh` da `main` (meu `payment_links_test` e o `rls_inv6_definer_sem_gate_test`). Comentário apenas; não renumerei bloco de outro dono.
 
 ---

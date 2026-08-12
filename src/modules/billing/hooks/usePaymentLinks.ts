@@ -160,7 +160,25 @@ export function useCreatePaymentLink() {
       });
 
       if (error) throw new Error(error.message);
-      return data as unknown as CreatePaymentLinkResult;
+
+      // CHECAGEM DE FORMA NO SEAM, porque o compilador não faz esse trabalho
+      // aqui: o cliente acima é destipado, então drift no contrato da RPC
+      // chegaria como `undefined` no diálogo — que abriria vazio, dizendo que
+      // gerou uma proposta cujo link não existe. Um erro alto no ponto de
+      // entrada custa uma linha; o silencioso custa a proposta.
+      const r = data as Partial<CreatePaymentLinkResult> | null;
+      if (!r || typeof r.token !== "string" || typeof r.link_id !== "string") {
+        throw new Error(
+          "A geração respondeu num formato inesperado — o link não foi entregue. Confira se a proposta existe na lista antes de gerar outra.",
+        );
+      }
+      return {
+        ...r,
+        // `buyer_prefilled` é booleano no contrato; qualquer outra coisa vira
+        // `false`, que é o lado seguro — pior avisar de menos que afirmar um
+        // pré-preenchimento que não aconteceu.
+        buyer_prefilled: r.buyer_prefilled === true,
+      } as CreatePaymentLinkResult;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });

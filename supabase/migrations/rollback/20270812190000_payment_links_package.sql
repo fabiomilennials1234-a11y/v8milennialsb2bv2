@@ -1,4 +1,4 @@
--- Rollback de 20270812120000_payment_links_package.sql
+-- Rollback de 20270812190000_payment_links_package.sql
 --
 -- ATENÇÃO — este rollback DESTRÓI DADO DE PROPOSTA: o pacote montado e o motivo
 -- do desconto concedido. O `quote` e o hash sobrevivem (são da Fatia 5), mas uma
