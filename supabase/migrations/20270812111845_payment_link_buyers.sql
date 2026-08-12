@@ -79,10 +79,33 @@
 -- violação de unicidade ALTA na escrita, não comprador errado silencioso na
 -- leitura. É a direção certa de falhar.
 --
--- Se esta linha falhar ao aplicar, é porque a duplicata JÁ EXISTE — e aí o
+-- Se o ADD falhar por DUPLICATA, é porque ela JÁ EXISTE nos dados — e aí o
 -- conserto é dado, não schema. Falhar alto está certo; um índice não-único
 -- esconderia o problema.
+--
+-- POR QUE `DROP ... IF EXISTS` ANTES DO `ADD`, e não `ADD` sozinho
+-- ---------------------------------------------------------------
+-- `ADD CONSTRAINT` não tem `IF NOT EXISTS` no Postgres, então numa base que já
+-- tem a restrição ele estoura com `already exists` — e a migration inteira
+-- morre ali, sem ter aplicado o resto.
+--
+-- Isso não é hipótese: o Postgres local COMPARTILHADO do time já está nesse
+-- estado. Esta migration foi aplicada nele à mão, fora do `schema_migrations`
+-- (medido: os objetos existem, o ledger não os conhece), então a próxima pessoa
+-- que rodasse a cadeia ali bateria neste ALTER. Prod aplica limpo — e isso é
+-- irrelevante para o custo, que é do time e é hoje.
+--
+-- A forma abaixo é o PRECEDENTE DA CASA nesta mesma tabela: a 20270811170000
+-- (#1533) troca o CHECK de método com `DROP CONSTRAINT IF EXISTS` seguido de
+-- `ADD CONSTRAINT`, exatamente para sobreviver a base tocada à mão. Divergir do
+-- precedente na tabela vizinha é dívida de leitura para quem vier depois.
+--
+-- O intervalo sem a restrição existe apenas DENTRO da transação da migration:
+-- ninguém enxerga a tabela sem unicidade.
 -- ---------------------------------------------------------------------------
+ALTER TABLE public.payment_link_charges
+  DROP CONSTRAINT IF EXISTS payment_link_charges_provider_charge_id_key;
+
 ALTER TABLE public.payment_link_charges
   ADD CONSTRAINT payment_link_charges_provider_charge_id_key UNIQUE (provider_charge_id);
 

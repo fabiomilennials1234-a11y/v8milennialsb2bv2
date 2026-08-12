@@ -190,7 +190,15 @@ Três portas, cada uma devolvendo o **menos** que serve ao seu chamador — toda
 
 **Achado grande, e não era desta fatia:** `payment_link_charges.provider_charge_id` **não tinha índice nem unicidade**, e `supabase/functions/asaas-webhook/index.ts` (já na `main`) resolve o link com `.eq("provider_charge_id", …).maybeSingle()`. Duplicata → `maybeSingle()` erra → o handler engole e responde 200 → **organização nunca ativada, em silêncio**, que é o modo de falha contra o qual a Fatia 6 inteira foi desenhada. A migration adiciona `UNIQUE (provider_charge_id)` e, junto, conserta `billing_attach_link_charge`: com **duas** restrições únicas, o `ON CONFLICT ON CONSTRAINT` nomeado deixa de cobrir a retentativa normal (mesmo link, mesmo método, mesma cobrança viola as duas), então o reuso passa a ser procurado ANTES do INSERT.
 
-pgTAP: `supabase/tests/payment_link_buyers_test.sql`, **52/52**, vermelho antes (a asserção de unicidade falha sem a migration — provado, não presumido).
+pgTAP: `supabase/tests/payment_link_buyers_test.sql`, **66/66**, vermelho antes (a asserção de unicidade falha sem a migration — provado, não presumido).
+
+### ⚠️ O AMBIENTE ONDE ISSO FOI MEDIDO NÃO É A `main` — leia antes de confiar no verde
+
+O Postgres local compartilhado (`supabase_db_jsjsmuncfkbsbzqzqhfq`, porta 54322) estava, em 2026-08-12, **7 migrations atrás da `main`**: 91 arquivos `.sql` no repo contra 84 linhas no ledger. Ausentes: `20270811150000` (semiannual canônico), `20270811160000`, **`20270811220000`** (livro de eventos da Fatia 6), `20270812100000` (Fatia 9) e `20270812110000`.
+
+Consequência direta e que se perde se ninguém escrever: **`org_subscriptions.provider_payment_id` NÃO EXISTE naquele banco.** A coluna existe no REPO (`20270811220000:189`) e é ela que o endpoint de status usa para derivar `paid`. Quando eu testar essa parte, eu **injeto** a `20270811220000` na mesma transação revertida — então um verde meu sobre proveniência de pagamento **não é evidência de que o ambiente tinha a coluna**, é evidência de que o contrato fecha quando ela existe.
+
+Registrado também: a `20270812111845` foi aplicada naquele banco **à mão, fora do `schema_migrations`** — os objetos existem e o ledger não os conhece. Sem dano (medi a forma: versão nova, `prefill` presente, zero linhas), mas é a classe do incidente de migration por MCP. Foi o que motivou o `DROP CONSTRAINT IF EXISTS` antes do `ADD`.
 
 **Regra de PII, corrigida na mira.** O `withErrorBoundary` **não** registra o corpo da requisição — loga `function_name`, `organization_id`, `user_id` e `error{name,message,stack}`. O vetor real é mais fácil de cair: **mensagem de erro que alguém constrói com o dado dentro** (`"cliente inválido: cpf 123…"` vira `err.message` e vai inteiro para `runtime_logs`). Regra prática: **nunca interpolar e-mail ou `cpfCnpj` em texto de exceção** — para identificar a linha existe o `charge_id`. E o `redactSecrets` do logger redige por **nome de chave** (`token`, `secret`, `password`, `apikey`…) mais mascaramento de telefone: **não tem `cpf` nem `email` na lista**, então `payloadSnapshot` com chave `buyer_tax_id` passaria em claro. O Malho acrescenta os dois padrões numa fatia própria (vale para o repo inteiro).
 
