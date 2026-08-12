@@ -6,7 +6,7 @@ Branch: `feat/scrum-287-webhook-asaas`. **Nada aplicado em produção.**
 
 ---
 
-## O DEFEITO ABERTO — conserte isto primeiro
+## O DEFEITO — CORRIGIDO em 2026-08-12 (era o que faria a fatia nascer morta)
 
 `supabase/functions/asaas-webhook/index.ts`, na escrita da assinatura:
 
@@ -29,7 +29,11 @@ Postgres **só infere índice parcial** no `ON CONFLICT` se o comando **repetir 
 
 **Por que é pior que um bug comum:** o handler engole erro e responde 200 (a fila do Asaas pausa em 15 falhas). Então o INSERT falharia, o log registraria, o Asaas receberia 200 — e **a organização nunca seria ativada, em silêncio, para sempre**. É exatamente o modo de falha contra o qual a fatia inteira foi desenhada, entrando pelo argumento de uma chamada.
 
-### O conserto NÃO é trocar a string
+### O conserto — FEITO: `billing_apply_paid_subscription`, RPC service_role-only
+
+O handler chama a RPC; o `ON CONFLICT ... WHERE cancelled_at IS NULL` mora dentro dela. Grants medidos com `has_function_privilege` no pgTAP (anon não, authenticated não, service_role sim), e gate no corpo além do GRANT — para o dia em que um `DROP + CREATE` devolver EXECUTE a PUBLIC.
+
+### Por que não dava para trocar só a string
 
 O PostgREST **não expressa predicado**: `on_conflict` aceita nome de coluna, não cláusula `WHERE`. Não há como escrever isso pelo cliente.
 
@@ -41,13 +45,16 @@ A escrita da assinatura tem que ir por **RPC**, na migration desta fatia:
 
 A garantia continua no BANCO, não num `IF` — só muda de onde é chamada.
 
-### O teste que faltava
+### O teste que faltava — FEITO (37/37, era 27)
 
 Nenhuma das 27 asserções exercitava a criação **real** da assinatura contra o schema real — se exercitasse, teria estourado 42P10. Falta:
 
-1. inserir **de verdade** e afirmar que a linha existe com `plan_id`, `billing_cycle` e `provider_payment_id` corretos;
-2. segundo evento (`CONFIRMED` depois de `RECEIVED`) mantém **uma** linha;
-3. grants da RPC nova, nome por nome.
+1. ✅ insere **de verdade** pela RPC e afirma plano, ciclo, cobrança e assentos;
+2. ✅ segundo evento da mesma cobrança mantém **uma** linha viva; renovação com cobrança nova move a proveniência;
+3. ✅ grants nome por nome;
+4. ✅ **e uma asserção que trava o 42P10**: `ON CONFLICT (organization_id)` sem o predicado é recusado pelo Postgres. É a regressão que reabriria o silêncio.
+
+**Verificado ainda:** o outro `upsert` que sobrou no handler (`payment_history`) aponta para `payment_history_asaas_payment_id_key`, que é índice **total** — inferência funciona. Medido, não presumido.
 
 > Mesma lição do dublê mais frouxo que o real, que já custou um bug de produção com 70 pessoas: **teste que não toca o schema real não prova nada sobre o schema real.**
 

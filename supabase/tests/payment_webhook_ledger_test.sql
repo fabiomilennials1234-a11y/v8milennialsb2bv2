@@ -242,5 +242,96 @@ SELECT throws_ok(
   '23505', NULL,
   '(ASSINATURA) e uma SEGUNDA assinatura viva é recusada pelo banco — é isto que impede "append-only por ciclo" aqui');
 
+-- ===========================================================================
+-- (RPC) a assinatura é escrita DE VERDADE, contra o schema real
+--
+-- Este bloco existe porque a versão anterior desta fatia escrevia a assinatura
+-- pelo cliente, com ON CONFLICT (organization_id) — e o índice é PARCIAL. O
+-- Postgres só infere índice parcial se o comando REPETIR o predicado, então
+-- aquela escrita estourava 42P10 em TODA chamada. Nenhuma das 27 asserções
+-- pegou, porque nenhuma inseria de verdade: exercitavam a tabela, não o
+-- caminho. Teste que não toca o schema real não prova nada sobre o schema real.
+-- ===========================================================================
+SELECT throws_ok(
+  $$ INSERT INTO public.org_subscriptions
+       (organization_id, plan_id, billing_cycle, payment_method, provider, final_amount_cents, base_amount_cents)
+     VALUES ('5c2c8287-0000-4000-8000-000000000002', '91a17287-0000-4000-8000-000000000001',
+             'annual', 'pix', 'asaas', 100, 100)
+     ON CONFLICT (organization_id) DO NOTHING $$,
+  '42P10', NULL,
+  '(RPC) ON CONFLICT SEM o predicado é RECUSADO pelo Postgres — é este 42P10 que derrubaria a ativação em silêncio');
+
+SET LOCAL role postgres;
+SET LOCAL session_replication_role = replica;
+INSERT INTO public.organizations (id, name, slug)
+VALUES ('5c2c8287-0000-4000-8000-000000000002', 'Org RPC 287', 'org-rpc-287')
+ON CONFLICT (id) DO NOTHING;
+SET LOCAL session_replication_role = DEFAULT;
+
+-- Primeiro evento que libera acesso (o RECEIVED do Pix, por exemplo).
+SELECT lives_ok(
+  $$ SELECT public.billing_apply_paid_subscription(
+       '5c2c8287-0000-4000-8000-000000000002'::uuid,
+       '91a17287-0000-4000-8000-000000000001'::uuid,
+       'annual', 'pix', 'pay_rpc_1',
+       5, 120000, 20000, 100000, 10, 5, 0, NULL, 'asaas') $$,
+  '(RPC) a assinatura é criada pela RPC — o caminho que o handler usa de verdade');
+
+SELECT is(
+  (SELECT plan_id::text || '|' || billing_cycle || '|' || provider_payment_id || '|' || user_count::text
+     FROM public.org_subscriptions
+    WHERE organization_id = '5c2c8287-0000-4000-8000-000000000002' AND cancelled_at IS NULL),
+  '91a17287-0000-4000-8000-000000000001|annual|pay_rpc_1|5',
+  '(RPC) e a linha carrega plano, ciclo, cobrança e assentos do quote — não valores inventados');
+
+-- Segundo evento da MESMA cobrança (CONFIRMED depois de RECEIVED, ou a
+-- re-entrega). Uma linha, sempre.
+SELECT lives_ok(
+  $$ SELECT public.billing_apply_paid_subscription(
+       '5c2c8287-0000-4000-8000-000000000002'::uuid,
+       '91a17287-0000-4000-8000-000000000001'::uuid,
+       'annual', 'pix', 'pay_rpc_1',
+       5, 120000, 20000, 100000, 10, 5, 0, NULL, 'asaas') $$,
+  '(RPC) o segundo evento da mesma cobrança não estoura');
+
+SELECT is(
+  (SELECT count(*)::int FROM public.org_subscriptions
+    WHERE organization_id = '5c2c8287-0000-4000-8000-000000000002' AND cancelled_at IS NULL),
+  1,
+  '(RPC) e continua UMA assinatura viva — o par CONFIRMED/RECEIVED não duplica');
+
+-- Renovação com cobrança NOVA atualiza a corrente e a proveniência anda junto.
+SELECT lives_ok(
+  $$ SELECT public.billing_apply_paid_subscription(
+       '5c2c8287-0000-4000-8000-000000000002'::uuid,
+       '91a17287-0000-4000-8000-000000000001'::uuid,
+       'annual', 'pix', 'pay_rpc_2',
+       5, 120000, 20000, 100000, 10, 5, 0, NULL, 'asaas') $$,
+  '(RPC) o ciclo seguinte reaproveita a linha corrente');
+
+SELECT is(
+  (SELECT provider_payment_id FROM public.org_subscriptions
+    WHERE organization_id = '5c2c8287-0000-4000-8000-000000000002' AND cancelled_at IS NULL),
+  'pay_rpc_2',
+  '(RPC) e a proveniência aponta para a cobrança NOVA — "ativa por causa de qual pagamento?" continua respondível');
+
+-- ===========================================================================
+-- (GRANT) medido DEPOIS, nome por nome
+-- ===========================================================================
+SELECT ok(
+  NOT has_function_privilege('anon',
+    'public.billing_apply_paid_subscription(uuid,uuid,text,text,text,integer,integer,integer,integer,numeric,numeric,integer,uuid,text)', 'EXECUTE'),
+  '(GRANT) anon NÃO executa a escrita de assinatura');
+
+SELECT ok(
+  NOT has_function_privilege('authenticated',
+    'public.billing_apply_paid_subscription(uuid,uuid,text,text,text,integer,integer,integer,integer,numeric,numeric,integer,uuid,text)', 'EXECUTE'),
+  '(GRANT) authenticated NÃO executa — a 25ª RPC cross-tenant não nasce aqui');
+
+SELECT ok(
+  has_function_privilege('service_role',
+    'public.billing_apply_paid_subscription(uuid,uuid,text,text,text,integer,integer,integer,integer,numeric,numeric,integer,uuid,text)', 'EXECUTE'),
+  '(GRANT) service_role executa — é quem o webhook usa');
+
 SELECT * FROM finish();
 ROLLBACK;

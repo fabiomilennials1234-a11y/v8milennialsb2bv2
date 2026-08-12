@@ -283,36 +283,33 @@ Deno.serve(
       const base = inteiro(quote.base_amount_cents, inteiro(quote.subtotal_cents));
       const finalCents = inteiro(quote.charge_cents, base);
 
-      // ON CONFLICT sobre `org_subscriptions_one_current_per_org` — o índice
-      // parcial que o schema já tinha e que PROÍBE duas assinaturas vivas na
-      // mesma organização. Por isso a renovação ATUALIZA a corrente em vez de
-      // empilhar linha: quem guarda o histórico do que foi pago é
-      // `payment_history`. A garantia continua sendo do BANCO, não de um `IF` —
-      // que é o que importa quando dois eventos chegam no mesmo milissegundo.
-      const { error: erroAssinatura } = await supabase
-        .from("org_subscriptions")
-        .upsert({
-          organization_id: orgId,
-          plan_id: quote.plan_id,
-          billing_cycle: quote.billing_cycle,
-          payment_method: quote.payment_method,
-          user_count: inteiro(quote.seats, 1),
-          // `final_amount_cents <= base_amount_cents` é CHECK da tabela; o
-          // quote já respeita, e o piso evita gravar um par impossível se o
-          // motor mudar.
-          base_amount_cents: Math.max(base, finalCents),
-          discount_amount_cents: inteiro(quote.cycle_discount_cents) +
-            inteiro(quote.coupon_discount_cents) + inteiro(quote.manual_discount_cents),
-          final_amount_cents: finalCents,
-          cycle_discount_pct: inteiro(quote.cycle_discount_pct),
-          coupon_discount_pct: inteiro(quote.coupon_discount_pct),
-          manual_discount_cents: inteiro(quote.manual_discount_cents),
-          coupon_id: typeof quote.coupon_id === "string" ? quote.coupon_id : null,
-          provider: "asaas",
-          provider_payment_id: d.paymentId,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "organization_id", ignoreDuplicates: false })
-        .select("id");
+      // VIA RPC, e não pelo cliente. `org_subscriptions_one_current_per_org` é
+      // um índice PARCIAL (WHERE cancelled_at IS NULL), e o Postgres só o infere
+      // se o comando REPETIR o predicado — que o PostgREST não sabe expressar
+      // (`on_conflict` aceita nome de coluna, não cláusula WHERE).
+      //
+      // Escrever daqui estourava 42P10 em TODA chamada. E como este handler
+      // engole erro e responde 200 — a fila do provedor pausa em 15 falhas —, a
+      // organização nunca seria ativada, EM SILÊNCIO. O modo de falha contra o
+      // qual a fatia inteira foi desenhada, entrando pelo argumento de uma
+      // chamada. A garantia continua no BANCO; só mudou de onde é chamada.
+      const { error: erroAssinatura } = await supabase.rpc("billing_apply_paid_subscription", {
+        p_organization_id: orgId,
+        p_plan_id: quote.plan_id,
+        p_billing_cycle: quote.billing_cycle,
+        p_payment_method: quote.payment_method,
+        p_provider_payment_id: d.paymentId,
+        p_seats: inteiro(quote.seats, 1),
+        p_base_amount_cents: base,
+        p_discount_amount_cents: inteiro(quote.cycle_discount_cents) +
+          inteiro(quote.coupon_discount_cents) + inteiro(quote.manual_discount_cents),
+        p_final_amount_cents: finalCents,
+        p_cycle_discount_pct: inteiro(quote.cycle_discount_pct),
+        p_coupon_discount_pct: inteiro(quote.coupon_discount_pct),
+        p_manual_discount_cents: inteiro(quote.manual_discount_cents),
+        p_coupon_id: typeof quote.coupon_id === "string" ? quote.coupon_id : null,
+        p_provider: "asaas",
+      });
 
       if (erroAssinatura) {
         await logRuntime({

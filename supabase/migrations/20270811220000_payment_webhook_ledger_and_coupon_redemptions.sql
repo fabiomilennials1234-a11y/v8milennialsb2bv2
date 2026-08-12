@@ -190,3 +190,100 @@ ALTER TABLE public.org_subscriptions
 
 COMMENT ON COLUMN public.org_subscriptions.provider_payment_id IS
   'Id da cobrança no gateway que pagou o ciclo CORRENTE desta assinatura. Proveniência, não chave: a unicidade já é garantida por org_subscriptions_one_current_per_org (uma assinatura viva por organização). NULO em linha criada por outro caminho.';
+
+-- ---------------------------------------------------------------------------
+-- 5. A escrita da assinatura vira RPC — porque o PostgREST não sabe dizer WHERE
+-- ---------------------------------------------------------------------------
+-- `org_subscriptions_one_current_per_org` é UNIQUE (organization_id) WHERE
+-- cancelled_at IS NULL. Postgres SÓ infere índice parcial no ON CONFLICT se o
+-- comando REPETIR o predicado — provado em transação revertida:
+--
+--   ON CONFLICT (organization_id)                            -> 42P10
+--   ON CONFLICT (organization_id) WHERE cancelled_at IS NULL -> infere
+--
+-- E o PostgREST não expressa predicado: `on_conflict` aceita nome de coluna,
+-- não cláusula WHERE. Escrever a assinatura pelo cliente estouraria 42P10 em
+-- TODA chamada — e como o webhook engole erro e responde 200 (a fila do
+-- provedor pausa em 15 falhas), a organização nunca seria ativada, EM SILÊNCIO.
+-- O modo de falha contra o qual a fatia foi desenhada, entrando pelo argumento
+-- de uma chamada.
+--
+-- Então o comando mora aqui, onde o predicado cabe. A garantia continua sendo
+-- do BANCO e não de um `IF`; só muda de onde é chamada.
+CREATE OR REPLACE FUNCTION public.billing_apply_paid_subscription(
+  p_organization_id       uuid,
+  p_plan_id               uuid,
+  p_billing_cycle         text,
+  p_payment_method        text,
+  p_provider_payment_id   text,
+  p_seats                 integer DEFAULT 1,
+  p_base_amount_cents     integer DEFAULT 0,
+  p_discount_amount_cents integer DEFAULT 0,
+  p_final_amount_cents    integer DEFAULT 0,
+  p_cycle_discount_pct    numeric DEFAULT 0,
+  p_coupon_discount_pct   numeric DEFAULT 0,
+  p_manual_discount_cents integer DEFAULT 0,
+  p_coupon_id             uuid    DEFAULT NULL,
+  p_provider              text    DEFAULT 'asaas'
+) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+DECLARE
+  v_id uuid;
+  v_role text := coalesce(
+    (current_setting('request.jwt.claims', true)::jsonb ->> 'role'), '');
+BEGIN
+  -- Gate no CORPO, não só no GRANT. O GRANT é a primeira linha e está medido no
+  -- pgTAP; isto é a segunda, para o dia em que um DROP + CREATE devolver EXECUTE
+  -- a PUBLIC — que já aconteceu neste repositório.
+  IF v_role <> 'service_role' AND session_user NOT IN ('postgres', 'supabase_admin') THEN
+    RAISE EXCEPTION 'access_denied: billing_apply_paid_subscription é só do serviço'
+      USING ERRCODE = '42501';
+  END IF;
+
+  INSERT INTO public.org_subscriptions (
+    organization_id, plan_id, billing_cycle, payment_method, user_count,
+    base_amount_cents, discount_amount_cents, final_amount_cents,
+    cycle_discount_pct, coupon_discount_pct, manual_discount_cents,
+    coupon_id, provider, provider_payment_id, updated_at
+  ) VALUES (
+    p_organization_id, p_plan_id, p_billing_cycle, p_payment_method, greatest(p_seats, 1),
+    -- `final <= base` é CHECK da tabela; o piso evita gravar par impossível se
+    -- o motor de preço mudar.
+    greatest(p_base_amount_cents, p_final_amount_cents), p_discount_amount_cents, p_final_amount_cents,
+    p_cycle_discount_pct, p_coupon_discount_pct, p_manual_discount_cents,
+    p_coupon_id, p_provider, p_provider_payment_id, now()
+  )
+  ON CONFLICT (organization_id) WHERE cancelled_at IS NULL
+  DO UPDATE SET
+    plan_id               = EXCLUDED.plan_id,
+    billing_cycle         = EXCLUDED.billing_cycle,
+    payment_method        = EXCLUDED.payment_method,
+    user_count            = EXCLUDED.user_count,
+    base_amount_cents     = EXCLUDED.base_amount_cents,
+    discount_amount_cents = EXCLUDED.discount_amount_cents,
+    final_amount_cents    = EXCLUDED.final_amount_cents,
+    cycle_discount_pct    = EXCLUDED.cycle_discount_pct,
+    coupon_discount_pct   = EXCLUDED.coupon_discount_pct,
+    manual_discount_cents = EXCLUDED.manual_discount_cents,
+    coupon_id             = EXCLUDED.coupon_id,
+    provider              = EXCLUDED.provider,
+    provider_payment_id   = EXCLUDED.provider_payment_id,
+    updated_at            = now()
+  RETURNING id INTO v_id;
+
+  RETURN v_id;
+END;
+$$;
+
+COMMENT ON FUNCTION public.billing_apply_paid_subscription IS
+  'Escreve a assinatura corrente da organização a partir de um pagamento confirmado. Existe como RPC porque o ON CONFLICT precisa REPETIR o predicado do índice parcial (WHERE cancelled_at IS NULL) e o PostgREST não expressa predicado — pelo cliente, a escrita estouraria 42P10 em toda chamada. Só service_role.';
+
+REVOKE ALL ON FUNCTION public.billing_apply_paid_subscription(
+  uuid, uuid, text, text, text, integer, integer, integer, integer, numeric, numeric, integer, uuid, text
+) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.billing_apply_paid_subscription(
+  uuid, uuid, text, text, text, integer, integer, integer, integer, numeric, numeric, integer, uuid, text
+) TO service_role;
