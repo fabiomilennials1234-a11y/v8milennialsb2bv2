@@ -55,7 +55,7 @@ describe("assertPermission", () => {
   it("returns { allowed: false, reason } for member without permission", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("team_members", [
-      { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "member", is_active: true },
     ]);
     // delete_lead uses org-permission path — no overrides = denied
     const result = await assertPermission(sb, "u-member", "org-1", "delete_lead");
@@ -69,7 +69,7 @@ describe("assertPermission", () => {
   it("returns { allowed: true } when feature permission has default_value=true", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("team_members", [
-      { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "member", is_active: true },
     ]);
     mockTable("feature_permissions", [
       { key: "workflows.edit", is_admin_only: false, default_value: true },
@@ -83,7 +83,7 @@ describe("assertPermission", () => {
   it("returns { allowed: false } when member override disables permission", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("team_members", [
-      { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "member", is_active: true },
     ]);
     mockTable("feature_permissions", [
       { key: "pipeline.move_cards", is_admin_only: false, default_value: true },

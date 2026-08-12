@@ -61,12 +61,12 @@ describe("filterVisibleRanking", () => {
     const visible = new Set(["adm", "mem"]);
     const ranking = [
       u("adm", 1, { role: "admin" }),
-      u("mem", 2, { role: "membro" }),
+      u("mem", 2, { role: "member" }),
     ];
     const result = filterVisibleRanking(ranking, visible);
     expect(result).toHaveLength(2);
     expect(result[0].role).toBe("admin");
-    expect(result[1].role).toBe("membro");
+    expect(result[1].role).toBe("member");
   });
 
   it("retorna array vazio quando visibleMemberIds está vazio", () => {
@@ -98,7 +98,7 @@ describe("filterVisibleRanking", () => {
       u("admin-1", 1, { role: "admin" }),
       u("master-1", 2, { role: "master" }), // falha camada 1 (não visível) e 2 (role)
       u("master-virtual-1", 3, { role: "admin" }), // passa camada 1 e 2, falha camada 3 (virtual)
-      u("phantom", 4, { role: "membro" }), // falha camada 1 (não visível)
+      u("phantom", 4, { role: "member" }), // falha camada 1 (não visível)
     ];
     const result = filterVisibleRanking(ranking, visible);
     expect(result).toHaveLength(1);

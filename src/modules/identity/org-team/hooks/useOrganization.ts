@@ -7,11 +7,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "./useCurrentTeamMember";
+import type { AppRole } from "../../permissions/lib/app-role";
 export type OrgType = "crm" | "outbound";
 export interface OrganizationContext {
   organizationId: string | null;
   teamMemberId: string | null;
-  role: string | null;
+  /**
+   * `team_members.role` — o enum `app_role`, não uma string qualquer (#1541).
+   * Era `string | null`, e foi por essa fresta que comparações com valores
+   * inexistentes ("owner", "master", "membro") entraram e nunca casaram.
+   */
+  role: AppRole | null;
   orgType: OrgType | null;
   /** Fuso da org (IANA, ex. "America/Sao_Paulo"). Usado por cortes de dia org-local. */
   timezone: string | null;

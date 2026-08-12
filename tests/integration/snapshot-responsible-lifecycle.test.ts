@@ -145,7 +145,7 @@ describe.skipIf(shouldSkip)('snapshot_responsible_from_lead lifecycle', () => {
       {
         id: sdrA,
         organization_id: TEST_ORG_ID,
-        role: 'membro',
+        role: 'member',
         name: 'SDR A snapshot',
         email: `sdr-a-${sdrA.slice(0, 8)}@test.com`,
         is_active: true,
@@ -155,7 +155,7 @@ describe.skipIf(shouldSkip)('snapshot_responsible_from_lead lifecycle', () => {
       {
         id: sdrB,
         organization_id: TEST_ORG_ID,
-        role: 'membro',
+        role: 'member',
         name: 'SDR B snapshot',
         email: `sdr-b-${sdrB.slice(0, 8)}@test.com`,
         is_active: true,
@@ -165,7 +165,7 @@ describe.skipIf(shouldSkip)('snapshot_responsible_from_lead lifecycle', () => {
       {
         id: closerX,
         organization_id: TEST_ORG_ID,
-        role: 'membro',
+        role: 'member',
         name: 'Closer X snapshot',
         email: `closer-x-${closerX.slice(0, 8)}@test.com`,
         is_active: true,
@@ -175,7 +175,7 @@ describe.skipIf(shouldSkip)('snapshot_responsible_from_lead lifecycle', () => {
       {
         id: closerY,
         organization_id: TEST_ORG_ID,
-        role: 'membro',
+        role: 'member',
         name: 'Closer Y snapshot',
         email: `closer-y-${closerY.slice(0, 8)}@test.com`,
         is_active: true,

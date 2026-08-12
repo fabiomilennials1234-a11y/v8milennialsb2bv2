@@ -190,7 +190,7 @@ describe("requireAuth — happy paths", () => {
         id: "tm1",
         user_id: "u1",
         organization_id: "org-1",
-        role: "membro",
+        role: "member",
         is_active: true,
         job_title: "SDR",
         metric_type: "meetings",
@@ -202,7 +202,7 @@ describe("requireAuth — happy paths", () => {
     const ctx = await requireAuth(req, { organizationId: "org-1" });
     expect(ctx.userId).toBe("u1");
     expect(ctx.teamMemberId).toBe("tm1");
-    expect(ctx.role).toBe("membro");
+    expect(ctx.role).toBe("member");
     expect(ctx.isAdmin).toBe(false);
     expect(ctx.isMaster).toBe(false);
     expect(ctx.jobTitle).toBe("SDR");
@@ -259,7 +259,7 @@ describe("requireAuth — happy paths", () => {
         id: "tm4",
         user_id: "u4",
         organization_id: "org-fallback",
-        role: "membro",
+        role: "member",
         is_active: true,
         job_title: "Closer",
         metric_type: "sales",
@@ -298,7 +298,7 @@ describe("requireAuth — requireOrganization", () => {
     // user tem team_member em DUAS orgs — fallback iria pegar a errada
     mockState.tables.team_members = [
       { id: "tm-A", user_id: "u-multi", organization_id: "org-A", role: "admin", is_active: true, job_title: null, metric_type: null },
-      { id: "tm-B", user_id: "u-multi", organization_id: "org-B", role: "membro", is_active: true, job_title: null, metric_type: null },
+      { id: "tm-B", user_id: "u-multi", organization_id: "org-B", role: "member", is_active: true, job_title: null, metric_type: null },
     ];
     const req = new Request("https://x", { headers: { Authorization: "Bearer v" } });
     await expect(
@@ -310,7 +310,7 @@ describe("requireAuth — requireOrganization", () => {
     mockState.user = { id: "u-multi" };
     mockState.tables.team_members = [
       { id: "tm-A", user_id: "u-multi", organization_id: "org-A", role: "admin", is_active: true, job_title: null, metric_type: null },
-      { id: "tm-B", user_id: "u-multi", organization_id: "org-B", role: "membro", is_active: true, job_title: null, metric_type: null },
+      { id: "tm-B", user_id: "u-multi", organization_id: "org-B", role: "member", is_active: true, job_title: null, metric_type: null },
     ];
     const req = new Request("https://x", { headers: { Authorization: "Bearer v" } });
     const ctx = await requireAuth(req, {
@@ -319,7 +319,7 @@ describe("requireAuth — requireOrganization", () => {
     });
     expect(ctx.organizationId).toBe("org-B");
     expect(ctx.teamMemberId).toBe("tm-B");
-    expect(ctx.role).toBe("membro");
+    expect(ctx.role).toBe("member");
     expect(ctx.isAdmin).toBe(false);
   });
 
@@ -415,7 +415,7 @@ describe("requireAdmin", () => {
         id: "tm1",
         user_id: "u1",
         organization_id: "org-1",
-        role: "membro",
+        role: "member",
         is_active: true,
         job_title: null,
         metric_type: null,
@@ -455,7 +455,7 @@ describe("resolvePermission", () => {
 
   it("member override enabled=true wins over default_value", async () => {
     mockState.tables.team_members = [
-      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true },
     ];
     mockState.tables.feature_permissions = [
       { key: "leads.delete", is_admin_only: false, default_value: false },
@@ -468,7 +468,7 @@ describe("resolvePermission", () => {
 
   it("member override enabled=false wins over default_value=true", async () => {
     mockState.tables.team_members = [
-      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true },
     ];
     mockState.tables.feature_permissions = [
       { key: "leads.delete", is_admin_only: false, default_value: true },
@@ -481,7 +481,7 @@ describe("resolvePermission", () => {
 
   it("falls back to feature default_value when no member override", async () => {
     mockState.tables.team_members = [
-      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true },
     ];
     mockState.tables.feature_permissions = [
       { key: "leads.delete", is_admin_only: false, default_value: true },
@@ -491,14 +491,14 @@ describe("resolvePermission", () => {
 
   it("returns false when feature not found", async () => {
     mockState.tables.team_members = [
-      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true },
     ];
     expect(await resolvePermission("u1", "org-1", "can_delete_leads")).toBe(false);
   });
 
   it("returns false when feature is admin_only", async () => {
     mockState.tables.team_members = [
-      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true },
     ];
     mockState.tables.feature_permissions = [
       { key: "leads.delete", is_admin_only: true, default_value: true },
