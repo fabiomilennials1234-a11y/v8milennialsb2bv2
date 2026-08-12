@@ -2,7 +2,9 @@ const BLOCKED_HOSTS = new Set([
   "localhost",
   "127.0.0.1",
   "0.0.0.0",
-  "[::1]",
+  // Sem colchetes: `validateExternalUrl` remove os de `URL.hostname` antes de consultar
+  // este Set. A entrada `"[::1]"` que existia aqui nunca casava com nada.
+  "::1",
   "metadata.google.internal",
   "metadata.google.com",
 ]);
@@ -34,6 +36,38 @@ function isPrivateIp(ip: string): boolean {
   return PRIVATE_RANGES.some((r) => n >= r.start && n <= r.end);
 }
 
+/**
+ * Contraparte IPv6 de `isPrivateIp`. Sem ela, todo alvo interno bloqueado em IPv4
+ * volta a ser alcançável pela notação IPv6 — inclusive o endpoint de metadados da
+ * nuvem, via `::ffff:169.254.169.254`.
+ *
+ * O host chega aqui já sem os colchetes de `URL.hostname`.
+ */
+function isPrivateIpv6(host: string): boolean {
+  // Zone id (`fe80::1%eth0`) não muda o destino — descarta antes de comparar.
+  const h = host.toLowerCase().replace(/%.*$/, "");
+  if (!h.includes(":")) return false;
+
+  if (h === "::1" || h === "::") return true;
+
+  // IPv4 mapeado, forma decimal (`::ffff:169.254.169.254`) e hexadecimal
+  // (`::ffff:a9fe:a9fe`) — as duas apontam para o mesmo endereço IPv4.
+  const dotted = /^(?:0*:)*:?ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(h);
+  if (dotted) return isPrivateIp(dotted[1]);
+
+  const hex = /^(?:0*:)*:?ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(h);
+  if (hex) {
+    const hi = parseInt(hex[1], 16);
+    const lo = parseInt(hex[2], 16);
+    return isPrivateIp(`${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`);
+  }
+
+  if (/^fe[89ab][0-9a-f]?:/.test(h)) return true;  // fe80::/10 link-local
+  if (/^f[cd][0-9a-f]{0,2}:/.test(h)) return true; // fc00::/7  unique local
+
+  return false;
+}
+
 export function validateExternalUrl(raw: string): { valid: true; url: URL } | { valid: false; reason: string } {
   let parsed: URL;
   try {
@@ -52,7 +86,7 @@ export function validateExternalUrl(raw: string): { valid: true; url: URL } | { 
     return { valid: false, reason: "Blocked host" };
   }
 
-  if (isPrivateIp(hostname)) {
+  if (isPrivateIp(hostname) || isPrivateIpv6(hostname)) {
     return { valid: false, reason: "Private IP not allowed" };
   }
 
