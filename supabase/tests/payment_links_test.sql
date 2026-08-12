@@ -442,17 +442,17 @@ SELECT ok((SELECT relrowsecurity FROM pg_class WHERE relname = 'payment_link_cha
 -- é estado a medir, não a supor.
 -- ===========================================================================
 SELECT ok(NOT has_function_privilege('anon',
-  'public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz)', 'EXECUTE'),
+  'public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz,jsonb,jsonb,text,integer,text,text,text,text)', 'EXECUTE'),
   '(GRANT) anon não gera link');
 SELECT ok(has_function_privilege('authenticated',
-  'public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz)', 'EXECUTE'),
+  'public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz,jsonb,jsonb,text,integer,text,text,text,text)', 'EXECUTE'),
   '(GRANT) authenticated executa — o Master é um usuário autenticado, e quem barra o não-master é o corpo, não o grant');
 
 -- `service_role` NÃO gera link: sob ele `auth.uid()` é NULL, então a função só
 -- entregaria `Forbidden`. Grant que só devolve erro manda quem depura para o
 -- lugar errado.
 SELECT ok(NOT has_function_privilege('service_role',
-  'public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz)', 'EXECUTE'),
+  'public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz,jsonb,jsonb,text,integer,text,text,text,text)', 'EXECUTE'),
   '(GRANT) service_role NÃO gera link — sob ele auth.uid() é NULL e a função só devolveria Forbidden');
 
 SELECT ok(NOT has_function_privilege('anon',
