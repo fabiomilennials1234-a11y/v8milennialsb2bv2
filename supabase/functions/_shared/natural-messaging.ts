@@ -4,12 +4,12 @@
  * Breaks long agent responses into multiple short messages
  * with realistic typing delays, simulating a real person.
  *
- * Strategy: LLM split ALWAYS runs first (Gemini Flash — fast, cheap).
+ * Strategy: LLM split ALWAYS runs first (gpt-4.1-mini — fast, cheap).
  * Heuristic split is the fallback if LLM fails or is unavailable.
  */
 
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") || "";
-const LLM_SPLIT_MODEL = "google/gemini-2.0-flash-001";
+const LLM_SPLIT_MODEL = "openai/gpt-4.1-mini";
 
 // =====================================================
 // INTENSITY PRESETS

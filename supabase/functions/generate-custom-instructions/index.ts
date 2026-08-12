@@ -120,7 +120,7 @@ IMPORTANTE: Responda SOMENTE com o JSON abaixo, sem texto antes ou depois, sem b
         "X-Title": "V8 Millennials - Generate Custom Instructions",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "openai/gpt-4.1-mini",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Problema/Ajuste: ${description.trim()}` },

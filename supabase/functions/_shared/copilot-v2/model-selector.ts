@@ -1,8 +1,10 @@
 /**
  * model-selector — Copilot v2 per-archetype model (Slice 2, ADR #10).
  *
- * Fast tool-calling model for high-volume archetypes; stronger model for
- * Vendedor's closing nuance. Values are the closed copilot_v2_model_id enum.
+ * Modelo único em todos os arquétipos (decisão CTO 2026-08-12): openai/gpt-4.1-mini.
+ * Antes o Vendedor apontava para anthropic/claude-sonnet-4-6 — valor que a
+ * migration 20260720221647 já tinha removido do enum copilot_v2_model_id, então
+ * o arquétipo teria falhado no insert do trace. Values são o enum fechado.
  */
 
 import type { QualificationTier } from "./rubric-engine.ts";
@@ -11,12 +13,12 @@ export type Archetype = "qualificador" | "vendedor" | "carteira";
 export type ModelId =
   | "google/gemini-2.5-flash"
   | "anthropic/claude-haiku-4-5"
-  | "anthropic/claude-sonnet-4-6";
+  | "openai/gpt-4.1-mini";
 
 const MODEL_BY_ARCHETYPE: Record<Archetype, ModelId> = {
-  qualificador: "google/gemini-2.5-flash",
-  carteira: "google/gemini-2.5-flash",
-  vendedor: "anthropic/claude-sonnet-4-6",
+  qualificador: "openai/gpt-4.1-mini",
+  carteira: "openai/gpt-4.1-mini",
+  vendedor: "openai/gpt-4.1-mini",
 };
 
 export function modelForArchetype(archetype: Archetype): ModelId {

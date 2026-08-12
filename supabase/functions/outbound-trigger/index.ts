@@ -427,7 +427,7 @@ ${leadContext || "Nenhum dado adicional disponível"}`;
         "X-Title": "V8 Millennials Outbound",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.0-flash-001",
+        model: "openai/gpt-4.1-mini",
         messages: [
           { role: "user", content: generationPrompt },
         ],
