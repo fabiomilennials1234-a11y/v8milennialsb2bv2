@@ -12,6 +12,9 @@ import { WebhookCallPanel } from "./sidebar-panels/WebhookCallPanel";
 import { GotoPanel } from "./sidebar-panels/GotoPanel";
 import { WaitBusinessWindowPanel } from "./sidebar-panels/WaitBusinessWindowPanel";
 import { AssignResponsiblePanel } from "./sidebar-panels/AssignResponsiblePanel";
+import { CodeJsonPanel } from "./sidebar-panels/CodeJsonPanel";
+import { CodeJavascriptPanel } from "./sidebar-panels/CodeJavascriptPanel";
+import { CodeHttpsPanel } from "./sidebar-panels/CodeHttpsPanel";
 import { NODE_LABELS } from "@/types/workflow";
 import type { WorkflowNode, WorkflowNodeData } from "@/types/workflow";
 
@@ -101,6 +104,12 @@ export function WorkflowSidebar({
         return <WaitBusinessWindowPanel data={nodeData as any} onUpdate={handleUpdate} />;
       case "assign_responsible":
         return <AssignResponsiblePanel data={nodeData as any} onUpdate={handleUpdate} />;
+      case "code_json":
+        return <CodeJsonPanel data={nodeData as any} onUpdate={handleUpdate} />;
+      case "code_javascript":
+        return <CodeJavascriptPanel data={nodeData as any} onUpdate={handleUpdate} />;
+      case "code_https":
+        return <CodeHttpsPanel data={nodeData as any} onUpdate={handleUpdate} />;
       case "end":
         return (
           <p className="text-sm text-muted-foreground p-4">

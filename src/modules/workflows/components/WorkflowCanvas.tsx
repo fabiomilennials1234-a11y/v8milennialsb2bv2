@@ -27,6 +27,9 @@ import { WebhookCallNode } from "./nodes/WebhookCallNode";
 import { GotoNode } from "./nodes/GotoNode";
 import { WaitBusinessWindowNode } from "./nodes/WaitBusinessWindowNode";
 import { AssignResponsibleNode } from "./nodes/AssignResponsibleNode";
+import { CodeJsonNode } from "./nodes/CodeJsonNode";
+import { CodeJavascriptNode } from "./nodes/CodeJavascriptNode";
+import { CodeHttpsNode } from "./nodes/CodeHttpsNode";
 import { AnimatedEdge } from "./edges/AnimatedEdge";
 import { SelectionAutoPan } from "./SelectionAutoPan";
 import type { WorkflowNode, WorkflowEdge } from "@/types/workflow";
@@ -44,6 +47,9 @@ const nodeTypes: NodeTypes = {
   goto: GotoNode,
   wait_business_window: WaitBusinessWindowNode,
   assign_responsible: AssignResponsibleNode,
+  code_json: CodeJsonNode,
+  code_javascript: CodeJavascriptNode,
+  code_https: CodeHttpsNode,
 };
 
 const edgeTypes: EdgeTypes = {
