@@ -474,6 +474,16 @@ verify_jwt = false
 [functions.billing-payment-link]
 verify_jwt = false
 
+# billing-payment-status: "e aí, caiu?" (SCRUM-289, Fatia 8). verify_jwt=false pelo
+# mesmo motivo da porta acima — a página não tem sessão e a autorização é o
+# conhecimento do token. Teto PRÓPRIO de 80/5min por IP, e não os 20 da porta do
+# link: aqui o front PERGUNTA (3s nos primeiros 2 min, 10s depois), então 20
+# reprovaria o uso legítimo e a tela ficaria "aguardando" para quem já pagou.
+# Deriva `paid` de payment_webhook_events, NÃO de org_subscriptions — no ramo
+# new_org a organização só existe depois do pagamento. O porquê está em status.ts.
+[functions.billing-payment-status]
+verify_jwt = false
+
 # asaas-webhook: recebe os eventos do gateway de pagamento (SCRUM-287).
 # verify_jwt=false — quem chama é o Asaas, que não tem sessão nossa. A defesa é
 # COMPOSTA, porque o provedor NÃO assina o corpo (não há HMAC, só um token
