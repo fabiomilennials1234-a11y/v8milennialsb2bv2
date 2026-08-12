@@ -43,7 +43,8 @@
     "typecheck:pending": "node scripts/tsc-ratchet.cjs --write-pending",
     "lint:ratchet": "node scripts/lint-ratchet.cjs",
     "lint:baseline": "node scripts/lint-ratchet.cjs --write",
-    "lint:pending": "node scripts/lint-ratchet.cjs --write-pending"
+    "lint:pending": "node scripts/lint-ratchet.cjs --write-pending",
+    "test:remote": "vitest run tests/remote/ --reporter=verbose"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -13,12 +13,15 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
 
-const PROD_URL =
-  process.env.PROD_SUPABASE_URL || 'https://jsjsmuncfkbsbzqzqhfq.supabase.co';
-const PROD_SERVICE_KEY = process.env.PROD_SUPABASE_SERVICE_ROLE_KEY ?? '';
-const PROD_ANON_KEY = process.env.PROD_SUPABASE_ANON_KEY ?? '';
+// O alvo vem do guard, que RECUSA produção (ver tests/remote/guard.ts). Antes
+// esta linha trazia o ref de prod como default, dentro do glob do CI.
+import { alvoRemoto, chaveRemota, semAlvoRemoto } from './guard';
 
-const admin = createClient(PROD_URL, PROD_SERVICE_KEY || 'skipped-no-key');
+const PROD_URL = semAlvoRemoto ? 'http://alvo-nao-configurado.invalid' : alvoRemoto();
+const PROD_SERVICE_KEY = semAlvoRemoto ? '' : chaveRemota();
+const PROD_ANON_KEY = process.env.TEST_SUPABASE_ANON_KEY ?? '';
+
+const admin = createClient(PROD_URL, PROD_SERVICE_KEY || 'sem-chave-suite-pulada');
 
 const TEST_EMAIL = `test-human-pause-${Date.now()}@test.local`;
 const TEST_PASSWORD = 'TestHumanPause123!';
@@ -33,9 +36,9 @@ let testAgentId: string;
 let testConversationId: string;
 let testInstanceId: string;
 let userClient: ReturnType<typeof createClient>;
-let msgIdsToClean: string[] = [];
+const msgIdsToClean: string[] = [];
 
-describe.skipIf(!PROD_SERVICE_KEY)('Human Pause Copilot', () => {
+describe.skipIf(semAlvoRemoto)('Human Pause Copilot', () => {
   beforeAll(async () => {
     // Use Milennials org (has active copilot plan)
     testOrgId = '6030520a-2ca7-477d-be89-55758e2cd808';
@@ -126,7 +129,9 @@ describe.skipIf(!PROD_SERVICE_KEY)('Human Pause Copilot', () => {
     if (testUserId) await admin.auth.admin.deleteUser(testUserId);
   }, 15_000);
 
-  async function insertMessage(overrides: Record<string, any> = {}) {
+  // `unknown` em vez de `any`: o único campo lido aqui é `phone_number`, e ele
+  // é declarado à parte. O resto só é espalhado no insert.
+  async function insertMessage(overrides: Record<string, unknown> & { phone_number?: string } = {}) {
     const msgId = `test-hp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const phone = overrides.phone_number ?? TEST_PHONE;
     const remoteJid = phone.replace('+', '') + '@s.whatsapp.net';
