@@ -15,9 +15,18 @@ Leia inteiro antes de escrever a primeira linha. Metade do valor daqui é o que 
 
 Três coisas registradas acima **mudaram ou estavam erradas**. Leia isto antes de agir por qualquer uma delas.
 
-### 1. A SUA MIGRATION COLIDE. Renumerar é o PRIMEIRO passo, antes de aplicar.
+### 1. ✅ RESOLVIDO em 2026-08-12 — a migration colidia; foi RENUMERADA para `20270812120000`.
 
-`20270811160000_payment_links_package.sql` (esta branch) tem **o mesmo prefixo de 14 dígitos** de
+**Estado atual:** `supabase/migrations/20270812120000_payment_links_package.sql` (+ rollback pareado).
+Rebase sobre `origin/main` **feito**, guarda local **verde**. O texto abaixo fica como registro do porquê.
+
+**E o que quase passou batido, medido pelo orquestrador:** o guarda
+`scripts/check-migration-versions.sh` (#1538, mergeado 14:27) roda **do checkout**. Branch sem rebase roda
+o guarda **velho** e ganha verde numa colisão real. Pior: a metade (b) do guarda lê `git ls-tree HEAD` —
+**árvore commitada**, não o índice. Renomear e não commitar mantém o FAIL apontando o nome antigo.
+Ordem que funciona: **rebase → renumera → COMMITA → roda o guarda**.
+
+`20270811160000_payment_links_package.sql` (versão antiga desta branch) tinha **o mesmo prefixo de 14 dígitos** de
 `20270811160000_payment_history_receipt_period_method.sql`, que **já está na `main` E no ledger de produção**.
 
 Consequência, e é a pior possível: o `supabase db push` chaveia `schema_migrations` pela versão. Ele veria
@@ -26,9 +35,15 @@ verde, e a mudança de schema **nunca chegaria em produção**. É a causa-raiz 
 documentada no cabeçalho de `scripts/check-migration-versions.sh`.
 
 **Renumere para um prefixo livre antes de qualquer `db push`.** Ocupados nesta janela: `…120000`, `…130000`,
-`…140000`, `…150000`, `…160000`, `…170000`, `…220000`, e `20270812000000` a `…040000`. Confira contra
-`origin/main` **na mão** — o guarda do repo hoje compara a branch contra si mesma e é cego para esta colisão
-(issue #1534, PR #1538 em revisão).
+`…140000`, `…150000`, `…160000`, `…170000`, `…220000`, e `20270812000000` a `…040000`, mais `20270812100000`.
+`20270812110000` **também está ocupado** (`copilot_model_defaults_gpt41_mini`, em ref que ainda não mergeou) e
+`20270812111845` é do colega em `mst-eng-b` (`payment_link_buyers`) — nenhum dos dois aparece em `origin/main`,
+então o guarda não os enxerga. Comando que enxerga **qualquer ref**, e é como `20270812120000` foi escolhida:
+
+```bash
+git log --all --name-only --diff-filter=A --pretty=format: -- 'supabase/migrations/2027081*' \
+  | sed 's#.*/##' | grep -E '^[0-9]{14}' | sort -u
+```
 
 Esta é a **quinta** colisão do mesmo tipo em dois dias. As outras quatro foram renumeradas nos PRs #1497,
 #1531, #1532 e #1536.
@@ -74,7 +89,7 @@ A **Fatia 7** é a **tela do Master** que chama essas funções. O CTO foi expl�
 
 ## 2. O que JÁ ESTÁ FEITO (nos dois commits)
 
-### 2.1 `supabase/migrations/20270811160000_payment_links_package.sql` — **NÃO TESTADA**
+### 2.1 `supabase/migrations/20270812120000_payment_links_package.sql` — **NÃO TESTADA**
 
 ⚠️ **Esta migration nunca rodou.** Foi escrita numa janela em que o banco local estava sendo derrubado de propósito por outro agente (isolamento de um segfault). **A primeira coisa a fazer ao retomar é aplicá-la e rodar o teste.** Ver seção 5.
 
@@ -162,7 +177,12 @@ Comparado como número, `-1 < 50000` e **a proposta mais generosa apareceria mar
 
 ## 5. O QUE FALTA — em ordem
 
-1. **APLICAR E TESTAR A `20270811160000`.** Ela nunca rodou.
+0. **Já feito (2026-08-12):** rebase sobre `origin/main`, renumeração para `20270812120000`, guarda local verde.
+   **Não aplique nada sem antes ler a issue #1548** — o ledger de prod tem um **vão** (a `20270811140000`,
+   que é a base desta migration, nunca subiu, embora a `150000` e a `160000` tenham subido). O plano de
+   subida inteiro está lá; aplicar fora dessa ordem repete o defeito que a renumeração acabou de evitar.
+
+1. **APLICAR E TESTAR A `20270812120000`** (local, depois do passo 0). Ela nunca rodou.
    ```bash
    export PATH="/Applications/Docker.app/Contents/Resources/bin:$PATH"
    supabase db reset      # avise o Malho antes: o banco local é compartilhado
@@ -193,15 +213,19 @@ Comparado como número, `-1 < 50000` e **a proposta mais generosa apareceria mar
 6. **O banco local é compartilhado.** Avise o Malho antes de `supabase db reset`.
 7. **`maestri ask` passa por shell no terminal do destinatário.** Crase e `${...}` viram execução e quebram a mensagem — já aconteceu. Escreva identificador em prosa e **leia a saída** procurando `command not found`.
 8. **Docker fora do PATH:** `export PATH="/Applications/Docker.app/Contents/Resources/bin:$PATH"`.
+9. **Guarda verde em branch atrasada não vale nada.** O guarda que roda é o **do checkout**: sem rebase você
+   executa a versão antiga do script e ela aprova a colisão. E mesmo rebaseado, a metade (b) lê `git ls-tree HEAD`
+   — renomeio **não commitado** é invisível para ela, e o FAIL continua citando o nome antigo. **Rebase → renomeia
+   → commita → roda.** Medido nesta branch: guarda velho `exit 0`, guarda novo `exit 1` nomeando os dois arquivos.
 
 ---
 
 ## 7. Pendências que NÃO são desta fatia, mas encostam nela
 
-- **PR #1533** (`fix/payment-link-metodo-do-port`): `boleto` não existe neste produto e o `CHECK` aceitava. **Pronto, 40/40 no CI.** Quando mergear, **rebase esta branch em `main`** — o `payment_links_test.sql` daqui é a versão anterior ao fix.
+- **PR #1533** (`fix/payment-link-metodo-do-port`): `boleto` não existe neste produto e o `CHECK` aceitava. **Mergeado; rebase feito.** O conflito veio exatamente onde ele previa: a asserção de contraste em `payment_links_test.sql` passava `'boleto'`, e o lado da `main` passa `'credit_card'`. Resolvido pela `main` — o `CHECK` agora só aceita `pix | credit_card`.
 - **A migration de ciclo que está em produção NÃO está na cadeia do repo** — uma das **44 fantasmas** (issue #1521). O repo diverge de prod **agora**, nesse ponto.
 - **Dois vocabulários de ciclo convivem por tabela:** `semiannual` no billing novo, `semester` no `payment_history` legado. Não é inconsistência de arquivo — são duas gerações de schema no mesmo banco.
-- **Deploys manuais pendentes** (merge não faz): migrations `20270811120000`, `20270811140000`, `20270811160000`, `20270811170000`, e as edge functions `infra-watchdog` e `billing-quote`.
+- **Deploys manuais pendentes** (merge não faz): migrations `20270811120000`, `20270811140000`, `20270812120000` (esta fatia), `20270811170000`, e as edge functions `infra-watchdog` e `billing-quote`. **Ordem e vãos: issue #1548.**
 - **Dois blocos `29`** no cabeçalho do `run.sh` da `main` (meu `payment_links_test` e o `rls_inv6_definer_sem_gate_test`). Comentário apenas; não renumerei bloco de outro dono.
 
 ---
