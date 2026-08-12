@@ -218,9 +218,20 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
     // Este trigger é de AUTOMAÇÃO, não de IA: "o lead respondeu" é um fato do
     // inbound, independente de a org ter Copilot. Ele ficava lá embaixo (passo
     // 1.7, depois do AGENT ACTIVE GATE), então só 17 das 99 orgs conseguiam
-    // alcançá-lo — as outras 82 saem no early-return do 0.95. Resultado medido
-    // em PROD 2026-08-11: ZERO workflows `lead_replied` e ZERO execuções em
-    // toda a história. O gate tornava o trigger inalcançável, não impopular.
+    // alcançá-lo. Resultado medido em PROD 2026-08-11: ZERO workflows
+    // `lead_replied` e ZERO execuções em toda a história. O gate tornava o
+    // trigger inalcançável, não impopular.
+    //
+    // ⚠️ Isto alcança 60 das 99 orgs, não as 99 (medido em PROD 2026-08-12).
+    // Das 82 que não chegavam aqui, 43 saíam no 0.95 e são o que esta mudança
+    // destrava; as outras 39 morrem ANTES, no PLAN GATE do passo 0.85
+    // (`plan_denied`, ou `lead_created_no_plan` quando a org tem
+    // `auto_create_lead_on_inbound`), porque o plano delas não inclui a feature
+    // `copilot` — inclusive orgs que TÊM `automations`. Subir o disparo acima
+    // do 0.85 não é opção: passaria na frente do lock de dedup (0.9) e
+    // perderíamos a garantia de disparo único. O caminho certo seria gatear o
+    // 0.97 por `automations` em vez de herdar o veredito de `copilot`. Fora do
+    // escopo desta fatia.
     //
     // Ordem importa: roda depois do lock de dedup (0.9), então mensagens
     // concorrentes do mesmo telefone não disparam duas vezes.
