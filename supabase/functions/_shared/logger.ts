@@ -5,6 +5,12 @@
  * Never throws — silently fails to avoid breaking the main flow.
  *
  * Security: all payloads pass through redactSecrets() before persisting.
+ *
+ * ⚠️ O QUE ESTA LISTA NÃO RESOLVE: mensagem de exceção construída com o dado
+ * dentro. `new Error(\`cliente inválido: cpf \${doc}\`)` vira `err.message` e
+ * atravessa inteiro — a redação é por NOME DE CHAVE, e uma frase não tem chave.
+ * A regra é não interpolar PII em texto de erro; para identificar a linha, use
+ * o id do registro (`charge_id`, `organization_id`), que não é PII.
  * Over-redaction (e.g. user_token_count matched by "token") is intentional —
  * security > debug verbosity.
  */
@@ -47,8 +53,92 @@ const BEARER_RE = /^(Bearer|Basic)\s+\S+/i;
  */
 const PHONE_KEY_PATTERNS = ["phone", "telefone", "remote_jid", "msisdn"];
 
+/**
+ * Chaves cujo valor é DOCUMENTO FISCAL do comprador (CPF/CNPJ).
+ *
+ * Entram no mapa agora porque até o billing existir não havia comprador no
+ * produto — o autor original já tinha pensado em PII de lead (telefone), e
+ * documento simplesmente não estava no mundo dele.
+ *
+ * Tratamento igual ao do telefone — mascarar, não apagar — pela mesma razão:
+ * apagar por completo inviabiliza correlacionar um log a um atendimento. Mas o
+ * corte é MAIS AGRESSIVO: só os dois últimos dígitos sobrevivem.
+ *
+ * Por que dois: num CPF os dois últimos são dígitos VERIFICADORES, derivados
+ * dos nove primeiros — não acrescentam identidade a quem já tem o resto, e
+ * sozinhos não reconstroem nada. Para correlacionar de verdade, use
+ * `charge_id`/`organization_id`, que estão no mesmo registro e não são PII.
+ */
+const TAX_ID_KEY_PATTERNS = [
+  "cpf", "cnpj", "tax_id", "taxid", "cpfcnpj", "documento", "doc_number",
+];
+
+/**
+ * Chaves cujo valor é E-MAIL. Redigido INTEIRO, e a assimetria em relação ao
+ * telefone é deliberada: e-mail identifica a pessoa sozinho e costuma ser a
+ * própria credencial de acesso ao sistema, enquanto um telefone mascarado ainda
+ * serve para casar com uma conversa. Correlação de e-mail se faz por `user_id`.
+ */
+const EMAIL_KEY_PATTERNS = ["email", "e_mail", "mail_to", "buyer_mail"];
+
+/**
+ * Chaves cujo valor é o NOME DO COMPRADOR. Redigido inteiro, como e-mail.
+ *
+ * ⚠️ O NOME DA CHAVE ENGANA, e enganou a mim primeiro: `legal_name` soa a razão
+ * social — dado público na Receita — mas a coluna guarda o `CustomerInput.name`
+ * que o gateway exige, e a tabela admite os DOIS ramos (`tax_id_kind` cpf ou
+ * cnpj). No ramo **cpf**, que é o comprador pessoa física, isso é o **nome
+ * civil de uma pessoa**: não está público em cadastro nenhum e não é derivável
+ * de nada que já tenhamos.
+ *
+ * Ou seja, o argumento "é público, não precisa redigir" vale para metade da
+ * tabela e falha na outra metade — e é a metade que falha que decide.
+ *
+ * Mesmo que fosse só CNPJ, dois motivos já bastariam:
+ *
+ * 1. A CASA JÁ DECIDIU O DESEMPATE, antes desta discussão — o cabeçalho deste
+ *    arquivo diz que sobre-redação é política aceita: "a false positive loses
+ *    debug info, a false negative leaks a credential".
+ *
+ * 2. "PÚBLICO EM OUTRO LUGAR" NÃO É "INOFENSIVO NO NOSSO LOG". O nome é
+ *    consultável por qualquer um; o que vaza aqui é a CORRELAÇÃO — a empresa
+ *    ligada a estado interno nosso e a dado de pagamento. O dado público é o
+ *    nome; o dado nosso é que ELA pagou, quanto, e o que quebrou no meio.
+ *
+ * O recorte é estreito de propósito e não tem o efeito colateral de `email`:
+ * `legal_name` e `razao_social` não casam nenhuma outra chave do repositório.
+ * `name` e `company` de LEAD seguem em claro — são o vocabulário do CRM, e
+ * redigi-los apagaria o diagnóstico de metade dos fluxos.
+ */
+const LEGAL_NAME_KEY_PATTERNS = ["legal_name", "razao_social", "razaosocial"];
+
 /** Menos que isto e o mascaramento revelaria o número inteiro. */
 const MIN_MASKABLE_DIGITS = 10;
+
+function isTaxIdKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  return TAX_ID_KEY_PATTERNS.some((p) => lower.includes(p));
+}
+
+function isEmailKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  return EMAIL_KEY_PATTERNS.some((p) => lower.includes(p));
+}
+
+function isLegalNameKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  return LEGAL_NAME_KEY_PATTERNS.some((p) => lower.includes(p));
+}
+
+/**
+ * Deixa só os dois últimos dígitos. Valor curto demais para mascarar vira
+ * REDACTED inteiro — mascarar 3 dígitos revelaria o número.
+ */
+function maskTaxId(value: string): string {
+  const digitos = value.replace(/\D/g, "");
+  if (digitos.length < 5) return REDACTED;
+  return "*".repeat(digitos.length - 2) + digitos.slice(-2);
+}
 
 function isPhoneKey(key: string): boolean {
   const lower = key.toLowerCase();
@@ -130,6 +220,12 @@ export function redactSecrets(input: unknown, _seen?: WeakSet<object>): unknown 
       } else {
         result[key] = REDACTED;
       }
+    } else if (isTaxIdKey(key)) {
+      result[key] = typeof value === "string" ? maskTaxId(value) : REDACTED;
+    } else if (isEmailKey(key)) {
+      result[key] = REDACTED;
+    } else if (isLegalNameKey(key)) {
+      result[key] = REDACTED;
     } else if (isPhoneKey(key)) {
       result[key] = typeof value === "string" ? maskPhone(value) : REDACTED;
     } else {
