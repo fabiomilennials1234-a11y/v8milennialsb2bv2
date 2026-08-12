@@ -74,6 +74,9 @@ export interface ExecuteWorkflowResult {
   stepsExecuted: number;
 }
 
+/** Teto do `context` persistido no heartbeat (128 KB). Acima disso, não vai. */
+const CONTEXT_HEARTBEAT_MAX_CHARS = 131_072;
+
 // ─── Main Executor ──────────────────────────────────────────────────────────
 
 export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<ExecuteWorkflowResult> {
@@ -119,6 +122,7 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
   const loopCounters = { ...(params.loopCounters || {}) };
   let stepsExecuted = 0;
   const maxSteps = Math.min(loopLimit, 500); // Hard cap at 500 steps
+  let oversizedContextWarned = false;
 
   // Get next nodes after trigger (or current node if resuming)
   let nextNodes = getNextNodes(currentNodeId, edgeMap);
@@ -157,12 +161,30 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
     // Onda 1 / T1.1.1: heartbeat updated_at impede double-claim por
     // claim_workflow_executions (que reclama processing >10min). Combinado com
     // batch=20 + nodes individuais rápidos, custo desprezível (1 UPDATE por node).
+    //
+    // `context` viaja junto porque, sem isso, um valor gravado por um nó só chega ao
+    // banco se o workflow pausar num caminho que grava contexto explicitamente (retry
+    // de action e wait_response). O `outputVariable` do webhook_call se perde hoje
+    // quando o nó seguinte é um delay. O UPDATE já acontecia a cada nó — a coluna a
+    // mais custa zero round-trip.
+    const heartbeat: Record<string, unknown> = {
+      current_node_id: nodeId,
+      loop_counters: loopCounters,
+      updated_at: new Date().toISOString(),
+    };
+    // Guarda de tamanho: um context inflado viajaria em TODO tick de TODO lead.
+    // Acima do teto, o heartbeat volta a ser só heartbeat.
+    if (contextSizeChars(context) <= CONTEXT_HEARTBEAT_MAX_CHARS) {
+      heartbeat.context = context;
+    } else if (!oversizedContextWarned) {
+      oversizedContextWarned = true;
+      console.warn(
+        `[workflow-executor] context acima de ${CONTEXT_HEARTBEAT_MAX_CHARS} chars na execução ${executionId} — não persistido no heartbeat`,
+      );
+    }
+
     await supabase.from("workflow_executions")
-      .update({
-        current_node_id: nodeId,
-        loop_counters: loopCounters,
-        updated_at: new Date().toISOString(),
-      })
+      .update(heartbeat)
       .eq("id", executionId);
 
     try {
@@ -922,6 +944,19 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Tamanho serializado do context, em caracteres. Um context que nem serializa é
+ * tratado como infinito: o UPDATE falharia de qualquer jeito, e uma exceção aqui
+ * (fora do try/catch de nó) derrubaria a execução inteira sem gravar passo nenhum.
+ */
+function contextSizeChars(context: Record<string, unknown>): number {
+  try {
+    return JSON.stringify(context).length;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
 
 function getNextNodes(
   nodeId: string,
