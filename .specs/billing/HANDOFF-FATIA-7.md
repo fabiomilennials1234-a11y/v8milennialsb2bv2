@@ -11,6 +11,57 @@ Leia inteiro antes de escrever a primeira linha. Metade do valor daqui é o que 
 
 ---
 
+## ⚠ CORREÇÃO DE FATO — inserida em 2026-08-12 14:2x pelo orquestrador, DEPOIS que este handoff foi escrito
+
+Três coisas registradas acima **mudaram ou estavam erradas**. Leia isto antes de agir por qualquer uma delas.
+
+### 1. A SUA MIGRATION COLIDE. Renumerar é o PRIMEIRO passo, antes de aplicar.
+
+`20270811160000_payment_links_package.sql` (esta branch) tem **o mesmo prefixo de 14 dígitos** de
+`20270811160000_payment_history_receipt_period_method.sql`, que **já está na `main` E no ledger de produção**.
+
+Consequência, e é a pior possível: o `supabase db push` chaveia `schema_migrations` pela versão. Ele veria
+`20270811160000` como já aplicada e **pularia o seu arquivo em silêncio**. A Fatia 7 mergearia, o CI ficaria
+verde, e a mudança de schema **nunca chegaria em produção**. É a causa-raiz do incidente #640 (2026-06-01),
+documentada no cabeçalho de `scripts/check-migration-versions.sh`.
+
+**Renumere para um prefixo livre antes de qualquer `db push`.** Ocupados nesta janela: `…120000`, `…130000`,
+`…140000`, `…150000`, `…160000`, `…170000`, `…220000`, e `20270812000000` a `…040000`. Confira contra
+`origin/main` **na mão** — o guarda do repo hoje compara a branch contra si mesma e é cego para esta colisão
+(issue #1534, PR #1538 em revisão).
+
+Esta é a **quinta** colisão do mesmo tipo em dois dias. As outras quatro foram renumeradas nos PRs #1497,
+#1531, #1532 e #1536.
+
+### 2. "A migration de ciclo só existe em prod" — NÃO É MAIS VERDADE.
+
+`20270811150000_billing_cycle_semiannual_canonical` **está na `main`** desde o merge do PR #1529 (2026-08-11
+19:43). Medido: 2 ocorrências em `origin/main`. Não trate como divergência repo↔prod.
+
+### 3. "Dois blocos numerados 29 no `run.sh` da `main`" — JÁ CORRIGIDO.
+
+`origin/main` não tem prefixo de item duplicado. A numeração vigente, por decreto: 29 `payment_links`,
+30 `rls_inv6`, 31 `billing_cycle`, 32 **seu**, 33 `payment_history`, 34 `payment_webhook_ledger`.
+**Combine o próximo número antes de escrever** — foi a sétima fonte de conflito do dia.
+
+### 4. Contexto que mudou enquanto você estava parado
+
+- **Fatia 5 completa na `main`**: PRs #1520, #1523 e #1529 mergeados.
+- **Fatia 6 mergeada** (2026-08-12 14:06, PR #1535): o webhook do Asaas. A assinatura é gravada pela RPC
+  `billing_apply_paid_subscription` (service_role-only, com `ON CONFLICT … WHERE cancelled_at IS NULL` dentro).
+  Handoff dela em `.specs/billing/HANDOFF-FATIA-6.md`, na `main`.
+- **`#1533` (boleto) mergeado.** Rebaseie esta branch sobre a `main` — era a dependência que você anotou.
+- **Jira está fora do ar** nesta sessão. O link do SCRUM-288 acima não abre; o estado vive no GitHub.
+
+### 5. E sobre a sua própria armadilha nº 3 — "saída vazia lida como aprovação"
+
+Ela pegou o orquestrador **duas vezes** no mesmo dia, depois de ler o seu relato: uma coleta de log vazia
+comparada com `comm` devolveu "nenhuma falha nova" quando o significado era "o log ainda não existe".
+A regra que ficou, e vale para você: **contar as linhas coletadas antes de interpretar qualquer comparação.**
+Coleta vazia é hipótese sobre a **medição**, nunca sobre o mundo.
+
+---
+
 ## 1. Onde isto se encaixa
 
 A **Fatia 5** (SCRUM-286, PR #1520, **já mergeada**) criou o link de pagamento no banco: tabela `payment_links`, tabela `payment_link_charges` e quatro funções (`billing_create_payment_link`, `billing_revoke_payment_link`, `billing_resolve_payment_link`, `billing_attach_link_charge`).
