@@ -437,7 +437,8 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/billing_cycle_semiannual_test.sql" \
     "$SCRIPT_DIR/payment_history_receipt_period_method_test.sql" \
     "$SCRIPT_DIR/payment_webhook_ledger_test.sql" \
-    "$SCRIPT_DIR/provision_existing_org_test.sql payment_link_buyers_test.sql"
+    "$SCRIPT_DIR/provision_existing_org_test.sql" \
+    "$SCRIPT_DIR/payment_link_buyers_test.sql"
 }
 
 run_with_psql() {
