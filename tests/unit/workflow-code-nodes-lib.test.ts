@@ -340,6 +340,31 @@ describe("validateCodeNodes", () => {
         validateCodeNodes([jsonNode("cj1", { code: '{"origem":"api.exemplo.com"}' })]),
       ).toEqual([]);
     });
+
+    // ── o check é por hostname, não por substring ──
+    //
+    // A versão antiga fazia `code.includes("api.exemplo.com")` sobre o fonte
+    // inteiro, e errava dos dois lados. Estes dois travam os dois lados.
+
+    it("libera quando o host de exemplo aparece só no corpo, não na url", () => {
+      const code = JSON.stringify({
+        method: "POST",
+        url: "https://api.cliente.com.br/pedidos",
+        body: { origem: "migrado de api.exemplo.com" },
+      });
+      expect(validateCodeNodes([httpsNode("ch1", { code })])).toEqual([]);
+    });
+
+    it("não confunde api.exemplo.com.br com o host de exemplo", () => {
+      // Sufixo é domínio real e diferente — o `includes` casava, o hostname não.
+      const code = JSON.stringify({ method: "GET", url: "https://api.exemplo.com.br/pedidos" });
+      expect(validateCodeNodes([httpsNode("ch1", { code })])).toEqual([]);
+    });
+
+    it("pega o host de exemplo mesmo com porta ou caixa alta", () => {
+      const code = JSON.stringify({ method: "GET", url: "https://API.Exemplo.COM:443/x" });
+      expect(validateCodeNodes([httpsNode("ch1", { code })])).toHaveLength(1);
+    });
   });
 
   it("acumula erros de nós diferentes", () => {

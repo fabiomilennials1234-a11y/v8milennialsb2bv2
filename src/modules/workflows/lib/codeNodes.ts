@@ -150,6 +150,33 @@ function urlDoHttpsEstaOk(parsed: unknown): boolean {
   return limpa.startsWith("https://") || limpa.startsWith(VAR_STUB);
 }
 
+/**
+ * O `url` do JSON ainda aponta para o host do exemplo semeado?
+ *
+ * Compara o **hostname** exato, e não `code.includes(HOST)` sobre o fonte inteiro.
+ * A versão por substring errava dos dois lados: reprovava um nó legítimo que
+ * mencionasse `api.exemplo.com` dentro do `body` ou de um header, e casaria
+ * `api.exemplo.com.br` — um domínio real e diferente — como se fosse o exemplo.
+ * (É também o que o CodeQL aponta como `js/incomplete-url-substring-sanitization`:
+ * checar URL por pedaço de texto é padrão frouxo mesmo quando, como aqui, o
+ * objetivo é UX e não segurança. A barreira de verdade é `validateExternalUrl`,
+ * no backend.)
+ */
+function usaHostDeExemplo(parsed: unknown): boolean {
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return false;
+
+  const url = (parsed as Record<string, unknown>).url;
+  if (typeof url !== "string") return false;
+
+  try {
+    return new URL(url.trim()).hostname.toLowerCase() === HTTPS_EXAMPLE_HOST;
+  } catch {
+    // `url` com `{{variavel}}` no lugar do host não é parseável — e também não é
+    // o exemplo, porque o usuário já trocou por algo dele.
+    return false;
+  }
+}
+
 const kb = (bytes: number) => Math.ceil(bytes / 1024);
 const KB_POR_NO = CODE_SOURCE_MAX_BYTES / 1024;
 const KB_POR_AUTOMACAO = CODE_WORKFLOW_MAX_BYTES / 1024;
@@ -225,11 +252,12 @@ export function validateCodeNodes(nodes: WorkflowNode[]): string[] {
     // existe — matando a automação no primeiro lead, já que o padrão de erro é
     // "parar". Recusar aqui é o que separa "exemplo que ensina" de armadilha.
     //
-    // Só o host é checado. O `{{token}}` do exemplo também sairia literal, mas
-    // não dá para provar aqui que ninguém o preenche: `webhook_call` e as ações
-    // de IA também gravam em `outputVariable`, e varrer só os nós de código
-    // reprovaria um `{{token}}` legítimo vindo de um deles.
-    if (node.type === "code_https" && code.includes(HTTPS_EXAMPLE_HOST)) {
+    // Só o host é checado, e por hostname exato (ver `usaHostDeExemplo`). O
+    // `{{token}}` do exemplo também sairia literal, mas não dá para provar aqui
+    // que ninguém o preenche: `webhook_call` e as ações de IA também gravam em
+    // `outputVariable`, e varrer só os nós de código reprovaria um `{{token}}`
+    // legítimo vindo de um deles.
+    if (node.type === "code_https" && usaHostDeExemplo(parsed)) {
       erros.push(
         `«${nome}»: troque ${HTTPS_EXAMPLE_HOST} pelo endereço real — esse é só o exemplo que vem preenchido.`,
       );
