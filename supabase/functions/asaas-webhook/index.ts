@@ -325,6 +325,40 @@ Deno.serve(
       }
     }
 
+    // ── O LINK FICA MARCADO COMO PAGO ─────────────────────────────────────
+    // `payment_links.paid_at` era declarado, indexado e LIDO em três pontos de
+    // decisão — e escrito em NENHUM. `billing_attach_link_charge` recusa
+    // cobrança em link já pago pelo predicado `paid_at IS NOT NULL`; com a
+    // coluna sempre nula, essa recusa NUNCA acontecia.
+    //
+    // O custo era do cliente: paga no Pix, recarrega a página, clica em cartão
+    // — e uma SEGUNDA cobrança nasce no gateway para uma proposta já paga. A
+    // idempotência por (link, método) não salva, porque métodos diferentes são
+    // linhas diferentes por desenho.
+    //
+    // `.is("paid_at", null)` é o que faz a re-entrega não reescrever o carimbo:
+    // vale a PRIMEIRA confirmação, não a última. Sem isso, o `RECEIVED` que
+    // chega 32 dias depois do `CONFIRMED` moveria a data do pagamento no
+    // cartão.
+    if (liberaAgora && charge?.payment_link_id) {
+      const { error: erroLink } = await supabase
+        .from("payment_links")
+        .update({ paid_at: d.paidAt ?? new Date().toISOString() })
+        .eq("id", charge.payment_link_id)
+        .is("paid_at", null);
+
+      if (erroLink) {
+        await logRuntime({
+          module: "billing",
+          organizationId: orgId ?? undefined,
+          action: "asaas_webhook_marcar_link_pago_falhou",
+          status: "error",
+          errorMessage: erroLink.message,
+          payloadSnapshot: { event_id: d.eventId, payment_id: d.paymentId },
+        });
+      }
+    }
+
     // Consumo do cupom: INSERIR no livro. A segunda vez é recusada pelo banco
     // (UNIQUE coupon_id, payment_id), então re-entrega não queima uso — e o
     // consumo pertence à CONFIRMAÇÃO, não à validação, porque validar é leitura
