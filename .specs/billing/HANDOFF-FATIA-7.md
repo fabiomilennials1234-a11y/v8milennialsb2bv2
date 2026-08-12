@@ -122,7 +122,13 @@ Ou seja: PII ali fica a **uma policy** de distância de qualquer autenticado. A 
 
 **DOIS CANAIS DE PII QUE ASSERÇÃO NÃO ALCANÇA** (achado do Sentinela na revisão; a auditoria e as mensagens de exceção da porta do Fole estão limpas — ele foi ler os `RAISE` e as três só ecoam o `p_link_id`):
 
-1. **O log do próprio Postgres.** Os três `p_buyer_*` viajam como **argumento** da RPC. Com `log_statement` ou `log_min_duration_statement` ligados, CPF e e-mail vão para o log do servidor **em texto claro**. `pg_stat_statements` normaliza literal — esse está seguro. Mesma classe já levantada na porta pública do #1523; não nasceu nesta fatia, mas é onde o próximo vazamento mora.
+1. **O log do próprio Postgres — e MEDIDO, é pior do que "com log_statement ligado".** Issue **#1560**. O responsável é `log_min_error_statement = error`, que é **default**: toda instrução que termina em ERROR é gravada por extenso. Medido no local com `log_statement = ddl` (ou seja, sem ninguém ter ligado nada):
+
+   ```
+   STATEMENT:  SELECT public.billing_create_payment_link('new_org',…,'Probe Sobrenome','7778889','probe.pii2@exemplo-probe.com');
+   ```
+
+   Nome, documento e e-mail em claro. E **não depende de qual erro** — o caso medido errou por `Forbidden`, não por documento inválido; `Forbidden`, validade no passado e violação de CHECK gravam a mesma linha. `log_parameter_max_length = -1` (default) faz o mesmo pelo caminho de bind do PostgREST. `pg_stat_statements` normaliza literal — esse está seguro. Mitigações e o que medir em prod estão na #1560.
 2. **Para quem escrever a tela (#1553):** se a RPC levantar por documento inválido, o objeto de erro do cliente Supabase pode carregar o **payload da requisição** para o Sentry. Saiba disso **antes** de instrumentar.
 
 ### 2.2 `supabase/functions/billing-quote/index.ts` — typecheck Deno limpo, **nunca deployada**
