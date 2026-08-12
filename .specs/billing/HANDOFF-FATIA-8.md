@@ -162,6 +162,38 @@ Desenho é nosso: colunas novas em `payment_link_charges`, ou tabela irmã. **Co
 
 Ele começa pelo caminho `existing_org`, que **não** depende disso, então não estamos bloqueando ninguém. Mas o `new_org` **espera por nós**.
 
+### FECHADO com o Malho em 2026-08-12 — migration `20270812111845_payment_link_buyers.sql`
+
+**Tabela irmã, e o argumento decisivo não é retenção, é ALCANCE.** `payment_link_charges` é servida pelo PostgREST (`anon` e `authenticated` têm GRANT — o `ALTER DEFAULT PRIVILEGES` do Supabase), e a única coisa entre um usuário logado e a linha é a policy. Numa tabela irmã com `REVOKE`, a PII fica fora do PostgREST **por construção**. O `REVOKE` inclui **`service_role`**: vazar a chave de serviço não entrega um `GET /payment_link_buyers?select=*`; a PII sai só pelas funções `SECURITY DEFINER`.
+
+**Chaveada pelo LINK, não pela cobrança** — divergi da proposta do Malho (`PK = charge_id`) por dois motivos funcionais, e ele leu o porquê:
+1. um link admite uma cobrança por método, então chavear por cobrança **duplica a PII** quando o cliente tenta Pix e depois cartão;
+2. `provider_customer_id` é do comprador e o cliente da Asaas é **reutilizável** — chaveado pela cobrança, cada método criaria um cliente novo no gateway. É o "entulho no gateway" que `payment_link_charges` existe para impedir, um nível acima.
+
+Contrato:
+
+```
+payment_link_buyers(payment_link_id uuid PK → payment_links(id) ON DELETE CASCADE,
+                    legal_name, email, tax_id, tax_id_kind, provider,
+                    provider_customer_id, created_at, updated_at)
+```
+
+Três portas, cada uma devolvendo o **menos** que serve ao seu chamador — todas `service_role`-only:
+
+| função | quem chama | devolve |
+|---|---|---|
+| `billing_upsert_link_buyer(link, provider, customer_id, legal_name, email, tax_id)` | esta fatia | estado. **Zero PII** |
+| `billing_get_link_customer(link)` | esta fatia, antes de criar cobrança | só `provider_customer_id` — é o que faz o 2º método REUSAR o cliente |
+| `billing_resolve_charge_buyer(provider_charge_id)` | **Fatia 9** | `buyer_email`, `buyer_legal_name`, alvo. **`tax_id` NÃO sai** |
+
+`tax_id_kind` é **derivado** do valor (11 dígitos → cpf, 14 → cnpj), nunca recebido: parâmetro seria segunda fonte da mesma verdade, e o CHECK só acusaria a divergência com a cobrança já criada.
+
+**Achado grande, e não era desta fatia:** `payment_link_charges.provider_charge_id` **não tinha índice nem unicidade**, e `supabase/functions/asaas-webhook/index.ts` (já na `main`) resolve o link com `.eq("provider_charge_id", …).maybeSingle()`. Duplicata → `maybeSingle()` erra → o handler engole e responde 200 → **organização nunca ativada, em silêncio**, que é o modo de falha contra o qual a Fatia 6 inteira foi desenhada. A migration adiciona `UNIQUE (provider_charge_id)` e, junto, conserta `billing_attach_link_charge`: com **duas** restrições únicas, o `ON CONFLICT ON CONSTRAINT` nomeado deixa de cobrir a retentativa normal (mesmo link, mesmo método, mesma cobrança viola as duas), então o reuso passa a ser procurado ANTES do INSERT.
+
+pgTAP: `supabase/tests/payment_link_buyers_test.sql`, **52/52**, vermelho antes (a asserção de unicidade falha sem a migration — provado, não presumido).
+
+**Regra de PII, corrigida na mira.** O `withErrorBoundary` **não** registra o corpo da requisição — loga `function_name`, `organization_id`, `user_id` e `error{name,message,stack}`. O vetor real é mais fácil de cair: **mensagem de erro que alguém constrói com o dado dentro** (`"cliente inválido: cpf 123…"` vira `err.message` e vai inteiro para `runtime_logs`). Regra prática: **nunca interpolar e-mail ou `cpfCnpj` em texto de exceção** — para identificar a linha existe o `charge_id`. E o `redactSecrets` do logger redige por **nome de chave** (`token`, `secret`, `password`, `apikey`…) mais mascaramento de telefone: **não tem `cpf` nem `email` na lista**, então `payloadSnapshot` com chave `buyer_tax_id` passaria em claro. O Malho acrescenta os dois padrões numa fatia própria (vale para o repo inteiro).
+
 ### REGRA DURA — PII de comprador
 
 `cpfCnpj` e e-mail são **PII**. **Nunca** em log, em mensagem de erro, ou em telemetria. Mesma disciplina do token: quando não resolve, registrar prefixo de hash, nunca o valor.
