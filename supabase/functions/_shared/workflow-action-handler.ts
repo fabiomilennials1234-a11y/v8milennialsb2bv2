@@ -75,11 +75,27 @@ export async function resolveVariables(
 
   const esc = opts?.escape ?? ((v: string) => v);
 
+  /**
+   * Substitui usando replacement de FUNÇÃO — nunca de string.
+   *
+   * `replaceAll(alvo, "texto")` roda GetSubstitution e interpreta `$$`, `$&`, "$`" e `$'`
+   * DENTRO do valor. Como o valor aqui é dado do lead, isso atravessa o `esc`: `jsonEscape`
+   * neutraliza `"` e `\`, mas não `$`. Medido: `notes` = `cliente disse: 'paguei US$' ontem`
+   * quebrava o JSON estruturalmente (`$'` = "tudo depois do match") e derrubava a execução
+   * inteira no `JSON.parse` do nó de código; `promo $$$` perdia um caractere em silêncio; e
+   * `total $&` reinjetava o `{{placeholder}}` cru no payload enviado ao cliente.
+   *
+   * A forma de função devolve o texto literal. Vale também para os call-sites SEM escape
+   * (mensagem de WhatsApp), onde a mesma corrupção já existia antes desta branch.
+   */
+  const sub = (haystack: string, needle: string, value: string): string =>
+    haystack.replaceAll(needle, () => esc(value));
+
   // First pass: resolve execution context variables (e.g., {{ai_message}} from previous nodes)
   if (executionContext) {
     for (const [key, val] of Object.entries(executionContext)) {
       if (val !== null && val !== undefined && typeof val !== "object") {
-        template = template.replaceAll(`{{${key}}}`, esc(String(val)));
+        template = sub(template, `{{${key}}}`, String(val));
       }
     }
     // If all variables resolved, return early
@@ -205,7 +221,7 @@ export async function resolveVariables(
   }
 
   for (const [key, val] of Object.entries(vars)) {
-    result = result.replaceAll(`{{${key}}}`, esc(val));
+    result = sub(result, `{{${key}}}`, val);
   }
 
   // Campaign variables: {{campanha_nome}}, {{campanha_estagio}}
@@ -239,7 +255,7 @@ export async function resolveVariables(
 
   // Second pass for late-bound vars (campaign + AI)
   for (const [key, val] of Object.entries(vars)) {
-    result = result.replaceAll(`{{${key}}}`, esc(val));
+    result = sub(result, `{{${key}}}`, val);
   }
 
   // Custom fields: {{custom.campo}}
@@ -266,13 +282,18 @@ export async function resolveVariables(
           val = fv?.value || "";
         }
       }
-      result = result.replaceAll(match, esc(val));
+      result = sub(result, match, val);
     }
   }
 
   // A suppressed placeholder name (see personalizationName) leaves a punctuation
   // gap like "Boa tarde , tudo bem?" — clean it only when we actually blanked one.
-  if (isPlaceholderLeadName(lead.name)) result = tidyEmptyVarGaps(result);
+  //
+  // Nunca em nó de código: `tidyEmptyVarGaps` é limpeza de COPY de mensagem (come o espaço
+  // antes da vírgula, colapsa espaço duplo), e os nós de código passam por aqui o documento
+  // JSON inteiro — a limpeza reescreveria o texto DENTRO das strings, mudando o que chega
+  // na API do cliente sem erro nenhum. `opts.escape` é o sinal de "isto é código, não copy".
+  if (!opts?.escape && isPlaceholderLeadName(lead.name)) result = tidyEmptyVarGaps(result);
 
   return result;
 }

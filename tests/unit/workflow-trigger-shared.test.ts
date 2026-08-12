@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   matchesTriggerConfig,
   fireTrigger,
   hasActiveWorkflowsForTrigger,
+  normalizePipelineIds,
 } from "../../supabase/functions/_shared/workflow-trigger";
 import { createMockSupabase } from "../helpers/supabase-mock";
 
@@ -591,11 +592,15 @@ describe("fireTrigger", () => {
       expect(count).toBe(1);
     });
 
-    // `process-workflow-executions` relê o context PERSISTIDO e roda
-    // `matchesTriggerConfig` de novo antes de executar. Se os funis não forem
-    // gravados, o fail-closed do matcher reprova a execução e o filtro vira
-    // no-op em 100% dos casos.
-    it("grava lead_pipeline_ids no context da execução", async () => {
+    // ── A trava que faltava ──
+    // `matchesTriggerConfig` roda DUAS vezes: aqui no fireTrigger, e de novo
+    // em `process-workflow-executions`, que revalida contra o context
+    // PERSISTIDO antes de rodar o primeiro nó. A versão original desta feature
+    // mantinha os funis fora do context de propósito (para não mexer na chave
+    // de dedup) e, com isso, o fail-closed reprovava 100% das execuções: a
+    // automação nascia e morria como "Skipped: trigger conditions not met".
+    // Estes três testes travam as duas pontas ao mesmo tempo.
+    it("grava lead_pipeline_ids no context, para a revalidação do executor", async () => {
       const { sb, mockTable, getInserted } = createMockSupabase();
       seedWorkflow(mockTable, { pipeline_ids: [FUNIL_A] });
       mockTable("pipeline_entries", [
@@ -617,12 +622,10 @@ describe("fireTrigger", () => {
       expect(ctx.message).toBe("oi");
     });
 
-    // O context persistido tem de sobreviver à revalidação do executor. Este
-    // teste fecha o ciclo: pega o context que o fireTrigger gravou e joga no
-    // mesmo matcher que `process-workflow-executions:247` chama.
-    it("o context gravado passa na revalidação do executor", async () => {
+    it("o context persistido passa na revalidação do executor", async () => {
       const { sb, mockTable, getInserted } = createMockSupabase();
-      seedWorkflow(mockTable, { pipeline_ids: [FUNIL_A] });
+      const config = { pipeline_ids: [FUNIL_A] };
+      seedWorkflow(mockTable, config);
       mockTable("pipeline_entries", [
         { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A },
       ]);
@@ -635,50 +638,24 @@ describe("fireTrigger", () => {
         context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
       });
 
+      // Exatamente o que process-workflow-executions/index.ts:247 faz.
       const persisted = getInserted("workflow_executions")[0].context as Record<string, unknown>;
-      expect(
-        matchesTriggerConfig("lead_replied", { pipeline_ids: [FUNIL_A] }, persisted),
-      ).toBe(true);
+      expect(matchesTriggerConfig("lead_replied", config, persisted)).toBe(true);
     });
 
-    // Fail-closed: se a leitura dos funis do lead falhar, o filtro é
-    // inavaliável. Disparar seria pior que não disparar — a automação sairia
-    // para leads fora do funil escolhido.
-    it("leitura dos funis falha → não dispara (fail-closed)", async () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const { sb, mockTable } = createMockSupabase();
-      seedWorkflow(mockTable, { pipeline_ids: [FUNIL_A] });
+    it("persistir os funis NÃO contamina a chave de dedup", async () => {
+      // A chave é `${trigger}:${hash}:${bucket}`. O hash tem que depender só
+      // do context original — os funis de um lead mudam com o tempo e
+      // tornariam a chave instável. Comparamos só o hash para não depender do
+      // balde de 60s (que poderia virar no meio do teste).
+      const hashOf = (key: unknown) => String(key).split(":")[1];
 
-      // Só `pipeline_entries` quebra; `workflows` continua respondendo pelo mock.
-      const real = sb.from.bind(sb);
-      const quebrado = {
-        select: () => quebrado,
-        eq: () => quebrado,
-        then: (resolve: (v: unknown) => unknown) =>
-          Promise.resolve({ data: null, error: { message: "conexão caiu" } }).then(resolve),
-      };
-      sb.from = ((t: string) => (t === "pipeline_entries" ? quebrado : real(t))) as typeof sb.from;
-
-      const count = await fireTrigger({
-        supabase: sb,
-        organizationId: "org-1",
-        triggerType: "lead_replied",
-        leadId: "lead-1",
-        context: { trigger: "lead_replied" },
-      });
-
-      expect(count).toBe(0);
-      expect(warn).toHaveBeenCalled();
-      warn.mockRestore();
-    });
-
-    // A chave de dedup não pode balançar com os funis: eles mudam com o tempo,
-    // e uma chave instável reabriria o disparo duplicado que ela existe pra barrar.
-    it("a chave de dedup ignora os funis do lead", async () => {
-      async function dedupKeyCom(entries: Array<Record<string, unknown>>) {
+      const dispararComFunil = async (funilDoLead: string) => {
         const { sb, mockTable, getInserted } = createMockSupabase();
         seedWorkflow(mockTable, { pipeline_ids: [FUNIL_A, FUNIL_B] });
-        mockTable("pipeline_entries", entries);
+        mockTable("pipeline_entries", [
+          { organization_id: "org-1", lead_id: "lead-1", pipeline_id: funilDoLead },
+        ]);
         await fireTrigger({
           supabase: sb,
           organizationId: "org-1",
@@ -686,72 +663,127 @@ describe("fireTrigger", () => {
           leadId: "lead-1",
           context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
         });
-        const execs = getInserted("workflow_executions");
-        return execs[0]?.trigger_dedup_key;
-      }
+        return getInserted("workflow_executions")[0];
+      };
 
-      const soFunilA = await dedupKeyCom([
+      const emA = await dispararComFunil(FUNIL_A);
+      const emB = await dispararComFunil(FUNIL_B);
+
+      expect((emA.context as Record<string, unknown>).lead_pipeline_ids).toEqual([FUNIL_A]);
+      expect((emB.context as Record<string, unknown>).lead_pipeline_ids).toEqual([FUNIL_B]);
+      // Funis diferentes, MESMO hash: a lista não entrou no payload da chave.
+      expect(hashOf(emA.trigger_dedup_key)).toBe(hashOf(emB.trigger_dedup_key));
+    });
+
+    it("sem filtro de funil, o context não ganha a chave (nada muda)", async () => {
+      const { sb, mockTable, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, { channel: "any" });
+      mockTable("pipeline_entries", [
         { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A },
       ]);
-      const nosDois = await dedupKeyCom([
-        { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A },
-        { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_B },
-      ]);
 
-      expect(soFunilA).toBeTruthy();
-      expect(soFunilA).toBe(nosDois);
+      await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      const ctx = getInserted("workflow_executions")[0].context as Record<string, unknown>;
+      expect(ctx).not.toHaveProperty("lead_pipeline_ids");
+    });
+
+    it("fail-closed de ponta a ponta quando a leitura dos funis falha", async () => {
+      const { sb, mockTable, mockSelectError, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, { pipeline_ids: [FUNIL_A] });
+      mockTable("pipeline_entries", [
+        { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A },
+      ]);
+      // O lead ESTÁ no funil — mas a consulta quebra. Não pode disparar.
+      mockSelectError("pipeline_entries", { code: "57014", message: "statement timeout" });
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      expect(count).toBe(0);
+      expect(getInserted("workflow_executions")).toHaveLength(0);
     });
   });
 });
 
-// ─── hasActiveWorkflowsForTrigger ───────────────────────────────
+// ─── hasActiveWorkflowsForTrigger — a guarda barata do passo 0.97 ──────
 //
-// Guarda do caminho quente: o inbound do WhatsApp passa por aqui a cada
-// mensagem. Se ela responder errado, ou a frota paga um lookup de lead por
-// mensagem, ou o trigger para de disparar para a org inteira.
+// É ela que decide se `agent-message` sequer avalia o trigger, em TODA
+// mensagem inbound da frota. Sem teste, qualquer deriva nos filtros mata a
+// feature em silêncio com a suíte verde.
 
 describe("hasActiveWorkflowsForTrigger", () => {
-  it("acha workflow ativo do trigger na org", async () => {
-    const { sb, mockTable } = createMockSupabase();
-    mockTable("workflows", [
-      { id: "w-1", organization_id: "org-1", trigger_type: "lead_replied", is_active: true },
-    ]);
+  const seed = (mockTable: ReturnType<typeof createMockSupabase>["mockTable"], rows: Record<string, unknown>[]) =>
+    mockTable("workflows", rows);
 
-    await expect(hasActiveWorkflowsForTrigger(sb, "org-1", "lead_replied")).resolves.toBe(true);
+  it("acha workflow ativo do tipo pedido", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    seed(mockTable, [
+      { id: "wf-1", organization_id: "org-1", trigger_type: "lead_replied", is_active: true },
+    ]);
+    expect(await hasActiveWorkflowsForTrigger(sb, "org-1", "lead_replied")).toBe(true);
   });
 
-  it("ignora workflow desligado", async () => {
+  it("ignora workflow DESATIVADO", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("workflows", [
-      { id: "w-1", organization_id: "org-1", trigger_type: "lead_replied", is_active: false },
+    seed(mockTable, [
+      { id: "wf-1", organization_id: "org-1", trigger_type: "lead_replied", is_active: false },
     ]);
-
-    await expect(hasActiveWorkflowsForTrigger(sb, "org-1", "lead_replied")).resolves.toBe(false);
+    expect(await hasActiveWorkflowsForTrigger(sb, "org-1", "lead_replied")).toBe(false);
   });
 
-  it("ignora workflow de OUTRO trigger e de OUTRA org", async () => {
+  it("ignora workflow de OUTRO trigger", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("workflows", [
-      { id: "w-1", organization_id: "org-1", trigger_type: "lead_created", is_active: true },
-      { id: "w-2", organization_id: "org-2", trigger_type: "lead_replied", is_active: true },
+    seed(mockTable, [
+      { id: "wf-1", organization_id: "org-1", trigger_type: "stage_changed", is_active: true },
     ]);
-
-    await expect(hasActiveWorkflowsForTrigger(sb, "org-1", "lead_replied")).resolves.toBe(false);
+    expect(await hasActiveWorkflowsForTrigger(sb, "org-1", "lead_replied")).toBe(false);
   });
 
-  it("leitura falha → false (fail-closed) e avisa no log", async () => {
-    // O mock não simula erro de SELECT; a função só usa
-    // .from().select().eq().eq().eq().limit(), então o dublê cobre a superfície.
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const chain = {
-      select: () => chain,
-      eq: () => chain,
-      limit: () => Promise.resolve({ data: null, error: { message: "boom" } }),
-    };
-    const sb = { from: () => chain } as never;
+  it("ignora workflow de OUTRA org (service_role bypassa a RLS)", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    seed(mockTable, [
+      { id: "wf-1", organization_id: "org-2", trigger_type: "lead_replied", is_active: true },
+    ]);
+    expect(await hasActiveWorkflowsForTrigger(sb, "org-1", "lead_replied")).toBe(false);
+  });
 
-    await expect(hasActiveWorkflowsForTrigger(sb, "org-1", "lead_replied")).resolves.toBe(false);
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+  it("fail-safe: erro de leitura devolve false (não paga o lookup de lead)", async () => {
+    const { sb, mockTable, mockSelectError } = createMockSupabase();
+    seed(mockTable, [
+      { id: "wf-1", organization_id: "org-1", trigger_type: "lead_replied", is_active: true },
+    ]);
+    mockSelectError("workflows", { code: "57014", message: "statement timeout" });
+    expect(await hasActiveWorkflowsForTrigger(sb, "org-1", "lead_replied")).toBe(false);
+  });
+});
+
+// ─── normalizePipelineIds — jsonb livre, nada valida a forma na escrita ──
+
+describe("normalizePipelineIds", () => {
+  it("descarta não-strings, apara espaço e remove vazios", () => {
+    expect(normalizePipelineIds(["  a  ", "", null, 42, { x: 1 }, "b"])).toEqual(["a", "b"]);
+  });
+
+  it("deduplica", () => {
+    expect(normalizePipelineIds(["a", "a", " a "])).toEqual(["a"]);
+  });
+
+  it("não-array vira lista vazia", () => {
+    expect(normalizePipelineIds(null)).toEqual([]);
+    expect(normalizePipelineIds(undefined)).toEqual([]);
+    expect(normalizePipelineIds("a")).toEqual([]);
+    expect(normalizePipelineIds({ 0: "a" })).toEqual([]);
   });
 });

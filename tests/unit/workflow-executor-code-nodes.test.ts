@@ -208,6 +208,119 @@ describe("executeWorkflow — code_json", () => {
     expect(JSON.parse(context.payload as string)).toEqual({ empresa: 'Pneus "Bom Preço" Ltda' });
   });
 
+  // ── `$` no valor do lead ────────────────────────────────────────────────
+  //
+  // Estes três provam que o valor substituído entra LITERAL. `replaceAll(alvo, "texto")`
+  // roda GetSubstitution e interpreta `$$`, `$&`, "$`" e `$'` dentro do VALOR — e
+  // `jsonEscape` não escapa `$`, então o hook de escape era atravessado por dado real.
+  // A defesa é o replacement de FUNÇÃO em `resolveVariables`; sem ele os três falham.
+
+  it("`$'` no nome do lead não quebra a estrutura do JSON", async () => {
+    const { sb } = baseMock("cliente disse: 'paguei US$' ontem");
+    const context: Record<string, unknown> = {};
+    const { nodes, edges } = chain({
+      id: "cj1",
+      type: "code_json",
+      data: { outputVariable: "payload", code: '{"obs":"{{nome}}","fixo":"ok"}' },
+    });
+
+    const result = await run(sb, nodes, edges, context);
+
+    // Com replacement de string, `$'` vira "tudo depois do match": o `"fixo":"ok"}`
+    // era reinjetado no meio do valor e o JSON.parse morria — derrubando a execução
+    // inteira, porque o default de `onError` é "fail".
+    expect(result.status).toBe("completed");
+    expect(JSON.parse(context.payload as string)).toEqual({
+      obs: "cliente disse: 'paguei US$' ontem",
+      fixo: "ok",
+    });
+  });
+
+  it("`$$` no nome do lead não perde caractere em silêncio", async () => {
+    const { sb } = baseMock("promo $$$ imperdivel");
+    const context: Record<string, unknown> = {};
+    const { nodes, edges } = chain({
+      id: "cj1",
+      type: "code_json",
+      data: { outputVariable: "payload", code: '{"titulo":"{{nome}}"}' },
+    });
+
+    const result = await run(sb, nodes, edges, context);
+
+    // `$$` colapsava para `$` — JSON válido, nenhum erro, e o payload que chega
+    // na API do cliente sai diferente do que está no CRM.
+    expect(result.status).toBe("completed");
+    expect(JSON.parse(context.payload as string).titulo).toBe("promo $$$ imperdivel");
+  });
+
+  it("`$&` no nome do lead não reinjeta o placeholder cru", async () => {
+    const { sb } = baseMock("total $& parcial");
+    const context: Record<string, unknown> = {};
+    const { nodes, edges } = chain({
+      id: "cj1",
+      type: "code_json",
+      data: { outputVariable: "payload", code: '{"titulo":"{{nome}}"}' },
+    });
+
+    const result = await run(sb, nodes, edges, context);
+
+    // `$&` é o próprio trecho casado: o valor virava `total {{nome}} parcial`,
+    // e o `{{nome}}` literal seguia para o payload.
+    expect(result.status).toBe("completed");
+    const titulo = JSON.parse(context.payload as string).titulo as string;
+    expect(titulo).toBe("total $& parcial");
+    expect(titulo).not.toContain("{{");
+  });
+
+  it("nome-placeholder de WhatsApp não faz a limpeza de copy reescrever o JSON", async () => {
+    // `tidyEmptyVarGaps` come o espaço antes da vírgula e colapsa espaço duplo —
+    // certo para mensagem de WhatsApp, errado para um documento JSON, onde
+    // reescreveria o texto DENTRO das strings a caminho da API do cliente.
+    // O gatilho é o nome-placeholder (`WhatsApp <digitos>`) de lead auto-criado.
+    const { sb } = baseMock("WhatsApp 2952");
+    const context: Record<string, unknown> = {};
+    // `{{nome}}` é essencial: sem uma variável que exija a busca do lead, o primeiro
+    // passe resolve tudo e a função sai pelo early-return antes da limpeza — o teste
+    // passaria mesmo com o defeito presente.
+    const { nodes, edges } = chain({
+      id: "cj1",
+      type: "code_json",
+      data: {
+        outputVariable: "payload",
+        code: '{"obs":"entregar dia 12 , conferir  quantidade","quem":"{{nome}}"}',
+      },
+    });
+
+    const result = await run(sb, nodes, edges, context);
+
+    expect(result.status).toBe("completed");
+    expect(JSON.parse(context.payload as string).obs).toBe("entregar dia 12 , conferir  quantidade");
+  });
+
+  it("preview não parte par surrogate (o passo precisa caber no jsonb)", async () => {
+    const { sb, steps } = baseMock();
+    const context: Record<string, unknown> = {};
+    // Empurra um emoji para a fronteira do corte em 500: com `slice(0, 500)` o
+    // preview terminaria num surrogate alto órfão, o PostgREST mandaria `\ud83d`
+    // solto e o Postgres recusaria o INSERT do passo — que `recordStep` não confere.
+    // `{"a":"` são 6 chars, então 493 x's colocam o surrogate ALTO exatamente no
+    // índice 499 — o último que `slice(0, 500)` mantém.
+    const enche = "x".repeat(493);
+    const { nodes, edges } = chain({
+      id: "cj1",
+      type: "code_json",
+      data: { outputVariable: "payload", code: `{"a":"${enche}😀${"y".repeat(60)}"}` },
+    });
+
+    const result = await run(sb, nodes, edges, context);
+
+    expect(result.status).toBe("completed");
+    const preview = steps().find((s) => s.node_id === "cj1")?.output_data?.preview as string;
+    // Nenhum surrogate solto: `JSON.stringify` de string mal formada emite `\udXXX`.
+    expect(JSON.stringify(preview)).not.toMatch(/\\ud[89ab][0-9a-f]{2}/i);
+    expect(preview.length).toBeLessThanOrEqual(500);
+  });
+
   it("JSON malformado com onError fail mata a execução e não segue para o próximo nó", async () => {
     const { sb, steps } = baseMock();
     const { nodes, edges } = chain({

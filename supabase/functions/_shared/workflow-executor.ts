@@ -962,7 +962,12 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
                   top_keys: Array.isArray(parsed)
                     ? ["<array>"]
                     : Object.keys(parsed as Record<string, unknown>).slice(0, 20),
-                  preview: compact.slice(0, 500),
+                  // `capString`, não `slice`: cortar em 500 no meio de um emoji deixa um
+                  // surrogate órfão, o PostgREST manda `\ud83d` solto e o Postgres recusa
+                  // o INSERT do passo (22P05). `recordStep` não confere o `error` do insert,
+                  // então o passo sumiria do histórico em silêncio. O gêmeo HTTPS já fazia
+                  // certo (linha do `outputSafe`); esta linha era a assimetria.
+                  preview: capString(compact, 500),
                 });
                 nextNodes.push(...getNextNodes(nodeId, edgeMap));
               }
