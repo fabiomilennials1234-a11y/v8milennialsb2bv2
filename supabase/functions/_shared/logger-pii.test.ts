@@ -84,10 +84,12 @@ Deno.test("LIMITE DECLARADO: frase não tem chave, então PII em texto de erro a
     "documenta o limite: a redação é por nome de chave, e uma frase não tem chave");
 });
 
-Deno.test("razão social é redigida — 'público na Receita' não é 'inofensivo no nosso log'", () => {
-  // O que vaza aqui não é o nome da empresa, que qualquer um consulta: é a
-  // CORRELAÇÃO entre ela e estado interno nosso. E em MEI a razão social é o
-  // nome civil da pessoa.
+Deno.test("nome do comprador é redigido — no ramo CPF ele é nome civil, não razão social", () => {
+  // O nome da chave engana: `legal_name` soa a razão social, mas a coluna
+  // guarda o nome que o gateway exige, e a tabela admite comprador pessoa
+  // FÍSICA. Nesse ramo é o nome civil de alguém — não é público em lugar
+  // nenhum. O argumento "é público" vale para metade da tabela e falha na
+  // outra, e é a metade que falha que decide.
   const out = redactSecrets({
     buyer_legal_name: "Padaria Aurora LTDA",
     razao_social: "João da Silva",

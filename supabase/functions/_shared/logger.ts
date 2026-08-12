@@ -82,23 +82,33 @@ const TAX_ID_KEY_PATTERNS = [
 const EMAIL_KEY_PATTERNS = ["email", "e_mail", "mail_to", "buyer_mail"];
 
 /**
- * Chaves cujo valor é RAZÃO SOCIAL. Redigida inteira, como e-mail.
+ * Chaves cujo valor é o NOME DO COMPRADOR. Redigido inteiro, como e-mail.
  *
- * O argumento contra cobrir era razoável e perdeu por três razões, nesta ordem:
+ * ⚠️ O NOME DA CHAVE ENGANA, e enganou a mim primeiro: `legal_name` soa a razão
+ * social — dado público na Receita — mas a coluna guarda o `CustomerInput.name`
+ * que o gateway exige, e a tabela admite os DOIS ramos (`tax_id_kind` cpf ou
+ * cnpj). No ramo **cpf**, que é o comprador pessoa física, isso é o **nome
+ * civil de uma pessoa**: não está público em cadastro nenhum e não é derivável
+ * de nada que já tenhamos.
  *
- * 1. A CASA JÁ DECIDIU O DESEMPATE, e antes desta discussão — o cabeçalho deste
+ * Ou seja, o argumento "é público, não precisa redigir" vale para metade da
+ * tabela e falha na outra metade — e é a metade que falha que decide.
+ *
+ * Mesmo que fosse só CNPJ, dois motivos já bastariam:
+ *
+ * 1. A CASA JÁ DECIDIU O DESEMPATE, antes desta discussão — o cabeçalho deste
  *    arquivo diz que sobre-redação é política aceita: "a false positive loses
- *    debug info, a false negative leaks a credential". Na dúvida, redige.
+ *    debug info, a false negative leaks a credential".
  *
- * 2. "PÚBLICO NA RECEITA" NÃO É "INOFENSIVO NO NOSSO LOG". O nome da empresa é
- *    consultável por qualquer um; o que vaza aqui é a CORRELAÇÃO — empresa real
+ * 2. "PÚBLICO EM OUTRO LUGAR" NÃO É "INOFENSIVO NO NOSSO LOG". O nome é
+ *    consultável por qualquer um; o que vaza aqui é a CORRELAÇÃO — a empresa
  *    ligada a estado interno nosso e a dado de pagamento. O dado público é o
  *    nome; o dado nosso é que ELA pagou, quanto, e o que quebrou no meio.
  *
- * 3. EM MEI E EMPRESÁRIO INDIVIDUAL A RAZÃO SOCIAL É O NOME CIVIL da pessoa.
- *    No nosso ICP (fábrica e distribuidora, majoritariamente LTDA) isso é
- *    minoria — e é a minoria que decide, porque cobrir custa UMA LINHA e não
- *    cobrir custa um nome de pessoa física em `runtime_logs`.
+ * O recorte é estreito de propósito e não tem o efeito colateral de `email`:
+ * `legal_name` e `razao_social` não casam nenhuma outra chave do repositório.
+ * `name` e `company` de LEAD seguem em claro — são o vocabulário do CRM, e
+ * redigi-los apagaria o diagnóstico de metade dos fluxos.
  */
 const LEGAL_NAME_KEY_PATTERNS = ["legal_name", "razao_social", "razaosocial"];
 
