@@ -3,20 +3,41 @@
  *
  * Why this module exists
  * ----------------------
- * `whatsapp_messages` holds ~2.3M rows / 4.5 GB in production and carries SEVEN
- * indexes covering `instance_id`. Clearing the FK with a single
- * `UPDATE ... SET instance_id = NULL WHERE instance_id = $1` rewrites 7 index
- * entries per row, and it blew the statement timeout: 34 of 95 instance
- * deletions failed with `canceling statement due to statement timeout`
- * (measured 2026-07-14 → 2026-08-07). The user saw the action fail, had no idea
- * whether it half-happened, and clicked again.
+ * It was born for `whatsapp_messages`: ~2.3M rows carrying SEVEN indexes over
+ * `instance_id`, where a single `UPDATE ... SET instance_id = NULL` blew the
+ * statement timeout — 34 of 95 instance deletions failed that way (measured
+ * 2026-07-14 → 2026-08-07).
+ *
+ * **That table stops being a target once — and only once — the
+ * `whatsapp_messages_instance_id_fkey` FK is DROPPED**, which happens in
+ * migration `20270811000010_whatsapp_messages_drop_instance_fk.sql`. That migration is
+ * a MANUAL step and it is applied BEFORE the proxy that calls this module is
+ * deployed; this module never assumes it already ran. `whatsapp-api-proxy`
+ * decides the target list per deletion by probing the catalog
+ * (`whatsappMessagesFkState`), so both deploy orders are safe.
+ *
+ * Why dropping the FK is the fix: after the DROP, `instance_id` is a historical
+ * uuid on the message, immune to the instance lifecycle. Clearing it is what
+ * makes a whole conversation vanish from the chat — which filters on
+ * `instance_id` — every time an instance is deleted; the timeout is the loud
+ * symptom, the lost history is the silent damage. With no FK there is neither
+ * cascade nor nullify, so deleting an instance stops touching those 2.3M rows.
+ *
+ * While the FK is still there, this loop remains the ONLY safe way to clear it:
+ * the cascade would do the same nulling anyway, in one statement, and time out.
+ *
+ * The other target is `scheduled_user_messages.whatsapp_instance_id`, still
+ * ON DELETE SET NULL and staying that way. That one is a pending-send queue,
+ * not history, and it is small — so for it, batching is not a cure for the
+ * timeout but a bound: it keeps a pathologically large queue from turning into
+ * one cascade statement, and keeps this call from occupying a connection
+ * indefinitely.
  *
  * Batching in the CLIENT, not in a plpgsql loop, is deliberate. A server-side
- * loop is one transaction holding row locks on a table the WhatsApp webhook
- * writes to continuously — and this project has already had an incident where a
- * long-running backfill exhaust the connection pool and stop message
- * ingestion for 42 minutes. One short transaction per batch releases locks in
- * between.
+ * loop is one transaction holding row locks — and this project has already had
+ * an incident where a long-running backfill exhausted the connection pool and
+ * stopped message ingestion for 42 minutes. One short transaction per batch
+ * releases locks in between.
  *
  * IO is injected so the loop is testable without a database.
  */
@@ -36,10 +57,17 @@ export const DEFAULT_BATCH_SIZE = 200;
  * connection indefinitely — this project has already had a long-running backfill
  * exhaust the connection pool and stop message ingestion for 42 minutes.
  *
- * At the default batch size this covers 100k rows per call, above the average
- * instance (~19k rows across 117 instances holding 2.3M) but not above the
- * worst. Hitting the ceiling returns `hitBatchCeiling: true` so the caller can
- * stop honestly and be retried, rather than pretending the work finished.
+ * At the default batch size this covers 100k rows per call.
+ *
+ * Reachability depends on the target. For `scheduled_user_messages` — a
+ * pending-send queue holding tens of rows in production — the ceiling is
+ * unreachable in practice. For `whatsapp_messages`, while its FK is still
+ * alive, it is NOT: the largest instance measured (Alamaster) carries ~155k
+ * rows, so its first deletion attempt hits the ceiling by design and needs a
+ * second call. That is the intended behaviour, not a defect.
+ *
+ * Hitting it returns `hitBatchCeiling: true` so the caller stops honestly and
+ * is retried, rather than pretending the work finished.
  */
 export const DEFAULT_MAX_BATCHES = 500;
 

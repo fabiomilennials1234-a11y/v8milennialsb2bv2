@@ -14,17 +14,23 @@ import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKe
 // A cadeia termina em `.limit()` — `fetchConversationMessages` pede
 // `order(timestamp desc).order(created_at desc).limit(THREAD_MESSAGE_LIMIT)`,
 // porque sem limite explícito o PostgREST corta em `max_rows` sozinho.
+// `.in()` e `rpc` entram porque a thread passou a varrer o CONJUNTO de
+// `instance_id` do chip (`whatsapp_chip_instance_ids`) em vez de uma instância
+// só — aqui a RPC devolve vazio, que degrada pro id passado. Ver
+// `src/modules/communication/lib/chipInstanceIds.ts`.
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: vi.fn(() => ({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
       order: vi.fn().mockReturnThis(),
       limit: vi.fn().mockResolvedValue({
         data: [{ id: "m1", phone_number: "5511999999999" }],
         error: null,
       }),
     })),
+    rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
   },
 }));
 

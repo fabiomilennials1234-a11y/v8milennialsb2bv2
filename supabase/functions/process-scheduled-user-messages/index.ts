@@ -12,6 +12,7 @@ import {
   sendTextViaInstance,
   sendMediaViaInstance,
   sendAudioViaInstance,
+  type SendResultSimple,
 } from "../_shared/whatsapp-dispatch.ts";
 import { sleepJitter, maxBatchForBudget } from "../_shared/anti-ban-jitter.ts";
 
@@ -25,6 +26,41 @@ const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const TICK_BUDGET_MS = 120_000;
 const WORST_PER_MESSAGE_MS = 12_000;
 const BATCH_SIZE = maxBatchForBudget(TICK_BUDGET_MS, WORST_PER_MESSAGE_MS); // = 10
+
+/** Um envio realizado — vira exatamente uma linha em `whatsapp_messages`. */
+interface Delivery {
+  messageType: string;
+  content: string | null;
+  mediaUrl: string | null;
+  result: SendResultSimple;
+}
+
+/**
+ * SZ.Chat não é provider WhatsApp: o envio sai por edge function e não devolve
+ * id de mensagem. Traduzir a resposta para o mesmo Result dos senders WA deixa
+ * o chamador tratar sucesso e falha de um jeito só — antes o retorno era
+ * descartado e uma recusa do SZ.Chat virava "enviada".
+ */
+async function sendTextViaSzChat(
+  supabase: any,
+  msg: any,
+  phoneNumber: string,
+): Promise<SendResultSimple> {
+  const { data, error } = await supabase.functions.invoke("sz-chat-send", {
+    body: {
+      action: "send_message",
+      organization_id: msg.organization_id,
+      phone_number: phoneNumber,
+      message: msg.message_content,
+    },
+  });
+
+  if (error) return { success: false, error: error.message ?? String(error) };
+  if (data?.success === false) {
+    return { success: false, error: data.error ?? "sz-chat send failed" };
+  }
+  return { success: true };
+}
 
 Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
@@ -163,72 +199,121 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
         if (dispatched > 0) await sleepJitter();
         dispatched++;
 
+        // Texto e mídia saem como DUAS mensagens no WhatsApp, cada uma com o seu
+        // id no provider. Coletar os dois resultados aqui, em vez de descartá-los,
+        // é o que permite gravar o que de fato saiu — e só o que saiu.
+        const sendOpts = { trackSource: "scheduled-user-message", trackId: msg.id };
+        const deliveries: Delivery[] = [];
+
         if (msg.message_content) {
-          if (isSzChat) {
-            await supabase.functions.invoke("sz-chat-send", {
-              body: {
-                action: "send_message",
-                organization_id: msg.organization_id,
-                phone_number: formattedNumber,
-                message: msg.message_content,
-              },
-            });
-          } else {
-            await sendTextViaInstance(
-              supabase,
-              instance,
-              formattedNumber,
-              msg.message_content,
-              { trackSource: "scheduled-user-message", trackId: msg.id }
-            );
-          }
+          deliveries.push({
+            messageType: "text",
+            content: msg.message_content,
+            mediaUrl: null,
+            result: isSzChat
+              ? await sendTextViaSzChat(supabase, msg, formattedNumber)
+              : await sendTextViaInstance(
+                  supabase,
+                  instance,
+                  formattedNumber,
+                  msg.message_content,
+                  sendOpts,
+                ),
+          });
         }
 
         if (msg.media_url && msg.media_type) {
-          if (msg.media_type === "audio") {
-            await sendAudioViaInstance(
-              supabase,
-              instance,
-              formattedNumber,
-              msg.media_url,
-              { trackSource: "scheduled-user-message", trackId: msg.id }
-            );
-          } else {
-            await sendMediaViaInstance(
-              supabase,
-              instance,
-              formattedNumber,
-              {
-                type: msg.media_type as "image" | "video" | "document",
-                file: msg.media_url,
-                filename: msg.media_filename || undefined,
-                caption: msg.message_content || undefined,
-              },
-              { trackSource: "scheduled-user-message", trackId: msg.id }
-            );
-          }
+          deliveries.push({
+            messageType: msg.media_type,
+            content: msg.message_content || null,
+            mediaUrl: msg.media_url,
+            result:
+              msg.media_type === "audio"
+                ? await sendAudioViaInstance(
+                    supabase,
+                    instance,
+                    formattedNumber,
+                    msg.media_url,
+                    sendOpts,
+                  )
+                : await sendMediaViaInstance(
+                    supabase,
+                    instance,
+                    formattedNumber,
+                    {
+                      type: msg.media_type as "image" | "video" | "document",
+                      file: msg.media_url,
+                      filename: msg.media_filename || undefined,
+                      caption: msg.message_content || undefined,
+                    },
+                    sendOpts,
+                  ),
+          });
+        }
+
+        // Sem texto e sem mídia não houve envio nenhum: marcar 'sent' registraria
+        // uma entrega que nunca existiu.
+        if (deliveries.length === 0) {
+          throw new Error("Mensagem agendada sem conteúdo para enviar");
+        }
+
+        const failures = deliveries.filter((d) => !d.result.success);
+        const succeeded = deliveries.filter((d) => d.result.success);
+        const failureDetail = failures
+          .map((f) => f.result.error ?? "envio falhou")
+          .join("; ");
+
+        // Os senders devolvem Result, não exceção. Sem esta checagem a falha
+        // (número inválido, provider fora, skip do governor) virava status
+        // 'sent' e o vendedor achava que a mensagem tinha saído.
+        if (succeeded.length === 0) {
+          throw new Error(failureDetail);
         }
 
         await supabase
           .from("scheduled_user_messages")
-          .update({ status: "sent", sent_at: new Date().toISOString() })
+          .update({
+            status: "sent",
+            sent_at: new Date().toISOString(),
+            // Parcial (texto saiu, mídia não): reenviar duplicaria o que já
+            // chegou, então a falha fica registrada na linha em vez de virar
+            // retry.
+            ...(failures.length > 0 && { error_message: failureDetail }),
+          })
           .eq("id", msg.id);
 
-        const messageId = `sched_${msg.id}_${Date.now()}`;
-        await supabase.from("whatsapp_messages").upsert({
-          organization_id: msg.organization_id,
-          instance_id: msg.whatsapp_instance_id,
-          message_id: messageId,
-          remote_jid: `${formattedNumber}@s.whatsapp.net`,
-          phone_number: msg.phone_number,
-          direction: "outgoing",
-          message_type: msg.media_type || "text",
-          content: msg.message_content,
-          media_url: msg.media_url,
-          status: "sent",
-          lead_id: msg.lead_id,
-          timestamp: new Date().toISOString(),
-        }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+        for (const delivery of succeeded) {
+          await supabase.from("whatsapp_messages").upsert({
+            organization_id: msg.organization_id,
+            // A instância RESOLVIDA acima, não `msg.whatsapp_instance_id`: a
+            // coluna da fila é nula na maioria das linhas (quem agenda pelo chat
+            // não escolhe chip), e gravar nulo fazia a mensagem nascer órfã —
+            // invisível no chat, que filtra por instance_id, e fora do UNIQUE
+            // (message_id, instance_id), que não dedupa contra NULL.
+            instance_id: instance.id,
+            // O id do provider é o MESMO que volta no eco fromMe, então o eco
+            // colide no UNIQUE e não cria uma segunda linha. O sintético só
+            // entra quando não há id do provider (SZ.Chat) — determinístico por
+            // envio, para um reenvio da mesma linha não duplicar.
+            message_id:
+              delivery.result.messageId || `sched_${msg.id}_${delivery.messageType}`,
+            remote_jid: `${formattedNumber}@s.whatsapp.net`,
+            phone_number: msg.phone_number,
+            direction: "outgoing",
+            message_type: delivery.messageType,
+            content: delivery.content,
+            media_url: delivery.mediaUrl,
+            status: "sent",
+            // Explícito, não herdado do DEFAULT: é este par que o
+            // trg_human_pause_on_manual_send lê para pausar o copiloto. Aqui
+            // pausar é o certo — quem escreveu foi o vendedor —, mas por decisão,
+            // não por acidente.
+            sent_source: "manual",
+            sent_by_ai: false,
+            lead_id: msg.lead_id,
+            timestamp: new Date().toISOString(),
+          }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+        }
 
         const { data: member } = await supabase
           .from("team_members")

@@ -12,6 +12,7 @@ import {
   resolveVariables,
   buildTrackId,
   recipientGate,
+  persistOutboundMessage,
 } from "./whatsapp-helpers.ts";
 
 // ─── Template ──────────────────────────────────────────────────────────────
@@ -70,6 +71,18 @@ export async function sendWhatsAppTemplate(input: ActionInput): Promise<ActionRe
     });
 
     if (!sendResult.success) return { success: false, error: `Template send failed: ${sendResult.error}` };
+
+    // `conversation` é o tipo que o resto do envio de texto por workflow já grava
+    // (5.299 das 5.354 linhas `sent_source='workflow'` dos últimos 7 dias).
+    await persistOutboundMessage(supabase, {
+      organizationId,
+      instanceId: wa.instanceId,
+      providerMessageId: sendResult.messageId,
+      phone,
+      messageType: "conversation",
+      content: message,
+      leadId,
+    });
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-rich] Gateway template send failed:", gwResult.error);
     return { success: false, error: `Template send failed: ${gwResult.error}` };
@@ -158,22 +171,16 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
 
     if (!sendResult.success) return { success: false, error: `Menu send failed: ${sendResult.error}` };
 
-    const messageId = sendResult.messageId || `wf_menu_${crypto.randomUUID()}`;
-    await supabase.from("whatsapp_messages").upsert({
-      organization_id: organizationId,
-      instance_id: wa.instanceId,
-      message_id: messageId,
-      remote_jid: `${phone}@s.whatsapp.net`,
-      phone_number: phone,
-      direction: "outgoing",
-      message_type: menuType,
+    await persistOutboundMessage(supabase, {
+      organizationId,
+      instanceId: wa.instanceId,
+      providerMessageId: sendResult.messageId,
+      phone,
+      messageType: menuType,
       content: text,
-      status: "sent",
-      lead_id: leadId,
-      timestamp: new Date().toISOString(),
-      sent_by_ai: true,
-      sent_source: "workflow",
-    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+      leadId,
+      fallbackIdPrefix: "wf_menu",
+    });
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-rich] Gateway menu send failed:", gwResult.error);
     return { success: false, error: `Menu send failed: ${gwResult.error}` };
@@ -258,22 +265,16 @@ export async function sendWhatsAppPixButton(input: ActionInput): Promise<ActionR
 
     if (!sendResult.success) return { success: false, error: `PIX button failed: ${sendResult.error}` };
 
-    const messageId = sendResult.messageId || `wf_pix_${crypto.randomUUID()}`;
-    await supabase.from("whatsapp_messages").upsert({
-      organization_id: organizationId,
-      instance_id: wa.instanceId,
-      message_id: messageId,
-      remote_jid: `${phone}@s.whatsapp.net`,
-      phone_number: phone,
-      direction: "outgoing",
-      message_type: "pix_button",
+    await persistOutboundMessage(supabase, {
+      organizationId,
+      instanceId: wa.instanceId,
+      providerMessageId: sendResult.messageId,
+      phone,
+      messageType: "pix_button",
       content: text || `[PIX R$ ${amount.toFixed(2)}]`,
-      status: "sent",
-      lead_id: leadId,
-      timestamp: new Date().toISOString(),
-      sent_by_ai: true,
-      sent_source: "workflow",
-    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+      leadId,
+      fallbackIdPrefix: "wf_pix",
+    });
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-rich] Gateway PIX button send failed:", gwResult.error);
     return { success: false, error: `PIX button failed: ${gwResult.error}` };
