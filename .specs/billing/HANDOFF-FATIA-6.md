@@ -1,8 +1,40 @@
-# HANDOFF — Fatia 6 (SCRUM-287, webhook do Asaas) — PR #1535
+# HANDOFF — Fatia 6 (SCRUM-287, webhook do Asaas)
 
-Estado em 2026-08-12. Escrito porque o contexto de quem construiu está no limite: se ele acabar, este arquivo é a diferença entre continuar e recomeçar.
+> **ATUALIZADO 2026-08-12, 15h.** O que mudou desde a primeira versão, em ordem de importância:
+>
+> 1. **A Fatia 6 está MERGEADA** (PR #1535, 12/08 14:06). Este arquivo deixou de descrever trabalho em curso e passou a descrever o que está na `main`.
+> 2. **Nada disso está em produção**, e há um **vão no meio do ledger** — ver a seção nova logo abaixo.
+> 3. **A ponta que falta não é código:** issue **#1548** carrega o plano de aplicação inteiro (migrations na ordem, deploy das três edge functions, três segredos, cadastro do webhook, verificação em sandbox).
+>
+> Handoff que envelhece em silêncio é pior que handoff ausente. Se você está lendo isto depois de 12/08, confira o ledger antes de confiar na tabela de estado.
 
-Branch: `feat/scrum-287-webhook-asaas`. **Nada aplicado em produção.**
+---
+
+## ⚠️ O VÃO NO LEDGER DE PRODUÇÃO — leia antes de aplicar qualquer coisa
+
+Medido **em prod** (e a distinção importa: medir em local não vale aqui):
+
+| migration | o que é | em prod? |
+|---|---|---|
+| `20270811140000` | Fatia 5 — `payment_links`, `payment_link_charges` | **NÃO** |
+| `20270811150000` | ciclo canônico (`semiannual`) | **sim** |
+| `20270811160000` | as 3 faltas de `payment_history` | **sim** |
+| `20270811220000` | Fatia 6 — livros de evento e de cupom, RPC da assinatura | **NÃO** |
+| `20270812100000` | Fatia 9 — livro de provisionamento, RPC de ativação, cron | **NÃO** |
+
+As duas do meio foram aplicadas a partir de branches e **pularam a 140000**, que é mais antiga e vem antes. **Não é dano funcional** — as duas mexem em `payment_history`, que existe desde o baseline, e a 140000 cria tabela nova. **É dano de ORDEM:** `supabase db push` recusa migration mais antiga que a última aplicada e vai pedir `--include-all`.
+
+**A ordem obrigatória de aplicação**, porque cada uma lê o que a anterior cria:
+
+```
+20270811140000  (payment_link_charges)
+   └─> 20270811220000  (org_subscriptions.provider_payment_id, lê payment_link_charges)
+          └─> 20270812100000  (lê org_subscriptions.provider_payment_id)
+```
+
+Plano completo, com deploy e segredos: **#1548**.
+
+---
 
 ---
 
@@ -91,11 +123,12 @@ Nenhuma das 27 asserções exercitava a criação **real** da assinatura contra 
 - vitest: **19/19**.
 - Dependência de ordem: `invoice_url`/`receipt_url`/`billing_type` vêm do #1523 — **mergeado às 20:17 de 11/08**, então já está satisfeita.
 
-## Pendências fora do código
+## Pendências fora do código — todas na #1548
 
 - `supabase functions deploy asaas-webhook` (merge não sobe edge function).
 - `supabase secrets set ASAAS_WEBHOOK_PATH_SECRET ASAAS_WEBHOOK_TOKEN ASAAS_ENV` — os dois primeiros **não existem ainda** e são escolha nossa; o token tem que bater com o do painel do Asaas.
-- Cadastrar o webhook no painel — ver o runbook.
+- Cadastrar o webhook no painel — ver `docs/runbooks/asaas-webhook-cadastro.md`.
+- As migrations, **na ordem acima**.
 
 ## Armadilhas do dia que valem para quem continuar
 
@@ -103,3 +136,4 @@ Nenhuma das 27 asserções exercitava a criação **real** da assinatura contra 
 - **CI vermelho não é sinal** neste repo: compare o conjunto de falhas do PR contra o da main, nas **duas** dimensões (`not ok` **e** `Bad plan`), e prove que a coleta tem substância — coleta vazia é "não procurei".
 - **Salve o log antes de re-rodar**: o rerun substitui o log do job.
 - **Endereço da falha não é autoria da falha** (um 522 do esm.sh apontou para `logger.ts:12`, arquivo tocado pelo PR).
+- **Diga em QUAL banco você mediu.** "Medido em local" e "medido em prod" são afirmações diferentes, e a diferença já custou um teste que passava no CI e quebraria contra produção. O caso concreto: `payment_link_charges` existe em local e **não existe em prod** — quem medir grants nela localmente e disser "em prod está assim" estará errado por acidente de ambiente.
