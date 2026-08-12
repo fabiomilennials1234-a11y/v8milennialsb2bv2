@@ -3,7 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
-import type { StudioWindow } from "./useMetricsStudio";
+// Do módulo do tipo, NÃO de "./useMetricsStudio": aquele hook importa este, e o
+// import de volta — mesmo sendo só de tipo — fecha ciclo no grafo de módulos e
+// reprova o dep-cruiser. Foi o que derrubou o Lint & Build do #1497.
+import type { StudioWindow } from "@/modules/analytics/lib/metrics-studio-window";
 
 /**
  * Persistência do painel do Estúdio no SERVIDOR (SCRUM-309).

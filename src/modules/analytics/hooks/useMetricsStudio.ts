@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMetricsStudioPanel } from "./useMetricsStudioPanel";
+import type { StudioWindow } from "@/modules/analytics/lib/metrics-studio-window";
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import {
   ENGINE_BY_ID,
@@ -15,19 +16,12 @@ export const MIN_W = 220;
 // 120 = header (44) + valor (54) + rodapé de controles (34), sem folga morta.
 export const MIN_H = 120;
 
-export interface StudioWindow {
-  /** Instância, não métrica: a mesma métrica pode abrir duas janelas. */
-  id: string;
-  metricId: string;
-  /** G2 do grill: o corte é escolha do usuário, não atributo da métrica. */
-  corte: MetricRecorte;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  chart: ChartKind;
-  z: number;
-}
+// O tipo mora em `lib/metrics-studio-window` porque `useMetricsStudioPanel`
+// também precisa dele, e importá-lo daqui fechava ciclo de módulos (ver o
+// cabeçalho daquele arquivo). Re-exportado para os consumidores que já o pegam
+// deste hook — MetricsCanvas, MetricWindow e useMetricsStudioReport seguem
+// intactos.
+export type { StudioWindow };
 
 interface StudioState {
   windows: StudioWindow[];
