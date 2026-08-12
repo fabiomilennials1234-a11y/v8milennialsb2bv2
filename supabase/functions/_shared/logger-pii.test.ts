@@ -83,3 +83,23 @@ Deno.test("LIMITE DECLARADO: frase não tem chave, então PII em texto de erro a
   assert(out.error_message.includes("12345678901"),
     "documenta o limite: a redação é por nome de chave, e uma frase não tem chave");
 });
+
+Deno.test("razão social é redigida — 'público na Receita' não é 'inofensivo no nosso log'", () => {
+  // O que vaza aqui não é o nome da empresa, que qualquer um consulta: é a
+  // CORRELAÇÃO entre ela e estado interno nosso. E em MEI a razão social é o
+  // nome civil da pessoa.
+  const out = redactSecrets({
+    buyer_legal_name: "Padaria Aurora LTDA",
+    razao_social: "João da Silva",
+  }) as Record<string, string>;
+  assertEquals(out.buyer_legal_name, "***REDACTED***");
+  assertEquals(out.razao_social, "***REDACTED***");
+});
+
+Deno.test("nome de LEAD não é razão social — a lista não cobre o que não pediu", () => {
+  // `name` e `company` de lead seguem em claro: são o vocabulário do CRM, e
+  // sobre-redigir aqui apagaria o diagnóstico de metade dos fluxos.
+  const out = redactSecrets({ name: "Contato X", company: "Empresa Y" }) as Record<string, string>;
+  assertEquals(out.name, "Contato X");
+  assertEquals(out.company, "Empresa Y");
+});

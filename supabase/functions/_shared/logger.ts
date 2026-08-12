@@ -81,6 +81,27 @@ const TAX_ID_KEY_PATTERNS = [
  */
 const EMAIL_KEY_PATTERNS = ["email", "e_mail", "mail_to", "buyer_mail"];
 
+/**
+ * Chaves cujo valor é RAZÃO SOCIAL. Redigida inteira, como e-mail.
+ *
+ * O argumento contra cobrir era razoável e perdeu por três razões, nesta ordem:
+ *
+ * 1. A CASA JÁ DECIDIU O DESEMPATE, e antes desta discussão — o cabeçalho deste
+ *    arquivo diz que sobre-redação é política aceita: "a false positive loses
+ *    debug info, a false negative leaks a credential". Na dúvida, redige.
+ *
+ * 2. "PÚBLICO NA RECEITA" NÃO É "INOFENSIVO NO NOSSO LOG". O nome da empresa é
+ *    consultável por qualquer um; o que vaza aqui é a CORRELAÇÃO — empresa real
+ *    ligada a estado interno nosso e a dado de pagamento. O dado público é o
+ *    nome; o dado nosso é que ELA pagou, quanto, e o que quebrou no meio.
+ *
+ * 3. EM MEI E EMPRESÁRIO INDIVIDUAL A RAZÃO SOCIAL É O NOME CIVIL da pessoa.
+ *    No nosso ICP (fábrica e distribuidora, majoritariamente LTDA) isso é
+ *    minoria — e é a minoria que decide, porque cobrir custa UMA LINHA e não
+ *    cobrir custa um nome de pessoa física em `runtime_logs`.
+ */
+const LEGAL_NAME_KEY_PATTERNS = ["legal_name", "razao_social", "razaosocial"];
+
 /** Menos que isto e o mascaramento revelaria o número inteiro. */
 const MIN_MASKABLE_DIGITS = 10;
 
@@ -92,6 +113,11 @@ function isTaxIdKey(key: string): boolean {
 function isEmailKey(key: string): boolean {
   const lower = key.toLowerCase();
   return EMAIL_KEY_PATTERNS.some((p) => lower.includes(p));
+}
+
+function isLegalNameKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  return LEGAL_NAME_KEY_PATTERNS.some((p) => lower.includes(p));
 }
 
 /**
@@ -187,6 +213,8 @@ export function redactSecrets(input: unknown, _seen?: WeakSet<object>): unknown 
     } else if (isTaxIdKey(key)) {
       result[key] = typeof value === "string" ? maskTaxId(value) : REDACTED;
     } else if (isEmailKey(key)) {
+      result[key] = REDACTED;
+    } else if (isLegalNameKey(key)) {
       result[key] = REDACTED;
     } else if (isPhoneKey(key)) {
       result[key] = typeof value === "string" ? maskPhone(value) : REDACTED;
