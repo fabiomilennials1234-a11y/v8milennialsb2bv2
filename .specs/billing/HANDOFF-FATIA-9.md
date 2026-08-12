@@ -2,8 +2,8 @@
 
 Estado em 2026-08-12, 15h. **Metade entregue, metade bloqueada por dado que não existe.**
 
-- **`existing_org`: PRONTO** — PR **#1545**, aguardando merge (CI rodando).
-- **`new_org`: NÃO COMEÇADO, de propósito.** Espera a persistência do comprador, que é a Fatia 8 do Fole.
+- **`existing_org`: MERGEADO** — PR #1545, 12/08 14:27.
+- **`new_org`: EM CONSTRUÇÃO.** O bloqueio caiu com o merge do **#1553** (12/08 15:26), que trouxe `payment_link_buyers` e a porta `billing_resolve_charge_buyer` para a `main`.
 - **Nada em produção.** A ponta de aplicação é a issue **#1548**.
 
 ---
@@ -41,7 +41,30 @@ Precisa de **e-mail e documento do comprador**, que hoje **não são persistidos
 - **pedido feito:** `UNIQUE (provider_charge_id)` em `payment_link_charges` — hoje **não existe índice nenhum** nessa coluna, e nada impede duas linhas com o mesmo valor. O handler da Fatia 6 usa `maybeSingle()` ali, então **uma duplicata quebraria em silêncio**;
 - **PII em tabela IRMÃ**, não em colunas de `payment_link_charges`. O argumento decisivo é **alcance**, não retenção: aquela tabela é concedida a `anon` e `authenticated` *(medido em LOCAL — em prod ela ainda não existe)*, e a única defesa seria a policy. Em tabela irmã com `REVOKE`, a PII fica fora do PostgREST **por construção**.
 
-**Não comece o `new_org` antes disso.** A metade difícil (idempotência, cota, renovação) já está provada; a fácil sem o dado é retrabalho.
+~~**Não comece o `new_org` antes disso.**~~ **DESBLOQUEADO em 12/08 15:26, pelo merge do #1553.** A persistência do comprador está na `main`: `payment_link_buyers` (PK por link, `REVOKE` inclusive de `service_role`, RLS sem policy) e a porta `billing_resolve_charge_buyer(text)`, service_role-only.
+
+A linha acima ficou tachada em vez de apagada de propósito: quem leu o handoff antes de hoje agiu segundo ela, e some-la esconderia que a ordem existiu e por quê.
+
+### O que a porta devolve, e como ramificar
+
+Por **`code`**, nunca por `ok` — `buyer_missing` volta com **`ok = true`**, porque cobrança nossa sem comprador não é falha de resolução:
+
+| `code` | significa | o que a Fatia 9 faz |
+|---|---|---|
+| `ok` | comprador presente | provisiona (`buyer_email`, `buyer_legal_name`, `provider_customer_id`) |
+| `buyer_missing` + `target_kind='existing_org'` | **normal** — não precisa de comprador | provisiona pelo caminho de `existing_org` |
+| `buyer_missing` + `target_kind='new_org'` | **INCIDENTE** — pagamento confirmado sem como criar o admin | **não inventa e-mail, não cria organização pela metade**; registra estado visível e exige humano |
+| `charge_not_found` | cobrança desconhecida | ordem de chegada, não incidente |
+
+`tax_id` **não sai** por essa porta, e a Fatia 9 não precisa dele. É o que torna impossível vazar documento mesmo por acidente.
+
+### E o `payment_history` do ramo `new_org`
+
+`payment_history.organization_id` é `NOT NULL` e **não afrouxa** — é a chave de tenant e a RLS depende dela; anulável abriria linha órfã sem dono, que é pior que ausência.
+
+Então a linha de `payment_history` do `new_org` é escrita **pela Fatia 9**, depois de criar a organização. Até lá a trilha vive em `payment_webhook_events`, que é gravado **antes** de resolver o dono e tem `organization_id` anulável de propósito.
+
+**Consequência que evita diagnóstico errado:** no estado `buyer_missing`+`new_org`, o `payment_history` **ainda não existe — e isso é esperado, não sintoma**.
 
 ## Ordem de aplicação — e há um vão no ledger
 
