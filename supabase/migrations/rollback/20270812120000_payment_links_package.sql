@@ -1,9 +1,21 @@
 -- Rollback de 20270812120000_payment_links_package.sql
 --
--- ATENÇÃO — este rollback DESTRÓI DADO DE PROPOSTA: o pacote montado, o motivo
--- do desconto concedido e o cadastro fiscal. O `quote` e o hash sobrevivem
--- (são da Fatia 5), mas uma proposta que já circulou perde o que o operador
--- montou, e não há de onde reconstruir.
+-- ATENÇÃO — este rollback DESTRÓI DADO DE PROPOSTA: o pacote montado e o motivo
+-- do desconto concedido. O `quote` e o hash sobrevivem (são da Fatia 5), mas uma
+-- proposta que já circulou perde o que o operador montou, e não há de onde
+-- reconstruir.
+--
+-- O COMPRADOR NÃO É TOCADO AQUI, de propósito. Ele vive em
+-- `payment_link_buyers` (Fatia 8) e desfazer aquela tabela é do rollback dela.
+-- Consequência aceita: depois deste rollback, um link pode ter comprador
+-- pré-preenchido e nenhuma coluna de pacote — estado feio, mas sem PII órfã, já
+-- que a linha do comprador cai por CASCADE junto com o link.
+--
+-- Este arquivo é o inverso EXATO da migration, e nada além. Banco que aplicou a
+-- versão pré-contrato (a que adicionava `customer_legal_name`, `customer_tax_id`
+-- e `customer_email` em `payment_links`) tem essas três colunas sobrando, e
+-- limpá-las é ato à parte, na mão, com quem for dono do banco — não trabalho de
+-- rollback, que não deve derrubar coluna que a sua migration não criou.
 --
 -- Só use enquanto a fatia estiver INERTE — nenhum link gerado com pacote. Se
 -- já houver, o caminho é revogar os links e deixar as colunas de pé.
@@ -93,15 +105,16 @@ REVOKE ALL ON FUNCTION public.billing_create_payment_link(text,uuid,text,uuid,in
 GRANT EXECUTE ON FUNCTION public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz) TO authenticated;
 
 ALTER TABLE public.payment_links
-  DROP CONSTRAINT IF EXISTS payment_links_desconto_manual_tem_motivo_check,
-  DROP CONSTRAINT IF EXISTS payment_links_tax_id_digitos_check;
+  DROP CONSTRAINT IF EXISTS payment_links_desconto_manual_tem_motivo_check;
 
 ALTER TABLE public.payment_links
   DROP COLUMN IF EXISTS package_features,
   DROP COLUMN IF EXISTS package_limits,
   DROP COLUMN IF EXISTS manual_discount_cents,
   DROP COLUMN IF EXISTS manual_discount_reason,
-  DROP COLUMN IF EXISTS manual_discount_by,
-  DROP COLUMN IF EXISTS customer_legal_name,
-  DROP COLUMN IF EXISTS customer_tax_id,
-  DROP COLUMN IF EXISTS customer_email;
+  DROP COLUMN IF EXISTS manual_discount_by;
+
+-- O COMMENT ON TABLE volta ao que a Fatia 5 escreveu, senão o rollback deixa a
+-- tabela anunciando um contrato de PII que este arquivo acabou de desfazer.
+COMMENT ON TABLE public.payment_links IS
+  'SCRUM-286: proposta de pagamento. Guarda o SHA-256 do token, nunca o texto — o link é irrecuperável depois da geração, por desenho.';

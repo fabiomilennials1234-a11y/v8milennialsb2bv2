@@ -7,8 +7,15 @@
 -- `scripts/check-migration-versions.sh` (#1538) reprova essa colisão — mas só
 -- depois de rebase, porque quem roda é o script do checkout.
 --
--- SCRUM-288 (Fatia 7) — o link passa a carregar o PACOTE MONTADO, o motivo do
--- desconto manual e o cadastro fiscal.
+-- SCRUM-288 (Fatia 7) — o link passa a carregar o PACOTE MONTADO e o motivo do
+-- desconto manual. O cadastro fiscal do comprador, que a primeira versão desta
+-- migration guardava em coluna aqui, passou a ir para `payment_link_buyers`
+-- (Fatia 8) — ver o bloco "O CADASTRO FISCAL NÃO MORA AQUI" abaixo.
+--
+-- DEPENDÊNCIA DURA: esta migration CHAMA `billing_prefill_link_buyer`, criada em
+-- `20270812111845_payment_link_buyers.sql` (PR #1553). Ela precisa estar aplicada
+-- ANTES. A ordem numérica já garante isso; aplicar fora de ordem dá "function
+-- does not exist", que é o jeito certo de falhar.
 -- ROLLBACK pareado: rollback/20270812120000_payment_links_package.sql
 --
 -- POR QUE ESTA MIGRATION EXISTE, E POR QUE ELA NÃO É EMENDA DA FATIA 5
@@ -26,29 +33,28 @@
 --      via `p_manual_final_cents`, mas concessão sem motivo registrado não é
 --      auditável — e `org_subscriptions`, que é o destino, já tem
 --      `manual_discount_reason` e `manual_discount_by` esperando;
---   3. o CADASTRO FISCAL (razão social, CNPJ, e-mail fiscal). Medido no schema
---      inteiro: o billing NÃO tem onde guardar isso. `upsell_clients.cnpj` e
---      `tinyerp_connections.tiny_cnpj` são outros contextos. E o `ensureCustomer`
---      do port de pagamento precisa do documento.
+--   3. o CADASTRO FISCAL do comprador (nome, documento, e-mail). Medido no
+--      schema inteiro na época: o billing não tinha onde guardar isso.
+--      `upsell_clients.cnpj` e `tinyerp_connections.tiny_cnpj` são outros
+--      contextos. E o `ensureCustomer` do port de pagamento precisa do documento.
 --
 -- A lacuna apareceu quando a tela foi escrita, e é assim que ela deve aparecer
 -- no repositório: migration própria, revisável em separado, em vez de reabrir
 -- uma fatia já aprovada e fingir que o contrato nasceu completo.
 --
--- POR QUE O FISCAL FICA NO LINK, E NÃO EM TABELA DE CLIENTE
--- --------------------------------------------------------
--- Tabela de cliente precisa de dono, e no alvo `new_org` A ORG AINDA NÃO
--- EXISTE — é o link que vai criá-la. O link é a única entidade que existe no
--- momento da proposta nos DOIS alvos, então é onde o dado cabe hoje.
+-- O item 3 MUDOU DE DESTINO, não de existência
+-- --------------------------------------------
+-- A primeira versão desta migration resolveu o item 3 com três colunas AQUI,
+-- argumentando que o link é a única entidade que existe nos dois alvos no
+-- momento da proposta. O argumento sobre DONO estava certo; o que ele não pesou
+-- foi ALCANCE — e alcance é o que decide onde PII mora.
 --
--- Quando o pagamento cair, a fatia de confirmação copia isto para onde o
--- cadastro do cliente viver: é ela que sabe que a org passou a existir. Se um
--- dia houver tabela de cliente de verdade, estas colunas viram a ORIGEM do
--- backfill, não concorrentes dela.
---
--- Consequência aceita, e dita em voz alta: duas propostas para o mesmo cliente
--- repetem o cadastro, e corrigir um typo numa não corrige a outra. É o preço de
--- não inventar dono para um dado que ainda não tem um.
+-- A Fatia 8 abriu `payment_link_buyers`, chaveada por `payment_link_id` — ou
+-- seja, o mesmo dono, e sem os grants do PostgREST. Então o item 3 continua
+-- resolvido, no lugar certo, e ainda ganha uma coisa que a coluna aqui não
+-- daria: pré-preenchimento do Master e preenchimento do comprador no checkout
+-- são a MESMA linha, então o cliente corrige o que o Master chutou em vez de
+-- criar uma segunda verdade.
 
 ALTER TABLE public.payment_links
   -- O pacote montado. Espelha `org_subscriptions.features` e `.limits`, que é o
@@ -68,12 +74,33 @@ ALTER TABLE public.payment_links
   -- caminho alternativo — aqui é constraint, e vale para qualquer escrita.
   ADD COLUMN IF NOT EXISTS manual_discount_cents  integer,
   ADD COLUMN IF NOT EXISTS manual_discount_reason text,
-  ADD COLUMN IF NOT EXISTS manual_discount_by     uuid,
+  ADD COLUMN IF NOT EXISTS manual_discount_by     uuid;
 
-  -- Cadastro fiscal do cliente da proposta.
-  ADD COLUMN IF NOT EXISTS customer_legal_name text,
-  ADD COLUMN IF NOT EXISTS customer_tax_id     text,
-  ADD COLUMN IF NOT EXISTS customer_email      text;
+-- O CADASTRO FISCAL NÃO MORA AQUI, e a decisão é o oposto da primeira versão
+-- desta migration — que adicionava `customer_legal_name`, `customer_tax_id` e
+-- `customer_email` nesta tabela.
+--
+-- Por que saiu, medido no banco local e não deduzido: `payment_links` tem
+-- `relacl` com `anon=rxtm` e `authenticated=arwdDxtm` (o `ALTER DEFAULT
+-- PRIVILEGES` que o próprio Supabase instala), e a ÚNICA coisa entre um usuário
+-- logado e a linha é a policy `payment_links_master_read` (`is_master_user()`).
+-- PII aqui fica a UMA policy de distância de qualquer autenticado.
+--
+-- A Fatia 8 (SCRUM-289) criou `payment_link_buyers` exatamente para isso não
+-- acontecer: REVOKE de `anon`, `authenticated` E `service_role`, RLS ligada sem
+-- policy nenhuma — fora do alcance do PostgREST por CONSTRUÇÃO. Guardar o mesmo
+-- documento nos dois lugares anularia a razão de a tabela dela existir: a
+-- inalcançável não vale nada se o mesmo CPF está na tabela ao lado, e ainda
+-- criaria duas fontes de verdade para o mesmo comprador.
+--
+-- Os três PARÂMETROS continuam existindo em `billing_create_payment_link` — o
+-- Master pré-preenche o comprador na geração, que é requisito do PRD — mas
+-- escrevem em `payment_link_buyers` via `billing_prefill_link_buyer`. A chave de
+-- lá é `payment_link_id`, então o pré-preenchimento do Master e o preenchimento
+-- do comprador no checkout são a MESMA linha: o que o cliente digita corrige o
+-- que o Master chutou, sem merge de dado.
+--
+-- Achado do Fole, aceito sem ressalva. Contrato fechado com ele em 2026-08-12.
 
 -- O motivo do desconto é constraint, não convenção de tela.
 ALTER TABLE public.payment_links
@@ -89,15 +116,10 @@ ALTER TABLE public.payment_links
     )
   );
 
--- CNPJ/CPF só como dígitos, e a normalização é do gravador, não do leitor.
--- `ensureCustomer` do gateway é idempotente POR DOCUMENTO: se cada proposta
--- gravar o mesmo CNPJ num formato diferente, o mesmo cliente vira dois lá fora.
-ALTER TABLE public.payment_links
-  DROP CONSTRAINT IF EXISTS payment_links_tax_id_digitos_check;
-ALTER TABLE public.payment_links
-  ADD CONSTRAINT payment_links_tax_id_digitos_check CHECK (
-    customer_tax_id IS NULL OR customer_tax_id ~ '^[0-9]{11}$|^[0-9]{14}$'
-  );
+-- O CHECK de dígitos do documento saiu junto com as colunas. Quem normaliza e
+-- valida o documento é `billing_prefill_link_buyer`, e o CHECK de coerência
+-- (`tax_id_kind` amarrado a `tax_id`) é da tabela do comprador. Uma regra, um
+-- lugar: cópia da mesma validação em duas tabelas anda sozinha e diverge.
 
 COMMENT ON COLUMN public.payment_links.package_features IS
   'SCRUM-288: features ligadas/desligadas em relação ao plano base. Espelha org_subscriptions.features — gravar no snapshot é cópia direta.';
@@ -105,8 +127,8 @@ COMMENT ON COLUMN public.payment_links.package_limits IS
   'SCRUM-288: limites ajustados em relação ao plano base. Espelha org_subscriptions.limits.';
 COMMENT ON COLUMN public.payment_links.manual_discount_reason IS
   'SCRUM-288: motivo do desconto manual. Obrigatório por CHECK quando há desconto — concessão sem motivo não é auditável.';
-COMMENT ON COLUMN public.payment_links.customer_tax_id IS
-  'SCRUM-288: CPF (11) ou CNPJ (14), só dígitos. Normalizado na escrita porque ensureCustomer do gateway é idempotente por documento.';
+COMMENT ON TABLE public.payment_links IS
+  'Proposta de pagamento gerada pelo Master. NÃO guarda PII do comprador: nome, e-mail e documento fiscal moram em payment_link_buyers (SCRUM-289), que é inalcançável pelo PostgREST por REVOKE. Esta tabela tem GRANT para anon e authenticated e é protegida por policy — PII aqui ficaria a uma policy de distância.';
 
 -- ---------------------------------------------------------------------------
 -- A geração passa a receber o pacote, o desconto manual e o fiscal
@@ -129,6 +151,18 @@ COMMENT ON COLUMN public.payment_links.customer_tax_id IS
 -- ---------------------------------------------------------------------------
 DROP FUNCTION IF EXISTS public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz);
 
+-- E a de 16 parâmetros também, que é a que ESTE arquivo cria. Não é paranoia,
+-- é erro medido: `CREATE OR REPLACE` recusa RENOMEAR parâmetro —
+--
+--   ERROR: cannot change name of input parameter "p_customer_legal_name"
+--
+-- e a primeira versão desta migration chamava os três de `p_customer_*`. Em
+-- produção a de 16 nunca existiu, então esta linha é no-op lá; em qualquer banco
+-- que aplicou a versão pré-contrato (o local compartilhado, por exemplo) ela é a
+-- diferença entre aplicar e morrer no meio. Os tipos são idênticos nas duas
+-- versões — só os nomes mudaram —, então uma assinatura cobre as duas.
+DROP FUNCTION IF EXISTS public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz,jsonb,jsonb,text,integer,text,text,text,text);
+
 CREATE OR REPLACE FUNCTION public.billing_create_payment_link(
   p_target_kind           text,
   p_organization_id       uuid,
@@ -143,9 +177,15 @@ CREATE OR REPLACE FUNCTION public.billing_create_payment_link(
   p_coupon_code           text    DEFAULT NULL,
   p_manual_final_cents    integer DEFAULT NULL,
   p_manual_discount_reason text   DEFAULT NULL,
-  p_customer_legal_name   text    DEFAULT NULL,
-  p_customer_tax_id       text    DEFAULT NULL,
-  p_customer_email        text    DEFAULT NULL
+  -- `p_buyer_*` e não `p_customer_*`: neste codebase `customer` já significa o
+  -- CADASTRO NO GATEWAY (`provider_customer_id`, `ProviderCustomer`,
+  -- `CustomerInput` do port). Nomear a pessoa de `customer_*` faria
+  -- `customer_tax_id` e `provider_customer_id` parecerem a mesma família, e não
+  -- são: um é o comprador, o outro é o registro dele na Asaas. Renomeado a
+  -- pedido do Fole, antes de mergear — depois seria caro.
+  p_buyer_legal_name      text    DEFAULT NULL,
+  p_buyer_tax_id          text    DEFAULT NULL,
+  p_buyer_email           text    DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -160,7 +200,7 @@ DECLARE
   v_master_id uuid;
   v_label     text;
   v_manual    integer;
-  v_tax_id    text;
+  v_buyer     jsonb;
 BEGIN
   SELECT id INTO v_master_id
     FROM public.master_users
@@ -189,11 +229,6 @@ BEGIN
     RAISE EXCEPTION 'Validade do link precisa ser futura';
   END IF;
 
-  -- Normalização do documento no GRAVADOR, não no leitor: `ensureCustomer` do
-  -- gateway é idempotente por documento, então o mesmo CNPJ em dois formatos
-  -- viraria dois clientes lá fora.
-  v_tax_id := NULLIF(regexp_replace(COALESCE(p_customer_tax_id, ''), '[^0-9]', '', 'g'), '');
-
   -- O preço é do MOTOR, não do chamador. Master escolhe pacote, prazo e — se
   -- negociar — o preço final; quanto isso representa de desconto quem calcula é
   -- o motor.
@@ -215,8 +250,7 @@ BEGIN
     token_hash, target_kind, organization_id, new_org_name,
     quote, amount_cents, expires_at, created_by,
     package_features, package_limits,
-    manual_discount_cents, manual_discount_reason, manual_discount_by,
-    customer_legal_name, customer_tax_id, customer_email)
+    manual_discount_cents, manual_discount_reason, manual_discount_by)
   VALUES (
     encode(digest(v_token, 'sha256'), 'hex'),
     p_target_kind,
@@ -233,11 +267,27 @@ BEGIN
     -- autenticação. Não é parâmetro: id de autor vindo do chamador é
     -- exatamente a forma das 23 RPCs fechadas hoje.
     CASE WHEN v_manual IS NOT NULL THEN p_manual_discount_reason END,
-    CASE WHEN v_manual IS NOT NULL THEN v_actor END,
-    p_customer_legal_name,
-    v_tax_id,
-    p_customer_email)
+    CASE WHEN v_manual IS NOT NULL THEN v_actor END)
   RETURNING id INTO v_id;
+
+  -- O COMPRADOR VAI PARA A TABELA DELE, na mesma transação.
+  --
+  -- Chamada DEPOIS do INSERT porque a PK de `payment_link_buyers` é FK deste
+  -- `id`. E de dentro desta função, que é DEFINER de dono `postgres`: a
+  -- checagem de EXECUTE acontece como `postgres`, então o grant
+  -- `service_role`-only da porta não barra o caminho — e continua barrando o
+  -- PostgREST, que é o ponto.
+  --
+  -- ELA LEVANTA em vez de devolver código, e isso ABORTA A CRIAÇÃO DO LINK
+  -- junto. É o desfecho certo: aqui nada aconteceu do lado de fora ainda
+  -- (não existe cobrança nem cliente no gateway), é entrada de formulário do
+  -- Master. Link que nasce com documento impossível vira cobrança que não pode
+  -- ser criada, descoberta na frente do cliente. Falhar na geração é barato.
+  --
+  -- Master que não preencheu nada recebe `noop` e NENHUMA linha de comprador —
+  -- pré-preencher é opcional, e linha vazia seria dado inventado.
+  v_buyer := public.billing_prefill_link_buyer(
+               v_id, p_buyer_legal_name, p_buyer_email, p_buyer_tax_id);
 
   -- Auditoria. O token NÃO entra aqui — a auditoria é o lugar mais provável de
   -- um vazamento por descuido, e o teste varre esta tabela procurando por ele.
@@ -257,14 +307,24 @@ BEGIN
       'manual_discount_cents', v_manual,
       'manual_discount_reason', CASE WHEN v_manual IS NOT NULL THEN p_manual_discount_reason END,
       'package_features_alteradas', (SELECT count(*) FROM jsonb_object_keys(COALESCE(p_package_features, '{}'::jsonb))),
-      'package_limits_alterados', (SELECT count(*) FROM jsonb_object_keys(COALESCE(p_package_limits, '{}'::jsonb)))));
+      'package_limits_alterados', (SELECT count(*) FROM jsonb_object_keys(COALESCE(p_package_limits, '{}'::jsonb))),
+      -- FATO, não dado: registra que houve pré-preenchimento de comprador, e
+      -- nada do que foi preenchido. Nome, e-mail e documento NUNCA entram em
+      -- master_audit_logs — a auditoria é tabela lida por gente e é o lugar
+      -- mais provável de um vazamento por descuido.
+      'buyer_prefilled', (v_buyer ->> 'code') = 'ok'));
 
   RETURN jsonb_build_object(
-    'link_id',      v_id,
-    'token',        v_token,
-    'amount_cents', (v_quote ->> 'charge_cents')::integer,
-    'quote',        v_quote,
-    'expires_at',   p_expires_at);
+    'link_id',        v_id,
+    'token',          v_token,
+    'amount_cents',   (v_quote ->> 'charge_cents')::integer,
+    'quote',          v_quote,
+    'expires_at',     p_expires_at,
+    -- Estado, não dado: a tela precisa saber se o comprador foi pré-preenchido
+    -- para não oferecer "preencher" duas vezes. Devolver o que foi preenchido
+    -- traria PII de volta pelo retorno da RPC — o caminho que esta fatia acabou
+    -- de fechar.
+    'buyer_prefilled', (v_buyer ->> 'code') = 'ok');
 END
 $fn$;
 

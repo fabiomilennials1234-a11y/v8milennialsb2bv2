@@ -99,9 +99,26 @@ Ela estende `payment_links` com o que a tela produz e não tinha onde morar:
 |---|---|
 | `package_features`, `package_limits` (jsonb, NOT NULL, default `{}`) | o pacote montado. Espelha `org_subscriptions.features` / `.limits`, que é o destino — gravar lá vira cópia direta |
 | `manual_discount_cents`, `manual_discount_reason`, `manual_discount_by` | concessão sem motivo registrado não é auditável |
-| `customer_legal_name`, `customer_tax_id`, `customer_email` | o billing não tinha **nenhum** cadastro fiscal (medido) |
 
-E troca a assinatura de `billing_create_payment_link` para receber tudo isso.
+E troca a assinatura de `billing_create_payment_link` para receber tudo isso — **16 parâmetros**, os três últimos `p_buyer_legal_name`, `p_buyer_tax_id`, `p_buyer_email`.
+
+### 2.1-b O CADASTRO FISCAL SAIU DAQUI (decisão de 2026-08-12, com o Fole)
+
+A primeira versão adicionava `customer_legal_name`, `customer_tax_id` e `customer_email` **em `payment_links`**. Saiu. Medido no banco:
+
+```
+payment_links | anon=rxtm/postgres | authenticated=arwdDxtm/postgres | ...
+policy payment_links_master_read | SELECT | {authenticated} | qual: is_master_user()
+```
+
+Ou seja: PII ali fica a **uma policy** de distância de qualquer autenticado. A Fatia 8 abriu `payment_link_buyers` com `REVOKE` de `anon`, `authenticated` **e `service_role`** e RLS sem policy — fora do alcance do PostgREST por construção. Manter as duas cópias anulava a tabela dela.
+
+**Como ficou:** os três parâmetros continuam na RPC (o Master pré-preenche, é requisito do PRD), e escrevem via `billing_prefill_link_buyer(uuid,text,text,text)` — `service_role`-only, chamada de dentro da nossa função `DEFINER` de dono `postgres`, na mesma transação. Chave de lá é `payment_link_id`, então pré-preenchimento do Master e preenchimento do comprador no checkout são a **mesma linha**.
+
+**Consequências que você precisa saber antes de escrever a tela:**
+- **A porta LEVANTA (22023)** em três casos — preenchimento pela metade, documento que não é 11/14 dígitos, e-mail sem formato — e isso **derruba a criação do link junto**. É deliberado: nada aconteceu no gateway ainda.
+- **Não há leitura de volta.** Decidido com o Fole: a lista de links **não mostra o comprador**, e ele não vai abrir porta master-gated para isso. Porta que devolve nome e e-mail para `authenticated` recria a superfície que essa decisão fechou.
+- O retorno da RPC traz `buyer_prefilled` (booleano) — estado, nunca o dado.
 
 ### 2.2 `supabase/functions/billing-quote/index.ts` — typecheck Deno limpo, **nunca deployada**
 
@@ -203,7 +220,11 @@ Comparado como número, `-1 < 50000` e **a proposta mais generosa apareceria mar
    `20270812100000` (Fatia 9) → **`20270812120000` (esta)**. A renumeração já a deixou por último, o que
    coincide com a dependência: ela só altera objeto que a `…140000` cria.
 
-2. **Escrever o teste da Fatia 7** e registrá-lo no `run.sh` como **item 32** (número reservado com o Malho; 30 é dele, 31 provavelmente do Fole). **Nas DUAS listas.**
+2. ✅ **FEITO** — `supabase/tests/payment_links_package_test.sql`, **23 asserções, 23 ok**, registrado no `run.sh` como **item 32** nas duas listas. Cobre: colunas do pacote com default `{}`, as três colunas de PII **ausentes** (`hasnt_column`), `authenticated` sem `SELECT` em `payment_link_buyers`, pré-preenchimento gravando na tabela do comprador com documento normalizado e `tax_id_kind` derivado, auditoria registrando o **fato** e varrida contra e-mail/documento/nome, atomicidade (os três casos de recusa **não deixam link para trás**), desconto vindo do motor com controle positivo em número concreto, autor vindo de `auth.uid()`, e motivo obrigatório por CHECK. Medido também no mundo de **91 migrations** (as 4 ausentes do banco local aplicadas na mesma transação revertida): 23/23 aqui e 40/40 no `payment_links_test`.
+
+   O que **NÃO** está coberto e é o próximo teste de alguém: o caminho do checkout público chamando `billing_upsert_link_buyer` em cima de uma linha pré-preenchida — é do Fole (item 36).
+
+   Sobra do plano antigo, para quem for escrever mais asserção:
    Cobrir: `CHECK` do motivo obrigatório, normalização do CNPJ, autor vindo de `auth.uid()` e não de parâmetro, e os grants nome por nome — `DROP + CREATE` devolve EXECUTE a PUBLIC, e esta migration **faz** `DROP + CREATE`.
 
 3. **A tela.** Linha de contagem + interruptor, formulário do pacote, dados fiscais, lista de links gerados com estado e revogação.
@@ -224,7 +245,10 @@ Comparado como número, `-1 < 50000` e **a proposta mais generosa apareceria mar
 6. **O banco local é compartilhado.** Avise o Malho antes de `supabase db reset`.
 7. **`maestri ask` passa por shell no terminal do destinatário.** Crase e `${...}` viram execução e quebram a mensagem — já aconteceu. Escreva identificador em prosa e **leia a saída** procurando `command not found`.
 8. **Docker fora do PATH:** `export PATH="/Applications/Docker.app/Contents/Resources/bin:$PATH"`.
-9. **Guarda verde em branch atrasada não vale nada.** O guarda que roda é o **do checkout**: sem rebase você
+9. **`p_manual_final_cents` é o preço MENSAL, não o total da cobrança.** Custou duas asserções vermelhas: passei `charge_cents` de um ciclo anual e o motor devolveu `manual_discount_cents = 0` — não deu desconto, deu **aumento de 12x** (`monthly_cents` virou o total). A tela tem que enviar o mensal. O nome do parâmetro não diz isso, e o motor aceita calado.
+10. **Banco local compartilhado está ATRÁS da main, e verde ali não é verde na main.** Medido em 2026-08-12: 84 versões no ledger local contra 91 no repo. Faltavam `20270811150000`, `…160000`, `…220000` e `20270812100000`. Rode as ausentes na MESMA transação revertida antes de acreditar no verde — o wrapper é `\i migration…` + `\i teste`, e o `ROLLBACK` do próprio teste desfaz tudo.
+11. **Objeto aplicado por `psql` NÃO entra no ledger.** Eu apliquei a minha migration e a do Fole no local por `psql` para testar a integração; as duas versões **não estão** em `supabase_migrations.schema_migrations`. Consequência: o próximo `db reset` acha que nunca aplicaram, e enquanto isso o schema tem objeto que o ledger não conhece — mesma classe do incidente de migration por MCP. Se você fizer isso, **diga em voz alta** e planeje o `db reset` com o time.
+12. **Guarda verde em branch atrasada não vale nada.** O guarda que roda é o **do checkout**: sem rebase você
    executa a versão antiga do script e ela aprova a colisão. E mesmo rebaseado, a metade (b) lê `git ls-tree HEAD`
    — renomeio **não commitado** é invisível para ela, e o FAIL continua citando o nome antigo. **Rebase → renomeia
    → commita → roda.** Medido nesta branch: guarda velho `exit 0`, guarda novo `exit 1` nomeando os dois arquivos.
