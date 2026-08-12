@@ -29,3 +29,18 @@ export * from "./hooks/useCouponValidation";
 // ────────────────────────────────────────────────────────────────────────
 
 export * from "./lib/subscription";
+
+// ────────────────────────────────────────────────────────────────────────
+// Proposta de pagamento (SCRUM-286/288) — cotação, links e as regras puras
+//
+// A TELA que consome isto mora no `identity/master`, porque é operação de
+// Master: gerar proposta é autoridade dele, não superfície de billing do
+// cliente. O que fica aqui é o que é do domínio de faturamento — cotar preço,
+// montar o link, comparar o pacote com o plano base, ler o piso de assentos —
+// e é por isso que atravessa pelo barrel, e não por deep-import.
+// ────────────────────────────────────────────────────────────────────────
+
+export * from "./hooks/useBillingQuote";
+export * from "./hooks/usePaymentLinks";
+export * from "./lib/package-diff";
+export * from "./lib/seats";
