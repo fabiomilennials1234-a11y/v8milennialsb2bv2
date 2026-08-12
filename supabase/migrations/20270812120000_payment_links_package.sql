@@ -328,6 +328,24 @@ BEGIN
 END
 $fn$;
 
+-- O CONTRATO DA FUNÇÃO FICA NO CATÁLOGO, não só neste arquivo. Quem chama lê
+-- `\df+` ou o Studio, não a migration de seis meses atrás.
+--
+-- E a linha do MENSAL está aqui porque o nome do parâmetro mente por omissão:
+-- `p_manual_final_cents` é o preço MENSAL negociado, e mandar o total de um
+-- ciclo anual não gera desconto — gera cobrança 12x maior, em silêncio. Custou
+-- duas asserções vermelhas para aparecer, e numa tela apareceria no extrato do
+-- cliente. Renomear é fatia própria (o parâmetro é de `billing_quote_price`,
+-- #1381), e enquanto não for, o aviso vive onde o chamador olha.
+COMMENT ON FUNCTION public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz,jsonb,jsonb,text,integer,text,text,text,text) IS
+  'SCRUM-288: gera a proposta com pacote montado e desconto manual auditável. p_manual_final_cents é o preço MENSAL negociado, NÃO o total da cobrança — mandar o total de um ciclo anual devolve desconto 0 e cobra 12x. Os três p_buyer_* NÃO viram coluna em payment_links: vão para payment_link_buyers via billing_prefill_link_buyer, que LEVANTA em dado inválido e derruba a criação do link junto. Autorização no corpo (master), grant para authenticated porque o Master é um usuário autenticado.';
+
+-- O mesmo aviso na origem do parâmetro. Comentário não muda comportamento e não
+-- disputa arquivo com ninguém; o objeto é da Fatia 3 (#1381) e o texto anterior
+-- dele fica preservado, só ganha a linha que faltava.
+COMMENT ON FUNCTION public.billing_quote_price(uuid,integer,text,text,text,integer) IS
+  'Motor de preço do checkout (#1381). Cascata multiplicativa: base+assentos → ciclo → cupom → override manual. Centavos inteiros. EXECUTE apenas service_role: a edge function do link é quem autoriza. ATENÇÃO: p_manual_final_cents é o preço MENSAL, não o total do ciclo — passar o total devolve manual_discount_cents = 0 e multiplica a cobrança pelo número de meses, sem erro. Medido em 2026-08-12 (SCRUM-288).';
+
 -- Os grants, DE NOVO e por extenso, porque o DROP acima os levou.
 REVOKE ALL ON FUNCTION public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz,jsonb,jsonb,text,integer,text,text,text,text) FROM PUBLIC, anon, service_role;
 GRANT EXECUTE ON FUNCTION public.billing_create_payment_link(text,uuid,text,uuid,integer,text,text,timestamptz,jsonb,jsonb,text,integer,text,text,text,text) TO authenticated;
