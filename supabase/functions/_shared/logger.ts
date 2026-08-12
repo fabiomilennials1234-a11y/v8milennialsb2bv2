@@ -185,6 +185,9 @@ export type RuntimeLogModule =
   | "pipe_dispatch"
   | "pipe_distribution"
   | "scheduled_user_messages"
+  // O INV-5 (migration 20270811120000) JÁ escreve `module='seguranca'` e o
+  // banco aceita — o vocabulário estava furado do lado que de fato o guarda.
+  | "seguranca"
   | "support"
   | "sz_chat"
   | "tts"
