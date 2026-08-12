@@ -187,7 +187,7 @@ Provider-agnostic via adapter. Migração Evolution→Uazapi completa.
 - Envs prod: `UAZAPI_BASE_URL`, `UAZAPI_ADMIN_TOKEN`, `UAZAPI_WEBHOOK_SECRET`, `CRON_SECRET`
 
 ### Permissões
-3 camadas, issues recorrentes. Testar com admin/membro/master separadamente.
+3 camadas, issues recorrentes. Testar separadamente com **admin**, **member** (o role do enum, não `membro`) e **master** — lembrando que master não é um valor de role, é a camada de cima.
 - `src/modules/identity/lib/permissions.ts` | `_shared/permission_engine.ts` | `src/modules/identity/hooks/useUserRole.ts` | `tests/integration/permission-engine.test.ts`
 
 ## Gotchas
@@ -214,7 +214,7 @@ Tags: array, JSON string `'["Ouro"]'`, ou string simples. Case-insensitive.
 
 **Lifecycle**: Entrada → pipe_whatsapp(novo→abordado→respondeu→agendado) → pipe_confirmacao(marcada→d5→d3→d1→compareceu) → pipe_propostas(enviada→vendido/perdido) → upsell. Lead em múltiplos pipes simultâneo.
 
-**Roles código**: SEMPRE `admin`, `master`, `membro`. SDR/Closer = só UI/docs.
+**Roles código**: `team_members.role` é o enum `app_role` = `admin | sdr | closer | agency | bdr | cliente | member`. Em uso hoje (prod): `admin` e `member`. **É `member`, nunca `membro`** — escrever `'membro'` estoura `22P02` no INSERT. **`master` NÃO é role**: é camada à parte (`is_master_user()`, `useMasterAuth()`), fora do enum. SDR/Closer existem no enum mas o produto os trata como rótulo de UI. Guarda mecânica: `tests/unit/role-vocabulary.test.ts`.
 
 **Copilot**: Agentes IA via WhatsApp. Tipos: qualificador, sdr, followup, agendador, prospectador, custom. Personalidade + capabilities + kanban rules + business context. Dados: `conversations` + `conversation_messages`.
 

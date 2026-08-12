@@ -465,3 +465,22 @@ verify_jwt = false
 
 
 
+
+# billing-payment-link: porta PÚBLICA do checkout (SCRUM-289). verify_jwt=false —
+# a página do link não tem sessão; a autorização é o CONHECIMENTO DO TOKEN, que é
+# tratado como credencial (nunca em log). Resolve pelo hash via a RPC
+# service_role-only e devolve lista branca; rate-limited por IP
+# (auth_rate_limits + check_auth_rate_limit), 20 req / 5 min.
+[functions.billing-payment-link]
+verify_jwt = false
+
+# asaas-webhook: recebe os eventos do gateway de pagamento (SCRUM-287).
+# verify_jwt=false — quem chama é o Asaas, que não tem sessão nossa. A defesa é
+# COMPOSTA, porque o provedor NÃO assina o corpo (não há HMAC, só um token
+# estático que nós escolhemos): caminho secreto na URL + token no header
+# `asaas-access-token`, ambos em tempo constante, + allowlist de IP exigida só
+# quando ASAAS_ENV=production (o Sandbox entrega de IPs fora da lista publicada).
+# Responde SEMPRE 200 — erro devolvido pausa a fila do provedor e derruba o
+# recebimento de toda a receita, não só daquele evento.
+[functions.asaas-webhook]
+verify_jwt = false

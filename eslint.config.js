@@ -14,6 +14,18 @@ export default tseslint.config(
       // Editar manualmente é proibido (ver CLAUDE.md). Parsing errors aqui
       // indicam drift de versão CLI ou schema; corrigir é regen, não fix manual.
       "src/integrations/supabase/types.ts",
+      // Worktrees de agente criadas na raiz (`.worktrees/…`): CÓPIAS do repo
+      // dentro do repo. O git as ignora via `.git/info/exclude` — arquivo local,
+      // que o ESLint não lê — e o flat config do ESLint 9 também não ignora
+      // dot-directories por padrão (isso era comportamento do `.eslintrc`).
+      // Resultado: cada worktree era lintada como se fosse código novo.
+      //
+      // Custo real, medido em 2026-08-10: 2.237 dos 2.243 problemas que o
+      // `lint:ratchet` acusava como INTRODUZIDOS vinham daqui, atribuídos à
+      // branch que por acaso estava aberta. E como o ratchet imprime só 20
+      // linhas, uma regressão real do diff ficava invisível embaixo do ruído —
+      // o gate rodava, mas não sinalizava.
+      ".worktrees/",
     ],
   },
   {

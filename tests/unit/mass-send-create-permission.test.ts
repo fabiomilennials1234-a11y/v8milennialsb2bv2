@@ -99,7 +99,7 @@ function makeRequest(body: object, token = "valid-token") {
   });
 }
 
-function setupAuthMocks(role: "admin" | "master" | "membro" = "admin") {
+function setupAuthMocks(role: "admin" | "master" | "member" = "admin") {
   mockGetUser.mockResolvedValue({
     data: { user: { id: "user-1" } },
     error: null,

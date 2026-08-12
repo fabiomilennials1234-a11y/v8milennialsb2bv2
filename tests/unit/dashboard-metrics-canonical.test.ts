@@ -168,12 +168,12 @@ describe("useDashboardMetrics — canonical sales overlay", () => {
 
 const LEGACY_RANKING = {
   salesRanking: [
-    { id: "a", name: "Ana", job_title: "Closer", metric_type: "sales", value: 1, conversions: 1, goal: 40000, goalProgress: 1, position: 2, role: "membro" },
-    { id: "b", name: "Bruno", job_title: "Closer", metric_type: "sales", value: 1, conversions: 1, goal: 10000, goalProgress: 1, position: 1, role: "membro" },
-    { id: "c", name: "Caio (5-key only)", job_title: "SDR", metric_type: "sales", value: 999, conversions: 9, goal: 0, goalProgress: 0, position: 3, role: "membro" },
+    { id: "a", name: "Ana", job_title: "Closer", metric_type: "sales", value: 1, conversions: 1, goal: 40000, goalProgress: 1, position: 2, role: "member" },
+    { id: "b", name: "Bruno", job_title: "Closer", metric_type: "sales", value: 1, conversions: 1, goal: 10000, goalProgress: 1, position: 1, role: "member" },
+    { id: "c", name: "Caio (5-key only)", job_title: "SDR", metric_type: "sales", value: 999, conversions: 9, goal: 0, goalProgress: 0, position: 3, role: "member" },
   ],
   meetingsRanking: [
-    { id: "s1", name: "Sara", value: 0, meetings: 12, meetingsBooked: 20, goal: 15, goalProgress: 80, position: 1, role: "membro", metric_type: "meetings", job_title: null },
+    { id: "s1", name: "Sara", value: 0, meetings: 12, meetingsBooked: 20, goal: 15, goalProgress: 80, position: 1, role: "member", metric_type: "meetings", job_title: null },
   ],
 };
 

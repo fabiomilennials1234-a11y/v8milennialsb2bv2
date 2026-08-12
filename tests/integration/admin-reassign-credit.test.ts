@@ -171,37 +171,37 @@ describe.skipIf(shouldSkip)('admin_reassign_*_credit RPCs', () => {
 
     const { error: tmErr } = await supabase.from('team_members').insert([
       {
-        id: sdrSource, organization_id: TEST_ORG_ID, role: 'membro',
+        id: sdrSource, organization_id: TEST_ORG_ID, role: 'member',
         name: 'Reassign SDR source', email: `r-sdr-src-${sdrSource.slice(0, 8)}@test.com`,
         is_active: true, metric_type: 'meetings', job_title: 'SDR',
       },
       {
-        id: sdrTarget, organization_id: TEST_ORG_ID, role: 'membro',
+        id: sdrTarget, organization_id: TEST_ORG_ID, role: 'member',
         name: 'Reassign SDR target', email: `r-sdr-tgt-${sdrTarget.slice(0, 8)}@test.com`,
         is_active: true, metric_type: 'meetings', job_title: 'SDR',
       },
       {
-        id: sdrInactive, organization_id: TEST_ORG_ID, role: 'membro',
+        id: sdrInactive, organization_id: TEST_ORG_ID, role: 'member',
         name: 'Reassign SDR inactive', email: `r-sdr-ina-${sdrInactive.slice(0, 8)}@test.com`,
         is_active: false, metric_type: 'meetings', job_title: 'SDR',
       },
       {
-        id: sdrOrgB, organization_id: TEST_ORG_B_ID, role: 'membro',
+        id: sdrOrgB, organization_id: TEST_ORG_B_ID, role: 'member',
         name: 'Reassign SDR orgB', email: `r-sdr-orgb-${sdrOrgB.slice(0, 8)}@test.com`,
         is_active: true, metric_type: 'meetings', job_title: 'SDR',
       },
       {
-        id: closerSource, organization_id: TEST_ORG_ID, role: 'membro',
+        id: closerSource, organization_id: TEST_ORG_ID, role: 'member',
         name: 'Reassign Closer source', email: `r-clo-src-${closerSource.slice(0, 8)}@test.com`,
         is_active: true, metric_type: 'sales', job_title: 'Closer',
       },
       {
-        id: closerTarget, organization_id: TEST_ORG_ID, role: 'membro',
+        id: closerTarget, organization_id: TEST_ORG_ID, role: 'member',
         name: 'Reassign Closer target', email: `r-clo-tgt-${closerTarget.slice(0, 8)}@test.com`,
         is_active: true, metric_type: 'sales', job_title: 'Closer',
       },
       {
-        id: closerOrgB, organization_id: TEST_ORG_B_ID, role: 'membro',
+        id: closerOrgB, organization_id: TEST_ORG_B_ID, role: 'member',
         name: 'Reassign Closer orgB', email: `r-clo-orgb-${closerOrgB.slice(0, 8)}@test.com`,
         is_active: true, metric_type: 'sales', job_title: 'Closer',
       },

@@ -161,7 +161,7 @@ async function listar() {
 }
 
 beforeEach(() => {
-  currentMember = { id: "tm-1", organization_id: "org-1", role: "membro" };
+  currentMember = { id: "tm-1", organization_id: "org-1", role: "member" };
   podeLigar = true;
   podeAtender = true;
   consultas = [];
@@ -693,7 +693,7 @@ describe("useCanCallLead — quem bypassa é o mesmo trio do servidor", () => {
   // gestor perderiam o botão em TODO lead — e o teste acima passaria por acaso
   // se o bypass fosse trocado por "id que não bate, então libera".
   it("membro comum com id que não bate em nada continua sem o botão", async () => {
-    currentMember = { id: "tm-1", organization_id: "org-1", role: "membro" };
+    currentMember = { id: "tm-1", organization_id: "org-1", role: "member" };
     tables.leads = [lead({ id: "lead-1", responsible_id: null })];
     await assertPodeLigar("lead-1", false);
   });

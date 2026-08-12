@@ -164,7 +164,7 @@ vi.mock("@/modules/communication/hooks/useVoiceCall", () => ({
 }));
 
 vi.mock("@/modules/identity", () => ({
-  useOrganization: () => ({ organizationId: "org-1", teamMemberId: "tm-1", role: "membro" }),
+  useOrganization: () => ({ organizationId: "org-1", teamMemberId: "tm-1", role: "member" }),
 }));
 
 /** O nome de quem liga tem suíte própria; aqui só não pode ir ao banco. */
