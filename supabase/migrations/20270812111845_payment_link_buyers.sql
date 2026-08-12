@@ -107,6 +107,13 @@ CREATE TABLE IF NOT EXISTS public.payment_link_buyers (
   -- `CustomerInput.name` do port (`_shared/payments/types.ts`) é obrigatório —
   -- a Asaas não cria cliente sem nome. NOT NULL aqui é o mesmo fato, uma camada
   -- abaixo.
+  --
+  -- O NOME DESTA COLUNA INDUZ AO ERRO, e já induziu uma vez: ela NÃO guarda só
+  -- razão social. No ramo `cpf` — comprador pessoa física — o que está aqui é o
+  -- NOME CIVIL de alguém, que não é público em cadastro nenhum. Quem for tratar
+  -- esta coluna como dado público (deixar de redigir em log, expor em tela,
+  -- devolver numa porta) está certo para metade das linhas e errado para a
+  -- outra metade.
   legal_name           text        NOT NULL,
 
   -- O CAMPO QUE JUSTIFICA A TABELA. É com ele que a Fatia 9 cria o usuário
@@ -151,6 +158,8 @@ CREATE TABLE IF NOT EXISTS public.payment_link_buyers (
 
 COMMENT ON TABLE public.payment_link_buyers IS
   'SCRUM-289: comprador da proposta (PII). Um por payment_link, não por cobrança — o cliente do gateway é reaproveitado entre métodos. Fora do alcance do PostgREST por REVOKE, não por policy: só as funções SECURITY DEFINER de billing chegam aqui.';
+COMMENT ON COLUMN public.payment_link_buyers.legal_name IS
+  'PII. NÃO é só razão social: no ramo cpf é o nome civil de uma pessoa física, que não é público em cadastro nenhum. Tratar como dado público acerta metade das linhas e erra a outra metade.';
 COMMENT ON COLUMN public.payment_link_buyers.email IS
   'PII. É com este e-mail que a Fatia 9 cria o admin da organização nova. NUNCA em log, erro ou telemetria.';
 COMMENT ON COLUMN public.payment_link_buyers.tax_id IS
