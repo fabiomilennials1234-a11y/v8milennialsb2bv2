@@ -2,13 +2,19 @@ import { forwardRef } from "react";
 import { LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
-import { ENGINE_BY_ID, type MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
+import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
 import type { StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
 import type { StudioWindow } from "@/modules/analytics/hooks/useMetricsStudio";
 import { MetricWindow } from "./MetricWindow";
 
 interface MetricsCanvasProps {
   windows: StudioWindow[];
+  /**
+   * Resolvedor de `metricId` → métrica. Vem do catálogo do Estúdio, que junta
+   * as de fábrica com as personalizadas da organização — por isso não é mais um
+   * `Map` estático de import.
+   */
+  byId: Map<string, EngineMetric>;
   period: StudioPeriod;
   podeVerPorPessoa: boolean;
   editavel: boolean;
@@ -29,7 +35,7 @@ interface MetricsCanvasProps {
  * a malha orienta, não prende.
  */
 export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(function MetricsCanvas(
-  { windows, period, podeVerPorPessoa, editavel, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
+  { windows, byId, period, podeVerPorPessoa, editavel, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
   ref,
 ) {
   const empty = windows.length === 0;
@@ -80,7 +86,11 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
       )}
 
       {windows.map((win) => {
-        const metric = ENGINE_BY_ID.get(win.metricId);
+        // Janela cuja métrica sumiu do catálogo (personalizada apagada por um
+        // admin, por exemplo) simplesmente não desenha. Não é erro: é uma
+        // definição que deixou de existir, e o painel do usuário não some por
+        // causa disso.
+        const metric = byId.get(win.metricId);
         if (!metric) return null;
         return (
           <MetricWindow

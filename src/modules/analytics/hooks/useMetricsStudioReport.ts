@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { useOrganization } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchMetricMeasure } from "./useMetricMeasure";
-import { ENGINE_BY_ID } from "@/modules/analytics/lib/metrics-studio-engine-map";
+import type { EngineMetric } from "@/modules/analytics/lib/metrics-studio-engine-map";
 import {
   montarRelatorio,
   nomeDoArquivo,
@@ -34,7 +34,7 @@ function rotuloDoPeriodo(scope: ReportScope, hoje: Date): string {
   return `${tri}º trimestre de ${hoje.getFullYear()}`;
 }
 
-export function useMetricsStudioReport(windows: StudioWindow[]) {
+export function useMetricsStudioReport(windows: StudioWindow[], byId: Map<string, EngineMetric>) {
   const { organizationId } = useOrganization();
   const [exportando, setExportando] = useState<ReportScope | null>(null);
 
@@ -65,7 +65,7 @@ export function useMetricsStudioReport(windows: StudioWindow[]) {
         const itens: ReportItem[] = [];
         await Promise.all(
           windows.map(async (win) => {
-            const metric = ENGINE_BY_ID.get(win.metricId);
+            const metric = byId.get(win.metricId);
             if (!metric) return;
             const comum = { organizationId, measureRef: metric.measureRef, filters: metric.filtrosFixos };
             const [medidaAtual, medidaAnterior] = await Promise.all([
@@ -119,7 +119,7 @@ export function useMetricsStudioReport(windows: StudioWindow[]) {
         setExportando(null);
       }
     },
-    [organizationId, windows, exportando],
+    [organizationId, windows, byId, exportando],
   );
 
   return { exportar, exportando };

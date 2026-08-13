@@ -9,15 +9,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { cn } from "@/lib/utils";
+import { MetricComposer } from "@/modules/analytics/components/metrics-studio/MetricComposer";
 import { MetricsCanvas } from "@/modules/analytics/components/metrics-studio/MetricsCanvas";
 import { MetricsStudioSidebar } from "@/modules/analytics/components/metrics-studio/MetricsStudioSidebar";
+import type { MetricCustomDefinition } from "@/modules/analytics/hooks/useMetricCustomDefinitions";
 import { useMetricsStudio } from "@/modules/analytics/hooks/useMetricsStudio";
 import { useMetricsStudioEnabled } from "@/modules/analytics/hooks/useMetricsStudioEnabled";
 import { useMetricsStudioReport } from "@/modules/analytics/hooks/useMetricsStudioReport";
+import { useStudioCatalog } from "@/modules/analytics/hooks/useStudioCatalog";
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
 import { STUDIO_PERIODS, type StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
-import { useFeaturePermission } from "@/modules/identity";
+import { useCurrentTeamMember, useFeaturePermission } from "@/modules/identity";
 
 /**
  * Estúdio de Métricas — `/metricas`.
@@ -36,8 +39,13 @@ import { useFeaturePermission } from "@/modules/identity";
  * A lista mostra só o que o motor calcula em produção — G1 do grill.
  */
 export default function MetricsStudio() {
-  const studio = useMetricsStudio();
+  // O catálogo junta o que o motor calcula de fábrica com o que ESTA org
+  // compôs (Emenda 1 do ADR-0023). Ele é a fonte de resolução de toda janela —
+  // por isso desce para o hook de estado, para o canvas e para o relatório.
+  const catalogo = useStudioCatalog();
+  const studio = useMetricsStudio(catalogo.byId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [compondo, setCompondo] = useState<{ editando: MetricCustomDefinition | null } | null>(null);
   // SCRUM-308. Nasce em Visualização: o painel é para LER. Antes disso, o
   // canvas estava sempre editável e arrastar acontecia por acidente durante a
   // leitura. A lista lateral só existe em Edição — em Visualização ela seria
@@ -48,11 +56,24 @@ export default function MetricsStudio() {
 
   // G5: trava de liberação por org. Falha para FECHADO — ver o hook.
   const rollout = useMetricsStudioEnabled();
-  const relatorio = useMetricsStudioReport(studio.windows);
+  const relatorio = useMetricsStudioReport(studio.windows, catalogo.byId);
 
   // G6 do grill: os cortes por pessoa (closer/SDR) reusam a trava do Ranking,
   // que já existe. Sem ela, o seletor de corte simplesmente não os oferece.
   const { allowed: podeVerPorPessoa } = useFeaturePermission("performance.view");
+
+  // Compor métrica é ato de ADMIN DE EQUIPE, e esta linha espelha a RLS letra
+  // por letra: `get_my_team_admin_organization_ids()` é
+  // `role = 'admin' AND is_active = true`, e mais nada.
+  //
+  // NÃO usa `useIdentity().isAdmin` nem `effectiveRole`: os dois devolvem
+  // 'admin' para MASTER, que não tem policy de escrita nesta tabela (mesma
+  // decisão de `metrics_studio_panels`). Master veria o botão e levaria erro na
+  // gravação — botão que sempre falha é pior que botão ausente.
+  const { data: membroAtual } = useCurrentTeamMember();
+  const podeCompor =
+    (membroAtual as { role?: string; is_active?: boolean } | null | undefined)?.role === "admin" &&
+    (membroAtual as { is_active?: boolean } | null | undefined)?.is_active !== false;
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -133,6 +154,18 @@ export default function MetricsStudio() {
     studio.clear();
     setSelectedId(null);
   }, [studio]);
+
+  // Excluir métrica personalizada não remove as janelas que a usam: elas param
+  // de desenhar (o canvas ignora metricId que não resolve) e voltam sozinhas se
+  // a definição for recriada. Apagar janela do painel de OUTRA pessoa a partir
+  // daqui seria mexer em estado que não é desta tela.
+  const handleRemoverMetrica = useCallback(
+    async (def: MetricCustomDefinition) => {
+      if (!window.confirm(`Excluir a métrica “${def.name}”? As janelas que a usam deixam de aparecer.`)) return;
+      await catalogo.custom.remover(def.id);
+    },
+    [catalogo.custom],
+  );
 
   if (rollout.isLoading) {
     return <TorqueLoader variant="inline" />;
@@ -251,9 +284,15 @@ export default function MetricsStudio() {
       >
         {editando && (
           <MetricsStudioSidebar
+            metrics={catalogo.metrics}
+            personalizadas={catalogo.personalizadas}
             openMetricIds={studio.openMetricIds}
             podeVerPorPessoa={podeVerPorPessoa}
+            podeCompor={podeCompor}
             onAdd={handleAdd}
+            onCriar={() => setCompondo({ editando: null })}
+            onEditar={(def) => setCompondo({ editando: def })}
+            onRemover={(def) => void handleRemoverMetrica(def)}
           />
         )}
 
@@ -261,6 +300,7 @@ export default function MetricsStudio() {
           <MetricsCanvas
             ref={canvasRef}
             windows={studio.windows}
+            byId={catalogo.byId}
             period={period}
             podeVerPorPessoa={podeVerPorPessoa}
             editavel={editando}
@@ -276,6 +316,24 @@ export default function MetricsStudio() {
           />
         </div>
       </div>
+
+      {/* O compositor é remontado a cada abertura (`key`) para nascer com o
+          rascunho certo: sem isso, editar uma métrica logo depois de criar
+          outra reaproveitaria o estado da anterior. */}
+      {compondo && (
+        <MetricComposer
+          key={compondo.editando?.id ?? "nova"}
+          aberto
+          period={period}
+          editando={compondo.editando}
+          salvando={catalogo.custom.salvando}
+          onFechar={() => setCompondo(null)}
+          onSalvar={async (draft) => {
+            if (compondo.editando) await catalogo.custom.atualizar(compondo.editando.id, draft);
+            else await catalogo.custom.criar(draft);
+          }}
+        />
+      )}
     </div>
   );
 }
