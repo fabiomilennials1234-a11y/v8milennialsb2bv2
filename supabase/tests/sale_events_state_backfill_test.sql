@@ -44,7 +44,7 @@ VALUES
   ('e2000000-aaaa-2222-0000-000000000001', 'e2000000-aaaa-0000-0000-000000000001',
    NULL, 'Closer U2', 'admin', true),
   ('e2000000-aaaa-2222-0001-000000000001', 'e2000000-aaaa-0000-0000-000000000001',
-   NULL, 'SDR U2', 'membro', true);
+   NULL, 'SDR U2', 'member', true);
 
 -- L1: novo negócio, atribuição canônica completa. L2: parado em stage open.
 INSERT INTO public.leads (id, organization_id, name,
