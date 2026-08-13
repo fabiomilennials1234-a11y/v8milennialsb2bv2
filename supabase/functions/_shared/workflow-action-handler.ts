@@ -286,6 +286,36 @@ export async function resolveVariables(
     }
   }
 
+  // Tags: {{tag.<nome>}} → ecoa o nome quando o lead carrega a tag, senão "".
+  //
+  // Este bloco existia SÓ no gêmeo `action-handlers/whatsapp-helpers.ts`. Enquanto esta
+  // função era alcançada apenas por notifyMessage/followupTitle/eventTitle/aiPrompt —
+  // nenhum deles com seletor de variável na tela —, a divergência era invisível. Os
+  // painéis dos nós de código são a primeira UI do repo a oferecer os chips de tag sobre
+  // um campo resolvido por AQUI: sem este bloco, o operador clicava em `Ouro` e a API do
+  // cliente recebia o literal `{{tag.Ouro}}`, com o passo gravado `success` e HTTP 200.
+  const tagMatches = result.match(/\{\{tag\.([^}]+)\}\}/g);
+  if (tagMatches) {
+    const { data: leadTags } = await supabase
+      .from("lead_tags")
+      .select("tags(name)")
+      .eq("lead_id", leadId);
+    // Sem o `Database` gerado, o parser do postgrest-js chuta ARRAY para o embed
+    // `tags(name)`. A relação é muitos-para-um (`lead_tags.tag_id → tags.id`) e o
+    // PostgREST devolve OBJETO — asserção, e não `.returns<>()`, que é método de RUNTIME
+    // do builder e quebraria os dublês de teste. Idem ao gêmeo.
+    const tagRows = (leadTags ?? []) as unknown as Array<{ tags: { name: string | null } | null }>;
+    const tagNames = new Set(
+      tagRows
+        .map((lt) => lt.tags?.name)
+        .filter((n): n is string => Boolean(n)),
+    );
+    for (const match of tagMatches) {
+      const tagName = match.replace("{{tag.", "").replace("}}", "");
+      result = sub(result, match, tagNames.has(tagName) ? tagName : "");
+    }
+  }
+
   // A suppressed placeholder name (see personalizationName) leaves a punctuation
   // gap like "Boa tarde , tudo bem?" — clean it only when we actually blanked one.
   //
