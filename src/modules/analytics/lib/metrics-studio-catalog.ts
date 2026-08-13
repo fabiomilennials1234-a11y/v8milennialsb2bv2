@@ -18,7 +18,9 @@
 
 export type MetricUnit = "currency" | "count" | "percent" | "duration" | "ratio";
 
-export type ChartKind = "number" | "line" | "pie" | "candle";
+/** G3 do grill: vela saiu — o motor não tem OHLC e não existe definição de
+ *  negócio para abertura/máxima/mínima de faturamento. */
+export type ChartKind = "number" | "line" | "pie";
 
 export type MetricReadiness = "pronta" | "parcial" | "ausente";
 
@@ -66,9 +68,9 @@ export const METRIC_FAMILIES: MetricFamily[] = [
   { id: "origem", label: "Origem" },
 ];
 
-const SERIES: ChartKind[] = ["number", "line", "candle"];
+const SERIES: ChartKind[] = ["number", "line"];
 const BREAKDOWN: ChartKind[] = ["number", "line", "pie"];
-const FULL: ChartKind[] = ["number", "line", "pie", "candle"];
+const FULL: ChartKind[] = ["number", "line", "pie"];
 
 export const STUDIO_METRICS: StudioMetric[] = [
   // ── Aquisição ────────────────────────────────────────────────────────────
@@ -422,7 +424,6 @@ export const CHART_KIND_META: Record<ChartKind, { label: string }> = {
   number: { label: "Número" },
   line: { label: "Linha" },
   pie: { label: "Pizza" },
-  candle: { label: "Vela" },
 };
 
 /** Paleta categórica do estúdio — dourado da marca na frente, frias atrás. */

@@ -1,12 +1,23 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { MetricUnit } from "@/modules/analytics/lib/metrics-studio-catalog";
-import { formatMetricValue } from "@/modules/analytics/lib/metrics-studio-catalog";
-import type { SamplePoint } from "@/modules/analytics/lib/metrics-studio-sample";
+import { formatMetricValue } from "@/modules/analytics/lib/tv-metric-format";
+
 import { StudioTooltip } from "./StudioTooltip";
 
+/**
+ * Ponto OHLC. Tipo LOCAL de propósito: nenhuma fonte do sistema produz isto
+ * hoje — ver o aviso abaixo.
+ */
+export interface OhlcPoint {
+  label: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
 interface StudioCandleChartProps {
-  series: SamplePoint[];
-  unit: MetricUnit;
+  series: OhlcPoint[];
+  formatId: string;
   compact: boolean;
 }
 
@@ -17,6 +28,13 @@ const PAD = { top: 10, right: 8, bottom: 18, left: 8 };
 const AXIS_W = 54;
 
 /**
+ * ⚠ DESLIGADO. G3 do grill de 2026-08-11 tirou a vela da lista de desenhos: o
+ * motor não tem OHLC e não existe definição de negócio para abertura, máxima e
+ * mínima de faturamento — os quatro valores só existiam porque o gerador de
+ * amostra os inventava. O componente fica no repositório por decisão do CTO;
+ * nenhuma tela o referencia. Religar exige antes definir e gravar OHLC no
+ * servidor (épico próprio, fora do roadmap de Métricas v2).
+ *
  * Vela (OHLC) desenhada à mão em SVG.
  *
  * Recharts não tem candlestick — as receitas que circulam empilham `Bar` com
@@ -25,7 +43,7 @@ const AXIS_W = 54;
  * faixa vertical, não por elemento, então acertar a vela fina não vira teste
  * de pontaria.
  */
-export function StudioCandleChart({ series, unit, compact }: StudioCandleChartProps) {
+export function StudioCandleChart({ series, formatId, compact }: StudioCandleChartProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [hover, setHover] = useState<number | null>(null);
@@ -105,7 +123,7 @@ export function StudioCandleChart({ series, unit, compact }: StudioCandleChartPr
                 textAnchor="end"
                 className="fill-muted-foreground text-[9px] tabular-nums"
               >
-                {formatMetricValue(tick, unit)}
+                {formatMetricValue(tick, formatId)}
               </text>
             </g>
           ))}
@@ -167,7 +185,7 @@ export function StudioCandleChart({ series, unit, compact }: StudioCandleChartPr
         >
           <StudioTooltip
             title={point.label}
-            unit={unit}
+            formatId={formatId}
             rows={[
               { label: "Abertura", value: point.open },
               { label: "Máxima", value: point.high },

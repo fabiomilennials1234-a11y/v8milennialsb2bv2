@@ -1,40 +1,89 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Gauge, PanelLeftClose, PanelLeftOpen, Trash2 } from "lucide-react";
+import { Check, Download, Gauge, Loader2, Lock, Pencil, Trash2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { cn } from "@/lib/utils";
 import { MetricsCanvas } from "@/modules/analytics/components/metrics-studio/MetricsCanvas";
 import { MetricsStudioSidebar } from "@/modules/analytics/components/metrics-studio/MetricsStudioSidebar";
 import { useMetricsStudio } from "@/modules/analytics/hooks/useMetricsStudio";
-import type { ChartKind, StudioMetric } from "@/modules/analytics/lib/metrics-studio-catalog";
-
-const PERIODS = [
-  { key: "today", label: "Hoje" },
-  { key: "week", label: "Semana" },
-  { key: "month", label: "Mês" },
-  { key: "quarter", label: "Trim." },
-] as const;
-
-type PeriodKey = (typeof PERIODS)[number]["key"];
+import { useMetricsStudioEnabled } from "@/modules/analytics/hooks/useMetricsStudioEnabled";
+import { useMetricsStudioReport } from "@/modules/analytics/hooks/useMetricsStudioReport";
+import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
+import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
+import { STUDIO_PERIODS, type StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
+import { useFeaturePermission } from "@/modules/identity";
 
 /**
- * Estúdio de Métricas — painel em branco + catálogo lateral.
+ * Estúdio de Métricas — `/metricas`.
  *
- * A rota é full-bleed (ver FULL_BLEED_PATTERNS no MainLayout): a top bar do
- * Torque continua, o resto do viewport é canvas. Sem `max-w`, sem scroll de
- * página — quem rola é a lista lateral.
+ * PÁGINA NORMAL do sistema, não canvas full-screen. A top bar do Torque, o
+ * padding e o cabeçalho do `<main>` continuam valendo; a rota só entra em
+ * WIDE_LAYOUT_PATTERNS (como os kanbans) para soltar o `max-w-[1600px]`.
+ *
+ * O painel é uma REGIÃO da página com altura própria, não o viewport inteiro:
+ * a primeira versão era full-bleed e comia a top bar, o que fazia a tela
+ * parecer outro produto. Aqui o estúdio é um painel emoldurado — mesma
+ * gramática de card do resto do app.
  *
  * Estado de composição: `useMetricsStudio` (persistido por org+usuário).
- * Números: amostra determinística (`metrics-studio-sample`). Trocar pelo motor
- * `fn_metric_measure` não muda nenhum componente desta árvore.
+ * Números: motor `fn_metric_measure`, via `useMetricWindowData` (SCRUM-310).
+ * A lista mostra só o que o motor calcula em produção — G1 do grill.
  */
 export default function MetricsStudio() {
   const studio = useMetricsStudio();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [period, setPeriod] = useState<PeriodKey>("month");
+  // SCRUM-308. Nasce em Visualização: o painel é para LER. Antes disso, o
+  // canvas estava sempre editável e arrastar acontecia por acidente durante a
+  // leitura. A lista lateral só existe em Edição — em Visualização ela seria
+  // um convite a mexer no que se quer só olhar, e rouba largura do painel.
+  const [modo, setModo] = useState<"ver" | "editar">("ver");
+  const editando = modo === "editar";
+  const [period, setPeriod] = useState<StudioPeriod>("month");
+
+  // G5: trava de liberação por org. Falha para FECHADO — ver o hook.
+  const rollout = useMetricsStudioEnabled();
+  const relatorio = useMetricsStudioReport(studio.windows);
+
+  // G6 do grill: os cortes por pessoa (closer/SDR) reusam a trava do Ranking,
+  // que já existe. Sem ela, o seletor de corte simplesmente não os oferece.
+  const { allowed: podeVerPorPessoa } = useFeaturePermission("performance.view");
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+
+  // Altura do painel MEDIDA, não chutada. A primeira versão usava
+  // `h-[calc(100vh-15rem)]`: 240px fixos contra ~142px de cromo real, o que
+  // deixava ~98px de área morta embaixo. E o padding do <main> é responsivo
+  // (py-5 sm:py-6 lg:py-8), então qualquer constante erra em algum breakpoint.
+  // Aqui o topo do painel é lido do layout e o rodapé respeita o padding real.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [panelHeight, setPanelHeight] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    const medir = () => {
+      const el = panelRef.current;
+      if (!el) return;
+      const topo = el.getBoundingClientRect().top;
+      // O padding do layout está num DIV interno do <main>, não no <main> —
+      // por isso subimos até achar quem de fato tem padding-bottom, em vez de
+      // ler direto do <main> (que devolve 0 e cola o painel na borda).
+      let respiro = 0;
+      for (let n = el.parentElement, i = 0; n && i < 6; n = n.parentElement, i++) {
+        const p = parseFloat(getComputedStyle(n).paddingBottom) || 0;
+        if (p > 0) { respiro = p; break; }
+      }
+      setPanelHeight(Math.max(420, window.innerHeight - topo - respiro));
+    };
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, []);
 
   useLayoutEffect(() => {
     const el = canvasRef.current;
@@ -48,7 +97,7 @@ export default function MetricsStudio() {
   }, []);
 
   const handleAdd = useCallback(
-    (metric: StudioMetric) => studio.addMetric(metric, canvasSize),
+    (metric: EngineMetric) => studio.addMetric(metric, canvasSize),
     [studio, canvasSize],
   );
 
@@ -67,6 +116,11 @@ export default function MetricsStudio() {
     [studio, canvasSize],
   );
 
+  const handleCorte = useCallback(
+    (id: string, corte: MetricRecorte) => studio.setCorte(id, corte, canvasSize),
+    [studio, canvasSize],
+  );
+
   const handleSelect = useCallback(
     (id: string | null) => {
       setSelectedId(id);
@@ -80,86 +134,177 @@ export default function MetricsStudio() {
     setSelectedId(null);
   }, [studio]);
 
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 items-center gap-3 border-b border-border/70 px-4 py-2.5">
-        <button
-          type="button"
-          onClick={() => setSidebarOpen((v) => !v)}
-          aria-label={sidebarOpen ? "Ocultar lista de métricas" : "Mostrar lista de métricas"}
-          className="rounded-lg border border-border bg-card p-1.5 text-muted-foreground transition-colors hover:text-foreground"
-        >
-          {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-        </button>
+  if (rollout.isLoading) {
+    return <TorqueLoader variant="inline" />;
+  }
 
+  if (!rollout.enabled) {
+    return <EstudioIndisponivel />;
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Cabeçalho de página — mesma gramática das outras rotas do sistema. */}
+      <header className="flex flex-wrap items-center gap-3">
         <div className="min-w-0">
-          <h1 className="text-[17px] font-extrabold leading-tight tracking-[-0.03em]">Métricas</h1>
-          <p className="text-[11px] text-muted-foreground/70">
-            {studio.windows.length === 0
-              ? "Painel vazio"
-              : `${studio.windows.length} ${studio.windows.length === 1 ? "janela" : "janelas"} no painel`}
+          <h1 className="text-[19px] font-extrabold leading-tight tracking-[-0.03em]">Métricas</h1>
+          <p className="text-[12px] text-muted-foreground/70">
+            {editando
+              ? "Arraste, redimensione e escolha o corte de cada janela"
+              : studio.windows.length === 0
+                ? "Monte o painel com as métricas que você acompanha"
+                : `${studio.windows.length} ${studio.windows.length === 1 ? "janela" : "janelas"} no painel`}
           </p>
         </div>
 
-        <div className="flex-1" />
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="flex gap-[2px] rounded-[9px] border border-border bg-card p-[3px]">
+            {STUDIO_PERIODS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => setPeriod(p.key)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-[12px] font-semibold transition-all",
+                  period === p.key
+                    ? "bg-background text-foreground shadow-[inset_0_0_0_1px_hsl(var(--border))]"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
 
-        <div className="flex gap-[2px] rounded-[9px] border border-border bg-card p-[3px]">
-          {PERIODS.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              onClick={() => setPeriod(p.key)}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-[12px] font-semibold transition-all",
-                period === p.key
-                  ? "bg-background text-foreground shadow-[inset_0_0_0_1px_hsl(var(--border))]"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {p.label}
-            </button>
-          ))}
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center gap-1.5 rounded-[9px] border border-border bg-card px-3 py-[7px] text-[12px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+          >
+            <Gauge className="h-3.5 w-3.5" />
+            Comando
+          </Link>
+
+          {/* SCRUM-312 · G10: planilha, não PDF. Desabilitado com painel
+              vazio — exportar nada gera arquivo que decepciona. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                disabled={studio.windows.length === 0 || relatorio.exportando !== null}
+                className="inline-flex items-center gap-1.5 rounded-[9px] border border-border bg-card px-3 py-[7px] text-[12px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+              >
+                {relatorio.exportando ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+                Exportar
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => void relatorio.exportar("month")}>
+                Relatório mensal
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void relatorio.exportar("quarter")}>
+                Relatório trimestral
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <button
+            type="button"
+            onClick={() => {
+              setModo(editando ? "ver" : "editar");
+              setSelectedId(null);
+            }}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-[9px] px-3 py-[7px] text-[12px] font-semibold transition-colors",
+              editando
+                ? "bg-primary text-primary-foreground"
+                : "border border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+            )}
+          >
+            {editando ? <Check className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+            {editando ? "Concluir" : "Editar"}
+          </button>
+
+          {editando && (
+          <button
+            type="button"
+            onClick={handleClear}
+            disabled={studio.windows.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-[9px] border border-border bg-card px-3 py-[7px] text-[12px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Limpar
+          </button>
+          )}
         </div>
-
-        <Link
-          to="/dashboard"
-          className="inline-flex items-center gap-1.5 rounded-[9px] border border-border bg-card px-3 py-[7px] text-[12px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-        >
-          <Gauge className="h-3.5 w-3.5" />
-          Comando
-        </Link>
-
-        <button
-          type="button"
-          onClick={handleClear}
-          disabled={studio.windows.length === 0}
-          className="inline-flex items-center gap-1.5 rounded-[9px] border border-border bg-card px-3 py-[7px] text-[12px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          Limpar
-        </button>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        {sidebarOpen && (
-          <MetricsStudioSidebar openMetricIds={studio.openMetricIds} onAdd={handleAdd} />
+      {/* Painel emoldurado: ocupa toda a altura restante da página, medida em
+          runtime. Enquanto a medição não chega, cai num piso razoável. */}
+      <div
+        ref={panelRef}
+        style={panelHeight ? { height: panelHeight } : undefined}
+        className="flex min-h-[420px] overflow-hidden rounded-xl border border-border/70 bg-card/30"
+      >
+        {editando && (
+          <MetricsStudioSidebar
+            openMetricIds={studio.openMetricIds}
+            podeVerPorPessoa={podeVerPorPessoa}
+            onAdd={handleAdd}
+          />
         )}
 
         <div className="min-w-0 flex-1">
           <MetricsCanvas
             ref={canvasRef}
             windows={studio.windows}
-            periodKey={period}
+            period={period}
+            podeVerPorPessoa={podeVerPorPessoa}
+            editavel={editando}
+            onEditar={() => setModo("editar")}
             selectedId={selectedId}
             size={canvasSize}
             onSelect={handleSelect}
             onMove={studio.moveWindow}
             onResize={studio.resizeWindow}
             onChart={handleChart}
+            onCorte={handleCorte}
             onRemove={handleRemove}
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Org fora do rollout. NÃO é tela de erro nem de permissão negada: a feature
+ * existe e está sendo liberada aos poucos. O texto diz isso, em vez de sugerir
+ * que o usuário fez algo errado ou que falta plano.
+ */
+function EstudioIndisponivel() {
+  return (
+    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center">
+      <div className="rounded-2xl border border-dashed border-border/70 p-4">
+        <Lock className="h-6 w-6 text-muted-foreground/40" strokeWidth={1.5} />
+      </div>
+      <div className="max-w-[360px]">
+        <p className="text-[14px] font-semibold">Métricas ainda não liberado</p>
+        <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/70">
+          Estamos liberando esta tela aos poucos. Enquanto isso, os números da sua operação
+          continuam no Comando.
+        </p>
+      </div>
+      <Link
+        to="/dashboard"
+        className="inline-flex items-center gap-1.5 rounded-[9px] border border-border bg-card px-3 py-[7px] text-[12px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+      >
+        <Gauge className="h-3.5 w-3.5" />
+        Ir para o Comando
+      </Link>
     </div>
   );
 }

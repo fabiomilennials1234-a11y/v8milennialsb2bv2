@@ -54,6 +54,41 @@ interface UseMetricMeasureArgs {
   enabled?: boolean;
 }
 
+/**
+ * Chamada imperativa do motor. Existe para quem precisa do número FORA de um
+ * componente — hoje o relatório (SCRUM-312), que busca N métricas de uma vez
+ * ao clicar em exportar e não pode montar N hooks.
+ *
+ * O hook abaixo consome esta mesma função: manter os dois caminhos idênticos
+ * é o que impede a exportação de divergir da tela.
+ */
+export async function fetchMetricMeasure(args: {
+  organizationId: string;
+  measureRef: MeasureRef;
+  recorte: string;
+  period?: MetricPeriod;
+  ref?: string | null;
+  start?: string | null;
+  end?: string | null;
+  filters?: MetricFilters;
+}): Promise<MetricMeasureResult | null> {
+  const { data, error } = await supabase.rpc("fn_metric_measure" as any, {
+    p_org_id: args.organizationId,
+    p_measure_ref: args.measureRef,
+    p_recorte: args.recorte,
+    p_period: args.period ?? "month",
+    p_ref: args.ref ?? null,
+    p_start: args.start ?? null,
+    p_end: args.end ?? null,
+    p_filters: args.filters ?? {},
+  });
+  if (error) {
+    if (isMissingSchemaError(error)) return null; // migration ainda não em prod
+    throw new Error(`Metric measure failed: ${error.message}`);
+  }
+  return (data as unknown as MetricMeasureResult) ?? null;
+}
+
 export function useMetricMeasure({
   measureRef,
   recorte,
@@ -81,22 +116,17 @@ export function useMetricMeasure({
       filters,
     ],
     queryFn: async (): Promise<MetricMeasureResult | null> => {
-      if (!measureRef) return null;
-      const { data, error } = await supabase.rpc("fn_metric_measure" as any, {
-        p_org_id: organizationId,
-        p_measure_ref: measureRef,
-        p_recorte: recorte,
-        p_period: period,
-        p_ref: ref,
-        p_start: start,
-        p_end: end,
-        p_filters: filters,
+      if (!measureRef || !organizationId) return null;
+      return fetchMetricMeasure({
+        organizationId,
+        measureRef,
+        recorte,
+        period,
+        ref,
+        start,
+        end,
+        filters,
       });
-      if (error) {
-        if (isMissingSchemaError(error)) return null; // migration ainda não em prod
-        throw new Error(`Metric measure failed: ${error.message}`);
-      }
-      return (data as unknown as MetricMeasureResult) ?? null;
     },
     enabled: enabled && isReady && !!organizationId && !!measureRef && !!recorte,
     staleTime: 30 * 1000,

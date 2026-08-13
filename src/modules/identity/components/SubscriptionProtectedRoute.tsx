@@ -18,6 +18,7 @@ import {
 import { useUserRole, useCanManageCopilot } from "../permissions/hooks/useUserRole";
 import { useIdentity } from "../auth/hooks/useIdentity";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
+import { IS_DEMO_MODE } from "@/core/demo-mode";
 import { OverdueBanner } from "@/modules/billing/components/subscription/OverdueBanner";
 import { SubscriptionBlockedPage } from "@/modules/billing/components/subscription/SubscriptionBlockedPage";
 
@@ -65,6 +66,15 @@ export function SubscriptionProtectedRoute({
   const effectiveLoading = isMaster
     ? authLoading || masterLoading || loading
     : authLoading || loading || roleLoading || masterLoading || copilotLoading;
+
+  // Modo demonstração (build de dev + VITE_DEMO_MODE=1). Em produção
+  // `IS_DEMO_MODE` é a constante `false` e este bloco não chega ao bundle.
+  // O gate de assinatura mora dentro do LayoutWrapper, então sem este bypass
+  // a demo cai em /auth mesmo com o ProtectedRoute liberado.
+  // Ver src/core/demo-mode.ts.
+  if (IS_DEMO_MODE) {
+    return <>{children}</>;
+  }
 
   if (effectiveLoading) {
     return <TorqueLoader variant="full" />;

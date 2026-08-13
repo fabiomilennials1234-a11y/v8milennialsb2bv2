@@ -100,20 +100,37 @@ Superfície nova. Comando vira **operação** (o que fazer agora), Estúdio vira
 
 | Peça | Arquivo |
 |---|---|
-| Página | `pages/MetricsStudio.tsx` (rota full-bleed — ver `FULL_BLEED_PATTERNS`) |
-| Catálogo (29 métricas, 9 famílias) | `lib/metrics-studio-catalog.ts` |
-| Amostra determinística | `lib/metrics-studio-sample.ts` (+ `.test.ts`) |
-| Estado do painel | `hooks/useMetricsStudio.ts` (persistido por org+usuário, TTL 30d) |
+| Página | `pages/MetricsStudio.tsx` (rota WIDE — ver `WIDE_LAYOUT_PATTERNS`) |
+| Inventário do roadmap (29 métricas) | `lib/metrics-studio-catalog.ts` — NÃO é o que a UI lista |
+| Mapa Estúdio→motor | `lib/metrics-studio-engine-map.ts` (+ `.test.ts`) |
+| Período Estúdio→motor | `lib/metrics-studio-period.ts` (+ `.test.ts`) |
+| Dado de uma janela | `hooks/useMetricWindowData.ts` |
+| Estado do painel | `hooks/useMetricsStudio.ts` (cópia de trabalho em memória) |
+| Persistência do painel | `hooks/useMetricsStudioPanel.ts` → tabela `metrics_studio_panels`, 1 por (org, membro) |
+| Trava de rollout | `hooks/useMetricsStudioEnabled.ts` → `organizations.metrics_studio_enabled` |
 | Lista lateral | `components/metrics-studio/MetricsStudioSidebar.tsx` |
 | Canvas / janela | `components/metrics-studio/{MetricsCanvas,MetricWindow}.tsx` |
-| Gráficos | `components/metrics-studio/charts/Studio{Line,Pie,Candle}Chart.tsx` |
+| Gráficos | `components/metrics-studio/charts/Studio{Line,Pie}Chart.tsx` (Candle existe e está DESLIGADO — G3) |
 
-**Estado do MVP — o que ainda NÃO é real:**
+**Estado, após o grill de 2026-08-11** (13 decisões em `.specs/features/metricas-v2/SPEC.md` §1.7):
 
-1. 🔴 **Números são amostra**, não o motor. `buildMetricSample()` é o único seam; trocar por `useMetricMeasure` (`fn_metric_measure`, ADR-0023) não toca componente nenhum.
-2. 🟠 **O catálogo da UI é maior que o do motor.** 29 métricas listadas, **13** já são medida de `fn_metric_catalog()`. O resto vive em hook legado (marcado `readiness: "pronta"`) ou não existe (`"parcial"` / `"ausente"`). O selo **motor** na lista mostra quais são componíveis hoje.
-3. 🟠 **Sem gate de permissão.** `useFeaturePermission` é fail-closed; gatear em `metrics.view` antes de a `get-member-permissions` semear a chave trancaria todo membro. Espelha `/dashboard`. Quando a chave existir: gate em `App.tsx` + entrada em `NAV_VIEW_PERMISSIONS`.
-4. 🟠 **`TabProximosPassos` roda com fixture** (`lib/proximos-passos-sample.ts`). Cada faixa declara em `wiring` a fonte real que a alimentaria.
+1. ✅ **Números vêm do motor** `fn_metric_measure`, via `useMetricWindowData`. A amostra foi deletada.
+2. ✅ **A lista mostra só o que tem número real** (G1): 7 medidas + 3 razões. O inventário de 29 continua em `metrics-studio-catalog.ts` como mapa do roadmap, não como fonte da UI.
+3. ✅ **O corte é escolha do usuário** (G2) — o seletor da janela oferece só os cortes que aquela medida aceita, conferidos contra prod.
+4. ✅ **Cortes por pessoa reusam `performance.view`** (G6). Não foi preciso criar `metrics.view`.
+5. ✅ **Trava de liberação por org** (G5): `organizations.metrics_studio_enabled`, migration `20270811100000`. Falha para FECHADO — enquanto não estiver em prod, o Estúdio fica invisível para todos. Fecha três portas: rota, item da top bar e command palette.
+7. ✅ **Modos Visualização e Edição** (SCRUM-308). Nasce em Visualização; canvas travado, sem alças nem controles, lista lateral recolhida.
+8. ✅ **Painel persistido no servidor** (SCRUM-309): `metrics_studio_panels`, um por (org, membro), migration `20270811110000`. NÃO reusa `dashboard_widgets` — ver o cabeçalho da migration para os quatro motivos medidos.
+6. 🟠 **17 das 29 do inventário seguem fora do motor** — é o SCRUM-311 que as porta.
+
+**Asperezas do motor que a UI precisa respeitar** (todas tratadas em `useMetricWindowData`):
+
+- `value` XOR `series`: recorte `total` devolve escalar e `series: null`; qualquer outro devolve série e `value: null`.
+- Toda série vem ordenada por VALOR desc — inclusive `tempo`. A série temporal é reordenada por `key` antes de virar linha, senão o gráfico sai embaralhado.
+- Razão devolve `series: null` SEMPRE, e força `total` nos dois filhos.
+- O motor DEGRADA recorte em silêncio e reporta o efetivo em `measure.recorte`. A janela rotula pelo efetivo, não pelo pedido.
+- Par (medida, recorte) incompatível levanta `EXCEPTION 22023`, que **não** é capturado por `isMissingSchemaError`. O mapa é a guarda.
+- O comparativo de período (G4) é uma SEGUNDA chamada, sempre em `total`, e não bloqueia a janela.
 
 **Vela é SVG próprio** (`StudioCandleChart`): recharts não tem candlestick, e a receita usual de empilhar `Bar` com base falsa quebra quando `low = 0`.
 

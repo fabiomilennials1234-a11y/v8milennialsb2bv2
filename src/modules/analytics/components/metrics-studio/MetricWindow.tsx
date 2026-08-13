@@ -1,29 +1,42 @@
-import { memo, useCallback, useMemo, useRef, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, X } from "lucide-react";
+import { memo, useCallback, useRef, useState } from "react";
+import { AlertCircle, ArrowDownRight, ArrowUpRight, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CHART_KIND_META, type ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import {
-  CHART_KIND_META,
-  READINESS_META,
-  formatMetricValue,
-  type ChartKind,
-  type StudioMetric,
-} from "@/modules/analytics/lib/metrics-studio-catalog";
-import { buildMetricSample } from "@/modules/analytics/lib/metrics-studio-sample";
-import { GRID, MIN_H, MIN_W, type StudioWindow } from "@/modules/analytics/hooks/useMetricsStudio";
-import { StudioCandleChart } from "./charts/StudioCandleChart";
+  ROTULO_DO_CORTE,
+  cortesVisiveis,
+  ehEscalar,
+  type EngineMetric,
+  type MetricRecorte,
+} from "@/modules/analytics/lib/metrics-studio-engine-map";
+import { variacaoPct, type StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
+import { EM_DASH, formatMetricValue } from "@/modules/analytics/lib/tv-metric-format";
+import { headValueFromMeasure } from "@/modules/analytics/lib/tv-series";
+import { useMetricWindowData } from "@/modules/analytics/hooks/useMetricWindowData";
+import {
+  GRID,
+  MIN_H,
+  MIN_W,
+  graficosPara,
+  type StudioWindow,
+} from "@/modules/analytics/hooks/useMetricsStudio";
 import { StudioLineChart } from "./charts/StudioLineChart";
 import { StudioPieChart } from "./charts/StudioPieChart";
 
 interface MetricWindowProps {
   win: StudioWindow;
-  metric: StudioMetric;
-  periodKey: string;
+  metric: EngineMetric;
+  period: StudioPeriod;
+  podeVerPorPessoa: boolean;
+  /** SCRUM-308: em Visualização a janela é só leitura. */
+  editavel: boolean;
   selected: boolean;
   canvas: { width: number; height: number };
   onSelect: (id: string) => void;
   onMove: (id: string, x: number, y: number) => void;
   onResize: (id: string, w: number, h: number) => void;
   onChart: (id: string, chart: ChartKind) => void;
+  onCorte: (id: string, corte: MetricRecorte) => void;
   onRemove: (id: string) => void;
 }
 
@@ -40,17 +53,14 @@ const snap = (n: number) => Math.round(n / GRID) * GRID;
 const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max);
 
 function MetricWindowBase({
-  win, metric, periodKey, selected, canvas,
-  onSelect, onMove, onResize, onChart, onRemove,
+  win, metric, period, podeVerPorPessoa, editavel, selected, canvas,
+  onSelect, onMove, onResize, onChart, onCorte, onRemove,
 }: MetricWindowProps) {
-  // Geometria em trânsito fica LOCAL: `usePersistedState` grava em localStorage
-  // a cada mudança, e commitar por pointermove picotaria o arrasto. O parent só
-  // recebe o valor final, no pointerup.
+  // Geometria em trânsito fica LOCAL. Commitar por pointermove subiria cada
+  // quadro do arrasto para o estado do painel — e, desde o SCRUM-309, isso
+  // agenda gravação no servidor. O pai só recebe o valor final, no pointerup.
   const [draft, setDraft] = useState<Geometry | null>(null);
   const origin = useRef({ px: 0, py: 0, x: 0, y: 0, w: 0, h: 0 });
-  // Espelho do draft para ler no `pointerup` do resize: o handler vive em
-  // listener de window, fora do ciclo de render, e commitar de dentro de um
-  // updater de estado dispararia o efeito duas vezes em StrictMode.
   const draftRef = useRef<Geometry | null>(null);
 
   const applyDraft = useCallback((next: Geometry | null) => {
@@ -59,8 +69,7 @@ function MetricWindowBase({
   }, []);
 
   const geo = draft ?? win;
-  const sample = useMemo(() => buildMetricSample(metric, periodKey), [metric, periodKey]);
-  const readiness = READINESS_META[metric.readiness];
+  const dados = useMetricWindowData(metric, win.corte, period);
 
   const startDrag = useCallback(
     (e: React.PointerEvent) => {
@@ -126,18 +135,29 @@ function MetricWindowBase({
   );
 
   const compact = geo.h < 210 || geo.w < 300;
-  const rising = sample.deltaPct >= 0;
+  const cortes = cortesVisiveis(metric, podeVerPorPessoa);
+  const graficos = graficosPara(metric, win.corte);
+  const escalar = ehEscalar(metric, win.corte);
+
+  // O motor DEGRADA o recorte em silêncio e reporta o efetivo. Se ele degradou,
+  // o rótulo tem que dizer o que o número REALMENTE é — senão a janela mente.
+  const corteEfetivo = (dados.medida?.recorte as MetricRecorte | undefined) ?? win.corte;
+  const degradou = !escalar && corteEfetivo !== win.corte;
+
+  const valor = headValueFromMeasure(dados.medida);
+  const variacao = variacaoPct(valor, dados.valorAnterior);
+  const subindo = (variacao ?? 0) >= 0;
 
   return (
     <div
       role="group"
       aria-label={metric.label}
-      onPointerDown={() => onSelect(win.id)}
+      onPointerDown={editavel ? () => onSelect(win.id) : undefined}
       style={{ left: geo.x, top: geo.y, width: geo.w, height: geo.h, zIndex: win.z }}
       className={cn(
         "group absolute flex flex-col overflow-hidden rounded-xl border bg-card/95 backdrop-blur-sm",
         "transition-[box-shadow,border-color] duration-150",
-        selected
+        selected && editavel
           ? "border-primary/50 shadow-[0_0_0_1px_hsl(var(--primary)/.25),0_18px_50px_-12px_hsl(0_0%_0%/.55)]"
           : "border-border/70 shadow-[0_10px_30px_-16px_hsl(0_0%_0%/.6)] hover:border-border",
         draft && "select-none",
@@ -145,117 +165,153 @@ function MetricWindowBase({
     >
       {/* Header — também é a alça de arrasto. */}
       <div
-        onPointerDown={startDrag}
-        onPointerMove={onDragMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        className="flex cursor-grab items-start gap-2 border-b border-border/50 px-3 py-2 active:cursor-grabbing"
+        onPointerDown={editavel ? startDrag : undefined}
+        onPointerMove={editavel ? onDragMove : undefined}
+        onPointerUp={editavel ? endDrag : undefined}
+        onPointerCancel={editavel ? endDrag : undefined}
+        className={cn(
+          "flex items-start gap-2 border-b border-border/50 px-3 py-2",
+          editavel && "cursor-grab active:cursor-grabbing",
+        )}
       >
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <span
-              className={cn("h-1.5 w-1.5 shrink-0 rounded-full", readiness.dot)}
-              title={`${readiness.label} — ${readiness.hint}`}
-            />
-            <h3 className="truncate text-[12px] font-semibold tracking-[-0.01em]">{metric.label}</h3>
-          </div>
+          <h3 className="truncate text-[12px] font-semibold tracking-[-0.01em]">{metric.label}</h3>
           {!compact && (
-            <p className="truncate text-[10px] text-muted-foreground/70">{metric.description}</p>
+            <p className="truncate text-[10px] text-muted-foreground/70">
+              {ROTULO_DO_CORTE[corteEfetivo]}
+              {degradou && " · sem funil escolhido"}
+            </p>
           )}
         </div>
 
-        <button
-          type="button"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => onRemove(win.id)}
-          aria-label={`Remover ${metric.label}`}
-          className="rounded-md p-1 text-muted-foreground/60 opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+        {editavel && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => onRemove(win.id)}
+            aria-label={`Remover ${metric.label}`}
+            className="rounded-md p-1 text-muted-foreground/60 opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Corpo */}
       <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-3 py-2">
-        <div className="flex items-baseline gap-2">
-          <span className="text-[22px] font-extrabold tracking-[-0.04em] tabular-nums">
-            {formatMetricValue(sample.value, metric.unit)}
-          </span>
-          <span
-            className={cn(
-              "inline-flex items-center gap-0.5 text-[11px] font-semibold tabular-nums",
-              rising ? "text-emerald-500" : "text-destructive",
-            )}
-          >
-            {rising ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-            {Math.abs(sample.deltaPct).toFixed(1)}%
-          </span>
-        </div>
-
-        {win.chart !== "number" && (
-          <div className="min-h-0 flex-1">
-            {win.chart === "line" && (
-              <StudioLineChart series={sample.series} unit={metric.unit} compact={compact} />
-            )}
-            {win.chart === "pie" && (
-              <StudioPieChart slices={sample.slices} unit={metric.unit} compact={compact} />
-            )}
-            {win.chart === "candle" && (
-              <StudioCandleChart series={sample.series} unit={metric.unit} compact={compact} />
-            )}
+        {dados.isLoading ? (
+          <div className="flex flex-1 items-center justify-center">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/40" />
           </div>
+        ) : dados.isError ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-1.5 text-center">
+            <AlertCircle className="h-4 w-4 text-muted-foreground/40" />
+            <p className="text-[11px] text-muted-foreground/70">Não foi possível carregar</p>
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => dados.refetch()}
+              className="text-[11px] font-semibold text-primary hover:underline"
+            >
+              Tentar de novo
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-baseline gap-2">
+              <span className="text-[22px] font-extrabold tracking-[-0.04em] tabular-nums">
+                {formatMetricValue(valor, metric.formatId)}
+              </span>
+              {variacao !== null && (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-0.5 text-[11px] font-semibold tabular-nums",
+                    subindo ? "text-emerald-500" : "text-destructive",
+                  )}
+                  title="Comparado ao período anterior"
+                >
+                  {subindo ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                  {Math.abs(variacao).toFixed(1)}%
+                </span>
+              )}
+            </div>
+
+            {win.chart !== "number" && (
+              <div className="min-h-0 flex-1">
+                {dados.series.length === 0 ? (
+                  <div className="flex h-full items-center justify-center">
+                    <span className="text-[11px] text-muted-foreground/50">
+                      Sem dado no período {EM_DASH}
+                    </span>
+                  </div>
+                ) : win.chart === "line" ? (
+                  <StudioLineChart series={dados.series} formatId={metric.formatId} compact={compact} />
+                ) : (
+                  <StudioPieChart slices={dados.series} formatId={metric.formatId} compact={compact} />
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Seletor de gráfico — aparece ao selecionar a janela ou no hover. */}
+      {/* Controles — só em Edição, ao selecionar a janela ou no hover. */}
+      {editavel && (
       <div
         className={cn(
-          "flex items-center gap-1 border-t border-border/50 px-2 py-1.5 transition-opacity duration-150",
+          "flex items-center gap-1 overflow-x-auto border-t border-border/50 px-2 py-1.5 scrollbar-hide transition-opacity duration-150",
           selected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
         )}
       >
-        {metric.charts.map((kind) => (
-          <button
-            key={kind}
-            type="button"
+        {cortes.length > 1 && (
+          <select
+            value={win.corte}
             onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => onChart(win.id, kind)}
-            aria-pressed={win.chart === kind}
-            className={cn(
-              "rounded-md px-2 py-1 text-[10px] font-semibold transition-colors",
-              win.chart === kind
-                ? "bg-primary/15 text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
+            onChange={(e) => onCorte(win.id, e.target.value as MetricRecorte)}
+            aria-label="Corte do dado"
+            className="shrink-0 rounded-md bg-muted/60 px-1.5 py-1 text-[10px] font-semibold text-foreground outline-none"
           >
-            {CHART_KIND_META[kind].label}
-          </button>
-        ))}
-        <span className="ml-auto pr-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/40">
-          amostra
-        </span>
-      </div>
+            {cortes.map((c) => (
+              <option key={c} value={c}>
+                {ROTULO_DO_CORTE[c]}
+              </option>
+            ))}
+          </select>
+        )}
 
-      {/* Alças de redimensionamento */}
-      <div
-        onPointerDown={startResize("e")}
-        className="absolute inset-y-3 right-0 w-1.5 cursor-ew-resize"
-        aria-hidden
-      />
-      <div
-        onPointerDown={startResize("s")}
-        className="absolute inset-x-3 bottom-0 h-1.5 cursor-ns-resize"
-        aria-hidden
-      />
-      <div
-        onPointerDown={startResize("se")}
-        className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
-        aria-hidden
-      >
-        <svg viewBox="0 0 16 16" className="h-full w-full text-muted-foreground/35">
-          <path d="M15 6 L6 15 M15 11 L11 15" stroke="currentColor" strokeWidth="1.5" fill="none" />
-        </svg>
+        {graficos.length > 1 &&
+          graficos.map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => onChart(win.id, kind)}
+              aria-pressed={win.chart === kind}
+              className={cn(
+                "shrink-0 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors",
+                win.chart === kind
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              {CHART_KIND_META[kind].label}
+            </button>
+          ))}
       </div>
+      )}
+
+      {/* Alças de redimensionamento — só em Edição. */}
+      {editavel && (
+        <>
+          <div onPointerDown={startResize("e")} className="absolute inset-y-3 right-0 w-1.5 cursor-ew-resize" aria-hidden />
+          <div onPointerDown={startResize("s")} className="absolute inset-x-3 bottom-0 h-1.5 cursor-ns-resize" aria-hidden />
+          <div onPointerDown={startResize("se")} className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize" aria-hidden>
+            <svg viewBox="0 0 16 16" className="h-full w-full text-muted-foreground/35">
+              <path d="M15 6 L6 15 M15 11 L11 15" stroke="currentColor" strokeWidth="1.5" fill="none" />
+            </svg>
+          </div>
+        </>
+      )}
     </div>
   );
 }

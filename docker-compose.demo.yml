@@ -1,0 +1,23 @@
+# Demonstração LOCAL do app integrado — sem auth, sem banco.
+#
+# Sobe o Torque inteiro a partir do código da branch atual: top bar, navegação,
+# rotas reais. Serve para revisar UI dentro do shell do produto, não para
+# deploy — ver o cabeçalho de Dockerfile.demo.
+#
+#   docker compose -f docker-compose.demo.yml up --build
+#   → http://localhost:8090
+#
+#   docker compose -f docker-compose.demo.yml down
+#
+# A porta 8090 evita as 8080/8081/8082 que os dev servers do Vite costumam
+# ocupar nesta máquina.
+
+services:
+  demo:
+    container_name: torque-demo
+    build:
+      context: .
+      dockerfile: Dockerfile.demo
+    ports:
+      - "8090:8080"
+    restart: "no"
