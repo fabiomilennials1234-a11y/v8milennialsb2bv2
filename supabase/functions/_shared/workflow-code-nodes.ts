@@ -187,6 +187,37 @@ export function flattenForContext(
   flattenInto(prefix, value, out, 0, { written: 0 });
 }
 
+/**
+ * Zera a variável de saída de um nó de código que NÃO produziu resultado: erro em
+ * qualquer ponto do nó, ou o `code_javascript` da fase 1, que nunca executa.
+ *
+ * **Esvazia em vez de apagar**, e a diferença é o que chega ao cliente. `resolveVariables`
+ * (`workflow-action-handler.ts`) só substitui chave PRESENTE no context — chave ausente
+ * ele não reconhece e deixa passar. Com a variável ausente, um `{{resposta}}` no nó de
+ * mensagem seguinte sai **literal** na mensagem enviada ao lead. Com a chave em `""`, ele
+ * resolve para vazio. Não gravar protegia o invariante "corpo de erro não é resultado" e
+ * ao mesmo tempo vazava o placeholder; `""` honra os dois.
+ *
+ * As folhas achatadas (`prefix.a`, `prefix.a.b`) são APAGADAS, não esvaziadas: numa
+ * reentrada (`goto`, `wait_response`) as folhas da volta anterior sobreviveriam e os nós
+ * de baixo leriam a resposta velha como se fosse a desta chamada. Não há como saber que
+ * folhas a chamada teria produzido, então não existe conjunto para zerar — logo um
+ * `{{resposta.pedido}}` num nó de baixo SEGUE saindo literal depois de um erro. Fechar
+ * isso exigiria varrer `{{...}}` não resolvido na hora do envio, mudança de raio muito
+ * maior do que estes três nós.
+ */
+export function clearCodeOutput(
+  prefix: string,
+  out: Record<string, unknown>,
+): void {
+  if (!prefix) return;
+  const stale = `${prefix}.`;
+  for (const key of Object.keys(out)) {
+    if (key.startsWith(stale)) delete out[key];
+  }
+  out[prefix] = "";
+}
+
 function flattenInto(
   path: string,
   value: unknown,

@@ -44,6 +44,9 @@ vi.mock("../../supabase/functions/_shared/fetch-utils.ts", () => ({
 }));
 
 import { executeWorkflow } from "../../supabase/functions/_shared/workflow-executor";
+// A REAL — o `vi.mock` acima só troca `executeWorkflowAction`. É ela que prova o que o
+// nó de mensagem seguinte renderiza depois de um nó de código falhar.
+import { resolveVariables } from "../../supabase/functions/_shared/workflow-action-handler";
 import { createMockSupabase } from "../helpers/supabase-mock";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────
@@ -579,8 +582,9 @@ describe("executeWorkflow — code_https", () => {
     expect(step?.status).toBe("failed");
     expect(step?.error).toBe("HTTP 500");
     expect(step?.output_data).toEqual({ status: 500, bytes: 13, preview: "upstream caiu" });
-    // Corpo de erro não é resultado: a variável de saída fica intocada.
-    expect(context.resposta).toBeUndefined();
+    // Corpo de erro não é resultado — mas a chave fica VAZIA, não ausente. Ausente,
+    // `resolveVariables` não a reconhece e `{{resposta}}` sairia literal na mensagem.
+    expect(context.resposta).toBe("");
   });
 
   it("HTTP 500 com onError fail derruba a execução e grava UM passo só", async () => {
@@ -709,8 +713,10 @@ describe("executeWorkflow — code_javascript", () => {
       "Nó JavaScript ainda não executa (fase 1). O fluxo seguiu sem rodar o código.",
     );
     expect(steps().map((s) => s.node_id)).toContain("depois");
-    // Nada foi executado, então nada foi gravado no context.
-    expect(context.resultado).toBeUndefined();
+    // Nada foi executado, então nada de resultado no context — mas a chave existe
+    // VAZIA, não ausente: o fluxo segue, e quem lê `{{resultado}}` embaixo tem de
+    // receber vazio em vez do texto cru do placeholder.
+    expect(context.resultado).toBe("");
   });
 
   it("onError fail não muda nada — a fase 1 nunca falha o workflow", async () => {
@@ -995,5 +1001,140 @@ describe("executeWorkflow — context no heartbeat", () => {
       String(c[0]).includes("não persistido no heartbeat"),
     );
     expect(avisos).toHaveLength(1);
+  });
+});
+
+// ─── Saída de nó que não produziu resultado ───────────────────────────────
+
+/**
+ * O nó de código falha (ou, no JavaScript, nem executa), o `onError` manda seguir, e
+ * um nó de baixo lê a variável de saída dele.
+ *
+ * A regra "corpo de erro não é resultado" era cumprida NÃO GRAVANDO a variável — e é
+ * justamente isso que vazava: `resolveVariables` só substitui chave PRESENTE no
+ * context, então a chave ausente atravessava intacta e o lead recebia `{{resposta}}`
+ * escrito na mensagem. A chave passa a existir VAZIA.
+ */
+describe("nós de código — saída de nó que não produziu resultado", () => {
+  it("o placeholder do nó de baixo NÃO sai literal na mensagem ao lead", async () => {
+    const { sb } = baseMock();
+    const context: Record<string, unknown> = {};
+    const { nodes, edges } = chain({
+      id: "cj1",
+      type: "code_json",
+      data: { outputVariable: "resposta", code: "{isso não é json", onError: "continue" },
+    });
+
+    await run(sb, nodes, edges, context);
+
+    // A prova que interessa é esta: o texto que o nó de mensagem seguinte renderiza.
+    // `resolveVariables` aqui é a REAL (o vi.mock preserva via importOriginal).
+    const renderizado = await resolveVariables(
+      sb as never,
+      "lead-1",
+      "Olá, seu pedido: {{resposta}}",
+      context,
+    );
+
+    expect(renderizado).not.toContain("{{resposta}}");
+    expect(renderizado).toBe("Olá, seu pedido: ");
+  });
+
+  it("code_json com onError continue esvazia a saída em vez de deixá-la ausente", async () => {
+    const { sb } = baseMock();
+    const context: Record<string, unknown> = {};
+    const { nodes, edges } = chain({
+      id: "cj1",
+      type: "code_json",
+      data: { outputVariable: "resposta", code: "{quebrado", onError: "continue" },
+    });
+
+    const result = await run(sb, nodes, edges, context);
+
+    expect(result.status).toBe("completed");
+    expect(context).toHaveProperty("resposta");
+    expect(context.resposta).toBe("");
+  });
+
+  it("code_https: falha de REDE também esvazia, não só o não-2xx", async () => {
+    const { sb } = baseMock();
+    mockFetch.mockRejectedValue(new Error("socket hang up"));
+    // Saída viva de uma volta anterior do mesmo nó (goto, wait_response).
+    const context: Record<string, unknown> = { resposta: '{"pedido":"ped-1"}' };
+    const { nodes, edges } = chain({
+      id: "ch1",
+      type: "code_https",
+      data: {
+        outputVariable: "resposta",
+        code: JSON.stringify({ url: "https://api.cliente.com/pedidos" }),
+        onError: "continue",
+      },
+    });
+
+    const result = await run(sb, nodes, edges, context);
+
+    expect(result.status).toBe("completed");
+    // Sem isto, o nó de baixo leria "ped-1" como se fosse a resposta DESTA chamada.
+    expect(context.resposta).toBe("");
+  });
+
+  it("code_https: o erro varre as folhas achatadas da volta anterior", async () => {
+    const { sb } = baseMock();
+    const context: Record<string, unknown> = {
+      resposta: '{"status":"ok","pedido":"ped-1"}',
+      "resposta.status": "ok",
+      "resposta.pedido": "ped-1",
+      outra: "não é minha, fica",
+    };
+    respondeCom('{"erro":"indisponível"}', 500);
+    const { nodes, edges } = chain({
+      id: "ch1",
+      type: "code_https",
+      data: {
+        outputVariable: "resposta",
+        code: JSON.stringify({ url: "https://api.cliente.com/pedidos" }),
+        onError: "continue",
+      },
+    });
+
+    await run(sb, nodes, edges, context);
+
+    expect(context.resposta).toBe("");
+    // Folhas são APAGADAS (não há conjunto para zerar — ver clearCodeOutput).
+    expect(context["resposta.status"]).toBeUndefined();
+    expect(context["resposta.pedido"]).toBeUndefined();
+    // E o varrimento é por prefixo: variável de outro nó não pode ser levada junto.
+    expect(context.outra).toBe("não é minha, fica");
+  });
+
+  it("com onError fail a saída também é limpa — o heartbeat já persistiu o context", async () => {
+    const { sb } = baseMock();
+    const context: Record<string, unknown> = { resposta: '{"pedido":"ped-1"}' };
+    const { nodes, edges } = chain({
+      id: "cj1",
+      type: "code_json",
+      data: { outputVariable: "resposta", code: "{quebrado", onError: "fail" },
+    });
+
+    const result = await run(sb, nodes, edges, context);
+
+    expect(result.status).toBe("failed");
+    // A execução para, mas uma retomada parte do context persistido: se a saída velha
+    // sobrevivesse ali, ela reapareceria viva depois do erro.
+    expect(context.resposta).toBe("");
+  });
+
+  it("sem outputVariable não inventa chave nenhuma no context", async () => {
+    const { sb } = baseMock();
+    const context: Record<string, unknown> = {};
+    const { nodes, edges } = chain({
+      id: "cj1",
+      type: "code_json",
+      data: { outputVariable: "", code: "{quebrado", onError: "continue" },
+    });
+
+    await run(sb, nodes, edges, context);
+
+    expect(Object.keys(context)).toEqual([]);
   });
 });

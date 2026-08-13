@@ -13,6 +13,7 @@ import { evaluateCondition, getLeadTags } from "./workflow-condition-evaluator.t
 import { executeWorkflowAction, resolveVariables, type ActionResult } from "./workflow-action-handler.ts";
 import {
   capString,
+  clearCodeOutput,
   CODE_OUTPUT_MAX_CHARS,
   flattenForContext,
   type HttpsRequestSpec,
@@ -978,6 +979,13 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
 
           if (codeError) {
             await recordStep(supabase, executionId, node, "failed", inputSafe, undefined, codeError);
+            // Erro não produz resultado — e NÃO GRAVAR não basta para isso valer. Ver a
+            // nota longa em `clearCodeOutput`: chave ausente faz o `{{saida}}` de um nó de
+            // baixo sair literal na mensagem ao lead, e numa reentrada deixa viva a saída
+            // da volta anterior. Fora do `if (onError)` de propósito: com `fail` a execução
+            // para aqui, mas o `context` já foi persistido pelo heartbeat deste nó, e é
+            // dele que uma retomada parte.
+            clearCodeOutput(outVar, context);
             if (node.data.onError === "continue") {
               nextNodes.push(...getNextNodes(nodeId, edgeMap));
             } else {
@@ -994,20 +1002,24 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
           // Nada de eval / new Function / Worker / import() dinâmico aqui: o executor
           // roda com o SUPABASE_SERVICE_ROLE_KEY no ambiente, e escape de sandbox é
           // comprometimento cross-tenant. A execução isolada é a fase 2 (SPEC §4).
+          const jsOutVar = String(node.data.outputVariable || "").trim();
           try {
-            const outVar = String(node.data.outputVariable || "").trim();
             await recordStep(
               supabase,
               executionId,
               node,
               "skipped",
-              { output_variable: outVar },
+              { output_variable: jsOutVar },
               { phase: 1, executed: false },
               "Nó JavaScript ainda não executa (fase 1). O fluxo seguiu sem rodar o código.",
             );
           } catch (err) {
             console.warn(`[workflow-executor] code_javascript ${nodeId}:`, err);
           }
+          // Um nó que não executa não produz saída — mas o fluxo SEGUE, então quem lê
+          // `{{saida}}` embaixo precisa receber vazio, não o texto cru do placeholder.
+          // Fora do try: se o `recordStep` falhar, o vazamento não pode passar junto.
+          clearCodeOutput(jsOutVar, context);
           nextNodes.push(...getNextNodes(nodeId, edgeMap));
           break;
         }
@@ -1110,6 +1122,10 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
             if (!failStepRecorded) {
               await recordStep(supabase, executionId, node, "failed", inputSafe, undefined, codeError);
             }
+            // Vale para TODOS os erros do nó, não só o não-2xx: código vazio, JSON
+            // inválido, forma inválida, URL bloqueada, timeout e falha de rede caem
+            // todos aqui. Ver `clearCodeOutput`.
+            clearCodeOutput(outVar, context);
             if (node.data.onError === "continue") {
               nextNodes.push(...getNextNodes(nodeId, edgeMap));
             } else {
