@@ -31,6 +31,9 @@ import {
   CalendarClock,
   UserRoundPlus,
   Settings2,
+  Braces,
+  SquareCode,
+  Network,
 } from "lucide-react";
 import type { WorkflowNodeType } from "@/types/workflow";
 
@@ -46,6 +49,8 @@ interface WorkflowToolbarProps {
   workflowId?: string;
   onExport?: () => void;
   onOpenSettings?: () => void;
+  /** Tipos que não devem aparecer no menu (ex.: nó gateado por feature flag). */
+  hiddenNodeTypes?: WorkflowNodeType[];
 }
 
 interface NodeOption {
@@ -92,6 +97,15 @@ const ADD_NODE_GROUPS: NodeOptionGroup[] = [
       { type: "webhook_call", label: "Webhook Externo", icon: Globe, color: "text-indigo-500" },
     ],
   },
+  {
+    label: "Código",
+    options: [
+      { type: "code_json", label: "JSON", icon: Braces, color: "text-emerald-500" },
+      { type: "code_javascript", label: "JavaScript", icon: SquareCode, color: "text-sky-500" },
+      // `Network` e não `Globe`: o Globe já é o Webhook Externo, logo acima.
+      { type: "code_https", label: "HTTPS", icon: Network, color: "text-violet-500" },
+    ],
+  },
 ];
 
 export function WorkflowToolbar({
@@ -106,8 +120,18 @@ export function WorkflowToolbar({
   workflowId,
   onExport,
   onOpenSettings,
+  hiddenNodeTypes = [],
 }: WorkflowToolbarProps) {
   const navigate = useNavigate();
+
+  // Um grupo que perdeu todas as opções para o filtro não pode render o rótulo
+  // nem o separador — sobraria um cabeçalho solto no menu.
+  const visibleGroups = ADD_NODE_GROUPS
+    .map((group) => ({
+      ...group,
+      options: group.options.filter((opt) => !hiddenNodeTypes.includes(opt.type)),
+    }))
+    .filter((group) => group.options.length > 0);
 
   return (
     <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
@@ -143,7 +167,7 @@ export function WorkflowToolbar({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            {ADD_NODE_GROUPS.map((group, gi) => (
+            {visibleGroups.map((group, gi) => (
               <div key={group.label}>
                 {gi > 0 && <DropdownMenuSeparator />}
                 <DropdownMenuLabel className="text-xs text-muted-foreground uppercase">

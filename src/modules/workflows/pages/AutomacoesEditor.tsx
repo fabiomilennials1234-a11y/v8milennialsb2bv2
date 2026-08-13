@@ -10,7 +10,8 @@ import {
   type WorkflowSelection,
 } from "@/modules/workflows/lib/clipboard";
 import { upgradeWorkflowNodes } from "@/modules/workflows/lib/upgradeLegacyMessageNode";
-import { UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
+import { HTTPS_CODE_EXAMPLE, validateCodeNodes } from "@/modules/workflows/lib/codeNodes";
+import { CODE_JS_NODE_FLAG, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import { useFeatureFlag } from "@/modules/platform";
 
 import { WorkflowCanvas } from "@/modules/workflows/components/WorkflowCanvas";
@@ -45,6 +46,9 @@ import type {
   GotoNodeData,
   WaitBusinessWindowNodeData,
   AssignResponsibleNodeData,
+  CodeJsonNodeData,
+  CodeJavascriptNodeData,
+  CodeHttpsNodeData,
 } from "@/types/workflow";
 
 const DEFAULT_TRIGGER_NODE: WorkflowNode = {
@@ -104,6 +108,32 @@ function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
         assignMode: "round_robin",
         assignTarget: "responsible",
       } as AssignResponsibleNodeData;
+    case "code_json":
+      return {
+        type: "code_json",
+        label: "JSON",
+        code: "",
+        outputVariable: "payload",
+        requiredKeys: [],
+        onError: "fail",
+      } as CodeJsonNodeData;
+    case "code_javascript":
+      return {
+        type: "code_javascript",
+        label: "JavaScript",
+        code: "",
+        outputVariable: "resultado",
+        timeoutMs: 500,
+        onError: "fail",
+      } as CodeJavascriptNodeData;
+    case "code_https":
+      return {
+        type: "code_https",
+        label: "HTTPS",
+        code: HTTPS_CODE_EXAMPLE,
+        outputVariable: "resposta",
+        onError: "fail",
+      } as CodeHttpsNodeData;
   }
 }
 
@@ -146,6 +176,10 @@ export default function AutomacoesEditor() {
   // legados quando a flag está ON para a org corrente.
   const { enabled: unifiedEnabled, isLoading: unifiedLoading } =
     useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
+
+  // O nó JavaScript ainda não executa (fase 1). Fica fora do menu enquanto a org
+  // não tem a flag, para não prometer na UI o que o runtime não faz.
+  const { enabled: jsNodeEnabled } = useFeatureFlag(CODE_JS_NODE_FLAG);
 
   // In-memory clipboard for copy/paste of node subgraphs (same editor only).
   const clipboardRef = useRef<WorkflowSelection | null>(null);
@@ -448,6 +482,15 @@ export default function AutomacoesEditor() {
       return;
     }
 
+    // Nós de código são o único tipo com validação por-nó no save: um fonte
+    // inválido só apareceria na execução, e o `definition` inteiro viaja em
+    // todo tick do cron — barrar aqui é o único gate que o editor tem.
+    const erros = validateCodeNodes(nodes);
+    if (erros.length > 0) {
+      toast.error(erros[0]);
+      return;
+    }
+
     const triggerData = triggerNode.data as unknown as TriggerNodeData;
     const definition = { nodes, edges };
 
@@ -516,6 +559,7 @@ export default function AutomacoesEditor() {
         workflowId={id}
         onExport={!isNew && workflow ? () => handleExport(workflow) : undefined}
         onOpenSettings={() => setSettingsOpen(true)}
+        hiddenNodeTypes={jsNodeEnabled ? [] : ["code_javascript"]}
       />
 
       <div className="flex flex-1 overflow-hidden">

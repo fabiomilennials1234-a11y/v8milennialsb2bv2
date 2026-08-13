@@ -4,10 +4,10 @@ import { trackEvent } from '../_shared/track.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
-import { getOrCreateLead, normalizePhoneForSearch } from "../_shared/lead-service.ts";
+import { findLeadByPhoneOrEmail, getOrCreateLead, normalizePhoneForSearch } from "../_shared/lead-service.ts";
 import { OpenRouterClient } from "./openrouter-client.ts";
 import { AgentEngine } from "./agent-engine.ts";
-import { fireTrigger } from "../_shared/workflow-trigger.ts";
+import { fireTrigger, hasActiveWorkflowsForTrigger } from "../_shared/workflow-trigger.ts";
 import { isCopilotCanceled, logCopilotCancellation, reactivateSystemDisabledContact } from "../_shared/copilot/cancellation.ts";
 
 // Force bundler to include provider modules (used via dynamic import in whatsapp-client)
@@ -213,6 +213,69 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
       autoCreateLead = orgFlagRow?.auto_create_lead_on_inbound === true;
     }
 
+    // 0.97. TRIGGER lead_replied — ANTES dos gates de Copilot, de propósito.
+    //
+    // Este trigger é de AUTOMAÇÃO, não de IA: "o lead respondeu" é um fato do
+    // inbound, independente de a org ter Copilot. Ele ficava lá embaixo (passo
+    // 1.7, depois do AGENT ACTIVE GATE), então só 17 das 99 orgs conseguiam
+    // alcançá-lo. Resultado medido em PROD 2026-08-11: ZERO workflows
+    // `lead_replied` e ZERO execuções em toda a história. O gate tornava o
+    // trigger inalcançável, não impopular.
+    //
+    // ⚠️ Isto alcança 60 das 99 orgs, não as 99 (medido em PROD 2026-08-12).
+    // Das 82 que não chegavam aqui, 43 saíam no 0.95 e são o que esta mudança
+    // destrava; as outras 39 morrem ANTES, no PLAN GATE do passo 0.85
+    // (`plan_denied`, ou `lead_created_no_plan` quando a org tem
+    // `auto_create_lead_on_inbound`), porque o plano delas não inclui a feature
+    // `copilot` — inclusive orgs que TÊM `automations`. Subir o disparo acima
+    // do 0.85 não é opção: passaria na frente do lock de dedup (0.9) e
+    // perderíamos a garantia de disparo único. O caminho certo seria gatear o
+    // 0.97 por `automations` em vez de herdar o veredito de `copilot`. Fora do
+    // escopo desta fatia.
+    //
+    // Ordem importa: roda depois do lock de dedup (0.9), então mensagens
+    // concorrentes do mesmo telefone não disparam duas vezes.
+    //
+    // Lookup SEM criação (`findLeadByPhoneOrEmail`, não `getOrCreateLead`):
+    // telefone desconhecido não é "resposta", é primeiro contato — esse caso é
+    // do `lead_created`. Mudança de comportamento consciente: o passo 1.7
+    // ficava depois do `identifyTenant`, que CRIA o lead, então um primeiro
+    // inbound de número novo disparava `lead_replied`. Sem base instalada,
+    // ninguém regride.
+    //
+    // A guarda `hasActiveWorkflowsForTrigger` existe para não pagar um lookup
+    // de lead por mensagem em toda a frota: sem workflow do tipo, sai em uma
+    // query indexada.
+    //
+    // `source: "copilot"` é mantido: o origin guard do fireTrigger descarta
+    // workflows que contenham nó de copilot, evitando laço IA↔automação. Efeito
+    // colateral herdado (não introduzido aqui): um workflow com nó de Copilot
+    // nunca dispara por `lead_replied`.
+    //
+    // Passa também na frente dos gates 1.0 (audiência) e 1.5 (IA desligada
+    // para o lead), e isso é deliberado: aqueles gates governam se a IA
+    // RESPONDE, não se o lead respondeu. Desligar a chavinha de IA de um
+    // contato não deve calar uma automação que não usa IA — e a que usa já é
+    // barrada pelo origin guard acima.
+    if (await hasActiveWorkflowsForTrigger(supabase, organization_id, "lead_replied")) {
+      const repliedLead = await findLeadByPhoneOrEmail(supabase, organization_id, from);
+      if (repliedLead) {
+        // Awaited, não fire-and-forget: os gates abaixo fazem early-return e o
+        // isolate pode ser derrubado antes de uma promise solta terminar —
+        // justamente no caso (org sem Copilot) que esta mudança veio destravar.
+        await fireTrigger({
+          supabase,
+          organizationId: organization_id,
+          triggerType: "lead_replied",
+          leadId: repliedLead.id,
+          context: { trigger: "lead_replied", channel, message },
+          source: "copilot",
+        }).catch((err) => {
+          console.warn('[agent-message] fireTrigger lead_replied falhou:', err?.message ?? err);
+        });
+      }
+    }
+
     // 0.95. AGENT ACTIVE GATE (early) — sem nenhum agente ativo na org,
     // não há motivo pra criar lead fantasma a partir de uma msg que ninguém
     // vai responder. Roda ANTES de getOrCreateLead pra evitar poluir o pipe
@@ -384,15 +447,8 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
       });
     }
 
-    // 1.7. FIRE lead_replied workflow trigger (fire-and-forget)
-    fireTrigger({
-      supabase,
-      organizationId,
-      triggerType: "lead_replied",
-      leadId: lead.id,
-      context: { trigger: "lead_replied", channel, message },
-      source: "copilot",
-    }).catch(() => {});
+    // 1.7. (movido) O trigger `lead_replied` agora dispara no passo 0.97, antes
+    // dos gates de Copilot — ver o comentário lá para o porquê.
 
     // 2. ROUTE engine version (Trilha 3.B B3 feature flag)
     // Hoje v1==v2 funcionalmente (refactor B1 transparente). Flag preparado
