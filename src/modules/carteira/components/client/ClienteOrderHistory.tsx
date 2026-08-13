@@ -2,6 +2,10 @@ import { ShoppingCart, ReceiptText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatBRL, formatDateFull } from "@/lib/format";
+import {
+  sourceLabel,
+  sourceBadgeClass,
+} from "@/modules/carteira/lib/order-display";
 import type { Tables } from "@/integrations/supabase/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -18,36 +22,6 @@ interface ClienteOrderHistoryProps {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function sourceLabel(source: string | null) {
-  switch (source) {
-    case "pipe":
-      return "Pipeline";
-    case "manual":
-      return "Manual";
-    case "erp":
-      return "ERP";
-    case "copilot":
-      return "Copilot";
-    case "csv_import":
-      return "CSV";
-    default:
-      return source ?? "—";
-  }
-}
-
-function sourceBadgeClass(source: string | null) {
-  switch (source) {
-    case "pipe":
-      return "bg-blue-500/10 text-blue-400 border-blue-500/20";
-    case "copilot":
-      return "bg-primary/10 text-primary border-primary/20";
-    case "erp":
-      return "bg-purple-500/10 text-purple-400 border-purple-500/20";
-    default:
-      return "bg-muted text-muted-foreground border-border";
-  }
-}
 
 function dotColor(gap: number | null, cycleDays: number) {
   if (gap == null || cycleDays === 0) return "bg-muted-foreground";

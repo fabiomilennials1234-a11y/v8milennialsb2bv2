@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Plus, Search, LayoutGrid, List, TrendingUp, ShoppingCart, Upload, BarChart3, Users, ClipboardCheck, Send } from "lucide-react";
+import { Plus, Search, LayoutGrid, List, TrendingUp, ShoppingCart, Upload, BarChart3, Users, ClipboardCheck, Send, Receipt } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,10 +29,28 @@ import { RevenueChart } from "@/modules/carteira/components/client/RevenueChart"
 import { CarteiraCohortHeatmap } from "@/modules/carteira/components/client/CarteiraCohortHeatmap";
 import { CarteiraVendedorRanking } from "@/modules/carteira/components/client/CarteiraVendedorRanking";
 import { CarteiraApprovals } from "@/modules/carteira/components/client/CarteiraApprovals";
+import { CarteiraOrders } from "@/modules/carteira/components/orders/CarteiraOrders";
 import { usePendingOrders } from "@/modules/carteira/hooks/useOrderApproval";
 import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 
 type ViewMode = "kanban" | "list";
+
+type CarteiraView = "clientes" | "analytics" | "aprovacoes" | "pedidos";
+
+const CARTEIRA_VIEWS = [
+  { value: "clientes", label: "Clientes", Icon: Users },
+  { value: "analytics", label: "Analytics", Icon: BarChart3 },
+  { value: "aprovacoes", label: "Aprovações", Icon: ClipboardCheck },
+  // Sem badge de contagem, de propósito: o badge de Aprovações significa
+  // "aja em mim" e decai a zero. Pedidos é inventário — grande, nunca zero,
+  // não acionável. Um número ali roubaria o significado do vizinho. A
+  // contagem vive na linha de resumo do conteúdo.
+  { value: "pedidos", label: "Pedidos", Icon: Receipt },
+] as const satisfies readonly {
+  value: CarteiraView;
+  label: string;
+  Icon: typeof Users;
+}[];
 
 const PORTFOLIO_TABS = [
   { value: "all", label: "Todos" },
@@ -79,13 +97,30 @@ export default function Upsell() {
   const [carteiraFilter, setCarteiraFilter] = useState("all");
 
   const [currentRows, setCurrentRows] = useState<PortfolioClientRow[]>([]);
-  const [carteiraView, setCarteiraView] = useState<"clientes" | "analytics" | "aprovacoes">("clientes");
+  const [carteiraView, setCarteiraView] = useState<CarteiraView>("clientes");
+  const viewTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  function handleViewKeyDown(
+    e: React.KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    const delta = e.key === "ArrowRight" ? 1 : -1;
+    const next =
+      (index + delta + CARTEIRA_VIEWS.length) % CARTEIRA_VIEWS.length;
+    setCarteiraView(CARTEIRA_VIEWS[next].value);
+    viewTabRefs.current[next]?.focus();
+  }
   const [disparoOpen, setDisparoOpen] = useState(false);
   const bulk = useBulkSelection();
   const { data: kpiData } = usePortfolioKPIs();
 
   useRealtimeSubscription("upsell_clients", ["portfolio-clients", "portfolio-kpis"]);
-  useRealtimeSubscription("upsell_orders", ["portfolio-clients", "portfolio-kpis", "pending-orders"]);
+  // "carteira_orders" entra aqui porque a aba Pedidos lê pela RPC
+  // carteira_list_orders — sem esta chave, editar num aparelho não atualiza a
+  // lista aberta em outro.
+  useRealtimeSubscription("upsell_orders", ["portfolio-clients", "portfolio-kpis", "pending-orders", "carteira_orders"]);
   const { data: pendingOrders = [] } = usePendingOrders();
   const pendingCount = pendingOrders.length;
 
@@ -152,101 +187,119 @@ export default function Upsell() {
         {/* Alert banner */}
         <CarteiraAlertBanner onViewDetails={() => setCarteiraFilter("overdue")} />
 
-        {/* Tabs */}
-        <div className="flex gap-0 border-b border-border overflow-x-auto">
-          {PORTFOLIO_TABS.map((tab) => {
-            const count = tabCounts[tab.value] ?? 0;
-            const active = carteiraFilter === tab.value;
-            const isRisk = "isRisk" in tab && tab.isRisk;
-            return (
-              <button
-                key={tab.value}
-                onClick={() => {
-                  setCarteiraFilter(tab.value);
-                  setSelectedClient(null);
-                }}
-                className={cn(
-                  "px-5 py-2.5 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap",
-                  active
-                    ? "text-foreground border-b-primary"
-                    : "text-muted-foreground border-b-transparent hover:text-muted-foreground",
-                )}
-              >
-                {tab.label}
-                {count > 0 && (
-                  <span
-                    className={cn(
-                      "ml-1.5 text-[11px] px-1.5 py-px rounded-full inline-block",
-                      active && !isRisk && "bg-primary/10 text-primary",
-                      active && isRisk && "bg-destructive/10 text-destructive",
-                      !active && !isRisk && "bg-muted text-muted-foreground",
-                      !active && isRisk && "bg-destructive/10 text-destructive",
-                    )}
-                  >
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+        {/* Fileira de segmentos — só na view Clientes.
+            `carteiraFilter` só é consumido por CarteiraClientTable, então em
+            analytics/aprovações/pedidos esta fileira renderizava e não fazia
+            nada (UI morta pré-existente). */}
+        {carteiraView === "clientes" && (
+          <div
+            role="tablist"
+            aria-label="Filtro da carteira"
+            className="flex gap-0 border-b border-border overflow-x-auto"
+          >
+            {PORTFOLIO_TABS.map((tab) => {
+              const count = tabCounts[tab.value] ?? 0;
+              const active = carteiraFilter === tab.value;
+              const isRisk = "isRisk" in tab && tab.isRisk;
+              return (
+                <button
+                  key={tab.value}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => {
+                    setCarteiraFilter(tab.value);
+                    setSelectedClient(null);
+                  }}
+                  className={cn(
+                    "px-5 py-2.5 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                    active
+                      ? "text-foreground border-b-primary"
+                      : "text-muted-foreground border-b-transparent hover:text-foreground",
+                  )}
+                >
+                  {tab.label}
+                  {count > 0 && (
+                    <span
+                      className={cn(
+                        "ml-1.5 text-[11px] px-1.5 py-px rounded-full inline-block",
+                        active && !isRisk && "bg-primary/10 text-primary",
+                        active && isRisk && "bg-destructive/10 text-destructive",
+                        !active && !isRisk && "bg-muted text-muted-foreground",
+                        !active && isRisk && "bg-destructive/10 text-destructive",
+                      )}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Search + View toggle */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1 max-w-[320px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
             <Input
-              placeholder="Buscar cliente, empresa…"
+              placeholder={
+                carteiraView === "pedidos"
+                  ? "Buscar cliente, produto…"
+                  : "Buscar cliente, empresa…"
+              }
               value={carteiraSearch}
               onChange={(e) => setCarteiraSearch(e.target.value)}
               className="pl-9 bg-card border-border text-[13px]"
             />
           </div>
-          <div className="flex border border-border rounded-md ml-auto">
-            <button
-              onClick={() => setCarteiraView("clientes")}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-l-md transition-colors",
-                carteiraView === "clientes"
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-muted-foreground",
-              )}
-            >
-              <Users className="w-3.5 h-3.5" />
-              Clientes
-            </button>
-            <button
-              onClick={() => setCarteiraView("analytics")}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors",
-                carteiraView === "analytics"
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-muted-foreground",
-              )}
-            >
-              <BarChart3 className="w-3.5 h-3.5" />
-              Analytics
-            </button>
-            <button
-              onClick={() => setCarteiraView("aprovacoes")}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-r-md transition-colors",
-                carteiraView === "aprovacoes"
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-muted-foreground",
-              )}
-            >
-              <ClipboardCheck className="w-3.5 h-3.5" />
-              Aprovações
-              {pendingCount > 0 && (
-                <span className="ml-1 bg-primary/15 text-primary text-[10px] font-semibold px-1.5 py-px rounded-full">
-                  {pendingCount}
-                </span>
-              )}
-            </button>
+          <div
+            role="tablist"
+            aria-label="Visão da carteira"
+            className="flex border border-border rounded-md ml-auto"
+          >
+            {CARTEIRA_VIEWS.map((view, i) => {
+              const active = carteiraView === view.value;
+              return (
+                <button
+                  key={view.value}
+                  ref={(el) => {
+                    viewTabRefs.current[i] = el;
+                  }}
+                  role="tab"
+                  aria-selected={active}
+                  aria-controls="carteira-view-panel"
+                  // Roving tabIndex: o control inteiro é UMA parada de Tab; as
+                  // setas navegam entre os itens (padrão WAI-ARIA tablist).
+                  tabIndex={active ? 0 : -1}
+                  onKeyDown={(e) => handleViewKeyDown(e, i)}
+                  onClick={() => setCarteiraView(view.value)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors",
+                    i === 0 && "rounded-l-md",
+                    i === CARTEIRA_VIEWS.length - 1 && "rounded-r-md",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                    active
+                      ? "bg-muted text-foreground"
+                      : // `hover:text-muted-foreground` era no-op (mesma cor do
+                        // estado base) — hover invisível nos 4 itens.
+                        "text-muted-foreground hover:text-foreground hover:bg-muted/40",
+                  )}
+                >
+                  <view.Icon className="w-3.5 h-3.5" />
+                  {view.label}
+                  {view.value === "aprovacoes" && pendingCount > 0 && (
+                    <span className="ml-1 bg-primary/15 text-primary text-[10px] font-semibold px-1.5 py-px rounded-full">
+                      {pendingCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
+        <div id="carteira-view-panel" role="tabpanel" className="space-y-6">
         {carteiraView === "clientes" ? (
           <>
             {/* Main content: table + optional sidebar */}
@@ -303,9 +356,16 @@ export default function Upsell() {
             <CarteiraCohortHeatmap />
             <CarteiraVendedorRanking />
           </div>
-        ) : (
+        ) : carteiraView === "aprovacoes" ? (
           <CarteiraApprovals />
+        ) : (
+          // Sem gate em `organizationId`: o hook já espera o auth context
+          // (`enabled: isReady && !!organizationId`) e mostra skeleton. Gatear o
+          // render aqui deixava a aba EM BRANCO — sem skeleton, sem empty
+          // state — no intervalo até o contexto resolver.
+          <CarteiraOrders searchQuery={carteiraSearch} />
         )}
+        </div>
 
         {/* Shared modals */}
         <CreateClientModal open={createClientOpen} onOpenChange={setCreateClientOpen} />

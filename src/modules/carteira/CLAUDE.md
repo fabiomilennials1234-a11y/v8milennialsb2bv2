@@ -54,6 +54,12 @@ src/modules/carteira/
   - `useNewOrder` aceita `NewOrderParams` (discriminated union por `mode`):
     - `mode: "items"` (default, `mode` omissível) — `{ items: OrderLineItem[] }`. Insere `upsell_orders` + `client_purchase_items` + `upsell_client_products` (distinct). `sale_value` derivado da soma dos itens.
     - `mode: "manual_total"` — `{ saleValue: number; description?: string }`. Insere SÓ 1 row em `upsell_orders` (`product_name = description || "Venda avulsa"`, `product_type: "unitario"`). NÃO insere `client_purchase_items` nem `upsell_client_products`. Exige `saleValue > 0` (throw). Não vai pro TinyERP (venda sem SKU) — `NewOrderModal` pula o `TinyErpUpsellConfirmDialog` nesse modo.
+- **Order — aba Pedidos** (listar + editar pedido MANUAL, 2026-08-13): `useCarteiraOrders` (RPC `carteira_list_orders`), `useUpdateOrder`, componente `CarteiraOrders`.
+  - **Gate de procedência**: pedido com vínculo ERP é **read-only** no CRM. `carteira_erp_source(order_id, org_id, tiny_order_id, external_source)` devolve `nfe|tiny|omie|NULL`; NULL = manual = editável. `carteira_update_order` recusa com `order_erp_linked`. Medido em prod: **302 manuais / 232 ERP** de 534 aprovados.
+  - Só pedido **aprovado** é editável (`order_not_approved`). A lista já filtra, mas a RPC tem `GRANT EXECUTE TO authenticated` e é alcançável direto pelo PostgREST — sem o gate, um membro mudaria o valor de um pedido PENDENTE antes da aprovação.
+  - Permissão de edição: **admin + membro** (pertencer à org basta). Gate real é do banco (`assert_org_member` na RPC), não do front.
+  - **Cancelar, descancelar e hard delete NÃO existem** — fora do escopo da fatia 1 por decisão do CTO.
+  - Detalhe: `Obsidian/.../06 — Features/Vendas/Carteira Pedidos.md`
 - **Upsell clients**: `useUpsellClients`, `useUpsellClient`, `useCreate/Update/DeleteUpsellClient`, `useUpsellClientByLeadId`
 - **Upsell products**: `useUpsellClientProducts`, `useCreate/Update/DeleteUpsellClientProduct`
 - **Upsell campanhas**: `useUpsellCampanhas`, `useCreate/Update/DeleteUpsellCampanha`
@@ -93,6 +99,23 @@ Re-exportados via index.ts: `PortfolioKPIs`, `PortfolioClientRow`, `PortfolioCli
 🟠 **Portfolio health snapshots** — `calculate-portfolio-health` edge function escreve `client_health_snapshots` (a cada 30min) + colunas derivadas em `upsell_clients`. `usePortfolioTrends` lê snapshots; `usePortfolioKPIs` (`get_portfolio_kpis`) lê colunas de `upsell_clients` direto.
 
 🟢 **Recompute síncrono de métricas de dinheiro** (migration `20270107000000`, 2026-07-03) — trigger `trg_upsell_order_recalc_metrics` em `upsell_orders` chama `recalc_upsell_client_metrics(client_id)` a cada order `approved` que entra/sai/muda. Recomputa `avg_ticket`, `last_order_at`, `next_order_expected`, `order_count`, `lifetime_value`, `reorder_cycle_days`, `days_since_last_order` na hora (antes só o cron 30min). **health_score/segment/churn/trend continuam no cron** — não replicar em SQL. Semântica espelha `calculate-portfolio-health`; ao mexer no cálculo de dinheiro, mudar OS DOIS em sincronia senão divergem (KPI flica entre trigger e cron).
+
+🟠 **`get_my_admin_organization_ids()` inclui gestor** (achado 2026-08-13, **não corrigido — pré-existente**) — o helper (baseline:9680) faz UNION com `get_my_gestor_organization_ids()` (9695) e inclui gestor de portfólio; o `isAdmin` do front (`useIdentity.ts:34`) não inclui. Toda policy que usa esse helper é mais frouxa que a UI sugere — inclusive `upsell_orders_delete_org`, que hoje permite hard delete a quem não vê botão nenhum. Com PITR OFF, isso é irreversível. Escalado ao CTO como item próprio; **esta fatia não toca RLS**.
+
+🟠 **Audit de pedido ouve TODO update** (2026-08-13) — `trg_order_event_audit` virou `AFTER INSERT OR UPDATE` (era `UPDATE OF approval_status`). O guard `IS DISTINCT FROM` sobre os 6 campos auditados é o que impede que `tinyerp-pull-orders:297`, `erp-order-webhook:197` e `_shared/erp/sync/upsert-order.ts:81` encham `order_events` de ruído a cada ciclo de re-sync. Não remover. Abrir campo novo à edição exige estender o snapshot NA MESMA MUDANÇA, senão a edição passa sem rastro.
+
+🟠 **Gate de ERP vive na RPC, não em RLS** (2026-08-13) — `carteira_update_order` recusa pedido com vínculo ERP, mas as policies de `upsell_orders` seguem as do baseline: um `PATCH` cru via PostgREST ainda alcança a tabela. Superfície **pré-existente** (membro sempre pôde escrever em `upsell_orders`), não introduzida pela aba Pedidos — mas quem for endurecer isso precisa saber que a invariante "ERP é read-only" é hoje só da RPC. Fechar exige fatia de RLS própria.
+
+🔴 **Editar pedido aprovado NÃO corrige `sale_events`** (2026-08-13, **dívida aceita pelo CTO**) — os gatilhos de `20260723013018` escutam só `AFTER INSERT WHEN approved` e `AFTER UPDATE OF approval_status`; nenhum observa `sale_value`, `sold_at`, `client_id` ou `sale_responsible_id`. Editar altera `upsell_orders` e as métricas derivadas de `upsell_clients`, mas a venda fica **congelada no caderno** com os valores da aprovação. Medido: pedido 500→750, `lifetime_value` 800→1050, `sale_events` parado em 500. Org com `carteira_emits_revenue_enabled = true` verá divergência entre a Carteira e a receita canônica do ADR-0017 — hoje **só Milennials** (41 pedidos, interseção 100%). Nenhuma UI pode afirmar que a edição mexe em receita. Saída futura: par corretivo (`sale_reversed` + `sale`) atrás da mesma flag, respeitando a chave de idempotência da #1199.
+
+🟠 **Edição concorrente é last-write-wins silencioso** (2026-08-13) — `carteira_update_order` usa `FOR UPDATE`, o que serializa editores mas **não detecta** conflito: a segunda edição espera o lock e sobrescreve a primeira sem aviso (medido: 1,34s de espera, correção anterior perdida). O `GET DIAGNOSTICS ROW_COUNT` é guarda defensiva para o caso de alguém remover o lock, não proteção contra corrida. Detecção exigiria versionamento otimista.
+
+### Dívidas conhecidas da aba Pedidos (registradas, fora de escopo)
+
+- `order_events.created_at` não desempata entre o evento `edited/order` e o `edited/items` da mesma edição. Sem consumidor hoje.
+- `useUpsellClients()` não tem `.limit()` — teto do PostgREST é 1000 e a maior org tem 664 clientes. Ainda não estoura.
+- `carteira_erp_source` compara `external_source` case-sensitive. Integrador futuro gravando `'Tiny'` viraria falso-negativo (= editável por engano). Hoje prod só tem `<null>`, `tiny` e `funnel_sale_event`.
+- Ordenação da tabela é da página carregada; server-side exigiria parâmetro de ordenação na RPC.
 
 🔴 **Venda manual auto-aprovada** — `useNewOrder`/`useCreateOrder`/`useCreateUpsellOrder` + import gravam `approval_status:'approved'`. O default da coluna é `'pending'` e pending é invisível pra métrica (cron + `get_portfolio_kpis` só contam `approved`). Qualquer novo caminho que insira em `upsell_orders` e queira contar na métrica DEVE setar `approved` (ou o pedido some até aprovação manual na aba Aprovações).
 
