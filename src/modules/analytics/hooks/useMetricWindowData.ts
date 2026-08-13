@@ -4,8 +4,15 @@ import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metric
 import {
   periodoAnterior,
   periodoAtual,
+  type IntervaloCustom,
   type StudioPeriod,
 } from "@/modules/analytics/lib/metrics-studio-period";
+import {
+  agruparSerie,
+  ehMedidaDeMedia,
+  granularidadeAutomatica,
+  type Granularidade,
+} from "@/modules/analytics/lib/metrics-studio-granularidade";
 import { headValueFromMeasure, type MetricSeriesPoint } from "@/modules/analytics/lib/tv-series";
 
 /**
@@ -32,8 +39,10 @@ import { headValueFromMeasure, type MetricSeriesPoint } from "@/modules/analytic
 
 export interface MetricWindowData {
   medida: MetricMeasureResult | null;
-  /** Já ordenada: cronológica em `tempo`, por valor nos demais cortes. */
+  /** Já ordenada e agrupada: cronológica em `tempo`, por valor nos demais. */
   series: MetricSeriesPoint[];
+  /** Granularidade REALMENTE aplicada — a janela rotula por ela, não pelo pedido. */
+  granularidade: Granularidade;
   valorAnterior: number | null;
   isLoading: boolean;
   isError: boolean;
@@ -44,12 +53,15 @@ export function useMetricWindowData(
   metric: EngineMetric,
   corte: MetricRecorte,
   period: StudioPeriod,
+  intervalo?: IntervaloCustom | null,
+  /** `undefined` = automática pelo tamanho da janela. */
+  granularidadePedida?: Granularidade,
 ): MetricWindowData {
   // `hoje` fica fora do useMemo de propósito: recalcular a cada render é
   // barato, e congelar a data numa aba aberta o dia inteiro faria a janela
   // continuar mostrando ontem.
-  const atual = periodoAtual(period);
-  const anterior = periodoAnterior(period);
+  const atual = periodoAtual(period, undefined, intervalo);
+  const anterior = periodoAnterior(period, undefined, intervalo);
 
   const principal = useMetricMeasure({
     measureRef: metric.measureRef,
@@ -73,17 +85,26 @@ export function useMetricWindowData(
 
   const medida = principal.data ?? null;
 
+  // Granularidade efetiva: o que a pessoa pediu, ou a automática pelo número de
+  // pontos que o motor devolveu. Fica fora do `useMemo` da série porque a
+  // janela precisa dela para rotular o seletor mesmo quando a série está vazia.
+  const pontosBrutos = Array.isArray(medida?.series) ? medida.series.length : 0;
+  const granularidade: Granularidade =
+    corte === "tempo" ? (granularidadePedida ?? granularidadeAutomatica(pontosBrutos)) : "dia";
+
   const series = useMemo(() => {
     const bruta = medida?.series;
     if (!Array.isArray(bruta) || bruta.length === 0) return [];
     if (corte !== "tempo") return bruta;
     // `key` é 'YYYY-MM-DD', então ordenação lexicográfica é cronológica.
-    return [...bruta].sort((a, b) => (a.key ?? "").localeCompare(b.key ?? ""));
-  }, [medida, corte]);
+    const cronologica = [...bruta].sort((a, b) => (a.key ?? "").localeCompare(b.key ?? ""));
+    return agruparSerie(cronologica, granularidade, ehMedidaDeMedia(medida?.measure_id));
+  }, [medida, corte, granularidade]);
 
   return {
     medida,
     series,
+    granularidade,
     valorAnterior: headValueFromMeasure(comparativo.data ?? null),
     isLoading: principal.isLoading,
     isError: principal.isError,

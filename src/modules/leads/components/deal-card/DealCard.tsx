@@ -11,6 +11,8 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DealQualificationSlot } from "../deal-detail/DealQualificationSlot";
+import type { QualificationTier } from "../lead-detail/modal/types";
 import { formatBRL } from "@/lib/format";
 import { DealCardStages } from "./DealCardStages";
 import { DealCardTimeline } from "./DealCardTimeline";
@@ -193,6 +195,18 @@ export function DealCard({
               )}
               <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </button>
+
+            {/* Qualificação DO NEGÓCIO. Fica ao lado da identidade porque é
+                julgamento sobre ESTA oportunidade — a nota da PESSOA
+                (pré-qualificação) mora no modal do lead. Sem `deals.id` o card
+                ainda não virou negócio, e o slot se desabilita explicando. */}
+            <div className="mt-2.5">
+              <DealQualificationSlot
+                dealId={negocio.dealId}
+                leadId={negocio.lead.id}
+                current={(negocio.qualificacao as QualificationTier | null) ?? null}
+              />
+            </div>
 
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-muted-foreground">
               <span className="inline-flex items-center gap-1.5">

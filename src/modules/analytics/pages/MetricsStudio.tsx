@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, Download, Gauge, Loader2, Lock, Pencil, Trash2 } from "lucide-react";
 import {
@@ -19,7 +19,8 @@ import { useMetricsStudioReport } from "@/modules/analytics/hooks/useMetricsStud
 import { useStudioCatalog } from "@/modules/analytics/hooks/useStudioCatalog";
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
-import { STUDIO_PERIODS, type StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
+import { STUDIO_PERIODS, type IntervaloCustom, type StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
+import type { Granularidade } from "@/modules/analytics/lib/metrics-studio-granularidade";
 import { useCurrentTeamMember, useFeaturePermission } from "@/modules/identity";
 
 /**
@@ -53,6 +54,19 @@ export default function MetricsStudio() {
   const [modo, setModo] = useState<"ver" | "editar">("ver");
   const editando = modo === "editar";
   const [period, setPeriod] = useState<StudioPeriod>("month");
+  /**
+   * Intervalo do período "Personalizado". Nasce nos últimos 30 dias — um
+   * intervalo vazio deixaria a tela sem número até a pessoa preencher as DUAS
+   * datas, e a primeira impressão do filtro seria um painel em branco.
+   */
+  const [intervalo, setIntervalo] = useState<IntervaloCustom>(() => {
+    const hoje = new Date();
+    const inicio = new Date(hoje);
+    inicio.setDate(inicio.getDate() - 29);
+    const iso = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return { start: iso(inicio), end: iso(hoje) };
+  });
 
   // G5: trava de liberação por org. Falha para FECHADO — ver o hook.
   const rollout = useMetricsStudioEnabled();
@@ -75,7 +89,24 @@ export default function MetricsStudio() {
     (membroAtual as { role?: string; is_active?: boolean } | null | undefined)?.role === "admin" &&
     (membroAtual as { is_active?: boolean } | null | undefined)?.is_active !== false;
 
-  const canvasRef = useRef<HTMLDivElement>(null);
+  // ⚠ CALLBACK REF, não `useRef` — e é o conserto de um defeito real.
+  //
+  // A medição vivia num `useLayoutEffect` com deps `[]` que fazia
+  // `if (!canvasRef.current) return`. Só que a página devolve `<TorqueLoader/>`
+  // enquanto `rollout.isLoading`: na PRIMEIRA renderização o canvas não está no
+  // DOM, o efeito saía fora, e como as deps eram vazias ele NUNCA MAIS rodava.
+  // O ResizeObserver jamais era instalado e `canvasSize` ficava {0,0} para
+  // sempre.
+  //
+  // O estrago não era "o canvas não mede": era o REDIMENSIONAR NÃO FUNCIONAR.
+  // `MetricWindow.startResize` limita a largura com
+  // `clamp(…, MIN_W, Math.max(MIN_W, canvas.width - o.x))` — com `width` zero o
+  // teto colapsa no piso e toda janela ficava presa em MIN_W×MIN_H (220×120).
+  // O mesmo zero fazia `placeNext` empilhar tudo no canto e as janelas nascerem
+  // menores que o `initialSize`.
+  //
+  // Com callback ref o estado muda QUANDO O NÓ APARECE, e o efeito reage.
+  const [canvasEl, setCanvasEl] = useState<HTMLDivElement | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
   // Altura do painel MEDIDA, não chutada. A primeira versão usava
@@ -83,13 +114,15 @@ export default function MetricsStudio() {
   // deixava ~98px de área morta embaixo. E o padding do <main> é responsivo
   // (py-5 sm:py-6 lg:py-8), então qualquer constante erra em algum breakpoint.
   // Aqui o topo do painel é lido do layout e o rodapé respeita o padding real.
-  const panelRef = useRef<HTMLDivElement>(null);
+  // Mesma armadilha do canvas, mesma correção — o painel também só existe
+  // depois que a trava de rollout resolve.
+  const [panelEl, setPanelEl] = useState<HTMLDivElement | null>(null);
   const [panelHeight, setPanelHeight] = useState<number | null>(null);
 
   useLayoutEffect(() => {
+    if (!panelEl) return;
+    const el = panelEl;
     const medir = () => {
-      const el = panelRef.current;
-      if (!el) return;
       const topo = el.getBoundingClientRect().top;
       // O padding do layout está num DIV interno do <main>, não no <main> —
       // por isso subimos até achar quem de fato tem padding-bottom, em vez de
@@ -104,18 +137,17 @@ export default function MetricsStudio() {
     medir();
     window.addEventListener("resize", medir);
     return () => window.removeEventListener("resize", medir);
-  }, []);
+  }, [panelEl]);
 
   useLayoutEffect(() => {
-    const el = canvasRef.current;
-    if (!el) return;
+    if (!canvasEl) return;
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       setCanvasSize({ width, height });
     });
-    observer.observe(el);
+    observer.observe(canvasEl);
     return () => observer.disconnect();
-  }, []);
+  }, [canvasEl]);
 
   const handleAdd = useCallback(
     (metric: EngineMetric) => studio.addMetric(metric, canvasSize),
@@ -140,6 +172,11 @@ export default function MetricsStudio() {
   const handleCorte = useCallback(
     (id: string, corte: MetricRecorte) => studio.setCorte(id, corte, canvasSize),
     [studio, canvasSize],
+  );
+
+  const handleGranularidade = useCallback(
+    (id: string, granularidade: Granularidade) => studio.setGranularidade(id, granularidade),
+    [studio],
   );
 
   const handleSelect = useCallback(
@@ -208,6 +245,33 @@ export default function MetricsStudio() {
               </button>
             ))}
           </div>
+
+          {/* As duas datas só aparecem no modo Personalizado — ocupar a barra o
+              tempo todo com campos que não valem para "Mês" seria ruído. O
+              limite superior de `start` e o inferior de `end` são o outro
+              extremo: o navegador impede o intervalo invertido, então o motor
+              nunca recebe `start > end`. */}
+          {period === "custom" && (
+            <div className="flex items-center gap-1.5 rounded-[9px] border border-border bg-card px-2 py-[5px]">
+              <input
+                type="date"
+                value={intervalo.start}
+                max={intervalo.end}
+                onChange={(e) => setIntervalo((i) => ({ ...i, start: e.target.value }))}
+                aria-label="Início do período"
+                className="bg-transparent text-[12px] font-semibold text-foreground outline-none"
+              />
+              <span className="text-[11px] text-muted-foreground">até</span>
+              <input
+                type="date"
+                value={intervalo.end}
+                min={intervalo.start}
+                onChange={(e) => setIntervalo((i) => ({ ...i, end: e.target.value }))}
+                aria-label="Fim do período"
+                className="bg-transparent text-[12px] font-semibold text-foreground outline-none"
+              />
+            </div>
+          )}
 
           <Link
             to="/dashboard"
@@ -278,7 +342,7 @@ export default function MetricsStudio() {
       {/* Painel emoldurado: ocupa toda a altura restante da página, medida em
           runtime. Enquanto a medição não chega, cai num piso razoável. */}
       <div
-        ref={panelRef}
+        ref={setPanelEl}
         style={panelHeight ? { height: panelHeight } : undefined}
         className="flex min-h-[420px] overflow-hidden rounded-xl border border-border/70 bg-card/30"
       >
@@ -298,10 +362,11 @@ export default function MetricsStudio() {
 
         <div className="min-w-0 flex-1">
           <MetricsCanvas
-            ref={canvasRef}
+            ref={setCanvasEl}
             windows={studio.windows}
             byId={catalogo.byId}
             period={period}
+            intervalo={period === "custom" ? intervalo : null}
             podeVerPorPessoa={podeVerPorPessoa}
             editavel={editando}
             onEditar={() => setModo("editar")}
@@ -312,6 +377,7 @@ export default function MetricsStudio() {
             onResize={studio.resizeWindow}
             onChart={handleChart}
             onCorte={handleCorte}
+            onGranularidade={handleGranularidade}
             onRemove={handleRemove}
           />
         </div>

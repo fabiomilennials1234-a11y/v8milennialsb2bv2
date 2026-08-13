@@ -31,6 +31,8 @@ import {
   type StandardPipelineStatus,
 } from "../../hooks/useLeadAllPipelines";
 import { useLeadsDeals } from "../../hooks/useLeadsDeals";
+import { DealQualificationSlot } from "./DealQualificationSlot";
+import type { QualificationTier } from "../lead-detail/modal/types";
 
 /**
  * Modal do **negócio** — o que o card do funil abre.
@@ -225,6 +227,55 @@ function DealContent({ onClose, isMobile }: { onClose: () => void; isMobile: boo
         />
       </div>
 
+      {/* Qualificação DO NEGÓCIO + progresso. Fica acima dos números porque é
+          julgamento, não medida: é a primeira coisa que o vendedor responde ao
+          abrir a oportunidade. A pré-qualificação da PESSOA continua no modal
+          do lead — sujeitos diferentes, telas diferentes. */}
+      {deal && (
+        <div className="flex flex-wrap items-center gap-2 px-1">
+          <DealQualificationSlot
+            dealId={deal.dealId}
+            leadId={lead.id}
+            current={(deal.qualificationTier as QualificationTier | null) ?? null}
+            locked={!canMoveMeeting.allowed}
+          />
+
+          {/* Progresso do negócio dentro do funil. `stageIndex`/`stageCount`
+              existem justamente para desenhar isto sem inventar denominador —
+              cada org numera e apaga etapa como quer. */}
+          {deal.stageIndex != null && deal.stageCount > 0 && (
+            <div className="flex items-center gap-1.5" title={`Etapa ${deal.stageIndex + 1} de ${deal.stageCount}`}>
+              {Array.from({ length: deal.stageCount }, (_, i) => (
+                <span
+                  key={i}
+                  aria-hidden
+                  className={cn(
+                    "h-1 w-4 rounded-full transition-colors",
+                    i <= (deal.stageIndex ?? -1) ? "bg-primary" : "bg-border",
+                  )}
+                />
+              ))}
+              <span className="ml-0.5 text-[10.5px] tabular-nums text-muted-foreground/70">
+                {deal.stageIndex + 1}/{deal.stageCount}
+              </span>
+            </div>
+          )}
+
+          {deal.outcome !== "open" && (
+            <span
+              className={cn(
+                "rounded-full px-2 py-[3px] text-[10px] font-bold uppercase tracking-wide",
+                deal.outcome === "won"
+                  ? "bg-success/15 text-success"
+                  : "bg-destructive/15 text-destructive",
+              )}
+            >
+              {deal.outcome === "won" ? "Ganho" : "Perdido"}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Valor só aparece aqui quando NÃO há pill de orçamento — dois números
           do mesmo dinheiro na mesma tela é como eles passam a divergir. */}
       {deal && ((deal.value > 0 && !pills.includes("budget")) || deal.daysInStage != null) && (
@@ -257,6 +308,41 @@ function DealContent({ onClose, isMobile }: { onClose: () => void; isMobile: boo
               >
                 {deal.daysInStage}d
               </span>
+            </div>
+          )}
+
+          {/* Quando o negócio começou. Sem isto, "12d nesta etapa" não diz se a
+              oportunidade é de ontem ou está arrastando há três meses. */}
+          {deal.enteredAt && (
+            <div className="flex flex-col">
+              <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground/70">
+                Aberto em
+              </span>
+              <span className="text-[15px] font-semibold tabular-nums">
+                {new Date(deal.enteredAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+              </span>
+            </div>
+          )}
+
+          {/* Reunião só quando existe E não há pill de reunião — mesma regra do
+              valor: dois lugares para a mesma data é como elas divergem. */}
+          {deal.meetingDate && !pills.includes("meeting") && (
+            <div className="flex flex-col">
+              <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground/70">
+                Reunião
+              </span>
+              <span className="text-[15px] font-semibold tabular-nums">
+                {new Date(deal.meetingDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+              </span>
+            </div>
+          )}
+
+          {lead.origin && (
+            <div className="flex min-w-0 flex-col">
+              <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground/70">
+                Origem
+              </span>
+              <span className="truncate text-[15px] font-semibold">{lead.origin}</span>
             </div>
           )}
         </div>

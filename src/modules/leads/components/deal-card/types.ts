@@ -45,6 +45,19 @@ export interface DealCardLeadRef {
 export interface DealCardData {
   /** `pipeline_entries.id` — a posição, que é o que identifica o negócio hoje. */
   id: string;
+  /**
+   * `deals.id` — a IDENTIDADE. `null` no card que ainda não virou negócio.
+   * É o que permite gravar atributo DO NEGÓCIO em vez de escrever na pessoa.
+   */
+  dealId: string | null;
+  /**
+   * Qualidade desta OPORTUNIDADE (`deals.qualification_tier`).
+   *
+   * Distinta da pré-qualificação, que fica no modal do lead e qualifica a
+   * PESSOA. Um lead com três negócios tem uma pré-qualificação e pode ter três
+   * notas diferentes.
+   */
+  qualificacao: string | null;
   titulo: string;
   estado: EstadoDoNegocio;
 

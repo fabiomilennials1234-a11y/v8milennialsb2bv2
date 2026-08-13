@@ -21,14 +21,40 @@
 
 import type { MetricPeriod } from "@/modules/analytics/hooks/useMetricMeasure";
 
-export type StudioPeriod = "today" | "week" | "month" | "quarter";
+export type StudioPeriod = "today" | "week" | "month" | "quarter" | "custom";
 
 export const STUDIO_PERIODS: { key: StudioPeriod; label: string }[] = [
   { key: "today", label: "Hoje" },
   { key: "week", label: "Semana" },
   { key: "month", label: "Mês" },
   { key: "quarter", label: "Trim." },
+  { key: "custom", label: "Período" },
 ];
+
+/**
+ * Intervalo escolhido à mão, em data de CALENDÁRIO (`YYYY-MM-DD`).
+ *
+ * Continua valendo a regra de ouro do arquivo: o front não calcula fronteira.
+ * Manda as duas datas e o servidor decide onde o dia começa, na timezone da
+ * organização. Por isso são strings de data e não `Date` nem instante ISO.
+ */
+export interface IntervaloCustom {
+  start: string;
+  end: string;
+}
+
+/** Diferença em dias inteiros entre duas datas de calendário. */
+function diasEntre(inicio: string, fim: string): number {
+  const ms = new Date(`${fim}T00:00:00`).getTime() - new Date(`${inicio}T00:00:00`).getTime();
+  return Math.max(0, Math.round(ms / 86_400_000));
+}
+
+/** Soma dias a uma data de calendário, devolvendo `YYYY-MM-DD`. */
+function somaDias(data: string, n: number): string {
+  const d = new Date(`${data}T00:00:00`);
+  d.setDate(d.getDate() + n);
+  return iso(d);
+}
 
 /** O que os hooks precisam para chamar `fn_metric_measure`. */
 export interface EnginePeriod {
@@ -58,8 +84,18 @@ function menosMeses(d: Date, n: number): Date {
 }
 
 /** Janela atual. `hoje` é injetável para o teste não depender do relógio. */
-export function periodoAtual(studio: StudioPeriod, hoje = new Date()): EnginePeriod {
+export function periodoAtual(
+  studio: StudioPeriod,
+  hoje = new Date(),
+  intervalo?: IntervaloCustom | null,
+): EnginePeriod {
   switch (studio) {
+    case "custom":
+      // Sem intervalo escolhido ainda, cai no mês — a tela nunca fica sem
+      // número enquanto a pessoa não terminou de preencher as duas datas.
+      return intervalo
+        ? { period: "range", ref: null, start: intervalo.start, end: intervalo.end }
+        : { period: "month", ref: iso(hoje), start: null, end: null };
     case "today":
       return { period: "day", ref: iso(hoje), start: null, end: null };
     case "week":
@@ -84,8 +120,25 @@ export function periodoAtual(studio: StudioPeriod, hoje = new Date()): EnginePer
  * dias decorridos, para comparar "trimestre até aqui" com "trimestre anterior
  * até o mesmo ponto" — comparar 40 dias contra 90 diria que despencou.
  */
-export function periodoAnterior(studio: StudioPeriod, hoje = new Date()): EnginePeriod {
+export function periodoAnterior(
+  studio: StudioPeriod,
+  hoje = new Date(),
+  intervalo?: IntervaloCustom | null,
+): EnginePeriod {
   switch (studio) {
+    case "custom": {
+      if (!intervalo) return { period: "month", ref: iso(menosMeses(hoje, 1)), start: null, end: null };
+      // Janela anterior do MESMO tamanho, encostada na atual: um intervalo de
+      // 10 dias compara com os 10 dias imediatamente anteriores. Comparar com
+      // "mês passado" quando a pessoa pediu 10 dias diria qualquer coisa.
+      const dias = diasEntre(intervalo.start, intervalo.end);
+      return {
+        period: "range",
+        ref: null,
+        start: somaDias(intervalo.start, -(dias + 1)),
+        end: somaDias(intervalo.start, -1),
+      };
+    }
     case "today": {
       const ontem = new Date(hoje);
       ontem.setDate(ontem.getDate() - 1);

@@ -29,6 +29,11 @@ export interface LeadsFilterParams {
   /** Instante ISO (inclusive) — limite superior de `created_at`. */
   createdTo?: string;
   /**
+   * Aba Clientes: só leads com ao menos um negócio GANHO (ADR-0023 §7).
+   * Semântica e o embed correspondente vivem em `../lib/lead-list-filters`.
+   */
+  apenasClientes?: boolean;
+  /**
    * Ordenação da lista (ADR-0024 decisão 2). Catálogo fechado e regra de
    * desempate em `../lib/lead-list-sort`. Ausente = a ordem de sempre.
    *
@@ -63,7 +68,7 @@ function applyLeadsFilters(
  * Retorna até LEADS_PAGE_SIZE leads por página.
  */
 export function useLeads(params: LeadsFilterParams = {}) {
-  const { page = 0, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, sort = DEFAULT_LEAD_SORT } = params;
+  const { page = 0, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, apenasClientes, sort = DEFAULT_LEAD_SORT } = params;
   const { organizationId, isReady } = useOrganization();
 
   useRealtimeSubscription("leads", ["leads"]);
@@ -73,7 +78,7 @@ export function useLeads(params: LeadsFilterParams = {}) {
     // devolveria a página 3 da ordem antiga como se fosse a da ordem nova.
     // Espalhada em duas primitivas (e não como objeto) para a chave continuar
     // legível no devtools.
-    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, sort.key, sort.direction],
+    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, apenasClientes, sort.key, sort.direction],
     queryFn: async () => {
       if (!organizationId) {
         console.warn("[useLeads] No organization_id available - returning empty array");
@@ -83,9 +88,34 @@ export function useLeads(params: LeadsFilterParams = {}) {
       const from = page * LEADS_PAGE_SIZE;
       const to = from + LEADS_PAGE_SIZE - 1;
 
-      let query = supabase
-        .from("leads")
-        .select(`
+      // ⚠ DOIS selects LITERAIS, e a duplicação é obrigatória.
+      //
+      // O cliente tipado do Supabase resolve a forma do retorno lendo a string
+      // do `.select()` em tempo de COMPILAÇÃO. Interpolar o embed
+      // (`${...}`) torna o template um `string` comum, o parser não consegue
+      // mais analisá-lo e devolve `ParserError<"Unexpected input">` — que se
+      // propaga e faz `leads` deixar de ser `Lead[]` na página inteira.
+      //
+      // Duas constantes literais mantêm as duas formas tipadas. Se acrescentar
+      // campo aqui, acrescente NOS DOIS.
+      let query = apenasClientes
+        ? supabase
+            .from("leads")
+            .select(`
+          *,
+          responsible:team_members!leads_responsible_id_fkey(id, name),
+          sdr:team_members!leads_sdr_id_fkey(id, name),
+          closer:team_members!leads_closer_id_fkey(id, name),
+          pre_sale_responsible:team_members!leads_pre_sale_responsible_id_fkey(id, name),
+          sale_responsible:team_members!leads_sale_responsible_id_fkey(id, name),
+          lead_tags(
+            tag:tags(id, name, color)
+          ),
+          deals!deals_source_lead_id_fkey!inner(id)
+        `)
+        : supabase
+            .from("leads")
+            .select(`
           *,
           responsible:team_members!leads_responsible_id_fkey(id, name),
           sdr:team_members!leads_sdr_id_fkey(id, name),
@@ -97,7 +127,7 @@ export function useLeads(params: LeadsFilterParams = {}) {
           )
         `);
 
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo });
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, apenasClientes });
 
       // Sempre com desempate por `id` — ver `lib/lead-list-sort`. Sem ele a
       // paginação por OFFSET repete linha entre páginas dentro de um empate,
@@ -116,19 +146,23 @@ export function useLeads(params: LeadsFilterParams = {}) {
  * Hook para contar total de leads (para paginação) — COM OS MESMOS FILTROS
  */
 export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
-  const { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo } = filters;
+  const { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, apenasClientes } = filters;
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
-    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo],
+    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, apenasClientes],
     queryFn: async () => {
       if (!organizationId) return 0;
 
       let query = supabase
         .from("leads")
-        .select("*", { count: "exact", head: true });
+        .select(
+          // Mesma regra do select da lista: literal, nunca interpolado.
+          apenasClientes ? "*, deals!deals_source_lead_id_fkey!inner(id)" : "*",
+          { count: "exact", head: true },
+        );
 
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo });
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, apenasClientes });
 
       const { count, error } = await query;
       if (error) throw error;

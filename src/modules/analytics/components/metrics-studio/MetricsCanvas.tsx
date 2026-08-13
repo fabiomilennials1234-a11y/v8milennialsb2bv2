@@ -3,7 +3,8 @@ import { LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
-import type { StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
+import type { IntervaloCustom, StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
+import type { Granularidade } from "@/modules/analytics/lib/metrics-studio-granularidade";
 import type { StudioWindow } from "@/modules/analytics/hooks/useMetricsStudio";
 import { MetricWindow } from "./MetricWindow";
 
@@ -16,6 +17,7 @@ interface MetricsCanvasProps {
    */
   byId: Map<string, EngineMetric>;
   period: StudioPeriod;
+  intervalo?: IntervaloCustom | null;
   podeVerPorPessoa: boolean;
   editavel: boolean;
   onEditar: () => void;
@@ -26,6 +28,7 @@ interface MetricsCanvasProps {
   onResize: (id: string, w: number, h: number) => void;
   onChart: (id: string, chart: ChartKind) => void;
   onCorte: (id: string, corte: MetricRecorte) => void;
+  onGranularidade: (id: string, granularidade: Granularidade) => void;
   onRemove: (id: string) => void;
 }
 
@@ -35,7 +38,7 @@ interface MetricsCanvasProps {
  * a malha orienta, não prende.
  */
 export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(function MetricsCanvas(
-  { windows, byId, period, podeVerPorPessoa, editavel, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
+  { windows, byId, period, intervalo, podeVerPorPessoa, editavel, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onGranularidade, onRemove },
   ref,
 ) {
   const empty = windows.length === 0;
@@ -98,6 +101,7 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
             win={win}
             metric={metric}
             period={period}
+            intervalo={intervalo}
             podeVerPorPessoa={podeVerPorPessoa}
             editavel={editavel}
             selected={selectedId === win.id}
@@ -107,6 +111,7 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
             onResize={onResize}
             onChart={onChart}
             onCorte={onCorte}
+            onGranularidade={onGranularidade}
             onRemove={onRemove}
           />
         );

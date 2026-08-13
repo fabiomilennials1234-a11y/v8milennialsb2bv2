@@ -22,6 +22,7 @@
  */
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import type { MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
+import type { Granularidade } from "@/modules/analytics/lib/metrics-studio-granularidade";
 
 export interface StudioWindow {
   /** Instância, não métrica: a mesma métrica pode abrir duas janelas. */
@@ -35,4 +36,10 @@ export interface StudioWindow {
   h: number;
   chart: ChartKind;
   z: number;
+  /**
+   * Granularidade da série no recorte `tempo`. Ausente = automática pelo
+   * tamanho da janela — que é o certo para quem nunca escolheu, e continua
+   * acompanhando a troca de período sem a pessoa reajustar.
+   */
+  granularidade?: Granularidade;
 }

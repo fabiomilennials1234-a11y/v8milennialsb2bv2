@@ -25,6 +25,36 @@ export interface LeadListFilterValues {
   createdFrom?: string;
   /** Instante ISO (inclusive) — limite superior de `created_at`. */
   createdTo?: string;
+  /**
+   * Aba **Clientes**: só quem já comprou.
+   *
+   * A prova é ter ao menos um NEGÓCIO GANHO (`deals.won`) — a definição do
+   * ADR-0023 §7, onde Cliente é "uma palavra com um significado: alguém que
+   * comprou". Monotônico: ganhou uma vez, é cliente para sempre.
+   *
+   * ⚠ Não usa `sale_events`, e a diferença é medível: na Milennials são 91
+   * leads com negócio ganho contra 99 com venda no caderno. Os 8 de diferença
+   * são venda registrada sem negócio no funil (produtor de Carteira, ou card
+   * que andou depois da venda). Incluí-los aqui faria a aba mostrar gente cujo
+   * "negócio fechado" a tela ao lado não consegue mostrar — e a coluna
+   * Negócios apareceria vazia para eles.
+   */
+  apenasClientes?: boolean;
+}
+
+/**
+ * Embed que transforma o filtro de clientes num INNER JOIN.
+ *
+ * PostgREST só filtra a tabela-pai por uma filha com `!inner` no SELECT — o
+ * `.eq("deals.won", true)` sozinho filtraria o embed e devolveria todos os
+ * leads, com o embed vazio nos que não têm negócio. Por isso a semântica mora
+ * em dois pedaços que precisam andar juntos: este fragmento e o filtro abaixo.
+ *
+ * `deals_source_lead_id_fkey` é explícito porque `deals` tem mais de um caminho
+ * para `leads`; sem nomear a FK, o PostgREST recusa por ambiguidade.
+ */
+export function embedDeClientes(apenasClientes?: boolean): string {
+  return apenasClientes ? ",\n          deals!deals_source_lead_id_fkey!inner(id)" : "";
 }
 
 /**
@@ -104,6 +134,12 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
   }
   if (filters.createdTo) {
     q = q.lte("created_at", filters.createdTo);
+  }
+
+  // Par obrigatório do `embedDeClientes`: o embed faz o INNER JOIN, estas duas
+  // linhas dizem QUAIS negócios contam. Negócio na lixeira não prova compra.
+  if (filters.apenasClientes) {
+    q = q.eq("deals.won", true).is("deals.deleted_at", null);
   }
 
   if (filters.filterQualification && filters.filterQualification !== "all") {

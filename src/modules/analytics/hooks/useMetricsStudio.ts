@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMetricsStudioPanel } from "./useMetricsStudioPanel";
 import type { StudioWindow } from "@/modules/analytics/lib/metrics-studio-window";
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
+import type { Granularidade } from "@/modules/analytics/lib/metrics-studio-granularidade";
 import {
   ehEscalar,
   type EngineMetric,
@@ -115,6 +116,7 @@ export interface MetricsStudioApi {
   resizeWindow: (id: string, w: number, h: number) => void;
   setChart: (id: string, chart: ChartKind, bounds: Bounds) => void;
   setCorte: (id: string, corte: MetricRecorte, bounds: Bounds) => void;
+  setGranularidade: (id: string, granularidade: Granularidade) => void;
   focusWindow: (id: string) => void;
   clear: () => void;
 }
@@ -251,6 +253,18 @@ export function useMetricsStudio(byId: Map<string, EngineMetric>): MetricsStudio
     [mutar, byId],
   );
 
+  // Granularidade não mexe em geometria — a janela não cresce nem se move ao
+  // trocar de "por dia" para "por mês", só o desenho muda. Por isso não passa
+  // por `acomodar`.
+  const setGranularidade = useCallback(
+    (id: string, granularidade: Granularidade) =>
+      mutar((prev) => ({
+        ...prev,
+        windows: prev.windows.map((w) => (w.id === id ? { ...w, granularidade } : w)),
+      })),
+    [mutar],
+  );
+
   // Ordem-z é estado de UI, mas persiste junto: reabrir o painel com as
   // janelas em ordem diferente da que se deixou seria desorientador.
   const focusWindow = useCallback(
@@ -283,6 +297,7 @@ export function useMetricsStudio(byId: Map<string, EngineMetric>): MetricsStudio
     resizeWindow,
     setChart,
     setCorte,
+    setGranularidade,
     focusWindow,
     clear,
   };
