@@ -43,6 +43,7 @@ owner: claude-agent
 ## Vendas
 
 - [[Agenda Interna|Agenda Interna]]
+- [[Carteira Pedidos|Carteira — aba Pedidos (listar e editar)]]
 - [[Export Stage Kanban|Export Stage (Kanban)]]
 - [[Filtros do Kanban|Filtros do Kanban]]
 - [[Lead Card|Lead Card (Kanban) — Trello-style]]
