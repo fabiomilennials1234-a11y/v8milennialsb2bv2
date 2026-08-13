@@ -444,7 +444,14 @@ AS $$
 DECLARE
   v_kind text; v_num jsonb; v_den jsonb; v_num_v numeric; v_den_v numeric;
   v_unit text; v_val numeric; v_period_label text; v_tz text; v_bounds tstzrange;
-  v_tree jsonb; v_def record; v_ref_id uuid;
+  v_tree jsonb; v_ref_id uuid;
+  -- ⚠ Escalares, NÃO um `record`. Medido contra banco real: com
+  -- `v_def record` atribuído só no ramo `custom`, o payload `kind='tree'`
+  -- estourava `record "v_def" is not assigned yet` — plpgsql avalia o acesso a
+  -- campo de record MESMO dentro de um `CASE` cujo ramo não é tomado, e o
+  -- `jsonb_build_object` do RETURN referencia `v_def.*` nos dois casos.
+  -- Escalares nascem NULL e o mesmo RETURN serve aos dois ramos.
+  v_def_id uuid; v_def_name text; v_def_format text;
 BEGIN
   -- 1ª INSTRUÇÃO — gate de tenancy (padrão canônico ADR-0017).
   PERFORM public.assert_org_access(p_org_id);
@@ -513,14 +520,14 @@ BEGIN
       -- O filtro por organização usa o parâmetro do servidor, JÁ conferido por
       -- assert_org_access. A definição de outra org é invisível aqui mesmo que
       -- o id seja adivinhado.
-      SELECT d.id, d.name, d.tree, d.format_id INTO v_def
+      SELECT d.id, d.name, d.format_id, d.tree
+        INTO v_def_id, v_def_name, v_def_format, v_tree
       FROM public.metric_custom_definitions d
       WHERE d.id = v_ref_id AND d.organization_id = p_org_id;
-      IF v_def.id IS NULL THEN
+      IF v_def_id IS NULL THEN
         RAISE EXCEPTION 'métrica personalizada % não existe nesta organização', v_ref_id
           USING ERRCODE = '22023';
       END IF;
-      v_tree := v_def.tree;
     ELSE
       v_tree := p_measure_ref->'tree';
     END IF;
@@ -544,9 +551,9 @@ BEGIN
     RETURN jsonb_build_object(
       'kind', v_kind,
       'measure_ref', p_measure_ref,
-      'measure_id', CASE WHEN v_kind = 'custom' THEN v_def.id::text ELSE NULL END,
-      'label',      CASE WHEN v_kind = 'custom' THEN v_def.name     ELSE NULL END,
-      'format_id',  CASE WHEN v_kind = 'custom' THEN v_def.format_id ELSE p_measure_ref->>'format_id' END,
+      'measure_id', v_def_id::text,
+      'label',      v_def_name,
+      'format_id',  COALESCE(v_def_format, p_measure_ref->>'format_id'),
       'unit', v_unit,
       'currency', CASE WHEN v_unit = 'currency' THEN 'BRL' ELSE NULL END,
       -- A árvore compõe escalares de janela; não há coorte única a declarar.
