@@ -158,9 +158,22 @@ SELECT ok(
 -- ===========================================================================
 -- (DN) deny-all de escrita no catálogo
 -- ===========================================================================
+-- O número exato era 7 quando o motor nasceu. O SCRUM-311 está portando 19
+-- medidas legadas, uma migration por vez, então qualquer literal aqui quebra na
+-- próxima fatia — e um teste que reprova por trabalho planejado ensina a
+-- ignorar o teste. O que importa não é a contagem: é que o catálogo servido
+-- pela função seja EXATAMENTE o catálogo registrado na tabela, e que as sete
+-- fundadoras continuem lá.
 SELECT is(
   (SELECT count(*)::int FROM (SELECT jsonb_array_elements(public.fn_metric_catalog()->'measures')) x),
-  7, '(cat) catálogo serve 7 medidas');
+  (SELECT count(*)::int FROM public.metric_catalog_measures),
+  '(cat) fn_metric_catalog serve todas as medidas registradas, nem uma a mais nem a menos');
+
+SELECT is(
+  (SELECT count(*)::int FROM public.metric_catalog_measures
+    WHERE id IN ('receita','num_vendas','leads_criados','reunioes_marcadas',
+                 'reunioes_realizadas','leads_na_etapa','tempo_medio_etapa')),
+  7, '(cat) as sete medidas fundadoras continuam no catálogo');
 SELECT is(
   (SELECT count(*)::int FROM (SELECT jsonb_array_elements(public.fn_metric_catalog()->'ratios')) x),
   3, '(cat) catálogo serve 3 presets de razão');
