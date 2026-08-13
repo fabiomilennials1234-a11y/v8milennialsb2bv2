@@ -27,16 +27,18 @@ interface CustomPipelineKanbanProps {
   entries: CustomPipeEntry[];
   searchQuery?: string;
   /**
-   * True quando QUALQUER filtro client-side está ativo na página (qualificação,
-   * pré-qualificação ou responsável) — a página já removeu as entries que não
-   * casam. A RPC `get_custom_pipeline_stage_counts` só conhece a busca: não
-   * conhece tier nem responsável. Então sob esses filtros o badge da coluna tem
-   * que ser derivado dos items carregados (já filtrados), senão badge != cards.
+   * True quando o badge da coluna tem que ser contado NO CLIENTE em vez de vir
+   * da RPC. Dois motivos, ambos decididos pela página:
    *
-   * O nome ficou de quando só existia o filtro de tier; mantido para não
-   * conflitar com a mesma prop na `develop`.
+   * 1. Filtro client-side ativo (qualificação, pré-qualificação, responsável) —
+   *    a RPC `get_custom_pipeline_stage_counts` só conhece a busca.
+   * 2. A página escondeu entries cujo lead a RLS negou, e a migration que
+   *    ensina a RPC a ignorá-las ainda pode não estar aplicada (deploy manual).
+   *
+   * Em qualquer um dos dois, contar pela RPC faria o badge somar o que a tela
+   * não desenha. Era `tierFilterActive`, de quando só existia o filtro de tier.
    */
-  tierFilterActive?: boolean;
+  clientCountActive?: boolean;
   onRemoveEntry?: (entryId: string) => void;
   onClickEntry?: (entry: CustomPipeEntry) => void;
 }
@@ -73,7 +75,7 @@ export function CustomPipelineKanban({
   stages,
   entries,
   searchQuery,
-  tierFilterActive = false,
+  clientCountActive = false,
   onRemoveEntry,
   onClickEntry,
 }: CustomPipelineKanbanProps) {
@@ -159,16 +161,15 @@ export function CustomPipelineKanban({
         title: stage.name,
         color: stage.color || "#64748b",
         items,
-        // Total real da coluna (server-side). Fallback pro length carregado
-        // enquanto o count não chega (undefined → DraggableKanbanBoard usa
-        // items.length). Chave por stage_id (uuid) do custom pipe.
-        // Sob filtro de qualificação (tier) o RPC de contagem não conhece o
-        // tier, então usamos a contagem client-side dos items filtrados —
-        // caso contrário o badge divergiria dos cards.
-        totalCount: tierFilterActive ? items.length : (stageCounts[stage.id] ?? items.length),
+        // Total real da coluna (server-side, chave por stage_id uuid). Fallback
+        // pro length carregado enquanto o count não chega (undefined →
+        // DraggableKanbanBoard usa items.length). Quando a página sinaliza
+        // `clientCountActive`, o RPC não sabe o que ela escondeu — ver o
+        // docblock da prop —, então a contagem sai dos items filtrados.
+        totalCount: clientCountActive ? items.length : (stageCounts[stage.id] ?? items.length),
       };
     });
-  }, [stages, filteredEntries, stageCounts, tierFilterActive]);
+  }, [stages, filteredEntries, stageCounts, clientCountActive]);
 
   const handleStatusChange = async (itemId: string, newStageId: string) => {
     try {

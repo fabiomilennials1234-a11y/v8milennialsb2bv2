@@ -3,13 +3,13 @@ import { AlertTriangle } from "lucide-react";
 import { track } from "@/lib/analytics";
 import { useOrganization } from "@/modules/identity";
 interface GhostLeadsBannerProps {
-  pipeType: "whatsapp" | "confirmacao" | "propostas";
+  pipeType: "whatsapp" | "confirmacao" | "propostas" | "custom";
   ghostCount: number;
 }
 
 /**
- * Aviso visível para o usuário quando o pipe contém rows cujo join com
- * `leads` é nulo por RLS divergente (o pipe é visível mas o lead não).
+ * Aviso visível para o usuário quando o funil contém entries cujo join com
+ * `leads` é nulo — o registro do funil é visível mas o lead não.
  *
  * Antes: rows sem lead eram descartadas silenciosamente — o funil
  * simplesmente aparecia vazio/incompleto, sem indício de que havia um
@@ -17,6 +17,13 @@ interface GhostLeadsBannerProps {
  *
  * Agora: (1) banner explícito ao usuário, (2) telemetria em `usage_events`
  * para rastrear em qual org + quantos cards ocorre em produção.
+ *
+ * ⚠️ Nos funis do SISTEMA este banner está inerte desde que as RPCs paginadas
+ * entraram: `get_pipeline_page` devolve `lead` via INNER JOIN, então
+ * `item.lead == null` virou impossível e o evento `pipe.ghost_leads_detected`
+ * não é emitido desde 2026-05-13. O consumidor vivo é o funil personalizado
+ * (`pipeType="custom"`), onde a entry é visível por org e o lead por
+ * responsabilidade — ver `CustomPipeline.tsx`.
  */
 export function GhostLeadsBanner({ pipeType, ghostCount }: GhostLeadsBannerProps) {
   const { organizationId } = useOrganization();
@@ -45,13 +52,18 @@ export function GhostLeadsBanner({ pipeType, ghostCount }: GhostLeadsBannerProps
       <div className="space-y-1">
         <p className="font-medium text-foreground">
           {ghostCount === 1
-            ? "1 card está com inconsistência de permissão"
-            : `${ghostCount} cards estão com inconsistência de permissão`}
+            ? "1 lead deste funil não aparece para você"
+            : `${ghostCount} leads deste funil não aparecem para você`}
         </p>
+        {/* O texto anterior dizia "inconsistência de permissão" e mandava pedir
+            ao administrador para revisar. Na prática o caso dominante NÃO é
+            inconsistência: é a organização tendo configurado que cada pessoa vê
+            só a própria carteira. Aquele texto empurrava o admin a religar
+            `leads.view_all` — ou seja, a desfazer a própria decisão. */}
         <p className="text-muted-foreground">
-          O funil contém registros cujos leads não são visíveis para você.
-          Provável divergência entre responsável do lead e do pipe. Peça ao
-          administrador para revisar ou entre em contato com o suporte.
+          São leads que não estão atribuídos a você. Sua organização configurou
+          o acesso para que cada pessoa veja apenas a própria carteira — não é
+          um erro. Se precisar de algum deles, fale com um administrador.
         </p>
       </div>
     </div>
