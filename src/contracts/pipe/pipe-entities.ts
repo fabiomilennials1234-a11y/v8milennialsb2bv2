@@ -88,6 +88,22 @@ export interface CustomPipeEntry {
     // qualification filter). Optional/nullable — a lead may be unqualified.
     qualification_tier?: string | null;
     pre_qualification_tier?: string | null;
+    // Campos que `useCustomPipeEntries` já seleciona e que o card do kanban lê.
+    // Estavam ausentes daqui e o consumo se virava com `as any` — declarados
+    // porque o filtro "Responsável" precisa navegar este mesmo objeto tipado.
+    rating?: number | null;
+    origin?: string | null;
+    urgency?: string | null;
+    faturamento?: string | null;
+    notes?: string | null;
+    avatar_url?: string | null;
+    // Vínculos de responsabilidade — `useCustomPipeEntries` os seleciona
+    // (team_members via leads_{responsible,sdr,closer}_id_fkey) e o card do
+    // kanban os exibe; declarados aqui porque o filtro "Responsável" do funil
+    // personalizado precisa casar pelo `team_members.id`, não pelo nome.
+    responsible?: { id: string; name: string | null; avatar_url?: string | null } | null;
+    sdr?: { id: string; name: string | null; avatar_url?: string | null } | null;
+    closer?: { id: string; name: string | null; avatar_url?: string | null } | null;
   };
   stage?: CustomPipelineStage;
   assigned_profile?: { id: string; full_name: string | null; avatar_url: string | null };
