@@ -136,7 +136,11 @@ SELECT is(
   'count/entradas',
   'CT2: negocios_abertos é contagem, ancorada na janela de entrada');
 
-SELECT like(
+-- `alike`, não `like`: LIKE é palavra reservada do SQL, então pgTAP nomeia a
+-- asserção de padrão como `alike()`/`unalike()`. Chamar `like()` levanta
+-- "function like(...) does not exist" e MATA a suíte inteira — não reprova uma
+-- asserção, derruba o arquivo.
+SELECT alike(
   (SELECT description FROM public.metric_catalog_measures WHERE id = 'leads_na_etapa'),
   '%PESSOAS distintas%',
   'CT3: a descrição de leads_na_etapa passou a dizer o que ela conta');
@@ -285,12 +289,20 @@ SELECT is(
   'no_rows',
   'NA2: janela sem abertura devolve ausência — travessão na tela, nunca zero');
 
+-- ⚠ O CONTRATO É `value: 0` MAIS `empty_reason`, não `value: null`. Medido
+-- contra a branch efêmera: a primeira versão desta asserção esperava null e
+-- reprovou. É a decisão 10 do SPEC — o motor devolve zero e SINALIZA a
+-- ausência; quem transforma em travessão é a tela (`tv-metric-format`), porque
+-- só ela sabe distinguir "zero de verdade" de "não houve" ao DESENHAR.
+--
+-- Afirmar os dois juntos é o que impede o meio-termo: um motor que devolvesse
+-- 0 sem `empty_reason` faria a tela imprimir "0" com cara de fato.
 SELECT is(
   (public.fn_metric_measure('39130000-0000-4000-8000-00000000000a',
      '{"kind":"leaf","id":"negocios_abertos"}'::jsonb, 'total', 'range', NULL,
-     '2027-09-01'::date, '2027-09-30'::date) -> 'value')::text,
-  'null',
-  'NA3: e o valor é null, não 0 — "não houve" não é "houve zero"');
+     '2027-09-01'::date, '2027-09-30'::date) ->> 'value')::numeric,
+  0::numeric,
+  'NA3: o motor devolve 0 — e o empty_reason de NA2 é o que diz que não é fato');
 
 -- ===========================================================================
 -- (CV) Conversão na unidade do funil

@@ -6,8 +6,10 @@ import {
   ENGINE_METRICS,
   FORMATO_DA_MEDIDA,
   ROTULO_DO_CORTE,
+  UNIDADE_DA_MEDIDA,
   cortesVisiveis,
   ehEscalar,
+  filtrarPeloCatalogo,
   medidasDe,
   parEhCompativel,
   type MetricRecorte,
@@ -20,10 +22,22 @@ import {
  */
 
 /**
- * Medidas do catálogo. As 7 primeiras estão em PROD (conferidas 2026-08-11);
- * `leads_sem_responsavel` entra pela migration 20270812010000 (SCRUM-311).
+ * Vocabulário FECHADO das medidas — a união do que as migrations do repo criam.
+ * Não é um retrato de prod: é o contrato do código.
+ *
+ * ⚠ MUDOU DE INTENÇÃO na fatia 9/10, e vale dizer por quê. Antes esta lista era
+ * o catálogo de PRODUÇÃO, e havia um teste afirmando que nada apontava para
+ * medida fora dele. Aquilo reprovava a cada fatia nova do SCRUM-311 — a lista
+ * ficava desatualizada por construção — e, pior, não protegia ambiente nenhum
+ * em runtime: quem lia a lista estática era a UI, e a UI oferecia a medida do
+ * mesmo jeito no dia em que o código entrasse antes da migration.
+ *
+ * A defesa real agora é `filtrarPeloCatalogo`, que intersecta esta lista com o
+ * catálogo VIVO de `fn_metric_catalog()`. Este teste passou a guardar a outra
+ * metade: que o código não referencia medida que migration nenhuma cria.
  */
-const MEDIDAS_DO_CATALOGO = [
+const VOCABULARIO_DAS_MEDIDAS = [
+  // catálogo v1 (20260723100000)
   "receita",
   "num_vendas",
   "leads_criados",
@@ -31,26 +45,86 @@ const MEDIDAS_DO_CATALOGO = [
   "reunioes_realizadas",
   "leads_na_etapa",
   "tempo_medio_etapa",
+  // SCRUM-311, uma migration por fatia
   "leads_sem_responsavel",
+  "leads_avaliados",
+  "leads_nao_avaliados",
+  "boas_avaliacoes",
+  "negocios_perdidos",
+  "tempo_resposta_equipe",
+  "reunioes_no_show",
+  // fatia 9 — Lead ≠ Negócio (20270813100000)
+  "negocios_na_etapa",
+  "negocios_abertos",
 ];
 
-/** Fora de prod: migration 20260727140000 nunca aplicada. */
-const MEDIDAS_FORA_DE_PROD = ["reunioes_no_show"];
-
 describe("engine map — integridade contra o catálogo do motor", () => {
-  it("toda medida referenciada existe no catálogo do motor", () => {
+  it("toda medida referenciada é criada por alguma migration do repo", () => {
     for (const m of ENGINE_METRICS) {
       for (const medida of medidasDe(m)) {
-        expect(MEDIDAS_DO_CATALOGO, `${m.id} → ${medida}`).toContain(medida);
+        expect(VOCABULARIO_DAS_MEDIDAS, `${m.id} → ${medida}`).toContain(medida);
       }
     }
   });
 
-  it("nada aponta para medida ausente de prod", () => {
-    const referenciadas = ENGINE_METRICS.flatMap(medidasDe);
-    for (const ausente of MEDIDAS_FORA_DE_PROD) {
-      expect(referenciadas).not.toContain(ausente);
+  it("o vocabulário e as tabelas de apoio não divergem", () => {
+    // Medida referenciada sem entrada em COMPATIBILIDADE/FORMATO/UNIDADE
+    // quebraria a janela de um jeito que só aparece ao abrir.
+    for (const m of ENGINE_METRICS) {
+      if (m.measureRef.kind !== "leaf") continue;
+      expect(COMPATIBILIDADE[m.measureRef.id], `COMPATIBILIDADE[${m.measureRef.id}]`).toBeDefined();
+      expect(FORMATO_DA_MEDIDA[m.measureRef.id], `FORMATO[${m.measureRef.id}]`).toBeDefined();
+      expect(UNIDADE_DA_MEDIDA[m.measureRef.id], `UNIDADE[${m.measureRef.id}]`).toBeDefined();
     }
+  });
+
+  describe("filtrarPeloCatalogo — a defesa que roda em runtime", () => {
+    it("oferece só o que o banco-alvo calcula", () => {
+      // Um banco que só tem o catálogo v1: as fatias do SCRUM-311 somem da
+      // lista em vez de virarem janela que levanta 22023.
+      const catalogoV1 = {
+        measures: [
+          { id: "receita", compatible_recortes: ["total", "tempo", "origem", "closer", "sdr", "pipeline", "tag", "stream"] },
+          { id: "num_vendas", compatible_recortes: ["total", "tempo"] },
+          { id: "leads_criados", compatible_recortes: ["total", "tempo"] },
+        ],
+      };
+      const oferecidas = filtrarPeloCatalogo(ENGINE_METRICS, catalogoV1).map((m) => m.id);
+
+      expect(oferecidas).toContain("receita");
+      // Razões sobrevivem quando os DOIS filhos existem no catálogo.
+      expect(oferecidas).toContain("taxa_conversao"); // num_vendas ÷ leads_criados
+      expect(oferecidas).toContain("ticket_medio"); // receita ÷ num_vendas
+      // E as fatias do SCRUM-311 somem, que é o ponto.
+      expect(oferecidas).not.toContain("reunioes_no_show");
+      expect(oferecidas).not.toContain("negocios_por_etapa");
+      expect(oferecidas).not.toContain("taxa_qualidade");
+    });
+
+    it("razão some quando UM dos filhos falta", () => {
+      const so_receita = { measures: [{ id: "receita", compatible_recortes: ["total"] }] };
+      const oferecidas = filtrarPeloCatalogo(ENGINE_METRICS, so_receita).map((m) => m.id);
+      expect(oferecidas).toContain("receita");
+      expect(oferecidas).not.toContain("ticket_medio"); // falta num_vendas
+      expect(oferecidas).not.toContain("taxa_conversao"); // falta leads_criados
+    });
+
+    it("corte que o banco não aceita é podado, e a medida sobrevive", () => {
+      const catalogo = { measures: [{ id: "receita", compatible_recortes: ["total"] }] };
+      const receita = filtrarPeloCatalogo(ENGINE_METRICS, catalogo).find((m) => m.id === "receita")!;
+      expect(receita.cortes).toEqual(["total"]);
+    });
+
+    it("medida sem NENHUM corte aceito não é oferecida", () => {
+      const catalogo = { measures: [{ id: "receita", compatible_recortes: [] }] };
+      expect(filtrarPeloCatalogo(ENGINE_METRICS, catalogo)).toEqual([]);
+    });
+
+    it("FALHA PARA FECHADO: catálogo vazio não oferece a lista estática", () => {
+      // Deploy pela metade (RPC ausente) devolve catálogo vazio. Oferecer tudo
+      // ali seria oferecer tudo quebrado.
+      expect(filtrarPeloCatalogo(ENGINE_METRICS, { measures: [] })).toEqual([]);
+    });
   });
 
   it("TODO corte oferecido está na tabela de compatibilidade", () => {
@@ -140,11 +214,15 @@ describe("engine map — decisões do grill", () => {
     }
   });
 
-  it("G1: a oferta é 8 medidas + 3 razões", () => {
+  // Tripwire deliberado: mexer nestes números é declarar que a oferta mudou.
+  // Ele NÃO é a defesa contra oferecer medida que o banco não tem — essa é
+  // `filtrarPeloCatalogo`, testada acima. Aqui só se afirma que ninguém
+  // acrescentou entrada por acidente.
+  it("G1: a oferta de fábrica é 16 medidas + 5 razões", () => {
     const leafs = ENGINE_METRICS.filter((m) => m.measureRef.kind === "leaf");
     const ratios = ENGINE_METRICS.filter((m) => m.measureRef.kind === "ratio");
-    expect(leafs).toHaveLength(8);
-    expect(ratios).toHaveLength(3);
+    expect(leafs).toHaveLength(16);
+    expect(ratios).toHaveLength(5);
   });
 
   it("SCRUM-311: leads_sem_responsavel não oferece corte por pessoa", () => {

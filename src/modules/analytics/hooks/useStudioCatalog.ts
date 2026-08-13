@@ -2,9 +2,11 @@ import { useMemo } from "react";
 import {
   ENGINE_METRICS,
   UNIDADE_DA_MEDIDA,
+  filtrarPeloCatalogo,
   type EngineMetric,
 } from "@/modules/analytics/lib/metrics-studio-engine-map";
 import type { MetricUnit } from "@/modules/analytics/lib/metric-vocabulary";
+import { useMetricCatalog } from "./useMetricCatalog";
 import {
   useMetricCustomDefinitions,
   type MetricCustomApi,
@@ -62,10 +64,17 @@ export interface StudioCatalog {
 
 export function useStudioCatalog(): StudioCatalog {
   const custom = useMetricCustomDefinitions();
+  // O catálogo do MOTOR (`fn_metric_catalog`) decide o que aparece. A lista
+  // estática diz o que o código sabe desenhar; o banco diz o que ele consegue
+  // calcular, e a interseção é o que se oferece. Ver `filtrarPeloCatalogo`.
+  const catalogo = useMetricCatalog();
 
   const metrics = useMemo(
-    () => [...ENGINE_METRICS, ...custom.definicoes.map(comoEngineMetric)],
-    [custom.definicoes],
+    () => [
+      ...filtrarPeloCatalogo(ENGINE_METRICS, catalogo.data ?? { measures: [] }),
+      ...custom.definicoes.map(comoEngineMetric),
+    ],
+    [catalogo.data, custom.definicoes],
   );
 
   const byId = useMemo(() => new Map(metrics.map((m) => [m.id, m])), [metrics]);
@@ -81,6 +90,8 @@ export function useStudioCatalog(): StudioCatalog {
     personalizadas: custom.definicoes,
     unidadeDaMedida,
     custom,
-    isLoading: custom.isLoading,
+    // O painel só sabe o que oferecer quando as DUAS fontes chegaram: o
+    // catálogo do motor e as personalizadas da org.
+    isLoading: custom.isLoading || catalogo.isLoading,
   };
 }

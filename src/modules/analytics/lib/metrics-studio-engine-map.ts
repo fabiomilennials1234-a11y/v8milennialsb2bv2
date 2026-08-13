@@ -389,3 +389,53 @@ export function parEhCompativel(m: EngineMetric, corte: MetricRecorte): boolean 
   if (m.measureRef.kind !== "leaf") return true;
   return COMPATIBILIDADE[m.measureRef.id]?.includes(corte) ?? false;
 }
+
+/**
+ * O que ESTE banco realmente calcula, dentre o que o código sabe desenhar.
+ *
+ * ⚠ Existe porque a lista de cima é ESTÁTICA e o catálogo do motor é DADO: cada
+ * medida chega por uma migration própria, e as migrations do SCRUM-311 não
+ * estão todas em todo ambiente. Oferecer na lista lateral uma medida que o
+ * banco-alvo não tem faz `fn_metric_measure` levantar `EXCEPTION 22023` — que
+ * `isMissingSchemaError` NÃO captura e que derruba a janela inteira, com a
+ * pessoa achando que quebrou o produto.
+ *
+ * Antes disto, um teste unitário congelava a lista contra um retrato do
+ * catálogo de prod. Aquilo funcionava como aviso, não como defesa: passava a
+ * reprovar toda vez que uma fatia nova entrava, e não protegia ambiente nenhum
+ * em runtime. Aqui quem decide o que aparece é o próprio banco.
+ *
+ * FALHA PARA FECHADO. Catálogo vazio (RPC ausente, deploy pela metade) devolve
+ * lista vazia em vez da lista estática — mesma escolha da trava de rollout do
+ * Estúdio: não oferecer é melhor que oferecer e quebrar.
+ *
+ * Filtra também os CORTES, pela compatibilidade que o banco declara. A tabela
+ * `COMPATIBILIDADE` deste arquivo é uma cópia conferida à mão; a do banco é a
+ * fonte.
+ */
+export function filtrarPeloCatalogo(
+  metrics: EngineMetric[],
+  catalogo: { measures: { id: string; compatible_recortes?: string[] }[] },
+): EngineMetric[] {
+  const disponiveis = new Map(
+    catalogo.measures.map((m) => [m.id, new Set(m.compatible_recortes ?? [])]),
+  );
+  if (disponiveis.size === 0) return [];
+
+  return metrics.flatMap((m) => {
+    // Personalizada não passa por aqui: a árvore dela já foi validada contra o
+    // catálogo na escrita E é revalidada em runtime pelo motor.
+    if (m.measureRef.kind === "custom" || m.measureRef.kind === "tree") return [m];
+
+    const medidas = medidasDe(m);
+    if (!medidas.every((id) => disponiveis.has(id))) return [];
+
+    // Razão ignora corte — o motor força `total` nos dois filhos.
+    if (m.measureRef.kind === "ratio") return [m];
+
+    const aceitos = disponiveis.get(m.measureRef.id)!;
+    const cortes = m.cortes.filter((c) => aceitos.has(c));
+    // Medida sem NENHUM corte aceito não tem como ser aberta.
+    return cortes.length === 0 ? [] : [{ ...m, cortes }];
+  });
+}
