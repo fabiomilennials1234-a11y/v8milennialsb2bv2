@@ -20,36 +20,31 @@
  * `taxa_conversao` e `ticket_medio` são RAZÕES, não medidas.
  *
  * ⚠ Só entra aqui o que o motor calcula. Medido em 2026-08-11: o catálogo de
- * prod tem 7 medidas; `leads_sem_responsavel` é a 8ª e chega pela migration
- * `20270812010000` (SCRUM-311) — a UI só a mostra depois do apply.
+ * PROD tem 7 medidas. As outras chegam pelas migrations do SCRUM-311, e a UI só
+ * as mostra depois do apply — cada uma some sozinha da tela enquanto a sua
+ * migration não estiver aplicada, porque o motor levanta 22023 e a janela cai.
  *
- * `reunioes_no_show` e o campo `target` (de que `meta_definida` depende) vivem
- * na migration `20260727140000`, que NUNCA foi aplicada — o ledger pula de
- * `20260727120000` para `20260727140241`.
+ * `reunioes_no_show` NÃO vem de `20260727140000` (aquela nunca foi aplicada e
+ * NÃO PODE ser: reescreve `_metric_leaf` com o CASE de 8 medidas e apaga o
+ * roteamento das 16). Vem de `20270812120000`, que absorveu as duas metades no
+ * despachante vigente.
+ *
+ * `meta_definida` continua fora: alvo é CAMPO do payload (`target`), não medida,
+ * e o motor só compõe razão entre dois ids do catálogo (SCRUM-365).
  */
 
-import type { MeasureRef, MetricFilters } from "@/modules/analytics/hooks/useMetricMeasure";
+import type { MeasureRef } from "@/modules/analytics/hooks/useMetricMeasure";
+import type {
+  MetricFilters,
+  MetricFormatId,
+  MetricRecorte,
+  MetricUnit,
+} from "@/modules/analytics/lib/metric-vocabulary";
 
-/** Recortes do catálogo fechado. Espelha `metric_catalog_recortes` em prod. */
-export type MetricRecorte =
-  | "total"
-  | "closer"
-  | "sdr"
-  | "origem"
-  | "tag"
-  | "produto"
-  | "stream"
-  | "pipeline"
-  | "etapa"
-  | "tempo";
-
-/** Formatos do catálogo fechado. Espelha `metric_catalog_formats` em prod. */
-export type MetricFormatId =
-  | "currency_brl"
-  | "integer"
-  | "percent_1"
-  | "duration_human"
-  | "ratio_2";
+// Os três tipos passaram a morar em `lib/metric-vocabulary` (módulo folha) para
+// que `metric-tree` possa usá-los sem fechar ciclo com este arquivo. Continuam
+// re-exportados daqui: nenhum consumidor precisou mudar de import.
+export type { MetricFormatId, MetricRecorte };
 
 /**
  * Cortes que expõem número por PESSOA. G6: só aparecem para quem já tem acesso
@@ -106,6 +101,17 @@ export const COMPATIBILIDADE: Record<string, MetricRecorte[]> = {
   // SCRUM-311 fatia 1. Sem 'tempo' (é estado, não série) e sem corte por
   // pessoa ("sem dono por vendedor" é contradição).
   leads_sem_responsavel: ["total", "origem", "tag"],
+  // SCRUM-311 fatias 2-8 — portadas para o motor pela pilha, e até aqui
+  // INVISÍVEIS na tela: catálogo tem a medida, a lista lateral não a oferecia.
+  leads_avaliados: ["total", "origem", "tag", "produto", "tempo"],
+  leads_nao_avaliados: ["total", "origem", "tag", "produto", "tempo"],
+  boas_avaliacoes: ["total", "origem", "tag", "produto", "tempo"],
+  negocios_perdidos: ["total", "closer", "origem", "pipeline", "tempo"],
+  tempo_resposta_equipe: ["total", "origem", "tempo"],
+  reunioes_no_show: ["total", "sdr", "origem", "tempo"],
+  // SCRUM-311 fatia 9 — a unidade do funil é o NEGÓCIO (ADR-0023).
+  negocios_na_etapa: ["total", "pipeline", "etapa"],
+  negocios_abertos: ["total", "tempo", "origem", "pipeline", "etapa"],
 };
 
 /** Formato único por medida, de `metric_catalog_measure_formats` em prod. */
@@ -118,15 +124,53 @@ export const FORMATO_DA_MEDIDA: Record<string, MetricFormatId> = {
   leads_na_etapa: "integer",
   tempo_medio_etapa: "duration_human",
   leads_sem_responsavel: "integer",
+  leads_avaliados: "integer",
+  leads_nao_avaliados: "integer",
+  boas_avaliacoes: "integer",
+  negocios_perdidos: "integer",
+  reunioes_no_show: "integer",
+  tempo_resposta_equipe: "duration_human",
+  negocios_na_etapa: "integer",
+  negocios_abertos: "integer",
 };
 
 /**
- * O que o Estúdio oferece. 8 medidas + 3 razões.
+ * Unidade por medida, de `metric_catalog_measures.unit` em prod.
+ *
+ * A árvore personalizada precisa da UNIDADE, não do formato: é dela que sai a
+ * derivação de `receita ÷ leads → currency`. O compositor lê daqui para dizer
+ * "essa conta não fecha" antes de o banco dizer.
+ */
+export const UNIDADE_DA_MEDIDA: Record<string, MetricUnit> = {
+  receita: "currency",
+  num_vendas: "count",
+  leads_criados: "count",
+  reunioes_marcadas: "count",
+  reunioes_realizadas: "count",
+  leads_na_etapa: "count",
+  tempo_medio_etapa: "duration_seconds",
+  leads_sem_responsavel: "count",
+  leads_avaliados: "count",
+  leads_nao_avaliados: "count",
+  boas_avaliacoes: "count",
+  negocios_perdidos: "count",
+  reunioes_no_show: "count",
+  tempo_resposta_equipe: "duration_seconds",
+  negocios_na_etapa: "count",
+  negocios_abertos: "count",
+};
+
+/**
+ * O que o Estúdio oferece de FÁBRICA: 16 medidas + 5 razões.
+ *
+ * As personalizadas do cliente NÃO entram nesta constante — elas vêm do banco
+ * (`metric_custom_definitions`) e são juntadas em runtime por
+ * `useStudioCatalog`. Esta lista é o que o motor calcula sem ninguém compor.
  *
  * Fora daqui, com o motivo:
- *   - `reunioes_no_show`, `meta_definida` → migration 20260727140000 não está em prod
- *   - `curva_abc`, `negocios_por_lead`, `taxa_resposta_automacao` → não existem
- *   - as 7 parciais e as demais "prontas" → vivem em hook legado (SCRUM-311 as porta)
+ *   - `meta_definida` → alvo é campo do payload, não medida (SCRUM-365)
+ *   - `curva_abc`, `taxa_resposta_automacao` → não existem
+ *   - as demais do inventário → vivem em hook legado (SCRUM-311 as porta)
  */
 export const ENGINE_METRICS: EngineMetric[] = [
   {
@@ -164,11 +208,35 @@ export const ENGINE_METRICS: EngineMetric[] = [
     cortes: ["total", "tempo", "origem", "sdr", "tag"],
     formatId: "integer",
   },
+  // SCRUM-311 fatia 9 — LEAD ≠ NEGÓCIO, e a janela salva não muda de id.
+  //
+  // Este item já se chamava "Negócios na etapa" na tela, mas apontava para
+  // `leads_na_etapa`, que conta ENTRADA. Medido em prod (2026-08-12): 41.025
+  // entradas para 36.073 leads distintos — 12% de diferença que ninguém via. O
+  // `id` do StudioMetric fica: painel salvo referencia `negocios_por_etapa` e
+  // continua abrindo. O que muda é para onde ele aponta.
   {
     id: "negocios_por_etapa",
     label: "Negócios na etapa",
+    measureRef: { kind: "leaf", id: "negocios_na_etapa" },
+    cortes: ["total", "etapa", "pipeline"],
+    formatId: "integer",
+  },
+  {
+    // A outra metade da separação: pessoa distinta. Um lead com 3 negócios
+    // conta 1 aqui e 3 acima — e é isso que o E2E do lead com dois negócios
+    // prova.
+    id: "leads_na_etapa",
+    label: "Leads na etapa",
     measureRef: { kind: "leaf", id: "leads_na_etapa" },
     cortes: ["total", "etapa", "pipeline"],
+    formatId: "integer",
+  },
+  {
+    id: "negocios_abertos",
+    label: "Negócios abertos",
+    measureRef: { kind: "leaf", id: "negocios_abertos" },
+    cortes: ["total", "tempo", "origem", "pipeline", "etapa"],
     formatId: "integer",
   },
   {
@@ -187,12 +255,73 @@ export const ENGINE_METRICS: EngineMetric[] = [
     formatId: "duration_human",
   },
 
+  // SCRUM-311 fatias 2-8 — o motor já as calcula desde a pilha do épico; até
+  // aqui nenhuma aparecia na lista lateral, o que é o mesmo que não existir
+  // para quem usa o produto.
+  {
+    id: "negocios_perdidos",
+    label: "Negócios perdidos",
+    measureRef: { kind: "leaf", id: "negocios_perdidos" },
+    cortes: ["total", "tempo", "origem", "closer", "pipeline"],
+    formatId: "integer",
+  },
+  {
+    id: "leads_avaliados",
+    label: "Leads avaliados",
+    measureRef: { kind: "leaf", id: "leads_avaliados" },
+    cortes: ["total", "tempo", "origem", "tag", "produto"],
+    formatId: "integer",
+  },
+  {
+    id: "leads_nao_avaliados",
+    label: "Leads não avaliados",
+    measureRef: { kind: "leaf", id: "leads_nao_avaliados" },
+    cortes: ["total", "tempo", "origem", "tag", "produto"],
+    formatId: "integer",
+  },
+  {
+    id: "boas_avaliacoes",
+    label: "Boas avaliações",
+    measureRef: { kind: "leaf", id: "boas_avaliacoes" },
+    cortes: ["total", "tempo", "origem", "tag", "produto"],
+    formatId: "integer",
+  },
+  {
+    // O rótulo diz REGISTRO, não comparecimento — medido em prod: 627 marcadas
+    // × 159 comparecidas, e o cliente não falta a 3 de cada 4 reuniões. A
+    // medida enxerga a lacuna de registro, e o nome não pode prometer outra
+    // coisa (ver o cabeçalho de 20270812120000).
+    id: "reunioes_no_show",
+    label: "Reuniões sem comparecimento registrado",
+    measureRef: { kind: "leaf", id: "reunioes_no_show" },
+    cortes: ["total", "tempo", "origem", "sdr"],
+    formatId: "integer",
+  },
+  {
+    id: "tempo_resposta_equipe",
+    label: "Tempo médio de resposta",
+    measureRef: { kind: "leaf", id: "tempo_resposta_equipe" },
+    cortes: ["total", "tempo", "origem"],
+    formatId: "duration_human",
+  },
+
   // Razões: profundidade 1, dois filhos, ambos forçados a 'total' pelo motor.
   // `series` vem SEMPRE null — a UI não oferece corte nem gráfico de série.
   {
+    // Renomeada na fatia 9: o denominador é LEAD, e sob a unidade nova isso
+    // precisa estar no rótulo. Um lead com 3 negócios entra UMA vez aqui e pode
+    // ganhar TRÊS — a taxa passa de 100% e não é defeito, é a pergunta que ela
+    // responde. Quem quer conversão na unidade do funil usa a de baixo.
     id: "taxa_conversao",
-    label: "Taxa de conversão",
+    label: "Taxa de conversão por lead",
     measureRef: { kind: "ratio", num: "num_vendas", den: "leads_criados" },
+    cortes: ["total"],
+    formatId: "percent_1",
+  },
+  {
+    id: "taxa_conversao_negocio",
+    label: "Taxa de conversão por negócio",
+    measureRef: { kind: "ratio", num: "num_vendas", den: "negocios_abertos" },
     cortes: ["total"],
     formatId: "percent_1",
   },
@@ -210,20 +339,37 @@ export const ENGINE_METRICS: EngineMetric[] = [
     cortes: ["total"],
     formatId: "currency_brl",
   },
+  {
+    // SCRUM-311 fatia 7. Os dois filhos ancoram em `entradas` e o numerador é
+    // subconjunto do denominador — a razão vive em [0, 100] por construção.
+    id: "taxa_qualidade",
+    label: "Taxa de qualidade de leads",
+    measureRef: { kind: "ratio", num: "boas_avaliacoes", den: "leads_avaliados" },
+    cortes: ["total"],
+    formatId: "percent_1",
+  },
 ];
 
 export const ENGINE_BY_ID = new Map(ENGINE_METRICS.map((m) => [m.id, m]));
 
-/** Ids de medida referenciados (1 para leaf, 2 para razão). */
+/**
+ * Ids de medida referenciados (1 para leaf, 2 para razão).
+ *
+ * Personalizada devolve lista vazia: os operandos dela vivem na árvore, do lado
+ * do banco, e quem precisa deles é o compositor — não este mapa.
+ */
 export function medidasDe(m: EngineMetric): string[] {
-  return m.measureRef.kind === "leaf"
-    ? [m.measureRef.id]
-    : [m.measureRef.num, m.measureRef.den];
+  if (m.measureRef.kind === "leaf") return [m.measureRef.id];
+  if (m.measureRef.kind === "ratio") return [m.measureRef.num, m.measureRef.den];
+  return [];
 }
 
-/** Razão é sempre escalar; leaf é escalar só no corte `total`. */
+/**
+ * Razão e personalizada são SEMPRE escalares — o motor devolve `series: null`
+ * nas duas. Leaf é escalar só no corte `total`.
+ */
 export function ehEscalar(m: EngineMetric, corte: MetricRecorte): boolean {
-  return m.measureRef.kind === "ratio" || corte === "total";
+  return m.measureRef.kind !== "leaf" || corte === "total";
 }
 
 /**
@@ -240,6 +386,56 @@ export function cortesVisiveis(m: EngineMetric, podeVerPorPessoa: boolean): Metr
  * força `total` nos filhos —, então a checagem vale só para leaf.
  */
 export function parEhCompativel(m: EngineMetric, corte: MetricRecorte): boolean {
-  if (m.measureRef.kind === "ratio") return true;
+  if (m.measureRef.kind !== "leaf") return true;
   return COMPATIBILIDADE[m.measureRef.id]?.includes(corte) ?? false;
+}
+
+/**
+ * O que ESTE banco realmente calcula, dentre o que o código sabe desenhar.
+ *
+ * ⚠ Existe porque a lista de cima é ESTÁTICA e o catálogo do motor é DADO: cada
+ * medida chega por uma migration própria, e as migrations do SCRUM-311 não
+ * estão todas em todo ambiente. Oferecer na lista lateral uma medida que o
+ * banco-alvo não tem faz `fn_metric_measure` levantar `EXCEPTION 22023` — que
+ * `isMissingSchemaError` NÃO captura e que derruba a janela inteira, com a
+ * pessoa achando que quebrou o produto.
+ *
+ * Antes disto, um teste unitário congelava a lista contra um retrato do
+ * catálogo de prod. Aquilo funcionava como aviso, não como defesa: passava a
+ * reprovar toda vez que uma fatia nova entrava, e não protegia ambiente nenhum
+ * em runtime. Aqui quem decide o que aparece é o próprio banco.
+ *
+ * FALHA PARA FECHADO. Catálogo vazio (RPC ausente, deploy pela metade) devolve
+ * lista vazia em vez da lista estática — mesma escolha da trava de rollout do
+ * Estúdio: não oferecer é melhor que oferecer e quebrar.
+ *
+ * Filtra também os CORTES, pela compatibilidade que o banco declara. A tabela
+ * `COMPATIBILIDADE` deste arquivo é uma cópia conferida à mão; a do banco é a
+ * fonte.
+ */
+export function filtrarPeloCatalogo(
+  metrics: EngineMetric[],
+  catalogo: { measures: { id: string; compatible_recortes?: string[] }[] },
+): EngineMetric[] {
+  const disponiveis = new Map(
+    catalogo.measures.map((m) => [m.id, new Set(m.compatible_recortes ?? [])]),
+  );
+  if (disponiveis.size === 0) return [];
+
+  return metrics.flatMap((m) => {
+    // Personalizada não passa por aqui: a árvore dela já foi validada contra o
+    // catálogo na escrita E é revalidada em runtime pelo motor.
+    if (m.measureRef.kind === "custom" || m.measureRef.kind === "tree") return [m];
+
+    const medidas = medidasDe(m);
+    if (!medidas.every((id) => disponiveis.has(id))) return [];
+
+    // Razão ignora corte — o motor força `total` nos dois filhos.
+    if (m.measureRef.kind === "ratio") return [m];
+
+    const aceitos = disponiveis.get(m.measureRef.id)!;
+    const cortes = m.cortes.filter((c) => aceitos.has(c));
+    // Medida sem NENHUM corte aceito não tem como ser aberta.
+    return cortes.length === 0 ? [] : [{ ...m, cortes }];
+  });
 }

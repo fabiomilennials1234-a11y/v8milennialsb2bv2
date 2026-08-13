@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
+import type { MetricTreeNode } from "@/modules/analytics/lib/metric-tree";
+import type { MetricFilters, MetricFormatId } from "@/modules/analytics/lib/metric-vocabulary";
 
 // Métricas Montáveis, Camada 2 (#1194 / ADR-0023).
 // Widget ÚNICO via fn_metric_measure. Usado no design-time do Composer (preview
@@ -10,25 +12,37 @@ import { isMissingSchemaError } from "@/lib/rpc-errors";
 
 export type MetricPeriod = "day" | "week" | "month" | "range";
 
-// measure_ref: leaf {id} | ratio {num,den}. Só IDs do catálogo — nunca SQL/coluna.
+/**
+ * measure_ref — só IDs do catálogo, nunca SQL/coluna.
+ *
+ *   leaf   {id}            uma medida
+ *   ratio  {num,den}       razão v1 (profundidade 1) — deriva percent e
+ *                          MULTIPLICA por 100 em count/count
+ *   custom {id}            definição salva em `metric_custom_definitions`
+ *   tree   {tree,...}      árvore inline, para a prévia do compositor
+ *
+ * ⚠ `custom` e `tree` (Emenda 1 do ADR-0023) NÃO multiplicam por 100 em
+ * unidade nenhuma: `count ÷ count` deriva `ratio`. Quem quer percentual põe
+ * `× 100` na própria árvore. Ver `lib/metric-tree.ts`.
+ */
 export type MeasureRef =
   | { kind: "leaf"; id: string }
-  | { kind: "ratio"; num: string; den: string };
+  | { kind: "ratio"; num: string; den: string }
+  | { kind: "custom"; id: string }
+  | { kind: "tree"; tree: MetricTreeNode; format_id?: MetricFormatId };
 
-// Allowlist de filtros — espelha o trigger do banco. NUNCA organization_id.
-export interface MetricFilters {
-  pipeline_id?: string;
-  member_id?: string;
-  origin?: string;
-  tag_id?: string;
-  product_id?: string;
-  stream?: "novo_negocio" | "carteira";
-}
+// Re-exportado daqui por compatibilidade: o tipo mora em `lib/metric-vocabulary`
+// para não fechar ciclo com `metric-tree`.
+export type { MetricFilters };
 
 export interface MetricMeasureResult {
-  kind: "leaf" | "ratio";
+  kind: "leaf" | "ratio" | "custom" | "tree";
   measure_id?: string;
   measure_ref?: MeasureRef;
+  /** Só em kind='custom': o nome que o cliente deu à métrica. */
+  label?: string | null;
+  /** Só em custom/tree: o formato declarado na definição. */
+  format_id?: MetricFormatId | null;
   unit: string;
   currency: string | null;
   anchor: string | null;

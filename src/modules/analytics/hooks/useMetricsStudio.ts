@@ -3,7 +3,6 @@ import { useMetricsStudioPanel } from "./useMetricsStudioPanel";
 import type { StudioWindow } from "@/modules/analytics/lib/metrics-studio-window";
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import {
-  ENGINE_BY_ID,
   ehEscalar,
   type EngineMetric,
   type MetricRecorte,
@@ -120,7 +119,13 @@ export interface MetricsStudioApi {
   clear: () => void;
 }
 
-export function useMetricsStudio(): MetricsStudioApi {
+/**
+ * `byId` vem de fora (`useStudioCatalog`) e não de um `Map` estático: desde a
+ * fatia 10 o catálogo inclui as métricas personalizadas da organização, que
+ * chegam do banco. Resolver janela por mapa de import deixaria toda janela
+ * personalizada órfã depois de recarregar a página.
+ */
+export function useMetricsStudio(byId: Map<string, EngineMetric>): MetricsStudioApi {
   // SCRUM-309: o painel vive no servidor. O estado local é a cópia de
   // trabalho — arrastar produz dezenas de mudanças por segundo e nenhuma delas
   // deve virar requisição.
@@ -226,7 +231,7 @@ export function useMetricsStudio(): MetricsStudioApi {
     (id: string, corte: MetricRecorte, bounds: Bounds) =>
       mutar((prev) => {
         const alvo = prev.windows.find((w) => w.id === id);
-        const metric = alvo && ENGINE_BY_ID.get(alvo.metricId);
+        const metric = alvo && byId.get(alvo.metricId);
         if (!alvo || !metric) return prev;
 
         // Trocar o corte muda o formato do dado: "por dia" vira série
@@ -243,7 +248,7 @@ export function useMetricsStudio(): MetricsStudioApi {
           windows: outras.concat(acomodar(alvo, crescido, outras, bounds)).sort((a, b) => a.z - b.z),
         };
       }),
-    [mutar],
+    [mutar, byId],
   );
 
   // Ordem-z é estado de UI, mas persiste junto: reabrir o painel com as
@@ -265,8 +270,8 @@ export function useMetricsStudio(): MetricsStudioApi {
   const clear = useCallback(() => mutar(() => EMPTY), [mutar]);
 
   const openMetricIds = useMemo(
-    () => new Set(windows.filter((w) => ENGINE_BY_ID.has(w.metricId)).map((w) => w.metricId)),
-    [windows],
+    () => new Set(windows.filter((w) => byId.has(w.metricId)).map((w) => w.metricId)),
+    [windows, byId],
   );
 
   return {

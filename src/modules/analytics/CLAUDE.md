@@ -102,15 +102,62 @@ Superfície nova. Comando vira **operação** (o que fazer agora), Estúdio vira
 |---|---|
 | Página | `pages/MetricsStudio.tsx` (rota WIDE — ver `WIDE_LAYOUT_PATTERNS`) |
 | Inventário do roadmap (29 métricas) | `lib/metrics-studio-catalog.ts` — NÃO é o que a UI lista |
-| Mapa Estúdio→motor | `lib/metrics-studio-engine-map.ts` (+ `.test.ts`) |
+| Vocabulário fechado (folha, sem deps) | `lib/metric-vocabulary.ts` — `MetricRecorte`, `MetricFormatId`, `MetricUnit`, `MetricFilters` |
+| Mapa Estúdio→motor | `lib/metrics-studio-engine-map.ts` (+ `.test.ts`) — 16 medidas + 5 razões |
+| Árvore personalizada (espelho do validador SQL) | `lib/metric-tree.ts` |
 | Período Estúdio→motor | `lib/metrics-studio-period.ts` (+ `.test.ts`) |
 | Dado de uma janela | `hooks/useMetricWindowData.ts` |
-| Estado do painel | `hooks/useMetricsStudio.ts` (cópia de trabalho em memória) |
+| Catálogo efetivo (fábrica + personalizadas) | `hooks/useStudioCatalog.ts` |
+| CRUD de métrica personalizada | `hooks/useMetricCustomDefinitions.ts` → `metric_custom_definitions` |
+| Estado do painel | `hooks/useMetricsStudio.ts` (cópia de trabalho; recebe `byId` do catálogo) |
 | Persistência do painel | `hooks/useMetricsStudioPanel.ts` → tabela `metrics_studio_panels`, 1 por (org, membro) |
 | Trava de rollout | `hooks/useMetricsStudioEnabled.ts` → `organizations.metrics_studio_enabled` |
 | Lista lateral | `components/metrics-studio/MetricsStudioSidebar.tsx` |
+| Compositor de métrica | `components/metrics-studio/MetricComposer.tsx` |
 | Canvas / janela | `components/metrics-studio/{MetricsCanvas,MetricWindow}.tsx` |
 | Gráficos | `components/metrics-studio/charts/Studio{Line,Pie}Chart.tsx` (Candle existe e está DESLIGADO — G3) |
+
+### 🔴 Lead ≠ Negócio (fatia 9 · migration `20270813100000`)
+
+A unidade do funil é o **NEGÓCIO** (ADR-0023 `negocio-is-the-funnel-unit`). O motor
+passou a distinguir, e as duas medidas leem a MESMA tabela:
+
+| medida | conta | prod 2026-08-12 |
+|---|---|---|
+| `negocios_na_etapa` | `COUNT(*)` de entrada aberta | 41.025 |
+| `leads_na_etapa` | `COUNT(DISTINCT lead_id)` | 36.073 |
+
+⚠️ **`leads_na_etapa` MUDOU de conta.** Painel salvo apontando para ela cai 12%.
+É a correção, não o efeito colateral — e é grátis hoje porque o Estúdio inteiro
+está atrás de `metrics_studio_enabled`, que não está em prod.
+
+O StudioMetric `negocios_por_etapa` **manteve o id** (painel salvo continua
+abrindo) e passou a apontar para `negocios_na_etapa`. Ele já se chamava
+"Negócios na etapa" na tela e contava entrada — três nomes, uma conta.
+
+`negocios_abertos` (âncora `entradas`, por `entered_at`) existe para a razão
+`taxa_conversao_negocio`: dividir venda por LEAD infla o denominador quando o
+lead tem vários negócios (4.380 leads têm mais de um aberto).
+
+### Métrica personalizada (fatia 10 · migration `20270813110000`)
+
+Emenda 1 do ADR-0023: profundidade ≤ 3, operadores `+ − × ÷`, folha = id do
+catálogo (+ filtro da allowlist) ou número literal, árvore `jsonb` tipada.
+
+- `measure_ref` ganhou `kind='custom'` (definição salva) e `kind='tree'` (prévia
+  inline do compositor). Os dois passam pelo mesmo validador e pelo mesmo
+  avaliador — prévia não é caminho privilegiado.
+- Validação nas **duas pontas**: trigger na escrita e `fn_metric_tree_validate`
+  em runtime, porque a linha gravada sobrevive a mudança de validador.
+- Escrita é **admin-only** (`get_my_admin_organization_ids()`); leitura é de
+  qualquer membro da org.
+
+🔴 **A armadilha de 100×, e por que ela não existe na árvore.** O ramo
+`kind='ratio'` deriva `count/count → percent` e **multiplica por 100**; o front
+apenas SUFIXA `%` sem multiplicar. Par incoerente imprime erro de 100× que nada
+detecta. Na árvore personalizada, `count ÷ count` deriva **`ratio`** e o motor
+**nunca multiplica** — quem quer percentual escreve `× 100` na composição, e o
+compositor avisa em português quando o formato é `percent_1`.
 
 **Estado, após o grill de 2026-08-11** (13 decisões em `.specs/features/metricas-v2/SPEC.md` §1.7):
 
