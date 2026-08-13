@@ -50,6 +50,30 @@
 -- function calculate-portfolio-health vai PRIMEIRO. O cron dela reescreve todas
 -- estas colunas a cada 30min — aplicar só esta migration seria desfeito no ciclo
 -- seguinte.
+--
+-- ─── Duas regras da casa que esta migration toca de propósito ────────────────
+--
+-- 1. LINT DE MÉTRICAS (ADR-0017, regra ledger-revenue) — suprimido na linha do
+--    `sum(sale_value)` com `-- metric-lint-allow`. Justificativa: essa linha é
+--    HERDADA VERBATIM da função que já roda em produção (conferida por
+--    pg_get_functiondef); esta migration não cria superfície de receita nova nem
+--    muda um centavo de lifetime_value — só troca o DIVISOR do avg_ticket (de
+--    linhas para pedidos). Reescrever a receita para o caderno de eventos é o
+--    SP-3 da própria ADR e continua ABERTO: medido no PROD em 13/08, o caderno
+--    tem R$ 248.234,96 no stream 'carteira' contra R$ 1.954.654,93 em
+--    upsell_orders (12,7%), alcança 210 dos 888 clientes ativos, e NENHUM dos
+--    seus eventos referencia uma linha de upsell_orders (o caderno registra a
+--    venda na entrada em etapa `won`, não a recompra por pedido). Migrar agora
+--    zeraria 87% da receita da carteira.
+--
+-- 2. GUARDA F4 ("migration = só schema", CLAUDE.md raiz) — o DO block de backfill
+--    no fim CONTRARIA essa guarda, deliberadamente. Sem ele, 135 dos 333 clientes
+--    afetados ficariam com o ciclo errado indefinidamente: o cron só processa org
+--    com a feature `customer_portfolio` ligada (ela não é default-enabled) e
+--    alcança apenas 197; a trigger só dispara em escrita nova de order. O que
+--    reduz o risco que a F4 protege: o backfill reescreve SÓ colunas DERIVADAS,
+--    recomputáveis a qualquer momento a partir de upsell_orders — um apply em
+--    alvo errado não destrói dado de origem, basta rodar o recompute de novo.
 
 CREATE OR REPLACE FUNCTION public.recalc_upsell_client_metrics(p_client_id uuid)
 RETURNS void
@@ -94,7 +118,7 @@ BEGIN
   -- count(*) = linhas; count(DISTINCT dia UTC) = pedidos de verdade.
   SELECT count(*),
          count(DISTINCT (sold_at AT TIME ZONE 'UTC')::date),
-         COALESCE(sum(sale_value), 0),
+         COALESCE(sum(sale_value), 0),  -- metric-lint-allow: linha herdada verbatim da função viva; receita inalterada, ver cabeçalho (ADR-0017 SP-3)
          max(sold_at)
     INTO v_order_count, v_day_count, v_total, v_last
   FROM upsell_orders
