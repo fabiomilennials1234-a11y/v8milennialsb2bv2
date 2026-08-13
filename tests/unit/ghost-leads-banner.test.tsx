@@ -33,12 +33,32 @@ describe("GhostLeadsBanner", () => {
 
   it("renders singular text for ghostCount=1", () => {
     render(<GhostLeadsBanner pipeType="whatsapp" ghostCount={1} />);
-    expect(screen.getByText(/1 card está com inconsistência de permissão/)).toBeTruthy();
+    expect(screen.getByText(/1 lead deste funil não aparece para você/)).toBeTruthy();
   });
 
   it("renders plural text for ghostCount>1", () => {
     render(<GhostLeadsBanner pipeType="propostas" ghostCount={7} />);
-    expect(screen.getByText(/7 cards estão com inconsistência de permissão/)).toBeTruthy();
+    expect(screen.getByText(/7 leads deste funil não aparecem para você/)).toBeTruthy();
+  });
+
+  // O corpo NÃO pode voltar a mandar revisar permissão. O texto anterior dizia
+  // "inconsistência de permissão / peça ao administrador para revisar", e o caso
+  // dominante em produção não é inconsistência: é a org ter configurado carteira
+  // por pessoa. Aquele texto empurrava o admin a religar `leads.view_all`, ou
+  // seja, a desfazer a própria decisão. Ancorado aqui para não regredir.
+  it("explains the carteira setup instead of asking to review permissions", () => {
+    render(<GhostLeadsBanner pipeType="custom" ghostCount={430} />);
+    expect(screen.getByText(/não é um erro/)).toBeTruthy();
+    expect(screen.queryByText(/inconsistência de permissão/)).toBeNull();
+    expect(screen.queryByText(/revisar/)).toBeNull();
+  });
+
+  it("accepts the custom pipe type — the only live consumer today", () => {
+    render(<GhostLeadsBanner pipeType="custom" ghostCount={575} />);
+    expect(screen.getByText(/575 leads deste funil não aparecem para você/)).toBeTruthy();
+    expect(mockTrack).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: { pipe_type: "custom", ghost_count: 575 } }),
+    );
   });
 
   it("fires pipe.ghost_leads_detected with pipe_type + count", () => {
