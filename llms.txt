@@ -20,6 +20,7 @@ Important notes:
 - [CLAUDE.md](CLAUDE.md): spec Claude Code (subagentes + áreas frágeis)
 - [AGENTS.md](AGENTS.md): spec agent-agnostic
 - [CONTRIBUTING.md](CONTRIBUTING.md): branch/commit/PR + protocolo vault
+- [MASTER-ROADMAP-WORLD-CLASS.md](docs/MASTER-ROADMAP-WORLD-CLASS.md): 7 waves, 47 gaps. Ler ANTES de remover arquivo — distingue andaime de wave futura de resíduo morto
 
 ## Arquitetura
 
