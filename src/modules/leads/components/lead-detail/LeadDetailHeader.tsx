@@ -1,6 +1,6 @@
 import { memo } from "react";
 import {
-  MessageSquare, Phone, PhoneCall, Send, Clock,
+  MessageSquare, Mail, Phone, PhoneCall, Send, Clock,
   Bot, MoreVertical, Flame, X,
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -16,6 +16,7 @@ import { ORIGIN_COLORS } from "../leads/LeadCard";
 import { StageProgressBar } from "./StageProgressBar";
 import { cn } from "@/lib/utils";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { EMAIL_CHANNEL_AVAILABLE, SMS_CHANNEL_AVAILABLE } from "@/modules/communication/lib/channel-availability";
 import type { DrawerVariant } from "./legacy/drawer-variant";
 
 const VARIANT_LABELS: Record<DrawerVariant, string> = {
@@ -34,6 +35,9 @@ interface LeadDetailHeaderProps {
   onClose: () => void;
   onOpenScheduleModal: () => void;
   onOpenCallModal: () => void;
+  onOpenEmailWriter: () => void;
+  onOpenEmailComposer: () => void;
+  onOpenSmsDialog: () => void;
   onDelete: () => void;
 }
 
@@ -43,7 +47,8 @@ function initials(name: string | undefined) {
 
 export const LeadDetailHeader = memo(function LeadDetailHeader({
   lead, variant, stages, currentStageId, currentAiDisabled,
-  onToggleAI, onClose, onOpenScheduleModal, onOpenCallModal, onDelete,
+  onToggleAI, onClose, onOpenScheduleModal, onOpenCallModal,
+  onOpenEmailWriter, onOpenEmailComposer, onOpenSmsDialog, onDelete,
 }: LeadDetailHeaderProps) {
   const openWhatsApp = useOpenWhatsAppChat();
   const originColor = ORIGIN_COLORS[lead.origin] || ORIGIN_COLORS.outro;
@@ -115,6 +120,11 @@ export const LeadDetailHeader = memo(function LeadDetailHeader({
             <MessageSquare className="w-3 h-3" /> WhatsApp
           </Button>
         )}
+        {EMAIL_CHANNEL_AVAILABLE && lead.email && (
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onOpenEmailComposer}>
+            <Mail className="w-3 h-3" /> Email
+          </Button>
+        )}
         {lead.phone && (
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1" asChild>
             <a href={`tel:${(lead.phone || "").replace(/\D/g, "")}`}>
@@ -142,6 +152,11 @@ export const LeadDetailHeader = memo(function LeadDetailHeader({
               <DropdownMenuItem onClick={onOpenCallModal}>
                 <PhoneCall className="w-4 h-4 mr-2" /> Registrar ligação
               </DropdownMenuItem>
+              {EMAIL_CHANNEL_AVAILABLE && (
+                <DropdownMenuItem onClick={onOpenEmailWriter}>
+                  <Mail className="w-4 h-4 mr-2" /> Email com IA
+                </DropdownMenuItem>
+              )}
               {lead.phone && (
                 <>
                   <DropdownMenuItem onClick={onOpenScheduleModal}>
@@ -152,6 +167,11 @@ export const LeadDetailHeader = memo(function LeadDetailHeader({
                       <Send className="w-4 h-4 mr-2" /> Enviar mensagem
                     </Link>
                   </DropdownMenuItem>
+                  {SMS_CHANNEL_AVAILABLE && (
+                    <DropdownMenuItem onClick={onOpenSmsDialog}>
+                      <Phone className="w-4 h-4 mr-2" /> Enviar SMS
+                    </DropdownMenuItem>
+                  )}
                 </>
               )}
               <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">

@@ -1,6 +1,6 @@
 import { memo } from "react";
 import {
-  MessageSquare, Phone, Bot, MoreVertical, Clock,
+  MessageSquare, Phone, Mail, Bot, MoreVertical, Clock,
   Send, PhoneCall, Trash2,
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ScheduleFollowUpButton } from "@/modules/engagement/components/followups/ScheduleFollowUpButton";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { EMAIL_CHANNEL_AVAILABLE, SMS_CHANNEL_AVAILABLE } from "@/modules/communication/lib/channel-availability";
 import { useLeadActionGates } from "../hooks/useLeadActionGates";
 import { cn } from "@/lib/utils";
 
@@ -26,14 +27,18 @@ interface LeadModalToolbarProps {
   aiDisabled: boolean;
   onToggleAI: (enabled: boolean) => void;
   onOpenCallModal: () => void;
+  onOpenEmailComposer: () => void;
+  onOpenEmailWriter: () => void;
   onOpenScheduleModal: () => void;
+  onOpenSmsDialog: () => void;
   onDelete: () => void;
   onClose: () => void;
 }
 
 export const LeadModalToolbar = memo(function LeadModalToolbar({
   lead, aiDisabled, onToggleAI,
-  onOpenCallModal, onOpenScheduleModal, onDelete, onClose,
+  onOpenCallModal, onOpenEmailComposer, onOpenEmailWriter,
+  onOpenScheduleModal, onOpenSmsDialog, onDelete, onClose,
 }: LeadModalToolbarProps) {
   const openWhatsApp = useOpenWhatsAppChat();
   const gates = useLeadActionGates(lead.id);
@@ -59,6 +64,11 @@ export const LeadModalToolbar = memo(function LeadModalToolbar({
           <a href={`tel:${lead.phone.replace(/\D/g, "")}`}>
             <Phone className="w-3.5 h-3.5" /> Ligar
           </a>
+        </Button>
+      )}
+      {EMAIL_CHANNEL_AVAILABLE && lead.email && canSendMessage && (
+        <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={onOpenEmailComposer}>
+          <Mail className="w-3.5 h-3.5" /> Email
         </Button>
       )}
       <ScheduleFollowUpButton
@@ -88,9 +98,16 @@ export const LeadModalToolbar = memo(function LeadModalToolbar({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             {canSendMessage && (
-              <DropdownMenuItem onClick={onOpenCallModal}>
-                <PhoneCall className="w-3.5 h-3.5 mr-2" /> Registrar ligação
-              </DropdownMenuItem>
+              <>
+                <DropdownMenuItem onClick={onOpenCallModal}>
+                  <PhoneCall className="w-3.5 h-3.5 mr-2" /> Registrar ligação
+                </DropdownMenuItem>
+                {EMAIL_CHANNEL_AVAILABLE && (
+                  <DropdownMenuItem onClick={onOpenEmailWriter}>
+                    <Mail className="w-3.5 h-3.5 mr-2" /> Email com IA
+                  </DropdownMenuItem>
+                )}
+              </>
             )}
             {lead.phone && canSendMessage && (
               <>
@@ -102,6 +119,11 @@ export const LeadModalToolbar = memo(function LeadModalToolbar({
                     <Send className="w-3.5 h-3.5 mr-2" /> Abrir conversa
                   </Link>
                 </DropdownMenuItem>
+                {SMS_CHANNEL_AVAILABLE && (
+                  <DropdownMenuItem onClick={onOpenSmsDialog}>
+                    <Phone className="w-3.5 h-3.5 mr-2" /> Enviar SMS
+                  </DropdownMenuItem>
+                )}
               </>
             )}
             {gates.canDelete.allowed && (
