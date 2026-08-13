@@ -42,6 +42,71 @@ export type SignalInput = {
 
 const WEIGHTS = { recency: 0.35, frequency: 0.25, ticket: 0.25, engagement: 0.15 };
 
+export const DEFAULT_CYCLE_DAYS = 30;
+
+// ─── Pedido real vs linha de item ────────────────────────────────────────────
+//
+// `upsell_orders` grava UMA LINHA POR ITEM de produto — não existe coluna que
+// agrupe as linhas de um mesmo pedido (`external_id` do Tiny é por linha). Tratar
+// linha como pedido fazia uma venda de 2 itens virar "2 pedidos separados por 0
+// dia" → ciclo de recompra = 1 dia → o KPI de Receita Recorrente multiplicava o
+// ticket por 30 (30/ciclo). Medido no PROD 2026-08-13: 107 clientes na frota,
+// 99 deles na Basic4u (ciclo médio 18 → 41, ticket médio R$ 1.278 → R$ 1.999).
+//
+// Pedido = todas as linhas do mesmo cliente no mesmo DIA UTC de `sold_at`.
+// UTC (e não America/Sao_Paulo) porque tem que casar exatamente com o
+// `(sold_at AT TIME ZONE 'UTC')::date` do gêmeo em SQL — se as duas
+// implementações divergirem, o valor gravado oscila entre a trigger e o cron de
+// 30min (ver src/modules/carteira/CLAUDE.md). Diferença medida entre os dois
+// fusos no PROD: 1 cliente em 333.
+
+export type OrderLike = { sold_at: string; sale_value: number | string };
+
+export type DayOrder = {
+  /** dia UTC no formato YYYY-MM-DD — espelha `(sold_at AT TIME ZONE 'UTC')::date` */
+  day: string;
+  /** soma de `sale_value` de todas as linhas daquele dia */
+  saleValue: number;
+};
+
+/**
+ * Colapsa linhas de item no pedido real (cliente + dia UTC), somando o valor.
+ * Retorna ordenado por dia ASC. Linhas com `sold_at` inválido são descartadas
+ * (antes viravam NaN no ciclo e contaminavam a média).
+ */
+export function groupOrdersByDay(orders: OrderLike[]): DayOrder[] {
+  const byDay = new Map<string, number>();
+
+  for (const o of orders) {
+    const ts = new Date(o.sold_at);
+    if (Number.isNaN(ts.getTime())) continue;
+    const day = ts.toISOString().slice(0, 10);
+    byDay.set(day, (byDay.get(day) ?? 0) + Number(o.sale_value ?? 0));
+  }
+
+  return [...byDay.entries()]
+    .map(([day, saleValue]) => ({ day, saleValue }))
+    .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+}
+
+/**
+ * Ciclo de recompra = média dos gaps entre DIAS distintos de compra.
+ * Menos de 2 pedidos → não há gap pra medir, cai no default da org.
+ */
+export function computeCycleDays(dayOrders: DayOrder[], orgDefault?: number): number {
+  const fallback = orgDefault ?? DEFAULT_CYCLE_DAYS;
+  if (dayOrders.length < 2) return fallback;
+
+  const gaps: number[] = [];
+  for (let i = 1; i < dayOrders.length; i++) {
+    const prev = new Date(`${dayOrders[i - 1].day}T00:00:00Z`).getTime();
+    const curr = new Date(`${dayOrders[i].day}T00:00:00Z`).getTime();
+    gaps.push(Math.abs(curr - prev) / (1000 * 60 * 60 * 24));
+  }
+
+  return Math.max(1, Math.round(gaps.reduce((s, g) => s + g, 0) / gaps.length));
+}
+
 export function calculateRecencyScore(daysSinceLast: number, cycleDays: number): number {
   if (cycleDays <= 0) return 50;
   if (daysSinceLast <= cycleDays) return 100;
