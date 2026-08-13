@@ -192,9 +192,31 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
       );
     }
 
-    await supabase.from("workflow_executions")
+    // O retorno NAO pode ser descartado. `context` e jsonb, e o supabase-js v2 devolve
+    // `{error}` em vez de lancar: um UPDATE recusado passava despercebido e congelava
+    // `updated_at`/`current_node_id` no valor do claim. Congelado,
+    // `claim_workflow_executions` reclama a execucao 10 min depois e ela re-executa A
+    // PARTIR do no atual — refazendo POSTs e reenviando mensagens, indefinidamente.
+    // `stripJsonbUnsafe` tapa a entrada conhecida (U+0000); esta degradacao existe para
+    // que QUALQUER outra recusa vinda da coluna `context` custe a persistencia do
+    // context, nunca o avanco do heartbeat.
+    const { error: heartbeatError } = await supabase.from("workflow_executions")
       .update(heartbeat)
       .eq("id", executionId);
+
+    if (heartbeatError && heartbeat.context !== undefined) {
+      delete heartbeat.context;
+      const { error: retryError } = await supabase.from("workflow_executions")
+        .update(heartbeat)
+        .eq("id", executionId);
+      console.warn(
+        `[workflow-executor] heartbeat COM context recusado na execucao ${executionId} (${heartbeatError.message}) — regravado sem context${retryError ? ` — e o sem-context TAMBEM falhou: ${retryError.message}` : ""}`,
+      );
+    } else if (heartbeatError) {
+      console.warn(
+        `[workflow-executor] heartbeat recusado na execucao ${executionId}: ${heartbeatError.message}`,
+      );
+    }
 
     try {
       switch (node.type) {

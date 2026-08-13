@@ -24,6 +24,16 @@ const FLATTEN_MAX_DEPTH = 3;
 const FLATTEN_MAX_KEYS = 50;
 
 /**
+ * Teto de caracteres de UMA folha achatada. O orcamento de `FLATTEN_MAX_KEYS` conta
+ * CHAVES, nunca bytes: sem este teto, 50 folhas de tamanho ilimitado passavam por cima
+ * da guarda de 128 KB que o heartbeat usa para decidir se persiste o `context` — e uma
+ * pausa (delay, janela de atendimento) depois disso retomava com o context ANTERIOR ao
+ * no de codigo, mandando `{{resposta.id}}` literal ao lead. Espelha o corte de 2000 do
+ * `webhook_call`, o outro escritor de context vindo de rede.
+ */
+const FLATTEN_MAX_LEAF_CHARS = 2_000;
+
+/**
  * Escapa um valor para dentro de uma string JSON (sem as aspas externas).
  * Sem isto, um lead chamado `Pneus "Bom Preço" Ltda` quebra o `JSON.parse` do nó JSON
  * — e, no nó HTTPS, quebra o JSON que descreve a requisição inteira.
@@ -184,7 +194,22 @@ export function flattenForContext(
   value: unknown,
   out: Record<string, string | number | boolean>,
 ): void {
+  // As folhas da passada ANTERIOR saem antes. `clearCodeOutput` cobre os caminhos em que
+  // o no NAO produz saida; este cobre o caminho em que ele produz — e e onde o residuo
+  // passa despercebido, porque nao ha erro nenhum na tela. Volta 1 responde
+  // `{"status":"erro","mensagem":"cartao recusado"}`, volta 2 responde `{"status":"ok"}`:
+  // sem a varredura, `{{resposta.mensagem}}` mandaria "cartao recusado" ao lead depois de
+  // um pagamento aprovado, com o passo gravado como `success`.
+  sweepLeaves(prefix, out);
   flattenInto(prefix, value, out, 0, { written: 0 });
+}
+
+/** Apaga as folhas pontilhadas de `prefix`, sem tocar em `out[prefix]`. */
+export function sweepLeaves(prefix: string, out: Record<string, unknown>): void {
+  const stale = `${prefix}.`;
+  for (const key of Object.keys(out)) {
+    if (key.startsWith(stale)) delete out[key];
+  }
 }
 
 /**
@@ -232,7 +257,10 @@ function flattenInto(
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     // depth 0 é o próprio prefixo — ver o comentário de flattenForContext.
     if (depth === 0) return;
-    out[path] = value;
+    // `capString` corta no teto E saneia para jsonb: a folha e gravada CRUA a partir do
+    // corpo ja decodificado, entao e por aqui que um U+0000 vindo de uma resposta de API
+    // entrava no context e congelava o heartbeat.
+    out[path] = typeof value === "string" ? capString(value, FLATTEN_MAX_LEAF_CHARS) : value;
     budget.written++;
     return;
   }
@@ -251,15 +279,43 @@ function flattenInto(
 }
 
 /**
- * Trunca para no máximo `max` caracteres, anexando "…" quando cortou.
+ * Remove o que o Postgres recusa DENTRO de jsonb, mesmo sendo JSON válido no fio:
+ * `U+0000` e surrogates órfãos. Os dois produzem `22P05` ("unsupported Unicode escape
+ * sequence") quando o PostgREST repassa o corpo, e a recusa é invisível: nem `recordStep`
+ * nem o heartbeat conferem o `error` do retorno, e o supabase-js v2 devolve `{error}` em
+ * vez de lançar.
+ *
+ * O estrago do `U+0000` não fica no passo: ele entra em `context` (corpo de API com byte
+ * 0x00, ou um `\u0000` numa string do JSON do usuário) e, a partir daí, TODO UPDATE que
+ * leve a coluna `context` falha calado — `updated_at` e `current_node_id` congelam no
+ * valor do claim, `claim_workflow_executions` reclama a execução 10 min depois e ela
+ * re-executa A PARTIR do nó de código, refazendo os POSTs e reenviando as mensagens já
+ * enviadas, a cada 10 minutos. Sanear na entrada é o que impede o replay.
+ */
+export function stripJsonbUnsafe(s: string): string {
+  // O U+0000 sai por `replaceAll` com PADRÃO DE STRING: a forma /\u0000/g dispara
+  // `no-control-regex`, e silenciar a regra num arquivo que trata dado de terceiros
+  // custa mais do que trocar a forma da chamada.
+  return s
+    .replaceAll("\u0000", "")
+    .replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, "");
+}
+
+/**
+ * Trunca para no máximo `max` caracteres, anexando "…" quando cortou, e devolve string
+ * segura para jsonb (ver `stripJsonbUnsafe`).
  * Não parte par surrogate: cortar no meio de um emoji produziria um caractere solto
  * que quebra o `JSON.stringify` do jsonb na hora de gravar o passo.
  */
 export function capString(s: string, max: number): string {
   if (max <= 0) return "";
-  if (s.length <= max) return s;
 
-  let cut = s.slice(0, max - 1);
+  // Sanear ANTES de medir: o corte é por comprimento, e remover caracteres depois
+  // deixaria o resultado abaixo do teto sem motivo.
+  const safe = stripJsonbUnsafe(s);
+  if (safe.length <= max) return safe;
+
+  let cut = safe.slice(0, max - 1);
   const last = cut.charCodeAt(cut.length - 1);
   if (last >= 0xd800 && last <= 0xdbff) cut = cut.slice(0, -1); // high surrogate órfão
 
