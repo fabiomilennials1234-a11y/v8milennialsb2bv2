@@ -1,12 +1,16 @@
 /**
- * Integration tests for lead-service against PRODUCTION Supabase.
+ * Testes do lead-service contra um Supabase REMOTO — uma BRANCH EFÊMERA.
  *
- * Uses an isolated test organization — never touches customer data.
- * All test data is created and cleaned up within the test run.
+ * Rodava contra PRODUÇÃO, criando organização lá, e vivia dentro do glob de
+ * `npm run test:integration`. Ver `tests/remote/guard.ts` para a decisão.
  *
- * Run: SUPABASE_URL=https://jsjsmuncfkbsbzqzqhfq.supabase.co \
- *      SUPABASE_SERVICE_ROLE_KEY=<key> \
- *      npx vitest run tests/integration/lead-service-prod.test.ts
+ * Rodar:
+ *   # 1. crie a branch — .specs/project/runbook-validacao-local.md
+ *   # 2. exporte o alvo (o guard RECUSA o ref de produção)
+ *   TEST_SUPABASE_URL=https://<ref-da-branch>.supabase.co \
+ *   TEST_SUPABASE_SERVICE_ROLE_KEY=<chave-da-branch> \
+ *   npm run test:remote
+ *   # 3. ENCERRE a branch no mesmo ciclo
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -16,7 +20,7 @@ import {
   cleanupTestData,
   deleteTestOrg,
   INTEGRATION_TEST_ORG_NAME,
-} from './setup-prod';
+} from './setup-remote';
 import {
   getOrCreateLead,
   normalizePhoneForSearch,

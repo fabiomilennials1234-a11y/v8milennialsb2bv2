@@ -1,27 +1,30 @@
 /**
- * Integration test setup — connects to PRODUCTION Supabase.
+ * Setup das suítes que falam com um Supabase REMOTO.
  *
- * Uses an isolated test organization that does NOT interact with real customer data.
- * All test data is created in beforeAll and cleaned up in afterAll.
+ * Antes chamava-se `setup-prod.ts` e trazia o ref de PRODUÇÃO como default —
+ * com `ensureTestOrg()` criando organização lá. Estava dentro do glob de
+ * `npm run test:integration`, que o CI roda a cada push; o que impedia o
+ * estrago era só a ausência de uma variável de ambiente.
  *
- * IMPORTANT: This setup uses the service_role key for full access.
- * The test org is completely isolated via organization_id scoping.
+ * Agora o alvo vem do `guard`, que RECUSA produção. Ver o cabeçalho de
+ * `tests/remote/guard.ts` para a decisão e o porquê.
+ *
+ * A org de teste continua isolada por `organization_id` — mas isolamento em
+ * produção nunca foi a garantia certa. A garantia certa é não estar lá.
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { alvoRemoto, chaveRemota } from './guard';
 
-const PROD_SUPABASE_URL =
-  process.env.PROD_SUPABASE_URL || 'https://jsjsmuncfkbsbzqzqhfq.supabase.co';
-const PROD_SERVICE_ROLE_KEY = process.env.PROD_SUPABASE_SERVICE_ROLE_KEY;
+/**
+ * Cliente da BRANCH EFÊMERA. O nome antigo (`supabaseProd`) fica como alias
+ * para não reescrever as suítes num commit que é sobre segurança, não sobre
+ * renomear — mas ele já não aponta para produção, e o guard garante isso.
+ */
+export const supabaseRemoto = createClient(alvoRemoto(), chaveRemota());
 
-if (!PROD_SERVICE_ROLE_KEY) {
-  throw new Error(
-    'PROD_SUPABASE_SERVICE_ROLE_KEY is required to run production integration tests. ' +
-      'Set it in your local .env (never commit it).',
-  );
-}
-
-export const supabaseProd = createClient(PROD_SUPABASE_URL, PROD_SERVICE_ROLE_KEY);
+/** @deprecated Use `supabaseRemoto`. Mantido para não misturar assuntos no diff. */
+export const supabaseProd = supabaseRemoto;
 
 // Test org ID — created by ensureTestOrg(), cleaned up by cleanupTestOrg()
 export const INTEGRATION_TEST_ORG_NAME = '__integration_test_org__';

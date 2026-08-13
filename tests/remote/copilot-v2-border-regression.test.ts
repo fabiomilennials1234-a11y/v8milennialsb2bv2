@@ -15,8 +15,13 @@
 import { describe, it, expect } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
 
-const PROD_URL = 'https://jsjsmuncfkbsbzqzqhfq.supabase.co';
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+// O alvo vem do guard, que RECUSA produção (ver tests/remote/guard.ts). Antes
+// esta linha era o ref de prod HARDCODED — sem env, sem escapatória — e a única
+// coisa entre ele e o CI era o `describe.skip` da linha abaixo.
+import { alvoRemoto, chaveRemota, semAlvoRemoto } from './guard';
+
+const PROD_URL = semAlvoRemoto ? 'http://alvo-nao-configurado.invalid' : alvoRemoto();
+const SERVICE_KEY = semAlvoRemoto ? '' : chaveRemota();
 const ORG = '6030520a-2ca7-477d-be89-55758e2cd808'; // Milennials
 // NOTE: foundation migration 20260531174908_copilot_v2_foundation IS applied to prod.
 // Lazy — constructing a client with an empty key throws at import time.
