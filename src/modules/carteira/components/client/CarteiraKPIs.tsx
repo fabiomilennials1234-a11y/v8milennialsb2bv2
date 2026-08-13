@@ -69,7 +69,7 @@ export function CarteiraKPIs() {
       <KPICard
         label="Receita Recorrente"
         value={formatBRL(totalRecurring)}
-        sub="ticket médio mensal"
+        sub="clientes em dia com a recompra"
         valueClassName={totalRecurring > 0 ? "text-primary" : undefined}
       />
 
