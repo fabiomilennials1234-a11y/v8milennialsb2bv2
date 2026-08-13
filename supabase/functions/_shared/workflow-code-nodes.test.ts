@@ -11,6 +11,8 @@ import {
   HTTPS_MAX_TIMEOUT_MS,
   jsonEscape,
   parseHttpsRequest,
+  stripJsonbUnsafe,
+  sweepLeaves,
 } from "./workflow-code-nodes.ts";
 
 /** Extrai o spec de um resultado que se espera OK (falha o teste se não for). */
@@ -281,4 +283,69 @@ Deno.test("capString — não parte par surrogate", () => {
 Deno.test("capString — teto zero ou negativo devolve vazio", () => {
   assertEquals(capString("abc", 0), "");
   assertEquals(capString("abc", -1), "");
+});
+
+// ─── Saneamento para jsonb ──────────────────────────────────────────────────
+
+Deno.test("stripJsonbUnsafe — remove U+0000", () => {
+  // Um byte 0x00 no corpo de uma API vira U+0000 no `res.text()`. Dentro de `context`
+  // (jsonb) o Postgres recusa a conversão com 22P05, o UPDATE do heartbeat falha calado
+  // e o reclaim re-executa a partir do nó de código a cada 10 min.
+  assertEquals(stripJsonbUnsafe("a\u0000b"), "ab");
+  assertEquals(stripJsonbUnsafe("\u0000"), "");
+});
+
+Deno.test("stripJsonbUnsafe — remove surrogate órfão, preserva par válido", () => {
+  assertEquals(stripJsonbUnsafe("a\ud83db"), "ab");
+  assertEquals(stripJsonbUnsafe("a\ude00b"), "ab");
+  assertEquals(stripJsonbUnsafe("a😀b"), "a😀b");
+});
+
+Deno.test("capString — saneia U+0000 mesmo abaixo do teto", () => {
+  // O caminho perigoso não é o corte: é a string curta, que passava direto.
+  assertEquals(capString("a\u0000b", 100), "ab");
+});
+
+Deno.test("flattenForContext — folha string é saneada e cortada em 2000", () => {
+  const out: Record<string, string | number | boolean> = {};
+  flattenForContext("resposta", { nota: "x\u0000y", gigante: "z".repeat(5000) }, out);
+
+  assertEquals(out["resposta.nota"], "xy");
+  // Sem teto por folha, 50 folhas de tamanho livre empurravam o context por cima da
+  // guarda de 128 KB do heartbeat — e a pausa seguinte retomava com o context velho.
+  assertEquals(String(out["resposta.gigante"]).length, 2000);
+});
+
+Deno.test("flattenForContext — varre as folhas da passada anterior", () => {
+  const out: Record<string, string | number | boolean> = {};
+
+  flattenForContext("resposta", { status: "erro", mensagem: "cartão recusado" }, out);
+  assertEquals(out["resposta.mensagem"], "cartão recusado");
+
+  // Volta 2 do laço: a API responde com outra FORMA, sem `mensagem`.
+  flattenForContext("resposta", { status: "ok" }, out);
+
+  assertEquals(out["resposta.status"], "ok");
+  // Sem a varredura, `{{resposta.mensagem}}` mandaria "cartão recusado" ao lead depois
+  // de um pagamento aprovado — com o passo gravado como `success`.
+  assertEquals(out["resposta.mensagem"], undefined);
+});
+
+Deno.test("sweepLeaves — apaga só as folhas do prefixo", () => {
+  const out: Record<string, unknown> = {
+    "resposta": "{...}",
+    "resposta.id": 1,
+    "resposta.erro.codigo": 502,
+    "outra": "fica",
+    "outra.folha": "fica",
+  };
+
+  sweepLeaves("resposta", out);
+
+  // A chave do próprio prefixo é do executor — quem mexe nela é `clearCodeOutput`.
+  assertEquals(out["resposta"], "{...}");
+  assertEquals(out["resposta.id"], undefined);
+  assertEquals(out["resposta.erro.codigo"], undefined);
+  assertEquals(out["outra"], "fica");
+  assertEquals(out["outra.folha"], "fica");
 });
