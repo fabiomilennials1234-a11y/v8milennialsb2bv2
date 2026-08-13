@@ -138,13 +138,24 @@ function CustomPipelinePageInner() {
   // conhece tier nem responsável. Sob qualquer filtro client-side ele precisa
   // ser derivado dos items filtrados, ou contaria o que a tela não mostra.
   //
-  // Fantasma também entra na disjunção, e de propósito: a migration que
-  // conserta o RPC é de deploy MANUAL enquanto o front sobe sozinho no merge.
-  // Na janela entre os dois, o badge server-side ainda contaria os fantasmas
-  // que esta tela acabou de esconder. Derivar no cliente é exato para todas as
-  // orgs afetadas hoje — as duas com fantasma (HGE 673, Alamaster 95) estão
-  // muito abaixo do corte de 1000 linhas do PostgREST.
-  const clientCountActive = filtersActive || ghostCount > 0;
+  // ⚠️ Fantasma NÃO entra mais nesta disjunção. Entrava enquanto a migration
+  // `20270812130000` era deploy manual e o front subia sozinho no merge: na
+  // janela entre os dois, o RPC ainda somava os fantasmas que esta tela
+  // acabava de esconder. A migration está no PROD desde 2026-08-13, o RPC é
+  // SECURITY INVOKER e agora usa INNER JOIN — ele já devolve o total que a
+  // RLS autoriza PARA ESTE usuário (medido: 98 para um vendedor restrito da
+  // HGE, 670 para a admin, com o controle negado em 0).
+  //
+  // Manter o fantasma aqui custava caro e para sempre: `useCustomPipeEntries`
+  // não tem `.limit()`, então o PostgREST corta em 1000 linhas — e derivar do
+  // que sobrou faz o badge MENTIR justamente nos funis grandes. É o bug que
+  // motivou criar este RPC (ver o cabeçalho de
+  // `archive/20270315000000_get_custom_pipeline_stage_counts.sql`: "Prospecção
+  // CNAE" mostrava 1000 de 2543). Ligar por fantasma reintroduzia isso de
+  // forma PASSIVA — sem o usuário pedir filtro nenhum —, e bastava 1 lead
+  // soft-deleted para disparar, porque a policy de `leads` começa por
+  // `deleted_at IS NULL` ANTES do teste de admin.
+  const clientCountActive = filtersActive;
 
   const filterSections: FilterSectionConfig[] = useMemo(
     () => [
