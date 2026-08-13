@@ -161,10 +161,20 @@ export async function resolveInstance(
  *      "live" here (the watchdog only audits uazapi rows) and would otherwise
  *      deterministically win the recency ordering, mis-routing free-form
  *      copilot replies through the Meta API.
- *   2. FALLBACK: the legacy query byte-for-byte (provider-blind, unordered) —
- *      session_dead_since can be a stale false-positive (10-min watchdog
- *      cycle) and a hard filter would silence the copilot. This NEVER returns
- *      null where the legacy query would have returned a row.
+ *   2. FALLBACK: the legacy query, MINUS one predicate only — it drops the
+ *      liveness filter (session_dead_since can be a stale false-positive of the
+ *      10-min watchdog cycle, and a hard filter would silence the copilot) but
+ *      KEEPS the provider allowlist. It relaxes liveness, never provider. This
+ *      NEVER returns null where a LEGACY-PROVIDER row existed.
+ *
+ * PROVIDER ALLOWLIST, NOT A DENYLIST — both queries are scoped to
+ * ['uazapi','evolution']. This function hands its row to `getWhatsAppProvider`,
+ * which assumes a session-based chip; every non-legacy provider (meta_cloud
+ * today, notificame next) is template/window-gated and must never receive a
+ * free-form automation message picked here. An allowlist makes the 5th provider
+ * born excluded — a denylist of the known names would leave the hole open.
+ * The only caller, copilot-batch-processor, already treats null as the
+ * retryable `no_active_instance`, so the fail-closed exit path exists.
  */
 export async function selectSendableInstance(
   supabaseAdmin: any,
@@ -182,11 +192,13 @@ export async function selectSendableInstance(
     .maybeSingle();
   if (live) return live as WhatsAppInstance;
 
-  // Legacy fallback — identical to the callers' previous selection.
+  // Liveness fallback — the legacy selection minus the session_dead_since
+  // filter. The provider allowlist stays (see the contract above).
   const { data: fallback } = await supabaseAdmin
     .from("whatsapp_instances")
     .select("*")
     .eq("organization_id", organizationId)
+    .in("provider", ["uazapi", "evolution"])
     .in("status", ["open", "connected"])
     .limit(1)
     .maybeSingle();
