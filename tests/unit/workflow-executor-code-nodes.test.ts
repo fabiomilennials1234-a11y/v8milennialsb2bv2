@@ -78,7 +78,7 @@ const baseMock = (leadName = "Ada Lovelace") => {
     },
   ]);
   const steps = () => getInserted("workflow_execution_steps") as unknown as StepRow[];
-  return { sb, steps };
+  return { sb, steps, mockTable };
 };
 
 /** Corpo fresco a cada chamada — `Response.text()` só pode ser lido uma vez. */
@@ -1136,5 +1136,61 @@ describe("nós de código — saída de nó que não produziu resultado", () => 
     await run(sb, nodes, edges, context);
 
     expect(Object.keys(context)).toEqual([]);
+  });
+});
+
+// ─── {{tag.X}} e saneamento, ponta a ponta ────────────────────────────────
+
+describe("nós de código — variáveis e context", () => {
+  it("{{tag.X}} é resolvida: a que o lead tem ecoa o nome, a que não tem sai vazia", async () => {
+    // Os painéis novos oferecem os chips de tag (VariableInserter sem filtro), mas o
+    // `resolveVariables` destes nós é o gêmeo que NÃO tinha bloco de tag: o literal
+    // `{{tag.Ouro}}` chegava à API do cliente com o passo `success` e HTTP 200.
+    const { sb, mockTable } = baseMock();
+    mockTable("lead_tags", [{ lead_id: "lead-1", tags: { name: "Ouro" } }]);
+    respondeCom("{}");
+
+    const { nodes, edges } = chain({
+      id: "ch1",
+      type: "code_https",
+      data: {
+        outputVariable: "resposta",
+        code: JSON.stringify({
+          method: "POST",
+          url: "https://api.cliente.com/pedidos",
+          body: { faixa: "{{tag.Ouro}}", ausente: "{{tag.Bronze}}" },
+        }),
+      },
+    });
+
+    await run(sb, nodes, edges, {});
+
+    const body = JSON.parse(String(ultimaRequisicao().opts.body));
+    expect(body.faixa).toBe("Ouro");
+    expect(body.ausente).toBe("");
+  });
+
+  it("U+0000 vindo do corpo da API não entra no context", async () => {
+    const { sb } = baseMock();
+    const context: Record<string, unknown> = {};
+    respondeCom(JSON.stringify({ nota: "a\u0000b" }));
+
+    const { nodes, edges } = chain({
+      id: "ch1",
+      type: "code_https",
+      data: {
+        outputVariable: "resposta",
+        code: JSON.stringify({ url: "https://api.cliente.com/pedidos" }),
+      },
+    });
+
+    await run(sb, nodes, edges, context);
+
+    // O Postgres recusa U+0000 dentro de jsonb (22P05). Como nem o heartbeat nem o
+    // `recordStep` conferiam o `error` do retorno, o UPDATE falhava calado, `updated_at`
+    // congelava e o reclaim re-executava a partir deste nó a cada 10 min — refazendo o
+    // POST. Sanear na entrada é o que impede o replay.
+    expect(String(context.resposta)).not.toContain("\u0000");
+    expect(context["resposta.nota"]).toBe("ab");
   });
 });
