@@ -262,6 +262,22 @@ export async function getWhatsAppProvider(
     });
   }
 
+  // FAIL-CLOSED on any non-legacy provider, BEFORE the kill-switch reads the
+  // org row. Three things at once:
+  //   1. It closes the vector where `whatsapp_provider_override` (below) COERCES
+  //      a notificame row into uazapi (which would look up `get_uazapi_credentials`
+  //      for a row that has no vault entry) or into evolution (which would build an
+  //      EvolutionProvider with null keys). That path is reachable via
+  //      preferredInstanceId and is NOT covered by the dispatch allowlist.
+  //   2. It makes the `let effectiveProvider: "uazapi" | "evolution"` annotation
+  //      below HONEST — rows arrive here cast as `any`, so today it lies, and that
+  //      lie is the root cause of the hole being born silent.
+  //   3. It moves the "Unknown provider" throw ahead of any I/O.
+  // Behaviour for legacy rows: identical.
+  if (instance.provider !== "uazapi" && instance.provider !== "evolution") {
+    throw new Error(`Unknown provider: ${instance.provider}`);
+  }
+
   // Sprint 3 S3.2 — kill-switch: organizations.whatsapp_provider_override
   // takes precedence over instance.provider. Used as panic button during
   // migration rollout if Uazapi has a platform-wide incident.

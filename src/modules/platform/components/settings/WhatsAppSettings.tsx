@@ -46,7 +46,12 @@ import {
   useLogoutInstance,
   WhatsAppInstance,
 } from "@/modules/communication/hooks/useWhatsAppInstances";
-import { WhatsAppProviderChooser, getProviderProfile, useConnectWhatsAppCloud } from "@/modules/communication";
+import {
+  WhatsAppProviderChooser,
+  getProviderProfile,
+  useConnectWhatsAppCloud,
+  useConnectNotificame,
+} from "@/modules/communication";
 import { useFeatureFlag } from "../../hooks/useFeatureFlag";
 import { useCanManageWhatsApp } from "@/modules/identity";
 import { useTeamMembers } from "@/modules/identity";
@@ -371,10 +376,48 @@ export function WhatsAppSettings() {
   // migrations are applied. Flag OFF → the connections UI is byte-identical to
   // today (direct Uazapi create dialog, no provider chip).
   const metaCloudFlag = useFeatureFlag("meta_cloud");
+  // NotificaMe (canal oficial via BSP, fatia 1) atrás da própria flag jsonb.
+  // Flag OFF → esta tela é byte-idêntica ao que era antes da fatia.
+  const notificameFlag = useFeatureFlag("notificame");
   // Meta WhatsApp Cloud CONNECTION (Embedded Signup). INERT until Meta App
   // Review + VITE_META_WA_CONFIG_ID — `connectWhatsAppCloud` toasts a graceful
   // "configuração pendente" and aborts when unconfigured (no crash).
   const { connectWhatsAppCloud } = useConnectWhatsAppCloud();
+  // Mesma permissão que libera "Nova Instância". Declarada AQUI, antes do
+  // NotificaMe, porque é ela que decide se a sonda dele chega a rodar.
+  const { canManage } = useCanManageWhatsApp();
+  // NotificaMe Seamless.
+  //
+  // A sonda de mount é LEITURA PURA (`mode:"status"` na edge function). Isto é
+  // uma correção, não um detalhe: antes, abrir esta aba PROVISIONAVA uma subconta
+  // no fornecedor — objeto IRREMOVÍVEL e faturável — sem ninguém clicar em nada,
+  // e um master passeando pelas orgs criava uma em nome de CADA org cuja tela ele
+  // abrisse. Provisionar agora acontece SÓ no clique.
+  //
+  // `enabled` soma `canManage` porque o único caminho até `connectNotificame` é o
+  // chooser, e o chooser só abre pelos botões que já dependem de `canManage`.
+  // Sondar para quem não pode abrir a porta é chamada gasta à toa. O gate que
+  // VALE, porém, é o do servidor — que exige ADMIN OU MASTER, degrau acima desta
+  // feature permission (ela nasce liberada para todo membro ativo). Um membro com
+  // `canManage` e sem admin recebe 403 e o card nasce desabilitado com o motivo:
+  // a credencial da subconta NÃO é rotacionável, então entregá-la ao browser
+  // errado é irreversível.
+  //
+  // INERT enquanto faltarem os secrets do fornecedor: `isConfigured=false` +
+  // `configReason` legível fazem o card nascer desabilitado COM MOTIVO, em vez de
+  // só avisar por toast depois do clique. `isProvisioning` é um TERCEIRO estado —
+  // o popup já abriu e a subconta está sendo criada no fornecedor —, e ele merece
+  // microcopy própria porque é o único em que esperar resolve.
+  const {
+    connectNotificame,
+    isConfigured: notificameConfigured,
+    configReason: notificameReason,
+    isConfigLoading: notificameConfigLoading,
+    isProvisioning: notificameProvisioning,
+  } = useConnectNotificame({ enabled: notificameFlag.enabled && canManage });
+  // Qualquer um dos dois caminhos oficiais ligado ⇒ a escolha da API vira uma
+  // decisão explícita, e o chooser substitui o dialog Uazapi direto.
+  const showChooser = metaCloudFlag.enabled || notificameFlag.enabled;
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isChooserOpen, setIsChooserOpen] = useState(false);
   const [instanceName, setInstanceName] = useState("");
@@ -391,13 +434,22 @@ export function WhatsAppSettings() {
   const deleteInstance = useDeleteWhatsAppInstance();
   const checkStatus = useCheckConnectionStatus();
   const logout = useLogoutInstance();
-  const { canManage } = useCanManageWhatsApp();
+  // `canManage` sobe para o topo do componente (junto do NotificaMe) — a sonda
+  // do canal oficial depende dele para nem sair do lugar.
   const { getQuota } = useOrgQuotas();
   const whatsappQuota = getQuota("max_whatsapp_instances");
   const { data: allowedMembers = [] } = useAllowedMembersForInstance(vendedoresInstance?.id ?? null);
   const setAllowedMembers = useSetAllowedMembersForInstance();
   const [selectedVendedores, setSelectedVendedores] = useState<Set<string>>(new Set());
   const [vendedoresDirty, setVendedoresDirty] = useState(false);
+
+  // Alvo da confirmação de remoção. O aviso depende do PROVIDER, não só de "não
+  // é QR": o canal oficial da Meta some e pronto; o do NotificaMe deixa para
+  // trás uma subconta que é PRESERVADA de propósito.
+  const deleteTarget = deleteInstanceId
+    ? instances.find((i) => i.id === deleteInstanceId.id) ?? null
+    : null;
+  const deleteTargetIsQr = getProviderProfile(deleteTarget?.provider).connectKind === "qr";
 
   const allowedIdsStr = useMemo(
     () => allowedMembers.map((a) => a.team_member_id).sort().join(","),
@@ -571,6 +623,15 @@ export function WhatsAppSettings() {
     }
   };
 
+  // O aviso de "API não oficial" só é verdade sobre números que conectam por QR.
+  // Com um canal oficial (Meta Cloud / NotificaMe) na tela, a frase mentiria —
+  // e mentir sobre risco de ban é pior que não avisar. Sem instância nenhuma o
+  // aviso continua, porque o caminho padrão de criação ainda é o Uazapi.
+  const hasQrInstance = instances.some(
+    (i) => getProviderProfile(i.provider).connectKind === "qr",
+  );
+  const showUnofficialWarning = instances.length === 0 || hasQrInstance;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -626,7 +687,7 @@ export function WhatsAppSettings() {
           {canManage && (
             <Button
               onClick={() =>
-                metaCloudFlag.enabled ? setIsChooserOpen(true) : setIsCreateDialogOpen(true)
+                showChooser ? setIsChooserOpen(true) : setIsCreateDialogOpen(true)
               }
               size="sm"
               className="gap-2"
@@ -644,14 +705,16 @@ export function WhatsAppSettings() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-800 dark:text-amber-200">
-        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
-        <p>
-          Conexão via <strong>API não oficial</strong> do WhatsApp — o número pode ser
-          banido pela Meta (política da Meta, não falha do Torque). Aqueça números novos
-          aos poucos e evite disparos em massa.
-        </p>
-      </div>
+      {showUnofficialWarning && (
+        <div className="flex items-center gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-800 dark:text-amber-200">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <p>
+            Conexão via <strong>API não oficial</strong> do WhatsApp — o número pode ser
+            banido pela Meta (política da Meta, não falha do Torque). Aqueça números novos
+            aos poucos e evite disparos em massa.
+          </p>
+        </div>
+      )}
 
       {errorDetails && (
         <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
@@ -685,8 +748,13 @@ export function WhatsAppSettings() {
           <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
           <p>Nenhuma instância WhatsApp cadastrada</p>
           {canManage && (
+            // Mesma porta que o botão do topo: a org NOVA é justamente o público
+            // mais provável do número oficial, e mandá-la direto pro dialog
+            // Uazapi a deixava sem sequer ver que existe outro caminho.
             <Button
-              onClick={() => setIsCreateDialogOpen(true)}
+              onClick={() =>
+                showChooser ? setIsChooserOpen(true) : setIsCreateDialogOpen(true)
+              }
               variant="outline"
               className="mt-4"
             >
@@ -699,6 +767,12 @@ export function WhatsAppSettings() {
           {instances.map((instance) => {
             const effectiveStatus = deriveInstanceStatus(instance);
             const isLive = effectiveStatus === "connected";
+            // Só o caminho QR (Uazapi/Evolution) tem QR Code, logout e "checar
+            // status": os três caem no `whatsapp-api-proxy` → `getWhatsAppProvider`,
+            // que na fatia 1 não conhece `notificame` e responde "Unknown
+            // provider". Esconder é o fail-closed correto — o botão não existe
+            // em vez de existir e explodir.
+            const isQrProvider = getProviderProfile(instance.provider).connectKind === "qr";
             return (
             <motion.div
               key={instance.id}
@@ -711,7 +785,7 @@ export function WhatsAppSettings() {
                   <div className="flex items-center gap-3 mb-2">
                     <h4 className="font-medium">{instance.instance_name}</h4>
                     {getStatusBadge(effectiveStatus)}
-                    {metaCloudFlag.enabled && (
+                    {showChooser && (
                       <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
                         {getProviderProfile(instance.provider).label}
                       </Badge>
@@ -740,7 +814,7 @@ export function WhatsAppSettings() {
                       {instance.session_dead_reason
                         ? `: ${instance.session_dead_reason}`
                         : ""}
-                      . Rescaneie o QR Code pra reconectar.
+                      .{isQrProvider ? " Rescaneie o QR Code pra reconectar." : ""}
                     </p>
                   )}
                 </div>
@@ -759,7 +833,7 @@ export function WhatsAppSettings() {
                       Vendedores
                     </Button>
                   )}
-                  {!isLive && (
+                  {!isLive && isQrProvider && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -769,15 +843,17 @@ export function WhatsAppSettings() {
                       {instance.qr_code ? "Ver QR Code" : "Reconectar"}
                     </Button>
                   )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleCheckStatus(instance.id)}
-                    disabled={checkStatus.isPending}
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                  </Button>
-                  {isLive && (
+                  {isQrProvider && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleCheckStatus(instance.id)}
+                      disabled={checkStatus.isPending}
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </Button>
+                  )}
+                  {isLive && isQrProvider && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -816,7 +892,7 @@ export function WhatsAppSettings() {
         </div>
       )}
 
-      {/* Provider chooser (Meta Cloud flag) — Uazapi QR vs Meta Oficial */}
+      {/* Provider chooser — Uazapi QR vs Meta Oficial vs WhatsApp Oficial (NotificaMe) */}
       <WhatsAppProviderChooser
         open={isChooserOpen}
         onOpenChange={setIsChooserOpen}
@@ -824,6 +900,23 @@ export function WhatsAppSettings() {
         onChooseMeta={() => {
           void connectWhatsAppCloud();
         }}
+        // Handler ausente ⇒ o card do NotificaMe nem renderiza (flag OFF).
+        onChooseNotificame={notificameFlag.enabled ? connectNotificame : undefined}
+        // Motivo preenchido ⇒ card visível, desabilitado e explicando por quê.
+        // Três esperas distintas, três frases distintas: sonda em voo; subconta
+        // sendo criada no fornecedor (o popup JÁ abriu — é o clique que
+        // provisiona, e desabilitar aqui é o que impede um segundo clique
+        // enquanto a conta nasce); e indisponível de verdade — que agora inclui
+        // "você não é admin", já que o servidor exige admin ou master.
+        notificameDisabledReason={
+          notificameConfigLoading
+            ? "Verificando disponibilidade..."
+            : notificameProvisioning
+              ? "Preparando sua conta oficial..."
+              : notificameConfigured
+                ? null
+                : notificameReason
+        }
       />
 
       {/* Create Dialog */}
@@ -933,6 +1026,31 @@ export function WhatsAppSettings() {
             <AlertDialogDescription>
               Esta ação não pode ser desfeita. A instância será removida permanentemente.
             </AlertDialogDescription>
+            {/*
+              Dívida (i) da fatia 1, dita em voz alta em vez de silenciada: o
+              reaper só limpa o lado do fornecedor para `provider='uazapi'`. Um
+              canal oficial removido aqui continua existindo lá — foi esse mesmo
+              padrão que gerou 87 instâncias órfãs na Uazapi.
+
+              No NotificaMe a frase é OUTRA, e não é um aviso de dívida: a conta
+              oficial da organização sobrevive à remoção do canal DE PROPÓSITO.
+              É ela que faz uma reconexão reaproveitar a conta existente em vez
+              de criar outra no fornecedor — e conta criada lá é irremovível e
+              faturável. Dizer só "ficou órfão" esconderia o desenho.
+            */}
+            {deleteTarget && !deleteTargetIsQr && (
+              deleteTarget.provider === "notificame" ? (
+                <p className="text-sm text-muted-foreground">
+                  O número deixa de funcionar aqui, mas a conta oficial da sua organização é
+                  mantida — é ela que permite reconectar depois sem abrir uma conta nova no
+                  provedor. O canal em si continua existindo lá; a remoção é manual.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  O canal continua ativo no provedor — a remoção lá ainda é manual.
+                </p>
+              )
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>

@@ -1,13 +1,19 @@
 /**
- * WhatsAppProviderChooser — the two-path connect chooser.
+ * WhatsAppProviderChooser — o chooser de conexão.
  *
- * Shown (behind the `meta_cloud` feature flag) when adding a number, because
- * picking the API is a consequential choice, not a dropdown: Uazapi = QR +
- * full toolset (non-official); Meta Oficial = Embedded Signup + templates,
- * gated by the 24h window. Honest about the trade either way.
+ * Mostrado (atrás das flags `meta_cloud` / `notificame`) ao adicionar um número,
+ * porque escolher a API é uma decisão consequente, não um dropdown: Uazapi = QR
+ * + ferramental completo (não-oficial); Meta Oficial = Embedded Signup, gated
+ * pela janela de 24h; WhatsApp Oficial (NotificaMe) = login Meta pelo Seamless,
+ * número oficial sem risco de ban. Honesto sobre o trade nos três casos.
+ *
+ * Card DESABILITADO COM MOTIVO: quando a configuração do fornecedor ainda não
+ * existe, o card nasce inerte e diz por quê ANTES do clique. O precedente
+ * (`meta_cloud`) só avisa por toast depois — o usuário clica, nada acontece
+ * visualmente, e ele clica de novo.
  */
 import { motion } from "framer-motion";
-import { QrCode, ShieldCheck, Check, AlertTriangle } from "lucide-react";
+import { QrCode, ShieldCheck, BadgeCheck, Check, AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -25,13 +31,31 @@ interface WhatsAppProviderChooserProps {
   onChooseUazapi: () => void;
   /** Meta Cloud path → launches Embedded Signup. */
   onChooseMeta: () => void;
+  /**
+   * NotificaMe Seamless path → abre o popup do fornecedor. O card só existe
+   * quando este handler é passado (flag `notificame` ligada).
+   */
+  onChooseNotificame?: () => void;
+  /**
+   * Motivo legível quando o NotificaMe ainda não está configurado. Preenchido =
+   * card desabilitado exibindo esta frase no lugar da pílula "Escolher".
+   */
+  notificameDisabledReason?: string | null;
 }
 
 const UAZAPI = getProviderProfile("uazapi");
 const META = getProviderProfile("meta_cloud");
+const NOTIFICAME = getProviderProfile("notificame");
 
 const UAZAPI_FEATURES = ["Texto", "Mídia", "Menus", "Pix", "Reações", "Disparo em massa", "Histórico"];
 const META_FEATURES = ["Texto", "Mídia", "Templates aprovados", "Métricas Meta", "Selo verificado"];
+const NOTIFICAME_FEATURES = [
+  "Texto",
+  "Mídia",
+  "Templates aprovados",
+  "Número oficial verificado",
+  "Sem risco de ban",
+];
 
 function ProviderCard({
   icon,
@@ -41,6 +65,8 @@ function ProviderCard({
   caveat,
   onChoose,
   highlight,
+  disabled,
+  disabledReason,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -49,18 +75,24 @@ function ProviderCard({
   caveat: string;
   onChoose: () => void;
   highlight?: boolean;
+  disabled?: boolean;
+  disabledReason?: string | null;
 }) {
   return (
     <motion.button
       type="button"
-      onClick={onChoose}
-      whileHover={{ y: -2 }}
+      onClick={disabled ? undefined : onChoose}
+      disabled={disabled}
+      aria-disabled={disabled}
+      whileHover={disabled ? undefined : { y: -2 }}
       transition={{ duration: 0.15 }}
       className={cn(
         "group flex w-full flex-col rounded-xl border bg-card/60 p-5 text-left",
-        "border-border/60 hover:border-primary/60 hover:bg-card",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-        highlight && "border-primary/40",
+        "border-border/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        disabled
+          ? "cursor-not-allowed opacity-60"
+          : "hover:border-primary/60 hover:bg-card",
+        highlight && !disabled && "border-primary/40",
       )}
     >
       <div className="mb-3 flex items-center gap-2.5">
@@ -86,15 +118,21 @@ function ProviderCard({
         {caveat}
       </p>
 
-      <span
-        className={cn(
-          "inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium",
-          "bg-muted/60 text-foreground group-hover:bg-primary group-hover:text-primary-foreground",
-          "transition-colors",
-        )}
-      >
-        Escolher
-      </span>
+      {disabled ? (
+        <span className="text-xs leading-relaxed text-muted-foreground">
+          {disabledReason || "Indisponível no momento"}
+        </span>
+      ) : (
+        <span
+          className={cn(
+            "inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium",
+            "bg-muted/60 text-foreground group-hover:bg-primary group-hover:text-primary-foreground",
+            "transition-colors",
+          )}
+        >
+          Escolher
+        </span>
+      )}
     </motion.button>
   );
 }
@@ -104,10 +142,14 @@ export function WhatsAppProviderChooser({
   onOpenChange,
   onChooseUazapi,
   onChooseMeta,
+  onChooseNotificame,
+  notificameDisabledReason,
 }: WhatsAppProviderChooserProps) {
+  const hasNotificame = typeof onChooseNotificame === "function";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className={cn("max-w-2xl", hasNotificame && "lg:max-w-4xl")}>
         <DialogHeader>
           <DialogTitle>Conectar WhatsApp</DialogTitle>
           <DialogDescription>
@@ -115,7 +157,7 @@ export function WhatsAppProviderChooser({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-2 sm:grid-cols-2">
+        <div className={cn("grid gap-4 py-2 sm:grid-cols-2", hasNotificame && "lg:grid-cols-3")}>
           <ProviderCard
             icon={<QrCode className="h-5 w-5" />}
             label={UAZAPI.label}
@@ -133,12 +175,31 @@ export function WhatsAppProviderChooser({
             tagline={META.tagline}
             features={META_FEATURES}
             caveat="Janela 24h · sem Pix/menu/disparo Uazapi"
-            highlight
+            // O destaque migra para o NotificaMe quando ele existe: é o caminho
+            // oficial que já está ao alcance, enquanto o Embedded Signup segue
+            // esperando App Review.
+            highlight={!hasNotificame}
             onChoose={() => {
               onOpenChange(false);
               onChooseMeta();
             }}
           />
+          {hasNotificame && (
+            <ProviderCard
+              icon={<BadgeCheck className="h-5 w-5" />}
+              label={NOTIFICAME.label}
+              tagline={NOTIFICAME.tagline}
+              features={NOTIFICAME_FEATURES}
+              caveat="Janela 24h · sem Pix/menu/disparo"
+              highlight
+              disabled={Boolean(notificameDisabledReason)}
+              disabledReason={notificameDisabledReason}
+              onChoose={() => {
+                onOpenChange(false);
+                onChooseNotificame?.();
+              }}
+            />
+          )}
         </div>
 
         <p className="px-1 pb-1 text-center text-xs text-muted-foreground">

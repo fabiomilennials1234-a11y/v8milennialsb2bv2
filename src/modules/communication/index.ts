@@ -21,18 +21,37 @@
  * (continua em `src/hooks/` enquanto não houver `core/realtime/` — slice 14).
  */
 
-// ── WhatsApp — provider-aware connections (Uazapi / Meta Cloud) ───────────
+// ── WhatsApp — provider-aware connections (Uazapi / Meta Cloud / NotificaMe) ──
 export { WhatsAppProviderChooser } from "./components/whatsapp/WhatsAppProviderChooser";
 // Meta WhatsApp Cloud CONNECTION via Embedded Signup (Slice 3, ADR-0009).
 // INERT until Meta App Review + VITE_META_WA_CONFIG_ID — graceful fallback toast.
 export { useConnectWhatsAppCloud } from "./hooks/useConnectWhatsAppCloud";
 export type { UseConnectWhatsAppCloudResult } from "./hooks/useConnectWhatsAppCloud";
+// NotificaMe Seamless CONNECTION (canal oficial via BSP, fatia 1).
+// INERT enquanto faltarem os secrets do fornecedor — NOTIFICAME_API_TOKEN,
+// NOTIFICAME_SUBACCOUNT_DEFAULTS e NOTIFICAME_ENCRYPTION_KEY — ou enquanto quem
+// olha a tela não for admin/master: `isConfigured=false` + `configReason`
+// legível, para o card nascer desabilitado COM motivo.
+// (NOTIFICAME_COMPANY_UUID foi eliminado nesta branch: sob subconta por org não
+// há um uuid nosso e único; há um por org, e ele é credencial no cofre.)
+export { useConnectNotificame } from "./hooks/useConnectNotificame";
+export type { UseConnectNotificameResult } from "./hooks/useConnectNotificame";
+// Regra de origem do postMessage do Seamless, pura e testável (igualdade estrita).
+// `seamlessOriginFromStartUrl` é a ÚNICA derivação correta no cliente — a origem
+// esperada e a URL do popup precisam sair da MESMA fonte.
+export {
+  NOTIFICAME_ORIGIN,
+  readSeamlessMessage,
+  seamlessOriginFromStartUrl,
+} from "./lib/notificame-message";
+export type { SeamlessOutcome } from "./lib/notificame-message";
 export {
   getProviderProfile,
   canUseUazapiActions,
   type WhatsAppProviderId,
   type ProviderProfile,
   type ProviderCapabilities,
+  type ConnectKind,
 } from "./lib/whatsapp-provider";
 
 // ── Lib: blast media guard (consumido por campaigns/Disparos, #904) ────────
