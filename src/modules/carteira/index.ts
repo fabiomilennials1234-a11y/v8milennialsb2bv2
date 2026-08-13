@@ -79,6 +79,29 @@ export {
 export type { PendingOrder } from "./hooks/useOrderApproval";
 
 // ────────────────────────────────────────────────────────────────────────
+// Order — aba Pedidos (listar + editar pedido MANUAL).
+// Leitura pela RPC carteira_list_orders; edição por carteira_update_order,
+// que recusa pedido com vínculo ERP (o ERP é a fonte da verdade).
+// Cancelar e hard delete NÃO existem nesta fatia.
+// ────────────────────────────────────────────────────────────────────────
+
+export { useCarteiraOrders } from "./hooks/useCarteiraOrders";
+export type {
+  CarteiraOrderRow,
+  CarteiraOrderItem,
+  UseCarteiraOrdersParams,
+} from "./hooks/useCarteiraOrders";
+
+export { useUpdateOrder } from "./hooks/useUpdateOrder";
+export type {
+  UpdateOrderInput,
+  UpdateOrderPatch,
+  UpdateOrderItem,
+} from "./hooks/useUpdateOrder";
+
+export { CarteiraOrders } from "./components/orders/CarteiraOrders";
+
+// ────────────────────────────────────────────────────────────────────────
 // Hooks — Upsell (clients, campanhas, products, orders, metrics, gestão)
 // ────────────────────────────────────────────────────────────────────────
 
