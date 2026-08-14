@@ -22,6 +22,7 @@ export function createMockSupabase() {
   const upsertOpts: Record<string, unknown[]> = {};
   const rpcResults: Record<string, unknown> = {};
   const insertErrors: Record<string, { code: string; message: string }> = {};
+  const selectErrors: Record<string, { code: string; message: string }> = {};
 
   function mockTable(name: string, data: MockData) {
     // Clone so the mock owns its rows. Updates persist by mutating rows in
@@ -33,6 +34,21 @@ export function createMockSupabase() {
   /** Force the next (and subsequent) inserts on `table` to fail with `error`. */
   function mockInsertError(name: string, error: { code: string; message: string }) {
     insertErrors[name] = error;
+  }
+
+  /**
+   * Force READS on `table` to resolve `{ data: null, error }`.
+   *
+   * Existe porque vários módulos tratam falha de leitura de forma diferente de
+   * "leitura vazia" (fail-closed vs. seguir em frente), e sem isto o ramo
+   * `if (error)` era inalcançável no teste — a suíte ficava verde afirmando um
+   * fail-closed que nunca tinha sido exercitado.
+   *
+   * Só afeta leitura: insert/upsert/update na mesma tabela seguem normais, para
+   * o teste poder semear o cenário e depois quebrar só a consulta.
+   */
+  function mockSelectError(name: string, error: { code: string; message: string }) {
+    selectErrors[name] = error;
   }
 
   function mockRpc(name: string, result: unknown) {
@@ -62,7 +78,12 @@ export function createMockSupabase() {
     let selectOpts: { count?: string; head?: boolean } | null = null;
     let insertError: { code: string; message: string } | null = null;
     let isUpdate = false;
+    let isWrite = false;
     let updateData: Record<string, unknown> = {};
+
+    /** Erro de LEITURA mockado — não se aplica a insert/upsert/update. */
+    const pendingSelectError = () =>
+      !isWrite && !isUpdate && selectErrors[tableName] ? selectErrors[tableName] : null;
 
     const applyOp = (row: Record<string, unknown>, f: { field: string; op: string; value: unknown }): boolean => {
       const val = row[f.field];
@@ -170,6 +191,7 @@ export function createMockSupabase() {
       // `.returns<T>()` is a type-only helper on the real client; pass through.
       returns: () => chain,
       insert: (rows: unknown) => {
+        isWrite = true;
         if (insertErrors[tableName]) {
           insertError = insertErrors[tableName];
           return chain;
@@ -187,6 +209,7 @@ export function createMockSupabase() {
         return chain;
       },
       upsert: (rows: unknown, opts?: unknown) => {
+        isWrite = true;
         const arr = Array.isArray(rows) ? rows : [rows];
         if (!insertedRows[tableName]) insertedRows[tableName] = [];
         if (!upsertOpts[tableName]) upsertOpts[tableName] = [];
@@ -207,6 +230,8 @@ export function createMockSupabase() {
       delete: () => chain,
       single: () => {
         if (insertError) return Promise.resolve({ data: null, error: insertError });
+        const selErr = pendingSelectError();
+        if (selErr) return Promise.resolve({ data: null, error: selErr });
         const result = applyUpdateIfPending();
         return Promise.resolve({
           data: result[0] || null,
@@ -215,6 +240,8 @@ export function createMockSupabase() {
       },
       maybeSingle: () => {
         if (insertError) return Promise.resolve({ data: null, error: insertError });
+        const selErr = pendingSelectError();
+        if (selErr) return Promise.resolve({ data: null, error: selErr });
         const result = applyUpdateIfPending();
         return Promise.resolve({
           data: result[0] || null,
@@ -246,6 +273,10 @@ export function createMockSupabase() {
     const defaultPromise = () => {
       if (insertError) {
         return Promise.resolve({ data: null, error: insertError, count: null });
+      }
+      const selErr = pendingSelectError();
+      if (selErr) {
+        return Promise.resolve({ data: null, error: selErr, count: null });
       }
       // Persist updates so read-after-write works. applyFilters() returns refs to
       // the shared table row objects, so Object.assign mutates tables in place.
@@ -352,5 +383,5 @@ export function createMockSupabase() {
     channel: (name: string) => createChannel(name),
   };
 
-  return { sb: sb as any, mockTable, mockRpc, mockInsertError, getInserted, getUpdated, getUpsertOpts, emitEvent };
+  return { sb: sb as any, mockTable, mockRpc, mockInsertError, mockSelectError, getInserted, getUpdated, getUpsertOpts, emitEvent };
 }

@@ -10,7 +10,16 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { evaluateCondition, getLeadTags } from "./workflow-condition-evaluator.ts";
-import { executeWorkflowAction, type ActionResult } from "./workflow-action-handler.ts";
+import { executeWorkflowAction, resolveVariables, type ActionResult } from "./workflow-action-handler.ts";
+import {
+  capString,
+  clearCodeOutput,
+  CODE_OUTPUT_MAX_CHARS,
+  flattenForContext,
+  type HttpsRequestSpec,
+  jsonEscape,
+  parseHttpsRequest,
+} from "./workflow-code-nodes.ts";
 import { getNextSendTime } from "./followupSchedule.ts";
 import { resolveActiveWindow, computeNextWindowStart as computeNextWindowStartLocal } from "./copilot/time-context.ts";
 import { logRuntime } from "./logger.ts";
@@ -74,6 +83,9 @@ export interface ExecuteWorkflowResult {
   stepsExecuted: number;
 }
 
+/** Teto do `context` persistido no heartbeat (128 KB). Acima disso, não vai. */
+const CONTEXT_HEARTBEAT_MAX_CHARS = 131_072;
+
 // ─── Main Executor ──────────────────────────────────────────────────────────
 
 export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<ExecuteWorkflowResult> {
@@ -119,6 +131,7 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
   const loopCounters = { ...(params.loopCounters || {}) };
   let stepsExecuted = 0;
   const maxSteps = Math.min(loopLimit, 500); // Hard cap at 500 steps
+  let oversizedContextWarned = false;
 
   // Get next nodes after trigger (or current node if resuming)
   let nextNodes = getNextNodes(currentNodeId, edgeMap);
@@ -157,13 +170,53 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
     // Onda 1 / T1.1.1: heartbeat updated_at impede double-claim por
     // claim_workflow_executions (que reclama processing >10min). Combinado com
     // batch=20 + nodes individuais rápidos, custo desprezível (1 UPDATE por node).
-    await supabase.from("workflow_executions")
-      .update({
-        current_node_id: nodeId,
-        loop_counters: loopCounters,
-        updated_at: new Date().toISOString(),
-      })
+    //
+    // `context` viaja junto porque, sem isso, um valor gravado por um nó só chega ao
+    // banco se o workflow pausar num caminho que grava contexto explicitamente (retry
+    // de action e wait_response). O `outputVariable` do webhook_call já se perde hoje
+    // quando o nó seguinte é um delay; os nós de código herdariam o mesmo bug. O UPDATE
+    // já acontecia a cada nó — a coluna a mais custa zero round-trip.
+    const heartbeat: Record<string, unknown> = {
+      current_node_id: nodeId,
+      loop_counters: loopCounters,
+      updated_at: new Date().toISOString(),
+    };
+    // Guarda de tamanho: um context inflado (nó de código com JSON grande) viajaria
+    // em TODO tick de TODO lead. Acima do teto, o heartbeat volta a ser só heartbeat.
+    if (contextSizeChars(context) <= CONTEXT_HEARTBEAT_MAX_CHARS) {
+      heartbeat.context = context;
+    } else if (!oversizedContextWarned) {
+      oversizedContextWarned = true;
+      console.warn(
+        `[workflow-executor] context acima de ${CONTEXT_HEARTBEAT_MAX_CHARS} chars na execução ${executionId} — não persistido no heartbeat`,
+      );
+    }
+
+    // O retorno NAO pode ser descartado. `context` e jsonb, e o supabase-js v2 devolve
+    // `{error}` em vez de lancar: um UPDATE recusado passava despercebido e congelava
+    // `updated_at`/`current_node_id` no valor do claim. Congelado,
+    // `claim_workflow_executions` reclama a execucao 10 min depois e ela re-executa A
+    // PARTIR do no atual — refazendo POSTs e reenviando mensagens, indefinidamente.
+    // `stripJsonbUnsafe` tapa a entrada conhecida (U+0000); esta degradacao existe para
+    // que QUALQUER outra recusa vinda da coluna `context` custe a persistencia do
+    // context, nunca o avanco do heartbeat.
+    const { error: heartbeatError } = await supabase.from("workflow_executions")
+      .update(heartbeat)
       .eq("id", executionId);
+
+    if (heartbeatError && heartbeat.context !== undefined) {
+      delete heartbeat.context;
+      const { error: retryError } = await supabase.from("workflow_executions")
+        .update(heartbeat)
+        .eq("id", executionId);
+      console.warn(
+        `[workflow-executor] heartbeat COM context recusado na execucao ${executionId} (${heartbeatError.message}) — regravado sem context${retryError ? ` — e o sem-context TAMBEM falhou: ${retryError.message}` : ""}`,
+      );
+    } else if (heartbeatError) {
+      console.warn(
+        `[workflow-executor] heartbeat recusado na execucao ${executionId}: ${heartbeatError.message}`,
+      );
+    }
 
     try {
       switch (node.type) {
@@ -872,6 +925,239 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
           break;
         }
 
+        // ── Nós de código (JSON / JavaScript / HTTPS) ─────────────────────────
+        //
+        // 🚨 Os três gravam metadado como `input_data`, NUNCA `node.data` — e por isso o
+        // corpo de cada um vive dentro de um try/catch local. O catch genérico lá embaixo
+        // grava `node.data` inteiro no passo, e o `data` de um nó de código carrega o
+        // fonte escrito pelo usuário — no HTTPS, o `Authorization` junto —, legível por
+        // qualquer membro da org via `workflow_execution_steps`. Deixar uma exceção subir
+        // daqui é vazamento.
+
+        case "code_json": {
+          const outVar = String(node.data.outputVariable || "").trim();
+          const src = String(node.data.code || "");
+          const inputSafe = codeNodeStepInput(src, outVar);
+          let codeError: string | null = null;
+
+          try {
+            if (!src.trim()) {
+              codeError = "Nenhum código configurado";
+            } else {
+              // `jsonEscape` nas variáveis: sem ele, um lead chamado
+              // `Pneus "Bom Preço" Ltda` derruba o JSON.parse abaixo.
+              const resolved = await resolveVariables(supabase, leadId, src, context, { escape: jsonEscape });
+
+              let parsed: unknown;
+              try {
+                parsed = JSON.parse(resolved);
+              } catch (parseErr) {
+                codeError = `JSON inválido: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`;
+              }
+
+              if (!codeError && (typeof parsed !== "object" || parsed === null)) {
+                codeError = "O resultado precisa ser um objeto ou array JSON, não um valor solto";
+              }
+
+              if (!codeError && !Array.isArray(parsed)) {
+                const requiredKeys = Array.isArray(node.data.requiredKeys)
+                  ? (node.data.requiredKeys as unknown[]).map(k => String(k).trim()).filter(Boolean)
+                  : [];
+                const missing = requiredKeys.filter(k => !(k in (parsed as Record<string, unknown>)));
+                if (missing.length > 0) {
+                  codeError = `Chave obrigatória ausente no JSON: ${missing.join(", ")}`;
+                }
+              }
+
+              if (!codeError) {
+                // Grava a STRING compacta, não o objeto vivo: resolveVariables pula
+                // valores `typeof === "object"`, então o objeto seria ilegível para
+                // qualquer nó posterior. As folhas escalares vão achatadas ao lado,
+                // para `{{payload.total}}` e `{{payload.itens.0.sku}}` funcionarem.
+                const compact = capString(JSON.stringify(parsed), CODE_OUTPUT_MAX_CHARS);
+                if (outVar) {
+                  context[outVar] = compact;
+                  flattenForContext(outVar, parsed, context as Record<string, string | number | boolean>);
+                }
+
+                await recordStep(supabase, executionId, node, "success", inputSafe, {
+                  bytes: resolved.length,
+                  top_keys: Array.isArray(parsed)
+                    ? ["<array>"]
+                    : Object.keys(parsed as Record<string, unknown>).slice(0, 20),
+                  // `capString`, não `slice`: cortar em 500 no meio de um emoji deixa um
+                  // surrogate órfão, o PostgREST manda `\ud83d` solto e o Postgres recusa
+                  // o INSERT do passo (22P05). `recordStep` não confere o `error` do insert,
+                  // então o passo sumiria do histórico em silêncio. O gêmeo HTTPS já fazia
+                  // certo (linha do `outputSafe`); esta linha era a assimetria.
+                  preview: capString(compact, 500),
+                });
+                nextNodes.push(...getNextNodes(nodeId, edgeMap));
+              }
+            }
+          } catch (err) {
+            codeError = err instanceof Error ? err.message : String(err);
+          }
+
+          if (codeError) {
+            await recordStep(supabase, executionId, node, "failed", inputSafe, undefined, codeError);
+            // Erro não produz resultado — e NÃO GRAVAR não basta para isso valer. Ver a
+            // nota longa em `clearCodeOutput`: chave ausente faz o `{{saida}}` de um nó de
+            // baixo sair literal na mensagem ao lead, e numa reentrada deixa viva a saída
+            // da volta anterior. Fora do `if (onError)` de propósito: com `fail` a execução
+            // para aqui, mas o `context` já foi persistido pelo heartbeat deste nó, e é
+            // dele que uma retomada parte.
+            clearCodeOutput(outVar, context);
+            if (node.data.onError === "continue") {
+              nextNodes.push(...getNextNodes(nodeId, edgeMap));
+            } else {
+              await updateExecution(supabase, executionId, "failed", nodeId, loopCounters, codeError);
+              return { success: false, status: "failed", error: codeError, stepsExecuted };
+            }
+          }
+          break;
+        }
+
+        case "code_javascript": {
+          // Fase 1: o nó NÃO executa. Fail-open deliberado, igual ao `default:` — um nó
+          // salvo mas ainda não executável nunca pode matar um workflow de produção.
+          // Nada de eval / new Function / Worker / import() dinâmico aqui: o executor
+          // roda com o SUPABASE_SERVICE_ROLE_KEY no ambiente, e escape de sandbox é
+          // comprometimento cross-tenant. A execução isolada é a fase 2 (SPEC §4).
+          const jsOutVar = String(node.data.outputVariable || "").trim();
+          try {
+            await recordStep(
+              supabase,
+              executionId,
+              node,
+              "skipped",
+              { output_variable: jsOutVar },
+              { phase: 1, executed: false },
+              "Nó JavaScript ainda não executa (fase 1). O fluxo seguiu sem rodar o código.",
+            );
+          } catch (err) {
+            console.warn(`[workflow-executor] code_javascript ${nodeId}:`, err);
+          }
+          // Um nó que não executa não produz saída — mas o fluxo SEGUE, então quem lê
+          // `{{saida}}` embaixo precisa receber vazio, não o texto cru do placeholder.
+          // Fora do try: se o `recordStep` falhar, o vazamento não pode passar junto.
+          clearCodeOutput(jsOutVar, context);
+          nextNodes.push(...getNextNodes(nodeId, edgeMap));
+          break;
+        }
+
+        case "code_https": {
+          // O usuário escreve UM JSON descrevendo a requisição inteira (method, url,
+          // headers, body, timeoutMs). Aqui: resolve variáveis → parse → valida forma →
+          // valida destino → dispara → grava a resposta.
+          const outVar = String(node.data.outputVariable || "").trim();
+          const src = String(node.data.code || "");
+          // 🚨 O passo NUNCA carrega `headers` (é onde vive o Authorization), nem o
+          // `code`, nem a query string da URL (pode levar token). Só host + caminho.
+          let inputSafe = httpsStepInput(src, outVar);
+          let codeError: string | null = null;
+          // Ligado quando o passo de falha JÁ foi gravado com status/preview da resposta
+          // — sem ele, o bloco de erro lá embaixo gravaria uma segunda linha.
+          let failStepRecorded = false;
+
+          try {
+            if (!src.trim()) {
+              codeError = "Nenhum código configurado";
+            } else {
+              // `jsonEscape` nas variáveis: sem ele, um lead chamado
+              // `Pneus "Bom Preço" Ltda` derruba o JSON.parse abaixo.
+              const resolved = await resolveVariables(supabase, leadId, src, context, { escape: jsonEscape });
+
+              let parsed: unknown;
+              try {
+                parsed = JSON.parse(resolved);
+              } catch (parseErr) {
+                codeError = `JSON inválido: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`;
+              }
+
+              if (!codeError) {
+                const shape = parseHttpsRequest(parsed);
+                if (!shape.ok) {
+                  codeError = shape.error;
+                } else {
+                  const spec = shape.spec;
+                  inputSafe = httpsStepInput(src, outVar, spec);
+
+                  // `parseHttpsRequest` só garante o esquema https. Quem barra IP
+                  // privado, metadata da nuvem e porta de sistema é o validador.
+                  const urlCheck = validateExternalUrl(spec.url);
+                  if (!urlCheck.valid) {
+                    codeError = `URL bloqueada: ${urlCheck.reason}`;
+                  } else {
+                    const fetchOpts: RequestInit = { method: spec.method, headers: spec.headers };
+                    if (spec.body !== undefined) fetchOpts.body = spec.body;
+
+                    // ⚠️ Nada de `break` daqui para dentro: `break` num `case` sai do
+                    // switch inteiro e pularia o tratamento de `codeError` no fim.
+                    const attempt = await runHttpsRequest(urlCheck.url, fetchOpts, spec.timeoutMs);
+                    if (!attempt.ok) {
+                      codeError = attempt.error;
+                    } else {
+                      const res = attempt.res;
+                      const responseText = await res.text();
+                      const outputSafe = {
+                        status: res.status,
+                        bytes: responseText.length,
+                        preview: capString(responseText, 500),
+                      };
+
+                      if (!res.ok) {
+                        // Diferente do `webhook_call` (que sempre segue), aqui o não-2xx
+                        // respeita o `onError` do nó — uniformidade com os outros nós de
+                        // código vale mais do que a compatibilidade com o webhook.
+                        // A variável de saída NÃO é gravada: corpo de erro não é resultado.
+                        await recordStep(supabase, executionId, node, "failed", inputSafe, outputSafe, `HTTP ${res.status}`);
+                        failStepRecorded = true;
+                        codeError = `A requisição respondeu HTTP ${res.status}`;
+                      } else {
+                        if (outVar) {
+                          context[outVar] = capString(responseText, CODE_OUTPUT_MAX_CHARS);
+                          // Corpo JSON também vai achatado, para `{{resposta.id}}` funcionar.
+                          try {
+                            const json = JSON.parse(responseText);
+                            if (json !== null && typeof json === "object") {
+                              flattenForContext(outVar, json, context as Record<string, string | number | boolean>);
+                            }
+                          } catch {
+                            // Resposta não-JSON: só a string crua na variável.
+                          }
+                        }
+
+                        await recordStep(supabase, executionId, node, "success", inputSafe, outputSafe);
+                        nextNodes.push(...getNextNodes(nodeId, edgeMap));
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            codeError = err instanceof Error ? err.message : String(err);
+          }
+
+          if (codeError) {
+            if (!failStepRecorded) {
+              await recordStep(supabase, executionId, node, "failed", inputSafe, undefined, codeError);
+            }
+            // Vale para TODOS os erros do nó, não só o não-2xx: código vazio, JSON
+            // inválido, forma inválida, URL bloqueada, timeout e falha de rede caem
+            // todos aqui. Ver `clearCodeOutput`.
+            clearCodeOutput(outVar, context);
+            if (node.data.onError === "continue") {
+              nextNodes.push(...getNextNodes(nodeId, edgeMap));
+            } else {
+              await updateExecution(supabase, executionId, "failed", nodeId, loopCounters, codeError);
+              return { success: false, status: "failed", error: codeError, stepsExecuted };
+            }
+          }
+          break;
+        }
+
         default:
           console.warn(`[workflow-executor] Unknown node type: ${node.type}`);
           await recordStep(supabase, executionId, node, "skipped", undefined, undefined, `Unknown type: ${node.type}`);
@@ -922,6 +1208,93 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Tamanho serializado do context, em caracteres. Um context que nem serializa é
+ * tratado como infinito: o UPDATE falharia de qualquer jeito, e uma exceção aqui
+ * (fora do try/catch de nó) derrubaria a execução inteira sem gravar passo nenhum.
+ */
+function contextSizeChars(context: Record<string, unknown>): number {
+  try {
+    return JSON.stringify(context).length;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+/**
+ * `input_data` dos passos de nó de código — deliberadamente NÃO é o `node.data`.
+ *
+ * `workflow_execution_steps` é legível por qualquer membro da org, e o `data` de um nó
+ * de código carrega o fonte inteiro escrito pelo usuário. Só metadado sai daqui.
+ */
+function codeNodeStepInput(src: string, outVar: string): Record<string, unknown> {
+  return {
+    bytes: src.length,
+    output_variable: outVar,
+  };
+}
+
+/**
+ * `input_data` do nó HTTPS. Mesma regra do `codeNodeStepInput`, mais dura: o fonte aqui
+ * carrega o header `Authorization`, e a query string da URL pode levar token.
+ *
+ * Sai só `{ method, url_host, url_path, has_body, output_variable, bytes }` — **nunca**
+ * `headers`, **nunca** o `code`, **nunca** `url.search`. A forma é a mesma antes e depois
+ * de haver um spec: sem ele, os campos da requisição vão nulos.
+ */
+function httpsStepInput(
+  src: string,
+  outVar: string,
+  spec?: HttpsRequestSpec,
+): Record<string, unknown> {
+  let host: string | null = null;
+  let path: string | null = null;
+
+  if (spec) {
+    try {
+      const u = new URL(spec.url);
+      host = u.host;   // sem usuário/senha, sem query
+      path = u.pathname;
+    } catch {
+      // URL malformada: o `validateExternalUrl` reprova logo adiante. Host/caminho
+      // ficam nulos em vez de derrubar a gravação do passo.
+    }
+  }
+
+  return {
+    method: spec?.method ?? null,
+    url_host: host,
+    url_path: path,
+    has_body: spec?.body !== undefined,
+    output_variable: outVar,
+    bytes: src.length,
+  };
+}
+
+/**
+ * Dispara a requisição do nó HTTPS. Devolve a resposta, ou a mensagem de erro em PT-BR
+ * **sem a URL crua**.
+ *
+ * A mensagem nativa de falha de rede embute a URL inteira — com a query string, onde pode
+ * viajar um token — e ela terminaria na coluna `error` do passo, legível por qualquer
+ * membro da org. Só o host sai daqui.
+ */
+async function runHttpsRequest(
+  url: URL,
+  opts: RequestInit,
+  timeoutMs: number,
+): Promise<{ ok: true; res: Response } | { ok: false; error: string }> {
+  try {
+    return { ok: true, res: await fetchWithTimeout(url, opts, timeoutMs) };
+  } catch (err) {
+    const name = (err as { name?: string } | null)?.name;
+    if (name === "AbortError" || name === "TimeoutError") {
+      return { ok: false, error: `A requisição para ${url.host} não respondeu em ${timeoutMs} ms` };
+    }
+    return { ok: false, error: `Falha de rede ao chamar ${url.host}` };
+  }
+}
 
 function getNextNodes(
   nodeId: string,

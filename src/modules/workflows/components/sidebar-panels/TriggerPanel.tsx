@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { TRIGGER_CATEGORIES } from "@/types/workflow";
 import type { TriggerNodeData, WorkflowTriggerType, ScheduledDispatchItem } from "@/types/workflow";
-import { usePipelineStages, getPipelineTypeName, type PipelineType, useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines";
+import { usePipelineStages, type PipelineType, usePipelines, useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines";
 import { useCampanhas, useCampanhaStages } from "@/modules/campaigns/hooks/useCampanhas";
 import { useLeadOrigins } from "@/modules/leads";
 import { CampaignSelectorField } from "./CampaignSelectorField";
@@ -155,30 +155,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
 
       {/* ── lead_replied ── */}
       {data.triggerType === "lead_replied" && (
-        <>
-          <div className="space-y-2">
-            <Label>Canal</Label>
-            <Select
-              value={(cfg.channel as string) || "any"}
-              onValueChange={(v) => updateConfig({ channel: v })}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Qualquer canal</SelectItem>
-                <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                <SelectItem value="meta">Meta (IG/FB)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Contém texto (opcional)</Label>
-            <Input
-              value={(cfg.contains_text as string) || ""}
-              onChange={(e) => updateConfig({ contains_text: e.target.value })}
-              placeholder="Ex: confirmo, sim"
-            />
-          </div>
-        </>
+        <LeadRepliedConfig cfg={cfg} updateConfig={updateConfig} />
       )}
 
       {/* ── lead_no_reply ── */}
@@ -380,6 +357,115 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
         </>
       )}
     </div>
+  );
+}
+
+// ── Sub-componente para lead_replied: canal + funis + texto ──
+//
+// O filtro por funil usa `pipeline_ids` (lista de `pipelines.id`). Um campo só
+// dá conta de funil padrão E custom porque a tabela `pipelines` é a união dos
+// dois — o funil custom é espelhado nela com o MESMO uuid. Por isso NÃO
+// repetimos aqui a dualidade `filter_pipe` (slug) + `filter_pipeline_id` (uuid)
+// que o lead_created carrega.
+
+function LeadRepliedConfig({
+  cfg,
+  updateConfig,
+}: {
+  cfg: Record<string, unknown>;
+  updateConfig: (updates: Record<string, unknown>) => void;
+}) {
+  const { data: pipelines } = usePipelines();
+
+  const selectedIds = Array.isArray(cfg.pipeline_ids) ? (cfg.pipeline_ids as string[]) : [];
+
+  // Funil desativado some da lista, mas se ele ainda estiver salvo no filtro
+  // precisa continuar visível — senão o usuário vê "0 funis" numa automação
+  // que na verdade está restrita, e desmarcar vira impossível.
+  const visiblePipelines = (pipelines || []).filter(
+    (p) => p.is_active || selectedIds.includes(p.id),
+  );
+  const systemPipelines = visiblePipelines.filter((p) => p.type === "system");
+  const customPipelines = visiblePipelines.filter((p) => p.type === "custom");
+
+  const togglePipeline = (pipelineId: string, checked: boolean) => {
+    const next = checked
+      ? [...selectedIds, pipelineId]
+      : selectedIds.filter((id) => id !== pipelineId);
+    updateConfig({ pipeline_ids: next });
+  };
+
+  const renderGroup = (label: string, items: typeof visiblePipelines) => (
+    <div className="space-y-1">
+      <p className="text-xs font-semibold text-muted-foreground uppercase">{label}</p>
+      {items.map((p) => (
+        <label
+          key={p.id}
+          className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
+        >
+          <Checkbox
+            checked={selectedIds.includes(p.id)}
+            onCheckedChange={(checked) => togglePipeline(p.id, checked === true)}
+          />
+          {p.name}
+          {!p.is_active && (
+            <span className="text-xs text-muted-foreground">(desativado)</span>
+          )}
+        </label>
+      ))}
+    </div>
+  );
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Canal</Label>
+        <Select
+          value={(cfg.channel as string) || "any"}
+          onValueChange={(v) => updateConfig({ channel: v })}
+        >
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="any">Qualquer canal</SelectItem>
+            <SelectItem value="whatsapp">WhatsApp</SelectItem>
+            <SelectItem value="meta">Meta (IG/FB)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Funis (opcional)</Label>
+        <p className="text-xs text-muted-foreground">
+          Dispara só quando o lead estiver em um dos funis marcados. Nenhum
+          marcado = qualquer funil.
+        </p>
+        {visiblePipelines.length > 0 ? (
+          <div className="space-y-3 max-h-48 overflow-y-auto rounded-md border p-3">
+            {systemPipelines.length > 0 && renderGroup("Funis Padrão", systemPipelines)}
+            {customPipelines.length > 0 && renderGroup("Funis Custom", customPipelines)}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Nenhum funil encontrado.</p>
+        )}
+        {selectedIds.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {selectedIds.length} funil(is) selecionado(s)
+          </p>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label>Contém texto (opcional)</Label>
+        <Input
+          value={(cfg.contains_text as string) || ""}
+          onChange={(e) => updateConfig({ contains_text: e.target.value })}
+          placeholder="Ex: confirmo, sim"
+        />
+        <p className="text-xs text-muted-foreground">
+          Refina ainda mais: além do funil, a resposta precisa conter este texto.
+        </p>
+      </div>
+    </>
   );
 }
 

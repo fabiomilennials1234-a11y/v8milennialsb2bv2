@@ -10,6 +10,7 @@ import { ResponsibleSlot } from "../header/ResponsibleSlot";
 import { QualificationSlot } from "../header/QualificationSlot";
 import { StageRail } from "../pipes/StageRail";
 import { LeadModalToolbar } from "../LeadModalToolbar";
+import { EMAIL_CHANNEL_AVAILABLE } from "@/modules/communication/lib/channel-availability";
 
 // ─── Mocks ──────────────────────────────────────────────────────────
 
@@ -193,7 +194,10 @@ describe("LeadModalToolbar gates", () => {
     aiDisabled: false,
     onToggleAI: vi.fn(),
     onOpenCallModal: vi.fn(),
+    onOpenEmailComposer: vi.fn(),
+    onOpenEmailWriter: vi.fn(),
     onOpenScheduleModal: vi.fn(),
+    onOpenSmsDialog: vi.fn(),
     onDelete: vi.fn(),
     onClose: vi.fn(),
   };
@@ -207,6 +211,16 @@ describe("LeadModalToolbar gates", () => {
     expect(queryByText(/excluir lead/i)).not.toBeInTheDocument();
   });
 
+  it("esconde Email e SMS enquanto o canal não estiver disponível", () => {
+    // Ancorado NA FLAG, não em `not.toBeInTheDocument()` seco: se um dia o
+    // backend de e-mail/SMS existir e a flag virar, este teste continua
+    // dizendo a verdade em vez de virar asserção vazia que passa sempre.
+    renderWithQuery(<LeadModalToolbar {...baseProps} />);
+    expect(Boolean(screen.queryByRole("button", { name: /^email$/i }))).toBe(
+      EMAIL_CHANNEL_AVAILABLE,
+    );
+  });
+
   it("hides comms buttons (WhatsApp/Ligar) when canSendMessage=false", () => {
     // Add canSendMessage to gates contract via canMention as proxy until granular key lands.
     // For now sendMessage gate maps internally; we exercise the "off" path with all comm-related flags off.
@@ -214,6 +228,7 @@ describe("LeadModalToolbar gates", () => {
     gatesState.current.canEditField = { allowed: false, isLoading: false, reason: "denied" };
     renderWithQuery(<LeadModalToolbar {...baseProps} />);
     // When comms are denied, WhatsApp / Ligar should not render.
+    // (Email tem teste próprio acima — está atrás da flag de canal, não do gate.)
     expect(screen.queryByRole("button", { name: /whatsapp/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^ligar$/i })).not.toBeInTheDocument();
   });

@@ -33,8 +33,11 @@ Inclui:
 ```
 src/modules/communication/
 ├── components/
+│   ├── ai/                        # AiEmailWriter (slice 16 absorvido)
 │   ├── chat/                      # WhatsApp UI (actions, admin, bubble, composer, context-panel, history-sync, layout, list, media, search, takeover, view + barrel index.ts)
 │   ├── chat-meta/                 # Meta Messenger/Instagram UI
+│   ├── email/                     # Email channel UI (slice 16)
+│   ├── sms/                       # SMS channel UI (slice 16)
 │   ├── whatsapp/                  # SessionDeadBanner (lifecycle alerts)
 │   └── whatsapp-migration/        # Evolution→Uazapi RepairingWizard (banner órfão deletado 2026-07-02)
 ├── hooks/
@@ -60,7 +63,11 @@ src/modules/communication/
 │   ├── useDeadSessions.ts
 │   ├── useIncomingMessageToast.ts
 │   ├── usePreferredInstance.ts
-│   └── useUserWriteInstanceFlag.ts
+│   ├── useUserWriteInstanceFlag.ts
+│   ├── useEmailAccounts.ts        # (slice 16)
+│   ├── useEmails.ts               # (slice 16)
+│   ├── useSms.ts                  # (slice 16)
+│   └── useAiEmailDrafts.ts        # (slice 16)
 ├── lib/
 │   ├── whatsappApi.ts             # Low-level HTTP client (Uazapi REST)
 │   ├── whatsapp.ts                # High-level send helpers
@@ -91,9 +98,19 @@ Superfície completa em `./index.ts`. Resumo:
 
 **Hooks Meta:** `useMetaConnection`, `useMetaPages`, `useMetaConversations`, `useMetaConversationProfile`, `useMetaMessages`, `useMetaSend`, `useMetaMarkAsRead`, `useMetaLinkLead`, `useMetaRealtime`.
 
-**E-mail / SMS / AI email writer — REMOVIDOS em 2026-08-06.** Eram 9 arquivos (~1.330 linhas) chamando as edge functions `send-email`, `send-sms` e `generate-ai-email-draft`, que **nunca existiram** — nem no repo, nem deployadas no PROD (conferido contra as 150 funções vivas). As 7 tabelas (`emails`, `email_accounts`, `email_templates`, `ai_email_drafts`, `sms_messages`, `sms_templates`, `sms_provider_config`) seguem com 0 linhas e **não foram dropadas**: `emails.deal_id`/`contact_id` são da mesma onda de roadmap que `deals`/`contacts` (épico SCRUM-43).
+**Hooks email/sms/ai (slice 16 longtail):** `useEmailAccounts`, `useEmails`, `useSms`, `useAiEmailDrafts`.
 
-**Components:** `ChatShellWithContext`, `ChatSkeleton`, `MessageBubble`, `MessagesAreaErrorBoundary`, `AudioPlayer`, `AudioRecorder`, `ImagePreviewModal`, `MessageImage/Video/Document`, `ChatEmptyState`, `ScrollToBottomFab`, `UnreadDivider`, `ScheduledMessagesBanner`, `ScheduleMessageModal`, `ConversationNotes`, `LeadContactModal`, `HumanPauseBadge`, `ChannelBadge`, `RealtimeStatusBadge`; Meta: `MetaChatShell`, `MetaChatHeader`, `MetaConversationList(Item)`, `MetaMessage{List,Bubble}`, `MetaComposer`, `MetaWindowWarning`, `LinkLeadDialog`, `ChatMetaSkeleton`; WhatsApp lifecycle: `SessionDeadBanner`, `RepairingWizard`.
+⚠️ **E-mail e SMS estão ESCONDIDOS na UI desde 06/08/2026** — `lib/channel-availability.ts`
+(`EMAIL_CHANNEL_AVAILABLE` / `SMS_CHANNEL_AVAILABLE`, ambas `false`). O andaime está completo,
+mas as edge functions `send-email`, `send-sms` e `generate-ai-email-draft` **nunca foram
+construídas** (não existem em nenhum commit, nem no `config.toml`, nem entre as 150 funções
+deployadas no PROD). Os botões davam erro no cliente desde maio. É **Wave 2** do
+`docs/MASTER-ROADMAP-WORLD-CLASS.md` (2.1 Email Sync, 2.2 Unified Inbox, 2.4 SMS), que depende
+da Wave 1.1 (Contact/Deal = épico SCRUM-43). **Não apagar** — `useEmails` já aceita `contactId`
+e `AiEmailWriter` já aceita `dealId`. Para religar: construir a function, registrar no
+`config.toml`, deployar e virar a flag.
+
+**Components:** `ChatShellWithContext`, `ChatSkeleton`, `MessageBubble`, `MessagesAreaErrorBoundary`, `AudioPlayer`, `AudioRecorder`, `ImagePreviewModal`, `MessageImage/Video/Document`, `ChatEmptyState`, `ScrollToBottomFab`, `UnreadDivider`, `ScheduledMessagesBanner`, `ScheduleMessageModal`, `ConversationNotes`, `LeadContactModal`, `HumanPauseBadge`, `ChannelBadge`, `RealtimeStatusBadge`; Meta: `MetaChatShell`, `MetaChatHeader`, `MetaConversationList(Item)`, `MetaMessage{List,Bubble}`, `MetaComposer`, `MetaWindowWarning`, `LinkLeadDialog`, `ChatMetaSkeleton`; WhatsApp lifecycle: `SessionDeadBanner`, `RepairingWizard`; Email/SMS/AI (slice 16): `AiEmailWriter`, email/sms internals.
 
 **Lib:** `whatsappApi` (namespace export), `primaryInstanceFor`, `computeNeedsDeepLinkResolve`, `prefetchChatRoute`, `prefetchChatData`.
 
