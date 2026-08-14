@@ -27,6 +27,7 @@ import { OmieSettings } from "./OmieSettings";
 import { ElevenLabsSettings } from "./ElevenLabsSettings";
 import { WhatsAppSettings } from "./WhatsAppSettings";
 import { TorqueCallsSettings } from "./TorqueCallsSettings";
+import { InstagramChannelSettings } from "./InstagramChannelSettings";
 
 // Hooks de status
 import { useMetaConnectionStatusByType } from "@/modules/communication/hooks/useMetaConnection";
@@ -34,10 +35,20 @@ import { useGoogleCalendarStatus } from "@/modules/integrations/hooks/useGoogleC
 import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
 import { useOmieStatus } from "@/modules/integrations";
 import { useWhatsAppInstances, useVoipSessions } from "@/modules/communication";
+// Import direto do módulo do hook, e não do barrel, pelo MESMO motivo do
+// `useMetaConnection` logo acima: a suíte deste arquivo mocka
+// `@/modules/communication` de forma exaustiva, e um export a mais no barrel
+// deixaria o CI vermelho por um símbolo que o mock não conhece — não por
+// defeito. Aqui não entra hook nenhum: só a função de leitura e a chave.
+import {
+  fetchMessagingChannels,
+  messagingChannelsQueryKey,
+} from "@/modules/communication/hooks/useMessagingChannels";
 import { useOrganization } from "@/modules/identity";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { useFeatureFlag } from "@/modules/platform/hooks/useFeatureFlag";
 import type { FeatureKey } from "@/modules/platform/lib/feature-registry";
 
 // ─── Brand Logos (SVG inline para visual premium) ───────
@@ -162,6 +173,17 @@ interface IntegrationDef {
   settingsId: string;
   /** Quando presente, o cartão só aparece se a organização tiver a feature. */
   featureKey?: FeatureKey;
+  /**
+   * Quando presente, o cartão só aparece se a flag jsonb homônima estiver
+   * ligada em `organizations.feature_flags`.
+   *
+   * DIFERENTE de `featureKey`, e de propósito: `featureKey` é PLANO (o que a org
+   * paga, tipado no catálogo de features), esta é ROLLOUT (o que já está pronto
+   * para esta org, ligado por UPDATE direto). Um canal em rollout não vira item
+   * de plano até existir de verdade — e enquanto não vira, não aparece no
+   * BillingOverrideModal. Aceito conscientemente.
+   */
+  flagKey?: string;
 }
 
 const CATEGORY_LABELS: Record<IntegrationCategory, string> = {
@@ -197,6 +219,23 @@ const INTEGRATIONS: IntegrationDef[] = [
     features: ["Chamada pelo chat", "Usa o número que já existe", "Histórico no lead"],
     settingsId: "torquecalls",
     featureKey: "voice_calls",
+  },
+  {
+    // Instagram como CANAL DE ATENDIMENTO, pelo NotificaMe — prateleira
+    // diferente do card "Instagram" de marketing, que é o caminho antigo pela
+    // Graph API e continua existindo por mais uma fatia (é ele que tem caixa de
+    // entrada hoje). Dois caminhos, dois rótulos, nunca "Instagram" duas vezes
+    // com o mesmo nome na mesma prateleira.
+    id: "instagram_oficial",
+    name: "Instagram (oficial)",
+    description: "Conecte a conta profissional com verificação da Meta.",
+    longDescription:
+      "Conecte a conta profissional do Instagram pelo login da Meta, sem depender de um app próprio. Esta etapa entrega a conexão da conta; o recebimento de mensagens diretas no Torque entra em seguida.",
+    category: "messaging",
+    logo: <InstagramLogo />,
+    features: ["Conta profissional", "Login pela Meta", "Direct — em breve"],
+    settingsId: "instagram_oficial",
+    flagKey: "notificame_instagram",
   },
   {
     id: "facebook",
@@ -272,6 +311,25 @@ function useIntegrationStatuses() {
   const { data: voipSessions = [] } = useVoipSessions();
   const { organizationId } = useOrganization();
 
+  // Estado REAL do canal novo. Antes era `connected: false` chumbado: o cartão
+  // de uma org COM Instagram conectado dizia "não conectado" e não entrava na
+  // contagem — um número errado no lugar mais visível da tela.
+  //
+  // A queryKey é a MESMA de `useMessagingChannels`, de propósito: o
+  // `invalidateQueries` que roda no fim da conexão atualiza este selo sem
+  // precisar saber que ele existe. Duas chaves diferentes deixariam o badge
+  // parado até o próximo F5.
+  //
+  // `enabled` pela flag pelo mesmo motivo do card: a tabela só existe depois da
+  // migration desta fatia, e a flag desligada é exatamente o período em que ela
+  // pode não existir no ambiente.
+  const notificameInstagramFlag = useFeatureFlag("notificame_instagram");
+  const { data: messagingChannels = [] } = useQuery({
+    queryKey: messagingChannelsQueryKey(organizationId),
+    enabled: notificameInstagramFlag.enabled && !!organizationId,
+    queryFn: () => fetchMessagingChannels(organizationId as string),
+  });
+
   const { data: orgData } = useQuery({
     queryKey: ["org-elevenlabs-key", organizationId],
     queryFn: async () => {
@@ -301,6 +359,13 @@ function useIntegrationStatuses() {
   // o comentário longo lá.
   const activeVoiceSessions = voipSessions.filter((s) => s.status === "open");
 
+  // `status === "connected"` e não "existe uma linha": um perfil que caiu
+  // continua na tabela como `disconnected`, e chamar isso de conectado é a mesma
+  // mentira que o badge do TorqueCalls contava com sessão `pending`.
+  const connectedInstagram = messagingChannels.filter(
+    (c) => c.channel_type === "instagram" && c.status === "connected",
+  );
+
   return {
     whatsapp: {
       connected: connectedInstances.length > 0,
@@ -321,6 +386,20 @@ function useIntegrationStatuses() {
     instagram: {
       connected: !!igConnected,
       detail: igConnected ? "Perfil conectado" : undefined,
+    },
+    instagram_oficial: {
+      connected: connectedInstagram.length > 0,
+      // O @ da conta quando é uma só — é o que o usuário reconhece. Sem handle
+      // (o fornecedor nem sempre manda), o nome do perfil; nunca um telefone,
+      // porque perfil de Instagram não tem um.
+      detail:
+        connectedInstagram.length === 1
+          ? connectedInstagram[0].handle
+            ? `@${connectedInstagram[0].handle}`
+            : connectedInstagram[0].display_name
+          : connectedInstagram.length > 1
+            ? `${connectedInstagram.length} contas`
+            : undefined,
     },
     google_calendar: {
       connected: !!calendarStatus?.connected,
@@ -494,6 +573,11 @@ function getSettingsComponent(settingsId: string): React.FC | null {
       return FacebookSettings;
     case "instagram":
       return InstagramSettings;
+    // Canal novo, componente próprio. `InstagramSettings` (Graph) NÃO sai nesta
+    // fatia: ela é o único caminho de Instagram que já recebe mensagem, e tirá-la
+    // antes de a nova entregar inbox seria regressão, não simplificação.
+    case "instagram_oficial":
+      return InstagramChannelSettings;
     case "google_calendar":
       return GoogleCalendarSettings;
     case "tinyerp":
@@ -515,11 +599,20 @@ export default function IntegrationsCatalog() {
   const [filterCategory, setFilterCategory] = useState<IntegrationCategory | "all">("all");
   const statuses = useIntegrationStatuses();
   const { hasFeature } = useOrgFeatures();
+  // Rollout por org, jsonb `organizations.feature_flags`. Fail-closed: enquanto
+  // carrega, o cartão não aparece — nunca piscar uma porta que pode não existir.
+  const notificameInstagramFlag = useFeatureFlag("notificame_instagram");
+  const ROLLOUT_FLAGS: Record<string, boolean> = {
+    notificame_instagram: notificameInstagramFlag.enabled,
+  };
 
   // Gate de interface — o servidor já checa a mesma feature em torquecalls-control;
-  // isto só evita mostrar um cartão que o plano da organização não paga.
+  // isto só evita mostrar um cartão que o plano da organização não paga. O gate
+  // de `flagKey` é outra pergunta (rollout, não plano) e some junto com a flag.
   const visibleIntegrations = INTEGRATIONS.filter(
-    (i) => !i.featureKey || hasFeature(i.featureKey),
+    (i) =>
+      (!i.featureKey || hasFeature(i.featureKey)) &&
+      (!i.flagKey || ROLLOUT_FLAGS[i.flagKey] === true),
   );
 
   const connectedCount = visibleIntegrations.filter(

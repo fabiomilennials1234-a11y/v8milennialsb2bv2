@@ -1,7 +1,21 @@
 /**
- * useConnectNotificame — conecta um número WhatsApp OFICIAL pelo Seamless do
- * NotificaMe (fatia 1). É a terceira porta de entrada da superfície de conexões,
- * ao lado do QR da Uazapi e do Embedded Signup da Meta.
+ * useConnectNotificame — conecta um canal OFICIAL pelo Seamless do NotificaMe.
+ * Na fatia 1 era só WhatsApp; na 1.1 o MESMO fluxo passa a conectar também o
+ * Instagram, porque o popup, a subconta, a sessão e o diff de canais são
+ * idênticos — o que muda é uma palavra na querystring (`type`) e o lugar onde a
+ * linha nasce do lado de cá.
+ *
+ * UM TIPO, DUAS PORTAS. O `channelType` não é um detalhe de request: ele decide
+ * (a) qual `start_url` abre o popup, (b) qual gate de flag o servidor aplica
+ * (`notificame` para WhatsApp, `notificame_instagram` para Instagram — ligar um
+ * NÃO liga o outro), (c) qual tabela recebe o canal no finish
+ * (`whatsapp_instances` para WhatsApp, `messaging_channels` para Instagram) e
+ * (d) qual queryKey é invalidada. Um canal de Instagram NUNCA entra em
+ * `whatsapp_instances`: se entrasse, herdaria o rótulo "WhatsApp Oficial", seria
+ * candidato a disparo em massa e comeria uma vaga PAGA de número.
+ *
+ * DEFAULT `"whatsapp"` de propósito: o call site da fatia 1 continua correto sem
+ * ter tocado nele, e um clique que não escolheu nada cai no comportamento antigo.
  *
  * MODELO: SUBCONTA POR ORG. Cada org do Torque tem uma subconta própria na
  * revenda do NotificaMe, provisionada pelo servidor sob demanda.
@@ -64,6 +78,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { readSeamlessMessage, seamlessOriginFromStartUrl } from "../lib/notificame-message";
+import { messagingChannelsQueryKey } from "./useMessagingChannels";
 
 /** Geometria do popup do Seamless — cabe o fluxo da Meta sem scroll horizontal. */
 const POPUP_FEATURES = "width=680,height=760,menubar=no,toolbar=no,location=no";
@@ -76,7 +91,26 @@ const POPUP_POLL_MS = 500;
 const FINISH_RETRIES = 3;
 const FINISH_RETRY_DELAY_MS = 2_000;
 
-const FALLBACK_REASON = "WhatsApp Oficial indisponível no momento";
+const FALLBACK_REASON = "Canal oficial indisponível no momento";
+
+/**
+ * Canais que o Seamless conecta. ALLOWLIST fechada — o servidor tem a sua,
+ * idêntica, e é a dele que vale. `facebook` existe no fornecedor e NÃO entra
+ * aqui: nenhum caminho desta fatia o liga.
+ */
+export type SeamlessChannelType = "whatsapp" | "instagram";
+
+/** Rótulo do canal na microcopy. Nunca "WhatsApp" numa frase de Instagram. */
+const CHANNEL_LABEL: Record<SeamlessChannelType, string> = {
+  whatsapp: "WhatsApp Oficial",
+  instagram: "Instagram",
+};
+
+/** Nenhuma URL conhecida — org sem subconta, ou sonda que falhou. */
+const NO_START_URLS: Readonly<Record<SeamlessChannelType, string | null>> = Object.freeze({
+  whatsapp: null,
+  instagram: null,
+});
 
 /**
  * Janela de espera do popup no primeiro connect da org, antes de ele ser
@@ -94,17 +128,75 @@ interface StartProbe {
   /** Plataforma configurada E o usuário autorizado. É o que habilita o botão. */
   configured: boolean;
   /**
-   * URL do popup, quando a org JÁ tem subconta. `null` com `configured:true` NÃO
-   * é indisponibilidade — é "ainda não provisionada", e o clique resolve.
+   * URL do popup POR CANAL, quando a org JÁ tem subconta. `null` com
+   * `configured:true` NÃO é indisponibilidade — é "ainda não provisionada" (ou,
+   * no caso do Instagram, "flag do canal desligada"), e o clique resolve.
+   *
+   * O servidor devolve as duas na MESMA ida (`start_urls`); um servidor ainda
+   * não atualizado devolve só `start_url`, que é a do WhatsApp — e é por isso
+   * que `instagram` NÃO herda o legado: herdar mandaria o usuário para um
+   * fluxo de WhatsApp com a palavra "Instagram" no botão.
    */
-  startUrl: string | null;
+  startUrls: Record<SeamlessChannelType, string | null>;
   reason: string | null;
   /** Código estável de máquina — vocabulário fechado nosso. */
   code: string | null;
 }
 
-/** Microcopy por código estável de erro das edge functions. */
-function messageForCode(code: string | undefined, configReason: string | null): string {
+/**
+ * A URL do popup é do canal que se pediu?
+ *
+ * É a ÚNICA coisa no browser que distingue um fluxo do outro: o popup devolve
+ * `{status:"channel-success"}` idêntico para os dois, sem id e sem tipo. Quem
+ * decide o que foi conectado é a URL que abrimos — então ela é conferida, nunca
+ * presumida.
+ *
+ * Ausência de `type` ⇒ WhatsApp: é o que o servidor da fatia 1 emite, e lá o
+ * tipo era fixo.
+ */
+function startUrlMatchesChannel(url: string, channelType: SeamlessChannelType): boolean {
+  try {
+    return (new URL(url).searchParams.get("type") ?? "whatsapp") === channelType;
+  } catch {
+    // URL impossível de parsear não é do canal nenhum. Fail-closed.
+    return false;
+  }
+}
+
+/**
+ * Lê `start_urls` (servidor novo) com degradação para `start_url` (servidor da
+ * fatia 1, ainda em prod enquanto o deploy da 1.1 não sai).
+ *
+ * Cada URL é conferida contra a chave em que veio. Um servidor que devolvesse a
+ * URL de WhatsApp na chave `instagram` mandaria quem clicou "Conectar Instagram"
+ * para o fluxo de WhatsApp — e o finish vincularia um NÚMERO. Confiar na chave
+ * seria confiar em quem já errou.
+ */
+function readStartUrls(
+  result: { start_url?: unknown; start_urls?: unknown } | null,
+): Record<SeamlessChannelType, string | null> {
+  const legacy = typeof result?.start_url === "string" ? result.start_url : null;
+  const map = (result?.start_urls ?? null) as Record<string, unknown> | null;
+  const pick = (key: SeamlessChannelType): string | null => {
+    const raw = map && typeof map[key] === "string" ? (map[key] as string) : null;
+    return raw && startUrlMatchesChannel(raw, key) ? raw : null;
+  };
+  return {
+    whatsapp: pick("whatsapp") ?? (legacy && startUrlMatchesChannel(legacy, "whatsapp") ? legacy : null),
+    // Sem herança do legado — ver o comentário de `startUrls`.
+    instagram: pick("instagram"),
+  };
+}
+
+/**
+ * Microcopy por código estável de erro das edge functions. `channelLabel` entra
+ * nas frases que nomeiam o canal; o default preserva as frases da fatia 1.
+ */
+function messageForCode(
+  code: string | undefined,
+  configReason: string | null,
+  channelLabel: string = CHANNEL_LABEL.whatsapp,
+): string {
   switch (code) {
     case "ambiguous_channel":
       // Sob subconta por org, ambíguo NÃO é mais "canal sem dono na conta-mãe":
@@ -114,16 +206,27 @@ function messageForCode(code: string | undefined, configReason: string | null): 
       return "Outra conexão está em andamento. Aguarde alguns segundos e tente de novo.";
     case "no_channel_found":
       return "O NotificaMe ainda não registrou o canal. Tente conectar de novo em instantes.";
+    case "channel_type_undetermined":
+      // Chega aqui SÓ depois das retentativas: o fornecedor listou o canal e
+      // seguiu sem dizer de que tipo ele é. O servidor recusa gravar sem tipo
+      // confirmado, então o canal EXISTE do lado de lá e não está vinculado —
+      // e é isso que a frase precisa dizer. "Tente de novo" sozinho mandaria o
+      // usuário repetir um fluxo que já criou o canal, e criaria o segundo.
+      return "O canal foi criado, mas não conseguimos identificar o tipo dele. Fale com o suporte para vinculá-lo — não repita a conexão, ela criaria um canal duplicado.";
     case "channel_already_bound":
       return "Esse canal já está vinculado a outra organização.";
     case "quota_exceeded":
       return "Limite de números da organização atingido.";
     case "feature_disabled":
-      return "WhatsApp Oficial não habilitado para esta organização.";
+      return `${channelLabel} não habilitado para esta organização.`;
+    case "instagram_not_enabled":
+      // Flag SEPARADA da do WhatsApp Oficial: ligar o canal oficial de WhatsApp
+      // numa org não liga o Instagram dela, e vice-versa. Fail-closed no servidor.
+      return "Instagram ainda não está habilitado para esta organização.";
     case "permission_denied":
       // O servidor exige admin ou master. A frase é deliberadamente sobre QUEM
       // pode, não sobre "erro": um membro comum não fez nada errado.
-      return "Apenas administradores podem conectar o WhatsApp Oficial.";
+      return `Apenas administradores podem conectar o ${channelLabel}.`;
     case "provisioning_in_progress":
       return "Estamos preparando sua conta oficial. Tente de novo em instantes.";
     case "subaccount_provision_failed":
@@ -145,8 +248,35 @@ function messageForCode(code: string | undefined, configReason: string | null): 
     case "not_configured":
       return configReason ?? FALLBACK_REASON;
     default:
-      return "Não foi possível concluir a conexão do WhatsApp Oficial.";
+      return `Não foi possível concluir a conexão do ${channelLabel}.`;
   }
+}
+
+/**
+ * Motivo do estado INERTE escrito no vocabulário do CANAL pedido.
+ *
+ * POR QUE ISTO EXISTE. A sonda é UMA só para os dois canais, e quem escreve a
+ * frase dela é o SERVIDOR — cujas frases nomeiam o WhatsApp Oficial ("WhatsApp
+ * Oficial ainda não está configurado nesta plataforma"), porque foi para ele que
+ * a fatia 1 as escreveu. Renderizar essa prosa num card de Instagram é dizer
+ * "WhatsApp" numa tela que não fala de WhatsApp — o defeito que esta função
+ * remove. A tradução parte do `code`, que é vocabulário FECHADO nosso; a prosa
+ * do servidor nunca atravessa de canal.
+ *
+ * Sem código conhecido, frase neutra: genérica é melhor que errada.
+ */
+function reasonForChannel(code: string | null, channelType: SeamlessChannelType): string {
+  const channelLabel = CHANNEL_LABEL[channelType];
+  if (!code) return FALLBACK_REASON;
+  // Único código da sonda cuja frase do servidor nomeia um canal. Em
+  // `messageForCode` ele resolve ecoando aquela prosa — aqui, não.
+  if (code === "not_configured") {
+    return `${channelLabel} ainda não está configurado nesta plataforma`;
+  }
+  // Os demais códigos da sonda (`provisioning_in_progress`,
+  // `subaccount_*`, `permission_denied`, `feature_disabled`,
+  // `instagram_not_enabled`) já têm frase neutra ou parametrizada pelo rótulo.
+  return messageForCode(code, null, channelLabel);
 }
 
 /**
@@ -179,14 +309,29 @@ type ConnectOutcome =
   | { ok: false; code: string | null };
 
 export interface UseConnectNotificameResult {
-  /** Abre o popup do Seamless. SÍNCRONO — precisa rodar no gesto do clique. */
-  connectNotificame: () => void;
+  /**
+   * Abre o popup do Seamless para o canal pedido. SÍNCRONO — precisa rodar no
+   * gesto do clique. Sem argumento ⇒ `"whatsapp"`, o comportamento da fatia 1.
+   */
+  connectNotificame: (channelType?: SeamlessChannelType) => void;
   /** True do `window.open` até o finish resolver (ou o usuário desistir). */
   isConnecting: boolean;
   /** False quando falta secret do fornecedor ou o usuário não é admin — INERTE. */
   isConfigured: boolean;
-  /** Motivo legível para a UI mostrar ANTES do clique. `null` quando pronto. */
+  /**
+   * Motivo legível para a UI mostrar ANTES do clique. `null` quando pronto.
+   *
+   * ⚠️ É a razão do **WhatsApp Oficial** — a prosa do servidor, preservada byte
+   * a byte para o call site da fatia 1. Uma tela de OUTRO canal que renderize
+   * isto exibe a palavra "WhatsApp" no card errado. Use `configReasonFor`.
+   */
   configReason: string | null;
+  /**
+   * A razão do CANAL que a tela representa. É o que toda superfície deve ler:
+   * `configReasonFor("instagram")` nunca devolve uma frase de WhatsApp, e
+   * `configReasonFor("whatsapp")` é idêntico a `configReason`.
+   */
+  configReasonFor: (channelType?: SeamlessChannelType) => string | null;
   /** True enquanto a sonda de configuração está em voo. */
   isConfigLoading: boolean;
   /**
@@ -264,7 +409,7 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
         const body = await readFnError(error);
         return {
           configured: false,
-          startUrl: null,
+          startUrls: { ...NO_START_URLS },
           // NUNCA ecoar `body.error`. `withErrorBoundary` devolve `error.message`
           // CRU ao cliente, e uma falha ao falar com o fornecedor pode carregar o
           // token da CONTA-MÃE dentro dessa string. `reason` é renderizado em
@@ -277,14 +422,20 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
       }
 
       const result = data as
-        | { configured?: boolean; start_url?: string | null; reason?: string; code?: string }
+        | {
+            configured?: boolean;
+            start_url?: string | null;
+            start_urls?: Record<string, unknown> | null;
+            reason?: string;
+            code?: string;
+          }
         | null;
 
       if (result?.configured === true) {
         return {
           configured: true,
-          // Ausente ⇒ org sem subconta ainda. Botão VIVO: o clique provisiona.
-          startUrl: typeof result.start_url === "string" ? result.start_url : null,
+          // Ausentes ⇒ org sem subconta ainda. Botão VIVO: o clique provisiona.
+          startUrls: readStartUrls(result),
           reason: null,
           code: null,
         };
@@ -292,7 +443,7 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
 
       return {
         configured: false,
-        startUrl: null,
+        startUrls: { ...NO_START_URLS },
         reason: result?.reason ?? "NotificaMe ainda não configurado nesta organização",
         code: typeof result?.code === "string" ? result.code : null,
       };
@@ -305,67 +456,128 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
   const isConfigLoading = probe.isLoading || (enabled && !organizationId);
 
   const isConfigured = probe.data?.configured === true;
+  // A prosa do SERVIDOR — e ela fala de WhatsApp Oficial. Fica como está para o
+  // call site da fatia 1; qualquer outro canal passa por `configReasonFor`.
   const configReason = isConfigured ? null : probe.data?.reason ?? FALLBACK_REASON;
-  const startUrl = probe.data?.startUrl ?? null;
+  // O código é o que viaja entre canais. A frase, não.
+  const configCode = probe.data?.code ?? null;
+  const startUrls = probe.data?.startUrls ?? NO_START_URLS;
 
-  /** Semeia o cache com a URL recém-provisionada: o próximo clique já abre nela. */
+  /**
+   * Razão do estado inerte, no vocabulário do canal pedido.
+   *
+   * O WhatsApp continua recebendo a frase do servidor, intacta: é o call site
+   * que já existia, e nada nele mudou. Os demais canais são traduzidos a partir
+   * do `code` por `reasonForChannel` — ver o comentário lá em cima sobre por que
+   * a prosa do servidor não pode atravessar de canal.
+   */
+  const configReasonFor = useCallback(
+    (channelType: SeamlessChannelType = "whatsapp"): string | null => {
+      if (isConfigured) return null;
+      if (channelType === "whatsapp") return configReason;
+      return reasonForChannel(configCode, channelType);
+    },
+    [isConfigured, configReason, configCode],
+  );
+
+  /**
+   * Semeia o cache com a URL recém-provisionada: o próximo clique já abre nela.
+   * Escreve SÓ a chave do canal conectado — sobrescrever o mapa inteiro apagaria
+   * a URL do outro canal, e o próximo clique nele abriria janela em branco à toa.
+   */
   const cacheStartUrl = useCallback(
-    (url: string) => {
-      queryClient.setQueryData<StartProbe>(["notificame_start_url", organizationId], {
-        configured: true,
-        startUrl: url,
-        reason: null,
-        code: null,
-      });
+    (url: string, channelType: SeamlessChannelType) => {
+      queryClient.setQueryData<StartProbe>(
+        ["notificame_start_url", organizationId],
+        (prev): StartProbe => ({
+          configured: true,
+          startUrls: { ...(prev?.startUrls ?? NO_START_URLS), [channelType]: url },
+          reason: null,
+          code: null,
+        }),
+      );
     },
     [queryClient, organizationId],
   );
 
   // ── Finalização: descobre e vincula o canal, server-side ───────────────────
-  const finish = useCallback(async () => {
-    // A sessão foi aberta lá atrás, em paralelo ao fluxo da Meta. Aqui só se
-    // colhe o resultado — e `null` é desfecho válido (caminho degradado, sem
-    // baseline), não erro.
-    const sessionId = await (sessionRef.current ?? Promise.resolve(null));
+  const finish = useCallback(
+    async (channelType: SeamlessChannelType) => {
+      const channelLabel = CHANNEL_LABEL[channelType];
+      // A sessão foi aberta lá atrás, em paralelo ao fluxo da Meta. Aqui só se
+      // colhe o resultado — e `null` é desfecho válido (caminho degradado, sem
+      // baseline), não erro.
+      const sessionId = await (sessionRef.current ?? Promise.resolve(null));
 
-    for (let attempt = 0; attempt < FINISH_RETRIES; attempt++) {
-      const { data, error } = await supabase.functions.invoke("notificame-channel-finish", {
-        body: {
-          organization_id: organizationId,
-          ...(sessionId ? { session_id: sessionId } : {}),
-        },
-      });
+      for (let attempt = 0; attempt < FINISH_RETRIES; attempt++) {
+        const { data, error } = await supabase.functions.invoke("notificame-channel-finish", {
+          body: {
+            organization_id: organizationId,
+            ...(sessionId ? { session_id: sessionId } : {}),
+          },
+        });
 
-      if (!error) {
-        const result = data as { instance_id?: string } | null;
-        if (!result?.instance_id) {
-          toast.error("Resposta inesperada do servidor");
+        if (!error) {
+          const result = data as
+            | { instance_id?: string; messaging_channel_id?: string; channel_kind?: string }
+            | null;
+          // `channel_kind` é a palavra do SERVIDOR sobre o que ele acabou de
+          // gravar, e ela ganha da nossa: se o finish decidiu diferente, é a
+          // decisão dele que está no banco. Ausente ⇒ servidor da fatia 1, que só
+          // sabia WhatsApp; aí vale o que pedimos.
+          const kind: SeamlessChannelType =
+            result?.channel_kind === "instagram" || result?.channel_kind === "whatsapp"
+              ? result.channel_kind
+              : channelType;
+          // Cada canal tem a SUA chave de identidade. Aceitar `instance_id` num
+          // desfecho de Instagram seria aceitar que o canal caiu em
+          // `whatsapp_instances` — exatamente o que este desenho impede.
+          const boundId = kind === "instagram" ? result?.messaging_channel_id : result?.instance_id;
+          if (!boundId) {
+            toast.error("Resposta inesperada do servidor");
+            return;
+          }
+          await queryClient.invalidateQueries({
+            queryKey:
+              kind === "instagram"
+                ? messagingChannelsQueryKey(organizationId)
+                : ["whatsapp_instances", organizationId],
+          });
+          toast.success(`${CHANNEL_LABEL[kind]} conectado!`);
           return;
         }
-        await queryClient.invalidateQueries({
-          queryKey: ["whatsapp_instances", organizationId],
-        });
-        toast.success("WhatsApp Oficial conectado!");
+
+        const body = await readFnError(error);
+        // `no_channel_found` é consistência eventual do `/v1/channels`: o canal
+        // acabou de nascer e a listagem ainda não o enxerga.
+        // `channel_type_undetermined` é a MESMA consistência eventual, um passo
+        // adiante: o canal já apareceu na listagem, mas ainda sem o `type`. O
+        // servidor recusa gravar sem tipo confirmado — ele não escolhe tabela pelo
+        // que pedimos no clique —, então a espera é o que resolve. Não retentar
+        // aqui transformaria uma janela de segundos em erro terminal na tela,
+        // logo depois de o usuário ter concluído o fluxo do fornecedor.
+        // `ambiguous_channel` só é retentável QUANDO houve sessão: com a baseline
+        // aplicada, dois candidatos significam concorrência real (outro canal
+        // nascendo agora), e concorrência real se resolve esperando. Sem sessão,
+        // ambíguo é estado parado — retentar seria só repetir o mesmo erro.
+        // `channel_type_mismatch` NÃO entra: ali o fornecedor RESPONDEU o tipo, e
+        // retentar traria a mesma resposta.
+        const retryable =
+          body.code === "no_channel_found" ||
+          body.code === "channel_type_undetermined" ||
+          (body.code === "ambiguous_channel" && !!sessionId);
+        if (retryable && attempt < FINISH_RETRIES - 1) {
+          await sleep(FINISH_RETRY_DELAY_MS);
+          continue;
+        }
+        // A razão DESTE canal, não a do WhatsApp: `messageForCode` a usa no caso
+        // `not_configured`, e ali a frase do servidor nomearia o canal errado.
+        toast.error(messageForCode(body.code, configReasonFor(channelType), channelLabel));
         return;
       }
-
-      const body = await readFnError(error);
-      // `no_channel_found` é consistência eventual do `/v1/channels`: o canal
-      // acabou de nascer e a listagem ainda não o enxerga.
-      // `ambiguous_channel` só é retentável QUANDO houve sessão: com a baseline
-      // aplicada, dois candidatos significam concorrência real (outro canal
-      // nascendo agora), e concorrência real se resolve esperando. Sem sessão,
-      // ambíguo é estado parado — retentar seria só repetir o mesmo erro.
-      const retryable =
-        body.code === "no_channel_found" || (body.code === "ambiguous_channel" && !!sessionId);
-      if (retryable && attempt < FINISH_RETRIES - 1) {
-        await sleep(FINISH_RETRY_DELAY_MS);
-        continue;
-      }
-      toast.error(messageForCode(body.code, configReason));
-      return;
-    }
-  }, [organizationId, queryClient, configReason]);
+    },
+    [organizationId, queryClient, configReasonFor],
+  );
 
   // ── Clique ────────────────────────────────────────────────────────────────
   // NÃO é async, e não há `await` antes do `window.open`: o navegador só libera
@@ -373,15 +585,19 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
   // janela abre EM BRANCO quando a URL ainda não existe, em vez de esperar o
   // provisionamento e abrir depois — esperar seria abrir janela sem gesto, e
   // Safari/Firefox bloqueiam.
-  const connectNotificame = useCallback(() => {
+  const connectNotificame = useCallback((channelType: SeamlessChannelType = "whatsapp") => {
+    const channelLabel = CHANNEL_LABEL[channelType];
+    // GLOBAL, não por canal: dois popups simultâneos (um de cada canal) na mesma
+    // org fariam a baseline da segunda sessão já conter o canal da primeira, e o
+    // pareamento canal↔sessão se perderia.
     if (isConnecting) return;
 
     if (isConfigLoading) {
-      toast.info("Verificando disponibilidade do WhatsApp Oficial...");
+      toast.info(`Verificando disponibilidade do ${channelLabel}...`);
       return;
     }
     if (!isConfigured) {
-      toast.info(configReason ?? FALLBACK_REASON);
+      toast.info(configReasonFor(channelType) ?? FALLBACK_REASON);
       return;
     }
     if (!organizationId) {
@@ -389,8 +605,10 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
       return;
     }
 
-    // Primeiro clique da org: ainda não há subconta, logo não há URL. A janela
-    // abre mesmo assim — no gesto — e é NAVEGADA quando o connect responder.
+    // URL DESTE canal. Ausente ⇒ ou a org ainda não tem subconta, ou o servidor
+    // ainda é o da fatia 1 (sem `start_urls`) — nos dois casos a janela abre em
+    // branco no gesto e é navegada quando o `connect` responder com a URL certa.
+    const startUrl = startUrls[channelType];
     const needsProvisioning = !startUrl;
     // Origem esperada do postMessage: DERIVADA da URL para onde o popup realmente
     // foi, nunca de uma constante. `NOTIFICAME_BASE_URL` é configurável e `api.` e
@@ -402,7 +620,7 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
     expectedOriginRef.current = seamlessOriginFromStartUrl(startUrl);
     const popup = window.open(startUrl ?? "about:blank", POPUP_NAME, POPUP_FEATURES);
     if (!popup) {
-      toast.error("Permita pop-ups neste site para conectar o WhatsApp Oficial");
+      toast.error(`Permita pop-ups neste site para conectar o ${channelLabel}`);
       return;
     }
 
@@ -446,7 +664,10 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
     // antes da foto ser tirada, e a foto tem que ser fresca no clique.
     const connect: Promise<ConnectOutcome> = supabase.functions
       .invoke("notificame-channel-start", {
-        body: { organization_id: organizationId, mode: "connect" },
+        // `channel_type` é PROPOSTA do cliente, nunca decisão: o servidor tem a
+        // sua allowlist fechada, aplica o gate de flag do canal pedido e é ele
+        // quem carimba `requested_channel_type` na sessão.
+        body: { organization_id: organizationId, mode: "connect", channel_type: channelType },
       })
       .then(async ({ data, error }): Promise<ConnectOutcome> => {
         if (error) return { ok: false, code: (await readFnError(error)).code ?? null };
@@ -477,15 +698,35 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
         // falha foi da foto — o finish degrada sozinho. Só derrubamos o fluxo
         // quando a janela ficaria em branco para sempre.
         if (needsProvisioning) {
-          settleWith(messageForCode(r.code ?? undefined, configReason));
+          settleWith(messageForCode(r.code ?? undefined, configReasonFor(channelType), channelLabel));
         }
+        return;
+      }
+
+      // ── A URL devolvida é DESTE canal? ───────────────────────────────────
+      // O servidor da fatia 1 ignora `channel_type` e devolve sempre a URL do
+      // WhatsApp. Navegar a janela para ela mandaria quem clicou "Conectar
+      // Instagram" para o fluxo de WhatsApp, e o finish vincularia um NÚMERO.
+      // Pior que o erro do momento: semear essa URL na chave do Instagram gruda
+      // o estado errado no cache, e o clique seguinte abre nela DIRETO, sem
+      // sequer passar por aqui.
+      //
+      // A janela em que isso acontece é real e pode durar horas: front e edge
+      // functions sobem em atos separados e manuais (EasyPanel e CLI), em
+      // qualquer ordem.
+      if (!startUrlMatchesChannel(r.startUrl, channelType)) {
+        if (needsProvisioning) {
+          settleWith(`Conexão do ${channelLabel} indisponível no momento. Tente de novo em instantes.`);
+        }
+        // Janela já estava na URL certa (veio do cache, que só guarda URL
+        // conferida): o usuário segue nela. Só não semeamos nada.
         return;
       }
 
       // A URL só existe depois desta resposta na primeira vez da org. Semear o
       // cache aqui é o que faz o SEGUNDO clique abrir direto no fornecedor —
       // inclusive quando este popup foi abandonado no meio.
-      cacheStartUrl(r.startUrl);
+      cacheStartUrl(r.startUrl, channelType);
       // A janela vai para ESTA url agora, então a origem esperada é a dela.
       expectedOriginRef.current = seamlessOriginFromStartUrl(r.startUrl);
 
@@ -522,7 +763,7 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
         return;
       }
 
-      void finish().finally(() => {
+      void finish(channelType).finally(() => {
         setIsConnecting(false);
         setIsProvisioning(false);
       });
@@ -546,7 +787,7 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
       if (settledRef.current) return;
       settledRef.current = true;
       runCleanup();
-      toast.error("Tempo esgotado para conectar o WhatsApp Oficial");
+      toast.error(`Tempo esgotado para conectar o ${channelLabel}`);
       setIsConnecting(false);
       setIsProvisioning(false);
     }, SEAMLESS_TIMEOUT_MS);
@@ -560,8 +801,8 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
     isConnecting,
     isConfigLoading,
     isConfigured,
-    startUrl,
-    configReason,
+    startUrls,
+    configReasonFor,
     organizationId,
     cacheStartUrl,
     finish,
@@ -573,6 +814,7 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
     isConnecting,
     isConfigured,
     configReason,
+    configReasonFor,
     isConfigLoading,
     isProvisioning,
   };

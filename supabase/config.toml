@@ -65,8 +65,16 @@ verify_jwt = false
 [functions.notificame-channel-start]
 verify_jwt = false
 
-# notificame: finaliza a conexão Seamless — lista canais COM O TOKEN DA SUBCONTA e vincula o canal novo (diff contra a baseline da sessão) à org do auth. JWT (requireAuth) inside fn + gate de flag + whatsapp.manage_instances
+# notificame: finaliza a conexão Seamless — lista canais COM O TOKEN DA SUBCONTA e vincula o canal novo (diff contra a baseline da sessão) à org do auth; registra a subscription de entrada (só Instagram) e CARIMBA o resultado em messaging_channels.inbound_subscription_* (colunas, não jsonb), SEM desfazer o vínculo quando falha — quem repara é notificame-subscription-repair. JWT (requireAuth) inside fn + gate de flag + whatsapp.manage_instances
 [functions.notificame-channel-finish]
+verify_jwt = false
+
+# notificame-subscription-repair: O LEITOR do estado de recebimento. Cron de 5 min (pg_cron → pg_net, x-cron-secret fail-closed) que reencontra os canais status='connected' com inbound_subscription_status IN ('pending','failed') e retenta POST /v1/subscriptions com backoff exponencial (5min → 6h, sem estado terminal). Existe porque subscription_pending era produzido e NINGUÉM lia: o canal conectava, a tela dizia sucesso e nenhuma mensagem chegava. NÃO desregistra, NÃO desfaz vínculo, NÃO consulta feature flag (flag gateia conectar/mostrar, não receber).
+[functions.notificame-subscription-repair]
+verify_jwt = false
+
+# notificame-webhook: ingress de eventos do NotificaMe; auth = secret no path (timingSafeCompare, 404 em falha) + uuid da subconta no path + allowlist de IP fail-closed — o fornecedor NÃO assina o corpo; tenant sai do uuid da subconta que NÓS registramos, nunca do body. Evento não-interpretável é PARKADO inteiro em notificame_webhook_events (200 = "está guardado"), nunca descartado; sem external_id do fornecedor a linha NÃO nasce. Inbound INERTE: não acorda Copilot nem workflow.
+[functions.notificame-webhook]
 verify_jwt = false
 
 # api: public REST API router /api/v1/* (ADR-0008); auth via API key inside fn

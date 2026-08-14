@@ -51,6 +51,15 @@ export interface ChatContactTag {
 }
 
 export interface ChatContact {
+  /**
+   * Discriminador da união `InboxContact`. Literal e OBRIGATÓRIO de propósito:
+   * é o compilador que aponta todo sítio de CONSTRUÇÃO de contato quando um
+   * segundo canal entra no inbox. Opcional (ou com default) o campo faria os
+   * mesmos sítios compilarem calados e produzirem contatos sem canal, que a
+   * lista renderizaria com o selo errado. Nenhum sítio de LEITURA quebra: quem
+   * já tinha `ChatContact` continua tendo.
+   */
+  channel: "whatsapp";
   phone_number: string;
   push_name: string | null;
   last_message: string | null;
@@ -88,4 +97,115 @@ export interface WhatsAppInstanceForUser {
   status: string;
   /** Provider — drives capability gating (Uazapi/Evolution/Meta Cloud). Rule 13. */
   provider?: string;
+}
+
+// ─── Canais sociais (Instagram via NotificaMe) ───────────────────────────────
+
+/**
+ * Conversa de um canal SOCIAL (hoje só Instagram Direct).
+ *
+ * Tipo IRMÃO de `ChatContact`, não uma flexibilização dele. O motivo é o
+ * `phone_number`: em `ChatContact` ele é `string` obrigatório e é a IDENTIDADE
+ * da conversa — 18 referências só na bolha de chat contam com isso. Um contato
+ * de Instagram não tem telefone, e afrouxar o campo para `string | null` faria
+ * cada um desses sítios ter de decidir o que fazer com o nulo. Pior: preencher
+ * com `''` colapsaria TODOS os contatos de IG numa conversa só, porque
+ * `normalizePhone('')` devolve `''` e a chave vira a mesma para todo mundo.
+ *
+ * A identidade aqui é `(messaging_channel_id, external_user_id)`, materializada
+ * em `conversation_key` — a MESMA string que vai para
+ * `conversation_read_state.conversation_key`, prefixada por `instagram:` desde o
+ * dia zero para nunca colidir com o recorte `whatsapp:%` da RPC de WhatsApp.
+ */
+export interface SocialContact {
+  channel: "instagram";
+  /** `instagram:${messaging_channel_id}:${external_user_id}` — chave de leitura e de cache. */
+  conversation_key: string;
+  messaging_channel_id: string;
+  /** IGSID do INTERLOCUTOR (nunca da nossa conta). */
+  external_user_id: string;
+  /** @handle do interlocutor, quando o payload informa. */
+  handle: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  last_message: string | null;
+  last_message_time: string;
+  last_message_direction: "incoming" | "outgoing" | null;
+  unread_count: number;
+  /**
+   * NULL nesta fatia, sempre. `leads` não tem nenhuma coluna de identidade
+   * social — vincular exigiria `lead_social_identities`, que é fatia própria.
+   * O campo existe para o dia em que existir, não para ser preenchido no chute.
+   */
+  lead_id: string | null;
+  /** Sempre `[]` nesta fatia: etiqueta hoje pendura em lead ou em conversa de WhatsApp. */
+  tags: ChatContactTag[];
+}
+
+/** Uma conversa do inbox, de qualquer canal. Discriminada por `channel`. */
+export type InboxContact = ChatContact | SocialContact;
+
+/**
+ * Uma CAIXA DE ENTRADA. O seletor do inbox deixou de ser "lista de números de
+ * WhatsApp" e passou a ser esta união: `whatsapp_instances` ∪
+ * `messaging_channels`. Org sem canal social não tem linha na segunda metade e
+ * a união degrada, byte a byte, para o comportamento de hoje — por isso não há
+ * feature flag plumbada no front.
+ */
+export type InboxBox =
+  | { kind: "whatsapp"; id: string; name: string; status: string; provider?: string }
+  | { kind: "instagram"; id: string; name: string; status: string; handle: string | null };
+
+/** True quando o contato é de WhatsApp — narrowing para os caminhos legados. */
+export function isWhatsAppContact(c: InboxContact): c is ChatContact {
+  return c.channel === "whatsapp";
+}
+
+/** True quando o contato é de um canal social. */
+export function isSocialContact(c: InboxContact): c is SocialContact {
+  return c.channel === "instagram";
+}
+
+/**
+ * Identidade da conversa, num lugar só.
+ *
+ * É o que o shell guarda em `selectedKey`, o que vira `key` de cada linha da
+ * lista e o que compara seleção. Um helper e não dois campos porque a alternativa
+ * — cada call-site escolher entre `phone_number` e `conversation_key` — é como o
+ * `chat-meta` casou thread por `sender_id` e fez toda mensagem de SAÍDA sumir.
+ */
+export function contactKey(c: InboxContact): string {
+  return c.channel === "whatsapp" ? c.phone_number : c.conversation_key;
+}
+
+/**
+ * Nome exibido da conversa.
+ *
+ * Para Instagram o `@handle` ganha do nome de exibição porque é o que o usuário
+ * vê no app do Instagram; sem nenhum dos dois, o sufixo do IGSID é preferível a
+ * um rótulo genérico — dois contatos sem nome precisam continuar distinguíveis
+ * na lista.
+ */
+export function contactLabel(c: InboxContact): string {
+  if (c.channel === "whatsapp") {
+    return (c.push_name || c.lead_name || c.phone_number || "").trim() || "Contato";
+  }
+  if (c.handle) return `@${c.handle}`;
+  if (c.display_name) return c.display_name;
+  return `Instagram ${c.external_user_id.slice(-6)}`;
+}
+
+/** Semente estável do gradiente do avatar — nunca string vazia. */
+export function contactAvatarSeed(c: InboxContact): string {
+  return c.channel === "whatsapp"
+    ? c.phone_number || contactLabel(c)
+    : c.external_user_id || c.conversation_key;
+}
+
+/** Monta a `conversation_key` de um contato social. Único produtor da string. */
+export function buildSocialConversationKey(
+  messagingChannelId: string,
+  externalUserId: string,
+): string {
+  return `instagram:${messagingChannelId}:${externalUserId}`;
 }

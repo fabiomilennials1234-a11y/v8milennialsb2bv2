@@ -26,7 +26,14 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useViewport } from "@/shared/hooks/use-viewport";
-import type { ChatContact, WhatsAppInstanceForUser } from "@/modules/communication/hooks/useWhatsAppChat";
+import type { ChatContact } from "@/modules/communication/hooks/useWhatsAppChat";
+import {
+  contactKey,
+  isWhatsAppContact,
+  type InboxBox,
+  type InboxContact,
+} from "@/modules/communication/hooks/chat/types";
+import { ChannelBadge } from "../ChannelBadge";
 import { ConversationListItem, contactDisplayName } from "./ConversationListItem";
 import { MobileConversationRow } from "./MobileConversationRow";
 import { MobileChatListHeader, type MobileChatFilter } from "./MobileChatListHeader";
@@ -57,15 +64,20 @@ function estimateItemHeight(density: DensityMode): number {
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface ConversationListProps {
-  contacts: ChatContact[];
-  selectedPhone: string | null;
-  onSelectContact: (phone: string) => void;
+  contacts: InboxContact[];
+  /** Identidade da conversa aberta — `contactKey`, não telefone. */
+  selectedKey: string | null;
+  onSelectContact: (key: string) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
   isLoading: boolean;
-  instances?: WhatsAppInstanceForUser[];
-  selectedInstanceId?: string | null;
-  onSelectInstance?: (instanceId: string) => void;
+  /**
+   * As caixas de entrada disponíveis: números de WhatsApp ∪ canais sociais.
+   * Antes era `instances` — o seletor deixou de ser "escolha o número".
+   */
+  boxes?: InboxBox[];
+  selectedBoxId?: string | null;
+  onSelectBox?: (boxId: string) => void;
   activeTab: "active" | "archived";
   onTabChange: (tab: "active" | "archived") => void;
   onArchive: (phone: string) => void;
@@ -105,14 +117,14 @@ interface ConversationListProps {
 
 export function ConversationList({
   contacts,
-  selectedPhone,
+  selectedKey,
   onSelectContact,
   searchQuery,
   onSearchChange,
   isLoading,
-  instances,
-  selectedInstanceId,
-  onSelectInstance,
+  boxes,
+  selectedBoxId,
+  onSelectBox,
   activeTab,
   onTabChange,
   onArchive,
@@ -144,6 +156,26 @@ export function ConversationList({
   const { isMobile } = useViewport();
   const [mobileFilter, setMobileFilter] = useState<MobileChatFilter>("all");
 
+  const selectedBox = boxes?.find((b) => b.id === selectedBoxId) ?? null;
+  /**
+   * Caixa social muda o REGIME da lista, não só o ícone. Funil, etapa,
+   * qualificação, vendedor, etiqueta, arquivadas e "pediu atendente" são todos
+   * conceitos ancorados em lead ou em `whatsapp_conversations`; a RPC social não
+   * aplica nenhum deles. Mostrá-los inertes seria mentir sobre o recorte —
+   * o usuário clicaria num chip e a lista não mudaria.
+   */
+  const isSocialBox = selectedBox?.kind === "instagram";
+
+  /**
+   * A metade de WhatsApp da lista. O engine de filtro, os contadores e o
+   * enriquecimento falam `ChatContact`; estreitar aqui, uma vez, é o que
+   * mantém esse caminho inteiro sem um único `as`.
+   */
+  const whatsappContacts = useMemo(
+    () => contacts.filter(isWhatsAppContact),
+    [contacts],
+  );
+
   const filterCtx: InboxFilterContext = useMemo(
     () => ({
       currentTeamMemberId,
@@ -166,7 +198,10 @@ export function ConversationList({
 
   // Etapa do primeiro funil em que o lead está (com rótulo resolvido).
   const stageLabelFor = useCallback(
-    (c: ChatContact): string | null => {
+    (c: InboxContact): string | null => {
+      // Etapa é posição do LEAD num funil. Conversa social não tem lead nesta
+      // fatia, então não tem etapa — e "nenhuma" é null, não um rótulo vazio.
+      if (c.channel !== "whatsapp") return null;
       const first = c.funnels?.[0];
       if (!first) return null;
       return stageLabelIndex.get(first.pipelineId)?.get(first.stageKey) ?? null;
@@ -174,13 +209,23 @@ export function ConversationList({
     [stageLabelIndex],
   );
 
+  // ── Caixa social: só busca local. ─────────────────────────────────────────
+  // Nenhuma das dimensões do filtro tem dado para avaliar aqui, e o `activeTab`
+  // não existe (não há arquivamento). Uma lista curta e honesta.
+  const socialContacts = useMemo(() => {
+    if (!isSocialBox) return [] as InboxContact[];
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return contacts;
+    return contacts.filter((c) => contactDisplayName(c).toLowerCase().includes(q));
+  }, [isSocialBox, contacts, searchQuery]);
+
   // ── Desktop: engine puro. Mobile: header próprio (all/unread/groups + vendedor).
-  const filteredContacts = useMemo(() => {
+  const whatsappFiltered = useMemo(() => {
     if (!isMobile) {
-      return applyInboxFilters(contacts, filter, filterCtx, { searchQuery, tab: activeTab });
+      return applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: activeTab });
     }
     const search = searchQuery.toLowerCase();
-    return contacts.filter((c) => {
+    return whatsappContacts.filter((c) => {
       if (filter.vendor !== "all") {
         const vendorId = resolveContactVendorId(c);
         if (filter.vendor === "mine") { if (vendorId !== currentTeamMemberId) return false; }
@@ -194,20 +239,25 @@ export function ConversationList({
       const name = contactDisplayName(c).toLowerCase();
       return c.phone_number.includes(searchQuery) || name.includes(search);
     });
-  }, [isMobile, contacts, filter, filterCtx, searchQuery, activeTab, mobileFilter, resolveContactVendorId, currentTeamMemberId]);
+  }, [isMobile, whatsappContacts, filter, filterCtx, searchQuery, activeTab, mobileFilter, resolveContactVendorId, currentTeamMemberId]);
+
+  const filteredContacts: InboxContact[] = isSocialBox ? socialContacts : whatsappFiltered;
 
   // Contagens reagem ao filtro aplicado (menos a própria tab).
   const activeCount = useMemo(
-    () => (isMobile ? filteredContacts.length : applyInboxFilters(contacts, filter, filterCtx, { searchQuery, tab: "active" }).length),
-    [isMobile, filteredContacts.length, contacts, filter, filterCtx, searchQuery],
+    () => (isMobile ? whatsappFiltered.length : applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: "active" }).length),
+    [isMobile, whatsappFiltered.length, whatsappContacts, filter, filterCtx, searchQuery],
   );
   const archivedCount = useMemo(
-    () => applyInboxFilters(contacts, filter, filterCtx, { searchQuery, tab: "archived" }).length,
-    [contacts, filter, filterCtx, searchQuery],
+    () => applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: "archived" }).length,
+    [whatsappContacts, filter, filterCtx, searchQuery],
   );
   const unreadCount = useMemo(
-    () => contacts.filter((c) => !c.is_group && !c.archived_at && c.unread_count > 0).length,
-    [contacts],
+    () =>
+      isSocialBox
+        ? socialContacts.filter((c) => c.unread_count > 0).length
+        : whatsappContacts.filter((c) => !c.is_group && !c.archived_at && c.unread_count > 0).length,
+    [isSocialBox, socialContacts, whatsappContacts],
   );
 
   // Com o gate fechado o recorte não é confiável — número exibido seria invenção.
@@ -231,8 +281,6 @@ export function ConversationList({
     overscan: 3,
   });
 
-  const selectedInst = instances?.find((i) => i.id === selectedInstanceId);
-
   return (
     <div className={cn(
       "flex flex-col h-full min-h-0 bg-muted/20",
@@ -241,13 +289,18 @@ export function ConversationList({
       {/* ─── Header: mobile vs desktop ─────────────────────────────────────── */}
       {isMobile ? (
         <MobileChatListHeader
-          instanceName={selectedInst?.instance_name ?? "WhatsApp"}
-          instanceConnected={selectedInst?.status === "connected"}
+          instanceName={selectedBox?.name ?? "WhatsApp"}
+          instanceConnected={selectedBox?.status === "connected"}
+          channel={selectedBox?.kind ?? "whatsapp"}
+          showFilters={!isSocialBox}
           onOpenInstanceSelector={() => {
-            if (instances && instances.length > 1 && onSelectInstance) {
-              const idx = instances.findIndex((i) => i.id === selectedInstanceId);
-              const next = instances[(idx + 1) % instances.length];
-              onSelectInstance(next.id);
+            // O mobile cicla entre as caixas em vez de abrir um seletor. Com o
+            // Instagram na roda, ciclar continua sendo a interação certa: são
+            // poucas caixas e o nome no header diz em qual você está.
+            if (boxes && boxes.length > 1 && onSelectBox) {
+              const idx = boxes.findIndex((b) => b.id === selectedBoxId);
+              const next = boxes[(idx + 1) % boxes.length];
+              onSelectBox(next.id);
             }
           }}
           searchQuery={searchQuery}
@@ -263,11 +316,11 @@ export function ConversationList({
         />
       ) : (
       <div className="p-3 border-b bg-background shrink-0">
-        {instances && instances.length > 0 && onSelectInstance && (
+        {boxes && boxes.length > 0 && onSelectBox && (
           <div className="mb-3">
             <div className="flex items-center justify-between mb-1.5">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Número / Inbox
+                Caixa de entrada
               </p>
               {isAdmin && onOpenInstances && (
                 <Button
@@ -282,25 +335,29 @@ export function ConversationList({
                 </Button>
               )}
             </div>
-            <Select value={selectedInstanceId || ""} onValueChange={onSelectInstance}>
+            <Select value={selectedBoxId || ""} onValueChange={onSelectBox}>
               <SelectTrigger className="h-9 w-full bg-background">
-                <SelectValue placeholder="Escolha o número..." />
+                <SelectValue placeholder="Escolha a caixa..." />
               </SelectTrigger>
               <SelectContent>
-                {instances.map((inst) => (
-                  <SelectItem key={inst.id} value={inst.id}>
+                {boxes.map((box) => (
+                  <SelectItem key={box.id} value={box.id}>
                     <span className="flex items-center gap-2">
+                      {/* O selo do canal, e não só a bolinha de status: é ele
+                          que faz a caixa nova ser lida como Instagram em vez de
+                          "mais um número de WhatsApp". */}
+                      <ChannelBadge channel={box.kind} size={14} />
                       <span
                         className={cn(
                           "w-1.5 h-1.5 rounded-full shrink-0",
-                          inst.status === "connected"
+                          box.status === "connected"
                             ? "bg-emerald-500"
-                            : inst.status === "connecting"
+                            : box.status === "connecting"
                               ? "bg-amber-500"
                               : "bg-muted-foreground/40",
                         )}
                       />
-                      {inst.instance_name}
+                      {box.name}
                     </span>
                   </SelectItem>
                 ))}
@@ -323,50 +380,60 @@ export function ConversationList({
         </div>
 
         {/* ─── Filtro (modelo Linear) ──────────────────────────────────────── */}
-        <InboxFilterBar
-          filter={filter}
-          patch={patch}
-          toggleMulti={toggleMulti}
-          clearFilter={clearFilter}
-          unreadCount={unreadCount}
-          waitingHumanCount={waitingHumanCount}
-          funnelOptions={funnelOptions}
-          vendorOptions={vendorOptions}
-          currentTeamMemberId={currentTeamMemberId}
-          canSeeUnassigned={canSeeUnassigned}
-          allTags={allTags}
-        />
+        {/* Some inteiro na caixa social: funil, etapa, qualificação, vendedor e
+            etiqueta são dimensões de lead, e a RPC social não aplica nenhuma.
+            Um chip que não recorta nada é pior que chip nenhum. */}
+        {!isSocialBox && (
+          <InboxFilterBar
+            filter={filter}
+            patch={patch}
+            toggleMulti={toggleMulti}
+            clearFilter={clearFilter}
+            unreadCount={unreadCount}
+            waitingHumanCount={waitingHumanCount}
+            funnelOptions={funnelOptions}
+            vendorOptions={vendorOptions}
+            currentTeamMemberId={currentTeamMemberId}
+            canSeeUnassigned={canSeeUnassigned}
+            allTags={allTags}
+          />
+        )}
 
         <p className="mt-2 text-xs text-muted-foreground">
-          Total: {fmtCount(filteredContacts.length)}
+          Total: {isSocialBox ? filteredContacts.length : fmtCount(filteredContacts.length)}
         </p>
 
-        <div className="flex mt-2 bg-muted rounded-md p-0.5">
-          <button
-            type="button"
-            onClick={() => onTabChange("active")}
-            className={cn(
-              "flex-1 text-xs py-1.5 rounded-sm transition-colors font-medium",
-              activeTab === "active"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Ativas ({fmtCount(activeCount)})
-          </button>
-          <button
-            type="button"
-            onClick={() => onTabChange("archived")}
-            className={cn(
-              "flex-1 text-xs py-1.5 rounded-sm transition-colors font-medium",
-              activeTab === "archived"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Arquivadas ({fmtCount(archivedCount)})
-          </button>
-        </div>
+        {/* Arquivamento vive em `whatsapp_conversations`; não há equivalente
+            para canal social, então as abas não nascem em vez de nascerem
+            mortas. */}
+        {!isSocialBox && (
+          <div className="flex mt-2 bg-muted rounded-md p-0.5">
+            <button
+              type="button"
+              onClick={() => onTabChange("active")}
+              className={cn(
+                "flex-1 text-xs py-1.5 rounded-sm transition-colors font-medium",
+                activeTab === "active"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Ativas ({fmtCount(activeCount)})
+            </button>
+            <button
+              type="button"
+              onClick={() => onTabChange("archived")}
+              className={cn(
+                "flex-1 text-xs py-1.5 rounded-sm transition-colors font-medium",
+                activeTab === "archived"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Arquivadas ({fmtCount(archivedCount)})
+            </button>
+          </div>
+        )}
       </div>
       )}
 
@@ -383,7 +450,7 @@ export function ConversationList({
           <InboxEnrichmentNotice onRetry={onRetryEnrichment} onClear={clearFilter} />
         ) : filteredContacts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-            {activeTab === "archived" ? (
+            {!isSocialBox && activeTab === "archived" ? (
               <>
                 <Archive className="w-12 h-12 text-muted-foreground/50 mb-4" />
                 <p className="text-sm text-muted-foreground">Nenhuma conversa arquivada</p>
@@ -392,7 +459,11 @@ export function ConversationList({
               <>
                 <MessageSquare className="w-12 h-12 text-muted-foreground/50 mb-4" />
                 <p className="text-sm text-muted-foreground">
-                  {searchQuery ? "Nenhuma conversa encontrada" : "Nenhuma conversa ainda"}
+                  {searchQuery
+                    ? "Nenhuma conversa encontrada"
+                    : isSocialBox
+                      ? "Nenhuma mensagem no Instagram ainda"
+                      : "Nenhuma conversa ainda"}
                 </p>
               </>
             )}
@@ -420,7 +491,7 @@ export function ConversationList({
                 >
                   <ConversationListItem
                     contact={contact}
-                    isSelected={selectedPhone === contact.phone_number}
+                    isSelected={selectedKey === contactKey(contact)}
                     onSelect={onSelectContact}
                     waitingHumanLeadIds={waitingHumanLeadIds}
                     activeTab={activeTab}
@@ -445,17 +516,16 @@ export function ConversationList({
             {filteredContacts.map((contact) =>
               isMobile ? (
                 <MobileConversationRow
-                  key={contact.phone_number}
+                  key={contactKey(contact)}
                   contact={contact}
-                  isSelected={selectedPhone === contact.phone_number}
+                  isSelected={selectedKey === contactKey(contact)}
                   onPress={onSelectContact}
-
                 />
               ) : (
                 <ConversationListItem
-                  key={contact.phone_number}
+                  key={contactKey(contact)}
                   contact={contact}
-                  isSelected={selectedPhone === contact.phone_number}
+                  isSelected={selectedKey === contactKey(contact)}
                   onSelect={onSelectContact}
                   waitingHumanLeadIds={waitingHumanLeadIds}
                   activeTab={activeTab}

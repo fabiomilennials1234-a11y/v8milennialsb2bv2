@@ -4,19 +4,21 @@
  * Pure presentational: no state, no dropdown menus, no complex interactions.
  * Just avatar + text + badges + tap handler.
  */
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { ChatContact } from "@/modules/communication/hooks/useWhatsAppChat";
+import { contactKey, type InboxContact } from "@/modules/communication/hooks/chat/types";
+import { ChannelBadge } from "../ChannelBadge";
 import { contactDisplayName, formatContactTime } from "./ConversationListItem";
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
 export interface MobileConversationRowProps {
-  contact: ChatContact;
+  contact: InboxContact;
   isSelected: boolean;
-  onPress: (phone: string) => void;
-  onLongPress?: (phone: string) => void;
+  /** Recebe `contactKey(contact)` — telefone no WhatsApp, `conversation_key` no social. */
+  onPress: (key: string) => void;
+  onLongPress?: (key: string) => void;
   stageName?: string | null;
   stageColor?: string | null;
 }
@@ -32,15 +34,19 @@ export function MobileConversationRow({
   stageColor,
 }: MobileConversationRowProps) {
   const name = contactDisplayName(contact);
-  const initials = (name.charAt(0) || "?").toUpperCase();
+  const initials = (name.replace("@", "").charAt(0) || "?").toUpperCase();
   const hasUnread = contact.unread_count > 0 && !isSelected;
+  const key = contactKey(contact);
+  const isWhatsApp = contact.channel === "whatsapp";
 
   const isOutgoingManual =
     contact.last_message_direction === "outgoing" &&
-    (!contact.last_message_sent_source ||
+    (!isWhatsApp ||
+      !contact.last_message_sent_source ||
       contact.last_message_sent_source === "manual");
 
   const isOutgoingWorkflow =
+    isWhatsApp &&
     contact.last_message_direction === "outgoing" &&
     contact.last_message_sent_source === "workflow";
 
@@ -58,26 +64,34 @@ export function MobileConversationRow({
             ? "bg-amber-950/20"
             : "active:bg-muted/60",
       )}
-      onClick={() => onPress(contact.phone_number)}
+      onClick={() => onPress(key)}
       onContextMenu={(e) => {
         if (onLongPress) {
           e.preventDefault();
-          onLongPress(contact.phone_number);
+          onLongPress(key);
         }
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onPress(contact.phone_number);
+          onPress(key);
         }
       }}
     >
       {/* Avatar */}
-      <Avatar className="w-10 h-10 shrink-0">
-        <AvatarFallback className="bg-primary/10 text-primary font-medium text-sm">
-          {initials}
-        </AvatarFallback>
-      </Avatar>
+      <div className="relative shrink-0">
+        <Avatar className="w-10 h-10">
+          {!isWhatsApp && contact.avatar_url && (
+            <AvatarImage src={contact.avatar_url} alt="" />
+          )}
+          <AvatarFallback className="bg-primary/10 text-primary font-medium text-sm">
+            {initials}
+          </AvatarFallback>
+        </Avatar>
+        {/* Só aparece quando há mais de um canal em jogo seria melhor, mas a
+            linha do mobile não sabe o contexto — o selo é barato e nunca mente. */}
+        {!isWhatsApp && <ChannelBadge channel={contact.channel} size={14} overlay />}
+      </div>
 
       {/* Center content */}
       <div className="flex-1 min-w-0">

@@ -31,6 +31,14 @@
  * antigo ou um campo com typo agora caem em leitura pura — nunca em criação de
  * conta. Fail-closed aqui é fail-closed no dinheiro.
  *
+ * DOIS CANAIS, uma allowlist (`channel_type`, fatia 1.1): `"whatsapp"` (default) e
+ * `"instagram"`. O valor vem do body, mas NUNCA chega cru à URL do fornecedor: ele
+ * atravessa `readSeamlessChannelType`, uma allowlist FECHADA server-side, e tudo
+ * que ela não reconhece — inclusive `"facebook"`, que o fornecedor aceita e esta
+ * fatia não habilita — vira o default inócuo `"whatsapp"`. Instagram tem gate
+ * PRÓPRIO (`notificame_instagram`), separado de `notificame`: ligar o inbox de
+ * Instagram numa org é decisão distinta de ligar um número oficial.
+ *
  * A idempotência de verdade continua no BANCO — `UNIQUE (organization_id)` em
  * `notificame_subaccounts`, com a claim gravada ANTES da chamada ao fornecedor.
  * O modo `status` é a primeira barreira; a UNIQUE é a que vale sob dois browsers.
@@ -85,9 +93,13 @@ import {
   readNotificameParentConfig,
   readSubaccountDefaults,
   buildSeamlessStartUrl,
-  isNotificameEnabledForOrg,
+  readNotificameFlags,
+  readSeamlessChannelType,
   listChannels,
   orgConfigFrom,
+  vendorLogFields,
+  NotificameError,
+  type SeamlessChannelType,
 } from "../_shared/notificame.ts";
 import {
   ensureNotificameSubaccount,
@@ -107,6 +119,22 @@ const MANAGE_INSTANCES_FEATURE = "whatsapp.manage_instances";
  */
 function readMode(body: Record<string, unknown>): "status" | "connect" {
   return body.mode === "connect" ? "connect" : "status";
+}
+
+/**
+ * QUAL canal o clique pediu. Mesma filosofia do `readMode`: o valor passa por uma
+ * ALLOWLIST FECHADA server-side (`readSeamlessChannelType`) e qualquer coisa que
+ * ela não reconheça — ausente, typo, caixa errada, `'facebook'`, corpo forjado,
+ * cliente antigo — cai no DEFAULT INÓCUO `'whatsapp'`, que é exatamente o
+ * comportamento hoje em produção.
+ *
+ * Não é erro de propósito: recusar aqui quebraria o cliente da fatia 1, que não
+ * manda `channel_type` nenhum. E não é string livre em nenhuma hipótese — este
+ * valor termina interpolado na URL do fornecedor que NÓS abrimos no browser do
+ * usuário, ao lado do token da subconta.
+ */
+function readChannelType(body: Record<string, unknown>): SeamlessChannelType {
+  return readSeamlessChannelType(body.channel_type) ?? "whatsapp";
 }
 
 Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
@@ -134,6 +162,7 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
   }
 
   const mode = readMode(body);
+  const channelType = readChannelType(body);
 
   // ── Auth: a org vem da membresia VALIDADA, nunca do body ───────────────────
   let auth;
@@ -155,12 +184,27 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
   }
 
   // ── Gate de feature, server-side (verify_jwt=false ⇒ alcançável de fora) ────
+  // Duas flags, uma leitura. `notificame` é o portão de cima: é ele que autoriza
+  // provisionar a subconta, e sem subconta não há nem WhatsApp nem Instagram.
   const admin = createAdminClient(FUNCTION_NAME);
-  if (!(await isNotificameEnabledForOrg(admin, orgId))) {
+  const flags = await readNotificameFlags(admin, orgId);
+  if (!flags.enabled) {
     return new Response(
       JSON.stringify({
         error: "Recurso não habilitado para esta organização",
         code: "feature_disabled",
+      }),
+      { status: 403, headers },
+    );
+  }
+
+  // Instagram tem porta PRÓPRIA. Ligar o inbox de Instagram numa org é decisão
+  // separada de ligar um número oficial — e fail-closed: chave ausente é "não".
+  if (channelType === "instagram" && !flags.instagramEnabled) {
+    return new Response(
+      JSON.stringify({
+        error: "Instagram não habilitado para esta organização",
+        code: "instagram_not_enabled",
       }),
       { status: 403, headers },
     );
@@ -190,7 +234,7 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
         `NotificaMe — exige admin ou master`,
       entityType: "whatsapp_instance",
       triggeredBy: auth.userId,
-      payloadSnapshot: { mode },
+      payloadSnapshot: { mode, channel_type: channelType },
       ...trace,
     });
     return new Response(
@@ -221,7 +265,7 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
       errorMessage: "usuário sem whatsapp.manage_instances tentou iniciar conexão",
       entityType: "whatsapp_instance",
       triggeredBy: auth.userId,
-      payloadSnapshot: { mode },
+      payloadSnapshot: { mode, channel_type: channelType },
       ...trace,
     });
     return new Response(
@@ -268,14 +312,15 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
     );
   }
 
-  const buildUrl = (companyUuid: string) =>
+  const buildUrl = (companyUuid: string, type: SeamlessChannelType) =>
     // A linha pela qual este rework inteiro existe: `companyUuid` = token DA
-    // SUBCONTA daquela org. Jamais `parent.parentToken`.
+    // SUBCONTA daquela org. Jamais `parent.parentToken`. Vale igual para os dois
+    // types — o que muda é só o canal que o popup vai conectar.
     buildSeamlessStartUrl({
       baseUrl: parent.baseUrl,
       companyUuid,
       redirectOrigin: origin,
-      type: "whatsapp",
+      type,
     });
 
   // ═══ MODO `status` — leitura pura, nada nasce no fornecedor ════════════════
@@ -286,7 +331,20 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
         configured: true,
         // `null` quando a org ainda não tem subconta. O cliente NÃO trata isso
         // como indisponibilidade: o botão fica vivo, e o clique é que provisiona.
-        start_url: existing ? buildUrl(existing.companyUuid) : null,
+        //
+        // `start_url` (singular) fica, apontando para WhatsApp: o cliente da fatia
+        // 1 já está em prod e lê exatamente esta chave.
+        start_url: existing ? buildUrl(existing.companyUuid, "whatsapp") : null,
+        // As DUAS URLs na mesma ida. Sem isto, o cliente não teria destino ANTES
+        // do clique e precisaria de um await no meio do handler — que é o que faz
+        // Safari e Firefox bloquearem o `window.open`. A de Instagram só aparece
+        // com a flag ligada: URL nula ⇒ o card nem oferece o caminho.
+        start_urls: {
+          whatsapp: existing ? buildUrl(existing.companyUuid, "whatsapp") : null,
+          instagram: existing && flags.instagramEnabled
+            ? buildUrl(existing.companyUuid, "instagram")
+            : null,
+        },
         session_id: null,
       }),
       { status: 200, headers },
@@ -327,15 +385,37 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
 
     // 200 no HTTP, 'error' no runtime_logs. A severidade vive na trilha — o
     // status HTTP aqui existe para que o corpo chegue legível ao card.
+    //
+    // ⚠️ ESTA É A LINHA QUE FALHOU EM PRODUÇÃO. Ela guardava
+    // `{"code":"subaccount_provision_failed"}` e nada mais: o nosso código, que é
+    // grosso de propósito e cobre quatro causas com consertos diferentes. O que o
+    // FORNECEDOR respondeu — a única coisa que as separava — era descartado três
+    // camadas abaixo, e a resposta para "por que a conta oficial não provisionou?"
+    // simplesmente não existia em lugar nenhum.
+    //
+    // `vendorLogFields` entra por SPREAD, em campos escalares com nome NOSSO
+    // (`vendor_code`, `vendor_message`). NUNCA `JSON.stringify` do corpo deles sob
+    // uma chave genérica: `redactSecrets` redige por NOME DE CHAVE, e um payload
+    // serializado dentro de uma string atravessa a redação inteiro — token
+    // incluso — para uma tabela que humanos leem.
+    //
+    // E nada disto vaza para o cliente: a resposta abaixo continua montada só a
+    // partir do nosso `code`.
     await logRuntime({
       organizationId: orgId,
       module: "channel",
       action: "notificame.subaccount_provision_failed",
       status: "error",
-      errorMessage: `provisionamento da subconta falhou (${ensured.code})`,
+      errorMessage: ensured.vendor?.code
+        ? `provisionamento da subconta falhou (${ensured.code}; NotificaMe: ${ensured.vendor.code})`
+        : `provisionamento da subconta falhou (${ensured.code})`,
       entityType: "whatsapp_instance",
       triggeredBy: auth.userId,
-      payloadSnapshot: { code: ensured.code },
+      payloadSnapshot: {
+        code: ensured.code,
+        channel_type: channelType,
+        ...vendorLogFields(ensured.vendor),
+      },
       ...trace,
     });
     // Três desfechos, três mensagens. Colapsar tudo em "tente de novo" seria
@@ -380,6 +460,11 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
       organizationId: orgId,
       userId: auth.userId,
       baselineChannelIds: existingChannels.map((c) => c.id),
+      // O tipo viaja com a foto: é ele que, no finish, estreita os candidatos
+      // ANTES da contagem. Sem ele, um canal de WhatsApp nascido em paralelo na
+      // mesma subconta seria vinculado como Instagram — o postMessage do Seamless
+      // não distingue os dois.
+      requestedChannelType: channelType,
     });
   } catch (err) {
     // A foto falhou, mas o popup JÁ está aberto no browser do usuário: derrubar
@@ -398,6 +483,16 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
       errorMessage: (err as Error)?.message ?? "falha ao fotografar canais",
       entityType: "whatsapp_instance",
       triggeredBy: auth.userId,
+      payloadSnapshot: {
+        channel_type: channelType,
+        // `err.message` acima é NOSSA e fixa ("NotificaMe recusou a listagem de
+        // canais") — ela não distingue token recusado de rota mudada. O par
+        // código+mensagem DELES distingue, e este caminho é silencioso por
+        // desenho (o fluxo segue sem foto), então a trilha é tudo que sobra.
+        ...(err instanceof NotificameError
+          ? { code: err.code, ...vendorLogFields(err.vendor) }
+          : {}),
+      },
       ...trace,
     });
   }
@@ -405,7 +500,16 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
   return new Response(
     JSON.stringify({
       configured: true,
-      start_url: buildUrl(subaccount.companyUuid),
+      // A URL do type PEDIDO. `start_urls` vai junto para o cliente semear o
+      // cache das duas sem uma segunda ida ao servidor.
+      start_url: buildUrl(subaccount.companyUuid, channelType),
+      start_urls: {
+        whatsapp: buildUrl(subaccount.companyUuid, "whatsapp"),
+        instagram: flags.instagramEnabled
+          ? buildUrl(subaccount.companyUuid, "instagram")
+          : null,
+      },
+      channel_type: channelType,
       session_id: sessionId,
     }),
     { status: 200, headers },

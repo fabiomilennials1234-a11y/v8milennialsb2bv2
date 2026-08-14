@@ -83,6 +83,10 @@ async function fetchContactsForInstance(
 
     if (!existing) {
       contactsMap.set(key, {
+        // A bolha continua WhatsApp-pura nesta fatia: ela lê `whatsapp_messages`
+        // e nunca `channel_messages`. O discriminador é carimbado porque a
+        // conversa que sai daqui atravessa os mesmos componentes de lista.
+        channel: "whatsapp",
         phone_number: msg.phone_number,
         push_name: msg.direction === "incoming" ? msg.push_name : null,
         last_message: msg.content,

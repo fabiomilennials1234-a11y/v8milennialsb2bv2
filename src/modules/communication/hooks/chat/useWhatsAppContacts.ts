@@ -134,6 +134,7 @@ export function useWhatsAppContacts(
                 ? Math.max(r.unread_count ?? 1, 1)
                 : 0);
           return {
+            channel: "whatsapp",
             phone_number: r.phone_number,
             unread_count: unread,
             push_name: r.push_name,
@@ -279,6 +280,7 @@ export function useWhatsAppContacts(
 
         if (!existing) {
           contactsMap.set(key, {
+            channel: "whatsapp",
             phone_number: msg.phone_number,
             push_name: msg.direction === "incoming" ? msg.push_name : null,
             last_message: msg.content,

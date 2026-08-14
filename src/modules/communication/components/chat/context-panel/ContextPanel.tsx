@@ -25,6 +25,16 @@ export interface ContextPanelProps {
   phoneNumber?: string;
   pushName?: string | null;
   onClose?: () => void;
+  /**
+   * O que dizer quando não há telefone para resolver o lead.
+   *
+   * O default ("selecione uma conversa") pressupõe que a ausência de telefone
+   * significa ausência de conversa aberta. Com um segundo canal no inbox isso
+   * deixou de ser verdade: uma conversa de Instagram está aberta, tem mensagens
+   * na tela, e simplesmente não tem telefone — nem lead, nesta fatia. Repetir o
+   * texto antigo ali seria contradizer a coluna do meio.
+   */
+  placeholder?: string;
 }
 
 export type ContextPanelTab = "info" | "history" | "ai";
@@ -51,7 +61,12 @@ function getScoreTone(score: number) {
   return null;
 }
 
-export function ContextPanel({ leadId, phoneNumber, pushName }: ContextPanelProps) {
+export function ContextPanel({
+  leadId,
+  phoneNumber,
+  pushName,
+  placeholder,
+}: ContextPanelProps) {
   const [activeTab, setActiveTab] = useState<ContextPanelTab>("info");
   const { data: lead, isLoading: leadLoading } = useLeadByPhone(phoneNumber ?? null);
   const activeLeadId = lead?.id ?? leadId ?? null;
@@ -61,7 +76,7 @@ export function ContextPanel({ leadId, phoneNumber, pushName }: ContextPanelProp
       <div className="flex flex-col h-full bg-background border-l border-border/60">
         <div className="flex flex-col items-center justify-center h-full gap-3 p-6 text-center">
           <p className="text-sm text-muted-foreground">
-            Selecione uma conversa para ver as informações do lead
+            {placeholder ?? "Selecione uma conversa para ver as informações do lead"}
           </p>
         </div>
       </div>

@@ -11,6 +11,16 @@
  * existe, o card nasce inerte e diz por quê ANTES do clique. O precedente
  * (`meta_cloud`) só avisa por toast depois — o usuário clica, nada acontece
  * visualmente, e ele clica de novo.
+ *
+ * NÃO ADICIONE UM CARD DE INSTAGRAM AQUI. É a modificação óbvia — o NotificaMe
+ * conecta Instagram pelo MESMO popup, pelo MESMO hook — e é a errada. Este
+ * diálogo se chama "Conectar WhatsApp" e é aberto pelo botão "Adicionar
+ * número"; um card de Instagram dentro dele repetiria exatamente o erro de
+ * rótulo que a fatia 1 evitou ao dar ao NotificaMe um perfil próprio em
+ * `whatsapp-provider.ts`. Instagram entra pelo catálogo de integrações, em
+ * componente próprio (`InstagramChannelSettings`), sem a palavra "WhatsApp" em
+ * nenhum texto do caminho. Por isso `onChooseNotificame` continua sem
+ * parâmetro: quem o passa é que escolhe o canal, e aqui ele é sempre WhatsApp.
  */
 import { motion } from "framer-motion";
 import { QrCode, ShieldCheck, BadgeCheck, Check, AlertTriangle } from "lucide-react";

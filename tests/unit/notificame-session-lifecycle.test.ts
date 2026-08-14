@@ -190,7 +190,18 @@ type OpenFn = (admin: unknown, params: Record<string, unknown>) => Promise<strin
 type ReadFn = (
   admin: unknown,
   params: Record<string, unknown>,
-) => Promise<{ state: string; baselineChannelIds?: string[] }>;
+) => Promise<{
+  state: string;
+  baselineChannelIds?: string[];
+  /**
+   * Fatia 1.1. Declarado AQUI, e não só assertado lá embaixo, porque `OpenFn` e
+   * `ReadFn` são tipos LOCAIS e frouxos (`Record<string, unknown>` na entrada):
+   * o módulo é importado dinamicamente, e `tests/` nem sequer entra no
+   * `tsconfig.json` do app. Nenhum compilador vai reclamar por nós se o campo
+   * sumir — só uma asserção de runtime vai.
+   */
+  requestedChannelType?: string;
+}>;
 type FinalizeFn = (admin: unknown, params: Record<string, unknown>) => Promise<boolean>;
 
 let db: FakeDb;
@@ -369,7 +380,7 @@ describe("finalizeConnectSession — fecha uma vez só", () => {
   });
 });
 
-describe("openConnectSession segue intacta", () => {
+describe("openConnectSession grava a foto E o tipo pedido", () => {
   it("grava a foto verbatim e devolve o id", async () => {
     const open = fnOf<OpenFn>("openConnectSession");
 
@@ -377,10 +388,116 @@ describe("openConnectSession segue intacta", () => {
       organizationId: ORG,
       userId: USER,
       baselineChannelIds: BASELINE,
+      requestedChannelType: "whatsapp",
     });
 
     expect(id).toBe(SESSION_ID);
     expect(db.session().baseline_channel_ids).toEqual(BASELINE);
     expect(db.session().status).toBe("open");
+  });
+
+  /**
+   * O TIPO PEDIDO PRECISA CHEGAR NA COLUNA.
+   *
+   * É ele — e só ele — que decide, no finish, em QUAL TABELA a linha nasce
+   * (`whatsapp_instances` ou `messaging_channels`) e quais candidatos entram no
+   * diff. Se ele não for persistido, o finish lê o DEFAULT do banco (`'whatsapp'`)
+   * e uma conexão de Instagram termina como um NÚMERO: rótulo "WhatsApp Oficial",
+   * visível em treze telas que só sabem falar de número, e comendo uma vaga PAGA
+   * de `max_whatsapp_instances`. O canal do outro lado é faturável e irremovível.
+   *
+   * Este caso é o que faltava: até aqui o arquivo provava a foto e ignorava o
+   * tipo, e o defeito acima passaria VERDE.
+   */
+  it("carimba requested_channel_type='instagram' na linha", async () => {
+    const open = fnOf<OpenFn>("openConnectSession");
+
+    await open(db, {
+      organizationId: ORG,
+      userId: USER,
+      baselineChannelIds: BASELINE,
+      requestedChannelType: "instagram",
+    });
+
+    expect(db.session().requested_channel_type).toBe("instagram");
+  });
+
+  // CONTROLE POSITIVO do caso acima: a asserção distingue os dois valores em vez
+  // de casar com qualquer coisa que apareça na coluna.
+  it("carimba requested_channel_type='whatsapp' quando é esse o pedido", async () => {
+    const open = fnOf<OpenFn>("openConnectSession");
+
+    await open(db, {
+      organizationId: ORG,
+      userId: USER,
+      baselineChannelIds: BASELINE,
+      requestedChannelType: "whatsapp",
+    });
+
+    expect(db.session().requested_channel_type).toBe("whatsapp");
+  });
+});
+
+describe("o tipo pedido sobrevive à ida e volta pelo banco", () => {
+  it("readConnectSession devolve 'instagram' para a sessão que pediu Instagram", async () => {
+    const read = fnOf<ReadFn>("readConnectSession");
+    seedOpenSession({ requested_channel_type: "instagram" });
+
+    const state = await read(db, readParams());
+
+    expect(state.state).toBe("open");
+    expect(state.requestedChannelType).toBe("instagram");
+  });
+
+  /**
+   * O REPLAY TAMBÉM PRECISA DO TIPO. A rota idempotente do finish (sessão já
+   * consumida) devolve a linha existente ao cliente, e é `channel_kind` que diz
+   * ao hook qual queryKey invalidar e qual id ler. Uma sessão 'finished' que
+   * perdesse o tipo faria o replay de uma conexão de Instagram responder como se
+   * fosse de WhatsApp.
+   */
+  it("sobrevive à sessão já consumida (rota idempotente)", async () => {
+    const read = fnOf<ReadFn>("readConnectSession");
+    seedOpenSession({
+      requested_channel_type: "instagram",
+      status: "consumed",
+      consumed_at: new Date().toISOString(),
+    });
+
+    const state = await read(db, readParams());
+
+    expect(state.state).toBe("finished");
+    expect(state.requestedChannelType).toBe("instagram");
+  });
+
+  /**
+   * SESSÕES VIVAS EM PROD, abertas pela fatia 1 ANTES da migration `…093000`:
+   * a coluna não existia, então a linha chega aqui sem o campo. Elas são, por
+   * definição, de WhatsApp — era o único tipo que existia quando nasceram.
+   *
+   * Degradar para `null`/`undefined` aqui tiraria o filtro de tipo de uma sessão
+   * viva; degradar para 'instagram' as reclassificaria. 'whatsapp' é o único
+   * desfecho que não mente, e é o mesmo default que o banco aplica.
+   */
+  it("linha PRÉ-migration (coluna ausente) lê como 'whatsapp', não como nulo", async () => {
+    const read = fnOf<ReadFn>("readConnectSession");
+    seedOpenSession(); // sem `requested_channel_type` — como as linhas antigas
+
+    const state = await read(db, readParams());
+
+    expect(state.state).toBe("open");
+    expect(state.requestedChannelType).toBe("whatsapp");
+  });
+
+  it("valor desconhecido na coluna NÃO vira canal social — cai em 'whatsapp'", async () => {
+    const read = fnOf<ReadFn>("readConnectSession");
+    // O CHECK do banco recusa isto hoje; a asserção guarda o dia em que a
+    // allowlist crescer (p.ex. 'facebook') sem que o leitor seja atualizado
+    // junto. Fail-closed: o tipo novo não pode ser tratado como Instagram.
+    seedOpenSession({ requested_channel_type: "facebook" });
+
+    const state = await read(db, readParams());
+
+    expect(state.requestedChannelType).toBe("whatsapp");
   });
 });

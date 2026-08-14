@@ -59,9 +59,16 @@
  * que ele fica em claro na tabela.
  *
  * `last_error_code` guarda CÓDIGO NOSSO, jamais corpo ou mensagem do fornecedor:
- * a coluna é lida por service_role e acaba em log, e o texto deles é livre. E ela
- * deixou de ser diagnóstico decorativo: é ELA que decide se uma retomada pode
- * criar. Escrever um código novo sem classificá-lo abaixo é reabrir a porta.
+ * a coluna não é diagnóstico decorativo, é ELA que decide se uma retomada pode
+ * criar, e um texto livre de terceiro não pode entrar num predicado de
+ * autorização. Escrever um código novo sem classificá-lo abaixo é reabrir a porta.
+ *
+ * ⚠️ ISSO NÃO É "NUNCA REGISTRAR O QUE O FORNECEDOR DISSE" — a leitura larga dessa
+ * regra já custou uma hora de diagnóstico em produção, com `runtime_logs` guardando
+ * só `{"code":"subaccount_provision_failed"}`. A recusa DELES (código e mensagem)
+ * sobe no campo `vendor` de `EnsureSubaccountResult`, que existe para a edge
+ * function LOGAR. Duas coisas diferentes, dois destinos diferentes: a COLUNA é
+ * decisão e só aceita código nosso; o LOG é diagnóstico e precisa dos dois.
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -73,6 +80,7 @@ import {
   NotificameError,
   type FetchImpl,
   type NotificameParentConfig,
+  type NotificameVendorDetail,
   type ResaleLookup,
   type SubaccountDefaults,
 } from "./notificame.ts";
@@ -187,6 +195,24 @@ export type EnsureSubaccountResult =
   | { ok: true; subaccount: NotificameSubaccount }
   | {
     ok: false;
+    /**
+     * O QUE O FORNECEDOR DISSE, quando foi ele que recusou. ⚠️ SERVER-ONLY: existe
+     * para a edge function LOGAR, e nunca para compor a resposta HTTP.
+     *
+     * ESTE CAMPO É O CONSERTO DE UM DEFEITO MEDIDO. O `code` abaixo é NOSSO e é
+     * grosso de propósito — `subaccount_provision_failed` cobre "o fornecedor
+     * recusou", "o token não gravou", "o POST estourou o deadline" e "a claim não
+     * inseriu", que têm consertos diferentes. Em produção, a trilha guardou
+     * exatamente `{"code":"subaccount_provision_failed"}` e mais nada, e a
+     * resposta do fornecedor — a única coisa que distinguia os casos — tinha sido
+     * descartada três camadas abaixo.
+     *
+     * `null`/ausente = a falha não foi do fornecedor (chave de cifra, banco,
+     * transporte, timeout) ou ele não respondeu nada legível. `last_error_code`,
+     * que é o que DECIDE a próxima tentativa, continua recebendo só código nosso —
+     * a coluna não muda de natureza por causa disto.
+     */
+    vendor?: NotificameVendorDetail | null;
     code:
       | "provisioning_in_progress"
       | "subaccount_provision_failed"
@@ -516,7 +542,17 @@ export async function ensureNotificameSubaccount(
     // `adopt_only`, escrever um código retomável por cima seria um REBAIXAMENTO:
     // apagaria a memória de que o fornecedor pode ter criado a subconta e daria à
     // próxima tentativa o direito de criar a segunda.
-    console.warn("[notificame] resale reconciliation unavailable:", lookup.code);
+    // O detalhe do fornecedor sobe para quem loga. Sem ele, `resale_unavailable`
+    // não distingue "token da conta-mãe expirou" (AUTHENTICATION_ERROR) de "a rota
+    // mudou" (Hub404) de "a revenda foi desabilitada" — e este caminho é o que
+    // TRAVA a org, porque bloqueia a criação por desenho.
+    const lookupVendor = ("vendor" in lookup ? lookup.vendor : null) ?? null;
+    console.warn(
+      "[notificame] resale reconciliation unavailable:",
+      lookup.code,
+      lookupVendor?.code ?? "",
+      lookupVendor?.message ?? "",
+    );
     await markFailed(
       admin,
       subaccountRowId,
@@ -527,6 +563,7 @@ export async function ensureNotificameSubaccount(
       code: mode === "adopt_only"
         ? "subaccount_needs_reconciliation"
         : "subaccount_provision_failed",
+      vendor: lookupVendor,
     };
   }
 
@@ -579,7 +616,18 @@ export async function ensureNotificameSubaccount(
         ? err.code
         : "create_account_transport_error";
       await markFailed(admin, subaccountRowId, code);
-      return { ok: false, code: "subaccount_provision_failed" };
+      // ⚠️ A COLUNA continua recebendo só `code`; o que o fornecedor DISSE sai por
+      // aqui, no retorno, para o log de servidor. Esta é a recusa mais cara do
+      // módulo — é a que decide se uma subconta faturável nasceu — e era a que não
+      // deixava rastro nenhum além do nosso código genérico.
+      const vendor = err instanceof NotificameError ? err.vendor : null;
+      console.warn(
+        "[notificame] POST /v2/accounts recusado:",
+        code,
+        vendor?.code ?? "",
+        vendor?.message ?? "",
+      );
+      return { ok: false, code: "subaccount_provision_failed", vendor };
     }
   }
 

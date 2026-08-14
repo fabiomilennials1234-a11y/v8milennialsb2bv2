@@ -119,6 +119,38 @@ export const chatQueryKeys = {
       leadId ?? null,
     ] as const,
 
+  /**
+   * Lista de conversas de um canal SOCIAL (Instagram).
+   *
+   * Namespace NOVO — jamais reaproveitar `whatsapp_contacts`. O patcher de
+   * realtime de WhatsApp (`useWhatsAppMessagesRealtime`) alcança o cache por
+   * PREFIXO com `setQueriesData`; se as duas listas dividissem o primeiro
+   * segmento da chave, ele escreveria `ChatContact[]` por cima de linhas de
+   * Instagram e a lista mudaria de tipo em tempo de execução.
+   */
+  socialContacts: (
+    organizationId: string | null | undefined,
+    messagingChannelId: string | null | undefined,
+  ) =>
+    [
+      "social_contacts",
+      organizationId ?? null,
+      messagingChannelId ?? null,
+    ] as const,
+
+  /** Mensagens de uma conversa social, por (canal, interlocutor). */
+  socialMessages: (
+    organizationId: string | null | undefined,
+    messagingChannelId: string | null | undefined,
+    contactExternalId: string | null | undefined,
+  ) =>
+    [
+      "social_messages",
+      organizationId ?? null,
+      messagingChannelId ?? null,
+      contactExternalId ?? null,
+    ] as const,
+
   /** Mensagens com falha de envio (cache local de retry). */
   failed: (
     organizationId: string | null | undefined,
@@ -139,4 +171,14 @@ export type ChatQueryKey =
   | ReturnType<typeof chatQueryKeys.leadWhatsAppInstance>
   | ReturnType<typeof chatQueryKeys.chatDeepLink>
   | ReturnType<typeof chatQueryKeys.failed>
-  | ReturnType<typeof chatQueryKeys.calls>;
+  | ReturnType<typeof chatQueryKeys.calls>
+  | ReturnType<typeof chatQueryKeys.socialContacts>
+  | ReturnType<typeof chatQueryKeys.socialMessages>;
+
+/**
+ * Primeiro segmento das chaves sociais. É o que `useRealtimeSubscription`
+ * recebe (ele invalida por `[chave[0]]`), e é o que garante que a invalidação
+ * de um canal social nunca toque o cache de WhatsApp.
+ */
+export const SOCIAL_CONTACTS_KEY_ROOT = "social_contacts" as const;
+export const SOCIAL_MESSAGES_KEY_ROOT = "social_messages" as const;
