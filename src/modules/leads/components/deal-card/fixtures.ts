@@ -22,6 +22,9 @@ const ETAPAS_ORCAMENTOS = [
 
 /** O caso que a operação precisa ver: parado muito acima da mediana da etapa. */
 export const NEGOCIO_ESTAGNADO: DealCardData = {
+  // Negócio já avaliado — o slot mostra a nota.
+  dealId: "de410000-0000-4000-8000-000000000001",
+  qualificacao: "ouro",
   id: "e1",
   titulo: "Reposição trimestral",
   estado: "aberto",
@@ -77,6 +80,10 @@ export const NEGOCIO_ESTAGNADO: DealCardData = {
 
 /** 98,9% dos negócios: sem valor, uma movimentação só, recém-criado. */
 export const NEGOCIO_MAGRO: DealCardData = {
+  // Card que ainda NÃO virou negócio: `dealId` nulo desabilita o slot, que é
+  // o estado da grande maioria enquanto o backfill do L3 não roda.
+  dealId: null,
+  qualificacao: null,
   id: "e2",
   titulo: "Negócio de ago/2026",
   estado: "aberto",
@@ -121,6 +128,8 @@ export const NEGOCIO_MAGRO: DealCardData = {
 
 /** Fechado: o desfecho substitui o bloco de tempo, que deixou de apontar ação. */
 export const NEGOCIO_GANHO: DealCardData = {
+  dealId: "de410000-0000-4000-8000-0000000000ff",
+  qualificacao: "diamante",
   id: "e3",
   titulo: "Negócio de mai/2026",
   estado: "ganho",

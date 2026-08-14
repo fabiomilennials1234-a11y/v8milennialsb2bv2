@@ -131,16 +131,38 @@ describe("LeadCardCompact — compromisso: meia-noite é ausência de hora", () 
 });
 
 describe("LeadCardCompact — contato e interação", () => {
-  it("mostra o telefone quando a org quer contato no card", () => {
+  /**
+   * O telefone saiu da face do card, e é regra de produto, não esquecimento:
+   * com WhatsApp e ligar no rodapé — os dois já usando o número —, imprimir
+   * `(11) 98472-1130` gastava uma linha para repetir o que os botões fazem.
+   * Quem precisa do número lê no card do negócio.
+   */
+  it("não imprime o telefone: quem fala com a pessoa é o botão", () => {
     montar();
 
-    expect(screen.getByText("(11) 98472-1130")).toBeInTheDocument();
+    expect(screen.queryByText("(11) 98472-1130")).toBeNull();
   });
 
-  it("config.showContact desligado tira o telefone", () => {
-    montar({ config: { ...CONFIG_TUDO, showContact: false } });
+  it("o botão de WhatsApp aparece quando a página sabe discar", () => {
+    const onWhatsApp = vi.fn();
+    montar({ onWhatsApp });
 
-    expect(screen.queryByText("(11) 98472-1130")).toBeNull();
+    fireEvent.click(screen.getByLabelText(/Abrir WhatsApp de Distética Suplementos/));
+
+    expect(onWhatsApp).toHaveBeenCalled();
+  });
+
+  it("sem telefone discável não há botão de WhatsApp", () => {
+    montar();
+
+    expect(screen.queryByLabelText(/Abrir WhatsApp/)).toBeNull();
+  });
+
+  it("negócio fechado perde o rodapé de ação — vira registro", () => {
+    montar({ lead: { ...LEAD, outcome: "won" }, onWhatsApp: vi.fn() });
+
+    expect(screen.getByTestId("selo-desfecho")).toHaveTextContent("Ganha");
+    expect(screen.queryByLabelText(/Abrir WhatsApp/)).toBeNull();
   });
 
   it("clicar no card abre o lead", () => {
@@ -151,9 +173,55 @@ describe("LeadCardCompact — contato e interação", () => {
     expect(onClick).toHaveBeenCalled();
   });
 
-  it("mostra a origem que a página resolveu", () => {
+  /**
+   * A origem virou ponto de 6px: continua no card (o vendedor reconhece a cor)
+   * sem gastar a largura de um distintivo escrito. O rótulo vive no nome
+   * acessível — é o que o leitor de tela e o teste leem.
+   */
+  it("a origem continua legível, como ponto rotulado", () => {
     montar();
 
+    expect(screen.getByLabelText("Origem: Meta Ads")).toBeInTheDocument();
+    expect(screen.queryByText("Meta Ads")).toBeNull();
+  });
+
+  it("lead sem empresa cede a linha para a origem, não para 'Sem empresa'", () => {
+    montar({ lead: { ...LEAD, company: null } });
+
     expect(screen.getByText("Meta Ads")).toBeInTheDocument();
+    expect(screen.queryByText(/Sem empresa/)).toBeNull();
+  });
+});
+
+/**
+ * A regra que substituiu a linha de sete distintivos: **no máximo dois sinais
+ * de estado**, escolhidos por severidade. Sem isto o card volta a ter uma
+ * fileira que ninguém lê.
+ */
+describe("LeadCardCompact — no máximo dois sinais, o mais severo primeiro", () => {
+  it("atrasado vence 'parado' e 'inativo'", () => {
+    montar({
+      lead: { ...LEAD, isInactive: true, stageEnteredAt: new Date(Date.now() - 40 * 86_400_000).toISOString() },
+      dateIndicator: { label: "Atrasado", className: "" },
+    });
+
+    expect(screen.getByText("Atrasado")).toBeInTheDocument();
+    expect(screen.queryByText(/parado/)).toBeNull();
+    expect(screen.queryByText("Inativo")).toBeNull();
+  });
+
+  it("parado só acende a partir de 7 dias — 3 dias não é notícia", () => {
+    montar({ lead: { ...LEAD, stageEnteredAt: new Date(Date.now() - 3 * 86_400_000).toISOString() } });
+
+    expect(screen.queryByText(/parado/)).toBeNull();
+  });
+
+  it("negócio fechado não mostra sinal de urgência nenhum", () => {
+    montar({
+      lead: { ...LEAD, outcome: "lost", lossReason: "Financeiro", stageEnteredAt: new Date(Date.now() - 40 * 86_400_000).toISOString() },
+    });
+
+    expect(screen.queryByText(/parado/)).toBeNull();
+    expect(screen.getByTestId("motivo-perda")).toHaveTextContent("Financeiro");
   });
 });

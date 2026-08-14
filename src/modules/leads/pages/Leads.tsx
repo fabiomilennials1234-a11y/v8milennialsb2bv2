@@ -284,9 +284,28 @@ function LeadsInner() {
     [setPersistedSort],
   );
 
-  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, sort };
+  /**
+   * Aba da lista. `leads` é toda a base; `clientes` é quem já comprou —
+   * ao menos um negócio GANHO (ADR-0023 §7).
+   *
+   * Fora de `filterState` de propósito, pela mesma razão que a ordenação está:
+   * `filterState` é o payload das visões salvas, e a aba não é um recorte que
+   * alguém salva — é onde a pessoa está olhando. A troca de aba também zera a
+   * página, senão trocar na página 7 mostraria uma lista vazia de 91 clientes.
+   */
+  const [aba, setAba] = useState<"leads" | "clientes">("leads");
+  const apenasClientes = aba === "clientes";
+  const trocarAba = useCallback((proxima: "leads" | "clientes") => {
+    setAba(proxima);
+    setPage(0);
+  }, []);
+
+  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, apenasClientes, sort };
   const { data: leads = [], isLoading } = useLeads(filterParams);
-  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo });
+  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, apenasClientes });
+  // Contagem da OUTRA aba, para o número aparecer no rótulo sem precisar clicar.
+  // Só a contagem — a lista da aba inativa não é buscada.
+  const { data: totalClientes } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, apenasClientes: true });
   const { data: teamMembers = [] } = useTeamMembers();
   const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
@@ -608,6 +627,40 @@ function LeadsInner() {
           <p className="stat-card-label">Com Responsável</p>
           <p className="text-xl font-bold text-success">{stats.withSDR}</p>
         </motion.div>
+      </div>
+
+      {/* Abas — Leads (a base) × Clientes (quem já comprou). Ficam ACIMA dos
+          filtros porque não são um filtro: são o conjunto sobre o qual os
+          filtros se aplicam. Busca, origem e rating continuam valendo nas duas. */}
+      <div
+        role="tablist"
+        aria-label="Recorte da lista"
+        className="flex w-fit gap-[2px] rounded-[9px] border border-border bg-card p-[3px]"
+      >
+        {([
+          { chave: "leads", rotulo: "Leads", total: aba === "leads" ? totalLeads : undefined },
+          { chave: "clientes", rotulo: "Clientes", total: totalClientes },
+        ] as const).map((item) => (
+          <button
+            key={item.chave}
+            type="button"
+            role="tab"
+            aria-selected={aba === item.chave}
+            data-testid={`aba-${item.chave}`}
+            onClick={() => trocarAba(item.chave)}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-[12px] font-semibold transition-all",
+              aba === item.chave
+                ? "bg-background text-foreground shadow-[inset_0_0_0_1px_hsl(var(--border))]"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {item.rotulo}
+            {item.total !== undefined && (
+              <span className="ml-1.5 tabular-nums text-muted-foreground/70">{item.total}</span>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Filters */}

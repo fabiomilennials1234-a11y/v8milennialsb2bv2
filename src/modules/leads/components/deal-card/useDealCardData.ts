@@ -169,6 +169,8 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
 
     return {
       id: negocioBase.id,
+      dealId: negocioBase.dealId,
+      qualificacao: negocioBase.qualificationTier,
       titulo: negocioBase.title,
       estado:
         negocioBase.outcome === "won"

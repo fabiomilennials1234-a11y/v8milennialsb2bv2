@@ -12,6 +12,18 @@ export interface PipeStatusColumn {
   id: string;
   title: string;
   color: string;
+  /**
+   * Etapa TERMINAL — negócio fechado, ganho ou perdido. O Kanban a mostra
+   * empilhada e só revela os cards quando a pessoa pede. O valor diz qual dos
+   * dois, porque a pilha se descreve com a palavra certa ("fechados" ×
+   * "perdidos") e usa a cor da própria etapa.
+   *
+   * Vem de `pipeline_stages.is_final_positive` / `is_final_negative`, não de um
+   * `stage_key` fixo: funil customizado tem etapa terminal com outro nome, e
+   * filtrar por `'vendido'`/`'perdido'` cegaria todos eles — o mesmo
+   * anti-padrão que o lint de métricas do repo reprova em migration.
+   */
+  stacked?: "ganho" | "perda";
 }
 
 /** Colunas do pipe WhatsApp (qualificação). */
@@ -48,8 +60,11 @@ export const propostasStatusColumns: PipeStatusColumn[] = [
   { id: "proposta_enviada", title: "Proposta Enviada", color: "#0EA5E9" },
   { id: "esfriou", title: "Esfriou", color: "#64748B" },
   { id: "futuro", title: "Futuro", color: "#8B5CF6" },
-  { id: "vendido", title: "Vendido ✓", color: "#22C55E" },
-  { id: "perdido", title: "Perdido", color: "#EF4444" },
+  // `stacked` também no fallback: ele é o que a tela usa enquanto as etapas do
+  // banco não chegam, e sem isto a coluna de vendidos abriria expandida por um
+  // instante e recolheria — pulo visual a cada carregamento.
+  { id: "vendido", title: "Vendido ✓", color: "#22C55E", stacked: "ganho" },
+  { id: "perdido", title: "Perdido", color: "#EF4444", stacked: "perda" },
 ];
 
 /**
@@ -60,11 +75,32 @@ export const propostasStatusColumns: PipeStatusColumn[] = [
  * `pipelines`.
  */
 export function stagesToColumns(
-  stages: { id: string; stage_key: string; name: string; color: string | null }[],
+  stages: {
+    id: string;
+    stage_key: string;
+    name: string;
+    color: string | null;
+    /** Governam o empilhamento. Opcionais: quem não passa, não empilha. */
+    is_final_positive?: boolean | null;
+    is_final_negative?: boolean | null;
+  }[],
 ): PipeStatusColumn[] {
   return stages.map((stage) => ({
-    id: "stage_key" in stage ? stage.stage_key : stage.id,
+    // Era `"stage_key" in stage ? stage.stage_key : stage.id`. O ramo do `else`
+    // é inalcançável — `stage_key` é obrigatório no tipo do parâmetro —, e o
+    // TypeScript estreitava o `stage` para `never` ali, o que produzia um erro
+    // herdado (TS2339) neste arquivo. Some junto com o ternário.
+    id: stage.stage_key,
     title: stage.name,
     color: stage.color || "#64748b",
+    // Ganho tem precedência: etapa marcada como as DUAS coisas é config
+    // contraditória, e "fechado com ganho" é a leitura menos danosa — some da
+    // tela do mesmo jeito, mas sem chamar de perda o que talvez seja venda.
+    stacked:
+      stage.is_final_positive === true
+        ? ("ganho" as const)
+        : stage.is_final_negative === true
+          ? ("perda" as const)
+          : undefined,
   }));
 }

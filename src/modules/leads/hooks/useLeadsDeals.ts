@@ -27,6 +27,14 @@ export type DealOutcome = "open" | "won" | "lost";
 export interface LeadDeal {
   /** id da `pipeline_entries` — a POSIÇÃO. A identidade é `deals.id`. */
   id: string;
+  /**
+   * `deals.id` — a IDENTIDADE do negócio. `null` no card que ainda não tem
+   * negócio (todos, enquanto o backfill não roda). É o que permite gravar
+   * atributo DO NEGÓCIO, como a qualificação, em vez de escrever na pessoa.
+   */
+  dealId: string | null;
+  /** Qualidade desta OPORTUNIDADE. Distinta da pré-qualificação, que é da pessoa. */
+  qualificationTier: string | null;
   leadId: string;
   /** `deals.title` quando o card tem negócio; nome do funil como fallback. */
   title: string;
@@ -174,14 +182,46 @@ export function useLeadsDeals(leadIds: string[]) {
       );
 
       const dealTitleById = new Map<string, string>();
+      // Qualificação DO NEGÓCIO (migration 20270813120000). Guardada à parte do
+      // título porque um negócio pode ter título e não ter nota — e o mapa de
+      // título ignora linha sem `title`.
+      const dealTierById = new Map<string, string | null>();
       if (dealIds.length > 0) {
-        const { data: dealRows, error: dealsError } = await supabase
-          .from("deals")
-          .select("id, title")
+        // PONTE DE COMPATIBILIDADE — some junto com o apply em prod.
+        //
+        // `deals.qualification_tier` nasce na migration 20270813120000, que
+        // ainda NÃO está em produção. `src/integrations/supabase/types.ts` é
+        // gerado A PARTIR DE PROD, então o cliente tipado não conhece a coluna
+        // e recusa o SELECT INTEIRO com
+        // `SelectQueryError<"column 'qualification_tier' does not exist">` —
+        // derrubando junto o `id` e o `title`, que existem.
+        //
+        // A chamada é isolada numa variável de forma PLANA para o erro não
+        // fluir para o resto do hook. Mesma receita do #1497
+        // (`metrics_studio_panels`).
+        //
+        // Ordem correta (runbook): apply em prod → `gen types` apontando para
+        // PROD → apagar esta ponte e voltar ao `.from("deals")` tipado.
+        type LinhaNegocio = { id: string; title: string | null; qualification_tier: string | null };
+        const tabelaDeals = (supabase as unknown as {
+          from: (t: string) => {
+            select: (c: string) => {
+              in: (col: string, vals: string[]) => Promise<{
+                data: LinhaNegocio[] | null;
+                error: { message: string } | null;
+              }>;
+            };
+          };
+        }).from("deals");
+
+        const { data: dealRows, error: dealsError } = await tabelaDeals
+          .select("id, title, qualification_tier")
           .in("id", dealIds);
-        if (dealsError) throw dealsError;
+        if (dealsError) throw new Error(dealsError.message);
         for (const d of dealRows ?? []) {
-          if (d.id && d.title) dealTitleById.set(d.id, d.title);
+          if (!d.id) continue;
+          if (d.title) dealTitleById.set(d.id, d.title);
+          dealTierById.set(d.id, d.qualification_tier ?? null);
         }
       }
 
@@ -302,6 +342,8 @@ export function useLeadsDeals(leadIds: string[]) {
         const deal: LeadDeal = {
           id: raw.id,
           leadId: raw.lead_id,
+          dealId,
+          qualificationTier: dealId ? (dealTierById.get(dealId) ?? null) : null,
           title: (dealId ? dealTitleById.get(dealId) : undefined) ?? pipeline.name ?? "Funil",
           funnelName: pipeline.name ?? "Funil",
           funnelColor: pipeline.color ?? FALLBACK_COLOR,

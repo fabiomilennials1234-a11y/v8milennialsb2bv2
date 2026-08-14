@@ -52,6 +52,18 @@ export interface KanbanColumn<T extends DraggableItem> {
   hasMore?: boolean;
   isFetchingMore?: boolean;
   onLoadMore?: () => void;
+  /**
+   * Etapa TERMINAL (ganho ou perda): nasce empilhada, e os cards só aparecem
+   * quando a pessoa clica em "Estender negócios". O valor diz qual dos dois —
+   * a pilha usa a palavra certa.
+   *
+   * Existe porque negócio ganho não é trabalho em aberto — ele é histórico. Na
+   * Milennials são 91 cards que empurram as etapas ativas para fora da tela e
+   * competem por atenção com o que ainda pode ser feito. Recolher devolve a
+   * largura ao funil sem esconder nada: o número fica no cabeçalho e a pilha
+   * abre em um clique.
+   */
+  stacked?: "ganho" | "perda";
 }
 
 interface DraggableKanbanBoardProps<T extends DraggableItem> {
@@ -87,6 +99,85 @@ function PartialSortNotice() {
   );
 }
 
+/**
+ * A pilha que substitui os cards numa etapa de negócio fechado.
+ *
+ * Desenho: três camadas recuadas sugerindo maço de cards, o número por extenso
+ * e um convite para abrir. Nada de valor somado aqui — a coluna carrega por
+ * página, e somar o que está na tela produziria um total que mente sobre o
+ * resto (é a decisão 2 do redesenho de funis: soma é no servidor ou não é).
+ */
+function PilhaDeFechados({
+  total,
+  cor,
+  tipo,
+  onEstender,
+}: {
+  total: number;
+  cor: string;
+  tipo: "ganho" | "perda";
+  onEstender?: () => void;
+}) {
+  const substantivo = tipo === "ganho" ? "fechado" : "perdido";
+
+  if (total === 0) {
+    return (
+      <p className="px-1 py-6 text-center text-[11px] text-muted-foreground/60">
+        {tipo === "ganho" ? "Nenhum negócio fechado ainda." : "Nenhum negócio perdido."}
+      </p>
+    );
+  }
+
+  return (
+    <div className="pt-1">
+      <button
+        type="button"
+        onClick={onEstender}
+        data-testid="estender-negocios"
+        className={cn(
+          "group relative block w-full text-left",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-xl",
+        )}
+      >
+        {/* As duas camadas de trás são só afordância — sem texto, sem foco. */}
+        <span
+          aria-hidden
+          className="absolute inset-x-2 -top-1.5 h-8 rounded-lg border border-border/60 bg-card/40"
+        />
+        <span
+          aria-hidden
+          className="absolute inset-x-1 -top-[3px] h-8 rounded-lg border border-border/70 bg-card/70"
+        />
+
+        <span
+          className={cn(
+            "relative flex flex-col gap-2 rounded-xl border border-border bg-card px-3 py-3",
+            "transition-colors duration-150 group-hover:border-primary/40",
+          )}
+        >
+          <span className="flex items-baseline gap-2">
+            <span
+              aria-hidden
+              className="size-2 shrink-0 rounded-full"
+              style={{ backgroundColor: cor }}
+            />
+            <span className="text-[20px] font-extrabold leading-none tracking-[-0.03em] tabular-nums">
+              {total}
+            </span>
+            <span className="text-[12px] text-muted-foreground">
+              {total === 1 ? `negócio ${substantivo}` : `negócios ${substantivo}s`}
+            </span>
+          </span>
+
+          <span className="text-[11px] font-semibold text-muted-foreground transition-colors group-hover:text-primary">
+            Estender negócios
+          </span>
+        </span>
+      </button>
+    </div>
+  );
+}
+
 function DroppableColumn<T extends DraggableItem>({
   column,
   children,
@@ -98,6 +189,8 @@ function DroppableColumn<T extends DraggableItem>({
   onCreateInColumn,
   sortKey,
   onSortChange,
+  empilhada,
+  onEstender,
 }: {
   column: KanbanColumn<T>;
   children: React.ReactNode;
@@ -109,6 +202,9 @@ function DroppableColumn<T extends DraggableItem>({
   onCreateInColumn?: (stageId: string, stageTitle: string) => void;
   sortKey?: ColumnSortKey;
   onSortChange?: (stageId: string, sortKey: ColumnSortKey) => void;
+  /** Etapa de ganho ainda recolhida: mostra a pilha no lugar dos cards. */
+  empilhada?: boolean;
+  onEstender?: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
@@ -220,23 +316,51 @@ function DroppableColumn<T extends DraggableItem>({
 
       {renderColumnFooter && renderColumnFooter(column)}
 
+      {/* Só aparece com a pilha ABERTA — recolher é a saída do estado que a
+          pessoa escolheu, e não faz sentido oferecer quando já está recolhido. */}
+      {column.stacked != null && !empilhada && (
+        <button
+          type="button"
+          onClick={onEstender}
+          data-testid="recolher-negocios"
+          className={cn(
+            "mx-2.5 mb-1.5 shrink-0 rounded-lg border border-border/70 px-2 py-1",
+            "text-[10.5px] font-semibold text-muted-foreground",
+            "transition-colors hover:border-primary/40 hover:text-foreground",
+          )}
+        >
+          Recolher negócios
+        </button>
+      )}
+
       {sortKey && sortKey !== DEFAULT_COLUMN_SORT && column.hasMore && <PartialSortNotice />}
 
       <div className="flex-1 min-h-[100px] space-y-2 overflow-y-auto px-2.5 pb-2.5">
-        {children}
-        {column.hasMore && column.onLoadMore && (
-          <LoadMoreSentinel onLoadMore={column.onLoadMore} isFetching={column.isFetchingMore ?? false} />
-        )}
-        {!column.hasMore && column.isFetchingMore && (
-          <div className="flex justify-center py-2">
-            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-          </div>
+        {empilhada ? (
+          <PilhaDeFechados
+            total={column.totalCount ?? column.items.length}
+            cor={column.color}
+            tipo={column.stacked ?? "ganho"}
+            onEstender={onEstender}
+          />
+        ) : (
+          <>
+            {children}
+            {column.hasMore && column.onLoadMore && (
+              <LoadMoreSentinel onLoadMore={column.onLoadMore} isFetching={column.isFetchingMore ?? false} />
+            )}
+            {!column.hasMore && column.isFetchingMore && (
+              <div className="flex justify-center py-2">
+                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+              </div>
+            )}
+          </>
         )}
       </div>
 
       {/* Criar direto na etapa. Substitui o "+" que existia no cabeçalho e não
           tinha handler nenhum — afordância que prometia e não fazia. */}
-      {onCreateInColumn && (
+      {onCreateInColumn && !empilhada && (
         <button
           type="button"
           onClick={() => onCreateInColumn(column.id, column.title)}
@@ -335,6 +459,20 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
   // Ordenação por coluna: cada etapa guarda a sua. Fica no board (e não na
   // página) porque é preferência de leitura da coluna, não recorte de dado —
   // não entra nas visualizações salvas nem na URL.
+  // Etapas de ganho que a pessoa mandou estender nesta visita. O estado é de
+  // SESSÃO de propósito: recolhido é o default certo toda vez que se volta ao
+  // funil, e persistir a escolha faria a coluna reabrir amanhã sem que ninguém
+  // tenha pedido de novo.
+  const [estendidas, setEstendidas] = useState<Set<string>>(() => new Set());
+  const alternarEstendida = useCallback((stageId: string) => {
+    setEstendidas((prev) => {
+      const proximo = new Set(prev);
+      if (proximo.has(stageId)) proximo.delete(stageId);
+      else proximo.add(stageId);
+      return proximo;
+    });
+  }, []);
+
   const [sortByColumn, setSortByColumn] = useState<Record<string, ColumnSortKey>>({});
   const handleSortChange = useCallback((stageId: string, sortKey: ColumnSortKey) => {
     setSortByColumn((prev) => ({ ...prev, [stageId]: sortKey }));
@@ -467,10 +605,13 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
         {columns.map((column) => {
           const columnSort = sortByColumn[column.id] ?? DEFAULT_COLUMN_SORT;
           const sortedItems = sortColumnItems(column.items, columnSort);
+          const empilhada = column.stacked != null && !estendidas.has(column.id);
           return (
             <DroppableColumn
               key={column.id}
               column={column}
+              empilhada={empilhada}
+              onEstender={() => alternarEstendida(column.id)}
               className={columnClassName}
               renderColumnFooter={renderColumnFooter}
               renderColumnExtra={renderColumnExtra}

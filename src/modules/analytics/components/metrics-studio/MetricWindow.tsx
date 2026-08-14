@@ -9,7 +9,8 @@ import {
   type EngineMetric,
   type MetricRecorte,
 } from "@/modules/analytics/lib/metrics-studio-engine-map";
-import { variacaoPct, type StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
+import { variacaoPct, type IntervaloCustom, type StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
+import { GRANULARIDADES, type Granularidade } from "@/modules/analytics/lib/metrics-studio-granularidade";
 import { EM_DASH, formatMetricValue } from "@/modules/analytics/lib/tv-metric-format";
 import { headValueFromMeasure } from "@/modules/analytics/lib/tv-series";
 import { useMetricWindowData } from "@/modules/analytics/hooks/useMetricWindowData";
@@ -27,6 +28,7 @@ interface MetricWindowProps {
   win: StudioWindow;
   metric: EngineMetric;
   period: StudioPeriod;
+  intervalo?: IntervaloCustom | null;
   podeVerPorPessoa: boolean;
   /** SCRUM-308: em Visualização a janela é só leitura. */
   editavel: boolean;
@@ -37,6 +39,7 @@ interface MetricWindowProps {
   onResize: (id: string, w: number, h: number) => void;
   onChart: (id: string, chart: ChartKind) => void;
   onCorte: (id: string, corte: MetricRecorte) => void;
+  onGranularidade: (id: string, granularidade: Granularidade) => void;
   onRemove: (id: string) => void;
 }
 
@@ -53,8 +56,8 @@ const snap = (n: number) => Math.round(n / GRID) * GRID;
 const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max);
 
 function MetricWindowBase({
-  win, metric, period, podeVerPorPessoa, editavel, selected, canvas,
-  onSelect, onMove, onResize, onChart, onCorte, onRemove,
+  win, metric, period, intervalo, podeVerPorPessoa, editavel, selected, canvas,
+  onSelect, onMove, onResize, onChart, onCorte, onGranularidade, onRemove,
 }: MetricWindowProps) {
   // Geometria em trânsito fica LOCAL. Commitar por pointermove subiria cada
   // quadro do arrasto para o estado do painel — e, desde o SCRUM-309, isso
@@ -69,7 +72,7 @@ function MetricWindowBase({
   }, []);
 
   const geo = draft ?? win;
-  const dados = useMetricWindowData(metric, win.corte, period);
+  const dados = useMetricWindowData(metric, win.corte, period, intervalo, win.granularidade);
 
   const startDrag = useCallback(
     (e: React.PointerEvent) => {
@@ -178,7 +181,12 @@ function MetricWindowBase({
           <h3 className="truncate text-[12px] font-semibold tracking-[-0.01em]">{metric.label}</h3>
           {!compact && (
             <p className="truncate text-[10px] text-muted-foreground/70">
-              {ROTULO_DO_CORTE[corteEfetivo]}
+              {/* No recorte temporal o rótulo é a GRANULARIDADE efetiva, não o
+                  "Por dia" fixo do catálogo: com a série agrupada em semanas,
+                  dizer "Por dia" seria a janela mentindo sobre o próprio eixo. */}
+              {corteEfetivo === "tempo"
+                ? (GRANULARIDADES.find((g) => g.key === dados.granularidade)?.label ?? ROTULO_DO_CORTE.tempo)
+                : ROTULO_DO_CORTE[corteEfetivo]}
               {degradou && " · sem funil escolhido"}
             </p>
           )}
@@ -274,6 +282,26 @@ function MetricWindowBase({
             {cortes.map((c) => (
               <option key={c} value={c}>
                 {ROTULO_DO_CORTE[c]}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {/* Granularidade — só no recorte temporal, onde ela existe. Sem isto,
+            um trimestre desenha ~90 pontos num gráfico de 400px e a linha vira
+            ruído. O valor mostrado é o EFETIVO (automático quando ninguém
+            escolheu), para o seletor não mentir sobre o que está na tela. */}
+        {win.corte === "tempo" && (
+          <select
+            value={win.granularidade ?? dados.granularidade}
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => onGranularidade(win.id, e.target.value as Granularidade)}
+            aria-label="Granularidade da série"
+            className="shrink-0 rounded-md bg-muted/60 px-1.5 py-1 text-[10px] font-semibold text-foreground outline-none"
+          >
+            {GRANULARIDADES.map((g) => (
+              <option key={g.key} value={g.key}>
+                {g.label}
               </option>
             ))}
           </select>
